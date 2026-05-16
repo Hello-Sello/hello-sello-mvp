@@ -1,0 +1,31 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.settings/
+
+# Temp / backup files
+*.tmp
+*.bak
+*.orig
+
+# Logs
+*.log
+
+# Local environment / secrets (defensive — no secrets expected in design docs)
+.env
+.env.local
