@@ -60,19 +60,25 @@ This is the most important step. The Linear issue title and body must be standal
 - "How does Sella distinguish casual chat from deal-forming chat?"
 - "Should pharmacies be charged per active deal or per month?"
 
-**Body (markdown):** keep it short — target ~80-120 words. Match the team's existing issue style (see DEV-1, DEV-3 for live examples).
+**Body (markdown):** keep it short — target ~50-100 words. Use Marcel's standard issue template (see DEV-37, DEV-38, DEV-40, DEV-41 for live examples).
 
-Structure:
+Structure (Marcel's template — four labelled sections, each 1-2 sentences):
 
 ```markdown
-[Restate the question in one sentence, with the section reference. Example: "The back of the Deal Card is currently described in Layer 1 (Section 4.2) as 'Sella's summary of the deal.' Content is TBD."]
+What do we want to do?
+[One sentence — the goal or outcome being defined.]
 
-[One short paragraph of context, OR a tight bullet list of options/angles being considered. Pick whichever is clearer.]
+Problem:
+[One or two sentences — the specific open question, including a section reference (e.g., "Layer 1 §4.2 says X is TBD").]
 
-[One sentence on why this matters — what gets blocked, what gets built wrong, what decision depends on this.]
+Proposed Solution and Why:
+[One or two sentences — proposed direction with rationale. If unknown, write "TBD" and list the angles being considered.]
+
+Additional Context:
+[Optional — one sentence linking to related issues, prior decisions, or a layer doc. Can be left blank.]
 ```
 
-Do NOT write a long multi-section essay. The team prefers tight, scannable issue bodies. If you find yourself writing more than ~120 words, you're overdoing it — cut.
+Do NOT write a long multi-section essay. The team prefers tight, scannable issue bodies — DEV-37 and DEV-38 are ~50-70 words. If you find yourself writing more than ~100 words, you're overdoing it — cut.
 
 If the user's input is too vague to frame as a clear question (e.g., "pricing is weird"), ask follow-up questions until the question is sharp. Never create a vague ticket — vague tickets become dead tickets.
 
@@ -96,7 +102,7 @@ Issues (each issue lives inside one project)
 
 | Area (project label) | Projects typically belonging here |
 |---|---|
-| Connect | Define Deals / Deal Cards (structure & access), Chat, Relationship page (company-company), Flow to connect two companies, Thread instead of group chat, Sending offer with product basket and note, Requesting offer/pricelist, Sending connect request with "note" |
+| Connect | Deals / Deal Card definition (structure & access), Chat, Relationship page (company-company), Flow to connect two companies, Thread instead of group chat, Sending offer with product basket and note, Requesting offer/pricelist, Sending connect request with "note" |
 | Sella | Sella for sellers, Sella for buyers, Sella for CEOs, Sella for relationship/deal |
 | Authentication | Company account setup, Creating Superadmin role, Invite Team, Portfolio setup, Email Verification, Sign in, Personal account setup, Signup via email, Business Card QR Code Generation |
 | R&D | What context will SELLA use, Encrypted chat model, GDPR sister companies, LLM selection, Free and Premium plan, PRD, Architecture & System Design |
@@ -213,11 +219,25 @@ User: `/track-doubt In section 4.2 we don't know what the back of the deal card 
 
 Claude:
 1. Identifies `LAYER-1-USERS-AND-CORE-OBJECTS.md`, Section 4.2 (The Deal Card).
-2. Drafts the question: "What content should appear on the back of the Deal Card (the flip side)?"
-3. Suggests project = "Define Deals / Deal Cards", label = Connect.
-4. Builds the preview (Linear draft + marker location + Open Questions row).
-5. Asks: "Confirm to create the Linear issue and update the doc?"
-6. On confirmation: creates the issue, edits the doc, replies with the Linear URL.
+2. Drafts the title: "What content should appear on the back of the Deal Card (the flip side)?"
+3. Drafts the body using Marcel's template:
+   ```
+   What do we want to do?
+   Define the content of the back of the Deal Card (Sella's summary).
+
+   Problem:
+   Layer 1 §4.2 says the back is "Sella's summary of the deal" — content TBD. Plain-English summary, risk flags, past-deal comparison, predicted outcome, or some combination?
+
+   Proposed Solution and Why:
+   TBD — needs design exploration.
+
+   Additional Context:
+   Open question listed in Layer 1 §13.
+   ```
+4. Suggests project = "Deals / Deal Card definition (structure & access)".
+5. Builds the preview (Linear draft + marker location + Open Questions row).
+6. Asks: "Confirm to create the Linear issue and update the doc?"
+7. On confirmation: creates the issue, edits the doc, replies with the Linear URL.
 
 ### Example 2 — doubt only, no section reference
 

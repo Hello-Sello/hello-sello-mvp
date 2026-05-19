@@ -26,7 +26,8 @@ Hello Sello is an **AI-native deal room for B2B** — a shared chat space betwee
 - **[LAYER-1-USERS-AND-CORE-OBJECTS.md](LAYER-1-USERS-AND-CORE-OBJECTS.md)** — Layer 1. **LOCKED.**
 - **[LAYER-2-SURFACES.md](LAYER-2-SURFACES.md)** — Layer 2. **IN PROGRESS.**
 - **[LAYER-3-DEAL-EXECUTION.md](LAYER-3-DEAL-EXECUTION.md)** — Layer 3. **IN PROGRESS.**
-- *(Future)* LAYER-4, LAYER-5. See **"The 5-Layer Roadmap"** below for what each layer covers.
+- **[LAYER-4-SELLA-BEHAVIOR.md](LAYER-4-SELLA-BEHAVIOR.md)** — Layer 4. **IN PROGRESS.**
+- *(Future)* LAYER-5. See **"The 5-Layer Roadmap"** below for what each layer covers.
 - **[DECISIONS.md](DECISIONS.md)** — locked decisions with reasoning. One-line per decision.
 
 ---
@@ -45,7 +46,9 @@ Layer 1 — Users and Core Objects   ✅ LOCKED
   → LAYER-1-USERS-AND-CORE-OBJECTS.md
 
 Layer 2 — Product Surfaces   ⏳ IN PROGRESS
-  • The 5 surfaces: Connect / Present / Sell / Buy / Trade
+  • The Big 7 pillars (locked 2026-05-18): Connect / Buy / Sell / Present / Trade / Discover
+    (six navigable surfaces) + Sella (always-available AI in right-side panel, not a sidebar item)
+  • Home = landing page outside the Big 7
   • Navigation model and home / landing view
   • What lives on each surface
   • How surfaces map to the Layer 1 deal lifecycle
@@ -60,7 +63,7 @@ Layer 3 — The Deal (deeply)   ⏳ IN PROGRESS
   Note: Layer 1 covered the structural side (objects, lifecycle states,
   birth paths). Layer 3 picks up the execution side.
 
-Layer 4 — Sella's Behavior   ⏸ TBD
+Layer 4 — Sella's Behavior   ⏳ IN PROGRESS (started 2026-05-19)
   • What Sella DOES (not architecture — that's in Layer 1)
   • When she shows up across the 5 surfaces
   • Detection rules (deal-forming signals, casual-chat boundary)
@@ -86,20 +89,20 @@ Layer 5 — Inputs and Outputs   ⏸ TBD
 
 *Updated at the end of every brainstorm session. This is the "you are here" marker for the next session — always read this first.*
 
-**Last updated:** 2026-05-16
+**Last updated:** 2026-05-19
 
 **Layer status:**
-- Layer 1 — ✅ LOCKED (8 doubts: DEV-5 → DEV-12)
-- Layer 2 — ⏳ Sprint pass done; sub-areas not yet drilled (10 doubts: DEV-13 → DEV-22)
-- Layer 3 — ⏳ Sprint pass done; 4 sections parked for Marcel (14 doubts: DEV-23 → DEV-36)
-- Layer 4 — ⏸ Not started
-- Layer 5 — ⏸ Not started
+- Layer 1 — ✅ LOCKED. Two doubts closed and superseded this session (DEV-1, DEV-6); DEV-40 + DEV-41 spun out of DEV-6. DEV-10 deferred to DEV-39.
+- Layer 2 — ⏳ Big 7 framework locked 2026-05-18 (added Discover surface + Sella pillar; Home as landing page). Sub-areas still not drilled. 10 doubts: DEV-13 → DEV-22.
+- Layer 3 — ⏳ Sprint pass done; 4 sections parked for Marcel (DEV-23, DEV-26, DEV-29, DEV-35, DEV-36).
+- Layer 4 — ⏳ Started 2026-05-19. §1 (identity) + §2 (persona consistency) locked. Sections 3-10 TBD.
+- Layer 5 — ⏸ Not started.
 
-**Just completed:** Layer 3 sprint pass — Stages, Milestones, Things, Completion locked. PO / Payment / Delivery / Cancellation parked pending Marcel.
+**Just completed:** Layer 4 kickoff — §1 identity anchored, §2 per-Sella persona consistency locked. Voice-tone doubt tracked. Big 7 framework lock (2026-05-18) + 5 new Linear projects for Buy-side toolset.
 
-**Next session:** Layer 4 (Sella's Behavior) — brainstormable internally without external input. *(Layer 5 will follow in a fresh session.)*
+**Next session:** Drill Layer 4 §3 (Triggers & detection) → §10 (Non-goals), absorbing carry-overs from DEV-5 + DEV-7 + DEV-11 + Sella-reply-suggestion project. Then Layer 5 (I/O), then engineering architecture / system design / DB schema.
 
-**Parallel:** Marcel consultation needed for DEV-23, DEV-24, DEV-25, DEV-26, DEV-29, DEV-35, DEV-36.
+**Parallel:** Marcel consultation needed for DEV-23, DEV-26, DEV-29, DEV-35, DEV-36. Victor leading Buy-side build.
 
 **Convention:** at the end of each session, update "Last updated" + "Layer status" + "Just completed" + "Next" + "Parallel." Keep it tight — this is the handoff signal, not a journal.
 
@@ -115,9 +118,10 @@ Layer 5 — Inputs and Outputs   ⏸ TBD
   - **Authentication** — accounts, signup, roles, portfolio
   - **R&D** — model selection, GDPR, encryption, pricing model, architecture
   - **Present** — shop, basket, COA, presentation mode
-  - **Sell** — pricelist, batch allocation, batch upload
-  - **Buy** — buyer-side views
+  - **Sell** — pricelist, batch allocation, batch upload, deal engine
+  - **Buy** — buyer-side views, margin & pricing tool, cash-flow calc, product data bank
   - **Trade** — analysis, partner maps
+  - **Discover** — pre-populated companies, supplier discovery, legal advertising
 - **All issue creation goes through the `track-doubt` skill.** Do not create Linear issues directly.
 
 To look up projects/labels live, use:
