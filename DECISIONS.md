@@ -101,6 +101,7 @@ Each entry: **What was decided** → **Why** (the reasoning at the time).
 - **Deal workspace: invited participants only.**
 - **Shop prices: visible only to connected companies.** Non-connected can see the shop but not prices.
 - **(2026-05-14) Shop price visibility is company-configurable** — 3 modes: show all, hide all, or show one default pricelist publicly. For connected buyers in an established relationship, a custom pricelist applies on top. *Why:* sellers need control over what's public — competitive positioning, channel strategy, regulatory considerations. **Supersedes the previous "visible only to connected companies" rule above.**
+- **(2026-05-16) Deal visibility has two independent layers.** *Layer A — Relationship page (deal records):* every deal between two companies is visible to all colleagues in both companies by **default**. **PRIVATE is a per-side, per-user control** — each side's dealmaker independently decides whether their own org colleagues can see the deal. So a deal can be: (a) public on both sides (default), (b) private on one side only (CoA's user hides it from CoA colleagues; CoB still sees it company-wide), or (c) private on both sides (visible only to the two dealmakers). *Lifecycle:* a deal can stay PRIVATE through birth and negotiation. **Once both sides accept the deal, Layer A visibility flips to company-wide on both sides** — the deal becomes a public record of completed business. (Source: Marcel comment on DEV-6, 2026-05-16.) *Layer B — Deal Workspace contents (chat + artifacts):* invited deal participants only. **Unchanged from the prior lock** — Layer B is independent of A and is never affected by the PRIVATE toggle. *Why:* the Relationship page is the shared business record between two companies; default-open builds trust and lets colleagues pick up context. PRIVATE handles the realistic case where a salesperson wants to keep an in-progress deal off their colleagues' radar (commission conflicts, partial info, competitive sensitivity) — but only until the deal is done.
 
 ### Reversibility
 
@@ -120,6 +121,17 @@ Each entry: **What was decided** → **Why** (the reasoning at the time).
 - External expert paid features.
 - Sella for CEO as a distinct surface.
 - Person belonging to multiple companies.
+
+### Walkthrough locks 2026-05-19 — core entities, P↔C flow, access matrix
+
+- **(2026-05-19) Basket = Deal Card — one entity, two lifecycle visuals (DEV-22).** Cart-style while the seller assembles products in their shop; transitions to Pokémon-card-style once the deal forms (signals detected, offer sent + accepted/countered, basket confirmed in a Deal Room, or manual trigger). Same underlying record carries products / volumes / prices / discounts / terms / notes through both stages.
+- **(2026-05-19) Deal Room is a distinct concept (DEV-22).** Customer-presentation surface, opened by expanding either a Basket or a Deal Card. Floating, full-page. Holds product info + media (videos, photos) tied to products + optional per-room Loom recording and presentation notes. 1 Deal Room per Basket. Re-presentable to multiple customers. Off-platform sharing via temporary link (also a marketing surface). Persistence model: persistent object vs transient render is open — see [DEV-52](https://linear.app/hellosello/issue/DEV-52).
+- **(2026-05-19) Deal Workspace remains the deal container** — spawns at Deal Card birth, holds chat / artifacts / members / stages / the card itself. Initial members = the two dealmakers; more can be added later. *(Reaffirmed; Deal Workspace is NOT the same as Deal Room.)*
+- **(2026-05-19) Back-of-card SIGNALS (DEV-5).** Back of the Deal Card = "SIGNALS" — Deal-Sella-generated insights about the deal. Starting MVP set is 8 examples (deal age / typical close time A↔B / product expiry risk / repeat buy-sell pattern / low product availability / logistics-cost bundling / collaborative business insight / extensible AI suggestion). Deal-Sella owns generation (neutral). UI: flip top-left (back), expand top-right (→ Deal Room, full-page floating). *Compute model* ([DEV-48](https://linear.app/hellosello/issue/DEV-48)), *storage model* ([DEV-49](https://linear.app/hellosello/issue/DEV-49)), and *per-viewer personalization* ([DEV-50](https://linear.app/hellosello/issue/DEV-50)) are tracked as engineering follow-ups.
+- **(2026-05-19) P↔C → P↔P conversion flow (DEV-7).** Person initiates cross-company contact via one of three channels — requesting pricing, sending a connection request with a note, sending/offering a Deal Card. The contact lands on the receiving company's super-admin + designated salespeople as a P↔C ticket. **First-contact Sella** greets the person, asks qualifying questions, and requests docs upfront — pre-pickup docs sit in a temporary "pending inbox" tied to the receiving company. On pickup (first-clicker wins; super-admin can manually assign), the connection is formalized: the Relationship page is created (pending inbox migrates in), the P↔C chat is archived (log preserved), a new P↔P chat opens, initial messages are logged as a system entry on the Relationship page, and Sella writes a summary first message in the new P↔P chat (salesperson can edit). *First-contact Sella config:* platform-wide workflow framework, per-company customizable questions and document requests. *Why:* every cross-company first contact becomes structured intake — by the time a human picks up, the deal is closer to ready.
+- **(2026-05-19) Relationship page is created at pickup** — not at first contact. Pre-pickup activity (initial P↔C messages, doc uploads to first-contact Sella) lives in a temporary pending inbox tied to the receiving company. On pickup, the pending inbox migrates onto the freshly-created Relationship page. *(Resolves part of DEV-7; supersedes any earlier ambiguity in Layer 1 §4.1 about Relationship-creation timing.)*
+- **(2026-05-19) DEV-8 closed by reference.** Marcel's DEV-8 answer about deal-record visibility on the Relationship page is fully covered by the DEV-6 two-layer visibility lock (2026-05-18). There is **no separate "private group" tier** — just PRIVATE deals (which a user can set on any deal), with PRIVATE deals auto-flipping to company-wide on acceptance per the existing lock.
+- **(2026-05-19) 16-combo access matrix lifted into Layer 1 as canonical (DEV-10 closed by reference to DEV-39).** The matrix now lives in Layer 1 §11.1 and is the **master access model** — it overrides any narrower rule earlier in Layer 1 that conflicts. Rows 9 / 10 / 14 are intentionally absent (impossible / forbidden / no-access combinations). How the matrix is encoded in code (policy DSL / RLS / OPA / hardcoded) is tracked as engineering follow-up [DEV-51](https://linear.app/hellosello/issue/DEV-51).
 
 ---
 
@@ -142,6 +154,22 @@ Each entry: **What was decided** → **Why** (the reasoning at the time).
 - **Sell page = strictly seller-side ops** for the sales team. No cross-side analytics (those belong in Trade). *Why:* keep surfaces single-purpose; cross-side intelligence belongs in Trade.
 - **Buy page = buyer-side analog of Sell** — dedicated page for buyer-side procurement workflows. *Why:* symmetry with Sell; supports buyers who run real procurement teams.
 - **Trade page = C-suite analytics + business control center** (post-MVP). Initial scope: all deals across time with filters (1 month / 1 year / 2 years / custom). Future: map view. *Why:* C-suite needs a high-level operational dashboard distinct from day-to-day workflows on the other surfaces.
+- **(2026-05-16) Pricelist cascade for outgoing offers (DEV-1).** When a seller sends an offer card to one or more buyers, the system picks the right pricelist **per recipient** by cascading priority (most-specific wins): (1) **customer-specific pricelist** if the receiving buyer is in Connect with a custom pricelist on their Relationship page; (2) **STANDARD pricelist** if no customer-specific pricelist exists but the seller has uploaded a STANDARD pricelist (CSV); (3) **manual prompt** if neither exists — Sella asks the seller to enter prices before the offer goes out. *Why:* customer-specific is the most trust-building (already-negotiated terms with that buyer); STANDARD is the sensible fallback; manual prompt prevents accidentally sending a no-price offer. Per-recipient evaluation lets a single multi-recipient offer attach the right pricelist to each buyer.
+
+### Big 7 framework (locked 2026-05-18 team meeting)
+
+- **The product is organized around 7 pillars** — six navigable surfaces (Connect / Buy / Sell / Present / Trade / Discover) plus one always-available AI layer (Sella, right-side panel). *Why:* the Big 7 gives every user a clear mental map of platform value; surfaces own distinct user jobs while Sella stitches them together.
+- **Sella as a Big 7 pillar does NOT change the 2026-05-14 UI lock.** She still lives in the right-side panel across all surfaces and is NOT a sidebar item. The Big 7 framing is conceptual (a value-pillar list), not navigation. Sella's role adapts to the user, surface, and task.
+- **Discover is a new surface** for: (a) pre-populated companies (FLOWZ-style, see Layer 1 §12), (b) finding new suppliers globally as a network social feed, (c) legal advertising for brands to a verified audience (closed gang). *Why:* expands platform value from connected-only relationships to pre-registration discovery + brand promotion.
+- **Home = landing page outside the Big 7.** Login portal top-right; UI base = the FIGMA design with pink replacing blue. *Why:* the Big 7 are signed-in surfaces; Home is the public front door + login flow.
+- **Big 7 per-pillar value props (from the 2026-05-18 meeting table):**
+  - **Connect** — chat with every partner inside or outside Hello Sello.
+  - **Buy** — smart procurement decisions; visibility of all deals, prices, margins. **Led by Victor Diem.** Buy-side toolset = Margin & Pricing Tool / Deal Engine / Exclusivity Deals / Cash-Flow Calculator / Product Data Bank.
+  - **Sell** — allocate batches with margin control.
+  - **Present** — show what you've got, basket → deal(room). Online shop + best presentation.
+  - **Trade** — command center for all deals.
+  - **Discover** — find new interesting suppliers globally + legal advertising.
+  - **Sella** — female-inspired caring AI mediating for collaborative mutual benefits on both sides.
 
 ---
 
@@ -183,3 +211,12 @@ Each entry: **What was decided** → **Why** (the reasoning at the time).
 - **A stage closes when all required milestones in it are completed.** Optional milestones are carried over and don't block closure. *Why:* required gates are the contract; optional items are nice-to-haves that shouldn't halt progress.
 - **Deals are born with a default set of stages, fully customizable.** User can add, remove, reorder. (Default set TBD — tied to template scope question, DEV-31.) *Why:* zero-state friction matters; users shouldn't face a blank canvas, but should be free to reshape.
 - **The deal has a "deal owner" who stays accountable throughout the deal.** The deal owner manually picks the responsible team/person for each stage. *Why:* clean accountability — one throat to choke; stage-responsible people act on their portion without taking over the deal. *(Partially resolves DEV-24: ownership doesn't pass between stages. DEV-24 stays open for remaining nuances — Things-list placement, etc.)*
+
+---
+
+## Layer 4 — Sella's Behavior (IN PROGRESS)
+
+### Identity & persona (locked 2026-05-19)
+
+- **Sella's promise: a female-inspired caring AI for both sides, mediating for collaborative mutual benefits.** *(Inherited from Big 7 lock 2026-05-18; restated here as Layer 4's anchor.)*
+- **Per-Sella persona consistency.** Each specialist Sella (Seller / Buyer / Deal / Personal / Company) has its own persona that differentiates it while preserving Sella's unified warmth. Differentiation by role is part of how the specialists work — e.g., Deal-Sella is more formal / auditable (she writes evidence + system messages), Personal Sella more casual / anticipatory (she's the user's wingmate), Company Sella more authoritative / synthetic (she briefs admins). *Why:* a single monolithic voice across roles would either feel wrong in formal contexts (audit messages) or wrong in casual contexts (personal nudges) — role-fitted tone preserves trust on both ends.

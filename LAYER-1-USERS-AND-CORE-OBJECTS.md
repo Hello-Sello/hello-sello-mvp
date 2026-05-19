@@ -30,7 +30,7 @@
 
 ## 2. People (roles) inside a company
 
-> **⚠️ OPEN [DEV-6]** — Needs research: org-to-org permission architecture (10-20 people per company, multiple concurrent deals, org-to-org chat visibility, non-deal-specific content visibility). See [DEV-6](https://linear.app/hellosello/issue/DEV-6/how-should-org-to-org-permissions-and-chat-visibility-work-between-two).
+> **DEV-6 — closed (2026-05-18).** Deal-record visibility on the Relationship page resolved (see Section 11 — two-layer visibility model). Sub-questions from the original DEV-6 scope spun out: org-level role architecture at scale → [DEV-40](https://linear.app/hellosello/issue/DEV-40/how-should-org-level-roles-scale-beyond-adminmember-for-a-10-20-person); non-deal content permissions on the Relationship page → [DEV-41](https://linear.app/hellosello/issue/DEV-41/who-can-readedit-non-deal-content-on-the-relationship-page-notes-terms); multiple concurrent deals organization → [DEV-37](https://linear.app/hellosello/issue/DEV-37/create-organized-chat-windows-and-logs-for-multiple-deals).
 
 **Permission model = GitHub-style.**
 
@@ -61,7 +61,7 @@ We use industry-standard role names (admin, superadmin), not titles like "CEO."
 
 ## 3. Identity layers
 
-> **⚠️ OPEN [DEV-7]** — Person-to-Company chat: flow unresolved. Who's involved on the receiving company side, what's the intended purpose, how does it convert to other chat types? See [DEV-7](https://linear.app/hellosello/issue/DEV-7/what-is-the-purpose-of-person-to-company-chat-and-who-is-involved-in).
+> **DEV-7 — closed (2026-05-19).** P↔C contact lands on super-admin + designated salespeople as a ticket; first-contact Sella greets, qualifies, and requests docs (pre-pickup docs sit in a "pending inbox"); pickup formalizes the connection, activates the Relationship page, archives the P↔C, and opens a new P↔P chat. See Section 7 for the full flow.
 
 A user has two identities at once:
 - **Personal identity** (their own profile)
@@ -72,7 +72,7 @@ A user has two identities at once:
 | Conversation type | Who sees it | When it's used |
 |---|---|---|
 | **Person ↔ Person** | Only the two people | Informal talk, including casual messages that may turn into deal talk |
-| **Person ↔ Company** | The person + invited people on the company side | One human talks to a company entity |
+| **Person ↔ Company** | Super-admin + designated salespeople of the receiving company | First contact from outside (pricing request, connection request, or deal card). First-contact Sella greets and collects docs. On pickup, converts to a P↔P chat. See Section 7. |
 | **Company ↔ Company** | Only people invited to that specific deal | **Only exists inside a deal workspace.** Created when the workspace is created (at deal-card birth). Tied to ONE specific deal. There is no general C↔C chat outside a deal. |
 
 **Important correction we locked in:** company-to-company chat is **NOT** broadcast to all colleagues. It is scoped to **only the people invited to that specific deal**.
@@ -83,9 +83,11 @@ A user has two identities at once:
 
 ### 4.1 The Relationship (Company ↔ Company)
 
-> **⚠️ OPEN [DEV-8]** — Relationship page: what content is shown (company-to-company and person-to-person), and what's the per-user permission rule (e.g., visibility scoped to deals the user participated in vs. full org visibility)? See [DEV-8](https://linear.app/hellosello/issue/DEV-8/what-is-shown-on-the-relationship-page-company-to-company-and-person).
+> **DEV-8 — closed (2026-05-19).** Page contents listed below. Visibility resolved via the DEV-6 two-layer model (see Section 11). PRIVATE deals stay scoped until accepted, then flip to company-wide — **no separate "private group" tier**.
 
-A real, first-class object. Persistent. Once two companies have done business, the Relationship exists forever.
+A real, first-class object. **Created the moment a P↔C ticket is picked up** (= the moment two companies first connect — see Section 7). Once created, persistent forever.
+
+**Pre-pickup activity** (initial P↔C messages + docs that first-contact Sella collected) lives in a temporary **pending inbox** tied to the receiving company. On pickup, the pending inbox **migrates onto the freshly-created Relationship page**.
 
 **What lives on the Relationship:**
 - Shared notes between the companies
@@ -96,16 +98,35 @@ A real, first-class object. Persistent. Once two companies have done business, t
 
 **Why it matters:** when person X from Company A approaches Company B 9 months later about a different product, the Relationship already exists. The chat room is already there. They reuse the existing relationship.
 
-### 4.2 The Deal Card
+### 4.2 The Basket / Deal Card
 
-The **visual** of a deal. Think Pokémon card.
+The **product carrier** of a deal — **one entity, two visual representations across its lifecycle:**
 
-- **Front of the card:** the deal facts. Products, volumes, prices, discounts, free delivery, payment terms, notes, etc.
-- **Back of the card (flip):** Sella's summary of the deal. *(Content of the summary is still to be brainstormed.)*
+- **Cart-style (Basket)** — while the seller is assembling products from their shop for a customer presentation. Same as a shopping cart.
+- **Pokémon-card-style (Deal Card)** — once the deal starts to form (signals detected, offer sent and accepted/countered, basket confirmed in a Deal Room, or manual trigger).
 
-> **⚠️ OPEN [DEV-5]** — Back-of-card content TBD: plain-English summary, risk flags, past-deal comparison, predicted outcome, or some combination? See [DEV-5](https://linear.app/hellosello/issue/DEV-5/what-content-should-appear-on-the-back-of-the-deal-card-the-flip-side).
+The same underlying record carries products / volumes / prices / discounts / payment terms / delivery terms / notes through both stages.
 
-The deal card has **Git-style version history.** Every edit is logged. Every negotiation round produces a new version. The full history is preserved as an audit/evidence trail.
+**Front of the card:** the deal facts. Products, volumes, prices, discounts, free delivery, payment terms, notes.
+
+**Back of the card (flip):** **SIGNALS** — Deal-Sella-generated insights about the deal. Starting MVP set (extensible):
+
+1. When was the deal created
+2. Typical close time between these two companies (fallback to platform-wide benchmark if no A↔B history yet)
+3. Product expiry risk
+4. Repeat buy/sell pattern (suggest stocking / re-ordering for business continuity)
+5. Low product availability (suggest stocking more)
+6. Logistics-cost bundling opportunity
+7. Collaborative business insight (Choco-AI-inspired)
+8. Other AI suggestions (extensible)
+
+**UI controls on the card:**
+- **Flip** button (top-left) → turn to back (SIGNALS).
+- **Expand** button (top-right) → open the **Deal Room** (full-page floating customer-presentation view — see Section 4.4).
+
+**Compute model, storage model, and per-viewer personalization** of SIGNALS are open engineering questions — tracked as [DEV-48](https://linear.app/hellosello/issue/DEV-48), [DEV-49](https://linear.app/hellosello/issue/DEV-49), [DEV-50](https://linear.app/hellosello/issue/DEV-50).
+
+**Git-style version history.** Every edit is logged. Every negotiation round produces a new version. The full history is preserved as an audit / evidence trail.
 
 ### 4.3 The Deal Workspace
 
@@ -116,11 +137,30 @@ The **container** of a deal. Auto-scaffolded the moment a deal card is born.
 **What auto-creates inside the workspace:**
 - A chat thread (scoped to invited participants only)
 - An artifacts folder (documents, COAs, contracts, etc.)
-- A members list (default: the two people chatting + super admins of both companies, for now)
+- A members list (initial: the two dealmakers; more people can be added as needed)
 - Stages (custom per deal, defined by the participants with Sella's help)
 - The deal card itself
 
 The deal card lives inside the workspace. The card is what people see; the workspace is what holds everything.
+
+### 4.4 The Deal Room
+
+The **customer-presentation surface** of the platform — opened by expanding either a **Basket** or a **Deal Card** (see Section 4.2). Floating, full-page.
+
+**Purpose:** salesperson tool. Like a seller laying out products in person, but on-platform — with videos, photos, and Loom-style salesperson recordings to bring the products alive for the customer.
+
+**What lives inside:**
+- The Basket / Deal Card it was opened from (product list, volumes, indicative prices)
+- Media tied to each product (videos, photos) — **reused across all Deal Rooms** that include the product, not duplicated
+- Optional per-room additions: Loom video from the salesperson, presentation notes, special offers
+
+**Locked properties:**
+- **1 Deal Room per Basket / Deal Card** (1-to-1 mapping).
+- **Re-presentable** — the same Deal Room can be re-opened and presented to multiple customers if the seller wants.
+- **Persistent** (engineering choice between persistent object vs transient render tracked as [DEV-52](https://linear.app/hellosello/issue/DEV-52)).
+- **Off-platform sharing via temporary link** — for customers not yet on Hello Sello. Doubles as a marketing surface to bring them onto the platform.
+
+**Why it matters:** the Deal Room is how a seller "sells" pre-deal — Sella's job here is to make the presentation feel as good as a salesperson sitting across the table.
 
 ---
 
@@ -150,9 +190,17 @@ The deal card lives inside the workspace. The card is what people see; the works
 | **Draft deal** | Yes (v0.1 → v_n) | Yes | Deal card born, terms partial, negotiation happening |
 | **Confirmed deal** | Yes (locked) | Yes | Both sides accepted final terms, deal in execution |
 
-### 5.2 Three ways a deal card can be born (1 → 2 transition)
+### 5.2 How a deal card is born (Basket → Deal Card transition)
 
-> **⚠️ OPEN [DEV-10]** — Edge case: what can two Hello Sello users do when one imports the other as a contact but their companies are not yet connected? P↔P chat? P↔C? Deal initiation? Retroactive connection? See [DEV-10](https://linear.app/hellosello/issue/DEV-10/how-should-communication-work-between-two-hello-sello-users-when-their).
+> **DEV-10 — closed (2026-05-19).** The full access model for two HS users across all connection states is the 16-combo matrix — see Section 11.1. The matrix is the master answer for "what can these two users do right now?"
+
+A Basket becomes a Deal Card (= the deal forms) by one of these triggers:
+- **Basket / offer confirmed in a Deal Room** during a customer presentation
+- **Sella detects deal-forming signals** in chat (see Path B below)
+- **An offer is sent** and the receiver **accepts** or **counters** (see Path A below)
+- **Manual trigger** (`//deal` or `+` button — see Path C below)
+
+The three classic birth paths below describe the canonical flows; the Deal-Room-confirmation path is a fourth variation that fits Path A's spirit (a sent offer becomes a deal on acceptance).
 
 **Path A — Pickup of an inbound offer ticket (automatic birth)**
 
@@ -247,38 +295,63 @@ Every version is logged in Git-style history.
 
 ---
 
-## 7. The Inbound Offer Ticket Flow (Jira-style)
+## 7. The Inbound Contact Flow (P↔C → P↔P conversion)
 
-When an offer card arrives from another company:
+The receiving end of cross-company contact. A person in Company A can initiate contact with Company B through three channels:
+
+1. **Requesting pricing** (from a seller's shop)
+2. **Sending a connection request** with a note
+3. **Sending or offering a Deal Card** (from a Basket they already assembled)
+
+All three land as a **P↔C ticket** on Company B.
 
 ```
-Sender builds offer card → Sends to receiving company
+Person from CoA initiates P↔C contact to CoB
         |
         v
-Lands at receiver's ADMIN (connection gate)
-        |
-        |--- REJECT → end
-        |
-        v
-ACCEPT → ticket enters receiver's queue
+Lands on CoB's super-admin + designated salespeople
+(notifications fire on both)
         |
         v
-Queue is visible to the responsible role only
-   (seller side → sales team)
-   (buyer side → procurement team)
+First-contact Sella greets the person:
+   • Asks qualifying questions (configurable per company)
+   • Requests docs upfront (e.g., pharmacy license)
+   • Docs uploaded → "pending inbox" tied to CoB
+     (no Relationship page exists yet)
         |
         v
-Team member picks up the ticket → BIRTH → workspace spawns
+A salesperson (or super-admin) picks up the ticket
+   • First-clicker wins
+   • Super-admin can manually assign at their discretion
         |
-   If nobody picks up:
-   - Superadmin can manually assign
-   - Sender sees "Your offer is being reviewed"
+        |--- REJECT (super-admin) → ticket closed
+        |
+        v
+PICKUP →
+   • Connection between CoA and CoB is formalized
+   • Relationship page is CREATED
+   • Pending-inbox docs migrate onto the Relationship page
+   • P↔C chat is archived (log preserved)
+   • A new P↔P chat opens between the two people
+   • Initial P↔C messages logged as a system entry on the
+     Relationship page ("originated from buyer X via P↔C contact on date Y")
+   • Sella writes a summary first message into the new P↔P chat
+     (salesperson can edit before sending — agent should be good
+     enough that editing isn't usually needed)
 ```
+
+**Why the P↔C → P↔P conversion:** every cross-company first contact becomes structured intake — Sella does the work of qualification + doc collection so by the time a human picks up, the deal is closer to ready and the salesperson can focus on closing rather than gathering basics.
+
+**The "first-contact Sella" config:**
+- **Platform-wide workflow framework** — Sella always greets, qualifies, and requests docs.
+- **Per-company customization** — each company can configure their specific qualifying questions and their list of requested docs (e.g., Canadian Craft may ask about preferred batch sizes; a different distributor may ask about shipping address).
 
 **Admin role clarification:**
-- Admin gates the **company connection**, not the deal terms.
-- Admin is **NOT** the default approver of every new deal.
-- Future (post-MVP): threshold-based approvals (e.g., selling below floor price requires senior manager approval).
+- Super-admin gates the company connection (via pickup), not the deal terms.
+- Super-admin is NOT the default approver of every new deal.
+- Future (post-MVP): threshold-based approvals (e.g., selling below floor price requires senior-manager approval).
+
+**Note:** the access matrix in Section 11.1 governs what each of the three contact channels can do at any given platform / connection state — including off-platform parties via temp link.
 
 ---
 
@@ -377,7 +450,37 @@ Sella should **learn from her own mistakes** (e.g., when she misreads a casual c
 
 ---
 
-## 11. Visibility and privacy summary
+## 11. Visibility, privacy, and access
+
+### 11.1 The 16-combo access matrix (master access model)
+
+Below is the canonical access matrix — sourced from the Chat project description and locked here as the **master access rule for the platform**. Whenever a question arises about "can these two parties do X right now?", this matrix is the answer. It overrides any narrower rule earlier in this doc that conflicts.
+
+**Legend:**
+- **HS** = on Hello Sello platform
+- **Connected** = active connection established (friend / company request accepted)
+- **N/A** = connection not applicable (prerequisite not met)
+
+| # | People on HS | P↔P connected | Companies on HS | Co↔Co connected | Free tier | Premium |
+|---|---|---|---|---|---|---|
+| 1 | Both | Connected | Both | Connected | Full access to Relationship page | — |
+| 2 | Both | Connected | Both | Not connected | Chat access, Relationship page (unverified), Deals (unverified) | — |
+| 3 | Both | Connected | One | N/A | Chat access, Relationship page (unverified), Deals (unverified) | — |
+| 4 | Both | Connected | Neither | N/A | Chat access, Relationship page (unverified), Deals (unverified) | — |
+| 5 | Both | Not connected | Both | Connected | Send "connect" request with message; Relationship page visible | — |
+| 6 | Both | Not connected | Both | Not connected | Send connect request | — |
+| 7 | Both | Not connected | One | N/A | Send "connect" request; Relationship page visible (unverified) | — |
+| 8 | Both | Not connected | Neither | N/A | Send "connect" request; Relationship page visible (unverified) | — |
+| 11 | One | N/A | One | N/A | Chat access, Relationship page (unverified), Deals (unverified) — sent as a table in email with temporary link to Deal Room | — |
+| **12** | **One** | **N/A** | **Neither** | **N/A** | **Start of every account setup — important for buyers to simply request deals. Send chat messages as emails.** | — |
+| 13 | Neither | N/A | Both | Connected | Receive mails with information from Hello Sello conversations | — |
+| 15 | Neither | N/A | One | N/A | Receive mails with information from Hello Sello conversations | — |
+
+**Cases 9, 10, 14 are intentionally absent** — they represent state combinations that are impossible / forbidden / no-access on the platform.
+
+**How the matrix is encoded in the codebase** is open (policy DSL / RLS / OPA / hardcoded) — see [DEV-51](https://linear.app/hellosello/issue/DEV-51).
+
+### 11.2 Surface-level visibility table
 
 | Surface | Visible to |
 |---|---|
@@ -385,8 +488,11 @@ Sella should **learn from her own mistakes** (e.g., when she misreads a casual c
 | Sella system message in workspace ("Deal card updated") | All deal participants |
 | Inbound ticket queue | Role-scoped (sales team or procurement team, per industry best practices) |
 | Deal workspace (chat + artifacts) | Only invited participants |
+| Deal record on Relationship page (Layer A) | **Default:** all colleagues in both companies. **PRIVATE override:** each side's dealmaker can independently hide the deal from their own org. Once both sides accept the deal, Layer A flips back to company-wide on both sides. |
 | Relationship-level data (notes, terms, pricelist) | Per relationship permissions |
 | Shop prices | **Company-configurable.** Each shop can choose: (a) show all prices publicly, (b) hide all prices, or (c) show a single default pricelist publicly. For connected buyers in an established relationship, a custom pricelist applies on top (per Section 4.1). |
+
+**Two-layer visibility:** the Relationship page (Layer A — deal records) and the Deal Workspace (Layer B — chat + artifacts) are independent. PRIVATE only affects Layer A. Layer B always stays scoped to invited participants.
 
 > **⚠️ OPEN [DEV-12]** — Sub-questions on shop price visibility: per-product granularity? Different rules for connected vs. non-connected? Is the public default pricelist the same object as the relationship custom pricelist? See [DEV-12](https://linear.app/hellosello/issue/DEV-12/how-granular-is-company-configurable-shop-price-visibility-per-product).
 
@@ -411,12 +517,7 @@ Sella should **learn from her own mistakes** (e.g., when she misreads a casual c
 
 ## 13. Open questions still to brainstorm (not blockers for Layer 1)
 
-- **Section 4.2** — What content should appear on the back of the Deal Card (the flip side)? — [DEV-5](https://linear.app/hellosello/issue/DEV-5/what-content-should-appear-on-the-back-of-the-deal-card-the-flip-side)
-- **Section 2** — How should org-to-org permissions and chat visibility work between two connected companies? — [DEV-6](https://linear.app/hellosello/issue/DEV-6/how-should-org-to-org-permissions-and-chat-visibility-work-between-two)
-- **Section 3** — What is the purpose of Person-to-Company chat and who is involved in this conversation? — [DEV-7](https://linear.app/hellosello/issue/DEV-7/what-is-the-purpose-of-person-to-company-chat-and-who-is-involved-in)
-- **Section 4.1** — What is shown on the Relationship page (company-to-company and person-to-person), and what are the permission rules? — [DEV-8](https://linear.app/hellosello/issue/DEV-8/what-is-shown-on-the-relationship-page-company-to-company-and-person)
 - **Section 4.3** — What exactly gets created inside a Deal Workspace, and how should it look? — [DEV-9](https://linear.app/hellosello/issue/DEV-9/what-exactly-gets-created-inside-a-deal-workspace-and-how-should-it)
-- **Section 5.2** — How should communication work between two Hello Sello users when their companies are not yet connected? — [DEV-10](https://linear.app/hellosello/issue/DEV-10/how-should-communication-work-between-two-hello-sello-users-when-their)
 - **Section 10** — How should the multi-Sella architecture be designed: orchestrator pattern, tool use, agent framework, or direct SDK? — [DEV-11](https://linear.app/hellosello/issue/DEV-11/how-should-the-multi-sella-architecture-be-designed-orchestrator)
 - **Section 11** — How granular is company-configurable shop price visibility — per-product, per-buyer, single vs. relationship pricelist? — [DEV-12](https://linear.app/hellosello/issue/DEV-12/how-granular-is-company-configurable-shop-price-visibility-per-product)
 - **Detection precision for Sella's deal-forming signals.** (How sensitive should she be? Tunable thresholds?)
@@ -429,9 +530,11 @@ Sella should **learn from her own mistakes** (e.g., when she misreads a casual c
 
 | Term | Meaning |
 |---|---|
-| **Relationship** | Persistent company-to-company object. Holds notes, terms, custom pricelist, deal history. |
-| **Deal Card** | Visual artifact showing the deal facts (front) and Sella's summary (back). Has version history. |
-| **Deal Workspace** | Container that auto-spawns when a card is born. Holds chat, artifacts, members, stages. |
+| **Relationship** | Persistent company-to-company object. Created at first P↔C pickup. Holds notes, terms, custom pricelist, deal history. |
+| **Basket** | Cart-style visual of the Deal Card while the seller is assembling products. Same underlying record. |
+| **Deal Card** | Pokémon-card-style visual once the deal forms. Same entity as Basket — just a later lifecycle visual. SIGNALS on the back. Has version history. |
+| **Deal Room** | Customer-presentation surface. Opens by expanding a Basket or Deal Card. Holds product media + optional salesperson Loom. Re-presentable across customers. Sharable off-platform via temp link. |
+| **Deal Workspace** | Container that auto-spawns when a Deal Card is born. Holds chat, artifacts, members, stages, the card itself. |
 | **Birth** | The moment a deal card is created and a workspace spawns. Three paths: ticket pickup, Sella detection, manual trigger. |
 | **Confirmation** | The moment both sides accept the final card version. Deal moves from negotiation to execution. |
 | **Sella** | The unified user-facing AI agent. Underneath, a router that delegates to specialized sub-agents. |
