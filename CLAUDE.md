@@ -29,6 +29,7 @@ Hello Sello is an **AI-native deal room for B2B** — a shared chat space betwee
 - **[LAYER-4-SELLA-BEHAVIOR.md](LAYER-4-SELLA-BEHAVIOR.md)** — Layer 4. **IN PROGRESS.**
 - *(Future)* LAYER-5. See **"The 5-Layer Roadmap"** below for what each layer covers.
 - **[DECISIONS.md](DECISIONS.md)** — locked decisions with reasoning. One-line per decision.
+- **[ARCHITECTURE-NOTES.md](ARCHITECTURE-NOTES.md)** — running engineering scratchpad. One-sentence implications from each lock, grouped by topic. Precursor to the formal Architecture doc.
 
 ---
 
@@ -89,20 +90,26 @@ Layer 5 — Inputs and Outputs   ⏸ TBD
 
 *Updated at the end of every brainstorm session. This is the "you are here" marker for the next session — always read this first.*
 
-**Last updated:** 2026-05-19
+**Last updated:** 2026-05-20
 
 **Layer status:**
-- Layer 1 — ✅ LOCKED. Two doubts closed and superseded this session (DEV-1, DEV-6); DEV-40 + DEV-41 spun out of DEV-6. DEV-10 deferred to DEV-39.
-- Layer 2 — ⏳ Big 7 framework locked 2026-05-18 (added Discover surface + Sella pillar; Home as landing page). Sub-areas still not drilled. 10 doubts: DEV-13 → DEV-22.
-- Layer 3 — ⏳ Sprint pass done; 4 sections parked for Marcel (DEV-23, DEV-26, DEV-29, DEV-35, DEV-36).
-- Layer 4 — ⏳ Started 2026-05-19. §1 (identity) + §2 (persona consistency) locked. Sections 3-10 TBD.
+- Layer 1 — ✅ LOCKED. Walkthrough this session closed 9 doubts (DEV-1, DEV-5, DEV-6, DEV-7, DEV-8, DEV-10, DEV-12, DEV-22, plus DEV-40 + DEV-41 spun out of DEV-6). Two-layer visibility model, P↔C → P↔P flow, Basket = Deal Card + Deal Room, 16-combo access matrix lifted to §11.1 as canonical, Superadmin + custom Groups RBAC, Relationship-page permissions. Foundation solid for engineering.
+- Layer 2 — ⏳ Big 7 framework locked 2026-05-18. Cluster C closed DEV-12 (shop pricing), DEV-14 (blank vs populated states), DEV-18 (Presentation Mode concept). 7 surface drill-down doubts still open: DEV-13 / 15 / 16 / 17 / 19 / 20 / 21.
+- Layer 3 — ⏳ Cluster D closed DEV-25 (Done = delivery note + invoice attached), DEV-33 (stages don't reopen; passive thin-line notifications), DEV-35 (no payment for cannabis MVP; Stripe Phase 2; factoring Phase 3), DEV-36 (Sella OCR/AI on delivery note + invoice auto-amends deal). Open: DEV-23, DEV-26, DEV-29 (parked Marcel); plus DEV-24, 27, 28, 30, 31, 32, 34 (smaller stage/milestone/thing nuances).
+- Layer 4 — ⏳ Kicked off 2026-05-19. §1 (identity + Schranner-inspired mediator voice) + §2 (per-Sella persona consistency) locked. §3-§10 TBD next session.
 - Layer 5 — ⏸ Not started.
 
-**Just completed:** Layer 4 kickoff — §1 identity anchored, §2 per-Sella persona consistency locked. Voice-tone doubt tracked. Big 7 framework lock (2026-05-18) + 5 new Linear projects for Buy-side toolset.
+**Just completed (session 2026-05-19 → 2026-05-20):**
+Walkthrough of 16-issue In-Review pile across 6 clusters. 17 doubts closed: DEV-1, 5, 6, 7, 8, 10, 12, 14, 18, 22, 25, 33, 35, 36, 40, 41, 46. Big 7 framework locked. Layer 4 file created. **`ARCHITECTURE-NOTES.md` created** as engineering scratchpad (one-sentence implications grouped by topic). Memory notes refreshed (Basket=Card model). Track-doubt skill template aligned to Marcel's issue format. 8 engineering follow-up issues spawned: DEV-48 (signals compute), DEV-49 (signals storage), DEV-50 (per-viewer signals), DEV-51 (access matrix as code), DEV-52 (Deal Room object/render), DEV-53 (partial shipments), DEV-54 (Presentation Mode UI), DEV-55 (Sella voice samples). 5 new Buyer-side Linear projects spawned earlier (Margin & Pricing, Deal Engine, Cash-Flow, Sella reply suggestion, Profile visibility).
 
-**Next session:** Drill Layer 4 §3 (Triggers & detection) → §10 (Non-goals), absorbing carry-overs from DEV-5 + DEV-7 + DEV-11 + Sella-reply-suggestion project. Then Layer 5 (I/O), then engineering architecture / system design / DB schema.
+**Next session:** Layer 4 §3-§10 brainstorm — Triggers & detection → Autonomy ladder → Per-surface behavior → Cross-cutting behaviors → Memory / context / learning → Privacy invariants → Failure modes → Non-goals. Carry-overs already flagged in the stubs (Sella reply suggestion, first-contact Sella, back-of-card SIGNALS, translation, multi-Sella architecture per DEV-11).
 
-**Parallel:** Marcel consultation needed for DEV-23, DEV-26, DEV-29, DEV-35, DEV-36. Victor leading Buy-side build.
+**Parallel / blocked:**
+- **Marcel:** DEV-23 (cancellation/dispute), DEV-26 (PO generation), DEV-29 (approval signatures), DEV-53 (split shipments confirmation), DEV-37/38/39/42/43/44/45 (his backlog items)
+- **Ayush:** DEV-9 (Deal Workspace UI sketches)
+- **Victor:** leading Buy-side build (Margin & Pricing, Deal Engine, Cash-Flow Calc, Product Data Bank, Exclusivity Deals)
+- **Engineering follow-ups parked (need research/design):** DEV-11 (multi-Sella architecture pattern), DEV-48/49/50 (signals compute/storage/personalization), DEV-51 (access matrix encoding), DEV-52 (Deal Room object/render), DEV-54 (Presentation Mode UI), DEV-55 (Sella voice samples)
+- **Open follow-ups without owners:** Exclusivity Deals label (Buy vs Sell vs Discover — your call), Product Data Bank scope (R&D vs Discover vs Buy — your call)
 
 **Convention:** at the end of each session, update "Last updated" + "Layer status" + "Just completed" + "Next" + "Parallel." Keep it tight — this is the handoff signal, not a journal.
 

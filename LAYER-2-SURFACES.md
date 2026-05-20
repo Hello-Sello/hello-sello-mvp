@@ -49,9 +49,10 @@ The product is organized as **6 navigable surfaces + Sella (always-available AI 
 - **Navigation:** the 6 navigable surfaces (Connect / Buy / Sell / Present / Trade / Discover) live as pages in the left sidebar.
 - **Big 7 (locked 2026-05-18):** Connect / Buy / Sell / Present / Trade / Discover + Sella as a pillar. Home is a separate landing page outside the Big 7.
 - **Sella is a Big 7 pillar but NOT a sidebar surface.** She lives in a right-side panel across all surfaces (Cursor-style). Always available but no sidebar item. Her role adapts to the user, surface, and task. *(Lock from 2026-05-14, reaffirmed 2026-05-18.)*
-- **All users see all 6 navigable surfaces**, regardless of whether their company sells, buys, or both. *(Open follow-up: what's visible **within** a surface for users who only buy or only sell — see Open Questions.)*
+- **All users see all 6 navigable surfaces**, regardless of whether their company sells, buys, or both.
+- **(2026-05-20, DEV-14) Each surface has two UI states: blank and populated.** *Blank* = the user / company hasn't activated this surface (e.g., a pharmacy that has never used Sell). *Populated* = active use with content visible. No hiding, no role gating — every surface stays reachable. The platform encourages dual-role usage; the design pattern is just "show empty state vs live state."
 
-> **⚠️ OPEN [DEV-14]** — Within-surface visibility for buy-only / sell-only users vs dual-role: empty states, hidden sections, defaults? See [DEV-14](https://linear.app/hellosello/issue/DEV-14/whats-visible-inside-each-surface-for-users-whose-company-only-buys-or).
+> **DEV-14 — closed (2026-05-20).** See the blank-vs-populated rule above.
 - **Deals:** workspaces live inside Connect. Accessible from chat AND from Trade.
 
 ## Still open
@@ -75,7 +76,7 @@ The product is organized as **6 navigable surfaces + Sella (always-available AI 
 ## 2. Present
 
 > **⚠️ OPEN [DEV-15]** — Layout/navigation pattern for this surface. See [DEV-15](https://linear.app/hellosello/issue/DEV-15/whats-the-layoutnavigation-pattern-for-each-of-the-5-surfaces-when-a).
-> **⚠️ OPEN [DEV-18]** — Presentation Mode UI specifics (the Deal Room concept is locked — see below; the visual layout / interaction model of Presentation Mode itself is still open). See [DEV-18](https://linear.app/hellosello/issue/DEV-18/what-exactly-is-presentation-mode-and-how-does-the-basket-deal-room).
+> **DEV-18 — closed (2026-05-20).** Presentation Mode concept locked — seller selects products from their shop, adds presentation media (videos / photos / Loom), and turns them into a Deal Room for the customer. UI / interaction design spun off as [DEV-54](https://linear.app/hellosello/issue/DEV-54/design-the-presentation-mode-ui-interaction-model).
 > **DEV-22 — closed (2026-05-19).** The Basket / Deal Card / Deal Room / Deal Workspace model is locked — see below.
 
 **Contents:** see the Present Linear label.
@@ -86,6 +87,7 @@ The product is organized as **6 navigable surfaces + Sella (always-available AI 
 - **Basket = Deal Card** — **one entity, two lifecycle visual representations.** Cart-style while the seller assembles products from their shop; transitions to Pokémon-card-style once a deal forms (signals detected, sent + accepted/countered, basket confirmed in a Deal Room, or manual trigger). Same underlying record. See [Layer 1 §4.2](LAYER-1-USERS-AND-CORE-OBJECTS.md).
 - **Deal Room is a distinct concept from Deal Workspace.** Deal Room = customer-presentation surface (videos / photos / Loom). Deal Workspace = container that spawns at Deal Card birth (chat / artifacts / members / stages). See [Layer 1 §4.4](LAYER-1-USERS-AND-CORE-OBJECTS.md).
 - **Deal Room properties:** 1 per Basket (1-to-1), re-presentable to multiple customers, persistent (engineering choice: object vs render — [DEV-52](https://linear.app/hellosello/issue/DEV-52)), product media (videos, photos) tied to products for reuse across rooms, off-platform sharing via temporary link (doubles as marketing).
+- **(2026-05-20, DEV-12) Shop pricing per viewer — 3 modes:** (a) show all prices publicly, (b) hide all — buyer sees a **"request pricing" button** to ask, (c) show one default STANDARD pricelist publicly. For connected companies, an **individual custom pricelist** applies on top — **different per connected company**. *(Refines the 2026-05-14 lock; mirrors Layer 1 §11.2 Shop prices row.)*
 
 *(Detailed sub-area discussion: TBD.)*
 
@@ -200,11 +202,9 @@ Sella's user-facing value prop (Big 7): "A female-inspired caring AI for both si
 *(Doubts get appended here as they're tracked via the `/track-doubt` skill. Format: `Section X — question — DEV-XX link`.)*
 
 - **Structural Q2** — What should the home / landing view show for a logged-in user? — [DEV-13](https://linear.app/hellosello/issue/DEV-13/what-should-the-home-landing-view-show-for-a-logged-in-user)
-- **Structural / surface visibility** — What's visible inside each surface for users whose company only buys or only sells (vs. dual-role)? — [DEV-14](https://linear.app/hellosello/issue/DEV-14/whats-visible-inside-each-surface-for-users-whose-company-only-buys-or)
 - **All 5 surfaces — layout** — What's the layout/navigation pattern for each surface when a user clicks it in the sidebar? — [DEV-15](https://linear.app/hellosello/issue/DEV-15/whats-the-layoutnavigation-pattern-for-each-of-the-5-surfaces-when-a)
 - **Section 1 — Connect / Chat** — Is "Thread instead of group chat" a Connect feature or a chat-specific behavior? — [DEV-16](https://linear.app/hellosello/issue/DEV-16/is-thread-instead-of-group-chat-a-connect-level-feature-or-a-chat)
 - **Section 1 — Connect / Contact import** — How are imported contacts labelled and categorized? — [DEV-17](https://linear.app/hellosello/issue/DEV-17/how-are-imported-contacts-labelled-and-categorized-after-import)
-- **Section 2 — Present** — What is Presentation Mode, and how does basket → Deal Room transition work? — [DEV-18](https://linear.app/hellosello/issue/DEV-18/what-exactly-is-presentation-mode-and-how-does-the-basket-deal-room)
 - **Section 3 — Sell** — What features should live in Sell beyond the 3 known projects? — [DEV-19](https://linear.app/hellosello/issue/DEV-19/what-features-should-live-in-the-sell-page-beyond-the-3-known-projects)
 - **Section 4 — Buy** — What features should live in Buy (analogous to Sell)? — [DEV-20](https://linear.app/hellosello/issue/DEV-20/what-features-should-live-in-the-buy-page-analogous-to-sell)
 - **Section 5 — Trade** — What's the new name for the Trade page (verb matching naming convention)? — [DEV-21](https://linear.app/hellosello/issue/DEV-21/whats-the-new-name-for-the-trade-page-verb-matching-the-surface-naming)
