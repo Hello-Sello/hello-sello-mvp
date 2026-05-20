@@ -48,7 +48,7 @@ The journey from **"order" → "done"** — what happens after both parties conf
 [Confirmed] / [In Progress]  →  [Cancelled]   (post-confirmation cancellation, see Section 9)
 ```
 
-> **⚠️ OPEN [DEV-25]** — Does the final transition to Done require the customer to explicitly click, or is it implicit on stages + delivery? See [DEV-25](https://linear.app/hellosello/issue/DEV-25/does-the-customerother-party-explicitly-click-done-to-finalize-a-deal).
+> **DEV-25 — closed (2026-05-20).** Done = delivery note + invoice **both attached** (document-driven trigger; no explicit click). See §8 for the full completion model.
 >
 > **⚠️ OPEN [DEV-23]** — Cancellation / dispute flow after confirmation. See [DEV-23](https://linear.app/hellosello/issue/DEV-23/how-should-cancellation-and-dispute-resolution-work-after-deal).
 
@@ -62,20 +62,20 @@ The journey from **"order" → "done"** — what happens after both parties conf
 >
 > **⚠️ OPEN [DEV-32]** — When a stage is added mid-deal, both-side confirm vs notification? See [DEV-32](https://linear.app/hellosello/issue/DEV-32/when-a-stage-is-added-mid-deal-does-the-other-party-need-to-confirm-or).
 >
-> **⚠️ OPEN [DEV-33]** — Reopening closed stages: follow-up, branch, tagged issue, or full reopen? See [DEV-33](https://linear.app/hellosello/issue/DEV-33/how-does-reopening-a-closed-stage-work-follow-up-branch-tagged-stage).
+> **DEV-33 — closed (2026-05-20).** **Closed stages do not reopen.** Post-close work happens via appendices — documents (attached to deal), Things (clarification tickets, see §7), and approvals (approval workflow from DEV-41). The "Reopened" state from the 2026-05-16 lock is removed. Stage-closure and post-close deal-data-change notifications downgraded to **passive thin status line** (no push) per Marcel's notification-overload concern.
 >
 > **⚠️ OPEN [DEV-34]** — Stage UI: Kanban, timeline, checklist, or hybrid? See [DEV-34](https://linear.app/hellosello/issue/DEV-34/how-are-stages-presented-visually-in-the-deal-workspace-kanban).
 
 **Locked:**
 - **Stages = macro phases AFTER confirmation.** Custom per deal.
 - Examples: finance, logistics, delivery.
-- **Lifecycle: Pending → In Progress → Closed → Reopened.** Reopened lets a closed stage come back if downstream issues surface.
+- **Lifecycle: Pending → In Progress → Closed.** Three states. Closed = final; post-close work uses appendices (documents, Things, approvals), not a state transition. *(DEV-33, 2026-05-20 — supersedes the 2026-05-16 four-state "Reopened" lock.)*
 - **Parallel stages allowed; sequential-vs-parallel is user-configurable per deal.**
 - **A stage closes when all required milestones in it are completed.** Optional milestones carry over (don't block closure).
 - **Deals are born with a default set of stages, fully customizable.** (Default set TBD — tied to template scope, DEV-31.)
 - **The deal has a deal owner** who stays accountable throughout. The deal owner manually picks the responsible team/person for each stage.
 - Each stage has a responsible person/team. When their part is done, they close/tick the stage.
-- **Closing a stage triggers a visibility update** (in-app notification, status change in the workspace, or both). Closing IS the trigger; no separate "send notification" step. *(Exact mechanism TBD.)*
+- **Closing a stage shows a passive thin status line** in both the P↔P chat where the change was processed AND the C↔C workspace chat — WhatsApp-style artifact with date + timestamp, no push notification. *(DEV-33, 2026-05-20 — supersedes the 2026-05-16 active-notification lock; Marcel wants to save people from notification overload.)*
 
 ---
 
@@ -112,17 +112,24 @@ The journey from **"order" → "done"** — what happens after both parties conf
 
 ## 5. Payment terms tracking
 
-> **⚠️ OPEN [DEV-35]** — How is payment tracking handled in the deal lifecycle? Needs Marcel input. See [DEV-35](https://linear.app/hellosello/issue/DEV-35/how-is-payment-tracking-handled-in-the-deal-lifecycle).
+> **DEV-35 — closed (2026-05-20).** MVP scope locked — see below.
 
-*(Section parked until Marcel consultation. Same approach as Sections 4 and 9 — brainstorm-ahead avoided to prevent inventing scope.)*
+**Locked 2026-05-20 (DEV-35):**
+- **MVP:** no payment tracking inside Hello Sello for medical cannabis. Cannabis deals operate on **40-90 day payment windows handled externally** between the two companies. The deal card still carries payment **terms** (e.g., "Net 60") as metadata, but no payment state machine.
+- **Phase 2:** **Stripe integration** for packaging-material / non-cannabis suppliers — payment-in-platform for those flows.
+- **Phase 3 / future:** **factoring integration** — suppliers can route invoices to partner factoring companies, with Hello Sello taking a small fee. *(Marcel DEV-35 comment 2026-05-19.)*
 
 ---
 
 ## 6. Delivery tracking
 
-> **⚠️ OPEN [DEV-36]** — How is delivery tracking handled in MVP (without logistics partners)? Needs Marcel input. See [DEV-36](https://linear.app/hellosello/issue/DEV-36/how-is-delivery-tracking-handled-in-mvp-without-logistics-partners).
+> **DEV-36 — closed (2026-05-20).** MVP scope locked — see below.
 
-*(Section parked until Marcel consultation.)*
+**Locked 2026-05-20 (DEV-36):**
+- **MVP:** delivery is tracked by **uploading the delivery note + invoice** as attachments to the deal. **Sella OCR / AI** extracts the data (volumes, prices, final product names) and **auto-amends the deal card** to reflect what was actually shipped. Both parties see the amendment as a passive thin status line in the workspace chat (no push notification).
+- **Phase 2:** logistics companies as workspace actors — they receive pickup notifications and add tracking information into the same portal.
+- **Phase 3 / future:** customer ERP integration for end-to-end automatic delivery tracking.
+- *Open follow-up:* partial / split shipments — when one deal has multiple deliveries, does Done fire only after all delivery notes + invoices are uploaded? Working assumption: yes (one deal, N deliveries, Done on final). To confirm with Marcel — see [DEV-53](https://linear.app/hellosello/issue/DEV-53/multiple-deliveries-on-one-deal-does-done-require-all-delivery-notes).
 
 ---
 
@@ -149,12 +156,13 @@ The journey from **"order" → "done"** — what happens after both parties conf
 
 ## 8. Completion
 
-**Locked:**
-- A deal moves to **Done** when:
-  - All stages are closed by their responsible people, AND
-  - Product reaches the customer
+**Locked (2026-05-20, DEV-25):**
+- A deal moves to **Done** when the **delivery note + invoice are both attached** to the deal. These documents prove the deal content is correct and final.
+- **No explicit "Done" click is required** — the documents are the trigger.
+- **Sella OCR / AI extracts the document data** and amends the deal card to reflect actual volumes / prices / final names shipped (see §6 for delivery tracking).
+- For deals with **multiple deliveries**, the deal stays in-flight until **all delivery notes + invoices are uploaded** — see [DEV-53](https://linear.app/hellosello/issue/DEV-53/multiple-deliveries-on-one-deal-does-done-require-all-delivery-notes) (partial-shipments confirmation with Marcel).
 
-> **⚠️ OPEN [DEV-25]** — Final transition mechanism: explicit customer click vs. implicit completion. See [DEV-25](https://linear.app/hellosello/issue/DEV-25/does-the-customerother-party-explicitly-click-done-to-finalize-a-deal).
+*(Supersedes the earlier "all stages closed AND product reaches the customer" wording — document attachment is now the canonical trigger.)*
 
 *(Post-Done: archival, accessibility, audit trail — TBD.)*
 
@@ -175,12 +183,14 @@ The journey from **"order" → "done"** — what happens after both parties conf
 - **Stages and Milestones are distinct concepts.** Stages = post-confirmation macro phases (custom templates). Milestones = checkboxes / gates (pre- or post-confirmation, required or optional).
 - **Milestones can be pre-confirmation OR post-confirmation.** Same primitive, different placement in the lifecycle.
 - **Milestones are flexible (no enforced types), optional by default, ticked only by assignee or creator.** Required ones halt the stage with clear "why halted" UX. Templates per deal + any-party-can-add. In-app notifications, audit trail required for GDPR.
-- **Stage lifecycle: Pending → In Progress → Closed → Reopened.** Parallel stages allowed; sequential-vs-parallel user-configurable per deal.
+- **(2026-05-20, DEV-33) Stage lifecycle: Pending → In Progress → Closed.** Three states — no Reopened. Closed = final; post-close work happens via appendices (documents, Things, approvals). Parallel stages allowed; sequential-vs-parallel user-configurable per deal. *(Supersedes the 2026-05-16 four-state lifecycle lock.)*
 - **A stage closes when all required milestones are complete** (optional ones carry over).
 - **Deals are born with default stages, customizable.** Deal owner stays accountable throughout; manually assigns stage-responsible people (partially resolves DEV-24).
-- **Stage closure triggers a visibility update** (notification, status banner, or both — exact mechanism TBD). Supersedes earlier "no notification" interpretation.
+- **(2026-05-20, DEV-33) Stage closure + post-close deal-data changes use a passive thin status line** — visible in both the P↔P chat where the change was processed AND the C↔C workspace chat. WhatsApp-style artifact (date + timestamp), no push notification. *Why:* Marcel wants to save people from notification overload. *(Supersedes the 2026-05-16 active-notification lock.)*
 - **"Things" = action items always assigned to someone.** Standalone OR deal-scoped. With categories, filters, in-app notifications, redirect/reassign, threaded discussion. Lifecycle: Open → Done (side: Dismissed).
-- **Deal moves to Done when all stages are closed AND product reaches the customer.** (Final trigger mechanism — see Open Questions.)
+- **(2026-05-20, DEV-25) Deal moves to Done when the delivery note + invoice are both attached.** Document-driven trigger — no explicit click. Sella OCR / AI extracts and amends the deal card with actual volumes / prices / names. For multi-delivery deals, Done waits until all delivery-note + invoice pairs are uploaded (DEV-53 to confirm).
+- **(2026-05-20, DEV-35) Payment tracking:** MVP no in-platform tracking for cannabis (40-90 day windows handled externally); Phase 2 Stripe for materials; Phase 3 factoring partnership.
+- **(2026-05-20, DEV-36) Delivery tracking:** MVP = manual delivery-note + invoice upload with Sella OCR / AI extraction; Phase 2 logistics-company integration; Phase 3 ERP integration.
 
 ---
 
@@ -192,7 +202,6 @@ The journey from **"order" → "done"** — what happens after both parties conf
 
 ## Open Questions
 
-- **Section 1 / 8 — Completion trigger** — Does the customer explicitly click "Done," or is completion implicit? — [DEV-25](https://linear.app/hellosello/issue/DEV-25/does-the-customerother-party-explicitly-click-done-to-finalize-a-deal)
 - **Section 2 — Stage ownership** — Does ownership pass between stage-responsible people as stages advance? — [DEV-24](https://linear.app/hellosello/issue/DEV-24/does-deal-ownership-pass-between-collaborators-as-stages-advance-or)
 - **Section 9 — Cancellation flow** — How does post-confirmation cancellation/dispute work? — [DEV-23](https://linear.app/hellosello/issue/DEV-23/how-should-cancellation-and-dispute-resolution-work-after-deal)
 - **Section 4 — PO generation** — What does "PO automatisch generiert" actually mean? Marcel input needed. — [DEV-26](https://linear.app/hellosello/issue/DEV-26/what-does-po-automatisch-generiert-actually-mean-in-the-product-scope)
@@ -202,10 +211,7 @@ The journey from **"order" → "done"** — what happens after both parties conf
 - **Section 3 — Milestone dependencies** — Chain vs flat/independent? — [DEV-30](https://linear.app/hellosello/issue/DEV-30/can-a-milestone-depend-on-another-milestone-being-done-first-chain-or)
 - **Section 2 — Stage templates** — Platform / company / per-deal scope? (Post-MVP.) — [DEV-31](https://linear.app/hellosello/issue/DEV-31/stage-template-library-platform-wide-company-wide-per-deal-or-all)
 - **Section 2 — Adding stages mid-deal** — Both-side confirm vs notification only? — [DEV-32](https://linear.app/hellosello/issue/DEV-32/when-a-stage-is-added-mid-deal-does-the-other-party-need-to-confirm-or)
-- **Section 2 — Reopening closed stages** — Follow-up, branch, tagged issue, or full reopen? — [DEV-33](https://linear.app/hellosello/issue/DEV-33/how-does-reopening-a-closed-stage-work-follow-up-branch-tagged-stage)
 - **Section 2 — Stage UI** — Kanban, timeline, checklist, hybrid? — [DEV-34](https://linear.app/hellosello/issue/DEV-34/how-are-stages-presented-visually-in-the-deal-workspace-kanban)
-- **Section 5 — Payment tracking** — How is payment tracked through the deal lifecycle? Needs Marcel. — [DEV-35](https://linear.app/hellosello/issue/DEV-35/how-is-payment-tracking-handled-in-the-deal-lifecycle)
-- **Section 6 — Delivery tracking** — How is delivery tracked in MVP (without logistics partners)? Needs Marcel. — [DEV-36](https://linear.app/hellosello/issue/DEV-36/how-is-delivery-tracking-handled-in-mvp-without-logistics-partners)
 
 ---
 

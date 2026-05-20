@@ -29,6 +29,7 @@ Hello Sello is an **AI-native deal room for B2B** — a shared chat space betwee
 - **[LAYER-4-SELLA-BEHAVIOR.md](LAYER-4-SELLA-BEHAVIOR.md)** — Layer 4. **IN PROGRESS.**
 - *(Future)* LAYER-5. See **"The 5-Layer Roadmap"** below for what each layer covers.
 - **[DECISIONS.md](DECISIONS.md)** — locked decisions with reasoning. One-line per decision.
+- **[ARCHITECTURE-NOTES.md](ARCHITECTURE-NOTES.md)** — running engineering scratchpad. One-sentence implications from each lock, grouped by topic. Precursor to the formal Architecture doc.
 
 ---
 
@@ -89,20 +90,20 @@ Layer 5 — Inputs and Outputs   ⏸ TBD
 
 *Updated at the end of every brainstorm session. This is the "you are here" marker for the next session — always read this first.*
 
-**Last updated:** 2026-05-19
+**Last updated:** 2026-05-20
 
 **Layer status:**
-- Layer 1 — ✅ LOCKED. Two doubts closed and superseded this session (DEV-1, DEV-6); DEV-40 + DEV-41 spun out of DEV-6. DEV-10 deferred to DEV-39.
-- Layer 2 — ⏳ Big 7 framework locked 2026-05-18 (added Discover surface + Sella pillar; Home as landing page). Sub-areas still not drilled. 10 doubts: DEV-13 → DEV-22.
-- Layer 3 — ⏳ Sprint pass done; 4 sections parked for Marcel (DEV-23, DEV-26, DEV-29, DEV-35, DEV-36).
-- Layer 4 — ⏳ Started 2026-05-19. §1 (identity) + §2 (persona consistency) locked. Sections 3-10 TBD.
+- Layer 1 — ✅ LOCKED. Cluster A walkthrough closed DEV-5, DEV-7, DEV-8, DEV-10, DEV-22 (2026-05-19). Cluster B closed DEV-40 + DEV-41 (2026-05-20). 8 follow-up engineering issues created (DEV-48 → DEV-52, plus DEV-40/41 closure docs).
+- Layer 2 — ⏳ Big 7 framework locked 2026-05-18. Sub-areas still not drilled. 9 doubts open (DEV-13 → DEV-21).
+- Layer 3 — ⏳ Sprint pass done; 5 sections in In-Review with Marcel answers (DEV-23, DEV-25, DEV-33, DEV-35, DEV-36) awaiting lock.
+- Layer 4 — ⏳ Started 2026-05-19. §1 (identity) + §2 (persona consistency) locked. Sections 3-10 TBD. DEV-46 (voice tone) has Marcel direction (Matthias Schranner mediator style).
 - Layer 5 — ⏸ Not started.
 
-**Just completed:** Layer 4 kickoff — §1 identity anchored, §2 per-Sella persona consistency locked. Voice-tone doubt tracked. Big 7 framework lock (2026-05-18) + 5 new Linear projects for Buy-side toolset.
+**Just completed:** Cluster F — DEV-46 (Sella voice tone = Schranner-inspired mediator style). Concrete voice samples spun off to DEV-55. Layer 4 §1 + §2 fully locked.
 
-**Next session:** Drill Layer 4 §3 (Triggers & detection) → §10 (Non-goals), absorbing carry-overs from DEV-5 + DEV-7 + DEV-11 + Sella-reply-suggestion project. Then Layer 5 (I/O), then engineering architecture / system design / DB schema.
+**Next session:** Layer 4 §3-§10 brainstorm (Triggers / Autonomy ladder / Per-surface / Cross-cutting / Memory / Privacy / Failure / Non-goals). Cluster E (DEV-9 workspace contents) held until Ayush delivers UI sketches.
 
-**Parallel:** Marcel consultation needed for DEV-23, DEV-26, DEV-29, DEV-35, DEV-36. Victor leading Buy-side build.
+**Parallel:** Marcel consultation needed for DEV-23 (cancellation), DEV-26 (PO generation), DEV-29 (approval signatures). Victor leading Buy-side build.
 
 **Convention:** at the end of each session, update "Last updated" + "Layer status" + "Just completed" + "Next" + "Parallel." Keep it tight — this is the handoff signal, not a journal.
 

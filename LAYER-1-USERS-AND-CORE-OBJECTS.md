@@ -30,28 +30,29 @@
 
 ## 2. People (roles) inside a company
 
-> **DEV-6 — closed (2026-05-18).** Deal-record visibility on the Relationship page resolved (see Section 11 — two-layer visibility model). Sub-questions from the original DEV-6 scope spun out: org-level role architecture at scale → [DEV-40](https://linear.app/hellosello/issue/DEV-40/how-should-org-level-roles-scale-beyond-adminmember-for-a-10-20-person); non-deal content permissions on the Relationship page → [DEV-41](https://linear.app/hellosello/issue/DEV-41/who-can-readedit-non-deal-content-on-the-relationship-page-notes-terms); multiple concurrent deals organization → [DEV-37](https://linear.app/hellosello/issue/DEV-37/create-organized-chat-windows-and-logs-for-multiple-deals).
+> **DEV-6, DEV-40 — closed.** DEV-6 (deal-record visibility) closed 2026-05-18 via the two-layer visibility model (Section 11.2). DEV-40 (org-level role architecture) closed 2026-05-20 with the Superadmin + custom Groups model — see below. (DEV-41 — non-deal content permissions — closed 2026-05-20 in Section 4.1.) Multiple concurrent deals organization remains tracked as [DEV-37](https://linear.app/hellosello/issue/DEV-37/create-organized-chat-windows-and-logs-for-multiple-deals).
 
-**Permission model = GitHub-style.**
+**Two layers of permissions: organization-level and deal-level.**
 
-**Two layers of permissions:**
+**Layer A — Organization-level (locked 2026-05-20, DEV-40):**
 
-**Layer A — Organization-level:**
-- **Admin / Superadmin** — sets up the company account, invites the team, manages permissions, gates incoming company-to-company connections.
-- **Members** — regular employees with org access.
+- **Superadmin** — the only platform-fixed role. **At least one per company** (created at account setup, transferable). System-level powers: accept incoming company-connection requests, manage billing, add/remove other Superadmins.
+- **Groups** — every other role is a **custom Group**, defined per company. Each Group carries a permission set, configured at setup using a green/red **Action × Group matrix**. Drag-and-drop UI to assign people to Groups.
+- **Members** — every signed-in user belongs to the company and to **N Groups simultaneously** (many-to-many). Effective permissions = union of group permissions.
 
-We use industry-standard role names (admin, superadmin), not titles like "CEO."
+Industry CRM pattern (Notion / Slack / Linear style) — sensible defaults at registration + full customization.
+
+**Examples of Groups a company might create** (illustrative; names and permissions are fully company-defined):
+- VP / Sales Manager / Junior Manager — hierarchical tiers
+- Sales team (seller side) / Procurement team (buyer side) — functional groupings
+- Procurement team on the seller side — inventory / batch management, feeds FIFO allocation
+- Cannabis Compliance / QA — regulated-industry-specific
+- **Approver** — group flagged with approval rights for gated actions (e.g., pricelist sign-off — see §4.1)
 
 **Layer B — Deal-level (collaborators):**
 - Each deal has its own collaborator list, like a GitHub repo.
-- Each side manages their own collaborators on a deal (the seller's admin cannot add buyer-side people).
+- Each side manages their own collaborators on a deal (the seller's Superadmin cannot add buyer-side people).
 - A collaborator can be **scoped to specific stages** of a deal (e.g., a regulatory consultant only joins for stage 3-4).
-
-**Typical roles inside a company (illustrative, not enforced):**
-- CEO / product manager / project manager (joins big deals, gets the high-level Sella view).
-- Salesperson and sales team (seller side — handles outgoing offers).
-- Procurement person and procurement team (buyer side — handles incoming offers).
-- **Procurement team on the seller side** — special case: this team manages inventory/batches, feeds batch information to the salesperson for FIFO allocation. (Different from buyer-side procurement.)
 
 **Rule for MVP:** one person belongs to exactly one company. May change in future.
 
@@ -84,17 +85,29 @@ A user has two identities at once:
 ### 4.1 The Relationship (Company ↔ Company)
 
 > **DEV-8 — closed (2026-05-19).** Page contents listed below. Visibility resolved via the DEV-6 two-layer model (see Section 11). PRIVATE deals stay scoped until accepted, then flip to company-wide — **no separate "private group" tier**.
+>
+> **DEV-41 — closed (2026-05-20).** Permissions on each content type locked — see the Permissions table below.
 
 A real, first-class object. **Created the moment a P↔C ticket is picked up** (= the moment two companies first connect — see Section 7). Once created, persistent forever.
 
 **Pre-pickup activity** (initial P↔C messages + docs that first-contact Sella collected) lives in a temporary **pending inbox** tied to the receiving company. On pickup, the pending inbox **migrates onto the freshly-created Relationship page**.
 
-**What lives on the Relationship:**
-- Shared notes between the companies
-- Agreed terms
-- Custom pricelist (the seller's pricelist customized for this buyer)
-- Full history of all deals between the two companies
-- Sella's insights about the relationship
+**What lives on the Relationship page:**
+- **Notes** — **per-side, not shared**. CoA has their own notes about CoB; CoB has their own notes about CoA. Each side's notes are visible only to that side.
+- **Agreed terms** — visible to both sides (mutually-agreed; edit workflow deferred)
+- **Custom pricelist** — the seller's pricelist customized for this buyer; visible to both sides
+- **Full history of all deals** between the two companies (governed by §11.2 visibility model)
+- **Sella's insights** about the relationship (system-generated by Deal-Sella)
+
+**Permissions on Relationship-page content (locked 2026-05-20, DEV-41):**
+
+| Content | Read | Write |
+|---|---|---|
+| **Notes** (per-side) | Owning side only — everyone in CoA sees CoA's notes; everyone in CoB sees CoB's notes. | CRM-style — everyone in the owning side can edit or delete. Every change (edit + delete) is logged with user + timestamp + before/after diff. |
+| **Agreed terms** | Both sides | TBD (mutually-agreed; edit workflow deferred) |
+| **Custom pricelist** | Both sides | Seller-side only; edits gated by **approval workflow** — Proposed → Approver sign-off → Applied. Approver = anyone in an Approver-flagged Group. **Single-approver for MVP**; multi-approver post-MVP if regulated use cases demand it. |
+| **Deal history** | Per §11.2 visibility model | System-generated |
+| **Sella insights** | Both sides | System-generated (Deal-Sella) |
 
 **Why it matters:** when person X from Company A approaches Company B 9 months later about a different product, the Relationship already exists. The chat room is already there. They reuse the existing relationship.
 
@@ -490,11 +503,11 @@ Below is the canonical access matrix — sourced from the Chat project descripti
 | Deal workspace (chat + artifacts) | Only invited participants |
 | Deal record on Relationship page (Layer A) | **Default:** all colleagues in both companies. **PRIVATE override:** each side's dealmaker can independently hide the deal from their own org. Once both sides accept the deal, Layer A flips back to company-wide on both sides. |
 | Relationship-level data (notes, terms, pricelist) | Per relationship permissions |
-| Shop prices | **Company-configurable.** Each shop can choose: (a) show all prices publicly, (b) hide all prices, or (c) show a single default pricelist publicly. For connected buyers in an established relationship, a custom pricelist applies on top (per Section 4.1). |
+| Shop prices | **Company-configurable per viewer**, three modes: (a) show all publicly, (b) hide all — buyer sees a **"request pricing" button** to ask, (c) show one default **STANDARD** pricelist publicly. For connected companies, an **individual custom pricelist** applies on top — **different per connected company**. *(2026-05-14 lock + DEV-12 refinement 2026-05-20.)* |
 
 **Two-layer visibility:** the Relationship page (Layer A — deal records) and the Deal Workspace (Layer B — chat + artifacts) are independent. PRIVATE only affects Layer A. Layer B always stays scoped to invited participants.
 
-> **⚠️ OPEN [DEV-12]** — Sub-questions on shop price visibility: per-product granularity? Different rules for connected vs. non-connected? Is the public default pricelist the same object as the relationship custom pricelist? See [DEV-12](https://linear.app/hellosello/issue/DEV-12/how-granular-is-company-configurable-shop-price-visibility-per-product).
+> **DEV-12 — closed (2026-05-20).** 3-mode model refined with the "request pricing" UX (hide-all mode) and **per-connected-company custom pricing** (different pricelist per connected buyer). See the Shop prices row above.
 
 ---
 
@@ -519,7 +532,6 @@ Below is the canonical access matrix — sourced from the Chat project descripti
 
 - **Section 4.3** — What exactly gets created inside a Deal Workspace, and how should it look? — [DEV-9](https://linear.app/hellosello/issue/DEV-9/what-exactly-gets-created-inside-a-deal-workspace-and-how-should-it)
 - **Section 10** — How should the multi-Sella architecture be designed: orchestrator pattern, tool use, agent framework, or direct SDK? — [DEV-11](https://linear.app/hellosello/issue/DEV-11/how-should-the-multi-sella-architecture-be-designed-orchestrator)
-- **Section 11** — How granular is company-configurable shop price visibility — per-product, per-buyer, single vs. relationship pricelist? — [DEV-12](https://linear.app/hellosello/issue/DEV-12/how-granular-is-company-configurable-shop-price-visibility-per-product)
 - **Detection precision for Sella's deal-forming signals.** (How sensitive should she be? Tunable thresholds?)
 - **Pricing model** (fixed tiers vs. usage-based vs. hybrid).
 - **In-product action that grows the network** (what does a new joiner do to pull the other side in?).
