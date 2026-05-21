@@ -250,3 +250,17 @@ Each entry: **What was decided** → **Why** (the reasoning at the time).
 ### Deal-Sella data scope (locked 2026-05-21)
 
 - **Deal-Sella sees only common-knowledge / symmetric pricelist data** — the relationship-level custom pricelist (per DEV-1 cascade) + the public shop pricelist visible to this deal's buyer (per DEV-12 mode). She does NOT see the seller's master pricelist, margins, prices for other buyers, or any internal pricing logic. *Why:* preserves neutrality structurally; asymmetric data → asymmetric agent.
+
+### Detection model & Sella surfacing (locked 2026-05-21)
+
+- **Detection model: hybrid — strict trigger, lenient monitoring.** Deal-Sella continuously reads chat context (topic detection, intent, product/price mentions) and maintains a "deal candidate" model in the background. She only prompts users when the strict deal-forming signal hits (product + quantity OR product + price, optionally with terms / affirmation). On both-users-Reject, she stops that prompt cycle but keeps monitoring — next prompt fires on next strict signal. *Why:* user trust requires predictable, signal-gated prompts; LLM intelligence is captured internally for rich v0.1 pre-fill; rejection ends prompt, not monitoring.
+- **Deal-Sella interactive UI placement.** When she activates to prompt the two users (deal-forming, counter, evidence text-box), she appears as a component above the chat, middle-aligned, in the P↔P chat. Distinct from the passive thin-status-line model used for stage closures and post-close amendments (DEV-33). *Why:* interactive prompts need attention; passive notifications need to be ignorable.
+- **No formal cooldown on deal-forming prompts.** Rejection does not trigger time-based or message-count-based suppression. Next prompt fires when the next strict signal is detected. *Why:* the strict signal IS the gate; layering a cooldown on top would be paternalistic.
+
+### Proactive nudges (locked 2026-05-21)
+
+- **Personal Sella owns proactive user-level nudges** — daily digest of pending Things and deals, stale-deal alerts, "what's on your plate today" synthesis. Cross-cuts sell + buy for the user. *Why:* user-level synthesis is a per-user concern; Seller-Sella and Buyer-Sella are domain-scoped, Personal Sella is user-scoped — one daily voice, not three.
+
+### Flagged for later (2026-05-21)
+
+- **Personal Sella vs Seller-Sella vs Buyer-Sella behavioral overlap.** These three specialists may act very similarly depending on context. Open: are they three distinct agents with overlapping behaviors, or one agent with context-dependent flavors? Has architectural implications for the multi-Sella system. To be drilled in §4/§5 of Layer 4. Should be tracked as a doubt via `/track-doubt` before engineering build.
