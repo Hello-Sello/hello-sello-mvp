@@ -100,14 +100,17 @@ Layer 5 — Inputs and Outputs   ⏸ TBD
 - Layer 5 — ⏸ Not started.
 
 **Just completed (session 2026-05-21):**
-Cherry-picked 4 Layer 4 locks from a parallel session, slotted into existing TBD sections (§2, §3, §8) without conflict with the 2026-05-19/20 work:
-- §2: Right-panel always = the user's side-specific Sella (Seller/Buyer). Deal-Sella never in right panel — she speaks only via system voice. Side-specific Sellas read from her workspace scope to answer deal questions.
-- §3: Deal-Sella detection ↔ mediation continuity (same agent, two modes; promotes on both-users-Accept; no specialist hand-off).
-- §8: Deal-Sella sees only common-knowledge / symmetric pricelist data (relationship pricelist per DEV-1 + public shop pricelist per DEV-12 visible to buyer). Master pricelist + margins + other-buyer prices stay in Seller-Sella.
+Two batches landed.
 
-The session's source work is preserved on branch `backup/layer4-local-2026-05-21` for future reference (most of it was rediscovery of locks already on remote, but these 4 items were genuine sharpenings).
+**Batch 1** (commit 7257b19, on main directly): right-panel always = side-specific Sella; Deal-Sella never in right panel — she speaks only via system voice; Deal-Sella detection ↔ mediation continuity (same agent, two modes); Deal-Sella sees only common-knowledge / symmetric pricelist data.
 
-**Next session:** Layer 4 §3–§10 continues — Autonomy ladder, Per-surface behavior (the Big 7 routing table), Cross-cutting behaviors, Memory / context / learning, Failure modes, Non-goals. Carry-overs already flagged in the stubs (Sella reply suggestion, first-contact Sella, back-of-card SIGNALS, translation, multi-Sella architecture per DEV-11).
+**Batch 2** (current branch `claude/layer-4-detection-locks`, PR opened):
+- §2: Personal Sella owns proactive user-level nudges (digest, stale-deal alerts, "what's on your plate"). Personal vs Seller/Buyer Sella behavioral overlap **flagged in §2** for later /track-doubt + Linear issue.
+- §3: Detection model locked as **hybrid** — strict signal gates user-facing prompts; lenient LLM monitoring captures context for v0.1 pre-fill; rejection stops the prompt, not the monitoring. Interactive UI placement = component above the chat, middle-aligned in P↔P chats (distinct from DEV-33 passive thin-status-line). No formal cooldown on deal-forming prompts.
+
+Source of batch 1 preserved on branch `backup/layer4-local-2026-05-21`.
+
+**Next session:** Layer 4 §3 leftover items (full trigger event coverage; first-contact Sella trigger spec); then §4 Autonomy ladder. Run `/track-doubt` to spawn a Linear issue for the Personal vs Seller/Buyer behavioral-overlap question. Then §5 per-surface behavior (Big 7 routing table).
 
 **Parallel / blocked:**
 - **Marcel:** DEV-23 (cancellation/dispute), DEV-26 (PO generation), DEV-29 (approval signatures), DEV-53 (split shipments confirmation), DEV-37/38/39/42/43/44/45 (his backlog items)

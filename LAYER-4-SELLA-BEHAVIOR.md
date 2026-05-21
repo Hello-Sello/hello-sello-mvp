@@ -71,6 +71,9 @@ Capture Sella's **behavior** — what she does, when she shows up, how she decid
 **Locked 2026-05-21:**
 - **Right-panel = the user's side-specific Sella always.** Inside a deal workspace, the side-specific Sella by deal direction (Seller or Buyer). Outside a deal, by sub-context (e.g., looking at a relationship with a buyer-company → Seller-Sella). Personal Sella appears when there's no clear side context; Company Sella on admin/CEO surfaces. *Why:* one consistent conversation partner per user, regardless of surface.
 - **Deal-Sella is never in the right-side panel.** She operates exclusively via system voice — `[Sella · system]` messages, evidence logging, text-box prompts to both sides. Users never address Deal-Sella directly. When a user asks a deal question in the right panel, their side-specific Sella reads from Deal-Sella's workspace scope and answers. *Why:* makes neutrality structural at the interface layer — Deal-Sella never has a one-sided conversation.
+- **Personal Sella owns proactive user-level nudges.** Daily digest of pending Things and deals, stale-deal alerts, "what's on your plate today" — all cross-cut sell + buy sides for a single user. *Why:* user-level synthesis is a per-user concern; Seller-Sella / Buyer-Sella are domain-scoped, Personal Sella is user-scoped — one daily voice, not three.
+
+> **⚠️ FLAG (2026-05-21)** — **Personal Sella vs Seller-Sella vs Buyer-Sella behavioral overlap.** These three specialists may act very similarly depending on context, suggesting fluid boundaries rather than strict separation. Open architectural question: are they three distinct agents with overlapping behaviors, or one agent with context-dependent flavors? Has implications for the multi-Sella system design. To be drilled in §4/§5; should be tracked as a doubt via `/track-doubt` (Linear issue) before engineering build.
 
 ---
 
@@ -87,6 +90,9 @@ Capture Sella's **behavior** — what she does, when she shows up, how she decid
 
 **Locked 2026-05-21:**
 - **Deal-Sella detection ↔ mediation continuity.** Same agent across two modes. **Detection mode:** runs in Person↔Person chats, listens for deal-forming signals (carry-overs above). **Mediation mode:** inside the deal workspace post-birth. On both-users-Accept of the "deal forming?" prompt, she promotes from detection → mediation and the workspace spawns. No hand-off to another specialist. *Why:* one specialist owns the deal lifecycle end-to-end; simpler architecture; cleaner audit trail.
+- **Detection model: hybrid — strict trigger, lenient monitoring.** Internally Deal-Sella **continuously reads chat context** (topic detection, intent, product mentions, price mentions, affirmation patterns) and maintains a background "deal candidate" model. She **only prompts users when the strict deal-forming signal hits** (Layer 1 §5.2: product + quantity OR product + price, optionally with terms language / affirmation). On both-users-Reject of "deal forming?", she stops that prompt cycle but **does not shut down the internal model** — she keeps monitoring and prompts again whenever a fresh strict signal is detected. *Why:* preserves user trust (predictable, signal-gated prompts) while leveraging LLM intelligence (rich context captured for v0.1 pre-fill); rejection ends the prompt, not the monitoring.
+- **Interactive UI placement in P↔P chats.** When Deal-Sella becomes active to prompt the two users (deal-forming, counter, evidence text-box), she appears as a component **above the chat, middle-aligned**, in the P↔P chat between them. Distinct from the **passive thin-status-line** model used for stage closures and post-close deal amendments (DEV-33).
+- **No formal cooldown on deal-forming prompts.** Rejection doesn't trigger a timer or message-count suppression. The next prompt fires when the next strict signal is detected. *Why:* the strict signal IS the gate; layering a cooldown on top would be paternalistic.
 
 ---
 
@@ -165,11 +171,19 @@ Capture Sella's **behavior** — what she does, when she shows up, how she decid
 - **Deal-Sella is never in the right-side panel.** She speaks exclusively via system voice (system messages, text-box prompts, evidence logging). Side-specific Sellas read from her workspace scope to answer deal questions. *(2026-05-21.)*
 - **Deal-Sella detection ↔ mediation continuity.** Same agent across two modes — detection in P↔P chats, mediation inside the workspace post-birth. On both-users-Accept, she promotes; workspace spawns. No specialist hand-off. *(2026-05-21.)*
 - **Deal-Sella sees only common-knowledge / symmetric pricelist data** — relationship pricelist (per DEV-1) + public shop pricelist visible to this deal's buyer (per DEV-12). Master pricelist, margins, and other-buyer prices stay in Seller-Sella. *(2026-05-21.)*
+- **Personal Sella owns proactive user-level nudges** — daily digest, stale-deal alerts, "what's on your plate." Cross-cuts sell + buy for the user. *(2026-05-21.)*
+- **Detection model: hybrid** — strict signal gates user-facing prompts; lenient LLM monitoring captures context for v0.1 pre-fill. Rejection stops the prompt, not the monitoring. *(2026-05-21.)*
+- **Deal-Sella interactive UI in P↔P chats** — appears above the chat, middle-aligned, when she activates to prompt. Distinct from the thin-status-line model for passive notifications (DEV-33). *(2026-05-21.)*
+- **No formal cooldown** on deal-forming prompts. Rejection ends the prompt; next prompt fires on next strict signal. *(2026-05-21.)*
 
 ---
 
 ## Open Questions
 
+- **§2 — Personal vs Seller/Buyer Sella behavioral overlap.** Are they three distinct agents with overlapping behaviors, or one agent with context-dependent flavors? Flagged 2026-05-21; to be drilled in §4/§5; needs `/track-doubt` → Linear issue before engineering build.
+- **§3 — Detection precision tuning.** Sensitivity thresholds, false-positive measurement, casual-chat boundary refinement. Track as a doubt before build.
+- **§3 — Full trigger event coverage.** Comprehensive list of events Sella subscribes to (member added, doc uploaded, milestone tick, stage close, etc.) and her action per event. Pending next session.
+- **§3 — First-contact Sella trigger spec.** When she fires on P↔C contact (behavior carry-over in §6; trigger spec belongs here). Pending next session.
 
 ---
 
