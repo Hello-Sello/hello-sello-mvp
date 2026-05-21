@@ -73,7 +73,7 @@ Capture Sella's **behavior** — what she does, when she shows up, how she decid
 - **Deal-Sella is never in the right-side panel.** She operates exclusively via system voice — `[Sella · system]` messages, evidence logging, text-box prompts to both sides. Users never address Deal-Sella directly. When a user asks a deal question in the right panel, their side-specific Sella reads from Deal-Sella's workspace scope and answers. *Why:* makes neutrality structural at the interface layer — Deal-Sella never has a one-sided conversation.
 - **Personal Sella owns proactive user-level nudges.** Daily digest of pending Things and deals, stale-deal alerts, "what's on your plate today" — all cross-cut sell + buy sides for a single user. *Why:* user-level synthesis is a per-user concern; Seller-Sella / Buyer-Sella are domain-scoped, Personal Sella is user-scoped — one daily voice, not three.
 
-> **⚠️ FLAG (2026-05-21)** — **Personal Sella vs Seller-Sella vs Buyer-Sella behavioral overlap.** These three specialists may act very similarly depending on context, suggesting fluid boundaries rather than strict separation. Open architectural question: are they three distinct agents with overlapping behaviors, or one agent with context-dependent flavors? Has implications for the multi-Sella system design. To be drilled in §4/§5; should be tracked as a doubt via `/track-doubt` (Linear issue) before engineering build.
+> **⚠️ OPEN [DEV-11]** — Personal vs Seller/Buyer Sella behavioral overlap; tracked under multi-Sella architecture.
 
 ---
 
@@ -180,7 +180,7 @@ Capture Sella's **behavior** — what she does, when she shows up, how she decid
 
 ## Open Questions
 
-- **§2 — Personal vs Seller/Buyer Sella behavioral overlap.** Are they three distinct agents with overlapping behaviors, or one agent with context-dependent flavors? Flagged 2026-05-21; to be drilled in §4/§5; needs `/track-doubt` → Linear issue before engineering build.
+- **§2** — Are Personal Sella, Seller-Sella, and Buyer-Sella three distinct agents or one with context flavors? — [DEV-11](https://linear.app/hellosello/issue/DEV-11/how-should-the-multi-sella-architecture-be-designed-orchestrator) (multi-Sella architecture).
 - **§3 — Detection precision tuning.** Sensitivity thresholds, false-positive measurement, casual-chat boundary refinement. Track as a doubt before build.
 - **§3 — Full trigger event coverage.** Comprehensive list of events Sella subscribes to (member added, doc uploaded, milestone tick, stage close, etc.) and her action per event. Pending next session.
 - **§3 — First-contact Sella trigger spec.** When she fires on P↔C contact (behavior carry-over in §6; trigger spec belongs here). Pending next session.
