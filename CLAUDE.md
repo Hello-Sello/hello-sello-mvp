@@ -185,6 +185,11 @@ This applies to LAYER docs, DECISIONS.md, PITCH.md, CLAUDE.md, and every Linear 
 - The team uses English as a working language but it's not everyone's first language.
 - The pitches contain German — preserve German verbatim where it appears.
 
+### Git workflow
+
+- **Commit to a `claude/*` branch, not directly to main.** Open a PR for review.
+- **Keep commit messages and PR bodies short.** Title + a few bullets, not essays. Reviewers read the diff, not the prose.
+
 ### What NOT to do
 
 - Don't make up Linear projects, labels, or issue IDs — always verify via the MCP.
