@@ -68,6 +68,10 @@ Capture Sella's **behavior** — what she does, when she shows up, how she decid
 
 *(Per-Sella day-to-day behavioral specs — what each one DOES specifically — TBD in next sessions.)*
 
+**Locked 2026-05-21:**
+- **Right-panel = the user's side-specific Sella always.** Inside a deal workspace, the side-specific Sella by deal direction (Seller or Buyer). Outside a deal, by sub-context (e.g., looking at a relationship with a buyer-company → Seller-Sella). Personal Sella appears when there's no clear side context; Company Sella on admin/CEO surfaces. *Why:* one consistent conversation partner per user, regardless of surface.
+- **Deal-Sella is never in the right-side panel.** She operates exclusively via system voice — `[Sella · system]` messages, evidence logging, text-box prompts to both sides. Users never address Deal-Sella directly. When a user asks a deal question in the right panel, their side-specific Sella reads from Deal-Sella's workspace scope and answers. *Why:* makes neutrality structural at the interface layer — Deal-Sella never has a one-sided conversation.
+
 ---
 
 ## 3. Triggers & detection
@@ -80,6 +84,9 @@ Capture Sella's **behavior** — what she does, when she shows up, how she decid
 - See workspace edits directly → write evidence + system message (Layer 1 §6.3).
 - Counter flow: ask "what's your counter?" → create new card version (Layer 1 §6.2).
 - 30-day inactivity → nudge "park or close?" (Layer 1 §9.3).
+
+**Locked 2026-05-21:**
+- **Deal-Sella detection ↔ mediation continuity.** Same agent across two modes. **Detection mode:** runs in Person↔Person chats, listens for deal-forming signals (carry-overs above). **Mediation mode:** inside the deal workspace post-birth. On both-users-Accept of the "deal forming?" prompt, she promotes from detection → mediation and the workspace spawns. No hand-off to another specialist. *Why:* one specialist owns the deal lifecycle end-to-end; simpler architecture; cleaner audit trail.
 
 ---
 
@@ -130,6 +137,9 @@ Capture Sella's **behavior** — what she does, when she shows up, how she decid
 - Inbound ticket queue is role-scoped.
 - Deal-Sella is neutral by construction.
 
+**Locked 2026-05-21:**
+- **Deal-Sella sees only common-knowledge / symmetric pricelist data.** She sees pricing visible to both sides of this deal: the relationship-level custom pricelist (per DEV-1 cascade, shared between the two companies) + the public shop pricelist visible to this deal's buyer (per DEV-12 mode). She does NOT see the seller's STANDARD pricelist (when hidden from the buyer), master pricing with margins, prices set for other buyers, or any internal pricing logic. *Why:* preserves neutrality structurally — an agent with asymmetric pricing knowledge cannot remain neutral by prompt alone. Asymmetric data → asymmetric agent.
+
 ---
 
 ## 9. Failure modes & escalation
@@ -151,6 +161,10 @@ Capture Sella's **behavior** — what she does, when she shows up, how she decid
 - **Sella's promise: a female-inspired caring AI for both sides, mediating for collaborative mutual benefits.** *(Inherited from Big 7 lock 2026-05-18.)*
 - **Per-Sella persona consistency** — each specialist Sella has its own persona that differentiates it while preserving Sella's unified warmth. Differentiation by role is part of how the specialists work. *(2026-05-19.)*
 - **Voice tone: Schranner-inspired mediator style** — calm, structured, balanced, solution-oriented; collaborative language; manages two parties toward mutually-best outcomes. *(2026-05-20, DEV-46.)*
+- **Right-panel Sella is always the user's side-specific Sella.** Inside a deal workspace, by deal direction (Seller or Buyer). Outside a deal, by sub-context. Personal Sella when no clear side context; Company Sella on admin/CEO surfaces. *(2026-05-21.)*
+- **Deal-Sella is never in the right-side panel.** She speaks exclusively via system voice (system messages, text-box prompts, evidence logging). Side-specific Sellas read from her workspace scope to answer deal questions. *(2026-05-21.)*
+- **Deal-Sella detection ↔ mediation continuity.** Same agent across two modes — detection in P↔P chats, mediation inside the workspace post-birth. On both-users-Accept, she promotes; workspace spawns. No specialist hand-off. *(2026-05-21.)*
+- **Deal-Sella sees only common-knowledge / symmetric pricelist data** — relationship pricelist (per DEV-1) + public shop pricelist visible to this deal's buyer (per DEV-12). Master pricelist, margins, and other-buyer prices stay in Seller-Sella. *(2026-05-21.)*
 
 ---
 

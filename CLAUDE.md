@@ -90,19 +90,24 @@ Layer 5 — Inputs and Outputs   ⏸ TBD
 
 *Updated at the end of every brainstorm session. This is the "you are here" marker for the next session — always read this first.*
 
-**Last updated:** 2026-05-20
+**Last updated:** 2026-05-21
 
 **Layer status:**
 - Layer 1 — ✅ LOCKED. Walkthrough this session closed 9 doubts (DEV-1, DEV-5, DEV-6, DEV-7, DEV-8, DEV-10, DEV-12, DEV-22, plus DEV-40 + DEV-41 spun out of DEV-6). Two-layer visibility model, P↔C → P↔P flow, Basket = Deal Card + Deal Room, 16-combo access matrix lifted to §11.1 as canonical, Superadmin + custom Groups RBAC, Relationship-page permissions. Foundation solid for engineering.
 - Layer 2 — ⏳ Big 7 framework locked 2026-05-18. Cluster C closed DEV-12 (shop pricing), DEV-14 (blank vs populated states), DEV-18 (Presentation Mode concept). 7 surface drill-down doubts still open: DEV-13 / 15 / 16 / 17 / 19 / 20 / 21.
 - Layer 3 — ⏳ Cluster D closed DEV-25 (Done = delivery note + invoice attached), DEV-33 (stages don't reopen; passive thin-line notifications), DEV-35 (no payment for cannabis MVP; Stripe Phase 2; factoring Phase 3), DEV-36 (Sella OCR/AI on delivery note + invoice auto-amends deal). Open: DEV-23, DEV-26, DEV-29 (parked Marcel); plus DEV-24, 27, 28, 30, 31, 32, 34 (smaller stage/milestone/thing nuances).
-- Layer 4 — ⏳ Kicked off 2026-05-19. §1 (identity + Schranner-inspired mediator voice) + §2 (per-Sella persona consistency) locked. §3-§10 TBD next session.
+- Layer 4 — ⏳ §1 (identity + Schranner mediator voice) + §2 (persona consistency) locked 2026-05-19/20. Session 2026-05-21 added: right-panel = side-specific Sella always; Deal-Sella never in right panel; Deal-Sella detection↔mediation continuity; Deal-Sella sees only common-knowledge/symmetric pricelist data. §3–§10 continues next session.
 - Layer 5 — ⏸ Not started.
 
-**Just completed (session 2026-05-19 → 2026-05-20):**
-Walkthrough of 16-issue In-Review pile across 6 clusters. 17 doubts closed: DEV-1, 5, 6, 7, 8, 10, 12, 14, 18, 22, 25, 33, 35, 36, 40, 41, 46. Big 7 framework locked. Layer 4 file created. **`ARCHITECTURE-NOTES.md` created** as engineering scratchpad (one-sentence implications grouped by topic). Memory notes refreshed (Basket=Card model). Track-doubt skill template aligned to Marcel's issue format. 8 engineering follow-up issues spawned: DEV-48 (signals compute), DEV-49 (signals storage), DEV-50 (per-viewer signals), DEV-51 (access matrix as code), DEV-52 (Deal Room object/render), DEV-53 (partial shipments), DEV-54 (Presentation Mode UI), DEV-55 (Sella voice samples). 5 new Buyer-side Linear projects spawned earlier (Margin & Pricing, Deal Engine, Cash-Flow, Sella reply suggestion, Profile visibility).
+**Just completed (session 2026-05-21):**
+Cherry-picked 4 Layer 4 locks from a parallel session, slotted into existing TBD sections (§2, §3, §8) without conflict with the 2026-05-19/20 work:
+- §2: Right-panel always = the user's side-specific Sella (Seller/Buyer). Deal-Sella never in right panel — she speaks only via system voice. Side-specific Sellas read from her workspace scope to answer deal questions.
+- §3: Deal-Sella detection ↔ mediation continuity (same agent, two modes; promotes on both-users-Accept; no specialist hand-off).
+- §8: Deal-Sella sees only common-knowledge / symmetric pricelist data (relationship pricelist per DEV-1 + public shop pricelist per DEV-12 visible to buyer). Master pricelist + margins + other-buyer prices stay in Seller-Sella.
 
-**Next session:** Layer 4 §3-§10 brainstorm — Triggers & detection → Autonomy ladder → Per-surface behavior → Cross-cutting behaviors → Memory / context / learning → Privacy invariants → Failure modes → Non-goals. Carry-overs already flagged in the stubs (Sella reply suggestion, first-contact Sella, back-of-card SIGNALS, translation, multi-Sella architecture per DEV-11).
+The session's source work is preserved on branch `backup/layer4-local-2026-05-21` for future reference (most of it was rediscovery of locks already on remote, but these 4 items were genuine sharpenings).
+
+**Next session:** Layer 4 §3–§10 continues — Autonomy ladder, Per-surface behavior (the Big 7 routing table), Cross-cutting behaviors, Memory / context / learning, Failure modes, Non-goals. Carry-overs already flagged in the stubs (Sella reply suggestion, first-contact Sella, back-of-card SIGNALS, translation, multi-Sella architecture per DEV-11).
 
 **Parallel / blocked:**
 - **Marcel:** DEV-23 (cancellation/dispute), DEV-26 (PO generation), DEV-29 (approval signatures), DEV-53 (split shipments confirmation), DEV-37/38/39/42/43/44/45 (his backlog items)
