@@ -295,3 +295,16 @@ Each entry: **What was decided** → **Why** (the reasoning at the time).
 - **Retrieval architecture: hybrid RAG.** Vector RAG for unstructured (chat, evidence, notes); direct DB queries for structured (pricelists, batches, deals); in-memory for live state. *Why:* company-wide scope of Side-Sellas would blow any context window; hybrid is the standard pattern (Notion AI / Slack AI / CRM AI agents).
 - **Learning loop (MVP) = thumbs up/down + optional reject-reason + approve-rate telemetry.** Per action type. No active retraining in MVP — feedback logged for analytics + future training. *Why:* lightweight signal mechanism; active retraining requires infra + QA that's post-MVP scope.
 - **User memory controls: view, delete, reset, per-relationship reset.** Honors GDPR right-to-be-forgotten via cross-reference to the GDPR / Authentication workstream. *Why:* regulated market (cannabis pharma + EU) demands explicit memory controls.
+
+### Failure modes & escalation (locked 2026-05-22)
+
+- **Every Sella write is reversible.** Undo affordance + full audit trail (per Layer 1 §11 + GDPR). *Why:* mistakes are inevitable; reversibility is the floor that keeps trust intact.
+- **Quick user-correction flow drops her autonomy.** Marking a Sella message "this was wrong" → drops her autonomy level for that action type (§4 ladder). *Why:* combines feedback signal with immediate behavioral consequence.
+- **Sella surfaces uncertainty** rather than asserting when low-confidence. Tentative labels ("I'm not sure, but...") on borderline suggestions. *Why:* preserves trust by being honest about what she doesn't know.
+- **Material errors escalate to both deal participants + audit log,** requiring user review before re-application. *Why:* wrong card terms, OCR amendments, regulated translations have downstream impact; can't silently retry.
+- **No silent failures.** Every Sella action is visible to the user. *Why:* the moat is trust; invisible mistakes destroy it.
+- **Human override is always available** — user can pause / disable any Sella behavior per surface, action type, or entirely. *Why:* user is the principal; Sella is a tool, not an authority.
+
+### Non-goals (locked 2026-05-22)
+
+- **Sella does NOT** advocate for one side, auto-send without user consent, access counterparty internal data, learn across companies, replace human judgment on material commercial decisions, give legal/regulatory advice, surveil casual chat, retain memory beyond defined scope, or act as the legal record of an agreement. *Why:* explicit non-goals protect neutrality (Schweiz des B2B-Handels), trust, and the bounded scope of an AI-as-tool vs AI-as-authority.
