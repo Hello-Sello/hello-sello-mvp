@@ -29,3 +29,6 @@ Desktop.ini
 # Local environment / secrets (defensive — no secrets expected in design docs)
 .env
 .env.local
+
+# Claude Code internal
+.claude/worktrees/
