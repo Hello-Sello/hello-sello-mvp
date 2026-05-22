@@ -263,4 +263,8 @@ Each entry: **What was decided** → **Why** (the reasoning at the time).
 
 ### Flagged for later (2026-05-21)
 
-- **Personal Sella vs Seller-Sella vs Buyer-Sella behavioral overlap.** These three specialists may act very similarly depending on context. Open: are they three distinct agents with overlapping behaviors, or one agent with context-dependent flavors? Has architectural implications for the multi-Sella system. To be drilled in §4/§5 of Layer 4. Should be tracked as a doubt via `/track-doubt` before engineering build.
+- **Personal Sella vs Seller-Sella vs Buyer-Sella behavioral overlap.** These three specialists may act very similarly depending on context. Open: are they three distinct agents with overlapping behaviors, or one agent with context-dependent flavors? Has architectural implications for the multi-Sella system. To be drilled in §4/§5 of Layer 4. *(Update 2026-05-21: covered by existing DEV-11 — see LAYER-4 §2 marker.)*
+
+### Trigger event coverage v1 (locked 2026-05-22)
+
+- **Sella trigger events documented across five layers (non-exhaustive):** Deal-Sella detection mode (chat watching → strict-signal prompts), Deal-Sella mediation mode (workspace events, milestones, docs, 30-day nudge), Side-Sella in right panel (read from Deal scope on user open/Counter/question), Personal Sella (digest, Things, login summary), and First-contact Sella (per DEV-7 P↔C workflow). *Why:* explicit event list gives engineering a build-ready map; new triggers can be added with team discussion as the product evolves.

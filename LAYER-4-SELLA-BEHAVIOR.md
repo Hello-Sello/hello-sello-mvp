@@ -79,7 +79,7 @@ Capture Sella's **behavior** — what she does, when she shows up, how she decid
 
 ## 3. Triggers & detection
 
-*(TBD.)*
+*(Substantive draft; more triggers may be added with build experience and team discussion.)*
 
 **Carry-overs from Layer 1 (already locked Sella triggers — bring forward when this section is written):**
 - Detect deal-forming signals: **product + quantity** OR **product + price** → pop "deal forming?" prompt to both users (Layer 1 §5.2 Path B).
@@ -93,6 +93,58 @@ Capture Sella's **behavior** — what she does, when she shows up, how she decid
 - **Detection model: hybrid — strict trigger, lenient monitoring.** Internally Deal-Sella **continuously reads chat context** (topic detection, intent, product mentions, price mentions, affirmation patterns) and maintains a background "deal candidate" model. She **only prompts users when the strict deal-forming signal hits** (Layer 1 §5.2: product + quantity OR product + price, optionally with terms language / affirmation). On both-users-Reject of "deal forming?", she stops that prompt cycle but **does not shut down the internal model** — she keeps monitoring and prompts again whenever a fresh strict signal is detected. *Why:* preserves user trust (predictable, signal-gated prompts) while leveraging LLM intelligence (rich context captured for v0.1 pre-fill); rejection ends the prompt, not the monitoring.
 - **Interactive UI placement in P↔P chats.** When Deal-Sella becomes active to prompt the two users (deal-forming, counter, evidence text-box), she appears as a component **above the chat, middle-aligned**, in the P↔P chat between them. Distinct from the **passive thin-status-line** model used for stage closures and post-close deal amendments (DEV-33).
 - **No formal cooldown on deal-forming prompts.** Rejection doesn't trigger a timer or message-count suppression. The next prompt fires when the next strict signal is detected. *Why:* the strict signal IS the gate; layering a cooldown on top would be paternalistic.
+
+**Locked 2026-05-22 — trigger event coverage (non-exhaustive v1):**
+
+The following events drive Sella's behavior in MVP. More can be added with build experience and team discussion.
+
+**Deal-Sella — detection mode** (pre-workspace, in P↔P chats):
+
+| Event | Action |
+|---|---|
+| New chat message | Run hybrid model (lenient monitor + strict signal check) |
+| Strict signal hits | Prompt both users (component above chat) |
+| Both Accept | Promote to mediation; workspace spawns |
+| Both Reject | End prompt; keep monitoring |
+
+**Deal-Sella — mediation mode** (inside workspace):
+
+| Event | Action |
+|---|---|
+| Message in workspace chat | Check for card-relevant change → if yes, system message |
+| Message in deal-participant P↔P chat | Check for card-relevant change → if yes, text-box prompt both users |
+| Counter button clicked | "What's your counter?" prompt → new card version |
+| Card edited (any version bump) | Audit log + back-of-card SIGNALS update |
+| Member added / removed | Audit log + thin-status-line (DEV-33) |
+| Document uploaded | Audit log + OCR auto-amend (DEV-25/36) + SIGNALS update |
+| Milestone ticked | Audit log + check stage closure |
+| Stage closed | Thin-status-line (DEV-33) in P↔P + workspace chat |
+| Delivery note + invoice both attached | Trigger Done state (DEV-25) |
+| 30-day inactivity | "Park or close?" nudge |
+
+**Side-Sella** (Seller-Sella / Buyer-Sella in right panel):
+
+| Event | Action |
+|---|---|
+| User opens deal | Read Deal-Sella scope; surface relevant past-deal context |
+| User clicks Counter | Suggest counter (private to this user) |
+| User asks question | Answer from Deal-Sella scope |
+
+**Personal Sella:**
+
+| Event | Action |
+|---|---|
+| Daily heartbeat | Digest: pending Things, stale deals |
+| New Thing assigned to this user | In-app notification |
+| User logs in | "What's on your plate today" |
+
+**First-contact Sella** (per DEV-7; behavior detailed in §6, trigger logged here):
+
+| Event | Action |
+|---|---|
+| Inbound P↔C contact arrives | Greet sender; run qualifying-question + doc-request workflow |
+| Pre-pickup | Hold docs in temporary pending inbox tied to receiver |
+| On pickup (first-clicker wins) | Create Relationship, migrate pending inbox in, archive P↔C chat, open P↔P chat, write Sella summary message (editable) |
 
 ---
 
@@ -175,6 +227,7 @@ Capture Sella's **behavior** — what she does, when she shows up, how she decid
 - **Detection model: hybrid** — strict signal gates user-facing prompts; lenient LLM monitoring captures context for v0.1 pre-fill. Rejection stops the prompt, not the monitoring. *(2026-05-21.)*
 - **Deal-Sella interactive UI in P↔P chats** — appears above the chat, middle-aligned, when she activates to prompt. Distinct from the thin-status-line model for passive notifications (DEV-33). *(2026-05-21.)*
 - **No formal cooldown** on deal-forming prompts. Rejection ends the prompt; next prompt fires on next strict signal. *(2026-05-21.)*
+- **Trigger event coverage v1** — Sella's triggers documented across detection / mediation / side-Sella / Personal / first-contact. Non-exhaustive; expandable with build experience. *(2026-05-22.)*
 
 ---
 
