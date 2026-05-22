@@ -96,7 +96,7 @@ Layer 5 — Inputs and Outputs   ⏸ TBD
 - Layer 1 — ✅ LOCKED. Walkthrough this session closed 9 doubts (DEV-1, DEV-5, DEV-6, DEV-7, DEV-8, DEV-10, DEV-12, DEV-22, plus DEV-40 + DEV-41 spun out of DEV-6). Two-layer visibility model, P↔C → P↔P flow, Basket = Deal Card + Deal Room, 16-combo access matrix lifted to §11.1 as canonical, Superadmin + custom Groups RBAC, Relationship-page permissions. Foundation solid for engineering.
 - Layer 2 — ⏳ Big 7 framework locked 2026-05-18. Cluster C closed DEV-12 (shop pricing), DEV-14 (blank vs populated states), DEV-18 (Presentation Mode concept). 7 surface drill-down doubts still open: DEV-13 / 15 / 16 / 17 / 19 / 20 / 21.
 - Layer 3 — ⏳ Cluster D closed DEV-25 (Done = delivery note + invoice attached), DEV-33 (stages don't reopen; passive thin-line notifications), DEV-35 (no payment for cannabis MVP; Stripe Phase 2; factoring Phase 3), DEV-36 (Sella OCR/AI on delivery note + invoice auto-amends deal). Open: DEV-23, DEV-26, DEV-29 (parked Marcel); plus DEV-24, 27, 28, 30, 31, 32, 34 (smaller stage/milestone/thing nuances).
-- Layer 4 — ⏳ §1 + §2 locked 2026-05-19/20. Sessions 2026-05-21/22 added 20+ locks across §2, §3, §4, §5, §6, §8. §3 + §4 + §5 + §6 substantively drafted. §7–§10 still TBD. Open: DEV-58 (counter stalemate).
+- Layer 4 — ⏳ §1 + §2 locked 2026-05-19/20. Sessions 2026-05-21/22 added 24+ locks across §2, §3, §4, §5, §6, §7, §8. §3–§7 substantively drafted. §9 + §10 still TBD. Open: DEV-58 (counter stalemate); memory-duration doubt (pending /track-doubt).
 - Layer 5 — ⏸ Not started.
 
 **Just completed (session 2026-05-21):**
@@ -110,7 +110,7 @@ Two batches landed.
 
 Source of batch 1 preserved on branch `backup/layer4-local-2026-05-21`.
 
-**Next session:** Layer 4 §7–§10 (memory/learning, privacy invariants beyond §8, failure modes, non-goals).
+**Next session:** Layer 4 §9 (failure modes) + §10 (non-goals) to close Layer 4. Then Layer 5 (Inputs and Outputs).
 
 **Parallel / blocked:**
 - **Marcel:** DEV-23 (cancellation/dispute), DEV-26 (PO generation), DEV-29 (approval signatures), DEV-53 (split shipments confirmation), DEV-37/38/39/42/43/44/45 (his backlog items)
@@ -187,7 +187,8 @@ This applies to LAYER docs, DECISIONS.md, PITCH.md, CLAUDE.md, and every Linear 
 
 ### Git workflow
 
-- **Commit to a `claude/*` branch, not directly to main.** Open a PR for review.
+- **Work on ONE persistent branch: `claude/work`.** Don't create a new branch per section / topic. After each PR merges, reset `claude/work` from new main and continue.
+- **Open a PR for review** for each batch; don't push to main directly.
 - **Keep commit messages and PR bodies short.** Title + a few bullets, not essays. Reviewers read the diff, not the prose.
 
 ### What NOT to do
