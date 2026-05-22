@@ -282,3 +282,9 @@ Each entry: **What was decided** → **Why** (the reasoning at the time).
 - **Discover follows user intent.** Browsing for suppliers → Buyer-Sella; managing legal ads / brand presence → Seller-Sella; just exploring → Personal Sella. *Why:* Discover serves three distinct purposes (Big 7 lock); intent-driven switching means Sella adapts to the action, not the page.
 - **Trade right-panel = Company Sella.** Trade is C-suite scope per L2; Company Sella is the only specialist with cross-side (sell + buy) visibility. *Why:* admin/CEO view needs both sides of the company.
 - **Cross-surface "what's on my plate" overlay.** From any surface, asking Personal Sella surfaces the user's open Things, deals, and digest — regardless of which side-Sella is in the panel. *Why:* user-level synthesis is per-user and surface-independent.
+
+### Translation MVP scope (locked 2026-05-22)
+
+- **Chat messages: per-chat toggle.** User enables / disables translation per chat thread. Matches the current demo pattern; positive Marcel feedback. *Why:* gives users control without forcing always-on cost; familiar UX from messaging tools.
+- **Everything else (deal cards, documents, system messages, side-Sella suggestions, shop content, public ads): English only for MVP.** *Why:* tight scope for first launch with English as the working language. Translation expansion is a deliberate post-MVP step.
+- **Pitch's broader translation promise ("wir wandeln alles in die Sprache unserer Partner") = post-MVP scope.** *Why:* the value is real but the engineering + content QA burden is large; ship MVP first, expand based on real customer needs.
