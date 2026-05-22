@@ -63,7 +63,7 @@
 - **8 Linear doubts with Marcel / Muskan answers in comments** waiting to be processed: DEV-1, DEV-5, DEV-6, DEV-7, DEV-8, DEV-9, DEV-10, DEV-12. Answers live only in Linear comments. Process → close the issues → update Layer docs + DECISIONS.md.
 - **3 new Marcel-created doubts**: DEV-37 (chat windows for multiple deals), DEV-38 (user safety / illegal activity), DEV-39 (16-combination connection matrix). Need triage + integration.
 - **Linear project rename**: `Define Deals / Deal Cards (structure & access)` → `Deals / Deal Card definition (structure & access)`. Old name still referenced in the `.claude/skills/track-doubt/SKILL.md` mapping table and in body text across the Layer docs. Search/replace needed.
-- **Meeting source-of-truth** for many of these resolutions is in [meeting-notes/2026-05-16-marcel-meeting.md](meeting-notes/2026-05-16-marcel-meeting.md). Read that first before re-deriving anything.
+- **Meeting source-of-truth** for many of these resolutions is in [meeting-notes/2026-05-16-marcel-meeting.md](../meeting-notes/2026-05-16-marcel-meeting.md). Read that first before re-deriving anything.
 
 ---
 
