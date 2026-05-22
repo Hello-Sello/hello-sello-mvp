@@ -268,3 +268,9 @@ Each entry: **What was decided** → **Why** (the reasoning at the time).
 ### Trigger event coverage v1 (locked 2026-05-22)
 
 - **Sella trigger events documented across five layers (non-exhaustive):** Deal-Sella detection mode (chat watching → strict-signal prompts), Deal-Sella mediation mode (workspace events, milestones, docs, 30-day nudge), Side-Sella in right panel (read from Deal scope on user open/Counter/question), Personal Sella (digest, Things, login summary), and First-contact Sella (per DEV-7 P↔C workflow). *Why:* explicit event list gives engineering a build-ready map; new triggers can be added with team discussion as the product evolves.
+
+### Autonomy ladder (locked 2026-05-22)
+
+- **5-level autonomy ladder: Off → Suggest → Pre-fill → Confirm-each → Auto.** Trust grading is per-action-type, not global. Climbs based on user approve-rate over N actions; resets on rejection streak. Threshold numbers TBD post-launch. *Why:* matches familiar tooling (Cursor / Copilot tiers); per-action-type granularity prevents premature trust collapse if one action type goes wrong.
+- **Hard autonomy ceiling at L3 (Confirm-each)** for: counter-offers to the other side, accepting / confirming a deal, posting AS THE USER in workspace chat, financial / contractual obligations, any action affecting the other side without separate consent. *Why:* protects neutrality (Deal-Sella never auto-acts) and trust (no surprise commitments).
+- **Ask Myself = pre-authorized auto-send of repetitive/specific assets.** User pre-uploads intro / pitch / product tour / demo / FAQ replies. Sella auto-sends contextually appropriate asset when asked a matching question. Not on the autonomy ladder — separate "pre-authorized static content" mode. *Why:* the ladder gates Sella-generated actions; Ask Myself sends user-curated content. Different trust model, separate primitive.

@@ -150,10 +150,59 @@ The following events drive Sella's behavior in MVP. More can be added with build
 
 ## 4. Autonomy ladder
 
-*(TBD.)*
+*(Substantive draft; threshold numbers and soft-cap N still TBD.)*
 
 **Carry-overs:**
 - **Proactive reply suggestion** in P↔P chats; user approves / edits / rejects; trust-graded **auto-fill** mode once trust earned. (2026-05-16 meeting + [Sella reply suggestion project](https://linear.app/hellosello/project/sella-reply-suggestion-proactive-trust-graded-auto-fill-f028d8db7823).)
+
+**Locked 2026-05-22:**
+
+The autonomy ladder defines how independently each Sella can act per action type. Trust is **per-action-type**, not global. Users may explicitly override defaults.
+
+**The 5-level ladder:**
+
+| Level | What Sella does | User action |
+|---|---|---|
+| **0. Off** | Disabled for this action type | None — nothing happens |
+| **1. Suggest** | Drafts in panel; user copies / applies manually | High friction; user does the work |
+| **2. Pre-fill** | Stages the action (e.g., types in chat box) | User edits + sends |
+| **3. Confirm-each** | Ready-to-send; user clicks "yes" per action | One click |
+| **4. Auto** | Sends / applies directly; batch review later | None — Sella acts |
+
+**Trust grading:**
+- Per-action-type, not global. Replies and counters accrue independently.
+- Climbs L1 → L4 based on user approve-rate over N actions of that type. (Threshold + N: TBD — see open Qs.)
+- Manual override always available (user can pin a level for any action).
+- Reset to a lower level on a rejection streak (number: TBD).
+
+**Hard ceiling (never auto-fills, regardless of trust):**
+- Sending a counter-offer to the other side — max L3 (Confirm-each).
+- Accepting / confirming a deal — max L3.
+- Posting to workspace chat AS THE USER (Sella's system voice doesn't count).
+- Any action creating a financial / contractual obligation.
+- Any action affecting the OTHER side without their separate consent.
+
+*Why the ceiling:* protects neutrality (Deal-Sella never auto-acts in mediation) and trust (no surprise commitments from either side's Sella).
+
+**Per-Sella autonomy defaults:**
+
+| Specialist | Suggest | Pre-fill | Confirm-each | Auto |
+|---|---|---|---|---|
+| **Deal-Sella** | System messages, evidence prompts, back-of-card SIGNALS | Card edit drafts (need both-users-Accept anyway) | — | Never |
+| **Seller-Sella** | Counters, pricing nudges, deal pre-fill | Counter drafts | Counter sends | Daily-digest-style insights only |
+| **Buyer-Sella** | Same, buyer-side | Same | Same | Same |
+| **Personal Sella** | Things triage, digest, summaries | Auto-categorize Things | — | Daily digest, login summary |
+| **First-contact Sella** | Greeting, qualifying questions | (flow is pre-authorized) | — | Auto-runs full P↔C workflow (DEV-7) |
+
+**Ask Myself — pre-authorized auto-send:**
+
+Sella answers FOR the user using pre-authorized assets. Use case: a buyer/seller asks the user a repetitive, specific question ("tell me about your company," "what's your product range") and Sella replies with the user's pre-uploaded content (intro / pitch / product tour / demo / FAQ).
+
+- User pre-authorizes specific assets (videos, PDFs, canned replies).
+- Sella auto-sends contextually appropriate asset.
+- Not on the ladder — it's a separate "pre-authorized" mode for static content.
+
+> **⚠️ OPEN [DEV-58]** — Seller-Sella & Buyer-Sella counter suggestions could stalemate deals; safeguards TBD (Deal-Sella as convergence watcher, soft-cap on counter rounds, shared market-data layer, realism check).
 
 ---
 
@@ -228,6 +277,9 @@ The following events drive Sella's behavior in MVP. More can be added with build
 - **Deal-Sella interactive UI in P↔P chats** — appears above the chat, middle-aligned, when she activates to prompt. Distinct from the thin-status-line model for passive notifications (DEV-33). *(2026-05-21.)*
 - **No formal cooldown** on deal-forming prompts. Rejection ends the prompt; next prompt fires on next strict signal. *(2026-05-21.)*
 - **Trigger event coverage v1** — Sella's triggers documented across detection / mediation / side-Sella / Personal / first-contact. Non-exhaustive; expandable with build experience. *(2026-05-22.)*
+- **5-level autonomy ladder** — Off / Suggest / Pre-fill / Confirm-each / Auto. Per-action-type trust grading; manual override always available. *(2026-05-22.)*
+- **Hard autonomy ceiling at L3** — counters, accepts, sends-to-other-side, financial/contractual obligations never auto-fill, regardless of trust. *(2026-05-22.)*
+- **Ask Myself — pre-authorized auto-send** of repetitive/specific assets (intro / pitch / product tour / demo / FAQ replies). Not on the ladder; separate static-content mode. *(2026-05-22.)*
 
 ---
 
@@ -237,6 +289,9 @@ The following events drive Sella's behavior in MVP. More can be added with build
 - **§3 — Detection precision tuning.** Sensitivity thresholds, false-positive measurement, casual-chat boundary refinement. Track as a doubt before build.
 - **§3 — Full trigger event coverage.** Comprehensive list of events Sella subscribes to (member added, doc uploaded, milestone tick, stage close, etc.) and her action per event. Pending next session.
 - **§3 — First-contact Sella trigger spec.** When she fires on P↔C contact (behavior carry-over in §6; trigger spec belongs here). Pending next session.
+- **§4** — How should Seller-Sella and Buyer-Sella counter suggestions avoid stalemating deals? — [DEV-58](https://linear.app/hellosello/issue/DEV-58/how-should-seller-sella-and-buyer-sella-counter-suggestions-avoid)
+- **§4 — Threshold + N for ladder climb / drop.** Approve-rate threshold and rejection-streak reset numbers. Pick post-launch from telemetry.
+- **§4 — Counter-round soft-cap N.** After how many rounds does Deal-Sella offer structured intervention? Tracked under DEV-58.
 
 ---
 
