@@ -187,7 +187,8 @@ This applies to LAYER docs, DECISIONS.md, PITCH.md, CLAUDE.md, and every Linear 
 
 ### Git workflow
 
-- **Commit to a `claude/*` branch, not directly to main.** Open a PR for review.
+- **Work on ONE persistent branch: `claude/work`.** Don't create a new branch per section / topic. After each PR merges, reset `claude/work` from new main and continue.
+- **Open a PR for review** for each batch; don't push to main directly.
 - **Keep commit messages and PR bodies short.** Title + a few bullets, not essays. Reviewers read the diff, not the prose.
 
 ### What NOT to do
