@@ -73,13 +73,13 @@ Capture Sella's **behavior** — what she does, when she shows up, how she decid
 - **Deal-Sella is never in the right-side panel.** She operates exclusively via system voice — `[Sella · system]` messages, evidence logging, text-box prompts to both sides. Users never address Deal-Sella directly. When a user asks a deal question in the right panel, their side-specific Sella reads from Deal-Sella's workspace scope and answers. *Why:* makes neutrality structural at the interface layer — Deal-Sella never has a one-sided conversation.
 - **Personal Sella owns proactive user-level nudges.** Daily digest of pending Things and deals, stale-deal alerts, "what's on your plate today" — all cross-cut sell + buy sides for a single user. *Why:* user-level synthesis is a per-user concern; Seller-Sella / Buyer-Sella are domain-scoped, Personal Sella is user-scoped — one daily voice, not three.
 
-> **⚠️ FLAG (2026-05-21)** — **Personal Sella vs Seller-Sella vs Buyer-Sella behavioral overlap.** These three specialists may act very similarly depending on context, suggesting fluid boundaries rather than strict separation. Open architectural question: are they three distinct agents with overlapping behaviors, or one agent with context-dependent flavors? Has implications for the multi-Sella system design. To be drilled in §4/§5; should be tracked as a doubt via `/track-doubt` (Linear issue) before engineering build.
+> **⚠️ OPEN [DEV-11]** — Personal vs Seller/Buyer Sella behavioral overlap; tracked under multi-Sella architecture.
 
 ---
 
 ## 3. Triggers & detection
 
-*(TBD.)*
+*(Substantive draft; more triggers may be added with build experience and team discussion.)*
 
 **Carry-overs from Layer 1 (already locked Sella triggers — bring forward when this section is written):**
 - Detect deal-forming signals: **product + quantity** OR **product + price** → pop "deal forming?" prompt to both users (Layer 1 §5.2 Path B).
@@ -94,14 +94,115 @@ Capture Sella's **behavior** — what she does, when she shows up, how she decid
 - **Interactive UI placement in P↔P chats.** When Deal-Sella becomes active to prompt the two users (deal-forming, counter, evidence text-box), she appears as a component **above the chat, middle-aligned**, in the P↔P chat between them. Distinct from the **passive thin-status-line** model used for stage closures and post-close deal amendments (DEV-33).
 - **No formal cooldown on deal-forming prompts.** Rejection doesn't trigger a timer or message-count suppression. The next prompt fires when the next strict signal is detected. *Why:* the strict signal IS the gate; layering a cooldown on top would be paternalistic.
 
+**Locked 2026-05-22 — trigger event coverage (non-exhaustive v1):**
+
+The following events drive Sella's behavior in MVP. More can be added with build experience and team discussion.
+
+**Deal-Sella — detection mode** (pre-workspace, in P↔P chats):
+
+| Event | Action |
+|---|---|
+| New chat message | Run hybrid model (lenient monitor + strict signal check) |
+| Strict signal hits | Prompt both users (component above chat) |
+| Both Accept | Promote to mediation; workspace spawns |
+| Both Reject | End prompt; keep monitoring |
+
+**Deal-Sella — mediation mode** (inside workspace):
+
+| Event | Action |
+|---|---|
+| Message in workspace chat | Check for card-relevant change → if yes, system message |
+| Message in deal-participant P↔P chat | Check for card-relevant change → if yes, text-box prompt both users |
+| Counter button clicked | "What's your counter?" prompt → new card version |
+| Card edited (any version bump) | Audit log + back-of-card SIGNALS update |
+| Member added / removed | Audit log + thin-status-line (DEV-33) |
+| Document uploaded | Audit log + OCR auto-amend (DEV-25/36) + SIGNALS update |
+| Milestone ticked | Audit log + check stage closure |
+| Stage closed | Thin-status-line (DEV-33) in P↔P + workspace chat |
+| Delivery note + invoice both attached | Trigger Done state (DEV-25) |
+| 30-day inactivity | "Park or close?" nudge |
+
+**Side-Sella** (Seller-Sella / Buyer-Sella in right panel):
+
+| Event | Action |
+|---|---|
+| User opens deal | Read Deal-Sella scope; surface relevant past-deal context |
+| User clicks Counter | Suggest counter (private to this user) |
+| User asks question | Answer from Deal-Sella scope |
+
+**Personal Sella:**
+
+| Event | Action |
+|---|---|
+| Daily heartbeat | Digest: pending Things, stale deals |
+| New Thing assigned to this user | In-app notification |
+| User logs in | "What's on your plate today" |
+
+**First-contact Sella** (per DEV-7; behavior detailed in §6, trigger logged here):
+
+| Event | Action |
+|---|---|
+| Inbound P↔C contact arrives | Greet sender; run qualifying-question + doc-request workflow |
+| Pre-pickup | Hold docs in temporary pending inbox tied to receiver |
+| On pickup (first-clicker wins) | Create Relationship, migrate pending inbox in, archive P↔C chat, open P↔P chat, write Sella summary message (editable) |
+
 ---
 
 ## 4. Autonomy ladder
 
-*(TBD.)*
+*(Substantive draft; threshold numbers and soft-cap N still TBD.)*
 
 **Carry-overs:**
 - **Proactive reply suggestion** in P↔P chats; user approves / edits / rejects; trust-graded **auto-fill** mode once trust earned. (2026-05-16 meeting + [Sella reply suggestion project](https://linear.app/hellosello/project/sella-reply-suggestion-proactive-trust-graded-auto-fill-f028d8db7823).)
+
+**Locked 2026-05-22:**
+
+The autonomy ladder defines how independently each Sella can act per action type. Trust is **per-action-type**, not global. Users may explicitly override defaults.
+
+**The 5-level ladder:**
+
+| Level | What Sella does | User action |
+|---|---|---|
+| **0. Off** | Disabled for this action type | None — nothing happens |
+| **1. Suggest** | Drafts in panel; user copies / applies manually | High friction; user does the work |
+| **2. Pre-fill** | Stages the action (e.g., types in chat box) | User edits + sends |
+| **3. Confirm-each** | Ready-to-send; user clicks "yes" per action | One click |
+| **4. Auto** | Sends / applies directly; batch review later | None — Sella acts |
+
+**Trust grading:**
+- Per-action-type, not global. Replies and counters accrue independently.
+- Climbs L1 → L4 based on user approve-rate over N actions of that type. (Threshold + N: TBD — see open Qs.)
+- Manual override always available (user can pin a level for any action).
+- Reset to a lower level on a rejection streak (number: TBD).
+
+**Hard ceiling (never auto-fills, regardless of trust):**
+- Sending a counter-offer to the other side — max L3 (Confirm-each).
+- Accepting / confirming a deal — max L3.
+- Posting to workspace chat AS THE USER (Sella's system voice doesn't count).
+- Any action creating a financial / contractual obligation.
+- Any action affecting the OTHER side without their separate consent.
+
+*Why the ceiling:* protects neutrality (Deal-Sella never auto-acts in mediation) and trust (no surprise commitments from either side's Sella).
+
+**Per-Sella autonomy defaults:**
+
+| Specialist | Suggest | Pre-fill | Confirm-each | Auto |
+|---|---|---|---|---|
+| **Deal-Sella** | System messages, evidence prompts, back-of-card SIGNALS | Card edit drafts (need both-users-Accept anyway) | — | Never |
+| **Seller-Sella** | Counters, pricing nudges, deal pre-fill | Counter drafts | Counter sends | Daily-digest-style insights only |
+| **Buyer-Sella** | Same, buyer-side | Same | Same | Same |
+| **Personal Sella** | Things triage, digest, summaries | Auto-categorize Things | — | Daily digest, login summary |
+| **First-contact Sella** | Greeting, qualifying questions | (flow is pre-authorized) | — | Auto-runs full P↔C workflow (DEV-7) |
+
+**Ask Myself — pre-authorized auto-send:**
+
+Sella answers FOR the user using pre-authorized assets. Use case: a buyer/seller asks the user a repetitive, specific question ("tell me about your company," "what's your product range") and Sella replies with the user's pre-uploaded content (intro / pitch / product tour / demo / FAQ).
+
+- User pre-authorizes specific assets (videos, PDFs, canned replies).
+- Sella auto-sends contextually appropriate asset.
+- Not on the ladder — it's a separate "pre-authorized" mode for static content.
+
+> **⚠️ OPEN [DEV-58]** — Seller-Sella & Buyer-Sella counter suggestions could stalemate deals; safeguards TBD (Deal-Sella as convergence watcher, soft-cap on counter rounds, shared market-data layer, realism check).
 
 ---
 
@@ -175,15 +276,22 @@ Capture Sella's **behavior** — what she does, when she shows up, how she decid
 - **Detection model: hybrid** — strict signal gates user-facing prompts; lenient LLM monitoring captures context for v0.1 pre-fill. Rejection stops the prompt, not the monitoring. *(2026-05-21.)*
 - **Deal-Sella interactive UI in P↔P chats** — appears above the chat, middle-aligned, when she activates to prompt. Distinct from the thin-status-line model for passive notifications (DEV-33). *(2026-05-21.)*
 - **No formal cooldown** on deal-forming prompts. Rejection ends the prompt; next prompt fires on next strict signal. *(2026-05-21.)*
+- **Trigger event coverage v1** — Sella's triggers documented across detection / mediation / side-Sella / Personal / first-contact. Non-exhaustive; expandable with build experience. *(2026-05-22.)*
+- **5-level autonomy ladder** — Off / Suggest / Pre-fill / Confirm-each / Auto. Per-action-type trust grading; manual override always available. *(2026-05-22.)*
+- **Hard autonomy ceiling at L3** — counters, accepts, sends-to-other-side, financial/contractual obligations never auto-fill, regardless of trust. *(2026-05-22.)*
+- **Ask Myself — pre-authorized auto-send** of repetitive/specific assets (intro / pitch / product tour / demo / FAQ replies). Not on the ladder; separate static-content mode. *(2026-05-22.)*
 
 ---
 
 ## Open Questions
 
-- **§2 — Personal vs Seller/Buyer Sella behavioral overlap.** Are they three distinct agents with overlapping behaviors, or one agent with context-dependent flavors? Flagged 2026-05-21; to be drilled in §4/§5; needs `/track-doubt` → Linear issue before engineering build.
+- **§2** — Are Personal Sella, Seller-Sella, and Buyer-Sella three distinct agents or one with context flavors? — [DEV-11](https://linear.app/hellosello/issue/DEV-11/how-should-the-multi-sella-architecture-be-designed-orchestrator) (multi-Sella architecture).
 - **§3 — Detection precision tuning.** Sensitivity thresholds, false-positive measurement, casual-chat boundary refinement. Track as a doubt before build.
 - **§3 — Full trigger event coverage.** Comprehensive list of events Sella subscribes to (member added, doc uploaded, milestone tick, stage close, etc.) and her action per event. Pending next session.
 - **§3 — First-contact Sella trigger spec.** When she fires on P↔C contact (behavior carry-over in §6; trigger spec belongs here). Pending next session.
+- **§4** — How should Seller-Sella and Buyer-Sella counter suggestions avoid stalemating deals? — [DEV-58](https://linear.app/hellosello/issue/DEV-58/how-should-seller-sella-and-buyer-sella-counter-suggestions-avoid)
+- **§4 — Threshold + N for ladder climb / drop.** Approve-rate threshold and rejection-streak reset numbers. Pick post-launch from telemetry.
+- **§4 — Counter-round soft-cap N.** After how many rounds does Deal-Sella offer structured intervention? Tracked under DEV-58.
 
 ---
 
