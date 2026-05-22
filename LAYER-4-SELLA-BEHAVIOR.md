@@ -208,7 +208,30 @@ Sella answers FOR the user using pre-authorized assets. Use case: a buyer/seller
 
 ## 5. Per-surface behavior
 
-*(TBD — one sub-section per Big 7 surface + Deal Workspace.)*
+*(Substantive draft for Big 7 + Home + Deal Workspace; polish like hover-preview is post-MVP.)*
+
+**Locked 2026-05-22 — surface → Sella routing:**
+
+| Surface | Right-panel Sella | Background Sella(s) | Sella's primary capabilities here |
+|---|---|---|---|
+| **Home** (pre-login) | None | None | Marketing surface only; no logged-in user identity |
+| **Connect** — overview (relationships / chat list, no item selected) | Personal Sella *(default)* | — | Daily digest, "what's on your plate," stale-deal alerts |
+| **Connect** — specific relationship/chat (sell-side) | Seller-Sella | Deal-Sella in **detection mode** (P↔P chats) | Past-deal context, suggested replies, deal pre-fill |
+| **Connect** — specific relationship/chat (buy-side) | Buyer-Sella | Deal-Sella in **detection mode** | Same, buyer-side |
+| **Connect** — P↔C inbox | Side-specific by direction | First-contact Sella runs intake | Greet, qualify, request docs (DEV-7); handoff on pickup |
+| **Inside a Deal Workspace** | Seller-Sella or Buyer-Sella (by direction) | **Deal-Sella in mediation mode** (system voice) | Side advisor in panel; Deal-Sella mediates (sys msgs, evidence, SIGNALS) |
+| **Buy** | Buyer-Sella | — | Price history, margin analysis, supplier coverage gaps, alternative-supplier suggestions, Cash-Flow Calc context |
+| **Sell** | Seller-Sella | — | Margin nudges, batch availability, FIFO, pricelist updates |
+| **Present** — your own shop | Seller-Sella | — | Setup help, photo/COA upload, basket → Deal Room (DEV-22/54) |
+| **Present** — browsing another shop | Buyer-Sella | — | Price history, alternative suppliers, basket creation |
+| **Trade** | Company Sella | — | Cross-deal analytics, revenue concentration, partner health, risk alerts |
+| **Discover** — scouting suppliers (acting as buyer) | Buyer-Sella | — | Supplier discovery, fit-matching, ranking |
+| **Discover** — managing legal ads (acting as seller) | Seller-Sella | — | Brand-ad management, audience targeting |
+| **Discover** — exploring (no clear side intent) | Personal Sella | — | General orientation |
+
+**Cross-cutting overlay:** any surface, user asks *"what's on my plate today"* → Personal Sella answers (regardless of which side-Sella is in the panel).
+
+**Sub-context switching rule:** when a surface has multiple intents (Connect, Discover), the right-panel Sella follows the user's current intent. Personal Sella is the default when intent is ambiguous.
 
 ---
 
@@ -280,6 +303,11 @@ Sella answers FOR the user using pre-authorized assets. Use case: a buyer/seller
 - **5-level autonomy ladder** — Off / Suggest / Pre-fill / Confirm-each / Auto. Per-action-type trust grading; manual override always available. *(2026-05-22.)*
 - **Hard autonomy ceiling at L3** — counters, accepts, sends-to-other-side, financial/contractual obligations never auto-fill, regardless of trust. *(2026-05-22.)*
 - **Ask Myself — pre-authorized auto-send** of repetitive/specific assets (intro / pitch / product tour / demo / FAQ replies). Not on the ladder; separate static-content mode. *(2026-05-22.)*
+- **§5 per-surface routing table locked.** Big 7 + Home + Deal Workspace mapped to right-panel Sella + background Sella(s) + primary capabilities. *(2026-05-22.)*
+- **Connect overview default = Personal Sella.** Switches to side-specific Sella when a relationship/chat is selected. *(2026-05-22.)*
+- **Discover follows user intent.** Buyer-Sella (scouting), Seller-Sella (ads), Personal Sella (exploring). *(2026-05-22.)*
+- **Trade right-panel = Company Sella** — C-suite scope; cross-side visibility. *(2026-05-22.)*
+- **"What's on my plate" overlay** — any surface, user can ask Personal Sella to summarize their open Things / deals. *(2026-05-22.)*
 
 ---
 
