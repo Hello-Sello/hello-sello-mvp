@@ -2,6 +2,8 @@
 
 This file is auto-loaded by Claude Code at every session start. It gives Claude the context to pick up where the team left off, without re-explaining everything.
 
+**This is the shared team file.** Committed and co-owned by all engineers. Each engineer keeps their own personal `CLAUDE.md` locally - gitignored, never committed.
+
 ---
 
 ## What this project is
@@ -22,14 +24,44 @@ Hello Sello is an **AI-native deal room for B2B** — a shared chat space betwee
 
 **Read these at the start of every brainstorm session for full context:**
 
-- **[PITCH.md](PITCH.md)** — investor + customer pitches. Defines voice, framing, positioning.
-- **[LAYER-1-USERS-AND-CORE-OBJECTS.md](LAYER-1-USERS-AND-CORE-OBJECTS.md)** — Layer 1. **LOCKED.**
-- **[LAYER-2-SURFACES.md](LAYER-2-SURFACES.md)** — Layer 2. **IN PROGRESS.**
-- **[LAYER-3-DEAL-EXECUTION.md](LAYER-3-DEAL-EXECUTION.md)** — Layer 3. **IN PROGRESS.**
-- **[LAYER-4-SELLA-BEHAVIOR.md](LAYER-4-SELLA-BEHAVIOR.md)** — Layer 4. **IN PROGRESS.**
+- **[PITCH.md](docs/product/PITCH.md)** — investor + customer pitches. Defines voice, framing, positioning.
+- **[LAYER-1-USERS-AND-CORE-OBJECTS.md](docs/product/LAYER-1-USERS-AND-CORE-OBJECTS.md)** — Layer 1. **LOCKED.**
+- **[LAYER-2-SURFACES.md](docs/product/LAYER-2-SURFACES.md)** — Layer 2. **IN PROGRESS.**
+- **[LAYER-3-DEAL-EXECUTION.md](docs/product/LAYER-3-DEAL-EXECUTION.md)** — Layer 3. **IN PROGRESS.**
+- **[LAYER-4-SELLA-BEHAVIOR.md](docs/product/LAYER-4-SELLA-BEHAVIOR.md)** — Layer 4. **IN PROGRESS.**
 - *(Future)* LAYER-5. See **"The 5-Layer Roadmap"** below for what each layer covers.
-- **[DECISIONS.md](DECISIONS.md)** — locked decisions with reasoning. One-line per decision.
-- **[ARCHITECTURE-NOTES.md](ARCHITECTURE-NOTES.md)** — running engineering scratchpad. One-sentence implications from each lock, grouped by topic. Precursor to the formal Architecture doc.
+- **[DECISIONS.md](docs/decisions/DECISIONS.md)** — locked decisions with reasoning. One-line per decision.
+- **[ARCHITECTURE-NOTES.md](docs/architecture/ARCHITECTURE-NOTES.md)** — running engineering scratchpad. One-sentence implications from each lock, grouped by topic. Precursor to the formal Architecture doc.
+
+---
+
+## Repo layout
+
+```
+hello-sello-design/
+├── AGENTS.md                        # shared team context (this file)
+├── README.md
+├── SKILLS.md                        # team skill dictionary
+├── .gitignore                       # CLAUDE.md is listed here
+├── .claude/skills/                  # project-scoped agent skills
+│
+├── docs/
+│   ├── product/                     # product design
+│   │   ├── PITCH.md
+│   │   ├── PRD.md                   # to be written
+│   │   └── LAYER-1..5-*.md
+│   ├── architecture/                # technical architecture
+│   │   ├── CONTEXT.md               # domain language glossary for agents
+│   │   ├── ARCHITECTURE-NOTES.md
+│   │   └── adr/                     # Architecture Decision Records
+│   ├── decisions/                   # product/design decisions log
+│   │   └── DECISIONS.md
+│   └── agents/                      # agent config (issue tracker, labels, domain)
+│
+├── frontend/                        # frontend code
+├── backend/                         # backend code
+└── infra/                           # infrastructure / deploy / CI
+```
 
 ---
 
@@ -44,7 +76,7 @@ Layer 1 — Users and Core Objects   ✅ LOCKED
   • Deal lifecycle STATES (Chat → Draft → Confirmed) and birth paths
   • Multi-Sella architecture (structural overview)
   • Privacy / visibility rules
-  → LAYER-1-USERS-AND-CORE-OBJECTS.md
+  → docs/product/LAYER-1-USERS-AND-CORE-OBJECTS.md
 
 Layer 2 — Product Surfaces   ⏳ IN PROGRESS
   • The Big 7 pillars (locked 2026-05-18): Connect / Buy / Sell / Present / Trade / Discover
@@ -53,7 +85,7 @@ Layer 2 — Product Surfaces   ⏳ IN PROGRESS
   • Navigation model and home / landing view
   • What lives on each surface
   • How surfaces map to the Layer 1 deal lifecycle
-  → LAYER-2-SURFACES.md (filled in live as brainstorm progresses)
+  → docs/product/LAYER-2-SURFACES.md (filled in live as brainstorm progresses)
 
 Layer 3 — The Deal (deeply)   ⏳ IN PROGRESS
   • What's inside a deal, who owns it
@@ -166,7 +198,7 @@ When a doubt, open question, or unresolved design choice surfaces during convers
 When a decision is being locked during conversation:
 1. Say: *"This sounds like a locked decision — want me to add it to DECISIONS.md?"*
 2. Show a one-line preview with rationale.
-3. If user confirms, append to DECISIONS.md.
+3. If user confirms, append to `docs/decisions/DECISIONS.md`.
 4. **Never write to DECISIONS.md without explicit confirmation.**
 
 ### Writes always preview first
@@ -177,7 +209,7 @@ For any file edit, new file, or Linear write:
 3. Wait for confirmation. Loop on revisions.
 4. Only then execute.
 
-This applies to LAYER docs, DECISIONS.md, PITCH.md, CLAUDE.md, and every Linear write.
+This applies to LAYER docs, DECISIONS.md, PITCH.md, AGENTS.md, and every Linear write.
 
 ### Language
 
@@ -216,6 +248,6 @@ If you're Claude and you just woke up in this folder, here's the 30-second brief
 
 1. The user (and any teammates) are designing a B2B AI deal-room product called Hello Sello.
 2. We brainstorm **layer by layer**. Layer 1 is locked. Layer 2 is next.
-3. Doubts go through `/track-doubt`. Decisions go to DECISIONS.md. Both require explicit permission before writing.
-4. Read [LAYER-1-USERS-AND-CORE-OBJECTS.md](LAYER-1-USERS-AND-CORE-OBJECTS.md) and [PITCH.md](PITCH.md) before discussing design. Skim [DECISIONS.md](DECISIONS.md) for the locked decisions.
+3. Doubts go through `/track-doubt`. Decisions go to `docs/decisions/DECISIONS.md`. Both require explicit permission before writing.
+4. Read [LAYER-1-USERS-AND-CORE-OBJECTS.md](docs/product/LAYER-1-USERS-AND-CORE-OBJECTS.md) and [PITCH.md](docs/product/PITCH.md) before discussing design. Skim [DECISIONS.md](docs/decisions/DECISIONS.md) for the locked decisions.
 5. Keep language simple. Show previews. Ask permission.

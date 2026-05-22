@@ -26,6 +26,9 @@ Desktop.ini
 # Logs
 *.log
 
+# Personal agent config — each engineer keeps their own, never committed
+CLAUDE.md
+
 # Local environment / secrets (defensive — no secrets expected in design docs)
 .env
 .env.local
