@@ -274,3 +274,24 @@ Each entry: **What was decided** → **Why** (the reasoning at the time).
 - **5-level autonomy ladder: Off → Suggest → Pre-fill → Confirm-each → Auto.** Trust grading is per-action-type, not global. Climbs based on user approve-rate over N actions; resets on rejection streak. Threshold numbers TBD post-launch. *Why:* matches familiar tooling (Cursor / Copilot tiers); per-action-type granularity prevents premature trust collapse if one action type goes wrong.
 - **Hard autonomy ceiling at L3 (Confirm-each)** for: counter-offers to the other side, accepting / confirming a deal, posting AS THE USER in workspace chat, financial / contractual obligations, any action affecting the other side without separate consent. *Why:* protects neutrality (Deal-Sella never auto-acts) and trust (no surprise commitments).
 - **Ask Myself = pre-authorized auto-send of repetitive/specific assets.** User pre-uploads intro / pitch / product tour / demo / FAQ replies. Sella auto-sends contextually appropriate asset when asked a matching question. Not on the autonomy ladder — separate "pre-authorized static content" mode. *Why:* the ladder gates Sella-generated actions; Ask Myself sends user-curated content. Different trust model, separate primitive.
+
+### Per-surface behavior (locked 2026-05-22)
+
+- **Surface → Sella routing table (Big 7 + Home + Deal Workspace).** Each surface has a default right-panel Sella, optional background Sellas, and a primary capability set. Captured in LAYER-4 §5. *Why:* concrete map gives engineering build-ready routing rules and prevents drift between surfaces.
+- **Connect overview default = Personal Sella.** No item selected → Personal Sella shows daily digest. Selecting a relationship/chat switches to the side-specific Sella by direction. *Why:* Personal Sella is the user's day-view agent; defaulting to her on overview surfaces matches the "what's on my plate" pattern.
+- **Discover follows user intent.** Browsing for suppliers → Buyer-Sella; managing legal ads / brand presence → Seller-Sella; just exploring → Personal Sella. *Why:* Discover serves three distinct purposes (Big 7 lock); intent-driven switching means Sella adapts to the action, not the page.
+- **Trade right-panel = Company Sella.** Trade is C-suite scope per L2; Company Sella is the only specialist with cross-side (sell + buy) visibility. *Why:* admin/CEO view needs both sides of the company.
+- **Cross-surface "what's on my plate" overlay.** From any surface, asking Personal Sella surfaces the user's open Things, deals, and digest — regardless of which side-Sella is in the panel. *Why:* user-level synthesis is per-user and surface-independent.
+
+### Translation MVP scope (locked 2026-05-22)
+
+- **Chat messages: per-chat toggle.** User enables / disables translation per chat thread. Matches the current demo pattern; positive Marcel feedback. *Why:* gives users control without forcing always-on cost; familiar UX from messaging tools.
+- **Everything else (deal cards, documents, system messages, side-Sella suggestions, shop content, public ads): English only for MVP.** *Why:* tight scope for first launch with English as the working language. Translation expansion is a deliberate post-MVP step.
+- **Pitch's broader translation promise ("wir wandeln alles in die Sprache unserer Partner") = post-MVP scope.** *Why:* the value is real but the engineering + content QA burden is large; ship MVP first, expand based on real customer needs.
+
+### Memory, retrieval, learning (locked 2026-05-22)
+
+- **Per-specialist memory scope:** Deal-Sella = per-deal, life-of-deal; Seller-Sella / Buyer-Sella = per-company-side, persistent; Personal Sella = per-user, persistent; Company Sella = per-company cross-side, persistent; First-contact Sella = config-only. *Why:* each specialist's scope matches its routing (Layer 1 §10); memory model is a direct consequence.
+- **Retrieval architecture: hybrid RAG.** Vector RAG for unstructured (chat, evidence, notes); direct DB queries for structured (pricelists, batches, deals); in-memory for live state. *Why:* company-wide scope of Side-Sellas would blow any context window; hybrid is the standard pattern (Notion AI / Slack AI / CRM AI agents).
+- **Learning loop (MVP) = thumbs up/down + optional reject-reason + approve-rate telemetry.** Per action type. No active retraining in MVP — feedback logged for analytics + future training. *Why:* lightweight signal mechanism; active retraining requires infra + QA that's post-MVP scope.
+- **User memory controls: view, delete, reset, per-relationship reset.** Honors GDPR right-to-be-forgotten via cross-reference to the GDPR / Authentication workstream. *Why:* regulated market (cannabis pharma + EU) demands explicit memory controls.

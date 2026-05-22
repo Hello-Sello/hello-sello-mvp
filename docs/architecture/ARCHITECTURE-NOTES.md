@@ -38,6 +38,14 @@ When the formal Architecture doc is written (post Layer 4 + 5), these become its
 - First-contact Sella runs a **platform-wide workflow framework** with per-company customizable qualifying-questions and document-request lists. *(DEV-7.)*
 - Multi-Sella architecture (orchestrator vs tool-use vs graph; framework choice) is **open and architecturally foundational**. *(Layer 1 §10 + DEV-11.)*
 - Sella's base voice = **Schranner-inspired mediator style** (calm, structured, balanced, solution-oriented, collaborative); each specialist inherits the base with role-fitted shifts. *(DEV-46, 2026-05-20.)*
+- Deal-Sella exists in two modes — **detection** (per P↔P chat, listening) and **mediation** (per workspace, post-birth) — but same agent identity; storage layer must persist the mode transition on workspace spawn. *(Layer 4 §3, 2026-05-21.)*
+- Deal-Sella's pricelist visibility is enforced at the **data layer** — she sees relationship pricelist + public shop pricelist, never the seller's master pricelist with margins. Asymmetric data access kept structural, not prompt-level. *(Layer 4 §8, 2026-05-21.)*
+- Right-panel Sella routing is automatic per-context (surface × sub-context × deal-direction); routing logic lives at the **interface layer** so Deal-Sella stays out of the panel structurally. *(Layer 4 §2 + §5, 2026-05-21/22.)*
+- Side-Sellas (Seller, Buyer) use **hybrid retrieval**: vector RAG for unstructured content (chat, evidence, notes), direct DB queries for structured records (pricelists, batches, deals), in-memory for live state. *(Layer 4 §7, 2026-05-22.)*
+- Sella's **autonomy ladder (5 levels)** requires per-user × per-action-type trust state — climb/drop based on approve-rate over rolling N actions. Storage: feedback log + ladder state. *(Layer 4 §4, 2026-05-22.)*
+- Sella's **learning loop (MVP)** = feedback log (thumbs + reject-reason + approve-rate per action type). No active retraining. *(Layer 4 §7, 2026-05-22.)*
+- Translation engine (MVP) is **chat-only** with per-chat toggle; broader translation across cards/docs/UI is post-MVP. *(Layer 4 §6, 2026-05-22.)*
+- GDPR right-to-be-forgotten applies to **all Sella memory layers** — per-user delete, per-relationship reset (admin-driven), full memory reset. *(Layer 4 §7, 2026-05-22.)*
 
 ## Pricing
 
