@@ -308,7 +308,7 @@ Example: user asks Seller-Sella *"what did we close last time with this buyer?"*
 - **Per-relationship reset:** admin can reset Side-Sella's memory of a specific counterparty (e.g., after a sour relationship)
 - **GDPR cross-reference:** Sella memory honors the broader GDPR / Authentication workstream's right-to-be-forgotten flows
 
-> **⚠️ OPEN [pending /track-doubt]** — Memory duration per specialist: permanent retention vs. rolling window vs. user-configurable. Needs benchmarking against comparable systems (CRMs, AI assistants).
+> **⚠️ OPEN [DEV-59]** — Memory duration per specialist: permanent vs rolling vs user-configurable.
 
 ---
 
@@ -381,6 +381,7 @@ Example: user asks Seller-Sella *"what did we close last time with this buyer?"*
 - **§4** — How should Seller-Sella and Buyer-Sella counter suggestions avoid stalemating deals? — [DEV-58](https://linear.app/hellosello/issue/DEV-58/how-should-seller-sella-and-buyer-sella-counter-suggestions-avoid)
 - **§4 — Threshold + N for ladder climb / drop.** Approve-rate threshold and rejection-streak reset numbers. Pick post-launch from telemetry.
 - **§4 — Counter-round soft-cap N.** After how many rounds does Deal-Sella offer structured intervention? Tracked under DEV-58.
+- **§7** — How long should each Sella retain memory — permanent, rolling window, or user-configurable? — [DEV-59](https://linear.app/hellosello/issue/DEV-59/how-long-should-each-sella-retain-memory-permanent-rolling-window-or)
 
 ---
 
