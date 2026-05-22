@@ -329,13 +329,58 @@ Example: user asks Seller-Sella *"what did we close last time with this buyer?"*
 
 ## 9. Failure modes & escalation
 
-*(TBD.)*
+*(Substantive draft; failure categories and responses can grow with build experience.)*
+
+**Locked 2026-05-22 — failure categories (non-exhaustive):**
+
+| Category | Example | Severity |
+|---|---|---|
+| **Detection false positive** | Sella prompts "deal forming?" on casual banter | Low (annoying) |
+| **Detection false negative** | Sella misses a real deal | Medium (user can still trigger //deal) |
+| **Wrong card pre-fill** | Pre-fills 50kg when chat said 5kg | Medium (caught at confirmation) |
+| **Wrong system message** | Posts inaccurate "card updated" | Medium (user can correct) |
+| **Bad counter suggestion** | Pushes aggressive position that stalls deal | Medium (tracked under DEV-58) |
+| **Translation error** | Mistranslates a critical term | Medium-High (regulated content) |
+| **OCR / extraction error** | Pulls wrong data from delivery note (DEV-25/36) | High (auto-amends deal) |
+| **Stale info** | References outdated relationship pricing | Medium |
+| **Hallucination** | Invents a fact (e.g., a deal that doesn't exist) | High |
+| **Auto-fill mistake** | Sends a suggestion the user wouldn't have | Variable (= action's blast radius) |
+
+**Locked 2026-05-22 — response mechanisms:**
+
+- **Every action reversible.** Undo affordance on Sella writes; full audit trail per Layer 1 §11 + GDPR.
+- **User correction flow.** Quick "this was wrong" button on Sella messages → drops her autonomy level for that action type (§4 ladder).
+- **Uncertainty surfacing.** When confidence is low, Sella labels suggestions as tentative ("I'm not sure, but...") instead of asserting.
+- **Cooldown / drop.** N consecutive rejections in an action type → drop one level on the ladder.
+- **Escalation for material errors.** Wrong card terms, wrong OCR amendment, mistranslated regulated content → notify both deal participants + flag to audit log; require user review before re-applying.
+- **No silent failures.** Sella always announces actions; user always has visibility of what changed.
+- **Human override always available.** User can pause / disable any Sella behavior per surface, per action type, or entirely.
+
+**Key principles:**
+- **Reversibility is mandatory** — every Sella write must be undoable.
+- **Audit captures everything** — including Sella's mistakes + the user's corrections.
+- **Trust isn't binary** — graceful degradation via the ladder when she's wrong.
 
 ---
 
 ## 10. Non-goals
 
-*(TBD — what Sella explicitly does NOT do, to protect neutrality and trust.)*
+*(Substantive draft; can grow with team discussion.)*
+
+What Sella explicitly does NOT do — mostly cross-references to earlier locks, consolidated here as the "won't do" guide:
+
+**Locked 2026-05-22:**
+
+- **Sella does not advocate for one side over the other.** *(§1 neutrality lock + §8 invariants + Layer 1 §10.)*
+- **Sella does not auto-send to the counterparty without user consent.** *(§4 hard ceiling.)*
+- **Sella does not access the counterparty's internal data.** *(§2 + §8.)*
+- **Sella does not learn across companies.** Each company's data is siloed. *(§7.)*
+- **Sella does not replace human judgment** on material commercial decisions (pricing floor, deal acceptance, regulatory approvals).
+- **Sella does not give legal or regulatory advice.** Cannabis pharma compliance is human-handled.
+- **Sella does not retain memory beyond defined scope.** *(§7.)*
+- **Sella does not surveil casual chat.** Only deal-forming signals fire detection. *(§3 hybrid model.)*
+- **Sella does not interrupt with unsolicited prompts** outside her trigger model. *(§3.)*
+- **Sella does not act as the legal record** of an agreement — the evidence log + signed documents are the legal record; Sella is a tool that helps capture them.
 
 ---
 
@@ -369,6 +414,8 @@ Example: user asks Seller-Sella *"what did we close last time with this buyer?"*
 - **§7 retrieval architecture: hybrid RAG.** Vector RAG for unstructured (chat, evidence, notes); direct DB queries for structured (pricelists, batches, deals); in-memory for live state. *(2026-05-22.)*
 - **§7 learning loop (MVP):** thumbs up/down + optional reject-reason + approve-rate telemetry per action type. No active retraining. *(2026-05-22.)*
 - **§7 user memory controls:** view / delete / reset / per-relationship reset. GDPR cross-reference. *(2026-05-22.)*
+- **§9 failure mode framework** — non-exhaustive categories + reversibility / correction / uncertainty surfacing / cooldown / escalation / no-silent-failures / human-override response mechanisms. *(2026-05-22.)*
+- **§10 non-goals consolidated** — Sella does NOT advocate, auto-send without consent, access counterparty data, learn across companies, replace human judgment, give legal advice, surveil casual chat, or act as legal record. *(2026-05-22.)*
 
 ---
 

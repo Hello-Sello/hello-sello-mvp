@@ -46,6 +46,8 @@ When the formal Architecture doc is written (post Layer 4 + 5), these become its
 - Sella's **learning loop (MVP)** = feedback log (thumbs + reject-reason + approve-rate per action type). No active retraining. *(Layer 4 §7, 2026-05-22.)*
 - Translation engine (MVP) is **chat-only** with per-chat toggle; broader translation across cards/docs/UI is post-MVP. *(Layer 4 §6, 2026-05-22.)*
 - GDPR right-to-be-forgotten applies to **all Sella memory layers** — per-user delete, per-relationship reset (admin-driven), full memory reset. *(Layer 4 §7, 2026-05-22.)*
+- Every Sella write must be **reversible** — undo affordance + audit trail per action. Storage / state design needs to support reversibility per action type. *(Layer 4 §9, 2026-05-22.)*
+- **Material-error escalation:** wrong card terms, OCR amendments, mistranslated regulated content → notify both deal participants + audit-log flag + require user review before re-apply. Implementation: error-class taxonomy + escalation routing. *(Layer 4 §9, 2026-05-22.)*
 
 ## Pricing
 
