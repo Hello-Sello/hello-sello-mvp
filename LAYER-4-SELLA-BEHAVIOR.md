@@ -264,11 +264,51 @@ The pitch's broader promise ("wir wandeln alles in die Sprache unserer Partner")
 
 ## 7. Context, memory, learning
 
-*(TBD.)*
+*(Substantive draft; memory duration is open — see open Qs.)*
 
 **Carry-overs:**
-- Sella self-learning from mistakes (e.g., rejected prompts should reduce future likelihood) — aspirational direction, mechanism TBD. (Layer 1 §10.6.)
-- Memory layer technical stack: ZapMem under evaluation, gated on EU data residency. (2026-05-16.)
+- Sella self-learning from mistakes (e.g., rejected prompts should reduce future likelihood) — aspirational direction; mechanism partially answered below (feedback log). *(Layer 1 §10.6.)*
+- Memory layer technical stack: ZapMem under evaluation, gated on EU data residency. *(2026-05-16. Engineering decision deferred to architecture workstream — see DEV-11.)*
+
+**Locked 2026-05-22 — memory scope per specialist:**
+
+| Specialist | Scope | Duration |
+|---|---|---|
+| **Deal-Sella** | This one deal only (card history, chat, artifacts, evidence, milestones) | Life of the deal (archived on Done / Cancel) |
+| **Seller-Sella** | Company-wide sell-side (all sell-side deals, relationships, pricelists, batches) | Persistent — accumulates with the company |
+| **Buyer-Sella** | Company-wide buy-side (all buy-side deals, relationships, past prices, supplier history) | Persistent |
+| **Personal Sella** | Per-user (preferences, language, style, open Things, "what you've been working on") | Persistent per user *(exact duration TBD)* |
+| **Company Sella** | Per-company cross-side (aggregate metrics for admin / CEO) | Persistent |
+| **First-contact Sella** | Workflow framework config (qualifying questions, doc list) | Persistent (config), not per-conversation history |
+
+**Locked 2026-05-22 — retrieval architecture for Side-Sellas:**
+
+Side-Sellas have **company-wide scope** but can't load everything into every prompt. Hybrid retrieval pattern:
+
+| Data type | Retrieval approach |
+|---|---|
+| **Unstructured** — chat history, evidence logs, relationship notes, deal-card narratives | **Vector RAG** — embed + retrieve relevant chunks by current context |
+| **Structured** — pricelists, batches, deal records, relationship terms | **Direct DB queries** — fetch by ID / filter |
+| **Live state** — currently-open deals, pending Things, today's chat | **In-memory context** — passed to LLM directly |
+
+Example: user asks Seller-Sella *"what did we close last time with this buyer?"* → direct DB query for deal records + vector RAG for relevant chat/evidence + LLM generates the answer. Same pattern as Notion AI / Slack AI / CRM AI agents.
+
+**Locked 2026-05-22 — learning loop (MVP):**
+
+- **Thumbs up / down** on every Sella suggestion → feedback log entry
+- **Optional reject-reason** free-text box when user rejects a prompt
+- **Approve-rate telemetry** per-action-type drives autonomy-ladder climb / drop (§4)
+- **No active retraining in MVP** — feedback logged for analytics + future model improvement. Aspirational fine-tuning post-MVP.
+
+**Locked 2026-05-22 — user memory controls (GDPR):**
+
+- **View:** user asks *"what do you remember about me?"* → Personal Sella surfaces her memory of the user
+- **Delete:** user can delete specific memories (right to be forgotten)
+- **Reset:** user can reset Sella's memory of them entirely
+- **Per-relationship reset:** admin can reset Side-Sella's memory of a specific counterparty (e.g., after a sour relationship)
+- **GDPR cross-reference:** Sella memory honors the broader GDPR / Authentication workstream's right-to-be-forgotten flows
+
+> **⚠️ OPEN [pending /track-doubt]** — Memory duration per specialist: permanent retention vs. rolling window vs. user-configurable. Needs benchmarking against comparable systems (CRMs, AI assistants).
 
 ---
 
@@ -325,6 +365,10 @@ The pitch's broader promise ("wir wandeln alles in die Sprache unserer Partner")
 - **"What's on my plate" overlay** — any surface, user can ask Personal Sella to summarize their open Things / deals. *(2026-05-22.)*
 - **Translation (MVP)** — chat messages via per-chat toggle; everything else English only. Broader translation post-MVP. *(2026-05-22.)*
 - **§6 cross-links:** Ask Myself → §4; First-contact Sella → DEV-7; SIGNALS → DEV-5 / DEV-48 / DEV-49 / DEV-50. *(2026-05-22.)*
+- **§7 memory scope per specialist** — Deal-Sella (per-deal, life-of-deal); Seller/Buyer-Sella (per-company-side, persistent); Personal Sella (per-user, persistent); Company Sella (per-company cross-side, persistent); First-contact Sella (config-only). *(2026-05-22.)*
+- **§7 retrieval architecture: hybrid RAG.** Vector RAG for unstructured (chat, evidence, notes); direct DB queries for structured (pricelists, batches, deals); in-memory for live state. *(2026-05-22.)*
+- **§7 learning loop (MVP):** thumbs up/down + optional reject-reason + approve-rate telemetry per action type. No active retraining. *(2026-05-22.)*
+- **§7 user memory controls:** view / delete / reset / per-relationship reset. GDPR cross-reference. *(2026-05-22.)*
 
 ---
 

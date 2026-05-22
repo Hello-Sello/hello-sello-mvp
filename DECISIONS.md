@@ -288,3 +288,10 @@ Each entry: **What was decided** → **Why** (the reasoning at the time).
 - **Chat messages: per-chat toggle.** User enables / disables translation per chat thread. Matches the current demo pattern; positive Marcel feedback. *Why:* gives users control without forcing always-on cost; familiar UX from messaging tools.
 - **Everything else (deal cards, documents, system messages, side-Sella suggestions, shop content, public ads): English only for MVP.** *Why:* tight scope for first launch with English as the working language. Translation expansion is a deliberate post-MVP step.
 - **Pitch's broader translation promise ("wir wandeln alles in die Sprache unserer Partner") = post-MVP scope.** *Why:* the value is real but the engineering + content QA burden is large; ship MVP first, expand based on real customer needs.
+
+### Memory, retrieval, learning (locked 2026-05-22)
+
+- **Per-specialist memory scope:** Deal-Sella = per-deal, life-of-deal; Seller-Sella / Buyer-Sella = per-company-side, persistent; Personal Sella = per-user, persistent; Company Sella = per-company cross-side, persistent; First-contact Sella = config-only. *Why:* each specialist's scope matches its routing (Layer 1 §10); memory model is a direct consequence.
+- **Retrieval architecture: hybrid RAG.** Vector RAG for unstructured (chat, evidence, notes); direct DB queries for structured (pricelists, batches, deals); in-memory for live state. *Why:* company-wide scope of Side-Sellas would blow any context window; hybrid is the standard pattern (Notion AI / Slack AI / CRM AI agents).
+- **Learning loop (MVP) = thumbs up/down + optional reject-reason + approve-rate telemetry.** Per action type. No active retraining in MVP — feedback logged for analytics + future training. *Why:* lightweight signal mechanism; active retraining requires infra + QA that's post-MVP scope.
+- **User memory controls: view, delete, reset, per-relationship reset.** Honors GDPR right-to-be-forgotten via cross-reference to the GDPR / Authentication workstream. *Why:* regulated market (cannabis pharma + EU) demands explicit memory controls.
