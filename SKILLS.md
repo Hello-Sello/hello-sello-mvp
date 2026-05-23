@@ -27,4 +27,21 @@ Add a block under **Skills** (if it has a slash command + SKILL.md file) or unde
 
 ---
 
-*Last updated: 2026-05-22*
+*Last updated: 2026-05-23*
+
+---
+
+## External skills configured for this project
+
+Matt Pocock's engineering skills are installed globally at `~/.claude/skills/` and configured for Hello Sello in `docs/agents/`.
+
+Available skills:
+
+- `grill-with-docs`, `to-prd`, `to-issues`, `triage`, `tdd`, `improve-codebase-architecture`, `prototype`, `diagnose`, `zoom-out`, `handoff`, `caveman`
+- Rule books: `rules-refactoring`, `rules-legacy-code`, `rules-release-it`, `rules-ddd-distilled`, `rules-ddia`, `rules-clean-architecture` (pulled on-demand)
+
+Per-project config:
+
+- `docs/agents/issue-tracker.md` — Linear workflow
+- `docs/agents/triage-labels.md` — label vocabulary
+- `docs/agents/domain.md` — CONTEXT.md and ADR paths

@@ -213,9 +213,10 @@ This applies to LAYER docs, DECISIONS.md, PITCH.md, AGENTS.md, and every Linear 
 
 ### Git workflow
 
-- **Work on ONE persistent branch: `claude/work`.** Don't create a new branch per section / topic. After each PR merges, reset `claude/work` from new main and continue.
-- **Open a PR for review** for each batch; don't push to main directly.
+- **Persistent per-person branches:** `claude/muskan/work`, `claude/ayush/work`. After each PR merges, reset your branch from new main and continue.
+- **Open a PR for review** for each batch; don't push to main directly. Default reviewer is the other developer.
 - **Keep commit messages and PR bodies short.** Title + a few bullets, not essays. Reviewers read the diff, not the prose.
+- **See [docs/WORKFLOW.md](docs/WORKFLOW.md)** for the full collaboration protocol — task ownership, shared-file rules, AI agent hygiene.
 
 ### What NOT to do
 
@@ -224,6 +225,22 @@ This applies to LAYER docs, DECISIONS.md, PITCH.md, AGENTS.md, and every Linear 
 - Don't expand scope beyond the current Layer.
 - Don't write decisions or doubts without going through the agreed protocol (Propose mode + permission gate).
 - Don't create new docs unless asked. Prefer editing existing ones.
+
+---
+
+## Agent skills
+
+### Issue tracker
+
+Linear via MCP (workspace `hellosello`, team `Development`). See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Matt Pocock's 5 canonical state labels (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context. `CONTEXT.md` at `docs/architecture/CONTEXT.md`; ADRs at `docs/architecture/adr/`. See `docs/agents/domain.md`.
 
 ---
 
