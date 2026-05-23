@@ -50,8 +50,8 @@ hello-sello-design/
 │   │   ├── PITCH.md
 │   │   ├── PRD.md                   # to be written
 │   │   └── LAYER-1..5-*.md
+│   ├── research/                    # persistent research: GDPR, tools, market, technical
 │   ├── architecture/                # technical architecture
-│   │   ├── CONTEXT.md               # domain language glossary for agents
 │   │   ├── ARCHITECTURE-NOTES.md
 │   │   └── adr/                     # Architecture Decision Records
 │   ├── decisions/                   # product/design decisions log
