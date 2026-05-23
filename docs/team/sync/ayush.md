@@ -5,15 +5,15 @@
 
 ---
 
-**Last updated:** — (bump to current UTC timestamp on every change)
+**Last updated:** 2026-05-23 15:59 UTC
 **Branch:** claude/ayush/work
-**Status:** offline
-**Linear issue in progress:** none
-**Shared files locked:** none
+**Status:** active
+**Linear issue in progress:** none (meta-process work, no DEV issue)
+**Shared files locked:** docs/decisions/DECISIONS.md
 **PR open:** none
 
 ---
 
 ## Notes for the other agent
 
-(Free-form 1-2 lines. Things Muskan's agent should know. Example: "Editing CONTEXT.md to add SIGNALS definition for the next hour - please hold any CONTEXT.md edits until I push.")
+Locking DECISIONS.md to append new "Build strategy" chapter (two-layer build strategy + per-surface file depth). Short edit, ~10 min. Will unlock when pushed.
