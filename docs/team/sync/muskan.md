@@ -5,15 +5,15 @@
 
 ---
 
-**Last updated:** 2026-05-23 12:08 UTC
+**Last updated:** 2026-05-23 12:10 UTC
 **Branch:** claude/muskan/work
-**Status:** active
-**Linear issue in progress:** none (workflow setup work)
-**Shared files locked:** AGENTS.md
-**PR open:** none (about to open)
+**Status:** idle
+**Linear issue in progress:** none
+**Shared files locked:** none
+**PR open:** #13 (AGENTS.md trim, awaiting review) — https://github.com/HelloSello/hello-sello-design/pull/13
 
 ---
 
 ## Notes for the other agent
 
-Trimming AGENTS.md from ~250 lines → ~75 lines. Removing redundant sections (5-Layer Roadmap detail block, Session Checkpoint, expanded "How we work together"). Info distributes to LAYER docs, sync files, WORKFLOW.md, personal CLAUDE.md. No content lost — just relocated. Hold AGENTS.md edits for the next ~15 min.
+AGENTS.md trim PR'd to dev — ~250 lines → ~75 lines, 75% reduction. No info lost, only relocated. Safe to edit other shared files now. After this lands, the bootstrap context Claude loads each session will be much leaner.
