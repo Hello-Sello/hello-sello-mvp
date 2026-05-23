@@ -68,6 +68,7 @@ When the formal Architecture doc is written (post Layer 4 + 5), these become its
 - Thing lifecycle: **Open → Done** (side path: Dismissed); supports redirect/reassign and threaded discussion. *(Layer 3 §7.)*
 - Tickable only by assignee or creator; every tick logged for audit. *(Layer 3 §7.)*
 - Documents attached to a deal (delivery notes, invoices) **can amend deal data** (volumes, prices, names) — Sella OCR / AI extracts and writes the amendment. *(DEV-25 + DEV-36.)*
+- **Stage template** stored as data/config with schema `{id, industry, stages[], default_things_per_stage{}}`; MVP ships one row (`cannabis_wholesale_v1`); selection logic `getTemplate(deal) → template_id` exists for extension; company-override extension point present in data model (`company.template_overrides`) without admin UI in MVP. *(DEV-31.)*
 
 ## Notifications
 

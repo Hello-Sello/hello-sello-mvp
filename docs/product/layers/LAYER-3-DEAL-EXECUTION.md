@@ -60,7 +60,7 @@ The journey from **"order" → "done"** — what happens after both parties conf
 
 > **DEV-24 — closed (2026-05-22).** Deal ownership does NOT pass between stage-responsible people. Stage-responsibility survives as the default-assignee mechanism for THINGS; stages themselves are scaffolding, not UI. See Locked below.
 >
-> **⚠️ OPEN [DEV-31]** — Stage template library scope: platform / company / per-deal / all three? (Post-MVP.) See [DEV-31](https://linear.app/hellosello/issue/DEV-31/stage-template-library-platform-wide-company-wide-per-deal-or-all).
+> **DEV-31 — closed (2026-05-23).** MVP ships a single hardcoded platform-default template (`cannabis_wholesale_v1`: finance/logistics/delivery + default THINGS per stage). Fully per-deal editable. Multi-template / company-curation / Sella-learns-templates deferred to post-MVP. See Locked below.
 >
 > **⚠️ OPEN [DEV-32]** — When a stage is added mid-deal, both-side confirm vs notification? Re-framed under new doctrine as adding THINGS mid-deal. See [DEV-32](https://linear.app/hellosello/issue/DEV-32/when-a-stage-is-added-mid-deal-does-the-other-party-need-to-confirm-or).
 >
@@ -70,11 +70,12 @@ The journey from **"order" → "done"** — what happens after both parties conf
 
 **Locked:**
 - **Stages = macro phases AFTER confirmation.** Custom per deal. Examples: finance, logistics, delivery.
-- **Deals are born with a default set of stages, fully customizable.** (Default set TBD — tied to template scope, DEV-31.)
+- **Deals are born with a default set of stages, fully customizable.** MVP default = hardcoded template `cannabis_wholesale_v1` (finance/logistics/delivery + default THINGS per stage). *(Resolved by DEV-31, 2026-05-23.)*
 - **The deal has a deal owner** who stays accountable throughout. The deal owner manually picks the responsible team/person for each stage at deal birth.
 - **(2026-05-22, DEV-24) Stages are NOT a UI primitive** — only conceptual scaffolding for organizing work and providing default assignees. No per-stage Kanban / timeline / lifecycle UI. *(Supersedes the 2026-05-20 DEV-33 per-stage lifecycle lock and the parallel-vs-sequential lock.)*
 - **(2026-05-22, DEV-24) Stage-responsibility = default-assignee mechanism.** Each stage's responsible person/team is the default assignee for THINGS in that stage (overridable per-THING). Stage-responsible people don't "close/tick the stage" — stages have no closure UI event.
 - **(2026-05-22, DEV-24) Deal ownership does NOT pass between stage-responsible people.** The deal is visible + actionable for the whole company; stage-responsible people work on their THINGS without taking over the deal.
+- **(2026-05-23, DEV-31) MVP stage template = `cannabis_wholesale_v1` (single hardcoded platform default).** Stages: finance, logistics, delivery. Each stage ships with default THINGS pre-loaded at deal birth (finance: "Send invoice", "Confirm payment terms"; logistics: "Confirm pickup date", "Verify COA matches batch", "BfArM import authorization on file (if cross-border)", "Confirm narcotic-grade transport carrier"; delivery: "Upload delivery note", "Upload final invoice"). Fully per-deal editable. Template stored as data/config — schema supports multiple templates even though MVP ships one. **Compliance-as-stage rejected for MVP** — distributed across existing stages (mostly Logistics) for simplicity. Multi-template library, company curation, Sella-learns-templates → post-MVP roadmap.
 
 ---
 
@@ -238,7 +239,7 @@ Two distinct flows after confirmation:
 
 *(Mirrors what's added to [DECISIONS.md](DECISIONS.md) under Layer 3.)*
 
-- **Deals are born with a default set of stages, fully customizable.** (Default set TBD — tied to template scope, DEV-31.) Deal owner stays accountable throughout; manually assigns stage-responsible people at deal birth (resolves DEV-24).
+- **Deals are born with a default set of stages, fully customizable.** MVP default = hardcoded template `cannabis_wholesale_v1` (finance/logistics/delivery + default THINGS per stage). Deal owner stays accountable throughout; manually assigns stage-responsible people at deal birth (resolves DEV-24). *(Default-set question resolved by DEV-31, 2026-05-23.)*
 - **(2026-05-22, DEV-24) Stages are NOT a UI primitive — only conceptual scaffolding.** Organize work by domain (finance, logistics, delivery), provide default assignees. No per-stage Kanban / timeline / lifecycle UI. *(Supersedes the 2026-05-20 DEV-33 per-stage lifecycle lock and the parallel-vs-sequential lock.)*
 - **(2026-05-22, DEV-24) Stage-responsibility = default-assignee mechanism for THINGS in that stage** (overridable per-THING). Stage-responsible people don't "close/tick the stage" — stages have no closure UI event.
 - **(2026-05-22, DEV-24) Deal ownership does NOT pass between stage-responsible people.** Deal is visible + actionable for the whole company; stage-responsible people work on their THINGS without taking over the deal.
@@ -252,6 +253,7 @@ Two distinct flows after confirmation:
 - **(2026-05-22, DEV-29) Approval signatures = the APPROVE button.** Captures 2FA-authenticated user + name/email/account + acceptance + timestamp. No third-party e-sig integration; this bundle is the legally binding signature (DocuSign-in-a-nutshell logic).
 - **(2026-05-22, DEV-23) Post-confirmation cancellation/amendment.** Two flows: (a) **Amendment** for partial issues (e.g., 20% under-delivery) — flagged by one side, requires the other's approval. (b) **Cancellation** for full non-delivery — MVP just deletes the deal so wrong docs don't surface; post-MVP triggers ERP cancel-if-possible (Odoo / CanCraft). **Authority:** SELLER can always cancel unilaterally (both birth paths); BUYER cannot — BUYER can only request a change with SELLER approval. Audit trail logged.
 - **(2026-05-22, DEV-26) Order generation — PO / SO / Hello Sello Deal Number + QR.** Deal birth is directional: **OFFER** (seller-initiated, sales order) or **ORDER** (buyer-initiated, purchase order). On mutual acceptance, the deal becomes an **order** with three IDs + QR: Buyer's PO # (buyer field), Seller's SO # (seller field), Hello Sello Deal Number (auto-generated, pattern `HS-AAA##-BBB##-NNNNNNNN`), QR code (encodes Deal Number). Order form is **XML-readable** for ERP/accounting/logistics. All IDs + QR generated at the moment of confirmation. Short-code derivation rule deferred (open flag in §4).
+- **(2026-05-23, DEV-31) MVP stage template = `cannabis_wholesale_v1` (single hardcoded platform default).** Stages: finance, logistics, delivery. Each stage ships with default THINGS pre-loaded at deal birth (finance: "Send invoice", "Confirm payment terms"; logistics: "Confirm pickup date", "Verify COA matches batch", "BfArM import authorization on file (if cross-border)", "Confirm narcotic-grade transport carrier"; delivery: "Upload delivery note", "Upload final invoice"). Fully per-deal editable. Template stored as data/config — schema supports multiple templates even though MVP ships one. **Compliance-as-stage rejected for MVP** — distributed across existing stages (mostly Logistics) for simplicity. Multi-template library, company curation, Sella-learns-templates → post-MVP roadmap.
 
 ---
 
@@ -264,7 +266,6 @@ Two distinct flows after confirmation:
 ## Open Questions
 
 - **Section 7 — Things UI** — Where do users see their Things inbox (page / widget / etc.)? — [DEV-27](https://linear.app/hellosello/issue/DEV-27/whats-the-ui-surface-for-a-users-things-inbox-page-sidebar-widget-or)
-- **Section 2 — Stage templates** — Platform / company / per-deal scope? (Post-MVP.) — [DEV-31](https://linear.app/hellosello/issue/DEV-31/stage-template-library-platform-wide-company-wide-per-deal-or-all)
 - **Section 2 — Adding stages mid-deal** — Both-side confirm vs notification only? — [DEV-32](https://linear.app/hellosello/issue/DEV-32/when-a-stage-is-added-mid-deal-does-the-other-party-need-to-confirm-or)
 
 ---
