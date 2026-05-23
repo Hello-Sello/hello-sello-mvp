@@ -26,6 +26,8 @@
 - Logistics partners as their own company type.
 - Adjacent businesses: packaging suppliers, lab supplies, raw materials, Food & Beverage distributors.
 
+> **DEV-3 — closed (2026-05-24).** Contact-import GDPR scope at account setup: **Option A — metadata only** (sender / recipient / timestamp / frequency). No subject lines, no email bodies, no third-party enrichment vendor. See DECISIONS.md Layer 1 walkthrough locks 2026-05-24 for full rationale; ARCHITECTURE-NOTES.md "Onboarding / data import" for engineering constraints.
+
 ---
 
 ## 2. People (roles) inside a company
