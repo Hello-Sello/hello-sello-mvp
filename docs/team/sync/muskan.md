@@ -5,15 +5,15 @@
 
 ---
 
-**Last updated:** — (bump to current UTC timestamp on every change)
+**Last updated:** 2026-05-23 12:08 UTC
 **Branch:** claude/muskan/work
-**Status:** offline
-**Linear issue in progress:** none
-**Shared files locked:** none
-**PR open:** none
+**Status:** active
+**Linear issue in progress:** none (workflow setup work)
+**Shared files locked:** AGENTS.md
+**PR open:** none (about to open)
 
 ---
 
 ## Notes for the other agent
 
-(Free-form 1-2 lines. Things Ayush's agent should know. Example: "Editing CONTEXT.md to add SIGNALS definition for the next hour - please hold any CONTEXT.md edits until I push.")
+Trimming AGENTS.md from ~250 lines → ~75 lines. Removing redundant sections (5-Layer Roadmap detail block, Session Checkpoint, expanded "How we work together"). Info distributes to LAYER docs, sync files, WORKFLOW.md, personal CLAUDE.md. No content lost — just relocated. Hold AGENTS.md edits for the next ~15 min.
