@@ -65,7 +65,7 @@ The product is organized as **6 navigable surfaces + Sella (always-available AI 
 
 > **⚠️ OPEN [DEV-15]** — Layout/navigation pattern (now generalized to all 5 surfaces). See [DEV-15](https://linear.app/hellosello/issue/DEV-15/whats-the-layoutnavigation-pattern-for-each-of-the-5-surfaces-when-a).
 > **⚠️ OPEN [DEV-16]** — Is "Thread instead of group chat" a Connect-level feature or a chat-specific behavior? See [DEV-16](https://linear.app/hellosello/issue/DEV-16/is-thread-instead-of-group-chat-a-connect-level-feature-or-a-chat).
-> **⚠️ OPEN [DEV-17]** — How are imported contacts labelled and categorized? See [DEV-17](https://linear.app/hellosello/issue/DEV-17/how-are-imported-contacts-labelled-and-categorized-after-import).
+> **DEV-17 — closed (2026-05-24).** MVP scheme: manual role label per contact (default `Unknown`; suggested enum: Supplier / Customer / Partner / Other / Unknown — final at build phase) + auto-derived activity bucket (Active / Occasional / Dormant from `email_count` + `last_seen` per DEV-3). No free-text tags or AI inference in MVP. See DECISIONS.md Layer 2 walkthrough locks 2026-05-24 for full lock; ARCHITECTURE-NOTES.md "Onboarding / data import" for schema shape.
 
 **Contents** (per the locked meta-rule: each surface's contents = its Linear-label's projects): the Connect Linear label is the source of truth. Provisional scope includes connection requests, relationship pages, company↔company chat (inside deal workspaces only), chat list, contact import, offer/pricelist requests, LinkedIn-style company profile banner, deal workspaces.
 
@@ -205,7 +205,6 @@ Sella's user-facing value prop (Big 7): "A female-inspired caring AI for both si
 - **Structural Q2** — What should the home / landing view show for a logged-in user? — [DEV-13](https://linear.app/hellosello/issue/DEV-13/what-should-the-home-landing-view-show-for-a-logged-in-user)
 - **All 5 surfaces — layout** — What's the layout/navigation pattern for each surface when a user clicks it in the sidebar? — [DEV-15](https://linear.app/hellosello/issue/DEV-15/whats-the-layoutnavigation-pattern-for-each-of-the-5-surfaces-when-a)
 - **Section 1 — Connect / Chat** — Is "Thread instead of group chat" a Connect feature or a chat-specific behavior? — [DEV-16](https://linear.app/hellosello/issue/DEV-16/is-thread-instead-of-group-chat-a-connect-level-feature-or-a-chat)
-- **Section 1 — Connect / Contact import** — How are imported contacts labelled and categorized? — [DEV-17](https://linear.app/hellosello/issue/DEV-17/how-are-imported-contacts-labelled-and-categorized-after-import)
 - **Section 3 — Sell** — What features should live in Sell beyond the 3 known projects? — [DEV-19](https://linear.app/hellosello/issue/DEV-19/what-features-should-live-in-the-sell-page-beyond-the-3-known-projects)
 - **Section 4 — Buy** — What features should live in Buy (analogous to Sell)? — [DEV-20](https://linear.app/hellosello/issue/DEV-20/what-features-should-live-in-the-buy-page-analogous-to-sell)
 
