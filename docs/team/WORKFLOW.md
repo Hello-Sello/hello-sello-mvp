@@ -60,21 +60,63 @@ Some files are co-owned. They conflict if we both edit them at the same time.
 
 **Shared files (treat with care):**
 
-- `AGENTS.md`, `SKILLS.md`
+- `AGENTS.md`
+- `docs/team/WORKFLOW.md`, `docs/team/SKILLS.md`
 - `docs/architecture/CONTEXT.md`
 - `docs/decisions/DECISIONS.md`
 - `docs/architecture/adr/*.md`
 - `docs/agents/*.md`
 - All `docs/product/LAYER-*.md`
 
+(The per-person sync files `docs/team/sync/ayush.md` and `docs/team/sync/muskan.md` are NOT in this list - each is owned by exactly one agent, no possibility of conflict.)
+
 **Rules:**
 
-1. **Pull before editing.** `git pull origin main` and rebase. Always.
-2. **Commit + push fast.** Don't sit on shared-file changes overnight.
-3. **PR immediately.** Shared-file PRs jump the queue — review and merge within hours, not days.
-4. **Tell the other person.** A quick chat ping ("editing CONTEXT.md now") prevents the worst conflicts.
+1. **Pull before editing.** `git fetch origin && git pull origin <your-branch> --rebase`. Always.
+2. **Run the sync ritual first** (see next section). Shared-file edits never start without it.
+3. **Commit + push fast.** Don't sit on shared-file changes overnight.
+4. **PR immediately.** Shared-file PRs jump the queue — review and merge within hours, not days.
+5. **Tell the other person.** A quick chat ping ("editing CONTEXT.md now") prevents the worst conflicts.
 
 Existing propose-mode protocols (DECISIONS.md edits, `/track-doubt` for Linear writes) still apply on top of this.
+
+---
+
+## Sync ritual — per-agent state files
+
+Two AI agents working in parallel can step on each other's edits faster than chat or Linear can catch up. The sync files close that gap by publishing each agent's live state via git.
+
+**How it works:**
+
+- Each agent owns ONE file: Ayush's agent writes only to [`docs/team/sync/ayush.md`](sync/ayush.md), Muskan's agent writes only to [`docs/team/sync/muskan.md`](sync/muskan.md). Zero merge conflicts possible by design - separate file paths, no overlap.
+- Both agents READ both files before editing any shared file.
+- State publishes via normal git push.
+
+**Schema (kept tight - 6 structured fields + free-form note):**
+
+| Field | Example |
+|---|---|
+| Last updated | `2026-05-23 14:32 UTC` |
+| Branch | `claude/ayush/work` |
+| Status | `offline` \| `idle` \| `active` |
+| Linear issue in progress | `DEV-63` or `none` |
+| Shared files locked | `docs/architecture/CONTEXT.md` or `none` |
+| PR open | `#42 + link` or `none` |
+| Notes for the other agent | Free-form 1-2 lines |
+
+**Ritual (before editing any shared file):**
+
+1. `git fetch origin && git pull origin <your-branch> --rebase` - get latest sync files.
+2. Read the OTHER person's sync file. Is the file you want to edit in their `Shared files locked` list?
+   - **Yes** → don't edit. Tell the user "the other agent is in this file. Wait, or message them."
+   - **No** → continue.
+3. Update YOUR sync file: add the file to `Shared files locked`, bump `Last updated`. **Commit + push the sync file alone** (one-line commit, no other changes batched in).
+4. Make the actual edit. Commit + push as usual.
+5. Update YOUR sync file: remove the file from `Shared files locked`, bump `Last updated`. Commit + push.
+
+**For non-shared files** (your own area: `frontend/` for Ayush, `backend/` for Muskan, your personal `CLAUDE.md`): no sync ritual needed. Just work.
+
+**For Linear task tracking,** Linear's "In Progress" column is still the source of truth at the task level. The sync files cover the more granular file-level coordination.
 
 ---
 
@@ -100,8 +142,9 @@ Both of us run Claude Code with the same skills. Two agents can plausibly edit t
 **Rules:**
 
 1. **Before any Claude Code session that might touch shared files** — `git fetch` and rebase off `origin/dev` first. Don't let Claude work off stale state.
-2. **AFK loops stay inside owned areas.** Long autonomous runs (`/triage`, future Ralph loops) should operate on `frontend/` (Ayush) or `backend/` (Muskan), not cross-area shared files.
-3. **`grill-with-docs` updates to `CONTEXT.md` → commit + push immediately.** Don't let it sit uncommitted across other work — that's how the file ends up in two places at once.
+2. **Run the sync ritual** (see above) for every shared-file edit. The sync files are designed for exactly this risk.
+3. **AFK loops stay inside owned areas.** Long autonomous runs (`/triage`, future Ralph loops) should operate on `frontend/` (Ayush) or `backend/` (Muskan), not cross-area shared files.
+4. **`grill-with-docs` and similar tools touch shared files** — they must run the sync ritual too. Don't let edits sit uncommitted across other work.
 
 ---
 
@@ -114,8 +157,9 @@ Both of us run Claude Code with the same skills. Two agents can plausibly edit t
 
 ---
 
-## WIP visibility — Linear is enough
+## WIP visibility — two layers
 
-We don't keep a separate WIP doc. **Linear's `In Progress` column shows who's doing what.** Check it before picking up a new task.
+- **Task level:** Linear's `In Progress` column. Check before picking up a new issue.
+- **File level:** `docs/team/sync/*.md`. Check before editing any shared file (see sync ritual above).
 
 If something blocks you and the other person doesn't know — chat first, then add a comment to the Linear issue.

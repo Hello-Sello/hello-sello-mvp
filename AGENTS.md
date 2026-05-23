@@ -40,8 +40,8 @@ Hello Sello is an **AI-native deal room for B2B** — a shared chat space betwee
 ```
 hello-sello-design/
 ├── AGENTS.md                        # shared team context (this file)
+├── CLAUDE.md                        # PERSONAL agent config, gitignored, per-engineer
 ├── README.md
-├── SKILLS.md                        # team skill dictionary
 ├── .gitignore                       # CLAUDE.md is listed here
 ├── .claude/skills/                  # project-scoped agent skills
 │
@@ -52,11 +52,22 @@ hello-sello-design/
 │   │   └── LAYER-1..5-*.md
 │   ├── research/                    # persistent research: GDPR, tools, market, technical
 │   ├── architecture/                # technical architecture
-│   │   ├── ARCHITECTURE-NOTES.md
+│   │   ├── CONTEXT.md               # domain glossary (term definitions)
+│   │   ├── ARCHITECTURE-NOTES.md    # engineering implications
 │   │   └── adr/                     # Architecture Decision Records
 │   ├── decisions/                   # product/design decisions log
 │   │   └── DECISIONS.md
-│   └── agents/                      # agent config (issue tracker, labels, domain)
+│   ├── agents/                      # configs for external AI skills (Matt Pocock framework)
+│   │   ├── issue-tracker.md
+│   │   ├── triage-labels.md
+│   │   └── domain.md
+│   ├── team/                        # how OUR team works
+│   │   ├── WORKFLOW.md              # branching + sync ritual + AI agent hygiene
+│   │   ├── SKILLS.md                # team skill dictionary
+│   │   └── sync/                    # per-person live state (read both before shared-file edits)
+│   │       ├── ayush.md
+│   │       └── muskan.md
+│   └── meeting-notes/
 │
 ├── frontend/                        # frontend code
 ├── backend/                         # backend code
@@ -217,7 +228,8 @@ This applies to LAYER docs, DECISIONS.md, PITCH.md, AGENTS.md, and every Linear 
 - **After each PR merges:** reset your personal branch from new `dev` and continue.
 - **Open a PR for review** for each batch; never push directly to `dev` or `main`. Default reviewer is the other developer.
 - **Keep commit messages and PR bodies short.** Title + a few bullets, not essays. Reviewers read the diff, not the prose.
-- **See [docs/WORKFLOW.md](docs/WORKFLOW.md)** for the full collaboration protocol — task ownership, shared-file rules, AI agent hygiene, release flow.
+- **Run the sync ritual** (`docs/team/sync/*.md`) before editing any shared file — see WORKFLOW.md.
+- **See [docs/team/WORKFLOW.md](docs/team/WORKFLOW.md)** for the full collaboration protocol — task ownership, shared-file rules, sync ritual, AI agent hygiene, release flow.
 
 ### What NOT to do
 
