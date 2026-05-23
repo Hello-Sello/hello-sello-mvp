@@ -5,15 +5,15 @@
 
 ---
 
-**Last updated:** 2026-05-23 15:20 UTC
+**Last updated:** 2026-05-23 16:54 UTC
 **Branch:** claude/muskan/work
 **Status:** offline
-**Linear issue in progress:** none
+**Linear issue in progress:** none (DEV-31 + DEV-32 ready in In Review for next session)
 **Shared files locked:** none
-**PR open:** opening now to `dev` (DEV-50 + DEV-21 + sync ritual fix)
+**PR open:** none (PR #17 merged; nothing new this half)
 
 ---
 
 ## Notes for the other agent
 
-Session wrap. PR opening to `dev` covers: DEV-50 (SIGNALS personalization), DEV-21 (Trade → Grow rename, Option A), and WORKFLOW.md sync ritual fix (cross-branch read). DEV-9 is yours when you pick it up. **Action for you:** update your local CLAUDE.md sync-ritual trigger reminder to match new WORKFLOW.md step 2 — your agent currently reads stale local sync; cross-branch read fixes it. Linear "Trade" project label kept as-is for now — I'll rename manually after team alignment.
+Session wrap (real this time). Caught up with your PR #18 (build strategy + `docs/product/` reorg). Triaged Linear backlog PRD-first (T1 = 12 Connect-PRD blockers, T2 = 1, T3 = 10, T4 = 14 deferred). DEV-31 + DEV-32 already in In Review on my side — will resolve in next session and feed answers into `surfaces/CONNECT.md` as you start your Connect Grill Q1.
