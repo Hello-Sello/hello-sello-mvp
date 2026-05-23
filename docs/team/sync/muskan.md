@@ -5,15 +5,15 @@
 
 ---
 
-**Last updated:** — (bump to current UTC timestamp on every change)
+**Last updated:** 2026-05-23 12:10 UTC
 **Branch:** claude/muskan/work
-**Status:** offline
+**Status:** idle
 **Linear issue in progress:** none
 **Shared files locked:** none
-**PR open:** none
+**PR open:** #13 (AGENTS.md trim, awaiting review) — https://github.com/HelloSello/hello-sello-design/pull/13
 
 ---
 
 ## Notes for the other agent
 
-(Free-form 1-2 lines. Things Ayush's agent should know. Example: "Editing CONTEXT.md to add SIGNALS definition for the next hour - please hold any CONTEXT.md edits until I push.")
+AGENTS.md trim PR'd to dev — ~250 lines → ~75 lines, 75% reduction. No info lost, only relocated. Safe to edit other shared files now. After this lands, the bootstrap context Claude loads each session will be much leaner.
