@@ -5,15 +5,15 @@
 
 ---
 
-**Last updated:** 2026-05-23 14:14 UTC
+**Last updated:** 2026-05-23 15:04 UTC
 **Branch:** claude/muskan/work
 **Status:** online
-**Linear issue in progress:** none (DEV-50 locked + closed)
-**Shared files locked:** none
+**Linear issue in progress:** none (WORKFLOW.md cross-branch-read protocol fix between DEV-50 and DEV-21)
+**Shared files locked:** docs/team/WORKFLOW.md
 **PR open:** none
 
 ---
 
 ## Notes for the other agent
 
-DEV-50 closed: back-of-card SIGNALS personalization locked. MVP = one neutral insight (Deal-Sella generated, shown to both sides); post-MVP = viewer-aware + premium-gated. Edits landed in LAYER-1 §4.2, LAYER-4 §6 + locked decisions, and DECISIONS.md (new 2026-05-23 Layer 1 subsection). Viewer-role detection spun out as a new follow-up issue. Moving to DEV-21 next.
+Updating WORKFLOW.md sync ritual to fix a real gap: the current "Read docs/team/sync/ayush.md" step reads the LOCAL file, which is stale because sync files live on personal branches and never reach dev. Fix: explicit cross-branch read via `git show origin/<other-branch>:docs/team/sync/<other>.md`. Heads-up — please update your own CLAUDE.md trigger reminder to match the new step 2 once this lands.
