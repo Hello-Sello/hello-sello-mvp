@@ -18,7 +18,7 @@ Consumed by Matt Pocock's `grill-with-docs` and `improve-codebase-architecture` 
 | **Deal Workspace** | The deal container. Spawns at Deal Card birth. Holds chat, artifacts, members, stages, and the Deal Card itself. |
 | **Relationship page** | The record of business between two companies. Created at pickup (first human response to a connection). Holds deal history, notes, pricelist, agreed terms. |
 | **Sella** | The AI agent. Female-inspired, mediator-style. Multiple specialist variants: Seller-Sella, Buyer-Sella, Deal-Sella, Personal Sella, Company Sella, First-contact Sella. |
-| **Big 7** | The 7 pillars of the product: Connect / Buy / Sell / Present / Trade / Discover (6 surfaces) + Sella (always-available AI layer). |
+| **Big 7** | The 7 pillars of the product: Connect / Buy / Sell / Present / Grow / Discover (6 surfaces) + Sella (always-available AI layer). |
 | **Thing** | A clarification ticket inside a Deal Workspace. Used for post-close work or mid-deal questions. |
 | **SIGNALS** | The back of the Deal Card. Deal-Sella-generated insights about the deal (deal age, expiry risk, repeat patterns, etc.). |
 

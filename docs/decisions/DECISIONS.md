@@ -138,6 +138,10 @@ Each entry: **What was decided** → **Why** (the reasoning at the time).
 - **(2026-05-20) Org-level role model (DEV-40).** One platform-fixed role: **Superadmin** (account holder, at least one per company, transferable, holds system-level powers — accept connections, manage billing, add/remove other Superadmins). Everything else is **custom Groups** defined per company at registration, with a configurable Action × Group permission matrix (green/red UI, drag-drop to assign members). A person can be in **N Groups** simultaneously; effective permissions = union. Industry CRM pattern (Notion / Slack / Linear-style) — sensible defaults + full customization. *Why:* the platform needs one fixed anchor for system bootstrap; everything else is the company's hierarchy and varies too much to fix in code.
 - **(2026-05-20) Relationship-page content permissions (DEV-41).** Notes are **per-side** (CoA's notes visible to CoA only; CoB's notes visible to CoB only) with CRM-style edit/delete by anyone in the owning side; every change (edit + delete) is recorded in a change log with user + timestamp + before/after diff. Pricelist edits are gated by an **approval workflow** (Proposed → Approver sign-off → Applied) with **single-approver for MVP** (any one person in an Approver-flagged Group); multi-approver deferred until regulated use cases demand it. Agreed terms are visible to both sides; edit workflow deferred. *Why:* notes are each side's working memory and shouldn't leak across companies; pricelist is commercially sensitive and needs sign-off for compliance; the approval primitive is generalizable to other gated actions later.
 
+### Walkthrough locks 2026-05-23 — back-of-card SIGNALS personalization
+
+- **(2026-05-23) Back-of-card SIGNALS personalization (DEV-50).** MVP ships one neutral insight per Deal Card — always filled (Deal-Sella generates per deal), shown identically to both buyer and seller. No personalization, no premium gating in MVP. Post-MVP adds two viewer-aware slots (buyer-flavored + seller-flavored) as a premium-tier feature; free users see a locked placeholder ("Unlock by going premium"). How Deal-Sella infers viewer role (buyer vs seller) is deferred to a follow-up issue. *Why:* a single neutral insight aligns with Deal-Sella's structural neutrality (Layer 1 §10.2 / Layer 4 §3) and lets generation quality be validated before splitting per viewer. Post-MVP personalization is where the premium upsell lives because it's the variant that materially shifts utility per audience.
+
 ---
 
 ## Layer 2 — Surfaces (IN PROGRESS)
@@ -168,6 +172,8 @@ Each entry: **What was decided** → **Why** (the reasoning at the time).
 - **(2026-05-20) Presentation Mode concept locked (DEV-18).** Seller goes to their Present screen → selects products from their shop → adds presentation media (videos / photos / Loom) → turns the selection into a Deal Room for the customer. Concept inherited from the DEV-22 lock (Basket → Deal Room expansion); DEV-18 closes by reference. UI / interaction design spun off as [DEV-54](https://linear.app/hellosello/issue/DEV-54).
 
 ### Big 7 framework (locked 2026-05-18 team meeting)
+
+> *Note: the "Trade" surface was renamed to "Grow" on 2026-05-23 ([DEV-21](https://linear.app/hellosello/issue/DEV-21/whats-the-new-name-for-the-trade-page-verb-matching-the-surface-naming)). Historical entries in this and earlier sections retain the original "Trade" name. The Linear project label is still named "Trade" — rename pending team alignment.*
 
 - **The product is organized around 7 pillars** — six navigable surfaces (Connect / Buy / Sell / Present / Trade / Discover) plus one always-available AI layer (Sella, right-side panel). *Why:* the Big 7 gives every user a clear mental map of platform value; surfaces own distinct user jobs while Sella stitches them together.
 - **Sella as a Big 7 pillar does NOT change the 2026-05-14 UI lock.** She still lives in the right-side panel across all surfaces and is NOT a sidebar item. The Big 7 framing is conceptual (a value-pillar list), not navigation. Sella's role adapts to the user, surface, and task.
@@ -200,6 +206,10 @@ The 9-phase development plan (Idea → Research → Prototype → PRD → Archit
 - **Implementation:** vertical slice. Build Connect → ship → Present → ship → Sell/Buy → ship → others. Each subsequent surface drops into the pre-built foundation. *Why:* tight feedback loop (ship fast) without paying refactor cost.
 
 *Net effect:* fast time to first ship (Connect), zero architecture rework when adding surfaces, deliberate scope discipline on Trade/Discover.
+
+### Trade → Grow rename (locked 2026-05-23, DEV-21)
+
+- **(2026-05-23) Trade surface renamed to Grow (DEV-21).** Single-word verb matching the surface naming convention (Connect / Present / Sell / Buy / Grow + Discover). Forward-looking docs updated (LAYER-1, LAYER-2 §5, LAYER-4 §5 routing + 2026-05-22 locked decision, CONTEXT.md, ARCHITECTURE-NOTES.md). DECISIONS.md historical entries above and meeting notes from 2026-05-18 retain "Trade" as the original name (annotation added at top of Big 7 framework section). Linear "Trade" project label kept as-is — rename pending team alignment. *Why:* "Trade" was a placeholder; "Grow" captures the surface's purpose — high-level analytics + business control + viewing all deals over time + future geographic ops — which together represent how the C-suite grows the business.
 
 ---
 

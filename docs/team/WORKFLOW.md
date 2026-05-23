@@ -89,8 +89,8 @@ Two AI agents working in parallel can step on each other's edits faster than cha
 **How it works:**
 
 - Each agent owns ONE file: Ayush's agent writes only to [`docs/team/sync/ayush.md`](sync/ayush.md), Muskan's agent writes only to [`docs/team/sync/muskan.md`](sync/muskan.md). Zero merge conflicts possible by design - separate file paths, no overlap.
-- Both agents READ both files before editing any shared file.
-- State publishes via normal git push.
+- Each agent commits + pushes their sync file to their **own personal branch** (`claude/muskan/work` or `claude/ayush/work`) — never to `dev`.
+- Each agent reads the OTHER agent's sync **directly from that branch's tip on origin** via `git show origin/<branch>:<path>`. No PR or merge required — state is visible to the other agent the instant a push lands.
 
 **Schema (kept tight - 6 structured fields + free-form note):**
 
@@ -106,11 +106,15 @@ Two AI agents working in parallel can step on each other's edits faster than cha
 
 **Ritual (before editing any shared file):**
 
-1. `git fetch origin && git pull origin <your-branch> --rebase` - get latest sync files.
-2. Read the OTHER person's sync file. Is the file you want to edit in their `Shared files locked` list?
+1. `git fetch origin` — pulls all remote refs (including the OTHER agent's branch tip). Then rebase your own branch: `git pull origin <your-branch> --rebase`.
+2. Read the OTHER person's sync file **directly from their branch tip** (NOT the local working tree, which is stale by design — sync files don't go through `dev`):
+   - Muskan reads Ayush: `git show origin/claude/ayush/work:docs/team/sync/ayush.md`
+   - Ayush reads Muskan: `git show origin/claude/muskan/work:docs/team/sync/muskan.md`
+
+   Is the file you want to edit in their `Shared files locked` list?
    - **Yes** → don't edit. Tell the user "the other agent is in this file. Wait, or message them."
    - **No** → continue.
-3. Update YOUR sync file: add the file to `Shared files locked`, bump `Last updated`. **Commit + push the sync file alone** (one-line commit, no other changes batched in).
+3. Update YOUR sync file: add the file to `Shared files locked`, bump `Last updated`. **Commit + push the sync file alone to YOUR branch** (one-line commit, no other changes batched in). Push makes it instantly visible to the other agent via the cross-branch read in step 2.
 4. Make the actual edit. Commit + push as usual.
 5. Update YOUR sync file: remove the file from `Shared files locked`, bump `Last updated`. Commit + push.
 

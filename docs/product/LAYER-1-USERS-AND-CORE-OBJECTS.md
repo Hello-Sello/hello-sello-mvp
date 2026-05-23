@@ -9,7 +9,7 @@
 - How negotiation works
 - The multi-Sella agent architecture
 
-**Layer 1 does NOT cover:** the product surfaces (Connect / Present / Sell / Buy / Trade pages), inputs/outputs (chat, email, fax, ERP), or Sella's specific behaviors. Those come later.
+**Layer 1 does NOT cover:** the product surfaces (Connect / Present / Sell / Buy / Grow pages), inputs/outputs (chat, email, fax, ERP), or Sella's specific behaviors. Those come later.
 
 ---
 
@@ -137,7 +137,9 @@ The same underlying record carries products / volumes / prices / discounts / pay
 - **Flip** button (top-left) → turn to back (SIGNALS).
 - **Expand** button (top-right) → open the **Deal Room** (full-page floating customer-presentation view — see Section 4.4).
 
-**Compute model, storage model, and per-viewer personalization** of SIGNALS are open engineering questions — tracked as [DEV-48](https://linear.app/hellosello/issue/DEV-48), [DEV-49](https://linear.app/hellosello/issue/DEV-49), [DEV-50](https://linear.app/hellosello/issue/DEV-50).
+**Compute model and storage model** of SIGNALS are open engineering questions — tracked as [DEV-48](https://linear.app/hellosello/issue/DEV-48), [DEV-49](https://linear.app/hellosello/issue/DEV-49).
+
+**Per-viewer personalization (LOCKED 2026-05-23, [DEV-50](https://linear.app/hellosello/issue/DEV-50/personalize-back-of-card-signals-per-viewer-premium-feature)):** MVP = one neutral insight per Deal Card, always filled (Deal-Sella generates per deal), shown identically to both buyer and seller — no personalization, no premium gating. Post-MVP = two viewer-aware slots (buyer-flavored + seller-flavored), premium-tier feature; free users see a locked placeholder. How Deal-Sella infers viewer role is deferred (separate follow-up issue).
 
 **Git-style version history.** Every edit is logged. Every negotiation round produces a new version. The full history is preserved as an audit / evidence trail.
 
@@ -556,4 +558,4 @@ Below is the canonical access matrix — sourced from the Chat project descripti
 
 ---
 
-*End of Layer 1. Ready to move to Layer 2: the product surfaces (Connect / Present / Sell / Buy / Trade) and how they map to this lifecycle.*
+*End of Layer 1. Ready to move to Layer 2: the product surfaces (Connect / Present / Sell / Buy / Grow) and how they map to this lifecycle.*

@@ -5,15 +5,15 @@
 
 ---
 
-**Last updated:** 2026-05-23 13:02 UTC
+**Last updated:** 2026-05-23 15:20 UTC
 **Branch:** claude/muskan/work
 **Status:** offline
 **Linear issue in progress:** none
 **Shared files locked:** none
-**PR open:** none (PR #13 merged)
+**PR open:** opening now to `dev` (DEV-50 + DEV-21 + sync ritual fix)
 
 ---
 
 ## Notes for the other agent
 
-Session wrap. AGENTS.md trim merged to dev. Workflow setup phase complete on my side. Branch is up to date with dev. Next session: pick up Linear issues using the new flow.
+Session wrap. PR opening to `dev` covers: DEV-50 (SIGNALS personalization), DEV-21 (Trade → Grow rename, Option A), and WORKFLOW.md sync ritual fix (cross-branch read). DEV-9 is yours when you pick it up. **Action for you:** update your local CLAUDE.md sync-ritual trigger reminder to match new WORKFLOW.md step 2 — your agent currently reads stale local sync; cross-branch read fixes it. Linear "Trade" project label kept as-is for now — I'll rename manually after team alignment.

@@ -88,6 +88,6 @@ When the formal Architecture doc is written (post Layer 4 + 5), these become its
 
 ## Surfaces
 
-- Big 7 framework: **six navigable surfaces** (Connect / Buy / Sell / Present / Trade / Discover) + **Sella as a right-side panel pillar** (not a sidebar item) + **Home as the public landing page** outside the Big 7. *(2026-05-18.)*
+- Big 7 framework: **six navigable surfaces** (Connect / Buy / Sell / Present / Grow / Discover) + **Sella as a right-side panel pillar** (not a sidebar item) + **Home as the public landing page** outside the Big 7. *(2026-05-18.)*
 - Every user sees all 6 surfaces; each surface renders in one of **two UI states** — **blank** (not activated) or **populated** (active use). No hiding, no role gating. *(DEV-14, 2026-05-20.)*
 - Shop prices have **three configurable viewer modes** (show all / hide all with "request pricing" button / show one STANDARD); connected buyers can additionally get an **individual custom pricelist per company**. *(DEV-12, 2026-05-20.)*
