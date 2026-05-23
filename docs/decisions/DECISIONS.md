@@ -378,3 +378,15 @@ The 9-phase development plan (Idea → Research → Prototype → PRD → Archit
 ### Non-goals for MVP
 
 - **Fax processing, COA/COB content parsing, ERP sync, bulk CSV import, and programmatic API access** are explicitly out of scope for first release. *Why:* keeps the MVP scoped to the dominant channels (chat + email) and the proven workflow (human reviews Sella's pre-fill). Each non-goal becomes a post-launch initiative tied to customer demand.
+
+---
+
+## Build strategy (drafted 2026-05-23)
+
+Project-wide decisions about HOW we build, not WHAT we build. These apply across all Layers and all Surfaces.
+
+### Walkthrough locks 2026-05-23 - product build strategy
+
+- **(2026-05-23) Two-layer build strategy: foundation broad, surfaces vertical, Sella cross-cutting.** Foundation = shared concepts every surface needs (User, Brand, Auth, Notifications, Permissions, Event/Activity stream). Designed broadly to fit all 7 surfaces; built minimally to serve Connect first. Surfaces (Connect, Present, Buy, Sell, Discover, Grow) = each is built fully end-to-end before moving to the next. Sella = cross-cutting concern (shows up inside every surface, like authentication or analytics); NOT a 7th sibling surface. *Why:* avoids both "design everything upfront" (slow, speculative) and "design only for Connect" (rework hell when next surface arrives). Foundation design is cheap because we design borders, not internals. Sella as cross-cutting matches how she actually appears in the product.
+
+- **(2026-05-23) Per-surface file depth: Connect 100%, others sketch, Sella overview.** CONNECT.md = full depth (built first, deepest design). PRESENT.md, BUY.md, SELL.md, DISCOVER.md, GROW.md = one-page sketches (definition, users, owned objects, core flows, what it shares, Sella's role). SELLA.md = cross-cutting overview + per-surface touchpoints (her full behavior rules stay in LAYER-4). All surface files follow the same template. *Why:* enough cross-surface context to design DB/architecture without missing things; no wasted effort on surfaces we won't build for months.
