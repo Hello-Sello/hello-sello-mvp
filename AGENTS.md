@@ -213,10 +213,11 @@ This applies to LAYER docs, DECISIONS.md, PITCH.md, AGENTS.md, and every Linear 
 
 ### Git workflow
 
-- **Persistent per-person branches:** `claude/muskan/work`, `claude/ayush/work`. After each PR merges, reset your branch from new main and continue.
-- **Open a PR for review** for each batch; don't push to main directly. Default reviewer is the other developer.
+- **Three-tier branches:** `main` (production) ← `dev` (integration, default for PRs) ← `claude/muskan/work`, `claude/ayush/work` (personal). Personal work PRs to `dev`; `dev` merges to `main` on a cadence.
+- **After each PR merges:** reset your personal branch from new `dev` and continue.
+- **Open a PR for review** for each batch; never push directly to `dev` or `main`. Default reviewer is the other developer.
 - **Keep commit messages and PR bodies short.** Title + a few bullets, not essays. Reviewers read the diff, not the prose.
-- **See [docs/WORKFLOW.md](docs/WORKFLOW.md)** for the full collaboration protocol — task ownership, shared-file rules, AI agent hygiene.
+- **See [docs/WORKFLOW.md](docs/WORKFLOW.md)** for the full collaboration protocol — task ownership, shared-file rules, AI agent hygiene, release flow.
 
 ### What NOT to do
 

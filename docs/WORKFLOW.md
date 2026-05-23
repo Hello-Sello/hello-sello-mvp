@@ -10,20 +10,27 @@ This workflow is for Muskan + Ayush. Other teammates (Marcel, Victor) have their
 
 ## Branching
 
-We use **persistent per-person branches**, not a single shared branch.
+Three-tier branch hierarchy.
 
-| Branch | Owner | Purpose |
-|---|---|---|
-| `main` | Shared. Source of truth. Never push directly. | Production-bound code |
-| `claude/muskan/work` | Muskan | Muskan's working branch — Claude resumes context here |
-| `claude/ayush/work` | Ayush | Ayush's working branch |
+| Tier | Branch | Purpose | Who pushes |
+|---|---|---|---|
+| Production | `main` | Deployed code. Receives merges only from `dev`, on a release cadence. | Nobody directly — only via PR from `dev` |
+| Integration | `dev` | Where personal work converges. CI/CD will run here once code exists. Default branch for PRs. | Nobody directly — only via PR from a personal branch |
+| Personal | `claude/muskan/work` (Muskan), `claude/ayush/work` (Ayush) | Where each of us works day-to-day. Claude resumes context here. | The owner only |
 
 **Daily flow per person:**
 
-1. Start session → `git pull origin main` → rebase your branch onto main
+1. Start session → `git fetch` → rebase your branch onto `origin/dev`
 2. Work, commit on your own branch
-3. Open a PR (your branch → `main`) when a batch is ready
-4. After your PR merges → reset your branch from new main and continue
+3. When a batch is ready → PR your branch → `dev`
+4. After PR merges → reset your branch from new `dev` and continue
+
+**Release flow (continuous, current phase):**
+
+- When `dev` is green and a meaningful chunk has landed → open PR `dev` → `main`
+- Default cadence: end of every working week, or whenever a milestone lands
+- Once we have CI/CD set up: `dev` → `main` only merges when GitHub Actions tests pass (configured later, when code exists)
+- Once we have real users: switch to explicit release tags instead of continuous merges
 
 ---
 
@@ -92,7 +99,7 @@ Both of us run Claude Code with the same skills. Two agents can plausibly edit t
 
 **Rules:**
 
-1. **Before any Claude Code session that might touch shared files** — `git pull` first. Don't let Claude work off stale state.
+1. **Before any Claude Code session that might touch shared files** — `git fetch` and rebase off `origin/dev` first. Don't let Claude work off stale state.
 2. **AFK loops stay inside owned areas.** Long autonomous runs (`/triage`, future Ralph loops) should operate on `frontend/` (Ayush) or `backend/` (Muskan), not cross-area shared files.
 3. **`grill-with-docs` updates to `CONTEXT.md` → commit + push immediately.** Don't let it sit uncommitted across other work — that's how the file ends up in two places at once.
 
