@@ -66,7 +66,8 @@ Some files are co-owned. They conflict if we both edit them at the same time.
 - `docs/decisions/DECISIONS.md`
 - `docs/architecture/adr/*.md`
 - `docs/agents/*.md`
-- All `docs/product/LAYER-*.md`
+- All `docs/product/layers/LAYER-*.md`
+- All `docs/product/surfaces/*.md`
 
 (The per-person sync files `docs/team/sync/ayush.md` and `docs/team/sync/muskan.md` are NOT in this list - each is owned by exactly one agent, no possibility of conflict.)
 

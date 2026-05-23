@@ -1,6 +1,6 @@
 # Known Amendments — Pending Integration into Layer 1
 
-**Status:** captured **2026-05-18** during a brainstorm session that didn't end with formal doc updates. These three corrections came out of user-confirmed verbal clarifications but were never written into [LAYER-1-USERS-AND-CORE-OBJECTS.md](LAYER-1-USERS-AND-CORE-OBJECTS.md).
+**Status:** captured **2026-05-18** during a brainstorm session that didn't end with formal doc updates. These three corrections came out of user-confirmed verbal clarifications but were never written into [LAYER-1-USERS-AND-CORE-OBJECTS.md](layers/LAYER-1-USERS-AND-CORE-OBJECTS.md).
 
 **Action for the next session:** verify each amendment with the user (in case prior understanding still drifted), then update Layer 1 + DECISIONS.md accordingly. **Once integrated, delete this file.**
 
