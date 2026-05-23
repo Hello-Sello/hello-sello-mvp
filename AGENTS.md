@@ -29,7 +29,7 @@ Hello Sello is an **AI-native deal room for B2B** — a shared chat space betwee
 - **[LAYER-2-SURFACES.md](docs/product/LAYER-2-SURFACES.md)** — Layer 2. **IN PROGRESS.**
 - **[LAYER-3-DEAL-EXECUTION.md](docs/product/LAYER-3-DEAL-EXECUTION.md)** — Layer 3. **IN PROGRESS.**
 - **[LAYER-4-SELLA-BEHAVIOR.md](docs/product/LAYER-4-SELLA-BEHAVIOR.md)** — Layer 4. **IN PROGRESS.**
-- *(Future)* LAYER-5. See **"The 5-Layer Roadmap"** below for what each layer covers.
+- **[LAYER-5-INPUTS-AND-OUTPUTS.md](docs/product/LAYER-5-INPUTS-AND-OUTPUTS.md)** — Layer 5. **IN PROGRESS.** (drafted 2026-05-22)
 - **[DECISIONS.md](docs/decisions/DECISIONS.md)** — locked decisions with reasoning. One-line per decision.
 - **[ARCHITECTURE-NOTES.md](docs/architecture/ARCHITECTURE-NOTES.md)** — running engineering scratchpad. One-sentence implications from each lock, grouped by topic. Precursor to the formal Architecture doc.
 
@@ -104,12 +104,15 @@ Layer 4 — Sella's Behavior   ⏳ IN PROGRESS (started 2026-05-19)
   • Per-Sella behaviors (Seller / Buyer / Deal / Personal / Company)
   • Context, memory, learning loop
 
-Layer 5 — Inputs and Outputs   ⏸ TBD
-  • Inputs: chat, email, fax, attachments, ERP data
-  • Outputs: offers, purchase orders, confirmations, forecasts
-  • Translation (DE↔EN, demand→offer, mail→deal, tables→forecasts)
-  • Third-party integrations (Isilocity COA, FLOWZ pre-population, ERP, etc.)
-  • Fax pipeline (post-MVP)
+Layer 5 — Inputs and Outputs   ⏳ IN PROGRESS (drafted 2026-05-22)
+  • Inputs: chat (core), email (human-in-loop), attachments (store-only),
+    FLOWZ scrape (pending GDPR)
+  • Outputs: deal confirmation, PO (format open), PDF for off-platform buyers
+  • Translation: DE↔EN chat translation (local models)
+  • Integrations: FLOWZ (MVP), Isilocity ERP (post-MVP)
+  • Non-goals MVP: fax, COA parsing, ERP sync, bulk import, programmatic API
+  → docs/product/LAYER-5-INPUTS-AND-OUTPUTS.md
+  Open: DEV-60 (email pipeline), DEV-61 (PO format), DEV-62 (FLOWZ GDPR)
 
 —— Separate workstream, NOT a Layer ——
   • Engineering architecture: tech stack, data model, auth, storage,
@@ -129,7 +132,7 @@ Layer 5 — Inputs and Outputs   ⏸ TBD
 - Layer 2 — ⏳ Big 7 framework locked. 7 surface drill-down doubts open: DEV-13 / 15 / 16 / 17 / 19 / 20 / 21.
 - Layer 3 — ⏳ Cluster D closed (Done trigger / no stage reopen / passive notifications / no MVP payment / OCR delivery tracking). Open: DEV-23, 26, 29 (Marcel); plus DEV-24, 27, 28, 30, 31, 32, 34.
 - Layer 4 — ⏳ Substantively drafted §1–§10. 26+ locks landed. Open Qs: DEV-11, 58, 59 + post-launch thresholds.
-- Layer 5 — ⏸ Not started.
+- Layer 5 — ⏳ Drafted 2026-05-22. Open: DEV-60 (email pipeline), DEV-61 (PO format), DEV-62 (FLOWZ GDPR).
 
 **Just completed:** Layer 4 §9 (failure modes) + §10 (non-goals) — closes Layer 4 draft.
 

@@ -308,3 +308,29 @@ Each entry: **What was decided** → **Why** (the reasoning at the time).
 ### Non-goals (locked 2026-05-22)
 
 - **Sella does NOT** advocate for one side, auto-send without user consent, access counterparty internal data, learn across companies, replace human judgment on material commercial decisions, give legal/regulatory advice, surveil casual chat, retain memory beyond defined scope, or act as the legal record of an agreement. *Why:* explicit non-goals protect neutrality (Schweiz des B2B-Handels), trust, and the bounded scope of an AI-as-tool vs AI-as-authority.
+
+---
+
+## Layer 5 — Inputs and Outputs (drafted 2026-05-22)
+
+### Inputs
+
+- **Email = MVP, human-in-loop.** Sella reads incoming emails and pre-fills a Deal Card; salesperson reviews, edits, and acts. Sella never auto-sends or auto-finalizes from email. *Why:* email is the dominant external channel in German cannabis B2B; human-in-loop preserves trust on day one and lets us measure Sella's extraction quality before automating further.
+- **Attachments (COA / COB) = MVP, store only.** Upload and link to product; no content parsing or compliance validation in MVP. *Why:* parsing introduces compliance liability and engineering scope we can't justify pre-launch. Storage alone unblocks the deal workflow.
+- **FLOWZ scrape = MVP, contingent on GDPR check.** Pre-populate supplier profiles and product catalogs from FLOWZ public data so buyers don't land on a blank screen and suppliers can claim a pre-existing profile on signup. *Why:* cold-start advantage on both sides of the marketplace; treats the seeded data as a sales/marketing accelerator, not a product feature. Build gated on DEV-62.
+- **Fax = POST-MVP.** Acknowledged as a real channel in German medical cannabis; deferred. *Why:* email + chat carry the MVP; fax adds OCR + delivery infrastructure overhead that doesn't pay back for first release.
+- **ERP (Isilocity, others) = POST-MVP.** No ERP read/write in MVP. *Why:* MVP is a standalone tool; ERP sync is a per-customer engineering project that should follow validated demand.
+
+### Outputs
+
+- **Deal confirmation = MVP, auto-generated at Confirmed state.** Sent via email to both parties; visible in-platform. *Why:* the moment both parties accept is the moment that needs an audit-quality artifact.
+- **Purchase Order = MVP, auto-generated from Confirmed Deal Card.** Structured PDF + machine-readable. *Why:* PO is the procurement system's source of truth; auto-generation eliminates double entry. Exact format spec open in DEV-61.
+- **Off-platform buyer flow = MVP, email + read-only Deal Room link + PDF download.** Auto-accept on signup connects the two individuals. *Why:* preserves the deal economics on day one; signup happens organically when the buyer acts on the offer, removing the "you must register first" friction.
+
+### Translation
+
+- **DE↔EN chat translation in MVP via local models.** Translation happens on-device where possible; remote model only when needed. *Why:* token cost at scale would be prohibitive for chat-volume translation; local models give the cross-language UX without the bill.
+
+### Non-goals for MVP
+
+- **Fax processing, COA/COB content parsing, ERP sync, bulk CSV import, and programmatic API access** are explicitly out of scope for first release. *Why:* keeps the MVP scoped to the dominant channels (chat + email) and the proven workflow (human reviews Sella's pre-fill). Each non-goal becomes a post-launch initiative tied to customer demand.
