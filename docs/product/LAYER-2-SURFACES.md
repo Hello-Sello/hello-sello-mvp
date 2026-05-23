@@ -8,7 +8,7 @@
 
 ## Purpose of this document
 
-Capture **how users navigate the product** — the 5 surfaces (Connect / Present / Sell / Buy / Trade), what lives on each, the navigation model, and how each maps back to the Layer 1 deal lifecycle.
+Capture **how users navigate the product** — the 5 surfaces (Connect / Present / Sell / Buy / Grow), what lives on each, the navigation model, and how each maps back to the Layer 1 deal lifecycle.
 
 ## Layer 2 covers
 
@@ -37,7 +37,7 @@ The product is organized as **6 navigable surfaces + Sella (always-available AI 
 | 2 | **Buy** | Smart procurement: visibility of all deals, prices, margins. Buyer-side toolset (Margin & Pricing, Deal Engine, Cash-Flow, Product Data Bank, Exclusivity). **Led by Victor Diem.** | To discuss |
 | 3 | **Sell** | Seller-side ops on top of deals: inventory, pricing, batch allocation with margin control. | To discuss |
 | 4 | **Present** | Seller's shop + product catalog. Basket → Deal Room. Online shop + best presentation. | To discuss |
-| 5 | **Trade** | Command center for all deals — cross-cutting analytics. **Post-MVP.** | To discuss |
+| 5 | **Grow** | Command center for all deals — cross-cutting analytics. **Post-MVP.** | To discuss |
 | 6 | **Discover** | Pre-populated companies (FLOWZ-style), find suppliers globally as a social feed, legal advertising to verified audience. | To discuss |
 | — | **Sella** (pillar, not a surface) | Always-available AI in right-side panel across every surface. Adapts to user, surface, and task. | See §7 |
 | — | **Home** (landing page) | Public front door + login portal. FIGMA-based with pink replacing blue. | See §8 |
@@ -46,14 +46,14 @@ The product is organized as **6 navigable surfaces + Sella (always-available AI 
 
 ## Structural decisions (locked)
 
-- **Navigation:** the 6 navigable surfaces (Connect / Buy / Sell / Present / Trade / Discover) live as pages in the left sidebar.
-- **Big 7 (locked 2026-05-18):** Connect / Buy / Sell / Present / Trade / Discover + Sella as a pillar. Home is a separate landing page outside the Big 7.
+- **Navigation:** the 6 navigable surfaces (Connect / Buy / Sell / Present / Grow / Discover) live as pages in the left sidebar.
+- **Big 7 (locked 2026-05-18):** Connect / Buy / Sell / Present / Grow / Discover + Sella as a pillar. Home is a separate landing page outside the Big 7.
 - **Sella is a Big 7 pillar but NOT a sidebar surface.** She lives in a right-side panel across all surfaces (Cursor-style). Always available but no sidebar item. Her role adapts to the user, surface, and task. *(Lock from 2026-05-14, reaffirmed 2026-05-18.)*
 - **All users see all 6 navigable surfaces**, regardless of whether their company sells, buys, or both.
 - **(2026-05-20, DEV-14) Each surface has two UI states: blank and populated.** *Blank* = the user / company hasn't activated this surface (e.g., a pharmacy that has never used Sell). *Populated* = active use with content visible. No hiding, no role gating — every surface stays reachable. The platform encourages dual-role usage; the design pattern is just "show empty state vs live state."
 
 > **DEV-14 — closed (2026-05-20).** See the blank-vs-populated rule above.
-- **Deals:** workspaces live inside Connect. Accessible from chat AND from Trade.
+- **Deals:** workspaces live inside Connect. Accessible from chat AND from Grow.
 
 ## Still open
 
@@ -101,7 +101,7 @@ The product is organized as **6 navigable surfaces + Sella (always-available AI 
 **Contents:** see the Sell Linear label.
 
 **Locked:**
-- Sell is **strictly seller-side ops** for the sales team. No cross-side analytics — those belong in Trade.
+- Sell is **strictly seller-side ops** for the sales team. No cross-side analytics — those belong in Grow.
 - Batch allocation flow is **post-MVP**.
 - **(2026-05-16, DEV-1)** Outbound offer pricelist cascade — per recipient: customer-specific (Relationship page) → STANDARD (seller's uploaded default) → manual prompt. See DECISIONS.md.
 
@@ -123,15 +123,16 @@ The product is organized as **6 navigable surfaces + Sella (always-available AI 
 
 ---
 
-## 5. Trade
+## 5. Grow
+
+> *(Renamed from "Trade" on 2026-05-23 — see [DEV-21](https://linear.app/hellosello/issue/DEV-21/whats-the-new-name-for-the-trade-page-verb-matching-the-surface-naming). The Linear project label is still named `Trade`; rename pending team alignment.)*
 
 > **⚠️ OPEN [DEV-15]** — Layout/navigation pattern for this surface. See [DEV-15](https://linear.app/hellosello/issue/DEV-15/whats-the-layoutnavigation-pattern-for-each-of-the-5-surfaces-when-a).
-> **⚠️ OPEN [DEV-21]** — Trade page rename — what verb matches the naming convention? See [DEV-21](https://linear.app/hellosello/issue/DEV-21/whats-the-new-name-for-the-trade-page-verb-matching-the-surface-naming).
 
-**Contents:** see the Trade Linear label.
+**Contents:** see the `Trade` Linear label (rename to `Grow` pending team alignment).
 
 **Locked:**
-- Trade is the **C-suite analytics + business control center** — a "command center for all your deals" (Big 7).
+- Grow is the **C-suite analytics + business control center** — a "command center for all your deals" (Big 7).
 - **Post-MVP** — entire page is built later.
 - **Initial scope:** all deals over time with filters (1 month / 1 year / 2 years / custom). Operate the business from there.
 - **Future** (post-post-MVP): map view of deals.
@@ -185,8 +186,8 @@ Sella's user-facing value prop (Big 7): "A female-inspired caring AI for both si
 ## Post-MVP (Layer 2 scope)
 
 - **Batch allocation flow** (Sell) — full workflow design deferred to post-MVP.
-- **Trade page entirely** — the whole C-suite analytics + business control surface is post-MVP.
-- **Trade map view** — geographic deal visualization (post-post-MVP, after Trade is launched).
+- **Grow page entirely** — the whole C-suite analytics + business control surface is post-MVP.
+- **Grow map view** — geographic deal visualization (post-post-MVP, after Grow is launched).
 - **FLOWZ pre-population** — see Layer 1 Section 12. Pre-seed companies and products to avoid empty-platform feeling.
 
 ---
@@ -207,7 +208,6 @@ Sella's user-facing value prop (Big 7): "A female-inspired caring AI for both si
 - **Section 1 — Connect / Contact import** — How are imported contacts labelled and categorized? — [DEV-17](https://linear.app/hellosello/issue/DEV-17/how-are-imported-contacts-labelled-and-categorized-after-import)
 - **Section 3 — Sell** — What features should live in Sell beyond the 3 known projects? — [DEV-19](https://linear.app/hellosello/issue/DEV-19/what-features-should-live-in-the-sell-page-beyond-the-3-known-projects)
 - **Section 4 — Buy** — What features should live in Buy (analogous to Sell)? — [DEV-20](https://linear.app/hellosello/issue/DEV-20/what-features-should-live-in-the-buy-page-analogous-to-sell)
-- **Section 5 — Trade** — What's the new name for the Trade page (verb matching naming convention)? — [DEV-21](https://linear.app/hellosello/issue/DEV-21/whats-the-new-name-for-the-trade-page-verb-matching-the-surface-naming)
 
 ---
 

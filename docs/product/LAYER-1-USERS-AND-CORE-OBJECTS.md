@@ -9,7 +9,7 @@
 - How negotiation works
 - The multi-Sella agent architecture
 
-**Layer 1 does NOT cover:** the product surfaces (Connect / Present / Sell / Buy / Trade pages), inputs/outputs (chat, email, fax, ERP), or Sella's specific behaviors. Those come later.
+**Layer 1 does NOT cover:** the product surfaces (Connect / Present / Sell / Buy / Grow pages), inputs/outputs (chat, email, fax, ERP), or Sella's specific behaviors. Those come later.
 
 ---
 
@@ -558,4 +558,4 @@ Below is the canonical access matrix — sourced from the Chat project descripti
 
 ---
 
-*End of Layer 1. Ready to move to Layer 2: the product surfaces (Connect / Present / Sell / Buy / Trade) and how they map to this lifecycle.*
+*End of Layer 1. Ready to move to Layer 2: the product surfaces (Connect / Present / Sell / Buy / Grow) and how they map to this lifecycle.*

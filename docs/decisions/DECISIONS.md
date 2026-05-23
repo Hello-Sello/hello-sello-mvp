@@ -173,6 +173,8 @@ Each entry: **What was decided** → **Why** (the reasoning at the time).
 
 ### Big 7 framework (locked 2026-05-18 team meeting)
 
+> *Note: the "Trade" surface was renamed to "Grow" on 2026-05-23 ([DEV-21](https://linear.app/hellosello/issue/DEV-21/whats-the-new-name-for-the-trade-page-verb-matching-the-surface-naming)). Historical entries in this and earlier sections retain the original "Trade" name. The Linear project label is still named "Trade" — rename pending team alignment.*
+
 - **The product is organized around 7 pillars** — six navigable surfaces (Connect / Buy / Sell / Present / Trade / Discover) plus one always-available AI layer (Sella, right-side panel). *Why:* the Big 7 gives every user a clear mental map of platform value; surfaces own distinct user jobs while Sella stitches them together.
 - **Sella as a Big 7 pillar does NOT change the 2026-05-14 UI lock.** She still lives in the right-side panel across all surfaces and is NOT a sidebar item. The Big 7 framing is conceptual (a value-pillar list), not navigation. Sella's role adapts to the user, surface, and task.
 - **Discover is a new surface** for: (a) pre-populated companies (FLOWZ-style, see Layer 1 §12), (b) finding new suppliers globally as a network social feed, (c) legal advertising for brands to a verified audience (closed gang). *Why:* expands platform value from connected-only relationships to pre-registration discovery + brand promotion.
@@ -204,6 +206,10 @@ The 9-phase development plan (Idea → Research → Prototype → PRD → Archit
 - **Implementation:** vertical slice. Build Connect → ship → Present → ship → Sell/Buy → ship → others. Each subsequent surface drops into the pre-built foundation. *Why:* tight feedback loop (ship fast) without paying refactor cost.
 
 *Net effect:* fast time to first ship (Connect), zero architecture rework when adding surfaces, deliberate scope discipline on Trade/Discover.
+
+### Trade → Grow rename (locked 2026-05-23, DEV-21)
+
+- **(2026-05-23) Trade surface renamed to Grow (DEV-21).** Single-word verb matching the surface naming convention (Connect / Present / Sell / Buy / Grow + Discover). Forward-looking docs updated (LAYER-1, LAYER-2 §5, LAYER-4 §5 routing + 2026-05-22 locked decision, CONTEXT.md, ARCHITECTURE-NOTES.md). DECISIONS.md historical entries above and meeting notes from 2026-05-18 retain "Trade" as the original name (annotation added at top of Big 7 framework section). Linear "Trade" project label kept as-is — rename pending team alignment. *Why:* "Trade" was a placeholder; "Grow" captures the surface's purpose — high-level analytics + business control + viewing all deals over time + future geographic ops — which together represent how the C-suite grows the business.
 
 ---
 

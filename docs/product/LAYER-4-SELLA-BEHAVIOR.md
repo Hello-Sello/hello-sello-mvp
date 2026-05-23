@@ -224,7 +224,7 @@ Sella answers FOR the user using pre-authorized assets. Use case: a buyer/seller
 | **Sell** | Seller-Sella | — | Margin nudges, batch availability, FIFO, pricelist updates |
 | **Present** — your own shop | Seller-Sella | — | Setup help, photo/COA upload, basket → Deal Room (DEV-22/54) |
 | **Present** — browsing another shop | Buyer-Sella | — | Price history, alternative suppliers, basket creation |
-| **Trade** | Company Sella | — | Cross-deal analytics, revenue concentration, partner health, risk alerts |
+| **Grow** | Company Sella | — | Cross-deal analytics, revenue concentration, partner health, risk alerts |
 | **Discover** — scouting suppliers (acting as buyer) | Buyer-Sella | — | Supplier discovery, fit-matching, ranking |
 | **Discover** — managing legal ads (acting as seller) | Seller-Sella | — | Brand-ad management, audience targeting |
 | **Discover** — exploring (no clear side intent) | Personal Sella | — | General orientation |
@@ -406,7 +406,7 @@ What Sella explicitly does NOT do — mostly cross-references to earlier locks, 
 - **§5 per-surface routing table locked.** Big 7 + Home + Deal Workspace mapped to right-panel Sella + background Sella(s) + primary capabilities. *(2026-05-22.)*
 - **Connect overview default = Personal Sella.** Switches to side-specific Sella when a relationship/chat is selected. *(2026-05-22.)*
 - **Discover follows user intent.** Buyer-Sella (scouting), Seller-Sella (ads), Personal Sella (exploring). *(2026-05-22.)*
-- **Trade right-panel = Company Sella** — C-suite scope; cross-side visibility. *(2026-05-22.)*
+- **Grow right-panel = Company Sella** — C-suite scope; cross-side visibility. *(2026-05-22.)*
 - **"What's on my plate" overlay** — any surface, user can ask Personal Sella to summarize their open Things / deals. *(2026-05-22.)*
 - **Translation (MVP)** — chat messages via per-chat toggle; everything else English only. Broader translation post-MVP. *(2026-05-22.)*
 - **§6 cross-links:** Ask Myself → §4; First-contact Sella → DEV-7; SIGNALS → DEV-5 / DEV-48 / DEV-49 / DEV-50. *(2026-05-22.)*
