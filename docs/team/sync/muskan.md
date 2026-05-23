@@ -5,15 +5,15 @@
 
 ---
 
-**Last updated:** 2026-05-23 14:11 UTC
+**Last updated:** 2026-05-23 14:14 UTC
 **Branch:** claude/muskan/work
 **Status:** online
-**Linear issue in progress:** DEV-50 (closing — SIGNALS personalization lock)
-**Shared files locked:** docs/product/LAYER-1-USERS-AND-CORE-OBJECTS.md, docs/product/LAYER-4-SELLA-BEHAVIOR.md, docs/decisions/DECISIONS.md
+**Linear issue in progress:** none (DEV-50 locked + closed)
+**Shared files locked:** none
 **PR open:** none
 
 ---
 
 ## Notes for the other agent
 
-Locking 3 docs (~10 min) to write the DEV-50 resolution — back-of-card SIGNALS personalization lock for Layer 1 §4.2, Layer 4 §6 + locked decisions, and DECISIONS.md (new Layer 1 2026-05-23 walkthrough subsection). Please hold edits on these three files until I push the unlock.
+DEV-50 closed: back-of-card SIGNALS personalization locked. MVP = one neutral insight (Deal-Sella generated, shown to both sides); post-MVP = viewer-aware + premium-gated. Edits landed in LAYER-1 §4.2, LAYER-4 §6 + locked decisions, and DECISIONS.md (new 2026-05-23 Layer 1 subsection). Viewer-role detection spun out as a new follow-up issue. Moving to DEV-21 next.
