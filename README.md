@@ -18,11 +18,13 @@ If you're a teammate joining the project, read in this order:
 2. **[docs/product/PITCH.md](docs/product/PITCH.md)** — voice, framing, positioning.
 3. **[docs/decisions/DECISIONS.md](docs/decisions/DECISIONS.md)** — every locked
    design decision with reasoning.
-4. **Layer docs** (in `docs/product/`):
-   - [LAYER-1-USERS-AND-CORE-OBJECTS.md](docs/product/LAYER-1-USERS-AND-CORE-OBJECTS.md) — LOCKED
-   - [LAYER-2-SURFACES.md](docs/product/LAYER-2-SURFACES.md) — IN PROGRESS
-   - [LAYER-3-DEAL-EXECUTION.md](docs/product/LAYER-3-DEAL-EXECUTION.md) — IN PROGRESS
-   - [LAYER-4-SELLA-BEHAVIOR.md](docs/product/LAYER-4-SELLA-BEHAVIOR.md) — IN PROGRESS
+4. **Layer docs** (in `docs/product/layers/`):
+   - [LAYER-1-USERS-AND-CORE-OBJECTS.md](docs/product/layers/LAYER-1-USERS-AND-CORE-OBJECTS.md) — LOCKED
+   - [LAYER-2-SURFACES.md](docs/product/layers/LAYER-2-SURFACES.md) — IN PROGRESS
+   - [LAYER-3-DEAL-EXECUTION.md](docs/product/layers/LAYER-3-DEAL-EXECUTION.md) — IN PROGRESS
+   - [LAYER-4-SELLA-BEHAVIOR.md](docs/product/layers/LAYER-4-SELLA-BEHAVIOR.md) — IN PROGRESS
+   - [LAYER-5-INPUTS-AND-OUTPUTS.md](docs/product/layers/LAYER-5-INPUTS-AND-OUTPUTS.md) — drafted
+5. **Per-surface deep dives** (in `docs/product/surfaces/`): CONNECT, PRESENT, BUY, SELL, DISCOVER, GROW, SELLA. Each is a vertical view of one surface. See [docs/product/README.md](docs/product/README.md) for the structure.
 
 ---
 
