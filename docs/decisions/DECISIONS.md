@@ -182,6 +182,25 @@ Each entry: **What was decided** → **Why** (the reasoning at the time).
   - **Discover** — find new interesting suppliers globally + legal advertising.
   - **Sella** — female-inspired caring AI mediating for collaborative mutual benefits on both sides.
 
+### Build priority across the Big 7 (locked 2026-05-23)
+
+- **Connect = build first.** Foundation surface - relationships, chat, connection requests, deal birth. Without Connect, no other surface has data to operate on. *Why:* every other surface (Buy, Sell, Present, Trade, Discover) depends on a real seller↔buyer relationship and a chat thread existing first.
+- **Present = build second.** *Why:* once Connect works, sellers need a way to assemble products into shops/baskets and pitch via Deal Room. Present is the natural next dependency in the deal-formation flow.
+- **Buy / Sell / Discover / Trade = build third through sixth, order TBD.** *Why:* none are foundational; their build order will be decided based on the lead customer's workflow (Canadian Craft) and what unlocks fastest value.
+- **Sella = built alongside whichever surface is in scope.** Not a build-priority slot of her own. *Why:* Sella is an always-on layer across all surfaces, not a page; her behavior is built per-surface as that surface lands.
+
+### Build approach across phases - "Approach C" hybrid (locked 2026-05-23)
+
+The 9-phase development plan (Idea → Research → Prototype → PRD → Architecture → Implementation planning → PRD-to-issues → Execution → Q&A) does **not** run sequentially per surface. Instead:
+
+- **Idea + Research:** deep for Connect; light for Present, Sell, Buy; 2-paragraph stubs for Trade and Discover. *Why:* Trade and Discover are far enough out that grilling their details now is wasted - they'll change before we touch them.
+- **Prototype:** only Connect first. *Why:* validate the foundational interaction before committing.
+- **PRD:** deep for Connect + Present; scoped (1-2 pages) for Sell + Buy; stubs for Trade + Discover. *Why:* PRD depth tracks build priority.
+- **Architecture:** ONE pass covering the full Big 7 vision. Data model, schema, API designed so Connect + Present ship first, but the foundation already accommodates Sell, Buy, Trade, Discover when they get built. *Why:* Connect's data model (Relationship, Deal Card, Workspace, Chat) is shared across all surfaces. Designing it once = no refactor cost. Trade and Discover get "future entry points" in the schema, not full implementations.
+- **Implementation:** vertical slice. Build Connect → ship → Present → ship → Sell/Buy → ship → others. Each subsequent surface drops into the pre-built foundation. *Why:* tight feedback loop (ship fast) without paying refactor cost.
+
+*Net effect:* fast time to first ship (Connect), zero architecture rework when adding surfaces, deliberate scope discipline on Trade/Discover.
+
 ---
 
 ## Layer 3 — The Deal (Execution) (IN PROGRESS)
