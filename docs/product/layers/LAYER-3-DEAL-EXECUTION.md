@@ -62,7 +62,7 @@ The journey from **"order" → "done"** — what happens after both parties conf
 >
 > **DEV-31 — closed (2026-05-23).** MVP ships a single hardcoded platform-default template (`cannabis_wholesale_v1`: finance/logistics/delivery + default THINGS per stage). Fully per-deal editable. Multi-template / company-curation / Sella-learns-templates deferred to post-MVP. See Locked below.
 >
-> **⚠️ OPEN [DEV-32]** — When a stage is added mid-deal, both-side confirm vs notification? Re-framed under new doctrine as adding THINGS mid-deal. See [DEV-32](https://linear.app/hellosello/issue/DEV-32/when-a-stage-is-added-mid-deal-does-the-other-party-need-to-confirm-or).
+> **DEV-32 — closed (2026-05-23).** Re-framed under DEV-24/30 doctrine as "adding a THING in a domain not previously represented." Lock: notification-only, no confirmation required. Inline notification to deal workspace per DEV-30 in-app model. See Locked below.
 >
 > **DEV-33 — closed (2026-05-20, partially superseded 2026-05-22).** The original lock had two halves: **(a) stage closure mechanics** (no-reopen + passive thin status line on stage close) — **superseded by DEV-24/DEV-30**: stages have no closure UI event anymore. **(b) Post-confirmation deal-data-change status-line pattern** (e.g., DEV-36 delivery-note OCR auto-amendments) — **still applies**: passive thin status line in both P↔P and C↔C chats, no push.
 >
@@ -76,6 +76,7 @@ The journey from **"order" → "done"** — what happens after both parties conf
 - **(2026-05-22, DEV-24) Stage-responsibility = default-assignee mechanism.** Each stage's responsible person/team is the default assignee for THINGS in that stage (overridable per-THING). Stage-responsible people don't "close/tick the stage" — stages have no closure UI event.
 - **(2026-05-22, DEV-24) Deal ownership does NOT pass between stage-responsible people.** The deal is visible + actionable for the whole company; stage-responsible people work on their THINGS without taking over the deal.
 - **(2026-05-23, DEV-31) MVP stage template = `cannabis_wholesale_v1` (single hardcoded platform default).** Stages: finance, logistics, delivery. Each stage ships with default THINGS pre-loaded at deal birth (finance: "Send invoice", "Confirm payment terms"; logistics: "Confirm pickup date", "Verify COA matches batch", "BfArM import authorization on file (if cross-border)", "Confirm narcotic-grade transport carrier"; delivery: "Upload delivery note", "Upload final invoice"). Fully per-deal editable. Template stored as data/config — schema supports multiple templates even though MVP ships one. **Compliance-as-stage rejected for MVP** — distributed across existing stages (mostly Logistics) for simplicity. Multi-template library, company curation, Sella-learns-templates → post-MVP roadmap.
+- **(2026-05-23, DEV-32) Mid-deal THING-add → inline notification only, no confirmation.** Under DEV-24/30 doctrine, "adding a stage mid-deal" re-frames as "adding a THING in a domain not previously represented." Notification routed to deal workspace per DEV-30 in-app notification model; aligns with DEV-30 "any-party-can-add" THINGS lock; audit trail logged. If THING lands in a domain with no stage-responsible person yet, deal owner picks the responsible at that moment (same mechanism as deal-birth assignment).
 
 ---
 
@@ -254,6 +255,7 @@ Two distinct flows after confirmation:
 - **(2026-05-22, DEV-23) Post-confirmation cancellation/amendment.** Two flows: (a) **Amendment** for partial issues (e.g., 20% under-delivery) — flagged by one side, requires the other's approval. (b) **Cancellation** for full non-delivery — MVP just deletes the deal so wrong docs don't surface; post-MVP triggers ERP cancel-if-possible (Odoo / CanCraft). **Authority:** SELLER can always cancel unilaterally (both birth paths); BUYER cannot — BUYER can only request a change with SELLER approval. Audit trail logged.
 - **(2026-05-22, DEV-26) Order generation — PO / SO / Hello Sello Deal Number + QR.** Deal birth is directional: **OFFER** (seller-initiated, sales order) or **ORDER** (buyer-initiated, purchase order). On mutual acceptance, the deal becomes an **order** with three IDs + QR: Buyer's PO # (buyer field), Seller's SO # (seller field), Hello Sello Deal Number (auto-generated, pattern `HS-AAA##-BBB##-NNNNNNNN`), QR code (encodes Deal Number). Order form is **XML-readable** for ERP/accounting/logistics. All IDs + QR generated at the moment of confirmation. Short-code derivation rule deferred (open flag in §4).
 - **(2026-05-23, DEV-31) MVP stage template = `cannabis_wholesale_v1` (single hardcoded platform default).** Stages: finance, logistics, delivery. Each stage ships with default THINGS pre-loaded at deal birth (finance: "Send invoice", "Confirm payment terms"; logistics: "Confirm pickup date", "Verify COA matches batch", "BfArM import authorization on file (if cross-border)", "Confirm narcotic-grade transport carrier"; delivery: "Upload delivery note", "Upload final invoice"). Fully per-deal editable. Template stored as data/config — schema supports multiple templates even though MVP ships one. **Compliance-as-stage rejected for MVP** — distributed across existing stages (mostly Logistics) for simplicity. Multi-template library, company curation, Sella-learns-templates → post-MVP roadmap.
+- **(2026-05-23, DEV-32) Mid-deal THING-add → inline notification only, no confirmation.** Under DEV-24/30 doctrine, "adding a stage mid-deal" re-frames as "adding a THING in a domain not previously represented." Notification routed to deal workspace per DEV-30 in-app notification model; aligns with DEV-30 "any-party-can-add" THINGS lock; audit trail logged. If THING lands in a domain with no stage-responsible person yet, deal owner picks the responsible at that moment (same mechanism as deal-birth assignment).
 
 ---
 
@@ -266,7 +268,6 @@ Two distinct flows after confirmation:
 ## Open Questions
 
 - **Section 7 — Things UI** — Where do users see their Things inbox (page / widget / etc.)? — [DEV-27](https://linear.app/hellosello/issue/DEV-27/whats-the-ui-surface-for-a-users-things-inbox-page-sidebar-widget-or)
-- **Section 2 — Adding stages mid-deal** — Both-side confirm vs notification only? — [DEV-32](https://linear.app/hellosello/issue/DEV-32/when-a-stage-is-added-mid-deal-does-the-other-party-need-to-confirm-or)
 
 ---
 
