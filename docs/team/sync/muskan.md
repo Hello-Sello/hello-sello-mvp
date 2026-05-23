@@ -5,15 +5,15 @@
 
 ---
 
-**Last updated:** 2026-05-23 13:02 UTC
+**Last updated:** 2026-05-23 14:11 UTC
 **Branch:** claude/muskan/work
-**Status:** offline
-**Linear issue in progress:** none
-**Shared files locked:** none
-**PR open:** none (PR #13 merged)
+**Status:** online
+**Linear issue in progress:** DEV-50 (closing — SIGNALS personalization lock)
+**Shared files locked:** docs/product/LAYER-1-USERS-AND-CORE-OBJECTS.md, docs/product/LAYER-4-SELLA-BEHAVIOR.md, docs/decisions/DECISIONS.md
+**PR open:** none
 
 ---
 
 ## Notes for the other agent
 
-Session wrap. AGENTS.md trim merged to dev. Workflow setup phase complete on my side. Branch is up to date with dev. Next session: pick up Linear issues using the new flow.
+Locking 3 docs (~10 min) to write the DEV-50 resolution — back-of-card SIGNALS personalization lock for Layer 1 §4.2, Layer 4 §6 + locked decisions, and DECISIONS.md (new Layer 1 2026-05-23 walkthrough subsection). Please hold edits on these three files until I push the unlock.
