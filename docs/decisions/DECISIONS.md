@@ -325,7 +325,9 @@ Each entry: **What was decided** → **Why** (the reasoning at the time).
 
 - **Deal confirmation = MVP, auto-generated at Confirmed state.** Sent via email to both parties; visible in-platform. *Why:* the moment both parties accept is the moment that needs an audit-quality artifact.
 - **Purchase Order = MVP, auto-generated from Confirmed Deal Card.** Structured PDF + machine-readable. *Why:* PO is the procurement system's source of truth; auto-generation eliminates double entry. Exact format spec open in DEV-61.
-- **Off-platform buyer flow = MVP, email + read-only Deal Room link + PDF download.** Auto-accept on signup connects the two individuals. *Why:* preserves the deal economics on day one; signup happens organically when the buyer acts on the offer, removing the "you must register first" friction.
+- **Off-platform buyers receive a regular email only - no Hello Sello UI.** Email contains: deal table + PDF attachment + Hello Sello banner ad. Buyer replies via email; Sella ingests via the standard email pipeline (§2.2). *Why:* keeps MVP simple; the Deal Room presentation flow (Present surface) handles richer link-based interaction post-MVP. (Corrected 2026-05-22 - earlier draft incorrectly mixed in the post-MVP Deal Room link flow.)
+- **No auto-connect on signup. Smart suggestions instead.** When an off-platform recipient later signs up, they see "X companies already have you in their records" and manually pick who to connect to. *Why:* explicit consent. Email is an asymmetric one-direction interaction; signup converts it into a real two-sided platform relationship. UX details tracked in DEV-63.
+- **Deal Room shareable link = POST-MVP.** *Why:* tied to the Deal Room presentation surface on the Present page, which is itself post-MVP scope.
 
 ### Translation
 

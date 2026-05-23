@@ -94,15 +94,28 @@ Auto-generated from a Confirmed Deal Card. The PO is a structured artifact (PDF 
 
 > **⚠️ OPEN [DEV-61]** - exact PO format spec: which fields, layout, language, machine-readable schema (XML / JSON / XRechnung for Germany?), download vs. email delivery.
 
-### 3.3 PDF offer / deal (for off-platform buyers)
+### 3.3 Email to off-platform buyers
 **MVP.**
 
-Per the 16-Connection Matrix (Marcel 2026-05-16 meeting), when a deal is sent to a buyer who is NOT on Hello Sello, the deal exits the platform as:
-- An **email containing a table summary** of the deal
-- A **temporary link to a read-only Deal Room** (so the off-platform buyer can view the deal without signing up)
-- An **option to download the deal as PDF**
+When a deal is sent to a buyer who is NOT on Hello Sello, the buyer **never sees a Hello Sello UI**. The interaction is email-only:
+- Hello Sello sends a regular email containing:
+  - Deal summary as an inline table
+  - PDF attachment (full deal artifact)
+  - **Hello Sello banner ad** at the bottom (marketing prompt to join)
+- The off-platform buyer **replies by email** in plain words ("yes" / "no" / counter-offer terms).
+- Sella reads the reply via the email pipeline (§2.2), pre-fills a Deal Card update, the salesperson reviews and acts.
 
-**Auto-acceptance rule** (Marcel 2026-05-16 meeting): if an off-platform buyer picks up the offer via the link, the two individuals are automatically connected on the platform once the buyer signs up.
+**No "click accept" mechanic, no read-only Deal Room link, no auto-acceptance in MVP.**
+
+**Connection on signup (manual, with smart suggestions):**
+If the off-platform buyer later signs up via the banner, Hello Sello does **not** auto-connect them to past contacts. Instead, on signup, the new user sees a list of companies that already have email/deal history with their address ("X companies already have you in their records - connect to start trading") and **manually picks** which to connect to. Same UX pattern as "friends already on Facebook" / LinkedIn's "connections to import."
+
+> **⚠️ OPEN [DEV-63]** - smart-suggestions UX details: timing (onboarding step vs persistent banner), fields shown per suggestion, skip-all flow.
+
+### 3.4 Deal Room shareable link
+**POST-MVP.**
+
+The Deal Room is a presentation surface on the **Present** page (Big 7) where a seller assembles products and pitches a deal visually. In a later release, a Deal Room will be shareable as a link to an off-platform buyer, who can view the presentation and click to accept. This is the flow the Marcel 2026-05-16 meeting referred to as "auto-acceptance on pickup." Deferred to post-MVP; the MVP off-platform flow above (§3.3) is the only way to reach off-platform buyers in first release.
 
 ---
 
@@ -158,6 +171,7 @@ Future integrations driven by customer demand. No commitments in MVP.
 | §2.2 Email | Exact pipeline: mailbox setup, forwarding rules, attachment handling, multi-thread tracking | [DEV-60](https://linear.app/hellosello/issue/DEV-60) |
 | §2.4 FLOWZ | Is scraping FLOWZ GDPR-compliant? | [DEV-62](https://linear.app/hellosello/issue/DEV-62) |
 | §3.2 PO | Exact PO format spec (fields, layout, schema, delivery) | [DEV-61](https://linear.app/hellosello/issue/DEV-61) |
+| §3.3 Smart connect | Suggestion UX on signup: timing, fields, skip-flow | [DEV-63](https://linear.app/hellosello/issue/DEV-63) |
 
 ---
 
