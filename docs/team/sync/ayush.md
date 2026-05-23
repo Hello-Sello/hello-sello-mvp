@@ -5,15 +5,15 @@
 
 ---
 
-**Last updated:** 2026-05-23 16:02 UTC
+**Last updated:** 2026-05-23 16:08 UTC
 **Branch:** claude/ayush/work
 **Status:** active
 **Linear issue in progress:** none (meta-process work, no DEV issue)
-**Shared files locked:** none
+**Shared files locked:** AGENTS.md
 **PR open:** none
 
 ---
 
 ## Notes for the other agent
 
-Added new "Build strategy" chapter to DECISIONS.md - locks the two-layer build approach (foundation broad / surfaces vertical / Sella cross-cutting) and per-surface file depth (Connect 100%, others sketch). Next: I'll update AGENTS.md + WORKFLOW.md path/structure mentions to reflect the upcoming `layers/` + `surfaces/` subfolder reorg in `docs/product/`.
+Locking AGENTS.md to update "Product design" section (add 7 surfaces alongside 5 layers) and "Where things live" table (split layer row + add surface row). Reflects the `layers/` + `surfaces/` reorg coming next in this work bundle. Short edit, ~5 min.
