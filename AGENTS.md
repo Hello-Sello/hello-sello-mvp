@@ -20,9 +20,11 @@ Hello Sello is an **AI-native deal room for B2B** — a shared chat space betwee
 
 ---
 
-## Product design — 5 layers
+## Product design - 5 layers + 7 surfaces
 
-The product design is structured into 5 sequential layers — each builds on the previous:
+Two complementary views of the product:
+
+**5 horizontal layers** - cross-cutting design across the whole product:
 
 1. Users and Core Objects (`LAYER-1`)
 2. Product Surfaces (`LAYER-2`)
@@ -30,7 +32,19 @@ The product design is structured into 5 sequential layers — each builds on the
 4. Sella Behavior (`LAYER-4`)
 5. Inputs and Outputs (`LAYER-5`)
 
-Read the relevant `docs/product/LAYER-*.md` for detail and current status.
+Files: `docs/product/layers/LAYER-*.md`
+
+**7 vertical surfaces** - per-surface deep dives:
+
+1. Connect (100% depth, built first)
+2. Present (sketch)
+3. Buy (sketch)
+4. Sell (sketch)
+5. Discover (sketch)
+6. Grow (sketch)
+7. Sella (cross-cutting AI agent - present in every surface, not a sibling surface)
+
+Files: `docs/product/surfaces/<NAME>.md`. Build strategy locked in `docs/decisions/DECISIONS.md` "Build strategy" chapter.
 
 ---
 
@@ -38,7 +52,8 @@ Read the relevant `docs/product/LAYER-*.md` for detail and current status.
 
 | Need | Path |
 |---|---|
-| Product design layers | `docs/product/LAYER-*.md` |
+| Product design layers (horizontal) | `docs/product/layers/LAYER-*.md` |
+| Per-surface deep dives (vertical) | `docs/product/surfaces/<NAME>.md` |
 | Investor + customer pitch | `docs/product/PITCH.md` |
 | Domain glossary (term definitions) | `docs/architecture/CONTEXT.md` |
 | Engineering implications (running scratchpad) | `docs/architecture/ARCHITECTURE-NOTES.md` |
