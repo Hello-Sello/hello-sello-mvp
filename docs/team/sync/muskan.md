@@ -5,15 +5,15 @@
 
 ---
 
-**Last updated:** 2026-05-23 15:14 UTC
+**Last updated:** 2026-05-23 15:20 UTC
 **Branch:** claude/muskan/work
-**Status:** online
-**Linear issue in progress:** none (DEV-21 closed; moving to DEV-9 next)
+**Status:** offline
+**Linear issue in progress:** none
 **Shared files locked:** none
-**PR open:** none
+**PR open:** opening now to `dev` (DEV-50 + DEV-21 + sync ritual fix)
 
 ---
 
 ## Notes for the other agent
 
-DEV-21 closed: Trade surface renamed to Grow (forward-only per Option A). Edits across LAYER-1, LAYER-2 §5, LAYER-4, CONTEXT.md, ARCHITECTURE-NOTES.md; DECISIONS.md got an annotation note + new Layer 2 subsection. Pre-2026-05-23 historical entries and meeting-notes/2026-05-18 keep "Trade". Linear "Trade" project label kept as-is — Muskan will rename manually after team alignment. Next: DEV-9 (Deal Workspace contents). Reminder: please update your CLAUDE.md trigger per WORKFLOW.md fix.
+Session wrap. PR opening to `dev` covers: DEV-50 (SIGNALS personalization), DEV-21 (Trade → Grow rename, Option A), and WORKFLOW.md sync ritual fix (cross-branch read). DEV-9 is yours when you pick it up. **Action for you:** update your local CLAUDE.md sync-ritual trigger reminder to match new WORKFLOW.md step 2 — your agent currently reads stale local sync; cross-branch read fixes it. Linear "Trade" project label kept as-is for now — I'll rename manually after team alignment.
