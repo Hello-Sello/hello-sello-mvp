@@ -12,6 +12,8 @@ When the formal Architecture doc is written (post Layer 4 + 5), these become its
 - Deal Room is its **own persistent record per Basket**, with product-media references reused across rooms and an optional off-platform temporary share link. *(DEV-22 + DEV-52.)*
 - Deal Workspace is a **separate container record** spawned at Deal Card birth, holding chat thread / artifacts / members / stages / the card itself. *(Layer 1 §4.3.)*
 - The Relationship is **created at first P↔C pickup**; pre-pickup activity (docs, messages) lives in a temporary per-company pending inbox that migrates onto the Relationship on creation. *(DEV-7, DEV-8.)*
+- A confirmed deal carries **three IDs + a QR code**: Buyer's PO # (buyer field), Seller's SO # (seller field), and a Hello Sello Deal Number (auto-generated, pattern `HS-AAA##-BBB##-NNNNNNNN`) encoded in a QR. Order form is XML-readable for ERP / accounting / logistics. Short-code derivation rule TBD at build phase. *(DEV-26.)*
+- Deal birth is **directional**: OFFER (seller-initiated, sales order) or ORDER (buyer-initiated, purchase order); both need the other party's approval to confirm. *(DEV-26.)*
 
 ## Permissions / RBAC
 
@@ -20,6 +22,7 @@ When the formal Architecture doc is written (post Layer 4 + 5), these become its
 - The permission matrix is **Action × Group**, set per company at registration via green/red drag-drop UI. *(DEV-40.)*
 - The **approval workflow primitive** (Proposed → Approver sign-off → Applied) gates sensitive actions; first user is pricelist edits; single-approver for MVP. *(DEV-41.)*
 - The **change-log primitive** (content_type / content_id / user / timestamp / before-after diff) records every edit and delete on supported entities. *(DEV-41.)*
+- Approval-type Things capture **person + 2FA-authenticated login + name/email/account + acceptance + timestamp** as a legally binding e-signature record (DocuSign-in-a-nutshell); no third-party integration. *(DEV-29.)*
 
 ## Access policy
 
@@ -57,14 +60,18 @@ When the formal Architecture doc is written (post Layer 4 + 5), these become its
 ## State machines
 
 - Deal lifecycle: **Chat → Draft → Confirmed → Done**, with a Cancelled side-path post-confirmation; **Done fires when delivery note + invoice are both attached** (document-driven, no explicit click). *(Layer 1 §5 + Layer 3 §1 + DEV-25.)*
-- Stage lifecycle: **Pending → In Progress → Closed** (no Reopened); post-close work happens via appendices (documents, Things, approvals). *(Layer 3 §2 + DEV-33.)*
+- **Stages = template scaffolding only** (organize work by domain, provide default assignees for THINGS); not a UI primitive, no per-stage state column. *(DEV-24/30, supersedes prior stage-lifecycle entry.)*
+- **Milestones unify into THINGS** — one entity type. Pre-confirmation gates use a `blocks_confirmation` flag (the only blocking behavior in execution). *(DEV-24/30/28.)*
+- **No post-confirmation blocking** — open THINGS sit until done; urgency drivers (deadline on THING, deal priority, deal creation date, delivery date) are sort signals, not gates. *(DEV-24/30, supersedes prior "Required Milestones gate stage closure" entry.)*
+- **Deal ownership does not transfer** between stage-responsible people — deal is visible + actionable for the whole company; stage-responsibility is the default-assignee mechanism only. *(DEV-24.)*
+- **Post-confirmation has two flows: Amendment** (one side flags, other approves; audit-logged) and **Cancellation** (MVP = delete the deal; post-MVP = ERP cancel-if-possible via Odoo / CanCraft). Seller can always cancel unilaterally; buyer can only request a change with seller approval. *(DEV-23.)*
 - Thing lifecycle: **Open → Done** (side path: Dismissed); supports redirect/reassign and threaded discussion. *(Layer 3 §7.)*
-- Required Milestones gate stage closure; tickable only by assignee or creator; every tick logged for audit. *(Layer 3 §3.)*
+- Tickable only by assignee or creator; every tick logged for audit. *(Layer 3 §7.)*
 - Documents attached to a deal (delivery notes, invoices) **can amend deal data** (volumes, prices, names) — Sella OCR / AI extracts and writes the amendment. *(DEV-25 + DEV-36.)*
 
 ## Notifications
 
-- Stage closures and post-close deal-data changes appear as a **passive thin status line** in both the P↔P chat where the change was processed and the C↔C workspace chat — no push notification. *(DEV-33, 2026-05-20.)*
+- Post-confirmation deal-data changes (e.g., DEV-36 OCR auto-amendments) appear as a **passive thin status line** in both the P↔P chat where the change was processed and the C↔C workspace chat — no push notification. *Stage-closure half of original DEV-33 lock is superseded under flat-THINGS doctrine: stages have no closure UI events.* *(DEV-33, partially superseded 2026-05-22 by DEV-24/30.)*
 
 ## Payments
 
