@@ -173,6 +173,22 @@ Both of us run Claude Code with the same skills. Two agents can plausibly edit t
 
 ---
 
+## Session wrap-up — end-of-session checklist
+
+When the user says "wrap up" or signals the session is ending, run this checklist before going offline. Both agents follow the same protocol.
+
+1. **Decisions** made this session → propose mode → [`docs/decisions/DECISIONS.md`](../decisions/DECISIONS.md)
+2. **Doubts** surfaced → `/track-doubt` → Linear
+3. **Domain terms** clarified → `/grill-with-docs` → [`docs/architecture/CONTEXT.md`](../architecture/CONTEXT.md)
+4. **Architecture insights** → [`docs/architecture/ARCHITECTURE-NOTES.md`](../architecture/ARCHITECTURE-NOTES.md) for scratchpad capture; `docs/architecture/adr/` via `/grill-with-docs` for load-bearing decisions
+5. **Update your personal CLAUDE.md** — overwrite "Last session" + "What's next" so the next session resumes with full context
+6. **Update your sync file** ([`sync/ayush.md`](sync/ayush.md) or [`sync/muskan.md`](sync/muskan.md)): Status → `idle` or `offline`, clear any remaining locks
+7. **Commit + push outstanding work** — the sync file always pushes; personal CLAUDE.md is gitignored and stays local
+
+Propose-mode protocols (DECISIONS.md edits, ARCHITECTURE-NOTES.md additions per "Issue closure" rule above) still apply during wrap-up — don't batch-write without asking.
+
+---
+
 ## PR review
 
 - **Default reviewer is the other person.**
