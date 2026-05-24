@@ -37,7 +37,7 @@ When the formal Architecture doc is written (post Layer 4 + 5), these become its
 
 ## Sella behavior
 
-- Deal-Sella **generates back-of-card SIGNALS**; compute model (on-demand vs precomputed) and storage model (derived view vs materialized) are open. *(DEV-5, DEV-48, DEV-49.)*
+- Deal-Sella **generates back-of-card SIGNALS**. MVP signals (deal creation date, COA expiry math) computed **live from underlying tables — no materialized storage**. Phase 2 signals (relationship-history, cross-deal, ML) added as platform data accumulates; compute/storage model decided per-signal at that point. Signals table designed **signal-type-keyed (rows, not columns)** with compute origin hidden behind read interface — any signal can be promoted live → cached without migration. *(DEV-5, DEV-48, DEV-49; LOCKED 2026-05-24.)*
 - First-contact Sella runs a **platform-wide workflow framework** with per-company customizable qualifying-questions and document-request lists. *(DEV-7.)*
 - Multi-Sella architecture (orchestrator vs tool-use vs graph; framework choice) is **open and architecturally foundational**. *(Layer 1 §10 + DEV-11.)*
 - Sella's base voice = **Schranner-inspired mediator style** (calm, structured, balanced, solution-oriented, collaborative); each specialist inherits the base with role-fitted shifts. *(DEV-46, 2026-05-20.)*

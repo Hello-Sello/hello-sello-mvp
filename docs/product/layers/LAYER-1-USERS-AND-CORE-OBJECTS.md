@@ -124,13 +124,16 @@ The same underlying record carries products / volumes / prices / discounts / pay
 
 **Front of the card:** the deal facts. Products, volumes, prices, discounts, free delivery, payment terms, notes.
 
-**Back of the card (flip):** **SIGNALS** — Deal-Sella-generated insights about the deal. Starting MVP set (extensible):
+**Back of the card (flip):** **SIGNALS** — Deal-Sella-generated insights about the deal.
 
+**MVP set (live-computed from underlying tables):**
 1. When was the deal created
+3. Product expiry risk (COA expires in X days)
+
+**Phase 2 (added as platform data / batch tracking accumulates):**
 2. Typical close time between these two companies (fallback to platform-wide benchmark if no A↔B history yet)
-3. Product expiry risk
 4. Repeat buy/sell pattern (suggest stocking / re-ordering for business continuity)
-5. Low product availability (suggest stocking more)
+5. Low product availability (suggest stocking more) — *depends on batch allocation landing (LAYER-2 §105)*
 6. Logistics-cost bundling opportunity
 7. Collaborative business insight (Choco-AI-inspired)
 8. Other AI suggestions (extensible)
@@ -139,7 +142,7 @@ The same underlying record carries products / volumes / prices / discounts / pay
 - **Flip** button (top-left) → turn to back (SIGNALS).
 - **Expand** button (top-right) → open the **Deal Room** (full-page floating customer-presentation view — see Section 4.4).
 
-**Compute model and storage model** of SIGNALS are open engineering questions — tracked as [DEV-48](https://linear.app/hellosello/issue/DEV-48), [DEV-49](https://linear.app/hellosello/issue/DEV-49).
+**Compute & storage model (LOCKED 2026-05-24, [DEV-48](https://linear.app/hellosello/issue/DEV-48) + [DEV-49](https://linear.app/hellosello/issue/DEV-49)):** MVP signals computed live (on-demand) from underlying tables — no materialized storage, no cache infrastructure. Phase 2 signals layered in as platform data grows; compute/storage model for each revisited at that point based on real usage data. **Signals storage designed for extensibility** — signal-type-keyed rows (not column-per-signal) and compute origin hidden behind a stable read interface, so any signal can be promoted live → cached later without schema migration.
 
 **Per-viewer personalization (LOCKED 2026-05-23, [DEV-50](https://linear.app/hellosello/issue/DEV-50/personalize-back-of-card-signals-per-viewer-premium-feature)):** MVP = one neutral insight per Deal Card, always filled (Deal-Sella generates per deal), shown identically to both buyer and seller — no personalization, no premium gating. Post-MVP = two viewer-aware slots (buyer-flavored + seller-flavored), premium-tier feature; free users see a locked placeholder. How Deal-Sella infers viewer role is deferred (separate follow-up issue).
 
