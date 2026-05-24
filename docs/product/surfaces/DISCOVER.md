@@ -35,6 +35,6 @@ Find new suppliers globally, browse pre-populated companies (FLOWZ-style), and s
 
 ## References to LAYER docs
 
-- `../layers/LAYER-1-USERS-AND-CORE-OBJECTS.md` §12 (FLOWZ-style pre-populated companies)
+- `../layers/LAYER-1-USERS-AND-CORE-OBJECTS.md` §13 (FLOWZ-style pre-populated companies)
 - `../layers/LAYER-2-SURFACES.md` §5 (Discover in Big 7)
 - `../layers/LAYER-5-INPUTS-AND-OUTPUTS.md` (FLOWZ scrape = MVP contingent on GDPR; no auto-connect on signup)

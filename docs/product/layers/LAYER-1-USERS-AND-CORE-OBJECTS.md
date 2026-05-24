@@ -28,6 +28,8 @@
 
 > **DEV-3 — closed (2026-05-24).** Contact-import GDPR scope at account setup: **Option A — metadata only** (sender / recipient / timestamp / frequency). No subject lines, no email bodies, no third-party enrichment vendor. See DECISIONS.md Layer 1 walkthrough locks 2026-05-24 for full rationale; ARCHITECTURE-NOTES.md "Onboarding / data import" for engineering constraints.
 
+> **DEV-38 — closed (2026-05-24).** Every company must be **license-verified by the Hello Sello team** before they can interact with other companies. Pre-verification accounts are **locked out** with a wait dialog. Verification is one-time at MVP. See §12 (Safety & compliance posture).
+
 ---
 
 ## 2. People (roles) inside a company
@@ -515,7 +517,32 @@ Below is the canonical access matrix — sourced from the Chat project descripti
 
 ---
 
-## 12. What is deferred (post-MVP)
+## 12. Safety & compliance posture (MVP)
+
+> **DEV-38 — closed (2026-05-24).** MVP posture = **minimum-viable safety**: KYC at onboarding + audit log + admin suspension. No platform-side detection.
+
+**Stance:** the platform is a dumb pipe with a gated door. Hello Sello prevents bad actors at entry via license verification, retains a full audit trail, and gives platform admins suspension power. No automated detection of illegal activity in MVP.
+
+**Locked:**
+
+- **KYC at onboarding** — every company uploads a license / pharmacy certificate. **Hello Sello team manually verifies.** No automation, no third-party vendor.
+- **Pre-verification state: fully locked out.** Wait dialog: *"Verification pending — please reach out to the Hello Sello team."* Cannot access any platform feature.
+- **Verification cadence: one-time at MVP.** Re-verification post-MVP.
+- **Suspension: Hello Sello platform admins only.** Company superadmins cannot self-suspend.
+- **Hello Sello platform admin** = platform-side actor (not a company role). Powers: verify onboarding, suspend companies, view cross-company audit log.
+- **Sella does not detect illegal activity** in MVP (consistent with LAYER-4 §379).
+- **Platform does not validate compliance content** (consistent with LAYER-5 §52 — COA/COB stored, not parsed).
+
+**Roadmap:**
+
+| Phase | What's added |
+|---|---|
+| Phase 2 (post-MVP, light detection) | Sella flags off-platform-deal language ("let's take this off-platform"); flags missing-license deal attempts; manual review queue. Annual license re-upload. |
+| Phase 3 (post-MVP, full stack) | Sanctions screening (OFAC/EU) at onboarding + periodic; license-license matching at deal birth; cross-deal pattern detection (money laundering / structuring); Compliance-Sella specialist activated. |
+
+---
+
+## 13. What is deferred (post-MVP)
 
 1. **Logistics partners** as their own company type.
 2. **Temporary view link** for outsiders (time-limited, scoped to one deal).
@@ -532,7 +559,7 @@ Below is the canonical access matrix — sourced from the Chat project descripti
 
 ---
 
-## 13. Open questions still to brainstorm (not blockers for Layer 1)
+## 14. Open questions still to brainstorm (not blockers for Layer 1)
 
 - **Section 4.3** — What exactly gets created inside a Deal Workspace, and how should it look? — [DEV-9](https://linear.app/hellosello/issue/DEV-9/what-exactly-gets-created-inside-a-deal-workspace-and-how-should-it)
 - **Section 10** — How should the multi-Sella architecture be designed: orchestrator pattern, tool use, agent framework, or direct SDK? — [DEV-11](https://linear.app/hellosello/issue/DEV-11/how-should-the-multi-sella-architecture-be-designed-orchestrator)
@@ -542,7 +569,7 @@ Below is the canonical access matrix — sourced from the Chat project descripti
 
 ---
 
-## 14. Quick glossary
+## 15. Quick glossary
 
 | Term | Meaning |
 |---|---|
