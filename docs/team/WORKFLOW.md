@@ -54,6 +54,26 @@ Either of us can pick up either area when the queue calls for it.
 
 ---
 
+## Issue closure — capture architecture implications
+
+Before moving any Linear issue to `Done`, scan the locked decision for architecture implications:
+
+- Does it introduce/change a data structure, schema, state machine, integration boundary, or extensibility hook?
+- Does it constrain or enable future builders (e.g., "must store as config not code")?
+
+If yes:
+
+1. **Propose** a one-sentence entry for [`docs/architecture/ARCHITECTURE-NOTES.md`](../architecture/ARCHITECTURE-NOTES.md) matching existing style — one bullet, source-tagged `*(DEV-XX.)*`.
+2. **Ask explicit permission** before writing (propose mode).
+3. **Land** it in the appropriate section (Core entities / Permissions / State machines / etc.).
+4. **Then** mark the issue Done.
+
+Don't skip for "small" decisions — extensibility hooks and data-shape choices accumulate quietly and are hardest to retrofit later.
+
+(Load-bearing decisions go in `docs/architecture/adr/` as a full ADR via `/grill-with-docs` — this rule is for the lighter scratchpad capture.)
+
+---
+
 ## Shared files — fast PR culture
 
 Some files are co-owned. They conflict if we both edit them at the same time.

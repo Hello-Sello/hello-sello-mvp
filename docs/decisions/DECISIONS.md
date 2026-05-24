@@ -286,7 +286,7 @@ The 9-phase development plan (Idea → Research → Prototype → PRD → Archit
 - **Stage lifecycle: Pending → In Progress → Closed → Reopened.** Four states. Reopened lets a closed stage come back if downstream issues surface. *Why:* real-world deals don't move strictly forward; the Reopened state preserves an audit trail of issues without losing the prior closure.
 - **Stages can run in parallel; sequential-vs-parallel is user-configurable per deal.** The dealmakers decide which stages run concurrently. *Why:* not all deals are linear — finance and logistics can often run in parallel; rigidity would create artificial blockers.
 - **A stage closes when all required milestones in it are completed.** Optional milestones are carried over and don't block closure. *Why:* required gates are the contract; optional items are nice-to-haves that shouldn't halt progress.
-- **Deals are born with a default set of stages, fully customizable.** User can add, remove, reorder. (Default set TBD — tied to template scope question, DEV-31.) *Why:* zero-state friction matters; users shouldn't face a blank canvas, but should be free to reshape.
+- **Deals are born with a default set of stages, fully customizable.** User can add, remove, reorder. MVP default = hardcoded template `cannabis_wholesale_v1` (finance/logistics/delivery + default THINGS per stage). *Why:* zero-state friction matters; users shouldn't face a blank canvas, but should be free to reshape. *(Default-set question resolved by DEV-31, 2026-05-23.)*
 - **The deal has a "deal owner" who stays accountable throughout the deal.** The deal owner manually picks the responsible team/person for each stage. *Why:* clean accountability — one throat to choke; stage-responsible people act on their portion without taking over the deal. *(Partially resolves DEV-24: ownership doesn't pass between stages. DEV-24 stays open for remaining nuances — Things-list placement, etc.)*
 
 ### Walkthrough locks 2026-05-20 — execution, delivery, payment, no-stage-reopen
@@ -309,6 +309,25 @@ The 9-phase development plan (Idea → Research → Prototype → PRD → Archit
   *Supersedes (2026-05-20, DEV-33):* "Stage lifecycle: Pending → In Progress → Closed" — stages have no UI lifecycle anymore. The "stage closure" half of the passive-thin-status-line lock is also superseded (stages don't close as UI events); the post-confirmation deal-data-change status-line pattern for DEV-36 OCR auto-amendments is unaffected and still applies.
 
   *Side-effect closures:* **DEV-34** (stage UI Kanban vs timeline) — no UI for stages, question dissolves. **DEV-28** (milestones ↔ THINGS) — they're the same primitive.
+
+### Walkthrough locks 2026-05-23 — stage template + mid-deal THING-add (DEV-31, DEV-32)
+
+- **(2026-05-23, DEV-31) MVP stage template = `cannabis_wholesale_v1` (single hardcoded platform default).** Stages: finance, logistics, delivery. Each stage ships with default THINGS pre-loaded at deal birth:
+  - Finance: "Send invoice", "Confirm payment terms (e.g., Net 60)"
+  - Logistics: "Confirm pickup date", "Verify COA matches batch", "BfArM import authorization on file (if cross-border)", "Confirm narcotic-grade transport carrier"
+  - Delivery: "Upload delivery note", "Upload final invoice"
+
+  Fully editable per-deal after birth (stages, THINGS, responsibles). No template-management UI in MVP.
+
+  *Why default THINGS in MVP:* low effort (data structure, no new UI; reuses existing THINGS primitive from DEV-30), high value (day-1 deal populated not blank; demonstrates THINGS primitive immediately; Sella has mediation material from minute one).
+
+  *Compliance-as-stage rejected for MVP* — distributed across existing stages (mostly Logistics) for simplicity. COA-batch verification stays prominent in Logistics (Marcel + Victor flagged COA as the cannabis-specific critical doc).
+
+  *Architecture — build for extension:* template stored as data/config (not hardcoded in business logic); schema supports N templates (`{id, industry, stages[], default_things_per_stage{}}`) even though MVP ships one row; selection logic `getTemplate(deal)` exists with extension shape; company-override extension point present in data model (`company.template_overrides`) without admin UI in MVP.
+
+  *Post-MVP roadmap (in order):* (1) multiple platform templates if HS expands beyond cannabis wholesale; (2) company-wide template curation UI (admin clones-and-tweaks default); (3) Sella-learns-templates — Sella proposes default-THING additions based on company's actual patterns over N deals.
+
+- **(2026-05-23, DEV-32) Mid-deal THING-add → inline notification only, no confirmation.** Under DEV-24/30 doctrine (stages = scaffolding, not UI events), "adding a stage mid-deal" re-frames as "adding a THING in a domain not previously represented." Lock: when one party adds a THING (in any stage/domain) mid-deal, the other party receives the standard inline notification in the deal workspace (per DEV-30 in-app notification model); no confirmation required; aligns with DEV-30 "any-party-can-add" THINGS lock; audit trail logged per DEV-30 standard. If the THING falls in a domain with no stage-responsible person yet, deal owner picks the responsible at that moment (same mechanism as deal-birth assignment). *Why:* matches the existing flat-THINGS doctrine — THINGS are universally any-party-addable; new domain/stage emergence is absorbed via existing default-assignee mechanism.
 
 ---
 
