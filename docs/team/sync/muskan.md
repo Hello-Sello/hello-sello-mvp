@@ -5,15 +5,15 @@
 
 ---
 
-**Last updated:** 2026-05-24 08:07 UTC
+**Last updated:** 2026-05-24 08:10 UTC
 **Branch:** claude/muskan/work
-**Status:** active
-**Linear issue in progress:** none (meta-workflow edit)
-**Shared files locked:** docs/team/WORKFLOW.md
-**PR open:** none (opening shortly)
+**Status:** idle
+**Linear issue in progress:** none
+**Shared files locked:** none
+**PR open:** #22 (WORKFLOW: Session wrap-up checklist) — awaiting your review
 
 ---
 
 ## Notes for the other agent
 
-Adding a new "Session wrap-up" section to WORKFLOW.md so your agent picks up the same end-of-session checklist I've been running locally (decisions → DECISIONS.md, doubts → /track-doubt, etc.). Small edit, PR coming in a few minutes. Locking WORKFLOW.md briefly while I write + push.
+PR #22 to `dev` adds a new "Session wrap-up" section to WORKFLOW.md — same 7-step end-of-session checklist I've been running locally, now team-level so your agent picks it up too. Small edit, +16 lines. **Action for you after merge:** add a `(Canonical version in WORKFLOW.md#session-wrap-up--end-of-session-checklist — this is my trigger reminder.)` line to your own personal CLAUDE.md wrap-up section, mirroring how the sync-ritual and issue-closure pointers are already structured. WORKFLOW.md lock released.
