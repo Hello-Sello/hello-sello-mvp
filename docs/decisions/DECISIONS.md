@@ -142,6 +142,10 @@ Each entry: **What was decided** → **Why** (the reasoning at the time).
 
 - **(2026-05-23) Back-of-card SIGNALS personalization (DEV-50).** MVP ships one neutral insight per Deal Card — always filled (Deal-Sella generates per deal), shown identically to both buyer and seller. No personalization, no premium gating in MVP. Post-MVP adds two viewer-aware slots (buyer-flavored + seller-flavored) as a premium-tier feature; free users see a locked placeholder ("Unlock by going premium"). How Deal-Sella infers viewer role (buyer vs seller) is deferred to a follow-up issue. *Why:* a single neutral insight aligns with Deal-Sella's structural neutrality (Layer 1 §10.2 / Layer 4 §3) and lets generation quality be validated before splitting per viewer. Post-MVP personalization is where the premium upsell lives because it's the variant that materially shifts utility per audience.
 
+### Walkthrough locks 2026-05-24 — contact import GDPR (DEV-3)
+
+- **(2026-05-24, DEV-3) Contact import GDPR scope = Option A (metadata only) for MVP.** The email-import pipeline reads ONLY: sender (contact's email + display name), recipient (the user themselves), timestamp (when emails were exchanged), and frequency (count of emails per contact). **No subject lines, no email bodies, no third-party enrichment vendor.** Per-contact storage schema: `{email, display_name, first_seen, last_seen, email_count}` — no conversation content stored. **API scope:** Gmail `gmail.metadata` (no body access); Outlook equivalent restricted scope; Google security review / app verification required pre-launch (~2-4 weeks). *Why:* lowest GDPR/DSGVO + ePrivacy risk surface. Cannabis-pharma is a regulated, lawyer-heavy vertical (German pharmacies, BfArM oversight) — Options B and C carry materially higher risk that isn't justified pre-evidence. Validate workflow on Option A first; expand later when phase, risk appetite, and customer evidence justify it. *Post-MVP roadmap:* **Option B** (+ subject line + EU enrichment vendor for title/phone/company per contact; requires explicit user consent); **Option C** (+ full email bodies for pre-populated chat history; requires explicit user consent + schema extension + heavier review). Unlikely to ship without strong customer-evidence-backed business case.
+
 ---
 
 ## Layer 2 — Surfaces (IN PROGRESS)
@@ -210,6 +214,39 @@ The 9-phase development plan (Idea → Research → Prototype → PRD → Archit
 ### Trade → Grow rename (locked 2026-05-23, DEV-21)
 
 - **(2026-05-23) Trade surface renamed to Grow (DEV-21).** Single-word verb matching the surface naming convention (Connect / Present / Sell / Buy / Grow + Discover). Forward-looking docs updated (LAYER-1, LAYER-2 §5, LAYER-4 §5 routing + 2026-05-22 locked decision, CONTEXT.md, ARCHITECTURE-NOTES.md). DECISIONS.md historical entries above and meeting notes from 2026-05-18 retain "Trade" as the original name (annotation added at top of Big 7 framework section). Linear "Trade" project label kept as-is — rename pending team alignment. *Why:* "Trade" was a placeholder; "Grow" captures the surface's purpose — high-level analytics + business control + viewing all deals over time + future geographic ops — which together represent how the C-suite grows the business.
+
+### Walkthrough locks 2026-05-24 — contact categorization (DEV-17)
+
+- **(2026-05-24, DEV-17) Imported contact categorization scheme locked for MVP — Option A "minimal" (built on DEV-3 metadata-only constraint).**
+
+  **MVP scheme:**
+
+  1. **Manual role label per contact** (user-set; default `Unknown`). Suggested enum (FINAL AT BUILD PHASE):
+     - `Supplier` — cultivators, manufacturers, upstream raw-material sources
+     - `Customer` — pharmacies, downstream end-buyers
+     - `Partner` — logistics (narcotic-grade carriers), lab/QA (COA providers), regulators (BfArM, customs, GACP/GMP auditors), compliance consultants — catch-all for service-side relationships
+     - `Other` — anything not fitting (e.g., internal contacts that slipped through import)
+     - `Unknown` — default until user labels
+
+     No auto-inference. User confirms/adjusts per-contact.
+
+  2. **Auto-derived activity bucket** (computed from DEV-3 metadata: `email_count` + `last_seen`). Thresholds suggested but tunable at build:
+     - **Active** — last contact ≤ 30 days AND `email_count` > 5
+     - **Occasional** — last contact ≤ 90 days
+     - **Dormant** — last contact > 90 days
+
+     Used for sort/filter in Connect surface; visible on contact card.
+
+  3. **No free-text tags in MVP.**
+  4. **No AI inference / Sella suggestions in MVP.**
+
+  *Open at build phase (suggested, not locked):* whether to split `Partner` into Logistics / Lab / Regulator specifics; whether to add `Wholesaler` for peer-trading distributors distinct from `Supplier`; activity bucket thresholds may need real-usage tuning; whether `Distributor` itself is a separate role (MVP company types per Layer 1 §1 are Distributors + Pharmacies — overlap with `Supplier` vs `Customer` depends on user's own role).
+
+  *Why minimal:* metadata-only signals (DEV-3) make confident AI inference unreliable; default-Unknown + lazy manual labeling avoids the wrong-label trust erosion. Activity bucket gives immediate value (sort by recency) without setup pressure. Cannabis B2B CRMs (Distru, LeafLink, Apex Trading) tend toward lifecycle categorization (Lead/Prospect/Customer); HS's role-type fits the "imported contact = known business relationship" framing better — these aren't sales-funnel leads.
+
+  *Architecture — schema extension shape:* contact record gains `role` enum (default `unknown`) + `activity_bucket` derived (computed live or cached, build-phase decision). Extension hooks present for post-MVP: `tags[]` (array of free-text user tags) and `sella_suggested_role` (nullable enum for AI suggestions) — schemas in place, no UI/inference in MVP.
+
+  *Post-MVP roadmap (in order):* (1) free-text tags UI exposure; (2) Sella-suggested-role inference with explicit confirm/dismiss (never auto-apply); (3) role enum expansion if usage shows need; (4) custom user-defined role enums per company.
 
 ---
 
