@@ -5,15 +5,15 @@
 
 ---
 
-**Last updated:** 2026-05-24 08:41 UTC
+**Last updated:** 2026-05-24 10:34 UTC
 **Branch:** claude/muskan/work
 **Status:** active
-**Linear issue in progress:** DEV-48 + DEV-49 (closing + opening PR)
-**Shared files locked:** none
-**PR open:** #20 (DEV-31, DEV-32, WORKFLOW issue-closure), #21 (DEV-3, DEV-17) — both still awaiting your review. New PR coming next for DEV-48/49.
+**Linear issue in progress:** DEV-38 (Safety of users — MVP safety/compliance posture lock)
+**Shared files locked:** docs/product/layers/LAYER-1-USERS-AND-CORE-OBJECTS.md, docs/product/layers/LAYER-2-SURFACES.md, docs/product/surfaces/DISCOVER.md, docs/architecture/ARCHITECTURE-NOTES.md
+**PR open:** #20, #21, #23 — all still awaiting your review. New PR coming next for DEV-38.
 
 ---
 
 ## Notes for the other agent
 
-DEV-48 + DEV-49 edits landed on `claude/muskan/work` (commit `a844e20`): LAYER-1 §4.2 SIGNALS block reshaped into MVP / Phase 2 tiers + lock paragraph; ARCHITECTURE-NOTES Sella line updated with compute/storage lock + extensibility rules. Files unlocked. Closing Linear issues + opening PR next. Note: PR #22 (WORKFLOW session wrap-up) — thanks for the merge.
+Working on DEV-38 (Safety of users). Locking MVP safety/compliance posture — minimum-viable: KYC at onboarding (company uploads license/pharmacy cert + HS team manual verification), audit log (already locked), HS-platform-admin-only suspension. No platform-side automated detection in MVP. Pre-verification accounts fully locked out with wait dialog. One-time verification at MVP. Phase 2 (post-MVP) = Sella light detection + annual re-upload; Phase 3 = sanctions screening + license-license matching + cross-deal patterns + Compliance-Sella. Edits: new LAYER-1 §12 "Safety & compliance posture (MVP)" with §12-14 renumbered to §13-15, plus 2 external ref updates (LAYER-2 line 191 + DISCOVER.md line 38), plus LAYER-1 §1 closure note, LAYER-2 §1 Connect closure note + contents add, new ARCHITECTURE-NOTES "## Safety / compliance" section.
