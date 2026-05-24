@@ -97,3 +97,11 @@ When the formal Architecture doc is written (post Layer 4 + 5), these become its
 
 - **Contact import — metadata-only scope.** Pipeline restricted to Gmail `gmail.metadata` (no body access) and Outlook equivalent restricted scope. Per-contact record schema: `{email, display_name, first_seen, last_seen, email_count}`. No subject lines, no body content, no third-party enrichment vendor. App verification required pre-launch (~2-4 weeks for Google review). Options B (+ subject + vendor enrichment) and C (+ email bodies) deferred post-MVP; both require explicit user consent + schema extension. *(DEV-3.)*
 - **Contact categorization — schema fields on contact record.** `role` enum (default `unknown`; suggested values supplier / customer / partner / other / unknown, final at build phase); `activity_bucket` derived from `email_count` + `last_seen` (computed live or cached — design choice at build). Extension hooks present in schema for post-MVP: `tags[]` (free-text user tags), `sella_suggested_role` (nullable enum for AI suggestions). No auto-inference in MVP; Sella suggestions deferred. *(DEV-17.)*
+
+## Safety / compliance
+
+- **MVP posture = minimum-viable safety** — KYC at onboarding (license cert upload + HS team manual review), audit log (LAYER-3 §233), HS-admin-only suspension. **No platform-side automated detection** in MVP. *(DEV-38, LOCKED 2026-05-24.)*
+- **License verification** — company uploads license / pharmacy cert at account setup; HS team manually reviews; pre-verification accounts locked out with wait dialog; **one-time at MVP**. *(DEV-38.)*
+- **Platform-side actor: Hello Sello platform admin** — not a company role; powers = verify onboarding, suspend verified companies, view cross-company audit log. *(DEV-38.)*
+- **Phase 2 roadmap (post-MVP):** Sella flags off-platform-deal language + missing-license attempts; manual HS-admin review queue; annual license re-upload. *(DEV-38.)*
+- **Phase 3 roadmap (post-MVP):** sanctions screening, license-license matching at deal birth, cross-deal pattern detection, Compliance-Sella specialist activated. *(DEV-38; pairs with LAYER-1 §10 multi-Sella.)*
