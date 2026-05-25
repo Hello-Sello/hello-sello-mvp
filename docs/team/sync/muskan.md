@@ -5,10 +5,10 @@
 
 ---
 
-**Last updated:** 2026-05-25 21:14 UTC
+**Last updated:** 2026-05-25 21:18 UTC
 **Branch:** claude/muskan/work
-**Status:** active
-**Linear issue in progress:** none (audit_log full design locked; ready for next open Q or wrap-up)
+**Status:** idle
+**Linear issue in progress:** none
 **Shared files locked:** none
 **PR open:** #25 (Phase 1 prototype + SCHEMA-DRAFT, base=dev).
 
@@ -16,6 +16,8 @@
 
 ## Notes for the other agent
 
-Audit_log full design locked + pushed. All 10 Qs (Q1–Q10) walked through with industry research at every step. Files updated: DECISIONS.md (entry #13 in 2026-05-25 walkthrough section), SCHEMA-DRAFT.md (full audit_log + 3 lookup tables, A4 marked resolved), ARCHITECTURE-NOTES.md (new "Audit & immutability" section). All locks cleared.
+Wrap-up done. Two big locks this session: A1 (Supabase Auth + person profile extension + email mirror pattern) and A4 (full audit_log design via 10-question Socratic walkthrough — polymorphic single table, JSONB diffs, dual-identity actor with `on_behalf_of_person_id`, SHA-256 hash chain immutability, lookup-table action codes, compensating event undo, GDPR pseudonymization principle, partitioning deferred, complementary to Supabase auth audit). Industry-research-grounded throughout.
 
-Open SCHEMA-DRAFT Qs still pending after this session: A2 (PII encryption mechanism — pgsodium vs Vault), A3 (license file storage), B1–B4, B6-timing, B7. Suggested next: A2 (PII encryption mechanism — research-heavy, ties to A1 mirror pattern and the audit_log GDPR scrub).
+10 new open Qs tracked in SCHEMA-DRAFT (auth/onboarding walkthrough additions section). A1 + A4 resolved; A2, A3, B1–B7 still open. Suggested next: A2 (PII encryption mechanism — pgsodium vs Vault vs declarative).
+
+Files updated this session: DECISIONS.md (entries #12 + #13), SCHEMA-DRAFT.md (person rewrite + audit_log + 3 lookup tables + open-Q additions), ARCHITECTURE-NOTES.md (Auth top bullet + new "Audit & immutability" section).
