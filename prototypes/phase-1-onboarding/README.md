@@ -48,7 +48,10 @@ ES modules require serving over HTTP — opening `file://` won't work.
 |---|---|
 | Hard-wizard pattern (vs just-in-time or hybrid) | **LOCKED** 2026-05-24 — variant comparison done in earlier iteration |
 | No Sell/Buy/Both selection at company setup | **LOCKED** 2026-05-24 — every user can be either at any time |
-| License upload at company setup, skippable | **LOCKED** 2026-05-24 — verification deferred to async review |
+| License upload at company setup | **LOCKED** 2026-05-24; **revised 2026-05-25 — now REQUIRED**, not skippable. See `HANDOFF.md` "Updates 2026-05-25" |
+| Gate model | **LOCKED 2026-05-25** — split-gate (internal setup allowed during pending; external actions hard-locked). See `HANDOFF.md` "Updates 2026-05-25" |
+| Path B (join existing company) | **LOCKED 2026-05-25** — new screen after sign-in, request routes to company Superadmin |
+| Group / Permission matrix placement | **LOCKED 2026-05-25** — 4 templated Groups (skippable) in onboarding; full Action × Group toggle matrix in Settings → Team & Permissions |
 | 6 in-app wizard steps (company → discover) | Open for iteration |
 | Contact import flow as a wizard step | Open — could move to Settings post-MVP |
 

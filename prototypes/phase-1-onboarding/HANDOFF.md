@@ -6,6 +6,22 @@
 
 ---
 
+## Updates 2026-05-25 (overrides earlier locks — build to these)
+
+After a follow-up walkthrough of the auth/onboarding flow, the following decisions in this document are superseded or extended. **Build to these, not to the original entries below.** Full rationale: `docs/decisions/DECISIONS.md` "Walkthrough locks 2026-05-25 — onboarding & authentication flow."
+
+| What changed | New state | Affects |
+|---|---|---|
+| **License upload** | **REQUIRED** at company setup (not skippable). One file primary, multiple supported via "add another." Optional free-text description. Re-upload allowed during pending review. Generic copy: *"Upload your license or certificate."* PDF + image formats (JPG / PNG / HEIC). | Lock #4 (was "optional") |
+| **Gate model — explicit framing** | **Split-gate.** Internal setup (profile, company details, team, contacts, settings) is allowed while pending. External actions (Connect, Discover, Receive P↔C, outbound-as-email, deal creation, all Co↔Co) are hard-locked until HS team verifies. | Sharpens lock #7's banner-locks-external-actions wording |
+| **NEW screen — "Existing or new company?"** | After sign-in (before company setup), every user sees a question screen: *"Do you have a company on Hello Sello already?"* → [New company] / [Join existing]. Personal email + company email both see this. If domain matches a verified company, a soft auto-suggest banner appears above (*"Looks like you're from CanCraft — request to join?"*); manual choice always remains. | New — not in original flow |
+| **NEW path — Path B (join existing)** | "Join existing" → user selects a company by name → join-request routes to that company's Superadmin → admin approves → user enters platform. No license upload, no HS team review for Path B users. | New — original flow only had "create new company" |
+| **Group setup step** | Stays as currently designed (4 templated checkboxes + skip). Full **Action × Group toggle matrix lives in Settings → Team & Permissions**, NOT in onboarding. | Refines step 9 |
+| **v0 scope reminder** | One user per company in v0 (Marcel + Victor as test Superadmins). Group setup will almost always be skipped by solo Superadmins. Path B is coded but unexercised by default — testable with a third user. | Scope note |
+| **HS team review surface** | In-HS admin route `/admin/verifications` (HS-team `person_id` allowlist). Reject requires free-text reason → emailed to user with resubmit link. 12-hour SLA per "Application submitted" copy. | New — not previously specified |
+
+---
+
 ## Purpose of the prototype
 
 Answered two product questions:
@@ -24,7 +40,7 @@ Answered two product questions:
 | 1 | **Modal-sequence onboarding** with skip-each-step | Forces user to see each item once; skip keeps friction low; checklist on home gives them back |
 | 2 | **Dark theme** for auth screens (signup, email verify, signin); **light theme** in-app | Auth is pre-platform; in-app is where users live |
 | 3 | **No Sell/Buy/Both selection** at company setup | Every user can be either at any time; role is per-deal not per-company |
-| 4 | **License upload is optional** at company setup | Verification can happen async or in person |
+| 4 | **License upload is REQUIRED** at company setup *(updated 2026-05-25 — was "optional"; see "Updates 2026-05-25" at top)* | Verification queue runs in parallel; license is the gate's input artifact |
 | 5 | **Home page** = teammate's design (Sella chat interface) | Out of scope for this handoff; we only need a placeholder |
 | 6 | **Checklist on home** = top section, LangSmith-style | Dismissible (×); shows progress as `n/4` |
 | 7 | **Verification banner** persistent on home until verified | Sets clear expectation; locks external actions |
