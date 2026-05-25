@@ -5,19 +5,17 @@
 
 ---
 
-**Last updated:** 2026-05-25 17:58 UTC
+**Last updated:** 2026-05-25 21:06 UTC
 **Branch:** claude/muskan/work
 **Status:** active
-**Linear issue in progress:** none (schema design discussion ongoing — next: A4 audit_log promotion)
-**Shared files locked:** none
+**Linear issue in progress:** none (audit_log full design lock — Q1–Q10)
+**Shared files locked:** docs/decisions/DECISIONS.md, docs/architecture/SCHEMA-DRAFT.md, docs/architecture/ARCHITECTURE-NOTES.md
 **PR open:** #25 (Phase 1 prototype + SCHEMA-DRAFT, base=dev).
 
 ---
 
 ## Notes for the other agent
 
-A1 locked + pushed: Supabase Auth + `person` profile extension (FK to `auth.users.id` ON DELETE CASCADE) + email mirror pattern (pgsodium `person.email_encrypted` via DB trigger on `auth.users` insert). Drops `password_hash`/`email_verified`/`verified_at` from `person`. Partially resolves B5 (email-verify token table — built-in) and B6 (2FA factor storage → `auth.mfa_factors`; timing still open).
+Locking full audit_log design after a long Socratic walk-through (10 questions Q1–Q10). Single comprehensive lock covering: polymorphic single table, JSONB diffs, writes-only-MVP with HS-license-views carve-out, refined dual-identity actor model (with `on_behalf_of_person_id` for AI agent delegation per industry consensus), immutability via triggers + role revoke + SHA-256 hash chain from day 1 (Path 2 — SOC 2 on roadmap), Stripe-style action codes via lookup table, compensating event undo pattern with `reverses_audit_id`, GDPR pseudonymization principle (impl deferred), partitioning deferred to Phase 2 (trigger/strategy/migration TBD), complementary to Supabase `auth.audit_log_entries`.
 
-Files updated: DECISIONS.md (entry #12 in 2026-05-25 walkthrough section), SCHEMA-DRAFT.md (`person` table rewritten + A1/B5 marked resolved + B6 partial in open-Qs), ARCHITECTURE-NOTES.md (new top bullet in Auth & verification section). All locks cleared.
-
-Open Qs still pending: A2 (PII encryption mechanism — pgsodium vs Vault), A3 (license file storage), A4 (promote audit_log to Phase 1), B1-B4, B6-timing, B7. Suggested next: A4 (smallest lift) or A2 (research-heavy, ties to A1 mirror pattern).
+Three files: DECISIONS.md (new entry #13 in 2026-05-25 walkthrough section), SCHEMA-DRAFT.md (full audit_log table block + 3 lookup tables + mark A4 resolved), ARCHITECTURE-NOTES.md (new "Audit & immutability" section).
