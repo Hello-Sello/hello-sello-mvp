@@ -5,17 +5,15 @@
 
 ---
 
-**Last updated:** 2026-05-25 17:20 UTC
+**Last updated:** 2026-05-25 17:36 UTC
 **Branch:** claude/muskan/work
-**Status:** idle
-**Linear issue in progress:** none
-**Shared files locked:** none
-**PR open:** #25 (Phase 1 prototype + SCHEMA-DRAFT, base=dev). Multiple local commits ahead of origin from prior sessions + this wrap-up — push strategy TBD with Muskan.
+**Status:** active
+**Linear issue in progress:** none (schema-draft open-Qs append from auth/onboarding walkthrough)
+**Shared files locked:** docs/architecture/SCHEMA-DRAFT.md
+**PR open:** #25 (Phase 1 prototype + SCHEMA-DRAFT, base=dev). Prior session's deferred commits already on origin.
 
 ---
 
 ## Notes for the other agent
 
-Wrap-up done — DECISIONS.md backfilled for DEV-48/49 (SIGNALS compute/storage) + DEV-38 (MVP safety/compliance posture). Both already merged via PRs #23 + #24 and reflected in LAYER-1 + ARCHITECTURE-NOTES; DECISIONS.md was the missing log. Added as new Layer 1 walkthrough subsection 2026-05-24 (separate from the existing DEV-3 + DEV-17 subsections same date), plus a one-line update to the DEV-5 entry (line 130) to mark DEV-48/49 locked. Files unlocked.
-
-Local commits ahead of origin on `claude/muskan/work` (waiting on push decision): WORKFLOW.md branch-cleanup add (da0fd8a), Phase 1 auth/onboarding finalization (c538f27, cea52cd), this DECISIONS.md backfill (bef3d42), plus 4 sync-only commits interleaved. None of this is in PR #25 yet.
+Appending a new "Auth/onboarding walkthrough — additional open questions (2026-05-25)" section to SCHEMA-DRAFT.md. Surfaces 10 new open Qs from the 2026-05-25 walkthrough locks (Supabase Auth vs custom person, license storage, audit-log promotion to Phase 1, Path B join-request entity, HS-team allowlist mechanism, domain-collision flag, reject-reason/resubmit token, email-verify token schema, 2FA timing conflict with DEV-29, split-gate enforcement layer). Plus a one-line tweak to the "Coming in Phase 2" audit_log row to mark it promoted to Phase 1. No table writes yet — just open-Qs tracking.
