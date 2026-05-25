@@ -5,26 +5,20 @@
 
 ---
 
-**Last updated:** 2026-05-25 17:30 UTC
+**Last updated:** 2026-05-25 17:45 UTC
 **Branch:** claude/muskan/work
-**Status:** writing
-**Linear issue in progress:** none (auth & onboarding flow finalization)
-**Shared files locked:**
-- `docs/decisions/DECISIONS.md`
-- `docs/architecture/ARCHITECTURE-NOTES.md`
-- `docs/product/layers/LAYER-1-USERS-AND-CORE-OBJECTS.md`
-- `prototypes/phase-1-onboarding/HANDOFF.md`
-- `prototypes/phase-1-onboarding/README.md`
-
+**Status:** idle
+**Linear issue in progress:** none
+**Shared files locked:** none
 **PR open:** #25 (Phase 1 prototype + SCHEMA-DRAFT, base=dev)
 
 ---
 
 ## Notes for the other agent
 
-Session 2026-05-25 (afternoon): finalizing Phase 1 onboarding & authentication flow.
+Session 2026-05-25 (afternoon) wrap-up: Phase 1 auth & onboarding flow finalized.
 
-- Walked through the full auth/onboarding flow against the existing prototype.
-- Locking 9 product decisions covering: split-gate access model, license required at signup, no company-type selection, Path A / Path B (new company vs join existing) routing, domain-collision rules, lightweight Group seed at onboarding (full matrix moves to Settings), v0 = one user per company, deferred Group-seed research to v0.1, HS team review surface.
-- Updating DECISIONS.md (new Layer 1 walkthrough subsection 2026-05-25), ARCHITECTURE-NOTES.md (new "Authentication & verification" section), LAYER-1 §11.1 (small audit-flag note re: split-gate vs 16-combo matrix), and prototype HANDOFF.md + README.md (mark superseded locks).
-- No push this session per Muskan's instruction — commits only, push later.
+- 11 product decisions locked covering: split-gate access model, license required at company setup (overrides prototype's "optional"), no company-type selection at signup, Path A (new company → HS team) vs Path B (join existing → Superadmin approval) with "Existing or new?" question post-signin, domain-collision rules (soft suggest + manual choice; personal email allowed), Group seed at onboarding = 4 templated checkboxes with skip (full matrix moves to Settings → Team & Permissions), v0 scope = one user per company (Marcel + Victor as test Superadmins; Path B coded but unexercised), Group-seed research deferred to v0.1, HS team review surface = in-HS admin route `/admin/verifications` with reviewer allowlist + 12-hr SLA + free-text reject reason emailed with resubmit link, access-matrix audit flag under split-gate (low-priority Linear issue pending), engineering flags carried forward (license file PII encryption + HS approve/reject audit-logging via DEV-41 primitive).
+- **Files updated:** `DECISIONS.md` (new Layer 1 walkthrough 2026-05-25), `ARCHITECTURE-NOTES.md` (new "Authentication & verification" section), `LAYER-1` §11.1 (audit-flag note), `prototypes/phase-1-onboarding/HANDOFF.md` + `README.md` (deltas + superseded-lock annotations).
+- **No push this session** per Muskan's instruction — local commits (sync lock + `c538f27` docs commit + this sync clear) sit on `claude/muskan/work` ahead of origin. Will push when ready to share.
+- Files unlocked.
