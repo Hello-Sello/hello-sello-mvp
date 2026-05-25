@@ -227,6 +227,129 @@ Connection requests between companies (P↔C).
 
 ---
 
+### `audit_log`
+
+Universal append-only change-log for every audited business action. **Immutable** — DB triggers reject UPDATE and DELETE. Polymorphic content reference (`content_type` + `content_id`) covers any entity type. **Tamper-evident** via SHA-256 hash chain from day 1. Full design locked 2026-05-25 (SCHEMA-DRAFT §A4 — see DECISIONS.md walkthrough locks 2026-05-25, entry "Audit log design").
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | UUID | PK, NOT NULL | |
+| `sequence_number` | BIGSERIAL | UNIQUE NOT NULL | Monotonic counter; gaps signal tampering |
+| `company_id` | UUID | NOT NULL, REFERENCES `company(id)` | Tenant scoping; for HS-team actions on a company, this is the acted-on company |
+| `actor_person_id` | UUID | NULL, REFERENCES `person(id)` | NULL when actor is non-person (sella/system/webhook) |
+| `actor_type` | VARCHAR(20) | NOT NULL, REFERENCES `audit_actor_type(code)` | 'user' / 'hs_team' / 'sella' / 'system' / 'webhook' |
+| `on_behalf_of_person_id` | UUID | NULL, REFERENCES `person(id)` | Triggering human when actor is agent/system. NULL = same as actor (for human actions) or no triggering human (autonomous system) |
+| `action` | VARCHAR(100) | NOT NULL, REFERENCES `audit_action_type(code)` | Stripe-style `resource.action_past_tense` |
+| `content_type` | VARCHAR(50) | NOT NULL, REFERENCES `auditable_content_type(code)` | 'company' / 'person' / 'pricelist' / 'deal_card' / 'person_group' / etc. |
+| `content_id` | UUID | NOT NULL | Polymorphic ref — not DB-enforced (varies by content_type) |
+| `before_diff` | JSONB | NULL | Diff of fields that changed (only changed fields, NOT full row). NULL for pure creation. |
+| `after_diff` | JSONB | NULL | Same shape as before_diff. NULL for pure deletion. |
+| `reason` | TEXT | NULL | Free-text reason (mandatory for `verify_rejected`; usually NULL) |
+| `metadata` | JSONB | NOT NULL DEFAULT `'{}'` | IP, user_agent, `agent_id` (in metadata until promoted), session_id, related entity refs |
+| `reverses_audit_id` | UUID | NULL, REFERENCES `audit_log(id)` | When NOT NULL, this row IS a reversal of the row it points to (compensating event pattern) |
+| `prev_entry_hash` | BYTEA | NULL | SHA-256 of the previous row's `entry_hash` (NULL for first row) |
+| `entry_hash` | BYTEA | NOT NULL | SHA-256 of (this row's canonical bytes + prev_entry_hash) |
+| `hmac_schema_version` | SMALLINT | NOT NULL DEFAULT 1 | Lets us migrate to a new hash scheme later without breaking old rows |
+| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
+
+**No `deleted_at` / soft delete** — audit log is the source of truth for what happened; nothing is deleted.
+
+**Indexes:**
+- `INDEX(company_id, created_at DESC)` — "show audit for this company over time"
+- `INDEX(content_type, content_id)` — "show audit for this specific entity"
+- `INDEX(actor_person_id)` — "what did this person do"
+- `INDEX(action)` — filter by action type
+- `INDEX(sequence_number)` — gap detection during chain verification
+
+**DB-level enforcement (immutability + hash chain):**
+- `BEFORE UPDATE` trigger → raise exception (immutable)
+- `BEFORE DELETE` trigger → raise exception (except via privileged `gdpr_scrub_audit_log()` function)
+- `BEFORE INSERT` trigger → compute `prev_entry_hash` (advisory lock around append) and `entry_hash` from canonical serialization of this row
+- Dedicated app role (`app_writer`) granted INSERT/SELECT only; UPDATE/DELETE/TRUNCATE revoked (defense in depth)
+
+**GDPR scrub** (principle locked, implementation deferred to build phase):
+- Pseudonymization (not hard delete) of `actor_person_id`, `on_behalf_of_person_id`, PII fields inside `before_diff`/`after_diff`, `reason`, `metadata`
+- Replace person references with sentinel UUID `'00000000-0000-0000-0000-000000000000'`
+- Meta-audit: scrub itself logged as a new row with `action='person.gdpr_scrubbed'`
+- Recompute downstream hashes after scrub (preserves chain validity for non-scrubbed segments)
+- Privileged `SECURITY DEFINER` function, EXECUTE restricted to HS team role
+
+**Open questions (build-phase or future):**
+
+| # | Item | When |
+|---|---|---|
+| Canonical serialization rules for hash chain | Alphabetically sorted JSON keys, ISO 8601 UTC timestamps, UTF-8 encoding. JCS standard recommended. | Build phase |
+| GDPR scrub function implementation details | Sentinel UUID approach, PII field path enumeration, recompute-hash helper | Build phase |
+| Backup retention vs scrubbed data policy | TBD when backups configured | Phase 2 |
+| **Reversibility tier taxonomy** | Column `audit_action_type.reversibility_tier VARCHAR(15) NULL` exists in MVP. Tier values + per-action assignments deferred until: Layer 1 §10 multi-Sella architecture lock + Layer 4 §4 autonomy ladder + DEV-29 e-signature semantics. When all three land → classify each action_type, optionally add CHECK constraint. | Post-MVP |
+
+**Planned additions (industry-aligned, deferred):**
+
+| Addition | Trigger to add |
+|---|---|
+| `agent_id` as proper column (currently in `metadata.agent_id` JSONB) | When Sella taxonomy stabilizes (Layer 1 §10 multi-Sella architecture lock) |
+| `tool_name` column | When Sella tool layer ships (post-MVP, ties to DEV-11) |
+| `delegation_scope` column | Only if external-callable agents introduced (Phase 3+) |
+| Partitioning by month via `pg_partman` | Trigger / strategy / migration TBD. Skip TimescaleDB (deprecated on Supabase Postgres 17). |
+| Selective mirror of business-relevant auth events (`person.created`, `person.email_verified`, `person.mfa_enabled`) from `auth.audit_log_entries` | When SOC 2 prep wants single-table queries OR specific audit query needs it |
+| PGAudit complement for security forensics (separate from this business audit) | Phase 2 — when security investigation needs raw-SQL audit |
+
+---
+
+### `audit_actor_type` (lookup)
+
+| Column | Type | Notes |
+|---|---|---|
+| `code` | VARCHAR(20) PK | E.g., 'user', 'sella' |
+| `description` | TEXT NOT NULL | Human-readable |
+
+**Seed values:** 'user', 'hs_team', 'sella', 'system', 'webhook'
+
+---
+
+### `audit_action_type` (lookup)
+
+| Column | Type | Notes |
+|---|---|---|
+| `code` | VARCHAR(100) PK | Stripe-style `resource.action_past_tense` (e.g., 'company.verify_approved') |
+| `description` | TEXT NOT NULL | Human-readable for UI |
+| `category` | VARCHAR(50) NOT NULL | For filtering: 'verification' / 'access' / 'pricing' / 'permissions' / 'esignature' / 'lifecycle' / 'compliance' |
+| `reversibility_tier` | VARCHAR(15) NULL | Taxonomy + per-action assignments deferred — see audit_log open Qs |
+| `created_at` | TIMESTAMPTZ NOT NULL DEFAULT NOW() | |
+
+**MVP seed values:**
+
+| code | description | category |
+|---|---|---|
+| `company.verify_approved` | HS team approved a company verification | `verification` |
+| `company.verify_rejected` | HS team rejected a company verification | `verification` |
+| `company.verify_reverted` | A prior verification decision was reversed | `verification` |
+| `company.license_viewed` | HS team viewed a company license document | `access` |
+| `company.license_downloaded` | HS team downloaded a company license document | `access` |
+| `pricelist.published` | A user published a pricelist | `pricing` |
+| `pricelist.amended` | A pricelist was edited | `pricing` |
+| `permission.granted` | A permission was granted to a Group | `permissions` |
+| `permission.revoked` | A permission was revoked from a Group | `permissions` |
+| `esignature.signed` | A user e-signed an approval | `esignature` |
+| `person.soft_deleted` | An entity was soft-deleted | `lifecycle` |
+| `person.gdpr_scrubbed` | PII was scrubbed for GDPR right-to-be-forgotten | `compliance` |
+
+(More added per feature as they ship.)
+
+---
+
+### `auditable_content_type` (lookup)
+
+| Column | Type | Notes |
+|---|---|---|
+| `code` | VARCHAR(50) PK | E.g., 'company', 'pricelist' |
+| `description` | TEXT NOT NULL | Human-readable |
+| `target_table` | VARCHAR(50) NOT NULL | The table `content_id` usually points to |
+
+**MVP seed values:** 'company', 'person', 'pricelist', 'deal_card', 'person_group', 'group', 'permission_matrix_entry', 'pending_inbox_item' (more added as schema grows)
+
+---
+
 ## Open questions to research before locking the schema
 
 ### PII encryption — which mechanism?
@@ -262,7 +385,7 @@ Surfaced by the 2026-05-25 walkthrough locks (DECISIONS.md "Walkthrough locks 20
 |---|---|---|---|
 | A1 | ~~**Supabase Auth (`auth.users`) vs. roll own `person.password_hash`?**~~ → **RESOLVED 2026-05-25 — Supabase Auth + mirror pattern.** See DECISIONS.md walkthrough locks 2026-05-25, entry "Auth model". | ~~Hard blocker~~ Resolved | `person`, email-verify token table, 2FA design |
 | A3 | **License file storage backend** — Supabase Storage vs. S3 + encryption-at-rest mechanism; virus-scan tool; file size/count limits (working: ~10-25 MB/file, ≤5-10 files). | Hard blocker | `company.license_filename` semantics; ties to PII encryption above |
-| A4 | **Promote `audit_log` to Phase 1.** HS team approve/reject is audit-logged (DEV-41 change-log primitive). Schema: `{id, actor_person_id, timestamp, content_type, content_id, action, before_diff, after_diff, reason}`. | Hard blocker | New Phase 1 table |
+| A4 | ~~**Promote `audit_log` to Phase 1.**~~ → **RESOLVED 2026-05-25 — full audit_log design locked** (Q1–Q10 walked through with industry research). See `audit_log` table block above + DECISIONS.md walkthrough locks 2026-05-25 "Audit log design". Phase 1 ships: polymorphic single table + JSONB diffs + dual-identity actor + hash chain + reversibility tier + GDPR pseudonymization principle. | ~~Hard blocker~~ Resolved | New Phase 1 table built with hash chain + reversibility + dual identity |
 | B1 | **Path B "join request" entity** — new `join_request` table or reuse `pending_inbox_item`? Multi-Superadmin company: any Superadmin reviews or routed to one? | Soft default | New table or schema change |
 | B2 | **HS-team allowlist** — `person.is_hs_team` column, separate `hs_team_member` table, or env-var allowlist consumed by middleware? | Soft default | `person` schema or new tiny table |
 | B3 | **Domain-collision override flag** — when user picks "new company" despite domain match, where does the silent flag live? `company.metadata.domain_collision_override` or column on review-queue entry? | Soft default | `company.metadata` or review entry |

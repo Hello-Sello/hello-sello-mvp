@@ -26,6 +26,20 @@ When the formal Architecture doc is written (post Layer 4 + 5), these become its
 - The **change-log primitive** (content_type / content_id / user / timestamp / before-after diff) records every edit and delete on supported entities. *(DEV-41.)*
 - Approval-type Things capture **person + 2FA-authenticated login + name/email/account + acceptance + timestamp** as a legally binding e-signature record (DocuSign-in-a-nutshell); no third-party integration. *(DEV-29.)*
 
+## Audit & immutability
+
+- **Universal `audit_log` table** captures all auditable business actions across the platform. Polymorphic content reference (`content_type` + `content_id`) — single table covers companies, persons, pricelists, deals, permissions, e-signatures, Sella actions. JSONB `before_diff` / `after_diff` for change snapshots (diffs only, not full row snapshots). Complementary to Supabase `auth.audit_log_entries` (which covers auth events — login, signup, MFA — and is auto-populated by Supabase); UNION-for-queries pattern when cross-cutting needed. *(Locked 2026-05-25, full design in SCHEMA-DRAFT §A4.)*
+
+- **Dual-identity actor model.** `actor_person_id` + `actor_type` (user/hs_team/sella/system/webhook) + `on_behalf_of_person_id` (triggering human when actor is agent/system). Captures both who executed and who caused — industry standard for AI agent audit per AWS CloudTrail `onBehalfOf`, Microsoft Entra Agent ID, LoginRadius/Scalekit guidance. *(Locked 2026-05-25.)*
+
+- **Tamper-evidence via SHA-256 hash chain from day 1.** Columns `sequence_number` + `prev_entry_hash` + `entry_hash` + `hmac_schema_version`. Each row hashes its canonical bytes + the previous row's hash; any modification breaks the chain. Chosen over deferral to DEV-29 because SOC 2 is on the roadmap (SOC 2 2026 TSC CC7.3 requires tamper-evident logging with real-time integrity verification) and hash backfill is awkward. *(Locked 2026-05-25.)*
+
+- **Immutability enforcement = triggers + role revoke (defense in depth).** Postgres BEFORE UPDATE / BEFORE DELETE triggers raise exception. Dedicated `app_writer` role granted INSERT/SELECT only; UPDATE/DELETE/TRUNCATE revoked. Bypass for legitimate GDPR scrub via SECURITY DEFINER function, EXECUTE restricted to HS team role. *(Locked 2026-05-25.)*
+
+- **Compensating event pattern for undo.** Reversal is a NEW audit_log row with `reverses_audit_id` pointing back to original. Original row never modified (consistent with immutability — event sourcing + Saga pattern). Reversibility tier column on `audit_action_type` (nullable VARCHAR(15)) — taxonomy + per-action assignments deferred until Layer 1 §10 multi-Sella architecture + Layer 4 §4 autonomy ladder + DEV-29 e-signature semantics land. *(Locked 2026-05-25.)*
+
+- **GDPR right-to-be-forgotten via pseudonymization** (not hard delete). Principle locked: scrub via `SECURITY DEFINER` function replaces PII fields with sentinel UUID / NULL while preserving structural audit history. Meta-audit: scrub itself logged as `person.gdpr_scrubbed` action. Recompute downstream hashes after scrub. Implementation details (function shape, scrub_pii_in_jsonb helper) deferred to build phase. *(Locked 2026-05-25.)*
+
 ## Access policy
 
 - The 16-combo access matrix is the **master access policy** for cross-company interactions; encoding model (DB-level RLS / policy engine / hardcoded) is under research. *(Layer 1 §11.1 + DEV-51.)*
