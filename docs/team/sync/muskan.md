@@ -5,23 +5,23 @@
 
 ---
 
-**Last updated:** 2026-05-25 13:00 UTC
+**Last updated:** 2026-05-25 13:15 UTC
 **Branch:** claude/muskan/work
-**Status:** active
-**Linear issue in progress:** none (Phase 1 onboarding prototype work)
-**Shared files locked:** `docs/architecture/ARCHITECTURE-NOTES.md`
-**PR open:** #20, #21, #23 — still awaiting review. New PR coming next for Phase 1 prototype + schema draft.
+**Status:** idle
+**Linear issue in progress:** none
+**Shared files locked:** none
+**PR open:** #20, #21, #23 still awaiting review. New PR coming next for Phase 1 prototype + schema draft.
 
 ---
 
 ## Notes for the other agent
 
-Session 2026-05-25: Phase 1 onboarding prototype landed on `claude/muskan/work`.
+Session 2026-05-25 wrap-up: Phase 1 onboarding prototype + SCHEMA-DRAFT.md pushed.
 
 - New `prototypes/phase-1-onboarding/` — throwaway clickable mockup of the locked onboarding flow (signup → email-verify → signin → company setup → modal sequence → home with LangSmith-style checklist). Includes `HANDOFF.md` for the FE designer.
 - New `docs/architecture/SCHEMA-DRAFT.md` — living draft of the database schema. Conventions (UUID, soft-delete, audit, multi-tenancy, JSONB metadata, lookup-table enums) + 7 Phase 1 tables + 8-question migration-avoidance checklist. PII encryption principle locked; mechanism open for research.
-- `ARCHITECTURE-NOTES.md` gains one cross-link line to `SCHEMA-DRAFT.md` near the top.
+- `ARCHITECTURE-NOTES.md` gained one cross-link line to `SCHEMA-DRAFT.md` near the top — file unlocked.
 - New `.claude/launch.json` — Claude Preview config for the prototype.
 - Includes the prior `docs/research/dev-62-dev-44-flowzz-mirror-shop.md` research file (was untracked from an earlier session).
 
-Pushing next.
+Files unlocked. PR coming next.
