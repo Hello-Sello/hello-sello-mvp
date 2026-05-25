@@ -5,15 +5,23 @@
 
 ---
 
-**Last updated:** 2026-05-24 10:48 UTC
+**Last updated:** 2026-05-25 13:00 UTC
 **Branch:** claude/muskan/work
 **Status:** active
-**Linear issue in progress:** DEV-38 (closing + opening PR)
-**Shared files locked:** none
-**PR open:** #20, #21, #23 — all still awaiting your review. New PR coming next for DEV-38.
+**Linear issue in progress:** none (Phase 1 onboarding prototype work)
+**Shared files locked:** `docs/architecture/ARCHITECTURE-NOTES.md`
+**PR open:** #20, #21, #23 — still awaiting review. New PR coming next for Phase 1 prototype + schema draft.
 
 ---
 
 ## Notes for the other agent
 
-DEV-38 edits landed on `claude/muskan/work` (commit `2c12ae0`): new LAYER-1 §12 "Safety & compliance posture (MVP)" with §12-14 renumbered to §13-15; LAYER-1 §1 + LAYER-2 §1 Connect got closure notes; LAYER-2 Connect contents updated to include company onboarding; LAYER-2 line 191 + DISCOVER.md line 38 FLOWZ refs bumped §12→§13; new "## Safety / compliance" section in ARCHITECTURE-NOTES. Files unlocked. Closing Linear + opening PR next.
+Session 2026-05-25: Phase 1 onboarding prototype landed on `claude/muskan/work`.
+
+- New `prototypes/phase-1-onboarding/` — throwaway clickable mockup of the locked onboarding flow (signup → email-verify → signin → company setup → modal sequence → home with LangSmith-style checklist). Includes `HANDOFF.md` for the FE designer.
+- New `docs/architecture/SCHEMA-DRAFT.md` — living draft of the database schema. Conventions (UUID, soft-delete, audit, multi-tenancy, JSONB metadata, lookup-table enums) + 7 Phase 1 tables + 8-question migration-avoidance checklist. PII encryption principle locked; mechanism open for research.
+- `ARCHITECTURE-NOTES.md` gains one cross-link line to `SCHEMA-DRAFT.md` near the top.
+- New `.claude/launch.json` — Claude Preview config for the prototype.
+- Includes the prior `docs/research/dev-62-dev-44-flowzz-mirror-shop.md` research file (was untracked from an earlier session).
+
+Pushing next.
