@@ -5,17 +5,19 @@
 
 ---
 
-**Last updated:** 2026-05-25 17:54 UTC
+**Last updated:** 2026-05-25 17:58 UTC
 **Branch:** claude/muskan/work
 **Status:** active
-**Linear issue in progress:** none (A1 schema lock — Supabase Auth + person profile extension)
-**Shared files locked:** docs/decisions/DECISIONS.md, docs/architecture/SCHEMA-DRAFT.md, docs/architecture/ARCHITECTURE-NOTES.md
+**Linear issue in progress:** none (schema design discussion ongoing — next: A4 audit_log promotion)
+**Shared files locked:** none
 **PR open:** #25 (Phase 1 prototype + SCHEMA-DRAFT, base=dev).
 
 ---
 
 ## Notes for the other agent
 
-Locking SCHEMA-DRAFT §A1: auth model = Supabase Auth + `person` profile extension (FK to `auth.users.id` ON DELETE CASCADE). Email PII via mirror pattern (pgsodium `person.email_encrypted` populated via DB trigger on `auth.users` insert). Drops `password_hash`/`email_verified`/`verified_at` from `person`. Partially resolves B5 (email-verify token table — built-in) and B6 (2FA factor storage → `auth.mfa_factors`; timing still open).
+A1 locked + pushed: Supabase Auth + `person` profile extension (FK to `auth.users.id` ON DELETE CASCADE) + email mirror pattern (pgsodium `person.email_encrypted` via DB trigger on `auth.users` insert). Drops `password_hash`/`email_verified`/`verified_at` from `person`. Partially resolves B5 (email-verify token table — built-in) and B6 (2FA factor storage → `auth.mfa_factors`; timing still open).
 
-Three files touched: DECISIONS.md (entry #12 in 2026-05-25 walkthrough section), SCHEMA-DRAFT.md (replace `person` table block + mark A1/B5 resolved + B6 partial in open-Qs), ARCHITECTURE-NOTES.md (top bullet in Auth & verification section).
+Files updated: DECISIONS.md (entry #12 in 2026-05-25 walkthrough section), SCHEMA-DRAFT.md (`person` table rewritten + A1/B5 marked resolved + B6 partial in open-Qs), ARCHITECTURE-NOTES.md (new top bullet in Auth & verification section). All locks cleared.
+
+Open Qs still pending: A2 (PII encryption mechanism — pgsodium vs Vault), A3 (license file storage), A4 (promote audit_log to Phase 1), B1-B4, B6-timing, B7. Suggested next: A4 (smallest lift) or A2 (research-heavy, ties to A1 mirror pattern).
