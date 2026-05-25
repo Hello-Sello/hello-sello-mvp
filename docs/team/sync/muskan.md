@@ -5,11 +5,11 @@
 
 ---
 
-**Last updated:** 2026-05-25 16:24 UTC
+**Last updated:** 2026-05-25 16:25 UTC
 **Branch:** claude/muskan/work
-**Status:** active
+**Status:** idle
 **Linear issue in progress:** none
-**Shared files locked:** docs/team/WORKFLOW.md
+**Shared files locked:** none
 **PR open:** #25 (Phase 1 prototype + SCHEMA-DRAFT, base=dev)
 
 ---
