@@ -66,8 +66,9 @@ The product is organized as **6 navigable surfaces + Sella (always-available AI 
 > **⚠️ OPEN [DEV-15]** — Layout/navigation pattern (now generalized to all 5 surfaces). See [DEV-15](https://linear.app/hellosello/issue/DEV-15/whats-the-layoutnavigation-pattern-for-each-of-the-5-surfaces-when-a).
 > **⚠️ OPEN [DEV-16]** — Is "Thread instead of group chat" a Connect-level feature or a chat-specific behavior? See [DEV-16](https://linear.app/hellosello/issue/DEV-16/is-thread-instead-of-group-chat-a-connect-level-feature-or-a-chat).
 > **DEV-17 — closed (2026-05-24).** MVP scheme: manual role label per contact (default `Unknown`; suggested enum: Supplier / Customer / Partner / Other / Unknown — final at build phase) + auto-derived activity bucket (Active / Occasional / Dormant from `email_count` + `last_seen` per DEV-3). No free-text tags or AI inference in MVP. See DECISIONS.md Layer 2 walkthrough locks 2026-05-24 for full lock; ARCHITECTURE-NOTES.md "Onboarding / data import" for schema shape.
+> **DEV-38 — closed (2026-05-24).** MVP safety posture locked — company license verification at onboarding by Hello Sello team; pre-verification accounts locked out with wait dialog; one-time verification at MVP; HS platform admins are sole suspension authority. See [Layer 1 §12](LAYER-1-USERS-AND-CORE-OBJECTS.md) for full posture.
 
-**Contents** (per the locked meta-rule: each surface's contents = its Linear-label's projects): the Connect Linear label is the source of truth. Provisional scope includes connection requests, relationship pages, company↔company chat (inside deal workspaces only), chat list, contact import, offer/pricelist requests, LinkedIn-style company profile banner, deal workspaces.
+**Contents** (per the locked meta-rule: each surface's contents = its Linear-label's projects): the Connect Linear label is the source of truth. Provisional scope includes company onboarding (license verification by Hello Sello team — see [Layer 1 §12](LAYER-1-USERS-AND-CORE-OBJECTS.md)), connection requests, relationship pages, company↔company chat (inside deal workspaces only), chat list, contact import, offer/pricelist requests, LinkedIn-style company profile banner, deal workspaces.
 
 *(Detailed sub-area discussion: deferred until after the sprint pass through all 5 surfaces.)*
 
@@ -188,7 +189,7 @@ Sella's user-facing value prop (Big 7): "A female-inspired caring AI for both si
 - **Batch allocation flow** (Sell) — full workflow design deferred to post-MVP.
 - **Grow page entirely** — the whole C-suite analytics + business control surface is post-MVP.
 - **Grow map view** — geographic deal visualization (post-post-MVP, after Grow is launched).
-- **FLOWZ pre-population** — see Layer 1 Section 12. Pre-seed companies and products to avoid empty-platform feeling.
+- **FLOWZ pre-population** — see Layer 1 Section 13. Pre-seed companies and products to avoid empty-platform feeling.
 
 ---
 
