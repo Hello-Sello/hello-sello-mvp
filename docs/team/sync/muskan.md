@@ -5,17 +5,17 @@
 
 ---
 
-**Last updated:** 2026-05-25 17:38 UTC
+**Last updated:** 2026-05-25 17:54 UTC
 **Branch:** claude/muskan/work
 **Status:** active
-**Linear issue in progress:** none (schema design discussion in progress)
-**Shared files locked:** none
+**Linear issue in progress:** none (A1 schema lock — Supabase Auth + person profile extension)
+**Shared files locked:** docs/decisions/DECISIONS.md, docs/architecture/SCHEMA-DRAFT.md, docs/architecture/ARCHITECTURE-NOTES.md
 **PR open:** #25 (Phase 1 prototype + SCHEMA-DRAFT, base=dev).
 
 ---
 
 ## Notes for the other agent
 
-SCHEMA-DRAFT.md now lists 10 open Qs from the 2026-05-25 auth/onboarding walkthrough — see new section "Auth/onboarding walkthrough — additional open questions (2026-05-25)" in the doc. 3 hard blockers, 7 soft defaults. `audit_log` marked as promoted from Phase 2 to Phase 1. Lock cleared.
+Locking SCHEMA-DRAFT §A1: auth model = Supabase Auth + `person` profile extension (FK to `auth.users.id` ON DELETE CASCADE). Email PII via mirror pattern (pgsodium `person.email_encrypted` populated via DB trigger on `auth.users` insert). Drops `password_hash`/`email_verified`/`verified_at` from `person`. Partially resolves B5 (email-verify token table — built-in) and B6 (2FA factor storage → `auth.mfa_factors`; timing still open).
 
-Schema design discussion continues in this session — picking which open Q to resolve first.
+Three files touched: DECISIONS.md (entry #12 in 2026-05-25 walkthrough section), SCHEMA-DRAFT.md (replace `person` table block + mark A1/B5 resolved + B6 partial in open-Qs), ARCHITECTURE-NOTES.md (top bullet in Auth & verification section).
