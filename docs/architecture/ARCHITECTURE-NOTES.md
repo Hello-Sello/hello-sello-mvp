@@ -4,6 +4,8 @@ Running scratchpad of engineering implications surfaced as Layer-doc decisions g
 
 When the formal Architecture doc is written (post Layer 4 + 5), these become its input.
 
+**See also:** [`SCHEMA-DRAFT.md`](./SCHEMA-DRAFT.md) — living draft of proposed table schemas; updated alongside each prototype phase.
+
 ---
 
 ## Core entities
