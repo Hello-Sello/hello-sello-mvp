@@ -255,6 +255,27 @@ Connection requests between companies (P↔C).
 
 ---
 
+### Auth/onboarding walkthrough — additional open questions (2026-05-25)
+
+Surfaced by the 2026-05-25 walkthrough locks (DECISIONS.md "Walkthrough locks 2026-05-25 — onboarding & authentication flow"). Resolve before writing Phase 1 migrations.
+
+| # | Question | Type | Affects |
+|---|---|---|---|
+| A1 | **Supabase Auth (`auth.users`) vs. roll own `person.password_hash`?** Decides whether `person` owns auth or just profile data. Cascades into email-verify, password reset, 2FA shape. | Hard blocker | `person`, email-verify token table, 2FA design |
+| A3 | **License file storage backend** — Supabase Storage vs. S3 + encryption-at-rest mechanism; virus-scan tool; file size/count limits (working: ~10-25 MB/file, ≤5-10 files). | Hard blocker | `company.license_filename` semantics; ties to PII encryption above |
+| A4 | **Promote `audit_log` to Phase 1.** HS team approve/reject is audit-logged (DEV-41 change-log primitive). Schema: `{id, actor_person_id, timestamp, content_type, content_id, action, before_diff, after_diff, reason}`. | Hard blocker | New Phase 1 table |
+| B1 | **Path B "join request" entity** — new `join_request` table or reuse `pending_inbox_item`? Multi-Superadmin company: any Superadmin reviews or routed to one? | Soft default | New table or schema change |
+| B2 | **HS-team allowlist** — `person.is_hs_team` column, separate `hs_team_member` table, or env-var allowlist consumed by middleware? | Soft default | `person` schema or new tiny table |
+| B3 | **Domain-collision override flag** — when user picks "new company" despite domain match, where does the silent flag live? `company.metadata.domain_collision_override` or column on review-queue entry? | Soft default | `company.metadata` or review entry |
+| B4 | **Reject reason + resubmit token** — `company.rejection_reason TEXT`? Token-based resubmit link (UUID, expiry)? | Soft default | `company` columns or new `email_token` table |
+| B5 | **`email_verification_token` table schema** — already defaulted "separate table" but no schema. Token expiry, resend rate-limit rules. | Soft default | New table |
+| B6 | **2FA enforcement timing — DEV-29 conflict.** DEV-29 requires 2FA-authenticated login for e-signature actions; onboarding doesn't enforce 2FA setup. Required pre-first-e-signature? Optional for non-signing users? Factor (TOTP / SMS / email)? | Soft default | `person_2fa` table + auth flow |
+| B7 | **Split-gate enforcement layer** — locked at "action-policy layer, not session/auth layer". Mechanism: RLS, server-side per-RPC checks, middleware, or policy DSL? Ties to [DEV-51](https://linear.app/hellosello/issue/DEV-51) (16-combo matrix encoding). | Architecture (no schema) | Cross-cutting |
+
+**Suggested resolution order:** A1 → A4 → A2 (PII encryption above) → A3 → B-series in any order → B7 last (architecture-only, not schema).
+
+---
+
 ## Migration-avoidance checklist — the 8 questions
 
 The questions every B2B schema must answer **before launch**. Wrong defaults here = painful migrations later.
@@ -286,7 +307,7 @@ These tables aren't built yet but will follow the same conventions:
 | `deal_workspace`, `deal_room` | 3 | Containers |
 | `thing` | 3 | Universal execution primitive |
 | `order` (with PO#/SO#/HS#/QR) | 4 | Generated at confirmation |
-| `audit_log` | Cross-cutting | Universal change-log primitive |
+| `audit_log` | ~~Cross-cutting~~ **Promoted to Phase 1** (see open Qs §A4) | Universal change-log primitive — needed for HS verify flow |
 
 ---
 
