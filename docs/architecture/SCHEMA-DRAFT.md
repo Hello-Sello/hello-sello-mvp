@@ -21,7 +21,7 @@
 | Encoding | UTF-8 everywhere | Internationalization-ready (DE/EN locked in MVP) |
 | Enums | Defined as **lookup tables**, not Postgres native ENUM | New values without migration |
 | Flexible fields | `metadata JSONB NOT NULL DEFAULT '{}'` on tables likely to expand | Kills ~80% of "add a column" migrations |
-| PII encryption | **Principle locked:** PII columns (`email`, `phone`, `address`) will be encrypted at rest. **Mechanism: OPEN** — see open questions section | GDPR compliance; reduces blast radius of breaches |
+| PII encryption | **Locked 2026-05-27 (A2):** Hybrid by data class. Queryable PII (email, name, phone) → at-rest only (Supabase default) + RLS. High-sensitivity stored PII (license #, gov ID, sensitive notes) → pgcrypto column encryption, master key in Vault. Secrets (API keys, tokens) → Supabase Vault. See DECISIONS.md walkthrough locks 2026-05-27. | GDPR Art 32; right-sized protection per risk class |
 | Indexes | `INDEX` for FKs, query-shaped composite indexes for common filters | Performance |
 
 ---
@@ -37,7 +37,6 @@ Profile extension on top of Supabase Auth. **Identity lives in `auth.users` (Sup
 | `id` | UUID | PK, NOT NULL, REFERENCES `auth.users(id)` ON DELETE CASCADE | 1:1 with `auth.users` |
 | `first_name` | VARCHAR(100) | NOT NULL | |
 | `last_name` | VARCHAR(100) | NOT NULL | |
-| `email_encrypted` | BYTEA | NOT NULL | **pgsodium-encrypted** mirror of `auth.users.email`; populated via DB trigger on `auth.users` insert. App code reads this, not `auth.users.email`. Mechanism detail in §A2. |
 | `company_id` | UUID | NULL, REFERENCES `company(id)` | NULL until company setup completes |
 | `is_superadmin` | BOOLEAN | NOT NULL DEFAULT FALSE | First user of company is Superadmin |
 | `preferences` | JSONB | NOT NULL DEFAULT `'{}'` | title, phone, language, timezone (extensible) |
@@ -46,7 +45,9 @@ Profile extension on top of Supabase Auth. **Identity lives in `auth.users` (Sup
 | `updated_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
 | `deleted_at` | TIMESTAMPTZ | NULL | |
 
-**Owned by `auth.users` (not duplicated here):** `email` (plaintext, for Supabase Auth login lookup), `encrypted_password` (bcrypt), `email_confirmed_at`, `last_sign_in_at`, MFA factors (`auth.mfa_factors`), OAuth identities (`auth.identities`).
+**Owned by `auth.users` (not duplicated here):** `email` (single source of truth — A2 locked 2026-05-27 dropped the encrypted mirror; at-rest encryption + RLS sufficient), `encrypted_password` (bcrypt), `email_confirmed_at`, `last_sign_in_at`, MFA factors (`auth.mfa_factors`), OAuth identities (`auth.identities`).
+
+**App-side email access:** via `SECURITY DEFINER` view `person_with_email` that joins `person` ⨝ `auth.users` (where `person.id = auth.users.id`) and exposes `email` to authorized roles only. RLS predicates on the view enforce tenant + role-level access. *(Pattern locked 2026-05-27 in A2 — replaces the dropped pgsodium mirror column.)*
 
 **Indexes:**
 - `INDEX(company_id)` for tenant filtering
@@ -352,28 +353,17 @@ Universal append-only change-log for every audited business action. **Immutable*
 
 ## Open questions to research before locking the schema
 
-### PII encryption — which mechanism?
+### ~~PII encryption — which mechanism?~~ → RESOLVED 2026-05-27
 
-**Locked:** we will encrypt PII (`email`, `phone`, `address`) at rest.
-**Open:** which mechanism to use. Research and decide before writing the first migration.
+**Resolved 2026-05-27 — hybrid by data class.** See DECISIONS.md walkthrough locks 2026-05-27 — "PII encryption mechanism (A2)". Summary:
 
-| Option | How | When to pick |
-|---|---|---|
-| A. SQL functions | App code explicitly calls `encrypt()` / `decrypt()` in queries | Most control, but verbose app code |
-| B. Triggers on INSERT/UPDATE | DB auto-encrypts writes before storing | App code stays clean; logic hidden in DB |
-| C. Views for SELECT | A view auto-decrypts reads | Pair with (B) for transparent encryption both ways |
-| D. Supabase Edge Function | Encrypt in TypeScript before sending to DB | Use if key must live in external KMS, not Vault |
-| E. Declarative (newer Supabase features) | Mark column as encrypted, Supabase handles it | Simplest if available + matches our needs |
+- **Queryable PII** (email, name, phone) → at-rest only (Supabase default) + RLS. No column encryption — column-encrypting these breaks WHERE/JOIN and is flagged by industry guidance as over-encryption.
+- **High-sensitivity stored PII** (license #, gov ID, sensitive freeform notes) → **pgcrypto** column encryption, master key in Supabase Vault, accessed via `SECURITY DEFINER` functions.
+- **Secrets** (API keys, OAuth tokens, webhook signatures) → **Supabase Vault** (its actual designed use case).
+- **pgsodium dropped** — Supabase officially deprecated it ("DO NOT RECOMMEND any new usage"). `person.email_encrypted` mirror removed from §person table; replaced by `SECURITY DEFINER` view pattern.
+- **GDPR Art 17** (right-to-erasure) handled via A4 pseudonymization principle (already locked). Per-subject crypto-shred deferred unless regulator pressure.
 
-**Research tasks before deciding:**
-- Confirm which encryption extensions Supabase supports out-of-the-box (`pgsodium`, `pgcrypto`, others?)
-- Confirm how Supabase Vault integrates with each
-- Test performance impact on inserts/reads with realistic row counts
-- Decide where the encryption key lives (Vault vs external KMS)
-- Check OWASP + GDPR Article 32 requirements for the chosen mechanism
-- Confirm with Ayush — does any choice affect his React app's contract?
-
-**To revisit:** before the first migration that creates the `person` table for real.
+Sources: Supabase pgsodium deprecation notice + Discussion #27109, Supabase Vault docs, EDB "PII Horror Story" Postgres best practices, Crunchy Data encryption guidebook, Stormatics PII protection.
 
 ---
 
@@ -394,7 +384,7 @@ Surfaced by the 2026-05-25 walkthrough locks (DECISIONS.md "Walkthrough locks 20
 | B6 | **2FA enforcement timing — DEV-29 conflict.** *Factor storage resolved via A1 → `auth.mfa_factors`.* Open: required pre-first-e-signature? Optional for non-signing users? Which factor (TOTP / SMS / email)? | Soft default | Auth flow timing only |
 | B7 | **Split-gate enforcement layer** — locked at "action-policy layer, not session/auth layer". Mechanism: RLS, server-side per-RPC checks, middleware, or policy DSL? Ties to [DEV-51](https://linear.app/hellosello/issue/DEV-51) (16-combo matrix encoding). | Architecture (no schema) | Cross-cutting |
 
-**Suggested resolution order:** A1 → A4 → A2 (PII encryption above) → A3 → B-series in any order → B7 last (architecture-only, not schema).
+**Suggested resolution order:** ~~A1~~ → ~~A4~~ → ~~A2~~ → **A3 (next)** → B-series in any order → B7 last (architecture-only, not schema). *(A1 + A4 resolved 2026-05-25; A2 resolved 2026-05-27.)*
 
 ---
 
