@@ -5,32 +5,29 @@
 
 ---
 
-**Last updated:** 2026-05-28 08:23 UTC
+**Last updated:** 2026-05-28 08:24 UTC
 **Branch:** claude/muskan/work
-**Status:** active
-**Linear issue in progress:** none (A3 license file storage lock)
-**Shared files locked:** docs/decisions/DECISIONS.md, docs/architecture/SCHEMA-DRAFT.md, docs/architecture/ARCHITECTURE-NOTES.md
+**Status:** idle
+**Linear issue in progress:** none
+**Shared files locked:** none
 **PR open:** #25 (Phase 1 prototype + SCHEMA-DRAFT, base=dev).
 
 ---
 
 ## Notes for the other agent
 
-Session 2026-05-27: **A2 (PII encryption mechanism) locked — hybrid by data class; pgsodium dropped.**
+Recent session(s): **A2 (PII encryption) locked 2026-05-27** + **A3 (license file storage) locked 2026-05-28.**
 
-Heads-up: **Supabase officially deprecated pgsodium** ("DO NOT RECOMMEND any new usage"; TCE dashboard UI pulled due to "sharp edges"). That made the A1 (2026-05-25) email-mirror approach untenable. Revised:
+**A3 — license file storage (2026-05-28):**
+- **Backend = Supabase Storage** private bucket (chosen over direct S3 — RLS reuses `auth.uid()`, no second vendor).
+- **Encryption = AES-256 at-rest (default) + RLS + short-lived signed URLs.** No app-layer file encryption in v0 (files must be human-reviewed by HS team; deferred unless regulator demands provider-blind storage).
+- **Virus scan = Edge Function at upload boundary** (no Supabase built-in), synchronous for v0.
+- **Validation = allowlist {PDF,JPG,PNG,HEIC} + server-side magic bytes; 20 MB/file, max 5.**
+- **Schema = new `company_license_file` child table** (metadata + storage pointer; `scan_status`, soft-delete for re-upload). **`company.license_filename` dropped** (single column couldn't hold multi-file + per-file scan status).
+- Views/downloads logged to `audit_log` (`license_viewed` / `license_downloaded` — A4).
 
-- **Queryable PII** (email, name, phone) → at-rest only (Supabase default) + RLS. No column encryption.
-- **High-sensitivity stored PII** (license #, gov ID, sensitive freeform notes) → pgcrypto column encryption, master key in Vault, accessed via `SECURITY DEFINER` functions.
-- **Secrets** (API keys, OAuth tokens, webhook signatures) → Supabase Vault.
-- **`person.email_encrypted` dropped** from schema; pgsodium INSERT trigger no longer needed; `SECURITY DEFINER` view `person_with_email` joins `person` ⨝ `auth.users` for app-side email access.
-- **GDPR Art 17** continues to rely on A4's pseudonymization principle. Per-subject crypto-shred deferred unless regulator pressure.
+**A2 recap (2026-05-27):** pgsodium dropped (Supabase deprecated it). Hybrid PII encryption: queryable PII (email/name/phone) → at-rest + RLS; high-sensitivity (license #, gov ID) → pgcrypto + Vault key; secrets → Vault. `person.email_encrypted` dropped; `SECURITY DEFINER` view `person_with_email` replaces the mirror. **⚠️ Ayush:** your PR #25 prototype may reference `email_encrypted` — needs a scan/cleanup under the new A2 lock.
 
-Industry research grounding: Supabase docs (pgsodium deprecation), Discussion #27109, Supabase Vault docs, EDB "PII Horror Story", Crunchy Data encryption guidebook, Stormatics PII protection, oneuptime crypto-shredding.
+Files touched across both sessions: DECISIONS.md (two new dated subsections — 2026-05-27 A2, 2026-05-28 A3), SCHEMA-DRAFT.md (person rewrite, new `company_license_file` table, `license_filename` dropped, A2+A3 open Qs closed), ARCHITECTURE-NOTES.md (Auth + PII strategy + license-storage bullets).
 
-Files updated this session:
-- DECISIONS.md — new dated subsection "Walkthrough locks 2026-05-27 — PII encryption mechanism (A2)"; supersedes the email-mirror portion of the 2026-05-25 Auth model lock.
-- SCHEMA-DRAFT.md — conventions PII row updated; `person.email_encrypted` removed; SECURITY DEFINER view pattern noted; A2 open Q closed with research summary; resolution order updated.
-- ARCHITECTURE-NOTES.md — Auth bullet revised (email-handling section); new "PII encryption strategy" bullet added.
-
-Open Qs status: A1 + A4 + A2 resolved. **Still open:** A3 (license file storage backend — suggested next), B1–B4 (Path B entity, HS-team allowlist, domain-collision flag, reject token), B6 (2FA timing), B7 (split-gate enforcement layer).
+Open Qs status: A1 + A2 + A3 + A4 all resolved. **Still open:** B1–B4 (Path B entity, HS-team allowlist, domain-collision flag, reject token), B6 (2FA timing), B7 (split-gate enforcement layer — architecture-only).
