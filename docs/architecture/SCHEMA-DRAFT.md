@@ -73,7 +73,6 @@ Company entities.
 | `description` | TEXT | NULL | |
 | `primary_products` | TEXT | NULL | Comma-separated for MVP; promote later if filtering needed |
 | `website` | VARCHAR(500) | NULL | |
-| `license_filename` | VARCHAR(500) | NULL | Path/key in object storage |
 | `verification_status` | VARCHAR(50) | NOT NULL DEFAULT `'pending'` | FK to lookup table; values: 'pending', 'verified', 'rejected' |
 | `verified_at` | TIMESTAMPTZ | NULL | |
 | `verified_by` | UUID | NULL, REFERENCES `person(id)` | Hello Sello staff who verified |
@@ -90,7 +89,38 @@ Company entities.
 - Company "type" (distributor / pharmacy / both): **LOCKED — no such column.** Every company can be either at any time per deal.
 - Logos / brand assets → separate `company_asset` table (likely multiple per company).
 - Tax IDs, regulatory IDs (BfArM, EU-GMP, etc.) → as `metadata.regulatory_ids` for MVP; promote to columns if we filter/query by them.
-- File storage backend (S3 / GCS / local) → see `ARCHITECTURE-NOTES.md`.
+- ~~File storage backend (S3 / GCS / local)~~ → **RESOLVED 2026-05-28 (A3):** Supabase Storage private bucket. License files in `company_license_file` (below); see `ARCHITECTURE-NOTES.md`.
+
+---
+
+### `company_license_file`
+
+License/certificate files uploaded at company setup. **File bytes live in a Supabase Storage private bucket; this table holds metadata + the storage pointer only.** (A3 locked 2026-05-28.)
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | UUID | PK, NOT NULL, DEFAULT `gen_random_uuid()` | |
+| `company_id` | UUID | NOT NULL, REFERENCES `company(id)` | Tenant scope + owner |
+| `storage_path` | TEXT | NOT NULL | Key/path in Supabase Storage private bucket |
+| `original_filename` | VARCHAR(500) | NOT NULL | User's original filename (display only) |
+| `mime_type` | VARCHAR(100) | NOT NULL | Validated server-side via magic bytes |
+| `file_size_bytes` | BIGINT | NOT NULL | Validated ≤ 20 MB |
+| `scan_status` | VARCHAR(20) | NOT NULL DEFAULT `'pending'` | values: 'pending', 'clean', 'infected', 'scan_error' (lookup table if it grows) |
+| `description` | TEXT | NULL | Optional free-text from uploader (helps HS reviewer) |
+| `created_by` | UUID | NULL, REFERENCES `person(id)` | Uploader |
+| `updated_by` | UUID | NULL, REFERENCES `person(id)` | |
+| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
+| `updated_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
+| `deleted_at` | TIMESTAMPTZ | NULL | Re-upload during pending = soft-delete old + insert new |
+
+**Indexes:**
+- `INDEX(company_id)` for fetching a company's files
+- `INDEX(scan_status)` for "files pending/failed scan" queries
+
+**Access control:** Private bucket; RLS on `storage.objects` gates download. HS-team reviewers get short-lived signed URLs. Every view/download logged to `audit_log` (`license_viewed` / `license_downloaded` — A4). Virus scan via Edge Function at upload boundary sets `scan_status`.
+
+**Open questions:**
+- Extract license number / issuing authority / expiry into structured columns here? → **Default:** not in v0 (HS reviewer reads the file directly). If extracted later, the license-number column follows A2's pgcrypto high-sensitivity tier.
 
 ---
 
@@ -374,7 +404,7 @@ Surfaced by the 2026-05-25 walkthrough locks (DECISIONS.md "Walkthrough locks 20
 | # | Question | Type | Affects |
 |---|---|---|---|
 | A1 | ~~**Supabase Auth (`auth.users`) vs. roll own `person.password_hash`?**~~ → **RESOLVED 2026-05-25 — Supabase Auth + mirror pattern.** See DECISIONS.md walkthrough locks 2026-05-25, entry "Auth model". | ~~Hard blocker~~ Resolved | `person`, email-verify token table, 2FA design |
-| A3 | **License file storage backend** — Supabase Storage vs. S3 + encryption-at-rest mechanism; virus-scan tool; file size/count limits (working: ~10-25 MB/file, ≤5-10 files). | Hard blocker | `company.license_filename` semantics; ties to PII encryption above |
+| A3 | ~~**License file storage backend**~~ → **RESOLVED 2026-05-28.** Supabase Storage private bucket + at-rest (AES-256) + RLS + signed URLs; Edge-Function virus scan at upload boundary; allowlist {PDF,JPG,PNG,HEIC} + magic bytes; 20 MB/file, max 5; new `company_license_file` child table (above), `company.license_filename` dropped. See DECISIONS.md walkthrough locks 2026-05-28 — A3. | ~~Hard blocker~~ Resolved | New `company_license_file` table; `company.license_filename` removed |
 | A4 | ~~**Promote `audit_log` to Phase 1.**~~ → **RESOLVED 2026-05-25 — full audit_log design locked** (Q1–Q10 walked through with industry research). See `audit_log` table block above + DECISIONS.md walkthrough locks 2026-05-25 "Audit log design". Phase 1 ships: polymorphic single table + JSONB diffs + dual-identity actor + hash chain + reversibility tier + GDPR pseudonymization principle. | ~~Hard blocker~~ Resolved | New Phase 1 table built with hash chain + reversibility + dual identity |
 | B1 | **Path B "join request" entity** — new `join_request` table or reuse `pending_inbox_item`? Multi-Superadmin company: any Superadmin reviews or routed to one? | Soft default | New table or schema change |
 | B2 | **HS-team allowlist** — `person.is_hs_team` column, separate `hs_team_member` table, or env-var allowlist consumed by middleware? | Soft default | `person` schema or new tiny table |
@@ -384,7 +414,7 @@ Surfaced by the 2026-05-25 walkthrough locks (DECISIONS.md "Walkthrough locks 20
 | B6 | **2FA enforcement timing — DEV-29 conflict.** *Factor storage resolved via A1 → `auth.mfa_factors`.* Open: required pre-first-e-signature? Optional for non-signing users? Which factor (TOTP / SMS / email)? | Soft default | Auth flow timing only |
 | B7 | **Split-gate enforcement layer** — locked at "action-policy layer, not session/auth layer". Mechanism: RLS, server-side per-RPC checks, middleware, or policy DSL? Ties to [DEV-51](https://linear.app/hellosello/issue/DEV-51) (16-combo matrix encoding). | Architecture (no schema) | Cross-cutting |
 
-**Suggested resolution order:** ~~A1~~ → ~~A4~~ → ~~A2~~ → **A3 (next)** → B-series in any order → B7 last (architecture-only, not schema). *(A1 + A4 resolved 2026-05-25; A2 resolved 2026-05-27.)*
+**Suggested resolution order:** ~~A1~~ → ~~A4~~ → ~~A2~~ → ~~A3~~ → **B-series next (any order)** → B7 last (architecture-only, not schema). *(A1 + A4 resolved 2026-05-25; A2 resolved 2026-05-27; A3 resolved 2026-05-28.)*
 
 ---
 
