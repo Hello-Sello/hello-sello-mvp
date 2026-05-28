@@ -5,11 +5,11 @@
 
 ---
 
-**Last updated:** 2026-05-27 10:58 UTC
+**Last updated:** 2026-05-28 08:23 UTC
 **Branch:** claude/muskan/work
-**Status:** idle
-**Linear issue in progress:** none
-**Shared files locked:** none
+**Status:** active
+**Linear issue in progress:** none (A3 license file storage lock)
+**Shared files locked:** docs/decisions/DECISIONS.md, docs/architecture/SCHEMA-DRAFT.md, docs/architecture/ARCHITECTURE-NOTES.md
 **PR open:** #25 (Phase 1 prototype + SCHEMA-DRAFT, base=dev).
 
 ---
