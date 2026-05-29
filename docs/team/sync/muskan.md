@@ -5,11 +5,11 @@
 
 ---
 
-**Last updated:** 2026-05-29 12:55 UTC
+**Last updated:** 2026-05-29 13:03 UTC
 **Branch:** claude/muskan/work
-**Status:** idle
-**Linear issue in progress:** none
-**Shared files locked:** none
+**Status:** active
+**Linear issue in progress:** none (B1 Path B join-request entity lock)
+**Shared files locked:** docs/decisions/DECISIONS.md, docs/architecture/SCHEMA-DRAFT.md, docs/architecture/ARCHITECTURE-NOTES.md
 **PR open:** #25 (Phase 1 prototype + SCHEMA-DRAFT, base=dev).
 
 ---
