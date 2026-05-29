@@ -5,29 +5,27 @@
 
 ---
 
-**Last updated:** 2026-05-29 12:54 UTC
+**Last updated:** 2026-05-29 12:55 UTC
 **Branch:** claude/muskan/work
-**Status:** active
-**Linear issue in progress:** none (B7 split-gate enforcement layer lock)
-**Shared files locked:** docs/decisions/DECISIONS.md, docs/architecture/SCHEMA-DRAFT.md, docs/architecture/ARCHITECTURE-NOTES.md
+**Status:** idle
+**Linear issue in progress:** none
+**Shared files locked:** none
 **PR open:** #25 (Phase 1 prototype + SCHEMA-DRAFT, base=dev).
 
 ---
 
 ## Notes for the other agent
 
-Recent session(s): **A2 (PII encryption) locked 2026-05-27** + **A3 (license file storage) locked 2026-05-28.**
+Recent locks: **A2 (PII encryption) 2026-05-27** · **A3 (license file storage) 2026-05-28** · **B7 (enforcement layer) 2026-05-29.**
 
-**A3 — license file storage (2026-05-28):**
-- **Backend = Supabase Storage** private bucket (chosen over direct S3 — RLS reuses `auth.uid()`, no second vendor).
-- **Encryption = AES-256 at-rest (default) + RLS + short-lived signed URLs.** No app-layer file encryption in v0 (files must be human-reviewed by HS team; deferred unless regulator demands provider-blind storage).
-- **Virus scan = Edge Function at upload boundary** (no Supabase built-in), synchronous for v0.
-- **Validation = allowlist {PDF,JPG,PNG,HEIC} + server-side magic bytes; 20 MB/file, max 5.**
-- **Schema = new `company_license_file` child table** (metadata + storage pointer; `scan_status`, soft-delete for re-upload). **`company.license_filename` dropped** (single column couldn't hold multi-file + per-file scan status).
-- Views/downloads logged to `audit_log` (`license_viewed` / `license_downloaded` — A4).
+**B7 — split-gate / access-policy enforcement layer (2026-05-29):** **Layered / defense-in-depth.** Postgres **RLS = security floor** (tenant isolation via `company_id` + `auth.uid()`; DB blocks cross-tenant rows even if app code has a bug). **Central app-layer policy module = complex authorization** — the split-gate (verified/pending) + the DEV-51 16-combo cross-company matrix live in ONE authoritative module called by every protected action/RPC, NOT scattered inline checks. RLS deliberately not used for the complex matrix. Policy DSL (OPA/Oso) deferred until the hand-written matrix outgrows maintainable code. Architecture-only (no schema). **Unblocks DEV-51.**
 
-**A2 recap (2026-05-27):** pgsodium dropped (Supabase deprecated it). Hybrid PII encryption: queryable PII (email/name/phone) → at-rest + RLS; high-sensitivity (license #, gov ID) → pgcrypto + Vault key; secrets → Vault. `person.email_encrypted` dropped; `SECURITY DEFINER` view `person_with_email` replaces the mirror. **⚠️ Ayush:** your PR #25 prototype may reference `email_encrypted` — needs a scan/cleanup under the new A2 lock.
+**Triage note for the B-series:** B7 + B1 are the only architecture-shaping doubts. **B1** (Path B join-request entity — new table vs reuse `pending_inbox_item`) is the next architecture call. **B2/B3/B4/B6** reclassified as build/mechanism (concepts already locked; where-the-field-lives / which-technique) — decide at build, not now.
 
-Files touched across both sessions: DECISIONS.md (two new dated subsections — 2026-05-27 A2, 2026-05-28 A3), SCHEMA-DRAFT.md (person rewrite, new `company_license_file` table, `license_filename` dropped, A2+A3 open Qs closed), ARCHITECTURE-NOTES.md (Auth + PII strategy + license-storage bullets).
+**A3 recap (2026-05-28):** License files → Supabase Storage private bucket, AES-256 at-rest + RLS + signed URLs, Edge-Function virus scan, allowlist {PDF,JPG,PNG,HEIC} + magic bytes, 20 MB/max 5. New `company_license_file` child table; `company.license_filename` dropped. No app-layer file encryption in v0.
 
-Open Qs status: A1 + A2 + A3 + A4 all resolved. **Still open:** B1–B4 (Path B entity, HS-team allowlist, domain-collision flag, reject token), B6 (2FA timing), B7 (split-gate enforcement layer — architecture-only).
+**A2 recap (2026-05-27):** pgsodium dropped (Supabase deprecated). Hybrid PII encryption: queryable (email/name/phone) → at-rest + RLS; high-sensitivity (license #, gov ID) → pgcrypto + Vault key; secrets → Vault. `person.email_encrypted` dropped → `SECURITY DEFINER` view `person_with_email`. **⚠️ Ayush:** PR #25 prototype may reference `email_encrypted` — needs a scan/cleanup under the new A2 lock.
+
+Files touched (this B7 session): DECISIONS.md (new 2026-05-29 B7 subsection), ARCHITECTURE-NOTES.md (Access policy section — resolved the "under research" line + added layered-enforcement bullet), SCHEMA-DRAFT.md (B7 open Q closed + resolution order/triage updated). No schema changes.
+
+Open Qs status: **A1 + A2 + A3 + A4 + B7 resolved.** Remaining: **B1** (architecture — next), **B2/B3/B4/B6** (build/mechanism — deferred to build).
