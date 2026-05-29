@@ -42,7 +42,8 @@ When the formal Architecture doc is written (post Layer 4 + 5), these become its
 
 ## Access policy
 
-- The 16-combo access matrix is the **master access policy** for cross-company interactions; encoding model (DB-level RLS / policy engine / hardcoded) is under research. *(Layer 1 §11.1 + DEV-51.)*
+- The 16-combo access matrix is the **master access policy** for cross-company interactions. **Enforcement model = layered (B7, locked 2026-05-29):** the matrix is encoded in a central app-layer policy module — not RLS, not hardcoded inline. *(Layer 1 §11.1 + DEV-51.)*
+- **Authorization enforcement = layered / defense-in-depth (B7, 2026-05-29).** **RLS = security floor:** Postgres Row-Level Security owns tenant isolation (`company_id`) + basic row ownership, keyed on `auth.uid()`. The DB refuses cross-tenant rows regardless of how the query arrives — an app-code bug can't leak another company's data. **Central app-layer policy module = complex authorization:** the split-gate (verified/pending) + the DEV-51 16-combo cross-company matrix live in one authoritative module called by every protected action/RPC — not scattered inline checks. RLS deliberately not used for the complex matrix (context/workflow-state rules get slow + hard to test/debug in SQL). **Policy DSL/engine (OPA, Oso) deferred** until the hand-written matrix outgrows maintainable code. Consistent with the split-gate lock's "action-policy layer, not session/auth layer" — B7 adds the RLS floor beneath it. *(Locked 2026-05-29, resolves SCHEMA-DRAFT §B7.)*
 - Deal visibility has **two independent layers**: Layer A (deal records on the Relationship page, default company-wide with per-side PRIVATE override) and Layer B (Deal Workspace contents, always invited-only). *(DEV-6.)*
 - Notes on the Relationship page are **per-side, not shared cross-company** — each company's notes are private to its own members. *(DEV-41.)*
 

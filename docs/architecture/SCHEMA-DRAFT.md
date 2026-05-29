@@ -412,9 +412,9 @@ Surfaced by the 2026-05-25 walkthrough locks (DECISIONS.md "Walkthrough locks 20
 | B4 | **Reject reason + resubmit token** — `company.rejection_reason TEXT`? Token-based resubmit link (UUID, expiry)? | Soft default | `company` columns or new `email_token` table |
 | B5 | ~~**`email_verification_token` table schema**~~ → **RESOLVED 2026-05-25** via A1 lock (Supabase Auth owns this). | ~~Soft default~~ Resolved | No new table needed |
 | B6 | **2FA enforcement timing — DEV-29 conflict.** *Factor storage resolved via A1 → `auth.mfa_factors`.* Open: required pre-first-e-signature? Optional for non-signing users? Which factor (TOTP / SMS / email)? | Soft default | Auth flow timing only |
-| B7 | **Split-gate enforcement layer** — locked at "action-policy layer, not session/auth layer". Mechanism: RLS, server-side per-RPC checks, middleware, or policy DSL? Ties to [DEV-51](https://linear.app/hellosello/issue/DEV-51) (16-combo matrix encoding). | Architecture (no schema) | Cross-cutting |
+| B7 | ~~**Split-gate enforcement layer**~~ → **RESOLVED 2026-05-29.** Layered / defense-in-depth: Postgres RLS = security floor (tenant isolation via `company_id` + `auth.uid()`); central app-layer policy module = complex authorization (split-gate + DEV-51 16-combo matrix); policy DSL (OPA/Oso) deferred. See DECISIONS.md walkthrough locks 2026-05-29 — B7. Unblocks [DEV-51](https://linear.app/hellosello/issue/DEV-51). | ~~Architecture~~ Resolved (no schema) | Cross-cutting |
 
-**Suggested resolution order:** ~~A1~~ → ~~A4~~ → ~~A2~~ → ~~A3~~ → **B-series next (any order)** → B7 last (architecture-only, not schema). *(A1 + A4 resolved 2026-05-25; A2 resolved 2026-05-27; A3 resolved 2026-05-28.)*
+**Suggested resolution order:** ~~A1~~ → ~~A4~~ → ~~A2~~ → ~~A3~~ → ~~B7~~ → **B1 (architecture — entity boundary, next)** → B2/B3/B4/B6 (build/mechanism — decide at build). *(A1 + A4 resolved 2026-05-25; A2 resolved 2026-05-27; A3 + B7 resolved 2026-05-28/29. B1–B4 + B6 triaged: B1 = architecture, rest = build.)*
 
 ---
 
