@@ -258,6 +258,37 @@ Connection requests between companies (P↔C).
 
 ---
 
+### `join_request`
+
+Path B onboarding: a person requests to join an existing company; a Superadmin of that company approves/rejects. **Distinct from `pending_inbox_item`** (which is company↔company connection) — approval here grants company membership. (B1 locked 2026-05-29.)
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | UUID | PK, NOT NULL, DEFAULT `gen_random_uuid()` | |
+| `requester_person_id` | UUID | NOT NULL, REFERENCES `person(id)` | The joiner (may have `company_id` NULL at request time) |
+| `target_company_id` | UUID | NOT NULL, REFERENCES `company(id)` | Company to join; may still be `verification_status = pending` |
+| `status` | VARCHAR(20) | NOT NULL DEFAULT `'pending'` | FK to lookup: 'pending', 'approved', 'rejected', 'cancelled' |
+| `note` | TEXT | NULL | Optional message from requester |
+| `decided_by` | UUID | NULL, REFERENCES `person(id)` | Superadmin who approved/rejected |
+| `decided_at` | TIMESTAMPTZ | NULL | |
+| `rejection_reason` | TEXT | NULL | Free-text if rejected |
+| `metadata` | JSONB | NOT NULL DEFAULT `'{}'` | |
+| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
+| `updated_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
+| `deleted_at` | TIMESTAMPTZ | NULL | |
+
+**Indexes:**
+- `INDEX(target_company_id, status)` — "pending join requests for my company"
+- `INDEX(requester_person_id)` — "my join requests"
+
+**Approval side effect:** on `approved`, set `requester_person.company_id = target_company_id` + assign default role/group. This membership-granting effect is why it's a separate aggregate from `pending_inbox_item`. Approve/reject logged to `audit_log` (content_type `'join_request'`).
+
+**Open questions:**
+- Multi-Superadmin routing (any vs assigned) → **Default:** any Superadmin of target company; build/policy detail, deferred (v0 = one user/company, unexercised).
+- Domain-collision auto-suggest (B3) accepting the banner creates a `join_request` → wiring is build-time.
+
+---
+
 ### `audit_log`
 
 Universal append-only change-log for every audited business action. **Immutable** — DB triggers reject UPDATE and DELETE. Polymorphic content reference (`content_type` + `content_id`) covers any entity type. **Tamper-evident** via SHA-256 hash chain from day 1. Full design locked 2026-05-25 (SCHEMA-DRAFT §A4 — see DECISIONS.md walkthrough locks 2026-05-25, entry "Audit log design").
@@ -406,7 +437,7 @@ Surfaced by the 2026-05-25 walkthrough locks (DECISIONS.md "Walkthrough locks 20
 | A1 | ~~**Supabase Auth (`auth.users`) vs. roll own `person.password_hash`?**~~ → **RESOLVED 2026-05-25 — Supabase Auth + mirror pattern.** See DECISIONS.md walkthrough locks 2026-05-25, entry "Auth model". | ~~Hard blocker~~ Resolved | `person`, email-verify token table, 2FA design |
 | A3 | ~~**License file storage backend**~~ → **RESOLVED 2026-05-28.** Supabase Storage private bucket + at-rest (AES-256) + RLS + signed URLs; Edge-Function virus scan at upload boundary; allowlist {PDF,JPG,PNG,HEIC} + magic bytes; 20 MB/file, max 5; new `company_license_file` child table (above), `company.license_filename` dropped. See DECISIONS.md walkthrough locks 2026-05-28 — A3. | ~~Hard blocker~~ Resolved | New `company_license_file` table; `company.license_filename` removed |
 | A4 | ~~**Promote `audit_log` to Phase 1.**~~ → **RESOLVED 2026-05-25 — full audit_log design locked** (Q1–Q10 walked through with industry research). See `audit_log` table block above + DECISIONS.md walkthrough locks 2026-05-25 "Audit log design". Phase 1 ships: polymorphic single table + JSONB diffs + dual-identity actor + hash chain + reversibility tier + GDPR pseudonymization principle. | ~~Hard blocker~~ Resolved | New Phase 1 table built with hash chain + reversibility + dual identity |
-| B1 | **Path B "join request" entity** — new `join_request` table or reuse `pending_inbox_item`? Multi-Superadmin company: any Superadmin reviews or routed to one? | Soft default | New table or schema change |
+| B1 | ~~**Path B "join request" entity**~~ → **RESOLVED 2026-05-29.** Dedicated `join_request` table (above), NOT a reuse of `pending_inbox_item` — different concept (person→company membership vs company↔company connection), different invariants, approval grants membership. Multi-Superadmin routing defaulted to "any Superadmin of target company" (build detail). See DECISIONS.md walkthrough locks 2026-05-29 — B1. | ~~Soft default~~ Resolved | New `join_request` table |
 | B2 | **HS-team allowlist** — `person.is_hs_team` column, separate `hs_team_member` table, or env-var allowlist consumed by middleware? | Soft default | `person` schema or new tiny table |
 | B3 | **Domain-collision override flag** — when user picks "new company" despite domain match, where does the silent flag live? `company.metadata.domain_collision_override` or column on review-queue entry? | Soft default | `company.metadata` or review entry |
 | B4 | **Reject reason + resubmit token** — `company.rejection_reason TEXT`? Token-based resubmit link (UUID, expiry)? | Soft default | `company` columns or new `email_token` table |
@@ -414,7 +445,7 @@ Surfaced by the 2026-05-25 walkthrough locks (DECISIONS.md "Walkthrough locks 20
 | B6 | **2FA enforcement timing — DEV-29 conflict.** *Factor storage resolved via A1 → `auth.mfa_factors`.* Open: required pre-first-e-signature? Optional for non-signing users? Which factor (TOTP / SMS / email)? | Soft default | Auth flow timing only |
 | B7 | ~~**Split-gate enforcement layer**~~ → **RESOLVED 2026-05-29.** Layered / defense-in-depth: Postgres RLS = security floor (tenant isolation via `company_id` + `auth.uid()`); central app-layer policy module = complex authorization (split-gate + DEV-51 16-combo matrix); policy DSL (OPA/Oso) deferred. See DECISIONS.md walkthrough locks 2026-05-29 — B7. Unblocks [DEV-51](https://linear.app/hellosello/issue/DEV-51). | ~~Architecture~~ Resolved (no schema) | Cross-cutting |
 
-**Suggested resolution order:** ~~A1~~ → ~~A4~~ → ~~A2~~ → ~~A3~~ → ~~B7~~ → **B1 (architecture — entity boundary, next)** → B2/B3/B4/B6 (build/mechanism — decide at build). *(A1 + A4 resolved 2026-05-25; A2 resolved 2026-05-27; A3 + B7 resolved 2026-05-28/29. B1–B4 + B6 triaged: B1 = architecture, rest = build.)*
+**Suggested resolution order:** ~~A1~~ → ~~A4~~ → ~~A2~~ → ~~A3~~ → ~~B7~~ → ~~B1~~ → **B2/B3/B4/B6 remain (build/mechanism — decide at build).** *(All architecture-shaping open questions resolved: A1+A4 2026-05-25, A2 2026-05-27, A3 2026-05-28, B7+B1 2026-05-29. B2/B3/B4/B6 are field-placement / technique choices for already-locked concepts — decide at build.)*
 
 ---
 
