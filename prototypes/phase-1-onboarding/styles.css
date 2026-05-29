@@ -1,0 +1,64 @@
+/* Phase 1 prototype — minor custom CSS only. Most styling is Tailwind via CDN. */
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", sans-serif;
+}
+
+#app-topbar:not(.hidden) {
+  display: flex;
+}
+
+.data-row-new {
+  background-color: #fef3c7 !important;
+  animation: fadeYellow 2.5s ease-out forwards;
+}
+@keyframes fadeYellow {
+  0%   { background-color: #fde68a; }
+  60%  { background-color: #fef3c7; }
+  100% { background-color: #f8fafc; }
+}
+
+.data-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 12px;
+}
+.data-table th, .data-table td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid #e2e8f0;
+}
+.data-table th {
+  font-weight: 600;
+  color: #475569;
+  background: #f8fafc;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+code {
+  font-size: 11px;
+  background: #f1f5f9;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", monospace;
+}
+
+details summary {
+  list-style: none;
+  outline: none;
+}
+details summary::-webkit-details-marker { display: none; }
+details summary::before {
+  content: "▸ ";
+  color: #94a3b8;
+  font-size: 10px;
+}
+details[open] summary::before {
+  content: "▾ ";
+}
+
+.perm-cell:hover {
+  background: #f1f5f9;
+}
