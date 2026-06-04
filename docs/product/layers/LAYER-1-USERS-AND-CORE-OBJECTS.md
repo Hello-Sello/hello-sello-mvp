@@ -502,6 +502,8 @@ Below is the canonical access matrix — sourced from the Chat project descripti
 
 **How the matrix is encoded in the codebase** is open (policy DSL / RLS / OPA / hardcoded) — see [DEV-51](https://linear.app/hellosello/issue/DEV-51).
 
+> **⚠️ Cleanup flag (2026-05-25).** This matrix was written assuming a binary *on HS / not on HS* state. With the **split-gate access model** locked 2026-05-25 (see DECISIONS.md, Layer 1 walkthrough 2026-05-25), an intermediate state now exists — *person signed up + email verified, company not yet HS-verified*. Several combos (especially #4 and #8) may be unreachable under this new state, and others need clarification. Noted for a future audit pass; not blocking implementation.
+
 ### 11.2 Surface-level visibility table
 
 | Surface | Visible to |

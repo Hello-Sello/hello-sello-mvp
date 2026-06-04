@@ -184,6 +184,7 @@ When the user says "wrap up" or signals the session is ending, run this checklis
 5. **Update your personal CLAUDE.md** — overwrite "Last session" + "What's next" so the next session resumes with full context
 6. **Update your sync file** ([`sync/ayush.md`](sync/ayush.md) or [`sync/muskan.md`](sync/muskan.md)): Status → `idle` or `offline`, clear any remaining locks
 7. **Commit + push outstanding work** — the sync file always pushes; personal CLAUDE.md is gitignored and stays local
+8. **Drop merged `pr/*` branches.** For each `pr/*` PR that merged since last session: `git push origin --delete <name>`. Then run `git fetch -p && git branch -vv | awk '/: gone]/ {print $1}' | xargs -r git branch -D` to drop matching local copies. Never touches `main`, `dev`, or personal `claude/*/work` branches.
 
 Propose-mode protocols (DECISIONS.md edits, ARCHITECTURE-NOTES.md additions per "Issue closure" rule above) still apply during wrap-up — don't batch-write without asking.
 
