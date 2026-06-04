@@ -5,15 +5,22 @@
 
 ---
 
-**Last updated:** 2026-05-23 18:23 CEST
-**Branch:** claude/ayush/work
-**Status:** active
-**Linear issue in progress:** none (meta-process work, no DEV issue)
-**Shared files locked:** none
-**PR open:** none (PR to dev coming next - whole session bundle)
+**Last updated:** 2026-06-04 (Berlin)
+**Branch:** claude/ayush/work (rebased onto origin/dev, force-pushed; in sync, 0 behind dev)
+**Status:** idle / offline (architecture design session wrapped)
+**Linear issue in progress:** none
+**Shared files locked:** none (committed this session: DECISIONS.md, ARCHITECTURE-NOTES.md, README.md)
+**PR open:** none
 
 ---
 
 ## Notes for the other agent
 
-docs/product/ reorg done. New structure: `layers/` (5 LAYER files, history preserved via git mv), `surfaces/` (7 stub files: CONNECT/PRESENT/BUY/SELL/DISCOVER/GROW/SELLA - all status:stub using the agreed template, definitions and known LAYER cross-refs filled, content to be filled when each surface is grilled), `README.md` (explains layers/ vs surfaces/ and the template). Path refs fixed in KNOWN-AMENDMENTS.md, repo-root README.md (also added LAYER-5 + surfaces entry which was missing), .planning/STATE.md (3 refs). LAYER-to-LAYER cross-refs untouched (all relative, all 5 moved together, paths still valid). Next: I'll open a PR to dev bundling this whole session's work (Build Strategy chapter in DECISIONS.md + AGENTS.md updates + WORKFLOW.md shared-files glob + docs/product/ reorg + 7 stubs). Then we can resume Connect Grill Q1.
+Session 2026-06-04 (Ayush + Claude) - architecture design pass for the June 11 demo.
+
+1. **Rebased onto your work.** Pulled your phase-1 prototype + SCHEMA-DRAFT + arch-locks (A1-A4/B1/B7) via rebase; force-pushed my branch. Dropped an old May-24 sync commit (superseded). In sync now, 0 behind dev.
+2. **Two new decisions committed to DECISIONS.md** (Build-strategy chapter, 2026-06-04): (a) code architecture = **modular monolith (lite), domain-partitioned** - `src/app` + `src/modules` + `src/shared`; (b) **Sella inference = Claude on AWS Bedrock, EU/Frankfurt** (Sonnet major / Haiku light, Opus deferred). The Bedrock choice fills the technology half of DEV-11 (multi-Sella framework). Also added these to ARCHITECTURE-NOTES.md and documented the **target app structure** in README.md. No repo restructure yet.
+3. **Heads-up: our demo design is a simplified slice of the canon and needs reconciling** (I did NOT overwrite anything) - 3 spots: (a) workspace-spawn timing (we framed it as accept/counter; canon = deal-card birth), (b) Sella simplified to 3 jobs vs your multi-Sella specialists, (c) lifecycle words (we said "Pending"; canon = Draft / Confirmed / Done). Will align to the canon next session.
+4. **Not done yet:** the architecture brief, the two diagrams (user-flow + system), and the Connect screen/UI discussion - next session, before code.
+
+Status going idle / offline until next session.

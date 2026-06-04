@@ -44,6 +44,27 @@ If you're a teammate joining the project, read in this order:
 
 ---
 
+## Planned app code structure (modular monolith)
+
+> **Target structure for the app code, agreed 2026-06-04 - documented here as the plan. NOT yet built; this design repo is not being restructured. To be applied next session. Real app code lives in the `HelloSello_MVP` repo. See `docs/decisions/DECISIONS.md` (2026-06-04) + `docs/architecture/ARCHITECTURE-NOTES.md`.**
+
+Modular monolith, partitioned **by domain** (not technical layer). One deployable: Next.js (App Router, TypeScript) on Vercel + Supabase (Postgres / Auth / Realtime / Storage), multi-tenant via RLS. Sella inference on Claude via AWS Bedrock (EU / Frankfurt).
+
+```
+src/
+├── app/        # routing only (thin pages): (auth)/, connect/, inbox/, deals/[id]/, catalog/ …
+├── modules/    # domain modules - the heart
+│   ├── companies/  connections/  messaging/
+│   └── deals/  catalog/  sella/
+│       # each module: components/ · server/(actions+queries) · lib/ · types.ts · index.ts
+└── shared/     # cross-cutting: auth/ · db/ · ui/ · utils/ · types/
+supabase/       # migrations, RLS policies, seed
+```
+
+**Rules:** a module talks to another only through its public `index.ts`. Surfaces (Connect / Present / Buy / Sell / Discover / Grow) are routes in `app/` that compose modules; a new surface = a new route + reuse of existing modules. Auth is cross-cutting (`shared/auth`), not a domain module.
+
+---
+
 ## How we work
 
 - **Layer by layer.** Don't jump ahead. Layer 1 locked; Layers 2-4 in progress.
