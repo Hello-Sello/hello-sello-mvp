@@ -5,22 +5,22 @@
 
 ---
 
-**Last updated:** 2026-06-04 (Berlin)
-**Branch:** claude/ayush/work (rebased onto origin/dev, force-pushed; in sync, 0 behind dev)
-**Status:** idle / offline (architecture design session wrapped)
+**Last updated:** 2026-06-05 18:28 CEST
+**Branch:** claude/ayush/work (rebased onto origin/dev; 0 behind dev)
+**Status:** active - promoting architecture work to shared docs + repo-structure / README update
 **Linear issue in progress:** none
-**Shared files locked:** none (committed this session: DECISIONS.md, ARCHITECTURE-NOTES.md, README.md)
-**PR open:** none
+**Shared files locked:** `README.md`, `docs/architecture/connect-demo.md` (new), `docs/architecture/diagrams/` (new), `docs/architecture/ARCHITECTURE-NOTES.md` (may touch)
+**PR open:** none (will open after this push)
 
 ---
 
 ## Notes for the other agent
 
-Session 2026-06-04 (Ayush + Claude) - architecture design pass for the June 11 demo.
+Session 2026-06-05 (Ayush + Claude) - June 11 demo: design pass + saving the architecture for the team.
 
-1. **Rebased onto your work.** Pulled your phase-1 prototype + SCHEMA-DRAFT + arch-locks (A1-A4/B1/B7) via rebase; force-pushed my branch. Dropped an old May-24 sync commit (superseded). In sync now, 0 behind dev.
-2. **Two new decisions committed to DECISIONS.md** (Build-strategy chapter, 2026-06-04): (a) code architecture = **modular monolith (lite), domain-partitioned** - `src/app` + `src/modules` + `src/shared`; (b) **Sella inference = Claude on AWS Bedrock, EU/Frankfurt** (Sonnet major / Haiku light, Opus deferred). The Bedrock choice fills the technology half of DEV-11 (multi-Sella framework). Also added these to ARCHITECTURE-NOTES.md and documented the **target app structure** in README.md. No repo restructure yet.
-3. **Heads-up: our demo design is a simplified slice of the canon and needs reconciling** (I did NOT overwrite anything) - 3 spots: (a) workspace-spawn timing (we framed it as accept/counter; canon = deal-card birth), (b) Sella simplified to 3 jobs vs your multi-Sella specialists, (c) lifecycle words (we said "Pending"; canon = Draft / Confirmed / Done). Will align to the canon next session.
-4. **Not done yet:** the architecture brief, the two diagrams (user-flow + system), and the Connect screen/UI discussion - next session, before code.
+1. **Promoting architecture work from my personal `_workshop/` into `docs/architecture/`** so the team can find it: a new **`connect-demo.md`** (demo-slice architecture that references the canon, does not redefine it) + a **`diagrams/`** folder with 3 SVGs - **engineering** (component boxes), **runtime-sequence** (the deal flow over time), and a simpler **business** journey. This is the June-11 Connect-demo slice, not new canon.
+2. **README repo-structure update** - documenting the **modular-monolith (lite), domain-partitioned** target layout (6 modules: Identity, Connections, Messaging, Deal Workspace, Sella, Audit). Docs only - no live code restructure (real app lives in the MVP repo).
+3. **Canon vocabulary used in the doc:** workspace born with the deal card, lifecycle **Draft -> Confirmed -> Done**, the 3 demo Sella jobs named under **Deal-Sella** (the full multi-Sella family is referenced, not redefined).
+4. **Still pending (not today):** the `email_encrypted` scan in PR #25 (your A2 flag), and the Connect / Discover / Present screen designs (next, right after this push).
 
-Status going idle / offline until next session.
+Working now - will flip to idle when the push + PR are done.
