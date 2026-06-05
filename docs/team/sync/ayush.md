@@ -5,22 +5,22 @@
 
 ---
 
-**Last updated:** 2026-06-05 18:53 CEST
-**Branch:** claude/ayush/work (rebased onto origin/dev; pushed)
-**Status:** active - architecture saved to shared docs + repo skeleton pushed; next: Connect / Discover / Present screen designs
+**Last updated:** 2026-06-05 20:28 CEST
+**Branch:** claude/ayush/work (rebased onto origin/dev; 0 behind)
+**Status:** offline (session wrapped)
 **Linear issue in progress:** none
-**Shared files locked:** none (all committed + pushed)
-**PR open:** none yet - branch pushed; PR to `dev` ready to open (gh not installed locally, so Ayush opens it via the GitHub compare link).
+**Shared files locked:** none
+**PR open:** none - architecture PR #30 merged to `dev` this session.
 
 ---
 
 ## Notes for the other agent
 
-Session 2026-06-05 (Ayush + Claude). Pushed to `claude/ayush/work` (commit `62387d9`):
+Session 2026-06-05 wrapped.
 
-1. **Architecture promoted to `docs/architecture/`** - new `connect-demo.md` (June-11 demo slice; references the canon, does not redefine it) + `diagrams/` with 3 SVGs (engineering / runtime-sequence / business journey). Moved out of my personal `_workshop/`.
-2. **Modular repo skeleton added** - deleted empty layered `frontend/` `backend/` `infra/`; added `src/` (app + 6 modules + shared incl. `audit`) and `supabase/`, with `src/README.md` as the map. Reference only - real code is built in the MVP repo. README repo-layout + structure section updated to match.
-3. **Dead ownership refs cleaned** - `AGENTS.md` + `WORKFLOW.md` no longer reference `frontend/`=Ayush / `backend/`=Muskan. We now split by **module / component**, settled per task. WORKFLOW "Owned areas" table generalized; `docs/` stays shared (sync ritual).
-4. **Still pending (not done):** the `email_encrypted` scan in PR #25 (your A2 flag), and the actual screen designs (next).
+1. **Architecture merged to `dev` (PR #30).** Connect-demo architecture is now in `docs/architecture/` (`connect-demo.md` + `diagrams/`); modular-monolith skeleton in `src/` + `supabase/` (see `src/README.md`); the layered `frontend/`+`backend/`+`infra/` folders were removed; `README.md` / `AGENTS.md` / `WORKFLOW.md` updated (frontend/backend ownership dropped - we now split by **module / component**).
+2. **Screen design (prototypes, in my gitignored `_workshop/` - not on dev):** Home and Connect designed and locked-for-now, light theme matching your auth prototype (slate + pink-600). Connect = 5-panel shell with a per-surface sub-nav (Chat / Inbox / Companies / Relationship / Deals), the Deal Card travelling between the chat and the Sella panel, plus a mock-DB drawer.
+3. **Next session:** designing Inbox, Company pages, Deal card / Deal Room, and the Product card (Present). Then batch-promote the prototypes into the shared `prototypes/` folder.
+4. **Still open:** the `email_encrypted` scan in PR #25 (your A2 flag).
 
-PR to `dev` not opened yet (no `gh` CLI here) - Ayush will open it. Working on screens next.
+Going offline.
