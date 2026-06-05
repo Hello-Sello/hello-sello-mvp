@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="820" viewBox="0 0 1120 820" font-family="-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="ah" markerWidth="11" markerHeight="11" refX="8" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L9,4 L0,8 z" fill="#67c6d6"/></marker>
+  </defs>
+
+  <rect x="0" y="0" width="1120" height="820" fill="#3a414e"/>
+
+  <text x="560" y="50" text-anchor="middle" fill="#e8eaee" font-size="27" font-weight="700">Engineering Architecture - Connect Demo</text>
+  <text x="560" y="78" text-anchor="middle" fill="#aab0bb" font-size="15">Multi-tenant &#183; modular monolith &#183; Next.js + Supabase + Bedrock</text>
+
+  <!-- Companies -->
+  <rect x="110" y="110" width="200" height="88" rx="12" fill="#474e5c" stroke="#5a616f" stroke-width="1.5"/>
+  <text x="210" y="161" text-anchor="middle" fill="#d6dae1" font-size="17" font-weight="600">&#128101;  Company A</text>
+
+  <rect x="460" y="110" width="200" height="88" rx="12" fill="#474e5c" stroke="#5a616f" stroke-width="1.5"/>
+  <text x="560" y="161" text-anchor="middle" fill="#d6dae1" font-size="17" font-weight="600">&#128101;  Company B</text>
+
+  <rect x="810" y="110" width="200" height="88" rx="12" fill="#474e5c" stroke="#5a616f" stroke-width="1.5"/>
+  <text x="910" y="161" text-anchor="middle" fill="#d6dae1" font-size="17" font-weight="600">&#128101;  Company C</text>
+
+  <!-- company -> app connectors -->
+  <path d="M210,198 V250 H320 V294" fill="none" stroke="#6b7380" stroke-width="2" marker-end="url(#ah)"/>
+  <path d="M560,198 V294" fill="none" stroke="#6b7380" stroke-width="2" marker-end="url(#ah)"/>
+  <path d="M910,198 V250 H800 V294" fill="none" stroke="#6b7380" stroke-width="2" marker-end="url(#ah)"/>
+
+  <!-- App box -->
+  <rect x="130" y="300" width="860" height="174" rx="14" fill="#2c313b" stroke="#4a515e" stroke-width="1.5"/>
+  <text x="560" y="332" text-anchor="middle" fill="#cdd2da" font-size="18" font-weight="700">Next.js app on Vercel &#183; ONE modular monolith</text>
+
+  <rect x="146" y="358" width="118" height="74" rx="10" fill="#373d49" stroke="#4d5462" stroke-width="1.25"/>
+  <text x="205" y="400" text-anchor="middle" fill="#d6dae1" font-size="14" font-weight="600">Identity</text>
+
+  <rect x="284" y="358" width="118" height="74" rx="10" fill="#373d49" stroke="#4d5462" stroke-width="1.25"/>
+  <text x="343" y="400" text-anchor="middle" fill="#d6dae1" font-size="14" font-weight="600">Connections</text>
+
+  <rect x="422" y="358" width="118" height="74" rx="10" fill="#373d49" stroke="#4d5462" stroke-width="1.25"/>
+  <text x="481" y="400" text-anchor="middle" fill="#d6dae1" font-size="14" font-weight="600">Messaging</text>
+
+  <rect x="560" y="358" width="118" height="74" rx="10" fill="#373d49" stroke="#4d5462" stroke-width="1.25"/>
+  <text x="619" y="392" text-anchor="middle" fill="#d6dae1" font-size="13" font-weight="600">Deal</text>
+  <text x="619" y="410" text-anchor="middle" fill="#d6dae1" font-size="13" font-weight="600">Workspace</text>
+
+  <rect x="698" y="358" width="118" height="74" rx="10" fill="#373d49" stroke="#4d5462" stroke-width="1.25"/>
+  <text x="757" y="400" text-anchor="middle" fill="#d6dae1" font-size="14" font-weight="600">Sella</text>
+
+  <rect x="836" y="358" width="118" height="74" rx="10" fill="#373d49" stroke="#4d5462" stroke-width="1.25"/>
+  <text x="895" y="400" text-anchor="middle" fill="#d6dae1" font-size="14" font-weight="600">Audit</text>
+
+  <!-- app -> data connectors -->
+  <path d="M300,474 V548 H225 V656" fill="none" stroke="#6b7380" stroke-width="2" marker-end="url(#ah)"/>
+  <path d="M560,474 V642" fill="none" stroke="#6b7380" stroke-width="2" marker-end="url(#ah)"/>
+  <path d="M820,474 V548 H915 V656" fill="none" stroke="#6b7380" stroke-width="2" marker-end="url(#ah)"/>
+
+  <!-- connector labels -->
+  <rect x="161" y="578" width="128" height="26" rx="6" fill="#2c313b"/>
+  <text x="225" y="596" text-anchor="middle" fill="#c2c7d0" font-size="12.5">Identity &#8594; login</text>
+
+  <rect x="492" y="560" width="136" height="26" rx="6" fill="#2c313b"/>
+  <text x="560" y="578" text-anchor="middle" fill="#c2c7d0" font-size="12.5">all modules &#8594; data</text>
+
+  <rect x="869" y="578" width="92" height="26" rx="6" fill="#2c313b"/>
+  <text x="915" y="596" text-anchor="middle" fill="#c2c7d0" font-size="12.5">Sella &#8594; AI</text>
+
+  <!-- Auth -->
+  <rect x="120" y="660" width="210" height="92" rx="12" fill="#474e5c" stroke="#5a616f" stroke-width="1.5"/>
+  <text x="225" y="700" text-anchor="middle" fill="#e8eaee" font-size="16" font-weight="700">Supabase Auth</text>
+  <text x="225" y="724" text-anchor="middle" fill="#aab0bb" font-size="13" font-style="italic">login &amp; identity</text>
+
+  <!-- Postgres cylinder -->
+  <path d="M485,660 A75,15 0 0 0 635,660 L635,742 A75,15 0 0 1 485,742 Z" fill="#474e5c" fill-opacity="0.9" stroke="#6b7380" stroke-width="1.5"/>
+  <ellipse cx="560" cy="660" rx="75" ry="15" fill="#525a69" stroke="#6b7380" stroke-width="1.5"/>
+  <text x="560" y="706" text-anchor="middle" fill="#e8eaee" font-size="16" font-weight="700">Postgres</text>
+  <text x="560" y="727" text-anchor="middle" fill="#aab0bb" font-size="12" font-style="italic">shared DB &#183; RLS</text>
+
+  <!-- Bedrock -->
+  <rect x="800" y="660" width="240" height="92" rx="12" fill="#474e5c" stroke="#5a616f" stroke-width="1.5"/>
+  <text x="920" y="700" text-anchor="middle" fill="#e8eaee" font-size="16" font-weight="700">AWS Bedrock</text>
+  <text x="920" y="724" text-anchor="middle" fill="#aab0bb" font-size="13" font-style="italic">Claude &#183; EU / Frankfurt</text>
+
+  <!-- caption -->
+  <text x="560" y="792" text-anchor="middle" fill="#aab0bb" font-size="13.5">Many companies &#8594; one app &#8594; one shared database. RLS keeps each company private. Sella calls Claude only when needed.</text>
+</svg>
