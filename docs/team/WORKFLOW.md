@@ -139,7 +139,7 @@ Two AI agents working in parallel can step on each other's edits faster than cha
 4. Make the actual edit. Commit + push as usual.
 5. Update YOUR sync file: remove the file from `Shared files locked`, bump `Last updated`. Commit + push.
 
-**For non-shared files** (your own area: `frontend/` for Ayush, `backend/` for Muskan, your personal `CLAUDE.md`): no sync ritual needed. Just work.
+**For non-shared files** (your own working area - the modules/components you're actively on, your personal `CLAUDE.md`): no sync ritual needed. Just work.
 
 **For Linear task tracking,** Linear's "In Progress" column is still the source of truth at the task level. The sync files cover the more granular file-level coordination.
 
@@ -147,14 +147,12 @@ Two AI agents working in parallel can step on each other's edits faster than cha
 
 ## Owned areas — light touch
 
-We have a natural-but-flexible split:
+We work separately on different modules / components - a natural, flexible split, settled per task rather than fixed to folders. Touch the area someone is actively in only with a quick heads-up first.
 
-| Area | Default owner | Other person can touch? |
-|---|---|---|
-| `frontend/` | Ayush | Yes, with a heads-up |
-| `backend/` | Muskan | Yes, with a heads-up |
-| `infra/` | Either | Yes — usually low-conflict |
-| `docs/` | Either | Yes — but follow shared-file rules above |
+| Area | Rule |
+|---|---|
+| The module / component you are actively on | Yours for now; others give a heads-up before touching |
+| `docs/` | Shared - follow the shared-file sync ritual above |
 
 "Heads-up" = a quick chat message before starting. Not a formal sign-off.
 
@@ -168,7 +166,7 @@ Both of us run Claude Code with the same skills. Two agents can plausibly edit t
 
 1. **Before any Claude Code session that might touch shared files** — `git fetch` and rebase off `origin/dev` first. Don't let Claude work off stale state.
 2. **Run the sync ritual** (see above) for every shared-file edit. The sync files are designed for exactly this risk.
-3. **AFK loops stay inside owned areas.** Long autonomous runs (`/triage`, future Ralph loops) should operate on `frontend/` (Ayush) or `backend/` (Muskan), not cross-area shared files.
+3. **AFK loops stay inside owned areas.** Long autonomous runs (`/triage`, future Ralph loops) should operate on the modules/components you currently own, not cross-area shared files.
 4. **`grill-with-docs` and similar tools touch shared files** — they must run the sync ritual too. Don't let edits sit uncommitted across other work.
 
 ---

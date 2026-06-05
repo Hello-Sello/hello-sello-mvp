@@ -5,22 +5,22 @@
 
 ---
 
-**Last updated:** 2026-06-04 (Berlin)
-**Branch:** claude/ayush/work (rebased onto origin/dev, force-pushed; in sync, 0 behind dev)
-**Status:** idle / offline (architecture design session wrapped)
+**Last updated:** 2026-06-05 18:53 CEST
+**Branch:** claude/ayush/work (rebased onto origin/dev; pushed)
+**Status:** active - architecture saved to shared docs + repo skeleton pushed; next: Connect / Discover / Present screen designs
 **Linear issue in progress:** none
-**Shared files locked:** none (committed this session: DECISIONS.md, ARCHITECTURE-NOTES.md, README.md)
-**PR open:** none
+**Shared files locked:** none (all committed + pushed)
+**PR open:** none yet - branch pushed; PR to `dev` ready to open (gh not installed locally, so Ayush opens it via the GitHub compare link).
 
 ---
 
 ## Notes for the other agent
 
-Session 2026-06-04 (Ayush + Claude) - architecture design pass for the June 11 demo.
+Session 2026-06-05 (Ayush + Claude). Pushed to `claude/ayush/work` (commit `62387d9`):
 
-1. **Rebased onto your work.** Pulled your phase-1 prototype + SCHEMA-DRAFT + arch-locks (A1-A4/B1/B7) via rebase; force-pushed my branch. Dropped an old May-24 sync commit (superseded). In sync now, 0 behind dev.
-2. **Two new decisions committed to DECISIONS.md** (Build-strategy chapter, 2026-06-04): (a) code architecture = **modular monolith (lite), domain-partitioned** - `src/app` + `src/modules` + `src/shared`; (b) **Sella inference = Claude on AWS Bedrock, EU/Frankfurt** (Sonnet major / Haiku light, Opus deferred). The Bedrock choice fills the technology half of DEV-11 (multi-Sella framework). Also added these to ARCHITECTURE-NOTES.md and documented the **target app structure** in README.md. No repo restructure yet.
-3. **Heads-up: our demo design is a simplified slice of the canon and needs reconciling** (I did NOT overwrite anything) - 3 spots: (a) workspace-spawn timing (we framed it as accept/counter; canon = deal-card birth), (b) Sella simplified to 3 jobs vs your multi-Sella specialists, (c) lifecycle words (we said "Pending"; canon = Draft / Confirmed / Done). Will align to the canon next session.
-4. **Not done yet:** the architecture brief, the two diagrams (user-flow + system), and the Connect screen/UI discussion - next session, before code.
+1. **Architecture promoted to `docs/architecture/`** - new `connect-demo.md` (June-11 demo slice; references the canon, does not redefine it) + `diagrams/` with 3 SVGs (engineering / runtime-sequence / business journey). Moved out of my personal `_workshop/`.
+2. **Modular repo skeleton added** - deleted empty layered `frontend/` `backend/` `infra/`; added `src/` (app + 6 modules + shared incl. `audit`) and `supabase/`, with `src/README.md` as the map. Reference only - real code is built in the MVP repo. README repo-layout + structure section updated to match.
+3. **Dead ownership refs cleaned** - `AGENTS.md` + `WORKFLOW.md` no longer reference `frontend/`=Ayush / `backend/`=Muskan. We now split by **module / component**, settled per task. WORKFLOW "Owned areas" table generalized; `docs/` stays shared (sync ritual).
+4. **Still pending (not done):** the `email_encrypted` scan in PR #25 (your A2 flag), and the actual screen designs (next).
 
-Status going idle / offline until next session.
+PR to `dev` not opened yet (no `gh` CLI here) - Ayush will open it. Working on screens next.

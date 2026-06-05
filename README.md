@@ -34,19 +34,21 @@ If you're a teammate joining the project, read in this order:
 |--------|----------------|
 | `docs/product/` | Product design - PITCH, PRD, all Layer docs |
 | `docs/decisions/` | Locked decisions log |
-| `docs/architecture/` | Architecture notes, domain glossary, ADRs |
+| `docs/architecture/` | Architecture notes, domain glossary, ADRs, + the Connect-demo architecture (`connect-demo.md` + `diagrams/`) |
 | `docs/meeting-notes/` | Meeting notes |
 | `docs/agents/` | Agent config (issue tracker, labels, domain) |
-| `frontend/` | Frontend code |
-| `backend/` | Backend code |
-| `infra/` | Infrastructure, deploy, CI |
+| `prototypes/` | Throwaway click-through prototypes (e.g. phase-1 onboarding) |
+| `src/` | App structure skeleton (modular monolith) - reference only; see [`src/README.md`](src/README.md) |
+| `supabase/` | DB skeleton - migrations, RLS policies, seed (reference) |
 | `.claude/skills/` | Project-scoped Claude skills |
+
+> **App code is not implemented in this repo.** `src/` + `supabase/` are an empty reference skeleton showing the agreed shape; the real app is built in the [`HelloSello_MVP`](https://github.com/HelloSello/HelloSello_MVP) repo. Details below.
 
 ---
 
 ## Planned app code structure (modular monolith)
 
-> **Target structure for the app code, agreed 2026-06-04 - documented here as the plan. NOT yet built; this design repo is not being restructured. To be applied next session. Real app code lives in the `HelloSello_MVP` repo. See `docs/decisions/DECISIONS.md` (2026-06-04) + `docs/architecture/ARCHITECTURE-NOTES.md`.**
+> **Target structure, agreed 2026-06-04. Now scaffolded as an empty reference skeleton in [`src/`](src/README.md) + `supabase/` so the team can see the shape - reference only, not the implementation. The real app code is built in the `HelloSello_MVP` repo following this layout. See [`docs/decisions/DECISIONS.md`](docs/decisions/DECISIONS.md), [`docs/architecture/ARCHITECTURE-NOTES.md`](docs/architecture/ARCHITECTURE-NOTES.md), and the demo slice [`docs/architecture/connect-demo.md`](docs/architecture/connect-demo.md).**
 
 Modular monolith, partitioned **by domain** (not technical layer). One deployable: Next.js (App Router, TypeScript) on Vercel + Supabase (Postgres / Auth / Realtime / Storage), multi-tenant via RLS. Sella inference on Claude via AWS Bedrock (EU / Frankfurt).
 
@@ -57,11 +59,11 @@ src/
 │   ├── companies/  connections/  messaging/
 │   └── deals/  catalog/  sella/
 │       # each module: components/ · server/(actions+queries) · lib/ · types.ts · index.ts
-└── shared/     # cross-cutting: auth/ · db/ · ui/ · utils/ · types/
+└── shared/     # cross-cutting: auth/ · audit/ · db/ · ui/ · utils/ · types/
 supabase/       # migrations, RLS policies, seed
 ```
 
-**Rules:** a module talks to another only through its public `index.ts`. Surfaces (Connect / Present / Buy / Sell / Discover / Grow) are routes in `app/` that compose modules; a new surface = a new route + reuse of existing modules. Auth is cross-cutting (`shared/auth`), not a domain module.
+**Rules:** a module talks to another only through its public `index.ts`. Surfaces (Connect / Present / Buy / Sell / Discover / Grow) are routes in `app/` that compose modules; a new surface = a new route + reuse of existing modules. Auth and audit are cross-cutting (`shared/`), not domain modules.
 
 ---
 
