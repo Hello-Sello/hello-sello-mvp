@@ -5,11 +5,11 @@
 
 ---
 
-**Last updated:** 2026-06-06 21:11 UTC
+**Last updated:** 2026-06-06 21:32 UTC
 **Branch:** claude/muskan/work
-**Status:** active — schema review applied; next is the visual refresh (for the new lookups/columns)
+**Status:** active — refreshing `schema-phase1-visual.html` for the schema-review changes
 **Linear issue in progress:** none
-**Shared files locked:** none
+**Shared files locked:** docs/architecture/schema-phase1-visual.html
 **PR open:** none
 
 ---
