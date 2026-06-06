@@ -16,7 +16,10 @@ Consumed by Matt Pocock's `grill-with-docs` and `improve-codebase-architecture` 
 | **Deal Card** | The core deal object. Starts as a cart-style basket while the seller assembles products; transitions to a card-style record once the deal forms. Carries products, volumes, prices, discounts, terms, notes. |
 | **Deal Room** | The customer-presentation surface. Opened by expanding a Deal Card. Holds product info, media, optional Loom recording. 1 per Deal Card. |
 | **Deal Workspace** | The deal container. Spawns at Deal Card birth. Holds chat, artifacts, members, stages, and the Deal Card itself. |
-| **Relationship page** | The record of business between two companies. Created at pickup (first human response to a connection). Holds deal history, notes, pricelist, agreed terms. |
+| **Relationship page** | The persistent record of business between two companies. Created when a connection is **accepted**; reached from a **P2P or C2C chat** (one page, two doors — **no person-level relationship page**). Holds deal history (filterable → workspace), per-side **team notes** + per-user **personal notes**, agreed terms, custom pricelist, Sella insight, analytics, activity log, and **artifacts**. Relationship-level only (see **Two altitudes**). |
+| **Artifacts** | The shared document folder on a Relationship page — **company-wide** files (licenses, contracts, certs). Deal-specific documents (COAs, badges) stay inside the deal, not here. |
+| **Team note / Personal note** | The two note types on a Relationship page. A **team note** is per-side business memory, visible to your own company; a **personal note** is private to the individual (relationship upkeep). Different jobs, both kept. |
+| **Two altitudes** | The rule splitting **relationship-level** content (on the Relationship page) from **deal-level** content (on the deal card / in the deal). Decides where each piece of info, document, and insight lives. |
 | **Sella** | The AI agent. Female-inspired, mediator-style. Multiple specialist variants: Seller-Sella, Buyer-Sella, Deal-Sella, Personal Sella, Company Sella, First-contact Sella. |
 | **Big 7** | The 7 pillars of the product: Connect / Buy / Sell / Present / Grow / Discover (6 surfaces) + Sella (always-available AI layer). |
 | **Thing** | A clarification ticket inside a Deal Workspace. Used for post-close work or mid-deal questions. |

@@ -5,29 +5,25 @@
 
 ---
 
-**Last updated:** 2026-06-06 22:00 CEST
+**Last updated:** 2026-06-07 01:09 CEST
 **Branch:** claude/ayush/work
-**Status:** offline (session wrapped)
+**Status:** offline (session stopped - screen ③ done; PR #39 open)
 **Linear issue in progress:** none (DEV-37 multi-deal stays parked, explicitly later)
-**Shared files locked:** none
-**PR open:** [#35](https://github.com/HelloSello/hello-sello-mvp/pull/35) - Connect ② (chat) → `dev` (#32 repo-name cleanup tracked separately)
+**Shared files locked:** none (DECISIONS / ARCHITECTURE-NOTES / CONTEXT merge-resolved + committed; your session-5 dev integrated)
+**PR open:** [#39](https://github.com/HelloSello/hello-sello-mvp/pull/39) - Connect ③ (relationship page) → `dev` (mergeable: clean). Merged origin/dev in first + kept both 2026-06-07 DECISIONS sections (your Phase-2/Q2/Q3 + my screen-③).
 
 ---
 
 ## Notes for the other agent
 
-**2026-06-06 (screen ② - the chat) - LOCKED.** Built the full Connect chat in `prototypes/chat-prototype/` (port 8770), **post-acceptance only** (the Inbox owns accept/decline). Caught up on your **session 3** (company-category step + Path B deferral) - I **integrated `origin/dev`** into my branch before editing shared docs, so my edits sit on top of your Path B work (no clobber).
+**2026-06-07 (screen ③ — the Relationship page) — LOCKED.** Built `prototypes/relationship-prototype/` (port 8771), on the decided Connect shell. Rebased onto `origin/dev` (your session-4/6 work — inbox lock, schema review, UUID v4, Q2) before touching shared docs. Full narrative → `prototypes/relationship-prototype/CONTEXT.md`.
 
-**What's locked (relevant to your `messaging` + `deals` schema work):**
-- **Chat spine:** `relationship → chat_thread (type: c2c|p2p|deal) → chat_message (sender, type, body)`. C2C created at connection (company-level - **supersedes LAYER-1 §3's "C↔C only inside a workspace"**, which is now stale). System/Sella lines are `chat_message` rows (`sender ∈ {person,system,sella}` + a `type` discriminator) - **no separate `system_message` table**.
-- **Deal card is versioned:** `deal_card` (mutable: version, value_net, status) + **`deal_card_log`** (append-only history) + **`deal_change_input`** (per-user evidence - each party's note on a change) + **`audit_log`** (every system/Sella line mirrors here; chat system messages are *projections* of it).
-- **Sync rule:** messages are **never** synced across threads; the **deal card is the only shared state**. P2P change → card v2 + a per-user `deal_card_updated` system msg in the Deal chat + log + evidence; Deal-chat change → same minus the broadcast (origin already saw it).
-- **Two-party gate:** deal birth (and changes) require BOTH parties to confirm; model the decision per-party so the audit log attributes who agreed/declined.
+**What's locked (relevant to your `relationship` + schema work):**
+- **Nav:** the Relationship page is reached **from a P2P or C2C chat** — one page, two doors. **No person-level relationship page** (this answers DEV-8's never-closed sub-question = there is none). **No `Relationship`/`Deals` sub-nav tabs** — *supersedes the 2026-06-06 "drop Companies, add Relationship" line in DECISIONS.md:518*; Deals move to a future Grow/Trade surface.
+- **Content / two-altitudes:** relationship-level lives on the page (header · Sella insight · analytics · log · notes · terms · pricelist · artifacts); deal-level stays on the deal card / in the deal. Layout = tabbed.
+- **Tables I'm proposing for the page** (yours to reshape against `SCHEMA-DRAFT`): `note { relationship_id, side(supplier|buyer), scope(team|personal), author_id, body }` — **per-side team note + per-user personal note are two different things, both kept**; `agreed_term { relationship_id, key, value }` (both sides read); `pricelist_item { relationship_id, product, price, status(applied|proposed) }` (seller writes, Proposed→sign-off→Applied per DEV-41); `artifact { relationship_id, name, owner }` — **company-wide docs only; deal docs stay on the deal**; relationship-level `signal` (live-computed, cheap MVP — reuses your signal-type-keyed shape).
+- **Per-viewer projection:** the page renders by side — per-side team notes hide across the boundary, PRIVATE deals hide from the other side, only the seller edits the pricelist.
 
-Decisions → `DECISIONS.md` (`## 2026-06-06 (later)`); data model → `ARCHITECTURE-NOTES.md`; terms → `CONTEXT.md`; full narrative → `prototypes/chat-prototype/CONTEXT.md`.
+**Answering your flag (`ARCHITECTURE-NOTES.md:23` "at pickup / connect"):** agreed — the trigger is **accept**, not pickup (pickup is ownership-only now). I'm rewording it to "at accept" while I edit ARCHITECTURE-NOTES this pass.
 
-**No shared files left locked.** You're clear on Discover/Present and the `messaging`/`deals` schema - the shapes above are my proposal; reshape as the real schema needs.
-
-**Heads-up:** installed `gh` (Homebrew) this session - but `gh auth login` needs `read:org` and the keychain git token only has `repo`, so `gh` is unauthenticated. The **GitHub REST API works** via that keychain token (repo scope) - that's how I opened PR #35. So GitHub PR/comment/issue actions are doable here via the API; full `gh` CLI needs a `read:org` login later. Local folder is still `hello-sello-design`; remote `…/hello-sello-design.git` redirects to `hello-sello-mvp` (documented - not re-flagging).
-
-Going offline.
+Decisions → `DECISIONS.md` (`## 2026-06-07`); data model → `ARCHITECTURE-NOTES.md`; terms → `CONTEXT.md`.
