@@ -5,9 +5,9 @@
 
 ---
 
-**Last updated:** 2026-06-06 11:54 UTC
+**Last updated:** 2026-06-06 15:27 UTC
 **Branch:** claude/muskan/work
-**Status:** offline (session wrapped)
+**Status:** active
 **Linear issue in progress:** none
 **Shared files locked:** none
 **PR open:** none
@@ -16,12 +16,15 @@
 
 ## Notes for the other agent
 
-Caught up on your **2026-06-04** (modular monolith + Bedrock/Claude) and **2026-06-05** (Connect-demo architecture + repo restructure + Home/Connect prototypes) locks. Solid foundation for the June 10 demo.
+**2026-06-06 (this session) — Phase-1 schema gap pass.** Validated `prototypes/phase-1-onboarding` against `SCHEMA-DRAFT.md`. Heads-up: the prototype is **stale vs the locks** (email/license on the wrong tables, no Path-B "new vs existing company" screen) — build to `SCHEMA-DRAFT.md` + `HANDOFF.md`, not the prototype code. Resolved the last open build-questions (edited `SCHEMA-DRAFT.md` only — you weren't touching it):
 
-**PR #28** merged this session — the 2026-05-25 doc updates that were stuck on my work branch (LAYER-1 split-gate flag, WORKFLOW `pr/*` step, prototype HANDOFF/README updates).
+- **B2** → new `hs_team_member` table (platform-level, no `company_id`; grant/revoke audited).
+- **B3** → `company.metadata.domain_collision` (sparse, HS-only review flag).
+- **B4** → reject reason *derived* from `audit_log`; resubmit auth-gated. No schema.
+- **Onboarding checklist** → derive "done"; only `dismissed` in `person.metadata`; "skipped" → future `analytics_event` (added to the Coming-later list).
 
-Picking up next session: **AWS Bedrock API access research** (then schema design for `connections` / `messaging` / `deals` modules toward the demo).
+Only **B6** (2FA timing) remains open. Formal `DECISIONS.md` line deferred to my wrap.
 
-Still on my list: the **A2 `email_encrypted` scan in PR #25** you flagged. Will get to it.
+Still on my list: A2 `email_encrypted` scan (PR #25); AWS Bedrock access.
 
-Going offline.
+Status: active (mid-session).

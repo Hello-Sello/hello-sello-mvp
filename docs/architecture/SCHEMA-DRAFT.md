@@ -57,6 +57,7 @@ Profile extension on top of Supabase Auth. **Identity lives in `auth.users` (Sup
 - Should `preferences` extract into a separate `person_preferences` table for searchability? → **Default:** keep as JSONB; promote later if we ever query by preference.
 - ~~2FA — separate `person_2fa` table or columns on `person`?~~ → **Resolved 2026-05-25:** use Supabase Auth's `auth.mfa_factors` (TOTP supported natively).
 - ~~Email verification tokens → separate `email_verification_token` table.~~ → **Resolved 2026-05-25:** Supabase Auth handles email verification flow natively.
+- Onboarding checklist state? → **Resolved 2026-06-06:** "done" is *derived* (gmail = a `contact_record` exists; team = a `group` exists; profile = `preferences.title` set), not stored. Only `dismissed` persisted in `metadata`. "Skipped" is analytics → future `analytics_event` table (see Coming-later), never a column on `person`.
 
 ---
 
@@ -289,6 +290,34 @@ Path B onboarding: a person requests to join an existing company; a Superadmin o
 
 ---
 
+### `hs_team_member`
+
+Hello Sello internal staff allowed to review/verify companies (the `/admin/verifications` allowlist). **Platform-level, NOT tenant-scoped** — deliberately has no `company_id`, since HS staff act across all companies. (B2 locked 2026-06-06.)
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | UUID | PK, NOT NULL, DEFAULT `gen_random_uuid()` | |
+| `person_id` | UUID | NOT NULL, REFERENCES `person(id)` | The staff member (has a normal account) |
+| `role` | VARCHAR(20) | NOT NULL DEFAULT `'reviewer'` | 'reviewer' / 'admin' — promote to a lookup table if values grow |
+| `created_by` | UUID | NULL, REFERENCES `person(id)` | Who granted access (grant is auditable) |
+| `updated_by` | UUID | NULL, REFERENCES `person(id)` | |
+| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
+| `updated_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
+| `deleted_at` | TIMESTAMPTZ | NULL | Soft-delete = revoke membership (keeps history) |
+
+**No `company_id`** — platform-level staff, not tenant-scoped. Rare, deliberate exception to the multi-tenancy convention (like the audit lookup tables).
+
+**Constraints:**
+- `UNIQUE(person_id) WHERE deleted_at IS NULL` — at most one active membership per person
+
+**Access control / audit:**
+- RLS: writes restricted to service-role / existing HS-admin; HS members may read.
+- Grant + revoke logged to `audit_log` — adds `hs_team.member_added` / `hs_team.member_removed` to `audit_action_type` (category `permissions`).
+
+**Why a table (not `person.is_hs_team` or an env-var):** a boolean on the user's own row invites self-escalation and mixes platform-staff into tenant data; an env-var is invisible to RLS (which needs to grant HS its cross-tenant read) and can't be tied to an audited person. (B2 rationale, 2026-06-06.)
+
+---
+
 ### `audit_log`
 
 Universal append-only change-log for every audited business action. **Immutable** — DB triggers reject UPDATE and DELETE. Polymorphic content reference (`content_type` + `content_id`) covers any entity type. **Tamper-evident** via SHA-256 hash chain from day 1. Full design locked 2026-05-25 (SCHEMA-DRAFT §A4 — see DECISIONS.md walkthrough locks 2026-05-25, entry "Audit log design").
@@ -438,14 +467,14 @@ Surfaced by the 2026-05-25 walkthrough locks (DECISIONS.md "Walkthrough locks 20
 | A3 | ~~**License file storage backend**~~ → **RESOLVED 2026-05-28.** Supabase Storage private bucket + at-rest (AES-256) + RLS + signed URLs; Edge-Function virus scan at upload boundary; allowlist {PDF,JPG,PNG,HEIC} + magic bytes; 20 MB/file, max 5; new `company_license_file` child table (above), `company.license_filename` dropped. See DECISIONS.md walkthrough locks 2026-05-28 — A3. | ~~Hard blocker~~ Resolved | New `company_license_file` table; `company.license_filename` removed |
 | A4 | ~~**Promote `audit_log` to Phase 1.**~~ → **RESOLVED 2026-05-25 — full audit_log design locked** (Q1–Q10 walked through with industry research). See `audit_log` table block above + DECISIONS.md walkthrough locks 2026-05-25 "Audit log design". Phase 1 ships: polymorphic single table + JSONB diffs + dual-identity actor + hash chain + reversibility tier + GDPR pseudonymization principle. | ~~Hard blocker~~ Resolved | New Phase 1 table built with hash chain + reversibility + dual identity |
 | B1 | ~~**Path B "join request" entity**~~ → **RESOLVED 2026-05-29.** Dedicated `join_request` table (above), NOT a reuse of `pending_inbox_item` — different concept (person→company membership vs company↔company connection), different invariants, approval grants membership. Multi-Superadmin routing defaulted to "any Superadmin of target company" (build detail). See DECISIONS.md walkthrough locks 2026-05-29 — B1. | ~~Soft default~~ Resolved | New `join_request` table |
-| B2 | **HS-team allowlist** — `person.is_hs_team` column, separate `hs_team_member` table, or env-var allowlist consumed by middleware? | Soft default | `person` schema or new tiny table |
-| B3 | **Domain-collision override flag** — when user picks "new company" despite domain match, where does the silent flag live? `company.metadata.domain_collision_override` or column on review-queue entry? | Soft default | `company.metadata` or review entry |
-| B4 | **Reject reason + resubmit token** — `company.rejection_reason TEXT`? Token-based resubmit link (UUID, expiry)? | Soft default | `company` columns or new `email_token` table |
+| B2 | ~~**HS-team allowlist**~~ → **RESOLVED 2026-06-06.** Dedicated `hs_team_member` table (above) — platform-level, no `company_id`; FK to `person`, `role` (reviewer/admin), soft-delete = revoke, grant/revoke audited. Rejected `person.is_hs_team` (self-escalation) + env-var (RLS-invisible). | ~~Soft default~~ Resolved | New `hs_team_member` table |
+| B3 | ~~**Domain-collision override flag**~~ → **RESOLVED 2026-06-06.** Lives in `company.metadata.domain_collision = { overridden, matched_company_id, matched_domain }` — sparse, HS-team-only review flag. No dedicated column/table. | ~~Soft default~~ Resolved | `company.metadata` |
+| B4 | ~~**Reject reason + resubmit token**~~ → **RESOLVED 2026-06-06.** Reason *derived* from latest `company.verify_rejected` in `audit_log` (already mandatory there); resubmit is auth-gated + reuses `company_license_file`. No `rejection_reason` column, no token table. | ~~Soft default~~ Resolved | No schema (audit_log + auth) |
 | B5 | ~~**`email_verification_token` table schema**~~ → **RESOLVED 2026-05-25** via A1 lock (Supabase Auth owns this). | ~~Soft default~~ Resolved | No new table needed |
 | B6 | **2FA enforcement timing — DEV-29 conflict.** *Factor storage resolved via A1 → `auth.mfa_factors`.* Open: required pre-first-e-signature? Optional for non-signing users? Which factor (TOTP / SMS / email)? | Soft default | Auth flow timing only |
 | B7 | ~~**Split-gate enforcement layer**~~ → **RESOLVED 2026-05-29.** Layered / defense-in-depth: Postgres RLS = security floor (tenant isolation via `company_id` + `auth.uid()`); central app-layer policy module = complex authorization (split-gate + DEV-51 16-combo matrix); policy DSL (OPA/Oso) deferred. See DECISIONS.md walkthrough locks 2026-05-29 — B7. Unblocks [DEV-51](https://linear.app/hellosello/issue/DEV-51). | ~~Architecture~~ Resolved (no schema) | Cross-cutting |
 
-**Suggested resolution order:** ~~A1~~ → ~~A4~~ → ~~A2~~ → ~~A3~~ → ~~B7~~ → ~~B1~~ → **B2/B3/B4/B6 remain (build/mechanism — decide at build).** *(All architecture-shaping open questions resolved: A1+A4 2026-05-25, A2 2026-05-27, A3 2026-05-28, B7+B1 2026-05-29. B2/B3/B4/B6 are field-placement / technique choices for already-locked concepts — decide at build.)*
+**Suggested resolution order:** ~~A1~~ → ~~A4~~ → ~~A2~~ → ~~A3~~ → ~~B7~~ → ~~B1~~ → ~~B2/B3/B4~~ (resolved 2026-06-06) → **B6 remains (2FA enforcement timing — auth-flow detail, decide at build).** *(All architecture-shaping open questions resolved: A1+A4 2026-05-25, A2 2026-05-27, A3 2026-05-28, B7+B1 2026-05-29, B2/B3/B4 2026-06-06. Only B6 left — auth-flow timing.)*
 
 ---
 
@@ -481,6 +510,7 @@ These tables aren't built yet but will follow the same conventions:
 | `thing` | 3 | Universal execution primitive |
 | `order` (with PO#/SO#/HS#/QR) | 4 | Generated at confirmation |
 | `audit_log` | ~~Cross-cutting~~ **Promoted to Phase 1** (see open Qs §A4) | Universal change-log primitive — needed for HS verify flow |
+| `analytics_event` | 2+ | Append-only product telemetry (onboarding `step_skipped` / `step_started` / `step_completed`, funnel events). **Not** `audit_log` — that's for compliance-grade business actions, not UI telemetry. Shape designed when the event set is known; may instead live in an external tool (PostHog/Amplitude). Deferred past v0 — 1–2 test users yield no useful funnel. (Decided 2026-06-06: onboarding checklist `skipped` state is captured here, not as a column on `person`.) |
 
 ---
 
