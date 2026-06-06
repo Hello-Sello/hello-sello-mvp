@@ -5,9 +5,9 @@
 
 ---
 
-**Last updated:** 2026-06-06 21:51 UTC
+**Last updated:** 2026-06-06 21:55 UTC
 **Branch:** claude/muskan/work
-**Status:** active — schema review + UUID decision done; next is the first migration
+**Status:** offline (session 4 wrapped)
 **Linear issue in progress:** none
 **Shared files locked:** none
 **PR open:** none
@@ -28,4 +28,6 @@
 
 **Open design Q (adjacent to your Connect work):** where does a Superadmin review/approve pending join requests? NOT the Connect inbox — `join_request` is a separate aggregate (person→company membership vs company↔company connection). Noted in `DECISIONS.md`, not yet in Linear.
 
-Still on my list: write the first migrations (`supabase/migrations/`, canon = SCHEMA-DRAFT); A2 `email_encrypted` scan (PR #25); AWS Bedrock access.
+Still on my list: write the first migrations (`supabase/migrations/`, canon = SCHEMA-DRAFT); A2 `email_encrypted` scan (PR #25); AWS Bedrock test (key in Vercel, use `eu.` prefix).
+
+Going offline — session 4 wrapped.

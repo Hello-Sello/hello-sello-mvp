@@ -150,6 +150,11 @@ When the formal Architecture doc is written (post Layer 4 + 5), these become its
 - **Surfaces vs modules.** Surfaces (Connect, Present, Buy, Sell, Discover, Grow) are *windows* = routes in `src/app/`; modules are *workshops* = `src/modules/`. One surface composes one or more modules; one module is reused across surfaces.
 - **Sella inference infrastructure = Claude on AWS Bedrock, EU/Frankfurt.** Model-per-job: Sonnet (drafting/detection) / Haiku (summarization); Opus deferred. Wrapped behind a swappable provider interface in the `sella` module. EU residency for GDPR + EU AI Act. *(DECISIONS.md 2026-06-04; fills DEV-11 tech half. Verify Sonnet EU-region availability before wiring.)*
 
+## Schema engineering notes (2026-06-06)
+
+- **COA / product documents reuse the `company_license_file` pattern.** When COA (Certificate of Analysis), COB, and other per-product documents land (Phase 2/3), they follow the same A3 primitive: metadata row + Supabase Storage pointer + `mime_type`/`size`/`scan_status` + `audit_log` + RLS / signed URLs. New table (e.g. `product_document`) links to a product/deal instead of a company. **Naming hazard:** "CoA" = *Company A* (deal side, CONTEXT.md); "COA" = *Certificate of Analysis* (LAYER-5). Schema table must be `certificate_of_analysis` or `product_document`, **never** `coa`. *(2026-06-06.)*
+- **Bedrock EU inference profiles — Sella provider wrapper constraint.** `eu-central-1` Claude models invoke only via **EU cross-region inference-profile IDs** (prefix `eu.`, e.g. `eu.anthropic.claude-sonnet-4-5-…`), not bare `anthropic.claude-…` IDs. Sella's provider wrapper must use the `eu.` prefix or calls fail. Fills the "Verify Sonnet EU-region availability" gap noted above. *(2026-06-06.)*
+
 ## Connect chat model + Deal card — open / parked (2026-06-06)
 
 - **Buyer-metric field name** — the buyer's counterpart to the seller's `margin` on the Deal card — is **TBD**. *(2026-06-06.)*
