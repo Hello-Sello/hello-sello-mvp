@@ -5,11 +5,11 @@
 
 ---
 
-**Last updated:** 2026-06-06 21:34 UTC
+**Last updated:** 2026-06-06 21:49 UTC
 **Branch:** claude/muskan/work
-**Status:** active — schema + visual in lockstep; discussing UUID v4-vs-v7 (needs your ack before first migration)
+**Status:** active — recording UUID decision (stay v4; revisit on PG18 / audit_log growth)
 **Linear issue in progress:** none
-**Shared files locked:** none
+**Shared files locked:** docs/decisions/DECISIONS.md, docs/architecture/SCHEMA-DRAFT.md
 **PR open:** none
 
 ---
