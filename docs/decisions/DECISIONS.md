@@ -587,3 +587,39 @@ Keep the locked convention — PKs stay **v4** (`gen_random_uuid()`, native, zer
 - **Revisit triggers:** (1) Supabase ships native `uuidv7()` (PG18) → `SET DEFAULT uuidv7()` on new / high-write tables; (2) `audit_log` crosses ~1–5M rows → flip its default to v7 then (captures ~all the benefit, since it only grows).
 
 *Why record:* makes the v4 choice deliberate (researched, not default-by-omission) and stops it being re-litigated; documents the cheap upgrade path. No convention change (staying = status quo) → no Ayush ack needed. (Sources: andyatkinson "Avoid UUIDv4 PKs", Scaling Postgres #368, dev.to "UUIDv7 is the 2026 default" + "UUID best practices".)
+
+## 2026-06-07 — Phase 2 schema: deal_line_item, deal_card columns, deal_delivery separation
+
+*(Discussed session 5. Full table shapes in `docs/architecture/SCHEMA-DRAFT.md` → "Phase 2 tables" section.)*
+
+- **`deal_line_item` versioning = Option A (versioned snapshots, not mutable + diff-replay).** Each version bump of `deal_card` copies all line items with the new `version` number. Unchanged lines are duplicated; changed/added lines are new rows at the new version. Query current = `WHERE version = card.version`; reconstruct v1 = `WHERE version = 1`. *Why:* regulated industry (cannabis pharma) needs read-only historical snapshots — any diff-replay bug would corrupt audit reconstruction, which is unacceptable when a dispute arises. The cost (a few extra rows at ~3–15 line items × ~5–10 versions per deal) is negligible. Industry norm: Stripe freezes invoice line items per version; every B2B order system treats historical line items as immutable snapshots.
+
+- **`deal_card` gets structured delivery/commercial columns — not metadata.** Added as first-class columns: `offer_expires_at` (B2B quotes always expire; Sella monitors), `delivery_date_target` (buyers filter + sort by it), `payment_terms_code` (NET30/NET60/COD — cannabis pharma uses 40–90 day windows, already noted as domain fact; lookup table), `incoterms_code` (EXW/DAP/DDP — determines who pays shipping/insurance in cross-border cannabis trade; lookup table). Also: `buyer_po_number`, `seller_so_number` (generated at confirmation per Layer 3 lock). *Why first-class over metadata:* columns that are filtered, sorted, or validated by Sella/app-layer policy earn a column; display-only or shape-unknown fields stay in `metadata JSONB`. Country of origin stays in `metadata` for now (not filtered in MVP).
+
+- **`deal_line_item` gets cannabis-specific potency columns: `thc_percent`, `cbd_percent` (nullable).** *Why first-class:* regulatory-grade fields — Sella validates potency against license thresholds; buyers filter by potency range. These are not decorative metadata; they have invariants and will be queried. Nullable because non-cannabis products (material suppliers, Phase 2+) carry neither.
+
+- **`deal_delivery` is a separate table, NOT part of `deal_line_item`.** `deal_line_item` answers *"what was agreed"* (versioned, immutable per version). `deal_delivery` (Phase 3, DEV-36) will answer *"what was shipped"* — batch numbers, Certificate of Analysis files, actual delivered quantities, delivery note + invoice uploads (Sella OCR amends the deal). One deal can have N deliveries (DEV-53 — "Done fires on final pair"). *Why the separation:* mixing "agreed terms" with "physical execution" in one table forces nullable columns on both sides and breaks the single-responsibility of line items as a versioned commercial record.
+
+- **`relationship` canonical ordering: `CHECK(company_a_id < company_b_id)` + `UNIQUE(company_a_id, company_b_id)`.** Enforces exactly one `relationship` row per company pair regardless of who initiated. `initiated_by_company_id` records direction. *Why:* without canonical ordering, Company A↔B and Company B↔A are indistinguishable to the DB; the check + unique constraint makes the pair an unordered set at the storage layer while preserving direction in a separate column.
+
+## 2026-06-07 — Q3: Two-party confirmation state = dedicated `deal_confirmation` table
+
+Per-party yes/no for deal birth and amendments lives in a dedicated `deal_confirmation` table, not JSONB on `deal_card`. `deal_card.status` gains `'withdrawn'` as a terminal state.
+
+- **`deal_confirmation` table:** one row per `(deal_card_id, version, company_id)`. Status: `pending` / `confirmed` / `rejected`. Two rows created when a version is proposed; each party updates their own row. Both `confirmed` → version accepted (workspace spawns on v1; version bumps on amendments). Either `rejected` → back to negotiation.
+- **`withdrawn` on `deal_card.status`:** the initiating company pulls the offer back before the other party has responded (`deal_confirmation.status` still `pending`). Terminal. App-layer enforces: only `initiating_company_id` may set it, only while other party is pending.
+- **Why a table over JSONB:** JSONB stores only current state — you lose "when did company_b change to confirmed" without a separate audit table, defeating the point. The `deal_confirmation` table gives indexed queries ("deals awaiting my company's confirmation"), per-event timestamps, a natural `audit_log` target, and clean versioning across amendments. Regulated environments (cannabis pharma) require per-event non-repudiation — a table is the natural fit.
+
+*Full table shape in `docs/architecture/SCHEMA-DRAFT.md` → `deal_confirmation`.*
+
+## 2026-06-07 — chat_thread P2P uniqueness: canonical ordering enforced at DB level (Q2)
+
+`chat_thread` P2P threads store `person_a_id` + `person_b_id`. Without a rule, the same two people could get two thread rows if inserted in different order `(Alice, Bob)` vs `(Bob, Alice)` — the UNIQUE index alone doesn't catch this.
+
+**Decision:** enforce `CHECK (person_a_id < person_b_id)` at DB level. App must sort the two person UUIDs before inserting — smaller UUID goes in `person_a_id`. Identical pattern to `relationship.company_a_id < company_b_id` (already locked).
+
+*Why DB level, not just app:* the DB is the last line of defense — edge functions, scripts, and future code paths bypass the app. One bad insert = a duplicate private thread with split message history.
+
+*Why this pattern works:* UUIDs are strings; `<` comparison is deterministic. The canonical ordering is arbitrary but consistent — what matters is there is exactly one rule, enforced everywhere.
+
+**SCHEMA-DRAFT.md updated:** `chat_thread` constraints block now includes `CHECK (type != 'p2p' OR person_a_id < person_b_id)`.
