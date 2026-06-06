@@ -16,6 +16,11 @@ When the formal Architecture doc is written (post Layer 4 + 5), these become its
 - The Relationship is **created at first P↔C pickup**; pre-pickup activity (docs, messages) lives in a temporary per-company pending inbox that migrates onto the Relationship on creation. *(DEV-7, DEV-8.)*
 - A confirmed deal carries **three IDs + a QR code**: Buyer's PO # (buyer field), Seller's SO # (seller field), and a Hello Sello Deal Number (auto-generated, pattern `HS-AAA##-BBB##-NNNNNNNN`) encoded in a QR. Order form is XML-readable for ERP / accounting / logistics. Short-code derivation rule TBD at build phase. *(DEV-26.)*
 - Deal birth is **directional**: OFFER (seller-initiated, sales order) or ORDER (buyer-initiated, purchase order); both need the other party's approval to confirm. *(DEV-26.)*
+- `deal_card` carries a **`doc_type` discriminator** (`purchase_order` | `sales_order`) — the two card types (PO card / SO card) from ONE entity, keyed on who authored it; `margin` is **seller-scoped via RLS** (the buyer's app never receives the value — role-based, enforced at the data layer, not a UI hide). *(2026-06-06.)*
+- `deal_line_item` (products: name, cultivar, volume, unit_price, pzn) powers the Deal card's product line-item list. *(2026-06-06.)*
+- `deal_card_version` = **git-style version history** of the Deal card. *(2026-06-06.)*
+- `order` carries **PO# (buyer) / SO# (seller) / Hello-Sello deal number / QR**, generated at confirmation. *(2026-06-06; aligns with the three-IDs + QR lock above, DEV-26.)*
+- `relationship` is created at **pickup / connect** (a person accepts an inbound request); `pending_inbox_item` carries the **4 request types + assignee + status**. *(2026-06-06; refines the DEV-7 "created at first pickup" entry under the new 3-type chat model.)*
 
 ## Permissions / RBAC
 
@@ -49,7 +54,8 @@ When the formal Architecture doc is written (post Layer 4 + 5), these become its
 
 ## Chat / messaging
 
-- P↔C is a **distinct chat-type entity** that archives on pickup and spawns a sibling P↔P chat; initial P↔C messages are also logged as a system entry on the new Relationship page. *(DEV-7.)*
+- P↔C is a **distinct chat-type entity** that archives on pickup and spawns a sibling P↔P chat; initial P↔C messages are also logged as a system entry on the new Relationship page. *(DEV-7; superseded 2026-06-06 — P↔C is folded into C2C under the new 3-type model below.)*
+- `chat_thread` has a **type = p2p / c2c / deal** (the locked 3-type chat model — P↔C removed, folded into C2C). On accept of an inbound request a **C2C** thread is created in all 4 request types; a **P2P** thread also opens for the 3 substantive types (note / price-list seeds it); the deal-card type seeds a **deal draft** in the P2P that, on confirm, spawns the Deal Workspace (`deal` thread). *(2026-06-06.)*
 - Personal-chat content is **never company-visible** — only Sella's system messages cross from personal chat into a workspace. *(Layer 1 §11.)*
 
 ## Sella behavior
@@ -136,3 +142,16 @@ When the formal Architecture doc is written (post Layer 4 + 5), these become its
 - **Platform-side actor: Hello Sello platform admin** — not a company role; powers = verify onboarding, suspend verified companies, view cross-company audit log. *(DEV-38.)*
 - **Phase 2 roadmap (post-MVP):** Sella flags off-platform-deal language + missing-license attempts; manual HS-admin review queue; annual license re-upload. *(DEV-38.)*
 - **Phase 3 roadmap (post-MVP):** sanctions screening, license-license matching at deal birth, cross-deal pattern detection, Compliance-Sella specialist activated. *(DEV-38; pairs with LAYER-1 §10 multi-Sella.)*
+
+## Architecture / code structure (2026-06-04)
+
+- **Code architecture = modular monolith (lite), domain-partitioned.** One deployable (Next.js App Router on Vercel + Supabase). Layout: `src/app/` = routing only (thin pages per surface); `src/modules/<domain>/` = domain modules (companies, connections, messaging, deals, catalog, sella), each `components/ · server/(actions+queries) · lib/ · types.ts · index.ts`; `src/shared/` = cross-cutting (auth, db, ui, utils, types). **Boundary rule:** a module imports another module only via its public `index.ts`, never into another module's `server/` or `lib/`. *Why:* concretizes the foundation/surfaces/Sella build strategy; a new surface = a new `app/` route + reuse of existing modules; deal logic written once, used by Connect/Buy/Sell. *(DECISIONS.md 2026-06-04; documented in README, not applied to the repo yet.)*
+- **Auth placement.** Authentication is cross-cutting plumbing in `src/shared/auth/` (session + current user + company) - NOT a domain module. Supabase Auth is the engine; `companies` (the business org) is the domain module. Login/signup pages live in `src/app/(auth)/`. *(Consistent with the Auth model lock above.)*
+- **Surfaces vs modules.** Surfaces (Connect, Present, Buy, Sell, Discover, Grow) are *windows* = routes in `src/app/`; modules are *workshops* = `src/modules/`. One surface composes one or more modules; one module is reused across surfaces.
+- **Sella inference infrastructure = Claude on AWS Bedrock, EU/Frankfurt.** Model-per-job: Sonnet (drafting/detection) / Haiku (summarization); Opus deferred. Wrapped behind a swappable provider interface in the `sella` module. EU residency for GDPR + EU AI Act. *(DECISIONS.md 2026-06-04; fills DEV-11 tech half. Verify Sonnet EU-region availability before wiring.)*
+
+## Connect chat model + Deal card — open / parked (2026-06-06)
+
+- **Buyer-metric field name** — the buyer's counterpart to the seller's `margin` on the Deal card — is **TBD**. *(2026-06-06.)*
+- **Clickable product thumbnail → product card** — each `deal_line_item` row's thumbnail will later open that product's own card; **not built yet**. *(2026-06-06.)*
+- **Multi-deal context in a P2P chat** (deal selector spanning several deals on one P2P) is **parked on Linear DEV-37**. *(2026-06-06.)*

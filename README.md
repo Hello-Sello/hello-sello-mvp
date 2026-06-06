@@ -34,13 +34,36 @@ If you're a teammate joining the project, read in this order:
 |--------|----------------|
 | `docs/product/` | Product design - PITCH, PRD, all Layer docs |
 | `docs/decisions/` | Locked decisions log |
-| `docs/architecture/` | Architecture notes, domain glossary, ADRs |
+| `docs/architecture/` | Architecture notes, domain glossary, ADRs, + the Connect-demo architecture (`connect-demo.md` + `diagrams/`) |
 | `docs/meeting-notes/` | Meeting notes |
 | `docs/agents/` | Agent config (issue tracker, labels, domain) |
-| `frontend/` | Frontend code |
-| `backend/` | Backend code |
-| `infra/` | Infrastructure, deploy, CI |
+| `prototypes/` | Throwaway click-through prototypes (e.g. phase-1 onboarding) |
+| `src/` | App structure skeleton (modular monolith) - reference only; see [`src/README.md`](src/README.md) |
+| `supabase/` | DB skeleton - migrations, RLS policies, seed (reference) |
 | `.claude/skills/` | Project-scoped Claude skills |
+
+> **One repo: `hello-sello-mvp`** (github.com/HelloSello/hello-sello-mvp). Docs and code live here together - design docs in `docs/`, app code in `src/` + `supabase/`. Details below.
+
+---
+
+## Planned app code structure (modular monolith)
+
+> **Target structure, agreed 2026-06-04, scaffolded in [`src/`](src/README.md) + `supabase/`. The app code is built here, in this repo. See [`docs/decisions/DECISIONS.md`](docs/decisions/DECISIONS.md), [`docs/architecture/ARCHITECTURE-NOTES.md`](docs/architecture/ARCHITECTURE-NOTES.md), and the demo slice [`docs/architecture/connect-demo.md`](docs/architecture/connect-demo.md).**
+
+Modular monolith, partitioned **by domain** (not technical layer). One deployable: Next.js (App Router, TypeScript) on Vercel + Supabase (Postgres / Auth / Realtime / Storage), multi-tenant via RLS. Sella inference on Claude via AWS Bedrock (EU / Frankfurt).
+
+```
+src/
+├── app/        # routing only (thin pages): (auth)/, connect/, inbox/, deals/[id]/, catalog/ …
+├── modules/    # domain modules - the heart
+│   ├── companies/  connections/  messaging/
+│   └── deals/  catalog/  sella/
+│       # each module: components/ · server/(actions+queries) · lib/ · types.ts · index.ts
+└── shared/     # cross-cutting: auth/ · audit/ · db/ · ui/ · utils/ · types/
+supabase/       # migrations, RLS policies, seed
+```
+
+**Rules:** a module talks to another only through its public `index.ts`. Surfaces (Connect / Present / Buy / Sell / Discover / Grow) are routes in `app/` that compose modules; a new surface = a new route + reuse of existing modules. Auth and audit are cross-cutting (`shared/`), not domain modules.
 
 ---
 
@@ -58,8 +81,7 @@ If you're a teammate joining the project, read in this order:
 
 ## Related repos
 
-- [HelloSello/HelloSello_MVP](https://github.com/HelloSello/HelloSello_MVP) — MVP codebase (Next.js / pnpm / Supabase)
-- [HelloSello/hellosello_lovable](https://github.com/HelloSello/hellosello_lovable) — Lovable.dev workspace
+- [HelloSello/hellosello_lovable](https://github.com/HelloSello/hellosello_lovable) — Lovable.dev workspace (earlier prototype)
 - [HelloSello/selloai-hub](https://github.com/HelloSello/selloai-hub)
 
 ---

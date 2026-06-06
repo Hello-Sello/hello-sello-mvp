@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<!-- PROTOTYPE - throwaway. Connect, light, 5-panel (rail|subnav|list|chat|sella) + mock-DB. ?variant=d|c|a -->
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hello Sello - Connect (prototype)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", sans-serif; }
+  .data-table { border-collapse: collapse; width: 100%; font-size: 10.5px; }
+  .data-table th, .data-table td { text-align: left; padding: 3px 7px; border-bottom: 1px solid #e2e8f0; white-space: nowrap; }
+  .data-table th { font-weight: 600; color: #64748b; background: #f8fafc; text-transform: uppercase; font-size: 9px; letter-spacing: .03em; }
+  .data-row-new { background: #fef3c7; }
+  code { font-size: 10px; background: #f1f5f9; padding: 1px 4px; border-radius: 3px; }
+</style>
+</head>
+<body class="bg-slate-50 text-slate-900 h-screen overflow-hidden">
+<div id="app" class="h-screen flex flex-col"></div>
+<div id="switcher"></div>
+<script>
+/* ---- top bar ---- */
+function topbar(){
+  return `<header class="h-14 bg-white border-b border-slate-200 flex items-center px-4 gap-4 shrink-0">
+    <span class="text-pink-600 font-black text-lg tracking-tight shrink-0">Hello sello</span>
+    <div class="flex-1 max-w-2xl mx-auto"><div class="flex items-center gap-2 px-4 py-2 bg-slate-100 rounded-full text-slate-400 text-sm"><span>🔍</span>Search for company, product or service…</div></div>
+    <div class="flex items-center gap-2 shrink-0"><span class="text-sm font-medium text-slate-700 hidden xl:inline">Aurora Deutschland GmbH</span><div class="w-8 h-8 rounded-lg bg-pink-100 text-pink-700 flex items-center justify-center font-bold text-xs">AD</div></div>
+  </header>`;
+}
+
+/* ---- panel 1: thin icon rail ---- */
+const RAIL=[
+  {name:'Home',icon:'🏠',s:'a'},{name:'Connect',icon:'💬',s:'sel'},{name:'Discover',icon:'🔍',s:'a'},
+  {name:'Present',icon:'🏪',s:'a'},{name:'Buy',icon:'🛒',s:'soon'},{name:'Sell',icon:'🏷️',s:'soon'},{name:'Trade',icon:'🔄',s:'soon'},
+];
+function iconRail(){
+  const base='flex flex-col items-center gap-0.5 py-2 rounded-lg text-[9px] font-medium leading-none';
+  const item=n=> n.s==='sel'
+    ? `<a href="#" class="${base} text-pink-700 bg-pink-50"><span class="text-lg">${n.icon}</span>${n.name}</a>`
+    : n.s==='a'
+    ? `<a href="#" class="${base} text-slate-600 hover:bg-slate-100"><span class="text-lg">${n.icon}</span>${n.name}</a>`
+    : `<span class="${base} text-slate-300"><span class="text-lg grayscale">${n.icon}</span>${n.name}</span>`;
+  return `<aside class="w-16 bg-white border-r border-slate-200 shrink-0 flex flex-col px-1.5 py-2 gap-0.5">
+    ${RAIL.map(item).join('')}
+    <div class="mt-auto flex justify-center pt-2"><div class="w-8 h-8 rounded-full bg-gradient-to-br from-orange-400 to-pink-500"></div></div>
+  </aside>`;
+}
+
+/* ---- panel 2: Connect sub-nav ---- */
+function subnav(){
+  const tabs=[{name:'Chat',icon:'💬',sel:true},{name:'Inbox',icon:'📥',badge:2},{name:'Companies',icon:'🏢'},{name:'Relationship',icon:'🔗'},{name:'Deals',icon:'📄'}];
+  return `<div class="w-44 bg-white border-r border-slate-200 shrink-0 p-2">
+    <div class="px-2 py-2 text-sm font-bold text-slate-800">Connect</div>
+    ${tabs.map(t=>`<a href="#" class="flex items-center gap-2 px-2.5 py-2 rounded-lg text-sm ${t.sel?'bg-pink-50 text-pink-700 font-medium':'text-slate-600 hover:bg-slate-100'}"><span>${t.icon}</span>${t.name}${t.badge?`<span class="ml-auto text-[10px] bg-pink-600 text-white rounded-full px-1.5">${t.badge}</span>`:''}</a>`).join('')}
+  </div>`;
+}
+
+/* ---- panel 3: contact list ---- */
+const CONVOS=[
+  {id:'kim',n:'Kim Danziger',c:'CMG Pharma',last:'Looks good. Approved on our side.',unread:0},
+  {id:'tom',n:'Thomas Schmidt',c:'PharmaPlus Apotheken',last:'Thanks for the quick delivery!',unread:0},
+  {id:'anna',n:'Anna Müller',c:'MedicoPharmaX',last:'Re: delivery schedule',unread:2},
+  {id:'sofia',n:'Sofia Lindqvist',c:'NordMed',last:'New stock: CBD isolate available',unread:0},
+  {id:'petra',n:'Petra Keller',c:'Apo Berlin',last:'Can you send the updated cert?',unread:1},
+];
+function initials(n){return n.split(' ').map(x=>x[0]).join('');}
+function contactList(open){
+  return `<div class="w-64 bg-white border-r border-slate-200 shrink-0 flex flex-col">
+    <div class="p-3 border-b border-slate-100 space-y-2">
+      <button class="w-full text-sm px-3 py-2 bg-pink-600 text-white rounded-lg">+ New Chat</button>
+      <div class="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-lg text-slate-400 text-sm"><span>🔍</span>Search…</div>
+      <div class="flex gap-3 text-xs pt-0.5"><span class="text-slate-400">Sort:</span><button class="text-pink-700 font-medium">All</button><button class="text-slate-500">Unread</button><button class="text-slate-500">Companies</button></div>
+    </div>
+    <div class="flex-1 overflow-y-auto">
+      ${CONVOS.map(c=>`<button data-open="${c.id==='kim'?'c':'d'}" class="w-full text-left px-3 py-3 border-b border-slate-50 flex gap-3 ${(open&&c.id==='kim')?'bg-pink-50':'hover:bg-slate-50'}">
+        <div class="w-9 h-9 rounded-full bg-slate-200 shrink-0 flex items-center justify-center text-xs font-semibold text-slate-500">${initials(c.n)}</div>
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center justify-between gap-2"><span class="text-sm font-medium text-slate-800 truncate">${c.n}</span>${c.unread?`<span class="text-[10px] bg-pink-600 text-white rounded-full px-1.5 shrink-0">${c.unread}</span>`:''}</div>
+          <div class="text-xs text-slate-400 truncate">${c.c}</div>
+          <div class="text-xs text-slate-500 truncate mt-0.5">${c.last}</div>
+        </div>
+      </button>`).join('')}
+    </div>
+  </div>`;
+}
+
+/* ---- offer card ---- */
+function offerCard(accepted){
+  return `<div class="border ${accepted?'border-emerald-200':'border-pink-200'} rounded-2xl bg-white overflow-hidden w-full max-w-sm shadow-sm">
+    <div class="px-4 py-2.5 border-b border-slate-100 flex items-center justify-between">
+      <span class="text-xs font-bold tracking-wide text-pink-700 flex items-center gap-1">&#10022; SALES OFFER</span>
+      <span class="text-[10px] font-bold border rounded-full px-2 py-0.5 ${accepted?'text-emerald-700 bg-emerald-50 border-emerald-200':'text-amber-700 bg-amber-50 border-amber-200'}">${accepted?'ACCEPTED':'AWAITING'}</span>
+    </div>
+    <div class="p-4">
+      <div class="flex items-center gap-3"><div class="w-12 h-12 rounded-lg bg-slate-100 flex items-center justify-center text-xl shrink-0">🌿</div><div><div class="font-semibold text-slate-800">Dried flower · Indica</div><div class="text-sm text-slate-500">5 kg × €4.20 / kg</div></div></div>
+      <div class="flex items-center justify-between mt-4 pt-3 border-t border-slate-100">
+        <div><div class="text-[10px] uppercase tracking-wide text-slate-400">Delivery</div><div class="text-sm text-slate-700">01 Aug 2026</div></div>
+        <div class="text-right"><div class="text-[10px] uppercase tracking-wide text-slate-400">Total</div><div class="text-lg font-bold text-pink-600">€21,000</div></div>
+      </div>
+    </div>
+    <button class="w-full text-center text-xs text-slate-500 hover:text-pink-600 py-2 border-t border-slate-100">Open full Deal Room &rarr;</button>
+  </div>`;
+}
+
+/* ---- panel 4: main chat ---- */
+function emptyChat(){
+  return `<div class="flex-1 flex flex-col items-center justify-center text-center text-slate-400 p-8">
+    <div class="text-5xl mb-3">💬</div>
+    <div class="text-lg font-medium text-slate-500">Select a conversation</div>
+    <div class="text-sm">Pick a chat on the left to start - or hit + New Chat.</div>
+  </div>`;
+}
+function chatHeader(){
+  return `<div class="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-5 shrink-0">
+    <div class="flex items-center gap-3"><div class="w-9 h-9 rounded-full bg-slate-200 flex items-center justify-center text-xs font-semibold text-slate-500">KD</div><div><div class="font-semibold text-slate-800 leading-tight">Kim Danziger</div><div class="text-xs text-slate-400">CMG Pharma</div></div></div>
+    <div class="flex items-center gap-3"><button class="text-sm px-3 py-1.5 border border-slate-200 rounded-lg text-slate-600 hover:border-pink-300">My Relationship with CMG Pharma</button><button data-open="d" class="text-slate-400 hover:text-slate-600 text-lg">✕</button></div>
+  </div>`;
+}
+function chatBody(accepted){
+  let b=`
+    <div class="flex justify-start my-1.5"><div class="max-w-[75%] bg-white border border-slate-200 rounded-2xl rounded-bl-sm px-3.5 py-2 text-sm">Hi - we need 5kg of Indica this month.</div></div>
+    <div class="flex justify-end my-1.5"><div class="max-w-[75%] bg-pink-600 text-white rounded-2xl rounded-br-sm px-3.5 py-2 text-sm">I can do 5kg at €4.20/kg, net 30.</div></div>
+    <div class="flex justify-center my-3"><div class="text-xs text-pink-700 bg-pink-50 border border-pink-100 rounded-full px-3 py-1.5 flex items-center gap-1">&#10022; Sella drafted an offer - review it on the right.</div></div>`;
+  if(accepted){
+    b+=`<div class="flex justify-center my-3">${offerCard(true)}</div>
+    <div class="text-center text-xs text-slate-400 my-2">Order SLO-2026-0043 created</div>
+    <div class="flex justify-start my-1.5"><div class="max-w-[75%] bg-white border border-slate-200 rounded-2xl rounded-bl-sm px-3.5 py-2 text-sm">Looks good. Approved on our side.</div></div>`;
+  }
+  return b;
+}
+function chips(){
+  return `<div class="flex flex-wrap gap-2 px-4 pb-2">
+    ${['Sella recommendations…',"What's new in stock?",'Create offer…'].map(c=>`<button class="text-xs px-3 py-1.5 bg-pink-50 text-pink-700 border border-pink-100 rounded-full">${c}</button>`).join('')}
+  </div>`;
+}
+function composer(){
+  return `<div class="px-4 pb-4">
+    <div class="border border-slate-300 rounded-2xl bg-white">
+      <input class="w-full px-4 py-3 outline-none text-sm rounded-t-2xl bg-transparent" placeholder="Message Kim from CMG Pharma…"/>
+      <div class="flex items-center gap-3 px-4 py-2 border-t border-slate-100 text-slate-400 text-sm">
+        <span class="text-base">＋</span><span class="font-semibold">Aa</span><span>😊</span><span>@</span><span class="text-slate-200">|</span><span class="font-bold text-slate-500">B</span><span class="italic text-slate-500">I</span><span class="underline text-slate-500">U</span><span>🔗</span><span>☰</span>
+        <span class="ml-auto text-base">🎤</span>
+      </div>
+    </div>
+  </div>`;
+}
+function mainChat(state){
+  if(state==='d') return `<div class="flex-1 flex flex-col min-w-0 bg-slate-50">${emptyChat()}</div>`;
+  return `<div class="flex-1 flex flex-col min-w-0 bg-slate-50">
+    ${chatHeader()}
+    <div class="flex-1 overflow-y-auto p-5">${chatBody(state==='a')}</div>
+    ${chips()}
+    ${composer()}
+  </div>`;
+}
+
+/* ---- panel 5: Sella ---- */
+function sellaPanel(state){
+  const thumbs=`<div class="flex gap-2 p-3 border-b border-slate-100">${[1,2,3].map(()=>`<div class="w-12 h-12 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-base">🌿</div>`).join('')}</div>`;
+  const msg=t=>`<div class="bg-slate-50 border border-slate-200 rounded-2xl px-3.5 py-2.5 text-sm text-slate-700">${t}</div>`;
+  let inner;
+  if(state==='d'){
+    inner=`<div class="flex-1 overflow-y-auto p-3 flex flex-col items-center justify-center text-center text-slate-400">
+      <div class="w-12 h-12 rounded-2xl bg-pink-600 text-white flex items-center justify-center text-xl mb-3">&#10022;</div>
+      <div class="text-sm font-medium text-slate-600">Hi, I'm Sella</div>
+      <div class="text-xs px-4">How can I help? Ask me for deals, drafts, or what's in stock.</div>
+    </div>`;
+  } else {
+    const body = state==='a'
+      ? `${msg("Here's the deal for Kim — review and send when ready.")}${msg("Deal sent to Kim ✓ Watch the chat — they'll reply shortly and the order pipeline opens.")}<button data-go-state="c" class="w-full text-sm px-3 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg">↺ Replay from composing</button>`
+      : `${msg("Let's create your sell deal 👋 Choose your products and fill in the details.")}${msg("Here's the deal for Kim — review and send when ready.")}${offerCard(false)}<button data-go-state="a" class="w-full text-sm px-3 py-2 bg-pink-600 text-white rounded-lg">Send to Kim &rarr;</button>`;
+    inner=`<div class="flex-1 overflow-y-auto p-3 space-y-3"><div class="text-xs uppercase tracking-wide text-slate-400">Sell deal for Kim</div>${body}</div>`;
+  }
+  return `<aside class="w-72 bg-white border-l border-slate-200 shrink-0 flex flex-col">
+    ${thumbs}${inner}
+    <div class="p-3 border-t border-slate-100">
+      <div class="mb-2"><span class="inline-flex items-center gap-1 text-xs text-pink-700 font-semibold border border-pink-200 rounded-full px-2 py-1">&#10022; SELL DEAL · AI-assisted</span></div>
+      <div class="flex items-center gap-2 border border-slate-300 rounded-xl px-3 py-2"><input class="flex-1 outline-none text-sm bg-transparent" placeholder="Ask me anything…"/><span class="text-slate-400">🎤</span></div>
+    </div>
+  </aside>`;
+}
+
+/* ---- mock DB ---- */
+function DB(state){
+  const composing = state!=='d', accepted = state==='a';
+  return [
+    {name:'pending_inbox_item', cols:['id','from_company','to_company','type','status'],
+      rows:[
+        {id:'inb_01',from_company:'CannaCare GmbH',to_company:'Aurora',type:'connect_request',status:'pending'},
+        {id:'inb_02',from_company:'BerlinBuds',to_company:'Aurora',type:'connect_request',status:'pending'},
+      ]},
+    {name:'relationship', cols:['id','company_a','company_b','status'],
+      rows:[{id:'rel_01',company_a:'Aurora',company_b:'CMG Pharma',status:'active'}]},
+    {name:'chat_thread', cols:['id','relationship_id','type'],
+      rows:[{id:'thr_01',relationship_id:'rel_01',type:'deal'}]},
+    {name:'chat_message', cols:['id','thread_id','sender','type','body'],
+      rows:[
+        {id:'msg_01',thread_id:'thr_01',sender:'CMG Pharma',type:'text',body:'need 5kg…'},
+        {id:'msg_02',thread_id:'thr_01',sender:'Aurora',type:'text',body:'€4.20/kg'},
+      ].concat(composing?[{id:'msg_03',thread_id:'thr_01',sender:'Sella',type:'system',body:'drafted offer',_new:state==='c'}]:[])
+       .concat(accepted?[
+         {id:'msg_04',thread_id:'thr_01',sender:'Aurora',type:'offer',body:'→ dc_01',_new:true},
+         {id:'msg_05',thread_id:'thr_01',sender:'CMG Pharma',type:'text',body:'Approved',_new:true},
+       ]:[])},
+    {name:'deal_workspace', cols:['id','deal_card_id','born_from'],
+      rows: composing?[{id:'ws_01',deal_card_id:'dc_01',born_from:'chat',_new:state==='c'}]:[]},
+    {name:'deal_card', cols:['id','product','qty','unit_price','total','state','drafted_by'],
+      rows: composing?[{id:'dc_01',product:'Indica',qty:'5kg',unit_price:'€4.20',total:'€21,000',state:accepted?'Confirmed':'Draft',drafted_by:'Sella',_new:state==='c',_changed:accepted}]:[]},
+    {name:'deal_card_version', cols:['id','deal_card_id','v','state','changed_by'],
+      rows: (composing?[{id:'dcv_01',deal_card_id:'dc_01',v:1,state:'Draft',changed_by:'Sella',_new:state==='c'}]:[])
+        .concat(accepted?[{id:'dcv_02',deal_card_id:'dc_01',v:2,state:'Confirmed',changed_by:'both',_new:true}]:[])},
+    {name:'order', cols:['id','deal_card_id','code','status'],
+      rows: accepted?[{id:'ord_01',deal_card_id:'dc_01',code:'SLO-2026-0043',status:'open',_new:true}]:[]},
+    {name:'audit_log', cols:['id','actor','action','content_type'],
+      rows: (composing?[{id:'au_01',actor:'sella',action:'draft',content_type:'deal_card',_new:state==='c'}]:[])
+        .concat(accepted?[
+          {id:'au_02',actor:'aurora',action:'send',content_type:'deal_card',_new:true},
+          {id:'au_03',actor:'cmg',action:'accept',content_type:'deal_card',_new:true},
+        ]:[])},
+  ];
+}
+function dbDrawer(state){
+  const card=t=>`
+    <div class="min-w-[220px] bg-white border border-slate-200 rounded-lg overflow-hidden shrink-0 self-start">
+      <div class="px-2.5 py-1.5 bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-700">${t.name} <span class="text-slate-400 font-normal">(${t.rows.length})</span></div>
+      <div class="overflow-x-auto"><table class="data-table"><thead><tr>${t.cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead><tbody>${t.rows.length?t.rows.map(r=>`<tr class="${(r._new||r._changed)?'data-row-new':''}">${t.cols.map(c=>`<td>${r[c]!==undefined?r[c]:''}</td>`).join('')}</tr>`).join(''):`<tr><td colspan="${t.cols.length}" class="text-slate-300 italic">empty</td></tr>`}</tbody></table></div>
+    </div>`;
+  return `<div class="h-60 bg-slate-100 border-t border-slate-300 shrink-0 flex flex-col">
+    <div class="px-4 py-2 border-b border-slate-200 bg-white">
+      <span class="text-sm font-semibold text-slate-700">Data state · mock DB</span>
+      <span class="text-xs text-slate-400"> - what Connect writes. Rows scoped by <code>company_id</code> (RLS). The 2 <code>pending_inbox_item</code> rows are the Inbox tickets. New rows highlight yellow as you advance the flow.</span>
+    </div>
+    <div class="flex-1 overflow-auto p-3"><div class="flex gap-3 items-start">${DB(state).map(card).join('')}</div></div>
+  </div>`;
+}
+
+/* ---- screen ---- */
+function screen(state){
+  return `${topbar()}<div class="flex-1 flex min-h-0">${iconRail()}${subnav()}${contactList(state!=='d')}${mainChat(state)}${sellaPanel(state)}</div>${showDB?dbDrawer(state):''}`;
+}
+
+/* ---- switcher + db toggle ---- */
+let showDB=true;
+const ORDER=['d','c','a'];
+const LABELS={'d':'Default · nothing open','c':'Chat open · composing deal','a':'Chat open · sent & accepted'};
+function setVariant(v){const p=new URLSearchParams(location.search);p.set('variant',v);history.replaceState(null,'',location.pathname+'?'+p.toString());render();}
+function currentVariant(){let v=(new URLSearchParams(location.search).get('variant')||'d');return ORDER.includes(v)?v:'d';}
+function switcher(v){const i=ORDER.indexOf(v);const prev=ORDER[(i-1+ORDER.length)%ORDER.length];const next=ORDER[(i+1)%ORDER.length];
+  return `<button id="db-toggle" class="fixed bottom-4 left-4 z-50 text-sm px-3 py-2 bg-slate-900 text-white rounded-full shadow-xl">⛁ ${showDB?'Hide data':'Show data'}</button>
+  <div class="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1 bg-slate-900 text-white rounded-full shadow-xl px-2 py-1.5">
+    <button data-go="${prev}" class="w-8 h-8 rounded-full hover:bg-slate-700 flex items-center justify-center">&larr;</button>
+    <div class="px-3 text-sm font-medium whitespace-nowrap">${LABELS[v]} <span class="text-slate-400">(${i+1}/${ORDER.length})</span></div>
+    <button data-go="${next}" class="w-8 h-8 rounded-full hover:bg-slate-700 flex items-center justify-center">&rarr;</button>
+  </div>`;}
+function render(){
+  const v=currentVariant();
+  document.getElementById('app').innerHTML=screen(v);
+  document.getElementById('switcher').innerHTML=switcher(v);
+  document.querySelectorAll('#switcher [data-go]').forEach(b=>b.addEventListener('click',()=>setVariant(b.getAttribute('data-go'))));
+  document.querySelectorAll('[data-go-state]').forEach(b=>b.addEventListener('click',()=>setVariant(b.getAttribute('data-go-state'))));
+  document.querySelectorAll('[data-open]').forEach(b=>b.addEventListener('click',(e)=>{e.preventDefault();setVariant(b.getAttribute('data-open'));}));
+  const t=document.getElementById('db-toggle'); if(t) t.addEventListener('click',()=>{showDB=!showDB;render();});
+}
+document.addEventListener('keydown',e=>{const el=document.activeElement;const tag=(el&&el.tagName||'').toLowerCase();if(tag==='input'||tag==='textarea'||(el&&el.isContentEditable))return;const i=ORDER.indexOf(currentVariant());if(e.key==='ArrowLeft')setVariant(ORDER[(i-1+ORDER.length)%ORDER.length]);if(e.key==='ArrowRight')setVariant(ORDER[(i+1)%ORDER.length]);});
+render();
+</script>
+</body>
+</html>
