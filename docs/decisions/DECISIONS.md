@@ -533,3 +533,22 @@ Locked the Connect post-acceptance experience (Ayush + Claude session): the chat
 
 - **Sella = multiple AI workflows under one face.** The UI may show distinct "Sellas" wherever it fits; internally they are just workflows - so UI placement is unconstrained by an "only system voice" rule. *Why:* "Sella" is a single product persona over many workflows; the UI is free to surface her wherever she helps.
 - **Deal Room = CUT** (removed from scope). "Open full page" now points to the **Deal Workspace**. *Why:* the Deal Workspace already is the full deal surface; a separate Deal Room duplicated it.
+
+## 2026-06-06 - Phase-1 schema gaps resolved + company category
+
+Validated the Phase-1 schema against the `phase-1-onboarding` prototype and a Phase-2/3 cross-check; resolved the last open build-questions and added one new requirement (Marcel).
+
+### Phase-1 schema gaps (resolved)
+
+- **B2 — HS-team allowlist = new `hs_team_member` table** (platform-level, no `company_id`; FK to `person`, role reviewer/admin; grant/revoke audited). *Why:* a privilege boolean on the user's own row risks self-escalation; a table is auditable + listable. Rejected `person.is_hs_team` and env-var.
+- **B3 — domain-collision override = `company.metadata.domain_collision`** (sparse, HS-only review flag). *Why:* rare, review-only signal → JSONB metadata, not a column.
+- **B4 — rejection reason = derived from `audit_log`** (latest `company.verify_rejected`); resubmit is auth-gated, reuses `company_license_file`. *Why:* single source of truth; no `rejection_reason` column, no token table.
+- **Cleanups:** onboarding checklist = derive "done", store only `dismissed` (in `person.metadata`), "skipped" → future `analytics_event`; **superadmin = `person_group` only** (`is_superadmin` boolean dropped); contact tags = customer/supplier/partner/prospect/other (NULL = unclassified); **enums store the `code`, not the display label** (EN/DE translated in app). *Why:* don't store what you can derive; one source of truth; codes decouple from display text.
+
+### Company business category (Marcel)
+
+- **Companies pick one or more business categories at setup** — `company_type` lookup (cultivator / wholesaler / importer / pharmacy …) + `company_type_assignment` junction (multi-select). **A stable "what the business is" attribute, NOT a buy/sell role** (buyer/seller stays per-deal, driven by actions). *Why:* supply-chain category drives matching/discovery; vertically-integrated cannabis firms commonly hold several licences (→ multi-select); deliberately kept distinct from the locked "no buy/sell type on company".
+
+### Open (next session)
+
+- **`pending_inbox_item` needs `request_type` + `assigned_to`** before it locks — the Connect inbox (4 request types + claim-or-admin-assign + lenses) requires them. Awaiting Ayush's answers: exact 4 types, assign-vs-pickup semantics, lens definitions, per-type payload, reassign rules.

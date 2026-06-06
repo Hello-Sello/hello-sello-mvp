@@ -5,9 +5,9 @@
 
 ---
 
-**Last updated:** 2026-06-06 15:57 UTC
+**Last updated:** 2026-06-06 17:25 UTC
 **Branch:** claude/muskan/work
-**Status:** active
+**Status:** offline (session wrapped)
 **Linear issue in progress:** none
 **Shared files locked:** none
 **PR open:** none
@@ -25,8 +25,12 @@
 
 - **Cleanups:** `person.is_superadmin` dropped → `person_group` is the single source of truth for Superadmin; contact tags = customer/supplier/partner/prospect/other (blank = unclassified, dropped 'unknown'); store permission *codes* not labels (EN/DE i18n); `email_integration` re-sync deferred (v0 = one-time import).
 
-Only **B6** (2FA timing) remains open. Formal `DECISIONS.md` line deferred to my wrap.
+Only **B6** (2FA timing) remains open. **DECISIONS.md updated this wrap** (2026-06-06 — Phase-1 schema gaps + company category).
+
+Also this session: **synced my branch with dev** — your `src/` modular structure + `supabase/` + Connect/Deal docs/prototypes are now in my branch. Ran a **Phase-2/3 cross-check**: 11 Phase-1 tables are lock-ready; **`pending_inbox_item` needs `request_type` + `assigned_to`** (your Connect inbox design) before it locks — I'll send you 5 Qs to finalize it. New: **company business category** (Marcel) → `company_type` + `company_type_assignment` (multi-select, asked at setup; *not* buy/sell). Built a visual schema reference: `docs/architecture/schema-phase1-visual.html`.
+
+**Next session:** add the category step into the `phase-1-onboarding` prototype (sync-ritual first — shared); apply your answers → finalize `pending_inbox_item`; refresh the visual; then start migrations in `supabase/migrations/`.
 
 Still on my list: A2 `email_encrypted` scan (PR #25); AWS Bedrock access.
 
-Status: active (mid-session).
+Going offline.

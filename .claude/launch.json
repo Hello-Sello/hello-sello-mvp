@@ -6,6 +6,12 @@
       "runtimeExecutable": "python3",
       "runtimeArgs": ["-m", "http.server", "8765", "--directory", "prototypes/phase-1-onboarding"],
       "port": 8765
+    },
+    {
+      "name": "schema-visual",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "8011", "--directory", "docs/architecture"],
+      "port": 8011
     }
   ]
 }

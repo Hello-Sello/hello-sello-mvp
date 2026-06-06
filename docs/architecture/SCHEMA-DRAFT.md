@@ -87,7 +87,8 @@ Company entities.
 - `INDEX(country)` for geo queries
 
 **Open questions:**
-- Company "type" (distributor / pharmacy / both): **LOCKED — no such column.** Every company can be either at any time per deal.
+- Company buy/sell "type" (distributor / pharmacy / both *as a deal role*): **LOCKED — no such column.** Buyer/seller is per-deal, driven by actions. *(Distinct from business **category** — see next line.)*
+- Company business **category** (Cultivator / Wholesaler / Importer / Pharmacy …): **Added 2026-06-06 (Marcel).** Multi-select, asked at company setup — a stable "what this business is" attribute, NOT a buy/sell role. Stored via new `company_type` lookup + `company_type_assignment` junction (a company can hold several — vertically-integrated cannabis firms commonly do). NOT a column on `company`.
 - Logos / brand assets → separate `company_asset` table (likely multiple per company).
 - Tax IDs, regulatory IDs (BfArM, EU-GMP, etc.) → as `metadata.regulatory_ids` for MVP; promote to columns if we filter/query by them.
 - ~~File storage backend (S3 / GCS / local)~~ → **RESOLVED 2026-05-28 (A3):** Supabase Storage private bucket. License files in `company_license_file` (below); see `ARCHITECTURE-NOTES.md`.
@@ -122,6 +123,42 @@ License/certificate files uploaded at company setup. **File bytes live in a Supa
 
 **Open questions:**
 - Extract license number / issuing authority / expiry into structured columns here? → **Default:** not in v0 (HS reviewer reads the file directly). If extracted later, the license-number column follows A2's pgcrypto high-sensitivity tier.
+
+---
+
+### `company_type` (lookup)
+
+The fixed list of business categories a company can identify as (its position in the supply chain). Lookup table so new categories are added without a migration. **Business category, not a buy/sell role** (buyer/seller is per-deal). (Added 2026-06-06 — Marcel.)
+
+| Column | Type | Notes |
+|---|---|---|
+| `code` | VARCHAR(30) PK | e.g. `cultivator`, `wholesaler`, `importer`, `pharmacy` |
+| `description` | TEXT NOT NULL | Human-readable; EN/DE translated in the app (store the code, not the label) |
+| `sort_order` | SMALLINT NOT NULL DEFAULT 0 | Display order in the multi-select |
+
+**Seed values:** `cultivator`, `wholesaler`, `importer`, `pharmacy` (more added as the market needs).
+
+---
+
+### `company_type_assignment`
+
+Many-to-many link: which business categories a company has. A company can hold several (e.g. cultivator + importer + wholesaler — vertically-integrated cannabis firms commonly do). (Added 2026-06-06 — Marcel.)
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | UUID | PK, NOT NULL, DEFAULT `gen_random_uuid()` | |
+| `company_id` | UUID | NOT NULL, REFERENCES `company(id)` | The company |
+| `company_type_code` | VARCHAR(30) | NOT NULL, REFERENCES `company_type(code)` | One of its categories |
+| `created_by` | UUID | NULL, REFERENCES `person(id)` | Who set it |
+| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
+| `deleted_at` | TIMESTAMPTZ | NULL | Soft-delete to remove a category |
+
+**Constraints:**
+- `UNIQUE(company_id, company_type_code) WHERE deleted_at IS NULL` — no duplicate category per company
+
+**Indexes:**
+- `INDEX(company_id)` — a company's categories
+- `INDEX(company_type_code)` — "show all pharmacies" / category filtering on Discover
 
 ---
 

@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Hello Sello — Phase 1 Database (visual reference)</title>
+<style>
+  :root{
+    --pink:#db2777; --pink-soft:#fce7f3; --ink:#0f172a; --muted:#64748b;
+    --line:#e2e8f0; --bg:#f8fafc; --card:#ffffff;
+    --green:#16a34a; --green-soft:#dcfce7; --amber:#d97706; --amber-soft:#fef3c7;
+    --blue:#2563eb; --blue-soft:#dbeafe; --violet:#7c3aed; --violet-soft:#ede9fe;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.5;font-size:14px;}
+  .wrap{max-width:1180px;margin:0 auto;padding:32px 24px 80px;}
+  header h1{font-size:26px;margin:0 0 4px;font-weight:800;letter-spacing:-.02em;}
+  header h1 span{color:var(--pink);}
+  header p.sub{color:var(--muted);margin:0 0 20px;font-size:15px;}
+
+  .banner{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--pink);
+    border-radius:10px;padding:14px 18px;margin-bottom:20px;font-size:13.5px;}
+  .banner b{color:var(--ink);}
+
+  .legend{display:flex;flex-wrap:wrap;gap:8px 16px;background:var(--card);border:1px solid var(--line);
+    border-radius:10px;padding:14px 18px;margin-bottom:28px;font-size:12.5px;color:var(--muted);}
+  .legend .item{display:flex;align-items:center;gap:6px;}
+
+  .tag{display:inline-block;font-size:10.5px;font-weight:700;padding:1px 6px;border-radius:5px;
+    letter-spacing:.02em;vertical-align:middle;white-space:nowrap;}
+  .t-pk{background:#fef9c3;color:#854d0e;}
+  .t-fk{background:var(--blue-soft);color:var(--blue);}
+  .t-json{background:var(--violet-soft);color:var(--violet);}
+  .t-enc{background:#fee2e2;color:#b91c1c;}
+  .t-uniq{background:#f1f5f9;color:#475569;}
+  .t-lookup{background:#e0f2fe;color:#0369a1;}
+  .t-ok{background:var(--green-soft);color:var(--green);}
+  .t-warn{background:var(--amber-soft);color:var(--amber);}
+
+  .groupttl{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;
+    color:var(--muted);margin:34px 0 12px;display:flex;align-items:center;gap:10px;}
+  .groupttl::after{content:"";flex:1;height:1px;background:var(--line);}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(440px,1fr));gap:16px;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;
+    box-shadow:0 1px 2px rgba(15,23,42,.04);}
+  .card.warn{border-color:#fcd34d;}
+  .card.lookup{background:#fcfdff;}
+  .card-h{padding:13px 16px 11px;border-bottom:1px solid var(--line);}
+  .card-h .name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:15px;font-weight:700;color:var(--ink);}
+  .card-h .badges{float:right;display:flex;gap:5px;}
+  .card-h .what{display:block;color:var(--muted);font-size:12.5px;margin-top:5px;}
+
+  table.cols{width:100%;border-collapse:collapse;font-size:12.5px;}
+  table.cols td{padding:5px 16px;border-bottom:1px solid #f1f5f9;vertical-align:top;}
+  table.cols tr:last-child td{border-bottom:none;}
+  .cn{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:600;white-space:nowrap;}
+  .ct{color:var(--muted);font-size:11px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;white-space:nowrap;}
+  .note{color:#475569;font-size:12px;}
+  tr.dim td{background:#fcfcfd;}
+  tr.dim .cn{font-weight:500;color:#94a3b8;}
+
+  .links{padding:9px 16px;background:#f8fafc;border-top:1px solid var(--line);font-size:11.5px;color:var(--muted);}
+  .links b{color:#475569;font-weight:700;}
+  .arrow{color:var(--blue);font-family:ui-monospace,monospace;}
+  .footnote{margin-top:40px;color:var(--muted);font-size:12px;border-top:1px solid var(--line);padding-top:16px;}
+  code{background:#f1f5f9;padding:1px 5px;border-radius:4px;font-size:.9em;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Hello <span>Sello</span> — Phase 1 Database</h1>
+    <p class="sub">A plain-English map of every table: what it holds, why it exists, and how it links to the others.</p>
+  </header>
+
+  <div class="banner">
+    <b>Status:</b> Most tables are ready to lock <span class="tag t-ok">LOCK-READY</span> .
+    One — <code>pending_inbox_item</code> <span class="tag t-warn">NEEDS 2 FIELDS</span> — is the Connect (Phase&nbsp;2) inbox and still needs a <code>request_type</code> and an <code>assigned_to</code> field before it's final.
+    The small <span class="tag t-lookup">LOOKUP</span> tables are just fixed lists of allowed values (so we can add options without changing the database).
+  </div>
+
+  <div class="legend">
+    <span class="item"><span class="tag t-pk">PK</span> primary key (the row's id)</span>
+    <span class="item"><span class="tag t-fk">FK→</span> points at another table</span>
+    <span class="item"><span class="tag t-json">JSON</span> flexible bag of fields</span>
+    <span class="item"><span class="tag t-enc">ENC</span> encrypted at rest</span>
+    <span class="item"><span class="tag t-uniq">UNIQUE</span> no duplicates</span>
+    <span class="item">🔒 = single source of truth</span>
+  </div>
+
+  <div class="banner" style="border-left-color:var(--muted);">
+    <b>Shared by every table (shown dimmed, not repeated in words):</b>
+    <code>id</code> (a random UUID) · <code>created_at</code> / <code>updated_at</code> (when made / last changed) ·
+    <code>deleted_at</code> (“soft delete” — we hide rows, never truly erase, for the audit trail).
+    Company-owned tables also carry <code>company_id</code> so each company only sees its own data.
+    <em>(The audit log is the one exception — it can never be edited or deleted.)</em>
+  </div>
+
+  <!-- ===================== IDENTITY ===================== -->
+  <div class="groupttl">Identity &amp; profile</div>
+  <div class="grid">
+
+    <div class="card">
+      <div class="card-h">
+        <span class="badges"><span class="tag t-ok">LOCK-READY</span></span>
+        <span class="name">person</span>
+        <span class="what">A user's profile. Login/email/password live in Supabase Auth; this is the app-side profile that sits on top.</span>
+      </div>
+      <table class="cols">
+        <tr><td class="cn">id <span class="tag t-pk">PK</span> <span class="tag t-fk">FK→auth.users</span></td><td class="ct">uuid</td><td class="note">Same id as the Supabase Auth user (1-to-1).</td></tr>
+        <tr><td class="cn">first_name</td><td class="ct">varchar</td><td class="note">—</td></tr>
+        <tr><td class="cn">last_name</td><td class="ct">varchar</td><td class="note">—</td></tr>
+        <tr><td class="cn">company_id <span class="tag t-fk">FK→company</span></td><td class="ct">uuid · null</td><td class="note">Their company. Empty until they finish company setup / get approved to join one.</td></tr>
+        <tr><td class="cn">preferences <span class="tag t-json">JSON</span></td><td class="ct">jsonb</td><td class="note">Title, phone, language — and the onboarding <code>dismissed</code> flag.</td></tr>
+        <tr><td class="cn">metadata <span class="tag t-json">JSON</span></td><td class="ct">jsonb</td><td class="note">Spare room for future fields without a migration.</td></tr>
+        <tr class="dim"><td class="cn">created_at / updated_at / deleted_at</td><td class="ct">timestamptz</td><td class="note">Standard.</td></tr>
+      </table>
+      <div class="links"><b>Email?</b> Not stored here — it lives in <code>auth.users</code>, read via a secure view. <b>Superadmin?</b> Not a flag here — it's a row in <span class="arrow">person_group</span> (one source of truth 🔒).</div>
+    </div>
+
+  </div>
+
+  <!-- ===================== COMPANIES ===================== -->
+  <div class="groupttl">Companies</div>
+  <div class="grid">
+
+    <div class="card">
+      <div class="card-h">
+        <span class="badges"><span class="tag t-ok">LOCK-READY</span></span>
+        <span class="name">company</span>
+        <span class="what">A business on the platform. Created at company setup; verified by the Hello Sello team before it can do external things.</span>
+      </div>
+      <table class="cols">
+        <tr><td class="cn">id <span class="tag t-pk">PK</span></td><td class="ct">uuid</td><td class="note">—</td></tr>
+        <tr><td class="cn">name</td><td class="ct">varchar</td><td class="note">—</td></tr>
+        <tr><td class="cn">country</td><td class="ct">char(2)</td><td class="note">ISO code, e.g. <code>DE</code>.</td></tr>
+        <tr><td class="cn">address <span class="tag t-enc">ENC</span></td><td class="ct">text · null</td><td class="note">Encrypted at rest.</td></tr>
+        <tr><td class="cn">description / primary_products / website</td><td class="ct">text · null</td><td class="note">Optional details for the QR business card.</td></tr>
+        <tr><td class="cn">verification_status <span class="tag t-lookup">lookup</span></td><td class="ct">varchar</td><td class="note"><code>pending</code> / <code>verified</code> / <code>rejected</code>. The gate for external actions.</td></tr>
+        <tr><td class="cn">verified_at</td><td class="ct">timestamptz · null</td><td class="note">When approved.</td></tr>
+        <tr><td class="cn">verified_by <span class="tag t-fk">FK→person</span></td><td class="ct">uuid · null</td><td class="note">Which HS-team member approved it.</td></tr>
+        <tr><td class="cn">metadata <span class="tag t-json">JSON</span></td><td class="ct">jsonb</td><td class="note">Holds the silent <code>domain_collision</code> flag + regulatory ids.</td></tr>
+        <tr class="dim"><td class="cn">created_at / updated_at / deleted_at</td><td class="ct">timestamptz</td><td class="note">Standard.</td></tr>
+      </table>
+      <div class="links"><b>Rejection reason?</b> Not a column — it's read from the <span class="arrow">audit_log</span> entry. <b>“type” (buyer/seller)?</b> Deliberately none — role is per-deal, not per-company.</div>
+    </div>
+
+    <div class="card">
+      <div class="card-h">
+        <span class="badges"><span class="tag t-ok">LOCK-READY</span></span>
+        <span class="name">company_license_file</span>
+        <span class="what">Each licence/certificate a company uploads for verification. The file itself sits in Supabase Storage; this row is the pointer + details.</span>
+      </div>
+      <table class="cols">
+        <tr><td class="cn">id <span class="tag t-pk">PK</span></td><td class="ct">uuid</td><td class="note">—</td></tr>
+        <tr><td class="cn">company_id <span class="tag t-fk">FK→company</span></td><td class="ct">uuid</td><td class="note">Owner.</td></tr>
+        <tr><td class="cn">storage_path</td><td class="ct">text</td><td class="note">Where the file lives in the private bucket.</td></tr>
+        <tr><td class="cn">original_filename / mime_type / file_size_bytes</td><td class="ct">varchar / bigint</td><td class="note">File details; type checked by its actual bytes.</td></tr>
+        <tr><td class="cn">scan_status</td><td class="ct">varchar</td><td class="note"><code>pending</code> / <code>clean</code> / <code>infected</code> — set by a virus scan on upload.</td></tr>
+        <tr><td class="cn">description</td><td class="ct">text · null</td><td class="note">Optional note from the uploader for the reviewer.</td></tr>
+        <tr><td class="cn">created_by / updated_by <span class="tag t-fk">FK→person</span></td><td class="ct">uuid</td><td class="note">Who uploaded it.</td></tr>
+        <tr class="dim"><td class="cn">created_at / updated_at / deleted_at</td><td class="ct">timestamptz</td><td class="note">Re-upload = soft-delete old + insert new.</td></tr>
+      </table>
+      <div class="links"><b>Links:</b> belongs to one <span class="arrow">company</span>. Every view/download is written to <span class="arrow">audit_log</span>.</div>
+    </div>
+
+    <div class="card lookup">
+      <div class="card-h">
+        <span class="badges"><span class="tag t-lookup">LOOKUP</span></span>
+        <span class="name">company_type</span>
+        <span class="what">The list of business categories a company can be — its place in the supply chain. Added 2026-06-06; a lookup so new categories don't need a migration.</span>
+      </div>
+      <table class="cols">
+        <tr><td class="cn">code <span class="tag t-pk">PK</span></td><td class="ct">varchar</td><td class="note"><code>cultivator</code> / <code>wholesaler</code> / <code>importer</code> / <code>pharmacy</code> … (more later)</td></tr>
+        <tr><td class="cn">description</td><td class="ct">text</td><td class="note">Label — real EN/DE text translated in the app.</td></tr>
+        <tr><td class="cn">sort_order</td><td class="ct">smallint</td><td class="note">Order shown in the multi-select.</td></tr>
+      </table>
+      <div class="links"><b>Note:</b> a business <em>category</em> (what you are) — <b>not</b> buyer/seller, which is decided per-deal.</div>
+    </div>
+
+    <div class="card">
+      <div class="card-h">
+        <span class="badges"><span class="tag t-ok">LOCK-READY</span></span>
+        <span class="name">company_type_assignment</span>
+        <span class="what">Links a company to the one-or-more categories it picked. A company can be several at once (e.g. cultivator + importer + wholesaler).</span>
+      </div>
+      <table class="cols">
+        <tr><td class="cn">id <span class="tag t-pk">PK</span></td><td class="ct">uuid</td><td class="note">—</td></tr>
+        <tr><td class="cn">company_id <span class="tag t-fk">FK→company</span></td><td class="ct">uuid</td><td class="note">The company.</td></tr>
+        <tr><td class="cn">company_type_code <span class="tag t-fk">FK→company_type</span></td><td class="ct">varchar</td><td class="note">One of its categories.</td></tr>
+        <tr><td class="cn">created_by <span class="tag t-fk">FK→person</span></td><td class="ct">uuid · null</td><td class="note">Who set it.</td></tr>
+        <tr class="dim"><td class="cn">created_at / deleted_at</td><td class="ct">timestamptz</td><td class="note"><span class="tag t-uniq">UNIQUE</span> per company + category.</td></tr>
+      </table>
+      <div class="links"><b>Asked at company setup</b> (multi-select). Powers “show all pharmacies” style filtering on Discover.</div>
+    </div>
+
+  </div>
+
+  <!-- ===================== ROLES ===================== -->
+  <div class="groupttl">Roles &amp; permissions</div>
+  <div class="grid">
+
+    <div class="card">
+      <div class="card-h">
+        <span class="badges"><span class="tag t-ok">LOCK-READY</span></span>
+        <span class="name">group</span>
+        <span class="what">A company-defined team/role, like “Sales Team” or “Approver”. Each company makes its own.</span>
+      </div>
+      <table class="cols">
+        <tr><td class="cn">id <span class="tag t-pk">PK</span></td><td class="ct">uuid</td><td class="note">—</td></tr>
+        <tr><td class="cn">company_id <span class="tag t-fk">FK→company</span></td><td class="ct">uuid</td><td class="note">Owner.</td></tr>
+        <tr><td class="cn">name / description</td><td class="ct">varchar / text</td><td class="note">“Sales Team”, etc.</td></tr>
+        <tr><td class="cn">parent_group_id <span class="tag t-fk">FK→group</span></td><td class="ct">uuid · null</td><td class="note">Points at itself — for future nested teams.</td></tr>
+        <tr class="dim"><td class="cn">created_at / updated_at / deleted_at</td><td class="ct">timestamptz</td><td class="note"><span class="tag t-uniq">UNIQUE</span> name per company.</td></tr>
+      </table>
+      <div class="links"><b>Links:</b> belongs to a <span class="arrow">company</span>; people join via <span class="arrow">person_group</span>; abilities set in <span class="arrow">permission_matrix_entry</span>.</div>
+    </div>
+
+    <div class="card">
+      <div class="card-h">
+        <span class="badges"><span class="tag t-ok">LOCK-READY</span></span>
+        <span class="name">person_group</span>
+        <span class="what">The join table: which people belong to which groups. Also where the platform “superadmin” role lives 🔒.</span>
+      </div>
+      <table class="cols">
+        <tr><td class="cn">id <span class="tag t-pk">PK</span></td><td class="ct">uuid</td><td class="note">—</td></tr>
+        <tr><td class="cn">person_id <span class="tag t-fk">FK→person</span></td><td class="ct">uuid</td><td class="note">The member.</td></tr>
+        <tr><td class="cn">group_id <span class="tag t-fk">FK→group</span></td><td class="ct">uuid · null</td><td class="note">The group… </td></tr>
+        <tr><td class="cn">role</td><td class="ct">varchar · null</td><td class="note">…or a platform role like <code>superadmin</code> (then group is empty).</td></tr>
+        <tr class="dim"><td class="cn">created_at / deleted_at</td><td class="ct">timestamptz</td><td class="note">Rule: must have a group OR a role.</td></tr>
+      </table>
+      <div class="links"><b>Why here?</b> Keeping “superadmin” as a row (not a checkbox on <span class="arrow">person</span>) means one source of truth and no self-promotion.</div>
+    </div>
+
+    <div class="card">
+      <div class="card-h">
+        <span class="badges"><span class="tag t-ok">LOCK-READY</span></span>
+        <span class="name">permission_matrix_entry</span>
+        <span class="what">The grid of “can this group do this action?” — one row per (group × action).</span>
+      </div>
+      <table class="cols">
+        <tr><td class="cn">id <span class="tag t-pk">PK</span></td><td class="ct">uuid</td><td class="note">—</td></tr>
+        <tr><td class="cn">group_id <span class="tag t-fk">FK→group</span></td><td class="ct">uuid</td><td class="note">Which group.</td></tr>
+        <tr><td class="cn">action <span class="tag t-fk">FK→permission_action</span></td><td class="ct">varchar</td><td class="note">The action <em>code</em> (e.g. <code>view_deals</code>) — not the label.</td></tr>
+        <tr><td class="cn">granted</td><td class="ct">boolean</td><td class="note">Yes / no.</td></tr>
+        <tr class="dim"><td class="cn">created_at / updated_at</td><td class="ct">timestamptz</td><td class="note"><span class="tag t-uniq">UNIQUE</span> per group+action.</td></tr>
+      </table>
+      <div class="links"><b>Links:</b> a <span class="arrow">group</span> × a <span class="arrow">permission_action</span>.</div>
+    </div>
+
+    <div class="card lookup">
+      <div class="card-h">
+        <span class="badges"><span class="tag t-lookup">LOOKUP</span></span>
+        <span class="name">permission_action</span>
+        <span class="what">The fixed list of possible actions. A lookup so we add new abilities without a migration.</span>
+      </div>
+      <table class="cols">
+        <tr><td class="cn">code <span class="tag t-pk">PK</span></td><td class="ct">varchar</td><td class="note">Stable id, e.g. <code>edit_pricelist</code>. Never the display words.</td></tr>
+        <tr><td class="cn">description</td><td class="ct">text</td><td class="note">Fallback/admin label (real EN/DE text is translated in the app).</td></tr>
+        <tr><td class="cn">category</td><td class="ct">varchar</td><td class="note">For grouping in the UI.</td></tr>
+      </table>
+    </div>
+
+  </div>
+
+  <!-- ===================== STAFF ===================== -->
+  <div class="groupttl">Hello Sello staff</div>
+  <div class="grid">
+    <div class="card">
+      <div class="card-h">
+        <span class="badges"><span class="tag t-ok">LOCK-READY</span></span>
+        <span class="name">hs_team_member</span>
+        <span class="what">The allow-list of internal Hello Sello staff who can review &amp; verify companies. Platform-wide — not tied to any one company.</span>
+      </div>
+      <table class="cols">
+        <tr><td class="cn">id <span class="tag t-pk">PK</span></td><td class="ct">uuid</td><td class="note">—</td></tr>
+        <tr><td class="cn">person_id <span class="tag t-fk">FK→person</span></td><td class="ct">uuid</td><td class="note">The staff member (a normal account).</td></tr>
+        <tr><td class="cn">role</td><td class="ct">varchar</td><td class="note"><code>reviewer</code> / <code>admin</code>.</td></tr>
+        <tr><td class="cn">created_by / updated_by <span class="tag t-fk">FK→person</span></td><td class="ct">uuid</td><td class="note">Who granted access (auditable).</td></tr>
+        <tr class="dim"><td class="cn">created_at / updated_at / deleted_at</td><td class="ct">timestamptz</td><td class="note">Revoke = soft-delete. <span class="tag t-uniq">UNIQUE</span> active per person.</td></tr>
+      </table>
+      <div class="links"><b>No <code>company_id</code></b> on purpose — HS staff act across all companies. Granting/removing is written to <span class="arrow">audit_log</span>.</div>
+    </div>
+  </div>
+
+  <!-- ===================== CONTACTS ===================== -->
+  <div class="groupttl">Contacts</div>
+  <div class="grid">
+    <div class="card">
+      <div class="card-h">
+        <span class="badges"><span class="tag t-ok">LOCK-READY</span></span>
+        <span class="name">contact_record</span>
+        <span class="what">People imported from a user's Gmail/Outlook — metadata only (no subjects, no bodies). Used to find who they already know.</span>
+      </div>
+      <table class="cols">
+        <tr><td class="cn">id <span class="tag t-pk">PK</span></td><td class="ct">uuid</td><td class="note">—</td></tr>
+        <tr><td class="cn">person_id <span class="tag t-fk">FK→person</span></td><td class="ct">uuid</td><td class="note">Whose contact list this is.</td></tr>
+        <tr><td class="cn">email <span class="tag t-enc">ENC</span></td><td class="ct">varchar</td><td class="note">The contact's email, encrypted at rest.</td></tr>
+        <tr><td class="cn">display_name</td><td class="ct">varchar · null</td><td class="note">—</td></tr>
+        <tr><td class="cn">first_seen / last_seen / email_count</td><td class="ct">date / int</td><td class="note">How often / how recently — used to compute “active vs dormant” live.</td></tr>
+        <tr><td class="cn">role</td><td class="ct">varchar · null</td><td class="note"><code>customer / supplier / partner / prospect / other</code>. <b>Empty = not classified</b> (no “unknown”).</td></tr>
+        <tr><td class="cn">inferred_company_id <span class="tag t-fk">FK→company</span></td><td class="ct">uuid · null</td><td class="note">If we match them to a company on the platform.</td></tr>
+        <tr><td class="cn">provider</td><td class="ct">varchar</td><td class="note"><code>gmail</code> / <code>outlook</code>.</td></tr>
+        <tr class="dim"><td class="cn">metadata / created_at / updated_at / deleted_at</td><td class="ct">jsonb / timestamptz</td><td class="note"><span class="tag t-uniq">UNIQUE</span> per person+email.</td></tr>
+      </table>
+      <div class="links"><b>Re-syncing</b> the inbox later needs an <code>email_integration</code> table — deferred; v0 is a one-time import.</div>
+    </div>
+  </div>
+
+  <!-- ===================== REQUESTS ===================== -->
+  <div class="groupttl">Joining &amp; connecting</div>
+  <div class="grid">
+
+    <div class="card">
+      <div class="card-h">
+        <span class="badges"><span class="tag t-ok">LOCK-READY</span></span>
+        <span class="name">join_request</span>
+        <span class="what">A person asking to join an existing company. A superadmin of that company approves — which makes them a member.</span>
+      </div>
+      <table class="cols">
+        <tr><td class="cn">id <span class="tag t-pk">PK</span></td><td class="ct">uuid</td><td class="note">—</td></tr>
+        <tr><td class="cn">requester_person_id <span class="tag t-fk">FK→person</span></td><td class="ct">uuid</td><td class="note">The joiner.</td></tr>
+        <tr><td class="cn">target_company_id <span class="tag t-fk">FK→company</span></td><td class="ct">uuid</td><td class="note">Company they want to join.</td></tr>
+        <tr><td class="cn">status</td><td class="ct">varchar</td><td class="note"><code>pending / approved / rejected / cancelled</code>.</td></tr>
+        <tr><td class="cn">decided_by <span class="tag t-fk">FK→person</span></td><td class="ct">uuid · null</td><td class="note">Superadmin who decided.</td></tr>
+        <tr><td class="cn">decided_at / rejection_reason</td><td class="ct">timestamptz / text</td><td class="note">—</td></tr>
+        <tr class="dim"><td class="cn">metadata / created_at / updated_at / deleted_at</td><td class="ct">jsonb / timestamptz</td><td class="note">Standard.</td></tr>
+      </table>
+      <div class="links"><b>Approve →</b> sets the person's <span class="arrow">person.company_id</span>. Different from the inbox below: this grants <em>membership</em>.</div>
+    </div>
+
+    <div class="card warn">
+      <div class="card-h">
+        <span class="badges"><span class="tag t-warn">NEEDS 2 FIELDS</span></span>
+        <span class="name">pending_inbox_item</span>
+        <span class="what">The Connect inbox: incoming requests between companies (connect, message, price-list, deal-card). This is Phase-2 work, not used by onboarding.</span>
+      </div>
+      <table class="cols">
+        <tr><td class="cn">id <span class="tag t-pk">PK</span></td><td class="ct">uuid</td><td class="note">—</td></tr>
+        <tr><td class="cn">sender_person_id / sender_company_id <span class="tag t-fk">FK</span></td><td class="ct">uuid</td><td class="note">Who/what company sent it.</td></tr>
+        <tr><td class="cn">receiver_company_id <span class="tag t-fk">FK→company</span></td><td class="ct">uuid</td><td class="note">Who it's going to.</td></tr>
+        <tr><td class="cn">note / status</td><td class="ct">text / varchar</td><td class="note"><code>pending_pickup / picked_up / rejected</code>.</td></tr>
+        <tr><td class="cn">picked_up_by / picked_up_at</td><td class="ct">uuid / timestamptz</td><td class="note">Who self-claimed it.</td></tr>
+        <tr><td class="cn" style="color:var(--amber)">request_type <span class="tag t-warn">TO ADD</span></td><td class="ct">varchar</td><td class="note">Which of the 4 kinds of request — for sorting/filtering.</td></tr>
+        <tr><td class="cn" style="color:var(--amber)">assigned_to <span class="tag t-warn">TO ADD</span></td><td class="ct">uuid · null</td><td class="note">An admin can <em>assign</em> it to someone (vs first-come pickup).</td></tr>
+        <tr class="dim"><td class="cn">metadata / created_at / updated_at / deleted_at</td><td class="ct">jsonb / timestamptz</td><td class="note">Standard.</td></tr>
+      </table>
+      <div class="links"><b>Why amber:</b> Ayush's new Connect design needs the two amber fields before this table is final.</div>
+    </div>
+
+  </div>
+
+  <!-- ===================== AUDIT ===================== -->
+  <div class="groupttl">Audit trail</div>
+  <div class="grid">
+
+    <div class="card">
+      <div class="card-h">
+        <span class="badges"><span class="tag t-ok">LOCK-READY</span></span>
+        <span class="name">audit_log</span>
+        <span class="what">A permanent, tamper-evident record of every important action. Can never be edited or deleted. One table covers every kind of event.</span>
+      </div>
+      <table class="cols">
+        <tr><td class="cn">id <span class="tag t-pk">PK</span></td><td class="ct">uuid</td><td class="note">—</td></tr>
+        <tr><td class="cn">sequence_number</td><td class="ct">bigserial</td><td class="note">Ever-increasing counter — a gap signals tampering.</td></tr>
+        <tr><td class="cn">company_id <span class="tag t-fk">FK→company</span></td><td class="ct">uuid</td><td class="note">Which company this concerns.</td></tr>
+        <tr><td class="cn">actor_person_id <span class="tag t-fk">FK→person</span></td><td class="ct">uuid · null</td><td class="note">Who did it (empty if it was the system/Sella).</td></tr>
+        <tr><td class="cn">actor_type <span class="tag t-lookup">lookup</span></td><td class="ct">varchar</td><td class="note"><code>user / hs_team / sella / system / webhook</code>.</td></tr>
+        <tr><td class="cn">on_behalf_of_person_id <span class="tag t-fk">FK→person</span></td><td class="ct">uuid · null</td><td class="note">The human behind an automated action.</td></tr>
+        <tr><td class="cn">action <span class="tag t-lookup">lookup</span></td><td class="ct">varchar</td><td class="note">e.g. <code>company.verify_approved</code>.</td></tr>
+        <tr><td class="cn">content_type <span class="tag t-lookup">lookup</span> + content_id</td><td class="ct">varchar / uuid</td><td class="note">Which thing it happened to (any table — that's “polymorphic”).</td></tr>
+        <tr><td class="cn">before_diff / after_diff <span class="tag t-json">JSON</span></td><td class="ct">jsonb</td><td class="note">What changed.</td></tr>
+        <tr><td class="cn">reason</td><td class="ct">text · null</td><td class="note">Required for rejections — this is where the reject reason lives.</td></tr>
+        <tr><td class="cn">reverses_audit_id <span class="tag t-fk">FK→audit_log</span></td><td class="ct">uuid · null</td><td class="note">If this entry undoes an earlier one.</td></tr>
+        <tr><td class="cn">prev_entry_hash / entry_hash</td><td class="ct">bytea</td><td class="note">A hash chain — each row locks the one before it.</td></tr>
+        <tr class="dim"><td class="cn">metadata / created_at</td><td class="ct">jsonb / timestamptz</td><td class="note"><b>No deleted_at</b> — it's immutable.</td></tr>
+      </table>
+      <div class="links"><b>Powers:</b> the rejection reason, licence view logs, HS-staff grants, and the “who did what” history everywhere.</div>
+    </div>
+
+    <div class="card lookup">
+      <div class="card-h">
+        <span class="badges"><span class="tag t-lookup">LOOKUP ×3</span></span>
+        <span class="name">audit_actor_type · audit_action_type · auditable_content_type</span>
+        <span class="what">The three fixed lists the audit log points at: who can act, what actions exist, and what kinds of things can be acted on.</span>
+      </div>
+      <table class="cols">
+        <tr><td class="cn">audit_actor_type</td><td class="ct">code, description</td><td class="note">user / hs_team / sella / system / webhook.</td></tr>
+        <tr><td class="cn">audit_action_type</td><td class="ct">code, category…</td><td class="note">Stripe-style names like <code>pricelist.published</code>. New ones added as features ship.</td></tr>
+        <tr><td class="cn">auditable_content_type</td><td class="ct">code, target_table</td><td class="note">company / person / deal_card… New phases just add rows here.</td></tr>
+      </table>
+    </div>
+
+  </div>
+
+  <div class="footnote">
+    <b>The big picture:</b> almost everything points back at two tables — <code>person</code> (who) and <code>company</code> (which business). Roles hang off people, files &amp; licences hang off companies, and <code>audit_log</code> quietly records what everyone does. Source of truth: <code>docs/architecture/SCHEMA-DRAFT.md</code>.
+  </div>
+</div>
+</body>
+</html>
