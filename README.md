@@ -42,13 +42,13 @@ If you're a teammate joining the project, read in this order:
 | `supabase/` | DB skeleton - migrations, RLS policies, seed (reference) |
 | `.claude/skills/` | Project-scoped Claude skills |
 
-> **App code is not implemented in this repo.** `src/` + `supabase/` are an empty reference skeleton showing the agreed shape; the real app is built in the [`HelloSello_MVP`](https://github.com/HelloSello/HelloSello_MVP) repo. Details below.
+> **One repo: `hello-sello-mvp`** (github.com/HelloSello/hello-sello-mvp). Docs and code live here together - design docs in `docs/`, app code in `src/` + `supabase/`. Details below.
 
 ---
 
 ## Planned app code structure (modular monolith)
 
-> **Target structure, agreed 2026-06-04. Now scaffolded as an empty reference skeleton in [`src/`](src/README.md) + `supabase/` so the team can see the shape - reference only, not the implementation. The real app code is built in the `HelloSello_MVP` repo following this layout. See [`docs/decisions/DECISIONS.md`](docs/decisions/DECISIONS.md), [`docs/architecture/ARCHITECTURE-NOTES.md`](docs/architecture/ARCHITECTURE-NOTES.md), and the demo slice [`docs/architecture/connect-demo.md`](docs/architecture/connect-demo.md).**
+> **Target structure, agreed 2026-06-04, scaffolded in [`src/`](src/README.md) + `supabase/`. The app code is built here, in this repo. See [`docs/decisions/DECISIONS.md`](docs/decisions/DECISIONS.md), [`docs/architecture/ARCHITECTURE-NOTES.md`](docs/architecture/ARCHITECTURE-NOTES.md), and the demo slice [`docs/architecture/connect-demo.md`](docs/architecture/connect-demo.md).**
 
 Modular monolith, partitioned **by domain** (not technical layer). One deployable: Next.js (App Router, TypeScript) on Vercel + Supabase (Postgres / Auth / Realtime / Storage), multi-tenant via RLS. Sella inference on Claude via AWS Bedrock (EU / Frankfurt).
 
@@ -81,8 +81,7 @@ supabase/       # migrations, RLS policies, seed
 
 ## Related repos
 
-- [HelloSello/HelloSello_MVP](https://github.com/HelloSello/HelloSello_MVP) — MVP codebase (Next.js / pnpm / Supabase)
-- [HelloSello/hellosello_lovable](https://github.com/HelloSello/hellosello_lovable) — Lovable.dev workspace
+- [HelloSello/hellosello_lovable](https://github.com/HelloSello/hellosello_lovable) — Lovable.dev workspace (earlier prototype)
 - [HelloSello/selloai-hub](https://github.com/HelloSello/selloai-hub)
 
 ---
