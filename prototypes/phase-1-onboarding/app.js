@@ -501,6 +501,17 @@ document.addEventListener('change', (e) => {
   }
 });
 
+// Live-update the business-category dropdown's closed bar as boxes toggle.
+// Intentionally NO re-render — that would snap the <details> shut and reset picks mid-edit.
+document.addEventListener('change', (e) => {
+  if (e.target.name !== 'company_type') return;
+  const summary = document.querySelector('[data-category-summary]');
+  if (!summary) return;
+  const picked = [...document.querySelectorAll('input[name="company_type"]:checked')]
+    .map(el => el.closest('label').querySelector('span').textContent.trim());
+  summary.textContent = picked.length ? picked.join(', ') : 'Select business categories';
+});
+
 document.addEventListener('submit', (e) => {
   const form = e.target;
   const action = form.dataset.action;

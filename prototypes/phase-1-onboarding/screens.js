@@ -163,6 +163,8 @@ export function renderSignin(state) {
 
 export function renderCompanySetup(state) {
   const file = state.selectedFile;
+  const defaultType = 'cultivator';
+  const defaultLabel = COMPANY_TYPES.find(t => t.code === defaultType)?.description || 'Select business categories';
   return `
     <div class="max-w-md mx-auto">
       <h2 class="text-2xl font-semibold mb-2">Set up your company</h2>
@@ -190,14 +192,20 @@ export function renderCompanySetup(state) {
 
         <div>
           <span class="text-sm text-slate-700 block mb-1">Business category <span class="text-slate-400 font-normal">(select all that apply)</span></span>
-          <div class="grid grid-cols-2 gap-2">
-            ${COMPANY_TYPES.map(t => `
-              <label class="flex items-center gap-2 p-2.5 border border-slate-300 rounded cursor-pointer hover:bg-slate-50 has-[:checked]:border-pink-500 has-[:checked]:bg-pink-50">
-                <input type="checkbox" name="company_type" value="${t.code}" ${t.code === 'cultivator' ? 'checked' : ''} class="accent-pink-600" />
-                <span class="text-sm text-slate-700">${escapeHtml(t.description)}</span>
-              </label>
-            `).join('')}
-          </div>
+          <details class="group" data-category-dropdown>
+            <summary class="flex items-center justify-between px-3 py-2 border border-slate-300 rounded cursor-pointer list-none [&::-webkit-details-marker]:hidden hover:border-pink-400">
+              <span data-category-summary class="text-sm text-slate-700 truncate flex-1 min-w-0">${escapeHtml(defaultLabel)}</span>
+              <span class="text-slate-400 text-xs ml-2 transition-transform group-open:rotate-180">▾</span>
+            </summary>
+            <div class="mt-1 border border-slate-200 rounded bg-white p-1">
+              ${COMPANY_TYPES.map(t => `
+                <label class="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-slate-50 has-[:checked]:bg-pink-50">
+                  <input type="checkbox" name="company_type" value="${t.code}" ${t.code === defaultType ? 'checked' : ''} class="accent-pink-600" />
+                  <span class="text-sm text-slate-700">${escapeHtml(t.description)}</span>
+                </label>
+              `).join('')}
+            </div>
+          </details>
           <div class="text-xs text-slate-500 mt-2">What your business is — not who you buy from or sell to. A company can be several (e.g. cultivator + importer).</div>
         </div>
 
