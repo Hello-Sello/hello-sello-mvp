@@ -564,3 +564,14 @@ Path B (a person joins an existing company → request routes to that company's 
 - **Tie-in:** the company-category step (above) is **Path-A-only** — a Path B joiner inherits the company's existing categories, so onboarding forks after "existing or new?" and the multi-select lives only on the new-company branch.
 
 *Why:* the expensive design (separate `join_request` aggregate, nullable membership) is already done; the only retrofit risk is the security boundary + scattered `company_id` reads, both required by v0's own onboarding window — so honoring them now makes "add Path B later" a purely additive feature, not a schema/RLS refactor.
+
+## 2026-06-06 - UUID primary keys = v4 for now (revisit on PG18 / audit_log growth)
+
+Keep the locked convention — PKs stay **v4** (`gen_random_uuid()`, native, zero-dependency). Considered UUID **v7** (time-ordered) for better index locality on append-heavy tables; researched + discussed, decided to wait.
+
+- **Why not v7 now:** Supabase is on **PG17** with **no native `uuidv7()`** (PG18-only) and **no `pg_uuidv7` extension** available (checked the live project — only `uuid-ossp`). v7 today would need a hand-rolled PL/pgSQL function or fragile app-side generation — not worth it at current scale.
+- **Why staying on v4 is safe:** v4's index fragmentation only bites **large, high-write** tables (millions of rows + sustained inserts) — i.e. only `audit_log` here; low-volume tables (company / person / group / …) never feel it. v0 is 1–2 test users.
+- **Switching later is cheap — NOT a re-key:** v4 and v7 are the same `uuid` type, so adopting v7 = changing a column's **default** for new rows (one line); old rows stay v4, mixing is fine, and it "stops the bleeding" for inserts going forward. The expensive full re-key (rewrite old rows + every FK) is "almost never worth it" and we'd skip it. *(Corrects an earlier overstatement that switching later meant a painful FK re-key.)*
+- **Revisit triggers:** (1) Supabase ships native `uuidv7()` (PG18) → `SET DEFAULT uuidv7()` on new / high-write tables; (2) `audit_log` crosses ~1–5M rows → flip its default to v7 then (captures ~all the benefit, since it only grows).
+
+*Why record:* makes the v4 choice deliberate (researched, not default-by-omission) and stops it being re-litigated; documents the cheap upgrade path. No convention change (staying = status quo) → no Ayush ack needed. (Sources: andyatkinson "Avoid UUIDv4 PKs", Scaling Postgres #368, dev.to "UUIDv7 is the 2026 default" + "UUID best practices".)

@@ -26,6 +26,7 @@
 
 **Planned additions (deferred — additive, no migration penalty):**
 - **Optimistic-lock `version INTEGER`** on collaboratively-edited tables (`company`, `group`, `permission_matrix_entry`, + future `pricelist` / `deal_card`) → add when team/multi-user editing ships. v0 is one-user-per-company, so no write conflicts yet; the later add is a plain additive column. (Schema review 2026-06-06.)
+- **UUID v7 for PKs** — staying on **v4** (`gen_random_uuid()`) for now; v7 needs PG18-native `uuidv7()` or the `pg_uuidv7` extension (neither on Supabase PG17 yet). v4→v7 later is a cheap **default swap** (same `uuid` type — no FK re-key). Revisit when Supabase ships native v7 **or** `audit_log` grows large. (Decision 2026-06-06 — see DECISIONS.md.)
 
 ---
 
