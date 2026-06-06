@@ -602,6 +602,16 @@ Keep the locked convention — PKs stay **v4** (`gen_random_uuid()`, native, zer
 
 - **`relationship` canonical ordering: `CHECK(company_a_id < company_b_id)` + `UNIQUE(company_a_id, company_b_id)`.** Enforces exactly one `relationship` row per company pair regardless of who initiated. `initiated_by_company_id` records direction. *Why:* without canonical ordering, Company A↔B and Company B↔A are indistinguishable to the DB; the check + unique constraint makes the pair an unordered set at the storage layer while preserving direction in a separate column.
 
+## 2026-06-07 — Q3: Two-party confirmation state = dedicated `deal_confirmation` table
+
+Per-party yes/no for deal birth and amendments lives in a dedicated `deal_confirmation` table, not JSONB on `deal_card`. `deal_card.status` gains `'withdrawn'` as a terminal state.
+
+- **`deal_confirmation` table:** one row per `(deal_card_id, version, company_id)`. Status: `pending` / `confirmed` / `rejected`. Two rows created when a version is proposed; each party updates their own row. Both `confirmed` → version accepted (workspace spawns on v1; version bumps on amendments). Either `rejected` → back to negotiation.
+- **`withdrawn` on `deal_card.status`:** the initiating company pulls the offer back before the other party has responded (`deal_confirmation.status` still `pending`). Terminal. App-layer enforces: only `initiating_company_id` may set it, only while other party is pending.
+- **Why a table over JSONB:** JSONB stores only current state — you lose "when did company_b change to confirmed" without a separate audit table, defeating the point. The `deal_confirmation` table gives indexed queries ("deals awaiting my company's confirmation"), per-event timestamps, a natural `audit_log` target, and clean versioning across amendments. Regulated environments (cannabis pharma) require per-event non-repudiation — a table is the natural fit.
+
+*Full table shape in `docs/architecture/SCHEMA-DRAFT.md` → `deal_confirmation`.*
+
 ## 2026-06-07 — chat_thread P2P uniqueness: canonical ordering enforced at DB level (Q2)
 
 `chat_thread` P2P threads store `person_a_id` + `person_b_id`. Without a rule, the same two people could get two thread rows if inserted in different order `(Alice, Bob)` vs `(Bob, Alice)` — the UNIQUE index alone doesn't catch this.

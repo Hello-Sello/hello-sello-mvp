@@ -534,8 +534,10 @@ Per-entity status lists (convention: enums = lookup tables). **Shared shape:** `
 | `license_scan_status` | `pending` · `clean` ✓ · `infected` ✓ · `scan_error` ✓ |
 | `inbox_status` | `pending` · `accepted` ✓ · `rejected` ✓ |
 | `join_request_status` | `pending` · `approved` ✓ · `rejected` ✓ · `cancelled` ✓ |
+| `deal_card_status` | `draft` · `withdrawn` ✓ · `confirmed` · `amended` · `cancelled` ✓ |
+| `deal_confirmation_status` | `pending` · `confirmed` ✓ · `rejected` ✓ |
 
-**Referenced by:** `company.verification_status` → `company_verification_status` · `company_license_file.scan_status` → `license_scan_status` · `pending_inbox_item.status` → `inbox_status` · `join_request.status` → `join_request_status`.
+**Referenced by:** `company.verification_status` → `company_verification_status` · `company_license_file.scan_status` → `license_scan_status` · `pending_inbox_item.status` → `inbox_status` · `join_request.status` → `join_request_status` · `deal_card.status` → `deal_card_status` · `deal_confirmation.status` → `deal_confirmation_status`.
 
 ---
 
@@ -712,7 +714,7 @@ Mutable current state of a deal. Versioned — every accepted change bumps `vers
 | `relationship_id` | UUID | NOT NULL, REFERENCES `relationship(id)` | |
 | `thread_id` | UUID | NULL, REFERENCES `chat_thread(id)` | Set when workspace spawns (both parties confirm); NULL while draft |
 | `version` | INT | NOT NULL DEFAULT 1 | Bumped on every accepted change |
-| `status` | VARCHAR(20) | NOT NULL DEFAULT `'draft'` | Lookup: `'draft'` / `'confirmed'` / `'amended'` / `'cancelled'` |
+| `status` | VARCHAR(20) | NOT NULL DEFAULT `'draft'`, REFERENCES `deal_card_status(code)` | Lookup: `'draft'` / `'withdrawn'` / `'confirmed'` / `'amended'` / `'cancelled'` |
 | `deal_type` | VARCHAR(10) | NOT NULL | Lookup: `'offer'` (seller-initiated) / `'order'` (buyer-initiated) |
 | `initiating_company_id` | UUID | NOT NULL, REFERENCES `company(id)` | Direction of the deal; drives OFFER vs ORDER labelling |
 | `value_net` | NUMERIC(15, 2) | NULL | Computed total; updated on each version |
@@ -731,12 +733,49 @@ Mutable current state of a deal. Versioned — every accepted change bumps `vers
 | `updated_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
 | `deleted_at` | TIMESTAMPTZ | NULL | |
 
-**Two-party gate (Q3 — open):** per-party confirmation state for deal birth and deal changes. Options: (a) `deal_confirmation` table; (b) JSONB on `deal_card`. Decision pending — see open questions below.
+**Two-party gate (Q3 — locked 2026-06-07):** per-party confirmation state lives in a dedicated `deal_confirmation` table (see below). `withdrawn` status on this card means the initiating party pulled back before the other party responded.
 
 **Indexes:**
 - `INDEX(relationship_id, status)`
 - `INDEX(initiating_company_id)`
 - `INDEX(offer_expires_at) WHERE offer_expires_at IS NOT NULL` — Sella expiry monitoring
+
+---
+
+### `deal_confirmation`
+
+Per-party confirmation gate for deal birth and deal amendments. Two rows exist per `(deal_card_id, version)` — one per company. Both must reach `confirmed` before the version is accepted; either `rejected` sends the deal back to negotiation. *(Locked 2026-06-07 — Q3.)*
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | UUID | PK, NOT NULL, DEFAULT `gen_random_uuid()` | |
+| `deal_card_id` | UUID | NOT NULL, REFERENCES `deal_card(id)` | |
+| `version` | INT | NOT NULL | Which card version is being gated |
+| `company_id` | UUID | NOT NULL, REFERENCES `company(id)` | The responding party |
+| `responding_person_id` | UUID | NULL, REFERENCES `person(id)` | NULL until the party responds |
+| `status` | VARCHAR(20) | NOT NULL DEFAULT `'pending'`, REFERENCES `deal_confirmation_status(code)` | `'pending'` / `'confirmed'` / `'rejected'` |
+| `responded_at` | TIMESTAMPTZ | NULL | When the party confirmed or rejected |
+| `note` | TEXT | NULL | Optional rejection reason or note |
+| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
+| `updated_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
+
+**Constraints:**
+- `UNIQUE(deal_card_id, version, company_id)` — one response per party per version
+
+**Indexes:**
+- `INDEX(deal_card_id, version)` — check gate state for a version
+- `INDEX(company_id, status)` — "deals awaiting my company's confirmation"
+
+**State machine:**
+- `pending` → `confirmed` (party accepts)
+- `pending` → `rejected` (party declines — deal returns to negotiation)
+
+**Side effects (app-layer):**
+- Both rows `confirmed` → `deal_card.status` advances (`draft` → `confirmed` on v1; version bumps on amendments) + workspace spawns on v1
+- Either row `rejected` → deal returns to negotiation; `deal_card.status` stays `draft` or `amended`
+- `deal_card.status = 'withdrawn'` — set by the initiating company only, and only while the other party's row is still `pending`; this is a deal-card-level action, not a confirmation row action
+
+**`deal_confirmation_status` lookup seed values:** `pending` · `confirmed` ✓ · `rejected` ✓
 
 ---
 
@@ -826,7 +865,7 @@ Per-user evidence — each party's own note when a change is proposed. The "indi
 | # | Question | Affects |
 |---|---|---|
 | ~~Q2~~ | ~~**`chat_thread` P2P uniqueness**~~ → **RESOLVED 2026-06-07.** `CHECK (person_a_id < person_b_id)` enforced at DB level; app sorts before insert. Same pattern as `relationship` table. | `chat_thread` constraint ✓ |
-| Q3 | **Two-party confirmation state** — where does the per-party yes/no live for deal birth and deal changes? Options: (a) dedicated `deal_confirmation` table (cleaner, audit-friendly, per-event rows); (b) `metadata` JSONB on `deal_card` (simpler, harder to query). | `deal_card` or new table |
+| ~~Q3~~ | ~~**Two-party confirmation state**~~ → **RESOLVED 2026-06-07.** Dedicated `deal_confirmation` table — one row per party per version. `deal_card.status` gets `'withdrawn'` (initiator pulls back before other party responds — terminal). See `deal_confirmation` table above + DECISIONS.md 2026-06-07. | `deal_confirmation` table added |
 | TBD | **`buyer_metric` field name** — buyer's counterpart to seller's `margin` on the Deal card. Still TBD. | `deal_line_item.buyer_metric` column name |
 | screen③ | **`relationship_note`** — per-side private notes; shape pending screen ③ (Relationship page). | New table |
 | screen③ | **`pricelist`** (master / standard / custom-per-relationship) — three layers per DEV-1; shape pending screen ③. | New table(s) |
