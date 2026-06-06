@@ -5,11 +5,11 @@
 
 ---
 
-**Last updated:** 2026-06-07 01:01 CEST
+**Last updated:** 2026-06-07 01:04 CEST
 **Branch:** claude/ayush/work
-**Status:** offline (session stopped - screen ③ locked + recorded; resume at ④ discuss-first)
+**Status:** working (merging origin/dev → resolving doc conflicts + opening PR for screen ③)
 **Linear issue in progress:** none (DEV-37 multi-deal stays parked, explicitly later)
-**Shared files locked:** none (DECISIONS / ARCHITECTURE-NOTES / CONTEXT edits committed in `a42e93a`)
+**Shared files locked:** `docs/decisions/DECISIONS.md`, `docs/architecture/ARCHITECTURE-NOTES.md`, `docs/architecture/CONTEXT.md` — resolving merge conflict (your session-5 Phase-2 vs my screen-③); brief, will unlock
 **PR open:** none new (Connect ② chat is now in `dev`); I'll PR after screen ④ or on request
 
 ---
