@@ -77,8 +77,8 @@
   </header>
 
   <div class="banner">
-    <b>Status:</b> Most tables are ready to lock <span class="tag t-ok">LOCK-READY</span> .
-    One — <code>pending_inbox_item</code> <span class="tag t-warn">NEEDS 2 FIELDS</span> — is the Connect (Phase&nbsp;2) inbox and still needs a <code>request_type</code> and an <code>assigned_to</code> field before it's final.
+    <b>Status:</b> All Phase&nbsp;1 tables are ready to lock <span class="tag t-ok">LOCK-READY</span> .
+    The Connect inbox (<code>pending_inbox_item</code>) was locked 2026-06-06 — 4 request types via the <code>inbox_request_type</code> lookup, a single <code>assigned_to</code> owner, and status <code>pending / accepted / rejected</code>.
     The small <span class="tag t-lookup">LOOKUP</span> tables are just fixed lists of allowed values (so we can add options without changing the database).
   </div>
 
@@ -332,23 +332,39 @@
       <div class="links"><b>Approve →</b> sets the person's <span class="arrow">person.company_id</span>. Different from the inbox below: this grants <em>membership</em>.</div>
     </div>
 
-    <div class="card warn">
+    <div class="card lookup">
       <div class="card-h">
-        <span class="badges"><span class="tag t-warn">NEEDS 2 FIELDS</span></span>
+        <span class="badges"><span class="tag t-lookup">LOOKUP</span></span>
+        <span class="name">inbox_request_type</span>
+        <span class="what">The 4 kinds of inbox request. A lookup so a new kind is just a new row — no migration. Added 2026-06-06.</span>
+      </div>
+      <table class="cols">
+        <tr><td class="cn">code <span class="tag t-pk">PK</span></td><td class="ct">varchar</td><td class="note"><code>connect</code> / <code>connect_message</code> / <code>pricelist_request</code> / <code>deal_card</code></td></tr>
+        <tr><td class="cn">description</td><td class="ct">text</td><td class="note">Label — real EN/DE text translated in the app.</td></tr>
+        <tr><td class="cn">sort_order</td><td class="ct">smallint</td><td class="note">Order shown in the inbox.</td></tr>
+      </table>
+      <div class="links"><b>Only</b> <code>deal_card</code> carries extra data (a link to a <span class="arrow">deal_card</span>); the others reuse <code>note</code> or need nothing.</div>
+    </div>
+
+    <div class="card">
+      <div class="card-h">
+        <span class="badges"><span class="tag t-ok">LOCK-READY</span></span>
         <span class="name">pending_inbox_item</span>
-        <span class="what">The Connect inbox: incoming requests between companies (connect, message, price-list, deal-card). This is Phase-2 work, not used by onboarding.</span>
+        <span class="what">The Connect inbox: incoming requests to a company (connect, message, price-list, deal-card). Schema locked 2026-06-06; the inbox feature is built later, not used by onboarding.</span>
       </div>
       <table class="cols">
         <tr><td class="cn">id <span class="tag t-pk">PK</span></td><td class="ct">uuid</td><td class="note">—</td></tr>
+        <tr><td class="cn">type <span class="tag t-fk">FK→inbox_request_type</span></td><td class="ct">varchar</td><td class="note">Which of the 4 kinds.</td></tr>
         <tr><td class="cn">sender_person_id / sender_company_id <span class="tag t-fk">FK</span></td><td class="ct">uuid</td><td class="note">Who/what company sent it.</td></tr>
-        <tr><td class="cn">receiver_company_id <span class="tag t-fk">FK→company</span></td><td class="ct">uuid</td><td class="note">Who it's going to.</td></tr>
-        <tr><td class="cn">note / status</td><td class="ct">text / varchar</td><td class="note"><code>pending_pickup / picked_up / rejected</code>.</td></tr>
-        <tr><td class="cn">picked_up_by / picked_up_at</td><td class="ct">uuid / timestamptz</td><td class="note">Who self-claimed it.</td></tr>
-        <tr><td class="cn" style="color:var(--amber)">request_type <span class="tag t-warn">TO ADD</span></td><td class="ct">varchar</td><td class="note">Which of the 4 kinds of request — for sorting/filtering.</td></tr>
-        <tr><td class="cn" style="color:var(--amber)">assigned_to <span class="tag t-warn">TO ADD</span></td><td class="ct">uuid · null</td><td class="note">An admin can <em>assign</em> it to someone (vs first-come pickup).</td></tr>
+        <tr><td class="cn">receiver_company_id <span class="tag t-fk">FK→company</span></td><td class="ct">uuid</td><td class="note">Whose inbox it lands in.</td></tr>
+        <tr><td class="cn">note</td><td class="ct">text · null</td><td class="note">Free message; holds the body for <code>connect_message</code>.</td></tr>
+        <tr><td class="cn">deal_card_id <span class="tag t-fk">FK→deal_card</span></td><td class="ct">uuid · null</td><td class="note">Set <b>only</b> when type = <code>deal_card</code>.</td></tr>
+        <tr><td class="cn">status</td><td class="ct">varchar</td><td class="note"><code>pending / accepted / rejected</code>.</td></tr>
+        <tr><td class="cn">assigned_to <span class="tag t-fk">FK→person</span></td><td class="ct">uuid · null</td><td class="note">The one owner — claimed or admin-assigned.</td></tr>
+        <tr><td class="cn">assigned_at / assigned_by</td><td class="ct">timestamptz / uuid · null</td><td class="note"><code>assigned_by</code> null = self-claimed; set = who assigned.</td></tr>
         <tr class="dim"><td class="cn">metadata / created_at / updated_at / deleted_at</td><td class="ct">jsonb / timestamptz</td><td class="note">Standard.</td></tr>
       </table>
-      <div class="links"><b>Why amber:</b> Ayush's new Connect design needs the two amber fields before this table is final.</div>
+      <div class="links"><b>4 lenses:</b> Unassigned · Mine · All · My-history (from <code>status</code> + <code>assigned_to</code>). Claim if unassigned; only the owner or a superadmin can reassign — every change is written to <span class="arrow">audit_log</span>.</div>
     </div>
 
   </div>
