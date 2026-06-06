@@ -5,11 +5,11 @@
 
 ---
 
-**Last updated:** 2026-06-07 00:47 CEST
+**Last updated:** 2026-06-07 00:54 CEST
 **Branch:** claude/ayush/work
-**Status:** working (session active - locking screen ③, the Relationship page)
+**Status:** working (session active - screen ③ locked + recorded; docs released)
 **Linear issue in progress:** none (DEV-37 multi-deal stays parked, explicitly later)
-**Shared files locked:** `docs/decisions/DECISIONS.md`, `docs/architecture/ARCHITECTURE-NOTES.md`, `docs/architecture/CONTEXT.md` — recording the screen ③ lock (brief; will unlock this session)
+**Shared files locked:** none (DECISIONS / ARCHITECTURE-NOTES / CONTEXT edits committed in `a42e93a`)
 **PR open:** none new (Connect ② chat is now in `dev`); I'll PR after screen ④ or on request
 
 ---
