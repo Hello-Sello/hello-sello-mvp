@@ -577,7 +577,6 @@ Prototyped + locked in `prototypes/chat-prototype` (full narrative: that folder'
 - **Deal card in chat = a thin pinned pill** (`Deal card ▸`, pink) on the `Talking about:` row → click opens the full **flip-card dialog** (front = facts + scrollable products reflecting the version; back = the Signals/Logs filter). *Why:* progressive disclosure — the header says "a deal lives here," detail is one click away.
 - **C2C clarification (supersedes LAYER-1 §3):** C2C is a **company-level channel created at connection** (the company notice board / audit log), not deal-scoped. LAYER-1 §3 still describes the old "C↔C only inside a deal workspace" model and is **stale** — flagged for a docs pass.
 - **Multi-deal in one P2P stays parked on [DEV-37](https://linear.app/hellosello/issue/DEV-37)** — explicitly out of scope for now.
-
 ## 2026-06-06 - UUID primary keys = v4 for now (revisit on PG18 / audit_log growth)
 
 Keep the locked convention — PKs stay **v4** (`gen_random_uuid()`, native, zero-dependency). Considered UUID **v7** (time-ordered) for better index locality on append-heavy tables; researched + discussed, decided to wait.
