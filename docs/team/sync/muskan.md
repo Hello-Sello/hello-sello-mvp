@@ -5,11 +5,11 @@
 
 ---
 
-**Last updated:** 2026-06-06 17:25 UTC
+**Last updated:** 2026-06-06 17:50 UTC
 **Branch:** claude/muskan/work
-**Status:** offline (session wrapped)
+**Status:** online — editing phase-1 prototype (company-category step)
 **Linear issue in progress:** none
-**Shared files locked:** none
+**Shared files locked:** `prototypes/phase-1-onboarding/` (adding company-category step)
 **PR open:** none
 
 ---
