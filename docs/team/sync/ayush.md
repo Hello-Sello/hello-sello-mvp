@@ -10,7 +10,7 @@
 **Status:** offline (session wrapped)
 **Linear issue in progress:** none
 **Shared files locked:** none
-**PR open:** pending - opening a PR to `dev` this wrap-up (Connect chat model + Deal card); link filled in below once created.
+**PR open:** #31 - Connect chat model + Deal card -> `dev`: https://github.com/HelloSello/hello-sello-design/pull/31
 
 ---
 
