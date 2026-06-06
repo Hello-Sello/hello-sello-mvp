@@ -14,6 +14,16 @@ export const SEED_COMPANIES = [
   { id: 'seed-8', name: 'Cologne Med Distribution',     type: 'distributor', country: 'DE', tagline: 'Wholesale medical cannabis + accessories' }
 ];
 
+// Fixed business-category lookup (SCHEMA-DRAFT `company_type`). Stable `code` + i18n'd label;
+// asked at company setup. A company can hold several (vertically-integrated firms commonly do).
+// Business category — NOT a buy/sell role (buyer/seller is per-deal).
+export const COMPANY_TYPES = [
+  { code: 'cultivator', description: 'Cultivator', sort_order: 1 },
+  { code: 'wholesaler', description: 'Wholesaler', sort_order: 2 },
+  { code: 'importer',   description: 'Importer',   sort_order: 3 },
+  { code: 'pharmacy',   description: 'Pharmacy',   sort_order: 4 }
+];
+
 export const DEFAULT_GROUPS = [
   { name: 'Sales Team',       description: 'Outbound offers and customer relationships' },
   { name: 'Procurement Team', description: 'Inventory sourcing and supplier deals' },

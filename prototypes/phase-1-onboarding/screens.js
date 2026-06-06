@@ -4,6 +4,7 @@
 //  3. Home page + modal overlays — light theme, modals as dialogs
 
 import { SETUP_TILES } from './db.js';
+import { COMPANY_TYPES } from './seed.js';
 
 // ---------- helpers ----------
 
@@ -188,6 +189,19 @@ export function renderCompanySetup(state) {
         </label>
 
         <div>
+          <span class="text-sm text-slate-700 block mb-1">Business category <span class="text-slate-400 font-normal">(select all that apply)</span></span>
+          <div class="grid grid-cols-2 gap-2">
+            ${COMPANY_TYPES.map(t => `
+              <label class="flex items-center gap-2 p-2.5 border border-slate-300 rounded cursor-pointer hover:bg-slate-50 has-[:checked]:border-pink-500 has-[:checked]:bg-pink-50">
+                <input type="checkbox" name="company_type" value="${t.code}" ${t.code === 'cultivator' ? 'checked' : ''} class="accent-pink-600" />
+                <span class="text-sm text-slate-700">${escapeHtml(t.description)}</span>
+              </label>
+            `).join('')}
+          </div>
+          <div class="text-xs text-slate-500 mt-2">What your business is — not who you buy from or sell to. A company can be several (e.g. cultivator + importer).</div>
+        </div>
+
+        <div>
           <span class="text-sm text-slate-700 block mb-1">License / certificate <span class="text-slate-400 font-normal">(optional)</span></span>
           ${file
             ? `<div class="border border-emerald-200 bg-emerald-50 rounded-lg p-3 flex items-center gap-3">
@@ -215,7 +229,7 @@ export function renderCompanySetup(state) {
           </button>
         </div>
       </form>
-      ${dbNote('Creates a <code>company</code> row · links <code>person.company_id</code> · inserts <code>person_group</code> as Superadmin · stores <code>license_filename</code> + sets <code>verification_status: \'pending\'</code>.')}
+      ${dbNote('Creates a <code>company</code> row · links <code>person.company_id</code> · inserts <code>person_group</code> as Superadmin · inserts a <code>company_type_assignment</code> row per selected category · stores <code>license_filename</code> + sets <code>verification_status: \'pending\'</code>.')}
     </div>
   `;
 }
