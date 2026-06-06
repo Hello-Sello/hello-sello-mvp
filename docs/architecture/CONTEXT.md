@@ -20,15 +20,22 @@ Consumed by Matt Pocock's `grill-with-docs` and `improve-codebase-architecture` 
 | **Sella** | The AI agent. Female-inspired, mediator-style. Multiple specialist variants: Seller-Sella, Buyer-Sella, Deal-Sella, Personal Sella, Company Sella, First-contact Sella. |
 | **Big 7** | The 7 pillars of the product: Connect / Buy / Sell / Present / Grow / Discover (6 surfaces) + Sella (always-available AI layer). |
 | **Thing** | A clarification ticket inside a Deal Workspace. Used for post-close work or mid-deal questions. |
-| **SIGNALS** | The back of the Deal Card. Deal-Sella-generated insights about the deal (deal age, expiry risk, repeat patterns, etc.). |
+| **SIGNALS** | The back of the Deal Card. Deal-Sella-generated, **per-viewer** insights about the deal (deal age, expiry risk, repeat patterns, etc.) - each side sees its own. |
+| **PO card / SO card** | The two faces of one Deal Card, set by who authored it: a **PO card** = purchase order (buyer→seller), an **SO card** = sales order (seller→buyer). Same entity, distinguished by `doc_type`. |
+| **`doc_type`** | The discriminator on a Deal Card = `purchase_order` or `sales_order` - decides whether it renders as a PO card or an SO card. |
+| **Deal draft** | A Deal Card sitting inside a P2P chat that has not yet been confirmed. Confirming it ("start a deal") spawns the Deal Workspace. |
+| **Deal selector** | The chat control "Talking about: [current deal]" that picks which deal the conversation is about; defaults to the current deal. |
+| **Half-card** | The collapsed Deal Card shown only in the Inbox as a pre-connection gate. In a chat the card is always full. |
 
 ## Companies and users
 
 | Term | Definition |
 |------|-----------|
 | **CoA / CoB** | Company A and Company B — the two sides of any deal. Seller side and Buyer side. |
-| **P↔C** | Person-to-Company chat. First contact before a Relationship is established. |
-| **P↔P** | Person-to-Person chat. The live deal conversation after a Relationship is created. |
+| **P2P** | Person-to-Person chat. The live working conversation between two people (formerly written P↔P). |
+| **C2C** | Company-to-Company chat. A company-level channel - you message on behalf of your company and the whole company can see it. Created on every accepted connect request. (Replaces the old P↔C first-contact chat - that case is folded into C2C.) |
+| **Deal Chat** | The chat that lives inside a Deal Workspace, scoped to one deal. |
+| **P↔C** *(retired)* | Old person-to-company first-contact chat. Folded into **C2C** as of 2026-06-06; kept here only to read older docs. |
 | **Superadmin** | Platform-fixed role. At least one per company. Holds system-level powers (accept connections, manage billing, assign Superadmins). |
 | **Groups** | Custom company-defined roles (not platform-fixed). Each company defines its own Groups with a permission matrix. A person can be in N Groups simultaneously. |
 
