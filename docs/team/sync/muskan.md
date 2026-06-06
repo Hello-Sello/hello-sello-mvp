@@ -5,7 +5,7 @@
 
 ---
 
-**Last updated:** 2026-06-06 15:27 UTC
+**Last updated:** 2026-06-06 15:57 UTC
 **Branch:** claude/muskan/work
 **Status:** active
 **Linear issue in progress:** none
@@ -22,6 +22,8 @@
 - **B3** → `company.metadata.domain_collision` (sparse, HS-only review flag).
 - **B4** → reject reason *derived* from `audit_log`; resubmit auth-gated. No schema.
 - **Onboarding checklist** → derive "done"; only `dismissed` in `person.metadata`; "skipped" → future `analytics_event` (added to the Coming-later list).
+
+- **Cleanups:** `person.is_superadmin` dropped → `person_group` is the single source of truth for Superadmin; contact tags = customer/supplier/partner/prospect/other (blank = unclassified, dropped 'unknown'); store permission *codes* not labels (EN/DE i18n); `email_integration` re-sync deferred (v0 = one-time import).
 
 Only **B6** (2FA timing) remains open. Formal `DECISIONS.md` line deferred to my wrap.
 

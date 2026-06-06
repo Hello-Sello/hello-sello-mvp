@@ -19,7 +19,7 @@
 | Audit columns | `created_by UUID REFERENCES person(id)` + `updated_by UUID REFERENCES person(id)` | Required for change-log primitive (DEV-29/40/41) |
 | Multi-tenancy | `company_id UUID REFERENCES company(id)` on every company-scoped table | Enables Row-Level Security (RLS); fast tenant filtering |
 | Encoding | UTF-8 everywhere | Internationalization-ready (DE/EN locked in MVP) |
-| Enums | Defined as **lookup tables**, not Postgres native ENUM | New values without migration |
+| Enums | Defined as **lookup tables**, not Postgres native ENUM. Store/reference the stable `code` (e.g. `view_deals`), never display labels. | New values without migration; user-facing labels (EN/DE) are translated in the app keyed off `code`, so wording can change without touching stored data |
 | Flexible fields | `metadata JSONB NOT NULL DEFAULT '{}'` on tables likely to expand | Kills ~80% of "add a column" migrations |
 | PII encryption | **Locked 2026-05-27 (A2):** Hybrid by data class. Queryable PII (email, name, phone) → at-rest only (Supabase default) + RLS. High-sensitivity stored PII (license #, gov ID, sensitive notes) → pgcrypto column encryption, master key in Vault. Secrets (API keys, tokens) → Supabase Vault. See DECISIONS.md walkthrough locks 2026-05-27. | GDPR Art 32; right-sized protection per risk class |
 | Indexes | `INDEX` for FKs, query-shaped composite indexes for common filters | Performance |
@@ -38,7 +38,6 @@ Profile extension on top of Supabase Auth. **Identity lives in `auth.users` (Sup
 | `first_name` | VARCHAR(100) | NOT NULL | |
 | `last_name` | VARCHAR(100) | NOT NULL | |
 | `company_id` | UUID | NULL, REFERENCES `company(id)` | NULL until company setup completes |
-| `is_superadmin` | BOOLEAN | NOT NULL DEFAULT FALSE | First user of company is Superadmin |
 | `preferences` | JSONB | NOT NULL DEFAULT `'{}'` | title, phone, language, timezone (extensible) |
 | `metadata` | JSONB | NOT NULL DEFAULT `'{}'` | Future fields |
 | `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
@@ -55,6 +54,7 @@ Profile extension on top of Supabase Auth. **Identity lives in `auth.users` (Sup
 
 **Open questions:**
 - Should `preferences` extract into a separate `person_preferences` table for searchability? → **Default:** keep as JSONB; promote later if we ever query by preference.
+- ~~`is_superadmin` boolean on `person`?~~ → **Dropped 2026-06-06.** Single source of truth for Superadmin is `person_group` (role=`'superadmin'`); a privilege flag on the user's own row risked self-escalation and duplicated the role record.
 - ~~2FA — separate `person_2fa` table or columns on `person`?~~ → **Resolved 2026-05-25:** use Supabase Auth's `auth.mfa_factors` (TOTP supported natively).
 - ~~Email verification tokens → separate `email_verification_token` table.~~ → **Resolved 2026-05-25:** Supabase Auth handles email verification flow natively.
 - Onboarding checklist state? → **Resolved 2026-06-06:** "done" is *derived* (gmail = a `contact_record` exists; team = a `group` exists; profile = `preferences.title` set), not stored. Only `dismissed` persisted in `metadata`. "Skipped" is analytics → future `analytics_event` table (see Coming-later), never a column on `person`.
@@ -166,6 +166,7 @@ Many-to-many between persons and groups. Also tracks platform-level roles like S
 
 **Open questions:**
 - Should "Superadmin" be a row in `group` instead of a special `role` field? → **Default:** keep separate — platform roles vs company-defined Groups are different concepts.
+- **2026-06-06:** `person_group` (role=`'superadmin'`) is the **single source of truth** for Superadmin — the duplicate `person.is_superadmin` boolean was dropped.
 
 ---
 
@@ -209,7 +210,7 @@ Imported contacts via Gmail/Outlook metadata (DEV-3).
 | `first_seen` | DATE | NULL | First email exchange date |
 | `last_seen` | DATE | NULL | Most recent email exchange |
 | `email_count` | INT | NOT NULL DEFAULT 0 | |
-| `role` | VARCHAR(20) | NULL | 'customer', 'supplier', 'partner', 'other' (lookup table) |
+| `role` | VARCHAR(20) | NULL | 'customer', 'supplier', 'partner', 'prospect', 'other' (lookup table); **NULL = not yet classified** (don't store 'unknown') |
 | `inferred_company_id` | UUID | NULL, REFERENCES `company(id)` | Match against existing companies on platform |
 | `provider` | VARCHAR(20) | NOT NULL | 'gmail' or 'outlook' (lookup table) |
 | `metadata` | JSONB | NOT NULL DEFAULT `'{}'` | |
@@ -511,6 +512,7 @@ These tables aren't built yet but will follow the same conventions:
 | `order` (with PO#/SO#/HS#/QR) | 4 | Generated at confirmation |
 | `audit_log` | ~~Cross-cutting~~ **Promoted to Phase 1** (see open Qs §A4) | Universal change-log primitive — needed for HS verify flow |
 | `analytics_event` | 2+ | Append-only product telemetry (onboarding `step_skipped` / `step_started` / `step_completed`, funnel events). **Not** `audit_log` — that's for compliance-grade business actions, not UI telemetry. Shape designed when the event set is known; may instead live in an external tool (PostHog/Amplitude). Deferred past v0 — 1–2 test users yield no useful funnel. (Decided 2026-06-06: onboarding checklist `skipped` state is captured here, not as a column on `person`.) |
+| `email_integration` | 2+ | Per (person × provider) connection for **re-syncing** imported contacts: provider, status, `last_synced_at`, etc. OAuth tokens go in **Supabase Vault** (A2), never a column here. Deferred past v0 — v0 is a one-time import (token used then discarded, nothing stored). Add when auto-refresh is wanted. (Decided 2026-06-06.) |
 
 ---
 
