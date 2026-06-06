@@ -5,11 +5,11 @@
 
 ---
 
-**Last updated:** 2026-06-06 19:47 UTC
+**Last updated:** 2026-06-06 20:03 UTC
 **Branch:** claude/muskan/work
-**Status:** offline (session wrapped)
+**Status:** active — locking `pending_inbox_item` (Connect inbox) into the schema canon
 **Linear issue in progress:** none
-**Shared files locked:** none
+**Shared files locked:** docs/architecture/SCHEMA-DRAFT.md, docs/decisions/DECISIONS.md
 **PR open:** none
 
 ---
