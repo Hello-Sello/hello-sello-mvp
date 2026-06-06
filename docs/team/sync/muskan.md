@@ -5,11 +5,11 @@
 
 ---
 
-**Last updated:** 2026-06-06 21:55 UTC
+**Last updated:** 2026-06-07 UTC
 **Branch:** claude/muskan/work
-**Status:** offline (session 4 wrapped)
+**Status:** active
 **Linear issue in progress:** none
-**Shared files locked:** none
+**Shared files locked:** `docs/architecture/SCHEMA-DRAFT.md`
 **PR open:** none
 
 ---
