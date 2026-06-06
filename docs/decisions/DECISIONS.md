@@ -551,7 +551,7 @@ Validated the Phase-1 schema against the `phase-1-onboarding` prototype and a Ph
 
 ### Open (next session)
 
-- **`pending_inbox_item` needs `request_type` + `assigned_to`** before it locks — the Connect inbox (4 request types + claim-or-admin-assign + lenses) requires them. Awaiting Ayush's answers: exact 4 types, assign-vs-pickup semantics, lens definitions, per-type payload, reassign rules.
+- ~~**`pending_inbox_item` needs `request_type` + `assigned_to`** before it locks~~ → **RESOLVED 2026-06-06** (Ayush's 5 answers). Added `type` → new `inbox_request_type` lookup (seed: connect / connect_message / pricelist_request / deal_card); **one owner field** `assigned_to` + `assigned_by` provenance (NULL = picked up, set = assigned) — replaces `picked_up_by`; status lookup → `pending` / `accepted` / `rejected` (**`picked_up` retired** — "assigned" is derived from `assigned_to`, not a status); nullable `deal_card_id` FK set only for the `deal_card` type (CHECK-guarded); lenses (Unassigned / Mine / All / My-history) + reassign rules (claim if unassigned; owner-or-Superadmin to reassign; every (re)assign → `audit_log`) recorded in `SCHEMA-DRAFT`. *Why:* a lookup makes a new request type an INSERT not a migration; one owner field matches Zendesk / Front / Intercom; a real `deal_card_id` column (not a metadata link) keeps the reference from getting lost.
 
 ## 2026-06-06 - Path B (join-existing-company) deferral — engineering posture
 

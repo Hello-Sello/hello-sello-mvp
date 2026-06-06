@@ -268,28 +268,58 @@ Imported contacts via Gmail/Outlook metadata (DEV-3).
 
 ---
 
+### `inbox_request_type` (lookup)
+
+The kind of inbound request an inbox item represents. Lookup table so a new type is an INSERT, not a migration (Ayush 2026-06-06: anything new is just "connect + some payload"). (Added 2026-06-06.)
+
+| Column | Type | Notes |
+|---|---|---|
+| `code` | VARCHAR(30) PK | `connect`, `connect_message`, `pricelist_request`, `deal_card` |
+| `description` | TEXT NOT NULL | Human-readable; EN/DE translated in the app (store the code, not the label) |
+| `sort_order` | SMALLINT NOT NULL DEFAULT 0 | Display order |
+
+**Seed values:**
+- `connect` — plain connection request.
+- `connect_message` — connection request carrying a note (uses `pending_inbox_item.note`; no extra column).
+- `pricelist_request` — request for the one standard pricelist; **no payload in MVP** (revisit when per-buyer pricelists land).
+- `deal_card` — carries a hard link via `pending_inbox_item.deal_card_id`; accepting seeds a deal draft.
+
+---
+
 ### `pending_inbox_item`
 
-Connection requests between companies (P↔C).
+Inbound requests routed to a company's shared **Connect inbox**. Four types (`connect` / `connect_message` / `pricelist_request` / `deal_card`). Each is **claimed or admin-assigned** to one owner, shown under four lenses (Unassigned / Mine / All / My-history). (Inbox model locked 2026-06-06 — Ayush.)
 
 | Column | Type | Constraints | Notes |
 |---|---|---|---|
 | `id` | UUID | PK, NOT NULL | |
+| `type` | VARCHAR(30) | NOT NULL, REFERENCES `inbox_request_type(code)` | Set on insert; no default |
 | `sender_person_id` | UUID | NOT NULL, REFERENCES `person(id)` | |
 | `sender_company_id` | UUID | NOT NULL, REFERENCES `company(id)` | |
-| `receiver_company_id` | UUID | NOT NULL, REFERENCES `company(id)` | |
-| `note` | TEXT | NULL | Free-form message from sender |
-| `status` | VARCHAR(20) | NOT NULL DEFAULT `'pending_pickup'` | FK to lookup: 'pending_pickup', 'picked_up', 'rejected' |
-| `picked_up_by` | UUID | NULL, REFERENCES `person(id)` | |
-| `picked_up_at` | TIMESTAMPTZ | NULL | |
+| `receiver_company_id` | UUID | NOT NULL, REFERENCES `company(id)` | The company whose inbox this lands in |
+| `note` | TEXT | NULL | Free-form message; carries the body for `connect_message` |
+| `deal_card_id` | UUID | NULL, REFERENCES `deal_card(id)` | Set **only** when `type = 'deal_card'` |
+| `status` | VARCHAR(20) | NOT NULL DEFAULT `'pending'` | FK to lookup: 'pending', 'accepted', 'rejected' |
+| `assigned_to` | UUID | NULL, REFERENCES `person(id)` | Current owner, however acquired (claim or admin-assign) |
+| `assigned_at` | TIMESTAMPTZ | NULL | When ownership was set |
+| `assigned_by` | UUID | NULL, REFERENCES `person(id)` | **NULL = self-claimed** (pickup); **set = who assigned** the owner |
 | `metadata` | JSONB | NOT NULL DEFAULT `'{}'` | |
 | `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
 | `updated_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
 | `deleted_at` | TIMESTAMPTZ | NULL | |
 
+**Constraints:**
+- `CHECK (deal_card_id IS NULL OR type = 'deal_card')` — only a `deal_card` request may carry a deal-card link.
+
 **Indexes:**
-- `INDEX(receiver_company_id, status)` — for "show pending pickups for my company"
+- `INDEX(receiver_company_id, status)` — Unassigned / All lenses ("my company's open items")
+- `INDEX(assigned_to, status)` — Mine / My-history lenses
 - `INDEX(sender_company_id)`
+
+**Ownership & lenses (locked 2026-06-06):**
+- One owner field. `assigned_to` = current owner regardless of route; `assigned_by` = provenance (NULL = picked up, set = assigned). "Assigned" is **derived** (`assigned_to IS NOT NULL`), not a status value.
+- Lenses: **Unassigned** = `status='pending' AND assigned_to IS NULL`; **Mine** = `assigned_to = me`; **All** = company's open items; **My history** = `assigned_to = me AND status IN ('accepted','rejected')`.
+- Reassign: unassigned → anyone with the inbox permission may claim (`assigned_to=self`, `assigned_by=NULL`); already-assigned → only the current owner or a Superadmin may reassign. Every (re)assignment writes an `audit_log` row (content_type `'pending_inbox_item'`, already seeded).
 
 **Open questions:**
 - Should this evolve into a generic `notification` table covering more P↔C event types? → **Phase 2 question** — answer when we have more event shapes.
