@@ -663,6 +663,7 @@ One per C2C channel (created at connection accept), one per P2P pair, one per co
 **Constraints:**
 - `CHECK (type != 'p2p' OR (person_a_id IS NOT NULL AND person_b_id IS NOT NULL))` — p2p must name both people
 - `CHECK (type != 'deal' OR deal_card_id IS NOT NULL)` — deal thread must name the card
+- `CHECK (type != 'p2p' OR person_a_id < person_b_id)` — canonical ordering enforced at DB level; app must sort before insert (Q2 locked 2026-06-07, same pattern as `relationship.company_a_id < company_b_id`)
 - `UNIQUE(relationship_id, type) WHERE type = 'c2c' AND deleted_at IS NULL` — one C2C per relationship
 - `UNIQUE(relationship_id, person_a_id, person_b_id) WHERE type = 'p2p' AND deleted_at IS NULL` — one P2P per person-pair
 
@@ -824,7 +825,7 @@ Per-user evidence — each party's own note when a change is proposed. The "indi
 
 | # | Question | Affects |
 |---|---|---|
-| Q2 | **`chat_thread` P2P uniqueness** — `UNIQUE(relationship_id, person_a_id, person_b_id)` assumes canonical ordering (a < b). Do we enforce it or allow the app to always insert with lower UUID first? | `chat_thread` constraint |
+| ~~Q2~~ | ~~**`chat_thread` P2P uniqueness**~~ → **RESOLVED 2026-06-07.** `CHECK (person_a_id < person_b_id)` enforced at DB level; app sorts before insert. Same pattern as `relationship` table. | `chat_thread` constraint ✓ |
 | Q3 | **Two-party confirmation state** — where does the per-party yes/no live for deal birth and deal changes? Options: (a) dedicated `deal_confirmation` table (cleaner, audit-friendly, per-event rows); (b) `metadata` JSONB on `deal_card` (simpler, harder to query). | `deal_card` or new table |
 | TBD | **`buyer_metric` field name** — buyer's counterpart to seller's `margin` on the Deal card. Still TBD. | `deal_line_item.buyer_metric` column name |
 | screen③ | **`relationship_note`** — per-side private notes; shape pending screen ③ (Relationship page). | New table |

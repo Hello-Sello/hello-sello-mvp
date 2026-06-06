@@ -601,3 +601,15 @@ Keep the locked convention — PKs stay **v4** (`gen_random_uuid()`, native, zer
 - **`deal_delivery` is a separate table, NOT part of `deal_line_item`.** `deal_line_item` answers *"what was agreed"* (versioned, immutable per version). `deal_delivery` (Phase 3, DEV-36) will answer *"what was shipped"* — batch numbers, Certificate of Analysis files, actual delivered quantities, delivery note + invoice uploads (Sella OCR amends the deal). One deal can have N deliveries (DEV-53 — "Done fires on final pair"). *Why the separation:* mixing "agreed terms" with "physical execution" in one table forces nullable columns on both sides and breaks the single-responsibility of line items as a versioned commercial record.
 
 - **`relationship` canonical ordering: `CHECK(company_a_id < company_b_id)` + `UNIQUE(company_a_id, company_b_id)`.** Enforces exactly one `relationship` row per company pair regardless of who initiated. `initiated_by_company_id` records direction. *Why:* without canonical ordering, Company A↔B and Company B↔A are indistinguishable to the DB; the check + unique constraint makes the pair an unordered set at the storage layer while preserving direction in a separate column.
+
+## 2026-06-07 — chat_thread P2P uniqueness: canonical ordering enforced at DB level (Q2)
+
+`chat_thread` P2P threads store `person_a_id` + `person_b_id`. Without a rule, the same two people could get two thread rows if inserted in different order `(Alice, Bob)` vs `(Bob, Alice)` — the UNIQUE index alone doesn't catch this.
+
+**Decision:** enforce `CHECK (person_a_id < person_b_id)` at DB level. App must sort the two person UUIDs before inserting — smaller UUID goes in `person_a_id`. Identical pattern to `relationship.company_a_id < company_b_id` (already locked).
+
+*Why DB level, not just app:* the DB is the last line of defense — edge functions, scripts, and future code paths bypass the app. One bad insert = a duplicate private thread with split message history.
+
+*Why this pattern works:* UUIDs are strings; `<` comparison is deterministic. The canonical ordering is arbitrary but consistent — what matters is there is exactly one rule, enforced everywhere.
+
+**SCHEMA-DRAFT.md updated:** `chat_thread` constraints block now includes `CHECK (type != 'p2p' OR person_a_id < person_b_id)`.

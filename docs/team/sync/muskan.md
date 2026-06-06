@@ -7,7 +7,7 @@
 
 **Last updated:** 2026-06-07 UTC
 **Branch:** claude/muskan/work
-**Status:** offline (session 5 wrapped)
+**Status:** offline (session 6 wrapped)
 **Linear issue in progress:** none
 **Shared files locked:** none
 **PR open:** none
@@ -32,4 +32,6 @@ Still on my list: write the first migrations (`supabase/migrations/`, canon = SC
 
 **2026-06-07 — Phase 2 table shapes drafted into `SCHEMA-DRAFT.md`.** Full table designs written for: `relationship`, `chat_thread`, `chat_message`, `deal_card` (+ delivery/expiry columns: `offer_expires_at`, `delivery_date_target`, `payment_terms_code`, `incoterms_code`, `buyer_po_number`, `seller_so_number`), `deal_card_log`, `deal_change_input`, `deal_line_item` (versioned snapshots — Option A). Cannabis-specific `thc_percent`/`cbd_percent` added to line items. `deal_delivery` stub deferred to Phase 3. Wire diagram + open questions section added. Three open Qs remain: Q2 (P2P thread uniqueness ordering), Q3 (two-party confirmation state — table vs JSONB), buyer_metric field name.
 
-Going offline — session 4 wrapped.
+**2026-06-07 (session 6) — Q2 locked.** `chat_thread` P2P uniqueness → `CHECK (person_a_id < person_b_id)` at DB level (same pattern as `relationship` table). `SCHEMA-DRAFT.md` + `DECISIONS.md` updated. Migration strategy settled: Phase 1 + Phase 2 written together once Q3 is resolved. **Q3 still open** (two-party confirmation state).
+
+Going offline — session 6 wrapped.
