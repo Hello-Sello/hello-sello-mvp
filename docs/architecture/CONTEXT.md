@@ -70,4 +70,17 @@ Consumed by Matt Pocock's `grill-with-docs` and `improve-codebase-architecture` 
 | **Deal change input** | Each party's **own note** captured when a deal changes (Sella takes input, does not author). Per-user evidence — "individual for individual user". |
 | **Audit log** | The running record of every system/Sella action. System messages in chat are **projections** of audit/log entries, not independent facts. |
 
+## Deal card — commercial terms (2026-06-07)
+
+| Term | Definition |
+|------|-----------|
+| **Offer** | A Deal Card initiated by the **seller**. Maps to a Sales Order (SO). |
+| **Order** | A Deal Card initiated by the **buyer**. Maps to a Purchase Order (PO). Distinct from the older `doc_type` discriminator — `deal_type` is a first-class column on `deal_card`. |
+| **Incoterms** | International Commercial Terms (ICC standard — EXW, DAP, DDP, etc.). Determine who pays for shipping and insurance in a cross-border cannabis trade. Stored as `incoterms_code` on `deal_card`. |
+| **Payment terms** | The agreed payment window (NET30, NET60, COD, etc.). Cannabis pharma typically uses 40–90 day windows. Stored as `payment_terms_code` lookup on `deal_card`. |
+| **Offer expiry** | The date after which a deal offer lapses. Stored as `offer_expires_at` on `deal_card`; Sella monitors and flags approaching expiry. |
+| **Deal line item** | One product row on a Deal Card — product name, quantity, unit, unit price, line total, potency (THC/CBD for cannabis). Versioned: each `deal_card` version has its own complete set of line items (snapshot, not diff). |
+| **Deal delivery** | The physical execution of a deal — batch numbers, Certificate of Analysis (COA) file, actual delivered quantities, delivery note + invoice. Separate from line items ("what was agreed") and deferred to Phase 3 (DEV-36). |
+| **THC / CBD percent** | Potency fields on `deal_line_item` for cannabis products. Regulatory-grade — Sella validates these against license thresholds. Nullable (non-cannabis products carry neither). |
+
 *Maintained by `grill-with-docs` (proposes additions during grilling — humans confirm) and direct edits. Add new terms when they're locked in Layer docs or surface during code review.*

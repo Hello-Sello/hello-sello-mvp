@@ -534,8 +534,10 @@ Per-entity status lists (convention: enums = lookup tables). **Shared shape:** `
 | `license_scan_status` | `pending` · `clean` ✓ · `infected` ✓ · `scan_error` ✓ |
 | `inbox_status` | `pending` · `accepted` ✓ · `rejected` ✓ |
 | `join_request_status` | `pending` · `approved` ✓ · `rejected` ✓ · `cancelled` ✓ |
+| `deal_card_status` | `draft` · `withdrawn` ✓ · `confirmed` · `amended` · `cancelled` ✓ |
+| `deal_confirmation_status` | `pending` · `confirmed` ✓ · `rejected` ✓ |
 
-**Referenced by:** `company.verification_status` → `company_verification_status` · `company_license_file.scan_status` → `license_scan_status` · `pending_inbox_item.status` → `inbox_status` · `join_request.status` → `join_request_status`.
+**Referenced by:** `company.verification_status` → `company_verification_status` · `company_license_file.scan_status` → `license_scan_status` · `pending_inbox_item.status` → `inbox_status` · `join_request.status` → `join_request_status` · `deal_card.status` → `deal_card_status` · `deal_confirmation.status` → `deal_confirmation_status`.
 
 ---
 
@@ -593,23 +595,294 @@ The questions every B2B schema must answer **before launch**. Wrong defaults her
 
 ---
 
-## Coming in Phase 2 (tracked for future)
+## Phase 2 tables (in progress — 2026-06-07)
 
-These tables aren't built yet but will follow the same conventions:
+**Status:** shapes locked from Ayush's chat prototype (`prototypes/chat-prototype`, locked 2026-06-06). Discussed + extended 2026-06-07. Tables for `relationship_note`, `pricelist` pending screen ③ (Relationship page).
+
+**Wire diagram:**
+```
+pending_inbox_item (P1) — accepted → relationship (P2)
+                                         │
+                      ┌──────────────────┼──────────────────┐
+                      ▼                  ▼                   ▼
+             chat_thread(c2c)    chat_thread(p2p)       deal_card (P2)
+                      │                  │                   │
+              chat_message        chat_message         confirmed → chat_thread(deal)
+                                                              │
+                                                       deal_card_log
+                                                       deal_change_input
+                                                       deal_line_item
+```
+
+---
+
+### `relationship`
+
+Created when a `pending_inbox_item` is accepted (P↔C → P↔P transition). Parent of all chat threads and deals between two companies.
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | UUID | PK, NOT NULL, DEFAULT `gen_random_uuid()` | |
+| `company_a_id` | UUID | NOT NULL, REFERENCES `company(id)` | Lower UUID alphabetically — enforces one row per pair |
+| `company_b_id` | UUID | NOT NULL, REFERENCES `company(id)` | |
+| `initiated_by_company_id` | UUID | NOT NULL, REFERENCES `company(id)` | Who sent the original `pending_inbox_item` |
+| `inbox_item_id` | UUID | NULL, REFERENCES `pending_inbox_item(id)` | Origin record for traceability |
+| `status` | VARCHAR(20) | NOT NULL DEFAULT `'active'` | Lookup: `'active'` / `'suspended'` / `'ended'` |
+| `metadata` | JSONB | NOT NULL DEFAULT `'{}'` | Agreed terms, custom notes — extended when screen ③ lands |
+| `created_by` | UUID | NULL, REFERENCES `person(id)` | |
+| `updated_by` | UUID | NULL, REFERENCES `person(id)` | |
+| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
+| `updated_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
+| `deleted_at` | TIMESTAMPTZ | NULL | |
+
+**Constraints:**
+- `CHECK (company_a_id < company_b_id)` — canonical ordering, enforces one row per pair regardless of who initiated
+- `UNIQUE(company_a_id, company_b_id) WHERE deleted_at IS NULL`
+
+**Indexes:**
+- `INDEX(company_a_id)`, `INDEX(company_b_id)` — "all relationships for this company"
+- `INDEX(inbox_item_id)` — trace back to origin
+
+**Open:** full columns (per-side notes, agreed terms, custom pricelist) pending screen ③. `metadata` is the placeholder.
+
+---
+
+### `chat_thread`
+
+One per C2C channel (created at connection accept), one per P2P pair, one per confirmed deal.
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | UUID | PK, NOT NULL, DEFAULT `gen_random_uuid()` | |
+| `relationship_id` | UUID | NOT NULL, REFERENCES `relationship(id)` | |
+| `type` | VARCHAR(10) | NOT NULL | Lookup: `'c2c'` / `'p2p'` / `'deal'` |
+| `person_a_id` | UUID | NULL, REFERENCES `person(id)` | Only for `p2p` threads |
+| `person_b_id` | UUID | NULL, REFERENCES `person(id)` | Only for `p2p` threads |
+| `deal_card_id` | UUID | NULL, REFERENCES `deal_card(id)` | Only for `deal` threads; set when workspace spawns |
+| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
+| `deleted_at` | TIMESTAMPTZ | NULL | |
+
+**Constraints:**
+- `CHECK (type != 'p2p' OR (person_a_id IS NOT NULL AND person_b_id IS NOT NULL))` — p2p must name both people
+- `CHECK (type != 'deal' OR deal_card_id IS NOT NULL)` — deal thread must name the card
+- `CHECK (type != 'p2p' OR person_a_id < person_b_id)` — canonical ordering enforced at DB level; app must sort before insert (Q2 locked 2026-06-07, same pattern as `relationship.company_a_id < company_b_id`)
+- `UNIQUE(relationship_id, type) WHERE type = 'c2c' AND deleted_at IS NULL` — one C2C per relationship
+- `UNIQUE(relationship_id, person_a_id, person_b_id) WHERE type = 'p2p' AND deleted_at IS NULL` — one P2P per person-pair
+
+**Note:** `scope` (company/person/deal) is derivable from `type` — no extra column (Ayush's lock, 2026-06-06).
+
+**Indexes:**
+- `INDEX(relationship_id, type)`
+- `INDEX(person_a_id)`, `INDEX(person_b_id)` — "all chats for this person"
+
+---
+
+### `chat_message`
+
+Every line in every thread. System and Sella lines are rows here too — **no separate `system_message` table**.
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | UUID | PK, NOT NULL, DEFAULT `gen_random_uuid()` | |
+| `thread_id` | UUID | NOT NULL, REFERENCES `chat_thread(id)` | |
+| `sender_person_id` | UUID | NULL, REFERENCES `person(id)` | NULL when sender is `system` or `sella` |
+| `sender` | VARCHAR(10) | NOT NULL | Lookup: `'person'` / `'system'` / `'sella'` |
+| `type` | VARCHAR(50) | NOT NULL DEFAULT `'message'` | Discriminator lookup — see seed values below |
+| `body` | TEXT | NOT NULL | Human message text or system copy |
+| `metadata` | JSONB | NOT NULL DEFAULT `'{}'` | e.g. deal_card_version ref, Sella context, confirmation state |
+| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
+| `deleted_at` | TIMESTAMPTZ | NULL | |
+
+**`chat_message_type` lookup seed values:**
+`message`, `connection_established`, `deal_started`, `intro`, `deal_detected`, `workspace_created`, `deal_cancelled`, `deal_opened`, `deal_card_updated`
+
+**Invariant:** `deal_card_updated` messages are **projections** of a `deal_card_log` entry — the log is truth, the message is display. A change made in the Deal chat writes the log but does NOT broadcast a `deal_card_updated` message (everyone there already saw the conversation). Broadcast fires only when `origin != deal_chat`.
+
+**Indexes:**
+- `INDEX(thread_id, created_at DESC)` — paginated message load
+- `INDEX(sender_person_id)` — "messages by this person"
+
+---
+
+### `deal_card`
+
+Mutable current state of a deal. Versioned — every accepted change bumps `version`; line items snapshot at each version.
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | UUID | PK, NOT NULL, DEFAULT `gen_random_uuid()` | |
+| `relationship_id` | UUID | NOT NULL, REFERENCES `relationship(id)` | |
+| `thread_id` | UUID | NULL, REFERENCES `chat_thread(id)` | Set when workspace spawns (both parties confirm); NULL while draft |
+| `version` | INT | NOT NULL DEFAULT 1 | Bumped on every accepted change |
+| `status` | VARCHAR(20) | NOT NULL DEFAULT `'draft'`, REFERENCES `deal_card_status(code)` | Lookup: `'draft'` / `'withdrawn'` / `'confirmed'` / `'amended'` / `'cancelled'` |
+| `deal_type` | VARCHAR(10) | NOT NULL | Lookup: `'offer'` (seller-initiated) / `'order'` (buyer-initiated) |
+| `initiating_company_id` | UUID | NOT NULL, REFERENCES `company(id)` | Direction of the deal; drives OFFER vs ORDER labelling |
+| `value_net` | NUMERIC(15, 2) | NULL | Computed total; updated on each version |
+| `currency` | CHAR(3) | NOT NULL DEFAULT `'EUR'` | ISO 4217 |
+| `offer_expires_at` | TIMESTAMPTZ | NULL | When the quote/offer lapses; Sella monitors |
+| `delivery_date_target` | TIMESTAMPTZ | NULL | Target delivery date |
+| `payment_terms_code` | VARCHAR(20) | NULL, REFERENCES `payment_terms(code)` | NET30 / NET60 / COD etc. |
+| `incoterms_code` | VARCHAR(10) | NULL, REFERENCES `incoterms(code)` | EXW / DAP / DDP etc. |
+| `buyer_po_number` | VARCHAR(100) | NULL | Buyer's internal PO ref; generated at confirmation |
+| `seller_so_number` | VARCHAR(100) | NULL | Seller's internal SO ref; generated at confirmation |
+| `hs_deal_number` | VARCHAR(50) | NULL | Auto-generated at confirmation: `HS-AAA##-BBB##-NNNNNNNN` |
+| `metadata` | JSONB | NOT NULL DEFAULT `'{}'` | Stage template id, special handling notes, insurance refs |
+| `created_by` | UUID | NULL, REFERENCES `person(id)` | |
+| `updated_by` | UUID | NULL, REFERENCES `person(id)` | |
+| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
+| `updated_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
+| `deleted_at` | TIMESTAMPTZ | NULL | |
+
+**Two-party gate (Q3 — locked 2026-06-07):** per-party confirmation state lives in a dedicated `deal_confirmation` table (see below). `withdrawn` status on this card means the initiating party pulled back before the other party responded.
+
+**Indexes:**
+- `INDEX(relationship_id, status)`
+- `INDEX(initiating_company_id)`
+- `INDEX(offer_expires_at) WHERE offer_expires_at IS NOT NULL` — Sella expiry monitoring
+
+---
+
+### `deal_confirmation`
+
+Per-party confirmation gate for deal birth and deal amendments. Two rows exist per `(deal_card_id, version)` — one per company. Both must reach `confirmed` before the version is accepted; either `rejected` sends the deal back to negotiation. *(Locked 2026-06-07 — Q3.)*
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | UUID | PK, NOT NULL, DEFAULT `gen_random_uuid()` | |
+| `deal_card_id` | UUID | NOT NULL, REFERENCES `deal_card(id)` | |
+| `version` | INT | NOT NULL | Which card version is being gated |
+| `company_id` | UUID | NOT NULL, REFERENCES `company(id)` | The responding party |
+| `responding_person_id` | UUID | NULL, REFERENCES `person(id)` | NULL until the party responds |
+| `status` | VARCHAR(20) | NOT NULL DEFAULT `'pending'`, REFERENCES `deal_confirmation_status(code)` | `'pending'` / `'confirmed'` / `'rejected'` |
+| `responded_at` | TIMESTAMPTZ | NULL | When the party confirmed or rejected |
+| `note` | TEXT | NULL | Optional rejection reason or note |
+| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
+| `updated_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
+
+**Constraints:**
+- `UNIQUE(deal_card_id, version, company_id)` — one response per party per version
+
+**Indexes:**
+- `INDEX(deal_card_id, version)` — check gate state for a version
+- `INDEX(company_id, status)` — "deals awaiting my company's confirmation"
+
+**State machine:**
+- `pending` → `confirmed` (party accepts)
+- `pending` → `rejected` (party declines — deal returns to negotiation)
+
+**Side effects (app-layer):**
+- Both rows `confirmed` → `deal_card.status` advances (`draft` → `confirmed` on v1; version bumps on amendments) + workspace spawns on v1
+- Either row `rejected` → deal returns to negotiation; `deal_card.status` stays `draft` or `amended`
+- `deal_card.status = 'withdrawn'` — set by the initiating company only, and only while the other party's row is still `pending`; this is a deal-card-level action, not a confirmation row action
+
+**`deal_confirmation_status` lookup seed values:** `pending` · `confirmed` ✓ · `rejected` ✓
+
+---
+
+### `deal_line_item`
+
+Products per deal version. **Option A (versioned snapshots):** each version bump copies unchanged lines + writes new/changed ones. Query current = `WHERE deal_card_id = X AND version = (card.version)`; reconstruct v1 = `WHERE deal_card_id = X AND version = 1`. No diff-replay needed. *(Decided 2026-06-07 — no mutable line items; regulated industry needs read-only historical snapshots.)*
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | UUID | PK, NOT NULL, DEFAULT `gen_random_uuid()` | |
+| `deal_card_id` | UUID | NOT NULL, REFERENCES `deal_card(id)` | |
+| `version` | INT | NOT NULL | Snapshot version — matches `deal_card.version` at time of write |
+| `product_id` | UUID | NULL, REFERENCES `catalog_product(id)` | NULL if free-text product (no catalog in Phase 1) |
+| `product_name` | VARCHAR(200) | NOT NULL | Denormalized — snapshot name at this version |
+| `quantity` | NUMERIC(15, 3) | NOT NULL | |
+| `unit` | VARCHAR(20) | NOT NULL | Lookup: `'kg'` / `'g'` / `'unit'` etc. |
+| `unit_price` | NUMERIC(15, 4) | NOT NULL | Seller's agreed price for this version |
+| `seller_margin` | NUMERIC(6, 4) | NULL | **Seller-only** — never exposed to buyer; RLS + app-layer policy |
+| `buyer_metric` | NUMERIC(6, 4) | NULL | **Buyer-only** — name TBD (see open questions) |
+| `currency` | CHAR(3) | NOT NULL DEFAULT `'EUR'` | Matches `deal_card.currency` |
+| `line_total` | NUMERIC(15, 2) | GENERATED ALWAYS AS (`quantity * unit_price`) STORED | Computed |
+| `thc_percent` | NUMERIC(5, 2) | NULL | Cannabis-specific; regulatory-grade; Sella validates against license thresholds |
+| `cbd_percent` | NUMERIC(5, 2) | NULL | Cannabis-specific |
+| `sort_order` | SMALLINT | NOT NULL DEFAULT 0 | Display order on card front |
+| `metadata` | JSONB | NOT NULL DEFAULT `'{}'` | Country of origin, packing notes, customs codes (not yet queried — promote later) |
+| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
+
+**No `deleted_at`** — line items at a locked version are immutable.
+
+**Constraints:**
+- `UNIQUE(deal_card_id, version, sort_order)`
+
+**Indexes:**
+- `INDEX(deal_card_id, version)` — primary access pattern
+
+**What belongs elsewhere, not here:**
+- Batch numbers, CoA files, actual delivered quantities → `deal_delivery` (Phase 3, DEV-36). The line item answers *"what was agreed"*; the delivery answers *"what was shipped"*. One deal can have N deliveries (DEV-53).
+
+---
+
+### `deal_card_log`
+
+Append-only version history. Lives on the card back (Signals | Logs filter). Feeds `audit_log`.
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | UUID | PK, NOT NULL, DEFAULT `gen_random_uuid()` | |
+| `deal_card_id` | UUID | NOT NULL, REFERENCES `deal_card(id)` | |
+| `version` | INT | NOT NULL | Which card version this entry created |
+| `change_summary` | TEXT | NOT NULL | What changed — Sella-written or system |
+| `origin` | VARCHAR(15) | NOT NULL | Lookup: `'p2p'` / `'deal_chat'` / `'system'` — drives the broadcast rule |
+| `changed_by_person_id` | UUID | NULL, REFERENCES `person(id)` | |
+| `changed_by` | VARCHAR(10) | NOT NULL | `'person'` / `'sella'` / `'system'` |
+| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
+
+**No soft delete** — this is history.
+
+**Broadcast rule:** `origin != 'deal_chat'` → broadcast a `deal_card_updated` chat message into the Deal thread. Change made *in* the Deal chat → log + evidence only, no redundant message.
+
+**Indexes:**
+- `INDEX(deal_card_id, version)`
+
+---
+
+### `deal_change_input`
+
+Per-user evidence — each party's own note when a change is proposed. The "individual for individual user" record from the P2P↔Deal sync model (Ayush's lock, 2026-06-06).
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | UUID | PK, NOT NULL, DEFAULT `gen_random_uuid()` | |
+| `deal_card_id` | UUID | NOT NULL, REFERENCES `deal_card(id)` | |
+| `log_id` | UUID | NOT NULL, REFERENCES `deal_card_log(id)` | Which version change this note belongs to |
+| `party_person_id` | UUID | NOT NULL, REFERENCES `person(id)` | The person who submitted this note |
+| `note` | TEXT | NOT NULL | Their own words on the change |
+| `submitted_at` | TIMESTAMPTZ | NOT NULL | |
+| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
+
+**Indexes:**
+- `INDEX(deal_card_id, log_id)`
+- `INDEX(party_person_id)`
+
+---
+
+## Open questions — Phase 2 (decide before writing migrations)
+
+| # | Question | Affects |
+|---|---|---|
+| ~~Q2~~ | ~~**`chat_thread` P2P uniqueness**~~ → **RESOLVED 2026-06-07.** `CHECK (person_a_id < person_b_id)` enforced at DB level; app sorts before insert. Same pattern as `relationship` table. | `chat_thread` constraint ✓ |
+| ~~Q3~~ | ~~**Two-party confirmation state**~~ → **RESOLVED 2026-06-07.** Dedicated `deal_confirmation` table — one row per party per version. `deal_card.status` gets `'withdrawn'` (initiator pulls back before other party responds — terminal). See `deal_confirmation` table above + DECISIONS.md 2026-06-07. | `deal_confirmation` table added |
+| TBD | **`buyer_metric` field name** — buyer's counterpart to seller's `margin` on the Deal card. Still TBD. | `deal_line_item.buyer_metric` column name |
+| screen③ | **`relationship_note`** — per-side private notes; shape pending screen ③ (Relationship page). | New table |
+| screen③ | **`pricelist`** (master / standard / custom-per-relationship) — three layers per DEV-1; shape pending screen ③. | New table(s) |
+
+---
+
+## Deferred to Phase 3+
 
 | Table | Phase | Notes |
 |---|---|---|
-| `relationship` | 2 | Created at pickup (P↔C → P↔P transition) |
-| `relationship_note` | 2 | Per-side notes; private to each company |
-| `pricelist` (master, standard, custom-per-relationship) | 2 | Three layers per DEV-1 |
-| `chat_message`, `chat_thread` | 2/3 | P↔P chat |
-| `deal_card`, `deal_card_version` | 3 | Git-style version history |
-| `deal_workspace`, `deal_room` | 3 | Containers |
-| `thing` | 3 | Universal execution primitive |
-| `order` (with PO#/SO#/HS#/QR) | 4 | Generated at confirmation |
-| `audit_log` | ~~Cross-cutting~~ **Promoted to Phase 1** (see open Qs §A4) | Universal change-log primitive — needed for HS verify flow |
-| `analytics_event` | 2+ | Append-only product telemetry (onboarding `step_skipped` / `step_started` / `step_completed`, funnel events). **Not** `audit_log` — that's for compliance-grade business actions, not UI telemetry. Shape designed when the event set is known; may instead live in an external tool (PostHog/Amplitude). Deferred past v0 — 1–2 test users yield no useful funnel. (Decided 2026-06-06: onboarding checklist `skipped` state is captured here, not as a column on `person`.) |
-| `email_integration` | 2+ | Per (person × provider) connection for **re-syncing** imported contacts: provider, status, `last_synced_at`, etc. OAuth tokens go in **Supabase Vault** (A2), never a column here. Deferred past v0 — v0 is a one-time import (token used then discarded, nothing stored). Add when auto-refresh is wanted. (Decided 2026-06-06.) |
+| `deal_delivery` | 3 | Batch numbers, CoA files, actual delivered quantities, delivery note + invoice (DEV-36). Child of `deal_card`; one deal has N deliveries (DEV-53). |
+| `deal_workspace`, `deal_room` | 3 | Containers for the deal workspace UI |
+| `thing` | 3 | Universal deal-execution primitive |
+| `order` (with PO#/SO#/HS#/QR) | 4 | Generated at confirmation; XML-readable for ERP integration |
+| `analytics_event` | 2+ | Append-only UI telemetry. Not `audit_log` — that's compliance-grade. May live in external tool (PostHog/Amplitude). Deferred past v0. |
+| `email_integration` | 2+ | Per (person × provider) OAuth connection for contact re-sync. Tokens in Supabase Vault (A2). Deferred past v0. |
+| `audit_log` | ~~2~~ **Promoted to Phase 1** | See §A4 — already in Phase 1 tables above. |
 
 ---
 
