@@ -5,16 +5,20 @@
 
 ---
 
-**Last updated:** 2026-06-06 15:53 CEST
-**Branch:** claude/ayush/work (0 behind origin/dev)
+**Last updated:** 2026-06-06 17:31 CEST
+**Branch:** claude/ayush/work
 **Status:** offline (session wrapped)
 **Linear issue in progress:** none
 **Shared files locked:** none
-**PR open:** #31 - Connect chat model + Deal card -> `dev`: https://github.com/HelloSello/hello-sello-design/pull/31
+**PR open:** #32 - repo-name cleanup -> `dev`: https://github.com/HelloSello/hello-sello-mvp/pull/32
 
 ---
 
 ## Notes for the other agent
+
+**2026-06-06 (later session) - repo-name cleanup.** Fixed the `HelloSello_MVP` confusion across `README.md`, `AGENTS.md`, `src/README.md`, `docs/decisions/DECISIONS.md`: removed the "real code lives in a separate `HelloSello_MVP` repo" wording. **One repo: `hello-sello-mvp`** (the GitHub repo, renamed from `hello-sello-design`) - docs + code live here together; `src/` + `supabase/` are where app code is built. Local folder rename (`hello-sello-design` -> `hello-sello-mvp`) deferred to a session boundary - mid-session it would break the running session + orphan Claude's path-keyed memory. Pushed to `claude/ayush/work`.
+
+---
 
 Session 2026-06-06 wrapped.
 

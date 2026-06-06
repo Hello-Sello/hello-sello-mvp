@@ -64,7 +64,7 @@ Files: `docs/product/surfaces/<NAME>.md`. Build strategy locked in `docs/decisio
 | Team skill dictionary + protocols | `docs/team/SKILLS.md` |
 | Live cross-agent sync state | `docs/team/sync/{muskan,ayush}.md` |
 | External skill configs (Matt Pocock framework) | `docs/agents/` |
-| App structure (reference skeleton; real code in `HelloSello_MVP`) | `src/`, `supabase/` |
+| App code structure (modular monolith) | `src/`, `supabase/` |
 | Meeting notes | `docs/meeting-notes/` |
 | Personal session state | Each engineer's gitignored `CLAUDE.md` (at repo root) |
 

@@ -1,6 +1,6 @@
-# App structure - modular monolith (reference skeleton)
+# App structure - modular monolith
 
-> **This is a structure reference, not the live app.** These folders are an empty skeleton so the team can see and agree the shape. The actual implementation is built in the **[HelloSello_MVP](https://github.com/HelloSello/HelloSello_MVP)** repo, following this exact layout.
+> **This is the app-code structure for this repo (`hello-sello-mvp`).** These folders are scaffolded now; the implementation is built here, following this layout.
 > Decision: [`docs/decisions/DECISIONS.md`](../docs/decisions/DECISIONS.md) (2026-06-04). Demo slice: [`docs/architecture/connect-demo.md`](../docs/architecture/connect-demo.md).
 
 Modular monolith, partitioned **by domain** (not by technical layer). One deployable: Next.js (App Router, TypeScript) on Vercel + Supabase (Postgres / Auth / Realtime / Storage), multi-tenant via RLS. Sella inference on Claude via AWS Bedrock (EU / Frankfurt).
