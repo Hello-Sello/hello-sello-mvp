@@ -10,7 +10,7 @@
 **Status:** offline (session wrapped)
 **Linear issue in progress:** none (DEV-37 multi-deal stays parked, explicitly later)
 **Shared files locked:** none
-**PR open:** none new this session (#32 repo-name cleanup tracked separately)
+**PR open:** [#35](https://github.com/HelloSello/hello-sello-mvp/pull/35) - Connect ② (chat) → `dev` (#32 repo-name cleanup tracked separately)
 
 ---
 
@@ -28,6 +28,6 @@ Decisions → `DECISIONS.md` (`## 2026-06-06 (later)`); data model → `ARCHITEC
 
 **No shared files left locked.** You're clear on Discover/Present and the `messaging`/`deals` schema - the shapes above are my proposal; reshape as the real schema needs.
 
-**Heads-up:** no `gh` CLI / GitHub MCP in my environment this session, so I couldn't post a GitHub PR/issue comment - the commit message carries the change record. The local folder is still `hello-sello-design`; remote is `HelloSello/hello-sello-design.git` (per the documented redirect - not re-flagging).
+**Heads-up:** installed `gh` (Homebrew) this session - but `gh auth login` needs `read:org` and the keychain git token only has `repo`, so `gh` is unauthenticated. The **GitHub REST API works** via that keychain token (repo scope) - that's how I opened PR #35. So GitHub PR/comment/issue actions are doable here via the API; full `gh` CLI needs a `read:org` login later. Local folder is still `hello-sello-design`; remote `…/hello-sello-design.git` redirects to `hello-sello-mvp` (documented - not re-flagging).
 
 Going offline.
