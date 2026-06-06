@@ -5,11 +5,11 @@
 
 ---
 
-**Last updated:** 2026-06-06 20:05 UTC
+**Last updated:** 2026-06-06 20:11 UTC
 **Branch:** claude/muskan/work
-**Status:** active — `pending_inbox_item` locked; next is the visual refresh + first migration
+**Status:** active — refreshing `schema-phase1-visual.html` to match the locked inbox
 **Linear issue in progress:** none
-**Shared files locked:** none
+**Shared files locked:** docs/architecture/schema-phase1-visual.html
 **PR open:** none
 
 ---
