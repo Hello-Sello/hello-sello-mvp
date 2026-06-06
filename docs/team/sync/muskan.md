@@ -5,27 +5,32 @@
 
 ---
 
-**Last updated:** 2026-05-29 13:04 UTC
+**Last updated:** 2026-06-06 17:25 UTC
 **Branch:** claude/muskan/work
-**Status:** idle
+**Status:** offline (session wrapped)
 **Linear issue in progress:** none
 **Shared files locked:** none
-**PR open:** #25 (Phase 1 prototype + SCHEMA-DRAFT, base=dev).
+**PR open:** none
 
 ---
 
 ## Notes for the other agent
 
-🎯 **ALL architecture-shaping open questions are now resolved.** Recent locks: A2 (PII) 2026-05-27 · A3 (license storage) 2026-05-28 · B7 (enforcement layer) + B1 (join-request entity) 2026-05-29. Remaining open Qs (B2/B3/B4/B6) are build/mechanism — decide at build, not blocking architecture.
+**2026-06-06 (this session) — Phase-1 schema gap pass.** Validated `prototypes/phase-1-onboarding` against `SCHEMA-DRAFT.md`. Heads-up: the prototype is **stale vs the locks** (email/license on the wrong tables, no Path-B "new vs existing company" screen) — build to `SCHEMA-DRAFT.md` + `HANDOFF.md`, not the prototype code. Resolved the last open build-questions (edited `SCHEMA-DRAFT.md` only — you weren't touching it):
 
-**B1 — Path B join-request entity (2026-05-29):** **Dedicated `join_request` table** (new), NOT a reuse of `pending_inbox_item`. DDD aggregate-boundary call: `pending_inbox_item` = company↔company connection; a join request = a *person* → *company* membership request where **approval grants membership** (sets `person.company_id` + role) — different invariants, language, lifecycle, side-effect. New table: `requester_person_id`, `target_company_id` (may be still-pending company), `status` {pending/approved/rejected/cancelled}, `note`, `decided_by`, `decided_at`, `rejection_reason`, + standard cols. Multi-Superadmin routing defaulted to "any Superadmin of target company" (build detail). Approve/reject → `audit_log` (content_type `'join_request'`).
+- **B2** → new `hs_team_member` table (platform-level, no `company_id`; grant/revoke audited).
+- **B3** → `company.metadata.domain_collision` (sparse, HS-only review flag).
+- **B4** → reject reason *derived* from `audit_log`; resubmit auth-gated. No schema.
+- **Onboarding checklist** → derive "done"; only `dismissed` in `person.metadata`; "skipped" → future `analytics_event` (added to the Coming-later list).
 
-**B7 — access-policy enforcement layer (2026-05-29):** **Layered / defense-in-depth.** RLS = security floor (tenant isolation via `company_id` + `auth.uid()`); central app-layer policy module = complex authorization (split-gate + DEV-51 16-combo matrix), NOT scattered inline checks. Policy DSL (OPA/Oso) deferred. Architecture-only. **Unblocks DEV-51.**
+- **Cleanups:** `person.is_superadmin` dropped → `person_group` is the single source of truth for Superadmin; contact tags = customer/supplier/partner/prospect/other (blank = unclassified, dropped 'unknown'); store permission *codes* not labels (EN/DE i18n); `email_integration` re-sync deferred (v0 = one-time import).
 
-**A3 recap (2026-05-28):** License files → Supabase Storage private bucket, AES-256 at-rest + RLS + signed URLs, Edge-Function virus scan, allowlist {PDF,JPG,PNG,HEIC} + magic bytes, 20 MB/max 5. New `company_license_file` child table; `company.license_filename` dropped.
+Only **B6** (2FA timing) remains open. **DECISIONS.md updated this wrap** (2026-06-06 — Phase-1 schema gaps + company category).
 
-**A2 recap (2026-05-27):** pgsodium dropped (Supabase deprecated). Hybrid PII encryption: queryable → at-rest + RLS; high-sensitivity → pgcrypto + Vault key; secrets → Vault. `person.email_encrypted` dropped → `SECURITY DEFINER` view `person_with_email`. **⚠️ Ayush:** PR #25 prototype may reference `email_encrypted` — needs a scan/cleanup under the new A2 lock.
+Also this session: **synced my branch with dev** — your `src/` modular structure + `supabase/` + Connect/Deal docs/prototypes are now in my branch. Ran a **Phase-2/3 cross-check**: 11 Phase-1 tables are lock-ready; **`pending_inbox_item` needs `request_type` + `assigned_to`** (your Connect inbox design) before it locks — I'll send you 5 Qs to finalize it. New: **company business category** (Marcel) → `company_type` + `company_type_assignment` (multi-select, asked at setup; *not* buy/sell). Built a visual schema reference: `docs/architecture/schema-phase1-visual.html`.
 
-Schema now has two new tables since you last looked: **`company_license_file`** (A3) and **`join_request`** (B1). `company.license_filename` removed.
+**Next session:** add the category step into the `phase-1-onboarding` prototype (sync-ritual first — shared); apply your answers → finalize `pending_inbox_item`; refresh the visual; then start migrations in `supabase/migrations/`.
 
-Open Qs status: **A1+A2+A3+A4+B1+B7 resolved (all architecture done).** Remaining (build/mechanism, deferred): **B2** (HS-team allowlist location), **B3** (domain-collision flag location), **B4** (reject reason + resubmit token), **B6** (2FA enforcement timing).
+Still on my list: A2 `email_encrypted` scan (PR #25); AWS Bedrock access.
+
+Going offline.
