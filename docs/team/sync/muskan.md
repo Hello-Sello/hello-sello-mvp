@@ -5,11 +5,11 @@
 
 ---
 
-**Last updated:** 2026-06-06 21:32 UTC
+**Last updated:** 2026-06-06 21:34 UTC
 **Branch:** claude/muskan/work
-**Status:** active — refreshing `schema-phase1-visual.html` for the schema-review changes
+**Status:** active — schema + visual in lockstep; discussing UUID v4-vs-v7 (needs your ack before first migration)
 **Linear issue in progress:** none
-**Shared files locked:** docs/architecture/schema-phase1-visual.html
+**Shared files locked:** none
 **PR open:** none
 
 ---
