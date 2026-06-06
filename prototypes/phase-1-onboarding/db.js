@@ -2,6 +2,8 @@
 // Auth screens (signup → email-verify → signin → company-setup) are full-page.
 // After company submit, lands on HOME with a sequential modal onboarding flow.
 
+import { COMPANY_TYPES } from './seed.js';
+
 const STORAGE_KEY = 'hellosello-phase1-db';
 
 // Full-page screens (in order). Beyond this, user is on HOME.
@@ -30,6 +32,8 @@ export function freshDB() {
   return {
     person: [],
     company: [],
+    company_type: COMPANY_TYPES.map(t => ({ ...t })),   // fixed lookup, pre-seeded
+    company_type_assignment: [],
     group: [],
     person_group: [],
     permission_matrix_entry: [],
@@ -57,10 +61,14 @@ export function loadDB() {
   if (!raw) return freshDB();
   try {
     const loaded = JSON.parse(raw);
-    // Backfill new fields if loading older state
-    const def = freshDB()._meta;
-    loaded._meta = { ...def, ...(loaded._meta || {}) };
-    loaded._meta.setup_status = { ...def.setup_status, ...(loaded._meta.setup_status || {}) };
+    const fresh = freshDB();
+    // Backfill tables added since this state was saved (e.g. company_type*).
+    for (const k of Object.keys(fresh)) {
+      if (k !== '_meta' && loaded[k] == null) loaded[k] = fresh[k];
+    }
+    // Backfill new _meta fields if loading older state.
+    loaded._meta = { ...fresh._meta, ...(loaded._meta || {}) };
+    loaded._meta.setup_status = { ...fresh._meta.setup_status, ...(loaded._meta.setup_status || {}) };
     return loaded;
   } catch { return freshDB(); }
 }

@@ -127,7 +127,7 @@ function renderModal() {
 }
 
 function renderDataPanel() {
-  const tables = ['person', 'company', 'group', 'person_group', 'permission_matrix_entry', 'contact_record', 'pending_inbox_item'];
+  const tables = ['person', 'company', 'company_type', 'company_type_assignment', 'group', 'person_group', 'permission_matrix_entry', 'contact_record', 'pending_inbox_item'];
   const container = document.getElementById('data-tables');
   container.innerHTML = tables.map(t => renderTableBlock(t, state.db[t] || [])).join('') + renderMetaBlock();
 }
@@ -282,6 +282,10 @@ const actions = {
   },
 
   'create-company': (e, fd) => {
+    if (fd.getAll('company_type').length === 0) {
+      alert('Select at least one business category.');
+      return;
+    }
     if (state.db.company.length === 0) {
       const cid = nextId(state.db);
       const company = {
@@ -305,6 +309,21 @@ const actions = {
         });
         markNew('person_group', pgId);
       }
+
+      // company_type_assignment junction rows — one per selected business category
+      fd.getAll('company_type').forEach(code => {
+        const aid = nextId(state.db);
+        state.db.company_type_assignment.push({
+          id: aid,
+          company_id: cid,
+          company_type_code: code,
+          created_by: p?.id ?? null,
+          created_at: new Date().toISOString(),
+          deleted_at: null
+        });
+        markNew('company_type_assignment', aid);
+      });
+
       markNew('company', cid);
     }
     // Transition to home with submission dialog starting the modal sequence
@@ -480,6 +499,17 @@ document.addEventListener('change', (e) => {
   if (target.tagName === 'INPUT' && target.type === 'file' && actions[action]) {
     actions[action](e);
   }
+});
+
+// Live-update the business-category dropdown's closed bar as boxes toggle.
+// Intentionally NO re-render — that would snap the <details> shut and reset picks mid-edit.
+document.addEventListener('change', (e) => {
+  if (e.target.name !== 'company_type') return;
+  const summary = document.querySelector('[data-category-summary]');
+  if (!summary) return;
+  const picked = [...document.querySelectorAll('input[name="company_type"]:checked')]
+    .map(el => el.closest('label').querySelector('span').textContent.trim());
+  summary.textContent = picked.length ? picked.join(', ') : 'Select business categories';
 });
 
 document.addEventListener('submit', (e) => {

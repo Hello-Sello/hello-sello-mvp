@@ -552,3 +552,15 @@ Validated the Phase-1 schema against the `phase-1-onboarding` prototype and a Ph
 ### Open (next session)
 
 - **`pending_inbox_item` needs `request_type` + `assigned_to`** before it locks — the Connect inbox (4 request types + claim-or-admin-assign + lenses) requires them. Awaiting Ayush's answers: exact 4 types, assign-vs-pickup semantics, lens definitions, per-type payload, reassign rules.
+
+## 2026-06-06 - Path B (join-existing-company) deferral — engineering posture
+
+Path B (a person joins an existing company → request routes to that company's Superadmin → approval grants membership) is **locked in design** (B1, 2026-05-29) but **deferred in build**: v0 ships Path A only (one user per company, seeded test IDs). Recorded so the deferral is deliberate and v0 doesn't paint us into a corner.
+
+- **Deferring Path B is low-cost because it adds no new data shape or security state — it extends one v0 already has.** A `person` is born with `company_id = NULL` at signup; the gap between sign-in and company-setup is already a "logged-in but company-less" user. Path B just makes that gap last until a Superadmin approves instead of seconds. Same state, longer duration.
+- **What's deferred is all additive:** the `join_request` table, the approval side-effect (set `company_id` + role + audit), and the Path B screens (existing-or-new / pick-company / waiting / admin-approval surface). None alter an existing table — a later `CREATE TABLE` breaks nothing. No migration penalty for waiting; v0 omits the `join_request` table.
+- **Two invariants v0 MUST honor now (free — the onboarding window needs them anyway):** (1) `person.company_id` stays **nullable** and is read through **one accessor** (e.g. `currentCompany()`), never scattered — so the company-less case is a one-place fix later, not a 50-file hunt. (2) **RLS must fail safe on a null `company_id`** — a company-less user sees only their own rows, nothing tenant-scoped (equality policies like `company_id = my_company()` return nothing when null = the safe default). Get this right for onboarding and Path B's pending-joiner inherits it for free.
+- **Open (unspecified, not blocking):** *where* a Superadmin reviews pending join requests is not yet designed — the data + routing default ("any Superadmin of target company", B1) are locked, but the UI surface (Settings → Team? notification? badge?) is not. The Connect inbox does NOT cover it (that's company↔company connections, a separate aggregate).
+- **Tie-in:** the company-category step (above) is **Path-A-only** — a Path B joiner inherits the company's existing categories, so onboarding forks after "existing or new?" and the multi-select lives only on the new-company branch.
+
+*Why:* the expensive design (separate `join_request` aggregate, nullable membership) is already done; the only retrofit risk is the security boundary + scattered `company_id` reads, both required by v0's own onboarding window — so honoring them now makes "add Path B later" a purely additive feature, not a schema/RLS refactor.
