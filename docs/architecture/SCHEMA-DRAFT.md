@@ -16,13 +16,16 @@
 | Primary keys | `id UUID DEFAULT gen_random_uuid()` | Better for distributed systems, no enumeration attacks, no FK lock contention |
 | Timestamps | `created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()` + `updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()` | UTC; `updated_at` maintained via trigger |
 | Soft delete | `deleted_at TIMESTAMPTZ NULL` on every table | Regulated industry needs the deleted record retrievable for audit |
-| Audit columns | `created_by UUID REFERENCES person(id)` + `updated_by UUID REFERENCES person(id)` | Required for change-log primitive (DEV-29/40/41) |
+| Audit columns | `created_by` + `updated_by` (UUID → person(id)) on every **business** table; **pure junctions** (`person_group`, `company_type_assignment`) and the self-owned `person` profile are exempt. `deleted_by` pairs with `deleted_at` where an inline "who removed it" helps. | Required for change-log primitive (DEV-29/40/41); `audit_log` remains the legal trail |
 | Multi-tenancy | `company_id UUID REFERENCES company(id)` on every company-scoped table | Enables Row-Level Security (RLS); fast tenant filtering |
 | Encoding | UTF-8 everywhere | Internationalization-ready (DE/EN locked in MVP) |
 | Enums | Defined as **lookup tables**, not Postgres native ENUM. Store/reference the stable `code` (e.g. `view_deals`), never display labels. | New values without migration; user-facing labels (EN/DE) are translated in the app keyed off `code`, so wording can change without touching stored data |
 | Flexible fields | `metadata JSONB NOT NULL DEFAULT '{}'` on tables likely to expand | Kills ~80% of "add a column" migrations |
 | PII encryption | **Locked 2026-05-27 (A2):** Hybrid by data class. Queryable PII (email, name, phone) → at-rest only (Supabase default) + RLS. High-sensitivity stored PII (license #, gov ID, sensitive notes) → pgcrypto column encryption, master key in Vault. Secrets (API keys, tokens) → Supabase Vault. See DECISIONS.md walkthrough locks 2026-05-27. | GDPR Art 32; right-sized protection per risk class |
 | Indexes | `INDEX` for FKs, query-shaped composite indexes for common filters | Performance |
+
+**Planned additions (deferred — additive, no migration penalty):**
+- **Optimistic-lock `version INTEGER`** on collaboratively-edited tables (`company`, `group`, `permission_matrix_entry`, + future `pricelist` / `deal_card`) → add when team/multi-user editing ships. v0 is one-user-per-company, so no write conflicts yet; the later add is a plain additive column. (Schema review 2026-06-06.)
 
 ---
 
@@ -74,12 +77,15 @@ Company entities.
 | `description` | TEXT | NULL | |
 | `primary_products` | TEXT | NULL | Comma-separated for MVP; promote later if filtering needed |
 | `website` | VARCHAR(500) | NULL | |
-| `verification_status` | VARCHAR(50) | NOT NULL DEFAULT `'pending'` | FK to lookup table; values: 'pending', 'verified', 'rejected' |
+| `verification_status` | VARCHAR(50) | NOT NULL DEFAULT `'pending'`, REFERENCES `company_verification_status(code)` | 'pending', 'verified', 'rejected' |
 | `verified_at` | TIMESTAMPTZ | NULL | |
 | `verified_by` | UUID | NULL, REFERENCES `person(id)` | Hello Sello staff who verified |
 | `metadata` | JSONB | NOT NULL DEFAULT `'{}'` | currency, regulatory_ids, etc. |
+| `created_by` | UUID | NULL, REFERENCES `person(id)` | Founding user who created the company |
+| `updated_by` | UUID | NULL, REFERENCES `person(id)` | |
 | `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
 | `updated_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
+| `deleted_by` | UUID | NULL, REFERENCES `person(id)` | Who soft-deleted (pairs with `deleted_at`) |
 | `deleted_at` | TIMESTAMPTZ | NULL | |
 
 **Indexes:**
@@ -107,7 +113,7 @@ License/certificate files uploaded at company setup. **File bytes live in a Supa
 | `original_filename` | VARCHAR(500) | NOT NULL | User's original filename (display only) |
 | `mime_type` | VARCHAR(100) | NOT NULL | Validated server-side via magic bytes |
 | `file_size_bytes` | BIGINT | NOT NULL | Validated ≤ 20 MB |
-| `scan_status` | VARCHAR(20) | NOT NULL DEFAULT `'pending'` | values: 'pending', 'clean', 'infected', 'scan_error' (lookup table if it grows) |
+| `scan_status` | VARCHAR(20) | NOT NULL DEFAULT `'pending'`, REFERENCES `license_scan_status(code)` | 'pending', 'clean', 'infected', 'scan_error' |
 | `description` | TEXT | NULL | Optional free-text from uploader (helps HS reviewer) |
 | `created_by` | UUID | NULL, REFERENCES `person(id)` | Uploader |
 | `updated_by` | UUID | NULL, REFERENCES `person(id)` | |
@@ -173,8 +179,11 @@ Custom roles defined per company (Notion-style).
 | `name` | VARCHAR(100) | NOT NULL | "Sales Team", "Approver", etc. |
 | `description` | TEXT | NULL | |
 | `parent_group_id` | UUID | NULL, REFERENCES `group(id)` | For future hierarchy (Senior Sales ⊂ Sales) — added now to avoid migration |
+| `created_by` | UUID | NULL, REFERENCES `person(id)` | |
+| `updated_by` | UUID | NULL, REFERENCES `person(id)` | |
 | `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
 | `updated_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
+| `deleted_by` | UUID | NULL, REFERENCES `person(id)` | Who soft-deleted (pairs with `deleted_at`) |
 | `deleted_at` | TIMESTAMPTZ | NULL | |
 
 **Indexes:**
@@ -214,15 +223,19 @@ Which actions each group is allowed to perform.
 | Column | Type | Constraints | Notes |
 |---|---|---|---|
 | `id` | UUID | PK, NOT NULL | |
+| `company_id` | UUID | NOT NULL, REFERENCES `company(id)` | Denormalized from the group for direct RLS; MUST equal `group.company_id` (never moves) |
 | `group_id` | UUID | NOT NULL, REFERENCES `group(id)` | |
 | `action` | VARCHAR(100) | NOT NULL | FK to `permission_action` lookup table |
 | `granted` | BOOLEAN | NOT NULL DEFAULT FALSE | |
+| `created_by` | UUID | NULL, REFERENCES `person(id)` | Who set this grant |
+| `updated_by` | UUID | NULL, REFERENCES `person(id)` | Who last toggled it |
 | `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
 | `updated_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
 
 **Indexes:**
 - `UNIQUE(group_id, action)`
 - `INDEX(group_id)`
+- `INDEX(company_id)` — tenant filtering for RLS
 
 **Companion lookup table — `permission_action`:**
 
@@ -299,7 +312,7 @@ Inbound requests routed to a company's shared **Connect inbox**. Four types (`co
 | `receiver_company_id` | UUID | NOT NULL, REFERENCES `company(id)` | The company whose inbox this lands in |
 | `note` | TEXT | NULL | Free-form message; carries the body for `connect_message` |
 | `deal_card_id` | UUID | NULL, REFERENCES `deal_card(id)` | Set **only** when `type = 'deal_card'` |
-| `status` | VARCHAR(20) | NOT NULL DEFAULT `'pending'` | FK to lookup: 'pending', 'accepted', 'rejected' |
+| `status` | VARCHAR(20) | NOT NULL DEFAULT `'pending'`, REFERENCES `inbox_status(code)` | 'pending', 'accepted', 'rejected' |
 | `assigned_to` | UUID | NULL, REFERENCES `person(id)` | Current owner, however acquired (claim or admin-assign) |
 | `assigned_at` | TIMESTAMPTZ | NULL | When ownership was set |
 | `assigned_by` | UUID | NULL, REFERENCES `person(id)` | **NULL = self-claimed** (pickup); **set = who assigned** the owner |
@@ -320,6 +333,7 @@ Inbound requests routed to a company's shared **Connect inbox**. Four types (`co
 - One owner field. `assigned_to` = current owner regardless of route; `assigned_by` = provenance (NULL = picked up, set = assigned). "Assigned" is **derived** (`assigned_to IS NOT NULL`), not a status value.
 - Lenses: **Unassigned** = `status='pending' AND assigned_to IS NULL`; **Mine** = `assigned_to = me`; **All** = company's open items; **My history** = `assigned_to = me AND status IN ('accepted','rejected')`.
 - Reassign: unassigned → anyone with the inbox permission may claim (`assigned_to=self`, `assigned_by=NULL`); already-assigned → only the current owner or a Superadmin may reassign. Every (re)assignment writes an `audit_log` row (content_type `'pending_inbox_item'`, already seeded).
+- **RLS (build-time):** receiver-company members **and** sender-company members can both *read* the row (their inbox / their sent request); claim / assign / status writes are gated separately (inbox permission + owner-or-Superadmin).
 
 **Open questions:**
 - Should this evolve into a generic `notification` table covering more P↔C event types? → **Phase 2 question** — answer when we have more event shapes.
@@ -336,7 +350,7 @@ Path B onboarding: a person requests to join an existing company; a Superadmin o
 | `id` | UUID | PK, NOT NULL, DEFAULT `gen_random_uuid()` | |
 | `requester_person_id` | UUID | NOT NULL, REFERENCES `person(id)` | The joiner (may have `company_id` NULL at request time) |
 | `target_company_id` | UUID | NOT NULL, REFERENCES `company(id)` | Company to join; may still be `verification_status = pending` |
-| `status` | VARCHAR(20) | NOT NULL DEFAULT `'pending'` | FK to lookup: 'pending', 'approved', 'rejected', 'cancelled' |
+| `status` | VARCHAR(20) | NOT NULL DEFAULT `'pending'`, REFERENCES `join_request_status(code)` | 'pending', 'approved', 'rejected', 'cancelled' |
 | `note` | TEXT | NULL | Optional message from requester |
 | `decided_by` | UUID | NULL, REFERENCES `person(id)` | Superadmin who approved/rejected |
 | `decided_at` | TIMESTAMPTZ | NULL | |
@@ -509,6 +523,21 @@ Universal append-only change-log for every audited business action. **Immutable*
 
 ---
 
+## Status lookups
+
+Per-entity status lists (convention: enums = lookup tables). **Shared shape:** `code` VARCHAR(20) PK · `description` TEXT NOT NULL (EN/DE translated in app off `code`) · `sort_order` SMALLINT NOT NULL DEFAULT 0 · `is_terminal` BOOLEAN NOT NULL DEFAULT FALSE (true = end state — lets "history" / "done" filters read `is_terminal` instead of hardcoding status names). (Added 2026-06-06 — schema review.)
+
+| Table | `code` seeds (✓ = `is_terminal`) |
+|---|---|
+| `company_verification_status` | `pending` · `verified` ✓ · `rejected` ✓ |
+| `license_scan_status` | `pending` · `clean` ✓ · `infected` ✓ · `scan_error` ✓ |
+| `inbox_status` | `pending` · `accepted` ✓ · `rejected` ✓ |
+| `join_request_status` | `pending` · `approved` ✓ · `rejected` ✓ · `cancelled` ✓ |
+
+**Referenced by:** `company.verification_status` → `company_verification_status` · `company_license_file.scan_status` → `license_scan_status` · `pending_inbox_item.status` → `inbox_status` · `join_request.status` → `join_request_status`.
+
+---
+
 ## Open questions to research before locking the schema
 
 ### ~~PII encryption — which mechanism?~~ → RESOLVED 2026-05-27
@@ -554,7 +583,7 @@ The questions every B2B schema must answer **before launch**. Wrong defaults her
 |---|---|---|---|
 | 1 | ID type — auto-increment integer or UUID? | **UUID** | Distributed systems, no enumeration attacks, no FK lock contention |
 | 2 | Soft-delete — `deleted_at` on every table? | **Yes** | B2B almost always needs deleted records for audit |
-| 3 | Audit columns — `created_at`, `updated_at`, `created_by`, `updated_by` on every table? | **Yes** | Regulated industry requires audit trail (DEV-29/40/41) |
+| 3 | Audit columns — `created_at`, `updated_at`, `created_by`, `updated_by` on every table? | **Yes — business tables** (pure junctions + self-owned `person` exempt; `deleted_by` where useful) | Regulated industry requires audit trail (DEV-29/40/41); `audit_log` is the legal trail |
 | 4 | Multi-tenancy — every row carries `company_id`? | **Yes** | Even on derived tables, for RLS / fast filtering |
 | 5 | GDPR right-to-be-forgotten — delete or anonymize? | **Anonymize** | Keep referential integrity; null PII columns |
 | 6 | PII encryption — encrypt email, phone, address at rest? | **Yes (principle locked)** · Mechanism still open — see Open Questions | GDPR compliance; reduces blast radius |
