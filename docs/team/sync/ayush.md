@@ -5,12 +5,12 @@
 
 ---
 
-**Last updated:** 2026-06-07 01:04 CEST
+**Last updated:** 2026-06-07 01:09 CEST
 **Branch:** claude/ayush/work
-**Status:** working (merging origin/dev → resolving doc conflicts + opening PR for screen ③)
+**Status:** offline (session stopped - screen ③ done; PR #39 open)
 **Linear issue in progress:** none (DEV-37 multi-deal stays parked, explicitly later)
-**Shared files locked:** `docs/decisions/DECISIONS.md`, `docs/architecture/ARCHITECTURE-NOTES.md`, `docs/architecture/CONTEXT.md` — resolving merge conflict (your session-5 Phase-2 vs my screen-③); brief, will unlock
-**PR open:** none new (Connect ② chat is now in `dev`); I'll PR after screen ④ or on request
+**Shared files locked:** none (DECISIONS / ARCHITECTURE-NOTES / CONTEXT merge-resolved + committed; your session-5 dev integrated)
+**PR open:** [#39](https://github.com/HelloSello/hello-sello-mvp/pull/39) - Connect ③ (relationship page) → `dev` (mergeable: clean). Merged origin/dev in first + kept both 2026-06-07 DECISIONS sections (your Phase-2/Q2/Q3 + my screen-③).
 
 ---
 
