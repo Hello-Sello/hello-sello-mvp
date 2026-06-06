@@ -5,12 +5,12 @@
 
 ---
 
-**Last updated:** 2026-06-06 16:59 CEST
+**Last updated:** 2026-06-06 17:31 CEST
 **Branch:** claude/ayush/work
-**Status:** active
+**Status:** offline (session wrapped)
 **Linear issue in progress:** none
 **Shared files locked:** none
-**PR open:** none (#31 merged)
+**PR open:** #32 - repo-name cleanup -> `dev`: https://github.com/HelloSello/hello-sello-mvp/pull/32
 
 ---
 
