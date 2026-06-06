@@ -5,11 +5,11 @@
 
 ---
 
-**Last updated:** 2026-06-06 20:14 UTC
+**Last updated:** 2026-06-06 20:48 UTC
 **Branch:** claude/muskan/work
-**Status:** active — inbox locked + visual refreshed; next is the first migration
+**Status:** active — applying schema-review follow-through (status lookups + audit-col consistency)
 **Linear issue in progress:** none
-**Shared files locked:** none
+**Shared files locked:** docs/architecture/SCHEMA-DRAFT.md
 **PR open:** none
 
 ---
