@@ -551,7 +551,7 @@ Validated the Phase-1 schema against the `phase-1-onboarding` prototype and a Ph
 
 ### Open (next session)
 
-- **`pending_inbox_item` needs `request_type` + `assigned_to`** before it locks — the Connect inbox (4 request types + claim-or-admin-assign + lenses) requires them. Awaiting Ayush's answers: exact 4 types, assign-vs-pickup semantics, lens definitions, per-type payload, reassign rules.
+- ~~**`pending_inbox_item` needs `request_type` + `assigned_to`** before it locks~~ → **RESOLVED 2026-06-06** (Ayush's 5 answers). Added `type` → new `inbox_request_type` lookup (seed: connect / connect_message / pricelist_request / deal_card); **one owner field** `assigned_to` + `assigned_by` provenance (NULL = picked up, set = assigned) — replaces `picked_up_by`; status lookup → `pending` / `accepted` / `rejected` (**`picked_up` retired** — "assigned" is derived from `assigned_to`, not a status); nullable `deal_card_id` FK set only for the `deal_card` type (CHECK-guarded); lenses (Unassigned / Mine / All / My-history) + reassign rules (claim if unassigned; owner-or-Superadmin to reassign; every (re)assign → `audit_log`) recorded in `SCHEMA-DRAFT`. *Why:* a lookup makes a new request type an INSERT not a migration; one owner field matches Zendesk / Front / Intercom; a real `deal_card_id` column (not a metadata link) keeps the reference from getting lost.
 
 ## 2026-06-06 - Path B (join-existing-company) deferral — engineering posture
 
@@ -577,3 +577,14 @@ Prototyped + locked in `prototypes/chat-prototype` (full narrative: that folder'
 - **Deal card in chat = a thin pinned pill** (`Deal card ▸`, pink) on the `Talking about:` row → click opens the full **flip-card dialog** (front = facts + scrollable products reflecting the version; back = the Signals/Logs filter). *Why:* progressive disclosure — the header says "a deal lives here," detail is one click away.
 - **C2C clarification (supersedes LAYER-1 §3):** C2C is a **company-level channel created at connection** (the company notice board / audit log), not deal-scoped. LAYER-1 §3 still describes the old "C↔C only inside a deal workspace" model and is **stale** — flagged for a docs pass.
 - **Multi-deal in one P2P stays parked on [DEV-37](https://linear.app/hellosello/issue/DEV-37)** — explicitly out of scope for now.
+
+## 2026-06-06 - UUID primary keys = v4 for now (revisit on PG18 / audit_log growth)
+
+Keep the locked convention — PKs stay **v4** (`gen_random_uuid()`, native, zero-dependency). Considered UUID **v7** (time-ordered) for better index locality on append-heavy tables; researched + discussed, decided to wait.
+
+- **Why not v7 now:** Supabase is on **PG17** with **no native `uuidv7()`** (PG18-only) and **no `pg_uuidv7` extension** available (checked the live project — only `uuid-ossp`). v7 today would need a hand-rolled PL/pgSQL function or fragile app-side generation — not worth it at current scale.
+- **Why staying on v4 is safe:** v4's index fragmentation only bites **large, high-write** tables (millions of rows + sustained inserts) — i.e. only `audit_log` here; low-volume tables (company / person / group / …) never feel it. v0 is 1–2 test users.
+- **Switching later is cheap — NOT a re-key:** v4 and v7 are the same `uuid` type, so adopting v7 = changing a column's **default** for new rows (one line); old rows stay v4, mixing is fine, and it "stops the bleeding" for inserts going forward. The expensive full re-key (rewrite old rows + every FK) is "almost never worth it" and we'd skip it. *(Corrects an earlier overstatement that switching later meant a painful FK re-key.)*
+- **Revisit triggers:** (1) Supabase ships native `uuidv7()` (PG18) → `SET DEFAULT uuidv7()` on new / high-write tables; (2) `audit_log` crosses ~1–5M rows → flip its default to v7 then (captures ~all the benefit, since it only grows).
+
+*Why record:* makes the v4 choice deliberate (researched, not default-by-omission) and stops it being re-litigated; documents the cheap upgrade path. No convention change (staying = status quo) → no Ayush ack needed. (Sources: andyatkinson "Avoid UUIDv4 PKs", Scaling Postgres #368, dev.to "UUIDv7 is the 2026 default" + "UUID best practices".)

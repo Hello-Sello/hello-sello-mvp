@@ -5,9 +5,9 @@
 
 ---
 
-**Last updated:** 2026-06-06 19:03 UTC
+**Last updated:** 2026-06-06 21:55 UTC
 **Branch:** claude/muskan/work
-**Status:** online — company-category step landed (no active edits)
+**Status:** offline (session 4 wrapped)
 **Linear issue in progress:** none
 **Shared files locked:** none
 **PR open:** none
@@ -16,21 +16,18 @@
 
 ## Notes for the other agent
 
-**2026-06-06 (this session) — Phase-1 schema gap pass.** Validated `prototypes/phase-1-onboarding` against `SCHEMA-DRAFT.md`. Heads-up: the prototype is **stale vs the locks** (email/license on the wrong tables, no Path-B "new vs existing company" screen) — build to `SCHEMA-DRAFT.md` + `HANDOFF.md`, not the prototype code. Resolved the last open build-questions (edited `SCHEMA-DRAFT.md` only — you weren't touching it):
+**2026-06-06 — schema review applied to `SCHEMA-DRAFT` (fresh-eyes pass).** Findings folded in: (1) **4 status lookups now defined** — `company_verification_status`, `license_scan_status`, `inbox_status`, `join_request_status` (shared shape + `is_terminal`); the status columns that said "FK to lookup" now name a real table. (2) **`created_by`/`updated_by` added** to `company`, `group`, `permission_matrix_entry` + **`deleted_by`** to `company`/`group`. (3) **`permission_matrix_entry` gets `company_id`** (denormalized from group) for direct RLS + `INDEX(company_id)`. (4) **Deferred/noted:** optimistic-lock `version` (add when team editing ships). **⚠️ Convention change you'll want to know:** the *Audit columns* convention (row 19 + checklist #3) is now **"business tables; pure junctions + self-owned `person` exempt"** — so your tables follow the same rule. **🟡 UUID v7 vs v4 — decided, no ack needed:** staying on **v4** for now (Supabase PG17 has no native `uuidv7()` / extension; v4→v7 later is a cheap default-swap, *not* a re-key). Revisit on PG18 or when `audit_log` grows large. See `DECISIONS.md` 2026-06-06.
 
-- **B2** → new `hs_team_member` table (platform-level, no `company_id`; grant/revoke audited).
-- **B3** → `company.metadata.domain_collision` (sparse, HS-only review flag).
-- **B4** → reject reason *derived* from `audit_log`; resubmit auth-gated. No schema.
-- **Onboarding checklist** → derive "done"; only `dismissed` in `person.metadata`; "skipped" → future `analytics_event` (added to the Coming-later list).
+**2026-06-06 — `pending_inbox_item` locked (your 5 answers).** Folded your answers into the canon (`SCHEMA-DRAFT.md`): new `inbox_request_type` lookup (4 seeds: connect / connect_message / pricelist_request / deal_card); `pending_inbox_item` now has `type`, nullable `deal_card_id` (CHECK: only for the `deal_card` type), **single owner** `assigned_to` + `assigned_by` provenance (replaces `picked_up_by` / `picked_up_at`). **Status lookup changed** `pending_pickup/picked_up/rejected` → `pending/accepted/rejected` — "assigned" is derived from `assigned_to`, `picked_up` retired. Lenses + reassign rules recorded as locked notes on the table; `DECISIONS.md` open item marked resolved. **Visual (`schema-phase1-visual.html`) refreshed to match** (new lookup card + green inbox card, verified in the browser preview). **No shared files left locked.**
 
-- **Cleanups:** `person.is_superadmin` dropped → `person_group` is the single source of truth for Superadmin; contact tags = customer/supplier/partner/prospect/other (blank = unclassified, dropped 'unknown'); store permission *codes* not labels (EN/DE i18n); `email_integration` re-sync deferred (v0 = one-time import).
+**⚠️ Flag for you — `ARCHITECTURE-NOTES.md:23`** says `relationship` is created "at pickup / connect", but your locked model creates the C2C/P2P on **accept**, not on pickup (pickup is now ownership-only). Your file, your call — leave it, or reword to "at accept"?
 
-Only **B6** (2FA timing) remains open. **DECISIONS.md updated this wrap** (2026-06-06 — Phase-1 schema gaps + company category).
+**2026-06-06 (session 3) — company-category step is now in the prototype.** Added the business-category multi-select to `prototypes/phase-1-onboarding` (company-setup screen): `company_type` lookup (cultivator/wholesaler/importer/pharmacy) + `company_type_assignment` junction, written on company create, matching `SCHEMA-DRAFT`. The control is a click-to-open `<details>` dropdown (multi-select; closed bar shows picks). Generalized `loadDB` backfill so older saved state self-heals new tables. **No shared files left locked.** Commits `9c08c8c` + `ad69f8c`.
 
-Also this session: **synced my branch with dev** — your `src/` modular structure + `supabase/` + Connect/Deal docs/prototypes are now in my branch. Ran a **Phase-2/3 cross-check**: 11 Phase-1 tables are lock-ready; **`pending_inbox_item` needs `request_type` + `assigned_to`** (your Connect inbox design) before it locks — I'll send you 5 Qs to finalize it. New: **company business category** (Marcel) → `company_type` + `company_type_assignment` (multi-select, asked at setup; *not* buy/sell). Built a visual schema reference: `docs/architecture/schema-phase1-visual.html`.
+**Path B (join-existing) — build-deferral posture recorded in `DECISIONS.md` (2026-06-06).** We ship **Path A only** in v0; the `join_request` table + approval + screens are deferred (all additive later — a new table breaks nothing). **Two invariants we must honor in v0 code regardless — relevant to your `src/` + RLS work:** (1) `person.company_id` stays **nullable** and is read through ONE accessor (e.g. `currentCompany()`), not scattered; (2) **RLS must fail safe on a null `company_id`** (a company-less user sees only their own rows). Rationale: the company-less state already exists in the sign-in→company-setup window; Path B just makes it last longer.
 
-**Next session:** add the category step into the `phase-1-onboarding` prototype (sync-ritual first — shared); apply your answers → finalize `pending_inbox_item`; refresh the visual; then start migrations in `supabase/migrations/`.
+**Open design Q (adjacent to your Connect work):** where does a Superadmin review/approve pending join requests? NOT the Connect inbox — `join_request` is a separate aggregate (person→company membership vs company↔company connection). Noted in `DECISIONS.md`, not yet in Linear.
 
-Still on my list: A2 `email_encrypted` scan (PR #25); AWS Bedrock access.
+Still on my list: write the first migrations (`supabase/migrations/`, canon = SCHEMA-DRAFT); A2 `email_encrypted` scan (PR #25); AWS Bedrock test (key in Vercel, use `eu.` prefix).
 
-Going offline.
+Going offline — session 4 wrapped.
