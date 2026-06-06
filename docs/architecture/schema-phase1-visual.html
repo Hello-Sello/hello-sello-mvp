@@ -143,6 +143,7 @@
         <tr><td class="cn">verified_at</td><td class="ct">timestamptz · null</td><td class="note">When approved.</td></tr>
         <tr><td class="cn">verified_by <span class="tag t-fk">FK→person</span></td><td class="ct">uuid · null</td><td class="note">Which HS-team member approved it.</td></tr>
         <tr><td class="cn">metadata <span class="tag t-json">JSON</span></td><td class="ct">jsonb</td><td class="note">Holds the silent <code>domain_collision</code> flag + regulatory ids.</td></tr>
+        <tr><td class="cn">created_by / updated_by / deleted_by <span class="tag t-fk">FK→person</span></td><td class="ct">uuid · null</td><td class="note">Founding user / last editor / who soft-deleted.</td></tr>
         <tr class="dim"><td class="cn">created_at / updated_at / deleted_at</td><td class="ct">timestamptz</td><td class="note">Standard.</td></tr>
       </table>
       <div class="links"><b>Rejection reason?</b> Not a column — it's read from the <span class="arrow">audit_log</span> entry. <b>“type” (buyer/seller)?</b> Deliberately none — role is per-deal, not per-company.</div>
@@ -197,6 +198,20 @@
       <div class="links"><b>Asked at company setup</b> (multi-select). Powers “show all pharmacies” style filtering on Discover.</div>
     </div>
 
+    <div class="card lookup">
+      <div class="card-h">
+        <span class="badges"><span class="tag t-lookup">LOOKUP ×4</span></span>
+        <span class="name">status lookups</span>
+        <span class="what">Four tiny lookups for the status fields — <code>company_verification_status</code>, <code>license_scan_status</code>, <code>inbox_status</code>, <code>join_request_status</code>. Added 2026-06-06 (schema review) so every status field points at a real table.</span>
+      </div>
+      <table class="cols">
+        <tr><td class="cn">code <span class="tag t-pk">PK</span></td><td class="ct">varchar</td><td class="note">The stored value (e.g. <code>verified</code>, <code>accepted</code>).</td></tr>
+        <tr><td class="cn">description / sort_order</td><td class="ct">text / smallint</td><td class="note">EN/DE label off the code + display order.</td></tr>
+        <tr><td class="cn">is_terminal</td><td class="ct">boolean</td><td class="note">True = end state — “history” / “done” filters read this instead of hardcoding names.</td></tr>
+      </table>
+      <div class="links"><b>Used by:</b> <span class="arrow">company</span>, <span class="arrow">company_license_file</span>, <span class="arrow">pending_inbox_item</span>, <span class="arrow">join_request</span>.</div>
+    </div>
+
   </div>
 
   <!-- ===================== ROLES ===================== -->
@@ -214,6 +229,7 @@
         <tr><td class="cn">company_id <span class="tag t-fk">FK→company</span></td><td class="ct">uuid</td><td class="note">Owner.</td></tr>
         <tr><td class="cn">name / description</td><td class="ct">varchar / text</td><td class="note">“Sales Team”, etc.</td></tr>
         <tr><td class="cn">parent_group_id <span class="tag t-fk">FK→group</span></td><td class="ct">uuid · null</td><td class="note">Points at itself — for future nested teams.</td></tr>
+        <tr><td class="cn">created_by / updated_by / deleted_by <span class="tag t-fk">FK→person</span></td><td class="ct">uuid · null</td><td class="note">Who created / last edited / soft-deleted.</td></tr>
         <tr class="dim"><td class="cn">created_at / updated_at / deleted_at</td><td class="ct">timestamptz</td><td class="note"><span class="tag t-uniq">UNIQUE</span> name per company.</td></tr>
       </table>
       <div class="links"><b>Links:</b> belongs to a <span class="arrow">company</span>; people join via <span class="arrow">person_group</span>; abilities set in <span class="arrow">permission_matrix_entry</span>.</div>
@@ -243,9 +259,11 @@
       </div>
       <table class="cols">
         <tr><td class="cn">id <span class="tag t-pk">PK</span></td><td class="ct">uuid</td><td class="note">—</td></tr>
+        <tr><td class="cn">company_id <span class="tag t-fk">FK→company</span></td><td class="ct">uuid</td><td class="note">Tenant, copied from the group — lets RLS filter without a join.</td></tr>
         <tr><td class="cn">group_id <span class="tag t-fk">FK→group</span></td><td class="ct">uuid</td><td class="note">Which group.</td></tr>
         <tr><td class="cn">action <span class="tag t-fk">FK→permission_action</span></td><td class="ct">varchar</td><td class="note">The action <em>code</em> (e.g. <code>view_deals</code>) — not the label.</td></tr>
         <tr><td class="cn">granted</td><td class="ct">boolean</td><td class="note">Yes / no.</td></tr>
+        <tr><td class="cn">created_by / updated_by <span class="tag t-fk">FK→person</span></td><td class="ct">uuid · null</td><td class="note">Who set / last toggled the grant.</td></tr>
         <tr class="dim"><td class="cn">created_at / updated_at</td><td class="ct">timestamptz</td><td class="note"><span class="tag t-uniq">UNIQUE</span> per group+action.</td></tr>
       </table>
       <div class="links"><b>Links:</b> a <span class="arrow">group</span> × a <span class="arrow">permission_action</span>.</div>
