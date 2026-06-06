@@ -55,4 +55,16 @@ Consumed by Matt Pocock's `grill-with-docs` and `improve-codebase-architecture` 
 
 ---
 
+## Connect chat & deal sync (2026-06-06)
+
+| Term | Definition |
+|------|-----------|
+| **C2C chat** | Company-to-company chat. **Created at connection** (not deal-scoped) — the company-level notice board / audit record between two companies. *(Supersedes LAYER-1 §3's older "C↔C only inside a deal workspace" definition.)* |
+| **P2P chat** | Person-to-person chat between people at two connected companies. Private — content is never company-visible. Where people actually talk (mixed chatter + the occasional deal-affecting line). |
+| **Deal chat** | The chat thread inside a Deal Workspace. The deal's **ground truth / official record**, visible to deal participants. |
+| **Deal detection** | Sella spotting a deal-forming (or deal-changing) signal and asking **both** parties to confirm before acting (`deal_detected`). The deal is born — or changed — only on a two-party Yes. |
+| **Deal card log** | The append-only version history of a Deal Card (what changed, by whom, when, why). Lives on the **card back** behind a filter; feeds the audit log. |
+| **Deal change input** | Each party's **own note** captured when a deal changes (Sella takes input, does not author). Per-user evidence — "individual for individual user". |
+| **Audit log** | The running record of every system/Sella action. System messages in chat are **projections** of audit/log entries, not independent facts. |
+
 *Maintained by `grill-with-docs` (proposes additions during grilling — humans confirm) and direct edits. Add new terms when they're locked in Layer docs or surface during code review.*

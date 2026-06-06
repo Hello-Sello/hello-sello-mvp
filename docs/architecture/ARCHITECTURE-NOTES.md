@@ -155,3 +155,18 @@ When the formal Architecture doc is written (post Layer 4 + 5), these become its
 - **Buyer-metric field name** — the buyer's counterpart to the seller's `margin` on the Deal card — is **TBD**. *(2026-06-06.)*
 - **Clickable product thumbnail → product card** — each `deal_line_item` row's thumbnail will later open that product's own card; **not built yet**. *(2026-06-06.)*
 - **Multi-deal context in a P2P chat** (deal selector spanning several deals on one P2P) is **parked on Linear DEV-37**. *(2026-06-06.)*
+
+## Connect chat (screen ②): data model + P2P↔Deal sync (2026-06-06 later)
+
+Prototyped in `prototypes/chat-prototype` (decisions: DECISIONS.md `## 2026-06-06 (later)`; narrative: that folder's `CONTEXT.md`). Engineering shape to hand the `messaging` + `deals` modules.
+
+- **Chat spine (matches connect/inbox prototypes):** `relationship → chat_thread → chat_message`.
+  - `chat_thread { id, relationship_id, type: c2c | p2p | deal }`. C2C created at connection (company-level); P2P for substantive requests; a `deal` thread per confirmed deal (lives in the Deal Workspace). `scope` (company/person/deal) is **derivable from `type`** — no separate column.
+  - `chat_message { id, thread_id, sender, type, body }`. `sender ∈ {person, system, sella}`. System/Sella lines are `chat_message` rows with a `type` discriminator (`connection_established`, `deal_started`, `intro`, `deal_detected`, `workspace_created`, `deal_cancelled`, `deal_opened`, `deal_card_updated`). **No separate `system_message` table** — one vocabulary.
+- **Deal-card state is versioned, not overwritten:**
+  - `deal_card { id, version, value_net, status: confirmed|amended|cancelled, … }` — mutable current state.
+  - `deal_card_log { id, deal_card_id, version, change, by, … }` — **append-only** version history (the change story; lives on the card back; feeds audit).
+  - `deal_change_input { id, deal_card_id, version, party, note }` — **per-user evidence**: each party's own note on a change. This is the "individual for individual user" record; LAYER-1 §5's evidence-log made concrete.
+- **`audit_log { id, actor, action, target }`** — every system/Sella line mirrors here. **A `deal_card_updated` chat message is a *projection* of a log/audit entry, not an independent fact** — which is why a change made in the Deal chat updates the log without a broadcast (no second source to reconcile).
+- **Sync invariant:** chat messages are **never** copied between threads. The **`deal_card` is the only shared state** across P2P and Deal chat. A P2P (private) change crosses into the company-visible side **only** as a confirmed card delta + its per-user evidence + a system message; the deal card is the *published language* of that boundary.
+- **Two-party gate:** deal birth and (by the same pattern) deal changes are gated on both parties' confirmation; model the decision as per-party state so the audit log attributes who agreed / declined.
