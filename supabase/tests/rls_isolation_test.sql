@@ -51,6 +51,19 @@ VALUES ('ffffffff-ffff-ffff-ffff-ffffffffffff',
         'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee', 'Secret private task', 'negotiation',
         '11111111-1111-1111-1111-111111111111');
 
+-- seller-only column split: a product (GreenLeaf) + cost, a line item + per-side
+-- private metrics (seller margin = GreenLeaf, buyer metric = StonePharm).
+INSERT INTO deal_line_item (id, deal_card_id, version, product_name, quantity, unit, unit_price)
+VALUES ('99999999-9999-9999-9999-999999999999','cccccccc-cccc-cccc-cccc-cccccccccccc',1,'Flower',100,'g',5.0);
+INSERT INTO product (id, company_id, name)
+VALUES ('77777777-7777-7777-7777-777777777777','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','GL Flower');
+INSERT INTO product_cost (product_id, company_id, cogs)
+VALUES ('77777777-7777-7777-7777-777777777777','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',1.2345);
+INSERT INTO deal_line_item_private (deal_line_item_id, company_id, seller_margin)
+VALUES ('99999999-9999-9999-9999-999999999999','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',0.15);
+INSERT INTO deal_line_item_private (deal_line_item_id, company_id, buyer_metric)
+VALUES ('99999999-9999-9999-9999-999999999999','bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',0.10);
+
 -- ── ALICE (GreenLeaf) ────────────────────────────────────────────────────────
 SELECT set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', true);
 SELECT set_config('request.jwt.claims', '{"sub":"11111111-1111-1111-1111-111111111111","role":"authenticated"}', true);
@@ -64,6 +77,12 @@ BEGIN
     THEN RAISE EXCEPTION 'FAIL: Alice (rel member) should see the deal card'; END IF;
   IF (SELECT count(*) FROM thing) <> 1
     THEN RAISE EXCEPTION 'FAIL: Alice (workspace member) should see the private thing'; END IF;
+  -- column split: seller sees her cogs + margin, NOT the buyer metric
+  IF (SELECT count(*) FROM product_cost) <> 1
+    THEN RAISE EXCEPTION 'FAIL: seller should see her own product_cost'; END IF;
+  IF (SELECT count(*) FROM deal_line_item_private) <> 1
+     OR EXISTS (SELECT 1 FROM deal_line_item_private WHERE buyer_metric IS NOT NULL)
+    THEN RAISE EXCEPTION 'LEAK: seller should see only her margin row, not the buyer metric'; END IF;
 END $$;
 RESET ROLE;
 
@@ -88,6 +107,12 @@ BEGIN
     RAISE EXCEPTION 'LEAK: Bob inserted a product into GreenLeaf catalog';
   EXCEPTION WHEN insufficient_privilege THEN NULL;  -- expected: RLS blocked it
   END;
+  -- column split: buyer must NOT see GreenLeaf's cogs or the seller margin
+  IF (SELECT count(*) FROM product_cost) <> 0
+    THEN RAISE EXCEPTION 'LEAK: buyer saw % product_cost rows (cogs)', (SELECT count(*) FROM product_cost); END IF;
+  IF (SELECT count(*) FROM deal_line_item_private) <> 1
+     OR EXISTS (SELECT 1 FROM deal_line_item_private WHERE seller_margin IS NOT NULL)
+    THEN RAISE EXCEPTION 'LEAK: buyer should see only his metric row, not the seller margin'; END IF;
 END $$;
 RESET ROLE;
 
