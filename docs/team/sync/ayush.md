@@ -5,9 +5,9 @@
 
 ---
 
-**Last updated:** 2026-06-07 02:18 CEST
+**Last updated:** 2026-06-07 02:30 CEST
 **Branch:** claude/ayush/work
-**Status:** working (screen ④ locked + LAYER pass done; PR #40 open → `dev`)
+**Status:** offline (session wrapped — all 4 Connect atoms locked + LAYER pass done; PR #40 open). **Next: write the PRD** (June 11 Connect-demo MVP) → split into 2 Claude Code build tracks.
 **Linear issue in progress:** none (DEV-37 multi-deal stays parked, explicitly later)
 **Shared files locked:** none (canon docs + LAYER-1/LAYER-2 committed in `1c1c102` + `b825234`)
 **PR open:** [#40](https://github.com/HelloSello/hello-sello-mvp/pull/40) — Connect ④ Deal Workspace + LAYER reconciliation → `dev` (mergeable: clean; 9 files). PR #39 / screen ③ already merged.
