@@ -8,6 +8,11 @@
 
 ---
 
+> **⚙️ Build reconciliation — 2026-06-07 (session 12): this schema is APPLIED to Supabase (71 tables) + RLS.** Two deltas vs the design text below, made during the build (see DECISIONS.md session 12):
+> - **Seller-only column split (RLS can't hide columns):** `product.cogs` → new **`product_cost`** table; `deal_line_item.seller_margin` + `buyer_metric` → new **`deal_line_item_private`** table. Both per-side, RLS by owning `company_id`. So `product` and `deal_line_item` below **no longer carry those columns** — they live in the sibling tables.
+> - **Inline "Lookup: a/b/c" columns are now real lookup tables + FKs** (`chat_thread_type`, `chat_message_type`, `content_author` [shared by `chat_message.sender` + `deal_card_log.changed_by`], `payment_terms`, `incoterms`, `note_scope`, `relationship_status`, `deal_type`, `deal_line_unit`, `deal_change_origin`, `contact_role`, `contact_provider`, `permission_action`).
+> - Minor: `deal_artifact_category.code` is `VARCHAR(30)`. RLS policies + helpers live in `supabase/migrations/*_rls_policies.sql`; isolation test in `supabase/tests/`.
+
 ## Conventions (decide ONCE, apply to all tables)
 
 | Convention | Decision | Why |
