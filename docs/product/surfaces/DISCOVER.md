@@ -7,8 +7,17 @@ Find new suppliers globally, browse pre-populated companies (FLOWZ-style), and s
 ## Status
 
 - Depth: stub
-- Last updated: 2026-05-23
+- Last updated: 2026-06-07
 - Eventual depth: sketch
+
+## Visibility model (locked 2026-06-07)
+
+**Asymmetric, Instagram-style.** Discover lists the *selling* side by default and keeps the *buying* side private-but-findable.
+
+- **Listed by default = a company with a public shop.** If you present products/pricing publicly, you appear in the Discover directory (browsable, grouped by category/country).
+- **Everyone else = exact-search only.** A company without a public shop (e.g. a pharmacy acting purely as a buyer) is **not** shown in any list. It's only reachable if you know its name and search for it — and only if it's on the platform.
+- **Why:** sellers want to be found; buyers don't want to be cold-listed. Mirrors Marcel's note "list suppliers by category… no pharmacies shown first."
+- **Note:** "buyer" / "seller" is *not* a company flag (buy/sell is per-deal). The listing key is **"has a public shop"**, not a role.
 
 ## Who uses this surface and why
 
@@ -30,8 +39,13 @@ Find new suppliers globally, browse pre-populated companies (FLOWZ-style), and s
 
 ## Open questions
 
-- FLOWZ scrape gated on GDPR check (DEV-62)
-- Linear DEV-63 - UX details for "no auto-connect, smart suggestions on signup"
+Explored 2026-06-07 via `prototypes/discover-prototype/` (mock DB, 3 combination variants). Visibility rule locked (above); these stayed open — Discover paused here:
+
+- **Page structure undecided.** Discover does two jobs — a **supplier directory** (sellers→products, demand/supply toggle) and an **ad/social feed** (campaign calendar + posts). How they coexist is open: prototype mocks (A) tabs, (B) feed-first + rail, (C) unified scroll. No structure picked.
+- **Is demand-side in MVP?** The directory's "demand" toggle assumes companies can post what they *want to buy*. Confirm that's MVP, not just supply.
+- **Is the ad/social feed demo-scope or a fast-follow?** It's the heavier half (post templates, post types, calendar).
+- FLOWZ scrape gated on GDPR check (DEV-62) — affects `company.source` + consent posture.
+- Linear DEV-63 — UX for "no auto-connect, smart suggestions on signup".
 
 ## References to LAYER docs
 

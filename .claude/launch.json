@@ -12,6 +12,12 @@
       "runtimeExecutable": "python3",
       "runtimeArgs": ["-m", "http.server", "8011", "--directory", "docs/architecture"],
       "port": 8011
+    },
+    {
+      "name": "discover-prototype",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "8012", "--directory", "prototypes/discover-prototype"],
+      "port": 8012
     }
   ]
 }
