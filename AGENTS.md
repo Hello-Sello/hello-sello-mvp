@@ -120,6 +120,14 @@ If you're building and hit a doubt, go here:
 
 *(Updated at end of every session by whoever worked last.)*
 
+**2026-06-07 - Muskan (session 9 — Phase 2 schema review vs the PRD)**
+- Reviewed all 15 Phase 2 tables against the PRD (now source of truth) before migrations. Net change: tiny — one column swap + two stale-note fixes. Session-7/8 tables held up.
+- **Answered your two PRD action items:** (1) `deal_stage` seeds locked to your 5-stage template (`negotiation`/`compliance_quality`/`agreement`/`payment`/`fulfilment_delivery`); **dropped `domain`** — `thing` now groups by `stage` (NOT NULL), matching the PRD. **Stages = visible UI** (your prototype's "by domain" was a name-mismatch; PRD wins). (2) **O6 → workspace + deal chat born at Draft** (negotiation lives in the deal chat pre-confirm); fixed the stale `deal_card.thread_id` "at confirm" note.
+- **DEV-37 was misread in session 8** — it's *chat-organization* ("organized chat windows for multiple deals"), NOT multi-deal-per-workspace. **Workspace↔deal is a permanent 1:1.** Corrected in SCHEMA-DRAFT + DECISIONS + ARCHITECTURE-NOTES.
+- **Audit = log everything from day one** (full verb vocab seeded up front; every business write → `audit_log`). Deal visibility (chat + things + docs) moves in lockstep with the one `workspace_visibility` flag.
+- **Phase 2 is now final** except two known-deferred items: `buyer_metric` rename (placeholder ships) + `pricelist`/`product` column list (your blueprint CSVs are in `docs/product/blueprint/` — next schema session). Then write Phase 1 + Phase 2 migrations.
+- Full detail: DECISIONS.md 2026-06-07 session 9 + SCHEMA-DRAFT.md.
+
 **2026-06-07 - Ayush (Connect-demo PRD)**
 - New `docs/PRD/` folder: `connect-demo.md` (overview + 9-step acceptance script), `foundation.md` (Identity / Connections / Audit), `deal-flow.md` (Messaging / Deal Workspace / Sella).
 - Deal model locked across 3 layers: **status** `Draft → Confirmed` (demo stops here; `done` = Phase 3) · **stage** = 5-stage cannabis pipeline · **things** = per-stage checklist.

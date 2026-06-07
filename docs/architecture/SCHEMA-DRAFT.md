@@ -545,12 +545,12 @@ Per-entity status lists (convention: enums = lookup tables). **Shared shape:** `
 | `deal_confirmation_status` | `pending` · `confirmed` ✓ · `rejected` ✓ |
 | `workspace_visibility` | `company_wide` · `private` (both non-terminal — toggleable) |
 | `deal_member_role` | `owner` · `side_lead` · `member` (none terminal) |
-| `thing_domain` | `finance` · `logistics` · `delivery` (none terminal — display grouping) |
 | `thing_type` | `task` · `approval` · `document_upload` (none terminal — sub-kind) |
 | `thing_status` | `open` · `done` ✓ |
+| `deal_stage` | `negotiation` · `compliance_quality` · `agreement` · `payment` · `fulfilment_delivery` (sort 1–5; none terminal — pipeline position) |
 | `deal_artifact_category` | `delivery_note` · `invoice` · `proforma_invoice` · `contract` · `co_a` · `packing_list` · `certificate_of_origin` · `phytosanitary_cert` · `other` (none terminal — descriptive) |
 
-**Referenced by:** `company.verification_status` → `company_verification_status` · `company_license_file.scan_status` → `file_scan_status` · `relationship_artifact.scan_status` → `file_scan_status` · `deal_artifact.scan_status` → `file_scan_status` · `pending_inbox_item.status` → `inbox_status` · `join_request.status` → `join_request_status` · `deal_card.status` → `deal_card_status` · `deal_confirmation.status` → `deal_confirmation_status` · `relationship_term.status` → `relationship_term_status` · `deal_workspace.visibility` → `workspace_visibility` · `deal_member.role` → `deal_member_role` · `thing.domain` → `thing_domain` · `thing.type` → `thing_type` · `thing.status` → `thing_status` · `deal_artifact.category` → `deal_artifact_category`.
+**Referenced by:** `company.verification_status` → `company_verification_status` · `company_license_file.scan_status` → `file_scan_status` · `relationship_artifact.scan_status` → `file_scan_status` · `deal_artifact.scan_status` → `file_scan_status` · `pending_inbox_item.status` → `inbox_status` · `join_request.status` → `join_request_status` · `deal_card.status` → `deal_card_status` · `deal_confirmation.status` → `deal_confirmation_status` · `relationship_term.status` → `relationship_term_status` · `deal_workspace.visibility` → `workspace_visibility` · `deal_member.role` → `deal_member_role` · `thing.stage_code` → `deal_stage` · `thing.type` → `thing_type` · `thing.status` → `thing_status` · `deal_artifact.category` → `deal_artifact_category`.
 
 **Note on `deal_card_status`:** `done` is set by **app-layer** when both a `delivery_note` and an `invoice` artifact are present (non-deleted) on the deal workspace AND `deal_card.status = 'confirmed'`. Document-driven, no explicit "Done" click. Trigger lives in the upload Edge Function (not a DB trigger — see ARCHITECTURE-NOTES "app-layer vs DB trigger" 2026-06-07).
 
@@ -831,7 +831,7 @@ One per C2C channel (created at connection accept), one per P2P pair, one per co
 | `type` | VARCHAR(10) | NOT NULL | Lookup: `'c2c'` / `'p2p'` / `'deal'` |
 | `person_a_id` | UUID | NULL, REFERENCES `person(id)` | Only for `p2p` threads |
 | `person_b_id` | UUID | NULL, REFERENCES `person(id)` | Only for `p2p` threads |
-| `deal_card_id` | UUID | NULL, REFERENCES `deal_card(id)` | Only for `deal` threads; set when workspace spawns |
+| `deal_card_id` | UUID | NULL, REFERENCES `deal_card(id)` | Only for `deal` threads; set at **Draft** (the deal thread is born when the card is drafted, alongside the workspace — O6, session 9) |
 | `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
 | `deleted_at` | TIMESTAMPTZ | NULL | |
 
@@ -843,6 +843,8 @@ One per C2C channel (created at connection accept), one per P2P pair, one per co
 - `UNIQUE(relationship_id, person_a_id, person_b_id) WHERE type = 'p2p' AND deleted_at IS NULL` — one P2P per person-pair
 
 **Note:** `scope` (company/person/deal) is derivable from `type` — no extra column (Ayush's lock, 2026-06-06).
+
+**Visibility (RLS) — `deal` threads only (session 9):** a `deal` thread follows its deal's `deal_workspace.visibility` flag in lockstep with the deal's THINGS + artifacts — `company_wide` → both companies' employees read; `private` → active `deal_member` only. `c2c` and `p2p` threads keep their own relationship-/person-scoped visibility (not tied to any deal).
 
 **Indexes:**
 - `INDEX(relationship_id, type)`
@@ -885,7 +887,7 @@ Mutable current state of a deal. Versioned — every accepted change bumps `vers
 |---|---|---|---|
 | `id` | UUID | PK, NOT NULL, DEFAULT `gen_random_uuid()` | |
 | `relationship_id` | UUID | NOT NULL, REFERENCES `relationship(id)` | |
-| `thread_id` | UUID | NULL, REFERENCES `chat_thread(id)` | Set when workspace spawns (both parties confirm); NULL while draft |
+| `thread_id` | UUID | NULL, REFERENCES `chat_thread(id)` | Set at **Draft** — the workspace + deal chat are born the moment the card is drafted (O6 resolved session 9; negotiation happens in the deal chat before confirmation). Nullable only to break the create-order cycle in the birth transaction. |
 | `version` | INT | NOT NULL DEFAULT 1 | Bumped on every accepted change |
 | `status` | VARCHAR(20) | NOT NULL DEFAULT `'draft'`, REFERENCES `deal_card_status(code)` | Lookup: `'draft'` / `'withdrawn'` / `'confirmed'` / `'amended'` / `'cancelled'` |
 | `deal_type` | VARCHAR(10) | NOT NULL | Lookup: `'offer'` (seller-initiated) / `'order'` (buyer-initiated) |
@@ -1035,12 +1037,12 @@ Per-user evidence — each party's own note when a change is proposed. The "indi
 
 ### `deal_workspace`
 
-Layer B invited-only container for a deal's execution. Auto-created at `deal_card` birth (1:1 with `deal_card` v0; DEV-37 multi-deal-per-workspace deferred). Owns members, THINGS, deal-level artifacts. **Container concerns live here; agreement state stays on `deal_card`.** *(Locked 2026-06-07 session 8.)*
+Container for a deal's execution. **Born at `deal_card` Draft** (the workspace + deal chat exist from the moment the card is drafted, so negotiation has somewhere to live — O6, session 9). Visibility is **company-wide by default** (`private` collapses to invited members — session-8 flip). Owns members, THINGS, deal-level artifacts. **Container concerns live here; agreement state stays on `deal_card`.** **Permanent 1:1 with `deal_card`** — one workspace = one deal, always. (DEV-37 is a *chat-organization* issue — "organized chat windows for multiple deals" — NOT multi-deal-per-workspace; the earlier "relax the 1:1 later" note was a misreading, corrected session 9.) *(Locked 2026-06-07 session 8; birth-trigger + DEV-37 correction session 9.)*
 
 | Column | Type | Constraints | Notes |
 |---|---|---|---|
 | `id` | UUID | PK, NOT NULL, DEFAULT `gen_random_uuid()` | |
-| `deal_card_id` | UUID | NOT NULL, REFERENCES `deal_card(id)` | 1:1 in v0 |
+| `deal_card_id` | UUID | NOT NULL, REFERENCES `deal_card(id)` | Permanent 1:1 (one workspace = one deal) |
 | `owner_person_id` | UUID | NOT NULL, REFERENCES `person(id)` | Accountable dealmaker; on the initiating side |
 | `visibility` | VARCHAR(20) | NOT NULL DEFAULT `'company_wide'`, REFERENCES `workspace_visibility(code)` | `company_wide` (default — listed on Layer A + contents company-visible) / `private` (hidden from Layer A list + contents invited-only) |
 | `metadata` | JSONB | NOT NULL DEFAULT `'{}'` | Stage template id, owner-handoff hints |
@@ -1051,7 +1053,7 @@ Layer B invited-only container for a deal's execution. Auto-created at `deal_car
 | `deleted_at` | TIMESTAMPTZ | NULL | |
 
 **Constraints:**
-- `UNIQUE(deal_card_id) WHERE deleted_at IS NULL` — one workspace per card (v0; DEV-37 relaxes later)
+- `UNIQUE(deal_card_id) WHERE deleted_at IS NULL` — one workspace per card (permanent invariant)
 
 **Indexes:**
 - `INDEX(deal_card_id)` — primary lookup
@@ -1165,7 +1167,7 @@ Both handoffs use the same 3-layer enforcement as the owner-handoff invariant (R
 
 ### `thing`
 
-The visible work primitive in a `deal_workspace` — what needs to happen for the deal to execute. **Stages are scaffolding only (group + default-assignee); not a UI element.** Approval THINGS implement the e-signature gate that drives `deal_confirmation` rows. Document-upload THINGS reference uploaded `deal_artifact` rows. *(Locked 2026-06-07 session 8.)*
+The visible work primitive in a `deal_workspace` — what needs to happen for the deal to execute. **THINGS are grouped by `stage` — the 5-step deal pipeline shown across the top of the workspace (a visible UI element, per the PRD; supersedes the old DEV-24/34 "stages = invisible scaffolding").** Approval THINGS implement the e-signature gate that drives `deal_confirmation` rows. Document-upload THINGS reference uploaded `deal_artifact` rows. *(Locked 2026-06-07 session 8; stage-over-domain + stages-are-UI reconciled against the PRD 2026-06-07 session 9.)*
 
 | Column | Type | Constraints | Notes |
 |---|---|---|---|
@@ -1173,15 +1175,14 @@ The visible work primitive in a `deal_workspace` — what needs to happen for th
 | `deal_workspace_id` | UUID | NOT NULL, REFERENCES `deal_workspace(id)` | Parent workspace |
 | `title` | VARCHAR(200) | NOT NULL | Display label (e.g. "Upload delivery note") |
 | `description` | TEXT | NULL | Optional context |
-| `domain` | VARCHAR(20) | NOT NULL, REFERENCES `thing_domain(code)` | UI grouping — Finance / Logistics / Delivery |
 | `type` | VARCHAR(20) | NOT NULL DEFAULT `'task'`, REFERENCES `thing_type(code)` | `task` / `approval` / `document_upload` (v0) |
 | `status` | VARCHAR(20) | NOT NULL DEFAULT `'open'`, REFERENCES `thing_status(code)` | `open` / `done` (v0) |
-| `stage_code` | VARCHAR(30) | NULL, REFERENCES `deal_stage(code)` | Scaffolding — not UI; default-assignee logic. Seeds TBD (DEV-24/34). |
+| `stage_code` | VARCHAR(30) | NOT NULL, REFERENCES `deal_stage(code)` | The deal-pipeline stage this THING belongs to — the grouping primitive (UI, shown across the workspace top). 5 seeds below. *(Replaced the dropped `domain` column — session 9.)* |
 | `assignee_person_id` | UUID | NULL, REFERENCES `person(id)` | NULL = unassigned; can be from either side |
 | `due_at` | TIMESTAMPTZ | NULL | Optional deadline |
 | `linked_confirmation_id` | UUID | NULL, REFERENCES `deal_confirmation(id)` | Only for `type='approval'` — auto-marks THING done when row signed |
 | `linked_artifact_id` | UUID | NULL, REFERENCES `deal_artifact(id)` | Only for `type='document_upload'` — auto-marks THING done when artifact attached |
-| `sort_order` | SMALLINT | NOT NULL DEFAULT 0 | Display order within domain |
+| `sort_order` | SMALLINT | NOT NULL DEFAULT 0 | Display order within stage |
 | `completed_at` | TIMESTAMPTZ | NULL | |
 | `completed_by_person_id` | UUID | NULL, REFERENCES `person(id)` | |
 | `metadata` | JSONB | NOT NULL DEFAULT `'{}'` | Type-specific stash (signature method, file hints, etc.) |
@@ -1198,7 +1199,7 @@ The visible work primitive in a `deal_workspace` — what needs to happen for th
 - `CHECK ((type = 'document_upload') OR linked_artifact_id IS NULL)` — only doc-upload things link to artifact
 
 **Indexes:**
-- `INDEX(deal_workspace_id, domain, sort_order)` — primary Things-tab query (grouped by domain)
+- `INDEX(deal_workspace_id, stage_code, sort_order)` — primary Things-tab query (grouped by pipeline stage)
 - `INDEX(assignee_person_id, status) WHERE status = 'open'` — "my open things"
 - `INDEX(deal_workspace_id, type)` — find approval things etc.
 - `INDEX(linked_confirmation_id) WHERE linked_confirmation_id IS NOT NULL` — confirmation→thing reverse lookup
@@ -1212,14 +1213,18 @@ The visible work primitive in a `deal_workspace` — what needs to happen for th
 | New `deal_artifact` upload | Linked `document_upload` THING auto-marks `status='done'`; if category ∈ {`delivery_note`, `invoice`} → triggers card.status done-check (see deal_artifact) |
 | THING marked done manually | App-layer validates type-specific rules first (approval can't be force-done without signature) |
 
-**Lookups (4 new):**
+**Visibility (RLS) — lockstep with the workspace flag (session 9):**
+
+| Read | If `deal_workspace.visibility = 'company_wide'` → person.company_id ∈ relationship pair; if `'private'` → person is an active `deal_member`. (Same rule as `deal_artifact` + the deal `chat_thread` — a deal's things, docs, and chat all follow the deal's one visibility flag.) |
+| Insert / Update | Same as Read access. |
+
+**Lookups (3 new — `thing_domain` dropped session 9):**
 
 | Lookup | v0 seeds | Notes |
 |---|---|---|
-| `thing_domain` | `finance` (10) · `logistics` (20) · `delivery` (30) | Matches Ayush's prototype grouping |
 | `thing_type` | `task` (10) · `approval` (20) · `document_upload` (30) | Asana subtype pattern — single table, different rendering |
 | `thing_status` | `open` (10) · `done` (20, ✓ terminal) | v0 minimal; expand later (blocked, in_progress) |
-| `deal_stage` | TBD — seeds defined when stage system locks (DEV-24/34) | NULL allowed v0 |
+| `deal_stage` | `negotiation` (1) · `compliance_quality` (2) · `agreement` (3) · `payment` (4) · `fulfilment_delivery` (5) | The 5-step cannabis-B2B deal pipeline (Ayush's research, DEV-24/34). Status flips Draft→Confirmed at stage 3 (`agreement`); stages 4–5 are post-confirmation (Phase 3 execution). The grouping primitive for THINGS. |
 
 ---
 
@@ -1309,7 +1314,22 @@ Deal-scoped files — contracts, delivery notes, invoices, certificates of analy
 | ~~screen④~~ | ~~**`thing`** — visible work primitive~~ → **RESOLVED 2026-06-07 (session 8).** Single table with `type` discriminator (Asana subtype pattern) — `task` / `approval` / `document_upload`. Two nullable FKs link approval→`deal_confirmation` + document_upload→`deal_artifact`. Status: `open`/`done` v0. Stages = scaffolding only (NULL FK to `deal_stage` lookup; seeds TBD per DEV-24/34). See `thing` table above. | `thing` table + 4 lookups |
 | ~~screen④~~ | ~~**Deal-level artifact (Ayush's `artifact`)**~~ → **RESOLVED 2026-06-07 (session 8).** New `deal_artifact` clones `relationship_artifact` Storage pattern; **9 category seeds** including EU regulatory (phytosanitary_cert, certificate_of_origin, packing_list, proforma_invoice, co_a). PDF-only v0, 20 MB. **Done-flip lives in app-layer Edge Function** (not DB trigger) — single write path + better debuggability. `done` added to `deal_card_status`. See `deal_artifact` table above. | `deal_artifact` table + `deal_artifact_category` lookup + `done` in `deal_card_status` |
 | **Deferred** | **`buyer_metric` field name** — buyer's counterpart to seller's `margin` on `deal_line_item`. Still TBD; column ships as `buyer_metric` placeholder; rename later is a single ALTER. | `deal_line_item.buyer_metric` column name |
-| **Deferred** | **`pricelist` table shape** — Partially resolved 2026-06-07 (session 8): **structured rows in DB** + CSV blueprint (input) + manual entry; PDF dropped. Marcel sent Drive "Pricelist" spreadsheet 2026-06-07 with proposed columns + confirmed relationship-level custom pricelist deferred post-v0. **Still open:** exact column list (read Marcel's blueprint next session) + per-customer override workflow (Marcel raised this is needed but explicitly NOT v0 — deferred). MVP scope confirmed: **one standard company-wide pricelist** (per-customer override + DEV-41 Proposed→Applied workflow deferred post-v0). | New `pricelist` + `pricelist_item` tables — column list pending Marcel's blueprint |
+| **Deferred** | **`pricelist` table shape** — Partially resolved 2026-06-07 (session 8): **structured rows in DB** + CSV blueprint (input) + manual entry; PDF dropped. Marcel's blueprint CSVs **now in repo** (`docs/product/blueprint/` — `Pricelist - Sheet1.csv` + `Product list - Canadian Craft Info.csv`, committed `628dc88`). **Still open:** exact column list (design `product` + `pricelist` from the CSVs — next schema session) + per-customer override workflow (Marcel raised it; explicitly NOT v0). MVP scope: **one standard company-wide pricelist** (override + DEV-41 Proposed→Applied workflow deferred post-v0). | New `product` + `pricelist` tables — design from blueprint CSVs |
+
+### Session-9 reconciliation (2026-06-07 — Phase 2 review against the PRD)
+
+| # | Question | Affects |
+|---|---|---|
+| ~~R3~~ | ~~**`thing` grouping — `domain` vs `stage`**~~ → **RESOLVED 2026-06-07 (session 9).** PRD groups deal work by the **5-stage pipeline**, never by domain. Dropped `domain` column + `thing_domain` lookup; `stage_code` is now **NOT NULL** (the grouping primitive). `deal_stage` seeds filled (Ayush's research): `negotiation`/`compliance_quality`/`agreement`/`payment`/`fulfilment_delivery`. **Stages are now a visible UI element** (supersedes DEV-24/34 "scaffolding only"). | `thing.domain` dropped · `thing_domain` lookup dropped · `stage_code` NOT NULL · `deal_stage` seeded |
+| ~~O6~~ | ~~**When is `deal_workspace` born?**~~ → **RESOLVED 2026-06-07 (session 9).** **At Draft** — workspace + deal `chat_thread` are born the moment the card is drafted (PRD FR-D3/FR-M3; negotiation lives in the deal chat pre-confirmation). Already consistent with session-8 "auto-created at deal_card birth"; only the stale `deal_card.thread_id` "at confirm" note was corrected. | `deal_card.thread_id` + `chat_thread.deal_card_id` notes |
+| ~~DEV-37~~ | ~~**Does the 1:1 deal↔workspace relax later?**~~ → **RESOLVED 2026-06-07 (session 9). No.** DEV-37 (verified on Linear) is *chat-organization* ("organized chat windows for multiple deals"), **not** multi-deal-per-workspace. Workspace↔deal is a **permanent 1:1**. Session-8 "relax later" language + rationale removed. | `deal_workspace` 1:1 now permanent |
+| ~~R1~~ | ~~**Visibility propagation to deal children**~~ → **RESOLVED 2026-06-07 (session 9).** A deal's THINGS, `deal_artifact`, and `deal` chat thread all follow the one `deal_workspace.visibility` flag in lockstep (`company_wide`/`private`). Explicit RLS rules written for `thing` + deal `chat_thread`. | `thing` + `chat_thread` RLS |
+| ~~R4~~ | ~~**Audit vocabulary completeness**~~ → **RESOLVED 2026-06-07 (session 9). Log everything from day one** — comprehensive audit logging is a first-build requirement; full action-verb vocabulary seeded up front (not "added per feature"). Build rule: every business-table write also writes an `audit_log` row. | `audit_action_type` full seed + build rule |
+
+**Migration notes (R6 — for the migration author):**
+- **Soft-cycle FKs** `chat_thread.deal_card_id` ↔ `deal_card.thread_id`: create both tables first, then add these two FK constraints via `ALTER` (or `DEFERRABLE INITIALLY DEFERRED`). Both born together at Draft.
+- **`deal_line_item.product_id`** ships as nullable `UUID` **without** the FK constraint in Phase 2; add `ALTER … REFERENCES catalog_product(id)` in the Phase 3 migration once `product`/`catalog_product` lands. No backfill (existing NULLs stay valid).
+- **Topological create order** verified — see the wire diagram above; no blocking cycles.
 
 ---
 

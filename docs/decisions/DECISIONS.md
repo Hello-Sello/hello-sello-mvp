@@ -703,3 +703,25 @@ Ayush's screen ④ lock + PR #40 merge unblocked the four Deal-Workspace tables.
 - **Pricelist scope (re-clarified 2026-06-07 session 8 after Marcel's WhatsApp updates):** Marcel sent updated info confirming **(a)** structured rows in DB + CSV blueprint (input) + manual entry; PDF dropped; **(b)** relationship-level **custom pricelist** to override the company-wide default IS conceptually needed but explicitly **deferred post-v0** (Marcel: *"we are not doing this in v0"*); **(c)** he added a "Pricelist" spreadsheet to Drive with proposed columns + flagged the multi-pricelist case for UX review. v0 scope re-confirmed: **one standard company-wide pricelist** + DEV-41 Proposed→Applied workflow build deferred (the DEV-41 *decision* is locked 2026-05-20 — single-approver MVP — but the *implementation* sits behind v0). Exact column list pending — read Marcel's Drive blueprint next session.
 
 *Why record:* closes the 4 Phase 2 open schema questions for screen ④ (`deal_workspace`, `deal_member`, `thing`, `deal_artifact`). With these locked, the only remaining open items before writing Phase 1 + Phase 2 migrations are (1) the pricelist column list (Marcel's blueprint pending) and (2) the `buyer_metric` rename (non-blocking — placeholder ships v0). Visibility model flip is the load-bearing change here: it simplifies RLS, aligns with industry default, and supersedes the old two-layer-independent ARCHITECTURE-NOTES line 54. *Full table shapes in `docs/architecture/SCHEMA-DRAFT.md` → Phase 2 tables.*
+
+## 2026-06-07 (session 9) — Phase 2 schema review: stage-over-domain, workspace-at-Draft, DEV-37 correction, log-everything
+
+Holistic review of all 15 Phase 2 tables before writing migrations (checks R1–R6 + O6). PRD (`docs/PRD/`) is the source of truth; reconciled the session-8 schema against it.
+
+- **`thing` groups by `stage`, not `domain` — `domain` dropped.** The PRD organizes deal work by a 5-stage pipeline, never by domain. Session 8 had carried both a `domain` column (finance/logistics/delivery) and an empty `stage` — two grouping columns for one job. Resolution: keep `stage` (now NOT NULL, the real grouping), drop `domain` + `thing_domain` lookup. *Why:* one grouping concept, not two; the PRD's pipeline is the canonical organizer. (The review's earlier R3 instinct — "carry one grouping column, not two" — held; only the surviving column flipped once the PRD's stage definition replaced the stale DEV-31 "stages = finance/logistics/delivery".) The screen-④ prototype's domain-grouping is a superseded name-mismatch; PRD wins.
+
+- **`deal_stage` seeds locked (Ayush's research, DEV-24/34):** `negotiation` · `compliance_quality` · `agreement` · `payment` · `fulfilment_delivery` (sort 1–5). Status flips Draft→Confirmed at stage 3 (`agreement`); stages 4–5 are post-confirmation (Phase 3).
+
+- **Stages are now a visible UI element — supersedes DEV-24/34 "stages = invisible scaffolding".** The PRD shows the pipeline across the top of the workspace. *Why recorded:* a prior locked decision is reversed by the PRD; docs must agree.
+
+- **Deal Workspace + deal chat are born at Draft (resolves O6).** Negotiation happens inside the deal chat before confirmation, so the container must exist at Draft. Already consistent with session 8 ("auto-created at deal_card birth"); only the stale `deal_card.thread_id` note ("set when both confirm") was corrected to "set at Draft".
+
+- **DEV-37 correction — it's chat-organization, NOT workspace structure.** Session 8 misread DEV-37 as "multi-deal-per-workspace, relax the 1:1 later". The actual Linear issue (verified) is "create organized chat windows and logs for multiple deals" (a P2P/c2c chat concern, Chat project). Workspace↔deal is a **permanent 1:1**, not a v0 simplification. Removed the "relaxes later" language + the false rationale from the session-8 `deal_workspace` decision (the separate-table decision itself stands on its real reasons — container vs versioned-agreement separation).
+
+- **Audit: log everything from day one.** Comprehensive audit logging is mandatory in the first build (not "added per feature as they ship"). Full action-verb vocabulary seeded up front. *Why:* regulated industry; a missed event is unrecoverable, while an over-logged one is filterable (every action carries a `category`).
+
+- **Deal visibility moves in lockstep.** A deal's chat, to-dos, and documents all follow that deal's `workspace_visibility` flag (company_wide default / private = invited-only). Explicit RLS rule written for `thing` + the deal `chat_thread` (was unstated). Applies to the deal thread only; c2c/p2p threads keep their own scope.
+
+- **Migration notes (R6):** soft-cycle FKs (`chat_thread.deal_card_id` ↔ `deal_card.thread_id`) created post-table via ALTER; `deal_line_item.product_id` ships as nullable UUID without FK constraint until `catalog_product`/`product` lands in Phase 3.
+
+*Net schema change from the whole review: one column swap on `thing` (drop `domain`, require `stage`) + two stale-note fixes. No structural churn — the session-7/8 tables held up. Source of truth = PRD (`docs/PRD/`).*
