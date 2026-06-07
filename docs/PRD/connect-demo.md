@@ -145,12 +145,7 @@ Each step is a checkable requirement. The `FR-` and `SR-` tags point into the sp
 | O3 | Is the chat real-time or refresh-to-see? | **Resolved: real-time** (Supabase Realtime) for the chat. |
 | O4 | Which side initiates (seller = OFFER vs buyer = ORDER)? | **Resolved: seller-initiated OFFER** for the demo narrative (sets the `deal_type` label). |
 | O5 | Deal-workspace stages - count, customization, advancement, and how stages complete. | **Resolved.** Fixed **5-stage cannabis template**: Negotiation → Compliance & Quality → Agreement → Payment → Fulfilment & Delivery (researched from the German/EU medical-cannabis deal journey). Demo **builds + walks stages 1-3** with a **manual** advance marker; status flips **Draft → Confirmed at stage 3 (Agreement)**; stages 4-5 shown **greyed** (Phase 3). **Things** (per-stage work items) shown as a checklist, **not user-creatable**. The 5-stage list is the **template shared with Muskan** for the schema table. See [deal-flow.md](deal-flow.md) Block 4. |
-
-### Open - needs Muskan (schema owner)
-
-| # | Question | Why it matters |
-|---|---|---|
-| O6 | **When is the `deal_workspace` born - at Draft or at Confirmation?** This PRD says **at Draft** (the deal chat must exist for the two sides to negotiate before they confirm - this is what resolved O2). The earlier `deal_card.thread_id` note said "set when both confirm"; Muskan's session-8 `deal_workspace` table did not pin the birth trigger. | The whole negotiation-in-the-deal-chat flow (steps 5-7) depends on the workspace existing during Draft. If the schema births it only at confirmation, either the schema moves the trigger to Draft, or the demo negotiates in the c2c/p2p chat instead. Needs one decision with Muskan. |
+| O6 | When is the `deal_workspace` born - at Draft or at Confirmation? | **Resolved: at Draft** (schema session 9). The workspace + deal chat are born the moment Sella drafts the card, so negotiation has somewhere to live before confirmation. Locked in [SCHEMA-DRAFT.md](../architecture/SCHEMA-DRAFT.md): `deal_workspace` ("Born at `deal_card` Draft") + `deal_card.thread_id` ("Set at Draft"). Agrees with [LAYER-4 §3](../product/layers/LAYER-4-SELLA-BEHAVIOR.md) (workspace spawns on both-users-Accept) and FR-D3. The earlier `thread_id` "set when both confirm" note is superseded. |
 
 ### Deferred (post-demo, documented for direction)
 
