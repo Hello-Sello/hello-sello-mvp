@@ -14,7 +14,7 @@ Hello Sello is an **AI-native deal room for B2B** — a shared chat space betwee
 
 **Lead customer:** Canadian Craft (cannabis distributor) — launches fully on Hello Sello with 25 pharmacy partners. ~€150k GMV from month one.
 
-**Stage:** building MVP. ~25 days into design.
+**Stage:** design DONE. Build sprint active. Demo target: **June 11** (Canadian Craft, 25 pharmacies).
 
 **Category claim:** not a CRM, not a marketplace, not an ERP. A **Superspace** — an intelligent layer above whatever ERP/email/fax systems each company already runs. The moat is **neutrality** — the platform serves both sides of every deal from one shared room.
 
@@ -52,19 +52,22 @@ Files: `docs/product/surfaces/<NAME>.md`. Build strategy locked in `docs/decisio
 
 | Need | Path |
 |---|---|
+| **Codebase reference (file structure, conventions, TDD)** | **`docs/architecture/CODEBASE.md`** |
+| **Demo scope (6 blocks, in/out list, June 11)** | **`docs/architecture/connect-demo.md`** |
+| Screen designs + interaction spec (prototypes are the spec) | `prototypes/` |
+| Schema, tables, RLS | `supabase/` + `docs/architecture/SCHEMA-DRAFT.md` |
+| Domain glossary (term definitions) | `docs/architecture/CONTEXT.md` |
+| Why a decision was made | `docs/decisions/DECISIONS.md` |
 | Product design layers (horizontal) | `docs/product/layers/LAYER-*.md` |
 | Per-surface deep dives (vertical) | `docs/product/surfaces/<NAME>.md` |
 | Investor + customer pitch | `docs/product/PITCH.md` |
-| Domain glossary (term definitions) | `docs/architecture/CONTEXT.md` |
 | Engineering implications (running scratchpad) | `docs/architecture/ARCHITECTURE-NOTES.md` |
 | ADRs (full writeups of load-bearing decisions) | `docs/architecture/adr/` |
-| Decision log (one-line per lock) | `docs/decisions/DECISIONS.md` |
 | External research (GDPR, tools, market, technical) | `docs/research/` |
 | How we work together (branching, sync ritual, hygiene) | `docs/team/WORKFLOW.md` |
 | Team skill dictionary + protocols | `docs/team/SKILLS.md` |
 | Live cross-agent sync state | `docs/team/sync/{muskan,ayush}.md` |
-| External skill configs (Matt Pocock framework) | `docs/agents/` |
-| App code structure (modular monolith) | `src/`, `supabase/` |
+| App code structure (module boundaries, the one rule) | `src/README.md` |
 | Meeting notes | `docs/meeting-notes/` |
 | Personal session state | Each engineer's gitignored `CLAUDE.md` (at repo root) |
 
@@ -96,9 +99,49 @@ Personal work PRs to `dev`; `dev` merges to `main` on a cadence. Run the sync ri
 
 ---
 
+## When building - context routing
+
+If you're building and hit a doubt, go here:
+
+| Doubt | Go to |
+|---|---|
+| How should this file be named / where does it live? | `docs/architecture/CODEBASE.md` |
+| What's in scope for the demo? | `docs/architecture/connect-demo.md` |
+| What should this screen look like / how should it behave? | `prototypes/` — the locked screens are the spec |
+| What tables / fields exist? | `supabase/` + `docs/architecture/SCHEMA-DRAFT.md` |
+| What does a term mean (P2P, Deal, Artifact, etc.)? | `docs/architecture/CONTEXT.md` |
+| Why was this decision made? | `docs/decisions/DECISIONS.md` |
+| How does this module talk to another module? | `src/README.md` (the one rule: only through `index.ts`) |
+| What are the product rules for this flow? | `docs/product/layers/LAYER-*.md` + `docs/product/surfaces/<NAME>.md` |
+
+---
+
+## Session Checkpoint
+
+*(Updated at end of every session by whoever worked last.)*
+
+**2026-06-07 - Ayush (Connect-demo PRD)**
+- New `docs/PRD/` folder: `connect-demo.md` (overview + 9-step acceptance script), `foundation.md` (Identity / Connections / Audit), `deal-flow.md` (Messaging / Deal Workspace / Sella).
+- Deal model locked across 3 layers: **status** `Draft → Confirmed` (demo stops here; `done` = Phase 3) · **stage** = 5-stage cannabis pipeline · **things** = per-stage checklist.
+- **→ Muskan: your `deal_stage` seeds (TBD, DEV-24/34) = this 5-stage template.** Seeds (researched, German/EU medical-cannabis journey): `negotiation`, `compliance_quality`, `agreement`, `payment`, `fulfilment_delivery` (sort_order 1-5). Demo builds/walks 1-3; 4-5 greyed (Phase 3). Status flips Draft→Confirmed at stage 3 (`agreement`).
+- **? Needs your call (O6): is `deal_workspace` born at Draft or at Confirmation?** The PRD needs it at **Draft** - the two sides negotiate inside the deal chat *before* they confirm (this resolved O2). Your session-8 `deal_workspace` table didn't pin the birth trigger; the old `deal_card.thread_id` note said "at confirm".
+- Demo scope: manual stage advance + read-only Things checklist over your `thing` table. Auto-advance-when-Things-done engine + user-created stages/Things deferred post-demo.
+
+**2026-06-07 - Ayush (GitHub sync + docs wrap)**
+- All PRs merged to dev: #39, #40, #41, #42. Dev is clean. Branch: 0/0.
+- `gh` now authenticated (ayush1330) - PR management works from Claude Code.
+- AGENTS.md restructured: builder context routing table added (above), Session Checkpoint added.
+- README.md updated: statuses fixed, stage = build sprint.
+- No production code yet - `src/` empty, `supabase/migrations/` not applied.
+- **Muskan:** session 8 active - writing screen ④ tables. Files locked: SCHEMA-DRAFT, DECISIONS, ARCHITECTURE-NOTES.
+- **Ayush:** offline. Next = write PRD (June 11, 6 blocks from `connect-demo.md`) → divide build tracks.
+
+---
+
 ## Quick orientation for a fresh session
 
 1. Hello Sello = B2B AI deal room (German medical cannabis beachhead)
 2. Read your personal `CLAUDE.md` for current focus / what's next
-3. Cross-agent state in `docs/team/sync/` — check before editing any shared file
-4. Linear (workspace `hellosello`) for your assigned issues
+3. Check Session Checkpoint above for current build state
+4. Cross-agent state in `docs/team/sync/` — check before editing any shared file
+5. Linear (workspace `hellosello`) for your assigned issues
