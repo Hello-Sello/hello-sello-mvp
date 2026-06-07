@@ -5,12 +5,12 @@
 
 ---
 
-**Last updated:** 2026-06-07 00:24 UTC
+**Last updated:** 2026-06-07 00:26 UTC
 **Branch:** claude/muskan/work
-**Status:** working (session 7 — writing DECISIONS.md entry for the 3 relationship table locks; PR to follow)
+**Status:** working (session 7 — SCHEMA + DECISIONS landed; opening PR to dev)
 **Linear issue in progress:** none
-**Shared files locked:** `docs/decisions/DECISIONS.md`
-**PR open:** none (PR coming after DECISIONS entry committed)
+**Shared files locked:** none
+**PR open:** pending (opening claude/muskan/work → dev now)
 
 ---
 
