@@ -799,3 +799,59 @@ Built the app-layer foundation modules on top of Ayush's Task-1A scaffold. These
 - **`getUser()` over `getSession()` for server-side auth.** `getUser()` revalidates the JWT with the Supabase auth server; `getSession()` trusts the cookie as-is. On the server (where we resolve person/company), revalidation is the safer default.
 
 *Why record:* F5 is consumed by every module Ayush builds; the barrel-split and thin-audit decisions are the kind of thing a future developer would violate without knowing why (e.g. "why not just export everything from index.ts?" or "let me compute the hash in the helper for safety"). These locks prevent that drift.
+
+---
+
+## 2026-06-07 (session 15) — Auth screens (1b): theme resolution + build locks
+
+- **Auth-screen theme — LIGHT wins; the 2026-05-25 "dark auth" intent is superseded.** The onboarding prototype HANDOFF lock #2 (*"dark theme for auth screens, light in-app"*, 2026-05-25) **conflicted** with Task-1A's *"light-only for the demo; dark deferred"* (2026-06-07, this DECISIONS.md). **Muskan's call: light wins** — `/login`, `/signup`, `/onboarding` render on the light glass system like the rest of the app. *Why:* one theme to polish before June 11; the `@theme` token structure keeps dark a cheap post-demo add. Revisit dark (incl. the dark-auth idea) post-demo. *(Recorded so the conflict doesn't resurface — a dark mock for signup is **not** the current target.)*
+- **Auth chrome = conditional, not a route-group split.** `AppShell` renders bare (no rail / top-bar) on `/login` + `/signup` via a `usePathname` check (it is now a client component). Chose this over the canonical `(app)`/`(auth)` route-group split because the split would move Ayush's 8 surface pages mid-Connect-build (collision risk). The route-group split is the cleaner refactor for later.
+- **Post-signup landing = `/onboarding` placeholder (Path-B gate).** A fresh signup is authenticated but has `company_id = NULL`, so it lands on `/onboarding` (not the app). 1c (company setup) replaces the placeholder. Industry pattern: gated onboarding (Slack/Notion/Linear).
+- **Session proxy uses `getClaims()`, not `getSession()`.** The Next-16 `proxy.ts` refresh + route gate verifies the JWT signature (safe server-side); `getSession()` trusts the cookie and must not gate routes. (Consistent with the F5 `getUser()`-over-`getSession()` lock.)
+- **`signOut` uses `scope: 'local'`.** The button always clears the local session even if the remote revoke would fail (expired/invalid session); the redirect never waits on a network call that can error.
+- **Dropped the `/logout` GET route.** A GET that mutates is a smell; sign-out is a `<form>` server action. Placed in the rail's user-avatar menu.
+
+---
+
+## 2026-06-07 (Sella design) — Deal-Sella detection: runtime placement, tool contract, proposal flow
+
+Design session on how Deal-Sella's detection actually *runs* at build time. Layer 4 locks Sella's **behavior**; this locks the **build mechanics**. Build itself handed to Ayush / the F5 build session. All captured in `ARCHITECTURE-NOTES.md` "Sella runtime placement"; mirrored here as the load-bearing locks.
+
+- **Placement rule — data-triggered → background, person-waiting → app.** A Sella task kicked off by a DB change (new message, card version bump, doc upload) runs in a background runtime and must never sit in the user's request path (keeps Sella a non-blocking leaf). A task a user waits on-screen for (side-panel reply, "what's on my plate") runs in the Next.js app. **Tasks live in different homes; one choice does not bind the others.** *Why:* "where Sella lives" is really "where each *task's* trigger lives" — the model (Bedrock) is one shared brain; only the trigger code's home varies.
+- **Detection lives in a Supabase Edge Function.** Flow: new `chat_message` → DB webhook (async `pg_net`, non-blocking) → Edge Function → Claude Haiku with one `propose_deal_draft` tool over a rolling ~15–20-message window → writes a Draft suggestion → Supabase Realtime shows it live. Chosen over an in-Next.js background job because Vercel serverless can freeze post-response (unreliable for fire-and-forget).
+- **Suggest-only is structural, not a promise.** Sella is handed only *propose* tools — there is no `confirm`/`send` tool — so it cannot commit a deal by construction. Resolves the "Sella suggests, humans decide" guarantee at the tool layer.
+- **`propose_deal_draft` contract (S2):** `line_items[]` {name → `deal_line_item.name`, quantity+unit → `.volume`, unit_price, cultivar?, pzn?}, `currency` → `deal_card.currency`, one-line `summary` → `deal_card_log`. Required: name, quantity, unit_price, currency. `deal_type` not extracted (initiator-set; seller = OFFER per O4); `value_net` computed (qty × price). Maps 1:1 to schema columns — no glue layer.
+- **Proposal + both-sides votes live in the `deal_detected` message `metadata`** (the column is documented "Sella context, confirmation state") — **no new table**. Not `deal_confirmation` (that's the heavier final two-party *card* confirm). Promote to a `deal_proposal` table post-MVP only if the proposal grows a real lifecycle.
+- **Workspace birth = one atomic app-side transaction.** On both-accept, a single all-or-nothing transaction creates `deal_card` (Draft) + `deal_line_item` rows + `deal_workspace` + `deal` thread + `deal_member` rows + `workspace_created` system line + audit. The `deal_detected` message persists as the "proposed → both accepted" record.
+- **No detection cost gate for MVP.** Per-message Haiku ≈ $0.001 + prompt caching → the cheap rule/embedding pre-filter is a post-MVP scale optimization, not needed for the demo.
+
+**Open (build-phase) — RESOLVED 2026-06-08 (see next entry):** spawn-transaction internals (`deal_member` owner/side_lead auto-insert, the `thread_id`-nullable create-order cycle); Bedrock-from-Deno credential setup (`aws4fetch` SigV4 + Supabase Edge secrets, *not* the Vercel env keys).
+
+*Why record:* this is the design Ayush builds Sella against; the placement rule and the structural suggest-only guarantee are the kind of thing that gets violated silently (e.g. "let me just call Bedrock in the message handler" → chat blocks on AI). Grounded in research 2026-06-07 (function-calling extraction, Haiku pricing/caching, Supabase DB webhooks) + Layer 4 §3/§5. Also closes O6 in the connect-demo PRD.
+
+---
+
+## 2026-06-08 (Sella design) — Workspace-spawn transaction + Bedrock creds (closes the build-phase opens above)
+
+Follow-on session settling the two items the detection entry left open. Mirrored in `ARCHITECTURE-NOTES.md` ("Sella runtime placement") and the schema change in `SCHEMA.md` §8.
+
+- **Create-order is acyclic — no `thread_id` backfill.** The feared "thread_id-nullable cycle" does not exist: the FK is one-directional (`chat_thread.deal_card_id → deal_card`; `deal_card` carries no thread column). Fixed order, one all-or-nothing transaction: (1) `deal_card` → (2) `deal_line_item` → (3) `deal_workspace` → (4) `deal_member` → (5) `chat_thread` (type `deal`) → (6) `chat_message` `workspace_created` → (7) audit.
+- **Both founders become `owner` (one per side).** The two P2P chatters each get a `deal_member` row with `role = owner` — co-ownership, one per company side. `side_lead` stays in the enum but is NOT auto-assigned at birth (reserved for later delegation: a side's lead who isn't a full owner). `member` = colleagues added later.
+- **`deal_workspace.owner_person_id` REMOVED — ownership lives in `deal_member`.** A deal can have several owners (two leads + more), so a single-owner column can't hold the truth. Ownership = `deal_member` rows with `role = owner`; one source, unbounded count. *(Amends the locked Phase-2 `deal_workspace` table — see SCHEMA.md §8.)*
+- **Superadmin access = platform-wide RLS bypass, not a membership row.** The HS superadmin manages any deal via a bypass policy, never inserted as a `deal_member` on each deal (keeps every deal's people-list clean).
+- **P2P→deal continuity signpost.** On birth, the `deal_detected` message in the P2P thread updates to a "Deal created → open workspace" link into the new deal thread, so the two people don't lose the deal when it moves rooms.
+- **Bedrock-from-Deno creds = permanent key, least-privilege.** The detection Edge Function authenticates to Bedrock with a permanent IAM/Bedrock key in **Supabase Edge secrets** (not the Vercel env keys), scoped to **Bedrock-invoke on the `eu.` EU Claude models only**. Auto-expiring (12hr) keys + refresh machinery = post-MVP hardening. *(Build = Ayush.)*
+
+*Why record:* the owner-column removal changes a locked schema table; the co-owner + superadmin-via-RLS choices drive both the spawn transaction and the deal RLS policy. Grounded in SCHEMA.md §7/§8 (`deal_card` / `deal_workspace` / `deal_member`) + the placement rule from the entry above.
+
+---
+
+## 2026-06-08 (Sella design) — Multi-Sella architecture (DEV-11): MVP scope locked, orchestration deferred
+
+DEV-11 asks "are Personal / Seller / Buyer Sella distinct agents or one with context flavors?" + the framework choice. Split into what MVP actually needs vs what's deferred. Most of the §2 framing was already answered by locks scattered across Layer 4 + ARCHITECTURE-NOTES; this collects them into one architecture statement.
+
+- **The "5 Sellas" = ONE agent runtime, parameterized** by (data scope · persona shift · tool set + memory namespace) — not 5 services or codebases. Forced by already-locked facts: one base voice with role-fitted shifts (DEV-46), one Bedrock provider wrapper (4a), routing at the **interface layer** (§2/§5), and the side-Sella **reads** Deal-Sella's scope rather than two agents conversing (§2). Industry-aligned (2026 consensus: single-agent + tools is the default; add tools before agents; graduate to multi-agent only at clear limits — multi-agent helps parallel tasks but degrades sequential ones).
+- **MVP needs no agent architecture.** All 4 MVP Sella tasks (BUILD-PLAN Unit 4: 4a wrapper · 4b detect · 4c draft · 4d summarize) are **stateless single-shot Bedrock calls** behind the 4a provider wrapper, each with ≤1 structured-output tool. **No agentic loop, no orchestrator, no graph, no agent framework** (LangGraph / Bedrock Agents), **no RAG, no persistent memory.** Detection (built) is the reference shape.
+- **Deferred to post-MVP** (decide when the task is built, not now): multi-step agentic loops, multi-Sella co-activation runtime, RAG-backed Side-Sellas + memory/retention ([DEV-59](https://linear.app/hellosello/issue/DEV-59)), autonomy-ladder trust state (§4), any agent framework adoption. The locked *direction* to graduate from = **single-agent + function-calling tools**.
+
+*Why record:* retires the "5 agents?" framing of DEV-11 **for MVP** and prevents over-building (no one reaches for LangGraph / an orchestrator to run 4 stateless calls). DEV-11 itself stays **open** for post-MVP orchestration. Grounded in BUILD-PLAN Unit 4 (4a–4d all single-shot) + the locked detection design (2026-06-07/08 entries above) + the 2026 single-vs-multi-agent consensus.
