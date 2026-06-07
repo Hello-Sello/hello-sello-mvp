@@ -5,9 +5,9 @@
 
 ---
 
-**Last updated:** 2026-06-07 17:13 CEST
+**Last updated:** 2026-06-07 17:28 CEST
 **Branch:** claude/ayush/work
-**Status:** idle (build plan re-cut: Connect+Sella → Ayush, Foundation+Present/Discover → Muskan; shipped to dev)
+**Status:** offline (PRD + build plan session wrapped; next session = Task 1A, stand up the app shell UI-first)
 **Linear issue in progress:** none
 **Shared files locked:** none
 **PR open:** none — BUILD-PLAN PR merged to dev.
