@@ -114,7 +114,7 @@ License/certificate files uploaded at company setup. **File bytes live in a Supa
 | `original_filename` | VARCHAR(500) | NOT NULL | User's original filename (display only) |
 | `mime_type` | VARCHAR(100) | NOT NULL | Validated server-side via magic bytes |
 | `file_size_bytes` | BIGINT | NOT NULL | Validated ≤ 20 MB |
-| `scan_status` | VARCHAR(20) | NOT NULL DEFAULT `'pending'`, REFERENCES `license_scan_status(code)` | 'pending', 'clean', 'infected', 'scan_error' |
+| `scan_status` | VARCHAR(20) | NOT NULL DEFAULT `'pending'`, REFERENCES `file_scan_status(code)` | 'pending', 'clean', 'infected', 'scan_error' |
 | `description` | TEXT | NULL | Optional free-text from uploader (helps HS reviewer) |
 | `created_by` | UUID | NULL, REFERENCES `person(id)` | Uploader |
 | `updated_by` | UUID | NULL, REFERENCES `person(id)` | |
@@ -507,6 +507,12 @@ Universal append-only change-log for every audited business action. **Immutable*
 | `esignature.signed` | A user e-signed an approval | `esignature` |
 | `person.soft_deleted` | An entity was soft-deleted | `lifecycle` |
 | `person.gdpr_scrubbed` | PII was scrubbed for GDPR right-to-be-forgotten | `compliance` |
+| `relationship_term.proposed` | One side proposed a new agreed term | `lifecycle` |
+| `relationship_term.accepted` | The other side accepted a proposed term | `lifecycle` |
+| `relationship_term.rejected` | The other side rejected a proposed term | `lifecycle` |
+| `relationship_artifact.uploaded` | A relationship-level file was uploaded | `lifecycle` |
+| `relationship_artifact.downloaded` | A relationship-level file was downloaded | `access` |
+| `relationship_artifact.deleted` | A relationship-level file was soft-deleted | `lifecycle` |
 
 (More added per feature as they ship.)
 
@@ -520,7 +526,7 @@ Universal append-only change-log for every audited business action. **Immutable*
 | `description` | TEXT NOT NULL | Human-readable |
 | `target_table` | VARCHAR(50) NOT NULL | The table `content_id` usually points to |
 
-**MVP seed values:** 'company', 'person', 'pricelist', 'deal_card', 'person_group', 'group', 'permission_matrix_entry', 'pending_inbox_item' (more added as schema grows)
+**MVP seed values:** 'company', 'person', 'pricelist', 'deal_card', 'person_group', 'group', 'permission_matrix_entry', 'pending_inbox_item', 'relationship_note', 'relationship_term', 'relationship_artifact' (more added as schema grows)
 
 ---
 
@@ -531,13 +537,14 @@ Per-entity status lists (convention: enums = lookup tables). **Shared shape:** `
 | Table | `code` seeds (✓ = `is_terminal`) |
 |---|---|
 | `company_verification_status` | `pending` · `verified` ✓ · `rejected` ✓ |
-| `license_scan_status` | `pending` · `clean` ✓ · `infected` ✓ · `scan_error` ✓ |
+| `file_scan_status` | `pending` · `clean` ✓ · `infected` ✓ · `scan_error` ✓ |
+| `relationship_term_status` | `pending` · `accepted` ✓ · `rejected` ✓ |
 | `inbox_status` | `pending` · `accepted` ✓ · `rejected` ✓ |
 | `join_request_status` | `pending` · `approved` ✓ · `rejected` ✓ · `cancelled` ✓ |
 | `deal_card_status` | `draft` · `withdrawn` ✓ · `confirmed` · `amended` · `cancelled` ✓ |
 | `deal_confirmation_status` | `pending` · `confirmed` ✓ · `rejected` ✓ |
 
-**Referenced by:** `company.verification_status` → `company_verification_status` · `company_license_file.scan_status` → `license_scan_status` · `pending_inbox_item.status` → `inbox_status` · `join_request.status` → `join_request_status` · `deal_card.status` → `deal_card_status` · `deal_confirmation.status` → `deal_confirmation_status`.
+**Referenced by:** `company.verification_status` → `company_verification_status` · `company_license_file.scan_status` → `file_scan_status` · `relationship_artifact.scan_status` → `file_scan_status` · `pending_inbox_item.status` → `inbox_status` · `join_request.status` → `join_request_status` · `deal_card.status` → `deal_card_status` · `deal_confirmation.status` → `deal_confirmation_status` · `relationship_term.status` → `relationship_term_status`.
 
 ---
 
@@ -597,7 +604,7 @@ The questions every B2B schema must answer **before launch**. Wrong defaults her
 
 ## Phase 2 tables (in progress — 2026-06-07)
 
-**Status:** shapes locked from Ayush's chat prototype (`prototypes/chat-prototype`, locked 2026-06-06). Discussed + extended 2026-06-07. Tables for `relationship_note`, `pricelist` pending screen ③ (Relationship page).
+**Status:** shapes locked from Ayush's chat prototype (`prototypes/chat-prototype`, locked 2026-06-06). Discussed + extended 2026-06-07. Screen ③ tables locked 2026-06-07: `relationship_note`, `relationship_term`, `relationship_artifact`. `pricelist` shape pending Marcel (PDF vs CSV vs structured).
 
 **Wire diagram:**
 ```
@@ -643,7 +650,160 @@ Created when a `pending_inbox_item` is accepted (P↔C → P↔P transition). Pa
 - `INDEX(company_a_id)`, `INDEX(company_b_id)` — "all relationships for this company"
 - `INDEX(inbox_item_id)` — trace back to origin
 
-**Open:** full columns (per-side notes, agreed terms, custom pricelist) pending screen ③. `metadata` is the placeholder.
+**Open:** Custom per-relationship pricelist deferred post-v0; standard pricelist shape pending Marcel (PDF vs CSV vs structured). Per-side notes + agreed terms resolved → `relationship_note` + `relationship_term` (below).
+
+---
+
+### `relationship_note`
+
+Notes one company writes about a relationship. Either **team-visible** (whole company sees them) or **personal** (only the author sees them). One table + `scope` column — industry pattern (Salesforce, HubSpot). *(Locked 2026-06-07.)*
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | UUID | PK, NOT NULL, DEFAULT `gen_random_uuid()` | |
+| `relationship_id` | UUID | NOT NULL, REFERENCES `relationship(id)` | |
+| `company_id` | UUID | NOT NULL, REFERENCES `company(id)` | Which side wrote it — drives RLS (other side never sees) |
+| `scope` | VARCHAR(10) | NOT NULL, REFERENCES `note_scope(code)` | `'team'` / `'personal'` |
+| `body` | TEXT | NOT NULL | |
+| `metadata` | JSONB | NOT NULL DEFAULT `'{}'` | |
+| `created_by` | UUID | NULL, REFERENCES `person(id)` | Author |
+| `updated_by` | UUID | NULL, REFERENCES `person(id)` | |
+| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
+| `updated_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
+| `deleted_at` | TIMESTAMPTZ | NULL | |
+
+**Visibility (RLS):**
+- `scope = 'team'` → readable by anyone where `person.company_id = relationship_note.company_id`
+- `scope = 'personal'` → readable by **the author only** (`auth.uid() = created_by`); other teammates and Superadmins do NOT see personal notes
+- Other side of the relationship → never sees either (always filtered by `company_id` first)
+
+**Indexes:**
+- `INDEX(relationship_id, company_id)` — primary read path ("our notes on this relationship")
+- `INDEX(created_by)` — "my personal notes" filter
+
+**`note_scope` lookup:**
+
+| Column | Type | Notes |
+|---|---|---|
+| `code` | VARCHAR(10) PK | `team`, `personal` |
+| `description` | TEXT NOT NULL | EN/DE translated in app |
+| `sort_order` | SMALLINT NOT NULL DEFAULT 0 | |
+
+---
+
+### `relationship_term`
+
+Standing agreed terms at the relationship level — payment terms, incoterms, MOQ, exclusivity, etc. **Proposal/accept flow** mirrors `deal_confirmation`: one side proposes a row, the other side accepts or rejects. Accepted values act as defaults inherited by `deal_card`. *(Locked 2026-06-07.)*
+
+**Not redundant with `deal_card.payment_terms_code` / `incoterms_code`:** the relationship-level row is the **standing agreement** (currently in force, can change). The `deal_card` columns are a **frozen snapshot** of what was agreed for that specific deal — must stay independent so changing the standing agreement later doesn't silently rewrite past deals. Same pattern as `pricelist` → `deal_line_item.unit_price` snapshot.
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | UUID | PK, NOT NULL, DEFAULT `gen_random_uuid()` | |
+| `relationship_id` | UUID | NOT NULL, REFERENCES `relationship(id)` | |
+| `term_type_code` | VARCHAR(30) | NOT NULL, REFERENCES `agreed_term_type(code)` | Controlled key — avoids EAV anti-pattern |
+| `value` | TEXT | NOT NULL | Proposed/agreed value (`"NET30"`, `"5"`, `"DAP"`); UI validates per `agreed_term_type.value_format` |
+| `status` | VARCHAR(20) | NOT NULL DEFAULT `'pending'`, REFERENCES `relationship_term_status(code)` | `pending` / `accepted` / `rejected` |
+| `proposed_by_company_id` | UUID | NOT NULL, REFERENCES `company(id)` | Which side proposed |
+| `proposed_by_person_id` | UUID | NOT NULL, REFERENCES `person(id)` | Who proposed |
+| `proposed_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
+| `responded_by_person_id` | UUID | NULL, REFERENCES `person(id)` | Who accepted/rejected (NULL until response) |
+| `responded_at` | TIMESTAMPTZ | NULL | NULL until response |
+| `response_note` | TEXT | NULL | Optional rejection reason or accept comment |
+| `superseded_at` | TIMESTAMPTZ | NULL | Set when a newer accepted row replaces this one |
+| `superseded_by_id` | UUID | NULL, REFERENCES `relationship_term(id)` | Points to the replacement row |
+| `metadata` | JSONB | NOT NULL DEFAULT `'{}'` | |
+| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
+| `updated_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
+| `deleted_at` | TIMESTAMPTZ | NULL | |
+
+**Constraints:**
+- `UNIQUE(relationship_id, term_type_code) WHERE status = 'accepted' AND superseded_at IS NULL AND deleted_at IS NULL` — only **one in-force value** per term type per relationship
+- `CHECK ((responded_by_person_id IS NULL) = (responded_at IS NULL))` — responder + timestamp move together
+
+**Indexes:**
+- `INDEX(relationship_id, term_type_code)` — fetch a relationship's terms
+- `INDEX(relationship_id, status)` — show pending proposals on the UI
+- `INDEX(superseded_by_id)` — chain a term's history
+
+**State machine:**
+- `pending` → `accepted` (the responding side accepts; if a prior accepted row existed for the same term, that row gets `superseded_at = NOW()` and `superseded_by_id = new.id`)
+- `pending` → `rejected` (declined; previous in-force value stays in force)
+
+**`agreed_term_type` lookup:**
+
+| Column | Type | Notes |
+|---|---|---|
+| `code` | VARCHAR(30) PK | Controlled vocabulary |
+| `description` | TEXT NOT NULL | EN/DE translated in app |
+| `value_format` | VARCHAR(20) NOT NULL | UI input hint: `'enum'` / `'number'` / `'text'` / `'boolean'` |
+| `sort_order` | SMALLINT NOT NULL DEFAULT 0 | |
+
+**Seed values:**
+
+| code | value_format | Why |
+|---|---|---|
+| `payment_terms` | enum | Already used on `deal_card`; standing default for new deals |
+| `incoterms` | enum | Already used on `deal_card`; standing default for new deals |
+| `min_order_qty` | number | Common B2B clause |
+| `delivery_lead_time_days` | number | Common B2B clause |
+| `exclusivity` | text | Open-ended (region / channel / product) |
+
+New term types = INSERT into lookup, no migration.
+
+---
+
+### `relationship_artifact`
+
+Company-wide files attached at the relationship level — contracts, NDAs, certificates, signed letterheads. **Not** deal documents (those stay on the deal). Same Supabase Storage pattern as `company_license_file` (A3 lock 2026-05-28). *(Locked 2026-06-07.)*
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | UUID | PK, NOT NULL, DEFAULT `gen_random_uuid()` | |
+| `relationship_id` | UUID | NOT NULL, REFERENCES `relationship(id)` | |
+| `uploaded_by_company_id` | UUID | NOT NULL, REFERENCES `company(id)` | Which side owns/uploaded it |
+| `title` | VARCHAR(200) | NOT NULL | Display label |
+| `description` | TEXT | NULL | Optional context |
+| `category` | VARCHAR(30) | NULL, REFERENCES `artifact_category(code)` | Optional grouping |
+| `storage_path` | TEXT | NOT NULL | Key/path in Supabase Storage private bucket |
+| `original_filename` | VARCHAR(500) | NOT NULL | User's original filename (display only) |
+| `mime_type` | VARCHAR(100) | NOT NULL | Validated server-side via magic bytes |
+| `file_size_bytes` | BIGINT | NOT NULL | Validated ≤ 20 MB |
+| `scan_status` | VARCHAR(20) | NOT NULL DEFAULT `'pending'`, REFERENCES `file_scan_status(code)` | `pending` / `clean` / `infected` / `scan_error` |
+| `metadata` | JSONB | NOT NULL DEFAULT `'{}'` | |
+| `created_by` | UUID | NULL, REFERENCES `person(id)` | Uploader (person) |
+| `updated_by` | UUID | NULL, REFERENCES `person(id)` | |
+| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
+| `updated_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
+| `deleted_by` | UUID | NULL, REFERENCES `person(id)` | Who soft-deleted (pairs with `deleted_at`) |
+| `deleted_at` | TIMESTAMPTZ | NULL | |
+
+**Visibility (RLS):**
+- **Both sides** of the relationship can READ all artifacts (relationship-scoped = shared by definition).
+- **Only the `uploaded_by_company_id` side** can UPDATE / soft-delete its own artifacts.
+- No `personal` scope here — relationship artifacts are organizational.
+
+**Access control (file bytes):** Private bucket; RLS on `storage.objects` gates download. Short-lived signed URLs only. Every view/download logged to `audit_log` (`relationship_artifact.uploaded` / `.downloaded` / `.deleted`). Virus scan via Edge Function at upload boundary sets `scan_status`.
+
+**Indexes:**
+- `INDEX(relationship_id)` — fetch a relationship's artifacts
+- `INDEX(uploaded_by_company_id)` — "files we uploaded"
+- `INDEX(category)` — filter by type on UI
+- `INDEX(scan_status)` — "files pending/failed scan"
+
+**v0 file constraints:**
+- **MIME allowlist:** `application/pdf` only (v0). Expand to DOCX / XLSX later if Marcel asks.
+- **Size cap:** 20 MB per file (matches license file cap).
+
+**`artifact_category` lookup:**
+
+| Column | Type | Notes |
+|---|---|---|
+| `code` | VARCHAR(30) PK | Controlled vocabulary |
+| `description` | TEXT NOT NULL | EN/DE translated in app |
+| `sort_order` | SMALLINT NOT NULL DEFAULT 0 | |
+
+**Seed values:** `contract`, `nda`, `certificate`, `marketing`, `other`
 
 ---
 
@@ -866,9 +1026,12 @@ Per-user evidence — each party's own note when a change is proposed. The "indi
 |---|---|---|
 | ~~Q2~~ | ~~**`chat_thread` P2P uniqueness**~~ → **RESOLVED 2026-06-07.** `CHECK (person_a_id < person_b_id)` enforced at DB level; app sorts before insert. Same pattern as `relationship` table. | `chat_thread` constraint ✓ |
 | ~~Q3~~ | ~~**Two-party confirmation state**~~ → **RESOLVED 2026-06-07.** Dedicated `deal_confirmation` table — one row per party per version. `deal_card.status` gets `'withdrawn'` (initiator pulls back before other party responds — terminal). See `deal_confirmation` table above + DECISIONS.md 2026-06-07. | `deal_confirmation` table added |
-| TBD | **`buyer_metric` field name** — buyer's counterpart to seller's `margin` on the Deal card. Still TBD. | `deal_line_item.buyer_metric` column name |
-| screen③ | **`relationship_note`** — per-side private notes; shape pending screen ③ (Relationship page). | New table |
-| screen③ | **`pricelist`** (master / standard / custom-per-relationship) — three layers per DEV-1; shape pending screen ③. | New table(s) |
+| ~~screen③~~ | ~~**`relationship_note`** — per-side private notes~~ → **RESOLVED 2026-06-07.** One table + `scope` (`team`/`personal`); personal strictly author-only. Industry pattern (Salesforce/HubSpot). See `relationship_note` table above. | `relationship_note` table added |
+| ~~screen③~~ | ~~**Agreed terms (Ayush's `agreed_term`)**~~ → **RESOLVED 2026-06-07.** New `relationship_term` table with proposal/accept flow; `agreed_term_type` lookup avoids EAV anti-pattern. Standing-agreement values inherited as defaults by `deal_card` (frozen snapshot independent). 5 seeds: `payment_terms`, `incoterms`, `min_order_qty`, `delivery_lead_time_days`, `exclusivity`. See `relationship_term` table above. | `relationship_term` table added |
+| ~~screen③~~ | ~~**Relationship artifacts (Ayush's `artifact`)**~~ → **RESOLVED 2026-06-07.** New `relationship_artifact` table — same Supabase Storage pattern as `company_license_file`; `artifact_category` lookup; v0 = PDF only, 20 MB. Both sides read; uploader edits. See `relationship_artifact` table above. | `relationship_artifact` table added |
+| ~~rename~~ | ~~**`license_scan_status` reused for multiple file tables**~~ → **RESOLVED 2026-06-07.** Renamed `license_scan_status` → `file_scan_status` (generic; reused by `company_license_file` + `relationship_artifact` + future `pricelist`). No DB cost (no migrations written yet). | Status lookups + 2 FKs updated |
+| **Deferred** | **`buyer_metric` field name** — buyer's counterpart to seller's `margin` on `deal_line_item`. Still TBD; column ships as `buyer_metric` placeholder; rename later is a single ALTER. | `deal_line_item.buyer_metric` column name |
+| **Deferred** | **`pricelist` table shape** — PDF vs CSV vs structured rows. Pending Marcel. MVP scope: **one standard company-wide pricelist** (no relationship-level custom pricelist in v0). Relationship-level custom pricelist + DEV-41 proposed/applied sign-off deferred post-v0. | New `pricelist` table(s) — shape TBD |
 
 ---
 
