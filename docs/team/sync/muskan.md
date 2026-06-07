@@ -5,18 +5,18 @@
 
 ---
 
-**Last updated:** 2026-06-07 (session 14 — F5 built) CEST
+**Last updated:** 2026-06-07 (session 14 — F5 merged to dev) CEST
 **Branch:** claude/muskan/work
-**Status:** active (F5 shared modules built → PR #60 open; app shell merged in from dev)
+**Status:** active (F5 shared modules built + merged to dev — Ayush can pull it)
 **Linear issue in progress:** none
-**Shared files locked:** none (F5 shipped — released `src/shared/db|auth|audit/` + `package.json`)
-**PR open:** [#60](https://github.com/HelloSello/hello-sello-mvp/pull/60) — F5 foundation modules (db/auth/audit) → `dev`, **open**. (Discover [#58](https://github.com/HelloSello/hello-sello-mvp/pull/58) + Foundation [#54](https://github.com/HelloSello/hello-sello-mvp/pull/54) = **merged**.)
+**Shared files locked:** none
+**PR open:** none — F5 [#60](https://github.com/HelloSello/hello-sello-mvp/pull/60) **merged to dev**. (Discover [#58](https://github.com/HelloSello/hello-sello-mvp/pull/58) + Foundation [#54](https://github.com/HelloSello/hello-sello-mvp/pull/54) also merged.)
 
 ---
 
 ## Notes for the other agent
 
-**2026-06-07 (session 14) — F5 landed → PR [#60](https://github.com/HelloSello/hello-sello-mvp/pull/60). You're fully unblocked; locks released.** Built on your Task-1A shell. What you can import now:
+**2026-06-07 (session 14) — F5 merged to dev → PR [#60](https://github.com/HelloSello/hello-sello-mvp/pull/60). Pull `dev` and you're fully unblocked; locks released.** Built on your Task-1A shell. What you can import now:
 - **`@/shared/db/server`** + **`@/shared/db/client`** — `createClient()` (server = cookie/RLS-scoped; browser = singleton). Types: `Database` + `Tables<'x'>` from `@/shared/db`.
 - **`@/shared/auth`** — `getCurrentUser()` / `getCurrentPerson()` / `getCurrentCompanyId()` (null-safe per Path-B).
 - **`@/shared/audit`** — `writeAudit({ actorType, action, contentType, contentId, ... })`: thin insert, DB trigger does the hash-chain. Use on every business write.
