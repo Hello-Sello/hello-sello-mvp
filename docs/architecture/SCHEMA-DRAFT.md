@@ -513,8 +513,11 @@ Universal append-only change-log for every audited business action. **Immutable*
 | `relationship_artifact.uploaded` | A relationship-level file was uploaded | `lifecycle` |
 | `relationship_artifact.downloaded` | A relationship-level file was downloaded | `access` |
 | `relationship_artifact.deleted` | A relationship-level file was soft-deleted | `lifecycle` |
+| `product.created` | A catalog product was created | `lifecycle` |
+| `product.amended` | A catalog product was edited | `lifecycle` |
+| `product_batch.created` | A product batch (lot) was added | `lifecycle` |
 
-(More added per feature as they ship.)
+(More added per feature as they ship. `pricelist.published` / `pricelist.amended` already seeded above.)
 
 ---
 
@@ -526,7 +529,7 @@ Universal append-only change-log for every audited business action. **Immutable*
 | `description` | TEXT NOT NULL | Human-readable |
 | `target_table` | VARCHAR(50) NOT NULL | The table `content_id` usually points to |
 
-**MVP seed values:** 'company', 'person', 'pricelist', 'deal_card', 'person_group', 'group', 'permission_matrix_entry', 'pending_inbox_item', 'relationship_note', 'relationship_term', 'relationship_artifact', 'deal_workspace', 'deal_member', 'thing', 'deal_artifact' (more added as schema grows)
+**MVP seed values:** 'company', 'person', 'pricelist', 'pricelist_item', 'deal_card', 'person_group', 'group', 'permission_matrix_entry', 'pending_inbox_item', 'relationship_note', 'relationship_term', 'relationship_artifact', 'deal_workspace', 'deal_member', 'thing', 'deal_artifact', 'product', 'product_batch', 'product_buyer_code' (more added as schema grows)
 
 ---
 
@@ -1299,6 +1302,248 @@ Deal-scoped files — contracts, delivery notes, invoices, certificates of analy
 
 ---
 
+## Phase 2 tables — Product Catalog & Pricelist (v0)
+
+**Status:** locked 2026-06-07 (session 10) from Marcel's blueprint CSVs (`docs/product/blueprint/`). **Research-grounded** (cannabis seed-to-sale + CoA practice, web research session 10): cannabis = **one product → many batches**; every batch varies in lab-tested cannabinoids/terpenes even for the same cultivar, so the **label/advertised value (on `product`) ≠ the measured value (on `product_batch`)**. This is why Marcel's CSV shows THC twice on the product *and* again on the batch.
+
+**7 tables + 4 lookups.** Per-customer / per-relationship **pricing** is deferred post-v0 (MVP = one standard company-wide pricelist). The only per-buyer fact allowed in v0 is the buyer's *identifier* (`product_buyer_code`) — an identifier, not a price.
+
+**Catalog wire diagram:**
+```
+company (P1, supplier) ──owns──> product ──┬── product_batch ──< batch_terpene >── terpene (lookup)
+                                           │
+                                           ├── product_buyer_code >── relationship (P2)
+                                           │
+pricelist ──< pricelist_item >─────────────┘
+   │                                       │
+ (header, one standard list/company)   price snapshot → deal_line_item.unit_price (at deal time)
+```
+
+---
+
+### `product` (catalog master)
+
+The marketable product as the **supplier** defines it. Stable catalog identity + **label/advertised** cannabinoids (the "28" in "STR **28**/1"). Owned by one supplier company; shown to buyers. (Locked 2026-06-07 session 10.)
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | UUID | PK, NOT NULL, DEFAULT `gen_random_uuid()` | |
+| `company_id` | UUID | NOT NULL, REFERENCES `company(id)` | Supplier / owner |
+| `name` | VARCHAR(200) | NOT NULL | "Spirit Bear STR 28/1" |
+| `cultivar` | VARCHAR(120) | NULL | Strain — "Strawberry Meltshake" |
+| `supplier_product_code` | VARCHAR(60) | NULL | Supplier's own SKU — "CC_001" |
+| `local_code_pzn` | VARCHAR(30) | NULL | German Pharmazentralnummer (national pharmacy product number) |
+| `pack_size_grams` | NUMERIC(10, 2) | NULL | "Grams Pack" — 50 |
+| `unit_code` | VARCHAR(10) | NOT NULL DEFAULT `'g'`, REFERENCES `product_unit(code)` | g / mL / pack |
+| `bundle_description` | VARCHAR(60) | NULL | Free-text descriptor — "8x50g" |
+| `packaging_material` | VARCHAR(60) | NULL | "Mylar bag" |
+| `resealable` | BOOLEAN | NULL | |
+| `thc_percent` | NUMERIC(5, 2) | NULL | **Label/advertised** — measured value is per-batch |
+| `cbd_percent` | NUMERIC(5, 2) | NULL | **Label/advertised** |
+| `cbg_percent` | NUMERIC(5, 2) | NULL | **Label/advertised** |
+| `cbn_percent` | NUMERIC(5, 2) | NULL | **Label/advertised** |
+| `cultivator` | VARCHAR(120) | NULL | The grower — "Master Grower BC" (distinct from supplier company) |
+| `country_of_origin` | VARCHAR(80) | NULL | "Canada" |
+| `region` | VARCHAR(80) | NULL | "British Columbia" |
+| `lineage_parent_a` | VARCHAR(120) | NULL | Genetics — "Strawberry Jelly" |
+| `lineage_parent_b` | VARCHAR(120) | NULL | Genetics — "Strawberries & Cream" |
+| `dominance_code` | VARCHAR(20) | NULL, REFERENCES `strain_dominance(code)` | indica / sativa / hybrid / indica_dominant / sativa_dominant |
+| `irradiation_code` | VARCHAR(20) | NULL, REFERENCES `irradiation_type(code)` | beta / gamma / un_irradiated |
+| `cogs` | NUMERIC(15, 4) | NULL | 🔒 **Seller-only** — cost of goods sold; never exposed to buyer (RLS + app-layer policy, same pattern as `deal_line_item.seller_margin`) |
+| `rrp_per_gram` | NUMERIC(15, 4) | NULL | Recommended retail price reference (UVP) |
+| `visibility_start` | DATE | NULL | Window the product is sellable/shown |
+| `visibility_end` | DATE | NULL | |
+| `image_path` | VARCHAR(255) | NULL | Supabase Storage key (single image v0; multi-image `product_image` deferred) |
+| `metadata` | JSONB | NOT NULL DEFAULT `'{}'` | **Per-company custom columns** — CSV: "more columns should be able to be created flexibly per company" |
+| `created_by` | UUID | NULL, REFERENCES `person(id)` | |
+| `updated_by` | UUID | NULL, REFERENCES `person(id)` | |
+| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
+| `updated_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
+| `deleted_at` | TIMESTAMPTZ | NULL | |
+| `deleted_by` | UUID | NULL, REFERENCES `person(id)` | |
+
+**Constraints:**
+- `UNIQUE(company_id, supplier_product_code) WHERE deleted_at IS NULL` — a supplier's SKU is unique within their own catalog
+
+**Indexes:**
+- `INDEX(company_id)` — RLS / tenant filter
+- `INDEX(company_id, cultivar)` — catalog browse/filter
+
+**Sell prices are NOT here** — `price_per_gram` + bundle live on `pricelist_item` (one source of truth). `product` holds only the **intrinsic** money facts: `cogs` (seller's private cost) + `rrp_per_gram` (a reference).
+
+---
+
+### `product_batch` (per-lot CoA)
+
+Each physical lot of a product. Carries the **measured** Certificate-of-Analysis values — these vary lot to lot (industry research: deviations up to ~50% off label). One product → many batches. (Locked 2026-06-07 session 10.)
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | UUID | PK, NOT NULL, DEFAULT `gen_random_uuid()` | |
+| `company_id` | UUID | NOT NULL, REFERENCES `company(id)` | Supplier (denormalized for RLS) |
+| `product_id` | UUID | NOT NULL, REFERENCES `product(id)` | The product this lot is of |
+| `batch_number` | VARCHAR(60) | NOT NULL | "A123" |
+| `ready_for_sale_date` | DATE | NULL | |
+| `shelf_life_months` | SMALLINT | NULL | |
+| `expiry_date` | DATE | NULL | |
+| `loss_on_drying_percent` | NUMERIC(5, 2) | NULL | Moisture content (LoD); typical 6–13% |
+| `water_activity` | NUMERIC(4, 2) | NULL | aw — mold threshold < 0.65 |
+| `thc_percent` | NUMERIC(5, 2) | NULL | **Measured** (this lot) |
+| `cbd_percent` | NUMERIC(5, 2) | NULL | **Measured** |
+| `cbg_percent` | NUMERIC(5, 2) | NULL | **Measured** |
+| `cbn_percent` | NUMERIC(5, 2) | NULL | **Measured** |
+| `description` | TEXT | NULL | Free-text |
+| `metadata` | JSONB | NOT NULL DEFAULT `'{}'` | |
+| `created_by` | UUID | NULL, REFERENCES `person(id)` | |
+| `updated_by` | UUID | NULL, REFERENCES `person(id)` | |
+| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
+| `updated_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
+| `deleted_at` | TIMESTAMPTZ | NULL | |
+| `deleted_by` | UUID | NULL, REFERENCES `person(id)` | |
+
+**Constraints:**
+- `UNIQUE(company_id, batch_number) WHERE deleted_at IS NULL`
+
+**Indexes:**
+- `INDEX(product_id)`
+
+**Not the same as `deal_delivery` (Phase 3):** this is the supplier's **catalog** batch (what exists in inventory); `deal_delivery` is what was *shipped against a deal*. A delivery will later reference a `product_batch`.
+
+---
+
+### `terpene` (lookup)
+
+Controlled vocabulary feeding the batch terpene dropdown. Seeded from the CSV's reference list.
+
+| Column | Type | Notes |
+|---|---|---|
+| `code` | VARCHAR(40) PK | `myrcene`, `limonene`, `beta_caryophyllene`, … |
+| `name` | VARCHAR(60) NOT NULL | Display name |
+| `aroma_description` | TEXT NULL | "earthy, musky, mango" |
+
+**Seeds (23 from CSV):** myrcene, limonene, beta_caryophyllene, pinene, linalool, terpinolene, humulene, ocimene, bisabolol, nerolidol, eucalyptol, camphene, terpineol, geraniol, valencene, fenchol, borneol, phellandrene, sabinene, guaiol, delta_3_carene, pulegone (+ more added freely).
+
+---
+
+### `batch_terpene` (child)
+
+A batch's terpene profile — one row per terpene present. Variable count (research: profiles carry dozens), so a child table beats the CSV's fixed "Terpene #1/#2/#3" columns.
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | UUID | PK, NOT NULL, DEFAULT `gen_random_uuid()` | |
+| `product_batch_id` | UUID | NOT NULL, REFERENCES `product_batch(id)` | |
+| `terpene_code` | VARCHAR(40) | NOT NULL, REFERENCES `terpene(code)` | |
+| `percent` | NUMERIC(5, 2) | NULL | Concentration by weight |
+
+**Constraints:**
+- `UNIQUE(product_batch_id, terpene_code)` — one row per terpene per batch
+
+---
+
+### `product_buyer_code` (map)
+
+The buyer's **own internal code** for a supplier's product. Relationship-scoped (a buyer code is a fact about the supplier↔buyer relationship — Pharmacy Berlin and Pharmacy Potsdam each have their own). **Identifiers only — not pricing** — so it doesn't break the "no per-buyer pricing in v0" rule. Modeled as a map (not a column on `product`) because one product has many buyer codes; a column would force an extract-to-rows migration the moment a 2nd buyer appears. (Locked 2026-06-07 session 10.)
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | UUID | PK, NOT NULL, DEFAULT `gen_random_uuid()` | |
+| `product_id` | UUID | NOT NULL, REFERENCES `product(id)` | |
+| `relationship_id` | UUID | NOT NULL, REFERENCES `relationship(id)` | The supplier↔buyer relationship |
+| `code` | VARCHAR(60) | NOT NULL | Buyer's internal article number — "PHA-BB1" |
+| `created_by` | UUID | NULL, REFERENCES `person(id)` | |
+| `updated_by` | UUID | NULL, REFERENCES `person(id)` | |
+| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
+| `updated_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
+| `deleted_at` | TIMESTAMPTZ | NULL | |
+
+**Constraints:**
+- `UNIQUE(product_id, relationship_id) WHERE deleted_at IS NULL` — one buyer code per product per relationship
+
+---
+
+### `pricelist` (header)
+
+A supplier's published price list. **v0 = one standard company-wide list per company** (per-customer override deferred post-v0; DEV-41 Proposed→Applied workflow deferred). (Locked 2026-06-07 session 10.)
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | UUID | PK, NOT NULL, DEFAULT `gen_random_uuid()` | |
+| `company_id` | UUID | NOT NULL, REFERENCES `company(id)` | Supplier / owner |
+| `name` | VARCHAR(120) | NOT NULL | "Standard pricelist 2026" |
+| `status_code` | VARCHAR(20) | NOT NULL DEFAULT `'draft'`, REFERENCES `pricelist_status(code)` | draft / published |
+| `published_at` | TIMESTAMPTZ | NULL | Set on publish |
+| `currency` | CHAR(3) | NOT NULL DEFAULT `'EUR'` | ISO 4217 |
+| `metadata` | JSONB | NOT NULL DEFAULT `'{}'` | |
+| `created_by` | UUID | NULL, REFERENCES `person(id)` | |
+| `updated_by` | UUID | NULL, REFERENCES `person(id)` | |
+| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
+| `updated_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
+| `deleted_at` | TIMESTAMPTZ | NULL | |
+| `deleted_by` | UUID | NULL, REFERENCES `person(id)` | |
+
+**Indexes:**
+- `INDEX(company_id)`
+
+**Optimistic-lock `version INTEGER`** to be added when multi-user editing ships (already flagged in Conventions).
+
+---
+
+### `pricelist_item` (rows)
+
+One product's pricing on a pricelist.
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | UUID | PK, NOT NULL, DEFAULT `gen_random_uuid()` | |
+| `pricelist_id` | UUID | NOT NULL, REFERENCES `pricelist(id)` | |
+| `product_id` | UUID | NOT NULL, REFERENCES `product(id)` | |
+| `price_per_gram` | NUMERIC(15, 4) | NOT NULL | "Basic Price / g" |
+| `bundle_threshold_grams` | NUMERIC(12, 2) | NULL | Min qty to unlock bundle price ("Bundle Deal" — 2000) |
+| `bundle_price_per_gram` | NUMERIC(15, 4) | NULL | "Bundle Deal Price / g" |
+| `currency` | CHAR(3) | NOT NULL DEFAULT `'EUR'` | Matches `pricelist.currency` |
+| `metadata` | JSONB | NOT NULL DEFAULT `'{}'` | |
+| `created_by` | UUID | NULL, REFERENCES `person(id)` | |
+| `updated_by` | UUID | NULL, REFERENCES `person(id)` | |
+| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
+| `updated_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
+| `deleted_at` | TIMESTAMPTZ | NULL | |
+| `deleted_by` | UUID | NULL, REFERENCES `person(id)` | |
+
+**Constraints:**
+- `UNIQUE(pricelist_id, product_id) WHERE deleted_at IS NULL` — a product appears once per list
+
+**Indexes:**
+- `INDEX(pricelist_id)`
+
+**Snapshot link:** `deal_line_item.unit_price` is a frozen copy of `pricelist_item.price_per_gram` at deal time — changing the list later never rewrites past deals (same pattern as `relationship_term` → `deal_card`).
+
+---
+
+### Catalog lookups (4 new)
+
+| Lookup | Seeds |
+|---|---|
+| `product_unit` | `g` · `mL` · `pack` |
+| `strain_dominance` | `indica` · `sativa` · `hybrid` · `indica_dominant` · `sativa_dominant` |
+| `irradiation_type` | `beta` · `gamma` · `un_irradiated` |
+| `pricelist_status` | `draft` · `published` |
+
+Each lookup has the shared shape: `code` PK (VARCHAR) + display label translated in-app off `code`.
+
+---
+
+### Catalog — deferred post-v0 (additive, no migration penalty)
+
+| Item | When |
+|---|---|
+| Per-customer / per-relationship **pricing** ("Customer Price / g" column in the Pricelist CSV) | When custom pricelists land — new `relationship_pricelist` / item-override table |
+| Multi-image per product (`product_image` child) | When the catalog UI needs galleries; `product.image_path` covers single-image v0 |
+| DEV-41 pricelist Proposed → Applied workflow | Post-v0 |
+| `deal_line_item.product_id` → **real FK** to `product` | Now landable in this batch (see migration notes) |
+
+---
+
 ## Open questions — Phase 2 (decide before writing migrations)
 
 | # | Question | Affects |
@@ -1314,7 +1559,7 @@ Deal-scoped files — contracts, delivery notes, invoices, certificates of analy
 | ~~screen④~~ | ~~**`thing`** — visible work primitive~~ → **RESOLVED 2026-06-07 (session 8).** Single table with `type` discriminator (Asana subtype pattern) — `task` / `approval` / `document_upload`. Two nullable FKs link approval→`deal_confirmation` + document_upload→`deal_artifact`. Status: `open`/`done` v0. Stages = scaffolding only (NULL FK to `deal_stage` lookup; seeds TBD per DEV-24/34). See `thing` table above. | `thing` table + 4 lookups |
 | ~~screen④~~ | ~~**Deal-level artifact (Ayush's `artifact`)**~~ → **RESOLVED 2026-06-07 (session 8).** New `deal_artifact` clones `relationship_artifact` Storage pattern; **9 category seeds** including EU regulatory (phytosanitary_cert, certificate_of_origin, packing_list, proforma_invoice, co_a). PDF-only v0, 20 MB. **Done-flip lives in app-layer Edge Function** (not DB trigger) — single write path + better debuggability. `done` added to `deal_card_status`. See `deal_artifact` table above. | `deal_artifact` table + `deal_artifact_category` lookup + `done` in `deal_card_status` |
 | **Deferred** | **`buyer_metric` field name** — buyer's counterpart to seller's `margin` on `deal_line_item`. Still TBD; column ships as `buyer_metric` placeholder; rename later is a single ALTER. | `deal_line_item.buyer_metric` column name |
-| **Deferred** | **`pricelist` table shape** — Partially resolved 2026-06-07 (session 8): **structured rows in DB** + CSV blueprint (input) + manual entry; PDF dropped. Marcel's blueprint CSVs **now in repo** (`docs/product/blueprint/` — `Pricelist - Sheet1.csv` + `Product list - Canadian Craft Info.csv`, committed `628dc88`). **Still open:** exact column list (design `product` + `pricelist` from the CSVs — next schema session) + per-customer override workflow (Marcel raised it; explicitly NOT v0). MVP scope: **one standard company-wide pricelist** (override + DEV-41 Proposed→Applied workflow deferred post-v0). | New `product` + `pricelist` tables — design from blueprint CSVs |
+| ~~Deferred~~ | ~~**`pricelist` + `product` table shape**~~ → **RESOLVED 2026-06-07 (session 10).** Designed from Marcel's blueprint CSVs. **7 tables + 4 lookups** (see "Phase 2 tables — Product Catalog & Pricelist" section above): `product` (label values), `product_batch` (measured CoA — one product → many batches), `terpene` + `batch_terpene`, `product_buyer_code` (relationship-scoped buyer codes), `pricelist` + `pricelist_item`. Per-customer **pricing** deferred post-v0 (MVP = one standard company-wide list); buyer *identifiers* allowed in v0 via `product_buyer_code`. | New catalog tables added |
 
 ### Session-9 reconciliation (2026-06-07 — Phase 2 review against the PRD)
 
@@ -1328,7 +1573,7 @@ Deal-scoped files — contracts, delivery notes, invoices, certificates of analy
 
 **Migration notes (R6 — for the migration author):**
 - **Soft-cycle FKs** `chat_thread.deal_card_id` ↔ `deal_card.thread_id`: create both tables first, then add these two FK constraints via `ALTER` (or `DEFERRABLE INITIALLY DEFERRED`). Both born together at Draft.
-- **`deal_line_item.product_id`** ships as nullable `UUID` **without** the FK constraint in Phase 2; add `ALTER … REFERENCES catalog_product(id)` in the Phase 3 migration once `product`/`catalog_product` lands. No backfill (existing NULLs stay valid).
+- **`deal_line_item.product_id`** — `product` now lands in v0 (session 10), so create `product` **before** `deal_line_item` and ship the FK as a real `REFERENCES product(id)` in the same Phase 2 migration. (Note table name is `product`, not `catalog_product` — naming locked session 10.) Stays nullable (free-text products still allowed); no backfill.
 - **Topological create order** verified — see the wire diagram above; no blocking cycles.
 
 ---
