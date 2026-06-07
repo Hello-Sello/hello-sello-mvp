@@ -799,3 +799,14 @@ Built the app-layer foundation modules on top of Ayush's Task-1A scaffold. These
 - **`getUser()` over `getSession()` for server-side auth.** `getUser()` revalidates the JWT with the Supabase auth server; `getSession()` trusts the cookie as-is. On the server (where we resolve person/company), revalidation is the safer default.
 
 *Why record:* F5 is consumed by every module Ayush builds; the barrel-split and thin-audit decisions are the kind of thing a future developer would violate without knowing why (e.g. "why not just export everything from index.ts?" or "let me compute the hash in the helper for safety"). These locks prevent that drift.
+
+---
+
+## 2026-06-07 (session 15) — Auth screens (1b): theme resolution + build locks
+
+- **Auth-screen theme — LIGHT wins; the 2026-05-25 "dark auth" intent is superseded.** The onboarding prototype HANDOFF lock #2 (*"dark theme for auth screens, light in-app"*, 2026-05-25) **conflicted** with Task-1A's *"light-only for the demo; dark deferred"* (2026-06-07, this DECISIONS.md). **Muskan's call: light wins** — `/login`, `/signup`, `/onboarding` render on the light glass system like the rest of the app. *Why:* one theme to polish before June 11; the `@theme` token structure keeps dark a cheap post-demo add. Revisit dark (incl. the dark-auth idea) post-demo. *(Recorded so the conflict doesn't resurface — a dark mock for signup is **not** the current target.)*
+- **Auth chrome = conditional, not a route-group split.** `AppShell` renders bare (no rail / top-bar) on `/login` + `/signup` via a `usePathname` check (it is now a client component). Chose this over the canonical `(app)`/`(auth)` route-group split because the split would move Ayush's 8 surface pages mid-Connect-build (collision risk). The route-group split is the cleaner refactor for later.
+- **Post-signup landing = `/onboarding` placeholder (Path-B gate).** A fresh signup is authenticated but has `company_id = NULL`, so it lands on `/onboarding` (not the app). 1c (company setup) replaces the placeholder. Industry pattern: gated onboarding (Slack/Notion/Linear).
+- **Session proxy uses `getClaims()`, not `getSession()`.** The Next-16 `proxy.ts` refresh + route gate verifies the JWT signature (safe server-side); `getSession()` trusts the cookie and must not gate routes. (Consistent with the F5 `getUser()`-over-`getSession()` lock.)
+- **`signOut` uses `scope: 'local'`.** The button always clears the local session even if the remote revoke would fail (expired/invalid session); the redirect never waits on a network call that can error.
+- **Dropped the `/logout` GET route.** A GET that mutates is a smell; sign-out is a `<form>` server action. Placed in the rail's user-avatar menu.
