@@ -843,3 +843,15 @@ Follow-on session settling the two items the detection entry left open. Mirrored
 - **Bedrock-from-Deno creds = permanent key, least-privilege.** The detection Edge Function authenticates to Bedrock with a permanent IAM/Bedrock key in **Supabase Edge secrets** (not the Vercel env keys), scoped to **Bedrock-invoke on the `eu.` EU Claude models only**. Auto-expiring (12hr) keys + refresh machinery = post-MVP hardening. *(Build = Ayush.)*
 
 *Why record:* the owner-column removal changes a locked schema table; the co-owner + superadmin-via-RLS choices drive both the spawn transaction and the deal RLS policy. Grounded in SCHEMA.md §7/§8 (`deal_card` / `deal_workspace` / `deal_member`) + the placement rule from the entry above.
+
+---
+
+## 2026-06-08 (Sella design) — Multi-Sella architecture (DEV-11): MVP scope locked, orchestration deferred
+
+DEV-11 asks "are Personal / Seller / Buyer Sella distinct agents or one with context flavors?" + the framework choice. Split into what MVP actually needs vs what's deferred. Most of the §2 framing was already answered by locks scattered across Layer 4 + ARCHITECTURE-NOTES; this collects them into one architecture statement.
+
+- **The "5 Sellas" = ONE agent runtime, parameterized** by (data scope · persona shift · tool set + memory namespace) — not 5 services or codebases. Forced by already-locked facts: one base voice with role-fitted shifts (DEV-46), one Bedrock provider wrapper (4a), routing at the **interface layer** (§2/§5), and the side-Sella **reads** Deal-Sella's scope rather than two agents conversing (§2). Industry-aligned (2026 consensus: single-agent + tools is the default; add tools before agents; graduate to multi-agent only at clear limits — multi-agent helps parallel tasks but degrades sequential ones).
+- **MVP needs no agent architecture.** All 4 MVP Sella tasks (BUILD-PLAN Unit 4: 4a wrapper · 4b detect · 4c draft · 4d summarize) are **stateless single-shot Bedrock calls** behind the 4a provider wrapper, each with ≤1 structured-output tool. **No agentic loop, no orchestrator, no graph, no agent framework** (LangGraph / Bedrock Agents), **no RAG, no persistent memory.** Detection (built) is the reference shape.
+- **Deferred to post-MVP** (decide when the task is built, not now): multi-step agentic loops, multi-Sella co-activation runtime, RAG-backed Side-Sellas + memory/retention ([DEV-59](https://linear.app/hellosello/issue/DEV-59)), autonomy-ladder trust state (§4), any agent framework adoption. The locked *direction* to graduate from = **single-agent + function-calling tools**.
+
+*Why record:* retires the "5 agents?" framing of DEV-11 **for MVP** and prevents over-building (no one reaches for LangGraph / an orchestrator to run 4 stateless calls). DEV-11 itself stays **open** for post-MVP orchestration. Grounded in BUILD-PLAN Unit 4 (4a–4d all single-shot) + the locked detection design (2026-06-07/08 entries above) + the 2026 single-vs-multi-agent consensus.
