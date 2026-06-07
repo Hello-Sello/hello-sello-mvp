@@ -89,6 +89,23 @@ Consumed by Matt Pocock's `grill-with-docs` and `improve-codebase-architecture` 
 
 | Term | Definition |
 |------|-----------|
-| **Standing agreement vs frozen snapshot** | A system-wide pattern: the *current* value of something (a price, a payment term, a product detail) lives in **one source-of-truth table** that is mutable; any deal struck against it **copies (snapshots)** the value at strike time into its own row. Changes to the standing value never rewrite past deals. Examples on the platform: `pricelist` → `deal_line_item.unit_price` (price snapshot); `relationship_term` (standing payment terms) → `deal_card.payment_terms_code` (deal snapshot); future `catalog_product.name` → `deal_line_item.product_name` (denormalized snapshot). *Why it matters:* regulated industry — past deals must remain auditable in their original form even after upstream values evolve. *Spotting the pattern:* if two columns look "redundant," ask *"would changing one rewrite history on the other?"* — if yes, they're not redundant; they're a snapshot pair. |
+| **Standing agreement vs frozen snapshot** | A system-wide pattern: the *current* value of something (a price, a payment term, a product detail) lives in **one source-of-truth table** that is mutable; any deal struck against it **copies (snapshots)** the value at strike time into its own row. Changes to the standing value never rewrite past deals. Examples on the platform: `pricelist` → `deal_line_item.unit_price` (price snapshot); `relationship_term` (standing payment terms) → `deal_card.payment_terms_code` (deal snapshot); `product.name` → `deal_line_item.product_name` (denormalized snapshot). *Why it matters:* regulated industry — past deals must remain auditable in their original form even after upstream values evolve. *Spotting the pattern:* if two columns look "redundant," ask *"would changing one rewrite history on the other?"* — if yes, they're not redundant; they're a snapshot pair. |
+
+## Product catalog (2026-06-07 session 10)
+
+| Term | Definition |
+|------|-----------|
+| **Product** | A supplier's marketable catalog entry — stable identity (name, cultivar, genetics, packaging, codes) + **label/advertised** cannabinoids. Distinct from a batch. Owned by one supplier company. |
+| **Product batch (Lot)** | One physical lot of a product, carrying the **measured** Certificate-of-Analysis values. One product → **many batches**. |
+| **Label vs measured cannabinoids** | The advertised THC/CBD on the **Product** (the "28" in "STR 28/1") vs the lab-tested value on each **Batch**. They legitimately differ — cannabis is a plant; lab results deviate lot to lot. |
+| **Cultivar** | The strain / genetic variety ("Strawberry Meltshake"). A product property, not a batch one. |
+| **Terpene** | Aromatic compound; a batch's terpene profile is part of its CoA. Stored as a controlled-vocabulary lookup + per-batch rows. |
+| **Certificate of Analysis (CoA)** | Lab report of a batch's cannabinoids, terpenes, moisture, contaminants. *(Note: distinct from "CoA = Company A" above; the cert is also the `co_a` deal-artifact category.)* |
+| **COGS** | Cost of goods sold — the seller's private per-product cost. **Seller-only**, never shown to the buyer. |
+| **RRP / UVP** | Recommended retail price (reference), per gram. |
+| **PZN (Pharmazentralnummer)** | German national pharmacy product number — the `local_code_pzn`. |
+| **Irradiation** | Sterilisation treatment of cannabis flower (beta / gamma / un-irradiated). |
+| **Buyer product code** | The buyer's *own* internal code for a supplier's product — **per-buyer** (relationship-scoped), not shared on the product master. |
+| **Pricelist / Pricelist item** | A supplier's standard company-wide price list (header) + its per-product price rows (basic + bundle). v0 = one standard list per company; per-customer override deferred. |
 
 *Maintained by `grill-with-docs` (proposes additions during grilling — humans confirm) and direct edits. Add new terms when they're locked in Layer docs or surface during code review.*
