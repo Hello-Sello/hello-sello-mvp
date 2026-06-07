@@ -5,12 +5,12 @@
 
 ---
 
-**Last updated:** 2026-06-07 14:30 CEST
+**Last updated:** 2026-06-07 14:45 CEST
 **Branch:** claude/muskan/work
-**Status:** idle (session 8 wrapped — 4 screen ④ tables locked + visibility model flipped)
+**Status:** offline (session 8 wrapped — 4 screen ④ tables locked + visibility model flipped; PR #46 merged)
 **Linear issue in progress:** none
 **Shared files locked:** none
-**PR open:** [#41](https://github.com/HelloSello/hello-sello-mvp/pull/41) — schema(phase-2): lock 3 screen ③ relationship tables → `dev` (mergeable: clean). Session 8 schema commits on `claude/muskan/work` waiting to be folded into next PR.
+**PR open:** none — [#46](https://github.com/HelloSello/hello-sello-mvp/pull/46) merged to `dev` 2026-06-07.
 
 ---
 
