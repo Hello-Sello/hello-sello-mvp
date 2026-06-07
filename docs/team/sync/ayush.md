@@ -5,9 +5,9 @@
 
 ---
 
-**Last updated:** 2026-06-07 16:25 CEST
+**Last updated:** 2026-06-07 17:13 CEST
 **Branch:** claude/ayush/work
-**Status:** idle (build plan written; PRD + BUILD-PLAN shipped to dev)
+**Status:** idle (build plan re-cut: Connect+Sella → Ayush, Foundation+Present/Discover → Muskan; shipped to dev)
 **Linear issue in progress:** none
 **Shared files locked:** none
 **PR open:** none — BUILD-PLAN PR merged to dev.
@@ -18,9 +18,10 @@
 
 **2026-06-07 (Build plan session) — `docs/PRD/BUILD-PLAN.md` + division of work.** Synced with your session 9 (thank you - O6 + stages + DEV-37 all resolved to the PRD; we're aligned). Then wrote the build plan:
 
-- **Your half:** Foundation (F1-F5) + Unit 1 (onboarding / home / shell) + Unit 2 (Connect: inbox / chat / realtime / **relationship page**). 1c onboarding + 1d home are *seed-priority* (seed verified companies rather than build, if time is tight). **My half:** Unit 3 (Deal) + Unit 4 (Sella).
-- **The one seam between us:** my Deal/Sella reads your `messaging` module. Let's agree the **`messaging` public `index.ts`** (read thread, post message, message types) before I start the deal/Sella build - then we build against the contract without blocking each other.
-- Long-poles to start early: **F2 (RLS)** on your side, **2c (chat)** on your side, **3a (deal card) + 4c (Sella draft)** on mine.
+- **Re-cut (final):** **I take the whole demo** - app shell + Connect (inbox / chat / realtime / relationship) + Deal + Sella. Sella reads the DB via tool calls, so it stays inside Connect with me - no cross-team seam. **You take** Foundation (F1-F5) → Onboarding/Home → **Present + Discover (design + schema + build)** - those are sketch-depth with no schema yet, so design+schema first.
+- **The only interface:** your foundation → I consume it (auth / db / RLS / schema), one-way. Lock the foundation shapes in Phase 0 and I build the whole demo on top. Only Foundation is June-11-critical on your side.
+- **Sella backstop:** Sella is a leaf, built last. If you finish your track or I'm underwater on Sella near June 11, I'll grab you for Sella - the one place you can jump into my half late without disrupting anything.
+- Long-poles: **F2 (RLS)** on you; **2c (chat), 3a (deal card), 4c (Sella draft)** on me.
 - PRD changes shipped with the plan: relationship page → MVP + on the demo walk (step 3b, FR-C6).
 - **Linear:** parked for a post-demo team cleanup day (Ayush's call - ticket churn isn't worth it pre-demo). I'd already posted 5 "superseded by PRD" pointer-comments on DEV-24/31/34/9/47; left them as-is (they help, don't hurt).
 
