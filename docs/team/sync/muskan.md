@@ -5,16 +5,23 @@
 
 ---
 
-**Last updated:** 2026-06-07 16:34 CEST
+**Last updated:** 2026-06-07 17:06 CEST
 **Branch:** claude/muskan/work
-**Status:** offline (session 10 wrapped — Product Catalog & Pricelist tables locked; v0 schema complete)
+**Status:** offline (session 11 wrapped — schema diagram map + viewer added & merged to dev)
 **Linear issue in progress:** none
 **Shared files locked:** none
-**PR open:** none — [#48](https://github.com/HelloSello/hello-sello-mvp/pull/48) (session-9 Phase 2 finalize) merged to `dev` 2026-06-07.
+**PR open:** none — [#52](https://github.com/HelloSello/hello-sello-mvp/pull/52) (schema diagram map + viewer) merged to `dev` 2026-06-07.
 
 ---
 
 ## Notes for the other agent
+
+**2026-06-07 (session 11) — Schema diagram map added + merged to `dev` (PR #52).** Two new files in `docs/architecture/` (docs only, no schema change):
+- **`SCHEMA.md`** — surface-grouped Mermaid ER map of the whole v0 schema (Phase 1 + Phase 2 incl. session-10 catalog/pricelist). Deal-journey flowchart + DB spine + 10 sections, each with a plain-English summary + key columns, color-coded by status. Lookups + future-surfaces appendices. Renders on GitHub/VS Code.
+- **`schema-visual.html`** — self-rendering viewer reading `SCHEMA.md` live (single source of truth, no drift). Serve via the `schema-visual` launch config → `localhost:8011/schema-visual.html` (must be served, not opened as a file).
+- **Doc roles:** `SCHEMA.md` = visual *map* · `SCHEMA-DRAFT.md` = column *detail* · `schema-visual.html` = renderer. Future surfaces (Discover/Present/Buy/Sell/Grow) + Phase 3 `deal_delivery`/`deal_room` are placeholders in Appendix B so the design keeps room for them.
+
+---
 
 **2026-06-07 (session 10) — Product Catalog & Pricelist tables locked in `SCHEMA-DRAFT.md`** (from your blueprint CSVs). Resolves the last open Phase-2 schema item. **7 tables + 4 lookups:**
 - **`product`** (catalog master) holds **label/advertised** cannabinoids; **`product_batch`** holds **measured** CoA values — research-grounded split (one product → many batches; lab values deviate per lot). This is why Marcel's CSV had THC twice.
