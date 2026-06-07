@@ -41,3 +41,15 @@ _workshop/
 
 # Visual companion (brainstorming skill) - mockups persist here per session
 .superpowers/
+
+# --- Next.js / Node (app) ---
+/node_modules
+/.next/
+/out/
+/build
+/coverage
+*.tsbuildinfo
+next-env.d.ts
+.vercel
+*.pem
+npm-debug.log*
