@@ -50,7 +50,7 @@ The 9 demo steps the "Walk" column points to:
 
 | # | Item | Walk | MVP | Size | Status |
 |---|---|---|---|---|---|
-| 1b | Auth screens (sign in / up) | ○ | ✓ | S | 🔨 WIP |
+| 1b | Auth screens (sign in / up) | ○ | ✓ | S | 🧪 review |
 | 1c | Company onboarding (setup, license upload, verification) | ○ | ✓ *(seed for demo)* | M | |
 | 1d | Home / logged-in landing | ○ | ✓ *(seed for demo)* | S | |
 
