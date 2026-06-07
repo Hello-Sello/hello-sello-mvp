@@ -5,11 +5,11 @@
 
 ---
 
-**Last updated:** 2026-06-07 15:35 CEST
+**Last updated:** 2026-06-07 16:19 CEST
 **Branch:** claude/muskan/work
-**Status:** offline (session 9 wrapped — Phase 2 schema review done; tables finalized)
+**Status:** active (session 10 — designing `product` + `pricelist` catalog tables from Marcel's blueprint CSVs)
 **Linear issue in progress:** none
-**Shared files locked:** none
+**Shared files locked:** `docs/architecture/SCHEMA-DRAFT.md` (writing catalog tables — product/batch/pricelist)
 **PR open:** none — [#48](https://github.com/HelloSello/hello-sello-mvp/pull/48) (session-9 Phase 2 finalize) merged to `dev` 2026-06-07.
 
 ---
