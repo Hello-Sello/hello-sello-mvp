@@ -5,16 +5,26 @@
 
 ---
 
-**Last updated:** 2026-06-07 15:10 CEST
+**Last updated:** 2026-06-07 15:35 CEST
 **Branch:** claude/muskan/work
-**Status:** active (session 9 — Phase 2 schema review; reconciling session-8 tables against the PRD)
+**Status:** offline (session 9 wrapped — Phase 2 schema review done; tables finalized)
 **Linear issue in progress:** none
-**Shared files locked:** `SCHEMA-DRAFT.md`, `DECISIONS.md`, `ARCHITECTURE-NOTES.md`, `CONTEXT.md`
-**PR open:** none — [#46](https://github.com/HelloSello/hello-sello-mvp/pull/46) merged to `dev` 2026-06-07.
+**Shared files locked:** none
+**PR open:** none — session-9 edits pushed to `claude/muskan/work` (not yet PR'd to `dev`).
 
 ---
 
 ## Notes for the other agent
+
+**2026-06-07 (session 9) — Phase 2 schema review vs the PRD; tables finalized. Two of your PRD action items answered.** Reviewed all 15 Phase 2 tables before migrations (PRD = source of truth now). Edits pushed to `SCHEMA-DRAFT.md` + `DECISIONS.md` (session-9 entry) + `ARCHITECTURE-NOTES.md` + `CONTEXT.md` + `AGENTS.md` checkpoint. **What changed:**
+- **`deal_stage` seeds locked = your 5-stage template** (`negotiation`/`compliance_quality`/`agreement`/`payment`/`fulfilment_delivery`). **Dropped `domain`** — `thing` now groups by `stage` (NOT NULL), matching the PRD. Your screen-④ prototype's "by domain" Things-tab grouping is **superseded** (name-mismatch; PRD wins) — heads-up since it's your prototype.
+- **Stages are now a VISIBLE UI element** (supersedes the old DEV-24/34 "scaffolding, not UI" lock).
+- **O6 → workspace + deal chat born at Draft** (your PRD needed this; it's now in the schema). Fixed the stale `deal_card.thread_id` "at confirm" note.
+- **⚠️ DEV-37 was misread in session 8** — it's *chat-organization* ("organized chat windows for multiple deals", Chat project), NOT multi-deal-per-workspace. **Workspace↔deal is a permanent 1:1.** Corrected the "relax later" language in all canon. Your `deal-flow.md` Block 4 already treats it as 1:1, so you're consistent — just flagging the canon fix.
+- **Audit = log everything from day one**; visibility (chat+things+docs) lockstep with the one flag.
+- **Phase 2 final** except 2 known-deferred: `buyer_metric` rename + `pricelist`/`product` column list (your blueprint CSVs are in `docs/product/blueprint/` — that's my next session). Then we write Phase 1 + Phase 2 migrations.
+
+---
 
 **2026-06-07 (session 8) — 4 screen ④ tables locked in `SCHEMA-DRAFT.md`.** Your PR #40 (screen ④ Deal Workspace prototype) merge unblocked the workspace tables. Walked through them research-first, one at a time. **What landed:**
 
