@@ -9,7 +9,7 @@
 - How negotiation works
 - The multi-Sella agent architecture
 
-**Layer 1 does NOT cover:** the product surfaces (Connect / Present / Sell / Buy / Trade pages), inputs/outputs (chat, email, fax, ERP), or Sella's specific behaviors. Those come later.
+**Layer 1 does NOT cover:** the product surfaces (Connect / Present / Sell / Buy / Grow pages), inputs/outputs (chat, email, fax, ERP), or Sella's specific behaviors. Those come later.
 
 ---
 
@@ -25,6 +25,10 @@
 **Future (not MVP):**
 - Logistics partners as their own company type.
 - Adjacent businesses: packaging suppliers, lab supplies, raw materials, Food & Beverage distributors.
+
+> **DEV-3 — closed (2026-05-24).** Contact-import GDPR scope at account setup: **Option A — metadata only** (sender / recipient / timestamp / frequency). No subject lines, no email bodies, no third-party enrichment vendor. See DECISIONS.md Layer 1 walkthrough locks 2026-05-24 for full rationale; ARCHITECTURE-NOTES.md "Onboarding / data import" for engineering constraints.
+
+> **DEV-38 — closed (2026-05-24).** Every company must be **license-verified by the Hello Sello team** before they can interact with other companies. Pre-verification accounts are **locked out** with a wait dialog. Verification is one-time at MVP. See §12 (Safety & compliance posture).
 
 ---
 
@@ -63,20 +67,22 @@ Industry CRM pattern (Notion / Slack / Linear style) — sensible defaults at re
 ## 3. Identity layers
 
 > **DEV-7 — closed (2026-05-19).** P↔C contact lands on super-admin + designated salespeople as a ticket; first-contact Sella greets, qualifies, and requests docs (pre-pickup docs sit in a "pending inbox"); pickup formalizes the connection, activates the Relationship page, archives the P↔C, and opens a new P↔P chat. See Section 7 for the full flow.
+>
+> **UPDATED 2026-06-06/07:** P↔C is **retired** — folded into **C2C** (created at connection). The Relationship is created **at accept**, not "pickup" (pickup is ownership-only). First-contact doc collection is **deferred** (if built it lives in the Inbox; its docs land in the relationship's **Artifacts**). Section 7 below is the old P↔C flow and is superseded by this. See DECISIONS 2026-06-06.
 
 A user has two identities at once:
 - **Personal identity** (their own profile)
 - **Company identity** (the company they belong to)
 
-**Three kinds of conversations:**
+**Three kinds of conversations** *(UPDATED 2026-06-06 — the locked model is now **P2P / C2C / Deal**; P↔C is retired, folded into C2C. See DECISIONS 2026-06-06 + `prototypes/chat-prototype/CONTEXT.md`):*
 
 | Conversation type | Who sees it | When it's used |
 |---|---|---|
-| **Person ↔ Person** | Only the two people | Informal talk, including casual messages that may turn into deal talk |
-| **Person ↔ Company** | Super-admin + designated salespeople of the receiving company | First contact from outside (pricing request, connection request, or deal card). First-contact Sella greets and collects docs. On pickup, converts to a P↔P chat. See Section 7. |
-| **Company ↔ Company** | Only people invited to that specific deal | **Only exists inside a deal workspace.** Created when the workspace is created (at deal-card birth). Tied to ONE specific deal. There is no general C↔C chat outside a deal. |
+| **P2P — Person ↔ Person** | Only the two people (private; never company-visible) | Informal talk, including casual messages that may turn into deal talk |
+| **C2C — Company ↔ Company** | Company-level — people on both connected companies | **Created at connection** (every accepted connect). The company-level notice board / audit record between two companies. *Replaces the old P↔C first-contact chat — that case is folded into C2C.* |
+| **Deal chat** | Only people invited to that specific deal | Lives **inside a deal workspace**, tied to ONE deal — the deal's ground truth / official record. *(This is the old "C↔C only inside a workspace"; that scoped chat is now the Deal chat.)* |
 
-**Important correction we locked in:** company-to-company chat is **NOT** broadcast to all colleagues. It is scoped to **only the people invited to that specific deal**.
+**Scope note:** the **Deal chat** (not C2C) is the one scoped to invited deal participants only. **C2C** is company-level (both companies' people), created at connection — it is *not* deal-scoped.
 
 ---
 
@@ -88,16 +94,19 @@ A user has two identities at once:
 >
 > **DEV-41 — closed (2026-05-20).** Permissions on each content type locked — see the Permissions table below.
 
-A real, first-class object. **Created the moment a P↔C ticket is picked up** (= the moment two companies first connect — see Section 7). Once created, persistent forever.
+> **UPDATED 2026-06-07 (screen ③ lock):** reached from a **P2P or C2C chat** (one page, two doors); **no person-level relationship page**. **No `Relationship`/`Deals` sub-nav tabs** (deals → a future Grow/Trade surface). See DECISIONS 2026-06-07 + `prototypes/relationship-prototype/CONTEXT.md`.
 
-**Pre-pickup activity** (initial P↔C messages + docs that first-contact Sella collected) lives in a temporary **pending inbox** tied to the receiving company. On pickup, the pending inbox **migrates onto the freshly-created Relationship page**.
+A real, first-class object. **Created when a connection is accepted** (= the moment two companies first connect). Once created, persistent forever. *(Earlier wording said "at P↔C pickup"; under the retired-P↔C model the trigger is **accept** — pickup is ownership-only.)*
 
-**What lives on the Relationship page:**
-- **Notes** — **per-side, not shared**. CoA has their own notes about CoB; CoB has their own notes about CoA. Each side's notes are visible only to that side.
+**First-contact documents** (a buyer's licence/certs gathered at first contact) land in the relationship's **Artifacts**. *(The old "pending inbox migrates onto the page" pipe assumed the retired P↔C type and is **deferred** — if built it lives in the Inbox; see §7.)*
+
+**What lives on the Relationship page** *(two altitudes — relationship-level lives here; deal-level lives on the card / in the deal):*
+- **Notes — two kinds:** a per-side **team note** (business, visible to your own company) **+** a per-user **personal note** (private to the individual — relationship upkeep). CoA's team note is visible to CoA only.
 - **Agreed terms** — visible to both sides (mutually-agreed; edit workflow deferred)
-- **Custom pricelist** — the seller's pricelist customized for this buyer; visible to both sides
-- **Full history of all deals** between the two companies (governed by §11.2 visibility model)
-- **Sella's insights** about the relationship (system-generated by Deal-Sella)
+- **Custom pricelist** — the seller's pricelist customized for this buyer; visible to both sides (seller writes, sign-off gated)
+- **Deal history** — all deals between the two companies, behind a **Deals** entry → filterable `All / Active / Old / Cancelled` → each deal's workspace (governed by §11.2 visibility model)
+- **Sella's insight + Analytics + Activity log** about the relationship (relationship-level; each opens for more in a dialog)
+- **Artifacts** — shared company-wide documents (licences, contracts, certs); deal-wise docs stay in the deal
 
 **Permissions on Relationship-page content (locked 2026-05-20, DEV-41):**
 
@@ -122,13 +131,16 @@ The same underlying record carries products / volumes / prices / discounts / pay
 
 **Front of the card:** the deal facts. Products, volumes, prices, discounts, free delivery, payment terms, notes.
 
-**Back of the card (flip):** **SIGNALS** — Deal-Sella-generated insights about the deal. Starting MVP set (extensible):
+**Back of the card (flip):** **SIGNALS** — Deal-Sella-generated insights about the deal.
 
+**MVP set (live-computed from underlying tables):**
 1. When was the deal created
+3. Product expiry risk (COA expires in X days)
+
+**Phase 2 (added as platform data / batch tracking accumulates):**
 2. Typical close time between these two companies (fallback to platform-wide benchmark if no A↔B history yet)
-3. Product expiry risk
 4. Repeat buy/sell pattern (suggest stocking / re-ordering for business continuity)
-5. Low product availability (suggest stocking more)
+5. Low product availability (suggest stocking more) — *depends on batch allocation landing (LAYER-2 §105)*
 6. Logistics-cost bundling opportunity
 7. Collaborative business insight (Choco-AI-inspired)
 8. Other AI suggestions (extensible)
@@ -137,28 +149,30 @@ The same underlying record carries products / volumes / prices / discounts / pay
 - **Flip** button (top-left) → turn to back (SIGNALS).
 - **Expand** button (top-right) → open the **Deal Room** (full-page floating customer-presentation view — see Section 4.4).
 
-**Compute model, storage model, and per-viewer personalization** of SIGNALS are open engineering questions — tracked as [DEV-48](https://linear.app/hellosello/issue/DEV-48), [DEV-49](https://linear.app/hellosello/issue/DEV-49), [DEV-50](https://linear.app/hellosello/issue/DEV-50).
+**Compute & storage model (LOCKED 2026-05-24, [DEV-48](https://linear.app/hellosello/issue/DEV-48) + [DEV-49](https://linear.app/hellosello/issue/DEV-49)):** MVP signals computed live (on-demand) from underlying tables — no materialized storage, no cache infrastructure. Phase 2 signals layered in as platform data grows; compute/storage model for each revisited at that point based on real usage data. **Signals storage designed for extensibility** — signal-type-keyed rows (not column-per-signal) and compute origin hidden behind a stable read interface, so any signal can be promoted live → cached later without schema migration.
+
+**Per-viewer personalization (LOCKED 2026-05-23, [DEV-50](https://linear.app/hellosello/issue/DEV-50/personalize-back-of-card-signals-per-viewer-premium-feature)):** MVP = one neutral insight per Deal Card, always filled (Deal-Sella generates per deal), shown identically to both buyer and seller — no personalization, no premium gating. Post-MVP = two viewer-aware slots (buyer-flavored + seller-flavored), premium-tier feature; free users see a locked placeholder. How Deal-Sella infers viewer role is deferred (separate follow-up issue).
 
 **Git-style version history.** Every edit is logged. Every negotiation round produces a new version. The full history is preserved as an audit / evidence trail.
 
 ### 4.3 The Deal Workspace
 
-> **⚠️ OPEN [DEV-9]** — Deal Workspace contents and layout are early ideas, not finalized. What's the full component list, how is it laid out visually, what's surfaced first? See [DEV-9](https://linear.app/hellosello/issue/DEV-9/what-exactly-gets-created-inside-a-deal-workspace-and-how-should-it).
+> **DEV-9 — closed (2026-06-07, screen ④).** Contents + layout locked. See DECISIONS 2026-06-07 + `prototypes/deal-workspace-prototype/CONTEXT.md`.
 
-The **container** of a deal. Auto-scaffolded the moment a deal card is born.
+The **container** of a deal — **Layer B: invited participants only**. Auto-scaffolded the moment a deal card is born. Reached from the **Relationship page's deals list** or a **⤢ button on the Deal Card**.
 
-**What auto-creates inside the workspace:**
-- A chat thread (scoped to invited participants only)
-- An artifacts folder (documents, COAs, contracts, etc.)
-- A members list (initial: the two dealmakers; more people can be added as needed)
-- Stages (custom per deal, defined by the participants with Sella's help)
-- The deal card itself
+**What's inside** (layout = an A&C mix: a tabbed work panel + the Deal Chat as the wide hero):
+- **Deal Chat** — per-deal, the deal's ground truth; carries the **Deal Card as a pinned `Deal card ▸` pill** (the same canonical flip card as ①/②: front facts/products, back `Signals | Logs`). The card's **change history is read from its Logs**, never echoed as chat messages.
+- **THINGS** — the **visible work primitive**, grouped by domain (Finance / Logistics / Delivery), with a done-count. Any party adds; Open→Done; **approval THINGS = e-signature** (the Draft confirmation gate). **Stages are NOT a UI element** (scaffolding only — DEV-24/34).
+- **People** — initial: the two dealmakers + a **deal owner**; more can be added.
+- **Documents** — deal-level artifacts (COAs, contracts, delivery note, invoice). Company-wide docs live on the Relationship page.
+- **Deal-Sella** — per-deal, neutral; speaks in the deal chat.
 
-The deal card lives inside the workspace. The card is what people see; the workspace is what holds everything.
+Lifecycle **Draft → Confirmed → Done** (Done = delivery note + invoice both attached; document-driven, no explicit Done click). The **Deal Room** (customer-presentation surface, §4.4) is a **Present-surface** tool — **not** part of the workspace.
 
 ### 4.4 The Deal Room
 
-The **customer-presentation surface** of the platform — opened by expanding either a **Basket** or a **Deal Card** (see Section 4.2). Floating, full-page.
+The **customer-presentation surface** of the platform — opened by expanding either a **Basket** or a **Deal Card** (see Section 4.2). Floating, full-page. *(A **Present-surface** tool — distinct from the Deal Workspace (§4.3) and **out of scope for Connect screen ④**. Still a live, distinct concept per DEV-22/DEV-52.)*
 
 **Purpose:** salesperson tool. Like a seller laying out products in person, but on-platform — with videos, photos, and Loom-style salesperson recordings to bring the products alive for the customer.
 
@@ -309,6 +323,8 @@ Every version is logged in Git-style history.
 ---
 
 ## 7. The Inbound Contact Flow (P↔C → P↔P conversion)
+
+> **UPDATED 2026-06-06/07 — superseded.** This section describes the old **P↔C** model. P↔C is now **folded into C2C** (created at connection); the Relationship is created **at accept** (not pickup); **first-contact doc collection is deferred** (if built it lives in the Inbox; its docs land in the relationship's **Artifacts**). Kept for history — the locked model is the 3-type chat (P2P / C2C / Deal); see §3 + DECISIONS 2026-06-06.
 
 The receiving end of cross-company contact. A person in Company A can initiate contact with Company B through three channels:
 
@@ -493,6 +509,8 @@ Below is the canonical access matrix — sourced from the Chat project descripti
 
 **How the matrix is encoded in the codebase** is open (policy DSL / RLS / OPA / hardcoded) — see [DEV-51](https://linear.app/hellosello/issue/DEV-51).
 
+> **⚠️ Cleanup flag (2026-05-25).** This matrix was written assuming a binary *on HS / not on HS* state. With the **split-gate access model** locked 2026-05-25 (see DECISIONS.md, Layer 1 walkthrough 2026-05-25), an intermediate state now exists — *person signed up + email verified, company not yet HS-verified*. Several combos (especially #4 and #8) may be unreachable under this new state, and others need clarification. Noted for a future audit pass; not blocking implementation.
+
 ### 11.2 Surface-level visibility table
 
 | Surface | Visible to |
@@ -511,7 +529,32 @@ Below is the canonical access matrix — sourced from the Chat project descripti
 
 ---
 
-## 12. What is deferred (post-MVP)
+## 12. Safety & compliance posture (MVP)
+
+> **DEV-38 — closed (2026-05-24).** MVP posture = **minimum-viable safety**: KYC at onboarding + audit log + admin suspension. No platform-side detection.
+
+**Stance:** the platform is a dumb pipe with a gated door. Hello Sello prevents bad actors at entry via license verification, retains a full audit trail, and gives platform admins suspension power. No automated detection of illegal activity in MVP.
+
+**Locked:**
+
+- **KYC at onboarding** — every company uploads a license / pharmacy certificate. **Hello Sello team manually verifies.** No automation, no third-party vendor.
+- **Pre-verification state: fully locked out.** Wait dialog: *"Verification pending — please reach out to the Hello Sello team."* Cannot access any platform feature.
+- **Verification cadence: one-time at MVP.** Re-verification post-MVP.
+- **Suspension: Hello Sello platform admins only.** Company superadmins cannot self-suspend.
+- **Hello Sello platform admin** = platform-side actor (not a company role). Powers: verify onboarding, suspend companies, view cross-company audit log.
+- **Sella does not detect illegal activity** in MVP (consistent with LAYER-4 §379).
+- **Platform does not validate compliance content** (consistent with LAYER-5 §52 — COA/COB stored, not parsed).
+
+**Roadmap:**
+
+| Phase | What's added |
+|---|---|
+| Phase 2 (post-MVP, light detection) | Sella flags off-platform-deal language ("let's take this off-platform"); flags missing-license deal attempts; manual review queue. Annual license re-upload. |
+| Phase 3 (post-MVP, full stack) | Sanctions screening (OFAC/EU) at onboarding + periodic; license-license matching at deal birth; cross-deal pattern detection (money laundering / structuring); Compliance-Sella specialist activated. |
+
+---
+
+## 13. What is deferred (post-MVP)
 
 1. **Logistics partners** as their own company type.
 2. **Temporary view link** for outsiders (time-limited, scoped to one deal).
@@ -528,7 +571,7 @@ Below is the canonical access matrix — sourced from the Chat project descripti
 
 ---
 
-## 13. Open questions still to brainstorm (not blockers for Layer 1)
+## 14. Open questions still to brainstorm (not blockers for Layer 1)
 
 - **Section 4.3** — What exactly gets created inside a Deal Workspace, and how should it look? — [DEV-9](https://linear.app/hellosello/issue/DEV-9/what-exactly-gets-created-inside-a-deal-workspace-and-how-should-it)
 - **Section 10** — How should the multi-Sella architecture be designed: orchestrator pattern, tool use, agent framework, or direct SDK? — [DEV-11](https://linear.app/hellosello/issue/DEV-11/how-should-the-multi-sella-architecture-be-designed-orchestrator)
@@ -538,7 +581,7 @@ Below is the canonical access matrix — sourced from the Chat project descripti
 
 ---
 
-## 14. Quick glossary
+## 15. Quick glossary
 
 | Term | Meaning |
 |---|---|
@@ -556,4 +599,4 @@ Below is the canonical access matrix — sourced from the Chat project descripti
 
 ---
 
-*End of Layer 1. Ready to move to Layer 2: the product surfaces (Connect / Present / Sell / Buy / Trade) and how they map to this lifecycle.*
+*End of Layer 1. Ready to move to Layer 2: the product surfaces (Connect / Present / Sell / Buy / Grow) and how they map to this lifecycle.*

@@ -1,0 +1,65 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "hello-sello-app",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["node_modules/next/dist/bin/next", "dev"],
+      "port": 3000
+    },
+    {
+      "name": "phase-1-prototype",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "8765", "--directory", "prototypes/phase-1-onboarding"],
+      "port": 8765
+    },
+    {
+      "name": "schema-visual",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "8011", "--directory", "docs/architecture"],
+      "port": 8011
+    },
+    {
+      "name": "home-prototype",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "8766", "--directory", "prototypes/home-prototype"],
+      "port": 8766
+    },
+    {
+      "name": "connect-prototype",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "8767", "--directory", "_workshop/connect-prototype"],
+      "port": 8767
+    },
+    {
+      "name": "inbox-prototype",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "8768", "--directory", "_workshop/inbox-prototype"],
+      "port": 8768
+    },
+    {
+      "name": "dealcard-prototype",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "8769", "--directory", "_workshop/dealcard-prototype"],
+      "port": 8769
+    },
+    {
+      "name": "chat-prototype",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "8770", "--directory", "prototypes/chat-prototype"],
+      "port": 8770
+    },
+    {
+      "name": "relationship-prototype",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "8771", "--directory", "prototypes/relationship-prototype"],
+      "port": 8771
+    },
+    {
+      "name": "deal-workspace-prototype",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "8772", "--directory", "prototypes/deal-workspace-prototype"],
+      "port": 8772
+    }
+  ]
+}

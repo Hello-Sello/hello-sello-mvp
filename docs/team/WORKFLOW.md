@@ -54,6 +54,26 @@ Either of us can pick up either area when the queue calls for it.
 
 ---
 
+## Issue closure — capture architecture implications
+
+Before moving any Linear issue to `Done`, scan the locked decision for architecture implications:
+
+- Does it introduce/change a data structure, schema, state machine, integration boundary, or extensibility hook?
+- Does it constrain or enable future builders (e.g., "must store as config not code")?
+
+If yes:
+
+1. **Propose** a one-sentence entry for [`docs/architecture/ARCHITECTURE-NOTES.md`](../architecture/ARCHITECTURE-NOTES.md) matching existing style — one bullet, source-tagged `*(DEV-XX.)*`.
+2. **Ask explicit permission** before writing (propose mode).
+3. **Land** it in the appropriate section (Core entities / Permissions / State machines / etc.).
+4. **Then** mark the issue Done.
+
+Don't skip for "small" decisions — extensibility hooks and data-shape choices accumulate quietly and are hardest to retrofit later.
+
+(Load-bearing decisions go in `docs/architecture/adr/` as a full ADR via `/grill-with-docs` — this rule is for the lighter scratchpad capture.)
+
+---
+
 ## Shared files — fast PR culture
 
 Some files are co-owned. They conflict if we both edit them at the same time.
@@ -66,7 +86,8 @@ Some files are co-owned. They conflict if we both edit them at the same time.
 - `docs/decisions/DECISIONS.md`
 - `docs/architecture/adr/*.md`
 - `docs/agents/*.md`
-- All `docs/product/LAYER-*.md`
+- All `docs/product/layers/LAYER-*.md`
+- All `docs/product/surfaces/*.md`
 
 (The per-person sync files `docs/team/sync/ayush.md` and `docs/team/sync/muskan.md` are NOT in this list - each is owned by exactly one agent, no possibility of conflict.)
 
@@ -89,8 +110,8 @@ Two AI agents working in parallel can step on each other's edits faster than cha
 **How it works:**
 
 - Each agent owns ONE file: Ayush's agent writes only to [`docs/team/sync/ayush.md`](sync/ayush.md), Muskan's agent writes only to [`docs/team/sync/muskan.md`](sync/muskan.md). Zero merge conflicts possible by design - separate file paths, no overlap.
-- Both agents READ both files before editing any shared file.
-- State publishes via normal git push.
+- Each agent commits + pushes their sync file to their **own personal branch** (`claude/muskan/work` or `claude/ayush/work`) — never to `dev`.
+- Each agent reads the OTHER agent's sync **directly from that branch's tip on origin** via `git show origin/<branch>:<path>`. No PR or merge required — state is visible to the other agent the instant a push lands.
 
 **Schema (kept tight - 6 structured fields + free-form note):**
 
@@ -106,15 +127,19 @@ Two AI agents working in parallel can step on each other's edits faster than cha
 
 **Ritual (before editing any shared file):**
 
-1. `git fetch origin && git pull origin <your-branch> --rebase` - get latest sync files.
-2. Read the OTHER person's sync file. Is the file you want to edit in their `Shared files locked` list?
+1. `git fetch origin` — pulls all remote refs (including the OTHER agent's branch tip). Then rebase your own branch: `git pull origin <your-branch> --rebase`.
+2. Read the OTHER person's sync file **directly from their branch tip** (NOT the local working tree, which is stale by design — sync files don't go through `dev`):
+   - Muskan reads Ayush: `git show origin/claude/ayush/work:docs/team/sync/ayush.md`
+   - Ayush reads Muskan: `git show origin/claude/muskan/work:docs/team/sync/muskan.md`
+
+   Is the file you want to edit in their `Shared files locked` list?
    - **Yes** → don't edit. Tell the user "the other agent is in this file. Wait, or message them."
    - **No** → continue.
-3. Update YOUR sync file: add the file to `Shared files locked`, bump `Last updated`. **Commit + push the sync file alone** (one-line commit, no other changes batched in).
+3. Update YOUR sync file: add the file to `Shared files locked`, bump `Last updated`. **Commit + push the sync file alone to YOUR branch** (one-line commit, no other changes batched in). Push makes it instantly visible to the other agent via the cross-branch read in step 2.
 4. Make the actual edit. Commit + push as usual.
 5. Update YOUR sync file: remove the file from `Shared files locked`, bump `Last updated`. Commit + push.
 
-**For non-shared files** (your own area: `frontend/` for Ayush, `backend/` for Muskan, your personal `CLAUDE.md`): no sync ritual needed. Just work.
+**For non-shared files** (your own working area - the modules/components you're actively on, your personal `CLAUDE.md`): no sync ritual needed. Just work.
 
 **For Linear task tracking,** Linear's "In Progress" column is still the source of truth at the task level. The sync files cover the more granular file-level coordination.
 
@@ -122,14 +147,12 @@ Two AI agents working in parallel can step on each other's edits faster than cha
 
 ## Owned areas — light touch
 
-We have a natural-but-flexible split:
+We work separately on different modules / components - a natural, flexible split, settled per task rather than fixed to folders. Touch the area someone is actively in only with a quick heads-up first.
 
-| Area | Default owner | Other person can touch? |
-|---|---|---|
-| `frontend/` | Ayush | Yes, with a heads-up |
-| `backend/` | Muskan | Yes, with a heads-up |
-| `infra/` | Either | Yes — usually low-conflict |
-| `docs/` | Either | Yes — but follow shared-file rules above |
+| Area | Rule |
+|---|---|
+| The module / component you are actively on | Yours for now; others give a heads-up before touching |
+| `docs/` | Shared - follow the shared-file sync ritual above |
 
 "Heads-up" = a quick chat message before starting. Not a formal sign-off.
 
@@ -143,8 +166,25 @@ Both of us run Claude Code with the same skills. Two agents can plausibly edit t
 
 1. **Before any Claude Code session that might touch shared files** — `git fetch` and rebase off `origin/dev` first. Don't let Claude work off stale state.
 2. **Run the sync ritual** (see above) for every shared-file edit. The sync files are designed for exactly this risk.
-3. **AFK loops stay inside owned areas.** Long autonomous runs (`/triage`, future Ralph loops) should operate on `frontend/` (Ayush) or `backend/` (Muskan), not cross-area shared files.
+3. **AFK loops stay inside owned areas.** Long autonomous runs (`/triage`, future Ralph loops) should operate on the modules/components you currently own, not cross-area shared files.
 4. **`grill-with-docs` and similar tools touch shared files** — they must run the sync ritual too. Don't let edits sit uncommitted across other work.
+
+---
+
+## Session wrap-up — end-of-session checklist
+
+When the user says "wrap up" or signals the session is ending, run this checklist before going offline. Both agents follow the same protocol.
+
+1. **Decisions** made this session → propose mode → [`docs/decisions/DECISIONS.md`](../decisions/DECISIONS.md)
+2. **Doubts** surfaced → `/track-doubt` → Linear
+3. **Domain terms** clarified → `/grill-with-docs` → [`docs/architecture/CONTEXT.md`](../architecture/CONTEXT.md)
+4. **Architecture insights** → [`docs/architecture/ARCHITECTURE-NOTES.md`](../architecture/ARCHITECTURE-NOTES.md) for scratchpad capture; `docs/architecture/adr/` via `/grill-with-docs` for load-bearing decisions
+5. **Update your personal CLAUDE.md** — overwrite "Last session" + "What's next" so the next session resumes with full context
+6. **Update your sync file** ([`sync/ayush.md`](sync/ayush.md) or [`sync/muskan.md`](sync/muskan.md)): Status → `idle` or `offline`, clear any remaining locks
+7. **Commit + push outstanding work** — the sync file always pushes; personal CLAUDE.md is gitignored and stays local
+8. **Drop merged `pr/*` branches.** For each `pr/*` PR that merged since last session: `git push origin --delete <name>`. Then run `git fetch -p && git branch -vv | awk '/: gone]/ {print $1}' | xargs -r git branch -D` to drop matching local copies. Never touches `main`, `dev`, or personal `claude/*/work` branches.
+
+Propose-mode protocols (DECISIONS.md edits, ARCHITECTURE-NOTES.md additions per "Issue closure" rule above) still apply during wrap-up — don't batch-write without asking.
 
 ---
 

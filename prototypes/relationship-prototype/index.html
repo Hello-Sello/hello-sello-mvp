@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<!-- PROTOTYPE - throwaway. RELATIONSHIP PAGE (screen ③) - the persistent record between two companies.
+     Reached from a P2P or C2C chat's "Relationship" button (one page, two doors; NO separate person page).
+     Built on the decided Connect shell (rail + subnav + page + Sella rail), same look as connect/chat/dealcard.
+
+     LAYOUT = C (Tabbed) - chosen by Ayush 2026-06-07. (A Stacked / B Dashboard were dropped.)
+     DEMO bar: State (Active | New) · Seeing as (Supplier | Buyer).
+
+     TOP BAND: header (two company logos joined by a bridge mark - NO person names) + Sella insight & Analytics
+       SIDE BY SIDE as two overview boxes. Each box has a "more" button that opens a DIALOG with a blurred backdrop
+       (open -> read -> close, like the Claude settings modal):
+         - Sella dialog   = what's happening + how to grow the relationship + actions you can take.
+         - Analytics dialog = a mini analytics page: KPIs + several bar charts + a pie chart + a takeaway.
+     TABS: Overview · Deals · Notes · Terms & prices · Docs.
+     CONTENT (locked): deals (button/peek -> filterable All/Active/Old/Cancelled -> Open workspace) ·
+       per-side TEAM note + per-user PERSONAL note · agreed terms (both) · custom pricelist (both read, seller
+       writes via sign-off) · Artifacts (shared company-wide docs; deal docs stay in the deal).
+     TWO ALTITUDES: relationship-level lives here; deal-level lives on the deal card / inside the deal.
+     SIDE-AWARE: per-side team note hides across sides, PRIVATE deals hide from the other side, only the seller
+       edits the pricelist - the Seeing-as toggle flips all of it. -->
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hello Sello - Relationship page (prototype)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", sans-serif; }
+  .data-table { border-collapse: collapse; width: 100%; font-size: 10.5px; }
+  .data-table th, .data-table td { text-align: left; padding: 3px 7px; border-bottom: 1px solid #e2e8f0; white-space: nowrap; }
+  .data-table th { font-weight: 600; color:#64748b; background:#f8fafc; text-transform: uppercase; font-size: 9px; letter-spacing:.03em; }
+  code { font-size: 10px; background:#f1f5f9; padding:1px 4px; border-radius:3px; }
+</style>
+</head>
+<body class="bg-slate-50 text-slate-900 h-screen overflow-hidden">
+<div id="app" class="h-screen flex flex-col"></div>
+<div id="bar"></div>
+<div id="modal"></div>
+<script>
+/* =========================================================================
+   SCENARIO  (reuses the chat prototype's two companies)
+   ========================================================================= */
+const SUPPLIER = {co:'Canadian Craft', sub:'Cannabis Co',     person:'Kim',    pInit:'KC', cInit:'CC'};
+const BUYER    = {co:'ABC Apotheke',   sub:'Apotheke am Werth',person:'Thomas', pInit:'TA', cInit:'AB'};
+const SINCE    = 'Mar 2025';
+
+// Deals between the two companies. status: active | old(=done) | cancelled.
+// One is PRIVATE on the supplier side -> only visible to that side (until accepted, per the visibility lock).
+const DEALS=[
+  {hs:'HS-CAN23-A189', title:'August batch · 6 SKUs', status:'active',    v:24200, date:'Jun 2026', q:'Q2 2026', priv:false},
+  {hs:'HS-CAN23-K042', title:'Q4 framework (draft)',  status:'active',    v:31000, date:'Jun 2026', q:'Q2 2026', priv:true, side:'supplier'},
+  {hs:'HS-CAN23-9F26', title:'Spring restock',        status:'old',       v:18400, date:'Mar 2026', q:'Q1 2026', priv:false},
+  {hs:'HS-CAN23-7C10', title:'CBD isolate trial',     status:'old',       v:6900,  date:'Nov 2025', q:'Q4 2025', priv:false},
+  {hs:'HS-CAN23-2B81', title:'Sample order',          status:'cancelled', v:1200,  date:'Sep 2025', q:'Q3 2025', priv:false},
+];
+const LOG=[
+  {icon:'🔄', what:'Deal HS-CAN23-A189 amended to v2 (Amnesia Haze swap)', at:'18 Jun 2026'},
+  {icon:'👤', what:'Thomas joined the relationship',                        at:'02 Jun 2026'},
+  {icon:'💶', what:'Custom pricelist updated · 3 items',                    at:'14 Jan 2026'},
+  {icon:'📄', what:'Deal HS-CAN23-7C10 completed',                          at:'20 Nov 2025'},
+  {icon:'🤝', what:'Agreed terms set · net 30 · DAP Cologne',              at:'18 Mar 2025'},
+  {icon:'🔗', what:'Canadian Craft and ABC Apotheke connected',            at:'12 Mar 2025'},
+];
+const NOTES={
+  team:{ supplier:'Reliable orderer, reorders about every 5 weeks. Pushing them toward the Q4 framework.',
+         buyer:'Fair prices, on-time delivery. Need the next indica batch early August.' },
+  personal:{ supplier:"Thomas's daughter had a piano recital - ask how it went.",
+             buyer:'Kim mentioned they are hiring - congratulate on the next call.' },
+};
+const TERMS=[['Payment','Net 30 days'],['Delivery','DAP Cologne'],['Min order','€5,000'],['Lead time','10 working days']];
+const PRICELIST=[
+  {name:'Northern Lights · Indica', price:'€4.20/g', status:'applied'},
+  {name:'Sour Diesel · Sativa',     price:'€4.50/g', status:'applied'},
+  {name:'Amnesia Haze · Sativa',    price:'€4.60/g', status:'proposed'},
+];
+const ARTIFACTS=[
+  {icon:'📜', name:'ABC Apotheke · pharmacy license.pdf',   by:'Buyer'},
+  {icon:'📜', name:'Canadian Craft · GDP certificate.pdf',  by:'Seller'},
+  {icon:'📄', name:'Framework agreement 2026.pdf',          by:'Both'},
+];
+const PINK=['#ec4899','#f472b6','#f9a8d4','#fbcfe8','#fce7f3'];
+
+/* =========================================================================
+   DEMO + UI STATE
+   ========================================================================= */
+let state='active';    // active | new (no deal yet)
+let viewer='supplier'; // supplier | buyer
+let dealFilter='all';  // all | active | old | cancelled
+let logExpanded=false;
+let tabC='overview';   // overview | deals | notes | terms | docs
+let sellaOpen=false;
+let analyticsOpen=false;
+let showDB=true;
+
+const me   = ()=> viewer==='supplier' ? SUPPLIER : BUYER;
+const them = ()=> viewer==='supplier' ? BUYER : SUPPLIER;
+const fmt  = n=> '€'+n.toLocaleString('en-US');
+const pad  = i=> String(i).padStart(2,'0');
+const short= s=> s.length>30 ? s.slice(0,28)+'…' : s;
+
+const visibleDeals = ()=> state==='new' ? [] : DEALS.filter(d=>!d.priv || d.side===viewer);
+const visibleLog   = ()=> state==='new' ? [{icon:'🔗', what:'Canadian Craft and ABC Apotheke connected', at:'today'}] : LOG;
+function relStats(){
+  if(state==='new') return {total:'€0', count:'0', since:'today', reorder:'—'};
+  const ds=visibleDeals().filter(d=>d.status!=='cancelled');
+  return {total:fmt(ds.reduce((s,d)=>s+d.v,0)), count:String(ds.length), since:SINCE, reorder:'~5 wks'};
+}
+
+/* =========================================================================
+   SHELL  (rail + subnav + Sella rail - same as connect/chat)
+   ========================================================================= */
+const RAIL=[{name:'Home',icon:'🏠',s:'a'},{name:'Connect',icon:'💬',s:'sel'},{name:'Discover',icon:'🔍',s:'a'},{name:'Present',icon:'🏪',s:'a'},{name:'Buy',icon:'🛒',s:'soon'},{name:'Sell',icon:'🏷️',s:'soon'},{name:'Trade',icon:'🔄',s:'soon'}];
+function topbar(){
+  return `<header class="h-14 bg-white border-b border-slate-200 flex items-center px-4 gap-4 shrink-0">
+    <span class="text-pink-600 font-black text-lg tracking-tight shrink-0">Hello sello</span>
+    <div class="flex-1 max-w-2xl mx-auto"><div class="flex items-center gap-2 px-4 py-2 bg-slate-100 rounded-full text-slate-400 text-sm"><span>🔍</span>Search for company, product or service…</div></div>
+    <div class="flex items-center gap-2 shrink-0"><span class="text-sm font-medium text-slate-700 hidden xl:inline">${me().co}</span><div class="w-8 h-8 rounded-lg bg-pink-100 text-pink-700 flex items-center justify-center font-bold text-xs">${me().cInit}</div></div>
+  </header>`;
+}
+function iconRail(){
+  const base='flex flex-col items-center gap-0.5 py-2 rounded-lg text-[9px] font-medium leading-none';
+  const item=n=> n.s==='sel'?`<a href="#" class="${base} text-pink-700 bg-pink-50"><span class="text-lg">${n.icon}</span>${n.name}</a>`
+    : n.s==='a'?`<a href="#" class="${base} text-slate-600 hover:bg-slate-100"><span class="text-lg">${n.icon}</span>${n.name}</a>`
+    :`<span class="${base} text-slate-300"><span class="text-lg grayscale">${n.icon}</span>${n.name}</span>`;
+  return `<aside class="w-16 bg-white border-r border-slate-200 shrink-0 flex flex-col px-1.5 py-2 gap-0.5">${RAIL.map(item).join('')}<div class="mt-auto flex justify-center pt-2"><div class="w-8 h-8 rounded-full bg-gradient-to-br from-orange-400 to-pink-500"></div></div></aside>`;
+}
+function subnav(){
+  // Relationship + Deals tabs REMOVED (Ayush 2026-06-06): the relationship page is reached from a chat, not a tab.
+  const tabs=[{name:'Chat',icon:'💬',sel:true},{name:'Inbox',icon:'📥',badge:2}];
+  return `<div class="w-44 bg-white border-r border-slate-200 shrink-0 p-2"><div class="px-2 py-2 text-sm font-bold text-slate-800">Connect</div>${tabs.map(t=>`<a href="#" class="flex items-center gap-2 px-2.5 py-2 rounded-lg text-sm ${t.sel?'bg-pink-50 text-pink-700 font-medium':'text-slate-600 hover:bg-slate-100'}"><span>${t.icon}</span>${t.name}${t.badge?`<span class="ml-auto text-[10px] bg-pink-600 text-white rounded-full px-1.5">${t.badge}</span>`:''}</a>`).join('')}
+    <div class="mt-3 px-2.5 py-2 rounded-lg bg-slate-50 border border-slate-100 text-[11px] text-slate-500">You opened this Relationship from the chat with <b>${them().co}</b>.</div></div>`;
+}
+function sellaRail(){
+  const sideLabel = viewer==='supplier'?'Seller':'Buyer';
+  return `<aside class="w-72 bg-white border-l border-slate-200 shrink-0 flex flex-col">
+    <div class="flex-1 p-3 space-y-3">
+      <div class="flex items-center gap-2"><div class="w-8 h-8 rounded-xl bg-pink-600 text-white flex items-center justify-center">&#10022;</div><div><div class="text-sm font-semibold text-slate-700">Sella</div><div class="text-[10px] text-slate-400">${sideLabel}-side · ${them().co}</div></div></div>
+      <div class="bg-slate-50 border border-slate-200 rounded-2xl px-3.5 py-2.5 text-sm text-slate-700">This page is your shared memory with ${them().co}. The insight box up top is my read on the whole relationship - not any one deal.</div>
+      <div class="bg-slate-50 border border-slate-200 rounded-2xl px-3.5 py-2.5 text-xs text-slate-500">Ask me: "how is this relationship doing?", "draft a Q4 framework", "what expires soon?"</div>
+    </div>
+    <div class="p-3 border-t border-slate-100"><div class="flex items-center gap-2 border border-slate-300 rounded-xl px-3 py-2"><input class="flex-1 outline-none text-sm bg-transparent" placeholder="Ask Sella…"/><span class="text-slate-400">🎤</span></div></div></aside>`;
+}
+
+/* =========================================================================
+   TOP BAND  (header + Sella & Analytics boxes side by side)
+   ========================================================================= */
+function relHeader(){
+  return `<div class="bg-white border border-slate-200 rounded-2xl p-4">
+    <div class="flex items-center justify-between">
+      <button data-back class="text-xs text-slate-400 hover:text-slate-600">← Back to chat with ${them().co}</button>
+      <span class="text-[10px] uppercase tracking-wide text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-full px-2 py-0.5">● Connected · since ${state==='new'?'today':SINCE}</span>
+    </div>
+    <div class="flex items-center justify-center mt-2">
+      <div class="flex flex-col items-center gap-1"><div class="w-14 h-14 rounded-2xl bg-pink-100 text-pink-700 flex items-center justify-center text-lg font-black">${SUPPLIER.cInit}</div><span class="text-xs font-semibold text-slate-700">${SUPPLIER.co}</span></div>
+      <div class="flex flex-col items-center px-3 -mt-4"><div class="flex items-center"><span class="block w-9 h-px bg-slate-300"></span><span class="block w-2.5 h-2.5 rounded-full bg-pink-500 mx-1"></span><span class="block w-9 h-px bg-slate-300"></span></div><span class="text-[9px] uppercase tracking-wide text-slate-400 mt-1">relationship</span></div>
+      <div class="flex flex-col items-center gap-1"><div class="w-14 h-14 rounded-2xl bg-slate-200 text-slate-600 flex items-center justify-center text-lg font-black">${BUYER.cInit}</div><span class="text-xs font-semibold text-slate-700">${BUYER.co}</span></div>
+    </div>
+  </div>`;
+}
+function sellaBox(){
+  const txt = state==='new'
+    ? `You just connected with ${them().co}. No history yet - share a price list or start a deal to get going.`
+    : `Steady, growing relationship: 3 closed deals (€31.5k) across 14 months, reorders about every 5 weeks. One COA expires in 30 days.`;
+  return `<div class="bg-gradient-to-br from-pink-50 to-white border border-pink-100 rounded-2xl p-4 flex flex-col">
+    <div class="flex items-center gap-2 mb-1.5"><div class="w-7 h-7 rounded-lg bg-pink-600 text-white flex items-center justify-center text-sm">&#10022;</div><span class="text-sm font-semibold text-slate-700">Sella insight</span><span class="ml-auto text-[9px] uppercase tracking-wide text-pink-400">relationship-level</span></div>
+    <div class="text-[13px] text-slate-700 flex-1">${txt}</div>
+    <button data-sella class="mt-2.5 self-start text-[11px] text-pink-600 font-medium hover:underline">More insight →</button>
+  </div>`;
+}
+function analyticsBox(){
+  const a=relStats();
+  const stat=(v,l)=>`<div><div class="text-base font-bold text-slate-800">${v}</div><div class="text-[10px] uppercase tracking-wide text-slate-400">${l}</div></div>`;
+  return `<div class="bg-white border border-slate-200 rounded-2xl p-4 flex flex-col">
+    <div class="flex items-center gap-2 mb-2"><span class="text-sm font-semibold text-slate-700">Analytics</span><span class="ml-auto text-[9px] uppercase tracking-wide text-slate-300">overview</span></div>
+    <div class="grid grid-cols-2 gap-3 flex-1">${stat(a.total,'Total business')}${stat(a.count,'Deals')}${stat(a.since,'Since')}${stat(a.reorder,'Reorders')}</div>
+    <button data-analytics class="mt-2.5 self-start text-[11px] text-pink-600 font-medium hover:underline">Full analytics →</button>
+  </div>`;
+}
+
+/* =========================================================================
+   TAB BODIES  (deals / notes / terms / pricelist / artifacts / log)
+   ========================================================================= */
+function logCard(){
+  const ev=visibleLog(); const shown=logExpanded?ev:ev.slice(0,3);
+  return `<div class="bg-white border border-slate-200 rounded-2xl p-4">
+    <div class="flex items-center justify-between mb-2"><span class="text-xs font-semibold uppercase tracking-wide text-slate-400">Activity log</span><button data-log class="text-[11px] text-pink-600 font-medium">${logExpanded?'Collapse':'Expand'} →</button></div>
+    <div class="space-y-2">${shown.map(e=>`<div class="flex gap-2 text-[12px]"><span class="text-slate-300 shrink-0">${e.icon}</span><div><span class="text-slate-700">${e.what}</span> <span class="text-slate-400">· ${e.at}</span></div></div>`).join('')}</div>
+    ${(!logExpanded && ev.length>3)?`<div class="text-[11px] text-slate-400 mt-2">+${ev.length-3} more events</div>`:''}
+  </div>`;
+}
+function dealRowMini(d){
+  return `<div class="flex items-center gap-2 text-[12px]"><span class="w-1.5 h-1.5 rounded-full ${d.status==='active'?'bg-emerald-500':'bg-slate-300'} shrink-0"></span><span class="text-slate-700 flex-1 truncate">${d.title}</span>${d.priv?'<span class="text-[9px] text-amber-600">🔒</span>':''}<span class="text-slate-500 shrink-0">${fmt(d.v)}</span></div>`;
+}
+function dealsEntry(){
+  const ds=visibleDeals(); const active=ds.filter(d=>d.status==='active');
+  const peek = active.length ? active.slice(0,2).map(dealRowMini).join('') : `<div class="text-[12px] text-slate-400">No active deals yet. <button class="text-pink-600 font-medium">Start a deal →</button></div>`;
+  return `<div class="bg-white border border-slate-200 rounded-2xl p-4">
+    <div class="flex items-center justify-between"><div class="flex items-center gap-2"><span class="text-xs font-semibold uppercase tracking-wide text-slate-400">Deals</span>${active.length?`<span class="text-[10px] bg-pink-600 text-white rounded-full px-1.5">${active.length} active</span>`:''}</div><button data-open-deals class="text-[11px] text-pink-600 font-medium">View all deals (${ds.length}) →</button></div>
+    <div class="mt-2 space-y-1.5">${peek}</div>
+  </div>`;
+}
+function dealRow(d){
+  const badge = d.status==='active'?'<span class="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-full px-2 py-0.5">Active</span>'
+    : d.status==='old'?'<span class="text-[10px] bg-slate-100 text-slate-500 rounded-full px-2 py-0.5">Done</span>'
+    : '<span class="text-[10px] bg-slate-100 text-slate-400 rounded-full px-2 py-0.5">Cancelled</span>';
+  const priv = d.priv?'<span class="text-[10px] bg-amber-50 text-amber-700 border border-amber-100 rounded-full px-2 py-0.5">🔒 Private</span>':'';
+  return `<div class="flex items-center gap-3 py-2.5">
+    <div class="w-9 h-9 rounded-lg bg-pink-50 text-pink-600 flex items-center justify-center shrink-0">📄</div>
+    <div class="min-w-0 flex-1"><div class="flex items-center gap-2 flex-wrap"><span class="text-sm font-medium text-slate-800 truncate">${d.title}</span>${badge}${priv}</div><div class="text-[11px] text-slate-400">${d.hs} · ${d.date}</div></div>
+    <div class="text-sm font-semibold text-slate-700 shrink-0">${fmt(d.v)}</div>
+    <button class="text-[11px] text-pink-600 font-medium shrink-0">Open workspace →</button>
+  </div>`;
+}
+function dealsView(){
+  const filters=[['all','All'],['active','Active'],['old','Old'],['cancelled','Cancelled']];
+  let ds=visibleDeals(); if(dealFilter!=='all') ds=ds.filter(d=>d.status===dealFilter);
+  return `<div>
+    <div class="flex gap-1.5 mb-3 flex-wrap">${filters.map(([k,l])=>`<button data-dealfilter="${k}" class="text-xs px-2.5 py-1 rounded-full ${dealFilter===k?'bg-pink-600 text-white font-medium':'bg-slate-100 text-slate-500 hover:bg-slate-200'}">${l}${k!=='all'?` (${visibleDeals().filter(d=>d.status===k).length})`:''}</button>`).join('')}</div>
+    <div class="divide-y divide-slate-100">${ds.length?ds.map(dealRow).join(''):`<div class="text-sm text-slate-400 py-8 text-center">No ${dealFilter==='all'?'':dealFilter+' '}deals yet.</div>`}</div>
+  </div>`;
+}
+function notesCard(){
+  return `<div class="space-y-3">
+    <div>
+      <div class="flex items-center gap-1.5 mb-1"><span class="text-[11px] font-medium text-slate-600">🏢 Team note</span><span class="text-[10px] text-slate-400">· ${me().co} sees this</span><button class="ml-auto text-[11px] text-pink-600">Edit</button></div>
+      <div class="bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-[12px] text-slate-700">${NOTES.team[viewer]}</div>
+    </div>
+    <div>
+      <div class="flex items-center gap-1.5 mb-1"><span class="text-[11px] font-medium text-slate-600">🔒 Personal note</span><span class="text-[10px] text-slate-400">· only you</span><button class="ml-auto text-[11px] text-pink-600">Edit</button></div>
+      <div class="bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 text-[12px] text-slate-700">${NOTES.personal[viewer]}</div>
+    </div>
+    <div class="text-[10px] text-slate-400">${them().co}'s own team note is private to them - you never see it.</div>
+  </div>`;
+}
+function termsCard(){
+  return `<div class="bg-white border border-slate-200 rounded-2xl p-4">
+    <div class="flex items-center justify-between mb-2"><span class="text-xs font-semibold uppercase tracking-wide text-slate-400">Agreed terms</span><span class="text-[10px] text-slate-400">both sides see</span></div>
+    <div class="grid grid-cols-2 gap-2">${TERMS.map(t=>`<div class="bg-slate-50 rounded-lg px-3 py-2"><div class="text-[10px] uppercase tracking-wide text-slate-400">${t[0]}</div><div class="text-[12px] text-slate-700 font-medium">${t[1]}</div></div>`).join('')}</div>
+  </div>`;
+}
+function pricelistCard(){
+  const isSeller = viewer==='supplier';
+  return `<div class="bg-white border border-slate-200 rounded-2xl p-4">
+    <div class="flex items-center justify-between mb-2"><span class="text-xs font-semibold uppercase tracking-wide text-slate-400">Custom pricelist</span>${isSeller?'<button class="text-[11px] text-pink-600 font-medium">+ Propose change</button>':'<span class="text-[10px] text-slate-400">read-only · seller sets prices</span>'}</div>
+    <div class="space-y-1">${PRICELIST.map(p=>`<div class="flex items-center justify-between text-[12px] px-2 py-1.5 rounded-lg ${p.status==='proposed'?'bg-amber-50 border border-amber-100':''}"><span class="text-slate-700">${p.name}</span><span class="flex items-center gap-2"><span class="font-medium text-slate-800">${p.price}</span>${p.status==='proposed'?'<span class="text-[9px] uppercase tracking-wide text-amber-600">⏳ awaiting sign-off</span>':''}</span></div>`).join('')}</div>
+    ${isSeller?'<div class="text-[10px] text-slate-400 mt-2">Edits need an Approver sign-off · Proposed → sign-off → Applied.</div>':''}
+  </div>`;
+}
+function artifactsCard(){
+  return `<div class="bg-white border border-slate-200 rounded-2xl p-4">
+    <div class="flex items-center justify-between mb-2"><span class="text-xs font-semibold uppercase tracking-wide text-slate-400">Artifacts · documents</span><button class="text-[11px] text-pink-600 font-medium">+ Upload</button></div>
+    <div class="space-y-1.5">${ARTIFACTS.map(a=>`<div class="flex items-center gap-2 text-[12px] bg-slate-50 rounded-lg px-3 py-2"><span>${a.icon}</span><span class="text-slate-700 flex-1 truncate">${a.name}</span><span class="text-[10px] text-slate-400 shrink-0">${a.by}</span></div>`).join('')}</div>
+    <div class="text-[10px] text-slate-400 mt-2">Company-wide docs live here. Deal-specific docs (COAs, badges) stay inside each deal.</div>
+  </div>`;
+}
+function startDealBanner(){
+  return `<div class="bg-pink-600 text-white rounded-2xl p-4 flex items-center justify-between gap-3"><div><div class="font-semibold">No deals yet with ${them().co}</div><div class="text-sm text-pink-100">You're connected - kick things off whenever you're ready.</div></div><button class="bg-white text-pink-700 rounded-lg px-4 py-2 text-sm font-semibold shrink-0">Start a deal →</button></div>`;
+}
+
+/* =========================================================================
+   LAYOUT C  (the chosen design - tabbed record)
+   ========================================================================= */
+function layoutC(){
+  const tabs=[['overview','Overview'],['deals','Deals'],['notes','Notes'],['terms','Terms & prices'],['docs','Docs']];
+  let body;
+  if(tabC==='overview') body=`${state==='new'?startDealBanner():''}<div class="space-y-3">${logCard()}${dealsEntry()}</div>`;
+  else if(tabC==='deals') body=dealsView();
+  else if(tabC==='notes') body=notesCard();
+  else if(tabC==='terms') body=`<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">${termsCard()}${pricelistCard()}</div>`;
+  else body=artifactsCard();
+  return `<div class="max-w-4xl mx-auto p-5 space-y-3">
+    ${relHeader()}
+    <div class="grid grid-cols-2 gap-3 items-stretch">${sellaBox()}${analyticsBox()}</div>
+    <div class="bg-white border border-slate-200 rounded-2xl">
+      <div class="flex gap-1 p-2 border-b border-slate-100 overflow-x-auto">${tabs.map(([k,l])=>`<button data-tabc="${k}" class="text-sm px-3 py-1.5 rounded-lg whitespace-nowrap ${tabC===k?'bg-pink-50 text-pink-700 font-medium':'text-slate-500 hover:bg-slate-50'}">${l}${k==='deals'?` (${visibleDeals().length})`:''}</button>`).join('')}</div>
+      <div class="p-4">${body}</div>
+    </div>
+  </div>`;
+}
+function pageArea(){ return `<div class="flex-1 min-w-0 bg-slate-50 overflow-y-auto">${layoutC()}</div>`; }
+
+/* =========================================================================
+   DIALOGS  (open -> read -> close, blurred backdrop - like the Claude modal)
+   ========================================================================= */
+function modalShell(label, inner, width){
+  return `<div data-backdrop="${label}" class="fixed inset-0 z-[60] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="relative ${width} max-h-[88vh] overflow-y-auto bg-white rounded-2xl shadow-2xl p-5" onclick="event.stopPropagation()">
+      <button data-close="${label}" class="absolute top-3 right-3 w-7 h-7 rounded-full bg-slate-100 text-slate-500 hover:text-slate-800 flex items-center justify-center z-10">✕</button>
+      ${inner}
+    </div></div>`;
+}
+function barChart(title, rows){ // rows = [[label, value, displayValue?]]
+  const max=Math.max(1,...rows.map(r=>r[1]));
+  return `<div class="bg-slate-50 rounded-xl p-3">
+    <div class="text-[10px] uppercase tracking-wide text-slate-400 mb-2">${title}</div>
+    <div class="space-y-1.5">${rows.map(r=>`<div class="flex items-center gap-2 text-[11px]"><span class="w-24 truncate text-slate-600">${r[0]}</span><div class="flex-1 bg-slate-200/70 rounded h-2.5"><div class="bg-pink-500 h-2.5 rounded" style="width:${Math.round(r[1]/max*100)}%"></div></div><span class="w-16 text-right text-slate-700 font-medium">${r[2]!==undefined?r[2]:r[1]}</span></div>`).join('')}</div>
+  </div>`;
+}
+function pieChart(title, rows){ // rows = [[label, value, color]]
+  const total=rows.reduce((s,r)=>s+r[1],0)||1; let acc=0;
+  const segs=rows.map(r=>{const a=acc/total*360; acc+=r[1]; const b=acc/total*360; return `${r[2]} ${a}deg ${b}deg`;}).join(',');
+  const legend=rows.map(r=>`<div class="flex items-center gap-1.5 text-[11px]"><span class="w-2.5 h-2.5 rounded-sm shrink-0" style="background:${r[2]}"></span><span class="text-slate-600 flex-1 truncate">${r[0]}</span><span class="text-slate-500">${Math.round(r[1]/total*100)}%</span></div>`).join('');
+  return `<div class="bg-slate-50 rounded-xl p-3">
+    <div class="text-[10px] uppercase tracking-wide text-slate-400 mb-2">${title}</div>
+    <div class="flex items-center gap-3"><div class="w-20 h-20 rounded-full shrink-0" style="background:conic-gradient(${segs})"></div><div class="flex-1 space-y-1 min-w-0">${legend}</div></div>
+  </div>`;
+}
+function sellaModal(){
+  if(!sellaOpen) return '';
+  const happening = state==='new'
+    ? [`You connected with ${them().co} today.`, `No deals or shared history yet.`]
+    : [`3 closed deals worth €31.5k across 14 months.`, `Reorders land about every 5 weeks - the next one is due in ~1 week.`, `One COA expires in 30 days.`, `A Q4 framework is drafted but not sent.`];
+  const grow = state==='new'
+    ? [['Share your price list','Give them something concrete to react to.'], ['Start a deal','Open the first basket and get the relationship moving.']]
+    : [['Send the Q4 framework','It is drafted - sending it can lock in volume for two quarters.'], ['Nudge a restock now','Their ~5-week cycle is almost due; a gentle offer tends to land.'], ['Upsell CBD isolate','They only ever ran a small trial - worth a proper offer.']];
+  const li=t=>`<li class="flex gap-2 text-[12px] text-slate-700"><span class="text-pink-400 mt-0.5">•</span><span>${t}</span></li>`;
+  const action=(t,s)=>`<button class="w-full text-left bg-slate-50 hover:bg-pink-50 rounded-lg px-3 py-2"><div class="text-[12px] font-medium text-slate-800">${t}</div><div class="text-[11px] text-slate-500">${s}</div></button>`;
+  const inner=`
+    <div class="flex items-center gap-2 mb-3"><div class="w-8 h-8 rounded-xl bg-pink-600 text-white flex items-center justify-center">&#10022;</div><div><div class="text-sm font-bold text-slate-800">Sella · relationship insight</div><div class="text-[11px] text-slate-400">${SUPPLIER.co} · ${BUYER.co}</div></div></div>
+    <div class="mb-4"><div class="text-[10px] uppercase tracking-wide text-slate-400 mb-1.5">What's happening</div><ul class="space-y-1">${happening.map(li).join('')}</ul></div>
+    <div><div class="text-[10px] uppercase tracking-wide text-slate-400 mb-1.5">How to grow this relationship</div><div class="space-y-1.5">${grow.map(g=>action(g[0],g[1])).join('')}</div></div>
+    <div class="mt-3 text-[11px] text-slate-400">Demo: illustrative. Real recommendations draw on deal history, stock levels, and timing.</div>`;
+  return modalShell('sella', inner, 'w-[520px]');
+}
+function analyticsModal(){
+  if(!analyticsOpen) return '';
+  const a=relStats();
+  const ds=visibleDeals().filter(d=>d.status!=='cancelled');
+  const all=visibleDeals();
+  const byDeal=ds.map(d=>[d.title, d.v, fmt(d.v)]);
+  const qmap={}; ds.forEach(d=>{qmap[d.q]=(qmap[d.q]||0)+d.v;});
+  const byQuarter=['Q4 2025','Q1 2026','Q2 2026'].filter(q=>qmap[q]).map(q=>[q, qmap[q], fmt(qmap[q])]);
+  const byStatus=[['Active',all.filter(d=>d.status==='active').length],['Done',all.filter(d=>d.status==='old').length],['Cancelled',all.filter(d=>d.status==='cancelled').length]].map(r=>[r[0],r[1],String(r[1])]);
+  const pieRows=ds.map((d,i)=>[d.title, d.v, PINK[i%PINK.length]]);
+  const avg = ds.length?fmt(Math.round(ds.reduce((s,d)=>s+d.v,0)/ds.length)):'€0';
+  const largest = ds.length?fmt(Math.max(...ds.map(d=>d.v))):'€0';
+  const kpi=(v,l)=>`<div class="bg-slate-50 rounded-lg px-2 py-2 text-center"><div class="text-base font-bold text-slate-800">${v}</div><div class="text-[9px] uppercase tracking-wide text-slate-400">${l}</div></div>`;
+  const empty = !ds.length;
+  const inner=`
+    <div class="text-sm font-bold text-slate-800 mb-1">Full analytics · ${SUPPLIER.co} · ${BUYER.co}</div>
+    <div class="text-[11px] text-slate-400 mb-3">Demo: simple, cheap stats. Real trends, margins and forecasts come later.</div>
+    <div class="grid grid-cols-6 gap-2 mb-4">${kpi(a.total,'Total')}${kpi(a.count,'Deals')}${kpi(avg,'Avg deal')}${kpi(largest,'Largest')}${kpi(a.since,'Since')}${kpi(a.reorder,'Reorder')}</div>
+    ${empty?'<div class="text-sm text-slate-400 py-10 text-center">No deals yet - charts appear once business starts.</div>':`
+    <div class="grid grid-cols-2 gap-3">
+      ${barChart('Business by deal', byDeal)}
+      ${pieChart('Share by deal', pieRows)}
+      ${barChart('Business by quarter', byQuarter)}
+      ${barChart('Deals by status', byStatus)}
+    </div>
+    <div class="mt-3 text-[11px] text-slate-600 bg-pink-50 border border-pink-100 rounded-lg px-3 py-2">Takeaway: reorders land about every 5 weeks and the next is due in ~1 week - a restock nudge tends to land well.</div>`}`;
+  return modalShell('analytics', inner, 'w-[680px]');
+}
+
+/* =========================================================================
+   MOCK DB  (what the relationship page reads/writes)
+   ========================================================================= */
+function DB(){
+  const rel=[{id:'rel_01',company_a:SUPPLIER.co,company_b:BUYER.co,status:'connected',since:state==='new'?'today':'2025-03-12'}];
+  if(state==='new'){
+    return [
+      {name:'relationship', cols:['id','company_a','company_b','status','since'], rows:rel},
+      {name:'deal',          cols:['id','title','status','value','private'], rows:[]},
+      {name:'note',          cols:['id','side','scope','body'], rows:[]},
+      {name:'agreed_term',   cols:['id','key','value','visible'], rows:[]},
+      {name:'pricelist_item',cols:['id','product','price','status'], rows:[]},
+      {name:'artifact',      cols:['id','name','owner'], rows:[]},
+      {name:'audit_log',     cols:['id','actor','action'], rows:[{id:'au_01',actor:me().co,action:'accept_connection'}]},
+    ];
+  }
+  const deals=DEALS.map((d,i)=>({id:'deal_'+pad(i+1),title:short(d.title),status:d.status,value:d.v,private:d.priv?d.side:'no'}));
+  const notes=[
+    {id:'nt_01',side:'supplier',scope:'team',    body:short(NOTES.team.supplier)},
+    {id:'nt_02',side:'buyer',   scope:'team',    body:short(NOTES.team.buyer)},
+    {id:'nt_03',side:'supplier',scope:'personal',body:short(NOTES.personal.supplier)},
+    {id:'nt_04',side:'buyer',   scope:'personal',body:short(NOTES.personal.buyer)},
+  ];
+  const terms=TERMS.map((t,i)=>({id:'tm_0'+(i+1),key:t[0],value:t[1],visible:'both'}));
+  const pl=PRICELIST.map((p,i)=>({id:'pl_0'+(i+1),product:short(p.name),price:p.price,status:p.status}));
+  const arts=ARTIFACTS.map((a,i)=>({id:'ar_0'+(i+1),name:short(a.name),owner:a.by.toLowerCase()}));
+  const audit=LOG.map((l,i)=>({id:'au_'+pad(i+1),actor:'system',action:short(l.what)}));
+  return [
+    {name:'relationship', cols:['id','company_a','company_b','status','since'], rows:rel},
+    {name:'deal',          cols:['id','title','status','value','private'], rows:deals},
+    {name:'note',          cols:['id','side','scope','body'], rows:notes},
+    {name:'agreed_term',   cols:['id','key','value','visible'], rows:terms},
+    {name:'pricelist_item',cols:['id','product','price','status'], rows:pl},
+    {name:'artifact',      cols:['id','name','owner'], rows:arts},
+    {name:'rel_signal',    cols:['id','scope','type','compute'], rows:[{id:'sg_01',scope:'relationship',type:'summary',compute:'live'}]},
+    {name:'audit_log',     cols:['id','actor','action'], rows:audit},
+  ];
+}
+function dbDrawer(){
+  const card=t=>`<div class="min-w-[235px] bg-white border border-slate-200 rounded-lg overflow-hidden shrink-0 self-start"><div class="px-2.5 py-1.5 bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-700">${t.name} <span class="text-slate-400 font-normal">(${t.rows.length})</span></div><div class="overflow-x-auto"><table class="data-table"><thead><tr>${t.cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead><tbody>${t.rows.length?t.rows.map(r=>`<tr>${t.cols.map(c=>`<td>${r[c]!==undefined&&r[c]!==''?r[c]:'<span class=\'text-slate-300\'>—</span>'}</td>`).join('')}</tr>`).join(''):`<tr><td colspan="${t.cols.length}" class="text-slate-300 italic">empty</td></tr>`}</tbody></table></div></div>`;
+  return `<div class="h-56 bg-slate-100 border-t border-slate-300 shrink-0 flex flex-col"><div class="px-4 py-2 border-b border-slate-200 bg-white"><span class="text-sm font-semibold text-slate-700">Data state · mock DB</span><span class="text-xs text-slate-400"> - one <code>relationship</code> owns it all. The page is a <b>per-viewer projection</b>: <code>note.side</code> + <code>note.scope</code> and <code>deal.private</code> decide what "Seeing as ${viewer}" can see. Deal docs are NOT here (they live in the deal).</span></div><div class="flex-1 overflow-auto p-3 pb-20"><div class="flex gap-3 items-start">${DB().map(card).join('')}</div></div></div>`;
+}
+
+/* =========================================================================
+   COMPOSE + DEMO BAR + WIRING
+   ========================================================================= */
+function screen(){ return `${topbar()}<div class="flex-1 min-h-0 overflow-x-auto"><div class="flex h-full min-w-[1300px]">${iconRail()}${subnav()}${pageArea()}${sellaRail()}</div></div>${showDB?dbDrawer():''}`; }
+function seg(label, opts, cur){ return `<div class="flex items-center gap-1 bg-slate-800 rounded-full p-0.5"><span class="text-[10px] text-slate-400 px-2">${label}</span>${opts.map(([k,t])=>`<button data-set="${label}" data-val="${k}" class="text-xs px-2.5 py-1 rounded-full ${cur===k?'bg-white text-slate-900 font-medium':'text-slate-300'}">${t}</button>`).join('')}</div>`; }
+function bar(){
+  return `<button data-db class="fixed bottom-4 left-4 z-50 text-sm px-3 py-2 bg-slate-900 text-white rounded-full shadow-xl">⛁ ${showDB?'Hide data':'Show data'}</button>
+  <div class="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-slate-900 rounded-2xl shadow-xl px-3 py-2 flex-wrap justify-center max-w-[94vw]"><span class="text-[10px] text-pink-300 font-semibold pr-1">DEMO</span>
+    ${seg('State',[['active','Active'],['new','New']],state)}
+    ${seg('Seeing as',[['supplier','Supplier'],['buyer','Buyer']],viewer)}</div>`;
+}
+function render(){
+  document.getElementById('app').innerHTML=screen();
+  document.getElementById('bar').innerHTML=bar();
+  document.getElementById('modal').innerHTML=sellaModal()+analyticsModal();
+  document.querySelectorAll('[data-set]').forEach(b=>b.addEventListener('click',()=>{
+    const k=b.getAttribute('data-set'), v=b.getAttribute('data-val');
+    if(k==='State'){state=v; tabC='overview';}
+    else if(k==='Seeing as'){viewer=v;}
+    render();
+  }));
+  const db=document.querySelector('[data-db]'); if(db)db.addEventListener('click',()=>{showDB=!showDB; render();});
+  const od=document.querySelector('[data-open-deals]'); if(od)od.addEventListener('click',()=>{tabC='deals'; dealFilter='all'; render();});
+  document.querySelectorAll('[data-dealfilter]').forEach(b=>b.addEventListener('click',()=>{dealFilter=b.getAttribute('data-dealfilter'); render();}));
+  const lg=document.querySelector('[data-log]'); if(lg)lg.addEventListener('click',()=>{logExpanded=!logExpanded; render();});
+  document.querySelectorAll('[data-tabc]').forEach(b=>b.addEventListener('click',()=>{tabC=b.getAttribute('data-tabc'); render();}));
+  const sb=document.querySelector('[data-sella]'); if(sb)sb.addEventListener('click',()=>{sellaOpen=true; render();});
+  const ab=document.querySelector('[data-analytics]'); if(ab)ab.addEventListener('click',()=>{analyticsOpen=true; render();});
+  document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',()=>{const w=b.getAttribute('data-close'); if(w==='sella')sellaOpen=false; if(w==='analytics')analyticsOpen=false; render();}));
+  document.querySelectorAll('[data-backdrop]').forEach(b=>b.addEventListener('click',()=>{const w=b.getAttribute('data-backdrop'); if(w==='sella')sellaOpen=false; if(w==='analytics')analyticsOpen=false; render();}));
+}
+render();
+</script>
+</body>
+</html>

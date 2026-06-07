@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<!-- PROTOTYPE - throwaway. CHAT (screen ②) - full chat: connect->chat rollout + post-birth deal-card SYNC.
+     POST-ACCEPTANCE ONLY (the Pending/accept step is the INBOX's job). Decided Connect shell.
+
+     DEMO bar: Request (Plain|+Message|Price-list|+Deal-card) · [Deal (Pending|Confirmed|Cancelled)] ·
+       [Change (None|P2P→pending|P2P→applied|Deal→applied)] · Chat (C2C|P2P|Deal) · Seeing as (Supplier|Buyer)
+
+     ROLLOUT: C2C=company notice board (system); P2P/Deal=Sella facilitates. +Deal-card -> deal_detected, BOTH confirm
+       -> workspace_created + Deal chat (deal_opened); either No -> cancelled+archived.
+
+     SYNC: Deal chat = ground truth; P2P = where people actually talk. Messages NOT synced; the DEAL CARD is the
+       shared truth, shown identically (thin pin -> click opens the full flip card) in both chats, versioned v1->v2.
+       Change in P2P  -> Sella TAKES INPUT (suggested delta + a NOTE each user writes; both submit) -> card v2 in both
+         + a per-user `deal_card_updated` SYSTEM MESSAGE into the Deal chat (everyone sees) + deal_card_log + evidence.
+       Change in Deal chat -> card v2 + log + evidence, NO broadcast (everyone there already saw it).
+       Deal card = openable flip dialog: FRONT = facts/products; BACK = a FILTER (Signals | Logs | …) that swaps the view. -->
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hello Sello - Chat (prototype)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", sans-serif; }
+  .data-table { border-collapse: collapse; width: 100%; font-size: 10.5px; }
+  .data-table th, .data-table td { text-align: left; padding: 3px 7px; border-bottom: 1px solid #e2e8f0; white-space: nowrap; }
+  .data-table th { font-weight: 600; color:#64748b; background:#f8fafc; text-transform: uppercase; font-size: 9px; letter-spacing:.03em; }
+  code { font-size: 10px; background:#f1f5f9; padding:1px 4px; border-radius:3px; }
+  .flip-3d { perspective: 1600px; }
+  .flip-inner { transition: transform .5s; transform-style: preserve-3d; position: relative; height: 100%; }
+  .flip-inner.back { transform: rotateY(180deg); }
+  .flip-face { backface-visibility: hidden; -webkit-backface-visibility: hidden; height: 100%; }
+  .flip-face.rear { position: absolute; inset: 0; transform: rotateY(180deg); }
+</style>
+</head>
+<body class="bg-slate-50 text-slate-900 h-screen overflow-hidden">
+<div id="app" class="h-screen flex flex-col"></div>
+<div id="bar"></div>
+<div id="modal"></div>
+<script>
+/* =========================================================================
+   SCENARIO
+   ========================================================================= */
+const SUPPLIER = {co:'Canadian Craft', sub:'Cannabis Co',      person:'Kim',    pInit:'KC', cInit:'CC'};
+const BUYER    = {co:'ABC Apotheke',   sub:'Apotheke am Werth', person:'Thomas', pInit:'TA', cInit:'AB'};
+const DEAL_HS  = 'HS-AUR07-CAN23-A189371';
+
+const REQUESTS = {
+  plain:     {label:'Plain connect',  opensP2P:false, seedKind:null,        blurb:'Bare connect - company chat only.'},
+  message:   {label:'+ Message',      opensP2P:true,  seedKind:'note',      blurb:'Connected with a note.'},
+  pricelist: {label:'Price-list ask', opensP2P:true,  seedKind:'pricelist', blurb:'Buyer asked the supplier for a price list.'},
+  dealcard:  {label:'+ Deal-card',    opensP2P:true,  seedKind:'dealcard',  blurb:'Deal card attached -> Sella detects a deal.'},
+};
+const SEED = {
+  note:      {sender:BUYER, body:'Hi Kim - we move a lot of indica into Cologne pharmacies. Worth a chat?'},
+  pricelist: {sender:BUYER, body:'Could you share your current price list? Looking at Q3 volume.'},
+  dealcard:  {sender:BUYER, body:'Put together a draft order - take a look.'},
+};
+const OTHERS=[
+  {co:'MedicoPharmaX', person:'Anna Müller',  init:'AM', last:'Re: delivery schedule',         unread:2},
+  {co:'Apo Berlin',    person:'Petra Keller', init:'PK', last:'Can you send the updated cert?', unread:1},
+];
+
+// The deal card = shared truth, versioned. v1 at birth; v2 after the swap (Northern Lights -> Amnesia Haze).
+const CARD = {
+  hs:DEAL_HS, date:'15 Jun 2026', delivery:'01 Aug 2026',
+  seller:{name:'CANADIAN CRAFT', sub:'CANNABIS CO'}, buyer:{name:'ABC APOTHEKE', sub:'AM WERTH'},
+  v1:{ver:1, net:'€23,000', gross:'€25,390', margin:'€4,000',
+      products:[['Northern Lights','Indica','2.0 kg','€4.20/g','bg-emerald-100'],['Sour Diesel','Sativa','1.5 kg','€4.50/g','bg-lime-100'],
+                ['White Widow','Hybrid','1.0 kg','€4.30/g','bg-teal-100'],['OG Kush','Indica','0.75 kg','€4.60/g','bg-green-100'],
+                ['Gelato','Hybrid','0.25 kg','€5.00/g','bg-amber-100'],['Lemon Haze','Sativa','0.5 kg','€4.80/g','bg-yellow-100']]},
+  v2:{ver:2, net:'€24,200', gross:'€26,620', margin:'€4,200',
+      products:[['Amnesia Haze','Sativa','2.0 kg','€4.60/g','bg-orange-100'],['Sour Diesel','Sativa','1.5 kg','€4.50/g','bg-lime-100'],
+                ['White Widow','Hybrid','1.0 kg','€4.30/g','bg-teal-100'],['OG Kush','Indica','0.75 kg','€4.60/g','bg-green-100'],
+                ['Gelato','Hybrid','0.25 kg','€5.00/g','bg-amber-100'],['Lemon Haze','Sativa','0.5 kg','€4.80/g','bg-yellow-100']]},
+  signals:{ seller:[['📈','Margin healthy','17% on this deal - above your 14% pharmacy average.'],['🔁','Repeat buyer','4th deal with ABC; they reorder ~every 5 weeks.']],
+            buyer:[['💸','Priced well','Net is ~8% under your last comparable order.'],['🚚','Reliable','Canadian Craft delivered on time on 96% of past orders.']] },
+};
+const cardData = ()=> cardVer()===2 ? CARD.v2 : CARD.v1;
+const CHANGE_DELTA = 'Northern Lights → Amnesia Haze · net €23,000 → €24,200';
+// Each user writes their OWN note - Sella is the scribe, not the author. Prefilled here (text entry is flaky to automate).
+const NOTE = { supplier:'NL sold out - swapping in Amnesia Haze, similar profile, slightly higher value.',
+               buyer:'Fine with the swap, go ahead.' };
+
+// casual P2P exchange that turns out to be deal-affecting
+const TRIGGER = [
+  {sender:BUYER,    body:'Quick one - are the Northern Lights still good for the August batch?'},
+  {sender:SUPPLIER, body:'Ah - NL just sold out. I can swap in Amnesia Haze, similar profile, slightly higher. Net would move to €24,200.'},
+  {sender:BUYER,    body:'Works for us, go ahead.'},
+];
+
+/* =========================================================================
+   DEMO + UI STATE
+   ========================================================================= */
+let req='dealcard';
+let dealVote={supplier:'yes', buyer:'yes'};
+let change='none';      // none | p2p_pending | p2p_applied | deal_applied
+let changeSubmitted={supplier:false, buyer:false};  // who has submitted their input+note
+let chat='p2p';
+let viewer='supplier';
+let listFilter='all';
+let cardOpen=false, cardFlipped=false, backTab='signals';  // the openable flip card + its back filter
+let showDB=true;
+
+const R = ()=>REQUESTS[req];
+const me   = ()=> viewer==='supplier' ? SUPPLIER : BUYER;
+const them = ()=> viewer==='supplier' ? BUYER : SUPPLIER;
+const p2pExists  = ()=> R().opensP2P;
+const isDealReq  = ()=> req==='dealcard';
+const dealConfirmed = ()=> isDealReq() && dealVote.supplier==='yes' && dealVote.buyer==='yes';
+const dealCancelled = ()=> isDealReq() && (dealVote.supplier==='no' || dealVote.buyer==='no');
+const dealPending   = ()=> isDealReq() && !dealConfirmed() && !dealCancelled();
+const dealExists = ()=> p2pExists() && dealConfirmed();
+const cardVer = ()=> (change==='p2p_applied'||change==='deal_applied') ? 2 : 1;
+const cardChanged = ()=> cardVer()===2;
+
+/* =========================================================================
+   SYSTEM-MESSAGE MODEL
+   ========================================================================= */
+function sysC2C(){
+  const out=[{type:'connection_established', scope:'company', actor:'system', body:`${SUPPLIER.co} and ${BUYER.co} are now connected.`}];
+  if(dealConfirmed()) out.push({type:'deal_started', scope:'company', actor:'system', body:`${SUPPLIER.co} and ${BUYER.co} started working on deal ${DEAL_HS}.`});
+  return out;
+}
+function sysP2P(){
+  if(!p2pExists()) return [];
+  if(req==='message') return [{type:'intro', scope:'person', actor:'sella', body:`${BUYER.person} from ${BUYER.co} wants to connect with ${SUPPLIER.person} from ${SUPPLIER.co}. Their note is below - take it from here.`}];
+  if(req==='pricelist') return [{type:'intro', scope:'person', actor:'sella', body:`${BUYER.person} from ${BUYER.co} is asking ${SUPPLIER.person} (${SUPPLIER.co}) for a price list. Over to you both.`}];
+  if(isDealReq()){
+    const out=[{type:'deal_detected', scope:'person', actor:'sella', body:`${BUYER.person} (${BUYER.co}) sent a deal draft to ${SUPPLIER.person} (${SUPPLIER.co}). I'm detecting a deal - both of you, want me to start drafting it?`}];
+    if(dealConfirmed()) out.push({type:'workspace_created', scope:'person', actor:'sella', body:`Both confirmed. I've opened a deal workspace (chat + artifacts). Find it on your Relationship page.`});
+    if(dealCancelled()) out.push({type:'deal_cancelled', scope:'person', actor:'sella', body:`The draft was declined, so I've cancelled this deal and archived it. You're still connected.`});
+    return out;
+  }
+  return [];
+}
+function cardLog(){
+  const log=[{ver:1, at:'15 Jun', by:'Kim + Thomas', change:'Deal created', why:'Initial draft confirmed by both'}];
+  if(cardChanged()) log.push({ver:2, at:'18 Jun', by:(change==='p2p_applied'?'via P2P':'via Deal chat'),
+     change:CHANGE_DELTA, why:`Kim: "${NOTE.supplier}"  ·  Thomas: "${NOTE.buyer}"`});
+  return log;
+}
+
+/* =========================================================================
+   SHELL
+   ========================================================================= */
+const RAIL=[{name:'Home',icon:'🏠',s:'a'},{name:'Connect',icon:'💬',s:'sel'},{name:'Discover',icon:'🔍',s:'a'},{name:'Present',icon:'🏪',s:'a'},{name:'Buy',icon:'🛒',s:'soon'},{name:'Sell',icon:'🏷️',s:'soon'},{name:'Trade',icon:'🔄',s:'soon'}];
+function topbar(){
+  return `<header class="h-14 bg-white border-b border-slate-200 flex items-center px-4 gap-4 shrink-0">
+    <span class="text-pink-600 font-black text-lg tracking-tight shrink-0">Hello sello</span>
+    <div class="flex-1 max-w-2xl mx-auto"><div class="flex items-center gap-2 px-4 py-2 bg-slate-100 rounded-full text-slate-400 text-sm"><span>🔍</span>Search for company, product or service…</div></div>
+    <div class="flex items-center gap-2 shrink-0"><span class="text-sm font-medium text-slate-700 hidden xl:inline">${me().co}</span><div class="w-8 h-8 rounded-lg bg-pink-100 text-pink-700 flex items-center justify-center font-bold text-xs">${me().cInit}</div></div>
+  </header>`;
+}
+function iconRail(){
+  const base='flex flex-col items-center gap-0.5 py-2 rounded-lg text-[9px] font-medium leading-none';
+  const item=n=> n.s==='sel'?`<a href="#" class="${base} text-pink-700 bg-pink-50"><span class="text-lg">${n.icon}</span>${n.name}</a>`
+    : n.s==='a'?`<a href="#" class="${base} text-slate-600 hover:bg-slate-100"><span class="text-lg">${n.icon}</span>${n.name}</a>`
+    :`<span class="${base} text-slate-300"><span class="text-lg grayscale">${n.icon}</span>${n.name}</span>`;
+  return `<aside class="w-16 bg-white border-r border-slate-200 shrink-0 flex flex-col px-1.5 py-2 gap-0.5">${RAIL.map(item).join('')}<div class="mt-auto flex justify-center pt-2"><div class="w-8 h-8 rounded-full bg-gradient-to-br from-orange-400 to-pink-500"></div></div></aside>`;
+}
+function subnav(){
+  const tabs=[{name:'Chat',icon:'💬',sel:true},{name:'Inbox',icon:'📥',badge:2},{name:'Relationship',icon:'🔗'},{name:'Deals',icon:'📄'}];
+  return `<div class="w-44 bg-white border-r border-slate-200 shrink-0 p-2"><div class="px-2 py-2 text-sm font-bold text-slate-800">Connect</div>${tabs.map(t=>`<a href="#" class="flex items-center gap-2 px-2.5 py-2 rounded-lg text-sm ${t.sel?'bg-pink-50 text-pink-700 font-medium':'text-slate-600 hover:bg-slate-100'}"><span>${t.icon}</span>${t.name}${t.badge?`<span class="ml-auto text-[10px] bg-pink-600 text-white rounded-full px-1.5">${t.badge}</span>`:''}</a>`).join('')}</div>`;
+}
+
+/* ---- chat list ---- */
+function liveThreads(){
+  const t=[];
+  const c=sysC2C(); t.push({key:'c2c', icon:'🏢', name:`${BUYER.co}`, sub:'Company chat (C2C)', last:c[c.length-1].body, unread: chat==='c2c'?0:1, company:BUYER.co});
+  if(p2pExists()){ const p=sysP2P(); const lastBody = isDealReq() ? p[p.length-1].body : (SEED[R().seedKind]?SEED[R().seedKind].body:p[p.length-1].body);
+    t.push({key:'p2p', icon:'👤', name:BUYER.person, sub:`P2P · ${BUYER.co}`, last:lastBody, unread: chat==='p2p'?0:1, company:BUYER.co, init:BUYER.pInit}); }
+  if(dealExists()){ t.push({key:'deal', icon:'📄', name:DEAL_HS, sub:'Deal chat', last: cardChanged()&&change==='p2p_applied'?'Deal card updated · '+CHANGE_DELTA:'Deal updates land here.', unread: chat==='deal'?0:1, company:BUYER.co}); }
+  return t;
+}
+function listRow(o){
+  const sel = o.key && chat===o.key;
+  const badge = o.unread?`<span class="text-[10px] bg-pink-600 text-white rounded-full px-1.5 shrink-0">${o.unread}</span>`:'';
+  const avatar = o.icon?`<div class="w-9 h-9 rounded-full ${sel?'bg-pink-600 text-white':'bg-slate-200 text-slate-500'} shrink-0 flex items-center justify-center text-sm">${o.icon}</div>`:`<div class="w-9 h-9 rounded-full bg-slate-200 text-slate-500 shrink-0 flex items-center justify-center text-xs font-semibold">${o.init}</div>`;
+  return `<button ${o.key?`data-chat="${o.key}"`:''} class="w-full text-left px-3 py-3 border-b border-slate-50 flex gap-3 ${sel?'bg-pink-50':'hover:bg-slate-50'}">${avatar}
+    <div class="min-w-0 flex-1"><div class="flex items-center justify-between gap-2"><span class="text-sm font-medium text-slate-800 truncate">${o.name}</span>${badge}</div>
+      <div class="text-xs text-slate-400 truncate">${o.sub}</div><div class="text-xs text-slate-500 truncate mt-0.5">${o.last||''}</div></div></button>`;
+}
+function chatList(){
+  const filters=[['all','All'],['unread','Unread'],['companies','Companies']];
+  let bodyRows;
+  if(listFilter==='companies'){
+    const groups={}; liveThreads().forEach(t=>{(groups[t.company]=groups[t.company]||[]).push(t);});
+    OTHERS.forEach(o=>{(groups[o.co]=groups[o.co]||[]).push({icon:null,init:o.init,name:o.person,sub:'Contact',last:o.last,unread:o.unread});});
+    bodyRows = Object.keys(groups).map(co=>`<div class="px-3 pt-3 pb-1 text-[11px] font-bold uppercase tracking-wide text-slate-400 bg-slate-50/70">🏢 ${co}</div>${groups[co].map(listRow).join('')}`).join('');
+  } else {
+    let rows=liveThreads().concat(OTHERS.map(o=>({icon:null,init:o.init,name:o.person,sub:o.co,last:o.last,unread:o.unread})));
+    if(listFilter==='unread') rows=rows.filter(r=>r.unread>0);
+    bodyRows = rows.length?rows.map(listRow).join(''):`<div class="p-6 text-center text-sm text-slate-400">Nothing unread.</div>`;
+  }
+  return `<div class="w-72 bg-white border-r border-slate-200 shrink-0 flex flex-col">
+    <div class="p-3 border-b border-slate-100 space-y-2"><button class="w-full text-sm px-3 py-2 bg-pink-600 text-white rounded-lg">+ New Chat</button>
+      <div class="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-lg text-slate-400 text-sm"><span>🔍</span>Search…</div>
+      <div class="flex gap-1.5 text-xs pt-0.5">${filters.map(([k,l])=>`<button data-filter="${k}" class="px-2.5 py-1 rounded-full ${listFilter===k?'bg-pink-600 text-white font-medium':'bg-slate-100 text-slate-500 hover:bg-slate-200'}">${l}</button>`).join('')}</div></div>
+    <div class="flex-1 overflow-y-auto">${bodyRows}</div></div>`;
+}
+
+/* =========================================================================
+   THIN PINNED CARD  ->  click opens the full flip-card DIALOG
+   ========================================================================= */
+function pinnedCard(){
+  // thin row: "Talking about: [HS ▾]" on the left, a thin pink "Deal card ▸" pill on the right (click -> opens the dialog)
+  const upd = cardChanged()?`<span class="text-pink-200"> · updated</span>`:'';
+  return `<div class="bg-white border-b border-slate-200 px-4 py-2 shrink-0">
+    <div class="flex items-center gap-2">
+      <span class="text-[11px] text-slate-400">Talking about:</span>
+      <button class="text-xs px-2.5 py-1 bg-slate-100 rounded-lg text-slate-700 flex items-center gap-1.5">${DEAL_HS} <span class="text-slate-400">▾</span></button>
+      <button data-open-card class="ml-auto text-xs px-2.5 py-1 bg-pink-600 text-white rounded-lg flex items-center gap-1.5 font-medium">Deal card${upd} <span class="text-pink-200">▸</span></button>
+    </div></div>`;
+}
+
+/* ---- the full card (front facts / back filter: Signals | Logs) inside a dialog ---- */
+function cardFront(){
+  const d=cardData();
+  const row=(l,v,hot)=>`<div class="flex items-stretch gap-2"><div class="w-28 bg-pink-600 text-white rounded-md px-2.5 py-1.5 text-xs font-bold flex items-center">${l}</div><div class="flex-1 ${hot?'bg-yellow-200':'bg-white'} rounded-md px-2.5 py-1.5 text-xs font-medium text-slate-800">${v}</div></div>`;
+  const margin = viewer==='supplier' ? row('Margin', d.margin+' <span class="text-[9px] font-normal">(seller only)</span>', true) : row('Buyer metric','<span class="text-slate-400">placeholder</span>');
+  return `<div class="flip-face">
+    <div class="bg-[#f7bdd0] rounded-2xl p-3 h-full flex flex-col">
+      <button data-flip class="absolute top-3 left-3 w-6 h-6 rounded-full bg-white/70 hover:bg-white text-pink-700 text-xs flex items-center justify-center z-10" title="Flip">⇆</button>
+      <div class="bg-pink-600 text-white text-center font-bold tracking-wide text-xs rounded-md py-1.5 mt-0.5">${CARD.hs}</div>
+      <div class="bg-white text-center text-slate-700 text-[11px] rounded-md py-1 mt-1.5">Order from ${CARD.date} · delivery ${CARD.delivery}</div>
+      <div class="space-y-1.5 mt-1.5">${row('Value net', d.net)}${row('Value gross', d.gross)}${margin}</div>
+      <div class="bg-white rounded-md p-2 mt-1.5 flex-1 min-h-0 flex flex-col">
+        <div class="flex items-center justify-between px-1 pb-1"><span class="text-[11px] font-semibold text-slate-600">Products (${d.products.length})</span><span class="text-[10px] text-slate-400">scroll ↓</span></div>
+        <div class="overflow-y-auto divide-y divide-slate-100 flex-1 min-h-0">${d.products.map(p=>`<div class="flex items-center gap-2 px-1 py-1.5">
+          <div class="w-7 h-7 rounded ${p[4]} flex items-center justify-center text-xs shrink-0">🌿</div>
+          <div class="min-w-0 flex-1"><div class="flex items-center justify-between gap-2"><span class="text-[11px] font-semibold text-slate-800 truncate">${p[0]}</span><span class="text-[10px] text-slate-700 shrink-0">${p[3]}</span></div>
+            <div class="text-[10px] text-slate-500 truncate">${p[1]} · ${p[2]}</div></div></div>`).join('')}</div>
+      </div>
+      <div class="text-center text-[10px] text-pink-700 mt-1.5">Flip (top-left) → Signals / Logs</div>
+    </div></div>`;
+}
+function cardBack(){
+  const tabs=[['signals','✦ Signals'],['logs','⛁ Logs']];
+  let content;
+  if(backTab==='logs'){
+    content = `<div class="space-y-1.5 overflow-y-auto flex-1 min-h-0">${cardLog().slice().reverse().map(l=>`<div class="bg-white rounded-md px-2.5 py-1.5">
+      <div class="text-[11px] font-semibold text-slate-800">${l.change}</div>
+      <div class="text-[10px] text-slate-400 mt-0.5">${l.by} · ${l.at}</div><div class="text-[10px] text-slate-500 mt-0.5">${l.why}</div></div>`).join('')}</div>`;
+  } else {
+    content = `<div class="space-y-1.5 overflow-y-auto flex-1 min-h-0">${CARD.signals[viewer==='supplier'?'seller':'buyer'].map(s=>`<div class="bg-white rounded-md px-2.5 py-1.5">
+      <div class="text-[11px] font-semibold text-slate-800 flex items-center gap-1.5">${s[0]} ${s[1]}</div><div class="text-[10px] text-slate-500 mt-0.5">${s[2]}</div></div>`).join('')}</div>`;
+  }
+  return `<div class="flip-face rear">
+    <div class="bg-[#f7bdd0] rounded-2xl p-3 h-full flex flex-col">
+      <button data-flip class="absolute top-3 left-3 w-6 h-6 rounded-full bg-white/70 hover:bg-white text-pink-700 text-xs flex items-center justify-center z-10" title="Flip">⇆</button>
+      <div class="bg-pink-600 text-white text-center font-bold tracking-wide text-xs rounded-md py-1.5 mt-0.5">CARD BACK</div>
+      <div class="flex gap-1 mt-1.5 bg-white/50 rounded-full p-0.5">${tabs.map(([k,l])=>`<button data-backtab="${k}" class="flex-1 text-[11px] py-1 rounded-full ${backTab===k?'bg-pink-600 text-white font-medium':'text-pink-800'}">${l}</button>`).join('')}</div>
+      ${backTab==='signals'?`<div class="text-center text-[10px] text-pink-800 mt-1.5 mb-1">${viewer==='supplier'?'Seller':'Buyer'} signals · Sella's read</div>`:`<div class="mt-2"></div>`}
+      ${content}
+    </div></div>`;
+}
+function cardDialog(){
+  if(!cardOpen) return '';
+  return `<div data-card-backdrop class="fixed inset-0 z-[60] bg-slate-900/40 flex items-center justify-center p-4">
+    <div class="relative w-[340px] h-[480px]" onclick="event.stopPropagation()">
+      <button data-close-card class="absolute -top-3 -right-3 z-20 w-7 h-7 rounded-full bg-white shadow text-slate-500 hover:text-slate-800 flex items-center justify-center">✕</button>
+      <div class="flip-3d h-full"><div class="flip-inner ${cardFlipped?'back':''}">${cardFront()}${cardBack()}</div></div>
+    </div></div>`;
+}
+
+/* =========================================================================
+   MAIN CHAT
+   ========================================================================= */
+function sysBubble(s){
+  const tone = s.actor==='system' ? 'bg-emerald-50 border-emerald-100 text-emerald-800' : s.type==='deal_cancelled' ? 'bg-slate-100 border-slate-200 text-slate-500' : 'bg-pink-50 border-pink-100 text-pink-700';
+  const tag = s.actor==='sella' ? '✦ Sella' : '✦';
+  return `<div class="flex justify-center my-2"><div class="max-w-[80%] text-[11px] ${tone} border rounded-2xl px-3 py-2 flex flex-col items-center text-center gap-0.5"><span>${s.body}</span><span class="opacity-50 text-[9px] uppercase tracking-wide">${tag} · ${s.type} · logged</span></div></div>`;
+}
+function voteRow(role,name){
+  const v=dealVote[role], isViewer=(viewer===role);
+  let right = v==='yes'?`<span class="text-emerald-600 font-medium">✓ confirmed</span>`:v==='no'?`<span class="text-slate-400">✕ declined</span>`:isViewer?`<span class="text-pink-600">↓ your call</span>`:`<span class="text-amber-600">⏳ waiting</span>`;
+  return `<div class="flex items-center justify-between text-[11px] px-2 py-0.5"><span class="text-slate-600">${isViewer?'You':name} <span class="text-slate-400">· ${role}</span></span>${right}</div>`;
+}
+function dealQuestion(){
+  const q=sysP2P().find(s=>s.type==='deal_detected').body; const voted = dealVote[viewer]!==null;
+  return `<div class="flex justify-center my-2"><div class="max-w-[80%] bg-pink-50 border border-pink-200 rounded-2xl px-3.5 py-2.5 text-center">
+    <div class="text-[11px] text-pink-700">${q}</div><div class="text-[9px] uppercase tracking-wide text-pink-400 mt-0.5 mb-1.5">✦ Sella · deal_detected · logged · BOTH must confirm</div>
+    <div class="bg-white/70 rounded-lg py-1 mb-2">${voteRow('supplier',SUPPLIER.person)}${voteRow('buyer',BUYER.person)}</div>
+    ${voted?`<div class="text-[11px] text-slate-500">You've answered - waiting on ${them().person}. <button data-vote="reset" class="underline">change</button></div>`:`<div class="flex gap-2 justify-center"><button data-vote="yes" class="bg-pink-600 text-white rounded-lg px-4 py-1.5 text-sm font-semibold">Yes, draft it</button><button data-vote="no" class="border border-slate-300 text-slate-500 rounded-lg px-4 py-1.5 text-sm">Not now</button></div>`}</div></div>`;
+}
+// CHANGE BOX - Sella TAKES INPUT (suggested delta + a NOTE each user writes). Per-user, both submit.
+function changeBox(){
+  const otherRole = viewer==='supplier'?'buyer':'supplier';
+  const meDone = changeSubmitted[viewer], otherDone = changeSubmitted[otherRole];
+  const myField = meDone
+    ? `<div class="bg-emerald-50 border border-emerald-100 rounded-lg px-2.5 py-1.5 text-[11px] text-emerald-800">✓ You submitted - "<span class="italic">${NOTE[viewer]}</span>"</div>`
+    : `<div class="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-[11px] text-slate-600 mb-1.5">✎ Your note: "<span class="italic">${NOTE[viewer]}</span>" <span class="text-slate-400">(edit before submitting)</span></div>
+       <button data-submit-change class="w-full bg-pink-600 text-white rounded-lg py-1.5 text-sm font-semibold">Submit my input</button>`;
+  const otherField = otherDone
+    ? `<div class="text-[11px] text-emerald-700">✓ ${them().person} submitted - "<span class="italic">${NOTE[otherRole]}</span>"</div>`
+    : `<div class="text-[11px] text-amber-600">⏳ waiting for ${them().person}'s input</div>`;
+  return `<div class="flex justify-center my-2"><div class="max-w-[82%] bg-pink-50 border border-pink-200 rounded-2xl px-3.5 py-2.5">
+    <div class="text-[11px] text-pink-700 text-center">Looks like this changes the deal. Tell me what changed - I'll update the card and inform the team.</div>
+    <div class="text-[9px] uppercase tracking-wide text-pink-400 mt-0.5 mb-2 text-center">✦ Sella · deal_change_detected · I take YOUR input, both of you</div>
+    <div class="bg-white/70 rounded-lg px-2.5 py-1.5 text-[11px] text-slate-700 mb-2">Suggested change: <b>${CHANGE_DELTA}</b> <span class="text-slate-400">- accept or edit</span></div>
+    <div class="bg-white/70 rounded-lg p-2 space-y-1.5"><div class="text-[10px] uppercase tracking-wide text-slate-400">Your input · ${viewer}</div>${myField}
+      <div class="border-t border-slate-200 pt-1.5">${otherField}</div></div></div></div>`;
+}
+// the per-user card-update broadcast (only fires when change came from the P2P)
+function cardUpdateBubble(){
+  return `<div class="flex justify-center my-2"><div class="max-w-[82%] bg-pink-50 border border-pink-100 rounded-2xl px-3 py-2">
+    <div class="text-[11px] text-pink-700 text-center font-medium">Deal card updated → ${CHANGE_DELTA}</div>
+    <div class="mt-1.5 space-y-1">
+      <div class="text-[11px] text-slate-600 bg-white rounded-md px-2 py-1">✎ <b>${SUPPLIER.person}</b> (seller): "${NOTE.supplier}"</div>
+      <div class="text-[11px] text-slate-600 bg-white rounded-md px-2 py-1">✎ <b>${BUYER.person}</b> (buyer): "${NOTE.buyer}"</div></div>
+    <div class="text-[9px] uppercase tracking-wide text-pink-400 mt-1.5 text-center">✦ Sella · deal_card_updated · per-user · everyone here sees this · logged</div></div></div>`;
+}
+function humanBubble(m){
+  const mine = m.sender===me();
+  return `<div class="flex ${mine?'justify-end':'justify-start'}"><div class="max-w-[70%] ${mine?'bg-pink-600 text-white rounded-br-sm':'bg-white border border-slate-200 rounded-bl-sm'} rounded-2xl px-3.5 py-2 text-sm">${m.body}</div></div>`;
+}
+function dealDraftBox(){
+  let foot = dealConfirmed()?`<div class="mt-2 text-[11px] text-emerald-700 bg-emerald-50 rounded-lg px-2.5 py-1.5">✓ Deal workspace open - see the Deal chat in the list</div>`:dealCancelled()?`<div class="mt-2 text-[11px] text-slate-500 bg-slate-100 rounded-lg px-2.5 py-1.5">✕ Deal cancelled - archived</div>`:'';
+  return `<div class="flex justify-start"><div class="max-w-[80%] bg-white border ${dealCancelled()?'border-slate-200 opacity-70':'border-pink-200'} rounded-2xl rounded-bl-sm p-3"><div class="flex items-center gap-2"><div class="w-9 h-9 rounded-lg bg-pink-100 text-pink-700 flex items-center justify-center">📄</div><div><div class="text-sm font-semibold text-slate-800">${DEAL_HS}</div><div class="text-[11px] text-pink-600 font-medium">Deal draft</div></div></div>${foot}</div></div>`;
+}
+function composer(name){
+  return `<div class="px-4 pb-4 shrink-0"><div class="border border-slate-300 rounded-2xl bg-white px-4 py-3 text-sm text-slate-400 flex items-center gap-2"><span class="text-base">＋</span>Message ${name}…<span class="ml-auto">🎤</span></div></div>`;
+}
+function chatMain(){
+  let header, pinned='', stream;
+  if(chat==='c2c'){
+    header={title:them().co, sub:'Company chat · C2C · audit log', initials:'🏢'}; stream = sysC2C().map(sysBubble).join('');
+  } else if(chat==='p2p'){
+    header={title:them().person, sub:`P2P · ${them().co}`, initials:them().pInit};
+    if(!p2pExists()){ stream = `<div class="text-center text-xs text-slate-400 mt-6">A bare connect opens no P2P - only the company chat.</div>`; }
+    else if(isDealReq() && !dealConfirmed()){ const parts=[humanBubble(SEED.dealcard), dealDraftBox()]; if(dealPending()) parts.push(dealQuestion()); else sysP2P().forEach(s=>parts.push(sysBubble(s))); stream=parts.join(''); }
+    else if(dealExists()){
+      pinned=pinnedCard();
+      const parts=[`<div class="flex justify-center"><div class="text-[10px] text-slate-400 bg-slate-100 rounded-full px-2 py-0.5">Today</div></div>`,
+        humanBubble({sender:BUYER, body:'Morning! How was the trade fair?'}), humanBubble({sender:SUPPLIER, body:'Busy 😄 lots of interest in the new sativas.'})];
+      if(change==='p2p_pending'||change==='p2p_applied') TRIGGER.forEach(m=>parts.push(humanBubble(m)));
+      if(change==='p2p_pending') parts.push(changeBox());
+      if(change==='p2p_applied') parts.push(`<div class="flex justify-center my-1"><div class="text-[11px] text-pink-700 bg-pink-50 border border-pink-100 rounded-full px-3 py-1">✦ Sella updated the card → v2 · told the Deal chat · logged</div></div>`);
+      stream=parts.join('');
+    } else { const parts=[]; sysP2P().forEach(s=>parts.push(sysBubble(s))); if(R().seedKind) parts.push(humanBubble(SEED[R().seedKind])); if(req==='pricelist') parts.push(`<div class="flex justify-end"><button class="text-xs bg-white border border-pink-200 text-pink-700 rounded-full px-3 py-1.5">📎 Share price list</button></div>`); stream=parts.join(''); }
+  } else {
+    header={title:DEAL_HS, sub:'Deal chat · workspace · ground truth', initials:'📄'};
+    if(!dealExists()){ stream=`<div class="text-center text-xs text-slate-400 mt-6">No deal yet. Both parties confirm Sella's draft prompt in the P2P.</div>`; }
+    else { pinned=pinnedCard(); const parts=[]; parts.push(sysBubble({type:'deal_opened',actor:'sella',body:`${BUYER.person} and ${SUPPLIER.person} started a deal - ${DEAL_HS}. Deal updates land here.`}));
+      if(change==='p2p_applied') parts.push(cardUpdateBubble());
+      if(change==='deal_applied'){ TRIGGER.forEach(m=>parts.push(humanBubble(m))); parts.push(`<div class="flex justify-center my-1"><div class="text-[11px] text-slate-500 bg-slate-100 border border-slate-200 rounded-full px-3 py-1">✦ Sella updated the card → v2 · logged · no broadcast (everyone here saw it)</div></div>`); }
+      stream=parts.join(''); }
+  }
+  return `<div class="flex-1 flex flex-col min-w-0 bg-slate-50">
+    <div class="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-5 shrink-0"><div class="flex items-center gap-3"><div class="w-9 h-9 rounded-full bg-slate-200 flex items-center justify-center text-xs font-semibold text-slate-500">${header.initials}</div><div><div class="font-semibold text-slate-800 leading-tight">${header.title}</div><div class="text-xs text-slate-400">${header.sub}</div></div></div><button class="text-xs px-3 py-1.5 border border-slate-200 rounded-lg text-slate-600">My Relationship with ${them().co} ↗</button></div>
+    ${pinned}<div class="flex-1 overflow-y-auto p-5 space-y-2">${stream}</div>${composer(chat==='c2c'?them().co:header.title)}</div>`;
+}
+function sellaRail(){
+  return `<aside class="w-72 bg-white border-l border-slate-200 shrink-0 flex flex-col"><div class="flex-1 p-3 space-y-3"><div class="flex items-center gap-2"><div class="w-8 h-8 rounded-xl bg-pink-600 text-white flex items-center justify-center">&#10022;</div><div class="text-sm font-semibold text-slate-700">Sella</div></div>
+    <div class="bg-slate-50 border border-slate-200 rounded-2xl px-3.5 py-2.5 text-sm text-slate-700">When a line changes the deal, I don't write it for you - I take <b>each of your notes</b>, update the card, and post a per-user update to the Deal chat. Messages aren't synced; the card is.</div>
+    <div class="bg-slate-50 border border-slate-200 rounded-2xl px-3.5 py-2.5 text-xs text-slate-500">Open the card to scroll the facts, flip to <b>Signals / Logs</b>. The log feeds the audit trail.</div></div>
+    <div class="p-3 border-t border-slate-100"><div class="flex items-center gap-2 border border-slate-300 rounded-xl px-3 py-2"><input class="flex-1 outline-none text-sm bg-transparent" placeholder="Ask Sella…"/><span class="text-slate-400">🎤</span></div></div></aside>`;
+}
+
+/* =========================================================================
+   MOCK DB  (+ deal_card, deal_card_log, deal_change_input [per-user evidence])
+   ========================================================================= */
+function DB(){
+  const rels=[], threads=[], msgs=[], audit=[], cards=[], clog=[], evid=[];
+  let mi=1, ai=1; const short=s=>s.length>30?s.slice(0,28)+'…':s;
+  const A=(actor,action,target)=>{audit.push({id:'au_'+String(ai).padStart(2,'0'),actor,action,target}); ai++;};
+  const logSys=(s,thread)=>{ msgs.push({id:'msg_'+String(mi).padStart(2,'0'),thread_id:thread,sender:s.actor,type:s.type,body:short(s.body)}); mi++; A(s.actor,s.type,thread); };
+
+  rels.push({id:'rel_01',company_a:SUPPLIER.co,company_b:BUYER.co,status:'connected'});
+  threads.push({id:'thr_c2c',relationship_id:'rel_01',type:'c2c'}); A(me().co,'accept_connection',BUYER.co); sysC2C().forEach(s=>logSys(s,'thr_c2c'));
+  if(p2pExists()){
+    threads.push({id:'thr_p2p',relationship_id:'rel_01',type:'p2p'});
+    if(R().seedKind){ msgs.push({id:'msg_'+String(mi).padStart(2,'0'),thread_id:'thr_p2p',sender:BUYER.person,type:'text',body:short(SEED[R().seedKind].body)}); mi++; }
+    if(isDealReq() && !dealConfirmed()){ msgs.push({id:'msg_'+String(mi).padStart(2,'0'),thread_id:'thr_p2p',sender:BUYER.person,type:'deal_draft',body:DEAL_HS}); mi++; }
+    sysP2P().forEach(s=>logSys(s,'thr_p2p'));
+    if(isDealReq()){ if(dealConfirmed()){ A(SUPPLIER.person,'confirm_deal',DEAL_HS); A(BUYER.person,'confirm_deal',DEAL_HS); } if(dealCancelled()){ if(dealVote.supplier==='no')A(SUPPLIER.person,'decline_deal',DEAL_HS); if(dealVote.buyer==='no')A(BUYER.person,'decline_deal',DEAL_HS); A('system','deal_archived',DEAL_HS); } }
+  }
+  if(dealExists()){
+    threads.push({id:'thr_deal',relationship_id:'rel_01',type:'deal'});
+    if(change==='p2p_pending'||change==='p2p_applied') TRIGGER.forEach(m=>{ msgs.push({id:'msg_'+String(mi).padStart(2,'0'),thread_id:'thr_p2p',sender:m.sender.person,type:'text',body:short(m.body)}); mi++; });
+    if(change==='deal_applied') TRIGGER.forEach(m=>{ msgs.push({id:'msg_'+String(mi).padStart(2,'0'),thread_id:'thr_deal',sender:m.sender.person,type:'text',body:short(m.body)}); mi++; });
+    logSys({type:'deal_opened',actor:'sella',body:'deal opened'},'thr_deal');
+    if(change==='p2p_applied') logSys({type:'deal_card_updated',actor:'sella',body:short(CHANGE_DELTA)},'thr_deal'); // broadcast only for P2P-origin
+    const d=cardData();
+    cards.push({id:'dc_01',version:d.ver,value_net:d.net.replace('€',''),status:cardChanged()?'amended':'confirmed'});
+    cardLog().forEach((l,i)=>clog.push({id:'dcl_0'+(i+1),deal_card_id:'dc_01',version:l.ver,change:short(l.change)}));
+    if(cardChanged()){ // per-user evidence - each user's individual input/note
+      evid.push({id:'ev_01',deal_card_id:'dc_01',version:2,party:SUPPLIER.person,note:short(NOTE.supplier)});
+      evid.push({id:'ev_02',deal_card_id:'dc_01',version:2,party:BUYER.person,note:short(NOTE.buyer)});
+      A('sella','deal_card_updated','dc_01');
+    }
+  }
+  return [
+    {name:'relationship', cols:['id','company_a','company_b','status'], rows:rels},
+    {name:'chat_thread',  cols:['id','relationship_id','type'], rows:threads},
+    {name:'chat_message', cols:['id','thread_id','sender','type','body'], rows:msgs},
+    {name:'deal_card',    cols:['id','version','value_net','status'], rows:cards},
+    {name:'deal_card_log',cols:['id','deal_card_id','version','change'], rows:clog},
+    {name:'deal_change_input', cols:['id','deal_card_id','version','party','note'], rows:evid},
+    {name:'audit_log',    cols:['id','actor','action','target'], rows:audit},
+  ];
+}
+function dbDrawer(){
+  const card=t=>`<div class="min-w-[235px] bg-white border border-slate-200 rounded-lg overflow-hidden shrink-0 self-start"><div class="px-2.5 py-1.5 bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-700">${t.name} <span class="text-slate-400 font-normal">(${t.rows.length})</span></div><div class="overflow-x-auto"><table class="data-table"><thead><tr>${t.cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead><tbody>${t.rows.length?t.rows.map(r=>`<tr>${t.cols.map(c=>`<td>${r[c]!==undefined&&r[c]!==''?r[c]:'<span class=\'text-slate-300\'>—</span>'}</td>`).join('')}</tr>`).join(''):`<tr><td colspan="${t.cols.length}" class="text-slate-300 italic">empty</td></tr>`}</tbody></table></div></div>`;
+  let note='';
+  if(dealExists()){
+    note = change==='p2p_applied' ? ' Change from P2P -> card v2 + per-user deal_change_input (evidence) + a deal_card_updated SYSTEM MESSAGE in the Deal chat. Raw P2P msgs stay in thr_p2p.'
+      : change==='deal_applied' ? ' Change from Deal chat -> card v2 + per-user evidence + log, NO system message.'
+      : change==='p2p_pending' ? ' Sella is taking both inputs (a note each) before applying.'
+      : ' Deal live at v1. Toggle Change to see a card edit sync across.';
+  }
+  return `<div class="h-56 bg-slate-100 border-t border-slate-300 shrink-0 flex flex-col"><div class="px-4 py-2 border-b border-slate-200 bg-white"><span class="text-sm font-semibold text-slate-700">Data state · mock DB</span><span class="text-xs text-slate-400"> - messages NOT synced; the <code>deal_card</code> is. ${note}</span></div><div class="flex-1 overflow-auto p-3 pb-20"><div class="flex gap-3 items-start">${DB().map(card).join('')}</div></div></div>`;
+}
+
+/* =========================================================================
+   COMPOSE + DEMO BAR
+   ========================================================================= */
+function screen(){ return `${topbar()}<div class="flex-1 min-h-0 overflow-x-auto"><div class="flex h-full min-w-[1240px]">${iconRail()}${subnav()}${chatList()}${chatMain()}${sellaRail()}</div></div>${showDB?dbDrawer():''}`; }
+function seg(label, opts, cur){ return `<div class="flex items-center gap-1 bg-slate-800 rounded-full p-0.5"><span class="text-[10px] text-slate-400 px-2">${label}</span>${opts.map(([k,t])=>`<button data-set="${label}" data-val="${k}" class="text-xs px-2.5 py-1 rounded-full ${cur===k?'bg-white text-slate-900 font-medium':'text-slate-300'}">${t}</button>`).join('')}</div>`; }
+function dealState(){ return dealConfirmed()?'confirmed':dealCancelled()?'cancelled':'pending'; }
+function bar(){
+  return `<button data-db class="fixed bottom-4 left-4 z-50 text-sm px-3 py-2 bg-slate-900 text-white rounded-full shadow-xl">⛁ ${showDB?'Hide data':'Show data'}</button>
+  <div class="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-slate-900 rounded-2xl shadow-xl px-3 py-2 flex-wrap justify-center max-w-[94vw]"><span class="text-[10px] text-pink-300 font-semibold pr-1">DEMO</span>
+    ${seg('Request',[['plain','Plain'],['message','+Message'],['pricelist','Price-list'],['dealcard','+Deal-card']],req)}
+    ${isDealReq()?seg('Deal',[['pending','Pending'],['confirmed','Confirmed'],['cancelled','Cancelled']],dealState()):''}
+    ${dealExists()?seg('Change',[['none','None'],['p2p_pending','P2P·pending'],['p2p_applied','P2P·applied'],['deal_applied','Deal·applied']],change):''}
+    ${seg('Chat',[['c2c','C2C'],['p2p','P2P'],['deal','Deal']],chat)}
+    ${seg('Seeing as',[['supplier','Supplier'],['buyer','Buyer']],viewer)}</div>`;
+}
+function render(){
+  document.getElementById('app').innerHTML=screen();
+  document.getElementById('bar').innerHTML=bar();
+  document.getElementById('modal').innerHTML=cardDialog();
+  document.querySelectorAll('[data-set]').forEach(b=>b.addEventListener('click',()=>{
+    const k=b.getAttribute('data-set'), v=b.getAttribute('data-val');
+    if(k==='Request'){req=v; dealVote={supplier:null,buyer:null}; change='none'; changeSubmitted={supplier:false,buyer:false}; if(!REQUESTS[v].opensP2P && chat!=='c2c') chat='c2c';}
+    else if(k==='Deal'){ dealVote = v==='confirmed'?{supplier:'yes',buyer:'yes'} : v==='cancelled'?{supplier:'yes',buyer:'no'} : {supplier:null,buyer:null}; if(v!=='confirmed') change='none'; }
+    else if(k==='Change'){ change=v; changeSubmitted = v==='p2p_applied'||v==='deal_applied'?{supplier:true,buyer:true}:{supplier:false,buyer:false}; if(v!=='none'&&chat==='c2c')chat='p2p'; }
+    else if(k==='Chat'){chat=v;} else if(k==='Seeing as'){viewer=v;}
+    render();
+  }));
+  document.querySelectorAll('[data-vote]').forEach(b=>b.addEventListener('click',()=>{const v=b.getAttribute('data-vote'); dealVote[viewer]= v==='reset'?null:v; render();}));
+  const sc=document.querySelector('[data-submit-change]'); if(sc)sc.addEventListener('click',()=>{changeSubmitted[viewer]=true; if(changeSubmitted.supplier&&changeSubmitted.buyer) change='p2p_applied'; render();});
+  document.querySelectorAll('[data-chat]').forEach(b=>b.addEventListener('click',()=>{chat=b.getAttribute('data-chat'); render();}));
+  document.querySelectorAll('[data-filter]').forEach(b=>b.addEventListener('click',()=>{listFilter=b.getAttribute('data-filter'); render();}));
+  const oc=document.querySelector('[data-open-card]'); if(oc)oc.addEventListener('click',()=>{cardOpen=true; cardFlipped=false; backTab='signals'; render();});
+  const cc=document.querySelector('[data-close-card]'); if(cc)cc.addEventListener('click',()=>{cardOpen=false; render();});
+  const bd=document.querySelector('[data-card-backdrop]'); if(bd)bd.addEventListener('click',()=>{cardOpen=false; render();});
+  document.querySelectorAll('[data-flip]').forEach(b=>b.addEventListener('click',()=>{cardFlipped=!cardFlipped; render();}));
+  document.querySelectorAll('[data-backtab]').forEach(b=>b.addEventListener('click',()=>{backTab=b.getAttribute('data-backtab'); cardFlipped=true; render();}));
+  const d=document.querySelector('[data-db]'); if(d)d.addEventListener('click',()=>{showDB=!showDB; render();});
+}
+render();
+</script>
+</body>
+</html>

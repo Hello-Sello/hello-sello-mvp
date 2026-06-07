@@ -35,3 +35,21 @@ CLAUDE.md
 
 # Claude Code internal
 .claude/worktrees/
+
+# Personal product-thinking workspace - not shared, gitignored
+_workshop/
+
+# Visual companion (brainstorming skill) - mockups persist here per session
+.superpowers/
+
+# --- Next.js / Node (app) ---
+/node_modules
+/.next/
+/out/
+/build
+/coverage
+*.tsbuildinfo
+next-env.d.ts
+.vercel
+*.pem
+npm-debug.log*

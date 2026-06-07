@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900" viewBox="0 0 1200 900" font-family="-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="ah" markerWidth="11" markerHeight="11" refX="8" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L9,4 L0,8 z" fill="#67c6d6"/></marker>
+  </defs>
+
+  <rect x="0" y="0" width="1200" height="900" fill="#3a414e"/>
+
+  <!-- Title -->
+  <text x="600" y="54" text-anchor="middle" fill="#e8eaee" font-size="30" font-weight="700">How a Deal Happens</text>
+  <text x="600" y="84" text-anchor="middle" fill="#aab0bb" font-size="15.5">Connect surface &#183; June 11 demo &#183; the journey both sides see</text>
+
+  <!-- Actor: Seller -->
+  <rect x="90" y="115" width="320" height="92" rx="14" fill="#474e5c" stroke="#5a616f" stroke-width="1.5"/>
+  <circle cx="132" cy="146" r="9" fill="none" stroke="#c2c7d0" stroke-width="2"/>
+  <path d="M118,174 a14,12 0 0 1 28,0" fill="none" stroke="#c2c7d0" stroke-width="2"/>
+  <text x="162" y="150" fill="#e8eaee" font-size="18" font-weight="600">Seller</text>
+  <text x="162" y="176" fill="#aab0bb" font-size="14">Company A</text>
+
+  <!-- Actor: Buyer -->
+  <rect x="790" y="115" width="320" height="92" rx="14" fill="#474e5c" stroke="#5a616f" stroke-width="1.5"/>
+  <circle cx="832" cy="146" r="9" fill="none" stroke="#c2c7d0" stroke-width="2"/>
+  <path d="M818,174 a14,12 0 0 1 28,0" fill="none" stroke="#c2c7d0" stroke-width="2"/>
+  <text x="862" y="150" fill="#e8eaee" font-size="18" font-weight="600">Buyer</text>
+  <text x="862" y="176" fill="#aab0bb" font-size="14">Company B</text>
+
+  <!-- Converging connectors into step 1 -->
+  <path d="M250,207 V224 H440 V236" fill="none" stroke="#6b7380" stroke-width="2" marker-end="url(#ah)"/>
+  <path d="M950,207 V224 H760 V236" fill="none" stroke="#6b7380" stroke-width="2" marker-end="url(#ah)"/>
+
+  <!-- Step 1 -->
+  <rect x="340" y="238" width="520" height="58" rx="12" fill="#474e5c" stroke="#5a616f" stroke-width="1.5"/>
+  <text x="600" y="264" text-anchor="middle" fill="#e8eaee" font-size="16" font-weight="600">They connect</text>
+  <text x="600" y="283" text-anchor="middle" fill="#aab0bb" font-size="12.5">one sends a request, the other accepts</text>
+
+  <!-- Step 2 -->
+  <rect x="340" y="312" width="520" height="58" rx="12" fill="#474e5c" stroke="#5a616f" stroke-width="1.5"/>
+  <text x="600" y="338" text-anchor="middle" fill="#e8eaee" font-size="16" font-weight="600">They chat</text>
+  <text x="600" y="357" text-anchor="middle" fill="#aab0bb" font-size="12.5">talking about a possible order</text>
+
+  <!-- Step 3 (Sella) -->
+  <rect x="340" y="386" width="520" height="58" rx="12" fill="#4f5868" stroke="#6f7888" stroke-width="1.5"/>
+  <text x="600" y="412" text-anchor="middle" fill="#ffffff" font-size="16" font-weight="600">Sella spots a deal</text>
+  <text x="600" y="431" text-anchor="middle" fill="#d4e9ee" font-size="12.5">notices price, volume and terms taking shape</text>
+  <rect x="770" y="398" width="78" height="26" rx="13" fill="#3a414e" stroke="#67c6d6" stroke-width="1.25"/>
+  <text x="809" y="415" text-anchor="middle" fill="#9fd6e0" font-size="11.5" font-weight="600">&#10022; Sella</text>
+
+  <!-- Step 4 (Sella) -->
+  <rect x="340" y="460" width="520" height="58" rx="12" fill="#4f5868" stroke="#6f7888" stroke-width="1.5"/>
+  <text x="600" y="486" text-anchor="middle" fill="#ffffff" font-size="16" font-weight="600">Sella drafts the Deal Card</text>
+  <text x="600" y="505" text-anchor="middle" fill="#d4e9ee" font-size="12.5">lays out the offer and asks both to confirm</text>
+  <rect x="770" y="472" width="78" height="26" rx="13" fill="#3a414e" stroke="#67c6d6" stroke-width="1.25"/>
+  <text x="809" y="489" text-anchor="middle" fill="#9fd6e0" font-size="11.5" font-weight="600">&#10022; Sella</text>
+
+  <!-- Step 5 -->
+  <rect x="340" y="534" width="520" height="58" rx="12" fill="#474e5c" stroke="#5a616f" stroke-width="1.5"/>
+  <text x="600" y="560" text-anchor="middle" fill="#e8eaee" font-size="16" font-weight="600">Both accept</text>
+  <text x="600" y="579" text-anchor="middle" fill="#aab0bb" font-size="12.5">each side reviews and says yes</text>
+
+  <!-- Step 6 (outcome) -->
+  <rect x="340" y="608" width="520" height="58" rx="12" fill="#474e5c" stroke="#7a818f" stroke-width="1.5"/>
+  <text x="600" y="634" text-anchor="middle" fill="#e8eaee" font-size="16" font-weight="600">Deal is done</text>
+  <text x="600" y="653" text-anchor="middle" fill="#cdd2da" font-size="12.5">Draft &#8594; Confirmed &#8594; Done</text>
+
+  <!-- down arrows between steps -->
+  <path d="M600,297 V310" fill="none" stroke="#6b7380" stroke-width="2" marker-end="url(#ah)"/>
+  <path d="M600,371 V384" fill="none" stroke="#6b7380" stroke-width="2" marker-end="url(#ah)"/>
+  <path d="M600,445 V458" fill="none" stroke="#6b7380" stroke-width="2" marker-end="url(#ah)"/>
+  <path d="M600,519 V532" fill="none" stroke="#6b7380" stroke-width="2" marker-end="url(#ah)"/>
+  <path d="M600,593 V606" fill="none" stroke="#6b7380" stroke-width="2" marker-end="url(#ah)"/>
+
+  <!-- Sella family band -->
+  <line x1="90" y1="694" x2="1110" y2="694" stroke="#4a515e" stroke-width="1"/>
+  <text x="600" y="724" text-anchor="middle" fill="#cdd2da" font-size="18" font-weight="700">The Sella family - the full vision</text>
+  <text x="600" y="747" text-anchor="middle" fill="#aab0bb" font-size="13">June 11 demo runs Deal-Sella. The rest come after.</text>
+
+  <!-- chip 0: First-contact (dim) -->
+  <g opacity="0.6">
+    <rect x="90" y="766" width="150" height="92" rx="10" fill="#353b46" stroke="#434a57" stroke-width="1"/>
+    <text x="165" y="806" text-anchor="middle" fill="#aab0bb" font-size="12.5" font-weight="600">First-contact Sella</text>
+    <text x="165" y="828" text-anchor="middle" fill="#767d8a" font-size="11">greets new contacts</text>
+  </g>
+
+  <!-- chip 1: Deal-Sella (HIGHLIGHT) -->
+  <rect x="264" y="766" width="150" height="92" rx="10" fill="#525a69" stroke="#9fd6e0" stroke-width="2"/>
+  <text x="339" y="806" text-anchor="middle" fill="#f1f3f6" font-size="12.5" font-weight="700">Deal-Sella</text>
+  <text x="339" y="828" text-anchor="middle" fill="#d4dae2" font-size="11">neutral deal mediator</text>
+  <rect x="309" y="756" width="60" height="20" rx="10" fill="#9fd6e0"/>
+  <text x="339" y="770" text-anchor="middle" fill="#25303a" font-size="11" font-weight="700">DEMO</text>
+
+  <!-- chip 2: Seller-Sella (dim) -->
+  <g opacity="0.6">
+    <rect x="438" y="766" width="150" height="92" rx="10" fill="#353b46" stroke="#434a57" stroke-width="1"/>
+    <text x="513" y="806" text-anchor="middle" fill="#aab0bb" font-size="12.5" font-weight="600">Seller-Sella</text>
+    <text x="513" y="828" text-anchor="middle" fill="#767d8a" font-size="11">helps the seller</text>
+  </g>
+
+  <!-- chip 3: Buyer-Sella (dim) -->
+  <g opacity="0.6">
+    <rect x="612" y="766" width="150" height="92" rx="10" fill="#353b46" stroke="#434a57" stroke-width="1"/>
+    <text x="687" y="806" text-anchor="middle" fill="#aab0bb" font-size="12.5" font-weight="600">Buyer-Sella</text>
+    <text x="687" y="828" text-anchor="middle" fill="#767d8a" font-size="11">helps the buyer</text>
+  </g>
+
+  <!-- chip 4: Personal Sella (dim) -->
+  <g opacity="0.6">
+    <rect x="786" y="766" width="150" height="92" rx="10" fill="#353b46" stroke="#434a57" stroke-width="1"/>
+    <text x="861" y="806" text-anchor="middle" fill="#aab0bb" font-size="12.5" font-weight="600">Personal Sella</text>
+    <text x="861" y="828" text-anchor="middle" fill="#767d8a" font-size="11">your assistant</text>
+  </g>
+
+  <!-- chip 5: Company Sella (dim) -->
+  <g opacity="0.6">
+    <rect x="960" y="766" width="150" height="92" rx="10" fill="#353b46" stroke="#434a57" stroke-width="1"/>
+    <text x="1035" y="806" text-anchor="middle" fill="#aab0bb" font-size="12.5" font-weight="600">Company Sella</text>
+    <text x="1035" y="828" text-anchor="middle" fill="#767d8a" font-size="11">company-wide view</text>
+  </g>
+</svg>

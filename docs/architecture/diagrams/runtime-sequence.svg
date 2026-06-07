@@ -1,0 +1,175 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1460" height="1210" viewBox="0 0 1460 1210" font-family="-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="ah" markerWidth="11" markerHeight="11" refX="8" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L9,4 L0,8 z" fill="#67c6d6"/></marker>
+  </defs>
+
+  <rect x="0" y="0" width="1460" height="1210" fill="#3a414e"/>
+
+  <!-- Title -->
+  <text x="730" y="38" text-anchor="middle" fill="#e8eaee" font-size="26" font-weight="700">Connect Demo - How It Runs</text>
+  <text x="730" y="62" text-anchor="middle" fill="#aab0bb" font-size="14">One deal, start to finish - who does what, in order, with the data write and state at each step</text>
+
+  <!-- ===== Lifeline headers ===== -->
+  <!-- Seller -->
+  <rect x="50" y="84" width="180" height="70" rx="12" fill="#474e5c" stroke="#5a616f" stroke-width="1.5"/>
+  <circle cx="140" cy="104" r="8" fill="none" stroke="#c2c7d0" stroke-width="2"/>
+  <path d="M127,128 a13,11 0 0 1 26,0" fill="none" stroke="#c2c7d0" stroke-width="2"/>
+  <text x="140" y="130" text-anchor="middle" fill="#e8eaee" font-size="14.5" font-weight="600">Seller</text>
+  <text x="140" y="147" text-anchor="middle" fill="#aab0bb" font-size="12">Company A</text>
+  <!-- Buyer -->
+  <rect x="270" y="84" width="180" height="70" rx="12" fill="#474e5c" stroke="#5a616f" stroke-width="1.5"/>
+  <circle cx="360" cy="104" r="8" fill="none" stroke="#c2c7d0" stroke-width="2"/>
+  <path d="M347,128 a13,11 0 0 1 26,0" fill="none" stroke="#c2c7d0" stroke-width="2"/>
+  <text x="360" y="130" text-anchor="middle" fill="#e8eaee" font-size="14.5" font-weight="600">Buyer</text>
+  <text x="360" y="147" text-anchor="middle" fill="#aab0bb" font-size="12">Company B</text>
+  <!-- Deal Workspace -->
+  <rect x="530" y="84" width="180" height="70" rx="12" fill="#474e5c" stroke="#5a616f" stroke-width="1.5"/>
+  <text x="620" y="120" text-anchor="middle" fill="#e8eaee" font-size="14.5" font-weight="700">Deal Workspace</text>
+  <text x="620" y="140" text-anchor="middle" fill="#aab0bb" font-size="12" font-style="italic">shared chat</text>
+  <!-- Deal-Sella -->
+  <rect x="780" y="84" width="160" height="70" rx="12" fill="#4f5868" stroke="#6f7888" stroke-width="1.5"/>
+  <text x="860" y="120" text-anchor="middle" fill="#ffffff" font-size="14.5" font-weight="700">Deal-Sella</text>
+  <text x="860" y="140" text-anchor="middle" fill="#d4e9ee" font-size="11.5" font-style="italic">this deal only</text>
+  <!-- AWS Bedrock -->
+  <rect x="980" y="84" width="200" height="70" rx="12" fill="#474e5c" stroke="#5a616f" stroke-width="1.5"/>
+  <text x="1080" y="120" text-anchor="middle" fill="#e8eaee" font-size="14.5" font-weight="700">AWS Bedrock</text>
+  <text x="1080" y="140" text-anchor="middle" fill="#aab0bb" font-size="12" font-style="italic">Claude &#183; Frankfurt</text>
+  <!-- Postgres -->
+  <rect x="1230" y="84" width="180" height="70" rx="12" fill="#474e5c" stroke="#5a616f" stroke-width="1.5"/>
+  <text x="1320" y="120" text-anchor="middle" fill="#e8eaee" font-size="14.5" font-weight="700">Postgres</text>
+  <text x="1320" y="140" text-anchor="middle" fill="#aab0bb" font-size="12" font-style="italic">shared &#183; RLS</text>
+
+  <!-- ===== Lifelines ===== -->
+  <line x1="140" y1="154" x2="140" y2="1006" stroke="#5a616f" stroke-width="1.5" stroke-dasharray="4 6"/>
+  <line x1="360" y1="154" x2="360" y2="1006" stroke="#5a616f" stroke-width="1.5" stroke-dasharray="4 6"/>
+  <line x1="620" y1="154" x2="620" y2="1006" stroke="#5a616f" stroke-width="1.5" stroke-dasharray="4 6"/>
+  <line x1="860" y1="154" x2="860" y2="1006" stroke="#5a616f" stroke-width="1.5" stroke-dasharray="4 6"/>
+  <line x1="1080" y1="154" x2="1080" y2="1006" stroke="#5a616f" stroke-width="1.5" stroke-dasharray="4 6"/>
+  <line x1="1320" y1="154" x2="1320" y2="1006" stroke="#5a616f" stroke-width="1.5" stroke-dasharray="4 6"/>
+
+  <!-- ===== Activation bars ===== -->
+  <rect x="855" y="346" width="10" height="138" fill="#4f5868" stroke="#6f7888" stroke-width="1"/>
+  <rect x="1075" y="392" width="10" height="48" fill="#474e5c" stroke="#5a616f" stroke-width="1"/>
+  <rect x="855" y="832" width="10" height="136" fill="#4f5868" stroke="#6f7888" stroke-width="1"/>
+  <rect x="1075" y="876" width="10" height="48" fill="#474e5c" stroke="#5a616f" stroke-width="1"/>
+
+  <!-- ===== Messages ===== -->
+  <!-- M1 Seller -> DW : chat -->
+  <text x="380" y="190" text-anchor="middle" fill="#cdd2da" font-size="13">chat: 'I can do 5kg at &#8364;4.20/kg, net 30'</text>
+  <line x1="140" y1="200" x2="615" y2="200" stroke="#6b7380" stroke-width="2" marker-end="url(#ah)"/>
+
+  <!-- M2 DW -> PG : persist -->
+  <text x="970" y="230" text-anchor="middle" fill="#cdd2da" font-size="13">persist message</text>
+  <line x1="620" y1="240" x2="1315" y2="240" stroke="#6b7380" stroke-width="2" marker-end="url(#ah)"/>
+
+  <!-- M3 DW -> Deal-Sella : event -->
+  <text x="740" y="270" text-anchor="middle" fill="#cdd2da" font-size="13">new message event</text>
+  <line x1="620" y1="280" x2="853" y2="280" stroke="#6b7380" stroke-width="2" marker-end="url(#ah)"/>
+
+  <!-- NOTE1 detect -->
+  <rect x="705" y="300" width="310" height="46" rx="7" fill="#2c313b" stroke="#4d5462" stroke-width="1"/>
+  <text x="860" y="320" text-anchor="middle" fill="#d4e9ee" font-size="12.5" font-weight="600">detects a deal signal</text>
+  <text x="860" y="338" text-anchor="middle" fill="#aab0bb" font-size="12">(price + volume + terms)</text>
+
+  <!-- M4 Deal-Sella -> Bedrock : extract+draft -->
+  <text x="970" y="368" text-anchor="middle" fill="#cdd2da" font-size="13">extract offer +</text>
+  <text x="970" y="384" text-anchor="middle" fill="#cdd2da" font-size="13">draft Deal Card  (Claude Sonnet)</text>
+  <line x1="865" y1="392" x2="1075" y2="392" stroke="#6b7380" stroke-width="2" marker-end="url(#ah)"/>
+
+  <!-- M5 Bedrock --> Deal-Sella : structured fields (return) -->
+  <text x="970" y="416" text-anchor="middle" fill="#aab0bb" font-size="12.5">structured fields</text>
+  <text x="970" y="432" text-anchor="middle" fill="#aab0bb" font-size="12.5">(product, qty, price, terms)</text>
+  <line x1="1075" y1="440" x2="867" y2="440" stroke="#6b7380" stroke-width="1.75" stroke-dasharray="5 4" marker-end="url(#ah)"/>
+
+  <!-- M6 Deal-Sella -> PG : create Deal Card Draft -->
+  <text x="1095" y="474" text-anchor="middle" fill="#cdd2da" font-size="13">create Deal Card (state = Draft)</text>
+  <line x1="865" y1="484" x2="1315" y2="484" stroke="#6b7380" stroke-width="2" marker-end="url(#ah)"/>
+
+  <!-- M7 Deal-Sella --> DW : surface drafted card (return) -->
+  <text x="742" y="504" text-anchor="middle" fill="#aab0bb" font-size="12.5">surface drafted card</text>
+  <text x="742" y="520" text-anchor="middle" fill="#aab0bb" font-size="12.5">'Here's the deal so far - confirm?'</text>
+  <line x1="855" y1="528" x2="625" y2="528" stroke="#6b7380" stroke-width="1.75" stroke-dasharray="5 4" marker-end="url(#ah)"/>
+
+  <!-- NOTE2 both sides review -->
+  <rect x="70" y="556" width="360" height="34" rx="7" fill="#2c313b" stroke="#4d5462" stroke-width="1"/>
+  <text x="250" y="578" text-anchor="middle" fill="#cdd2da" font-size="12.5">both sides review the draft</text>
+
+  <!-- M8 Buyer -> DW : Accept -->
+  <text x="490" y="614" text-anchor="middle" fill="#cdd2da" font-size="13">Accept</text>
+  <line x1="360" y1="624" x2="615" y2="624" stroke="#6b7380" stroke-width="2" marker-end="url(#ah)"/>
+
+  <!-- M9 Seller -> DW : Accept -->
+  <text x="380" y="654" text-anchor="middle" fill="#cdd2da" font-size="13">Accept</text>
+  <line x1="140" y1="664" x2="615" y2="664" stroke="#6b7380" stroke-width="2" marker-end="url(#ah)"/>
+
+  <!-- M10 DW -> PG : Confirmed -->
+  <text x="970" y="694" text-anchor="middle" fill="#cdd2da" font-size="13">Deal Card &#8594; Confirmed</text>
+  <line x1="620" y1="704" x2="1315" y2="704" stroke="#6b7380" stroke-width="2" marker-end="url(#ah)"/>
+
+  <!-- NOTE3 later -->
+  <rect x="600" y="726" width="240" height="32" rx="7" fill="#262b34" stroke="#4d5462" stroke-width="1"/>
+  <text x="720" y="747" text-anchor="middle" fill="#aab0bb" font-size="12.5" font-style="italic">later - documents attached</text>
+
+  <!-- M11 Seller -> DW : upload docs -->
+  <text x="380" y="782" text-anchor="middle" fill="#cdd2da" font-size="13">upload delivery note + invoice</text>
+  <line x1="140" y1="792" x2="615" y2="792" stroke="#6b7380" stroke-width="2" marker-end="url(#ah)"/>
+
+  <!-- M12 DW -> Deal-Sella : new docs event -->
+  <text x="740" y="822" text-anchor="middle" fill="#cdd2da" font-size="13">new docs event</text>
+  <line x1="620" y1="832" x2="853" y2="832" stroke="#6b7380" stroke-width="2" marker-end="url(#ah)"/>
+
+  <!-- M13 Deal-Sella -> Bedrock : OCR -->
+  <text x="970" y="852" text-anchor="middle" fill="#cdd2da" font-size="13">OCR / read documents</text>
+  <text x="970" y="868" text-anchor="middle" fill="#cdd2da" font-size="13">(Claude Sonnet, vision)</text>
+  <line x1="865" y1="876" x2="1075" y2="876" stroke="#6b7380" stroke-width="2" marker-end="url(#ah)"/>
+
+  <!-- M14 Bedrock --> Deal-Sella : amounts (return) -->
+  <text x="970" y="914" text-anchor="middle" fill="#aab0bb" font-size="12.5">amounts, line items</text>
+  <line x1="1075" y1="924" x2="867" y2="924" stroke="#6b7380" stroke-width="1.75" stroke-dasharray="5 4" marker-end="url(#ah)"/>
+
+  <!-- M15 Deal-Sella -> PG : Done -->
+  <text x="1095" y="958" text-anchor="middle" fill="#cdd2da" font-size="13">auto-amend card &#8594; state = Done</text>
+  <line x1="865" y1="968" x2="1315" y2="968" stroke="#6b7380" stroke-width="2" marker-end="url(#ah)"/>
+
+  <!-- ===== Sella family strip ===== -->
+  <line x1="50" y1="1040" x2="1410" y2="1040" stroke="#4a515e" stroke-width="1"/>
+  <text x="730" y="1068" text-anchor="middle" fill="#cdd2da" font-size="16" font-weight="700">The Sella family - this demo runs Deal-Sella; the rest come later</text>
+
+  <!-- chip 0 First-contact (dim) -->
+  <g opacity="0.55">
+    <rect x="50" y="1090" width="200" height="84" rx="10" fill="#353b46" stroke="#434a57" stroke-width="1"/>
+    <text x="150" y="1126" text-anchor="middle" fill="#aab0bb" font-size="14" font-weight="600">First-contact Sella</text>
+    <text x="150" y="1148" text-anchor="middle" fill="#767d8a" font-size="12">greets new contacts</text>
+  </g>
+  <!-- chip 1 Deal-Sella (HIGHLIGHT) -->
+  <rect x="282" y="1090" width="200" height="84" rx="10" fill="#525a69" stroke="#9fd6e0" stroke-width="2"/>
+  <text x="382" y="1126" text-anchor="middle" fill="#f1f3f6" font-size="14" font-weight="700">Deal-Sella</text>
+  <text x="382" y="1148" text-anchor="middle" fill="#d4dae2" font-size="12">neutral deal mediator</text>
+  <rect x="352" y="1080" width="60" height="20" rx="10" fill="#9fd6e0"/>
+  <text x="382" y="1094" text-anchor="middle" fill="#25303a" font-size="11" font-weight="700">DEMO</text>
+  <!-- chip 2 Seller-Sella (dim) -->
+  <g opacity="0.55">
+    <rect x="514" y="1090" width="200" height="84" rx="10" fill="#353b46" stroke="#434a57" stroke-width="1"/>
+    <text x="614" y="1126" text-anchor="middle" fill="#aab0bb" font-size="14" font-weight="600">Seller-Sella</text>
+    <text x="614" y="1148" text-anchor="middle" fill="#767d8a" font-size="12">helps the seller side</text>
+  </g>
+  <!-- chip 3 Buyer-Sella (dim) -->
+  <g opacity="0.55">
+    <rect x="746" y="1090" width="200" height="84" rx="10" fill="#353b46" stroke="#434a57" stroke-width="1"/>
+    <text x="846" y="1126" text-anchor="middle" fill="#aab0bb" font-size="14" font-weight="600">Buyer-Sella</text>
+    <text x="846" y="1148" text-anchor="middle" fill="#767d8a" font-size="12">helps the buyer side</text>
+  </g>
+  <!-- chip 4 Personal Sella (dim) -->
+  <g opacity="0.55">
+    <rect x="978" y="1090" width="200" height="84" rx="10" fill="#353b46" stroke="#434a57" stroke-width="1"/>
+    <text x="1078" y="1126" text-anchor="middle" fill="#aab0bb" font-size="14" font-weight="600">Personal Sella</text>
+    <text x="1078" y="1148" text-anchor="middle" fill="#767d8a" font-size="12">your own assistant</text>
+  </g>
+  <!-- chip 5 Company Sella (dim) -->
+  <g opacity="0.55">
+    <rect x="1210" y="1090" width="200" height="84" rx="10" fill="#353b46" stroke="#434a57" stroke-width="1"/>
+    <text x="1310" y="1126" text-anchor="middle" fill="#aab0bb" font-size="14" font-weight="600">Company Sella</text>
+    <text x="1310" y="1148" text-anchor="middle" fill="#767d8a" font-size="12">company-wide view</text>
+  </g>
+</svg>
