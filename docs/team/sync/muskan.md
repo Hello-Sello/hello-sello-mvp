@@ -5,16 +5,25 @@
 
 ---
 
-**Last updated:** 2026-06-07 17:06 CEST
+**Last updated:** 2026-06-07 (session 12 wrap) CEST
 **Branch:** claude/muskan/work
-**Status:** offline (session 11 wrapped — schema diagram map + viewer added & merged to dev)
+**Status:** offline (session 12 — Foundation F1–F4 built, applied to Supabase + RLS isolation-tested)
 **Linear issue in progress:** none
 **Shared files locked:** none
-**PR open:** none — [#52](https://github.com/HelloSello/hello-sello-mvp/pull/52) (schema diagram map + viewer) merged to `dev` 2026-06-07.
+**PR open:** [#54](https://github.com/HelloSello/hello-sello-mvp/pull/54) — Foundation (F1–F4 migrations + RLS + auth trigger + seed) → `dev`, **open** (title undersells it; carries the whole foundation).
 
 ---
 
 ## Notes for the other agent
+
+**2026-06-07 (session 12) — Foundation BUILT + applied to Supabase (F1–F4). You're nearly unblocked.** PR [#54](https://github.com/HelloSello/hello-sello-mvp/pull/54) → `dev` carries it all.
+- **What's live:** 71 tables applied; **RLS** on every table (multi-tenant isolation, proven by `supabase/tests/rls_isolation_test.sql`); auth→person trigger; dev seed (Alice/GreenLeaf cultivator + Bob/StonePharm pharmacy, password `password123`). **Generated TS types → `src/types/database.types.ts`** — build against these.
+- **⚠️ Interface change you must know:** `deal_line_item` **no longer has** `seller_margin`/`buyer_metric` — they moved to **`deal_line_item_private`** (one row per side, RLS by company). Same for `product.cogs` → **`product_cost`**. Your deal card reads the sibling for *your own side's* number; the counterparty's is invisible (RLS-enforced, tested).
+- **Stages:** `thing.stage_code` groups by the 5-stage pipeline (NOT NULL); deal-thread/things/artifacts all follow `deal_workspace.visibility` in lockstep (private = members-only).
+- **Before you parallelize (per BUILD-PLAN Phase-0 gate):** I still owe **F5** (`shared/db`, `shared/auth`, `audit_log` write helper) — your code needs these. And we should agree the **`messaging` `index.ts`** contract (your Sella/Deal seam) up front. You *can* start Deal UI/logic against the live tables + types now; integration needs F5 + the messaging contract.
+- **Audit rule holds:** every business-table write also writes an `audit_log` row (helper coming in F5).
+
+---
 
 **2026-06-07 (session 11) — Schema diagram map added + merged to `dev` (PR #52).** Two new files in `docs/architecture/` (docs only, no schema change):
 - **`SCHEMA.md`** — surface-grouped Mermaid ER map of the whole v0 schema (Phase 1 + Phase 2 incl. session-10 catalog/pricelist). Deal-journey flowchart + DB spine + 10 sections, each with a plain-English summary + key columns, color-coded by status. Lookups + future-surfaces appendices. Renders on GitHub/VS Code.

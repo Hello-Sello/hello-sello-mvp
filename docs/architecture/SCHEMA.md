@@ -4,7 +4,13 @@
 
 **Source of truth for columns:** [SCHEMA-DRAFT.md](./SCHEMA-DRAFT.md). This file is the *map*; SCHEMA-DRAFT is the *detail*. When a migration changes the schema, update both.
 
-**Last synced:** 2026-06-07 (Phase 1 + Phase 2 finalized through session 10 — incl. product catalog + pricelist).
+**Last synced:** 2026-06-07 (Phase 1 + Phase 2 **built + applied** to Supabase, session 12 — incl. product catalog + pricelist + RLS).
+
+> **Build reconciliation (session 12).** The schema is now live on Supabase (71 tables) with RLS. Two changes the build made vs the session-10 design — not yet redrawn into the diagrams below:
+> - **Seller-only column split:** `product.cogs` moved to a new **`product_cost`** table; `deal_line_item.seller_margin`/`buyer_metric` moved to a new **`deal_line_item_private`** table (per-side, RLS by owner — RLS can't hide columns, so the secret numbers live in per-side siblings).
+> - **13 inline "Lookup:" columns are now real lookup tables** (e.g. `chat_thread_type`, `chat_message_type`, `content_author`, `payment_terms`, `incoterms`, `note_scope`, `relationship_status`, `deal_type`, `deal_line_unit`, `deal_change_origin`, `contact_role`, `contact_provider`, `permission_action`).
+>
+> Column-level detail is current in [SCHEMA-DRAFT.md](./SCHEMA-DRAFT.md). RLS policy detail lives in `supabase/migrations/*_rls_policies.sql`.
 
 ---
 

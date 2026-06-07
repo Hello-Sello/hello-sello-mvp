@@ -120,6 +120,13 @@ If you're building and hit a doubt, go here:
 
 *(Updated at end of every session by whoever worked last.)*
 
+**2026-06-07 - Muskan (session 12 — Foundation BUILT: F1–F4 applied + RLS)**
+- **F1–F4 are live on Supabase:** 71 tables, RLS on every table (multi-tenant isolation, **isolation-tested** — `supabase/tests/rls_isolation_test.sql`), auth→person trigger, dev seed (Alice/GreenLeaf cultivator + Bob/StonePharm pharmacy, pw `password123`). TS types → `src/types/database.types.ts` (build against these).
+- **⚠️ Ayush — interface change you consume:** `deal_line_item` no longer has `seller_margin`/`buyer_metric` (moved to `deal_line_item_private`); `product.cogs` → `product_cost`. Per-side, RLS-hidden from the counterparty — read the sibling for *your own side's* number.
+- RLS = 10 `SECURITY DEFINER` chain-following helpers; deal thread + things + artifacts follow `deal_workspace.visibility` in lockstep (private = members only).
+- **F5 still owed** (`shared/db`, `shared/auth`, `audit_log` write helper) — that's the foundation Ayush consumes (auth / db / RLS / schema), per the re-cut below. Ayush can build Connect + Deal + Sella against the live tables + types now.
+- Full detail: DECISIONS.md + ARCHITECTURE-NOTES.md session 12.
+
 **2026-06-07 - Ayush (Build plan - re-cut: Connect + Sella to one owner)**
 - `docs/PRD/BUILD-PLAN.md` updated. **Split:** **Ayush** = the whole demo (app shell + Connect 2a-2e + Deal 3a-3d + Sella 4a-4d); **Muskan** = Foundation (F1-F5) → Onboarding/Home → **Present + Discover (design + schema + build)**.
 - **No bidirectional seam:** Sella reads the DB via tool calls, so it stays inside Connect with Ayush; the only interface is **Muskan's foundation → Ayush consumes** (auth / db / RLS / schema). Lock the foundation shapes in Phase 0.

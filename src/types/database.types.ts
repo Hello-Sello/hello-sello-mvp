@@ -1341,7 +1341,6 @@ export type Database = {
       }
       deal_line_item: {
         Row: {
-          buyer_metric: number | null
           cbd_percent: number | null
           created_at: string
           currency: string
@@ -1352,7 +1351,6 @@ export type Database = {
           product_id: string | null
           product_name: string
           quantity: number
-          seller_margin: number | null
           sort_order: number
           thc_percent: number | null
           unit: string
@@ -1360,7 +1358,6 @@ export type Database = {
           version: number
         }
         Insert: {
-          buyer_metric?: number | null
           cbd_percent?: number | null
           created_at?: string
           currency?: string
@@ -1371,7 +1368,6 @@ export type Database = {
           product_id?: string | null
           product_name: string
           quantity: number
-          seller_margin?: number | null
           sort_order?: number
           thc_percent?: number | null
           unit: string
@@ -1379,7 +1375,6 @@ export type Database = {
           version: number
         }
         Update: {
-          buyer_metric?: number | null
           cbd_percent?: number | null
           created_at?: string
           currency?: string
@@ -1390,7 +1385,6 @@ export type Database = {
           product_id?: string | null
           product_name?: string
           quantity?: number
-          seller_margin?: number | null
           sort_order?: number
           thc_percent?: number | null
           unit?: string
@@ -1418,6 +1412,58 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "deal_line_unit"
             referencedColumns: ["code"]
+          },
+        ]
+      }
+      deal_line_item_private: {
+        Row: {
+          buyer_metric: number | null
+          company_id: string
+          created_at: string
+          created_by: string | null
+          deal_line_item_id: string
+          id: string
+          seller_margin: number | null
+        }
+        Insert: {
+          buyer_metric?: number | null
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          deal_line_item_id: string
+          id?: string
+          seller_margin?: number | null
+        }
+        Update: {
+          buyer_metric?: number | null
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          deal_line_item_id?: string
+          id?: string
+          seller_margin?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deal_line_item_private_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "company"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deal_line_item_private_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "person"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deal_line_item_private_deal_line_item_id_fkey"
+            columns: ["deal_line_item_id"]
+            isOneToOne: false
+            referencedRelation: "deal_line_item"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -2494,7 +2540,6 @@ export type Database = {
           cbd_percent: number | null
           cbg_percent: number | null
           cbn_percent: number | null
-          cogs: number | null
           company_id: string
           country_of_origin: string | null
           created_at: string
@@ -2530,7 +2575,6 @@ export type Database = {
           cbd_percent?: number | null
           cbg_percent?: number | null
           cbn_percent?: number | null
-          cogs?: number | null
           company_id: string
           country_of_origin?: string | null
           created_at?: string
@@ -2566,7 +2610,6 @@ export type Database = {
           cbd_percent?: number | null
           cbg_percent?: number | null
           cbn_percent?: number | null
-          cogs?: number | null
           company_id?: string
           country_of_origin?: string | null
           created_at?: string
@@ -2815,6 +2858,65 @@ export type Database = {
           },
           {
             foreignKeyName: "product_buyer_code_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "person"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_cost: {
+        Row: {
+          cogs: number | null
+          company_id: string
+          created_at: string
+          created_by: string | null
+          product_id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          cogs?: number | null
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          product_id: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          cogs?: number | null
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          product_id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_cost_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "company"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_cost_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "person"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_cost_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: true
+            referencedRelation: "product"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_cost_updated_by_fkey"
             columns: ["updated_by"]
             isOneToOne: false
             referencedRelation: "person"
@@ -3522,7 +3624,19 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      can_access_thread: { Args: { p_thread_id: string }; Returns: boolean }
+      can_access_workspace: { Args: { p_ws_id: string }; Returns: boolean }
+      card_relationship_member: {
+        Args: { p_card_id: string }
+        Returns: boolean
+      }
+      current_company_id: { Args: never; Returns: string }
+      is_hs_team: { Args: never; Returns: boolean }
+      is_relationship_member: { Args: { p_rel_id: string }; Returns: boolean }
+      is_workspace_member: { Args: { p_ws_id: string }; Returns: boolean }
+      owns_group: { Args: { p_group_id: string }; Returns: boolean }
+      owns_pricelist: { Args: { p_pricelist_id: string }; Returns: boolean }
+      owns_product_batch: { Args: { p_batch_id: string }; Returns: boolean }
     }
     Enums: {
       [_ in never]: never
