@@ -120,6 +120,13 @@ If you're building and hit a doubt, go here:
 
 *(Updated at end of every session by whoever worked last.)*
 
+**2026-06-07 - Ayush (Connect-demo PRD)**
+- New `docs/PRD/` folder: `connect-demo.md` (overview + 9-step acceptance script), `foundation.md` (Identity / Connections / Audit), `deal-flow.md` (Messaging / Deal Workspace / Sella).
+- Deal model locked across 3 layers: **status** `Draft → Confirmed` (demo stops here; `done` = Phase 3) · **stage** = 5-stage cannabis pipeline · **things** = per-stage checklist.
+- **→ Muskan: your `deal_stage` seeds (TBD, DEV-24/34) = this 5-stage template.** Seeds (researched, German/EU medical-cannabis journey): `negotiation`, `compliance_quality`, `agreement`, `payment`, `fulfilment_delivery` (sort_order 1-5). Demo builds/walks 1-3; 4-5 greyed (Phase 3). Status flips Draft→Confirmed at stage 3 (`agreement`).
+- **? Needs your call (O6): is `deal_workspace` born at Draft or at Confirmation?** The PRD needs it at **Draft** - the two sides negotiate inside the deal chat *before* they confirm (this resolved O2). Your session-8 `deal_workspace` table didn't pin the birth trigger; the old `deal_card.thread_id` note said "at confirm".
+- Demo scope: manual stage advance + read-only Things checklist over your `thing` table. Auto-advance-when-Things-done engine + user-created stages/Things deferred post-demo.
+
 **2026-06-07 - Ayush (GitHub sync + docs wrap)**
 - All PRs merged to dev: #39, #40, #41, #42. Dev is clean. Branch: 0/0.
 - `gh` now authenticated (ayush1330) - PR management works from Claude Code.
