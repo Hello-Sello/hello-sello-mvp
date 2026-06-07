@@ -47,6 +47,10 @@ export async function signUp(
 
 export async function signOut(): Promise<void> {
   const supabase = await createClient()
-  await supabase.auth.signOut()
+  // scope: 'local' clears this browser's session cookies without a server-side
+  // revoke round-trip. The button must always log the user out locally, even if
+  // the remote revoke would fail (expired/invalid session), so we don't gate the
+  // redirect on a network call that can error.
+  await supabase.auth.signOut({ scope: 'local' })
   redirect('/login')
 }

@@ -12,8 +12,11 @@ export default function SignupPage() {
 
   return (
     <AuthCard
-      title="Create your account"
-      subtitle="Join Hello Sello"
+      title="Create your Hello Sello account"
+      highlights={[
+        'Register to get a QR code business card',
+        'Enter a network to buy and sell B2B',
+      ]}
       footer={
         <>
           Already have an account?{' '}

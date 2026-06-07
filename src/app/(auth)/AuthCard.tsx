@@ -1,18 +1,22 @@
+import { BadgeCheck } from 'lucide-react'
 import { Wordmark } from '@/shared/ui/Wordmark'
 
 /**
  * The frosted card the auth forms sit in — centered on the pink glass body,
  * Wordmark + heading on top, the form as children. Shared by login + signup so
- * the two screens stay visually identical.
+ * the two screens stay visually identical. `highlights` adds the value-prop
+ * bullets under the heading (signup uses them; login leaves them off).
  */
 export function AuthCard({
   title,
   subtitle,
+  highlights,
   children,
   footer,
 }: {
   title: string
   subtitle?: string
+  highlights?: string[]
   children: React.ReactNode
   footer?: React.ReactNode
 }) {
@@ -28,6 +32,20 @@ export function AuthCard({
             )}
           </div>
         </div>
+        {highlights && highlights.length > 0 && (
+          <ul className="mb-6 flex flex-col gap-2.5">
+            {highlights.map((point) => (
+              <li key={point} className="flex items-center gap-2.5 text-sm text-ink">
+                <BadgeCheck
+                  size={18}
+                  strokeWidth={2.25}
+                  className="shrink-0 text-brand"
+                />
+                {point}
+              </li>
+            ))}
+          </ul>
+        )}
         {children}
         {footer && (
           <div className="mt-6 text-center text-sm text-ink-muted">{footer}</div>
