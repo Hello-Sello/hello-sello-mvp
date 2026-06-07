@@ -41,8 +41,10 @@ export async function signUp(
   })
   if (error) return { error: error.message }
 
-  // A fresh signup has no company yet -> route to onboarding, not the app.
-  redirect('/onboarding')
+  // Decided flow: signup -> email-verification screen -> onboarding. Email
+  // confirmation is OFF in v0, so the user already has a session here; the
+  // verify screen is a simulated step ("I've verified" just advances).
+  redirect('/verify-email')
 }
 
 export async function signOut(): Promise<void> {
