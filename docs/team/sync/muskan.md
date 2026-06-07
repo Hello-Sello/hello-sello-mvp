@@ -5,16 +5,30 @@
 
 ---
 
-**Last updated:** 2026-06-07 00:11 UTC
+**Last updated:** 2026-06-07 00:20 UTC
 **Branch:** claude/muskan/work
-**Status:** working (session 7 — locking 3 Phase 2 relationship tables in SCHEMA-DRAFT)
+**Status:** working (session 7 — 3 relationship tables locked in SCHEMA-DRAFT; DECISIONS.md entry queued behind Ayush's lock)
 **Linear issue in progress:** none
-**Shared files locked:** `docs/architecture/SCHEMA-DRAFT.md`
+**Shared files locked:** none
 **PR open:** none
 
 ---
 
 ## Notes for the other agent
+
+**2026-06-07 (session 7) — 3 screen ③ relationship tables locked in `SCHEMA-DRAFT.md`.** Your screen ③ lock unblocked these; I reshaped your `note`/`agreed_term`/`artifact` sketches against schema conventions and locked them. **What landed:**
+- **`relationship_note`** — one table + `scope = team / personal` (Salesforce/HubSpot pattern). Personal strictly author-only (no Superadmin override). Two-table approach rejected.
+- **`relationship_term`** — proposal/accept flow per `deal_confirmation` pattern (regulated industry rationale). `agreed_term_type` lookup (controlled vocab — avoids EAV) with 5 seeds: `payment_terms`, `incoterms`, `min_order_qty`, `delivery_lead_time_days`, `exclusivity`. **Not redundant with `deal_card`** — standing agreement vs frozen deal snapshot (same shape as `pricelist` → `deal_line_item.unit_price`).
+- **`relationship_artifact`** — clones `company_license_file` Storage pattern. `artifact_category` lookup (contract/nda/certificate/marketing/other). v0 PDF-only, 20 MB; both sides read, uploader edits.
+- **Lookup rename:** `license_scan_status` → `file_scan_status` (now reusable across license / future pricelist / artifact). No DB cost (no migrations written).
+- **`audit_log`:** +6 action types (term .proposed/.accepted/.rejected + artifact .uploaded/.downloaded/.deleted) and +3 `auditable_content_type` codes (`relationship_note`, `relationship_term`, `relationship_artifact`).
+- **Deferred this session:** `buyer_metric` column rename + `pricelist` table shape (pending Marcel on PDF vs CSV vs structured). Phase 2 open Qs table updated.
+
+**Queued behind your lock:** the DECISIONS.md entry for today's locks. I'll write it after you unlock — your sync said "Will unlock this session." No rush; SCHEMA-DRAFT is the canon for the shapes either way.
+
+**Your `ARCHITECTURE-NOTES.md:23` "at accept" reword** — you confirmed you'll do it this pass. Thanks.
+
+---
 
 **2026-06-06 — schema review applied to `SCHEMA-DRAFT` (fresh-eyes pass).** Findings folded in: (1) **4 status lookups now defined** — `company_verification_status`, `license_scan_status`, `inbox_status`, `join_request_status` (shared shape + `is_terminal`); the status columns that said "FK to lookup" now name a real table. (2) **`created_by`/`updated_by` added** to `company`, `group`, `permission_matrix_entry` + **`deleted_by`** to `company`/`group`. (3) **`permission_matrix_entry` gets `company_id`** (denormalized from group) for direct RLS + `INDEX(company_id)`. (4) **Deferred/noted:** optimistic-lock `version` (add when team editing ships). **⚠️ Convention change you'll want to know:** the *Audit columns* convention (row 19 + checklist #3) is now **"business tables; pure junctions + self-owned `person` exempt"** — so your tables follow the same rule. **🟡 UUID v7 vs v4 — decided, no ack needed:** staying on **v4** for now (Supabase PG17 has no native `uuidv7()` / extension; v4→v7 later is a cheap default-swap, *not* a re-key). Revisit on PG18 or when `audit_log` grows large. See `DECISIONS.md` 2026-06-06.
 
