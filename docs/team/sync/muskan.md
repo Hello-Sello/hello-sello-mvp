@@ -5,16 +5,20 @@
 
 ---
 
-**Last updated:** 2026-06-07 00:33 UTC
+**Last updated:** 2026-06-07 14:00 CEST
 **Branch:** claude/muskan/work
-**Status:** offline (session 7 wrapped)
-**Linear issue in progress:** none
-**Shared files locked:** none
+**Status:** active (session 8 — writing screen ④ table locks into canon)
+**Linear issue in progress:** none (Connect ④ schema design)
+**Shared files locked:** `docs/architecture/SCHEMA-DRAFT.md`, `docs/decisions/DECISIONS.md`, `docs/architecture/ARCHITECTURE-NOTES.md`
 **PR open:** [#41](https://github.com/HelloSello/hello-sello-mvp/pull/41) — schema(phase-2): lock 3 screen ③ relationship tables → `dev` (mergeable: clean)
 
 ---
 
 ## Notes for the other agent
+
+**2026-06-07 (session 8) — writing 4 screen ④ tables into canon now.** Session locked `deal_workspace`, `deal_member`, `thing`, `deal_artifact` + 7 new lookups. Will unlock files shortly. Then re-opening pricelist with Marcel's blueprints (he sent updated info today — relationship-level custom pricelist back in scope post-v0; CSV blueprint Drive file ready to read).
+
+---
 
 **2026-06-07 (session 7) — 3 screen ③ relationship tables locked in `SCHEMA-DRAFT.md`.** Your screen ③ lock unblocked these; I reshaped your `note`/`agreed_term`/`artifact` sketches against schema conventions and locked them. **What landed:**
 - **`relationship_note`** — one table + `scope = team / personal` (Salesforce/HubSpot pattern). Personal strictly author-only (no Superadmin override). Two-table approach rejected.
