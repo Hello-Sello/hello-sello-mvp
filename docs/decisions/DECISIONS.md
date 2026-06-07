@@ -763,6 +763,16 @@ Wrote + applied the locked v0 schema to Supabase (71 tables), then the RLS priva
 
 *Why record:* F1–F4 are applied + isolation-tested on Supabase (impersonation test proves GreenLeaf ↮ StonePharm, private-deal lockstep, and seller-only column hiding). This is the executed reality behind `SCHEMA-DRAFT.md`. Open follow-ups: move RLS helpers to a private schema (advisor noise — they're RPC-exposed); audit JCS canonicalization + concurrency hardening; **F5** shared modules (`shared/db`, `shared/auth`, audit write helper); `buyer_metric` rename; verify Supabase Auth email provider enabled.
 
+## 2026-06-07 (session 13) — Discover: visibility model LOCKED; page structure + scope OPEN
+
+Explored the Discover surface (stub) via a throwaway prototype with a mock DB (`prototypes/discover-prototype/`, 3 combination variants). One product rule came out clear and is locked; the page design itself is **not** locked — paused for more thinking.
+
+- **LOCKED — Discover visibility is asymmetric ("Instagram model").** Listed-in-Discover = a company with a **public shop** (the selling side). Buyers (no shop, e.g. pharmacies acting purely as buyers) are **not listed** anywhere — reachable only by **exact-name search**, and only if they're on the platform. *Why:* sellers want to be found; buyers don't want to be cold-listed. The listing key is **"has a public shop", not a buy/sell role** — role is per-deal (consistent with the Layer-1 symmetric-company lock). Marcel's design arrived at the same rule independently ("list suppliers by category… no pharmacies shown first").
+- **CONFIRMED — Discover does two jobs** (both in Marcel's designs): a **supplier directory** (sellers → their products, grouped, with a demand/supply toggle) and an **ad / social feed** (campaign calendar + ad posts = "B2B social network").
+- **OPEN (explored, not locked):** (a) **page structure** — how directory + feed coexist (prototype mocks tabs / feed-first / unified-scroll; undecided); (b) is **demand-side** (companies posting what they want to buy) in MVP; (c) is the **ad/social feed** demo-scope or a fast-follow (it's the heavier half to build).
+
+*Why record:* the visibility rule is load-bearing for whoever builds Discover (it's a directory-listing + search-access rule → affects the data model and RLS). The open items are parked in `docs/product/surfaces/DISCOVER.md`. Next Discover session resumes from the prototype.
+
 ## 2026-06-07 (Task 1A) — UI design system: palette, glassmorphism, surface nav
 
 The app's visual language, locked while standing up the app shell (1A). Source of truth for tokens = `src/app/globals.css` `@theme`.

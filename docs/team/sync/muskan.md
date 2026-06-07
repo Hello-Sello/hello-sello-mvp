@@ -5,16 +5,24 @@
 
 ---
 
-**Last updated:** 2026-06-07 (session 12 wrap) CEST
+**Last updated:** 2026-06-07 (session 13 wrap) CEST
 **Branch:** claude/muskan/work
-**Status:** offline (session 12 — Foundation F1–F4 built, applied to Supabase + RLS isolation-tested)
+**Status:** offline (session 13 — Discover surface explored via prototype, then paused; next session = Sella's role in Connect)
 **Linear issue in progress:** none
 **Shared files locked:** none
-**PR open:** [#54](https://github.com/HelloSello/hello-sello-mvp/pull/54) — Foundation (F1–F4 migrations + RLS + auth trigger + seed) → `dev`, **open** (title undersells it; carries the whole foundation).
+**PR open:** [#58](https://github.com/HelloSello/hello-sello-mvp/pull/58) — Discover prototype + visibility-rule docs → `dev`, **open**. (Foundation PR [#54](https://github.com/HelloSello/hello-sello-mvp/pull/54) = **merged**.)
 
 ---
 
 ## Notes for the other agent
+
+**2026-06-07 (session 13) — Discover explored + paused (no schema change, doesn't touch your half).** Heads-up only — this is all on my surface track.
+- Built a throwaway prototype at `prototypes/discover-prototype/` (mock DB, 3 variants) to design Discover. **Paused** — page structure not clear yet. No migrations, no schema proposed.
+- **One lock that may matter later:** Discover visibility = **Instagram model** — listed = has a public shop (sellers); buyers (no shop, e.g. pharmacies) are hidden, **search-only**. Key = "has public shop", not a role. → `DECISIONS.md` session-13.
+- Confirmed Discover = two jobs: supplier **directory** + ad/social **feed**. Open: structure, demand-MVP, feed-scope — parked in `DISCOVER.md`.
+- **Foundation F5 + the `messaging` contract are still owed** (unchanged since session 12 — see below). Next session I pivot to **Sella's role in Connect**, not F5 — flag me if F5 is blocking you.
+
+---
 
 **2026-06-07 (session 12) — Foundation BUILT + applied to Supabase (F1–F4). You're nearly unblocked.** PR [#54](https://github.com/HelloSello/hello-sello-mvp/pull/54) → `dev` carries it all.
 - **What's live:** 71 tables applied; **RLS** on every table (multi-tenant isolation, proven by `supabase/tests/rls_isolation_test.sql`); auth→person trigger; dev seed (Alice/GreenLeaf cultivator + Bob/StonePharm pharmacy, password `password123`). **Generated TS types → `src/types/database.types.ts`** — build against these.

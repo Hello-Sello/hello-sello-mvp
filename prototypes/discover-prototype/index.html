@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hello Sello — Discover Prototype</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="bg-slate-50 text-slate-900">
+  <header class="border-b bg-white sticky top-0 z-20">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="text-pink-600 font-bold text-lg">Hello Sello</div>
+        <span class="text-xs text-slate-400">— Discover prototype (throwaway)</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="toggle-panel-btn" class="text-xs px-3 py-1.5 rounded border border-slate-200 hover:bg-slate-100">Toggle data panel</button>
+        <button id="reset-btn" class="text-xs px-3 py-1.5 rounded border border-red-200 text-red-600 hover:bg-red-50">Reset DB</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 py-6 grid gap-6" style="grid-template-columns: 1fr 320px;">
+    <section id="main"></section>
+    <aside id="panel-col" class="border-l border-slate-200 pl-5">
+      <div class="text-xs font-bold uppercase tracking-wide text-slate-400 mb-3">Mock DB — data state</div>
+      <div id="panel"></div>
+    </aside>
+  </main>
+
+  <div id="chrome"></div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
