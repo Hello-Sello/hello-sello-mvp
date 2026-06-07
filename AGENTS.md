@@ -120,13 +120,14 @@ If you're building and hit a doubt, go here:
 
 *(Updated at end of every session by whoever worked last.)*
 
-**2026-06-07 - Build sprint starts**
-- Design complete. All 4 Connect screens locked (①-④). LAYER docs reconciled.
-- Codebase architecture locked: `docs/architecture/CODEBASE.md`.
-- No production code yet - `src/` is empty scaffolding, `supabase/migrations/` not applied.
-- **Next:** write PRD → divide tracks with Muskan → build.
-- **Muskan:** schema/migrations/RLS in progress.
-- **Ayush:** PRD + app/UI track.
+**2026-06-07 - Ayush (GitHub sync + docs wrap)**
+- All PRs merged to dev: #39, #40, #41, #42. Dev is clean. Branch: 0/0.
+- `gh` now authenticated (ayush1330) - PR management works from Claude Code.
+- AGENTS.md restructured: builder context routing table added (above), Session Checkpoint added.
+- README.md updated: statuses fixed, stage = build sprint.
+- No production code yet - `src/` empty, `supabase/migrations/` not applied.
+- **Muskan:** session 8 active - writing screen ④ tables. Files locked: SCHEMA-DRAFT, DECISIONS, ARCHITECTURE-NOTES.
+- **Ayush:** offline. Next = write PRD (June 11, 6 blocks from `connect-demo.md`) → divide build tracks.
 
 ---
 
