@@ -84,4 +84,10 @@ Consumed by Matt Pocock's `grill-with-docs` and `improve-codebase-architecture` 
 | **Deal delivery** | The physical execution of a deal — batch numbers, Certificate of Analysis (COA) file, actual delivered quantities, delivery note + invoice. Separate from line items ("what was agreed") and deferred to Phase 3 (DEV-36). |
 | **THC / CBD percent** | Potency fields on `deal_line_item` for cannabis products. Regulatory-grade — Sella validates these against license thresholds. Nullable (non-cannabis products carry neither). |
 
+## Schema patterns (2026-06-07)
+
+| Term | Definition |
+|------|-----------|
+| **Standing agreement vs frozen snapshot** | A system-wide pattern: the *current* value of something (a price, a payment term, a product detail) lives in **one source-of-truth table** that is mutable; any deal struck against it **copies (snapshots)** the value at strike time into its own row. Changes to the standing value never rewrite past deals. Examples on the platform: `pricelist` → `deal_line_item.unit_price` (price snapshot); `relationship_term` (standing payment terms) → `deal_card.payment_terms_code` (deal snapshot); future `catalog_product.name` → `deal_line_item.product_name` (denormalized snapshot). *Why it matters:* regulated industry — past deals must remain auditable in their original form even after upstream values evolve. *Spotting the pattern:* if two columns look "redundant," ask *"would changing one rewrite history on the other?"* — if yes, they're not redundant; they're a snapshot pair. |
+
 *Maintained by `grill-with-docs` (proposes additions during grilling — humans confirm) and direct edits. Add new terms when they're locked in Layer docs or surface during code review.*
