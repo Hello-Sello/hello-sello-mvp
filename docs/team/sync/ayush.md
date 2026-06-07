@@ -5,12 +5,12 @@
 
 ---
 
-**Last updated:** 2026-06-07 23:54 CEST
+**Last updated:** 2026-06-08 00:25 CEST
 **Branch:** claude/ayush/work (synced to dev)
-**Status:** active (2a inbox merged to dev via PR #62; starting 2b - Accept side-effects)
+**Status:** offline (session wrapped; next session = build 2b+2c together, mock-first)
 **Linear issue in progress:** none
 **Shared files locked:** none
-**PR open:** none - **2a merged to dev (PR #62)**; branch synced (0/0 with dev). F1-F5 all consumed. Not blocked on you.
+**PR open:** none - 2a merged (#62) + doc corrections merged (#64); branch synced (0/0 with dev). Not blocked on you.
 
 ---
 

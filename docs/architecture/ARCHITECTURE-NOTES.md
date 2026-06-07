@@ -243,6 +243,18 @@ Prototyped in `prototypes/chat-prototype` (decisions: DECISIONS.md `## 2026-06-0
 - **Lens meaning lives in one predicate.** `lib/lenses.ts#matchesLens` is the single source for both the tab counts and the list filter, so a count can never disagree with the list length. Exhaustive `switch` + `never` guard = adding a lens without handling it fails to compile.
 - **One stateful component per surface panel-set.** `InboxView` is the only client/stateful piece; rows, list, detail, lens tabs, and the assign-menu are pure (props in, callbacks out). The §2 assignment model (claim first-come / no force take-over / owner-or-admin reassign) is one pure function `detailMode(item, viewer)` → the action surface is a direct consequence of the mode, not conditionals scattered across JSX. Implements existing locked decisions (DECISIONS.md DEV-7 + 2026-05-20 ticket model) — no new lock.
 
+## Data integration strategy - mock now, real later (2026-06-08)
+
+- **Now (demo build): everything is mock / in-memory.** Each surface ships UI-first against mock data shaped to the generated DB types (pattern set by Connect 2a). No Supabase calls, no edge functions yet. 2b+2c are built **together** as one mock-first "accept-to-chat" slice.
+- **Later (real data): work splits by concern, not "all-or-nothing edge functions":**
+  - **Plain app code → Supabase** for anything the user clicks and waits for (load inbox, accept, send a message, read threads). This IS the mock→real swap: replace the mock accessor + mutators behind each module's `index.ts` with Supabase client calls. **Most of the integration is this.**
+  - **Edge functions** (Supabase or Vercel) only for work that runs **away from the user's screen**:
+    - **Sella (AI):** Supabase edge fn for the DB-side think/read/write (service-role, writes its own `audit_log` rows); Vercel for streaming the reply into the chat UI (Vercel AI SDK). *(Resolves the tool-call-vs-edge-fn question parked below: likely BOTH, split by concern.)*
+    - **DB-change reactions** via Supabase **Database Webhooks** (INSERT/UPDATE/DELETE → edge fn, no app code): email on new `pending_inbox_item`, deal-number + QR at confirmation, license/doc scan (`file_scan_status`).
+    - **Scheduled jobs** via `pg_cron` → edge fn: activity bucket (Active/Occasional/Dormant), dormant-relationship detection.
+  - **Rule of thumb:** user-facing read/write = plain code; autonomous / AI / scheduled / side-effect-on-DB-change = edge function. Deploy edge fns via CLI (`supabase functions deploy` / Vercel deploy).
+- **Demo (June 11) needs none of the edge functions** - it runs on mock data. These are real-integration + Sella-phase (4a-4d) + post-demo items.
+
 ## Open - revisit at the Sella phase (4a-4d)
 
 - **Sella DB access: tool-calls vs Supabase edge functions (UNRESOLVED, 2026-06-07).** Earlier assumption (BUILD-PLAN line 110): Sella reads the DB via tool calls, keeping it inside Connect with no cross-team seam. Muskan found that Supabase **edge functions** let an agent connect to the DB directly, which might remove the tool-call layer. Not decided. When we build Sella, weigh: latency, where the logic lives (in-app vs edge), RLS/auth context propagation, testability, and how Sella's audit rows (`actor_type = 'sella'`) get written. Does not affect 2b-3d.
