@@ -810,3 +810,21 @@ Built the app-layer foundation modules on top of Ayush's Task-1A scaffold. These
 - **Session proxy uses `getClaims()`, not `getSession()`.** The Next-16 `proxy.ts` refresh + route gate verifies the JWT signature (safe server-side); `getSession()` trusts the cookie and must not gate routes. (Consistent with the F5 `getUser()`-over-`getSession()` lock.)
 - **`signOut` uses `scope: 'local'`.** The button always clears the local session even if the remote revoke would fail (expired/invalid session); the redirect never waits on a network call that can error.
 - **Dropped the `/logout` GET route.** A GET that mutates is a smell; sign-out is a `<form>` server action. Placed in the rail's user-avatar menu.
+
+---
+
+## 2026-06-07 (Sella design) — Deal-Sella detection: runtime placement, tool contract, proposal flow
+
+Design session on how Deal-Sella's detection actually *runs* at build time. Layer 4 locks Sella's **behavior**; this locks the **build mechanics**. Build itself handed to Ayush / the F5 build session. All captured in `ARCHITECTURE-NOTES.md` "Sella runtime placement"; mirrored here as the load-bearing locks.
+
+- **Placement rule — data-triggered → background, person-waiting → app.** A Sella task kicked off by a DB change (new message, card version bump, doc upload) runs in a background runtime and must never sit in the user's request path (keeps Sella a non-blocking leaf). A task a user waits on-screen for (side-panel reply, "what's on my plate") runs in the Next.js app. **Tasks live in different homes; one choice does not bind the others.** *Why:* "where Sella lives" is really "where each *task's* trigger lives" — the model (Bedrock) is one shared brain; only the trigger code's home varies.
+- **Detection lives in a Supabase Edge Function.** Flow: new `chat_message` → DB webhook (async `pg_net`, non-blocking) → Edge Function → Claude Haiku with one `propose_deal_draft` tool over a rolling ~15–20-message window → writes a Draft suggestion → Supabase Realtime shows it live. Chosen over an in-Next.js background job because Vercel serverless can freeze post-response (unreliable for fire-and-forget).
+- **Suggest-only is structural, not a promise.** Sella is handed only *propose* tools — there is no `confirm`/`send` tool — so it cannot commit a deal by construction. Resolves the "Sella suggests, humans decide" guarantee at the tool layer.
+- **`propose_deal_draft` contract (S2):** `line_items[]` {name → `deal_line_item.name`, quantity+unit → `.volume`, unit_price, cultivar?, pzn?}, `currency` → `deal_card.currency`, one-line `summary` → `deal_card_log`. Required: name, quantity, unit_price, currency. `deal_type` not extracted (initiator-set; seller = OFFER per O4); `value_net` computed (qty × price). Maps 1:1 to schema columns — no glue layer.
+- **Proposal + both-sides votes live in the `deal_detected` message `metadata`** (the column is documented "Sella context, confirmation state") — **no new table**. Not `deal_confirmation` (that's the heavier final two-party *card* confirm). Promote to a `deal_proposal` table post-MVP only if the proposal grows a real lifecycle.
+- **Workspace birth = one atomic app-side transaction.** On both-accept, a single all-or-nothing transaction creates `deal_card` (Draft) + `deal_line_item` rows + `deal_workspace` + `deal` thread + `deal_member` rows + `workspace_created` system line + audit. The `deal_detected` message persists as the "proposed → both accepted" record.
+- **No detection cost gate for MVP.** Per-message Haiku ≈ $0.001 + prompt caching → the cheap rule/embedding pre-filter is a post-MVP scale optimization, not needed for the demo.
+
+**Open (build-phase):** spawn-transaction internals (`deal_member` owner/side_lead auto-insert, the `thread_id`-nullable create-order cycle); Bedrock-from-Deno credential setup (`aws4fetch` SigV4 + Supabase Edge secrets, *not* the Vercel env keys).
+
+*Why record:* this is the design Ayush builds Sella against; the placement rule and the structural suggest-only guarantee are the kind of thing that gets violated silently (e.g. "let me just call Bedrock in the message handler" → chat blocks on AI). Grounded in research 2026-06-07 (function-calling extraction, Haiku pricing/caching, Supabase DB webhooks) + Layer 4 §3/§5. Also closes O6 in the connect-demo PRD.
