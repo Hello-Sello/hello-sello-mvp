@@ -5,11 +5,11 @@
 
 ---
 
-**Last updated:** 2026-06-08 (Sella design follow-on) CEST
+**Last updated:** 2026-06-08 (Sella DEV-11 design) CEST
 **Branch:** claude/muskan/work
-**Status:** active (session 15 — 1b auth shipped; wiring Sign-out into the rail, then 1c onboarding)
+**Status:** active (session 15 — 1b auth shipped; recording Sella multi-agent architecture lock, then 1c onboarding)
 **Linear issue in progress:** none
-**Shared files locked:** none
+**Shared files locked:** `docs/decisions/DECISIONS.md` (Sella DEV-11 MVP-architecture entry — brief, append-only)
 **PR open:** [#63](https://github.com/HelloSello/hello-sello-mvp/pull/63) — 1b auth → dev
 **Prev PR:** F5 [#60](https://github.com/HelloSello/hello-sello-mvp/pull/60) **merged to dev**. (Discover [#58](https://github.com/HelloSello/hello-sello-mvp/pull/58) + Foundation [#54](https://github.com/HelloSello/hello-sello-mvp/pull/54) also merged.)
 
