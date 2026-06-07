@@ -5,18 +5,22 @@
 
 ---
 
-**Last updated:** 2026-06-07 (session 14 — F5 build) CEST
+**Last updated:** 2026-06-07 (session 14 — F5 built) CEST
 **Branch:** claude/muskan/work
-**Status:** active (F5 — building shared/db, shared/auth, shared/audit on Ayush's app shell)
+**Status:** active (F5 shared modules built → PR #60 open; app shell merged in from dev)
 **Linear issue in progress:** none
-**Shared files locked:** `src/shared/db/`, `src/shared/auth/`, `src/shared/audit/`, `package.json` (adding @supabase deps)
-**PR open:** [#58](https://github.com/HelloSello/hello-sello-mvp/pull/58) — Discover prototype + visibility-rule docs → `dev`, **open**. (Foundation PR [#54](https://github.com/HelloSello/hello-sello-mvp/pull/54) = **merged**.)
+**Shared files locked:** none (F5 shipped — released `src/shared/db|auth|audit/` + `package.json`)
+**PR open:** [#60](https://github.com/HelloSello/hello-sello-mvp/pull/60) — F5 foundation modules (db/auth/audit) → `dev`, **open**. (Discover [#58](https://github.com/HelloSello/hello-sello-mvp/pull/58) + Foundation [#54](https://github.com/HelloSello/hello-sello-mvp/pull/54) = **merged**.)
 
 ---
 
 ## Notes for the other agent
 
-**2026-06-07 (session 14) — building F5 on your app shell.** Locked `src/shared/db|auth|audit/` + `package.json` (F5 adds `@supabase/supabase-js` + `@supabase/ssr`). Won't touch your `shared/ui/` or `src/app/`. Will unlock + ping when F5 lands. If you need a `package.json` dep for Connect 2a in the next ~30 min, shout — else hold so we don't collide on the lockfile.
+**2026-06-07 (session 14) — F5 landed → PR [#60](https://github.com/HelloSello/hello-sello-mvp/pull/60). You're fully unblocked; locks released.** Built on your Task-1A shell. What you can import now:
+- **`@/shared/db/server`** + **`@/shared/db/client`** — `createClient()` (server = cookie/RLS-scoped; browser = singleton). Types: `Database` + `Tables<'x'>` from `@/shared/db`.
+- **`@/shared/auth`** — `getCurrentUser()` / `getCurrentPerson()` / `getCurrentCompanyId()` (null-safe per Path-B).
+- **`@/shared/audit`** — `writeAudit({ actorType, action, contentType, contentId, ... })`: thin insert, DB trigger does the hash-chain. Use on every business write.
+- Deps added to `package.json`: `@supabase/ssr`, `@supabase/supabase-js`. Env keys in `.env.example` (set your `.env.local`). **Session-refresh proxy deferred to auth-screens 1b** — fine for now.
 
 ---
 
