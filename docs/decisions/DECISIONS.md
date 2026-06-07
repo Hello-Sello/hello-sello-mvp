@@ -641,3 +641,19 @@ Per-party yes/no for deal birth and amendments lives in a dedicated `deal_confir
 *Why this pattern works:* UUIDs are strings; `<` comparison is deterministic. The canonical ordering is arbitrary but consistent — what matters is there is exactly one rule, enforced everywhere.
 
 **SCHEMA-DRAFT.md updated:** `chat_thread` constraints block now includes `CHECK (type != 'p2p' OR person_a_id < person_b_id)`.
+
+## 2026-06-07 — Deal Workspace (screen ④): contents + layout (resolves DEV-9)
+
+Prototyped + locked in `prototypes/deal-workspace-prototype` (full narrative: that folder's `CONTEXT.md`). The Deal Workspace is the deal **container** - **Layer B (invited participants only)**, auto-scaffolded at Deal Card birth. This closes the open **[DEV-9]** ("what's inside a deal workspace + how should it look").
+
+- **Two entry points:** the Relationship page's deals list ("Open workspace →") and a **⤢ button on the Deal Card** itself. Inside, the card lives **in the deal chat** (a pinned pill), not as a separate box.
+- **Layout = an A&C mix** (after comparing 3 layouts): header + a **shrunk one-line Deal-Sella** on top; **left = a tabbed panel** `Things · People · Documents`; **right = the Deal Chat as the wide hero**. *Why:* the workspace is an *operating* surface (work THINGS while watching the chat), so the chat leads - whereas the relationship page (③) is a *reading* surface, which is why its calm tabbed layout won there. The surface's job picks the layout.
+- **The Deal Card is the canonical flip card everywhere** - the pinned `Deal card ▸` pill opens the same card as ①/② (FRONT = facts + products, margin seller-only; BACK = `Signals | Logs` filter). No workspace-special card.
+- **Change history lives in the card's LOGS, not as chat messages.** Removed the "card amended to v2…" status line + in-chat update messages. *Why:* one source of truth for change history (the card log) - a chat copy would be a second source that drifts; same instinct as ②'s "only the card is synced."
+- **THINGS are the visible work primitive, grouped by domain** (Finance / Logistics / Delivery), with a done-count + progress; any party adds; Open→Done; **approval THINGS = e-signature** (the Draft confirmation gate, both sides). **Stages are NOT a UI element** (scaffolding only - reaffirms DEV-24/34).
+- **Lifecycle Draft → Confirmed → Done.** Draft = the e-sign confirmation gate (+ per-party `deal_confirmation`); **Done = delivery note + invoice both attached** (document-driven, no explicit Done click; Deal-Sella OCR-amends the card to actuals).
+- **Documents are DEAL-level** (COA, contract, delivery note, invoice). Company-wide docs stay on the Relationship page (the two-altitudes rule).
+- **Deal-Sella** is per-deal, **neutral**, one read; it speaks in the deal chat. **Side-aware:** margin seller-only, "(you)" + topbar follow the side.
+- **Deal Room is OUT of screen ④** - it's the customer-*presentation* surface (product media, Loom, share link), a **Present-surface** tool distinct from the *execution* container. *Resolves the doc-vs-Linear divergence:* CLAUDE.md "Deal Room = CUT" vs Linear DEV-22/52 "Deal Room live & distinct" → the truth is **out of Connect ④, lives in Present**.
+
+*Why record:* screen ④ is the **last Connect atom** locked; this closes DEV-9 and triggers the LAYER docs reconciliation pass (§3 / §4.1 / §4.3 / §4.4 + LAYER-3). (Source: `prototypes/deal-workspace-prototype/CONTEXT.md`.)
