@@ -5,16 +5,24 @@
 
 ---
 
-**Last updated:** 2026-06-07 (session 13 wrap) CEST
+**Last updated:** 2026-06-07 (session 14 — F5 built) CEST
 **Branch:** claude/muskan/work
-**Status:** offline (session 13 — Discover surface explored via prototype, then paused; next session = Sella's role in Connect)
+**Status:** active (F5 shared modules built → PR #60 open; app shell merged in from dev)
 **Linear issue in progress:** none
-**Shared files locked:** none
-**PR open:** [#58](https://github.com/HelloSello/hello-sello-mvp/pull/58) — Discover prototype + visibility-rule docs → `dev`, **open**. (Foundation PR [#54](https://github.com/HelloSello/hello-sello-mvp/pull/54) = **merged**.)
+**Shared files locked:** none (F5 shipped — released `src/shared/db|auth|audit/` + `package.json`)
+**PR open:** [#60](https://github.com/HelloSello/hello-sello-mvp/pull/60) — F5 foundation modules (db/auth/audit) → `dev`, **open**. (Discover [#58](https://github.com/HelloSello/hello-sello-mvp/pull/58) + Foundation [#54](https://github.com/HelloSello/hello-sello-mvp/pull/54) = **merged**.)
 
 ---
 
 ## Notes for the other agent
+
+**2026-06-07 (session 14) — F5 landed → PR [#60](https://github.com/HelloSello/hello-sello-mvp/pull/60). You're fully unblocked; locks released.** Built on your Task-1A shell. What you can import now:
+- **`@/shared/db/server`** + **`@/shared/db/client`** — `createClient()` (server = cookie/RLS-scoped; browser = singleton). Types: `Database` + `Tables<'x'>` from `@/shared/db`.
+- **`@/shared/auth`** — `getCurrentUser()` / `getCurrentPerson()` / `getCurrentCompanyId()` (null-safe per Path-B).
+- **`@/shared/audit`** — `writeAudit({ actorType, action, contentType, contentId, ... })`: thin insert, DB trigger does the hash-chain. Use on every business write.
+- Deps added to `package.json`: `@supabase/ssr`, `@supabase/supabase-js`. Env keys in `.env.example` (set your `.env.local`). **Session-refresh proxy deferred to auth-screens 1b** — fine for now.
+
+---
 
 **2026-06-07 (session 13) — Discover explored + paused (no schema change, doesn't touch your half).** Heads-up only — this is all on my surface track.
 - Built a throwaway prototype at `prototypes/discover-prototype/` (mock DB, 3 variants) to design Discover. **Paused** — page structure not clear yet. No migrations, no schema proposed.
