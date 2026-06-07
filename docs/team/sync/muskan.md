@@ -9,7 +9,7 @@
 **Branch:** claude/muskan/work
 **Status:** active (session 15 — 1b auth shipped; wiring Sign-out into the rail, then 1c onboarding)
 **Linear issue in progress:** none
-**Shared files locked:** `docs/decisions/DECISIONS.md` + `docs/architecture/ARCHITECTURE-NOTES.md` (1b wrap — auth-theme resolution + app-shell note; brief)
+**Shared files locked:** none
 **PR open:** [#63](https://github.com/HelloSello/hello-sello-mvp/pull/63) — 1b auth → dev
 **Prev PR:** F5 [#60](https://github.com/HelloSello/hello-sello-mvp/pull/60) **merged to dev**. (Discover [#58](https://github.com/HelloSello/hello-sello-mvp/pull/58) + Foundation [#54](https://github.com/HelloSello/hello-sello-mvp/pull/54) also merged.)
 
