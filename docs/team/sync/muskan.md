@@ -10,7 +10,7 @@
 **Status:** offline (session 13 — Discover surface explored via prototype, then paused; next session = Sella's role in Connect)
 **Linear issue in progress:** none
 **Shared files locked:** none
-**PR open:** [#54](https://github.com/HelloSello/hello-sello-mvp/pull/54) — Foundation (F1–F4 migrations + RLS + auth trigger + seed) → `dev`, **still open**.
+**PR open:** [#58](https://github.com/HelloSello/hello-sello-mvp/pull/58) — Discover prototype + visibility-rule docs → `dev`, **open**. (Foundation PR [#54](https://github.com/HelloSello/hello-sello-mvp/pull/54) = **merged**.)
 
 ---
 
