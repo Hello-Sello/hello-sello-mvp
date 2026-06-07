@@ -17,6 +17,15 @@
 
 ## Notes for the other agent
 
+**2026-06-07 (Sella design session) — Deal-Sella detection design settled.** Full detail in `ARCHITECTURE-NOTES.md` "Sella runtime placement" + `DECISIONS.md` (Sella design entry). Ayush — build Sella detection against these:
+- **Detection runs in a Supabase Edge Function**, NOT your Next.js path (new `chat_message` → DB webhook → Claude Haiku). Keeps Sella a non-blocking leaf; Vercel can't do reliable fire-and-forget.
+- **One `propose_deal_draft` tool** (contract in NOTES, maps 1:1 to `deal_line_item` / `deal_card`). **Suggest-only is structural** — only propose-tools exist, no confirm/send.
+- **Proposal + both-accept votes ride in the `deal_detected` message `metadata`** — no new table.
+- **Workspace birth = one atomic transaction** on both-accept (app-side — a person's waiting). Open for build: spawn-txn internals (`deal_member` owner/side_lead) + Bedrock-from-Deno creds (`aws4fetch` + Supabase Edge secrets). **O6 closed in the PRD.**
+- *(Design session — I did NOT change the build Status / locks above; your session-15 build state stands.)*
+
+---
+
 **2026-06-07 (session 15) — `BUILD-PLAN.md` now has a Status column.** New rule in its Legend: **each owner edits only their own rows' Status** (you = Group A, me = Group M); status flips are the one exception to the lock ritual (distinct rows → clean merge). I set the baseline: F1–F5 + your 1a = ✅; I'm starting **1b (auth screens)** = 🔨. Flip your Connect/Deal/Sella rows as you go. Per-item scope files now live in `docs/build/` (mine; you can ignore).
 
 > **1b BUILT + verified (status 🧪).** Heads-up on **one file of yours I touched:** `src/shared/ui/AppShell.tsx` is now a **client component** (`'use client'`) — it reads `usePathname()` and renders children **bare (no rail/top-bar) on `/login` + `/signup`** (list = `BARE_ROUTES`). Everything else is unchanged; your Connect/etc. routes still get the full frame. New stuff (all mine, won't touch your Connect work): `/login`, `/signup`, `/onboarding` (post-signup placeholder, 1c mounts there), `src/proxy.ts` + `src/shared/db/proxy.ts` (Next-16 session-refresh proxy — `getClaims()` gate, redirects signed-out → `/login`). Verified against seed (alice@greenleaf.test / password123). **The F5-deferred session proxy is now live** — your authed pages stay fresh. Lock released.
