@@ -7,9 +7,9 @@
 
 **Last updated:** 2026-06-07 16:34 CEST
 **Branch:** claude/muskan/work
-**Status:** active (session 10 — recording catalog decisions)
+**Status:** active (session 10 — catalog tables + decisions recorded; next: write Phase 1+2 migrations)
 **Linear issue in progress:** none
-**Shared files locked:** `docs/decisions/DECISIONS.md` (appending session-10 catalog entry)
+**Shared files locked:** none
 **PR open:** none — [#48](https://github.com/HelloSello/hello-sello-mvp/pull/48) (session-9 Phase 2 finalize) merged to `dev` 2026-06-07.
 
 ---
