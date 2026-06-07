@@ -5,16 +5,29 @@
 
 ---
 
-**Last updated:** 2026-06-07 15:35 CEST
+**Last updated:** 2026-06-07 16:34 CEST
 **Branch:** claude/muskan/work
-**Status:** offline (session 9 wrapped — Phase 2 schema review done; tables finalized)
+**Status:** active (session 10 — catalog tables + decisions recorded; next: write Phase 1+2 migrations)
 **Linear issue in progress:** none
 **Shared files locked:** none
-**PR open:** none — session-9 edits pushed to `claude/muskan/work` (not yet PR'd to `dev`).
+**PR open:** none — [#48](https://github.com/HelloSello/hello-sello-mvp/pull/48) (session-9 Phase 2 finalize) merged to `dev` 2026-06-07.
 
 ---
 
 ## Notes for the other agent
+
+**2026-06-07 (session 10) — Product Catalog & Pricelist tables locked in `SCHEMA-DRAFT.md`** (from your blueprint CSVs). Resolves the last open Phase-2 schema item. **7 tables + 4 lookups:**
+- **`product`** (catalog master) holds **label/advertised** cannabinoids; **`product_batch`** holds **measured** CoA values — research-grounded split (one product → many batches; lab values deviate per lot). This is why Marcel's CSV had THC twice.
+- **`terpene`** lookup (23 seeds) + **`batch_terpene`** child (variable profile, not the CSV's fixed 3 cols).
+- **`product_buyer_code`** — relationship-scoped map for the buyer's own product code (PHA-BB1). It's an *identifier*, not pricing, so it doesn't break "no per-buyer pricing in v0". Modeled as a table (not a column) to avoid a future extract-to-rows migration.
+- **`pricelist` + `pricelist_item`** — one standard company-wide list per company; per-customer "Customer Price/g" override stays deferred post-v0. Sell prices live on `pricelist_item`; `product` holds only `cogs` (🔒seller-only) + `rrp_per_gram`.
+- **Naming locked: `product`** (not `catalog_product`). **`deal_line_item.product_id` FK is now real in Phase 2** — create `product` before `deal_line_item`.
+- 4 new lookups (`product_unit`, `strain_dominance`, `irradiation_type`, `pricelist_status`); audit seeds added (+`product`, `product_batch`, `product_buyer_code`, `pricelist_item`).
+- **Not yet written:** DECISIONS.md session-10 entry (rationale + research sources) — pending Muskan's go.
+
+**Next:** write Phase 1 + Phase 2 migrations (now unblocked — no open schema items left).
+
+---
 
 **2026-06-07 (session 9) — Phase 2 schema review vs the PRD; tables finalized. Two of your PRD action items answered.** Reviewed all 15 Phase 2 tables before migrations (PRD = source of truth now). Edits pushed to `SCHEMA-DRAFT.md` + `DECISIONS.md` (session-9 entry) + `ARCHITECTURE-NOTES.md` + `CONTEXT.md` + `AGENTS.md` checkpoint. **What changed:**
 - **`deal_stage` seeds locked = your 5-stage template** (`negotiation`/`compliance_quality`/`agreement`/`payment`/`fulfilment_delivery`). **Dropped `domain`** — `thing` now groups by `stage` (NOT NULL), matching the PRD. Your screen-④ prototype's "by domain" Things-tab grouping is **superseded** (name-mismatch; PRD wins) — heads-up since it's your prototype.
