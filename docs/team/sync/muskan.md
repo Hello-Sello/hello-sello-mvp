@@ -5,9 +5,9 @@
 
 ---
 
-**Last updated:** 2026-06-08 (Sella DEV-11 design) CEST
+**Last updated:** 2026-06-07 (session 15) CEST
 **Branch:** claude/muskan/work
-**Status:** active (session 15 — 1b auth shipped; Sella DEV-11 architecture recorded, back on 1c onboarding)
+**Status:** active (session 15 — 1b auth shipped; wiring Sign-out into the rail, then 1c onboarding)
 **Linear issue in progress:** none
 **Shared files locked:** none
 **PR open:** [#63](https://github.com/HelloSello/hello-sello-mvp/pull/63) — 1b auth → dev
@@ -17,25 +17,12 @@
 
 ## Notes for the other agent
 
-**2026-06-08 (Sella design) — DEV-11 multi-Sella architecture: MVP scope locked.** Detail in `DECISIONS.md` (newest entry). Ayush — relevant when you build 4a–4d:
-- **MVP Sella = stateless single-shot Bedrock calls** behind the 4a wrapper, each ≤1 structured-output tool. **No agent loop / orchestrator / graph / framework (LangGraph, Bedrock Agents) / RAG / memory.** Detection (built) is the reference shape — 4c draft + 4d summarize follow the same single-call pattern.
-- The "5 Sellas" = **one runtime parameterized** by (scope · persona · tools), not 5 services. Multi-Sella orchestration + memory/RAG are explicitly **post-MVP**.
-- *(Design only — no build Status / lock rows changed.)*
-
 **2026-06-07 (Sella design session) — Deal-Sella detection design settled.** Full detail in `ARCHITECTURE-NOTES.md` "Sella runtime placement" + `DECISIONS.md` (Sella design entry). Ayush — build Sella detection against these:
 - **Detection runs in a Supabase Edge Function**, NOT your Next.js path (new `chat_message` → DB webhook → Claude Haiku). Keeps Sella a non-blocking leaf; Vercel can't do reliable fire-and-forget.
 - **One `propose_deal_draft` tool** (contract in NOTES, maps 1:1 to `deal_line_item` / `deal_card`). **Suggest-only is structural** — only propose-tools exist, no confirm/send.
 - **Proposal + both-accept votes ride in the `deal_detected` message `metadata`** — no new table.
-- **Workspace birth = one atomic transaction** on both-accept (app-side — a person's waiting). **O6 closed in the PRD.**
+- **Workspace birth = one atomic transaction** on both-accept (app-side — a person's waiting). Open for build: spawn-txn internals (`deal_member` owner/side_lead) + Bedrock-from-Deno creds (`aws4fetch` + Supabase Edge secrets). **O6 closed in the PRD.**
 - *(Design session — I did NOT change the build Status / locks above; your session-15 build state stands.)*
-
-**2026-06-08 (Sella design, follow-on) — spawn-txn + Bedrock creds settled** (the two "open for build" items above are now closed). Detail in `DECISIONS.md` 2026-06-08 entry + `ARCHITECTURE-NOTES.md`. Ayush — build the workspace birth against these:
-- **Create order is acyclic** (no thread_id backfill): `deal_card` → `deal_line_item` → `deal_workspace` → `deal_member` → `chat_thread`(deal) → `chat_message`(`workspace_created`) → audit.
-- **Both founders = `deal_member` `role=owner`** (one per side). **`deal_workspace.owner_person_id` is REMOVED** — ownership reads from `deal_member` (SCHEMA.md §8 amended). `side_lead` not auto-assigned at birth.
-- **Superadmin = platform RLS bypass**, not a deal_member row.
-- **Signpost:** on birth, the P2P `deal_detected` message becomes a "Deal created → open workspace" link.
-- **Bedrock creds = permanent least-privilege key in Supabase Edge secrets** (not Vercel env), scoped to `eu.` Claude invoke only. Auto-expiring = post-MVP.
-- *(Recorded on my `claude/muskan/sella-design` worktree branch — will merge to work; I did NOT change any build Status row.)*
 
 ---
 
