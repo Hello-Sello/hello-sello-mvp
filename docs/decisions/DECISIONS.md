@@ -825,6 +825,21 @@ Design session on how Deal-Sella's detection actually *runs* at build time. Laye
 - **Workspace birth = one atomic app-side transaction.** On both-accept, a single all-or-nothing transaction creates `deal_card` (Draft) + `deal_line_item` rows + `deal_workspace` + `deal` thread + `deal_member` rows + `workspace_created` system line + audit. The `deal_detected` message persists as the "proposed → both accepted" record.
 - **No detection cost gate for MVP.** Per-message Haiku ≈ $0.001 + prompt caching → the cheap rule/embedding pre-filter is a post-MVP scale optimization, not needed for the demo.
 
-**Open (build-phase):** spawn-transaction internals (`deal_member` owner/side_lead auto-insert, the `thread_id`-nullable create-order cycle); Bedrock-from-Deno credential setup (`aws4fetch` SigV4 + Supabase Edge secrets, *not* the Vercel env keys).
+**Open (build-phase) — RESOLVED 2026-06-08 (see next entry):** spawn-transaction internals (`deal_member` owner/side_lead auto-insert, the `thread_id`-nullable create-order cycle); Bedrock-from-Deno credential setup (`aws4fetch` SigV4 + Supabase Edge secrets, *not* the Vercel env keys).
 
 *Why record:* this is the design Ayush builds Sella against; the placement rule and the structural suggest-only guarantee are the kind of thing that gets violated silently (e.g. "let me just call Bedrock in the message handler" → chat blocks on AI). Grounded in research 2026-06-07 (function-calling extraction, Haiku pricing/caching, Supabase DB webhooks) + Layer 4 §3/§5. Also closes O6 in the connect-demo PRD.
+
+---
+
+## 2026-06-08 (Sella design) — Workspace-spawn transaction + Bedrock creds (closes the build-phase opens above)
+
+Follow-on session settling the two items the detection entry left open. Mirrored in `ARCHITECTURE-NOTES.md` ("Sella runtime placement") and the schema change in `SCHEMA.md` §8.
+
+- **Create-order is acyclic — no `thread_id` backfill.** The feared "thread_id-nullable cycle" does not exist: the FK is one-directional (`chat_thread.deal_card_id → deal_card`; `deal_card` carries no thread column). Fixed order, one all-or-nothing transaction: (1) `deal_card` → (2) `deal_line_item` → (3) `deal_workspace` → (4) `deal_member` → (5) `chat_thread` (type `deal`) → (6) `chat_message` `workspace_created` → (7) audit.
+- **Both founders become `owner` (one per side).** The two P2P chatters each get a `deal_member` row with `role = owner` — co-ownership, one per company side. `side_lead` stays in the enum but is NOT auto-assigned at birth (reserved for later delegation: a side's lead who isn't a full owner). `member` = colleagues added later.
+- **`deal_workspace.owner_person_id` REMOVED — ownership lives in `deal_member`.** A deal can have several owners (two leads + more), so a single-owner column can't hold the truth. Ownership = `deal_member` rows with `role = owner`; one source, unbounded count. *(Amends the locked Phase-2 `deal_workspace` table — see SCHEMA.md §8.)*
+- **Superadmin access = platform-wide RLS bypass, not a membership row.** The HS superadmin manages any deal via a bypass policy, never inserted as a `deal_member` on each deal (keeps every deal's people-list clean).
+- **P2P→deal continuity signpost.** On birth, the `deal_detected` message in the P2P thread updates to a "Deal created → open workspace" link into the new deal thread, so the two people don't lose the deal when it moves rooms.
+- **Bedrock-from-Deno creds = permanent key, least-privilege.** The detection Edge Function authenticates to Bedrock with a permanent IAM/Bedrock key in **Supabase Edge secrets** (not the Vercel env keys), scoped to **Bedrock-invoke on the `eu.` EU Claude models only**. Auto-expiring (12hr) keys + refresh machinery = post-MVP hardening. *(Build = Ayush.)*
+
+*Why record:* the owner-column removal changes a locked schema table; the co-owner + superadmin-via-RLS choices drive both the spawn transaction and the deal RLS policy. Grounded in SCHEMA.md §7/§8 (`deal_card` / `deal_workspace` / `deal_member`) + the placement rule from the entry above.
