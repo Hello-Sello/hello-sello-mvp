@@ -5,11 +5,11 @@
 
 ---
 
-**Last updated:** 2026-06-07 00:30 UTC
+**Last updated:** 2026-06-07 00:33 UTC
 **Branch:** claude/muskan/work
-**Status:** working (session 7 wrap — adding CONTEXT + ARCHITECTURE-NOTES entries before going offline)
+**Status:** offline (session 7 wrapped)
 **Linear issue in progress:** none
-**Shared files locked:** `docs/architecture/CONTEXT.md`, `docs/architecture/ARCHITECTURE-NOTES.md`
+**Shared files locked:** none
 **PR open:** [#41](https://github.com/HelloSello/hello-sello-mvp/pull/41) — schema(phase-2): lock 3 screen ③ relationship tables → `dev` (mergeable: clean)
 
 ---
