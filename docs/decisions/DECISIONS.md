@@ -588,6 +588,24 @@ Keep the locked convention — PKs stay **v4** (`gen_random_uuid()`, native, zer
 
 *Why record:* makes the v4 choice deliberate (researched, not default-by-omission) and stops it being re-litigated; documents the cheap upgrade path. No convention change (staying = status quo) → no Ayush ack needed. (Sources: andyatkinson "Avoid UUIDv4 PKs", Scaling Postgres #368, dev.to "UUIDv7 is the 2026 default" + "UUID best practices".)
 
+## 2026-06-07 — Relationship page (screen ③): nav, content, layout
+
+Prototyped + locked in `prototypes/relationship-prototype` (full narrative: that folder's `CONTEXT.md`). The Relationship page is the persistent record between two companies — "the heart of the platform."
+
+- **Reached from a chat, not a tab — one page, two doors.** The page opens from a **P2P** or a **C2C** chat; both land on the **same company↔company page**. **There is no person-level relationship page** — *this answers DEV-8's never-closed sub-question: there is none.* *Why:* a relationship exists with a person or a company, so you reach it through whoever you're already talking to — the chat is the index, the page is the detail. A flat "all relationships" list/filter is **future**.
+- **No `Relationship` and no `Deals` sub-nav tabs** — **supersedes the 2026-06-06 "drop Companies, add Relationship" line above.** Deals live *inside* the relationship page; a cross-company Deals surface moves to a **future Grow/Trade** surface.
+- **Two altitudes (the organizing rule).** Relationship-level content lives on the page (header, Sella insight, analytics, log, notes, terms, pricelist, artifacts); deal-level content lives on the deal card / inside the deal (per-deal SIGNALS, per-deal docs). One question — *relationship or one deal?* — decides where everything goes. *Why:* keeps a rich page from becoming a junk drawer; it's also what made the tabbed layout possible (stable top band + zoomed-in tabs).
+- **Layout = tabbed.** Top band = header (the two company logos joined by a bridge mark — **no person names**, it's a company connection) + **Sella insight** and **Analytics** side by side; below, tabs: Overview · Deals · Notes · Terms & prices · Docs.
+- **Deals = progressive disclosure, not an inline dump.** A peek on Overview + a **Deals tab** filterable `All / Active / Old / Cancelled` → each deal → its Deal Workspace.
+- **Two kinds of note, both kept (different jobs):** a per-side **team note** (business, visible to your own company — "their next batch lands in ~4 months") and a per-user **personal note** (private to you, relationship upkeep — "their kid's birthday is in 4 days"). Resolves "which box?" by purpose.
+- **Artifacts = shared company-wide documents** on the page (licenses, contracts, certs). **Deal-wise docs (COAs, badges) stay inside the deal** — the two-altitudes rule applied to documents.
+- **Custom pricelist:** both sides read; **seller writes, gated by approval** (Proposed → sign-off → Applied, per DEV-41). **Agreed terms** visible to both sides (edit workflow deferred).
+- **Box → dialog pattern.** The Sella insight and Analytics boxes show an overview + a "more" button that opens a **dialog with a blurred backdrop** (open → read → close). Sella dialog = what's-happening + how-to-grow (action cards); Analytics dialog = KPIs + bar charts + a pie. *Why:* keep the page calm, push depth one tap away — the same progressive-disclosure grammar used by the deal-card pill and the deals list.
+- **Side-aware (a per-viewer projection):** per-side team notes hide across the boundary, PRIVATE deals hide from the other side, only the seller edits the pricelist. `note.side` + `note.scope` + `deal.private` drive it.
+- **Deferred:** first-contact document collection (the old "pending inbox migrates onto the page" flow — built on the retired P↔C type); if built later it lives in the **Inbox**, and its docs land in **Artifacts**. Agreed-terms edit + multi-approver pricelist sign-off (per DEV-41).
+
+*Why record:* screen ③ is the third Connect atom locked; this fixes the sub-nav model (correcting :518) and closes DEV-8's person↔person question. (Source: `prototypes/relationship-prototype/CONTEXT.md`.)
+
 ## 2026-06-07 — Phase 2 schema: deal_line_item, deal_card columns, deal_delivery separation
 
 *(Discussed session 5. Full table shapes in `docs/architecture/SCHEMA-DRAFT.md` → "Phase 2 tables" section.)*
@@ -623,21 +641,3 @@ Per-party yes/no for deal birth and amendments lives in a dedicated `deal_confir
 *Why this pattern works:* UUIDs are strings; `<` comparison is deterministic. The canonical ordering is arbitrary but consistent — what matters is there is exactly one rule, enforced everywhere.
 
 **SCHEMA-DRAFT.md updated:** `chat_thread` constraints block now includes `CHECK (type != 'p2p' OR person_a_id < person_b_id)`.
-
-## 2026-06-07 — Relationship page (screen ③): nav, content, layout
-
-Prototyped + locked in `prototypes/relationship-prototype` (full narrative: that folder's `CONTEXT.md`). The Relationship page is the persistent record between two companies — "the heart of the platform."
-
-- **Reached from a chat, not a tab — one page, two doors.** The page opens from a **P2P** or a **C2C** chat; both land on the **same company↔company page**. **There is no person-level relationship page** — *this answers DEV-8's never-closed sub-question: there is none.* *Why:* a relationship exists with a person or a company, so you reach it through whoever you're already talking to — the chat is the index, the page is the detail. A flat "all relationships" list/filter is **future**.
-- **No `Relationship` and no `Deals` sub-nav tabs** — **supersedes the 2026-06-06 "drop Companies, add Relationship" line above.** Deals live *inside* the relationship page; a cross-company Deals surface moves to a **future Grow/Trade** surface.
-- **Two altitudes (the organizing rule).** Relationship-level content lives on the page (header, Sella insight, analytics, log, notes, terms, pricelist, artifacts); deal-level content lives on the deal card / inside the deal (per-deal SIGNALS, per-deal docs). One question — *relationship or one deal?* — decides where everything goes. *Why:* keeps a rich page from becoming a junk drawer; it's also what made the tabbed layout possible (stable top band + zoomed-in tabs).
-- **Layout = tabbed.** Top band = header (the two company logos joined by a bridge mark — **no person names**, it's a company connection) + **Sella insight** and **Analytics** side by side; below, tabs: Overview · Deals · Notes · Terms & prices · Docs.
-- **Deals = progressive disclosure, not an inline dump.** A peek on Overview + a **Deals tab** filterable `All / Active / Old / Cancelled` → each deal → its Deal Workspace.
-- **Two kinds of note, both kept (different jobs):** a per-side **team note** (business, visible to your own company — "their next batch lands in ~4 months") and a per-user **personal note** (private to you, relationship upkeep — "their kid's birthday is in 4 days"). Resolves "which box?" by purpose.
-- **Artifacts = shared company-wide documents** on the page (licenses, contracts, certs). **Deal-wise docs (COAs, badges) stay inside the deal** — the two-altitudes rule applied to documents.
-- **Custom pricelist:** both sides read; **seller writes, gated by approval** (Proposed → sign-off → Applied, per DEV-41). **Agreed terms** visible to both sides (edit workflow deferred).
-- **Box → dialog pattern.** The Sella insight and Analytics boxes show an overview + a "more" button that opens a **dialog with a blurred backdrop** (open → read → close). Sella dialog = what's-happening + how-to-grow (action cards); Analytics dialog = KPIs + bar charts + a pie. *Why:* keep the page calm, push depth one tap away — the same progressive-disclosure grammar used by the deal-card pill and the deals list.
-- **Side-aware (a per-viewer projection):** per-side team notes hide across the boundary, PRIVATE deals hide from the other side, only the seller edits the pricelist. `note.side` + `note.scope` + `deal.private` drive it.
-- **Deferred:** first-contact document collection (the old "pending inbox migrates onto the page" flow — built on the retired P↔C type); if built later it lives in the **Inbox**, and its docs land in **Artifacts**. Agreed-terms edit + multi-approver pricelist sign-off (per DEV-41).
-
-*Why record:* screen ③ is the third Connect atom locked; this fixes the sub-nav model (correcting :518) and closes DEV-8's person↔person question. (Source: `prototypes/relationship-prototype/CONTEXT.md`.)
