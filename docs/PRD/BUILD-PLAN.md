@@ -77,7 +77,7 @@ The 9 demo steps the "Walk" column points to:
 
 | # | Item | Walk | MVP | Size | Status |
 |---|---|---|---|---|---|
-| 2a | Inbox (Variant A: lenses, claim/assign) | ★ | ✓ | M | |
+| 2a | Inbox (Variant A: lenses, claim/assign) | ★ | ✓ | M | 🧪 |
 | 2b | Accept → relationship + C2C created | ★ | ✓ | S | |
 | 2c | Chat - C2C + P2P threads, send/store, message types | ★ | ✓ | L | |
 | 2d | Realtime (Supabase Realtime subscriptions) | ★ | ✓ | M | |
