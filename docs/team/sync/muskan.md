@@ -7,9 +7,9 @@
 
 **Last updated:** 2026-06-07 (session 15) CEST
 **Branch:** claude/muskan/work
-**Status:** active (session 15 — adding Status column + row-ownership rule to BUILD-PLAN.md, then starting 1b auth screens)
+**Status:** active (session 15 — 1b auth shipped; wiring Sign-out into the rail, then 1c onboarding)
 **Linear issue in progress:** none
-**Shared files locked:** `src/shared/ui/AppShell.tsx` (1b — chrome-skip on /login + /signup; brief)
+**Shared files locked:** none
 **PR open:** none — F5 [#60](https://github.com/HelloSello/hello-sello-mvp/pull/60) **merged to dev**. (Discover [#58](https://github.com/HelloSello/hello-sello-mvp/pull/58) + Foundation [#54](https://github.com/HelloSello/hello-sello-mvp/pull/54) also merged.)
 
 ---
@@ -17,6 +17,10 @@
 ## Notes for the other agent
 
 **2026-06-07 (session 15) — `BUILD-PLAN.md` now has a Status column.** New rule in its Legend: **each owner edits only their own rows' Status** (you = Group A, me = Group M); status flips are the one exception to the lock ritual (distinct rows → clean merge). I set the baseline: F1–F5 + your 1a = ✅; I'm starting **1b (auth screens)** = 🔨. Flip your Connect/Deal/Sella rows as you go. Per-item scope files now live in `docs/build/` (mine; you can ignore).
+
+> **1b BUILT + verified (status 🧪).** Heads-up on **one file of yours I touched:** `src/shared/ui/AppShell.tsx` is now a **client component** (`'use client'`) — it reads `usePathname()` and renders children **bare (no rail/top-bar) on `/login` + `/signup`** (list = `BARE_ROUTES`). Everything else is unchanged; your Connect/etc. routes still get the full frame. New stuff (all mine, won't touch your Connect work): `/login`, `/signup`, `/onboarding` (post-signup placeholder, 1c mounts there), `src/proxy.ts` + `src/shared/db/proxy.ts` (Next-16 session-refresh proxy — `getClaims()` gate, redirects signed-out → `/login`). Verified against seed (alice@greenleaf.test / password123). **The F5-deferred session proxy is now live** — your authed pages stay fresh. Lock released.
+>
+> **Update — I wired Sign-out into the rail myself** (Muskan reversed the earlier "leave to you" call). The user-avatar slot at the bottom of `IconRail` is now a click-to-open menu with a **Sign out** item (calls my `signOut` action). Minimal styling — **restyle freely** when you polish the shell; it's your component. Signup also now carries the two value-prop lines (QR card / B2B network) on the locked light brand.
 
 ---
 

@@ -1,0 +1,82 @@
+import { BadgeCheck } from 'lucide-react'
+import { Wordmark } from '@/shared/ui/Wordmark'
+
+/**
+ * The frosted card the auth forms sit in — centered on the pink glass body,
+ * Wordmark + heading on top, the form as children. Shared by login + signup so
+ * the two screens stay visually identical. `highlights` adds the value-prop
+ * bullets under the heading (signup uses them; login leaves them off).
+ */
+export function AuthCard({
+  title,
+  subtitle,
+  highlights,
+  children,
+  footer,
+}: {
+  title: string
+  subtitle?: string
+  highlights?: string[]
+  children: React.ReactNode
+  footer?: React.ReactNode
+}) {
+  return (
+    <div className="flex min-h-screen items-center justify-center p-6">
+      <div className="glass-strong w-full max-w-sm rounded-3xl p-8">
+        <div className="mb-6 flex flex-col items-center gap-3 text-center">
+          <Wordmark />
+          <div>
+            <h1 className="text-lg font-semibold text-ink">{title}</h1>
+            {subtitle && (
+              <p className="mt-1 text-sm text-ink-muted">{subtitle}</p>
+            )}
+          </div>
+        </div>
+        {highlights && highlights.length > 0 && (
+          <ul className="mb-6 flex flex-col gap-2.5">
+            {highlights.map((point) => (
+              <li key={point} className="flex items-center gap-2.5 text-sm text-ink">
+                <BadgeCheck
+                  size={18}
+                  strokeWidth={2.25}
+                  className="shrink-0 text-brand"
+                />
+                {point}
+              </li>
+            ))}
+          </ul>
+        )}
+        {children}
+        {footer && (
+          <div className="mt-6 text-center text-sm text-ink-muted">{footer}</div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/** A labelled text input — the only field shape the auth forms use. */
+export function Field({
+  label,
+  name,
+  type = 'text',
+  autoComplete,
+}: {
+  label: string
+  name: string
+  type?: string
+  autoComplete?: string
+}) {
+  return (
+    <label className="flex flex-col gap-1 text-sm">
+      <span className="text-ink-muted">{label}</span>
+      <input
+        name={name}
+        type={type}
+        required
+        autoComplete={autoComplete}
+        className="w-full rounded-xl border border-white/70 bg-white/70 px-3 py-2 text-sm text-ink outline-none transition focus:border-brand focus:ring-2 focus:ring-brand-soft"
+      />
+    </label>
+  )
+}

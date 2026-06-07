@@ -1,7 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import { usePathname } from "next/navigation";
-import { User } from "lucide-react";
+import { User, LogOut } from "lucide-react";
+import { signOut } from "@/app/(auth)/actions";
 import { SURFACES } from "./surfaces";
 import { NavItem } from "./NavItem";
 import { Wordmark } from "./Wordmark";
@@ -14,6 +16,7 @@ import { Wordmark } from "./Wordmark";
  */
 export function IconRail() {
   const pathname = usePathname();
+  const [menuOpen, setMenuOpen] = useState(false);
 
   return (
     <aside className="glass m-3 mr-0 flex w-[84px] shrink-0 flex-col items-stretch gap-1 rounded-3xl p-2.5">
@@ -33,14 +36,39 @@ export function IconRail() {
         })}
       </nav>
 
-      {/* user photo slot - placeholder until the real avatar image lands */}
-      <div className="mt-auto flex justify-center pt-3">
-        <span
-          className="flex h-10 w-10 items-center justify-center rounded-full bg-white/70 text-ink/40 shadow-sm ring-2 ring-white"
-          title="User photo"
+      {/* user avatar slot (placeholder image) — click to open the account menu */}
+      <div className="relative mt-auto flex justify-center pt-3">
+        <button
+          type="button"
+          onClick={() => setMenuOpen((open) => !open)}
+          className="flex h-10 w-10 items-center justify-center rounded-full bg-white/70 text-ink/40 shadow-sm ring-2 ring-white transition hover:text-ink/70"
+          title="Account"
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
         >
           <User size={18} strokeWidth={1.75} />
-        </span>
+        </button>
+
+        {menuOpen && (
+          <>
+            {/* click-away backdrop */}
+            <div
+              className="fixed inset-0 z-10"
+              onClick={() => setMenuOpen(false)}
+            />
+            <div className="glass-strong absolute bottom-0 left-full z-20 ml-2 w-40 rounded-xl p-1">
+              <form action={signOut}>
+                <button
+                  type="submit"
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-ink transition hover:bg-white/60"
+                >
+                  <LogOut size={16} strokeWidth={1.75} />
+                  Sign out
+                </button>
+              </form>
+            </div>
+          </>
+        )}
       </div>
     </aside>
   );

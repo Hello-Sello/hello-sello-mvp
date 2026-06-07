@@ -1,5 +1,5 @@
 # 1b — Auth screens (sign in / sign up)
-**Status:** 🔨 WIP · **Size:** S · **Owner:** Muskan
+**Status:** 🧪 review (built + verified on `claude/muskan/work`; PR pending) · **Size:** S · **Owner:** Muskan
 
 ## Goal
 Real sign-in / sign-up screens against Supabase Auth, plus the session-refresh proxy
@@ -46,17 +46,29 @@ seed walks through.
    demo, else fresh signups have no session. (Agent can't change dashboard settings.)
 
 ## Task checklist
-_(locks on approval — draft:)_
-- [ ] `shared/db/proxy.ts` `updateSession` + `src/proxy.ts` matcher
-- [ ] AppShell chrome-skip on `/login` + `/signup` (lock AppShell.tsx via sync)
-- [ ] `(auth)` pages: `/login` + `/signup` (glass card, Wordmark, brand button)
-- [ ] Server actions: signIn / signUp(+metadata) / signOut + `/logout` handler
-- [ ] Error states + loading
-- [ ] Verify: typecheck + lint + preview (sign in seed user, sign up new, redirect-when-out)
+- [x] `shared/db/proxy.ts` `updateSession` + `src/proxy.ts` matcher
+- [x] AppShell chrome-skip on `/login` + `/signup` (locked AppShell.tsx via sync, released)
+- [x] `(auth)` pages: `/login` + `/signup` (glass card, Wordmark, brand button)
+- [x] Server actions: signIn / signUp(+metadata) / signOut
+- [x] Error states + loading (`useActionState`, inline `text-danger`, pending button)
+- [x] Verify: typecheck + lint + preview (all flows below green)
 
-## Done criteria
-- Signed-out user hitting any app route → `/login`.
-- Seed user signs in → lands in Connect, session persists across reloads (proxy refresh).
-- New signup → `person` row created (first/last from metadata), lands signed-in.
-- Sign-out → back to `/login`.
-- Auth pages render chrome-free, on-brand. Typecheck + lint clean.
+> **Deviation:** dropped the `/logout` GET route handler — a GET that mutates is a smell.
+> Sign-out is a server action via `<form>` (correct verb).
+>
+> **Post-build edits (after Muskan review):**
+> - Signup carries the two value-prop lines (QR card / B2B network) under the heading — `AuthCard`
+>   gained an optional `highlights` prop; login leaves it off. Stays on the **locked light brand**
+>   (the dark mock Muskan shared was a copy reference only; light is locked — Ayush's call to reopen).
+> - `signOut` uses `scope: 'local'` so the button always clears the local session, even if the
+>   server-side revoke would fail (expired/invalid session).
+> - **Sign-out placement = Ayush's** (shell UI). Action is ready; he wires it into the rail avatar.
+>   Until then, sign-out only exists on `/onboarding`. Flagged in `sync/muskan.md`.
+
+## Done criteria — all verified in preview
+- [x] Signed-out user hitting any app route → `/login` (proxy gate).
+- [x] Seed user (`alice@greenleaf.test`) signs in → lands in Connect; session persists on reload.
+- [x] New signup → `person` row created (Nina/Tester from metadata, `company_id` NULL) → `/onboarding` signed in. Test user cleaned up.
+- [x] Sign-out → back to `/login`.
+- [x] Auth pages render chrome-free, on-brand. Typecheck + lint clean.
+- [x] Email-confirm flag found already OFF (signup got an immediate session) — no dashboard change needed.
