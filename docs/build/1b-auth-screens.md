@@ -54,7 +54,16 @@ seed walks through.
 - [x] Verify: typecheck + lint + preview (all flows below green)
 
 > **Deviation:** dropped the `/logout` GET route handler — a GET that mutates is a smell.
-> Sign-out is a server action via `<form>` (correct verb). Rail placement deferred to Ayush's UI.
+> Sign-out is a server action via `<form>` (correct verb).
+>
+> **Post-build edits (after Muskan review):**
+> - Signup carries the two value-prop lines (QR card / B2B network) under the heading — `AuthCard`
+>   gained an optional `highlights` prop; login leaves it off. Stays on the **locked light brand**
+>   (the dark mock Muskan shared was a copy reference only; light is locked — Ayush's call to reopen).
+> - `signOut` uses `scope: 'local'` so the button always clears the local session, even if the
+>   server-side revoke would fail (expired/invalid session).
+> - **Sign-out placement = Ayush's** (shell UI). Action is ready; he wires it into the rail avatar.
+>   Until then, sign-out only exists on `/onboarding`. Flagged in `sync/muskan.md`.
 
 ## Done criteria — all verified in preview
 - [x] Signed-out user hitting any app route → `/login` (proxy gate).
