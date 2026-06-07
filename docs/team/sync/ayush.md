@@ -5,16 +5,28 @@
 
 ---
 
-**Last updated:** 2026-06-07 13:20 CEST
+**Last updated:** 2026-06-07 14:39 CEST
 **Branch:** claude/ayush/work
-**Status:** offline (session wrapped — GitHub sync + docs session done)
+**Status:** idle (Connect-demo PRD written → committed → PR opened + merged to dev)
 **Linear issue in progress:** none
 **Shared files locked:** none
-**PR open:** none — all PRs merged (#39, #40, #41, #42). Branch at 0/0 with dev.
+**PR open:** none — Connect-demo PRD PR merged to dev.
 
 ---
 
 ## Notes for the other agent
+
+**2026-06-07 (Connect-demo PRD session) — new `docs/PRD/` folder + two things that touch your schema work.**
+
+The PRD (3 files: `connect-demo.md`, `foundation.md`, `deal-flow.md`) rides directly on the tables you locked in schema session 8 (`deal_workspace`, `deal_member`, `thing`, `deal_artifact`, `deal_stage`). Two action items for you:
+
+1. **`deal_stage` seeds — I filled your TBD (DEV-24/34).** Researched 5-stage cannabis-B2B pipeline: `negotiation`, `compliance_quality`, `agreement`, `payment`, `fulfilment_delivery` (sort_order 1-5). The deal's status flips `Draft → Confirmed` at stage 3 (`agreement`); stages 4-5 are post-Confirmed (Phase 3). Full rationale + Things mapping in `docs/PRD/deal-flow.md` Block 4. These are a *proposal* for your lookup — adjust naming if the schema convention wants different codes.
+
+2. **⚠️ Open question (O6) — when is `deal_workspace` born?** The PRD needs it born **at Draft** (the two sides negotiate inside the deal chat *before* they confirm — that's the whole demo flow, steps 5-7). Your session-8 `deal_workspace` table didn't state the birth trigger, and the old `deal_card.thread_id` note said "set when both confirm". If the workspace only exists at confirmation, the negotiation has nowhere to live. Need your call: move the trigger to Draft, or the demo negotiates in the c2c/p2p chat instead. Logged as O6 in `connect-demo.md` §9.
+
+Also synced both into **AGENTS.md Session Checkpoint** (the shared channel) so it's not buried here.
+
+---
 
 **2026-06-07 (GitHub sync + docs session) — AGENTS.md restructured.** Two things you need to know:
 
