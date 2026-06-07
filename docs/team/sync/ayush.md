@@ -5,16 +5,19 @@
 
 ---
 
-**Last updated:** 2026-06-07 19:18 CEST
+**Last updated:** 2026-06-07 23:27 CEST
 **Branch:** claude/ayush/work
-**Status:** idle (Task 1A merged to dev + released to main; resuming Connect 2a in ~20 min)
+**Status:** idle (Connect 2a inbox built + verified + pushed; resuming on 2b/2c)
 **Linear issue in progress:** none
 **Shared files locked:** none
-**PR open:** none — 1A merged to dev (#56) + released to main (#57). My branch synced to dev.
+**PR open:** none - 2a built + verified on claude/ayush/work (pushed, `3eb5474`); PR -> dev pending. F5 now in dev (consumed).
 
 ---
 
 ## Notes for the other agent
+
+**2026-06-07 (Task 2a - Connect inbox BUILT + verified, UI-first / mock).** `/connect/inbox` is live: Connect sub-nav (panel 2) + lens tabs (Unassigned / Mine / All / History, live counts) + list + state-driven detail; Claim / Accept / Reassign over async mock data. §2 model enforced (claim first-come, no force take-over, owner or head-admin reassign) - matches your DEV-7 + 2026-05-20 ticket locks, so no new decision. Mock-first: `modules/connect/types.ts` binds to your `pending_inbox_item` Row; `mock/inbox.mock.ts` is the only throwaway - swap-to-real = rewrite `getInbox` + mutators behind `index.ts` (already async). Committed `3eb5474`, pushed; PR -> dev pending. Flipped my BUILD-PLAN 2a row -> 🧪.
+> **Saw + thank you for 1b** (on your branch, not in dev yet): AppShell -> client + BARE_ROUTES (/login, /signup) + the session proxy. When it merges, my Connect routes still get the full frame - no conflict expected (I only ever read AppShell). **What I'll need from you when I start 2b:** the messaging `index.ts` contract (the c2c/p2p chat seam). F5 landed - thanks, that half's unblocked.
 
 **2026-06-07 (Task 1A — app shell BUILT).** Stood up the Next.js app (16 + React 19 + Tailwind v4 + lucide) in the locked `src/`. Glass app shell: light rail (Hello Sello `//` logo + 7 surfaces + user-photo slot) + search top bar; stub per surface; `/` → `/connect`. **Rebased onto your dev foundation cleanly** — your `database.types.ts` + `supabase/` came in no-conflict. Thank you for F1-F4 + RLS. Two asks before I wire data on Connect/Deal: **F5** (`shared/db` / `shared/auth` / `audit_log` helper) + the **messaging `index.ts`** contract (the Sella/Deal seam). 1a was pure UI so it's done + unblocked. Next: Connect 2a inbox → 2c chat.
 > **Merged (19:18 CEST):** PR #56 → dev, PR #57 → main. **Design system now locked in DECISIONS.md + ARCHITECTURE-NOTES.md** (pink/white glassmorphic palette, 7 surfaces, wordmark, `globals.css` `@theme` tokens) — please build Present/Discover against those so the surfaces match. Saw you pushed Discover work (951cc77) while I released — you'll want to rebase onto the new dev.
