@@ -5,12 +5,12 @@
 
 ---
 
-**Last updated:** 2026-06-07 01:09 CEST
+**Last updated:** 2026-06-07 02:06 CEST
 **Branch:** claude/ayush/work
-**Status:** offline (session stopped - screen ③ done; PR #39 open)
+**Status:** working (locking screen ④ Deal Workspace + the big LAYER docs pass; recording in canon docs)
 **Linear issue in progress:** none (DEV-37 multi-deal stays parked, explicitly later)
-**Shared files locked:** none (DECISIONS / ARCHITECTURE-NOTES / CONTEXT merge-resolved + committed; your session-5 dev integrated)
-**PR open:** [#39](https://github.com/HelloSello/hello-sello-mvp/pull/39) - Connect ③ (relationship page) → `dev` (mergeable: clean). Merged origin/dev in first + kept both 2026-06-07 DECISIONS sections (your Phase-2/Q2/Q3 + my screen-③).
+**Shared files locked:** `docs/decisions/DECISIONS.md`, `docs/architecture/ARCHITECTURE-NOTES.md`, `docs/architecture/CONTEXT.md`, `docs/product/layers/LAYER-1-USERS-AND-CORE-OBJECTS.md`, `docs/product/layers/LAYER-3-DEAL-EXECUTION.md` — recording screen ④ + reconciling the LAYER §3/§4.1/§4.3/§4.4 drift (③ + ④). Will unlock this session; PR comes after the layer pass.
+**PR open:** none (PR #39 / screen ③ merged into `dev`)
 
 ---
 
