@@ -3634,6 +3634,10 @@ export type Database = {
       is_hs_team: { Args: never; Returns: boolean }
       is_relationship_member: { Args: { p_rel_id: string }; Returns: boolean }
       is_workspace_member: { Args: { p_ws_id: string }; Returns: boolean }
+      onboard_company: {
+        Args: { p_country: string; p_name: string; p_type_codes?: string[] }
+        Returns: string
+      }
       owns_group: { Args: { p_group_id: string }; Returns: boolean }
       owns_pricelist: { Args: { p_pricelist_id: string }; Returns: boolean }
       owns_product_batch: { Args: { p_batch_id: string }; Returns: boolean }
