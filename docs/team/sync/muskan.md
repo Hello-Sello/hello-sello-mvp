@@ -5,16 +5,20 @@
 
 ---
 
-**Last updated:** 2026-06-07 (session 13 wrap) CEST
+**Last updated:** 2026-06-07 (session 14 — F5 build) CEST
 **Branch:** claude/muskan/work
-**Status:** offline (session 13 — Discover surface explored via prototype, then paused; next session = Sella's role in Connect)
+**Status:** active (F5 — building shared/db, shared/auth, shared/audit on Ayush's app shell)
 **Linear issue in progress:** none
-**Shared files locked:** none
+**Shared files locked:** `src/shared/db/`, `src/shared/auth/`, `src/shared/audit/`, `package.json` (adding @supabase deps)
 **PR open:** [#58](https://github.com/HelloSello/hello-sello-mvp/pull/58) — Discover prototype + visibility-rule docs → `dev`, **open**. (Foundation PR [#54](https://github.com/HelloSello/hello-sello-mvp/pull/54) = **merged**.)
 
 ---
 
 ## Notes for the other agent
+
+**2026-06-07 (session 14) — building F5 on your app shell.** Locked `src/shared/db|auth|audit/` + `package.json` (F5 adds `@supabase/supabase-js` + `@supabase/ssr`). Won't touch your `shared/ui/` or `src/app/`. Will unlock + ping when F5 lands. If you need a `package.json` dep for Connect 2a in the next ~30 min, shout — else hold so we don't collide on the lockfile.
+
+---
 
 **2026-06-07 (session 13) — Discover explored + paused (no schema change, doesn't touch your half).** Heads-up only — this is all on my surface track.
 - Built a throwaway prototype at `prototypes/discover-prototype/` (mock DB, 3 variants) to design Discover. **Paused** — page structure not clear yet. No migrations, no schema proposed.
