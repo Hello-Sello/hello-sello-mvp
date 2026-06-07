@@ -9,7 +9,7 @@
 **Branch:** claude/muskan/work
 **Status:** active (session 15 — adding Status column + row-ownership rule to BUILD-PLAN.md, then starting 1b auth screens)
 **Linear issue in progress:** none
-**Shared files locked:** none
+**Shared files locked:** `src/shared/ui/AppShell.tsx` (1b — chrome-skip on /login + /signup; brief)
 **PR open:** none — F5 [#60](https://github.com/HelloSello/hello-sello-mvp/pull/60) **merged to dev**. (Discover [#58](https://github.com/HelloSello/hello-sello-mvp/pull/58) + Foundation [#54](https://github.com/HelloSello/hello-sello-mvp/pull/54) also merged.)
 
 ---
