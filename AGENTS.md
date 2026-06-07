@@ -120,12 +120,13 @@ If you're building and hit a doubt, go here:
 
 *(Updated at end of every session by whoever worked last.)*
 
-**2026-06-07 - Ayush (Build plan + division of work)**
-- `docs/PRD/BUILD-PLAN.md` written - who builds what for June 11. **Split:** **Muskan** = Foundation (F1-F5) + Unit 1 (onboarding / home / shell) + Unit 2 (Connect: inbox / chat / realtime / relationship page); **Ayush** = Unit 3 (Deal) + Unit 4 (Sella).
-- **One integration seam:** Ayush's `deals`/`sella` reads Muskan's `messaging` module (Sella reads `chat_message`; draft card lands in the P2P chat; deal thread is a `chat_thread`). **Agree the `messaging` public `index.ts` up front.**
-- 4 **L** long-poles to start early: F2 (RLS), 2c (chat), 3a (deal card), 4c (Sella draft).
-- PRD updated: relationship page is now **MVP + on the demo walk** (step 3b, FR-C6).
-- (Linear: left for the post-demo team cleanup day, per Ayush. 5 informational "superseded by PRD" comments were posted on DEV-24/31/34/9/47 before that call - they point to the PRD, harmless to leave.)
+**2026-06-07 - Ayush (Build plan - re-cut: Connect + Sella to one owner)**
+- `docs/PRD/BUILD-PLAN.md` updated. **Split:** **Ayush** = the whole demo (app shell + Connect 2a-2e + Deal 3a-3d + Sella 4a-4d); **Muskan** = Foundation (F1-F5) → Onboarding/Home → **Present + Discover (design + schema + build)**.
+- **No bidirectional seam:** Sella reads the DB via tool calls, so it stays inside Connect with Ayush; the only interface is **Muskan's foundation → Ayush consumes** (auth / db / RLS / schema). Lock the foundation shapes in Phase 0.
+- **Sella is a leaf, built last → Muskan's backstop** if she finishes her track or Ayush is underwater near the deadline.
+- Long-poles: **F2 (RLS)** on Muskan; **2c (chat), 3a (deal card), 4c (Sella draft)** on Ayush.
+- Only Foundation (F1-F5) is June-11-critical on Muskan's side; onboarding/home are demo-seeded, Present/Discover are build-ahead (not in this demo).
+- PRD: relationship page is MVP + on the demo walk (step 3b, FR-C6). (Linear: parked for the post-demo team cleanup, per Ayush.)
 
 **2026-06-07 - Muskan (session 9 — Phase 2 schema review vs the PRD)**
 - Reviewed all 15 Phase 2 tables against the PRD (now source of truth) before migrations. Net change: tiny — one column swap + two stale-note fixes. Session-7/8 tables held up.

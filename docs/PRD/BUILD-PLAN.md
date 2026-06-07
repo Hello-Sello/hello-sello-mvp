@@ -1,38 +1,39 @@
 # Connect Demo - Build Plan & Division of Work
 
 **Status:** Locked. The June 11 build, split between the two of us.
-**Owners:** Muskan (Foundation + Connect) · Ayush (Deal + Sella).
-**Created:** 2026-06-07 16:25 CEST.
+**Owners:** **Ayush** = the whole demo (Connect + Deal + Sella) · **Muskan** = Foundation → Onboarding/Home → the next surfaces (Present / Discover).
+**Created:** 2026-06-07 16:25 CEST · **Updated:** 2026-06-07 17:13 CEST (re-cut: Connect+Sella to one owner).
 **Demo:** 2026-06-11.
 
-> Who builds what for the Connect demo. Derived from the PRD ([connect-demo.md](connect-demo.md) §6 = the 9-step acceptance script) and the locked build strategy (foundation broad → surfaces vertical → Sella cross-cutting). The clean split lets us work in parallel without overlap and integrate at the end.
+> Who builds what for the Connect demo. Derived from the PRD ([connect-demo.md](connect-demo.md) §6 = the 9-step acceptance script) and the locked build strategy (foundation broad → surfaces vertical → Sella cross-cutting). The cut keeps the tightly-coupled connected experience under one owner so it has no internal seams, and lets the other owner build ahead on the next surfaces.
 
 ---
 
 ## Legend
 
-- **Walk** - is this on the 9-step demo script? **★** = yes (demo breaks here if missing) · **○** = not on the walk.
-- **MVP** - build it for June 11? **✓** = build · ***seed*** = seed or stub instead of building.
-- **Size** - rough effort for one full-stack engineer: **S** ~2-4h · **M** ~½-1 day · **L** ~1.5-2+ days.
+- **Walk** - on the 9-step demo script? **★** yes (demo breaks here if missing) · **○** not on the walk.
+- **MVP** - build for June 11? **✓** build · ***seed*** = seed/stub instead · **next** = not June-11 (build-ahead).
+- **Size** - rough effort: **S** ~2-4h · **M** ~½-1 day · **L** ~1.5-2+ days.
 
 The 9 demo steps the "Walk" column points to:
-1. A sends connect request → lands in B's inbox · 2. B accepts → relationship + C2C chat · 3. the two people chat · 4. Sella spots a deal, asks both · 5. both say yes → Sella drafts card + workspace born · 6. negotiate + advance stages, card versions · 7. each side confirms · 8. Draft → Confirmed · 9. audit trail (append-only).
+1. A sends connect request → B's inbox · 2. B accepts → relationship + C2C chat · 3. the two people chat · 3b. open the relationship page · 4. Sella spots a deal, asks both · 5. both say yes → Sella drafts card + workspace born · 6. negotiate + advance stages · 7. each side confirms · 8. Draft → Confirmed · 9. audit trail.
 
 ---
 
 ## Assignment at a glance
 
-| Group | Owner | Scope |
+| Owner | Owns | Order |
 |---|---|---|
-| **A** | **Muskan** | Foundation (F1-F5) |
-| **B** | **Muskan** | Unit 1 (Onboarding + Home + Shell) + Unit 2 (Connect) |
-| **C** | **Ayush** | Unit 3 (Deal) + Unit 4 (Sella) |
+| **Muskan** | **Foundation** (F1-F5) → **Onboarding + Home + Auth screens** (1b/1c/1d) → **Present + Discover** (design + schema + build) | front-loaded; only Foundation is June-11-critical |
+| **Ayush** | **The whole demo:** App shell (1a) + **Connect** (2a-2e) + **Deal** (3a-3d) + **Sella** (4a-4d) | starts once Foundation lands |
 
-Clean split: no overlap. Muskan owns the data spine + the communication half (inbox → chat → relationship); Ayush owns the deal-execution half + the AI. Everything meets at one seam (see Integration below).
+**Why this cut.** Connect + Deal + Sella are one tightly-coupled connected experience - and **Sella reads the DB through tool calls**, so it can't cleanly leave the Connect modules. Putting all of it under one owner means **zero internal seams on the live demo path** - it can't break at a handoff on stage. Muskan provides the foundation, then builds ahead on Present/Discover (also needed, not in this demo). The two halves' active work never overlaps.
 
 ---
 
-## Group A - Foundation (Muskan)
+## Group M - Muskan
+
+### Foundation (the only June-11-critical thing Muskan owns - it gates Ayush)
 
 | # | Item | Walk | MVP | Size |
 |---|---|---|---|---|
@@ -42,18 +43,34 @@ Clean split: no overlap. Muskan owns the data spine + the communication half (in
 | F4 | Seed: 2 companies + 2 users, verified | ★ | ✓ | S |
 | F5 | `shared/db`, `shared/auth`, `audit_log` write helper | ★ | ✓ | M |
 
-## Group B - Unit 1 + Unit 2 (Muskan)
+### Entry experience (real build, but the demo uses seed - so not June-11-blocking)
 
-**Unit 1 - Onboarding + Home + Shell**
+| # | Item | Walk | MVP | Size |
+|---|---|---|---|---|
+| 1b | Auth screens (sign in / up) | ○ | ✓ | S |
+| 1c | Company onboarding (setup, license upload, verification) | ○ | ✓ *(seed for demo)* | M |
+| 1d | Home / logged-in landing | ○ | ✓ *(seed for demo)* | S |
+
+### Next surfaces (post-Foundation; build-ahead, not in the June-11 demo)
+
+| Surface | Job | Size |
+|---|---|---|
+| **Present** | **design + schema first**, then build | L+ |
+| **Discover** | **design + schema first**, then build | L+ |
+
+*These are sketch-depth today with no schema (Phase 1/2 = Connect/Deal only). So the first job is design + schema - Muskan's strength - then build. This sets up the post-demo product instead of building on undesigned ground.*
+
+---
+
+## Group A - Ayush (the whole demo)
+
+### App shell
 
 | # | Item | Walk | MVP | Size |
 |---|---|---|---|---|
 | 1a | App shell + nav (5-surface frame, top bar, routing) | ★ | ✓ | M |
-| 1b | Auth screens (sign in / up) wired to Supabase | ★ | ✓ | S |
-| 1c | Company onboarding (setup, license upload, verification) | ○ | *seed* | M |
-| 1d | Home / logged-in landing | ○ | *seed* | S |
 
-**Unit 2 - Connect**
+### Connect (Unit 2)
 
 | # | Item | Walk | MVP | Size |
 |---|---|---|---|---|
@@ -63,9 +80,7 @@ Clean split: no overlap. Muskan owns the data spine + the communication half (in
 | 2d | Realtime (Supabase Realtime subscriptions) | ★ | ✓ | M |
 | 2e | Relationship page (notes / terms / artifacts) | ★ | ✓ | M |
 
-## Group C - Unit 3 + Unit 4 (Ayush)
-
-**Unit 3 - Deal**
+### Deal (Unit 3)
 
 | # | Item | Walk | MVP | Size |
 |---|---|---|---|---|
@@ -74,39 +89,34 @@ Clean split: no overlap. Muskan owns the data spine + the communication half (in
 | 3c | Stage pipeline (5-stage bar, manual advance) + Things checklist (by **stage**) | ★ | ✓ | M |
 | 3d | Confirmation gate (two-sided confirm → Confirmed) | ★ | ✓ | M |
 
-**Unit 4 - Sella** (leaf - built last; the demo works without it)
+### Sella (Unit 4) - leaf, built last; the demo works without it
 
 | # | Item | Walk | MVP | Size |
 |---|---|---|---|---|
 | 4a | Bedrock wrapper (provider interface, Sonnet/Haiku, EU) | ★ | ✓ | M |
-| 4b | Detect (read chat → spot deal → suggestion line) | ★ | ✓ | M |
+| 4b | Detect (read chat via DB tools → spot deal → suggestion line) | ★ | ✓ | M |
 | 4c | Draft (chat → deal-card draft) | ★ | ✓ | L |
 | 4d | Summarize (version one-liners) + Sella right-panel UI | ★ | ✓ | M |
 
-**Audit** is not a unit - each group emits `audit_log` rows from its own actions, using the helper from F5.
+**Audit** - each action emits an `audit_log` row using the helper from F5.
 
 ---
 
-## The integration seam (where A/B and C meet)
+## The interface between us (one-way, low-risk)
 
-The split is clean because there is essentially **one contract** between the two halves:
+The only thing connecting our work is **Muskan's foundation → Ayush consumes it**: auth, db client, RLS, the schema. She provides, you consume. **No bidirectional seam** - Sella stays inside Connect (it reads the DB via tools), so there is no cross-team Sella/messaging contract to negotiate. Lock the foundation shapes in Phase 0, then Ayush builds the whole demo on top.
 
-- **Muskan's `messaging` module ↔ Ayush's `deals` + `sella`.** Sella reads `chat_message`; the deal-card draft appears in the P2P chat; the deal workspace's chat is a `chat_thread`. So Ayush's side depends on the **`messaging` module's public `index.ts`** (read a thread, post a message, the message types).
-- **Both sides share the schema** (Foundation) - `deal_workspace`, `deal_card`, `thing`, `deal_stage` are Muskan's tables; Ayush reads/writes them through the `deals` module.
-
-**Agree these two public interfaces up front**, then each side builds against the typed contract without waiting on the other. That is what makes "everything matches and works together" at the end actually true.
+**Sella backstop.** Sella is a leaf, built last. If Muskan finishes her track - or if Ayush is underwater on Sella near the deadline - **Muskan helps on Sella.** It's the one place she can jump into Ayush's half late without disrupting the rest, because nothing depends on it.
 
 ---
 
-## Build order (★-first within each group)
+## Build order
 
-Start the **four L long-poles early** - they hold the risk: **F2 (RLS), 2c (chat), 3a (deal card), 4c (Sella draft).**
-
-- **Phase 0 (Muskan-gated):** F1-F5. Everything sits on this; can't parallelize around the schema/RLS.
-- **Then parallel:** Muskan walks B (1a/1b → 2a/2b → 2c/2d → 2e); Ayush walks C (3a/3b → 3c/3d → 4a-4d, Sella last).
-- **○ / seed:** 1c, 1d - seed verified companies instead of building onboarding; drop into Connect instead of a home page. Build only if time remains.
-
-Thinnest walkable thread (demo insurance): **connect → accept → chat → [manually draft a card] → confirm → Confirmed.** Get that green before stages, Things, and Sella polish.
+- **Phase 0 (Muskan, gating):** Foundation F1-F5. Nobody builds features until this lands.
+- **Then parallel, no overlap:**
+  - **Ayush** - the whole demo: shell → Connect (inbox/accept → chat/realtime → relationship) → Deal (card → workspace → stages/Things → confirm) → Sella (last). Start the **3 L long-poles early: 2c (chat), 3a (deal card), 4c (Sella draft).**
+  - **Muskan** - Onboarding/Home (demo uses seed, so not blocking) → Present + Discover (design + schema, then build).
+- **Thinnest walkable thread (demo insurance):** connect → accept → chat → manually draft a card → confirm → Confirmed. Get that green before stages, Things, and Sella polish.
 
 ---
 
