@@ -10,7 +10,7 @@
 **Status:** offline (session 9 wrapped — Phase 2 schema review done; tables finalized)
 **Linear issue in progress:** none
 **Shared files locked:** none
-**PR open:** none — session-9 edits pushed to `claude/muskan/work` (not yet PR'd to `dev`).
+**PR open:** none — [#48](https://github.com/HelloSello/hello-sello-mvp/pull/48) (session-9 Phase 2 finalize) merged to `dev` 2026-06-07.
 
 ---
 
