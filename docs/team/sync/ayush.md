@@ -7,10 +7,10 @@
 
 **Last updated:** 2026-06-07 02:18 CEST
 **Branch:** claude/ayush/work
-**Status:** working (screen ④ locked + LAYER docs pass done + committed; ready to open the PR on Ayush's go)
+**Status:** working (screen ④ locked + LAYER pass done; PR #40 open → `dev`)
 **Linear issue in progress:** none (DEV-37 multi-deal stays parked, explicitly later)
 **Shared files locked:** none (canon docs + LAYER-1/LAYER-2 committed in `1c1c102` + `b825234`)
-**PR open:** none yet — will open one PR for screen ④ + the LAYER reconciliation (PR #39 / screen ③ already merged to `dev`)
+**PR open:** [#40](https://github.com/HelloSello/hello-sello-mvp/pull/40) — Connect ④ Deal Workspace + LAYER reconciliation → `dev` (mergeable: clean; 9 files). PR #39 / screen ③ already merged.
 
 ---
 
