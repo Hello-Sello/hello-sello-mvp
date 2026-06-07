@@ -5,16 +5,39 @@
 
 ---
 
-**Last updated:** 2026-06-07 00:33 UTC
+**Last updated:** 2026-06-07 14:30 CEST
 **Branch:** claude/muskan/work
-**Status:** offline (session 7 wrapped)
+**Status:** idle (session 8 wrapped — 4 screen ④ tables locked + visibility model flipped)
 **Linear issue in progress:** none
 **Shared files locked:** none
-**PR open:** [#41](https://github.com/HelloSello/hello-sello-mvp/pull/41) — schema(phase-2): lock 3 screen ③ relationship tables → `dev` (mergeable: clean)
+**PR open:** [#41](https://github.com/HelloSello/hello-sello-mvp/pull/41) — schema(phase-2): lock 3 screen ③ relationship tables → `dev` (mergeable: clean). Session 8 schema commits on `claude/muskan/work` waiting to be folded into next PR.
 
 ---
 
 ## Notes for the other agent
+
+**2026-06-07 (session 8) — 4 screen ④ tables locked in `SCHEMA-DRAFT.md`.** Your PR #40 (screen ④ Deal Workspace prototype) merge unblocked the workspace tables. Walked through them research-first, one at a time. **What landed:**
+
+- **`deal_workspace`** — separate container table (NOT columns on `deal_card`). Container concerns isolated from cross-company versioned agreement. 1:1 with deal_card in v0; DEV-37 multi-deal-per-workspace stays deferred. **Visibility model FLIPPED** — supersedes ARCHITECTURE-NOTES line 54 "two independent layers, Layer B always invited-only" model. New model: **one flag (`company_wide` default / `private`) drives both Layer A listing AND Layer B contents access**. Industry default (Salesforce/HubSpot opportunity-visible-to-org), simpler RLS, and Muskan explicitly accepted strict-hide RLS can be added later if needed. **Memory note `project_deal_visibility_two_layers.md` flagged stale.** Line 54 marked superseded + new line added below it.
+- **3-layer same-company owner-handoff enforcement** — RLS + DB trigger `enforce_owner_same_company` + app-layer pre-check. Cross-company handoff structurally blocked. Same enforcement extends to `deal_member.role='side_lead'` handoff. *Why all three:* this is THE cross-company trust boundary; single-layer bug = breach. Industry consensus (Postgres + Supabase + OWASP Multi-Tenant) for security-critical cross-table invariants is defense-in-depth.
+- **`deal_member`** — junction with `role` enum (`owner` / `side_lead` / `member`). Side_lead concept added so each side controls own-side member adds (cross-company adds blocked). Workspace birth auto-inserts 2 rows: initiating dealmaker as `owner`, counterparty as `side_lead`. v0 deferred: `access_level` column.
+- **`thing`** — single table with `type` discriminator (Asana subtype pattern): `task` / `approval` / `document_upload`. Two nullable FKs link approval→`deal_confirmation` + document_upload→`deal_artifact`. Status: `open`/`done` v0. Stages = NULL FK to `deal_stage` lookup (seeds TBD per DEV-24/34).
+- **`deal_artifact`** — clones `relationship_artifact` Storage pattern; scoped to `deal_workspace`. **9 category seeds** including EU regulatory (`phytosanitary_cert`, `certificate_of_origin`, `packing_list`, `proforma_invoice` + the 4 originals + `other`). PDF-only v0, 20 MB.
+- **`done`-flip lives in app-layer Edge Function (NOT DB trigger)** — opposite call from owner-handoff. *Why:* this is correctness logic (not a trust boundary), single write path, better debuggability, no per-write overhead. Industry split: security-critical = both layers; correctness/state-transition = app-layer. Belt-and-suspenders DB trigger can be added later if support sees drift.
+- **`done` added to `deal_card_status` lookup.**
+- **`audit_log`:** +4 `auditable_content_type` codes (`deal_workspace`, `deal_member`, `thing`, `deal_artifact`).
+- **7 new lookups:** `workspace_visibility`, `deal_member_role`, `thing_domain`, `thing_type`, `thing_status`, `deal_stage` (seeds TBD), `deal_artifact_category`.
+- **Promoted from Phase 3 → Phase 2:** `deal_workspace` + `thing`. **`deal_room` stays Phase 3** (Present-surface, not execution container).
+
+**ARCHITECTURE-NOTES.md:** 3 new entries: (a) `deal_workspace` schema entry under Core entities; (b) visibility flip — line 54 marked superseded + new line below; (c) new app-layer-vs-DB-trigger principle entry under Access policy.
+
+**DECISIONS.md:** session 8 entry appended at end — full rationale for all of the above + the visibility flip's load-bearing significance.
+
+**Pricelist scope re-clarified (Marcel sent updated WhatsApp + Drive blueprint today):** structured rows + CSV blueprint input + manual entry; PDF dropped. Per-customer override = conceptually needed but **explicitly NOT v0** per Marcel. Exact columns pending — Drive "Pricelist" spreadsheet (`1-260WKvTX67fq4If6jekN9_4rA1eWvGLJG3zuJviuPA`) ready to read next session.
+
+**Heads up for next session:** Muskan creating `docs/product/blueprints/` folder for Marcel's CSV/spreadsheet exports (version-controlled record).
+
+---
 
 **2026-06-07 (session 7) — 3 screen ③ relationship tables locked in `SCHEMA-DRAFT.md`.** Your screen ③ lock unblocked these; I reshaped your `note`/`agreed_term`/`artifact` sketches against schema conventions and locked them. **What landed:**
 - **`relationship_note`** — one table + `scope = team / personal` (Salesforce/HubSpot pattern). Personal strictly author-only (no Superadmin override). Two-table approach rejected.

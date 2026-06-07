@@ -526,7 +526,7 @@ Universal append-only change-log for every audited business action. **Immutable*
 | `description` | TEXT NOT NULL | Human-readable |
 | `target_table` | VARCHAR(50) NOT NULL | The table `content_id` usually points to |
 
-**MVP seed values:** 'company', 'person', 'pricelist', 'deal_card', 'person_group', 'group', 'permission_matrix_entry', 'pending_inbox_item', 'relationship_note', 'relationship_term', 'relationship_artifact' (more added as schema grows)
+**MVP seed values:** 'company', 'person', 'pricelist', 'deal_card', 'person_group', 'group', 'permission_matrix_entry', 'pending_inbox_item', 'relationship_note', 'relationship_term', 'relationship_artifact', 'deal_workspace', 'deal_member', 'thing', 'deal_artifact' (more added as schema grows)
 
 ---
 
@@ -541,10 +541,18 @@ Per-entity status lists (convention: enums = lookup tables). **Shared shape:** `
 | `relationship_term_status` | `pending` · `accepted` ✓ · `rejected` ✓ |
 | `inbox_status` | `pending` · `accepted` ✓ · `rejected` ✓ |
 | `join_request_status` | `pending` · `approved` ✓ · `rejected` ✓ · `cancelled` ✓ |
-| `deal_card_status` | `draft` · `withdrawn` ✓ · `confirmed` · `amended` · `cancelled` ✓ |
+| `deal_card_status` | `draft` · `withdrawn` ✓ · `confirmed` · `amended` · `done` ✓ · `cancelled` ✓ |
 | `deal_confirmation_status` | `pending` · `confirmed` ✓ · `rejected` ✓ |
+| `workspace_visibility` | `company_wide` · `private` (both non-terminal — toggleable) |
+| `deal_member_role` | `owner` · `side_lead` · `member` (none terminal) |
+| `thing_domain` | `finance` · `logistics` · `delivery` (none terminal — display grouping) |
+| `thing_type` | `task` · `approval` · `document_upload` (none terminal — sub-kind) |
+| `thing_status` | `open` · `done` ✓ |
+| `deal_artifact_category` | `delivery_note` · `invoice` · `proforma_invoice` · `contract` · `co_a` · `packing_list` · `certificate_of_origin` · `phytosanitary_cert` · `other` (none terminal — descriptive) |
 
-**Referenced by:** `company.verification_status` → `company_verification_status` · `company_license_file.scan_status` → `file_scan_status` · `relationship_artifact.scan_status` → `file_scan_status` · `pending_inbox_item.status` → `inbox_status` · `join_request.status` → `join_request_status` · `deal_card.status` → `deal_card_status` · `deal_confirmation.status` → `deal_confirmation_status` · `relationship_term.status` → `relationship_term_status`.
+**Referenced by:** `company.verification_status` → `company_verification_status` · `company_license_file.scan_status` → `file_scan_status` · `relationship_artifact.scan_status` → `file_scan_status` · `deal_artifact.scan_status` → `file_scan_status` · `pending_inbox_item.status` → `inbox_status` · `join_request.status` → `join_request_status` · `deal_card.status` → `deal_card_status` · `deal_confirmation.status` → `deal_confirmation_status` · `relationship_term.status` → `relationship_term_status` · `deal_workspace.visibility` → `workspace_visibility` · `deal_member.role` → `deal_member_role` · `thing.domain` → `thing_domain` · `thing.type` → `thing_type` · `thing.status` → `thing_status` · `deal_artifact.category` → `deal_artifact_category`.
+
+**Note on `deal_card_status`:** `done` is set by **app-layer** when both a `delivery_note` and an `invoice` artifact are present (non-deleted) on the deal workspace AND `deal_card.status = 'confirmed'`. Document-driven, no explicit "Done" click. Trigger lives in the upload Edge Function (not a DB trigger — see ARCHITECTURE-NOTES "app-layer vs DB trigger" 2026-06-07).
 
 ---
 
@@ -604,7 +612,7 @@ The questions every B2B schema must answer **before launch**. Wrong defaults her
 
 ## Phase 2 tables (in progress — 2026-06-07)
 
-**Status:** shapes locked from Ayush's chat prototype (`prototypes/chat-prototype`, locked 2026-06-06). Discussed + extended 2026-06-07. Screen ③ tables locked 2026-06-07: `relationship_note`, `relationship_term`, `relationship_artifact`. `pricelist` shape pending Marcel (PDF vs CSV vs structured).
+**Status:** shapes locked from Ayush's chat prototype (`prototypes/chat-prototype`, locked 2026-06-06). Discussed + extended 2026-06-07. Screen ③ tables locked 2026-06-07: `relationship_note`, `relationship_term`, `relationship_artifact`. **Screen ④ tables locked 2026-06-07 (session 8):** `deal_workspace`, `deal_member`, `thing`, `deal_artifact`. `pricelist` shape pending Marcel — updated 2026-06-07: structured rows + CSV blueprint (input) + manual entry; PDF dropped; relationship-level custom pricelist confirmed deferred post-v0.
 
 **Wire diagram:**
 ```
@@ -616,9 +624,14 @@ pending_inbox_item (P1) — accepted → relationship (P2)
                       │                  │                   │
               chat_message        chat_message         confirmed → chat_thread(deal)
                                                               │
-                                                       deal_card_log
-                                                       deal_change_input
-                                                       deal_line_item
+                                                              ├── deal_card_log
+                                                              ├── deal_change_input
+                                                              ├── deal_line_item
+                                                              └── deal_workspace (screen ④)
+                                                                      │
+                                                              ┌───────┼───────┬──────────┐
+                                                              ▼       ▼       ▼          ▼
+                                                       deal_member  thing  deal_artifact (+ audit_log)
 ```
 
 ---
@@ -1020,6 +1033,267 @@ Per-user evidence — each party's own note when a change is proposed. The "indi
 
 ---
 
+### `deal_workspace`
+
+Layer B invited-only container for a deal's execution. Auto-created at `deal_card` birth (1:1 with `deal_card` v0; DEV-37 multi-deal-per-workspace deferred). Owns members, THINGS, deal-level artifacts. **Container concerns live here; agreement state stays on `deal_card`.** *(Locked 2026-06-07 session 8.)*
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | UUID | PK, NOT NULL, DEFAULT `gen_random_uuid()` | |
+| `deal_card_id` | UUID | NOT NULL, REFERENCES `deal_card(id)` | 1:1 in v0 |
+| `owner_person_id` | UUID | NOT NULL, REFERENCES `person(id)` | Accountable dealmaker; on the initiating side |
+| `visibility` | VARCHAR(20) | NOT NULL DEFAULT `'company_wide'`, REFERENCES `workspace_visibility(code)` | `company_wide` (default — listed on Layer A + contents company-visible) / `private` (hidden from Layer A list + contents invited-only) |
+| `metadata` | JSONB | NOT NULL DEFAULT `'{}'` | Stage template id, owner-handoff hints |
+| `created_by` | UUID | NULL, REFERENCES `person(id)` | |
+| `updated_by` | UUID | NULL, REFERENCES `person(id)` | |
+| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
+| `updated_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
+| `deleted_at` | TIMESTAMPTZ | NULL | |
+
+**Constraints:**
+- `UNIQUE(deal_card_id) WHERE deleted_at IS NULL` — one workspace per card (v0; DEV-37 relaxes later)
+
+**Indexes:**
+- `INDEX(deal_card_id)` — primary lookup
+- `INDEX(owner_person_id)` — "workspaces I own"
+- `INDEX(visibility) WHERE visibility = 'private'` — partial index for Layer A filter (private is rare)
+
+**Visibility model (NEW lock, supersedes ARCHITECTURE-NOTES line 54 two-layer-independent model):**
+- `visibility = 'company_wide'` (default): deal is listed on Relationship deals page (Layer A); workspace contents are **visible + actionable** to both companies' employees (whole company). `deal_member` is just an organizing list (not access gate).
+- `visibility = 'private'`: deal hidden from Layer A list; workspace contents restricted to active `deal_member` rows only. `deal_member` becomes the access gate.
+
+**RLS reads (workspace + contents):**
+```
+IF visibility = 'company_wide'
+  THEN person.company_id IN (relationship's company pair)
+  ELSE EXISTS active deal_member row for (workspace, person)
+```
+
+**Owner-handoff invariant — enforced at 3 layers (defense-in-depth):**
+- **RLS UPDATE policy:** only the current `owner_person_id` may change the column.
+- **DB trigger `enforce_owner_same_company` BEFORE UPDATE OF `owner_person_id`:** new owner's `company_id` must equal old owner's `company_id` — cross-company handoff is structurally rejected.
+- **App-layer validation** in workspace update API for user-friendly error messages.
+
+The same 3-layer enforcement extends to `deal_member.role='side_lead'` handoff (cross-side handoffs blocked).
+
+**Workspace audit goes to `audit_log` (not `deal_card_log`).** Owner change, privacy toggle, member add/remove are container events, not agreement amendments. `auditable_content_type = 'deal_workspace'`. *(2026-06-07 — A2 lock.)*
+
+**`workspace_visibility` lookup:**
+
+| code | description | sort_order |
+|---|---|---|
+| `company_wide` | Deal listed on Relationship deals; contents visible+actionable to both companies | 10 |
+| `private` | Hidden from Relationship deals; contents restricted to invited members | 20 |
+
+**Lifecycle:** NOT a column on this table. Read `deal_card.status` to display Draft / Confirmed / Done.
+
+**Live version:** NOT a column on this table. `deal_card.version` is the live version (always latest accepted).
+
+---
+
+### `deal_member`
+
+Junction table — workspace × person — tracking explicit membership. **Two jobs:** (a) UX "who's on this deal" + THING-assignment defaults (always); (b) access gate when `workspace.visibility = 'private'`. *(Locked 2026-06-07 session 8.)*
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | UUID | PK, NOT NULL, DEFAULT `gen_random_uuid()` | |
+| `deal_workspace_id` | UUID | NOT NULL, REFERENCES `deal_workspace(id)` | |
+| `person_id` | UUID | NOT NULL, REFERENCES `person(id)` | |
+| `role` | VARCHAR(20) | NOT NULL DEFAULT `'member'`, REFERENCES `deal_member_role(code)` | `owner` / `side_lead` / `member` |
+| `added_by_person_id` | UUID | NOT NULL, REFERENCES `person(id)` | Audit — who invited them |
+| `added_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
+| `removed_at` | TIMESTAMPTZ | NULL | Soft delete (keeps history) |
+| `removed_by_person_id` | UUID | NULL, REFERENCES `person(id)` | |
+| `metadata` | JSONB | NOT NULL DEFAULT `'{}'` | |
+| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
+| `updated_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
+
+**Constraints:**
+- `UNIQUE(deal_workspace_id, person_id) WHERE removed_at IS NULL` — one active row per person per workspace
+- `UNIQUE(deal_workspace_id) WHERE role = 'owner' AND removed_at IS NULL` — exactly one active owner
+- `UNIQUE(deal_workspace_id) WHERE role = 'side_lead' AND removed_at IS NULL` — exactly one active side_lead
+
+**Sync invariant:** the `role='owner'` row's `person_id` must equal `deal_workspace.owner_person_id`. Maintained app-layer + the `enforce_owner_same_company` trigger on workspace owner-handoff cascades into a `deal_member` role flip in the same transaction.
+
+**Indexes:**
+- `INDEX(deal_workspace_id)` — fetch all members for a workspace
+- `INDEX(person_id)` — "deals I'm on"
+- `INDEX(deal_workspace_id, role)` — find the owner / side_lead quickly
+
+**Workspace birth — auto-inserts 2 rows:**
+
+| Person | Role | Side |
+|---|---|---|
+| Initiating dealmaker (e.g. Kim — seller) | `owner` | Seller |
+| Counterparty dealmaker (e.g. Bob — buyer) | `side_lead` | Buyer |
+
+**Member-add permission rule (enforced when `visibility = 'private'`; advisory when `'company_wide'`):**
+
+| Acting person's `role` | Can add new members from |
+|---|---|
+| `owner` (e.g. Kim, seller) | Seller's company only |
+| `side_lead` (e.g. Bob, buyer) | Buyer's company only |
+| `member` | Nobody — no add permission |
+
+Enforcement: app-layer pre-check + RLS INSERT policy on `deal_member`.
+
+**Handoff scenarios (cross-company blocked):**
+
+| Scenario | Effect |
+|---|---|
+| Owner handoff (Kim → Marcel, both seller) | Marcel's row → `role='owner'`; Kim's row → `role='member'` (stays); `workspace.owner_person_id` updated |
+| Side_lead handoff (Bob → Lisa, both buyer) | Lisa's row → `role='side_lead'`; Bob's row → `role='member'` |
+
+Both handoffs use the same 3-layer enforcement as the owner-handoff invariant (RLS + trigger + app-layer).
+
+**`deal_member_role` lookup:**
+
+| code | description | sort_order |
+|---|---|---|
+| `owner` | Sales-accountable; one per workspace; matches `workspace.owner_person_id`; lead for own side | 10 |
+| `side_lead` | Lead for the OTHER side; one per workspace; can add own-side members | 20 |
+| `member` | Regular member — no add permission | 30 |
+
+**Side:** derived via `JOIN person → company_id` against the relationship's company pair. NOT denormalized.
+
+**Audit:** every add / remove / role-change → `audit_log` (`auditable_content_type='deal_member'` via `target_table` on the lookup — or under the parent workspace's content type; app-layer chooses).
+
+**Deferred post-v0:** `access_level` column (read vs write). In v0 all members can act. If a read-only "observer" persona emerges (auditor, regulator, finance reviewer), add an `access_level` column or an `observer` role value — single ALTER. *(Open — M3.)*
+
+---
+
+### `thing`
+
+The visible work primitive in a `deal_workspace` — what needs to happen for the deal to execute. **Stages are scaffolding only (group + default-assignee); not a UI element.** Approval THINGS implement the e-signature gate that drives `deal_confirmation` rows. Document-upload THINGS reference uploaded `deal_artifact` rows. *(Locked 2026-06-07 session 8.)*
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | UUID | PK, NOT NULL, DEFAULT `gen_random_uuid()` | |
+| `deal_workspace_id` | UUID | NOT NULL, REFERENCES `deal_workspace(id)` | Parent workspace |
+| `title` | VARCHAR(200) | NOT NULL | Display label (e.g. "Upload delivery note") |
+| `description` | TEXT | NULL | Optional context |
+| `domain` | VARCHAR(20) | NOT NULL, REFERENCES `thing_domain(code)` | UI grouping — Finance / Logistics / Delivery |
+| `type` | VARCHAR(20) | NOT NULL DEFAULT `'task'`, REFERENCES `thing_type(code)` | `task` / `approval` / `document_upload` (v0) |
+| `status` | VARCHAR(20) | NOT NULL DEFAULT `'open'`, REFERENCES `thing_status(code)` | `open` / `done` (v0) |
+| `stage_code` | VARCHAR(30) | NULL, REFERENCES `deal_stage(code)` | Scaffolding — not UI; default-assignee logic. Seeds TBD (DEV-24/34). |
+| `assignee_person_id` | UUID | NULL, REFERENCES `person(id)` | NULL = unassigned; can be from either side |
+| `due_at` | TIMESTAMPTZ | NULL | Optional deadline |
+| `linked_confirmation_id` | UUID | NULL, REFERENCES `deal_confirmation(id)` | Only for `type='approval'` — auto-marks THING done when row signed |
+| `linked_artifact_id` | UUID | NULL, REFERENCES `deal_artifact(id)` | Only for `type='document_upload'` — auto-marks THING done when artifact attached |
+| `sort_order` | SMALLINT | NOT NULL DEFAULT 0 | Display order within domain |
+| `completed_at` | TIMESTAMPTZ | NULL | |
+| `completed_by_person_id` | UUID | NULL, REFERENCES `person(id)` | |
+| `metadata` | JSONB | NOT NULL DEFAULT `'{}'` | Type-specific stash (signature method, file hints, etc.) |
+| `created_by` | UUID | NULL, REFERENCES `person(id)` | |
+| `updated_by` | UUID | NULL, REFERENCES `person(id)` | |
+| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
+| `updated_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
+| `deleted_at` | TIMESTAMPTZ | NULL | Soft delete |
+
+**Constraints:**
+- `CHECK ((completed_at IS NULL) = (completed_by_person_id IS NULL))` — completion fields move together
+- `CHECK (status != 'done' OR completed_at IS NOT NULL)` — done implies completion stamp
+- `CHECK ((type = 'approval') OR linked_confirmation_id IS NULL)` — only approval things link to confirmation
+- `CHECK ((type = 'document_upload') OR linked_artifact_id IS NULL)` — only doc-upload things link to artifact
+
+**Indexes:**
+- `INDEX(deal_workspace_id, domain, sort_order)` — primary Things-tab query (grouped by domain)
+- `INDEX(assignee_person_id, status) WHERE status = 'open'` — "my open things"
+- `INDEX(deal_workspace_id, type)` — find approval things etc.
+- `INDEX(linked_confirmation_id) WHERE linked_confirmation_id IS NOT NULL` — confirmation→thing reverse lookup
+- `INDEX(linked_artifact_id) WHERE linked_artifact_id IS NOT NULL` — artifact→thing reverse lookup
+
+**Behavioral rules (app-layer / trigger):**
+
+| Trigger | Effect |
+|---|---|
+| `deal_confirmation.status` → `confirmed` (both rows for a version) | Linked approval THINGS auto-mark `status='done'`; card.status flips draft→confirmed |
+| New `deal_artifact` upload | Linked `document_upload` THING auto-marks `status='done'`; if category ∈ {`delivery_note`, `invoice`} → triggers card.status done-check (see deal_artifact) |
+| THING marked done manually | App-layer validates type-specific rules first (approval can't be force-done without signature) |
+
+**Lookups (4 new):**
+
+| Lookup | v0 seeds | Notes |
+|---|---|---|
+| `thing_domain` | `finance` (10) · `logistics` (20) · `delivery` (30) | Matches Ayush's prototype grouping |
+| `thing_type` | `task` (10) · `approval` (20) · `document_upload` (30) | Asana subtype pattern — single table, different rendering |
+| `thing_status` | `open` (10) · `done` (20, ✓ terminal) | v0 minimal; expand later (blocked, in_progress) |
+| `deal_stage` | TBD — seeds defined when stage system locks (DEV-24/34) | NULL allowed v0 |
+
+---
+
+### `deal_artifact`
+
+Deal-scoped files — contracts, delivery notes, invoices, certificates of analysis, packing lists. Clones `relationship_artifact` (Supabase Storage pattern); scoped to `deal_workspace`. **Two categories trigger the card-status `done` flip when both present:** `delivery_note` + `invoice`. *(Locked 2026-06-07 session 8.)*
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | UUID | PK, NOT NULL, DEFAULT `gen_random_uuid()` | |
+| `deal_workspace_id` | UUID | NOT NULL, REFERENCES `deal_workspace(id)` | Container scope — not deal_card directly |
+| `uploaded_by_company_id` | UUID | NOT NULL, REFERENCES `company(id)` | Which side uploaded — drives edit/delete permission |
+| `title` | VARCHAR(200) | NOT NULL | Display label |
+| `description` | TEXT | NULL | Optional context |
+| `category` | VARCHAR(30) | NULL, REFERENCES `deal_artifact_category(code)` | NULL allowed for uncategorized; required for lifecycle-trigger categories |
+| `storage_path` | TEXT | NOT NULL | Key in Supabase Storage private bucket |
+| `original_filename` | VARCHAR(500) | NOT NULL | User's filename (display only) |
+| `mime_type` | VARCHAR(100) | NOT NULL | Validated server-side via magic bytes |
+| `file_size_bytes` | BIGINT | NOT NULL | Validated ≤ 20 MB |
+| `scan_status` | VARCHAR(20) | NOT NULL DEFAULT `'pending'`, REFERENCES `file_scan_status(code)` | Reuses generic lookup |
+| `metadata` | JSONB | NOT NULL DEFAULT `'{}'` | OCR results, type-specific stash |
+| `created_by` | UUID | NULL, REFERENCES `person(id)` | Uploader (person) |
+| `updated_by` | UUID | NULL, REFERENCES `person(id)` | |
+| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
+| `updated_at` | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
+| `deleted_by` | UUID | NULL, REFERENCES `person(id)` | Pairs with `deleted_at` |
+| `deleted_at` | TIMESTAMPTZ | NULL | |
+
+**Constraints:**
+- No DB-level uniqueness per category — app-layer handles replacement (soft-delete old + upload new). UI shows latest by upload time.
+- v0 file rules — `mime_type = 'application/pdf'`, `file_size_bytes ≤ 20 MB` — enforced app-layer + Edge Function (matches `relationship_artifact`).
+
+**Indexes:**
+- `INDEX(deal_workspace_id)` — fetch all artifacts in a workspace
+- `INDEX(deal_workspace_id, category)` — filter "Documents" tab by type
+- `INDEX(uploaded_by_company_id)` — "files we uploaded"
+- `INDEX(deal_workspace_id, category) WHERE category IN ('delivery_note', 'invoice') AND deleted_at IS NULL` — partial index for done-detection
+- `INDEX(scan_status) WHERE scan_status IN ('pending', 'scan_error')` — virus-scan management
+
+**Visibility (RLS):**
+
+| Action | Rule |
+|---|---|
+| Read | If `deal_workspace.visibility = 'company_wide'` → person.company_id ∈ relationship pair; if `'private'` → person is active `deal_member` |
+| Update | `uploaded_by_company_id = person.company_id` only (uploader's side edits) |
+| Soft-delete | Same as Update |
+| Insert | Same as Read access (anyone who can see workspace can upload) |
+
+**Access control (file bytes):** Private bucket; RLS on `storage.objects` gates download. Short-lived signed URLs only. Virus scan via Edge Function at upload boundary → sets `scan_status`. Every view/download/delete → `audit_log` (`deal_artifact.uploaded` / `.downloaded` / `.deleted`).
+
+**Lifecycle trigger — `done`-flip lives in app-layer (Edge Function), NOT a DB trigger.** When `category = 'delivery_note'` AND another `category = 'invoice'` exists on the same workspace (both non-deleted) AND `deal_card.status = 'confirmed'` → app-layer flips `deal_card.status = 'done'`. Rationale: single write path (upload Edge Function), better observability/debuggability, reversible if rules change (Phase 3 multi-delivery). See ARCHITECTURE-NOTES "app-layer vs DB trigger" 2026-06-07. RLS + the single-path-through-Edge-Function structurally prevent bypass; belt-and-suspenders DB trigger can be added later if support sees drift.
+
+**v0 file constraints:**
+- **MIME allowlist:** `application/pdf` only (v0). Expand to DOCX / XLSX later if Marcel asks.
+- **Size cap:** 20 MB per file (matches `relationship_artifact` + `company_license_file`).
+
+**`deal_artifact_category` lookup (9 seeds):**
+
+| code | description | sort_order | Triggers `done`? |
+|---|---|---|---|
+| `delivery_note` | Goods-received confirmation (seller → buyer's hub) | 10 | ✅ Half |
+| `invoice` | Commercial invoice (the bill) | 20 | ✅ Other half |
+| `proforma_invoice` | Preliminary bill pre-deal — buyer uses for licenses/financing | 25 | ❌ |
+| `contract` | Signed agreement document | 30 | ❌ |
+| `co_a` | Certificate of Analysis — ISO/IEC 17025 lab (THC/CBD/heavy metals/pesticides/mycotoxins) | 40 | ❌ |
+| `packing_list` | Detailed cargo breakdown — SKUs, weights, dimensions, customs match | 50 | ❌ |
+| `certificate_of_origin` | Country-of-manufacture verification — tariff/free-trade qualification | 60 | ❌ |
+| `phytosanitary_cert` | Plant-import certificate — required for hemp/cannabis goods entering EU | 70 | ❌ |
+| `other` | Catch-all | 90 | ❌ |
+
+**Forward-looking note:** when Phase 3 `deal_delivery` lands (DEV-36/53), `delivery_note` + `invoice` artifacts become per-delivery (one set per `deal_delivery` row) — done-detection rule generalizes to "all deliveries have both". Migration is additive: add `deal_delivery_id` nullable FK on `deal_artifact` (or move to `deal_delivery_artifact`).
+
+---
+
 ## Open questions — Phase 2 (decide before writing migrations)
 
 | # | Question | Affects |
@@ -1030,8 +1304,12 @@ Per-user evidence — each party's own note when a change is proposed. The "indi
 | ~~screen③~~ | ~~**Agreed terms (Ayush's `agreed_term`)**~~ → **RESOLVED 2026-06-07.** New `relationship_term` table with proposal/accept flow; `agreed_term_type` lookup avoids EAV anti-pattern. Standing-agreement values inherited as defaults by `deal_card` (frozen snapshot independent). 5 seeds: `payment_terms`, `incoterms`, `min_order_qty`, `delivery_lead_time_days`, `exclusivity`. See `relationship_term` table above. | `relationship_term` table added |
 | ~~screen③~~ | ~~**Relationship artifacts (Ayush's `artifact`)**~~ → **RESOLVED 2026-06-07.** New `relationship_artifact` table — same Supabase Storage pattern as `company_license_file`; `artifact_category` lookup; v0 = PDF only, 20 MB. Both sides read; uploader edits. See `relationship_artifact` table above. | `relationship_artifact` table added |
 | ~~rename~~ | ~~**`license_scan_status` reused for multiple file tables**~~ → **RESOLVED 2026-06-07.** Renamed `license_scan_status` → `file_scan_status` (generic; reused by `company_license_file` + `relationship_artifact` + future `pricelist`). No DB cost (no migrations written yet). | Status lookups + 2 FKs updated |
+| ~~screen④~~ | ~~**`deal_workspace`** — separate container vs columns on `deal_card`~~ → **RESOLVED 2026-06-07 (session 8).** Separate table (Option B) — container concerns isolated from agreement state. 1:1 with deal_card v0; DEV-37 multi-deal-per-workspace deferred. **Visibility model flipped:** workspace contents are company-wide by default; `private` restricts to invited members (supersedes ARCHITECTURE-NOTES line 54 "always invited-only" model). 3-layer same-company owner-handoff enforcement (RLS + DB trigger + app-layer). See `deal_workspace` table above. | `deal_workspace` table + `workspace_visibility` lookup |
+| ~~screen④~~ | ~~**`deal_member`** — workspace membership shape~~ → **RESOLVED 2026-06-07 (session 8).** Junction with `role` enum (`owner` / `side_lead` / `member`); side_lead concept added so each side controls own-side member adds (cross-company adds blocked). Kim stays as `member` after owner handoff. v0 deferred: `access_level` column. See `deal_member` table above. | `deal_member` table + `deal_member_role` lookup |
+| ~~screen④~~ | ~~**`thing`** — visible work primitive~~ → **RESOLVED 2026-06-07 (session 8).** Single table with `type` discriminator (Asana subtype pattern) — `task` / `approval` / `document_upload`. Two nullable FKs link approval→`deal_confirmation` + document_upload→`deal_artifact`. Status: `open`/`done` v0. Stages = scaffolding only (NULL FK to `deal_stage` lookup; seeds TBD per DEV-24/34). See `thing` table above. | `thing` table + 4 lookups |
+| ~~screen④~~ | ~~**Deal-level artifact (Ayush's `artifact`)**~~ → **RESOLVED 2026-06-07 (session 8).** New `deal_artifact` clones `relationship_artifact` Storage pattern; **9 category seeds** including EU regulatory (phytosanitary_cert, certificate_of_origin, packing_list, proforma_invoice, co_a). PDF-only v0, 20 MB. **Done-flip lives in app-layer Edge Function** (not DB trigger) — single write path + better debuggability. `done` added to `deal_card_status`. See `deal_artifact` table above. | `deal_artifact` table + `deal_artifact_category` lookup + `done` in `deal_card_status` |
 | **Deferred** | **`buyer_metric` field name** — buyer's counterpart to seller's `margin` on `deal_line_item`. Still TBD; column ships as `buyer_metric` placeholder; rename later is a single ALTER. | `deal_line_item.buyer_metric` column name |
-| **Deferred** | **`pricelist` table shape** — PDF vs CSV vs structured rows. Pending Marcel. MVP scope: **one standard company-wide pricelist** (no relationship-level custom pricelist in v0). Relationship-level custom pricelist + DEV-41 proposed/applied sign-off deferred post-v0. | New `pricelist` table(s) — shape TBD |
+| **Deferred** | **`pricelist` table shape** — Partially resolved 2026-06-07 (session 8): **structured rows in DB** + CSV blueprint (input) + manual entry; PDF dropped. Marcel sent Drive "Pricelist" spreadsheet 2026-06-07 with proposed columns + confirmed relationship-level custom pricelist deferred post-v0. **Still open:** exact column list (read Marcel's blueprint next session) + per-customer override workflow (Marcel raised this is needed but explicitly NOT v0 — deferred). MVP scope confirmed: **one standard company-wide pricelist** (per-customer override + DEV-41 Proposed→Applied workflow deferred post-v0). | New `pricelist` + `pricelist_item` tables — column list pending Marcel's blueprint |
 
 ---
 
@@ -1039,9 +1317,10 @@ Per-user evidence — each party's own note when a change is proposed. The "indi
 
 | Table | Phase | Notes |
 |---|---|---|
-| `deal_delivery` | 3 | Batch numbers, CoA files, actual delivered quantities, delivery note + invoice (DEV-36). Child of `deal_card`; one deal has N deliveries (DEV-53). |
-| `deal_workspace`, `deal_room` | 3 | Containers for the deal workspace UI |
-| `thing` | 3 | Universal deal-execution primitive |
+| `deal_delivery` | 3 | Batch numbers, CoA files, actual delivered quantities, delivery note + invoice (DEV-36). Child of `deal_card`; one deal has N deliveries (DEV-53). Generalizes the v0 done-flip rule to "all deliveries have both delivery_note + invoice". |
+| ~~`deal_workspace`~~ | ~~3~~ **Promoted to Phase 2 (2026-06-07 session 8)** | See `deal_workspace` section above. |
+| ~~`thing`~~ | ~~3~~ **Promoted to Phase 2 (2026-06-07 session 8)** | See `thing` section above. |
+| `deal_room` | 3 | Present-surface (customer-facing presentation tool) — distinct from Deal Workspace (execution container). Stays Phase 3. |
 | `order` (with PO#/SO#/HS#/QR) | 4 | Generated at confirmation; XML-readable for ERP integration |
 | `analytics_event` | 2+ | Append-only UI telemetry. Not `audit_log` — that's compliance-grade. May live in external tool (PostHog/Amplitude). Deferred past v0. |
 | `email_integration` | 2+ | Per (person × provider) OAuth connection for contact re-sync. Tokens in Supabase Vault (A2). Deferred past v0. |
