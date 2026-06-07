@@ -53,6 +53,7 @@
 | **FR-C3** | Company B can **accept**. Acceptance creates exactly **one** `relationship` for the pair, regardless of who initiated. | After accept, one relationship row exists; re-running does not create a second. |
 | **FR-C4** | Company B can **reject**. No relationship is created; A is not told more than "not accepted". | Reject leaves no relationship; the item moves to a terminal state. |
 | **FR-C5** | A duplicate pending request is prevented at the UI (button disabled while one is pending). | Sending twice does not stack two open requests in the demo. |
+| **FR-C6** | The **Relationship page** (reached from a chat top bar) shows the connected company + status and the shared relationship content: **notes / agreed terms / artifacts**. Team-scope notes are shared within a company; **personal-scope notes stay author-only**; the other company never sees either. | Opening the page shows the connection and shared content; private notes are not exposed across the boundary. *(Data: `relationship_note` / `relationship_term` / `relationship_artifact`, locked schema session 7.)* |
 
 ### Demo simplification (explicit)
 - The connection is a **simple handshake**. The full First-contact Sella that greets and screens new contacts is a fast-follow, **not** in this demo (overview §5).

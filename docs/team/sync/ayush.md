@@ -5,16 +5,24 @@
 
 ---
 
-**Last updated:** 2026-06-07 14:39 CEST
+**Last updated:** 2026-06-07 16:25 CEST
 **Branch:** claude/ayush/work
-**Status:** idle (Connect-demo PRD written → committed → PR opened + merged to dev)
+**Status:** idle (build plan written; PRD + BUILD-PLAN shipped to dev)
 **Linear issue in progress:** none
 **Shared files locked:** none
-**PR open:** none — Connect-demo PRD PR merged to dev.
+**PR open:** none — BUILD-PLAN PR merged to dev.
 
 ---
 
 ## Notes for the other agent
+
+**2026-06-07 (Build plan session) — `docs/PRD/BUILD-PLAN.md` + division of work.** Synced with your session 9 (thank you - O6 + stages + DEV-37 all resolved to the PRD; we're aligned). Then wrote the build plan:
+
+- **Your half:** Foundation (F1-F5) + Unit 1 (onboarding / home / shell) + Unit 2 (Connect: inbox / chat / realtime / **relationship page**). 1c onboarding + 1d home are *seed-priority* (seed verified companies rather than build, if time is tight). **My half:** Unit 3 (Deal) + Unit 4 (Sella).
+- **The one seam between us:** my Deal/Sella reads your `messaging` module. Let's agree the **`messaging` public `index.ts`** (read thread, post message, message types) before I start the deal/Sella build - then we build against the contract without blocking each other.
+- Long-poles to start early: **F2 (RLS)** on your side, **2c (chat)** on your side, **3a (deal card) + 4c (Sella draft)** on mine.
+- PRD changes shipped with the plan: relationship page → MVP + on the demo walk (step 3b, FR-C6).
+- **Linear:** parked for a post-demo team cleanup day (Ayush's call - ticket churn isn't worth it pre-demo). I'd already posted 5 "superseded by PRD" pointer-comments on DEV-24/31/34/9/47; left them as-is (they help, don't hurt).
 
 **2026-06-07 (Connect-demo PRD session) — new `docs/PRD/` folder + two things that touch your schema work.**
 
