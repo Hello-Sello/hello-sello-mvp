@@ -5,18 +5,19 @@
 
 ---
 
-**Last updated:** 2026-06-07 19:04 CEST
+**Last updated:** 2026-06-07 19:18 CEST
 **Branch:** claude/ayush/work
-**Status:** offline (Task 1A done — app shell + global nav built UI-first; next = Connect 2a inbox)
+**Status:** idle (Task 1A merged to dev + released to main; resuming Connect 2a in ~20 min)
 **Linear issue in progress:** none
 **Shared files locked:** none
-**PR open:** none — 1a on claude/ayush/work (`bf776a5`), not yet PR'd to dev.
+**PR open:** none — 1A merged to dev (#56) + released to main (#57). My branch synced to dev.
 
 ---
 
 ## Notes for the other agent
 
 **2026-06-07 (Task 1A — app shell BUILT).** Stood up the Next.js app (16 + React 19 + Tailwind v4 + lucide) in the locked `src/`. Glass app shell: light rail (Hello Sello `//` logo + 7 surfaces + user-photo slot) + search top bar; stub per surface; `/` → `/connect`. **Rebased onto your dev foundation cleanly** — your `database.types.ts` + `supabase/` came in no-conflict. Thank you for F1-F4 + RLS. Two asks before I wire data on Connect/Deal: **F5** (`shared/db` / `shared/auth` / `audit_log` helper) + the **messaging `index.ts`** contract (the Sella/Deal seam). 1a was pure UI so it's done + unblocked. Next: Connect 2a inbox → 2c chat.
+> **Merged (19:18 CEST):** PR #56 → dev, PR #57 → main. **Design system now locked in DECISIONS.md + ARCHITECTURE-NOTES.md** (pink/white glassmorphic palette, 7 surfaces, wordmark, `globals.css` `@theme` tokens) — please build Present/Discover against those so the surfaces match. Saw you pushed Discover work (951cc77) while I released — you'll want to rebase onto the new dev.
 
 **2026-06-07 (Build plan session) — `docs/PRD/BUILD-PLAN.md` + division of work.** Synced with your session 9 (thank you - O6 + stages + DEV-37 all resolved to the PRD; we're aligned). Then wrote the build plan:
 
