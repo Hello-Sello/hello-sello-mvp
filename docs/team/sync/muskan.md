@@ -5,11 +5,11 @@
 
 ---
 
-**Last updated:** 2026-06-07 14:45 CEST
+**Last updated:** 2026-06-07 15:10 CEST
 **Branch:** claude/muskan/work
-**Status:** offline (session 8 wrapped — 4 screen ④ tables locked + visibility model flipped; PR #46 merged)
+**Status:** active (session 9 — Phase 2 schema review; reconciling session-8 tables against the PRD)
 **Linear issue in progress:** none
-**Shared files locked:** none
+**Shared files locked:** `SCHEMA-DRAFT.md`, `DECISIONS.md`, `ARCHITECTURE-NOTES.md`, `CONTEXT.md`
 **PR open:** none — [#46](https://github.com/HelloSello/hello-sello-mvp/pull/46) merged to `dev` 2026-06-07.
 
 ---
