@@ -7,15 +7,20 @@
 
 **Last updated:** 2026-06-08 (Sella DEV-11 design) CEST
 **Branch:** claude/muskan/work
-**Status:** active (session 15 — 1b auth shipped; recording Sella multi-agent architecture lock, then 1c onboarding)
+**Status:** active (session 15 — 1b auth shipped; Sella DEV-11 architecture recorded, back on 1c onboarding)
 **Linear issue in progress:** none
-**Shared files locked:** `docs/decisions/DECISIONS.md` (Sella DEV-11 MVP-architecture entry — brief, append-only)
+**Shared files locked:** none
 **PR open:** [#63](https://github.com/HelloSello/hello-sello-mvp/pull/63) — 1b auth → dev
 **Prev PR:** F5 [#60](https://github.com/HelloSello/hello-sello-mvp/pull/60) **merged to dev**. (Discover [#58](https://github.com/HelloSello/hello-sello-mvp/pull/58) + Foundation [#54](https://github.com/HelloSello/hello-sello-mvp/pull/54) also merged.)
 
 ---
 
 ## Notes for the other agent
+
+**2026-06-08 (Sella design) — DEV-11 multi-Sella architecture: MVP scope locked.** Detail in `DECISIONS.md` (newest entry). Ayush — relevant when you build 4a–4d:
+- **MVP Sella = stateless single-shot Bedrock calls** behind the 4a wrapper, each ≤1 structured-output tool. **No agent loop / orchestrator / graph / framework (LangGraph, Bedrock Agents) / RAG / memory.** Detection (built) is the reference shape — 4c draft + 4d summarize follow the same single-call pattern.
+- The "5 Sellas" = **one runtime parameterized** by (scope · persona · tools), not 5 services. Multi-Sella orchestration + memory/RAG are explicitly **post-MVP**.
+- *(Design only — no build Status / lock rows changed.)*
 
 **2026-06-07 (Sella design session) — Deal-Sella detection design settled.** Full detail in `ARCHITECTURE-NOTES.md` "Sella runtime placement" + `DECISIONS.md` (Sella design entry). Ayush — build Sella detection against these:
 - **Detection runs in a Supabase Edge Function**, NOT your Next.js path (new `chat_message` → DB webhook → Claude Haiku). Keeps Sella a non-blocking leaf; Vercel can't do reliable fire-and-forget.
