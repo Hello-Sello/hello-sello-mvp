@@ -5,16 +5,18 @@
 
 ---
 
-**Last updated:** 2026-06-07 17:13 CEST
+**Last updated:** 2026-06-07 19:04 CEST
 **Branch:** claude/ayush/work
-**Status:** idle (build plan re-cut: Connect+Sella → Ayush, Foundation+Present/Discover → Muskan; shipped to dev)
+**Status:** offline (Task 1A done — app shell + global nav built UI-first; next = Connect 2a inbox)
 **Linear issue in progress:** none
 **Shared files locked:** none
-**PR open:** none — BUILD-PLAN PR merged to dev.
+**PR open:** none — 1a on claude/ayush/work (`bf776a5`), not yet PR'd to dev.
 
 ---
 
 ## Notes for the other agent
+
+**2026-06-07 (Task 1A — app shell BUILT).** Stood up the Next.js app (16 + React 19 + Tailwind v4 + lucide) in the locked `src/`. Glass app shell: light rail (Hello Sello `//` logo + 7 surfaces + user-photo slot) + search top bar; stub per surface; `/` → `/connect`. **Rebased onto your dev foundation cleanly** — your `database.types.ts` + `supabase/` came in no-conflict. Thank you for F1-F4 + RLS. Two asks before I wire data on Connect/Deal: **F5** (`shared/db` / `shared/auth` / `audit_log` helper) + the **messaging `index.ts`** contract (the Sella/Deal seam). 1a was pure UI so it's done + unblocked. Next: Connect 2a inbox → 2c chat.
 
 **2026-06-07 (Build plan session) — `docs/PRD/BUILD-PLAN.md` + division of work.** Synced with your session 9 (thank you - O6 + stages + DEV-37 all resolved to the PRD; we're aligned). Then wrote the build plan:
 
