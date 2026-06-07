@@ -26,6 +26,13 @@ When the formal Architecture doc is written (post Layer 4 + 5), these become its
 - `relationship` is created at **accept** (a person accepts an inbound connection request — **pickup is ownership-only now**, not the creation trigger); `pending_inbox_item` carries the **4 request types + assignee + status**. *(2026-06-06; reworded 2026-06-07 "pickup → accept" per Muskan's flag, under the new 3-type chat model.)*
 - **Relationship page = a per-viewer projection over one `relationship`.** Reached from a P2P or C2C chat (one page, two doors; **no person-level page** — DEV-8 sub-q = none). Relationship-level content only (header, Sella insight, analytics, log, notes, terms, pricelist, artifacts); deal-level stays on the deal card / in the deal (**"two altitudes"**). Proposed tables: `note { relationship_id, side(supplier|buyer), scope(team|personal), author_id, body }` (per-side team note + per-user personal note, both kept), `agreed_term`, `pricelist_item { …, status(applied|proposed) }` (seller-write, sign-off gated), `artifact` (company-wide docs only — deal docs stay on the deal), relationship-level `signal` (live-computed). Visibility driven by `note.side` / `note.scope` / `deal.private`. **No `Relationship`/`Deals` sub-nav tabs** (supersedes DECISIONS.md:518). *(screen ③, 2026-06-07; see `prototypes/relationship-prototype/CONTEXT.md`.)*
 
+## Frontend / app shell
+
+- **Stack: Next.js 16 (App Router) + React 19 + Tailwind v4 + lucide-react**, TypeScript; modular-monolith `src/` (routes in `app/`, domain in `modules/`, cross-cutting in `shared/`). *(Task 1A, 2026-06-07.)*
+- **Design tokens live in `src/app/globals.css` `@theme`** as CSS variables (Tailwind v4 has no JS config): pink/white palette + glass recipe; dark mode later = one extra `:root` block, not a rewrite. *(Task 1A.)*
+- **App shell is root-layout-composed** (`shared/ui/AppShell`): a light glass icon rail (`IconRail` — the only client component, reads the route via `usePathname` to highlight the active surface) + a glass top bar; every route inherits it. Stub page per surface, `/` → `/connect`. *(Task 1A.)*
+- **UI is built mock-first, shaped to Muskan's generated types** (`src/types/database.types.ts`) so mock→real Supabase is a swap, not a rewrite; data integration still needs **F5** (`shared/db` / `shared/auth` / `audit_log` helper) + the **messaging `index.ts`** contract. *(Task 1A.)*
+
 ## Permissions / RBAC
 
 - The platform fixes **one role only — Superadmin** (per company, at least one, transferable); every other role is a **company-defined custom Group**. *(DEV-40.)*
