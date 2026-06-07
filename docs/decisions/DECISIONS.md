@@ -762,3 +762,18 @@ Wrote + applied the locked v0 schema to Supabase (71 tables), then the RLS priva
 - **Minor locks:** `deal_artifact_category.code` widened to `VARCHAR(30)` (`certificate_of_origin` = 21 chars > the 20-char status shape); `payment_terms` + `incoterms` seeded (draft gave only examples → common B2B set / Incoterms 2020 standard); `permission_action` table created but unseeded (vocabulary built with the permission-matrix UI); `company_insert` RLS tightened from `WITH CHECK (true)` to own-company-at-onboarding.
 
 *Why record:* F1–F4 are applied + isolation-tested on Supabase (impersonation test proves GreenLeaf ↮ StonePharm, private-deal lockstep, and seller-only column hiding). This is the executed reality behind `SCHEMA-DRAFT.md`. Open follow-ups: move RLS helpers to a private schema (advisor noise — they're RPC-exposed); audit JCS canonicalization + concurrency hardening; **F5** shared modules (`shared/db`, `shared/auth`, audit write helper); `buyer_metric` rename; verify Supabase Auth email provider enabled.
+
+## 2026-06-07 (Task 1A) — UI design system: palette, glassmorphism, surface nav
+
+The app's visual language, locked while standing up the app shell (1A). Source of truth for tokens = `src/app/globals.css` `@theme`.
+
+- **Look = pink + white, light, glassmorphic.** Translucent white surfaces (`backdrop-blur`) over a faint cotton-candy-washed background; pink as the accent. *Why:* distinctive and professional; a dark full-height rail was tried and rejected as heavier and less clean than the light glass capsule.
+- **Palette (locked):** raspberry `#E30B5D` (brand/primary), cotton-candy `#FFB7D5` (light fills), red-pink `#76002D` (deep accent), white `#FFFFFF`, ink `#1F2020` (text/icons), green `#34B233` (success), periwinkle `#6C7BD9` (info), alert red `#DC2626` (danger/destructive). *Why the splits:* raspberry is the brand, so it can't double as "error" — a dedicated alert red keeps destructive actions unambiguous; the source swatch's "Electric Periwinkle Blue" was mislabeled (its hex was green), replaced with a true periwinkle for info.
+- **Light-only for the demo; dark deferred post-demo.** Tokens are CSS vars in `@theme`, so dark mode is later a second `:root` block, not a rewrite. *Why:* one theme to polish before June 11; the structure keeps dark cheap.
+- **Icons = `lucide-react` (monochrome), never emoji.** *Why:* emoji render differently per OS (a client's Windows machine ≠ macOS on stage); icon components render identically and inherit the brand tokens.
+- **Font = Geist** (ships with Next 16), via `next/font`.
+- **Wordmark = `He//o se//o`** — the `ll` in each word rendered as `//` (a Sella brand sign); deep-maroon letters + raspberry slashes. A text placeholder for a real logo image.
+- **7 global surfaces (locked):** Home · Connect · Discover · Present · Buy · Sell · Trade, in a thin left rail. *Why "Trade" not "Grow":* matches the home/connect prototypes; the earlier "Grow" label is superseded.
+- **Shell layout:** light glass capsule rail (Hello Sello logo top · surface pills · user-photo slot bottom) + a glass search top bar carrying the logged-in company's logo/name. Active surface = cotton-candy pill + raspberry; `soon` surfaces (Buy/Sell/Trade) are greyed and non-clickable until built.
+
+*Why record:* shared decision — Muskan builds Present + Discover against the same palette, tokens, icon set, and shell, so the design system must be team-visible, not buried in Ayush's workshop. Full build narrative: `_workshop/build-plans/1a-app-shell.md` (Ayush-local).
