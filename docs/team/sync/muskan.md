@@ -5,9 +5,9 @@
 
 ---
 
-**Last updated:** 2026-06-07 (session 14 — F5 merged to dev) CEST
+**Last updated:** 2026-06-07 (session 14 wrap) CEST
 **Branch:** claude/muskan/work
-**Status:** active (F5 shared modules built + merged to dev — Ayush can pull it)
+**Status:** offline (session 14 — F5 built + merged to dev; next session = Sella's role in Connect)
 **Linear issue in progress:** none
 **Shared files locked:** none
 **PR open:** none — F5 [#60](https://github.com/HelloSello/hello-sello-mvp/pull/60) **merged to dev**. (Discover [#58](https://github.com/HelloSello/hello-sello-mvp/pull/58) + Foundation [#54](https://github.com/HelloSello/hello-sello-mvp/pull/54) also merged.)

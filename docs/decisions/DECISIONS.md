@@ -787,3 +787,15 @@ The app's visual language, locked while standing up the app shell (1A). Source o
 - **Shell layout:** light glass capsule rail (Hello Sello logo top · surface pills · user-photo slot bottom) + a glass search top bar carrying the logged-in company's logo/name. Active surface = cotton-candy pill + raspberry; `soon` surfaces (Buy/Sell/Trade) are greyed and non-clickable until built.
 
 *Why record:* shared decision — Muskan builds Present + Discover against the same palette, tokens, icon set, and shell, so the design system must be team-visible, not buried in Ayush's workshop. Full build narrative: `_workshop/build-plans/1a-app-shell.md` (Ayush-local).
+
+## 2026-06-07 (session 14) — F5 shared modules built + merged to dev (PR #60)
+
+Built the app-layer foundation modules on top of Ayush's Task-1A scaffold. These are the contracts every feature module imports. PR [#60](https://github.com/HelloSello/hello-sello-mvp/pull/60) → `dev`.
+
+- **Publishable key (modern) over legacy anon key.** Env var = `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (`sb_publishable_…`). Supabase docs recommend it; independent rotation, same RLS enforcement. Legacy JWT anon key still works but is the deprecated path.
+- **`shared/db` cannot barrel browser + server clients into one `index.ts`.** `server.ts` imports `next/headers` (server-only); exporting it from a shared barrel breaks Client Components at build time. Surface: types from `@/shared/db`, browser client from `@/shared/db/client`, server client from `@/shared/db/server`.
+- **`writeAudit()` is intentionally thin — DB trigger owns the hash-chain.** The helper just INSERTs; `sequence_number`, `prev_entry_hash`, and `entry_hash` are computed by the `trg_audit_log_hash` BEFORE INSERT trigger (advisory-lock serialized). The generated TS type demands `entry_hash` (can't see the trigger); the helper casts around it.
+- **`getCurrentCompanyId()` = the single Path-B accessor.** Returns `null` when the user has no company yet. RLS fails safe on null (matches nothing). One accessor, one place to change if Path B adds complexity.
+- **`getUser()` over `getSession()` for server-side auth.** `getUser()` revalidates the JWT with the Supabase auth server; `getSession()` trusts the cookie as-is. On the server (where we resolve person/company), revalidation is the safer default.
+
+*Why record:* F5 is consumed by every module Ayush builds; the barrel-split and thin-audit decisions are the kind of thing a future developer would violate without knowing why (e.g. "why not just export everything from index.ts?" or "let me compute the hash in the helper for safety"). These locks prevent that drift.
