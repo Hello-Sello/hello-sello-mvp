@@ -313,7 +313,6 @@ erDiagram
     deal_workspace {
         uuid id PK
         uuid deal_card_id FK "1:1"
-        uuid owner_person_id FK
         enum visibility "company_wide / private"
     }
     deal_member {
@@ -336,6 +335,8 @@ erDiagram
         string storage_path
     }
 ```
+
+**Ownership (2026-06-08):** a deal has **multiple owners** — both side leads at birth (each a `deal_member` with `role = owner`, one per company side), so there is **no single `owner_person_id`** on the workspace; ownership is read entirely from `deal_member`. `side_lead` / `member` are for people added later. Superadmins manage any deal via a **platform-wide RLS rule**, not a membership row.
 
 **The 5 deal stages** (how Things are grouped across the top of the workspace):
 
