@@ -725,3 +725,27 @@ Holistic review of all 15 Phase 2 tables before writing migrations (checks R1–
 - **Migration notes (R6):** soft-cycle FKs (`chat_thread.deal_card_id` ↔ `deal_card.thread_id`) created post-table via ALTER; `deal_line_item.product_id` ships as nullable UUID without FK constraint until `catalog_product`/`product` lands in Phase 3.
 
 *Net schema change from the whole review: one column swap on `thing` (drop `domain`, require `stage`) + two stale-note fixes. No structural churn — the session-7/8 tables held up. Source of truth = PRD (`docs/PRD/`).*
+
+## 2026-06-07 (session 10) — Phase 2 schema: Product Catalog & Pricelist tables (from Marcel's blueprint CSVs)
+
+Designed the last open Phase-2 schema item from Marcel's two blueprint CSVs (`docs/product/blueprint/`), research-first (cannabis seed-to-sale + Certificate-of-Analysis practice). 7 tables + 4 lookups.
+
+- **One product → many batches; label value ≠ measured value.** `product` carries the **label/advertised** cannabinoids (the "28" in "STR 28/1"); `product_batch` carries the **measured** CoA values per lot. *Why split:* cannabis is a plant — every batch varies in THC/CBD/terpenes even for the same cultivar (industry research: lab results deviate up to ~50% off label; Canada forces a single label value per batch that the plant doesn't actually honor). This is exactly why Marcel's CSV shows THC twice on the product *and* again on the batch. A flat single-level "product" would either lie about potency or lose lot traceability.
+
+- **Terpenes = lookup + child table, not fixed columns.** `terpene` (controlled vocab, 23 seeds from the CSV reference list) + `batch_terpene` (one row per terpene per batch). *Why over the CSV's "Terpene #1/#2/#3" columns:* GC×GC profiling routinely finds far more than 3; a child table is unbounded and matches the controlled-vocab → lookup+child pattern. Fixed columns would cap the profile and force a migration the first time a 4th terpene appears.
+
+- **`buyer_product_code` → `product_buyer_code` map table, not a column on `product`.** The buyer's own internal code is **per-buyer** (Pharmacy Berlin and Pharmacy Potsdam each have their own for the same product). *Why a relationship-scoped table over a column:* one product has many buyer codes; a single column works for a one-buyer demo then forces a painful extract-column-to-rows migration the moment a 2nd buyer appears — the exact failure the migration-avoidance checklist exists to prevent. It stores an **identifier, not a price**, so it does not breach the "no per-buyer pricing in v0" rule. Scoped to `relationship` (the natural grain).
+
+- **Prices: one source of truth.** Sell + bundle prices live on `pricelist_item` (`price_per_gram`, `bundle_threshold_grams`, `bundle_price_per_gram`). `product` holds only the **intrinsic** money facts: `cogs` (🔒 seller-only — RLS + app-layer policy, same pattern as `deal_line_item.seller_margin`) + `rrp_per_gram` (recommended-retail reference). *Why:* avoids duplicating a sell price in two places; the price a buyer pays is a list concern, not a product property. `deal_line_item.unit_price` remains a frozen snapshot of `pricelist_item.price_per_gram` at deal time (changing the list never rewrites past deals).
+
+- **`pricelist` + `pricelist_item` (header + rows).** v0 = **one standard company-wide list per company**. Per-customer "Customer Price / g" override (present in the Pricelist CSV) stays **deferred post-v0** per Marcel; DEV-41 Proposed→Applied workflow implementation also deferred (the decision is locked, the build isn't).
+
+- **Naming locked: `product`** (not `catalog_product` — both appeared in earlier notes). Because `product` now lands in v0, **`deal_line_item.product_id` becomes a real FK in Phase 2**: create `product` before `deal_line_item` (was previously a deferred nullable-without-FK to a Phase-3 table).
+
+- **4 new lookups:** `product_unit` (g/mL/pack) · `strain_dominance` · `irradiation_type` (beta/gamma/un_irradiated) · `pricelist_status` (draft/published). **Audit seeds** added: `product`, `product_batch`, `product_buyer_code`, `pricelist_item` → `auditable_content_type`; `product.created/amended` + `product_batch.created` → `audit_action_type`.
+
+- **`metadata JSONB` on `product`** is load-bearing here — the CSV literally says "more columns should be able to be created flexibly per company." Per-company custom attributes go to JSONB, not per-company ALTERs.
+
+*Why record:* closes the last open Phase-2 schema question. With the catalog locked, **no open schema items remain** before writing Phase 1 + Phase 2 migrations (the `buyer_metric` rename is non-blocking — placeholder ships v0). Full table shapes in `docs/architecture/SCHEMA-DRAFT.md` → "Phase 2 tables — Product Catalog & Pricelist".
+
+Research sources: CT.gov seed-to-sale; GrowerIQ ALCOA batch lineage; Leafwell / NJ.gov "how to read a CoA"; Nature/Scientific Reports + PLOS One on batch THC variability; AWS / Citus on JSONB-vs-columns.
