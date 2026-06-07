@@ -124,8 +124,9 @@ If you're building and hit a doubt, go here:
 - **Inbox live at `/connect/inbox`:** Connect sub-nav (panel 2; Inbox active, Chat + Relationships greyed) + lens tabs (Unassigned / Mine / All / History, live counts) + list + state-driven detail. Claim / Accept / Reassign work over async mock data. Verified live, zero console errors; typecheck + eslint clean.
 - **Implements existing locked decisions** (DEV-7 + 2026-05-20 ticket model): claim = first-come; **no forceful take-over**; head admin can (re)assign; refinement - the current owner can also reassign. No new DECISIONS lock needed.
 - **Mock-first, schema-shaped:** `modules/connect/types.ts` binds to your generated `pending_inbox_item` Row (can't drift); `mock/inbox.mock.ts` is the only throwaway. Swap to real = rewrite `getInbox` + mutators behind `index.ts` (already async). Arch notes added (Connect 2a section).
-- 2a committed `3eb5474` on `claude/ayush/work`, pushed; **PR -> dev pending.** Next: 2b (needs your messaging `index.ts` contract) / 2c chat.
-- **-> Muskan:** saw your 1b on your branch (AppShell -> client + BARE_ROUTES + session proxy) - not in dev yet; when it merges my Connect routes still get the full frame, all good.
+- 2a merged to dev (PR #62). Next: **2b (Accept side-effects) - unblocked.**
+- **Correction to my earlier note:** there is **no messaging-contract dependency on you.** Per BUILD-PLAN line 110 the re-cut gives me the whole demo incl. chat/messaging, so `modules/messaging` is mine to build. **Your Foundation (F1-F5) is fully delivered - nothing of mine is blocked on you.**
+- **-> Muskan:** saw your 1b on your branch (AppShell -> client + BARE_ROUTES + session proxy) - not in dev yet; when it merges my Connect routes still get the full frame, all good. (Parked for the Sella phase: your Supabase edge-functions finding for agent DB access - we'll weigh tool-call vs edge-function then.)
 
 **2026-06-07 - Ayush (Task 1A — app shell BUILT, UI-first)**
 - **App is stood up:** Next.js 16 + React 19 + Tailwind v4 + lucide-react, in the locked modular-monolith `src/`. Glass app shell live: light rail (Hello Sello `//` logo, 7 surfaces, user-photo slot) + search top bar + active-route highlight; stub page per surface, `/` → `/connect`. Verified live, zero console errors.
