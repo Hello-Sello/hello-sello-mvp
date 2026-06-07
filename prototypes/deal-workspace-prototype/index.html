@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<!-- PROTOTYPE - throwaway. DEAL WORKSPACE (screen ④) - the deal container (Layer B: invited participants only).
+     Resolves DEV-9. Built on the decided Connect shell, consistent with connect/chat/relationship/dealcard.
+
+     LAYOUT = A&C mix (Ayush 2026-06-07): header + a SHRUNK Deal-Sella line on top; LEFT = a tabbed panel
+       (Things · People · Documents); RIGHT = the Deal Chat as the WIDE hero, with the Deal Card as a pinned
+       "Deal card ▸" pill. The card opens the CANONICAL flip card (front facts/products → back = Signals | Logs),
+       identical to screens ①/②. No amendment "status" messages anywhere - the change history lives in the card's
+       LOGS (flip the card). No personal/P2P chat here - only the Deal Chat (personal chat lives on the chat screen).
+     DEMO bar: Lifecycle (Draft|Confirmed|Done) · Seeing as (Supplier|Buyer).
+
+     CONTENTS (locked): deal info + lifecycle · the Deal Card (pinned in chat, flip front/back) · people/members ·
+       artifacts/docs (DEAL-level) · Deal Chat (per-deal, ground truth) · THINGS grouped by domain (stages NOT a UI
+       element, DEV-24/34) · Deal-Sella (per-deal, neutral) · approval THINGS = e-signature (Draft gate). -->
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hello Sello - Deal Workspace (prototype)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", sans-serif; }
+  .data-table { border-collapse: collapse; width: 100%; font-size: 10.5px; }
+  .data-table th, .data-table td { text-align: left; padding: 3px 7px; border-bottom: 1px solid #e2e8f0; white-space: nowrap; }
+  .data-table th { font-weight: 600; color:#64748b; background:#f8fafc; text-transform: uppercase; font-size: 9px; letter-spacing:.03em; }
+  code { font-size: 10px; background:#f1f5f9; padding:1px 4px; border-radius:3px; }
+  .flip-3d { perspective: 1600px; }
+  .flip-inner { transition: transform .5s; transform-style: preserve-3d; position: relative; height: 100%; }
+  .flip-inner.back { transform: rotateY(180deg); }
+  .flip-face { backface-visibility: hidden; -webkit-backface-visibility: hidden; height: 100%; }
+  .flip-face.rear { position: absolute; inset: 0; transform: rotateY(180deg); }
+</style>
+</head>
+<body class="bg-slate-50 text-slate-900 h-screen overflow-hidden">
+<div id="app" class="h-screen flex flex-col"></div>
+<div id="bar"></div>
+<div id="modal"></div>
+<script>
+/* =========================================================================
+   SCENARIO  (same companies + deal as chat/relationship prototypes)
+   ========================================================================= */
+const SUPPLIER = {co:'Canadian Craft', person:'Kim',    pInit:'KC', cInit:'CC'};
+const BUYER    = {co:'ABC Apotheke',   person:'Thomas', pInit:'TA', cInit:'AB'};
+const CARD = {hs:'HS-CAN23-A189', title:'August batch · 6 SKUs', date:'15 Jun 2026', delivery:'01 Aug 2026', net:'€24,200', gross:'€26,620', margin:'€4,200'};
+const PRODUCTS = [['Amnesia Haze','Sativa','2.0 kg','€4.60/g'],['Sour Diesel','Sativa','1.5 kg','€4.50/g'],['White Widow','Hybrid','1.0 kg','€4.30/g'],['OG Kush','Indica','0.75 kg','€4.60/g'],['Gelato','Hybrid','0.25 kg','€5.00/g'],['Lemon Haze','Sativa','0.5 kg','€4.80/g']];
+// Back of the card = SIGNALS (side-specific, Sella's read) + LOGS (version history). Same canonical card as ①/②.
+const SIGNALS = { seller:[['📈','Margin healthy','17% on this deal - above your 14% pharmacy average.'],['🔁','Repeat buyer','4th deal with ABC; they reorder ~every 5 weeks.']],
+                  buyer:[['💸','Priced well','Net is ~8% under your last comparable order.'],['🚚','Reliable','Canadian Craft delivered on time on 96% of past orders.']] };
+function cardLog(){
+  const log=[{ver:1, at:'15 Jun', by:'Kim + Thomas', change:'Deal created', why:'Initial draft confirmed by both'}];
+  if(life!=='draft') log.push({ver:2, at:'18 Jun', by:'via P2P', change:'Northern Lights → Amnesia Haze · net €23,000 → €24,200', why:'Kim: "NL sold out, swapping in Amnesia Haze." · Thomas: "Fine, go ahead."'});
+  if(life==='done') log.push({ver:3, at:'02 Aug', by:'Deal-Sella · OCR', change:'Amended to delivered actuals', why:'Delivery note + invoice attached'});
+  return log;
+}
+
+const MEMBERS = [
+  {p:SUPPLIER.person, co:SUPPLIER.co, init:SUPPLIER.pInit, role:'Deal owner · Seller', side:'supplier'},
+  {p:BUYER.person,    co:BUYER.co,    init:BUYER.pInit,    role:'Buyer',               side:'buyer'},
+];
+const DOMAINS = [['Finance','💶'],['Logistics','🚚'],['Delivery','📦']];
+const THINGS = [
+  {d:'Finance',   t:'Confirm payment terms (NET30)',      who:BUYER.person,    type:'task', done0:true},
+  {d:'Finance',   t:'Send invoice',                       who:SUPPLIER.person, type:'doc',  done0:false},
+  {d:'Logistics', t:'Confirm pickup date',                who:SUPPLIER.person, type:'task', done0:true},
+  {d:'Logistics', t:'Verify COA matches batch',           who:BUYER.person,    type:'task', done0:false},
+  {d:'Logistics', t:'BfArM import authorization on file', who:SUPPLIER.person, type:'doc',  done0:false},
+  {d:'Logistics', t:'Confirm narcotic-grade carrier',     who:SUPPLIER.person, type:'task', done0:true},
+  {d:'Delivery',  t:'Upload delivery note',               who:SUPPLIER.person, type:'doc',  done0:false},
+  {d:'Delivery',  t:'Upload final invoice',               who:SUPPLIER.person, type:'doc',  done0:false},
+];
+
+/* =========================================================================
+   DEMO + UI STATE
+   ========================================================================= */
+let life='confirmed';  // draft | confirmed | done
+let viewer='supplier'; // supplier | buyer
+let cardOpen=false, cardFlipped=false, backTab='signals';
+let tab='things';      // left panel tab: things | people | documents
+let showDB=true;
+
+const me   = ()=> viewer==='supplier' ? SUPPLIER : BUYER;
+const them = ()=> viewer==='supplier' ? BUYER : SUPPLIER;
+const pad  = i=> String(i).padStart(2,'0');
+const short= s=> s.length>30 ? s.slice(0,28)+'…' : s;
+
+function thingStatus(t){ return life==='done' ? 'done' : life==='draft' ? 'queued' : (t.done0 ? 'done' : 'open'); }
+const doneCount = ()=> THINGS.filter(t=>thingStatus(t)==='done').length;
+function artifacts(){
+  const a=[{n:'Certificate of Analysis · batch NL-0823.pdf', by:'Seller', icon:'🧪'},
+           {n:'Framework agreement 2026.pdf', by:'Both', icon:'📄'}];
+  if(life==='done'){ a.push({n:'Delivery note · 02 Aug 2026.pdf', by:'Seller', icon:'🚚', fresh:true}); a.push({n:'Final invoice · INV-2026-0188.pdf', by:'Seller', icon:'🧾', fresh:true}); }
+  return a;
+}
+function sellaRead(){
+  return life==='draft' ? `1 thing blocks confirmation: both sides must approve the final terms. Nothing else starts until the deal confirms.`
+    : life==='done' ? `Done - delivery note + invoice are in, and I amended the card to the delivered actuals. Nothing left to action.`
+    : `Confirmed and executing - ${doneCount()} of ${THINGS.length} things done. Delivery note + invoice still needed to close. The COA expires in 30 days; verify it before pickup.`;
+}
+
+/* =========================================================================
+   SHELL  (rail + subnav - same as connect/chat/relationship)
+   ========================================================================= */
+const RAIL=[{name:'Home',icon:'🏠',s:'a'},{name:'Connect',icon:'💬',s:'sel'},{name:'Discover',icon:'🔍',s:'a'},{name:'Present',icon:'🏪',s:'a'},{name:'Buy',icon:'🛒',s:'soon'},{name:'Sell',icon:'🏷️',s:'soon'},{name:'Trade',icon:'🔄',s:'soon'}];
+function topbar(){
+  return `<header class="h-14 bg-white border-b border-slate-200 flex items-center px-4 gap-4 shrink-0">
+    <span class="text-pink-600 font-black text-lg tracking-tight shrink-0">Hello sello</span>
+    <div class="flex-1 max-w-2xl mx-auto"><div class="flex items-center gap-2 px-4 py-2 bg-slate-100 rounded-full text-slate-400 text-sm"><span>🔍</span>Search for company, product or service…</div></div>
+    <div class="flex items-center gap-2 shrink-0"><span class="text-sm font-medium text-slate-700 hidden xl:inline">${me().co}</span><div class="w-8 h-8 rounded-lg bg-pink-100 text-pink-700 flex items-center justify-center font-bold text-xs">${me().cInit}</div></div>
+  </header>`;
+}
+function iconRail(){
+  const base='flex flex-col items-center gap-0.5 py-2 rounded-lg text-[9px] font-medium leading-none';
+  const item=n=> n.s==='sel'?`<a href="#" class="${base} text-pink-700 bg-pink-50"><span class="text-lg">${n.icon}</span>${n.name}</a>`
+    : n.s==='a'?`<a href="#" class="${base} text-slate-600 hover:bg-slate-100"><span class="text-lg">${n.icon}</span>${n.name}</a>`
+    :`<span class="${base} text-slate-300"><span class="text-lg grayscale">${n.icon}</span>${n.name}</span>`;
+  return `<aside class="w-16 bg-white border-r border-slate-200 shrink-0 flex flex-col px-1.5 py-2 gap-0.5">${RAIL.map(item).join('')}<div class="mt-auto flex justify-center pt-2"><div class="w-8 h-8 rounded-full bg-gradient-to-br from-orange-400 to-pink-500"></div></div></aside>`;
+}
+function subnav(){
+  const tabs=[{name:'Chat',icon:'💬',sel:true},{name:'Inbox',icon:'📥',badge:2}];
+  return `<div class="w-44 bg-white border-r border-slate-200 shrink-0 p-2"><div class="px-2 py-2 text-sm font-bold text-slate-800">Connect</div>${tabs.map(t=>`<a href="#" class="flex items-center gap-2 px-2.5 py-2 rounded-lg text-sm ${t.sel?'bg-pink-50 text-pink-700 font-medium':'text-slate-600 hover:bg-slate-100'}"><span>${t.icon}</span>${t.name}${t.badge?`<span class="ml-auto text-[10px] bg-pink-600 text-white rounded-full px-1.5">${t.badge}</span>`:''}</a>`).join('')}
+    <div class="mt-3 px-2.5 py-2 rounded-lg bg-slate-50 border border-slate-100 text-[11px] text-slate-500">Deal workspace - reached from the Relationship page or the deal card's ⤢ button.</div></div>`;
+}
+
+/* =========================================================================
+   COMPONENTS
+   ========================================================================= */
+function lifecyclePill(){
+  const steps=[['draft','Draft'],['confirmed','Confirmed'],['done','Done']];
+  const idx=steps.findIndex(s=>s[0]===life);
+  return `<div class="flex items-center gap-1">${steps.map((s,i)=>`<span class="text-[10px] px-2 py-0.5 rounded-full ${i===idx?'bg-pink-600 text-white font-medium':i<idx?'bg-emerald-50 text-emerald-700':'bg-slate-100 text-slate-400'}">${i<idx?'✓ ':''}${s[1]}</span>${i<steps.length-1?'<span class="text-slate-300 text-[10px]">→</span>':''}`).join('')}</div>`;
+}
+function dealHeader(){
+  return `<div class="bg-white border border-slate-200 rounded-2xl p-4">
+    <div class="flex items-center justify-between">
+      <button data-back class="text-xs text-slate-400 hover:text-slate-600">← Relationship · ${SUPPLIER.co} · ${BUYER.co}</button>
+      <span class="text-[10px] uppercase tracking-wide text-slate-500 bg-slate-100 rounded-full px-2 py-0.5">🔒 Layer B · invited only</span>
+    </div>
+    <div class="flex items-center justify-between mt-2 gap-3 flex-wrap">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-pink-100 text-pink-700 flex items-center justify-center text-lg shrink-0">📄</div>
+        <div><div class="text-sm font-bold text-slate-800">${CARD.title}</div><div class="text-[11px] text-slate-400">${CARD.hs} · ${SUPPLIER.cInit} ◦ ${BUYER.cInit} · owner ${SUPPLIER.person}</div></div>
+      </div>
+      <div class="flex items-center gap-4">
+        <div class="text-right"><div class="text-base font-bold text-slate-800">${CARD.net}</div><div class="text-[10px] uppercase tracking-wide text-slate-400">net</div></div>
+        ${lifecyclePill()}
+      </div>
+    </div>
+  </div>`;
+}
+function sellaInsight(){ // shrunk - a single compact line
+  return `<div class="bg-gradient-to-br from-pink-50 to-white border border-pink-100 rounded-xl px-3 py-2 flex items-start gap-2">
+    <div class="w-5 h-5 rounded bg-pink-600 text-white flex items-center justify-center text-[10px] shrink-0 mt-0.5">&#10022;</div>
+    <div class="text-[12px] text-slate-700"><span class="font-semibold text-slate-600">Deal-Sella:</span> ${sellaRead()}</div>
+  </div>`;
+}
+
+/* ---- the canonical Deal Card: flip front (facts/products) / back (Signals | Logs) ---- */
+function cardFront(){
+  const row=(l,v,hot)=>`<div class="flex items-stretch gap-2"><div class="w-24 bg-pink-600 text-white rounded-md px-2 py-1.5 text-[11px] font-bold flex items-center">${l}</div><div class="flex-1 ${hot?'bg-yellow-200':'bg-white'} rounded-md px-2 py-1.5 text-[11px] font-medium text-slate-800">${v}</div></div>`;
+  const marginRow = viewer==='supplier' ? row('Margin', CARD.margin+' <span class="text-[9px] font-normal">(seller only)</span>', true) : row('Buyer metric','<span class="text-slate-400">placeholder</span>');
+  return `<div class="flip-face">
+    <div class="bg-[#f7bdd0] rounded-2xl p-3 h-full flex flex-col">
+      <button data-flip class="absolute top-3 left-3 w-6 h-6 rounded-full bg-white/70 hover:bg-white text-pink-700 text-xs flex items-center justify-center z-10" title="Flip">⇆</button>
+      <div class="bg-pink-600 text-white text-center font-bold tracking-wide text-xs rounded-md py-1.5 mt-0.5">${CARD.hs}</div>
+      <div class="bg-white text-center text-slate-700 text-[11px] rounded-md py-1 mt-1.5">Order ${CARD.date} · delivery ${CARD.delivery}${life==='done'?' · <span class="text-amber-700">amended to actuals</span>':''}</div>
+      <div class="space-y-1.5 mt-1.5">${row('Value net',CARD.net)}${row('Value gross',CARD.gross)}${marginRow}</div>
+      <div class="bg-white rounded-md p-2 mt-1.5 flex-1 min-h-0 flex flex-col">
+        <div class="flex items-center justify-between px-1 pb-1"><span class="text-[11px] font-semibold text-slate-600">Products (${PRODUCTS.length})</span><span class="text-[10px] text-slate-400">scroll ↓</span></div>
+        <div class="overflow-y-auto divide-y divide-slate-100 flex-1 min-h-0">${PRODUCTS.map(p=>`<div class="flex items-center gap-2 px-1 py-1.5"><div class="w-7 h-7 rounded bg-emerald-100 flex items-center justify-center text-xs shrink-0">🌿</div><div class="min-w-0 flex-1"><div class="flex items-center justify-between gap-2"><span class="text-[11px] font-semibold text-slate-800 truncate">${p[0]}</span><span class="text-[10px] text-slate-700 shrink-0">${p[3]}</span></div><div class="text-[10px] text-slate-500 truncate">${p[1]} · ${p[2]}</div></div></div>`).join('')}</div>
+      </div>
+      <div class="text-center text-[10px] text-pink-700 mt-1.5">Flip (top-left) → Signals / Logs</div>
+    </div></div>`;
+}
+function cardBack(){
+  const tabs=[['signals','✦ Signals'],['logs','⛁ Logs']];
+  let content;
+  if(backTab==='logs'){
+    content = `<div class="space-y-1.5 overflow-y-auto flex-1 min-h-0">${cardLog().slice().reverse().map(l=>`<div class="bg-white rounded-md px-2.5 py-1.5"><div class="text-[11px] font-semibold text-slate-800">v${l.ver} · ${l.change}</div><div class="text-[10px] text-slate-400 mt-0.5">${l.by} · ${l.at}</div><div class="text-[10px] text-slate-500 mt-0.5">${l.why}</div></div>`).join('')}</div>`;
+  } else {
+    content = `<div class="space-y-1.5 overflow-y-auto flex-1 min-h-0">${SIGNALS[viewer==='supplier'?'seller':'buyer'].map(s=>`<div class="bg-white rounded-md px-2.5 py-1.5"><div class="text-[11px] font-semibold text-slate-800 flex items-center gap-1.5">${s[0]} ${s[1]}</div><div class="text-[10px] text-slate-500 mt-0.5">${s[2]}</div></div>`).join('')}</div>`;
+  }
+  return `<div class="flip-face rear">
+    <div class="bg-[#f7bdd0] rounded-2xl p-3 h-full flex flex-col">
+      <button data-flip class="absolute top-3 left-3 w-6 h-6 rounded-full bg-white/70 hover:bg-white text-pink-700 text-xs flex items-center justify-center z-10" title="Flip">⇆</button>
+      <div class="bg-pink-600 text-white text-center font-bold tracking-wide text-xs rounded-md py-1.5 mt-0.5">CARD BACK</div>
+      <div class="flex gap-1 mt-1.5 bg-white/50 rounded-full p-0.5">${tabs.map(([k,l])=>`<button data-backtab="${k}" class="flex-1 text-[11px] py-1 rounded-full ${backTab===k?'bg-pink-600 text-white font-medium':'text-pink-800'}">${l}</button>`).join('')}</div>
+      ${backTab==='signals'?`<div class="text-center text-[10px] text-pink-800 mt-1.5 mb-1">${viewer==='supplier'?'Seller':'Buyer'} signals · Sella's read</div>`:`<div class="mt-2"></div>`}
+      ${content}
+    </div></div>`;
+}
+function cardDialog(){
+  if(!cardOpen) return '';
+  return `<div data-card-backdrop class="fixed inset-0 z-[60] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="relative w-[340px] h-[480px]" onclick="event.stopPropagation()">
+      <button data-close-card class="absolute -top-3 -right-3 z-20 w-7 h-7 rounded-full bg-white shadow text-slate-500 hover:text-slate-800 flex items-center justify-center">✕</button>
+      <div class="flip-3d h-full"><div class="flip-inner ${cardFlipped?'back':''}">${cardFront()}${cardBack()}</div></div>
+    </div></div>`;
+}
+function membersCard(){
+  return `<div class="bg-white border border-slate-200 rounded-2xl p-3">
+    <div class="flex items-center justify-between mb-2"><span class="text-xs font-semibold uppercase tracking-wide text-slate-400">People (${MEMBERS.length})</span><button class="text-[11px] text-pink-600 font-medium">+ Add</button></div>
+    <div class="space-y-2">${MEMBERS.map(m=>`<div class="flex items-center gap-2"><div class="w-8 h-8 rounded-full ${m.side===viewer?'bg-pink-600 text-white':'bg-slate-200 text-slate-500'} flex items-center justify-center text-[11px] font-semibold shrink-0">${m.init}</div><div class="min-w-0"><div class="text-[12px] font-medium text-slate-800">${m.p}${m.side===viewer?' <span class="text-[10px] text-pink-600">(you)</span>':''}</div><div class="text-[10px] text-slate-400">${m.role} · ${m.co}</div></div></div>`).join('')}</div>
+    <div class="text-[10px] text-slate-400 mt-2">Initial members = the two dealmakers; the owner can add more (e.g. logistics, compliance).</div>
+  </div>`;
+}
+function docsCard(){
+  return `<div class="bg-white border border-slate-200 rounded-2xl p-3">
+    <div class="flex items-center justify-between mb-2"><span class="text-xs font-semibold uppercase tracking-wide text-slate-400">Documents</span><button class="text-[11px] text-pink-600 font-medium">+ Upload</button></div>
+    <div class="space-y-1.5">${artifacts().map(a=>`<div class="flex items-center gap-2 text-[12px] ${a.fresh?'bg-amber-50 border border-amber-100':'bg-slate-50'} rounded-lg px-2.5 py-1.5"><span>${a.icon}</span><span class="text-slate-700 flex-1 truncate">${a.n}</span><span class="text-[10px] text-slate-400 shrink-0">${a.by}</span></div>`).join('')}</div>
+    <div class="text-[10px] text-slate-400 mt-2">Deal-level docs. Company-wide docs live on the Relationship page.</div>
+  </div>`;
+}
+function thingRow(t){
+  const st=thingStatus(t);
+  const mark = st==='done'?'<span class="w-4 h-4 rounded-full bg-emerald-500 text-white text-[9px] flex items-center justify-center shrink-0">✓</span>'
+    : st==='queued'?'<span class="w-4 h-4 rounded-full border-2 border-slate-200 shrink-0"></span>'
+    : '<span class="w-4 h-4 rounded-full border-2 border-pink-400 shrink-0"></span>';
+  const typeBadge = t.type==='approval'?'<span class="text-[9px] bg-indigo-50 text-indigo-700 border border-indigo-100 rounded px-1">✍️ e-sign</span>'
+    : t.type==='doc'?'<span class="text-[9px] text-slate-400">📎 doc</span>':'';
+  return `<div class="flex items-center gap-2 py-1.5 ${st==='queued'?'opacity-50':''}"><div>${mark}</div><div class="min-w-0 flex-1"><div class="flex items-center gap-1.5"><span class="text-[12px] ${st==='done'?'text-slate-400 line-through':'text-slate-700'} truncate">${t.t}</span>${typeBadge}</div></div><span class="text-[10px] text-slate-400 shrink-0">${t.who===me().person?'you':t.who}</span></div>`;
+}
+function confirmationGate(){
+  if(life!=='draft') return '';
+  const vote=(who,ok)=>`<div class="flex items-center justify-between text-[11px] px-2 py-1"><span class="text-slate-600">${who}</span>${ok?'<span class="text-emerald-600">✓ approved</span>':'<span class="text-amber-600">⏳ pending</span>'}</div>`;
+  return `<div class="bg-indigo-50 border border-indigo-200 rounded-2xl p-3 mb-3">
+    <div class="flex items-center gap-2 mb-1"><span class="text-sm">✍️</span><span class="text-[13px] font-semibold text-slate-800">Approve final terms</span><span class="ml-auto text-[9px] uppercase tracking-wide text-indigo-500">blocks confirmation</span></div>
+    <div class="text-[11px] text-slate-500 mb-2">An approval THING = a 2FA e-signature (person + login + timestamp). Both sides must approve before the deal confirms.</div>
+    <div class="bg-white/70 rounded-lg">${vote(SUPPLIER.person+' · seller', true)}${vote(BUYER.person+' · buyer', false)}</div>
+    <button class="w-full mt-2 bg-indigo-600 text-white rounded-lg py-1.5 text-[12px] font-semibold">Approve &amp; e-sign as ${me().person}</button>
+  </div>`;
+}
+function thingsView(){
+  const total=THINGS.length, done=doneCount();
+  const groups = DOMAINS.map(([d,icon])=>{
+    const items=THINGS.filter(t=>t.d===d);
+    return `<div class="mb-2"><div class="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 mb-0.5"><span>${icon}</span>${d} <span class="text-slate-300 font-normal">· ${items.filter(t=>thingStatus(t)==='done').length}/${items.length}</span></div><div class="divide-y divide-slate-50">${items.map(thingRow).join('')}</div></div>`;
+  }).join('');
+  return `<div class="bg-white border border-slate-200 rounded-2xl p-3">
+    <div class="flex items-center justify-between mb-2"><div class="flex items-center gap-2"><span class="text-xs font-semibold uppercase tracking-wide text-slate-400">Things</span><span class="text-[10px] text-slate-400">${done}/${total} done</span></div><button class="text-[11px] text-pink-600 font-medium">+ Add a thing</button></div>
+    <div class="h-1 bg-slate-100 rounded mb-3"><div class="h-1 bg-pink-500 rounded" style="width:${Math.round(done/total*100)}%"></div></div>
+    ${confirmationGate()}
+    ${groups}
+    <div class="text-[10px] text-slate-400 mt-1">Stages (finance/logistics/delivery) organize THINGS but are never shown as a board - THINGS are the primitive.</div>
+  </div>`;
+}
+function pinnedCardBar(){
+  return `<div class="px-3 py-2 border-b border-slate-100 shrink-0 flex items-center gap-2">
+    <span class="text-[11px] text-slate-400">Talking about:</span>
+    <span class="text-xs px-2 py-0.5 bg-slate-100 rounded-lg text-slate-700">${CARD.hs}</span>
+    <button data-open-card class="ml-auto text-xs px-2.5 py-1 bg-pink-600 text-white rounded-lg flex items-center gap-1.5 font-medium">Deal card <span class="text-pink-200">▸</span></button>
+  </div>`;
+}
+function dealChat(){
+  const sys=t=>`<div class="flex justify-center my-1.5"><div class="max-w-[85%] text-[11px] bg-pink-50 border border-pink-100 text-pink-700 rounded-2xl px-3 py-1.5 text-center">${t}</div></div>`;
+  const hum=(who,t)=>{const mine=who===me().person;return `<div class="flex ${mine?'justify-end':'justify-start'} my-1"><div class="max-w-[68%] ${mine?'bg-pink-600 text-white rounded-br-sm':'bg-white border border-slate-200 rounded-bl-sm'} rounded-2xl px-3.5 py-2 text-[13px]">${t}</div></div>`;};
+  let body = sys(`${SUPPLIER.person} and ${BUYER.person} started a deal · ${CARD.hs}. Open the card ▸ to see its log.`);
+  if(life!=='draft'){
+    body += hum(BUYER.person,'Great - looking forward to the August batch.')
+      + hum(SUPPLIER.person,'Pickup is on track. COA is attached.')
+      + hum(BUYER.person,'Perfect. I will verify the COA against the batch today.');
+  }
+  return `<div class="bg-white border border-slate-200 rounded-2xl flex flex-col overflow-hidden h-full">
+    <div class="px-4 py-2.5 border-b border-slate-100 shrink-0 flex items-center gap-2"><div class="w-7 h-7 rounded-full bg-pink-100 text-pink-700 flex items-center justify-center text-xs">📄</div><div><div class="text-sm font-semibold text-slate-700 leading-tight">Deal chat</div><div class="text-[10px] text-slate-400">ground truth · invited only</div></div></div>
+    ${pinnedCardBar()}
+    <div class="flex-1 overflow-y-auto px-4 py-3 min-h-0">${body}</div>
+    <div class="px-3 pb-3 pt-1 shrink-0"><div class="flex items-center gap-2 border border-slate-300 rounded-xl px-3 py-2"><span class="text-base text-slate-400">＋</span><input class="flex-1 outline-none text-[13px] bg-transparent" placeholder="Message the deal…"/><span class="text-slate-400">🎤</span></div></div>
+  </div>`;
+}
+
+/* =========================================================================
+   LAYOUT  (A&C mix: tabbed work panel + WIDE chat with a pinned canonical card)
+   ========================================================================= */
+function workspace(){
+  const tabs=[['things',`Things ${doneCount()}/${THINGS.length}`],['people',`People`],['documents',`Documents`]];
+  const panel = tab==='people' ? membersCard() : tab==='documents' ? docsCard() : thingsView();
+  return `<div class="p-4 space-y-3 h-full flex flex-col">
+    ${dealHeader()}
+    ${sellaInsight()}
+    <div class="flex gap-3 flex-1 min-h-0">
+      <div class="w-[330px] shrink-0 flex flex-col min-h-0 gap-2">
+        <div class="bg-white border border-slate-200 rounded-2xl p-1.5 flex gap-1 shrink-0">${tabs.map(([k,l])=>`<button data-tab="${k}" class="flex-1 text-sm px-2 py-1.5 rounded-lg ${tab===k?'bg-pink-50 text-pink-700 font-medium':'text-slate-500 hover:bg-slate-50'}">${l}</button>`).join('')}</div>
+        <div class="flex-1 overflow-y-auto min-h-0">${panel}</div>
+      </div>
+      <div class="flex-1 min-w-0 min-h-0">${dealChat()}</div>
+    </div>
+  </div>`;
+}
+function pageArea(){ return `<div class="flex-1 min-w-0 bg-slate-50 overflow-y-auto">${workspace()}</div>`; }
+
+/* =========================================================================
+   MOCK DB
+   ========================================================================= */
+function DB(){
+  const conf = life==='draft'
+    ? [{id:'dc_01',version:1,company:SUPPLIER.co,status:'confirmed'},{id:'dc_02',version:1,company:BUYER.co,status:'pending'}]
+    : [{id:'dc_01',version:1,company:SUPPLIER.co,status:'confirmed'},{id:'dc_02',version:1,company:BUYER.co,status:'confirmed'}];
+  const things = THINGS.map((t,i)=>({id:'thg_'+pad(i+1),domain:t.d,title:short(t.t),assignee:t.who,status:thingStatus(t),type:t.type}));
+  things.push({id:'thg_09',domain:'—',title:'Approve final terms',assignee:'both',status:life==='draft'?'open':'done',type:'approval'});
+  return [
+    {name:'deal_workspace', cols:['id','deal_card_id','status','owner'], rows:[{id:'ws_01',deal_card_id:'card_01',status:life,owner:SUPPLIER.person}]},
+    {name:'deal_card',      cols:['id','hs','version','value_net','status'], rows:[{id:'card_01',hs:CARD.hs,version:life==='done'?3:life==='draft'?1:2,value_net:CARD.net.replace('€',''),status:life}]},
+    {name:'deal_card_log',  cols:['id','version','change','by'], rows:cardLog().map((l,i)=>({id:'dcl_0'+(i+1),version:l.ver,change:short(l.change),by:l.by}))},
+    {name:'member',         cols:['id','person','company','role'], rows:MEMBERS.map((m,i)=>({id:'mem_'+pad(i+1),person:m.p,company:m.co,role:m.side==='supplier'?'owner':'member'}))},
+    {name:'thing',          cols:['id','domain','title','assignee','status','type'], rows:things},
+    {name:'artifact',       cols:['id','name','kind'], rows:artifacts().map((a,i)=>({id:'art_'+pad(i+1),name:short(a.n),kind:a.icon==='🧪'?'coa':a.icon==='📄'?'contract':a.icon==='🚚'?'delivery_note':'invoice'}))},
+    {name:'deal_confirmation', cols:['id','version','company','status'], rows:conf},
+    {name:'chat_thread',    cols:['id','type','scope'], rows:[{id:'thr_deal',type:'deal',scope:'deal'}]},
+    {name:'stage',          cols:['id','template','domain'], rows:[{id:'st_01',template:'cannabis_wholesale_v1',domain:'finance'},{id:'st_02',template:'cannabis_wholesale_v1',domain:'logistics'},{id:'st_03',template:'cannabis_wholesale_v1',domain:'delivery'}]},
+    {name:'audit_log',      cols:['id','actor','action'], rows:[{id:'au_01',actor:'sella',action:'workspace_created'},{id:'au_02',actor:SUPPLIER.person,action:'thing_done'},{id:'au_03',actor:'sella',action:life==='done'?'card_amended_ocr':'deal_card_updated'}]},
+  ];
+}
+function dbDrawer(){
+  const card=t=>`<div class="min-w-[230px] bg-white border border-slate-200 rounded-lg overflow-hidden shrink-0 self-start"><div class="px-2.5 py-1.5 bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-700">${t.name} <span class="text-slate-400 font-normal">(${t.rows.length})</span></div><div class="overflow-x-auto"><table class="data-table"><thead><tr>${t.cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead><tbody>${t.rows.length?t.rows.map(r=>`<tr>${t.cols.map(c=>`<td>${r[c]!==undefined&&r[c]!==''?r[c]:'<span class=\'text-slate-300\'>—</span>'}</td>`).join('')}</tr>`).join(''):`<tr><td colspan="${t.cols.length}" class="text-slate-300 italic">empty</td></tr>`}</tbody></table></div></div>`;
+  return `<div class="h-56 bg-slate-100 border-t border-slate-300 shrink-0 flex flex-col"><div class="px-4 py-2 border-b border-slate-200 bg-white"><span class="text-sm font-semibold text-slate-700">Data state · mock DB</span><span class="text-xs text-slate-400"> - the workspace is one container scoped to invited members (Layer B). The card's change history is <code>deal_card_log</code> (shown on the card back, NOT as chat messages). <code>stage</code> = config/scaffolding; <code>thing</code> = the visible primitive. "Done" = delivery_note + invoice artifacts present.</span></div><div class="flex-1 overflow-auto p-3 pb-20"><div class="flex gap-3 items-start">${DB().map(card).join('')}</div></div></div>`;
+}
+
+/* =========================================================================
+   COMPOSE + DEMO BAR + WIRING
+   ========================================================================= */
+function screen(){ return `${topbar()}<div class="flex-1 min-h-0 overflow-x-auto"><div class="flex h-full min-w-[1320px]">${iconRail()}${subnav()}${pageArea()}</div></div>${showDB?dbDrawer():''}`; }
+function seg(label, opts, cur){ return `<div class="flex items-center gap-1 bg-slate-800 rounded-full p-0.5"><span class="text-[10px] text-slate-400 px-2">${label}</span>${opts.map(([k,t])=>`<button data-set="${label}" data-val="${k}" class="text-xs px-2.5 py-1 rounded-full ${cur===k?'bg-white text-slate-900 font-medium':'text-slate-300'}">${t}</button>`).join('')}</div>`; }
+function bar(){
+  return `<button data-db class="fixed bottom-4 left-4 z-50 text-sm px-3 py-2 bg-slate-900 text-white rounded-full shadow-xl">⛁ ${showDB?'Hide data':'Show data'}</button>
+  <div class="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-slate-900 rounded-2xl shadow-xl px-3 py-2 flex-wrap justify-center max-w-[94vw]"><span class="text-[10px] text-pink-300 font-semibold pr-1">DEMO</span>
+    ${seg('Lifecycle',[['draft','Draft'],['confirmed','Confirmed'],['done','Done']],life)}
+    ${seg('Seeing as',[['supplier','Supplier'],['buyer','Buyer']],viewer)}</div>`;
+}
+function render(){
+  document.getElementById('app').innerHTML=screen();
+  document.getElementById('bar').innerHTML=bar();
+  document.getElementById('modal').innerHTML=cardDialog();
+  document.querySelectorAll('[data-set]').forEach(b=>b.addEventListener('click',()=>{
+    const k=b.getAttribute('data-set'), v=b.getAttribute('data-val');
+    if(k==='Lifecycle') life=v; else if(k==='Seeing as') viewer=v;
+    render();
+  }));
+  const db=document.querySelector('[data-db]'); if(db)db.addEventListener('click',()=>{showDB=!showDB; render();});
+  document.querySelectorAll('[data-tab]').forEach(b=>b.addEventListener('click',()=>{tab=b.getAttribute('data-tab'); render();}));
+  const oc=document.querySelector('[data-open-card]'); if(oc)oc.addEventListener('click',()=>{cardOpen=true; cardFlipped=false; backTab='signals'; render();});
+  const cc=document.querySelector('[data-close-card]'); if(cc)cc.addEventListener('click',()=>{cardOpen=false; render();});
+  const bd=document.querySelector('[data-card-backdrop]'); if(bd)bd.addEventListener('click',()=>{cardOpen=false; render();});
+  document.querySelectorAll('[data-flip]').forEach(b=>b.addEventListener('click',()=>{cardFlipped=!cardFlipped; render();}));
+  document.querySelectorAll('[data-backtab]').forEach(b=>b.addEventListener('click',()=>{backTab=b.getAttribute('data-backtab'); cardFlipped=true; render();}));
+}
+render();
+</script>
+</body>
+</html>

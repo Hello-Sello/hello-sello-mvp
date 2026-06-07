@@ -67,20 +67,22 @@ Industry CRM pattern (Notion / Slack / Linear style) — sensible defaults at re
 ## 3. Identity layers
 
 > **DEV-7 — closed (2026-05-19).** P↔C contact lands on super-admin + designated salespeople as a ticket; first-contact Sella greets, qualifies, and requests docs (pre-pickup docs sit in a "pending inbox"); pickup formalizes the connection, activates the Relationship page, archives the P↔C, and opens a new P↔P chat. See Section 7 for the full flow.
+>
+> **UPDATED 2026-06-06/07:** P↔C is **retired** — folded into **C2C** (created at connection). The Relationship is created **at accept**, not "pickup" (pickup is ownership-only). First-contact doc collection is **deferred** (if built it lives in the Inbox; its docs land in the relationship's **Artifacts**). Section 7 below is the old P↔C flow and is superseded by this. See DECISIONS 2026-06-06.
 
 A user has two identities at once:
 - **Personal identity** (their own profile)
 - **Company identity** (the company they belong to)
 
-**Three kinds of conversations:**
+**Three kinds of conversations** *(UPDATED 2026-06-06 — the locked model is now **P2P / C2C / Deal**; P↔C is retired, folded into C2C. See DECISIONS 2026-06-06 + `prototypes/chat-prototype/CONTEXT.md`):*
 
 | Conversation type | Who sees it | When it's used |
 |---|---|---|
-| **Person ↔ Person** | Only the two people | Informal talk, including casual messages that may turn into deal talk |
-| **Person ↔ Company** | Super-admin + designated salespeople of the receiving company | First contact from outside (pricing request, connection request, or deal card). First-contact Sella greets and collects docs. On pickup, converts to a P↔P chat. See Section 7. |
-| **Company ↔ Company** | Only people invited to that specific deal | **Only exists inside a deal workspace.** Created when the workspace is created (at deal-card birth). Tied to ONE specific deal. There is no general C↔C chat outside a deal. |
+| **P2P — Person ↔ Person** | Only the two people (private; never company-visible) | Informal talk, including casual messages that may turn into deal talk |
+| **C2C — Company ↔ Company** | Company-level — people on both connected companies | **Created at connection** (every accepted connect). The company-level notice board / audit record between two companies. *Replaces the old P↔C first-contact chat — that case is folded into C2C.* |
+| **Deal chat** | Only people invited to that specific deal | Lives **inside a deal workspace**, tied to ONE deal — the deal's ground truth / official record. *(This is the old "C↔C only inside a workspace"; that scoped chat is now the Deal chat.)* |
 
-**Important correction we locked in:** company-to-company chat is **NOT** broadcast to all colleagues. It is scoped to **only the people invited to that specific deal**.
+**Scope note:** the **Deal chat** (not C2C) is the one scoped to invited deal participants only. **C2C** is company-level (both companies' people), created at connection — it is *not* deal-scoped.
 
 ---
 
@@ -92,16 +94,19 @@ A user has two identities at once:
 >
 > **DEV-41 — closed (2026-05-20).** Permissions on each content type locked — see the Permissions table below.
 
-A real, first-class object. **Created the moment a P↔C ticket is picked up** (= the moment two companies first connect — see Section 7). Once created, persistent forever.
+> **UPDATED 2026-06-07 (screen ③ lock):** reached from a **P2P or C2C chat** (one page, two doors); **no person-level relationship page**. **No `Relationship`/`Deals` sub-nav tabs** (deals → a future Grow/Trade surface). See DECISIONS 2026-06-07 + `prototypes/relationship-prototype/CONTEXT.md`.
 
-**Pre-pickup activity** (initial P↔C messages + docs that first-contact Sella collected) lives in a temporary **pending inbox** tied to the receiving company. On pickup, the pending inbox **migrates onto the freshly-created Relationship page**.
+A real, first-class object. **Created when a connection is accepted** (= the moment two companies first connect). Once created, persistent forever. *(Earlier wording said "at P↔C pickup"; under the retired-P↔C model the trigger is **accept** — pickup is ownership-only.)*
 
-**What lives on the Relationship page:**
-- **Notes** — **per-side, not shared**. CoA has their own notes about CoB; CoB has their own notes about CoA. Each side's notes are visible only to that side.
+**First-contact documents** (a buyer's licence/certs gathered at first contact) land in the relationship's **Artifacts**. *(The old "pending inbox migrates onto the page" pipe assumed the retired P↔C type and is **deferred** — if built it lives in the Inbox; see §7.)*
+
+**What lives on the Relationship page** *(two altitudes — relationship-level lives here; deal-level lives on the card / in the deal):*
+- **Notes — two kinds:** a per-side **team note** (business, visible to your own company) **+** a per-user **personal note** (private to the individual — relationship upkeep). CoA's team note is visible to CoA only.
 - **Agreed terms** — visible to both sides (mutually-agreed; edit workflow deferred)
-- **Custom pricelist** — the seller's pricelist customized for this buyer; visible to both sides
-- **Full history of all deals** between the two companies (governed by §11.2 visibility model)
-- **Sella's insights** about the relationship (system-generated by Deal-Sella)
+- **Custom pricelist** — the seller's pricelist customized for this buyer; visible to both sides (seller writes, sign-off gated)
+- **Deal history** — all deals between the two companies, behind a **Deals** entry → filterable `All / Active / Old / Cancelled` → each deal's workspace (governed by §11.2 visibility model)
+- **Sella's insight + Analytics + Activity log** about the relationship (relationship-level; each opens for more in a dialog)
+- **Artifacts** — shared company-wide documents (licences, contracts, certs); deal-wise docs stay in the deal
 
 **Permissions on Relationship-page content (locked 2026-05-20, DEV-41):**
 
@@ -152,22 +157,22 @@ The same underlying record carries products / volumes / prices / discounts / pay
 
 ### 4.3 The Deal Workspace
 
-> **⚠️ OPEN [DEV-9]** — Deal Workspace contents and layout are early ideas, not finalized. What's the full component list, how is it laid out visually, what's surfaced first? See [DEV-9](https://linear.app/hellosello/issue/DEV-9/what-exactly-gets-created-inside-a-deal-workspace-and-how-should-it).
+> **DEV-9 — closed (2026-06-07, screen ④).** Contents + layout locked. See DECISIONS 2026-06-07 + `prototypes/deal-workspace-prototype/CONTEXT.md`.
 
-The **container** of a deal. Auto-scaffolded the moment a deal card is born.
+The **container** of a deal — **Layer B: invited participants only**. Auto-scaffolded the moment a deal card is born. Reached from the **Relationship page's deals list** or a **⤢ button on the Deal Card**.
 
-**What auto-creates inside the workspace:**
-- A chat thread (scoped to invited participants only)
-- An artifacts folder (documents, COAs, contracts, etc.)
-- A members list (initial: the two dealmakers; more people can be added as needed)
-- Stages (custom per deal, defined by the participants with Sella's help)
-- The deal card itself
+**What's inside** (layout = an A&C mix: a tabbed work panel + the Deal Chat as the wide hero):
+- **Deal Chat** — per-deal, the deal's ground truth; carries the **Deal Card as a pinned `Deal card ▸` pill** (the same canonical flip card as ①/②: front facts/products, back `Signals | Logs`). The card's **change history is read from its Logs**, never echoed as chat messages.
+- **THINGS** — the **visible work primitive**, grouped by domain (Finance / Logistics / Delivery), with a done-count. Any party adds; Open→Done; **approval THINGS = e-signature** (the Draft confirmation gate). **Stages are NOT a UI element** (scaffolding only — DEV-24/34).
+- **People** — initial: the two dealmakers + a **deal owner**; more can be added.
+- **Documents** — deal-level artifacts (COAs, contracts, delivery note, invoice). Company-wide docs live on the Relationship page.
+- **Deal-Sella** — per-deal, neutral; speaks in the deal chat.
 
-The deal card lives inside the workspace. The card is what people see; the workspace is what holds everything.
+Lifecycle **Draft → Confirmed → Done** (Done = delivery note + invoice both attached; document-driven, no explicit Done click). The **Deal Room** (customer-presentation surface, §4.4) is a **Present-surface** tool — **not** part of the workspace.
 
 ### 4.4 The Deal Room
 
-The **customer-presentation surface** of the platform — opened by expanding either a **Basket** or a **Deal Card** (see Section 4.2). Floating, full-page.
+The **customer-presentation surface** of the platform — opened by expanding either a **Basket** or a **Deal Card** (see Section 4.2). Floating, full-page. *(A **Present-surface** tool — distinct from the Deal Workspace (§4.3) and **out of scope for Connect screen ④**. Still a live, distinct concept per DEV-22/DEV-52.)*
 
 **Purpose:** salesperson tool. Like a seller laying out products in person, but on-platform — with videos, photos, and Loom-style salesperson recordings to bring the products alive for the customer.
 
@@ -318,6 +323,8 @@ Every version is logged in Git-style history.
 ---
 
 ## 7. The Inbound Contact Flow (P↔C → P↔P conversion)
+
+> **UPDATED 2026-06-06/07 — superseded.** This section describes the old **P↔C** model. P↔C is now **folded into C2C** (created at connection); the Relationship is created **at accept** (not pickup); **first-contact doc collection is deferred** (if built it lives in the Inbox; its docs land in the relationship's **Artifacts**). Kept for history — the locked model is the 3-type chat (P2P / C2C / Deal); see §3 + DECISIONS 2026-06-06.
 
 The receiving end of cross-company contact. A person in Company A can initiate contact with Company B through three channels:
 
