@@ -5,12 +5,12 @@
 
 ---
 
-**Last updated:** 2026-06-07 00:20 UTC
+**Last updated:** 2026-06-07 00:24 UTC
 **Branch:** claude/muskan/work
-**Status:** working (session 7 — 3 relationship tables locked in SCHEMA-DRAFT; DECISIONS.md entry queued behind Ayush's lock)
+**Status:** working (session 7 — writing DECISIONS.md entry for the 3 relationship table locks; PR to follow)
 **Linear issue in progress:** none
-**Shared files locked:** none
-**PR open:** none
+**Shared files locked:** `docs/decisions/DECISIONS.md`
+**PR open:** none (PR coming after DECISIONS entry committed)
 
 ---
 
