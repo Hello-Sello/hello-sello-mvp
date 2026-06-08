@@ -855,3 +855,14 @@ DEV-11 asks "are Personal / Seller / Buyer Sella distinct agents or one with con
 - **Deferred to post-MVP** (decide when the task is built, not now): multi-step agentic loops, multi-Sella co-activation runtime, RAG-backed Side-Sellas + memory/retention ([DEV-59](https://linear.app/hellosello/issue/DEV-59)), autonomy-ladder trust state (§4), any agent framework adoption. The locked *direction* to graduate from = **single-agent + function-calling tools**.
 
 *Why record:* retires the "5 agents?" framing of DEV-11 **for MVP** and prevents over-building (no one reaches for LangGraph / an orchestrator to run 4 stateless calls). DEV-11 itself stays **open** for post-MVP orchestration. Grounded in BUILD-PLAN Unit 4 (4a–4d all single-shot) + the locked detection design (2026-06-07/08 entries above) + the 2026 single-vs-multi-agent consensus.
+
+---
+
+## 2026-06-08 (Sella 4a) — Bedrock auth method + shared-helper placement (smoke-test verified)
+
+Settling *how* the 4a Bedrock wrapper authenticates and *where* it lives, before building it. Both decisions were verified by a live throwaway smoke test (`bedrock-smoke` Edge Function), not just chosen on paper. Mirrored in `ARCHITECTURE-NOTES.md` ("Sella runtime placement").
+
+- **Auth = Bedrock API key (bearer token) + plain `fetch`. SigV4 / AWS SDK NOT used.** Supersedes the earlier "permanent IAM key + `aws4fetch` SigV4" assumption. A long-term **Bedrock API key** sits in Supabase Edge secrets as `AWS_BEARER_TOKEN_BEDROCK`; the function POSTs to the EU Converse endpoint with `Authorization: Bearer <key>` — no signing, no SDK to bundle. *Verified:* live call to `eu.anthropic.claude-haiku-4-5-20251001-v1:0` in `eu-central-1` returned "pong". 12hr short-term keys + refresh = post-MVP hardening.
+- **Shared Bedrock helper lives in `supabase/functions/_shared/sella/`, not `src/shared/`.** The heaviest model-calling tasks (detect / draft / summarize) run in the Edge Function (Deno); the Deno bundler can't cleanly import from the Next `src/` tree, but the Next app *can* import a pure helper from the functions dir. So the helper sits with its heaviest consumer + the stricter bundler. Refines (doesn't contradict) the "F5 / shared infra" framing — still shared, just physically beside the Edge Functions.
+
+*Why record:* both supersede prior paper assumptions (SigV4; "F5 territory" implying `src/shared`), and the auth one was the single biggest unknown in the whole Sella unit — now closed by a real call. The next builder should not re-introduce the AWS SDK or SigV4, and should not place the helper in `src/`. Grounded in the live smoke test + Supabase monorepo bundling friction ([CLI #1303](https://github.com/supabase/cli/issues/1303)) + research on Bedrock API keys (bearer tokens).
