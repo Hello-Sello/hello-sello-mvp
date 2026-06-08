@@ -21,7 +21,7 @@ type ConnectTab = {
 
 const CONNECT_TABS: ConnectTab[] = [
   { key: "inbox", label: "Inbox", href: "/connect/inbox", icon: Inbox, state: "active" },
-  { key: "chat", label: "Chat", href: "/connect/chat", icon: MessageCircle, state: "soon" },
+  { key: "chat", label: "Chat", href: "/connect/chat", icon: MessageCircle, state: "active" },
   { key: "relationships", label: "Relationships", href: "/connect/relationships", icon: Users, state: "soon" },
 ];
 
@@ -32,7 +32,7 @@ export function ConnectSubNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="glass flex w-48 shrink-0 flex-col gap-1 rounded-3xl p-3">
+    <nav className="glass flex w-44 shrink-0 flex-col gap-1 rounded-3xl p-3">
       <p className="px-2 pb-2 pt-1 text-xs font-semibold uppercase tracking-wide text-ink/40">
         Connect
       </p>

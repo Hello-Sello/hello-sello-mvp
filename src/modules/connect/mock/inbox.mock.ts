@@ -21,6 +21,7 @@ import type {
   TeamMember,
   ViewerContext,
 } from "@/modules/connect/types";
+import { acceptInbox } from "@/modules/messaging";
 
 // --- identities -------------------------------------------------------------
 
@@ -233,11 +234,23 @@ export async function assignItem(itemId: string, toPersonId: string, byPersonId:
   return getInbox();
 }
 
-/** Accept the inbound contact -> status accepted (2b wires the side-effects). */
+/** Accept the inbound contact -> status accepted + fires the messaging rollout. */
 export async function acceptItem(itemId: string): Promise<InboxItemView[]> {
   const item = findOrThrow(itemId);
   item.status = "accepted";
   item.updated_at = nowIso();
+
+  // 2b: trigger the messaging rollout (relationship + threads + seed messages).
+  void acceptInbox({
+    inboxItemId: item.id,
+    requestType: item.type as "connect" | "connect_message" | "pricelist_request" | "deal_card",
+    note: item.note,
+    ownCompany: { id: GREENLEAF_ID, name: "GreenLeaf Cultivation", initials: "GL" },
+    senderCompany: { id: item.sender_company_id, name: item.sender.companyName, initials: item.sender.initials },
+    viewerPerson: { id: VIEWER.personId, name: "Alice Green", initials: "AG" },
+    senderPerson: { id: item.sender_person_id, name: item.sender.companyName, initials: item.sender.initials },
+  });
+
   return getInbox();
 }
 
