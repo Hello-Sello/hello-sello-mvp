@@ -866,3 +866,30 @@ Settling *how* the 4a Bedrock wrapper authenticates and *where* it lives, before
 - **Shared Bedrock helper lives in `supabase/functions/_shared/sella/`, not `src/shared/`.** The heaviest model-calling tasks (detect / draft / summarize) run in the Edge Function (Deno); the Deno bundler can't cleanly import from the Next `src/` tree, but the Next app *can* import a pure helper from the functions dir. So the helper sits with its heaviest consumer + the stricter bundler. Refines (doesn't contradict) the "F5 / shared infra" framing — still shared, just physically beside the Edge Functions.
 
 *Why record:* both supersede prior paper assumptions (SigV4; "F5 territory" implying `src/shared`), and the auth one was the single biggest unknown in the whole Sella unit — now closed by a real call. The next builder should not re-introduce the AWS SDK or SigV4, and should not place the helper in `src/`. Grounded in the live smoke test + Supabase monorepo bundling friction ([CLI #1303](https://github.com/supabase/cli/issues/1303)) + research on Bedrock API keys (bearer tokens).
+
+---
+
+## 2026-06-08 (Ayush) — C2C = a ticket channel, not a free chat (direction DECIDED; NOT building now)
+
+A message into a company-to-company (C2C) channel should behave like a **ticket**, not a back-and-forth chat. The three chat types keep clear, separate jobs: **P2P** is where people actually talk, **Deal chat** is the deal-workspace thread, and **C2C** is for reaching a company when you don't know which person to ask, plus the durable connection/info record.
+
+*Why:* a company can have many people, and only some P2P pairs are connected; some people are connected to no one. A company needs a "knock on the door" that does not name a person (the classic sales problem: "who is their procurement person? their finance person?"). Framing C2C as a ticket keeps it from becoming a noisy second chat that fills with irrelevant text.
+
+**This resolves the prototype-vs-DECISIONS drift.** The prototype called C2C an "audit log / `actor=system` only"; DECISIONS:515 called it "messaging on behalf of your company". Both are true once "messaging the company" means "raise a ticket", not "free chat".
+
+**Agreed shape (for the future build):**
+- Sending stays as easy as typing a message (no form to fill). The C2C box just *looks* different — a different skin/framing, maybe one **optional** category tag — so it reads as a deliberate, different kind of message.
+- A C2C message becomes a ticket that enters the **same Inbox** (the 2a machinery), shown in a **different view** from new connect requests. Anyone in the company may raise one (relaxed permissions for MVP).
+- On pickup (same first-come claim rule as 2a): if the two people have no chat, a natural new **P2P** starts; if they already have a P2P, the pickup drops a **Sella** system message into that existing P2P (reuse, don't duplicate). Deal-card changes flow through the existing deal-card update mechanism.
+- The conversation happens privately in the **P2P**; the **outcome** is posted publicly back to C2C ("handled by Jonas"); significant changes are surfaced in C2C. The other company sees the result in C2C, not the private P2P words.
+- The sender sees a status: **open / claimed / answered**.
+
+**NOT building now (parked).** For the June 11 demo we keep the current C2C chat as-is, and keep Sella as the mediator through the existing flow. Deal-card changes use the older method, and since no deal card is attached yet there is nothing to change now. Build the ticket system as its own slice after the core demo path (2d/2e + the deal flow).
+
+**Open problems to solve when we build (from the 2026-06-08 brainstorm — recorded so we don't lose them):**
+1. *Easy vs deliberate (the core tension).* The box must be as easy as a chat (so people adopt it) yet feel different (so they don't dump irrelevant text). Likely fix: same typing ease, different framing + one optional category tag — no form.
+2. *P2P topic-mixing.* Reusing an existing P2P for a new ticket can mix unrelated topics in one thread. Likely fix: a clear Sella divider line ("New from the company channel: …"); switch to one-thread-per-ticket only if it gets messy.
+3. *Publishing the outcome to C2C.* Need a rule for what counts as "significant" and who posts it. Likely fix: auto for deal-card changes (existing flow) + a manual "Share update to the company channel" button. Confirm the privacy model (company sees the result, not the private P2P).
+4. *Inbox data model.* Decide whether a company ticket is the same Inbox item with a new "type" or a new concept. Defer to build time.
+
+*Status of the 2b/2c code today:* C2C is currently a writable chat (the earlier drift-fix). That stays for the demo; it becomes the ticket box when this slice is built.

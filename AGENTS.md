@@ -120,6 +120,12 @@ If you're building and hit a doubt, go here:
 
 *(Updated at end of every session by whoever worked last.)*
 
+**2026-06-08 - Ayush (Connect 2b + 2c BUILT + verified; C2C-as-ticket direction decided + parked)**
+- **2b + 2c DONE (accept → chat), mock-first, verified live, zero console errors.** `/connect/chat` is live: conversation list (All / Unread / Companies) + thread view (centered system + centered Sella + person bubbles) + composer + a Sella rail (panel 5, with an "Ask Sella" input). Accepting an inbox request fires the rollout: C2C always + P2P for the 3 substantive types, seeded by a Sella intro. `modules/messaging` is mine (built): schema-shaped types bound to `chat_thread`/`chat_message`/`relationship` Rows; `mock/store.ts` is the only throwaway (swap-to-real = body rewrite behind `index.ts`).
+- **New decision (DECISIONS.md 2026-06-08): C2C = a ticket channel, not a free chat.** P2P = people talk; Deal chat = deal thread; C2C = reach-a-company + record. A C2C message → a ticket in the **same Inbox** (different view) → claimed → opens/reuses a P2P (Sella drops a system line) → outcome posted back to C2C. **Parked, NOT building now** — the demo keeps the current C2C chat as-is; the ticket slice comes after the core path. 4 open problems recorded in DECISIONS.md.
+- **→ Muskan:** nothing owed by you — this is all my half. The future C2C-ticket build will **reuse your Inbox machinery (2a) + the P2P thread model**, no new foundation needed. Flagging in case it touches anything on your side later.
+- Next: **2d (realtime feel)** → 2e (relationship page + the "My Relationship with…" chat top bar).
+
 **2026-06-07 - Ayush (Connect 2a - inbox BUILT + verified, UI-first / mock)**
 - **Inbox live at `/connect/inbox`:** Connect sub-nav (panel 2; Inbox active, Chat + Relationships greyed) + lens tabs (Unassigned / Mine / All / History, live counts) + list + state-driven detail. Claim / Accept / Reassign work over async mock data. Verified live, zero console errors; typecheck + eslint clean.
 - **Implements existing locked decisions** (DEV-7 + 2026-05-20 ticket model): claim = first-come; **no forceful take-over**; head admin can (re)assign; refinement - the current owner can also reassign. No new DECISIONS lock needed.
