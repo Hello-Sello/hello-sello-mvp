@@ -7,10 +7,10 @@
 
 **Last updated:** 2026-06-08 21:36 CEST
 **Branch:** claude/ayush/work
-**Status:** wrapping (2b+2c done; PR #69 open for review. Next session = build 2d, then 2e)
+**Status:** offline (session wrapped; 2b+2c MERGED to dev. Next session = build 2d, then 2e)
 **Linear issue in progress:** none
-**Shared files locked:** none (edited DECISIONS.md + AGENTS.md this session - committed + pushed; you had no locks)
-**PR open:** [#69](https://github.com/HelloSello/hello-sello-mvp/pull/69) — 2b+2c → dev (open for review). Branch **rebased onto latest dev** (incl. your 1c #67 + Sella 4a #68) and in sync; my DECISIONS.md entry now sits after yours (combined cleanly, no overwrite).
+**Shared files locked:** none
+**PR open:** none — [#69](https://github.com/HelloSello/hello-sello-mvp/pull/69) (2b+2c) **merged to dev**. Branch was rebased onto your 1c #67 + Sella 4a #68 first; my DECISIONS.md entry sits after yours (combined, no overwrite). Branch in sync with dev (0/0).
 
 ---
 
