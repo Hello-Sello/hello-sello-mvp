@@ -5,16 +5,20 @@
 
 ---
 
-**Last updated:** 2026-06-08 00:25 CEST
-**Branch:** claude/ayush/work (synced to dev)
-**Status:** offline (session wrapped; next session = build 2b+2c together, mock-first)
+**Last updated:** 2026-06-08 21:36 CEST
+**Branch:** claude/ayush/work
+**Status:** wrapping (2b+2c done; PR #69 open for review. Next session = build 2d, then 2e)
 **Linear issue in progress:** none
-**Shared files locked:** none
-**PR open:** none - 2a merged (#62) + doc corrections merged (#64); branch synced (0/0 with dev). Not blocked on you.
+**Shared files locked:** none (edited DECISIONS.md + AGENTS.md this session - committed + pushed; you had no locks)
+**PR open:** [#69](https://github.com/HelloSello/hello-sello-mvp/pull/69) — 2b+2c → dev (open for review). Branch **rebased onto latest dev** (incl. your 1c #67 + Sella 4a #68) and in sync; my DECISIONS.md entry now sits after yours (combined cleanly, no overwrite).
 
 ---
 
 ## Notes for the other agent
+
+**2026-06-08 (Task 2b + 2c BUILT + verified; C2C-as-ticket decided + parked).** `/connect/chat` is live (mock-first): conversation list (All / Unread / Companies) + thread view + composer + a Sella rail (panel 5, with an "Ask Sella" input). Accept in the inbox fires the rollout: C2C always; P2P for the 3 substantive types, seeded by a Sella intro. `modules/messaging` is built (mine) - `mock/store.ts` is the only throwaway (swap-to-real = body rewrite behind `index.ts`). Committed + pushed to `claude/ayush/work`; not PR'd to dev yet.
+> **C2C = ticket channel (new decision - DECISIONS.md 2026-06-08) - PARKED.** P2P = people talk; C2C = reach-a-company + the record; a C2C message becomes a ticket in **your Inbox machinery (2a)** → claimed → opens/reuses a P2P (Sella drops a system line) → outcome posted back to C2C. **Not building now** - the demo keeps the current C2C chat. The future build reuses your Inbox + the P2P model, so **no new foundation owed by you**. 4 open problems recorded in DECISIONS.md + the AGENTS Session Checkpoint.
+> **Touched shared files** this session (DECISIONS.md + AGENTS.md) - you had no locks; committed + pushed. FYI in case you rebase.
 
 **2026-06-07 (Task 2a - Connect inbox BUILT + verified, UI-first / mock).** `/connect/inbox` is live: Connect sub-nav (panel 2) + lens tabs (Unassigned / Mine / All / History, live counts) + list + state-driven detail; Claim / Accept / Reassign over async mock data. §2 model enforced (claim first-come, no force take-over, owner or head-admin reassign) - matches your DEV-7 + 2026-05-20 ticket locks, so no new decision. Mock-first: `modules/connect/types.ts` binds to your `pending_inbox_item` Row; `mock/inbox.mock.ts` is the only throwaway - swap-to-real = rewrite `getInbox` + mutators behind `index.ts` (already async). Committed `3eb5474`, pushed; PR -> dev pending. Flipped my BUILD-PLAN 2a row -> 🧪.
 > **Saw + thank you for 1b** (on your branch, not in dev yet): AppShell -> client + BARE_ROUTES (/login, /signup) + the session proxy. When it merges, my Connect routes still get the full frame - no conflict expected (I only ever read AppShell).
