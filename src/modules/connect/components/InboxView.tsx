@@ -2,17 +2,22 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Inbox } from "lucide-react";
-import type { InboxItemView, LensKey } from "@/modules/connect/types";
+import type {
+  InboxItemView,
+  LensKey,
+  TeamMember,
+  ViewerContext,
+} from "@/modules/connect/types";
 import { filterByLens, lensCounts } from "@/modules/connect/lib/lenses";
 import {
   getInbox,
+  getAssignableMembers,
+  getViewerContext,
   claimItem,
   assignItem,
   acceptItem,
   declineItem,
-  getAssignableMembers,
-  VIEWER,
-} from "@/modules/connect/mock/inbox.mock";
+} from "@/modules/connect/supabase/inbox";
 import { LensTabs } from "./LensTabs";
 import { InboxList } from "./InboxList";
 import { InboxDetail } from "./InboxDetail";
@@ -23,8 +28,9 @@ import { InboxDetail } from "./InboxDetail";
  * and wires the claim/assign/accept/decline mutators. Everything it renders is
  * presentational.
  *
- * Data source = the mock module (getInbox/mutators/VIEWER). At swap time only
- * those imports change to real Supabase calls; the state + layout stay put.
+ * Data source = the real Supabase read (2d Phase 2): viewer comes from the
+ * session, team + items from the DB (RLS-scoped). Inbox WRITES become real in
+ * Phase 4; for now the action handlers just re-pull the real queue.
  */
 const EMPTY_HINT: Record<LensKey, string> = {
   unassigned: "No new requests waiting to be claimed.",
@@ -33,47 +39,62 @@ const EMPTY_HINT: Record<LensKey, string> = {
   history: "No accepted or declined requests yet.",
 };
 
-export function InboxView() {
-  const team = getAssignableMembers();
-  const viewer = VIEWER;
+const ZERO_COUNTS: Record<LensKey, number> = {
+  unassigned: 0,
+  mine: 0,
+  all: 0,
+  history: 0,
+};
 
+export function InboxView() {
+  const [viewer, setViewer] = useState<ViewerContext | null>(null);
+  const [team, setTeam] = useState<TeamMember[]>([]);
   const [items, setItems] = useState<InboxItemView[]>([]);
   const [activeLens, setActiveLens] = useState<LensKey>("unassigned");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // initial load - auto-select the first item of the default lens
+  // initial load - resolve the viewer (session) + team + queue, then auto-select
+  // the first item of the default lens.
   useEffect(() => {
     let alive = true;
-    void getInbox().then((list) => {
+    void (async () => {
+      const [v, t, list] = await Promise.all([
+        getViewerContext(),
+        getAssignableMembers(),
+        getInbox(),
+      ]);
       if (!alive) return;
+      setViewer(v);
+      setTeam(t);
       setItems(list);
-      setSelectedId(filterByLens(list, "unassigned", viewer.personId)[0]?.id ?? null);
+      setSelectedId(filterByLens(list, "unassigned", v.personId)[0]?.id ?? null);
       setLoading(false);
-    });
+    })();
     return () => {
       alive = false;
     };
-  }, [viewer.personId]);
+  }, []);
 
   const counts = useMemo(
-    () => lensCounts(items, viewer.personId),
-    [items, viewer.personId],
+    () => (viewer ? lensCounts(items, viewer.personId) : ZERO_COUNTS),
+    [items, viewer],
   );
   const visible = useMemo(
-    () => filterByLens(items, activeLens, viewer.personId),
-    [items, activeLens, viewer.personId],
+    () => (viewer ? filterByLens(items, activeLens, viewer.personId) : []),
+    [items, activeLens, viewer],
   );
   const selected = items.find((it) => it.id === selectedId) ?? null;
 
   function handleLensChange(lens: LensKey) {
+    if (!viewer) return;
     setActiveLens(lens);
     // re-anchor selection to the first item visible under the new lens
     setSelectedId(filterByLens(items, lens, viewer.personId)[0]?.id ?? null);
   }
 
-  // mutators: run the (mock) write, then refresh the list. Selection is kept so
-  // the detail panel shows the resulting state (e.g. the accepted banner).
+  // run a (real) write, then refresh the list from its returned queue. Selection
+  // is kept so the detail panel shows the resulting state (e.g. accepted).
   async function refreshWith(p: Promise<InboxItemView[]>) {
     setItems(await p);
   }
@@ -91,7 +112,7 @@ export function InboxView() {
           <InboxList
             items={visible}
             selectedId={selectedId}
-            viewerPersonId={viewer.personId}
+            viewerPersonId={viewer?.personId ?? ""}
             onSelect={setSelectedId}
             emptyHint={EMPTY_HINT[activeLens]}
           />
@@ -100,13 +121,17 @@ export function InboxView() {
 
       {/* panel 4 - detail */}
       <div className="glass flex min-w-0 flex-1 flex-col overflow-hidden rounded-3xl">
-        {selected ? (
+        {selected && viewer ? (
           <InboxDetail
             item={selected}
             viewer={viewer}
             team={team}
-            onClaim={(id) => void refreshWith(claimItem(id, viewer.personId))}
-            onReassign={(id, to) => void refreshWith(assignItem(id, to, viewer.personId))}
+            onClaim={(id) => {
+              if (viewer) void refreshWith(claimItem(id, viewer.personId));
+            }}
+            onReassign={(id, to) => {
+              if (viewer) void refreshWith(assignItem(id, to, viewer.personId));
+            }}
             onAccept={(id) => void refreshWith(acceptItem(id))}
             onDecline={(id) => void refreshWith(declineItem(id))}
             onStartDeal={() => {
