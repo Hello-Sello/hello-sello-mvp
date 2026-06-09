@@ -114,6 +114,7 @@ export async function getConversations(): Promise<ConversationListItem[]> {
     const base = {
       threadId: t.id,
       threadType: t.type as ThreadType,
+      relationshipId: t.relationship_id,
       lastMessagePreview: last ? previewOf(last.body) : null,
       lastMessageAt: last?.created_at ?? null,
       unreadCount: 0, // client-tracked unread lands in Phase 6
