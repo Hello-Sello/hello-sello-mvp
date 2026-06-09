@@ -5,11 +5,11 @@
 
 ---
 
-**Last updated:** 2026-06-10 (Present storefront — checkpoint) CEST
+**Last updated:** 2026-06-10 (Present storefront — import RPC) CEST
 **Branch:** claude/muskan/work
-**Status:** paused (Present storefront v0 — DB foundation + CSV validator landed on my branch; resuming with the import RPC)
+**Status:** active (Present storefront v0 — building `import_products` RPC)
 **Linear issue in progress:** none
-**Shared files locked:** none *(foundation migration `20260609210000` applied + committed; will re-lock `product`/`pricelist_item`/`supabase/migrations/*` when I build the `import_products` RPC next)*
+**Shared files locked:** `supabase/migrations/*` (adding `import_products(jsonb)` RPC — SECURITY INVOKER, inserts into `product`/`pricelist_item`/`product_batch`/`batch_terpene`/`product_cost` for the caller's own company; no table/policy changes, function only)
 **PR open:** [#63](https://github.com/HelloSello/hello-sello-mvp/pull/63) — 1b auth → dev
 **Prev PR:** F5 [#60](https://github.com/HelloSello/hello-sello-mvp/pull/60) **merged to dev**. (Discover [#58](https://github.com/HelloSello/hello-sello-mvp/pull/58) + Foundation [#54](https://github.com/HelloSello/hello-sello-mvp/pull/54) also merged.)
 
