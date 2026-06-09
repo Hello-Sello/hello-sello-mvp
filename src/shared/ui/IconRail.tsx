@@ -19,7 +19,7 @@ export function IconRail() {
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
-    <aside className="glass m-3 mr-0 flex w-[84px] shrink-0 flex-col items-stretch gap-1 rounded-3xl p-2.5">
+    <aside className="glass m-3 mr-0 flex w-[76px] shrink-0 flex-col items-stretch gap-1 rounded-3xl p-2.5">
       <div className="mb-3 mt-1 flex justify-center" title="Hello Sello">
         <Wordmark stacked />
       </div>
