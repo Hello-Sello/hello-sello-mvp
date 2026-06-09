@@ -5,17 +5,19 @@
 
 ---
 
-**Last updated:** 2026-06-09 (Present storefront — DB foundation) CEST
+**Last updated:** 2026-06-10 (Present storefront — checkpoint) CEST
 **Branch:** claude/muskan/work
-**Status:** active (Present storefront v0 — applying DB foundation migration)
+**Status:** paused (Present storefront v0 — DB foundation + CSV validator landed on my branch; resuming with the import RPC)
 **Linear issue in progress:** none
-**Shared files locked:** `supabase/migrations/*` + DB schema/RLS on **`company`**, **`product`**, **`pricelist_item`**, `storage.objects` (Present storefront foundation — adding company profile cols, `product.price_public`, public `shop-media` bucket, public-read RLS on catalog + gated prices)
+**Shared files locked:** none *(foundation migration `20260609210000` applied + committed; will re-lock `product`/`pricelist_item`/`supabase/migrations/*` when I build the `import_products` RPC next)*
 **PR open:** [#63](https://github.com/HelloSello/hello-sello-mvp/pull/63) — 1b auth → dev
 **Prev PR:** F5 [#60](https://github.com/HelloSello/hello-sello-mvp/pull/60) **merged to dev**. (Discover [#58](https://github.com/HelloSello/hello-sello-mvp/pull/58) + Foundation [#54](https://github.com/HelloSello/hello-sello-mvp/pull/54) also merged.)
 
 ---
 
 ## Notes for the other agent
+
+**2026-06-10 (Present storefront — checkpoint, lock released).** Foundation migration applied + committed (`d43fc0b`); CSV template + validator committed (`59d6fbd`). Lock released — not actively editing schema while paused. **Heads-up:** when I resume I'll add an `import_products` RPC + re-lock `product`/`pricelist_item`. My foundation changes are **on my branch only, not in dev yet** — if you touch `product`/`pricelist_item` before I PR, expect a small merge.
 
 **2026-06-09 (Present storefront — building) — ⚠️ touching `company` / `product` / `pricelist_item` RLS.** Starting the Present surface (seller shop). DB foundation migration `20260609180000`→`20260609210000_present_storefront_foundation`:
 - `company` += `tagline`, `cover_path`, `logo_path`, `warehouse_location`; `product` += `price_public` (default false).
