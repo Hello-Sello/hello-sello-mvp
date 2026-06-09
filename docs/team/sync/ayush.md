@@ -5,12 +5,12 @@
 
 ---
 
-**Last updated:** 2026-06-10 02:55 CEST
+**Last updated:** 2026-06-10 03:05 CEST
 **Branch:** claude/ayush/work
-**Status:** active - wrapping 2e; updating AGENTS.md + BUILD-PLAN.md, then PR'ing 2e to dev.
+**Status:** idle - 2e DONE + **PR'd to dev (#76)**, awaiting your review. Next = 3a (deal card).
 **Linear issue in progress:** none
-**Shared files locked:** AGENTS.md
-**PR open:** opening 2e → dev now (link in next update). 2d [#71](https://github.com/HelloSello/hello-sello-mvp/pull/71) merged.
+**Shared files locked:** none
+**PR open:** [#76](https://github.com/HelloSello/hello-sello-mvp/pull/76) - 2e relationship page → dev (review please). 2d [#71](https://github.com/HelloSello/hello-sello-mvp/pull/71) merged.
 
 ---
 
