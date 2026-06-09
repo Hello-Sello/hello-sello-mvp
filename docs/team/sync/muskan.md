@@ -5,11 +5,11 @@
 
 ---
 
-**Last updated:** 2026-06-10 (Present storefront — shop page live) CEST
+**Last updated:** 2026-06-10 (Present storefront — session wrap) CEST
 **Branch:** claude/muskan/work
-**Status:** active (Present storefront v0 — backend + visitor shop done; next = manage-shop owner UI, pure app code)
+**Status:** idle (Present storefront v0: backend + visitor shop SHIPPED on my branch; resuming with manage-shop UI next session)
 **Linear issue in progress:** none
-**Shared files locked:** none *(import_products RPC migration applied + committed; no schema work outstanding — manage-shop UI is app-only)*
+**Shared files locked:** none
 **PR open:** [#63](https://github.com/HelloSello/hello-sello-mvp/pull/63) — 1b auth → dev
 **Prev PR:** F5 [#60](https://github.com/HelloSello/hello-sello-mvp/pull/60) **merged to dev**. (Discover [#58](https://github.com/HelloSello/hello-sello-mvp/pull/58) + Foundation [#54](https://github.com/HelloSello/hello-sello-mvp/pull/54) also merged.)
 

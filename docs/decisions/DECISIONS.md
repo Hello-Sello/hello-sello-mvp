@@ -893,3 +893,16 @@ A message into a company-to-company (C2C) channel should behave like a **ticket*
 4. *Inbox data model.* Decide whether a company ticket is the same Inbox item with a new "type" or a new concept. Defer to build time.
 
 *Status of the 2b/2c code today:* C2C is currently a writable chat (the earlier drift-fix). That stays for the demo; it becomes the ticket box when this slice is built.
+
+---
+
+## Layer 2 — Present surface (storefront)
+
+### 2026-06-10 — Present storefront v0 (design + build, session 16)
+
+- **Present = the seller's shop.** Layout follows Marcel's screenshot: a LinkedIn-style **cover banner** + logo, three glass profile cards (about / tags+HQ+warehouse / links), **dominance filter pills**, and a product card grid. **One `/present` page, two roles** (owner edit vs visitor) — reuses the locked "seller-view = buyer-view = same object" doctrine. *Why:* matches Marcel's design and the existing role-based model; one surface, not two.
+- **Products enter via a seller-defined CSV template, not fuzzy parsing.** We own the columns/order → ingest is **validate-against-template**. The template carries **product + its current batch** (lab THC/CBD + terpenes). v0 = single image per product, one company-wide pricelist. *Why:* defining the contract removes the messy multi-table / duplicate-THC / header-less problems the prototype found — a far smaller, more reliable build. Off-template uploads (fuzzy parser) **parked post-v0**.
+- **Price visibility = per-product `price_public`** (default OFF → buyer sees **"Request pricing"**; seller opts each product in). Request-pricing routes to **Connect's inbox** (type `pricelist_request`, 2a machinery). *Why:* DEV-12 — prices aren't public by default; per-product matches "control what to show and what not". Per-connected-company custom pricelists stay deferred.
+- **Company profile fields:** fixed identity as **real columns** (`tagline`, `cover_path`, `logo_path`, `warehouse_location`); **social links in `company.metadata`** (jsonb list); tags reuse `company_type`. *Why:* match storage shape to data shape — fixed = columns, variable-length list = jsonb.
+- **Import is atomic** via the `import_products(jsonb)` RPC (SECURITY INVOKER, RLS-scoped to caller's company). One CSV row fans out → `product` + `pricelist_item` + `product_batch` + `batch_terpene` + `product_cost`. *Why:* a half-imported catalog is worse than none; mirrors `onboard_company`.
+- **Deferred (post-v0):** Deal Room (separate Present tool), per-customer pricelists, multi-image galleries, off-template/fuzzy CSV import, in-app template-download button.
