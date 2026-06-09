@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
-import { Building2 } from "lucide-react";
+import Link from "next/link";
+import { Building2, ArrowUpRight } from "lucide-react";
 import type { ChatMessageView, ConversationListItem } from "../types";
 import { MessageBubble } from "./MessageBubble";
 import { Composer } from "./Composer";
@@ -45,6 +46,17 @@ export function ThreadView({ conversation, messages, onSend }: ThreadViewProps) 
           </div>
           <span className="truncate text-[11px] text-ink/45">{conversation.subtitle}</span>
         </div>
+
+        {/* the door to the relationship page (screen ③) - one page, two doors:
+            both the P2P and the C2C thread of a pair open the same company↔company record */}
+        <Link
+          href={`/connect/relationship/${conversation.relationshipId}`}
+          className="ml-auto flex shrink-0 items-center gap-1 rounded-full bg-ink/5 px-3 py-1.5 text-[11px] font-medium text-ink/70 transition hover:bg-ink/10 hover:text-ink"
+        >
+          <span className="hidden sm:inline">My Relationship with </span>
+          <span className="max-w-[10rem] truncate">{conversation.companyName}</span>
+          <ArrowUpRight size={13} strokeWidth={2} className="shrink-0" />
+        </Link>
       </div>
 
       {/* stream */}

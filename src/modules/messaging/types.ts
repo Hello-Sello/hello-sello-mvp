@@ -95,6 +95,8 @@ export interface ConversationListItem {
   /** chat_thread.id */
   threadId: string;
   threadType: ThreadType;
+  /** chat_thread.relationship_id - the deep-link target for the relationship page (2e) */
+  relationshipId: string;
   /** display name: the company name for a c2c, the other person's name for a p2p */
   name: string;
   /** subtitle under the name: "Company chat (C2C)" for c2c, the company name for a p2p */
