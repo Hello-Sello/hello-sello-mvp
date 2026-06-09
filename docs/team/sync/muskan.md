@@ -5,16 +5,63 @@
 
 ---
 
-**Last updated:** 2026-06-07 (session 12 wrap) CEST
+**Last updated:** 2026-06-08 (Sella DEV-11 design) CEST
 **Branch:** claude/muskan/work
-**Status:** offline (session 12 — Foundation F1–F4 built, applied to Supabase + RLS isolation-tested)
+**Status:** active (session 15 — 1b auth shipped; Sella DEV-11 architecture recorded, back on 1c onboarding)
 **Linear issue in progress:** none
 **Shared files locked:** none
-**PR open:** [#54](https://github.com/HelloSello/hello-sello-mvp/pull/54) — Foundation (F1–F4 migrations + RLS + auth trigger + seed) → `dev`, **open** (title undersells it; carries the whole foundation).
+**PR open:** [#63](https://github.com/HelloSello/hello-sello-mvp/pull/63) — 1b auth → dev
+**Prev PR:** F5 [#60](https://github.com/HelloSello/hello-sello-mvp/pull/60) **merged to dev**. (Discover [#58](https://github.com/HelloSello/hello-sello-mvp/pull/58) + Foundation [#54](https://github.com/HelloSello/hello-sello-mvp/pull/54) also merged.)
 
 ---
 
 ## Notes for the other agent
+
+**2026-06-08 (Sella design) — DEV-11 multi-Sella architecture: MVP scope locked.** Detail in `DECISIONS.md` (newest entry). Ayush — relevant when you build 4a–4d:
+- **MVP Sella = stateless single-shot Bedrock calls** behind the 4a wrapper, each ≤1 structured-output tool. **No agent loop / orchestrator / graph / framework (LangGraph, Bedrock Agents) / RAG / memory.** Detection (built) is the reference shape — 4c draft + 4d summarize follow the same single-call pattern.
+- The "5 Sellas" = **one runtime parameterized** by (scope · persona · tools), not 5 services. Multi-Sella orchestration + memory/RAG are explicitly **post-MVP**.
+- *(Design only — no build Status / lock rows changed.)*
+
+**2026-06-07 (Sella design session) — Deal-Sella detection design settled.** Full detail in `ARCHITECTURE-NOTES.md` "Sella runtime placement" + `DECISIONS.md` (Sella design entry). Ayush — build Sella detection against these:
+- **Detection runs in a Supabase Edge Function**, NOT your Next.js path (new `chat_message` → DB webhook → Claude Haiku). Keeps Sella a non-blocking leaf; Vercel can't do reliable fire-and-forget.
+- **One `propose_deal_draft` tool** (contract in NOTES, maps 1:1 to `deal_line_item` / `deal_card`). **Suggest-only is structural** — only propose-tools exist, no confirm/send.
+- **Proposal + both-accept votes ride in the `deal_detected` message `metadata`** — no new table.
+- **Workspace birth = one atomic transaction** on both-accept (app-side — a person's waiting). **O6 closed in the PRD.**
+- *(Design session — I did NOT change the build Status / locks above; your session-15 build state stands.)*
+
+**2026-06-08 (Sella design, follow-on) — spawn-txn + Bedrock creds settled** (the two "open for build" items above are now closed). Detail in `DECISIONS.md` 2026-06-08 entry + `ARCHITECTURE-NOTES.md`. Ayush — build the workspace birth against these:
+- **Create order is acyclic** (no thread_id backfill): `deal_card` → `deal_line_item` → `deal_workspace` → `deal_member` → `chat_thread`(deal) → `chat_message`(`workspace_created`) → audit.
+- **Both founders = `deal_member` `role=owner`** (one per side). **`deal_workspace.owner_person_id` is REMOVED** — ownership reads from `deal_member` (SCHEMA.md §8 amended). `side_lead` not auto-assigned at birth.
+- **Superadmin = platform RLS bypass**, not a deal_member row.
+- **Signpost:** on birth, the P2P `deal_detected` message becomes a "Deal created → open workspace" link.
+- **Bedrock creds = permanent least-privilege key in Supabase Edge secrets** (not Vercel env), scoped to `eu.` Claude invoke only. Auto-expiring = post-MVP.
+- *(Recorded on my `claude/muskan/sella-design` worktree branch — will merge to work; I did NOT change any build Status row.)*
+
+---
+
+**2026-06-07 (session 15) — `BUILD-PLAN.md` now has a Status column.** New rule in its Legend: **each owner edits only their own rows' Status** (you = Group A, me = Group M); status flips are the one exception to the lock ritual (distinct rows → clean merge). I set the baseline: F1–F5 + your 1a = ✅; I'm starting **1b (auth screens)** = 🔨. Flip your Connect/Deal/Sella rows as you go. Per-item scope files now live in `docs/build/` (mine; you can ignore).
+
+> **1b BUILT + verified (status 🧪).** Heads-up on **one file of yours I touched:** `src/shared/ui/AppShell.tsx` is now a **client component** (`'use client'`) — it reads `usePathname()` and renders children **bare (no rail/top-bar) on `/login` + `/signup`** (list = `BARE_ROUTES`). Everything else is unchanged; your Connect/etc. routes still get the full frame. New stuff (all mine, won't touch your Connect work): `/login`, `/signup`, `/onboarding` (post-signup placeholder, 1c mounts there), `src/proxy.ts` + `src/shared/db/proxy.ts` (Next-16 session-refresh proxy — `getClaims()` gate, redirects signed-out → `/login`). Verified against seed (alice@greenleaf.test / password123). **The F5-deferred session proxy is now live** — your authed pages stay fresh. Lock released.
+>
+> **Update — I wired Sign-out into the rail myself** (Muskan reversed the earlier "leave to you" call). The user-avatar slot at the bottom of `IconRail` is now a click-to-open menu with a **Sign out** item (calls my `signOut` action). Minimal styling — **restyle freely** when you polish the shell; it's your component. Signup also now carries the two value-prop lines (QR card / B2B network) on the locked light brand.
+
+---
+
+**2026-06-07 (session 14) — F5 merged to dev → PR [#60](https://github.com/HelloSello/hello-sello-mvp/pull/60). Pull `dev` and you're fully unblocked; locks released.** Built on your Task-1A shell. What you can import now:
+- **`@/shared/db/server`** + **`@/shared/db/client`** — `createClient()` (server = cookie/RLS-scoped; browser = singleton). Types: `Database` + `Tables<'x'>` from `@/shared/db`.
+- **`@/shared/auth`** — `getCurrentUser()` / `getCurrentPerson()` / `getCurrentCompanyId()` (null-safe per Path-B).
+- **`@/shared/audit`** — `writeAudit({ actorType, action, contentType, contentId, ... })`: thin insert, DB trigger does the hash-chain. Use on every business write.
+- Deps added to `package.json`: `@supabase/ssr`, `@supabase/supabase-js`. Env keys in `.env.example` (set your `.env.local`). **Session-refresh proxy deferred to auth-screens 1b** — fine for now.
+
+---
+
+**2026-06-07 (session 13) — Discover explored + paused (no schema change, doesn't touch your half).** Heads-up only — this is all on my surface track.
+- Built a throwaway prototype at `prototypes/discover-prototype/` (mock DB, 3 variants) to design Discover. **Paused** — page structure not clear yet. No migrations, no schema proposed.
+- **One lock that may matter later:** Discover visibility = **Instagram model** — listed = has a public shop (sellers); buyers (no shop, e.g. pharmacies) are hidden, **search-only**. Key = "has public shop", not a role. → `DECISIONS.md` session-13.
+- Confirmed Discover = two jobs: supplier **directory** + ad/social **feed**. Open: structure, demand-MVP, feed-scope — parked in `DISCOVER.md`.
+- **Foundation F5 + the `messaging` contract are still owed** (unchanged since session 12 — see below). Next session I pivot to **Sella's role in Connect**, not F5 — flag me if F5 is blocking you.
+
+---
 
 **2026-06-07 (session 12) — Foundation BUILT + applied to Supabase (F1–F4). You're nearly unblocked.** PR [#54](https://github.com/HelloSello/hello-sello-mvp/pull/54) → `dev` carries it all.
 - **What's live:** 71 tables applied; **RLS** on every table (multi-tenant isolation, proven by `supabase/tests/rls_isolation_test.sql`); auth→person trigger; dev seed (Alice/GreenLeaf cultivator + Bob/StonePharm pharmacy, password `password123`). **Generated TS types → `src/types/database.types.ts`** — build against these.

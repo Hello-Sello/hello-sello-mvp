@@ -4,7 +4,8 @@
  * rail: deep-maroon letters with raspberry slashes so the mark pops on white.
  */
 export function Wordmark({ stacked = false }: { stacked?: boolean }) {
-  const slash = <span className="text-brand">//</span>;
+  // `{"//"}` (not bare `//`) so JSX reads it as a string child, not a comment.
+  const slash = <span className="text-brand">{"//"}</span>;
 
   if (stacked) {
     return (

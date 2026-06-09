@@ -14,6 +14,9 @@
 - **Walk** - on the 9-step demo script? **★** yes (demo breaks here if missing) · **○** not on the walk.
 - **MVP** - build for June 11? **✓** build · ***seed*** = seed/stub instead · **next** = not June-11 (build-ahead).
 - **Size** - rough effort: **S** ~2-4h · **M** ~½-1 day · **L** ~1.5-2+ days.
+- **Status** - `(blank)` not started · 🔨 WIP · 🧪 review (built, in PR) · ✅ done (merged) · ⏸ blocked.
+
+> **Status-column rule (both agents, read this):** each owner edits **only the Status cells of their own rows** — Muskan edits Group M, Ayush edits Group A. Status flips are the **one exception to the shared-file lock ritual**: distinct rows = distinct lines = clean git merge, so **no sync-lock needed for a status flip.** Any *structural* edit to this file (adding/removing rows or columns, rewording) still follows the normal lock ritual.
 
 The 9 demo steps the "Walk" column points to:
 1. A sends connect request → B's inbox · 2. B accepts → relationship + C2C chat · 3. the two people chat · 3b. open the relationship page · 4. Sella spots a deal, asks both · 5. both say yes → Sella drafts card + workspace born · 6. negotiate + advance stages · 7. each side confirms · 8. Draft → Confirmed · 9. audit trail.
@@ -35,28 +38,28 @@ The 9 demo steps the "Walk" column points to:
 
 ### Foundation (the only June-11-critical thing Muskan owns - it gates Ayush)
 
-| # | Item | Walk | MVP | Size |
-|---|---|---|---|---|
-| F1 | Phase 1 + 2 migrations → Supabase | ★ | ✓ | L |
-| F2 | RLS policies (multi-tenant `company_id`) - *the privacy spine* | ★ | ✓ | L |
-| F3 | Auth setup (Supabase Auth) | ★ | ✓ | M |
-| F4 | Seed: 2 companies + 2 users, verified | ★ | ✓ | S |
-| F5 | `shared/db`, `shared/auth`, `audit_log` write helper | ★ | ✓ | M |
+| # | Item | Walk | MVP | Size | Status |
+|---|---|---|---|---|---|
+| F1 | Phase 1 + 2 migrations → Supabase | ★ | ✓ | L | ✅ done |
+| F2 | RLS policies (multi-tenant `company_id`) - *the privacy spine* | ★ | ✓ | L | ✅ done |
+| F3 | Auth setup (Supabase Auth) | ★ | ✓ | M | ✅ done |
+| F4 | Seed: 2 companies + 2 users, verified | ★ | ✓ | S | ✅ done |
+| F5 | `shared/db`, `shared/auth`, `audit_log` write helper | ★ | ✓ | M | ✅ done |
 
 ### Entry experience (real build, but the demo uses seed - so not June-11-blocking)
 
-| # | Item | Walk | MVP | Size |
-|---|---|---|---|---|
-| 1b | Auth screens (sign in / up) | ○ | ✓ | S |
-| 1c | Company onboarding (setup, license upload, verification) | ○ | ✓ *(seed for demo)* | M |
-| 1d | Home / logged-in landing | ○ | ✓ *(seed for demo)* | S |
+| # | Item | Walk | MVP | Size | Status |
+|---|---|---|---|---|---|
+| 1b | Auth screens (sign in / up) | ○ | ✓ | S | 🧪 review |
+| 1c | Company onboarding (setup, license upload, verification) | ○ | ✓ *(seed for demo)* | M | 🔨 WIP |
+| 1d | Home / logged-in landing | ○ | ✓ *(seed for demo)* | S | |
 
 ### Next surfaces (post-Foundation; build-ahead, not in the June-11 demo)
 
-| Surface | Job | Size |
-|---|---|---|
-| **Present** | **design + schema first**, then build | L+ |
-| **Discover** | **design + schema first**, then build | L+ |
+| Surface | Job | Size | Status |
+|---|---|---|---|
+| **Present** | **design + schema first**, then build | L+ | |
+| **Discover** | **design + schema first**, then build | L+ | |
 
 *These are sketch-depth today with no schema (Phase 1/2 = Connect/Deal only). So the first job is design + schema - Muskan's strength - then build. This sets up the post-demo product instead of building on undesigned ground.*
 
@@ -66,37 +69,37 @@ The 9 demo steps the "Walk" column points to:
 
 ### App shell
 
-| # | Item | Walk | MVP | Size |
-|---|---|---|---|---|
-| 1a | App shell + nav (5-surface frame, top bar, routing) | ★ | ✓ | M |
+| # | Item | Walk | MVP | Size | Status |
+|---|---|---|---|---|---|
+| 1a | App shell + nav (5-surface frame, top bar, routing) | ★ | ✓ | M | ✅ done |
 
 ### Connect (Unit 2)
 
-| # | Item | Walk | MVP | Size |
-|---|---|---|---|---|
-| 2a | Inbox (Variant A: lenses, claim/assign) | ★ | ✓ | M |
-| 2b | Accept → relationship + C2C created | ★ | ✓ | S |
-| 2c | Chat - C2C + P2P threads, send/store, message types | ★ | ✓ | L |
-| 2d | Realtime (Supabase Realtime subscriptions) | ★ | ✓ | M |
-| 2e | Relationship page (notes / terms / artifacts) | ★ | ✓ | M |
+| # | Item | Walk | MVP | Size | Status |
+|---|---|---|---|---|---|
+| 2a | Inbox (Variant A: lenses, claim/assign) | ★ | ✓ | M | ✅ done |
+| 2b | Accept → relationship + C2C created | ★ | ✓ | S | ✅ done |
+| 2c | Chat - C2C + P2P threads, send/store, message types | ★ | ✓ | L | ✅ done |
+| 2d | Realtime (Supabase Realtime subscriptions) | ★ | ✓ | M | ✅ done |
+| 2e | Relationship page (notes / terms / artifacts) | ★ | ✓ | M | |
 
 ### Deal (Unit 3)
 
-| # | Item | Walk | MVP | Size |
-|---|---|---|---|---|
-| 3a | Deal card (draft, PO/SO, role views, version history, front/back) | ★ | ✓ | L |
-| 3b | Deal Workspace (born at draft, members, container) | ★ | ✓ | M |
-| 3c | Stage pipeline (5-stage bar, manual advance) + Things checklist (by **stage**) | ★ | ✓ | M |
-| 3d | Confirmation gate (two-sided confirm → Confirmed) | ★ | ✓ | M |
+| # | Item | Walk | MVP | Size | Status |
+|---|---|---|---|---|---|
+| 3a | Deal card (draft, PO/SO, role views, version history, front/back) | ★ | ✓ | L | |
+| 3b | Deal Workspace (born at draft, members, container) | ★ | ✓ | M | |
+| 3c | Stage pipeline (5-stage bar, manual advance) + Things checklist (by **stage**) | ★ | ✓ | M | |
+| 3d | Confirmation gate (two-sided confirm → Confirmed) | ★ | ✓ | M | |
 
 ### Sella (Unit 4) - leaf, built last; the demo works without it
 
-| # | Item | Walk | MVP | Size |
-|---|---|---|---|---|
-| 4a | Bedrock wrapper (provider interface, Sonnet/Haiku, EU) | ★ | ✓ | M |
-| 4b | Detect (read chat via DB tools → spot deal → suggestion line) | ★ | ✓ | M |
-| 4c | Draft (chat → deal-card draft) | ★ | ✓ | L |
-| 4d | Summarize (version one-liners) + Sella right-panel UI | ★ | ✓ | M |
+| # | Item | Walk | MVP | Size | Status |
+|---|---|---|---|---|---|
+| 4a | Bedrock wrapper (provider interface, Sonnet/Haiku, EU) | ★ | ✓ | M | |
+| 4b | Detect (read chat via DB tools → spot deal → suggestion line) | ★ | ✓ | M | |
+| 4c | Draft (chat → deal-card draft) | ★ | ✓ | L | |
+| 4d | Summarize (version one-liners) + Sella right-panel UI | ★ | ✓ | M | |
 
 **Audit** - each action emits an `audit_log` row using the helper from F5.
 

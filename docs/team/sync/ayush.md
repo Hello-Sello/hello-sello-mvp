@@ -5,18 +5,35 @@
 
 ---
 
-**Last updated:** 2026-06-07 19:04 CEST
+**Last updated:** 2026-06-09 20:09 CEST
 **Branch:** claude/ayush/work
-**Status:** offline (Task 1A done — app shell + global nav built UI-first; next = Connect 2a inbox)
+**Status:** building - 2d DONE (Connect backend now REAL + realtime). Next = 2e. **Uncommitted on branch** (awaiting Ayush's go to commit/push).
 **Linear issue in progress:** none
 **Shared files locked:** none
-**PR open:** none — 1a on claude/ayush/work (`bf776a5`), not yet PR'd to dev.
+**PR open:** none yet for 2d. ([#69](https://github.com/HelloSello/hello-sello-mvp/pull/69) (2b+2c) merged to dev earlier.)
 
 ---
 
 ## Notes for the other agent
 
+**2026-06-09 (Task 2d - Connect backend went REAL + realtime; ⚠️ I touched your RLS - please read).** The whole Connect experience now runs on Supabase (mock deleted) with live realtime. Verified end to end (inbox, chat, accept→chat, send-persists, Bob→Alice live, optimistic send, unread, privacy). **4 new migrations - 3 are in your foundation/RLS area:**
+> 1. `20260609180000_seed_demo_world.sql` - **3 new dummy logins** (Clara/David/Eva, all `password123`) + 3 companies + 2 connected relationships (C2C+P2P+messages) + 2 pending inbox items. Tagged `metadata.seed='demo-2d'`. Created via the `auth.users` + `auth.identities` + your `handle_new_user` trigger pattern.
+> 2. `20260609183000_rls_connect_counterparty_visibility.sql` - **broadened `company_select` + `person_select`** so a user can read the NAME of a company/person they have a relationship or pending-inbox link with (WhatsApp-style). The base policies only allowed your own company/people, so every inbound request showed "Unknown company". Strangers still see nothing (isolation verified). Added 2 SECURITY DEFINER helpers: `shares_connection_with_company`, `can_see_person`.
+> 3. `20260609193000_rls_thread_select_inline.sql` - **rewrote `thread_all` SELECT (USING)** to check the row's own columns directly instead of `can_access_thread(id)`. That helper re-queries chat_thread for the row's own id, which fails during `INSERT…RETURNING` (the new row isn't in its STABLE snapshot) → normal users couldn't create a chat (42501). `can_access_thread` is unchanged + still used by `chat_message` (WITH CHECK unchanged too).
+> 4. `20260609194500_realtime_chat_publication.sql` - added `chat_message` + `chat_thread` to `supabase_realtime`. Postgres Changes respects the SELECT RLS, so realtime privacy = read privacy (no new policy).
+> **Not committed/PR'd yet** - committing with Ayush. Flagging so it's not a surprise when it lands; shout if any RLS change worries you (I kept them minimal + isolation-preserving). Demo logins: Alice / Bob / Clara / David / Eva, all `password123`. Two-screen realtime demo = Alice + Bob.
+
+**2026-06-08 (Task 2b + 2c BUILT + verified; C2C-as-ticket decided + parked).** `/connect/chat` is live (mock-first): conversation list (All / Unread / Companies) + thread view + composer + a Sella rail (panel 5, with an "Ask Sella" input). Accept in the inbox fires the rollout: C2C always; P2P for the 3 substantive types, seeded by a Sella intro. `modules/messaging` is built (mine) - `mock/store.ts` is the only throwaway (swap-to-real = body rewrite behind `index.ts`). Committed + pushed to `claude/ayush/work`; not PR'd to dev yet.
+> **C2C = ticket channel (new decision - DECISIONS.md 2026-06-08) - PARKED.** P2P = people talk; C2C = reach-a-company + the record; a C2C message becomes a ticket in **your Inbox machinery (2a)** → claimed → opens/reuses a P2P (Sella drops a system line) → outcome posted back to C2C. **Not building now** - the demo keeps the current C2C chat. The future build reuses your Inbox + the P2P model, so **no new foundation owed by you**. 4 open problems recorded in DECISIONS.md + the AGENTS Session Checkpoint.
+> **Touched shared files** this session (DECISIONS.md + AGENTS.md) - you had no locks; committed + pushed. FYI in case you rebase.
+
+**2026-06-07 (Task 2a - Connect inbox BUILT + verified, UI-first / mock).** `/connect/inbox` is live: Connect sub-nav (panel 2) + lens tabs (Unassigned / Mine / All / History, live counts) + list + state-driven detail; Claim / Accept / Reassign over async mock data. §2 model enforced (claim first-come, no force take-over, owner or head-admin reassign) - matches your DEV-7 + 2026-05-20 ticket locks, so no new decision. Mock-first: `modules/connect/types.ts` binds to your `pending_inbox_item` Row; `mock/inbox.mock.ts` is the only throwaway - swap-to-real = rewrite `getInbox` + mutators behind `index.ts` (already async). Committed `3eb5474`, pushed; PR -> dev pending. Flipped my BUILD-PLAN 2a row -> 🧪.
+> **Saw + thank you for 1b** (on your branch, not in dev yet): AppShell -> client + BARE_ROUTES (/login, /signup) + the session proxy. When it merges, my Connect routes still get the full frame - no conflict expected (I only ever read AppShell).
+> **Correction (so there's no confusion):** I had earlier said I needed a messaging `index.ts` contract from you - that's stale. Per the re-cut (BUILD-PLAN line 110) I own the whole demo incl. chat/messaging, so `modules/messaging` is **mine to build** - no contract owed by you. F1-F5 all delivered; I'm not blocked on you. Starting 2b now.
+> **Parked for the Sella phase:** noted your Supabase **edge-functions** finding for agent DB access (vs the tool-call assumption in BUILD-PLAN line 110). Unresolved - let's weigh it when we get to Sella (4a-4d).
+
 **2026-06-07 (Task 1A — app shell BUILT).** Stood up the Next.js app (16 + React 19 + Tailwind v4 + lucide) in the locked `src/`. Glass app shell: light rail (Hello Sello `//` logo + 7 surfaces + user-photo slot) + search top bar; stub per surface; `/` → `/connect`. **Rebased onto your dev foundation cleanly** — your `database.types.ts` + `supabase/` came in no-conflict. Thank you for F1-F4 + RLS. Two asks before I wire data on Connect/Deal: **F5** (`shared/db` / `shared/auth` / `audit_log` helper) + the **messaging `index.ts`** contract (the Sella/Deal seam). 1a was pure UI so it's done + unblocked. Next: Connect 2a inbox → 2c chat.
+> **Merged (19:18 CEST):** PR #56 → dev, PR #57 → main. **Design system now locked in DECISIONS.md + ARCHITECTURE-NOTES.md** (pink/white glassmorphic palette, 7 surfaces, wordmark, `globals.css` `@theme` tokens) — please build Present/Discover against those so the surfaces match. Saw you pushed Discover work (951cc77) while I released — you'll want to rebase onto the new dev.
 
 **2026-06-07 (Build plan session) — `docs/PRD/BUILD-PLAN.md` + division of work.** Synced with your session 9 (thank you - O6 + stages + DEV-37 all resolved to the PRD; we're aligned). Then wrote the build plan:
 

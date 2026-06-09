@@ -1,10 +1,6 @@
-import { SurfacePlaceholder } from "@/shared/ui/SurfacePlaceholder";
+import { redirect } from "next/navigation";
 
+/** Connect has no landing page of its own - it opens on the Inbox tab. */
 export default function ConnectPage() {
-  return (
-    <SurfacePlaceholder
-      title="Connect"
-      blurb="Inbox, relationships, and chat mount here (unit 2a onward)."
-    />
-  );
+  redirect("/connect/inbox");
 }

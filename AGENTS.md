@@ -120,6 +120,20 @@ If you're building and hit a doubt, go here:
 
 *(Updated at end of every session by whoever worked last.)*
 
+**2026-06-08 - Ayush (Connect 2b + 2c BUILT + verified; C2C-as-ticket direction decided + parked)**
+- **2b + 2c DONE (accept → chat), mock-first, verified live, zero console errors.** `/connect/chat` is live: conversation list (All / Unread / Companies) + thread view (centered system + centered Sella + person bubbles) + composer + a Sella rail (panel 5, with an "Ask Sella" input). Accepting an inbox request fires the rollout: C2C always + P2P for the 3 substantive types, seeded by a Sella intro. `modules/messaging` is mine (built): schema-shaped types bound to `chat_thread`/`chat_message`/`relationship` Rows; `mock/store.ts` is the only throwaway (swap-to-real = body rewrite behind `index.ts`).
+- **New decision (DECISIONS.md 2026-06-08): C2C = a ticket channel, not a free chat.** P2P = people talk; Deal chat = deal thread; C2C = reach-a-company + record. A C2C message → a ticket in the **same Inbox** (different view) → claimed → opens/reuses a P2P (Sella drops a system line) → outcome posted back to C2C. **Parked, NOT building now** — the demo keeps the current C2C chat as-is; the ticket slice comes after the core path. 4 open problems recorded in DECISIONS.md.
+- **→ Muskan:** nothing owed by you — this is all my half. The future C2C-ticket build will **reuse your Inbox machinery (2a) + the P2P thread model**, no new foundation needed. Flagging in case it touches anything on your side later.
+- Next: **2d (realtime feel)** → 2e (relationship page + the "My Relationship with…" chat top bar).
+
+**2026-06-07 - Ayush (Connect 2a - inbox BUILT + verified, UI-first / mock)**
+- **Inbox live at `/connect/inbox`:** Connect sub-nav (panel 2; Inbox active, Chat + Relationships greyed) + lens tabs (Unassigned / Mine / All / History, live counts) + list + state-driven detail. Claim / Accept / Reassign work over async mock data. Verified live, zero console errors; typecheck + eslint clean.
+- **Implements existing locked decisions** (DEV-7 + 2026-05-20 ticket model): claim = first-come; **no forceful take-over**; head admin can (re)assign; refinement - the current owner can also reassign. No new DECISIONS lock needed.
+- **Mock-first, schema-shaped:** `modules/connect/types.ts` binds to your generated `pending_inbox_item` Row (can't drift); `mock/inbox.mock.ts` is the only throwaway. Swap to real = rewrite `getInbox` + mutators behind `index.ts` (already async). Arch notes added (Connect 2a section).
+- 2a merged to dev (PR #62). Next: **2b (Accept side-effects) - unblocked.**
+- **Correction to my earlier note:** there is **no messaging-contract dependency on you.** Per BUILD-PLAN line 110 the re-cut gives me the whole demo incl. chat/messaging, so `modules/messaging` is mine to build. **Your Foundation (F1-F5) is fully delivered - nothing of mine is blocked on you.**
+- **-> Muskan:** saw your 1b on your branch (AppShell -> client + BARE_ROUTES + session proxy) - not in dev yet; when it merges my Connect routes still get the full frame, all good. (Parked for the Sella phase: your Supabase edge-functions finding for agent DB access - we'll weigh tool-call vs edge-function then.)
+
 **2026-06-07 - Ayush (Task 1A — app shell BUILT, UI-first)**
 - **App is stood up:** Next.js 16 + React 19 + Tailwind v4 + lucide-react, in the locked modular-monolith `src/`. Glass app shell live: light rail (Hello Sello `//` logo, 7 surfaces, user-photo slot) + search top bar + active-route highlight; stub page per surface, `/` → `/connect`. Verified live, zero console errors.
 - **Design language locked:** pink/white glassmorphic. Palette in `globals.css` `@theme` (raspberry #E30B5D, cotton-candy #FFB7D5, red-pink #76002D, ink #1F2020, success #34B233, periwinkle #6C7BD9, danger #DC2626). Light-only; dark deferred post-demo.

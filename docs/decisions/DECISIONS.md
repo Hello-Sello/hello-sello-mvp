@@ -763,6 +763,16 @@ Wrote + applied the locked v0 schema to Supabase (71 tables), then the RLS priva
 
 *Why record:* F1–F4 are applied + isolation-tested on Supabase (impersonation test proves GreenLeaf ↮ StonePharm, private-deal lockstep, and seller-only column hiding). This is the executed reality behind `SCHEMA-DRAFT.md`. Open follow-ups: move RLS helpers to a private schema (advisor noise — they're RPC-exposed); audit JCS canonicalization + concurrency hardening; **F5** shared modules (`shared/db`, `shared/auth`, audit write helper); `buyer_metric` rename; verify Supabase Auth email provider enabled.
 
+## 2026-06-07 (session 13) — Discover: visibility model LOCKED; page structure + scope OPEN
+
+Explored the Discover surface (stub) via a throwaway prototype with a mock DB (`prototypes/discover-prototype/`, 3 combination variants). One product rule came out clear and is locked; the page design itself is **not** locked — paused for more thinking.
+
+- **LOCKED — Discover visibility is asymmetric ("Instagram model").** Listed-in-Discover = a company with a **public shop** (the selling side). Buyers (no shop, e.g. pharmacies acting purely as buyers) are **not listed** anywhere — reachable only by **exact-name search**, and only if they're on the platform. *Why:* sellers want to be found; buyers don't want to be cold-listed. The listing key is **"has a public shop", not a buy/sell role** — role is per-deal (consistent with the Layer-1 symmetric-company lock). Marcel's design arrived at the same rule independently ("list suppliers by category… no pharmacies shown first").
+- **CONFIRMED — Discover does two jobs** (both in Marcel's designs): a **supplier directory** (sellers → their products, grouped, with a demand/supply toggle) and an **ad / social feed** (campaign calendar + ad posts = "B2B social network").
+- **OPEN (explored, not locked):** (a) **page structure** — how directory + feed coexist (prototype mocks tabs / feed-first / unified-scroll; undecided); (b) is **demand-side** (companies posting what they want to buy) in MVP; (c) is the **ad/social feed** demo-scope or a fast-follow (it's the heavier half to build).
+
+*Why record:* the visibility rule is load-bearing for whoever builds Discover (it's a directory-listing + search-access rule → affects the data model and RLS). The open items are parked in `docs/product/surfaces/DISCOVER.md`. Next Discover session resumes from the prototype.
+
 ## 2026-06-07 (Task 1A) — UI design system: palette, glassmorphism, surface nav
 
 The app's visual language, locked while standing up the app shell (1A). Source of truth for tokens = `src/app/globals.css` `@theme`.
@@ -777,3 +787,109 @@ The app's visual language, locked while standing up the app shell (1A). Source o
 - **Shell layout:** light glass capsule rail (Hello Sello logo top · surface pills · user-photo slot bottom) + a glass search top bar carrying the logged-in company's logo/name. Active surface = cotton-candy pill + raspberry; `soon` surfaces (Buy/Sell/Trade) are greyed and non-clickable until built.
 
 *Why record:* shared decision — Muskan builds Present + Discover against the same palette, tokens, icon set, and shell, so the design system must be team-visible, not buried in Ayush's workshop. Full build narrative: `_workshop/build-plans/1a-app-shell.md` (Ayush-local).
+
+## 2026-06-07 (session 14) — F5 shared modules built + merged to dev (PR #60)
+
+Built the app-layer foundation modules on top of Ayush's Task-1A scaffold. These are the contracts every feature module imports. PR [#60](https://github.com/HelloSello/hello-sello-mvp/pull/60) → `dev`.
+
+- **Publishable key (modern) over legacy anon key.** Env var = `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (`sb_publishable_…`). Supabase docs recommend it; independent rotation, same RLS enforcement. Legacy JWT anon key still works but is the deprecated path.
+- **`shared/db` cannot barrel browser + server clients into one `index.ts`.** `server.ts` imports `next/headers` (server-only); exporting it from a shared barrel breaks Client Components at build time. Surface: types from `@/shared/db`, browser client from `@/shared/db/client`, server client from `@/shared/db/server`.
+- **`writeAudit()` is intentionally thin — DB trigger owns the hash-chain.** The helper just INSERTs; `sequence_number`, `prev_entry_hash`, and `entry_hash` are computed by the `trg_audit_log_hash` BEFORE INSERT trigger (advisory-lock serialized). The generated TS type demands `entry_hash` (can't see the trigger); the helper casts around it.
+- **`getCurrentCompanyId()` = the single Path-B accessor.** Returns `null` when the user has no company yet. RLS fails safe on null (matches nothing). One accessor, one place to change if Path B adds complexity.
+- **`getUser()` over `getSession()` for server-side auth.** `getUser()` revalidates the JWT with the Supabase auth server; `getSession()` trusts the cookie as-is. On the server (where we resolve person/company), revalidation is the safer default.
+
+*Why record:* F5 is consumed by every module Ayush builds; the barrel-split and thin-audit decisions are the kind of thing a future developer would violate without knowing why (e.g. "why not just export everything from index.ts?" or "let me compute the hash in the helper for safety"). These locks prevent that drift.
+
+---
+
+## 2026-06-07 (session 15) — Auth screens (1b): theme resolution + build locks
+
+- **Auth-screen theme — LIGHT wins; the 2026-05-25 "dark auth" intent is superseded.** The onboarding prototype HANDOFF lock #2 (*"dark theme for auth screens, light in-app"*, 2026-05-25) **conflicted** with Task-1A's *"light-only for the demo; dark deferred"* (2026-06-07, this DECISIONS.md). **Muskan's call: light wins** — `/login`, `/signup`, `/onboarding` render on the light glass system like the rest of the app. *Why:* one theme to polish before June 11; the `@theme` token structure keeps dark a cheap post-demo add. Revisit dark (incl. the dark-auth idea) post-demo. *(Recorded so the conflict doesn't resurface — a dark mock for signup is **not** the current target.)*
+- **Auth chrome = conditional, not a route-group split.** `AppShell` renders bare (no rail / top-bar) on `/login` + `/signup` via a `usePathname` check (it is now a client component). Chose this over the canonical `(app)`/`(auth)` route-group split because the split would move Ayush's 8 surface pages mid-Connect-build (collision risk). The route-group split is the cleaner refactor for later.
+- **Post-signup landing = `/onboarding` placeholder (Path-B gate).** A fresh signup is authenticated but has `company_id = NULL`, so it lands on `/onboarding` (not the app). 1c (company setup) replaces the placeholder. Industry pattern: gated onboarding (Slack/Notion/Linear).
+- **Session proxy uses `getClaims()`, not `getSession()`.** The Next-16 `proxy.ts` refresh + route gate verifies the JWT signature (safe server-side); `getSession()` trusts the cookie and must not gate routes. (Consistent with the F5 `getUser()`-over-`getSession()` lock.)
+- **`signOut` uses `scope: 'local'`.** The button always clears the local session even if the remote revoke would fail (expired/invalid session); the redirect never waits on a network call that can error.
+- **Dropped the `/logout` GET route.** A GET that mutates is a smell; sign-out is a `<form>` server action. Placed in the rail's user-avatar menu.
+
+---
+
+## 2026-06-07 (Sella design) — Deal-Sella detection: runtime placement, tool contract, proposal flow
+
+Design session on how Deal-Sella's detection actually *runs* at build time. Layer 4 locks Sella's **behavior**; this locks the **build mechanics**. Build itself handed to Ayush / the F5 build session. All captured in `ARCHITECTURE-NOTES.md` "Sella runtime placement"; mirrored here as the load-bearing locks.
+
+- **Placement rule — data-triggered → background, person-waiting → app.** A Sella task kicked off by a DB change (new message, card version bump, doc upload) runs in a background runtime and must never sit in the user's request path (keeps Sella a non-blocking leaf). A task a user waits on-screen for (side-panel reply, "what's on my plate") runs in the Next.js app. **Tasks live in different homes; one choice does not bind the others.** *Why:* "where Sella lives" is really "where each *task's* trigger lives" — the model (Bedrock) is one shared brain; only the trigger code's home varies.
+- **Detection lives in a Supabase Edge Function.** Flow: new `chat_message` → DB webhook (async `pg_net`, non-blocking) → Edge Function → Claude Haiku with one `propose_deal_draft` tool over a rolling ~15–20-message window → writes a Draft suggestion → Supabase Realtime shows it live. Chosen over an in-Next.js background job because Vercel serverless can freeze post-response (unreliable for fire-and-forget).
+- **Suggest-only is structural, not a promise.** Sella is handed only *propose* tools — there is no `confirm`/`send` tool — so it cannot commit a deal by construction. Resolves the "Sella suggests, humans decide" guarantee at the tool layer.
+- **`propose_deal_draft` contract (S2):** `line_items[]` {name → `deal_line_item.name`, quantity+unit → `.volume`, unit_price, cultivar?, pzn?}, `currency` → `deal_card.currency`, one-line `summary` → `deal_card_log`. Required: name, quantity, unit_price, currency. `deal_type` not extracted (initiator-set; seller = OFFER per O4); `value_net` computed (qty × price). Maps 1:1 to schema columns — no glue layer.
+- **Proposal + both-sides votes live in the `deal_detected` message `metadata`** (the column is documented "Sella context, confirmation state") — **no new table**. Not `deal_confirmation` (that's the heavier final two-party *card* confirm). Promote to a `deal_proposal` table post-MVP only if the proposal grows a real lifecycle.
+- **Workspace birth = one atomic app-side transaction.** On both-accept, a single all-or-nothing transaction creates `deal_card` (Draft) + `deal_line_item` rows + `deal_workspace` + `deal` thread + `deal_member` rows + `workspace_created` system line + audit. The `deal_detected` message persists as the "proposed → both accepted" record.
+- **No detection cost gate for MVP.** Per-message Haiku ≈ $0.001 + prompt caching → the cheap rule/embedding pre-filter is a post-MVP scale optimization, not needed for the demo.
+
+**Open (build-phase) — RESOLVED 2026-06-08 (see next entry):** spawn-transaction internals (`deal_member` owner/side_lead auto-insert, the `thread_id`-nullable create-order cycle); Bedrock-from-Deno credential setup (`aws4fetch` SigV4 + Supabase Edge secrets, *not* the Vercel env keys).
+
+*Why record:* this is the design Ayush builds Sella against; the placement rule and the structural suggest-only guarantee are the kind of thing that gets violated silently (e.g. "let me just call Bedrock in the message handler" → chat blocks on AI). Grounded in research 2026-06-07 (function-calling extraction, Haiku pricing/caching, Supabase DB webhooks) + Layer 4 §3/§5. Also closes O6 in the connect-demo PRD.
+
+---
+
+## 2026-06-08 (Sella design) — Workspace-spawn transaction + Bedrock creds (closes the build-phase opens above)
+
+Follow-on session settling the two items the detection entry left open. Mirrored in `ARCHITECTURE-NOTES.md` ("Sella runtime placement") and the schema change in `SCHEMA.md` §8.
+
+- **Create-order is acyclic — no `thread_id` backfill.** The feared "thread_id-nullable cycle" does not exist: the FK is one-directional (`chat_thread.deal_card_id → deal_card`; `deal_card` carries no thread column). Fixed order, one all-or-nothing transaction: (1) `deal_card` → (2) `deal_line_item` → (3) `deal_workspace` → (4) `deal_member` → (5) `chat_thread` (type `deal`) → (6) `chat_message` `workspace_created` → (7) audit.
+- **Both founders become `owner` (one per side).** The two P2P chatters each get a `deal_member` row with `role = owner` — co-ownership, one per company side. `side_lead` stays in the enum but is NOT auto-assigned at birth (reserved for later delegation: a side's lead who isn't a full owner). `member` = colleagues added later.
+- **`deal_workspace.owner_person_id` REMOVED — ownership lives in `deal_member`.** A deal can have several owners (two leads + more), so a single-owner column can't hold the truth. Ownership = `deal_member` rows with `role = owner`; one source, unbounded count. *(Amends the locked Phase-2 `deal_workspace` table — see SCHEMA.md §8.)*
+- **Superadmin access = platform-wide RLS bypass, not a membership row.** The HS superadmin manages any deal via a bypass policy, never inserted as a `deal_member` on each deal (keeps every deal's people-list clean).
+- **P2P→deal continuity signpost.** On birth, the `deal_detected` message in the P2P thread updates to a "Deal created → open workspace" link into the new deal thread, so the two people don't lose the deal when it moves rooms.
+- **Bedrock-from-Deno creds = permanent key, least-privilege.** The detection Edge Function authenticates to Bedrock with a permanent IAM/Bedrock key in **Supabase Edge secrets** (not the Vercel env keys), scoped to **Bedrock-invoke on the `eu.` EU Claude models only**. Auto-expiring (12hr) keys + refresh machinery = post-MVP hardening. *(Build = Ayush.)*
+
+*Why record:* the owner-column removal changes a locked schema table; the co-owner + superadmin-via-RLS choices drive both the spawn transaction and the deal RLS policy. Grounded in SCHEMA.md §7/§8 (`deal_card` / `deal_workspace` / `deal_member`) + the placement rule from the entry above.
+
+---
+
+## 2026-06-08 (Sella design) — Multi-Sella architecture (DEV-11): MVP scope locked, orchestration deferred
+
+DEV-11 asks "are Personal / Seller / Buyer Sella distinct agents or one with context flavors?" + the framework choice. Split into what MVP actually needs vs what's deferred. Most of the §2 framing was already answered by locks scattered across Layer 4 + ARCHITECTURE-NOTES; this collects them into one architecture statement.
+
+- **The "5 Sellas" = ONE agent runtime, parameterized** by (data scope · persona shift · tool set + memory namespace) — not 5 services or codebases. Forced by already-locked facts: one base voice with role-fitted shifts (DEV-46), one Bedrock provider wrapper (4a), routing at the **interface layer** (§2/§5), and the side-Sella **reads** Deal-Sella's scope rather than two agents conversing (§2). Industry-aligned (2026 consensus: single-agent + tools is the default; add tools before agents; graduate to multi-agent only at clear limits — multi-agent helps parallel tasks but degrades sequential ones).
+- **MVP needs no agent architecture.** All 4 MVP Sella tasks (BUILD-PLAN Unit 4: 4a wrapper · 4b detect · 4c draft · 4d summarize) are **stateless single-shot Bedrock calls** behind the 4a provider wrapper, each with ≤1 structured-output tool. **No agentic loop, no orchestrator, no graph, no agent framework** (LangGraph / Bedrock Agents), **no RAG, no persistent memory.** Detection (built) is the reference shape.
+- **Deferred to post-MVP** (decide when the task is built, not now): multi-step agentic loops, multi-Sella co-activation runtime, RAG-backed Side-Sellas + memory/retention ([DEV-59](https://linear.app/hellosello/issue/DEV-59)), autonomy-ladder trust state (§4), any agent framework adoption. The locked *direction* to graduate from = **single-agent + function-calling tools**.
+
+*Why record:* retires the "5 agents?" framing of DEV-11 **for MVP** and prevents over-building (no one reaches for LangGraph / an orchestrator to run 4 stateless calls). DEV-11 itself stays **open** for post-MVP orchestration. Grounded in BUILD-PLAN Unit 4 (4a–4d all single-shot) + the locked detection design (2026-06-07/08 entries above) + the 2026 single-vs-multi-agent consensus.
+
+---
+
+## 2026-06-08 (Sella 4a) — Bedrock auth method + shared-helper placement (smoke-test verified)
+
+Settling *how* the 4a Bedrock wrapper authenticates and *where* it lives, before building it. Both decisions were verified by a live throwaway smoke test (`bedrock-smoke` Edge Function), not just chosen on paper. Mirrored in `ARCHITECTURE-NOTES.md` ("Sella runtime placement").
+
+- **Auth = Bedrock API key (bearer token) + plain `fetch`. SigV4 / AWS SDK NOT used.** Supersedes the earlier "permanent IAM key + `aws4fetch` SigV4" assumption. A long-term **Bedrock API key** sits in Supabase Edge secrets as `AWS_BEARER_TOKEN_BEDROCK`; the function POSTs to the EU Converse endpoint with `Authorization: Bearer <key>` — no signing, no SDK to bundle. *Verified:* live call to `eu.anthropic.claude-haiku-4-5-20251001-v1:0` in `eu-central-1` returned "pong". 12hr short-term keys + refresh = post-MVP hardening.
+- **Shared Bedrock helper lives in `supabase/functions/_shared/sella/`, not `src/shared/`.** The heaviest model-calling tasks (detect / draft / summarize) run in the Edge Function (Deno); the Deno bundler can't cleanly import from the Next `src/` tree, but the Next app *can* import a pure helper from the functions dir. So the helper sits with its heaviest consumer + the stricter bundler. Refines (doesn't contradict) the "F5 / shared infra" framing — still shared, just physically beside the Edge Functions.
+
+*Why record:* both supersede prior paper assumptions (SigV4; "F5 territory" implying `src/shared`), and the auth one was the single biggest unknown in the whole Sella unit — now closed by a real call. The next builder should not re-introduce the AWS SDK or SigV4, and should not place the helper in `src/`. Grounded in the live smoke test + Supabase monorepo bundling friction ([CLI #1303](https://github.com/supabase/cli/issues/1303)) + research on Bedrock API keys (bearer tokens).
+
+---
+
+## 2026-06-08 (Ayush) — C2C = a ticket channel, not a free chat (direction DECIDED; NOT building now)
+
+A message into a company-to-company (C2C) channel should behave like a **ticket**, not a back-and-forth chat. The three chat types keep clear, separate jobs: **P2P** is where people actually talk, **Deal chat** is the deal-workspace thread, and **C2C** is for reaching a company when you don't know which person to ask, plus the durable connection/info record.
+
+*Why:* a company can have many people, and only some P2P pairs are connected; some people are connected to no one. A company needs a "knock on the door" that does not name a person (the classic sales problem: "who is their procurement person? their finance person?"). Framing C2C as a ticket keeps it from becoming a noisy second chat that fills with irrelevant text.
+
+**This resolves the prototype-vs-DECISIONS drift.** The prototype called C2C an "audit log / `actor=system` only"; DECISIONS:515 called it "messaging on behalf of your company". Both are true once "messaging the company" means "raise a ticket", not "free chat".
+
+**Agreed shape (for the future build):**
+- Sending stays as easy as typing a message (no form to fill). The C2C box just *looks* different — a different skin/framing, maybe one **optional** category tag — so it reads as a deliberate, different kind of message.
+- A C2C message becomes a ticket that enters the **same Inbox** (the 2a machinery), shown in a **different view** from new connect requests. Anyone in the company may raise one (relaxed permissions for MVP).
+- On pickup (same first-come claim rule as 2a): if the two people have no chat, a natural new **P2P** starts; if they already have a P2P, the pickup drops a **Sella** system message into that existing P2P (reuse, don't duplicate). Deal-card changes flow through the existing deal-card update mechanism.
+- The conversation happens privately in the **P2P**; the **outcome** is posted publicly back to C2C ("handled by Jonas"); significant changes are surfaced in C2C. The other company sees the result in C2C, not the private P2P words.
+- The sender sees a status: **open / claimed / answered**.
+
+**NOT building now (parked).** For the June 11 demo we keep the current C2C chat as-is, and keep Sella as the mediator through the existing flow. Deal-card changes use the older method, and since no deal card is attached yet there is nothing to change now. Build the ticket system as its own slice after the core demo path (2d/2e + the deal flow).
+
+**Open problems to solve when we build (from the 2026-06-08 brainstorm — recorded so we don't lose them):**
+1. *Easy vs deliberate (the core tension).* The box must be as easy as a chat (so people adopt it) yet feel different (so they don't dump irrelevant text). Likely fix: same typing ease, different framing + one optional category tag — no form.
+2. *P2P topic-mixing.* Reusing an existing P2P for a new ticket can mix unrelated topics in one thread. Likely fix: a clear Sella divider line ("New from the company channel: …"); switch to one-thread-per-ticket only if it gets messy.
+3. *Publishing the outcome to C2C.* Need a rule for what counts as "significant" and who posts it. Likely fix: auto for deal-card changes (existing flow) + a manual "Share update to the company channel" button. Confirm the privacy model (company sees the result, not the private P2P).
+4. *Inbox data model.* Decide whether a company ticket is the same Inbox item with a new "type" or a new concept. Defer to build time.
+
+*Status of the 2b/2c code today:* C2C is currently a writable chat (the earlier drift-fix). That stays for the demo; it becomes the ticket box when this slice is built.
