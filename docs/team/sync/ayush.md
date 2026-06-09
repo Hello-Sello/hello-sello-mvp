@@ -5,12 +5,12 @@
 
 ---
 
-**Last updated:** 2026-06-10 03:05 CEST
+**Last updated:** 2026-06-10 03:15 CEST
 **Branch:** claude/ayush/work
-**Status:** idle - 2e DONE + **PR'd to dev (#76)**, awaiting your review. Next = 3a (deal card).
+**Status:** idle - 2e DONE + **MERGED to dev (#76)**; branch rebased onto dev (0/0). Next = 3a (deal card).
 **Linear issue in progress:** none
 **Shared files locked:** none
-**PR open:** [#76](https://github.com/HelloSello/hello-sello-mvp/pull/76) - 2e relationship page → dev (review please). 2d [#71](https://github.com/HelloSello/hello-sello-mvp/pull/71) merged.
+**PR open:** none - [#76](https://github.com/HelloSello/hello-sello-mvp/pull/76) (2e) **merged to dev**. 2d [#71](https://github.com/HelloSello/hello-sello-mvp/pull/71) merged earlier. Pull `dev` to get 2e (incl. the `relationship-artifacts` bucket + demo-world seed).
 
 ---
 
