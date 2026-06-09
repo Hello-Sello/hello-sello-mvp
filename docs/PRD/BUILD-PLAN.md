@@ -81,7 +81,7 @@ The 9 demo steps the "Walk" column points to:
 | 2b | Accept → relationship + C2C created | ★ | ✓ | S | ✅ done |
 | 2c | Chat - C2C + P2P threads, send/store, message types | ★ | ✓ | L | ✅ done |
 | 2d | Realtime (Supabase Realtime subscriptions) | ★ | ✓ | M | ✅ done |
-| 2e | Relationship page (notes / terms / artifacts) | ★ | ✓ | M | |
+| 2e | Relationship page (notes / terms / artifacts) | ★ | ✓ | M | 🧪 review |
 
 ### Deal (Unit 3)
 
