@@ -9,7 +9,8 @@ import {
   getMessages,
   markRead,
   postMessage,
-} from "../mock/store";
+} from "../supabase/store";
+import { useChatRealtime } from "../lib/use-chat-realtime";
 import { ConversationList } from "./ConversationList";
 import { ThreadView } from "./ThreadView";
 import { SellaPanel } from "./SellaPanel";
@@ -26,6 +27,8 @@ export function ChatView() {
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessageView[]>([]);
   const [loading, setLoading] = useState(true);
+  // live unread counts per thread, cleared on open - in-memory for the demo
+  const [unread, setUnread] = useState<Record<string, number>>({});
 
   // initial load - auto-select the first conversation
   useEffect(() => {
@@ -57,17 +60,60 @@ export function ChatView() {
     [conversations, selectedThreadId],
   );
 
+  // overlay the live unread counts onto the list rows (drives the badge + Unread filter)
+  const listConversations = useMemo(
+    () => conversations.map((c) => ({ ...c, unreadCount: unread[c.threadId] ?? 0 })),
+    [conversations, unread],
+  );
+
   function handleSelect(threadId: string) {
     if (threadId === selectedThreadId) return;
     setMessages([]); // drop the prior thread's stream so it can't flash under the new header
+    setUnread((prev) => ({ ...prev, [threadId]: 0 })); // opening a thread clears its badge
     setSelectedThreadId(threadId);
   }
 
   async function handleSend(body: string) {
-    if (!selectedThreadId) return;
-    const updated = await postMessage(selectedThreadId, body);
+    const text = body.trim();
+    if (!selectedThreadId || !text) return;
+    // optimistic: show my message instantly; the canonical refetch below (and the
+    // realtime echo) replace the whole list, so the temp is swapped for the real row.
+    const optimistic: ChatMessageView = {
+      id: `optimistic-${crypto.randomUUID()}`,
+      thread_id: selectedThreadId,
+      sender: "person",
+      sender_person_id: null,
+      type: "message",
+      body: text,
+      metadata: {},
+      created_at: new Date().toISOString(),
+      deleted_at: null,
+      isMine: true,
+      authorName: "",
+      authorInitials: null,
+    };
+    setMessages((prev) => [...prev, optimistic]);
+    const updated = await postMessage(selectedThreadId, text);
     setMessages(updated);
+    // refresh the list so the new message updates the preview + ordering
+    void getConversations().then(setConversations);
   }
+
+  // live updates - a message or new thread from the other side appears with no
+  // reload (Supabase Realtime, RLS-filtered so privacy holds).
+  useChatRealtime({
+    onMessageInsert: (threadId) => {
+      if (threadId === selectedThreadId) {
+        void getMessages(threadId).then(setMessages);
+      } else {
+        setUnread((prev) => ({ ...prev, [threadId]: (prev[threadId] ?? 0) + 1 }));
+      }
+      void getConversations().then(setConversations);
+    },
+    onThreadInsert: () => {
+      void getConversations().then(setConversations);
+    },
+  });
 
   return (
     <div className="flex h-full gap-3">
@@ -77,7 +123,7 @@ export function ChatView() {
           <p className="flex-1 p-6 text-center text-sm text-ink/40">Loading conversations…</p>
         ) : (
           <ConversationList
-            conversations={conversations}
+            conversations={listConversations}
             filter={filter}
             onFilterChange={setFilter}
             selectedThreadId={selectedThreadId}
