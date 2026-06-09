@@ -8,7 +8,7 @@
  *   - View types     -> for any consumer that needs to read conversation/message data
  */
 export { ChatView } from "./components/ChatView";
-export { acceptInbox } from "./mock/store";
+export { acceptInbox } from "./supabase/store";
 export type {
   AcceptInput,
   ConversationListItem,
