@@ -5,12 +5,12 @@
 
 ---
 
-**Last updated:** 2026-06-10 (Present storefront — session wrap) CEST
+**Last updated:** 2026-06-10 (Present manage-shop + upload — PR'd) CEST
 **Branch:** claude/muskan/work
-**Status:** idle (Present storefront v0: backend + visitor shop SHIPPED on my branch; resuming with manage-shop UI next session)
+**Status:** idle (Present storefront v0 COMPLETE: backend + visitor shop + manage-shop edit + add-products drawer + image upload — PR'd to dev #75)
 **Linear issue in progress:** none
 **Shared files locked:** none
-**PR open:** [#63](https://github.com/HelloSello/hello-sello-mvp/pull/63) — 1b auth → dev
+**PR open:** [#75](https://github.com/HelloSello/hello-sello-mvp/pull/75) — Present storefront → dev · [#63](https://github.com/HelloSello/hello-sello-mvp/pull/63) — 1b auth → dev
 **Prev PR:** F5 [#60](https://github.com/HelloSello/hello-sello-mvp/pull/60) **merged to dev**. (Discover [#58](https://github.com/HelloSello/hello-sello-mvp/pull/58) + Foundation [#54](https://github.com/HelloSello/hello-sello-mvp/pull/54) also merged.)
 
 ---
