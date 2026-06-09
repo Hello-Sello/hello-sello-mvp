@@ -433,58 +433,70 @@ export type Database = {
         Row: {
           address: string | null
           country: string
+          cover_path: string | null
           created_at: string
           created_by: string | null
           deleted_at: string | null
           deleted_by: string | null
           description: string | null
           id: string
+          logo_path: string | null
           metadata: Json
           name: string
           primary_products: string | null
+          tagline: string | null
           updated_at: string
           updated_by: string | null
           verification_status: string
           verified_at: string | null
           verified_by: string | null
+          warehouse_location: string | null
           website: string | null
         }
         Insert: {
           address?: string | null
           country: string
+          cover_path?: string | null
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
           deleted_by?: string | null
           description?: string | null
           id?: string
+          logo_path?: string | null
           metadata?: Json
           name: string
           primary_products?: string | null
+          tagline?: string | null
           updated_at?: string
           updated_by?: string | null
           verification_status?: string
           verified_at?: string | null
           verified_by?: string | null
+          warehouse_location?: string | null
           website?: string | null
         }
         Update: {
           address?: string | null
           country?: string
+          cover_path?: string | null
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
           deleted_by?: string | null
           description?: string | null
           id?: string
+          logo_path?: string | null
           metadata?: Json
           name?: string
           primary_products?: string | null
+          tagline?: string | null
           updated_at?: string
           updated_by?: string | null
           verification_status?: string
           verified_at?: string | null
           verified_by?: string | null
+          warehouse_location?: string | null
           website?: string | null
         }
         Relationships: [
@@ -2559,6 +2571,7 @@ export type Database = {
           name: string
           pack_size_grams: number | null
           packaging_material: string | null
+          price_public: boolean
           region: string | null
           resealable: boolean | null
           rrp_per_gram: number | null
@@ -2594,6 +2607,7 @@ export type Database = {
           name: string
           pack_size_grams?: number | null
           packaging_material?: string | null
+          price_public?: boolean
           region?: string | null
           resealable?: boolean | null
           rrp_per_gram?: number | null
@@ -2629,6 +2643,7 @@ export type Database = {
           name?: string
           pack_size_grams?: number | null
           packaging_material?: string | null
+          price_public?: boolean
           region?: string | null
           resealable?: boolean | null
           rrp_per_gram?: number | null
@@ -3626,6 +3641,10 @@ export type Database = {
     Functions: {
       can_access_thread: { Args: { p_thread_id: string }; Returns: boolean }
       can_access_workspace: { Args: { p_ws_id: string }; Returns: boolean }
+      can_see_person: {
+        Args: { p_company_id: string; p_person_id: string }
+        Returns: boolean
+      }
       card_relationship_member: {
         Args: { p_card_id: string }
         Returns: boolean
@@ -3641,6 +3660,10 @@ export type Database = {
       owns_group: { Args: { p_group_id: string }; Returns: boolean }
       owns_pricelist: { Args: { p_pricelist_id: string }; Returns: boolean }
       owns_product_batch: { Args: { p_batch_id: string }; Returns: boolean }
+      shares_connection_with_company: {
+        Args: { p_company_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
       [_ in never]: never
