@@ -3650,6 +3650,7 @@ export type Database = {
         Returns: boolean
       }
       current_company_id: { Args: never; Returns: string }
+      import_products: { Args: { p_rows: Json }; Returns: Json }
       is_hs_team: { Args: never; Returns: boolean }
       is_relationship_member: { Args: { p_rel_id: string }; Returns: boolean }
       is_workspace_member: { Args: { p_ws_id: string }; Returns: boolean }

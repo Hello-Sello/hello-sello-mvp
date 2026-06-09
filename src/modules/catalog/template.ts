@@ -89,6 +89,19 @@ export function templateCsv(): string {
   return TEMPLATE_HEADERS.map(csvCell).join(",") + "\n";
 }
 
+/**
+ * Render rows (keyed by template header) as a CSV the validator can parse. The
+ * manual-add form uses this to route one product through the SAME validation +
+ * import path as a CSV upload — so there is one authority, not two.
+ */
+export function buildCsv(rows: Record<string, string>[]): string {
+  const head = TEMPLATE_HEADERS.map(csvCell).join(",");
+  const body = rows.map((r) =>
+    TEMPLATE_HEADERS.map((h) => csvCell(r[h] ?? "")).join(","),
+  );
+  return [head, ...body].join("\n") + "\n";
+}
+
 function csvCell(s: string): string {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
