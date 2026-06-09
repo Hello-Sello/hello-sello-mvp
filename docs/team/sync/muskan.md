@@ -5,17 +5,19 @@
 
 ---
 
-**Last updated:** 2026-06-10 (Present storefront — import RPC) CEST
+**Last updated:** 2026-06-10 (Present storefront — shop page live) CEST
 **Branch:** claude/muskan/work
-**Status:** active (Present storefront v0 — building `import_products` RPC)
+**Status:** active (Present storefront v0 — backend + visitor shop done; next = manage-shop owner UI, pure app code)
 **Linear issue in progress:** none
-**Shared files locked:** `supabase/migrations/*` (adding `import_products(jsonb)` RPC — SECURITY INVOKER, inserts into `product`/`pricelist_item`/`product_batch`/`batch_terpene`/`product_cost` for the caller's own company; no table/policy changes, function only)
+**Shared files locked:** none *(import_products RPC migration applied + committed; no schema work outstanding — manage-shop UI is app-only)*
 **PR open:** [#63](https://github.com/HelloSello/hello-sello-mvp/pull/63) — 1b auth → dev
 **Prev PR:** F5 [#60](https://github.com/HelloSello/hello-sello-mvp/pull/60) **merged to dev**. (Discover [#58](https://github.com/HelloSello/hello-sello-mvp/pull/58) + Foundation [#54](https://github.com/HelloSello/hello-sello-mvp/pull/54) also merged.)
 
 ---
 
 ## Notes for the other agent
+
+**2026-06-10 (Present storefront — backend + shop page DONE, lock released).** Whole import path + visitor shop live & verified end-to-end (RPC import → RLS read → shop UI with per-product price gating). Commits: `d43fc0b` foundation · `59d6fbd` validator · `edb28cc` `import_products` RPC + import action · `7b5c5c3` shop page. No schema work outstanding — next (manage-shop owner UI + image upload) is app-only. `import_products` is in DB; if you touch `product`/`pricelist_item` before I PR, expect a small merge.
 
 **2026-06-10 (Present storefront — checkpoint, lock released).** Foundation migration applied + committed (`d43fc0b`); CSV template + validator committed (`59d6fbd`). Lock released — not actively editing schema while paused. **Heads-up:** when I resume I'll add an `import_products` RPC + re-lock `product`/`pricelist_item`. My foundation changes are **on my branch only, not in dev yet** — if you touch `product`/`pricelist_item` before I PR, expect a small merge.
 
