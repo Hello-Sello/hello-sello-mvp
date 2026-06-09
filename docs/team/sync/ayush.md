@@ -5,16 +5,24 @@
 
 ---
 
-**Last updated:** 2026-06-09 20:09 CEST
+**Last updated:** 2026-06-10 02:55 CEST
 **Branch:** claude/ayush/work
-**Status:** idle - 2d DONE + **MERGED to dev (#71)**; branch rebased onto dev (in sync 0/0). Next = 2e.
+**Status:** active - wrapping 2e; updating AGENTS.md + BUILD-PLAN.md, then PR'ing 2e to dev.
 **Linear issue in progress:** none
-**Shared files locked:** none
-**PR open:** none — [#71](https://github.com/HelloSello/hello-sello-mvp/pull/71) (2d) **merged to dev**; rebased onto your Sella 4a (#70) cleanly. ([#69](https://github.com/HelloSello/hello-sello-mvp/pull/69) (2b+2c) merged earlier.)
+**Shared files locked:** AGENTS.md
+**PR open:** opening 2e → dev now (link in next update). 2d [#71](https://github.com/HelloSello/hello-sello-mvp/pull/71) merged.
 
 ---
 
 ## Notes for the other agent
+
+**2026-06-10 (Task 2e - Relationship page (screen ③) DONE; ⚠️ I added a STORAGE bucket + storage RLS - please read).** The full relationship page is real + verified both sides (reached from the chat header "My Relationship with {company}"; one page, two doors). Top band (bridge-mark header + Sella/Analytics boxes → dialogs) + tabs (Overview · Deals · Notes · Terms · Docs). Real reads/writes, RLS-scoped, viewer side from session.
+> **I wrote NO public-schema RLS** - your existing `relationship_note` / `relationship_term` / `relationship_artifact` / `deal_card` policies already do the side-aware projection (notes = per-company private; terms/artifacts/deals = relationship-shared). Verified live: Bob can't see Alice's notes; both see deals/terms/artifacts.
+> **2 new migrations (applied to live):**
+> 1. `20260610010000_relationship_artifact_storage.sql` - **NEW private bucket `relationship-artifacts`** + its `storage.objects` policies, scoped to `is_relationship_member((foldername)[1]::uuid)` (files namespaced `<relationship_id>/...` so BOTH sides reach the shared folder). **ADDS a bucket + storage policies only - touches none of your public-schema RLS.** Mirrors your `company-licenses` pattern, swapping own-company-folder for relationship membership. Artifact upload is real (magic-byte validated, signed-URL download); **virus scan is STUBBED `clean`** - real scanner deferred.
+> 2. `20260610020000_seed_relationship_demo.sql` - **demo-world seed** on Alice↔Bob (`5e64f146`): 4 historical `deal_card`s + 4 accepted `relationship_term`s, tagged `metadata.seed='demo-world'`, idempotent. **Reused by 3a** (the live Sella-drafts-a-deal moment sits on top of this past history). No threads (deal page reads cards directly).
+> **PR'ing to dev now.** Rebased onto your Present #75 cleanly - no conflicts (my work = new `modules/relationship/` + light `modules/messaging` edits; didn't touch `company`/`product`/`pricelist_item`/AppShell). Thanks for the AppShell-client + sign-out heads-up.
+> **One for you:** the top bar still shows the hardcoded "Aurora Deutschland GmbH" placeholder for every user (`src/shared/ui/TopBar.tsx`) - Ayush says that's yours to wire to the real logged-in company. Left it untouched.
 
 **2026-06-09 (Task 2d - Connect backend went REAL + realtime; ⚠️ I touched your RLS - please read).** The whole Connect experience now runs on Supabase (mock deleted) with live realtime. Verified end to end (inbox, chat, accept→chat, send-persists, Bob→Alice live, optimistic send, unread, privacy). **4 new migrations - 3 are in your foundation/RLS area:**
 > 1. `20260609180000_seed_demo_world.sql` - **3 new dummy logins** (Clara/David/Eva, all `password123`) + 3 companies + 2 connected relationships (C2C+P2P+messages) + 2 pending inbox items. Tagged `metadata.seed='demo-2d'`. Created via the `auth.users` + `auth.identities` + your `handle_new_user` trigger pattern.
