@@ -40,9 +40,12 @@ export async function updateSession(request: NextRequest) {
 
   const path = request.nextUrl.pathname
   const isAuthRoute = path === '/login' || path === '/signup'
+  // Public routes — viewable by anyone, signed in or not. `/c/<handle>` is the
+  // public profile page opened by scanning the QR.
+  const isPublicRoute = path.startsWith('/c/')
 
-  // Signed-out users may only reach the auth routes.
-  if (!user && !isAuthRoute) {
+  // Signed-out users may only reach the auth + public routes.
+  if (!user && !isAuthRoute && !isPublicRoute) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)

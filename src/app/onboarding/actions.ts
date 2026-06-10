@@ -2,16 +2,18 @@
 
 import { createClient } from '@/shared/db/server'
 import { getCurrentCompanyId, getCurrentPerson } from '@/shared/auth'
+import { updateMyProfile } from '@/modules/profile'
+import { updateCompanyProfile } from '@/modules/companies'
 
 // Each action returns a result the client stepper acts on (advance or show
 // error). None redirect — navigation lives in the client so the modal sequence
 // can flow step-to-step. Success = { ok: true }.
 export type ActionResult = { ok: true } | { error: string }
 
-// TEMP (testing, 2026-06-08): licence optional so test runs don't fill the
-// bucket. The 2026-05-25 lock makes it REQUIRED — flip back to `true` (here AND
-// in OnboardingStepper.tsx) before shipping.
-const LICENCE_REQUIRED = false
+// Licence is REQUIRED in production (2026-05-25 lock) but optional in local /
+// preview so test signups don't fill the bucket. Single source: the env var
+// `NEXT_PUBLIC_REQUIRE_LICENSE` (set to 'true' in prod). Same read on the client.
+const LICENCE_REQUIRED = process.env.NEXT_PUBLIC_REQUIRE_LICENSE === 'true'
 
 // Onboarding completion flags live in person.preferences.onboarding so the Home
 // checklist has a single source for which skippable steps are done.
@@ -100,36 +102,31 @@ export async function createCompany(formData: FormData): Promise<ActionResult> {
   return { ok: true }
 }
 
-/** Profile enrichment — stored in person.preferences (no dedicated columns). */
+/** Profile step — written to person columns via the profile module (one writer);
+ *  only the completion flag stays in preferences (drives the Home checklist). */
 export async function saveProfile(formData: FormData): Promise<ActionResult> {
-  const display_name = String(formData.get('display_name') ?? '').trim()
-  const title = String(formData.get('title') ?? '').trim()
-  const phone = String(formData.get('phone') ?? '').trim()
-  const language = String(formData.get('language') ?? '').trim()
+  const r = await updateMyProfile({
+    displayName: String(formData.get('display_name') ?? ''),
+    title: String(formData.get('title') ?? ''),
+    phone: String(formData.get('phone') ?? ''),
+    language: String(formData.get('language') ?? ''),
+    linkedin: String(formData.get('linkedin') ?? ''),
+  })
+  if (r.error) return { error: r.error }
 
-  const err = await patchPreferences(
-    { display_name, title, phone, language },
-    { profile: true },
-  )
-  return err ?? { ok: true }
+  const flagErr = await patchPreferences({}, { profile: true })
+  return flagErr ?? { ok: true }
 }
 
-/** Company-details enrichment — updates the existing company row. */
+/** Company-details step — written via the company module (one writer); flag in preferences. */
 export async function saveCompanyDetails(formData: FormData): Promise<ActionResult> {
-  const address = String(formData.get('address') ?? '').trim() || null
-  const description = String(formData.get('description') ?? '').trim() || null
-  const primary_products = String(formData.get('primary_products') ?? '').trim() || null
-  const website = String(formData.get('website') ?? '').trim() || null
-
-  const supabase = await createClient()
-  const companyId = await getCurrentCompanyId()
-  if (!companyId) return { error: 'No company in session.' }
-
-  const { error } = await supabase
-    .from('company')
-    .update({ address, description, primary_products, website })
-    .eq('id', companyId)
-  if (error) return { error: error.message }
+  const r = await updateCompanyProfile({
+    address: String(formData.get('address') ?? ''),
+    description: String(formData.get('description') ?? ''),
+    primaryProducts: String(formData.get('primary_products') ?? ''),
+    website: String(formData.get('website') ?? ''),
+  })
+  if (r.error) return { error: r.error }
 
   const flagErr = await patchPreferences({}, { company_details: true })
   return flagErr ?? { ok: true }

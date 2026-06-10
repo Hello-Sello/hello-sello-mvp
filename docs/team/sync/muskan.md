@@ -5,17 +5,26 @@
 
 ---
 
-**Last updated:** 2026-06-10 (Present — product image gallery/carousel, shipped) CEST
+**Last updated:** 2026-06-10 (Profile & QR business card — built, on branch) CEST
 **Branch:** claude/muskan/work
-**Status:** idle — Present product **multi-image gallery + carousel** done & verified; PR'ing to dev → main.
+**Status:** building — **Profile & QR business card** (P0 onboarding wiring · P1 account pages · P2 public page + QR + vCard + bottom-left card). Built + verified live; not PR'd yet.
 **Linear issue in progress:** none
-**Shared files locked:** none
-**PR open:** none — all merged ([#80](https://github.com/HelloSello/hello-sello-mvp/pull/80)→dev, [#81](https://github.com/HelloSello/hello-sello-mvp/pull/81)→main, [#82](https://github.com/HelloSello/hello-sello-mvp/pull/82)→dev, [#83](https://github.com/HelloSello/hello-sello-mvp/pull/83)→main)
+**Shared files locked:** none (two of your files touched **additively** — see latest note)
+**PR open:** none — Profile/QR work committed to `claude/muskan/work` (5 commits, `813ac55`→`c48e9f1`).
 **Prev PR:** Present storefront [#75](https://github.com/HelloSello/hello-sello-mvp/pull/75) **merged** · 1b auth [#63](https://github.com/HelloSello/hello-sello-mvp/pull/63) **merged**.
 
 ---
 
 ## Notes for the other agent
+
+**2026-06-10 (Profile & QR business card — built + verified live; ⚠️ two of your shell files touched, both additive).** New feature: the "Scan to Connect" digital business card + public profile page + the in-app account pages. **2 migrations applied to live (additive, touch only `person` + a new bucket + a new function — none of your tables/RLS):**
+> 1. `profile_qr_foundation` — `person` += `display_name/title/phone/language/links/avatar_path/public_handle` (backfilled; `public_handle` UNIQUE); new **public `avatars` bucket** + own-folder storage RLS.
+> 2. `get_public_profile_rpc` — `SECURITY DEFINER` function (`search_path=''`) returning ONLY curated card fields by handle; granted to `anon`. The public page calls this — the `person` table stays closed to anon.
+> **New code (all mine, non-overlapping):** `src/modules/profile`, `src/modules/companies` (one-writer modules), `src/app/account/*` (My Profile/Company/Settings, view+edit), `src/app/c/[handle]/*` (public page + vCard route), `src/shared/ui/{Avatar,AvatarUpload,account-card}`. Added `qrcode` dep.
+> **⚠️ Two of your files, touched additively — heads-up for your rebase:**
+> 1. `src/shared/ui/AppShell.tsx` — added `/c` to `BARE_ROUTES` (public profile pages render chrome-free, like `/login`). One array entry.
+> 2. `src/shared/ui/IconRail.tsx` — enriched the bottom account menu (the one I added the sign-out to in 1b — you said "restyle freely, it's your component") into the **account card**: avatar opens a popover with the QR business card + My Profile/Company/Settings links + sign-out. Restyle freely as before.
+> **`database.types.ts`** regen'd for the new `person` columns (the get_public_profile function isn't in the types — I used a localized typed cast to avoid a full regen churn). **Not PR'd yet.** The prototype at `src/app/prototype/qr-card` + its `/prototype` proxy allowance are THROWAWAY (deleted before the real PR).
 
 **2026-06-10 (Present product image gallery — built + verified; ⚠️ schema + storage RLS touched, all additive to MY surface).** Multiple images per product + Embla carousel + reorder/cover/remove. **3 new migrations (applied to live):**
 > 1. `20260610150000_product_image_gallery` — **new `product_image` table** (1:many on `product`, `position`-ordered; replaces the single `product.image_path`, which I **dropped** after backfilling). RLS mirrors `product_all` + an additive public SELECT. **Touches only `product` (drops one column) — none of your tables/RLS.**

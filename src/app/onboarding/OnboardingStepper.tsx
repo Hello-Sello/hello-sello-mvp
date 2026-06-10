@@ -30,16 +30,17 @@ type Prefill = {
   title?: string
   phone?: string
   language?: string
+  linkedin?: string
   address?: string
   description?: string
   primaryProducts?: string
   website?: string
 }
 
-// TEMP (testing, 2026-06-08): licence upload made optional so test runs don't
-// fill the bucket with throwaway files. The 2026-05-25 lock makes it REQUIRED —
-// flip this back to `true` (here AND in actions.ts) before shipping.
-const LICENCE_REQUIRED = false
+// Licence is REQUIRED in production (2026-05-25 lock), optional in local/preview
+// so test signups don't fill the bucket. Single source with the server action:
+// the env var NEXT_PUBLIC_REQUIRE_LICENSE (set 'true' in prod).
+const LICENCE_REQUIRED = process.env.NEXT_PUBLIC_REQUIRE_LICENSE === 'true'
 
 // ISO-2 codes for the markets the MVP cares about (company.country is a bare
 // CHAR(2), not a DB lookup, so this short list is the authoritative UI set).
@@ -107,6 +108,7 @@ export function OnboardingStepper({
   const [title, setTitle] = useState(prefill.title ?? '')
   const [phone, setPhone] = useState(prefill.phone ?? '')
   const [language, setLanguage] = useState(prefill.language ?? '')
+  const [linkedin, setLinkedin] = useState(prefill.linkedin ?? '')
 
   // Company-details fields.
   const [address, setAddress] = useState(prefill.address ?? '')
@@ -174,6 +176,7 @@ export function OnboardingStepper({
     fd.set('title', title.trim())
     fd.set('phone', phone.trim())
     fd.set('language', language.trim())
+    fd.set('linkedin', linkedin.trim())
     submit(() => saveProfile(fd))
   }
 
@@ -228,6 +231,8 @@ export function OnboardingStepper({
             setPhone={setPhone}
             language={language}
             setLanguage={setLanguage}
+            linkedin={linkedin}
+            setLinkedin={setLinkedin}
           />
         )}
 
@@ -613,6 +618,8 @@ function ProfileStep({
   setPhone,
   language,
   setLanguage,
+  linkedin,
+  setLinkedin,
 }: {
   displayName: string
   setDisplayName: (v: string) => void
@@ -622,6 +629,8 @@ function ProfileStep({
   setPhone: (v: string) => void
   language: string
   setLanguage: (v: string) => void
+  linkedin: string
+  setLinkedin: (v: string) => void
 }) {
   return (
     <div className="flex flex-col gap-4">
@@ -630,6 +639,7 @@ function ProfileStep({
       <Field label="Title / role" value={title} onChange={setTitle} placeholder="Head of Procurement" />
       <Field label="Phone" value={phone} onChange={setPhone} type="tel" />
       <Field label="Language" value={language} onChange={setLanguage} placeholder="English" />
+      <Field label="LinkedIn" value={linkedin} onChange={setLinkedin} placeholder="linkedin.com/in/…" />
     </div>
   )
 }
