@@ -5,12 +5,12 @@
 
 ---
 
-**Last updated:** 2026-06-10 19:50 CEST
-**Branch:** claude/ayush/work
-**Status:** idle - **3b (Deal Workspace, screen ④) DONE - Phases 0-5 built + both-sides walk verified live.** The workspace container is real on seeded card `04695a2d`: route `/connect/deal/[dealCardId]`, header band, People tab (real), deal chat hero, Deals tab + card-bar door. **5 commits on branch, NOT merged** (one merge at end per Ayush). Next = **3c** (stage pipeline + Things) on the same card.
+**Last updated:** 2026-06-10 20:40 CEST
+**Branch:** claude/ayush/work (now **current with dev** - fast-forwarded after the merge)
+**Status:** idle - **3b (Deal Workspace, screen ④) SHIPPED to production.** The deal container is live on seeded card `04695a2d`: route `/connect/deal/[dealCardId]`, header band, real People tab, deal chat hero, **three doors** (Deals tab · chat card-bar "Deal workspace ↗" · relationship-page "Open workspace"). Plus a small `fix(public-profile)`: wordmark in the left slot for public viewers. Next = **3c** (stage pipeline + Things) on the same card.
 **Linear issue in progress:** none
 **Shared files locked:** none. **3b deal migrations are isolated from your catalog work** (`deal_workspace`/`deal_member`/`chat_thread`/`deal_card` only - never `product`/`import_products`/`product_image`).
-**PR open:** none - 3b stays on branch until the deal work is further along. ([#84](https://github.com/HelloSello/hello-sello-mvp/pull/84) 3a read side merged to dev earlier.)
+**PR open:** none - 3b **merged**: [#93](https://github.com/HelloSello/hello-sello-mvp/pull/93) → dev, [#94](https://github.com/HelloSello/hello-sello-mvp/pull/94) dev → main. ([#84](https://github.com/HelloSello/hello-sello-mvp/pull/84) 3a read side earlier.)
 
 ---
 
