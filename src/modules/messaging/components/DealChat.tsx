@@ -80,7 +80,11 @@ export function DealChat({ dealCardId }: { dealCardId: string }) {
   return (
     <div className="flex h-full flex-col">
       {/* the card's home: "Talking about" bar + the floating flip card (same as ②) */}
-      <DealPin key={thread.relationshipId} relationshipId={thread.relationshipId}>
+      <DealPin
+        key={thread.relationshipId}
+        relationshipId={thread.relationshipId}
+        variant="workspace"
+      >
         <div className="h-full overflow-y-auto p-4">
           <div className="mx-auto flex max-w-2xl flex-col gap-2">
             {messages.map((m) => (

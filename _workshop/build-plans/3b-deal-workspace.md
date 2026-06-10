@@ -4,6 +4,18 @@
 
 ### Build log
 
+- **Phase 5 DONE** (2026-06-10) - the two doors + the leak fix, all verified live.
+  **Deals tab (door 1):** `ChatFilter` + `deals`; deal threads live ONLY there (All/Unread/Companies now filter
+  them out - the "Unknown" P2P leak row is gone); deals group by company (reused `groupByCompany`), row = the
+  **deal number** (store resolves `hs_deal_number` per thread, `dealCardId` rides on the list item); clicking a
+  deal row NAVIGATES to `/connect/deal/[id]` (a door, not an in-place selection; auto-select skips deal rows).
+  **Card bar (door 2 + Ayush's dropdown fix):** `DealPin` got a `variant` - `chat` (screen ②) keeps the
+  "Current deal ▾" concept, centers the card pill, adds **"Deal workspace ↗"** right; `workspace` (screen ④)
+  drops the meaningless selector + door (the deal is fixed; you're already in it) - just label + pill.
+  **Verified live:** All view has no Unknown row; Deals tab shows AURORA DEUTSCHLAND GMBH → HS-GL25-A189;
+  deal row click → workspace; bar door click → workspace; workspace bar has no dropdown; no console errors;
+  `tsc` clean. **Deferred (own task):** full tab redesign (All Unread/P2P/C2C/Deals, person/company tags,
+  deal-logo rows); relationship-page "Open workspace" link.
 - **Phase 2 + 3 + 4 DONE** (2026-06-10) - the whole workspace SCREEN in one pass (they are one layout).
   **Route** `/connect/deal/[dealCardId]` = the composition root: deals owns the container
   (`DealWorkspace` + `WorkspaceHeader` + `WorkPanel` + `PeopleTab`), messaging owns the hero

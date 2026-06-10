@@ -112,6 +112,12 @@ export interface ConversationListItem {
   lastMessageAt: string | null;
   /** unread count - mock-derived for now */
   unreadCount: number;
+  /**
+   * Only on `threadType === 'deal'` rows (3b): the deal this chat belongs to.
+   * A deal row does not select in place - it NAVIGATES to the workspace
+   * (`/connect/deal/[dealCardId]`), where the deal chat lives.
+   */
+  dealCardId?: string;
 }
 
 /**

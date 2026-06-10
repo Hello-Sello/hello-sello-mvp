@@ -1,18 +1,24 @@
 "use client";
 
 /**
- * Deal pin (3a, Phase 5) - the deal card's home inside the chat.
+ * Deal pin (3a Phase 5, reworked in 3b Phase 5) - the deal card's home inside
+ * a chat. Wraps the message stream: renders the "Talking about …" bar above it
+ * and, when opened, floats the DealCard on the RIGHT of the stream.
  *
- * Wraps the message stream: renders the "Talking about …" bar above it and, when
- * opened, floats the DealCard on the RIGHT of the stream (prototype placement).
- * Sella stays in her own panel - the card does not swap her out.
+ * Two variants (same card, different bar):
+ *   - `chat` (default, screen ②): "Talking about: Current deal ▾" on the left
+ *     (the selector concept stays - multi-deal per P2P is deferred, DEV-37),
+ *     the card pill in the CENTER, and the "Deal workspace ↗" door on the
+ *     right - the second locked door to screen ④.
+ *   - `workspace` (screen ④): the deal is fixed here, so no selector and no
+ *     workspace door (you are already in it) - just the label + the pill.
  *
- * Self-contained: finds the relationship's current deal and loads it itself, so
- * the messaging module just wraps its stream with <DealPin>. Single deal per
- * thread for the demo (multi-deal selector deferred, DEV-37).
+ * Self-contained: finds the relationship's current deal and loads it itself,
+ * so the messaging module just wraps its stream with <DealPin>.
  */
 import { useEffect, useState } from "react";
-import { ChevronDown, FileText, X } from "lucide-react";
+import Link from "next/link";
+import { ArrowUpRight, ChevronDown, FileText, X } from "lucide-react";
 import { getCurrentDealCardId, getDealCard } from "../supabase/reads";
 import { docAbbr } from "../lib/derive";
 import { DealCard } from "./DealCard";
@@ -20,9 +26,11 @@ import type { DealCardView } from "../types";
 
 export function DealPin({
   relationshipId,
+  variant = "chat",
   children,
 }: {
   relationshipId: string;
+  variant?: "chat" | "workspace";
   children: React.ReactNode;
 }) {
   const [data, setData] = useState<DealCardView | null>(null);
@@ -49,10 +57,29 @@ export function DealPin({
   const hsLabel =
     data?.card.hs_deal_number ?? (data ? `${docAbbr(data.card.deal_type)} · draft` : "");
 
+  const pill = data && (
+    <button
+      onClick={() => setOpen((o) => !o)}
+      className="flex items-center gap-2 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-deep"
+    >
+      <FileText size={13} />
+      <span className="tracking-wide">{hsLabel}</span>
+      <span className="text-white/70">{open ? "close" : "open"}</span>
+      {open ? <X size={13} /> : null}
+    </button>
+  );
+
   return (
     <>
       {/* "Talking about" bar - only when the relationship has a deal */}
-      {data && (
+      {data && variant === "workspace" && (
+        // the workspace's chat IS this deal's chat - no selector, no door
+        <div className="flex items-center gap-3 border-b border-black/5 px-4 py-2">
+          <span className="shrink-0 text-[11px] text-ink/45">Talking about:</span>
+          {pill}
+        </div>
+      )}
+      {data && variant === "chat" && (
         <div className="flex items-center gap-3 border-b border-black/5 px-4 py-2">
           <span className="shrink-0 text-[11px] text-ink/45">Talking about:</span>
           {/* single deal for the demo - selector is non-interactive (multi-deal = DEV-37) */}
@@ -60,15 +87,16 @@ export function DealPin({
             Current deal
             <ChevronDown size={13} className="text-ink/35" />
           </span>
-          <button
-            onClick={() => setOpen((o) => !o)}
-            className="ml-auto flex items-center gap-2 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-deep"
+          {/* the card pill, centered (Ayush, 3b Phase 5) */}
+          <span className="flex flex-1 justify-center">{pill}</span>
+          {/* the second door to screen ④ */}
+          <Link
+            href={`/connect/deal/${data.card.id}`}
+            className="flex shrink-0 items-center gap-1 rounded-full bg-ink/5 px-3 py-1.5 text-[11px] font-medium text-ink/70 transition hover:bg-ink/10 hover:text-ink"
           >
-            <FileText size={13} />
-            <span className="tracking-wide">{hsLabel}</span>
-            <span className="text-white/70">{open ? "close" : "open"}</span>
-            {open ? <X size={13} /> : null}
-          </button>
+            Deal workspace
+            <ArrowUpRight size={13} strokeWidth={2} className="shrink-0" />
+          </Link>
         </div>
       )}
 
