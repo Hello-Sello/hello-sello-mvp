@@ -21,6 +21,8 @@ DECLARE
   v_hs      TEXT;
   v_ws_id   UUID;
   v_thread  UUID;
+  v_co_a    TEXT;
+  v_co_b    TEXT;
 BEGIN
   -- only seed if the card is present (safe on a fresh/reset DB)
   SELECT relationship_id, hs_deal_number INTO v_rel_id, v_hs
@@ -29,6 +31,13 @@ BEGIN
     RAISE NOTICE 'demo card % not present - skipping workspace seed', v_card_id;
     RETURN;
   END IF;
+
+  -- company names from the LIVE table (never hardcode - companies get renamed)
+  SELECT ca.name, cb.name INTO v_co_a, v_co_b
+    FROM public.relationship r
+    JOIN public.company ca ON ca.id = r.company_a_id
+    JOIN public.company cb ON cb.id = r.company_b_id
+    WHERE r.id = v_rel_id;
 
   -- 1 · the workspace (company_wide = live default; uq_deal_workspace_card_active
   --     already guarantees at most one live workspace per card)
@@ -64,7 +73,7 @@ BEGIN
     WHERE thread_id = v_thread AND metadata->>'seed' = 'demo-world';
   INSERT INTO public.chat_message (thread_id, sender, sender_person_id, type, body, metadata, created_at) VALUES
     (v_thread, 'sella', NULL, 'workspace_created',
-     'Deal workspace created for ' || v_hs || '. GreenLeaf Cultivation and StonePharm are in - the card is pinned above.',
+     'Deal workspace created for ' || v_hs || '. ' || v_co_a || ' and ' || v_co_b || ' are in - the card is pinned above.',
      '{"seed":"demo-world"}', NOW() - INTERVAL '2 hours'),
     (v_thread, 'person', v_alice, 'message',
      'Moving our deal talk in here so everything stays next to the card.',

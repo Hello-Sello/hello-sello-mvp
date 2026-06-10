@@ -203,6 +203,26 @@ export async function markRead(_threadId: string): Promise<void> {
   // intentional no-op (Phase 6)
 }
 
+/**
+ * The deal chat born with a deal (3b): resolve one card's deal thread.
+ * RLS: visible only through the card's workspace (`thread_all`), so a
+ * non-member company gets a no-row error here, never the thread.
+ */
+export async function getDealThread(
+  dealCardId: string,
+): Promise<{ threadId: string; relationshipId: string }> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("chat_thread")
+    .select("id, relationship_id")
+    .eq("type", "deal")
+    .eq("deal_card_id", dealCardId)
+    .is("deleted_at", null)
+    .single();
+  if (error) throw error;
+  return { threadId: data.id, relationshipId: data.relationship_id };
+}
+
 /* -------------------------------------------------------------------------- */
 /* Writes (Phase 4)                                                           */
 /* -------------------------------------------------------------------------- */

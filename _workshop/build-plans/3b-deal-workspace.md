@@ -4,6 +4,24 @@
 
 ### Build log
 
+- **Phase 2 + 3 + 4 DONE** (2026-06-10) - the whole workspace SCREEN in one pass (they are one layout).
+  **Route** `/connect/deal/[dealCardId]` = the composition root: deals owns the container
+  (`DealWorkspace` + `WorkspaceHeader` + `WorkPanel` + `PeopleTab`), messaging owns the hero
+  (**new `DealChat`**, self-contained: takes only `dealCardId`, resolves its own thread via new
+  `getDealThread`, reuses MessageBubble/Composer/realtime/DealPin). Composing at the ROUTE keeps the modules
+  **acyclic** (messaging already imports deals for DealPin - a back-import would cycle). **Header band:** back
+  link → relationship, visibility chip (COMPANY-WIDE), HS number, parties + owners (from members), net
+  (formatMoney), display-only lifecycle pill (Draft→Confirmed→Done; odd terminal states = plain chip), static
+  Deal-Sella line per status. **Left tabs:** People REAL (owners first, "(you)" = `person_id === auth.uid`),
+  Things/Documents = quiet stubs (3c / later). **Verified live (as Bob):** layout at 1440px, People shows
+  Alice (owner · Aurora) + Bob (owner · StonePharm) "(you)", card pill opens the canonical flip card, composer
+  SEND works through RLS (test row written + verified in DB, then removed), realtime stream renders all 3 seed
+  voices (sella centered / Alice left / Bob right-mine), **no console errors**, `tsc` clean (eslint: only the
+  pre-existing parked `use-chat-realtime` finding). **Gotchas hit:** (1) company `aaaa…` was RENAMED live mid-build
+  (GreenLeaf → Aurora Deutschland GmbH - Muskan working live); header read the live name correctly, but the seeded
+  Sella note had it HARDCODED → seed now derives both company names from the live tables (file + live row fixed).
+  (2) Confirmed the predicted Chat-list leak with my own eyes: the deal thread shows up as a "Unknown" P2P row in
+  /connect/chat - Phase 5 fixes it.
 - **Phase 0 + 1 DONE** (2026-06-10) - **Schema:** migration `20260610170000` applied live - dropped
   `deal_workspace.owner_person_id` + dropped `uq_deal_member_one_owner` (it enforced ONE owner per workspace,
   contradicting one-owner-PER-SIDE; per-side uniqueness can't be a partial index - the createDeal core (3.5) owns

@@ -35,3 +35,4 @@ export {
 export { getDealCard, getCurrentDealCardId, getWorkspace } from "./supabase/reads";
 export { DealCard } from "./components/DealCard";
 export { DealPin } from "./components/DealPin";
+export { DealWorkspace } from "./components/DealWorkspace";
