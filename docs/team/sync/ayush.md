@@ -7,7 +7,7 @@
 
 **Last updated:** 2026-06-10 11:56 CEST
 **Branch:** claude/ayush/work
-**Status:** building **3a (deal card)** - Phase 0-4 DONE (card FRONT + BACK live: flip, Signals/Logs tabs, privacy proven both sides). Building Phase 5 (place the card in the chat). Phase 0+1 merged to dev (#79); **2-8 then ONE merge at the end.** **No locks.**
+**Status:** building **3a (deal card)** - Phase 0-5 DONE (card lives in the chat now: "Talking about" bar + floats right; front/back/flip/privacy all proven). Building Phase 6 (manual draft write). Phase 0+1 merged to dev (#79); **2-8 then ONE merge at the end.** **No locks.**
 **Linear issue in progress:** none
 **Shared files locked:** none - demo log seed (`20260610160000`, 2 `deal_card_log` rows on card `04695a2d`) applied. No schema/RLS change.
 **PR open:** none - [#79](https://github.com/HelloSello/hello-sello-mvp/pull/79) (3a Phase 0+1) **merged to dev**. Pull `dev` to get the `deals/` module + `deal_party_field` table. ([#76](https://github.com/HelloSello/hello-sello-mvp/pull/76)/[#77](https://github.com/HelloSello/hello-sello-mvp/pull/77) earlier.)
