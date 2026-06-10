@@ -5,12 +5,12 @@
 
 ---
 
-**Last updated:** 2026-06-10 03:15 CEST
+**Last updated:** 2026-06-10 03:25 CEST
 **Branch:** claude/ayush/work
-**Status:** idle - 2e DONE + **MERGED to dev (#76)**; branch rebased onto dev (0/0). Next = 3a (deal card).
+**Status:** idle - 2e DONE + **MERGED to dev (#76)**. **dev → main released (#77, admin-merge)** so main is now current with all of dev (Present + Connect 2d/2e + Sella 4a). Branch rebased onto **main**. Next = 3a (deal card).
 **Linear issue in progress:** none
 **Shared files locked:** none
-**PR open:** none - [#76](https://github.com/HelloSello/hello-sello-mvp/pull/76) (2e) **merged to dev**. 2d [#71](https://github.com/HelloSello/hello-sello-mvp/pull/71) merged earlier. Pull `dev` to get 2e (incl. the `relationship-artifacts` bucket + demo-world seed).
+**PR open:** none - [#76](https://github.com/HelloSello/hello-sello-mvp/pull/76) (2e) merged to dev; [#77](https://github.com/HelloSello/hello-sello-mvp/pull/77) (dev → main) merged. Pull `main`/`dev` to get 2e (incl. the `relationship-artifacts` bucket + demo-world seed).
 
 ---
 
