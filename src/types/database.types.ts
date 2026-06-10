@@ -1710,7 +1710,6 @@ export type Database = {
           deleted_at: string | null
           id: string
           metadata: Json
-          owner_person_id: string
           updated_at: string
           updated_by: string | null
           visibility: string
@@ -1722,7 +1721,6 @@ export type Database = {
           deleted_at?: string | null
           id?: string
           metadata?: Json
-          owner_person_id: string
           updated_at?: string
           updated_by?: string | null
           visibility?: string
@@ -1734,7 +1732,6 @@ export type Database = {
           deleted_at?: string | null
           id?: string
           metadata?: Json
-          owner_person_id?: string
           updated_at?: string
           updated_by?: string | null
           visibility?: string
@@ -1752,13 +1749,6 @@ export type Database = {
             columns: ["deal_card_id"]
             isOneToOne: false
             referencedRelation: "deal_card"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "deal_workspace_owner_person_id_fkey"
-            columns: ["owner_person_id"]
-            isOneToOne: false
-            referencedRelation: "person"
             referencedColumns: ["id"]
           },
           {

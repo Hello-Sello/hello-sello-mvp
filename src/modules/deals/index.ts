@@ -1,10 +1,9 @@
 /**
- * Public surface for the deals module (screen ① - the Deal Card).
+ * Public surface for the deals module (screen ① - the Deal Card, and
+ * screen ④ - the Deal Workspace).
  *
- * Phase 0 exposes the data shapes + pure derivation helpers only. The UI
- * (DealCard / DealPin) and the reads/writes land in later phases and are added
- * here as they are built - this barrel stays the ONLY public surface, exactly
- * like messaging/ and relationship/.
+ * This barrel stays the ONLY public surface, exactly like messaging/ and
+ * relationship/. UI components and reads are added here as the phases land.
  */
 export type {
   DealType,
@@ -15,6 +14,10 @@ export type {
   LogEntry,
   SignalView,
   DealCardView,
+  MemberRole,
+  MemberView,
+  WorkspaceVisibility,
+  DealWorkspaceView,
 } from "./types";
 
 export {
@@ -29,6 +32,7 @@ export {
   DEMO_VAT_RATE,
 } from "./lib/derive";
 
-export { getDealCard, getCurrentDealCardId } from "./supabase/reads";
+export { getDealCard, getCurrentDealCardId, getWorkspace } from "./supabase/reads";
 export { DealCard } from "./components/DealCard";
 export { DealPin } from "./components/DealPin";
+export { DealWorkspace } from "./components/DealWorkspace";

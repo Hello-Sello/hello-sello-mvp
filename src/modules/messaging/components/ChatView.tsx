@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { MessageSquare } from "lucide-react";
 import type { ChatMessageView, ConversationListItem } from "../types";
 import type { ChatFilter } from "./ConversationList";
@@ -22,6 +23,7 @@ import { SellaPanel } from "./SellaPanel";
  * import bindings change to real Supabase calls; layout + state stay put.
  */
 export function ChatView() {
+  const router = useRouter();
   const [conversations, setConversations] = useState<ConversationListItem[]>([]);
   const [filter, setFilter] = useState<ChatFilter>("all");
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
@@ -36,7 +38,9 @@ export function ChatView() {
     void getConversations().then((list) => {
       if (!alive) return;
       setConversations(list);
-      if (list[0]) setSelectedThreadId(list[0].threadId);
+      // auto-select the first CHAT - a deal row is a door, not a conversation here
+      const firstChat = list.find((c) => c.threadType !== "deal");
+      if (firstChat) setSelectedThreadId(firstChat.threadId);
       setLoading(false);
     });
     return () => {
@@ -67,6 +71,12 @@ export function ChatView() {
   );
 
   function handleSelect(threadId: string) {
+    // a deal row is a DOOR: it opens the workspace (the deal chat's one home)
+    const item = conversations.find((c) => c.threadId === threadId);
+    if (item?.threadType === "deal" && item.dealCardId) {
+      router.push(`/connect/deal/${item.dealCardId}`);
+      return;
+    }
     if (threadId === selectedThreadId) return;
     setMessages([]); // drop the prior thread's stream so it can't flash under the new header
     setUnread((prev) => ({ ...prev, [threadId]: 0 })); // opening a thread clears its badge

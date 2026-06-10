@@ -20,12 +20,16 @@ import type {
   DealCardView,
   DealType,
   DealCardStatus,
+  DealWorkspaceView,
   LineItemView,
   LogAuthor,
   ChangeOrigin,
   LogEntry,
+  MemberRole,
+  MemberView,
   PartyFieldView,
   PartySide,
+  WorkspaceVisibility,
 } from "../types";
 
 type Meta = Record<string, unknown>;
@@ -210,5 +214,89 @@ export async function getDealCard(cardId: string): Promise<DealCardView> {
     signals: side ? seededSignals(side) : [],
     log,
     viewerSide: side,
+  };
+}
+
+/**
+ * Load the deal CONTAINER for the workspace screen (3b): the workspace row,
+ * the live members (owners first - ownership is a role, one owner per company
+ * side), and the deal chat's thread id. RLS scopes everything: the workspace
+ * is `company_wide` so both relationship companies see it; a `private`
+ * workspace would only return for invited members.
+ * Throws if the card has no workspace or no deal thread (a deal is BORN with
+ * both - their absence is a data bug, not a state to render).
+ */
+export async function getWorkspace(dealCardId: string): Promise<DealWorkspaceView> {
+  const supabase = createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("deal workspace: no authenticated user");
+
+  const [wsRes, threadRes] = await Promise.all([
+    supabase
+      .from("deal_workspace")
+      .select("id, deal_card_id, visibility")
+      .eq("deal_card_id", dealCardId)
+      .is("deleted_at", null)
+      .single(),
+    supabase
+      .from("chat_thread")
+      .select("id")
+      .eq("type", "deal")
+      .eq("deal_card_id", dealCardId)
+      .is("deleted_at", null)
+      .single(),
+  ]);
+  if (wsRes.error) throw wsRes.error;
+  if (threadRes.error) throw threadRes.error;
+
+  // live members → resolve people → resolve companies (flat, stitched in JS)
+  const { data: memberRows, error: memErr } = await supabase
+    .from("deal_member")
+    .select("id, person_id, role, added_at")
+    .eq("deal_workspace_id", wsRes.data.id)
+    .is("removed_at", null)
+    .order("added_at", { ascending: true });
+  if (memErr) throw memErr;
+
+  const personIds = (memberRows ?? []).map((m) => m.person_id);
+  const { data: people, error: pplErr } = personIds.length
+    ? await supabase.from("person").select("id, first_name, last_name, company_id").in("id", personIds)
+    : { data: [], error: null };
+  if (pplErr) throw pplErr;
+  const personById = new Map((people ?? []).map((p) => [p.id, p] as const));
+
+  const companyIds = Array.from(
+    new Set((people ?? []).map((p) => p.company_id).filter((x): x is string => !!x)),
+  );
+  const { data: companies, error: coErr } = companyIds.length
+    ? await supabase.from("company").select("id, name").in("id", companyIds)
+    : { data: [], error: null };
+  if (coErr) throw coErr;
+  const companyNameById = new Map((companies ?? []).map((c) => [c.id, c.name] as const));
+
+  const members: MemberView[] = (memberRows ?? []).map((m) => {
+    const p = personById.get(m.person_id);
+    return {
+      id: m.id,
+      personId: m.person_id,
+      name: p ? [p.first_name, p.last_name].filter(Boolean).join(" ") : "Unknown person",
+      companyId: p?.company_id ?? "",
+      companyName: (p?.company_id && companyNameById.get(p.company_id)) || "Unknown company",
+      role: m.role as MemberRole,
+      isViewer: m.person_id === user.id,
+    };
+  });
+  // owners first, then joining order
+  members.sort((a, b) => Number(b.role === "owner") - Number(a.role === "owner"));
+
+  return {
+    workspaceId: wsRes.data.id,
+    dealCardId: wsRes.data.deal_card_id,
+    visibility: wsRes.data.visibility as WorkspaceVisibility,
+    members,
+    dealThreadId: threadRes.data.id,
   };
 }
