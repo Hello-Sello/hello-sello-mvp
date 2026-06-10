@@ -931,3 +931,18 @@ Full design contract in [PRD/profile-and-qr-card.md](../PRD/profile-and-qr-card.
 - **Licence env-gated** (`NEXT_PUBLIC_REQUIRE_LICENSE`): required in prod, optional in local/preview.
 - **Connect button = deliberate stub** — real P↔C wiring is the Connect surface (Ayush).
 - **Shipped to production** (PR #88→dev, #89→main admin override). Engineering in `ARCHITECTURE-NOTES.md` ("Profile & QR business card", 2026-06-10).
+
+---
+
+## Layer 2 — Discover surface
+
+### 2026-06-11 (session 20) — Discover: closed + tagged directory (NON-marketplace) — supersedes session-13 browse-depth
+
+Marcel's directive (2026-06-10): *"Discover closed to not see shit, but a line with the company logo and a request to enter… It needs to be a NON-Marketplace."* This resolves the page structure + scope that session 13 left open, and **changes the browse-depth** of the session-13 visibility lock.
+
+- **LOCKED — Discover is a CLOSED, TAGGED directory, not a marketplace.** Each company shows as a brand line (**logo · name · category · country**), filterable by category/country/name. The company's **shop / products / prices stay hidden** until you **"Request to enter"** and are accepted. No open catalog, no prices, no feed. *Why:* Marcel's NON-marketplace directive — stays discoverable while never exposing a catalog to strangers in a sensitive industry.
+- **Supersedes the session-13 "browsable public shop" depth.** *Who is listed* is unchanged (the "has a public shop" key still decides listing; buyers are exact-search only). What changed: a listed company's shop is **no longer browsable on sight** — it's gated behind request-to-enter. The asymmetric *listing* rule survives; the open *catalog* does not.
+- **Page structure DECIDED = search-first lobby** (centred search + category pills + single-column company list). Chosen from a 3-variant throwaway prototype (registry table / filter-rail grid / search-first lobby). *Why:* search-first sells "ask to come in," not "scroll a feed" — truest to NON-marketplace. The "Tagged" line (vs bare logo / vs teaser) is the minimum needed to *find* who to request without *browsing* a catalog.
+- **Ad / social feed = CUT** (was the heavier half of the session-13 "two jobs" confirmation). A campaign/ad feed contradicts a closed non-marketplace; dropped from scope.
+- **"Request to enter" wiring = OPEN** — entering = *unlock-shop* (Discover owns the access grant) **vs** = *a Connect request* (one door, reuses Connect's plumbing; gate state lives in Connect). Leaning the latter; **deferred until Connect's request/accept flow is ready**. Button stays stubbed until then.
+- **First slice = UI only** (search-first directory, placeholder data, stubbed button). Real `list_discoverable_companies()` `SECURITY DEFINER` RPC (same anon-safe projection pattern as `get_public_profile`) + the gate are the next slices. Build plan: [`docs/build/discover-directory.md`](../build/discover-directory.md).
