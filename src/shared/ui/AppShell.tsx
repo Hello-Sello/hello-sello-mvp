@@ -4,9 +4,10 @@ import { usePathname } from "next/navigation";
 import { TopBar } from "./TopBar";
 import { IconRail } from "./IconRail";
 
-// Pre-login routes: rendered bare (no rail / top bar) since there is nothing to
-// navigate to and no company to show until the user is signed in.
-const BARE_ROUTES = ["/login", "/signup"];
+// Routes rendered bare (no rail / top bar): the auth pages (nothing to navigate
+// to pre-login) and `/c/<handle>` public profile pages (shown to outsiders, must
+// not leak app chrome).
+const BARE_ROUTES = ["/login", "/signup", "/c"];
 
 /**
  * The frame every page sits inside: a full-height dark rail down the left, and

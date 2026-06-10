@@ -139,3 +139,103 @@ export async function setMyAvatarPath(path: string): Promise<{ error?: string }>
   const { error } = await supabase.from('person').update({ avatar_path: path }).eq('id', user.id)
   return error ? { error: error.message } : {}
 }
+
+// ---- Public profile (the /c/<handle> page) ---------------------------------
+
+export type PublicProfile = {
+  handle: string
+  displayName: string
+  title: string
+  avatarUrl: string | null
+  phone: string
+  linkedin: string
+  email: string
+  company: {
+    name: string
+    tagline: string
+    about: string
+    products: string
+    country: string
+    website: string
+  } | null
+}
+
+/**
+ * Read a profile by its public handle for the anonymous-facing page. Goes
+ * through the `get_public_profile` SECURITY DEFINER RPC, which returns ONLY the
+ * curated business-card fields — the person table itself stays closed to anon.
+ */
+// Row shape returned by the get_public_profile RPC. Typed here (not via the
+// generated Database types) so the call stays typed without re-generating the
+// whole types file; the shape is fixed by the migration that defines the function.
+type PublicRow = {
+  display_name: string | null
+  title: string | null
+  avatar_path: string | null
+  phone: string | null
+  links: unknown
+  email: string | null
+  company_name: string | null
+  company_tagline: string | null
+  company_about: string | null
+  company_products: string | null
+  company_country: string | null
+  company_website: string | null
+}
+
+export async function getPublicProfile(handle: string): Promise<PublicProfile | null> {
+  const supabase = await createClient()
+  // Call as a method (keeps `this` bound); name/result cast so we don't need to
+  // regenerate the whole Database types just for this one RPC.
+  const res = (await supabase.rpc('get_public_profile' as never, { p_handle: handle } as never)) as unknown as {
+    data: PublicRow[] | null
+    error: { message: string } | null
+  }
+  const { data, error } = res
+  if (error || !data || data.length === 0) return null
+  const r = data[0]
+
+  const avatarUrl = r.avatar_path
+    ? supabase.storage.from('avatars').getPublicUrl(r.avatar_path).data.publicUrl
+    : null
+
+  return {
+    handle,
+    displayName: r.display_name ?? '',
+    title: r.title ?? '',
+    avatarUrl,
+    phone: r.phone ?? '',
+    linkedin: linkedinFrom(r.links),
+    email: r.email ?? '',
+    company: r.company_name
+      ? {
+          name: r.company_name,
+          tagline: r.company_tagline ?? '',
+          about: r.company_about ?? '',
+          products: r.company_products ?? '',
+          country: r.company_country ?? '',
+          website: r.company_website ?? '',
+        }
+      : null,
+  }
+}
+
+/** Build a vCard 3.0 (the format iOS + Android both read) for "Save contact". */
+export function buildVCard(p: PublicProfile): string {
+  const [first, ...rest] = p.displayName.split(' ')
+  const last = rest.join(' ')
+  const lines = [
+    'BEGIN:VCARD',
+    'VERSION:3.0',
+    `N:${last};${first};;;`,
+    `FN:${p.displayName}`,
+    p.title && `TITLE:${p.title}`,
+    p.company && `ORG:${p.company.name}`,
+    p.email && `EMAIL;TYPE=WORK:${p.email}`,
+    p.phone && `TEL;TYPE=WORK,VOICE:${p.phone}`,
+    p.company?.website && `URL:${p.company.website}`,
+    p.linkedin && `X-SOCIALPROFILE;TYPE=linkedin:${p.linkedin}`,
+    'END:VCARD',
+  ].filter(Boolean)
+  return lines.join('\r\n')
+}

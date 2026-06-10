@@ -40,10 +40,10 @@ export async function updateSession(request: NextRequest) {
 
   const path = request.nextUrl.pathname
   const isAuthRoute = path === '/login' || path === '/signup'
-  // NOTE: `/prototype` is a THROWAWAY public allowance for the QR-card design
-  // prototype — exempt from BOTH gates (any visitor, signed-in or not, can view
-  // it). Remove together with src/app/prototype when the design is chosen.
-  const isPublicRoute = path.startsWith('/prototype')
+  // Public routes — viewable by anyone, signed in or not. `/c/<handle>` is the
+  // public profile page (scanned from the QR). `/prototype` is a THROWAWAY design
+  // allowance (removed with src/app/prototype when the design is built).
+  const isPublicRoute = path.startsWith('/c/') || path.startsWith('/prototype')
 
   // Signed-out users may only reach the auth + public routes.
   if (!user && !isAuthRoute && !isPublicRoute) {
