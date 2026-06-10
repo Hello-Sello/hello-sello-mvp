@@ -120,6 +120,13 @@ If you're building and hit a doubt, go here:
 
 *(Updated at end of every session by whoever worked last.)*
 
+**2026-06-10 - Ayush (Connect 3a Deal card + 3b Deal Workspace - SHIPPED to production)**
+- **3a (deal card, READ side) + 3b (Deal Workspace, screen ④) both DONE + merged** (3b: [#93](https://github.com/HelloSello/hello-sello-mvp/pull/93)→dev, [#94](https://github.com/HelloSello/hello-sello-mvp/pull/94)→main). Connect is now real end to end: inbox → chat → realtime → relationship → **deal card → deal workspace**.
+- **3a:** the deal card lives in the chat (`modules/deals/`): front (facts + role-private Margin/metric via the `deal_party_field` table, RLS-scoped) + back (Signals seeded · Logs real). PO/SO derived; gross computed; versions = `deal_card_log`.
+- **3b:** the deal CONTAINER, born with a deal. Route `/connect/deal/[dealCardId]` (composition root - deals owns the container, messaging owns the chat, composed at the route so the modules stay ACYCLIC). Header band + **real People tab** + deal chat hero (new `DealChat`, reuses the messaging spine + the card pill). **Three doors:** the Chat list's new **Deals tab**, the chat card-bar **"Deal workspace ↗"**, and the relationship-page **"Open workspace"**.
+- **→ Muskan (schema):** I altered ONE of your foundation tables - **dropped `deal_workspace.owner_person_id`** + index `uq_deal_member_one_owner`. Ownership is now a **role** (`deal_member.role='owner'`, your `deal_member_role` lookup guards it): a deal has **two owners, one per company side**, which a single not-null column couldn't model. Safe drop (both tables were empty; no code/RLS used the column). `chat_thread type='deal'` is now live-used. The Chat list gained a `deals` filter (deal threads excluded from All/Unread/Companies).
+- **Verified both sides live** (Bob then Alice): "(you)" follows login, message sides mirror, both write through RLS. Next: **3c** (stage pipeline + Things).
+
 **2026-06-10 - Ayush (Connect 2e - Relationship page BUILT + verified both sides; PR'd to dev)**
 - **2e DONE (all 8 phases), real + verified live both sides, zero console errors, `tsc` + eslint clean.** The company↔company record, reached from the chat header ("My Relationship with {company}"). **One page, two doors:** the P2P and C2C thread of a pair open the *same* record (proven - both threads carry the same `relationship_id`). New module `src/modules/relationship/` + route `app/connect/relationship/[relationshipId]`.
 - **Shape:** top band (two-logo **bridge mark** + Sella-insight box + Analytics box) + tabbed record (Overview · Deals · Notes · Terms · Docs) + two blurred-backdrop dialogs (Sella insight; full analytics = KPIs + bar charts + share pie). Real RLS-scoped reads, viewer side from session.
