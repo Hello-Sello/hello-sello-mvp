@@ -5,17 +5,26 @@
 
 ---
 
-**Last updated:** 2026-06-08 (Sella DEV-11 design) CEST
+**Last updated:** 2026-06-10 (Present manage-shop + upload — PR'd) CEST
 **Branch:** claude/muskan/work
-**Status:** active (session 15 — 1b auth shipped; Sella DEV-11 architecture recorded, back on 1c onboarding)
+**Status:** idle (Present storefront v0 COMPLETE: backend + visitor shop + manage-shop edit + add-products drawer + image upload — PR'd to dev #75)
 **Linear issue in progress:** none
 **Shared files locked:** none
-**PR open:** [#63](https://github.com/HelloSello/hello-sello-mvp/pull/63) — 1b auth → dev
+**PR open:** [#75](https://github.com/HelloSello/hello-sello-mvp/pull/75) — Present storefront → dev · [#63](https://github.com/HelloSello/hello-sello-mvp/pull/63) — 1b auth → dev
 **Prev PR:** F5 [#60](https://github.com/HelloSello/hello-sello-mvp/pull/60) **merged to dev**. (Discover [#58](https://github.com/HelloSello/hello-sello-mvp/pull/58) + Foundation [#54](https://github.com/HelloSello/hello-sello-mvp/pull/54) also merged.)
 
 ---
 
 ## Notes for the other agent
+
+**2026-06-10 (Present storefront — backend + shop page DONE, lock released).** Whole import path + visitor shop live & verified end-to-end (RPC import → RLS read → shop UI with per-product price gating). Commits: `d43fc0b` foundation · `59d6fbd` validator · `edb28cc` `import_products` RPC + import action · `7b5c5c3` shop page. No schema work outstanding — next (manage-shop owner UI + image upload) is app-only. `import_products` is in DB; if you touch `product`/`pricelist_item` before I PR, expect a small merge.
+
+**2026-06-10 (Present storefront — checkpoint, lock released).** Foundation migration applied + committed (`d43fc0b`); CSV template + validator committed (`59d6fbd`). Lock released — not actively editing schema while paused. **Heads-up:** when I resume I'll add an `import_products` RPC + re-lock `product`/`pricelist_item`. My foundation changes are **on my branch only, not in dev yet** — if you touch `product`/`pricelist_item` before I PR, expect a small merge.
+
+**2026-06-09 (Present storefront — building) — ⚠️ touching `company` / `product` / `pricelist_item` RLS.** Starting the Present surface (seller shop). DB foundation migration `20260609180000`→`20260609210000_present_storefront_foundation`:
+- `company` += `tagline`, `cover_path`, `logo_path`, `warehouse_location`; `product` += `price_public` (default false).
+- New **public** `shop-media` bucket (product photos + cover/logo), writes folder-scoped by `current_company_id()` (mirrors your `company-licenses` pattern).
+- **Additive SELECT policies** `product_public_select` + `pricelist_item_public_select` so buyers can browse another company's shop (catalog public; **prices gated** by `price_public`). Your `product_all` / `pli_all` write policies are untouched — I only OR a SELECT on top, isolation preserved. Shout if this worries you.
 
 **2026-06-08 (Sella design) — DEV-11 multi-Sella architecture: MVP scope locked.** Detail in `DECISIONS.md` (newest entry). Ayush — relevant when you build 4a–4d:
 - **MVP Sella = stateless single-shot Bedrock calls** behind the 4a wrapper, each ≤1 structured-output tool. **No agent loop / orchestrator / graph / framework (LangGraph, Bedrock Agents) / RAG / memory.** Detection (built) is the reference shape — 4c draft + 4d summarize follow the same single-call pattern.
