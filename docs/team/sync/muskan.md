@@ -7,10 +7,10 @@
 
 **Last updated:** 2026-06-11 (Discover directory UI — merged to dev) CEST
 **Branch:** claude/muskan/work
-**Status:** idle — **Discover directory UI shipped to dev** (closed + tagged NON-marketplace, search-first lobby; placeholder data + stubbed "Request to enter"). Real listing RPC + gate wiring deferred.
+**Status:** idle — **Discover directory UI SHIPPED to production** (closed + tagged NON-marketplace, search-first lobby; placeholder data + stubbed "Request to enter"). Real listing RPC + gate wiring deferred.
 **Linear issue in progress:** none
 **Shared files locked:** none (Discover is all new files under `src/app/discover/` — nothing of yours touched)
-**PR open:** none — Discover [#95](https://github.com/HelloSello/hello-sello-mvp/pull/95) → dev **merged** (UI-only; not yet promoted to main).
+**PR open:** none — Discover [#95](https://github.com/HelloSello/hello-sello-mvp/pull/95) → dev **merged**, [#96](https://github.com/HelloSello/hello-sello-mvp/pull/96) dev → main **merged (admin override)**. Live in prod (UI-only / placeholder data).
 **Prev PR:** Profile & QR [#88](https://github.com/HelloSello/hello-sello-mvp/pull/88)→dev / [#89](https://github.com/HelloSello/hello-sello-mvp/pull/89)→main **merged**; mobile-hero + docs [#91](https://github.com/HelloSello/hello-sello-mvp/pull/91)/[#92](https://github.com/HelloSello/hello-sello-mvp/pull/92) **merged**.
 **Prev PR:** Present storefront [#75](https://github.com/HelloSello/hello-sello-mvp/pull/75) **merged** · 1b auth [#63](https://github.com/HelloSello/hello-sello-mvp/pull/63) **merged**.
 
