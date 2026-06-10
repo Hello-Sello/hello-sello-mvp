@@ -1,4 +1,4 @@
-import { Building2 } from "lucide-react";
+import { Building2, FileText } from "lucide-react";
 import type { ConversationListItem } from "../types";
 import { formatTimeAgo } from "../lib/chat-display";
 
@@ -7,7 +7,9 @@ import { formatTimeAgo } from "../lib/chat-display";
  * and reports clicks via `onSelect`; all state lives in the parent ChatView.
  *
  * A c2c row reads as the company (Building2 avatar, "Company chat (C2C)"); a
- * p2p row reads as the person (initials avatar, the company as subtitle).
+ * p2p row reads as the person (initials avatar, the company as subtitle); a
+ * deal row (3b, Deals tab only) reads as the deal (FileText avatar, the deal
+ * NUMBER as the name) - clicking it navigates to the workspace, not in place.
  */
 export interface ConversationRowProps {
   item: ConversationListItem;
@@ -17,6 +19,7 @@ export interface ConversationRowProps {
 
 export function ConversationRow({ item, isSelected, onSelect }: ConversationRowProps) {
   const isC2C = item.threadType === "c2c";
+  const isDeal = item.threadType === "deal";
 
   return (
     <button
@@ -32,7 +35,13 @@ export function ConversationRow({ item, isSelected, onSelect }: ConversationRowP
       )}
 
       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-[11px] font-semibold text-ink/70 ring-1 ring-black/5">
-        {isC2C ? <Building2 size={16} strokeWidth={1.75} className="text-ink/55" /> : item.initials}
+        {isDeal ? (
+          <FileText size={16} strokeWidth={1.75} className="text-brand-deep/70" />
+        ) : isC2C ? (
+          <Building2 size={16} strokeWidth={1.75} className="text-ink/55" />
+        ) : (
+          item.initials
+        )}
       </span>
 
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">

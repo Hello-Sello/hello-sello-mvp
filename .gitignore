@@ -36,8 +36,8 @@ CLAUDE.md
 # Claude Code internal
 .claude/worktrees/
 
-# Personal product-thinking workspace - not shared, gitignored
-_workshop/
+# Product-thinking workspace - now shared with the team (build-plans, pov, notes, prototypes)
+# (was gitignored; tracked from 2026-06-10 so the team can reuse this arrangement)
 
 # Visual companion (brainstorming skill) - mockups persist here per session
 .superpowers/

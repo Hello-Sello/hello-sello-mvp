@@ -5,16 +5,24 @@
 
 ---
 
-**Last updated:** 2026-06-10 13:55 CEST
+**Last updated:** 2026-06-10 19:50 CEST
 **Branch:** claude/ayush/work
-**Status:** **merging 3a (read side) to dev** so you get the `deals/` module + card-in-chat. Then idle. **SCOPE CHANGE:** deal CREATE/EDIT (old Phase 6+7) → new section **"3.5 - Deal creation & editing"** (one core, three doors). Next = **3b** (Deal Workspace) on the seeded card.
+**Status:** idle - **3b (Deal Workspace, screen ④) DONE - Phases 0-5 built + both-sides walk verified live.** The workspace container is real on seeded card `04695a2d`: route `/connect/deal/[dealCardId]`, header band, People tab (real), deal chat hero, Deals tab + card-bar door. **5 commits on branch, NOT merged** (one merge at end per Ayush). Next = **3c** (stage pipeline + Things) on the same card.
 **Linear issue in progress:** none
-**Shared files locked:** ⚠️ `docs/PRD/BUILD-PLAN.md` (structural edit - marking 3a read-side done + adding the 3.5 section). Releasing after I commit. **NOT touching your locked files** - my deal migrations (`…130000`/`…140000`/`…160000`) are separate new files on `deal_*` tables, don't touch `product`/`import_products`/catalog; my card doesn't read `product.image_path` - safe to merge alongside your gallery work.
-**PR open:** none - [#79](https://github.com/HelloSello/hello-sello-mvp/pull/79) (3a Phase 0+1) **merged to dev**. Pull `dev` to get the `deals/` module + `deal_party_field` table. ([#76](https://github.com/HelloSello/hello-sello-mvp/pull/76)/[#77](https://github.com/HelloSello/hello-sello-mvp/pull/77) earlier.)
+**Shared files locked:** none. **3b deal migrations are isolated from your catalog work** (`deal_workspace`/`deal_member`/`chat_thread`/`deal_card` only - never `product`/`import_products`/`product_image`).
+**PR open:** none - 3b stays on branch until the deal work is further along. ([#84](https://github.com/HelloSello/hello-sello-mvp/pull/84) 3a read side merged to dev earlier.)
 
 ---
 
 ## Notes for the other agent
+
+**2026-06-10 (Task 3b - Deal Workspace DONE; ⚠️ I altered ONE of your foundation tables - please read).** Built screen ④ (the deal container) on seeded card `04695a2d`. **2 schema migrations applied to live:**
+> 1. `20260610170000_deal_workspace_role_ownership.sql` - **dropped `deal_workspace.owner_person_id`** (+ its FK) and **dropped index `uq_deal_member_one_owner`**. Reason: a deal has **two owners, one per company side** (locked w/ Ayush), so ownership = **`deal_member.role='owner'`** (your `deal_member_role` lookup already guards it - nice, no work). A single not-null owner column + a one-owner-per-workspace index both contradicted that. **Safe drop:** `deal_workspace`/`deal_member` were both **empty (0 rows)**, no code read the column (only generated types), and no RLS referenced it. `created_by` still records who made the workspace. The **per-side** one-owner rule moves to the `createDeal` core (section 3.5) since a partial index can't reach `person.company_id`. *(`uq_deal_member_one_side_lead` left as-is - side_lead unused in 3b.)*
+> 2. `20260610180000_seed_demo_deal_workspace.sql` - seeds the container on the demo card: workspace (`company_wide`) + 2 owner members (Alice GreenLeaf + Bob StonePharm) + a `chat_thread type='deal'` + 3 opening messages. Container rows are **insert-if-absent** (3c/3d attach to them); company names in the Sella note are derived from live tables (not hardcoded).
+> **`database.types.ts`:** I did NOT do a full regen (it pulled in your in-flight `product_image` + person profile cols whose code is on your branch, breaking mine). I **surgically removed only the `owner_person_id` lines**. When you next regen from live you'll naturally include the deal_workspace change (no owner col) - no conflict expected on the deal tables.
+> **New deal chat type:** `chat_thread type='deal'` is now LIVE-used (your foundation already had the type + RLS + CHECK ready). The Chat list (`messaging/`) now has a **Deals tab**; deal threads are filtered OUT of All/Unread/Companies. If you touch `messaging/` conversation list, note the new `deals` filter + `ConversationListItem.dealCardId`.
+
+
 
 **2026-06-10 (Task 3a - Deal card, Phase 1 DONE; ⚠️ NEW table `deal_party_field` - additive, applied to live).** Added ONE new table `public.deal_party_field` (migration `20260610130000`) to give role-scoped private fields (seller Margin + buyer placeholder, more later from Sell/Buy pages) a home - the schema had none. **One row per (card, version, side, field), RLS `owner_company_id = current_company_id()`** - same privacy spine as `relationship_note`; the other side's app never receives the row. **ADDITIVE only:** new table + its own policy + unique key + index + a demo seed; **touches none of your existing tables or RLS.** Isolated (only FKs to `deal_card` + `company`), so droppable later with zero blast radius if Sell/Buy design changes it. **Privacy proven in SQL** (JWT impersonation): Alice sees only her Margin, Bob sees only his placeholder. Regenerated `database.types.ts`. (PO/SO label is derived, gross is computed, version history reads your `deal_card_log` - no other schema changes in 3a.)
 

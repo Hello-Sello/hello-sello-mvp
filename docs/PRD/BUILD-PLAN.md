@@ -87,10 +87,17 @@ The 9 demo steps the "Walk" column points to:
 
 | # | Item | Walk | MVP | Size | Status |
 |---|---|---|---|---|---|
-| 3a | Deal card (draft, PO/SO, role views, version history, front/back) | ★ | ✓ | L | |
+| 3a | Deal card - **READ side** (show card, PO/SO derived, role-private field, front + back w/ Signals/Logs tabs + flip, placed in chat) | ★ | ✓ | L | ✅ done (on branch; read side) |
 | 3b | Deal Workspace (born at draft, members, container) | ★ | ✓ | M | |
 | 3c | Stage pipeline (5-stage bar, manual advance) + Things checklist (by **stage**) | ★ | ✓ | M | |
 | 3d | Confirmation gate (two-sided confirm → Confirmed) | ★ | ✓ | M | |
+| **3.5** | **Deal creation & editing** (the card's WRITE side - was 3a Phase 6+7). **ONE `createDeal` core, THREE doors: shop · chat "+" · Sella.** Create a draft (card + lines + log + chat line; card-only) + edit → version bump. Form-first; products from catalog; both sides; margin/metric optional. **May fold into Unit 4 (Sella).** | ★ | ✓ | L | |
+
+> **3a scope note (Ayush, 2026-06-10):** 3a delivered the **read side** of the deal card (display + flip + in-chat
+> placement + role privacy, verified both sides). The **write side** (create a draft, edit/version-bump) was pulled
+> out into the new **3.5** row above - it sits between the deal machinery (3b-3d) and Sella, because a deal is born
+> from 3 places (shop · chat · Sella) and should share **one** creation core. Version **display** (Logs tab) is
+> already done in 3a; only the version **write** moved. Build 3b-3d on the seeded card `04695a2d`.
 
 ### Sella (Unit 4) - leaf, built last; the demo works without it
 

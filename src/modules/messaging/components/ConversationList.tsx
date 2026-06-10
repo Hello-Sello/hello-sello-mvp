@@ -2,13 +2,20 @@ import { Search, Plus } from "lucide-react";
 import type { ConversationListItem } from "../types";
 import { ConversationRow } from "./ConversationRow";
 
-/** The panel-3 filter chips. `companies` regroups the same rows by company. */
-export type ChatFilter = "all" | "unread" | "companies";
+/**
+ * The panel-3 filter chips. `companies` regroups the same rows by company.
+ * `deals` (3b) is the deal chats' ONLY home in this list - deal threads never
+ * appear in the other three views (they'd read as broken "Unknown" P2Ps).
+ * The full tab redesign (All Unread / P2P / C2C / Deals, tags, deal-logo rows)
+ * is a separate later task.
+ */
+export type ChatFilter = "all" | "unread" | "companies" | "deals";
 
 const FILTERS: ReadonlyArray<{ key: ChatFilter; label: string }> = [
   { key: "all", label: "All" },
   { key: "unread", label: "Unread" },
   { key: "companies", label: "Companies" },
+  { key: "deals", label: "Deals" },
 ];
 
 /**
@@ -101,8 +108,30 @@ function ListBody({
     />
   );
 
+  // the deal chats live ONLY under the Deals tab; every other view excludes them
+  const deals = conversations.filter((c) => c.threadType === "deal");
+  const chats = conversations.filter((c) => c.threadType !== "deal");
+
+  if (filter === "deals") {
+    const groups = groupByCompany(deals);
+    return groups.length ? (
+      <div className="flex flex-col gap-2">
+        {groups.map((g) => (
+          <div key={g.companyId} className="flex flex-col gap-1">
+            <span className="px-3 pt-1 text-[11px] font-semibold uppercase tracking-wide text-ink/40">
+              {g.companyName}
+            </span>
+            {g.items.map(row)}
+          </div>
+        ))}
+      </div>
+    ) : (
+      <Empty message="No deals yet. A deal chat appears here the moment a deal is born." />
+    );
+  }
+
   if (filter === "unread") {
-    const unread = conversations.filter((c) => c.unreadCount > 0);
+    const unread = chats.filter((c) => c.unreadCount > 0);
     return unread.length ? (
       <div className="flex flex-col gap-1">{unread.map(row)}</div>
     ) : (
@@ -111,7 +140,7 @@ function ListBody({
   }
 
   if (filter === "companies") {
-    const groups = groupByCompany(conversations);
+    const groups = groupByCompany(chats);
     return groups.length ? (
       <div className="flex flex-col gap-2">
         {groups.map((g) => (
@@ -129,8 +158,8 @@ function ListBody({
   }
 
   // all
-  return conversations.length ? (
-    <div className="flex flex-col gap-1">{conversations.map(row)}</div>
+  return chats.length ? (
+    <div className="flex flex-col gap-1">{chats.map(row)}</div>
   ) : (
     <Empty message="No conversations yet. Accept a request in your Inbox to start one." />
   );

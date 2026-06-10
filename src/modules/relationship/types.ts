@@ -186,6 +186,12 @@ export interface DealSummaryView {
   valueNet: number | null;
   currency: string;
   createdAt: string;
+  /**
+   * true when this deal has a live workspace (screen ④) to open. A workspace is
+   * born WITH a deal (3.5); seeded historical deals predate that and have none,
+   * so the "Open workspace" door only lights up for deals that actually have one.
+   */
+  hasWorkspace: boolean;
 }
 
 /** One line of the Overview activity log (derived, newest first). */
