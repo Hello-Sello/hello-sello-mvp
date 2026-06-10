@@ -41,9 +41,8 @@ export async function updateSession(request: NextRequest) {
   const path = request.nextUrl.pathname
   const isAuthRoute = path === '/login' || path === '/signup'
   // Public routes — viewable by anyone, signed in or not. `/c/<handle>` is the
-  // public profile page (scanned from the QR). `/prototype` is a THROWAWAY design
-  // allowance (removed with src/app/prototype when the design is built).
-  const isPublicRoute = path.startsWith('/c/') || path.startsWith('/prototype')
+  // public profile page opened by scanning the QR.
+  const isPublicRoute = path.startsWith('/c/')
 
   // Signed-out users may only reach the auth + public routes.
   if (!user && !isAuthRoute && !isPublicRoute) {
