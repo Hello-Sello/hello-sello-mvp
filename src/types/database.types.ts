@@ -1596,6 +1596,73 @@ export type Database = {
         }
         Relationships: []
       }
+      deal_party_field: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          deal_card_id: string
+          field_key: string
+          field_label: string
+          id: string
+          metadata: Json
+          owner_company_id: string
+          party_side: string
+          sort_order: number
+          value_text: string | null
+          version: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          deal_card_id: string
+          field_key: string
+          field_label: string
+          id?: string
+          metadata?: Json
+          owner_company_id: string
+          party_side: string
+          sort_order?: number
+          value_text?: string | null
+          version: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          deal_card_id?: string
+          field_key?: string
+          field_label?: string
+          id?: string
+          metadata?: Json
+          owner_company_id?: string
+          party_side?: string
+          sort_order?: number
+          value_text?: string | null
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deal_party_field_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "person"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deal_party_field_deal_card_id_fkey"
+            columns: ["deal_card_id"]
+            isOneToOne: false
+            referencedRelation: "deal_card"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deal_party_field_owner_company_id_fkey"
+            columns: ["owner_company_id"]
+            isOneToOne: false
+            referencedRelation: "company"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       deal_stage: {
         Row: {
           code: string
@@ -2562,7 +2629,6 @@ export type Database = {
           deleted_by: string | null
           dominance_code: string | null
           id: string
-          image_path: string | null
           irradiation_code: string | null
           lineage_parent_a: string | null
           lineage_parent_b: string | null
@@ -2598,7 +2664,6 @@ export type Database = {
           deleted_by?: string | null
           dominance_code?: string | null
           id?: string
-          image_path?: string | null
           irradiation_code?: string | null
           lineage_parent_a?: string | null
           lineage_parent_b?: string | null
@@ -2634,7 +2699,6 @@ export type Database = {
           deleted_by?: string | null
           dominance_code?: string | null
           id?: string
-          image_path?: string | null
           irradiation_code?: string | null
           lineage_parent_a?: string | null
           lineage_parent_b?: string | null
@@ -2935,6 +2999,48 @@ export type Database = {
             columns: ["updated_by"]
             isOneToOne: false
             referencedRelation: "person"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_image: {
+        Row: {
+          company_id: string
+          created_at: string
+          id: string
+          image_path: string
+          position: number
+          product_id: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          id?: string
+          image_path: string
+          position?: number
+          product_id: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          id?: string
+          image_path?: string
+          position?: number
+          product_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_image_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "company"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_image_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "product"
             referencedColumns: ["id"]
           },
         ]
