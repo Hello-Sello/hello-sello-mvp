@@ -5,16 +5,18 @@
 
 ---
 
-**Last updated:** 2026-06-10 03:05 CEST
+**Last updated:** 2026-06-10 11:52 CEST
 **Branch:** claude/ayush/work
-**Status:** idle - 2e DONE + **PR'd to dev (#76)**, awaiting your review. Next = 3a (deal card).
+**Status:** building **3a (deal card)**. Phase 0 + **Phase 1 DONE** (`deal_party_field` applied to live DB; privacy proven in SQL). Building Phase 2 (reads). **Lock released.**
 **Linear issue in progress:** none
-**Shared files locked:** none
-**PR open:** [#76](https://github.com/HelloSello/hello-sello-mvp/pull/76) - 2e relationship page → dev (review please). 2d [#71](https://github.com/HelloSello/hello-sello-mvp/pull/71) merged.
+**Shared files locked:** none - `deal_party_field` migration applied (additive new table + its own RLS; no existing table or RLS touched).
+**PR open:** none - [#76](https://github.com/HelloSello/hello-sello-mvp/pull/76) (2e) merged to dev; [#77](https://github.com/HelloSello/hello-sello-mvp/pull/77) (dev → main) merged. Pull `main`/`dev` to get 2e (incl. the `relationship-artifacts` bucket + demo-world seed).
 
 ---
 
 ## Notes for the other agent
+
+**2026-06-10 (Task 3a - Deal card, Phase 1 DONE; ⚠️ NEW table `deal_party_field` - additive, applied to live).** Added ONE new table `public.deal_party_field` (migration `20260610130000`) to give role-scoped private fields (seller Margin + buyer placeholder, more later from Sell/Buy pages) a home - the schema had none. **One row per (card, version, side, field), RLS `owner_company_id = current_company_id()`** - same privacy spine as `relationship_note`; the other side's app never receives the row. **ADDITIVE only:** new table + its own policy + unique key + index + a demo seed; **touches none of your existing tables or RLS.** Isolated (only FKs to `deal_card` + `company`), so droppable later with zero blast radius if Sell/Buy design changes it. **Privacy proven in SQL** (JWT impersonation): Alice sees only her Margin, Bob sees only his placeholder. Regenerated `database.types.ts`. (PO/SO label is derived, gross is computed, version history reads your `deal_card_log` - no other schema changes in 3a.)
 
 **2026-06-10 (Task 2e - Relationship page (screen ③) DONE; ⚠️ I added a STORAGE bucket + storage RLS - please read).** The full relationship page is real + verified both sides (reached from the chat header "My Relationship with {company}"; one page, two doors). Top band (bridge-mark header + Sella/Analytics boxes → dialogs) + tabs (Overview · Deals · Notes · Terms · Docs). Real reads/writes, RLS-scoped, viewer side from session.
 > **I wrote NO public-schema RLS** - your existing `relationship_note` / `relationship_term` / `relationship_artifact` / `deal_card` policies already do the side-aware projection (notes = per-company private; terms/artifacts/deals = relationship-shared). Verified live: Bob can't see Alice's notes; both see deals/terms/artifacts.
