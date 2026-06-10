@@ -23,9 +23,9 @@ export function CardBack({ data }: { data: DealCardView }) {
   const [tab, setTab] = useState<Tab>("signals");
 
   return (
-    <div className="flex h-full w-[340px] flex-col rounded-3xl border border-brand/10 bg-brand-soft/40 p-3">
+    <div className="flex h-full w-[340px] flex-col rounded-3xl border border-brand/15 bg-[#ffe2ee] p-3 shadow-xl ring-1 ring-black/5">
       {/* tab switch */}
-      <div className="flex gap-1 rounded-xl bg-white/70 p-1">
+      <div className="flex gap-1 rounded-xl bg-white p-1">
         {TABS.map(({ id, label, icon: Icon }) => (
           <button
             key={id}

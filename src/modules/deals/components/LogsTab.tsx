@@ -36,7 +36,7 @@ export function LogsTab({ log }: { log: LogEntry[] }) {
       {log.map((e) => {
         const Icon = ACTOR_ICON[e.actorKind] ?? Cog;
         return (
-          <div key={e.id} className="rounded-xl bg-white/80 px-3 py-2">
+          <div key={e.id} className="rounded-xl bg-white px-3 py-2">
             <div className="flex items-center justify-between gap-2">
               <span className="rounded-md bg-brand/10 px-1.5 py-0.5 text-[10px] font-semibold text-brand-deep">
                 v{e.version}

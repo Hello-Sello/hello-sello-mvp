@@ -41,7 +41,7 @@ export function SignalsTab({ signals, side }: { signals: SignalView[]; side: Par
       {signals.map((s) => {
         const Icon = ICON[s.icon] ?? Sparkles;
         return (
-          <div key={s.id} className="rounded-xl bg-white/80 px-3 py-2">
+          <div key={s.id} className="rounded-xl bg-white px-3 py-2">
             <div className="flex items-center gap-2 text-sm font-semibold text-ink">
               <Icon className="h-4 w-4 text-brand" />
               {s.title}

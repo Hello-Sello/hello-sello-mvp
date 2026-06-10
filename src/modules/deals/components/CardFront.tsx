@@ -42,7 +42,7 @@ function Field({
       </div>
       <div
         className={`flex flex-1 items-center rounded-lg px-3 py-2 text-sm font-medium text-ink ${
-          highlight ? "bg-brand-soft/60" : "bg-white/80"
+          highlight ? "bg-brand/10" : "bg-white"
         }`}
       >
         {children}
@@ -53,7 +53,7 @@ function Field({
 
 function LogoBox({ role, name, isYou }: { role: string; name: string; isYou: boolean }) {
   return (
-    <div className="flex flex-1 flex-col rounded-xl bg-white/80 p-2">
+    <div className="flex flex-1 flex-col rounded-xl bg-white p-2">
       <div className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-ink/40">
         <Building2 className="h-3 w-3" />
         {role}
@@ -73,13 +73,13 @@ export function CardFront({ data }: { data: DealCardView }) {
   const hsNumber = card.hs_deal_number ?? `${term} · draft`;
 
   return (
-    <div className="w-[340px] rounded-3xl border border-brand/10 bg-brand-soft/40 p-3 shadow-sm">
+    <div className="w-[340px] rounded-3xl border border-brand/15 bg-[#ffe2ee] p-3 shadow-xl ring-1 ring-black/5">
       {/* HS number band */}
       <div className="rounded-xl bg-brand py-1.5 text-center text-sm font-bold tracking-wide text-white">
         {hsNumber}
       </div>
       {/* document term + date */}
-      <div className="mt-1.5 rounded-xl bg-white/80 py-1.5 text-center text-xs text-ink/70">
+      <div className="mt-1.5 rounded-xl bg-white py-1.5 text-center text-xs text-ink/70">
         {term} from {dateLabel(card.created_at)}
       </div>
       {/* the two parties */}

@@ -30,7 +30,7 @@ function volumeLabel(quantity: number, unit: string): string {
 
 export function ProductList({ items }: { items: LineItemView[] }) {
   return (
-    <div className="rounded-xl bg-white/80 p-2">
+    <div className="rounded-xl bg-white p-2">
       <div className="flex items-center justify-between px-1 pb-1.5">
         <span className="text-xs font-semibold text-ink/60">Products ({items.length})</span>
         {items.length > 4 && <span className="text-[10px] text-ink/35">scroll ↓</span>}
