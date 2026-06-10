@@ -5,12 +5,12 @@
 
 ---
 
-**Last updated:** 2026-06-10 (Profile & QR business card — built, on branch) CEST
+**Last updated:** 2026-06-10 (Profile & QR business card — SHIPPED to production) CEST
 **Branch:** claude/muskan/work
-**Status:** building — **Profile & QR business card** (P0 onboarding wiring · P1 account pages · P2 public page + QR + vCard + bottom-left card). Built + verified live; not PR'd yet.
+**Status:** idle — **Profile & QR business card SHIPPED** (onboarding wiring · account pages · public `/c/<handle>` page + QR + vCard + bottom-left card). Verified live (insider + outsider).
 **Linear issue in progress:** none
 **Shared files locked:** none (two of your files touched **additively** — see latest note)
-**PR open:** none — Profile/QR work committed to `claude/muskan/work` (5 commits, `813ac55`→`c48e9f1`).
+**PR open:** none — [#88](https://github.com/HelloSello/hello-sello-mvp/pull/88) → dev **merged**, [#89](https://github.com/HelloSello/hello-sello-mvp/pull/89) dev → main **merged (admin override)**.
 **Prev PR:** Present storefront [#75](https://github.com/HelloSello/hello-sello-mvp/pull/75) **merged** · 1b auth [#63](https://github.com/HelloSello/hello-sello-mvp/pull/63) **merged**.
 
 ---

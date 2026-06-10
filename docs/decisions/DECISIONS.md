@@ -916,3 +916,18 @@ A message into a company-to-company (C2C) channel should behave like a **ticket*
 - **Owner-management of a storage bucket needs a company-scoped SELECT policy.** `shop-media` had INSERT/UPDATE/DELETE but no SELECT, so `remove()` (which does select-then-delete) silently orphaned files. Added `shop_media_select` scoped to own-folder only — no anon/cross-company listing reopened. *(migration `20260610170000`; root-caused via live testing.)*
 - **Reorder + set-as-cover included (not deferred).** One authoritative `position` writer (`setProductImageOrder` takes the full ordered id list); "make cover" / move-left-right resolve to it client-side. Carousel = **Embla** (~7 KB, zero-dep); frame `aspect-[4/3]` to stay proportionate in the grid.
 - **Shipped to production** (PR #85→dev, #86→main). Engineering detail in `ARCHITECTURE-NOTES.md` ("Present product gallery", 2026-06-10).
+
+### 2026-06-10 — Profile & QR business card (design + build, session 19)
+
+Full design contract in [PRD/profile-and-qr-card.md](../PRD/profile-and-qr-card.md) (decisions D1–D13). Load-bearing locks:
+
+- **QR → public profile page** (`/c/<handle>`), not vCard-only or connection-only. The page is the deliverable (info + Save-contact, works for any scanner); the connect-action is progressive enhancement. *Why:* dissolves the "scanner may not be on HS" break — the page renders for everyone, signed in or not.
+- **Card identity = person, connects to company** (matches the company↔company model, DEV-7). The personal card is the entry point; a logged-in scanner's "Connect" routes to the company.
+- **Public page exposes ONLY a curated projection** via a `get_public_profile` `SECURITY DEFINER` RPC — anon never gets SELECT on `person`. Email IS public (business-card intent); per-field public toggles deferred.
+- **Profile fields promoted to typed `person` columns** (`display_name/title/phone/language/links/avatar_path/public_handle`), not `preferences` JSONB — one authoritative source for onboarding + account + card + page.
+- **Readable `public_handle`** (name slug + numeric suffix), permanent once shared; generated on first profile save for new users.
+- **Card placement = bottom-left avatar popover** (card + QR + My Profile/Company/Settings/Sign out); account screens = sidebar-settings layout; public page = light business-hero.
+- **Back button only for signed-in viewers** on the public page (an outsider scanning the QR has no app to return to).
+- **Licence env-gated** (`NEXT_PUBLIC_REQUIRE_LICENSE`): required in prod, optional in local/preview.
+- **Connect button = deliberate stub** — real P↔C wiring is the Connect surface (Ayush).
+- **Shipped to production** (PR #88→dev, #89→main admin override). Engineering in `ARCHITECTURE-NOTES.md` ("Profile & QR business card", 2026-06-10).
