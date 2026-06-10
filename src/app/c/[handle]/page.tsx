@@ -3,6 +3,7 @@ import { headers } from 'next/headers'
 import QRCode from 'qrcode'
 import { Mail, Phone, Globe, Link2, Download, UserPlus, MapPin, Package } from 'lucide-react'
 import { Avatar } from '@/shared/ui/Avatar'
+import { BackButton } from '@/shared/ui/BackButton'
 import { getPublicProfile } from '@/modules/profile'
 import { getCurrentUser } from '@/shared/auth'
 
@@ -28,7 +29,9 @@ export default async function PublicProfilePage({ params }: { params: Promise<{ 
 
   return (
     <div className="min-h-screen w-full bg-gradient-to-b from-white to-brand-soft/30">
-      <div className="flex h-10 items-center justify-end px-5 text-xs">
+      <div className="flex h-12 items-center justify-between px-5 text-xs">
+        {/* Back only for signed-in viewers — an outsider scanning the QR has no app to return to. */}
+        {insider ? <BackButton label="Back" /> : <span />}
         <span className={`rounded-full px-3 py-1 font-medium ${insider ? 'bg-success/15 text-success' : 'bg-black/[0.05] text-ink-muted'}`}>
           {insider ? 'Signed in to Hello Sello' : 'Public profile'}
         </span>

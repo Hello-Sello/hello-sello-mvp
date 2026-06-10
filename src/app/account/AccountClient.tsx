@@ -139,7 +139,7 @@ function PublicProfileCallout({ handle, name, url }: { handle: string; name: str
       <button onClick={copy} className="inline-flex items-center gap-1.5 rounded-xl border border-brand/40 px-3 py-2 text-sm font-semibold text-brand">
         {copied ? <><Check size={15} /> Copied</> : <><Copy size={15} /> Copy link</>}
       </button>
-      <a href={path} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-xl bg-brand px-3 py-2 text-sm font-semibold text-white">
+      <a href={path} className="inline-flex items-center gap-1.5 rounded-xl bg-brand px-3 py-2 text-sm font-semibold text-white">
         <ExternalLink size={15} /> View
       </a>
     </div>
