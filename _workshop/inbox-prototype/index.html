@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<!-- PROTOTYPE - throwaway. Connect > INBOX.  LOCKED design = Variant A (shared inbox: master/detail + lenses).
+     One shared data model (REQUESTS + DERIVED). Accept/Decline/Claim mutate it live; mock-DB drawer reads the same store.
+     B (screening) and C (ops table) were explored and parked for v2 - see NOTES.md + git history. -->
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hello Sello - Connect · Inbox (prototype)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", sans-serif; }
+  .data-table { border-collapse: collapse; width: 100%; font-size: 10.5px; }
+  .data-table th, .data-table td { text-align: left; padding: 3px 7px; border-bottom: 1px solid #e2e8f0; white-space: nowrap; }
+  .data-table th { font-weight: 600; color: #64748b; background: #f8fafc; text-transform: uppercase; font-size: 9px; letter-spacing: .03em; }
+  .data-row-new { background: #fef3c7; }
+  code { font-size: 10px; background: #f1f5f9; padding: 1px 4px; border-radius: 3px; }
+</style>
+</head>
+<body class="bg-slate-50 text-slate-900 h-screen overflow-hidden">
+<div id="app" class="h-screen flex flex-col"></div>
+<div id="switcher"></div>
+<script>
+/* =========================================================================
+   SHARED DATA MODEL  - one source of truth
+   ========================================================================= */
+const TEAM = {
+  AY:{n:'You',     c:'bg-pink-100 text-pink-700'},
+  MK:{n:'Muskan',  c:'bg-violet-100 text-violet-700'},
+  LS:{n:'Lars',    c:'bg-emerald-100 text-emerald-700'},
+};
+
+// kind: plain | message | pricelist | dealcard   (the 4 request types, low->high intent)
+let REQUESTS = [
+  {id:'inb_00',from:'GrünApo Berlin',   init:'GA',kind:'plain',    note:null,
+   mutuals:2,verified:true, ago:'yesterday',assignee:'AY',status:'accepted'}, // seeds History
+  {id:'inb_01',from:'CannaCare GmbH',   init:'CC',kind:'message',  note:"Hi - we run 12 pharmacies across Berlin and we'd love to connect to see your Indica range.",
+   mutuals:3,verified:true, ago:'2h',  assignee:null,status:'pending'},
+  {id:'inb_02',from:'BerlinBuds',       init:'BB',kind:'pricelist',note:'Could you share your current price-list for dried flower?',
+   mutuals:1,verified:true, ago:'5h',  assignee:'AY',status:'pending'},        // assigned to me
+  {id:'inb_03',from:'NordMed Pharma',   init:'NM',kind:'dealcard', note:'Pre-filled a deal to get us started.',
+   deal:{product:'CBD isolate',qty:'8 kg',unit:'€2,300 / kg',total:'€18,400',delivery:'Sept 2026'},
+   mutuals:5,verified:true, ago:'1d',  assignee:'MK',status:'pending'},        // Muskan is handling -> collision cue
+  {id:'inb_04',from:'GreenLeaf Apotheke',init:'GL',kind:'plain',   note:null,
+   mutuals:0,verified:false,ago:'2d',  assignee:null,status:'pending'},
+];
+
+let DERIVED = {relationship:[],chat_thread:[],chat_message:[],audit_log:[]};
+let seq = 1;
+const pad = n => String(n).padStart(2,'0');
+
+function unflag(){
+  [...DERIVED.relationship,...DERIVED.chat_thread,...DERIVED.chat_message,...DERIVED.audit_log].forEach(r=>r._new=false);
+  REQUESTS.forEach(r=>r._chg=false);
+}
+function accept(id){
+  unflag();
+  const r=REQUESTS.find(x=>x.id===id); if(!r||r.status!=='pending')return;
+  r.status='accepted'; r.assignee='AY'; r._chg=true;
+  const rel='rel_'+pad(seq), thr='thr_'+pad(seq);
+  DERIVED.relationship.push({id:rel,company_a:'Aurora',company_b:r.from,status:'connected',_new:true});
+  DERIVED.chat_thread.push({id:thr,relationship_id:rel,type:r.kind==='dealcard'?'deal':'c2c',_new:true});
+  DERIVED.chat_message.push({id:'msg_'+seq,thread_id:thr,sender:'system',body:'You are now connected',_new:true});
+  if(r.kind==='pricelist') DERIVED.chat_message.push({id:'msg_'+seq+'b',thread_id:thr,sender:'Sella',body:'Price-list ready to send',_new:true});
+  if(r.kind==='dealcard')  DERIVED.chat_message.push({id:'msg_'+seq+'b',thread_id:thr,sender:'system',body:'Deal card moved into the chat',_new:true});
+  DERIVED.audit_log.push({id:'au_'+seq,actor:'you',action:'accept_connection',target:r.from,_new:true});
+  seq++; render();
+}
+function decline(id){
+  unflag();
+  const r=REQUESTS.find(x=>x.id===id); if(!r||r.status!=='pending')return;
+  r.status='declined'; r.assignee='AY'; r._chg=true;
+  DERIVED.audit_log.push({id:'au_'+seq,actor:'you',action:'decline_connection',target:r.from,_new:true}); seq++; render();
+}
+function claim(id){
+  unflag();
+  const r=REQUESTS.find(x=>x.id===id); if(!r)return;
+  r.assignee='AY'; r._chg=true;
+  DERIVED.audit_log.push({id:'au_'+seq,actor:'you',action:'claim',target:r.from,_new:true}); seq++; render();
+}
+
+/* ---- lenses (saved filters over the same pile) ---- */
+const LENSES=[['unassigned','Unassigned'],['mine','Mine'],['all','All'],['history','History']];
+function lensList(l){
+  if(l==='unassigned') return REQUESTS.filter(r=>r.status==='pending'&&!r.assignee);
+  if(l==='mine')       return REQUESTS.filter(r=>r.assignee==='AY'&&r.status==='pending');
+  if(l==='all')        return REQUESTS.filter(r=>r.status==='pending');
+  if(l==='history')    return REQUESTS.filter(r=>r.status!=='pending'&&r.assignee==='AY');
+  return REQUESTS;
+}
+function lensCount(l){return lensList(l).length;}
+
+function typeMeta(k){return ({
+  dealcard:{label:'Deal card',  icon:'📄',cls:'bg-pink-600 text-white',                       desc:'Pre-filled a deal'},
+  pricelist:{label:'Price-list',icon:'🏷️',cls:'bg-amber-100 text-amber-700 border border-amber-200',desc:'Requesting your price-list'},
+  message:{label:'+ Note',      icon:'💬',cls:'bg-sky-100 text-sky-700 border border-sky-200',desc:'Wants to connect, left a note'},
+  plain:{label:'Connect',       icon:'🔗',cls:'bg-slate-100 text-slate-600 border border-slate-200',desc:'Wants to connect'},
+})[k];}
+
+/* =========================================================================
+   SHELL  (reused from the Connect prototype, Inbox tab selected)
+   ========================================================================= */
+function topbar(){
+  return `<header class="h-14 bg-white border-b border-slate-200 flex items-center px-4 gap-4 shrink-0">
+    <span class="text-pink-600 font-black text-lg tracking-tight shrink-0">Hello sello</span>
+    <div class="flex-1 max-w-2xl mx-auto"><div class="flex items-center gap-2 px-4 py-2 bg-slate-100 rounded-full text-slate-400 text-sm"><span>🔍</span>Search for company, product or service…</div></div>
+    <div class="flex items-center gap-2 shrink-0"><span class="text-sm font-medium text-slate-700 hidden xl:inline">Aurora Deutschland GmbH</span><div class="w-8 h-8 rounded-lg bg-pink-100 text-pink-700 flex items-center justify-center font-bold text-xs">AD</div></div>
+  </header>`;
+}
+const RAIL=[
+  {name:'Home',icon:'🏠',s:'a'},{name:'Connect',icon:'💬',s:'sel'},{name:'Discover',icon:'🔍',s:'a'},
+  {name:'Present',icon:'🏪',s:'a'},{name:'Buy',icon:'🛒',s:'soon'},{name:'Sell',icon:'🏷️',s:'soon'},{name:'Trade',icon:'🔄',s:'soon'},
+];
+function iconRail(){
+  const base='flex flex-col items-center gap-0.5 py-2 rounded-lg text-[9px] font-medium leading-none';
+  const item=n=> n.s==='sel'
+    ? `<a href="#" class="${base} text-pink-700 bg-pink-50"><span class="text-lg">${n.icon}</span>${n.name}</a>`
+    : n.s==='a'
+    ? `<a href="#" class="${base} text-slate-600 hover:bg-slate-100"><span class="text-lg">${n.icon}</span>${n.name}</a>`
+    : `<span class="${base} text-slate-300"><span class="text-lg grayscale">${n.icon}</span>${n.name}</span>`;
+  return `<aside class="w-16 bg-white border-r border-slate-200 shrink-0 flex flex-col px-1.5 py-2 gap-0.5">
+    ${RAIL.map(item).join('')}
+    <div class="mt-auto flex justify-center pt-2"><div class="w-8 h-8 rounded-full bg-gradient-to-br from-orange-400 to-pink-500"></div></div>
+  </aside>`;
+}
+function subnav(){
+  const tabs=[{name:'Chat',icon:'💬'},{name:'Inbox',icon:'📥',badge:lensCount('unassigned'),sel:true},{name:'Companies',icon:'🏢'},{name:'Relationship',icon:'🔗'},{name:'Deals',icon:'📄'}];
+  return `<div class="w-44 bg-white border-r border-slate-200 shrink-0 p-2">
+    <div class="px-2 py-2 text-sm font-bold text-slate-800">Connect</div>
+    ${tabs.map(t=>`<a href="#" class="flex items-center gap-2 px-2.5 py-2 rounded-lg text-sm ${t.sel?'bg-pink-50 text-pink-700 font-medium':'text-slate-600 hover:bg-slate-100'}"><span>${t.icon}</span>${t.name}${t.badge?`<span class="ml-auto text-[10px] bg-pink-600 text-white rounded-full px-1.5">${t.badge}</span>`:''}</a>`).join('')}
+  </div>`;
+}
+
+/* ---- small atoms ---- */
+function av(init,size,cls){return `<div class="${size} rounded-full ${cls||'bg-slate-200 text-slate-500'} flex items-center justify-center font-semibold shrink-0">${init}</div>`;}
+function typeBadge(k){const m=typeMeta(k);return `<span class="inline-flex items-center gap-1 text-[10px] font-bold rounded-full px-2 py-0.5 ${m.cls}">${m.icon} ${m.label}</span>`;}
+function verifiedPill(v){return v?`<span class="inline-flex items-center gap-1 text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-1.5 py-0.5">✓ Verified</span>`:`<span class="inline-flex items-center gap-1 text-[10px] text-slate-500 bg-slate-50 border border-slate-200 rounded-full px-1.5 py-0.5">⚠ Unverified</span>`;}
+function assigneeChip(r){
+  if(!r.assignee) return `<span class="text-[11px] text-slate-400">Unassigned</span>`;
+  const t=TEAM[r.assignee], me=r.assignee==='AY';
+  return `<span class="inline-flex items-center gap-1 text-[11px] ${me?'text-pink-700':'text-slate-500'}">${av(r.assignee==='AY'?'AY':t.n[0],'w-4 h-4 text-[8px]',t.c)}${me?'You':t.n}${me?'':' is on it'}</span>`;
+}
+function dealMini(d){
+  return `<div class="border border-pink-200 rounded-xl bg-white overflow-hidden shadow-sm">
+    <div class="px-3 py-2 border-b border-slate-100 flex items-center justify-between"><span class="text-[10px] font-bold tracking-wide text-pink-700">&#10022; DEAL CARD · pre-filled</span><span class="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">AWAITING</span></div>
+    <div class="p-3">
+      <div class="flex items-center gap-3"><div class="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center text-lg">🌿</div><div><div class="font-semibold text-slate-800 text-sm">${d.product}</div><div class="text-xs text-slate-500">${d.qty} × ${d.unit}</div></div></div>
+      <div class="flex items-center justify-between mt-3 pt-2 border-t border-slate-100"><div><div class="text-[9px] uppercase tracking-wide text-slate-400">Delivery</div><div class="text-xs text-slate-700">${d.delivery}</div></div><div class="text-right"><div class="text-[9px] uppercase tracking-wide text-slate-400">Total</div><div class="text-base font-bold text-pink-600">${d.total}</div></div></div>
+    </div>
+  </div>`;
+}
+
+/* =========================================================================
+   INBOX  - Shared inbox (master/detail + lenses)   [LOCKED]
+   ========================================================================= */
+function lensTabs(){
+  return `<div class="flex gap-1 px-3 pt-3">
+    ${LENSES.map(([k,label])=>`<button data-lens="${k}" class="text-xs px-2.5 py-1 rounded-full ${lens===k?'bg-pink-600 text-white font-medium':'bg-slate-100 text-slate-500 hover:bg-slate-200'}">${label} <span class="${lens===k?'text-pink-200':'text-slate-400'}">${lensCount(k)}</span></button>`).join('')}
+  </div>`;
+}
+function rowA(r,selected){
+  const m=typeMeta(r.kind);
+  return `<button data-select="${r.id}" class="w-full text-left px-3 py-3 border-b border-slate-50 flex gap-3 ${selected?'bg-pink-50':'hover:bg-slate-50'}">
+    ${av(r.init,'w-9 h-9 text-xs')}
+    <div class="min-w-0 flex-1">
+      <div class="flex items-center justify-between gap-2"><span class="text-sm font-medium text-slate-800 truncate">${r.from}</span><span class="text-[10px] text-slate-400 shrink-0">${r.ago}</span></div>
+      <div class="mt-1">${typeBadge(r.kind)}</div>
+      <div class="text-xs text-slate-500 truncate mt-1">${r.note?r.note:`<span class="italic text-slate-400">${m.desc}</span>`}</div>
+      <div class="flex items-center gap-2 mt-1.5">${assigneeChip(r)}<span class="text-slate-200">·</span><span class="text-[11px] text-slate-400">${r.mutuals} mutual</span></div>
+    </div>
+  </button>`;
+}
+function listA(){
+  const list=lensList(lens);
+  const sel=selA();
+  return `<div class="w-72 bg-white border-r border-slate-200 shrink-0 flex flex-col">
+    <div class="border-b border-slate-100">
+      <div class="px-3 pt-3 text-sm font-bold text-slate-800">Inbox</div>
+      ${lensTabs()}
+      <div class="flex items-center gap-2 mx-3 my-3 px-3 py-1.5 bg-slate-100 rounded-lg text-slate-400 text-sm"><span>🔍</span>Search requests…</div>
+    </div>
+    <div class="flex-1 overflow-y-auto">
+      ${list.length?list.map(r=>rowA(r,sel&&sel.id===r.id)).join(''):`<div class="p-6 text-center text-sm text-slate-400">Nothing in <b>${lens}</b>.</div>`}
+    </div>
+  </div>`;
+}
+function detailA(){
+  const r=selA();
+  if(!r) return `<div class="flex-1 flex flex-col items-center justify-center text-center text-slate-400 bg-slate-50"><div class="text-5xl mb-3">📥</div><div class="text-lg font-medium text-slate-500">Inbox zero</div><div class="text-sm">No requests in this lens.</div></div>`;
+  const m=typeMeta(r.kind);
+  // body by type
+  let body='';
+  if(r.kind==='dealcard') body=`<div class="max-w-sm">${dealMini(r.deal)}</div>`;
+  else if(r.note) body=`<div class="bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm text-slate-700 max-w-lg">${r.note}</div>`;
+  else body=`<div class="text-sm text-slate-400 italic">${m.desc} - no message attached.</div>`;
+
+  // action area by status
+  let actions='';
+  if(r.status==='pending'){
+    actions=`
+      <div class="flex items-center gap-2">
+        <button data-act="accept" data-id="${r.id}" class="px-4 py-2.5 bg-pink-600 text-white text-sm font-medium rounded-xl hover:bg-pink-700">✓ Accept &amp; connect</button>
+        <button data-act="decline" data-id="${r.id}" class="px-4 py-2.5 border border-slate-200 text-slate-600 text-sm rounded-xl hover:border-slate-300">Decline</button>
+        ${r.assignee!=='AY'?`<button data-act="claim" data-id="${r.id}" class="ml-auto px-3 py-2.5 text-sm text-pink-700 hover:bg-pink-50 rounded-xl">${r.assignee?'Take over':'Claim this'}</button>`:''}
+      </div>
+      ${r.assignee&&r.assignee!=='AY'?`<div class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-center gap-2">👀 ${TEAM[r.assignee].n} is already handling this - check before you reply.</div>`:''}`;
+  } else if(r.status==='accepted'){
+    actions=`<div class="border border-emerald-200 bg-emerald-50 rounded-2xl p-4 max-w-lg">
+      <div class="text-sm font-semibold text-emerald-800 flex items-center gap-2">✓ Connected with ${r.from}</div>
+      <div class="text-xs text-emerald-700 mt-1">Relationship created · a C2C chat thread opened with a "You are now connected" message${r.kind==='pricelist'?' · Sella queued your price-list':''}.</div>
+      <button data-startdeal class="mt-3 px-4 py-2 bg-pink-600 text-white text-sm rounded-xl hover:bg-pink-700">Start a deal &rarr;</button>
+    </div>`;
+  } else {
+    actions=`<div class="text-sm text-slate-500 bg-slate-100 rounded-xl px-4 py-3 max-w-lg">Declined. The sender isn't notified (just like LinkedIn). It moves to <b>History</b>.</div>`;
+  }
+
+  return `<div class="flex-1 flex flex-col min-w-0 bg-slate-50">
+    <div class="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-5 shrink-0">
+      <div class="flex items-center gap-3">${av(r.init,'w-9 h-9 text-sm')}<div><div class="font-semibold text-slate-800 leading-tight flex items-center gap-2">${r.from} ${verifiedPill(r.verified)}</div><div class="text-xs text-slate-400">Buyer · ${r.mutuals} mutual connections · ${r.ago}</div></div></div>
+      <div class="flex items-center gap-2 text-xs text-slate-500">Assignee: ${assigneeChip(r)} <button class="px-2 py-1 border border-slate-200 rounded-lg hover:border-pink-300">Assign ▾</button></div>
+    </div>
+    <div class="flex-1 overflow-y-auto p-6 space-y-5">
+      <div>${typeBadge(r.kind)} <span class="text-xs text-slate-400 ml-1">wants to connect</span></div>
+      ${body}
+      <div class="pt-2 space-y-3">${actions}</div>
+    </div>
+  </div>`;
+}
+
+/* =========================================================================
+   SELLA panel  - vets the selected requester
+   ========================================================================= */
+function sellaInbox(){
+  const msg=t=>`<div class="bg-slate-50 border border-slate-200 rounded-2xl px-3.5 py-2.5 text-sm text-slate-700">${t}</div>`;
+  const r=selA();
+  let inner;
+  if(!r){ inner=msg("Nothing to review here. Nice - inbox zero. 🎉"); }
+  else {
+    const verdict = r.verified ? (r.mutuals>=3?'Strong signal - verified and well-connected. Safe to accept.':'Verified, but few mutuals. Probably fine.') : 'Unverified and no mutuals - I\'d ask a question before connecting.';
+    inner=`<div class="text-xs uppercase tracking-wide text-slate-400">Vetting ${r.from}</div>
+      ${msg(verdict)}
+      ${r.kind==='pricelist'?msg("They want your price-list. Accept and I'll draft it into the new chat."):''}
+      ${r.kind==='dealcard'?msg("They pre-filled a deal. Accept and the deal card lands straight in the Deal Chat."):''}`;
+  }
+  return `<aside class="w-72 bg-white border-l border-slate-200 shrink-0 flex flex-col">
+    <div class="flex-1 overflow-y-auto p-3 space-y-3">
+      <div class="flex items-center gap-2"><div class="w-8 h-8 rounded-xl bg-pink-600 text-white flex items-center justify-center">&#10022;</div><div class="text-sm font-semibold text-slate-700">Sella</div></div>
+      ${inner}
+    </div>
+    <div class="p-3 border-t border-slate-100">
+      <div class="flex items-center gap-2 border border-slate-300 rounded-xl px-3 py-2"><input class="flex-1 outline-none text-sm bg-transparent" placeholder="Ask Sella to vet a request…"/><span class="text-slate-400">🎤</span></div>
+    </div>
+  </aside>`;
+}
+
+/* =========================================================================
+   MOCK DB drawer  - reads the SAME store the UI mutates
+   ========================================================================= */
+function DB(){
+  return [
+    {name:'pending_inbox_item', cols:['id','from_company','type','assignee','status'],
+      rows:REQUESTS.map(r=>({id:r.id,from_company:r.from,type:r.kind,assignee:r.assignee||'—',status:r.status,_changed:r._chg}))},
+    {name:'relationship', cols:['id','company_a','company_b','status'], rows:DERIVED.relationship},
+    {name:'chat_thread', cols:['id','relationship_id','type'], rows:DERIVED.chat_thread},
+    {name:'chat_message', cols:['id','thread_id','sender','body'], rows:DERIVED.chat_message},
+    {name:'audit_log', cols:['id','actor','action','target'], rows:DERIVED.audit_log},
+  ];
+}
+function dbDrawer(){
+  const card=t=>`
+    <div class="min-w-[220px] bg-white border border-slate-200 rounded-lg overflow-hidden shrink-0 self-start">
+      <div class="px-2.5 py-1.5 bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-700">${t.name} <span class="text-slate-400 font-normal">(${t.rows.length})</span></div>
+      <div class="overflow-x-auto"><table class="data-table"><thead><tr>${t.cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead><tbody>${t.rows.length?t.rows.map(r=>`<tr class="${(r._new||r._changed)?'data-row-new':''}">${t.cols.map(c=>`<td>${r[c]!==undefined?r[c]:''}</td>`).join('')}</tr>`).join(''):`<tr><td colspan="${t.cols.length}" class="text-slate-300 italic">empty</td></tr>`}</tbody></table></div>
+    </div>`;
+  return `<div class="h-56 bg-slate-100 border-t border-slate-300 shrink-0 flex flex-col">
+    <div class="px-4 py-2 border-b border-slate-200 bg-white">
+      <span class="text-sm font-semibold text-slate-700">Data state · mock DB</span>
+      <span class="text-xs text-slate-400"> - <b>Accept</b> writes a <code>relationship</code> + a C2C <code>chat_thread</code> + a "connected" <code>chat_message</code>. <b>Decline</b> just logs to <code>audit_log</code> (sender not notified). Changed rows highlight yellow.</span>
+    </div>
+    <div class="flex-1 overflow-auto p-3"><div class="flex gap-3 items-start">${DB().map(card).join('')}</div></div>
+  </div>`;
+}
+
+/* =========================================================================
+   COMPOSE + RENDER
+   ========================================================================= */
+function selA(){ return REQUESTS.find(x=>x.id===selectedId) || lensList(lens)[0]; }
+function screen(){
+  // min-w keeps the 5 desktop panels from crushing in a narrow preview pane; it scrolls horizontally instead.
+  return `${topbar()}<div class="flex-1 min-h-0 overflow-x-auto"><div class="flex h-full min-w-[1180px]">${iconRail()}${subnav()}${listA()}${detailA()}${sellaInbox()}</div></div>${showDB?dbDrawer():''}`;
+}
+function dbToggle(){
+  return `<button id="db-toggle" class="fixed bottom-4 left-4 z-50 text-sm px-3 py-2 bg-slate-900 text-white rounded-full shadow-xl">⛁ ${showDB?'Hide data':'Show data'}</button>`;
+}
+
+/* ---- UI state ---- */
+let showDB=true;
+let lens='unassigned';
+let selectedId=null;
+
+function render(){
+  document.getElementById('app').innerHTML=screen();
+  document.getElementById('switcher').innerHTML=dbToggle();
+  document.querySelectorAll('[data-lens]').forEach(b=>b.addEventListener('click',()=>{lens=b.getAttribute('data-lens');selectedId=null;render();}));
+  document.querySelectorAll('[data-select]').forEach(b=>b.addEventListener('click',()=>{selectedId=b.getAttribute('data-select');render();}));
+  document.querySelectorAll('[data-act]').forEach(b=>b.addEventListener('click',()=>{const id=b.getAttribute('data-id'),a=b.getAttribute('data-act');if(a==='accept')accept(id);else if(a==='decline')decline(id);else if(a==='claim')claim(id);}));
+  const dt=document.getElementById('db-toggle'); if(dt) dt.addEventListener('click',()=>{showDB=!showDB;render();});
+}
+render();
+</script>
+</body>
+</html>

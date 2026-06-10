@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<!-- PROTOTYPE - throwaway. DEAL CARD (screen 1). Look decided (Ayush's screenshot 1); this makes it interactive.
+     DEMO bar (NOT product UI), consistent structure across all prototypes:
+       View (Card|In chat) · State (Full|Half) · Seeing as (Seller|Buyer) · Side (Receiving|Sending)
+     PO/SO is DERIVED, never toggled:  sender = (side==='sending'? viewer : opposite(viewer));
+       seller is sender -> Sales Order ; buyer is sender -> Purchase Order.
+     Margin shows only to the seller; buyer sees a placeholder metric (name TBD). Products = scrollable list
+     with a small square thumbnail (not clickable yet). Mock-DB drawer at bottom. Single deal only (v1). -->
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hello Sello - Deal Card (prototype)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", sans-serif; }
+  .flip-3d { perspective: 1600px; }
+  .flip-inner { transition: transform .5s; transform-style: preserve-3d; position: relative; }
+  .flip-inner.back { transform: rotateY(180deg); }
+  .flip-face { backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+  .flip-face.rear { position: absolute; inset: 0; transform: rotateY(180deg); }
+  .data-table { border-collapse: collapse; width: 100%; font-size: 10.5px; }
+  .data-table th, .data-table td { text-align: left; padding: 3px 7px; border-bottom: 1px solid #e2e8f0; white-space: nowrap; }
+  .data-table th { font-weight: 600; color:#64748b; background:#f8fafc; text-transform: uppercase; font-size: 9px; letter-spacing:.03em; }
+  code { font-size: 10px; background:#f1f5f9; padding:1px 4px; border-radius:3px; }
+</style>
+</head>
+<body class="bg-slate-100 text-slate-900 h-screen overflow-hidden">
+<div id="app" class="h-screen flex flex-col"></div>
+<div id="bar"></div>
+<script>
+/* =========================================================================
+   DEAL DATA
+   ========================================================================= */
+const DEAL = {
+  hs:'HS-AUR07-CAN23-A189371', date:'15 JUNE 2026',
+  seller:{name:'CANADIAN CRAFT', sub:'CANNABIS CO'},
+  buyer:{name:'ABC', sub:'Apotheke am Werth'},
+  net:'23.000 €', gross:'25.390 €', margin:'4.000 €', delivery:'01 AUG 2026',
+  products:[
+    {name:'Northern Lights', cultivar:'Indica', vol:'2.0 kg', price:'€4.20/g', pzn:'17345601', color:'bg-emerald-100'},
+    {name:'Sour Diesel',     cultivar:'Sativa', vol:'1.5 kg', price:'€4.50/g', pzn:'17345602', color:'bg-lime-100'},
+    {name:'White Widow',     cultivar:'Hybrid', vol:'1.0 kg', price:'€4.30/g', pzn:'17345603', color:'bg-teal-100'},
+    {name:'OG Kush',         cultivar:'Indica', vol:'0.75 kg',price:'€4.60/g', pzn:'17345604', color:'bg-green-100'},
+    {name:'Amnesia Haze',    cultivar:'Sativa', vol:'0.5 kg', price:'€4.80/g', pzn:'17345605', color:'bg-yellow-100'},
+    {name:'Gelato',          cultivar:'Hybrid', vol:'0.25 kg',price:'€5.00/g', pzn:'17345606', color:'bg-amber-100'},
+  ],
+};
+const SIGNALS = {
+  seller:[
+    {icon:'📈', t:'Margin healthy', d:'17% on this deal - above your 14% average with pharmacies.'},
+    {icon:'⏳', t:'2 products near expiry', d:'Amnesia Haze + Gelato within 60 days. Prioritise dispatch.'},
+    {icon:'🔁', t:'Repeat buyer', d:'4th deal with ABC Apotheke. They reorder ~every 5 weeks.'},
+  ],
+  buyer:[
+    {icon:'💸', t:'Priced 8% below your last order', d:'Northern Lights down from €4.55/g.'},
+    {icon:'📦', t:'1 item low in stock', d:'OG Kush - confirm soon to hold your volume.'},
+    {icon:'🚚', t:'Reliable delivery', d:'Canadian Craft delivered on time on 96% of past orders.'},
+  ],
+};
+
+/* =========================================================================
+   DEMO STATE  (bottom bar - NOT part of the product)
+   ========================================================================= */
+let view='card';      // card | chat
+let cardType='po';    // po | so  -> the two deal-card types: Purchase Order card / Sales Order card
+let holder='seller';  // seller | buyer  -> whose hands the card is in (which face you see)
+let conn='full';      // full | half
+let flipped=false;
+let cardOpen=false;
+let showDB=true;
+
+const isSeller=()=>holder==='seller';
+const other=r=> r==='seller'?'buyer':'seller';
+// The card type IS the document term - one deal_card entity with a doc_type discriminator.
+const docTerm=()=> cardType==='po' ? 'Purchase Order' : 'Sales Order';
+const docAbbr=()=> cardType==='po' ? 'PO' : 'SO';
+
+/* =========================================================================
+   THE DEAL CARD
+   ========================================================================= */
+function logoBox(c){
+  return `<div class="flex-1 bg-white border border-slate-200 rounded-md p-2 flex flex-col">
+    <div class="text-[10px] uppercase tracking-wide text-slate-400">${c===DEAL.seller?'Seller':'Buyer'}</div>
+    <div class="flex-1 flex flex-col items-center justify-center py-1.5">
+      <div class="font-black tracking-tight text-slate-800 text-sm leading-none text-center">${c.name}</div>
+      <div class="text-[8px] tracking-[0.2em] text-slate-500 mt-1">${c.sub}</div>
+    </div>
+  </div>`;
+}
+function field(label, value, opts={}){
+  const val = opts.locked
+    ? `<div class="flex-1 bg-white/70 rounded-md px-3 py-2 text-sm text-slate-300 flex items-center gap-2">🔒 unlocks on connect</div>`
+    : `<div class="flex-1 ${opts.yellow?'bg-yellow-200':'bg-white'} rounded-md px-3 py-2 text-sm font-medium text-slate-800">${value}</div>`;
+  return `<div class="flex items-stretch gap-2">
+    <div class="w-32 bg-pink-600 text-white rounded-md px-3 py-2 text-sm font-bold flex items-center">${label}</div>
+    ${val}
+  </div>`;
+}
+function analyticField(locked){
+  // seller sees Margin; buyer sees a placeholder metric (name TBD)
+  return isSeller()
+    ? field('Margin', DEAL.margin+' <span class="text-[10px] font-normal">(seller only)</span>', {yellow:true, locked})
+    : field('Buyer metric', '<span class="text-slate-500">placeholder · name TBD</span>', {yellow:true, locked});
+}
+function productsList(locked){
+  if(locked) return `<div class="bg-white/70 rounded-md px-3 py-3 text-sm text-slate-300 flex items-center gap-2">🔒 Product breakdown unlocks on connect</div>`;
+  // list format; small square thumbnail on the far left. NOT clickable yet (later: opens that product's card).
+  return `<div class="bg-white rounded-md p-2">
+    <div class="flex items-center justify-between px-1 pb-1.5">
+      <span class="text-xs font-semibold text-slate-600">Products (${DEAL.products.length})</span>
+      <span class="text-[10px] text-slate-400">scroll ↓</span>
+    </div>
+    <div class="max-h-32 overflow-y-auto divide-y divide-slate-100">
+      ${DEAL.products.map(p=>`<div class="flex items-center gap-2.5 px-1 py-1.5" title="Product card opens here (coming soon)">
+        <div class="w-8 h-8 rounded ${p.color} flex items-center justify-center text-sm shrink-0">🌿</div>
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-xs font-semibold text-slate-800 truncate">${p.name}</span>
+            <span class="text-[10px] text-slate-700 font-medium shrink-0">${p.price}</span>
+          </div>
+          <div class="text-[10px] text-slate-500 truncate">${p.cultivar} · ${p.vol} · PZN ${p.pzn}</div>
+        </div>
+      </div>`).join('')}
+    </div>
+  </div>`;
+}
+function cardFront(){
+  // half-card is a PRE-CONNECTION teaser (inbox only). In the chat you're already connected -> always full.
+  const locked = conn==='half' && view==='card';
+  return `<div class="flip-face">
+    <div class="bg-[#f7bdd0] rounded-2xl p-3 w-[340px] shadow-lg relative">
+      <button data-flip class="absolute top-2 left-2 w-6 h-6 rounded-full bg-white/70 hover:bg-white text-pink-700 text-xs flex items-center justify-center" title="Flip to signals">⇆</button>
+      <div class="bg-pink-600 text-white text-center font-bold tracking-wide text-sm rounded-md py-1.5 mt-1">${DEAL.hs}</div>
+      <div class="bg-white text-center text-slate-700 text-xs rounded-md py-1.5 mt-1.5">${docTerm()} from ${DEAL.date}</div>
+      <div class="flex gap-2 mt-1.5">${logoBox(DEAL.seller)}${logoBox(DEAL.buyer)}</div>
+      <div class="space-y-1.5 mt-1.5">
+        ${field('Value net', DEAL.net)}
+        ${field('Value gross', DEAL.gross)}
+        ${analyticField(locked)}
+        ${field('Delivery wish', DEAL.delivery, {locked})}
+        ${field('Products', String(DEAL.products.length), {locked})}
+      </div>
+      <div class="mt-1.5">${productsList(locked)}</div>
+      ${locked?`<div class="text-center text-[11px] text-pink-700 mt-1.5 font-medium">Connect with this company to see the full deal</div>`:''}
+    </div>
+  </div>`;
+}
+function cardBack(){
+  const sig = SIGNALS[holder];
+  return `<div class="flip-face rear">
+    <div class="bg-[#f7bdd0] rounded-2xl p-3 w-[340px] shadow-lg relative h-full">
+      <button data-flip class="absolute top-2 left-2 w-6 h-6 rounded-full bg-white/70 hover:bg-white text-pink-700 text-xs flex items-center justify-center" title="Flip to facts">⇆</button>
+      <div class="bg-pink-600 text-white text-center font-bold tracking-wide text-sm rounded-md py-1.5 mt-1">&#10022; SIGNALS</div>
+      <div class="text-center text-[11px] text-pink-800 mt-1 mb-2">Sella's read - ${isSeller()?'seller':'buyer'} view</div>
+      <div class="space-y-1.5">
+        ${sig.map(s=>`<div class="bg-white rounded-md px-3 py-2">
+          <div class="text-sm font-semibold text-slate-800 flex items-center gap-2">${s.icon} ${s.t}</div>
+          <div class="text-xs text-slate-500 mt-0.5">${s.d}</div>
+        </div>`).join('')}
+      </div>
+      <div class="text-center text-[10px] text-pink-700 mt-3">Signals are advisory - the facts on the front are the agreed truth.</div>
+    </div>
+  </div>`;
+}
+function dealCard(){
+  return `<div class="flip-3d"><div class="flip-inner ${flipped?'back':''}">${cardFront()}${cardBack()}</div></div>`;
+}
+
+/* =========================================================================
+   VIEW 1 - card on a clean canvas (shows the card-to-screen ratio)
+   ========================================================================= */
+function cardCanvas(){
+  return `<div class="flex-1 flex flex-col items-center justify-center gap-3 overflow-auto p-4">
+    ${dealCard()}
+    <div class="text-xs text-slate-400 text-center max-w-sm">
+      <b>${docTerm()} card</b>, in the <b>${holder}'s</b> hands (its ${holder} face). ${conn==='half'?'Half card - shown before connecting (top facts only). ':'Full card - visible once connected. '}${isSeller()?'Margin shown.':'Placeholder metric (buyer).'} Flip (top-left) → signals.
+    </div>
+  </div>`;
+}
+
+/* =========================================================================
+   VIEW 2 - placement inside the P2P chat
+   ========================================================================= */
+function shellTop(){
+  return `<header class="h-14 bg-white border-b border-slate-200 flex items-center px-4 gap-4 shrink-0">
+    <span class="text-pink-600 font-black text-lg tracking-tight shrink-0">Hello sello</span>
+    <div class="flex-1 max-w-xl mx-auto"><div class="flex items-center gap-2 px-4 py-2 bg-slate-100 rounded-full text-slate-400 text-sm"><span>🔍</span>Search…</div></div>
+    <div class="w-8 h-8 rounded-lg bg-pink-100 text-pink-700 flex items-center justify-center font-bold text-xs">AD</div>
+  </header>`;
+}
+function rail(){
+  const items=[['🏠','Home'],['💬','Connect',1],['🔍','Discover'],['🏪','Present']];
+  return `<aside class="w-16 bg-white border-r border-slate-200 shrink-0 flex flex-col px-1.5 py-2 gap-0.5">
+    ${items.map(([i,n,sel])=>`<a class="flex flex-col items-center gap-0.5 py-2 rounded-lg text-[9px] font-medium ${sel?'text-pink-700 bg-pink-50':'text-slate-600'}"><span class="text-lg">${i}</span>${n}</a>`).join('')}
+  </aside>`;
+}
+function subnav(){
+  const tabs=[['💬','Chat',1],['📥','Inbox'],['🔗','Relationship'],['📄','Deals']];
+  return `<div class="w-40 bg-white border-r border-slate-200 shrink-0 p-2">
+    <div class="px-2 py-2 text-sm font-bold text-slate-800">Connect</div>
+    ${tabs.map(([i,n,sel])=>`<a class="flex items-center gap-2 px-2.5 py-2 rounded-lg text-sm ${sel?'bg-pink-50 text-pink-700 font-medium':'text-slate-600'}"><span>${i}</span>${n}</a>`).join('')}
+  </div>`;
+}
+function chatMain(){
+  const partner = isSeller() ? 'Thomas (ABC Apotheke)' : 'Kim (Canadian Craft)';
+  return `<div class="flex-1 flex flex-col min-w-0 bg-slate-50">
+    <div class="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-5 shrink-0">
+      <div class="flex items-center gap-3"><div class="w-9 h-9 rounded-full bg-slate-200 flex items-center justify-center text-xs font-semibold text-slate-500">${isSeller()?'TA':'KC'}</div>
+        <div><div class="font-semibold text-slate-800 leading-tight">${partner}</div><div class="text-xs text-slate-400">P2P chat</div></div></div>
+      <button class="text-xs px-3 py-1.5 border border-slate-200 rounded-lg text-slate-600">Relationship ↗</button>
+    </div>
+    <div class="bg-white border-b border-slate-200 px-4 py-2 flex items-center gap-3 shrink-0">
+      <span class="text-[11px] text-slate-400 shrink-0">Talking about:</span>
+      <button class="text-sm px-3 py-1.5 bg-slate-100 rounded-lg text-slate-700 flex items-center gap-2">Current deal <span class="text-slate-400">▾</span></button>
+      <button data-toggle-card class="ml-auto flex items-center gap-2 px-3 py-1.5 bg-pink-600 text-white rounded-lg text-sm">
+        <span class="font-semibold tracking-wide">${DEAL.hs}</span>
+        <span class="text-pink-200">${cardOpen?'✕ close':'open ▸'}</span>
+      </button>
+    </div>
+    <div class="flex-1 overflow-y-auto p-5 space-y-2 relative">
+      <div class="flex justify-center my-2"><div class="text-[11px] text-pink-700 bg-pink-50 border border-pink-100 rounded-full px-3 py-1">&#10022; You are now connected</div></div>
+      <div class="flex justify-start"><div class="max-w-[70%] bg-white border border-slate-200 rounded-2xl rounded-bl-sm px-3.5 py-2 text-sm">Hi - can you hold the 6 items on the ${docAbbr()} till August?</div></div>
+      <div class="flex justify-end"><div class="max-w-[70%] bg-pink-600 text-white rounded-2xl rounded-br-sm px-3.5 py-2 text-sm">Yes, locked. Net stays at €23,000.</div></div>
+      ${cardOpen?`<div class="absolute right-4 top-4 z-10">${dealCard()}</div>`:''}
+    </div>
+    <div class="px-4 pb-4"><div class="border border-slate-300 rounded-2xl bg-white px-4 py-3 text-sm text-slate-400">Message ${partner.split(' ')[0]}…</div></div>
+  </div>`;
+}
+function sellaRail(){
+  return `<aside class="w-64 bg-white border-l border-slate-200 shrink-0 flex flex-col">
+    <div class="flex-1 p-3 space-y-3">
+      <div class="flex items-center gap-2"><div class="w-8 h-8 rounded-xl bg-pink-600 text-white flex items-center justify-center">&#10022;</div><div class="text-sm font-semibold text-slate-700">Sella</div></div>
+      <div class="bg-slate-50 border border-slate-200 rounded-2xl px-3.5 py-2.5 text-sm text-slate-700">The deal card sits one click away in the bar above - Sella stays right here, both at once.</div>
+    </div>
+    <div class="p-3 border-t border-slate-100"><div class="flex items-center gap-2 border border-slate-300 rounded-xl px-3 py-2"><input class="flex-1 outline-none text-sm bg-transparent" placeholder="Ask Sella…"/><span class="text-slate-400">🎤</span></div></div>
+  </aside>`;
+}
+function chatCanvas(){
+  return `<div class="flex-1 min-h-0 overflow-x-auto"><div class="flex h-full min-w-[1100px]">${rail()}${subnav()}${chatMain()}${sellaRail()}</div></div>`;
+}
+
+/* =========================================================================
+   MOCK DB  (reflects demo state)
+   ========================================================================= */
+function DB(){
+  const po = cardType==='po';
+  return [
+    {name:'deal_card', cols:['id','hs_number','doc_type','value_net','value_gross','margin','status'],
+      rows:[{id:'dc_01',hs_number:DEAL.hs,doc_type:po?'purchase_order':'sales_order',value_net:'23000',value_gross:'25390',margin: isSeller()?'4000':'🔒 seller-scoped (RLS)',status:'confirmed'}]},
+    {name:'deal_line_item', cols:['id','deal_card_id','name','cultivar','volume','unit_price','pzn'],
+      rows:DEAL.products.map((p,i)=>({id:'li_0'+(i+1),deal_card_id:'dc_01',name:p.name,cultivar:p.cultivar,volume:p.vol,unit_price:p.price,pzn:p.pzn}))},
+    {name:'deal_card_version', cols:['id','deal_card_id','v','state','changed_by'],
+      rows:[{id:'dcv_01',deal_card_id:'dc_01',v:'1',state:'Draft',changed_by:'Sella'},{id:'dcv_02',deal_card_id:'dc_01',v:'2',state:'Confirmed',changed_by:'both'}]},
+    {name:'order', cols:['id','deal_card_id','po_number','so_number','hs_number','status'],
+      rows:[{id:'ord_01',deal_card_id:'dc_01',po_number:po?'PO-ABC-0098':'—',so_number:po?'—':'SO-CC-0451',hs_number:DEAL.hs,status:'open'}]},
+    {name:'relationship', cols:['id','company_a','company_b','status'],
+      rows:[{id:'rel_01',company_a:'Canadian Craft',company_b:'ABC Apotheke',status:'connected'}]},
+  ];
+}
+function dbDrawer(){
+  const card=t=>`
+    <div class="min-w-[220px] bg-white border border-slate-200 rounded-lg overflow-hidden shrink-0 self-start">
+      <div class="px-2.5 py-1.5 bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-700">${t.name} <span class="text-slate-400 font-normal">(${t.rows.length})</span></div>
+      <div class="overflow-x-auto"><table class="data-table"><thead><tr>${t.cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead><tbody>${t.rows.map(r=>`<tr>${t.cols.map(c=>`<td>${r[c]!==undefined?r[c]:''}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
+    </div>`;
+  return `<div class="h-48 bg-slate-100 border-t border-slate-300 shrink-0 flex flex-col">
+    <div class="px-4 py-2 border-b border-slate-200 bg-white">
+      <span class="text-sm font-semibold text-slate-700">Data state · mock DB</span>
+      <span class="text-xs text-slate-400"> - <code>doc_type</code> = ${cardType==='po'?'purchase_order':'sales_order'} - the <b>${docTerm()} card</b> (${cardType==='po'?'buyer→seller':'seller→buyer'}), one <code>deal_card</code> entity. In the ${holder}'s hands → <code>margin</code> ${isSeller()?'visible (seller)':'hidden (RLS)'}.</span>
+    </div>
+    <div class="flex-1 overflow-auto p-3"><div class="flex gap-3 items-start">${DB().map(card).join('')}</div></div>
+  </div>`;
+}
+
+/* =========================================================================
+   COMPOSE + DEMO BAR  (consistent structure across all prototypes)
+   ========================================================================= */
+function screen(){
+  const body = view==='chat' ? chatCanvas() : cardCanvas();
+  return `${shellTop()}${body}${showDB?dbDrawer():''}`;
+}
+function seg(label, opts, cur){
+  return `<div class="flex items-center gap-1 bg-slate-800 rounded-full p-0.5">
+    <span class="text-[10px] text-slate-400 px-2">${label}</span>
+    ${opts.map(([k,t])=>`<button data-set="${label}" data-val="${k}" class="text-xs px-2.5 py-1 rounded-full ${cur===k?'bg-white text-slate-900 font-medium':'text-slate-300'}">${t}</button>`).join('')}
+  </div>`;
+}
+function bar(){
+  return `<button data-db class="fixed bottom-4 left-4 z-50 text-sm px-3 py-2 bg-slate-900 text-white rounded-full shadow-xl">⛁ ${showDB?'Hide data':'Show data'}</button>
+  <div class="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-slate-900 rounded-2xl shadow-xl px-3 py-2 flex-wrap justify-center max-w-[80vw]">
+    <span class="text-[10px] text-pink-300 font-semibold pr-1">DEMO</span>
+    ${seg('View',[['card','Card'],['chat','In chat']],view)}
+    ${view==='card' ? seg('State',[['full','Full'],['half','Half']],conn) : ''}
+    ${seg('Card type',[['po','PO card'],['so','SO card']],cardType)}
+    ${seg('Held by',[['seller','Seller'],['buyer','Buyer']],holder)}
+  </div>`;
+}
+function render(){
+  document.getElementById('app').innerHTML=screen();
+  document.getElementById('bar').innerHTML=bar();
+  document.querySelectorAll('[data-set]').forEach(b=>b.addEventListener('click',()=>{
+    const k=b.getAttribute('data-set'), v=b.getAttribute('data-val');
+    if(k==='View')view=v; else if(k==='State')conn=v; else if(k==='Card type')cardType=v; else if(k==='Held by')holder=v;
+    render();
+  }));
+  document.querySelectorAll('[data-flip]').forEach(b=>b.addEventListener('click',()=>{flipped=!flipped;render();}));
+  const t=document.querySelector('[data-toggle-card]'); if(t)t.addEventListener('click',()=>{cardOpen=!cardOpen;render();});
+  const d=document.querySelector('[data-db]'); if(d)d.addEventListener('click',()=>{showDB=!showDB;render();});
+}
+render();
+</script>
+</body>
+</html>
