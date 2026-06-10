@@ -27,6 +27,16 @@ export type ShopProduct = {
   bundle_price_per_gram: number | null;
 };
 
+/** A profile link, stored in `company.metadata.links` (no column per link).
+ *  `value` is platform-dependent: a bare handle for instagram/x (so the link
+ *  survives a domain change like twitter.com→x.com and renders as @handle), or a
+ *  full URL for linkedin/custom (no single handle format). `label` is custom-only. */
+export type ShopLink = {
+  platform: "linkedin" | "instagram" | "x" | "custom";
+  value: string;
+  label?: string;
+};
+
 export type Shop = {
   company: {
     id: string;
@@ -39,10 +49,21 @@ export type Shop = {
     country: string | null;
     address: string | null;
     website: string | null;
+    links: ShopLink[];
     tags: string[];
   };
   products: ShopProduct[];
 };
+
+/** Pull the links array out of the company's jsonb metadata, tolerating any
+ *  legacy/foreign shape (returns [] rather than throwing on unexpected data). */
+function parseLinks(metadata: unknown): ShopLink[] {
+  const raw = (metadata as { links?: unknown } | null)?.links;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (l): l is ShopLink => !!l && typeof (l as ShopLink).value === "string",
+  );
+}
 
 export async function getMyShop(): Promise<Shop | null> {
   const supabase = await createClient();
@@ -62,7 +83,7 @@ export async function getMyShop(): Promise<Shop | null> {
   const { data: company } = await supabase
     .from("company")
     .select(
-      "id, name, tagline, description, cover_path, logo_path, warehouse_location, country, address, website, company_type_assignment(company_type_code)",
+      "id, name, tagline, description, cover_path, logo_path, warehouse_location, country, address, website, metadata, company_type_assignment(company_type_code)",
     )
     .eq("id", companyId)
     .single();
@@ -111,6 +132,7 @@ export async function getMyShop(): Promise<Shop | null> {
       country: company.country,
       address: company.address,
       website: company.website,
+      links: parseLinks(company.metadata),
       tags: (company.company_type_assignment ?? []).map((t) => t.company_type_code),
     },
     products,

@@ -21,6 +21,42 @@ export type ManageResult = { ok: true } | { error: string };
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
 const orNull = (fd: FormData, k: string) => str(fd, k) || null;
 
+const LINK_PLATFORMS = new Set(["linkedin", "instagram", "x", "custom"]);
+
+/** Reduce instagram/x input to a bare handle no matter what the seller typed —
+ *  an @prefix, or a full profile URL pasted in. linkedin/custom keep their URL. */
+function normalizeLinkValue(platform: string, raw: string): string {
+  let v = raw.trim();
+  if (platform === "instagram" || platform === "x") {
+    v = v.replace(/^@+/, "");
+    v = v.replace(/^https?:\/\/(www\.)?(instagram\.com|x\.com|twitter\.com)\//i, "");
+    v = v.replace(/[/?#].*$/, ""); // drop any trailing path/query/fragment
+  }
+  return v.trim();
+}
+
+/** Validate the client-supplied links JSON into a clean array before it lands in
+ *  metadata. Drops anything malformed rather than trusting the payload. */
+function parseLinks(raw: FormDataEntryValue | null): Array<{ platform: string; label?: string; value: string }> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(String(raw ?? "[]"));
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(parsed)) return [];
+  return parsed.flatMap((l) => {
+    const platform = (l as { platform?: unknown })?.platform;
+    const rawValue = (l as { value?: unknown })?.value;
+    if (typeof platform !== "string" || !LINK_PLATFORMS.has(platform)) return [];
+    if (typeof rawValue !== "string") return [];
+    const value = normalizeLinkValue(platform, rawValue);
+    if (!value) return [];
+    const label = (l as { label?: unknown })?.label;
+    return [{ platform, value, ...(typeof label === "string" && label.trim() ? { label: label.trim() } : {}) }];
+  });
+}
+
 function imageExt(file: File): string {
   const m = /\.([a-z0-9]+)$/i.exec(file.name);
   if (m) return m[1].toLowerCase();
@@ -44,6 +80,19 @@ export async function updateShopProfile(formData: FormData): Promise<ManageResul
     address: orNull(formData, "address"),
     website: orNull(formData, "website"),
   };
+
+  // Links live in metadata.links (one column per link would not scale). Merge so
+  // any other metadata keys survive; the client sends the full links array.
+  const { data: existing } = await supabase
+    .from("company")
+    .select("metadata")
+    .eq("id", companyId)
+    .single();
+  const baseMeta =
+    existing?.metadata && typeof existing.metadata === "object" && !Array.isArray(existing.metadata)
+      ? (existing.metadata as Record<string, unknown>)
+      : {};
+  patch.metadata = { ...baseMeta, links: parseLinks(formData.get("links")) };
 
   for (const [field, key] of [["cover_path", "cover"], ["logo_path", "logo"]] as const) {
     const file = formData.get(key);
