@@ -13,7 +13,7 @@ import { useRouter } from "next/navigation";
 import {
   Heart, ShoppingCart, Link2, UploadCloud, Plus, FileSpreadsheet,
   Pencil, Check, ImagePlus, Loader2, Eye, EyeOff,
-  Globe, Trash2,
+  Globe, Trash2, ArrowLeft,
 } from "lucide-react";
 import type { Shop, ShopLink, ShopProduct } from "@/modules/catalog/shop";
 import { updateShopProfile, setProductImage, setProductPricePublic } from "@/modules/catalog/manage";
@@ -296,23 +296,23 @@ function ProfileEditor({
   return (
     <form onSubmit={save} onChange={touch} className="space-y-3">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-bold text-ink">Edit shop</h2>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={cancel}
-            className="rounded-full bg-white/70 px-4 py-2 text-sm font-bold text-ink/75 hover:bg-white"
+            className="flex items-center gap-1 rounded-full bg-white/70 px-3 py-2 text-sm font-bold text-ink/75 hover:bg-white"
           >
-            Cancel
+            <ArrowLeft size={16} /> Back to shop
           </button>
-          <button
-            type="submit"
-            disabled={busy}
-            className="flex items-center gap-1.5 rounded-full bg-brand px-5 py-2 text-sm font-bold text-white hover:bg-brand-deep disabled:opacity-40"
-          >
-            {busy ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />} Save
-          </button>
+          <h2 className="text-lg font-bold text-ink">Edit shop</h2>
         </div>
+        <button
+          type="submit"
+          disabled={busy}
+          className="flex items-center gap-1.5 rounded-full bg-brand px-5 py-2 text-sm font-bold text-white hover:bg-brand-deep disabled:opacity-40"
+        >
+          {busy ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />} Save
+        </button>
       </div>
 
       {error && <p className="text-sm text-rose-600">{error}</p>}
