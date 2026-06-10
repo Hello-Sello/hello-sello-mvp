@@ -26,6 +26,32 @@ export type ProfileFields = {
   linkedin: string
 }
 
+function slugify(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+}
+
+/**
+ * Give the person a unique `public_handle` if they don't have one yet (the
+ * migration backfilled existing rows, but new signups don't get one until they
+ * first save a profile). Tries `slug`, then `slug-2`, `slug-3`… on collision —
+ * the DB unique index is the source of truth.
+ */
+async function ensureHandle(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  displayName: string,
+): Promise<void> {
+  const { data } = await supabase.from('person').select('public_handle').eq('id', userId).maybeSingle()
+  if (data?.public_handle) return
+  const base = slugify(displayName) || 'user'
+  for (let i = 0; i < 6; i++) {
+    const candidate = i === 0 ? base : `${base}-${i + 1}`
+    const { error } = await supabase.from('person').update({ public_handle: candidate }).eq('id', userId)
+    if (!error) return // success
+    if (error.code !== '23505') return // not a uniqueness clash — give up quietly
+  }
+}
+
 // `links` is a small open jsonb bag; today it only carries LinkedIn.
 function linkedinFrom(links: unknown): string {
   if (links && typeof links === 'object' && 'linkedin' in links) {
@@ -92,7 +118,10 @@ export async function updateMyProfile(fields: ProfileFields): Promise<{ error?: 
       links: linkedin ? { linkedin } : {},
     })
     .eq('id', user.id)
-  return error ? { error: error.message } : {}
+  if (error) return { error: error.message }
+
+  await ensureHandle(supabase, user.id, fields.displayName)
+  return {}
 }
 
 /**
