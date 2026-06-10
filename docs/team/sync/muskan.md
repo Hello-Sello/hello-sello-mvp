@@ -5,11 +5,11 @@
 
 ---
 
-**Last updated:** 2026-06-10 (Present profile editor — shipped to production) CEST
+**Last updated:** 2026-06-10 (Present — product image gallery/carousel, building) CEST
 **Branch:** claude/muskan/work
-**Status:** idle (Present v0 fully shipped to **production**: storefront + manage-shop + import + profile editor with save fix, social links, logo, back button)
+**Status:** building — Present product **multi-image gallery + carousel** (replace single `product.image_path` with a 1:many `product_image` table; Embla carousel; reorder + set-as-cover)
 **Linear issue in progress:** none
-**Shared files locked:** none
+**Shared files locked:** `supabase/migrations/*` (new `product_image` table + `import_products` RPC rewrite — touches `product` schema), `src/modules/catalog/manage.ts`, `src/modules/catalog/shop.ts`, `src/modules/catalog/template.ts`, `src/app/present/ShopView.tsx`
 **PR open:** none — all merged ([#80](https://github.com/HelloSello/hello-sello-mvp/pull/80)→dev, [#81](https://github.com/HelloSello/hello-sello-mvp/pull/81)→main, [#82](https://github.com/HelloSello/hello-sello-mvp/pull/82)→dev, [#83](https://github.com/HelloSello/hello-sello-mvp/pull/83)→main)
 **Prev PR:** Present storefront [#75](https://github.com/HelloSello/hello-sello-mvp/pull/75) **merged** · 1b auth [#63](https://github.com/HelloSello/hello-sello-mvp/pull/63) **merged**.
 
