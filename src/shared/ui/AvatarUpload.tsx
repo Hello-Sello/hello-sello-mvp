@@ -1,0 +1,75 @@
+'use client'
+
+import { useState } from 'react'
+import { Camera } from 'lucide-react'
+import { createClient } from '@/shared/db/client'
+import { Avatar } from './Avatar'
+
+/**
+ * Pick + upload an avatar straight from the browser to the public `avatars`
+ * bucket (client-direct — avoids the Server-Action body limit), then hand the
+ * stored path to `onSaved` so the caller can persist the pointer. Reused by the
+ * account page (and later onboarding).
+ */
+export function AvatarUpload({
+  personId,
+  name,
+  initialUrl,
+  onSaved,
+}: {
+  personId: string
+  name: string
+  initialUrl: string | null
+  onSaved: (path: string) => Promise<{ error?: string }>
+}) {
+  const [url, setUrl] = useState(initialUrl)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function pick(file: File) {
+    setBusy(true)
+    setError(null)
+    const supabase = createClient()
+    const path = `${personId}/${crypto.randomUUID()}-${file.name}`
+    const { error: upErr } = await supabase.storage
+      .from('avatars')
+      .upload(path, file, { upsert: true, contentType: file.type })
+    if (upErr) {
+      setError(upErr.message)
+      setBusy(false)
+      return
+    }
+    const publicUrl = supabase.storage.from('avatars').getPublicUrl(path).data.publicUrl
+    const res = await onSaved(path)
+    if (res.error) {
+      setError(res.error)
+      setBusy(false)
+      return
+    }
+    setUrl(publicUrl)
+    setBusy(false)
+  }
+
+  return (
+    <div className="flex items-center gap-4">
+      <Avatar url={url} name={name} size={76} />
+      <div className="flex flex-col gap-1">
+        <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-brand/40 px-3 py-1.5 text-sm font-semibold text-brand transition hover:bg-brand-soft/20">
+          <Camera size={15} /> {busy ? 'Uploading…' : 'Change photo'}
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            className="hidden"
+            disabled={busy}
+            onChange={(e) => {
+              const f = e.target.files?.[0]
+              if (f) pick(f)
+              e.target.value = ''
+            }}
+          />
+        </label>
+        {error && <span className="text-xs text-danger">{error}</span>}
+      </div>
+    </div>
+  )
+}

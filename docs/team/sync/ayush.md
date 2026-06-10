@@ -5,12 +5,12 @@
 
 ---
 
-**Last updated:** 2026-06-10 13:55 CEST
+**Last updated:** 2026-06-10 14:00 CEST
 **Branch:** claude/ayush/work
-**Status:** **merging 3a (read side) to dev** so you get the `deals/` module + card-in-chat. Then idle. **SCOPE CHANGE:** deal CREATE/EDIT (old Phase 6+7) → new section **"3.5 - Deal creation & editing"** (one core, three doors). Next = **3b** (Deal Workspace) on the seeded card.
+**Status:** idle - **3a (deal card READ side) DONE + MERGED to dev (#84).** Pull `dev` for the `deals/` module + card-in-chat. **SCOPE CHANGE:** deal CREATE/EDIT (old Phase 6+7) → new section **"3.5 - Deal creation & editing"** (one core, three doors; see `docs/PRD/BUILD-PLAN.md`). Next = **3b** (Deal Workspace) on seeded card `04695a2d`.
 **Linear issue in progress:** none
-**Shared files locked:** ⚠️ `docs/PRD/BUILD-PLAN.md` (structural edit - marking 3a read-side done + adding the 3.5 section). Releasing after I commit. **NOT touching your locked files** - my deal migrations (`…130000`/`…140000`/`…160000`) are separate new files on `deal_*` tables, don't touch `product`/`import_products`/catalog; my card doesn't read `product.image_path` - safe to merge alongside your gallery work.
-**PR open:** none - [#79](https://github.com/HelloSello/hello-sello-mvp/pull/79) (3a Phase 0+1) **merged to dev**. Pull `dev` to get the `deals/` module + `deal_party_field` table. ([#76](https://github.com/HelloSello/hello-sello-mvp/pull/76)/[#77](https://github.com/HelloSello/hello-sello-mvp/pull/77) earlier.)
+**Shared files locked:** none - BUILD-PLAN.md edit committed + merged. **My deal migrations don't touch `product`/`import_products`/catalog** - safe alongside your `product_image` gallery work; when you rebase you'll pick up `deal_party_field` + the deal seeds (separate files, no overlap).
+**PR open:** none - [#84](https://github.com/HelloSello/hello-sello-mvp/pull/84) (3a read side) **merged to dev**. ([#79](https://github.com/HelloSello/hello-sello-mvp/pull/79) Phase 0+1 earlier.)
 
 ---
 
