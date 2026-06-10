@@ -14,6 +14,7 @@
  */
 import { createClient } from "@/shared/db/client";
 import { sellerCompanyId, viewerSide, lineTotalOf } from "../lib/derive";
+import { seededSignals } from "../lib/signals";
 import type {
   DealCard,
   DealCardView,
@@ -169,6 +170,10 @@ export async function getDealCard(cardId: string): Promise<DealCardView> {
     };
   });
 
+  const side = viewerCompanyId
+    ? viewerSide(viewerCompanyId, card, rel.company_a_id, rel.company_b_id)
+    : null;
+
   return {
     card,
     sellerName,
@@ -176,10 +181,9 @@ export async function getDealCard(cardId: string): Promise<DealCardView> {
     sellerCompanyId: sellerId,
     lineItems,
     partyFields,
-    signals: [], // seeded in Phase 4 (Signals tab); Sella writes the real ones in 4d
+    // seeded per-side signals (Phase 4); Sella writes the real ones in 4d
+    signals: side ? seededSignals(side) : [],
     log,
-    viewerSide: viewerCompanyId
-      ? viewerSide(viewerCompanyId, card, rel.company_a_id, rel.company_b_id)
-      : null,
+    viewerSide: side,
   };
 }
