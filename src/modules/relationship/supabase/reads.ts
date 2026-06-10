@@ -161,6 +161,19 @@ export async function getRelationshipPageData(
   }));
 
   // --- deals (PRIVATE ones already hidden by RLS) ---
+  // which of these deals has a live workspace (screen ④)? one batch lookup -
+  // the "Open workspace" door only opens for deals that actually have one.
+  const dealIds = (dealsRes.data ?? []).map((d) => d.id);
+  const withWorkspace = new Set<string>();
+  if (dealIds.length) {
+    const { data: wsRows, error: wsErr } = await supabase
+      .from("deal_workspace")
+      .select("deal_card_id")
+      .in("deal_card_id", dealIds)
+      .is("deleted_at", null);
+    if (wsErr) throw wsErr;
+    for (const w of wsRows ?? []) withWorkspace.add(w.deal_card_id);
+  }
   const deals: DealSummaryView[] = (dealsRes.data ?? []).map((d) => {
     const status = d.status as DealStatus;
     return {
@@ -172,6 +185,7 @@ export async function getRelationshipPageData(
       valueNet: d.value_net,
       currency: d.currency,
       createdAt: d.created_at,
+      hasWorkspace: withWorkspace.has(d.id),
     };
   });
 
