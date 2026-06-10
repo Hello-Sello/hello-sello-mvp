@@ -37,17 +37,18 @@ export default async function PublicProfilePage({ params }: { params: Promise<{ 
         </span>
       </div>
 
-      <div className="relative h-52 w-full bg-gradient-to-br from-brand via-brand-deep to-[#3a0016]">
+      <div className="relative h-44 w-full bg-gradient-to-br from-brand via-brand-deep to-[#3a0016] md:h-52">
         <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(white 1px, transparent 1px)', backgroundSize: '22px 22px' }} />
         {co && (
-          <div className="absolute bottom-5 left-6 right-6 text-white">
+          <div className="absolute bottom-4 left-6 right-6 text-white md:bottom-5">
             {co.tagline && <p className="text-sm/none opacity-80">{co.tagline}</p>}
-            <h2 className="mt-1 text-2xl font-bold">{co.name}</h2>
+            <h2 className="mt-1 text-xl font-bold md:text-2xl">{co.name}</h2>
           </div>
         )}
       </div>
 
-      <main className="mx-auto -mt-10 grid max-w-4xl grid-cols-1 gap-6 px-6 pb-16 md:grid-cols-[1.4fr_1fr]">
+      {/* On mobile the card sits below the hero (banner stays visible); only md+ overlaps it. */}
+      <main className="mx-auto mt-6 grid max-w-4xl grid-cols-1 gap-6 px-6 pb-16 md:-mt-10 md:grid-cols-[1.4fr_1fr]">
         <section className="glass-strong rounded-3xl p-7">
           <div className="flex items-center gap-4">
             <Avatar url={profile.avatarUrl} name={profile.displayName} size={88} />
