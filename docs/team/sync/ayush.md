@@ -7,9 +7,9 @@
 
 **Last updated:** 2026-06-10 11:56 CEST
 **Branch:** claude/ayush/work
-**Status:** building **3a (deal card)**. Phase 0 + **Phase 1 DONE + MERGED to dev (#79)** - `dev` and my branch are now aligned at the same point. Building Phase 2 (reads). **Plan: phases 2-8 then ONE merge at the end** (not per phase). **No locks.**
+**Status:** building **3a (deal card)** - Phase 2 (reads) + Phase 3 (card front). Phase 0+1 MERGED to dev (#79). **Plan: phases 2-8 then ONE merge at the end** (not per phase). ⚠️ applying a small additive demo-data seed now.
 **Linear issue in progress:** none
-**Shared files locked:** none - `deal_party_field` migration applied + merged (additive new table + its own RLS; no existing table or RLS touched).
+**Shared files locked:** ⚠️ **live DB (demo data only)** - seeding 6 `deal_line_item` rows onto the confirmed demo-world card `04695a2d` + setting its `value_net` (migration `20260610140000`). No schema change, no RLS, no other card touched. Releasing right after apply.
 **PR open:** none - [#79](https://github.com/HelloSello/hello-sello-mvp/pull/79) (3a Phase 0+1) **merged to dev**. Pull `dev` to get the `deals/` module + `deal_party_field` table. ([#76](https://github.com/HelloSello/hello-sello-mvp/pull/76)/[#77](https://github.com/HelloSello/hello-sello-mvp/pull/77) earlier.)
 
 ---
