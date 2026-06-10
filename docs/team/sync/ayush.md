@@ -5,12 +5,12 @@
 
 ---
 
-**Last updated:** 2026-06-10 11:52 CEST
+**Last updated:** 2026-06-10 13:55 CEST
 **Branch:** claude/ayush/work
-**Status:** building **3a (deal card)**. Phase 0 + **Phase 1 DONE** (`deal_party_field` applied to live DB; privacy proven in SQL). Building Phase 2 (reads). **Lock released.**
+**Status:** **merging 3a (read side) to dev** so you get the `deals/` module + card-in-chat. Then idle. **SCOPE CHANGE:** deal CREATE/EDIT (old Phase 6+7) → new section **"3.5 - Deal creation & editing"** (one core, three doors). Next = **3b** (Deal Workspace) on the seeded card.
 **Linear issue in progress:** none
-**Shared files locked:** none - `deal_party_field` migration applied (additive new table + its own RLS; no existing table or RLS touched).
-**PR open:** none - [#76](https://github.com/HelloSello/hello-sello-mvp/pull/76) (2e) merged to dev; [#77](https://github.com/HelloSello/hello-sello-mvp/pull/77) (dev → main) merged. Pull `main`/`dev` to get 2e (incl. the `relationship-artifacts` bucket + demo-world seed).
+**Shared files locked:** ⚠️ `docs/PRD/BUILD-PLAN.md` (structural edit - marking 3a read-side done + adding the 3.5 section). Releasing after I commit. **NOT touching your locked files** - my deal migrations (`…130000`/`…140000`/`…160000`) are separate new files on `deal_*` tables, don't touch `product`/`import_products`/catalog; my card doesn't read `product.image_path` - safe to merge alongside your gallery work.
+**PR open:** none - [#79](https://github.com/HelloSello/hello-sello-mvp/pull/79) (3a Phase 0+1) **merged to dev**. Pull `dev` to get the `deals/` module + `deal_party_field` table. ([#76](https://github.com/HelloSello/hello-sello-mvp/pull/76)/[#77](https://github.com/HelloSello/hello-sello-mvp/pull/77) earlier.)
 
 ---
 
