@@ -1596,6 +1596,73 @@ export type Database = {
         }
         Relationships: []
       }
+      deal_party_field: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          deal_card_id: string
+          field_key: string
+          field_label: string
+          id: string
+          metadata: Json
+          owner_company_id: string
+          party_side: string
+          sort_order: number
+          value_text: string | null
+          version: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          deal_card_id: string
+          field_key: string
+          field_label: string
+          id?: string
+          metadata?: Json
+          owner_company_id: string
+          party_side: string
+          sort_order?: number
+          value_text?: string | null
+          version: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          deal_card_id?: string
+          field_key?: string
+          field_label?: string
+          id?: string
+          metadata?: Json
+          owner_company_id?: string
+          party_side?: string
+          sort_order?: number
+          value_text?: string | null
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deal_party_field_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "person"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deal_party_field_deal_card_id_fkey"
+            columns: ["deal_card_id"]
+            isOneToOne: false
+            referencedRelation: "deal_card"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deal_party_field_owner_company_id_fkey"
+            columns: ["owner_company_id"]
+            isOneToOne: false
+            referencedRelation: "company"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       deal_stage: {
         Row: {
           code: string

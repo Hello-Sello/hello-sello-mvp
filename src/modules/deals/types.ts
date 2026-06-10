@@ -10,10 +10,7 @@
  *
  * Code source: supabase/migrations/20260607090001_lookups_and_seeds.sql
  *              supabase/migrations/20260607090003_phase2_deal.sql
- *
- * `deal_party_field` (the role-scoped private-field table) is created in Phase 1;
- * its raw row binds after `database.types.ts` is regenerated. For Phase 0 we
- * model it as a hand-written UI projection only (`PartyFieldView`).
+ *              supabase/migrations/20260610130000_deal_party_field.sql  (Phase 1)
  */
 import type { Database } from "@/types/database.types";
 
@@ -29,6 +26,8 @@ export type DealCardRow = Tables["deal_card"]["Row"];
 export type DealLineItemRow = Tables["deal_line_item"]["Row"];
 /** The deal_card_log row, verbatim. */
 export type DealCardLogRow = Tables["deal_card_log"]["Row"];
+/** The deal_party_field row (role-scoped private fields, Phase 1), verbatim. */
+export type DealPartyFieldRow = Tables["deal_party_field"]["Row"];
 
 /* -------------------------------------------------------------------------- */
 /* Seeded code unions - narrow the lookup `string` columns                    */
