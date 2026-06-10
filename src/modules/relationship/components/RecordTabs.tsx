@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { FileText } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight, FileText } from "lucide-react";
 import { buildLog, formatMoney } from "../lib/stats";
 import { NotesTab } from "./NotesTab";
 import { DocsTab } from "./DocsTab";
@@ -256,13 +257,24 @@ function DealsTab({ deals }: { deals: DealSummaryView[] }) {
               <span className="shrink-0 text-sm font-semibold text-ink/70">
                 {d.valueNet != null ? formatMoney(d.valueNet, d.currency) : "-"}
               </span>
-              {/* screen ④ not built yet (3b+) - inert affordance */}
-              <span
-                className="shrink-0 cursor-not-allowed text-[11px] font-medium text-ink/25"
-                title="Deal workspace opens in a later phase"
-              >
-                Open workspace →
-              </span>
+              {/* the third door to screen ④ (3b). Only lights up for deals that
+                  actually have a workspace - historical seed deals have none. */}
+              {d.hasWorkspace ? (
+                <Link
+                  href={`/connect/deal/${d.id}`}
+                  className="flex shrink-0 items-center gap-1 text-[11px] font-medium text-brand-deep transition hover:gap-1.5 hover:text-brand"
+                >
+                  Open workspace
+                  <ArrowRight size={12} strokeWidth={2} />
+                </Link>
+              ) : (
+                <span
+                  className="shrink-0 text-[11px] font-medium text-ink/25"
+                  title="No workspace for this deal"
+                >
+                  No workspace
+                </span>
+              )}
             </div>
           ))}
         </div>

@@ -183,3 +183,51 @@ export interface DealCardView {
   /** which side the viewer is on (seller/buyer); null if the viewer has no company */
   viewerSide: PartySide | null;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Deal workspace - the deal container (screen ④, 3b)                         */
+/* -------------------------------------------------------------------------- */
+
+/** The deal_workspace row, verbatim. */
+export type DealWorkspaceRow = Tables["deal_workspace"]["Row"];
+/** The deal_member row, verbatim. */
+export type DealMemberRow = Tables["deal_member"]["Row"];
+
+/**
+ * deal_member_role.code - what a member is on this deal (`deal_member.role`).
+ * Ownership is a ROLE, not a column (locked 3b, migration 20260610170000):
+ * a deal has one `owner` per company side. `side_lead` exists in the lookup
+ * but is unused until the membership pass.
+ */
+export type MemberRole = "owner" | "side_lead" | "member";
+
+/** workspace_visibility.code - who can see the workspace (`deal_workspace.visibility`). */
+export type WorkspaceVisibility = "company_wide" | "private";
+
+/** One People-tab row: a live (not-removed) member, resolved to person + company. */
+export interface MemberView {
+  id: string;
+  personId: string;
+  name: string;
+  companyId: string;
+  companyName: string;
+  role: MemberRole;
+  /** true when this member IS the logged-in viewer (drives the "(you)" marker) */
+  isViewer: boolean;
+}
+
+/**
+ * The workspace container, ready to render. One `getWorkspace(dealCardId)`
+ * read assembles this: the workspace row (narrowed), the live members with
+ * person + company resolved, and the deal chat's thread id. The card itself
+ * is NOT here - the screen reads it with the existing `getDealCard`.
+ */
+export interface DealWorkspaceView {
+  workspaceId: string;
+  dealCardId: string;
+  visibility: WorkspaceVisibility;
+  /** live members, owners first (one owner per company side) */
+  members: MemberView[];
+  /** the chat_thread (type='deal') born with the deal; the chat hero mounts this */
+  dealThreadId: string;
+}

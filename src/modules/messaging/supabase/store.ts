@@ -80,7 +80,7 @@ export async function getConversations(): Promise<ConversationListItem[]> {
   const [threadsRes, relsRes, cosRes, pplRes, msgsRes] = await Promise.all([
     supabase
       .from("chat_thread")
-      .select("id, type, relationship_id, person_a_id, person_b_id, created_at")
+      .select("id, type, relationship_id, person_a_id, person_b_id, deal_card_id, created_at")
       .is("deleted_at", null),
     supabase.from("relationship").select("id, company_a_id, company_b_id"),
     supabase.from("company").select("id, name"),
@@ -98,6 +98,20 @@ export async function getConversations(): Promise<ConversationListItem[]> {
   const relById = new Map((relsRes.data ?? []).map((r) => [r.id, r] as const));
   const coNameById = new Map((cosRes.data ?? []).map((c) => [c.id, c.name] as const));
   const personById = new Map((pplRes.data ?? []).map((p) => [p.id, p] as const));
+
+  // deal rows show their deal NUMBER (3b) - resolve the hs numbers in one batch
+  const dealCardIds = (threadsRes.data ?? [])
+    .filter((t) => t.type === "deal" && t.deal_card_id)
+    .map((t) => t.deal_card_id as string);
+  const dealNoById = new Map<string, string | null>();
+  if (dealCardIds.length) {
+    const { data: cards, error: cardsErr } = await supabase
+      .from("deal_card")
+      .select("id, hs_deal_number")
+      .in("id", dealCardIds);
+    if (cardsErr) throw cardsErr;
+    for (const c of cards ?? []) dealNoById.set(c.id, c.hs_deal_number);
+  }
   // ordered asc, so the last write for a thread is its latest message
   const lastByThread = new Map<string, { body: string; created_at: string }>();
   for (const m of msgsRes.data ?? []) {
@@ -121,6 +135,19 @@ export async function getConversations(): Promise<ConversationListItem[]> {
       companyId: otherCompanyId ?? "",
       companyName: otherCompanyName,
     };
+
+    // deal - the chat born with a deal; the row carries the deal number and
+    // NAVIGATES to the workspace (it never selects in place)
+    if (t.type === "deal") {
+      const dealNo = (t.deal_card_id && dealNoById.get(t.deal_card_id)) || "Deal";
+      return {
+        ...base,
+        name: dealNo,
+        subtitle: `Deal chat · ${otherCompanyName}`,
+        initials: "DL",
+        dealCardId: t.deal_card_id ?? undefined,
+      };
+    }
 
     if (t.type === "c2c") {
       return {
@@ -201,6 +228,26 @@ export async function getMessages(threadId: string): Promise<ChatMessageView[]> 
  */
 export async function markRead(_threadId: string): Promise<void> {
   // intentional no-op (Phase 6)
+}
+
+/**
+ * The deal chat born with a deal (3b): resolve one card's deal thread.
+ * RLS: visible only through the card's workspace (`thread_all`), so a
+ * non-member company gets a no-row error here, never the thread.
+ */
+export async function getDealThread(
+  dealCardId: string,
+): Promise<{ threadId: string; relationshipId: string }> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("chat_thread")
+    .select("id, relationship_id")
+    .eq("type", "deal")
+    .eq("deal_card_id", dealCardId)
+    .is("deleted_at", null)
+    .single();
+  if (error) throw error;
+  return { threadId: data.id, relationshipId: data.relationship_id };
 }
 
 /* -------------------------------------------------------------------------- */
