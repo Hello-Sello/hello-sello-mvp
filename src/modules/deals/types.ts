@@ -180,4 +180,6 @@ export interface DealCardView {
   signals: SignalView[];
   /** full version history, newest first */
   log: LogEntry[];
+  /** which side the viewer is on (seller/buyer); null if the viewer has no company */
+  viewerSide: PartySide | null;
 }

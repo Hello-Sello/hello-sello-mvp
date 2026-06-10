@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { Building2, ArrowUpRight } from "lucide-react";
+import { DealPin } from "@/modules/deals";
 import type { ChatMessageView, ConversationListItem } from "../types";
 import { MessageBubble } from "./MessageBubble";
 import { Composer } from "./Composer";
@@ -59,15 +60,19 @@ export function ThreadView({ conversation, messages, onSend }: ThreadViewProps) 
         </Link>
       </div>
 
-      {/* stream */}
-      <div className="min-h-0 flex-1 overflow-y-auto p-4">
-        <div className="mx-auto flex max-w-2xl flex-col gap-2">
-          {messages.map((m) => (
-            <MessageBubble key={m.id} message={m} />
-          ))}
-          <div ref={bottomRef} />
+      {/* the deal "Talking about" bar + the card floated on the right (3a);
+          P2P + C2C both hang off a relationship, so the pin works in either */}
+      <DealPin key={conversation.relationshipId} relationshipId={conversation.relationshipId}>
+        {/* stream */}
+        <div className="h-full overflow-y-auto p-4">
+          <div className="mx-auto flex max-w-2xl flex-col gap-2">
+            {messages.map((m) => (
+              <MessageBubble key={m.id} message={m} />
+            ))}
+            <div ref={bottomRef} />
+          </div>
         </div>
-      </div>
+      </DealPin>
 
       {/* composer - writable for both types; only the placeholder differs */}
       <Composer
