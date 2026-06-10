@@ -1,6 +1,23 @@
 # Build Plan - 3b: Deal Workspace (screen ④)
 
-**Status:** 🟢 **LOCKED by Ayush** (2026-06-10; all §6 decisions resolved, see §6). Ready to build phase by phase.
+**Status:** 🟢 **LOCKED by Ayush** (2026-06-10; all §6 decisions resolved, see §6). Building phase by phase.
+
+### Build log
+
+- **Phase 0 + 1 DONE** (2026-06-10) - **Schema:** migration `20260610170000` applied live - dropped
+  `deal_workspace.owner_person_id` + dropped `uq_deal_member_one_owner` (it enforced ONE owner per workspace,
+  contradicting one-owner-PER-SIDE; per-side uniqueness can't be a partial index - the createDeal core (3.5) owns
+  that rule). **Discovered the role guard already exists:** `deal_member.role` is FK-guarded by the
+  `deal_member_role` lookup (`owner`/`side_lead`/`member`) - D-ROLE-GUARD needed no work. `database.types.ts`
+  edited surgically (full regen reverted - it pulled in Muskan's in-flight live schema, `person` profile cols +
+  `product_image`, whose code lives on HER branch; each owner regenerates with their own changes).
+  **Seed:** migration `20260610180000` applied live - workspace `0c7ffc82` (company_wide) + TWO owners
+  (Alice GreenLeaf + Bob StonePharm, `role='owner'`) + deal thread `0eded4c8` + 3 opening messages
+  (sella `workspace_created` → Alice → Bob). Container rows insert-if-absent (3c/3d hang real rows off them);
+  only messages delete-by-tag. **Code:** `types.ts` + `MemberRole`/`WorkspaceVisibility`/`MemberView`/
+  `DealWorkspaceView`; `reads.ts` + `getWorkspace(dealCardId)` (flat stitched, owners-first); barrel updated.
+  **Verified:** `tsc` + eslint clean; RLS impersonation proof - Alice sees 1 ws/2 members/1 thread/3 msgs,
+  Bob the same, an OUTSIDER (3rd company) sees 0/0/0/0.
 **Author:** Claude + Ayush · **Created:** 2026-06-10 · **Live project:** `byipusuthdlskdxoexkt`.
 **Prototype:** `prototypes/deal-workspace-prototype/` (locked 2026-06-07) - `index.html`, `CONTEXT.md`, `NOTES.md`.
 **Builds on:** 3a (deal card, read side, DONE). **Test card:** `04695a2d-668d-40b4-bfa8-55b0fe306018`
@@ -41,7 +58,7 @@ whole workspace backend already exists and is RLS-correct.
 | 1 | "Layer B: **invited participants only**" | `deal_workspace.visibility` **defaults to `company_wide`**; RLS `can_access_workspace` = relationship-member **AND** (`company_wide` **OR** `is_workspace_member`) | Workspace is **company_wide by default** (whole company of each side can see+act). `deal_member` rows are for the **People tab + ownership**, and only **gate visibility when `visibility='private'`**. This already matches CONTEXT §9 ("whole company can see+act unless PRIVATE"). | **MAJOR (mental model)** |
 | 2 | "one deal owner" (single column) | `deal_workspace.owner_person_id` exists + `NOT NULL`, **but** a deal has **two owners (one per company)** - one column can't hold two | **DROP the column** (table empty, 0 code deps, RLS ignores it - safe). **Ownership = `deal_member.role='owner'`** (a list, holds N owners). Seed **two owners**: Alice (GreenLeaf) + Bob (StonePharm). `created_by` still records who made the workspace. **LOCKED, see §6 D-OWNER.** | **MAJOR (resolved)** |
 | 3 | "deal chat" is a new concept | `chat_thread` already supports it: a **`type='deal'`** branch exists in the table CHECK (`deal` requires `deal_card_id`), in the RLS `thread_all` policy (deal threads visible via the workspace), and `deal_card_id` column exists | **No migration for the chat.** The deal chat is a `chat_thread` row `type='deal'`, `deal_card_id=<card>`, `relationship_id=<rel>`. The existing messaging `ThreadView` renders it. | minor (it's free) |
-| 4 | (not noticed) | the inbox query `listConversations` selects **all** `chat_thread` rows with **no type filter** (`store.ts:82`) | A `type='deal'` thread would **leak into the P2P/C2C inbox**. 3b must filter it out (`.in("type", ["p2p","c2c"])` or `.neq("type","deal")`). See Phase 6. | minor (but must-do) |
+| 4 | (terminology) "inbox" | the **Chat list** (conversations panel under the **Chat** tab) is the leak risk, NOT the **Inbox** (the connection-requests screen). The Chat-list query `listConversations` selects **all** `chat_thread` rows with **no type filter** (`store.ts:82`) | A `type='deal'` thread would **leak into the All/Companies/P2P views**. 3b keeps deals **out** of those views and shows them in a **new "Deals" filter tab** instead (grouped by company, like the Companies view; each row = the deal number). Deal row click → the workspace. See Phase 5 + §6 D-DEALS-TAB. | minor (but must-do) |
 | 5 | tables: `member · thing · artifact · stage · audit_log` | live names: **`deal_member · thing · deal_artifact · deal_stage · audit_log`**; `thing.stage_code` (text FK to `deal_stage.code`), `deal_artifact.deal_workspace_id` | Use the live names. 3b only touches `deal_workspace`, `deal_member`, `chat_thread` (+ optional seed `chat_message`). `thing`/`deal_artifact`/`deal_stage` are **3c/later**. | minor |
 
 ★ **IMPORTANT insight - why this matters.** The single biggest risk in 3b was the `owner_person_id` mismatch:
@@ -84,7 +101,7 @@ This is why 3b is **mostly UI + a seed** (likely **zero schema migrations**). Th
 | **Route + header band** | new route `src/app/connect/deal/[dealCardId]/page.tsx`; the top header (title · HS# · parties · owner · net · lifecycle pill) + static Deal-Sella one-liner | Phase 2 |
 | **Left tabbed panel** | `Things · People · Documents` tabs (C-style). **People = real** (`deal_member` + person names + "(you)"). **Things / Documents = visual stubs** ("+ Add…", empty state) filled by 3c / later | Phase 3 |
 | **Deal chat hero** | mount the existing messaging `ThreadView` on the deal thread (right, wide); place the 3a deal-card **pill** ("Talking about: HS-…") that opens the same flip card | Phase 4 |
-| **Entry points + inbox fix** | "Open workspace →" from the relationship deals list; **⤢** button on the deal card chrome; **filter `type='deal'` out of the inbox** (`store.ts`) | Phase 5 |
+| **Entry points + Deals tab** | **Door 1:** a new **"Deals" filter tab** in the Chat list (deals grouped by company, deal-number rows) → click opens the workspace. **Door 2:** **"Deal workspace ↗"** button on the chat card bar (card moves to center). Keep deals out of All/Unread/Companies | Phase 5 |
 | **Verify both sides** | end-to-end walk on the seeded card, Alice and Bob: header, People "(you)", deal chat + pill, company_wide visibility, no console errors, `tsc` + eslint clean | Phase 6 |
 
 ---
@@ -163,6 +180,17 @@ this screen, not a separate inbox conversation.
 **D-LIFECYCLE-PILL ✅ - display-only in 3b.** Derive the pill from the card/workspace status we already have
 (seeded card shows "Confirmed"). The *gate* that flips Draft→Confirmed is **3d**.
 
+**D-DEALS-TAB ✅ - the deal chat is first-class in the Chat list, via its own "Deals" tab (not hidden, not mixed).**
+*Terminology:* the **Chat list** = the conversations panel under the **Chat** tab; the **Inbox** = the separate
+connection-requests screen (don't confuse them). The deal chat (`chat_thread type='deal'`) has **one home** - the
+deal workspace at `/connect/deal/[dealCardId]` - reachable by **two doors**: (1) a **"Deals" filter tab** in the
+Chat list (deals grouped by company, like the Companies view; each row = the **deal number**; click → workspace),
+and (2) a **"Deal workspace ↗"** button on the chat card bar (card to center). Deals stay **out** of
+All/Unread/Companies for the demo. **Minimal in 3b** (just these two doors); the **full Chat-list redesign**
+(rename to All Unread/P2P/C2C/Deals, split P2P, tags, deal-logo+company-logo rows) is a **separate later task**.
+*Why one home + many doors:* the deal chat must never be ambiguous about "which one is real" - one destination,
+several launchers. (This replaces the earlier "hide deal threads" idea, which was wrong for the product vision.)
+
 ---
 
 ## 7. Phase-by-phase build order (each phase: build → verify in Claude Preview → `tsc` + eslint clean → commit)
@@ -185,9 +213,14 @@ this screen, not a separate inbox conversation.
 - **Phase 4 - deal chat hero.** Mount messaging `ThreadView` on `dealThreadId`; place the 3a card **pill** that opens
   the flip card. *Verify:* messages render + realtime works (reuse 2d); the pill opens the same card front/back/logs;
   margin still seller-only.
-- **Phase 5 - entry points + inbox leak fix.** "Open workspace →" on the relationship deals list; **⤢** on the card
-  chrome → route here. **Filter `type='deal'` out of `listConversations`.** *Verify:* both doors land on the
-  workspace; the deal thread does **not** appear in the P2P/C2C inbox.
+- **Phase 5 - entry points + Deals tab (Chat list).** **(a)** add a **"Deals" filter tab** to `ConversationList`
+  (key `deals`) - reuse `groupByCompany` so deals sit under a company heading; each row shows the **deal number**
+  (from `deal_card.hs_deal_number`); a deal row **navigates** to `/connect/deal/[dealCardId]` (not in-place select).
+  **(b)** keep deal threads **out** of All/Unread/Companies (the store maps a `deal` branch but those views exclude
+  it). **(c)** add the **"Deal workspace ↗"** button on the chat card bar (card to center, button right) → route to
+  the workspace. *Verify:* both doors open the workspace; the deal does **not** show in All/Unread/Companies; the
+  existing P2P/C2C chats look unchanged. **Out of scope (later task):** tab rename to All Unread/P2P/C2C/Deals,
+  splitting P2P from the company grouping, person/company tags, polished deal-row UI (deal logo + company logo).
 - **Phase 6 - verify both sides + wrap.** Full walk Alice ↔ Bob; `tsc` + eslint clean; update sync file, this log,
   CLAUDE.md Last-session / What's-next.
 
