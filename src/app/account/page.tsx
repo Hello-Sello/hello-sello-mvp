@@ -5,9 +5,11 @@ import { AccountClient } from './AccountClient'
 
 // Server route: load the caller's profile + company, hand them to the client UI.
 // Thin by design — all logic lives in the modules.
-export default async function AccountPage() {
+export default async function AccountPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
   const profile = await getMyProfile()
   if (!profile) redirect('/login')
   const company = await getCompanyProfile()
-  return <AccountClient profile={profile} company={company} />
+  const { tab } = await searchParams
+  const initialTab = tab === 'company' || tab === 'settings' ? tab : 'profile'
+  return <AccountClient profile={profile} company={company} initialTab={initialTab} />
 }

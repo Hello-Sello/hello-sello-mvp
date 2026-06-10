@@ -15,9 +15,9 @@ import { saveMyProfile, saveCompanyProfile, saveAvatar } from './actions'
 
 type Tab = 'profile' | 'company' | 'settings'
 
-export function AccountClient({ profile, company }: { profile: MyProfile; company: CompanyProfile | null }) {
+export function AccountClient({ profile, company, initialTab = 'profile' }: { profile: MyProfile; company: CompanyProfile | null; initialTab?: Tab }) {
   const router = useRouter()
-  const [tab, setTab] = useState<Tab>('profile')
+  const [tab, setTab] = useState<Tab>(initialTab)
   const [dirty, setDirty] = useState(false)
 
   function back() {
