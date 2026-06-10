@@ -8,20 +8,33 @@
  * the profile cards for a form and reveals per-product controls (photo, price
  * visibility); products are added through the drawer.
  */
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import useEmblaCarousel from "embla-carousel-react";
 import {
   Heart, ShoppingCart, Link2, UploadCloud, Plus, FileSpreadsheet,
   Pencil, Check, ImagePlus, Loader2, Eye, EyeOff,
-  Globe, Trash2, ArrowLeft,
+  Globe, Trash2, ArrowLeft, ChevronLeft, ChevronRight, Star, X,
 } from "lucide-react";
-import type { Shop, ShopLink, ShopProduct } from "@/modules/catalog/shop";
-import { updateShopProfile, setProductImage, setProductPricePublic } from "@/modules/catalog/manage";
+import type { Shop, ShopLink, ShopProduct, ProductImage } from "@/modules/catalog/shop";
+import {
+  updateShopProfile, addProductImageRecords, removeProductImage,
+  setProductImageOrder, setProductPricePublic,
+} from "@/modules/catalog/manage";
+import { createClient } from "@/shared/db/client";
 import { AddProductsDrawer } from "./AddProductsDrawer";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 const mediaUrl = (path: string) =>
   `${SUPABASE_URL}/storage/v1/object/public/shop-media/${path}`;
+
+// Client-side guards for direct-to-storage uploads. These mirror the bucket's
+// own limits (the real enforcement lives in the shop-media bucket config); the
+// checks here just give a friendly message before we attempt the upload.
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10 MB — matches the bucket limit
+const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const imageExt = (file: File) =>
+  file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
 
 const DOMINANCE_LABEL: Record<string, string> = {
   indica: "Indica",
@@ -117,7 +130,7 @@ export function ShopView({ shop }: { shop: Shop }) {
             {products
               .filter((p) => dom === "All" || p.dominance_code === dom)
               .map((p) => (
-                <ProductCard key={p.id} p={p} editing={editing} onChanged={() => router.refresh()} />
+                <ProductCard key={p.id} p={p} companyId={company.id} editing={editing} onChanged={() => router.refresh()} />
               ))}
           </div>
         </>
@@ -460,22 +473,229 @@ function ImagePicker({
   );
 }
 
-// ---------- product card (read + owner controls) ----------
-function ProductCard({ p, editing, onChanged }: { p: ShopProduct; editing: boolean; onChanged: () => void }) {
-  const img = p.image_path ? mediaUrl(p.image_path) : null;
-  const fileRef = useRef<HTMLInputElement>(null);
+// ---------- product image gallery (carousel + owner edit controls) ----------
+// A product has many photos; the one at index 0 is the cover. Read mode is an
+// Embla carousel (swipe + arrows + dots). Edit mode adds a multi-upload button
+// and a thumbnail strip whose move / make-cover / remove actions all resolve to
+// one ordered id list written through setProductImageOrder.
+function ProductGallery({
+  productId, companyId, label, images, editing, onChanged,
+}: {
+  productId: string;
+  companyId: string;
+  label: string;
+  images: ProductImage[];
+  editing: boolean;
+  onChanged: () => void;
+}) {
+  const [emblaRef, emblaApi] = useEmblaCarousel({ loop: false });
+  const [selected, setSelected] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const addRef = useRef<HTMLInputElement>(null);
 
-  async function uploadImage(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const onSelect = useCallback(() => {
+    if (emblaApi) setSelected(emblaApi.selectedScrollSnap());
+  }, [emblaApi]);
+  useEffect(() => {
+    if (!emblaApi) return;
+    emblaApi.on("select", onSelect);
+    onSelect();
+    return () => { emblaApi.off("select", onSelect); };
+  }, [emblaApi, onSelect]);
+  // Re-measure when photos are added / removed / reordered.
+  useEffect(() => { emblaApi?.reInit(); }, [emblaApi, images.length]);
+
+  async function run(fn: () => Promise<unknown>) {
     setBusy(true);
-    const fd = new FormData();
-    fd.set("image", file);
-    await setProductImage(p.id, fd);
+    await fn();
     setBusy(false);
     onChanged();
   }
+  // Upload each file straight from the browser to the shop-media bucket (Storage
+  // RLS scopes writes to this company's folder), then record only the paths via
+  // a server action. The bytes never touch the server, so no body-size limit
+  // applies. If recording the metadata fails, delete the just-uploaded objects
+  // so we don't leave orphaned files behind.
+  async function add(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = ""; // allow re-selecting the same file
+    if (files.length === 0) return;
+
+    const tooBig = files.find((f) => f.size > MAX_IMAGE_BYTES);
+    if (tooBig) { setError(`"${tooBig.name}" is over 10 MB.`); return; }
+    const wrongType = files.find((f) => !ACCEPTED_IMAGE_TYPES.includes(f.type));
+    if (wrongType) { setError(`"${wrongType.name}" must be JPG, PNG, or WebP.`); return; }
+
+    setError(null);
+    setBusy(true);
+    const supabase = createClient();
+    const uploaded: string[] = [];
+    try {
+      for (const file of files) {
+        const path = `${companyId}/products/${productId}-${crypto.randomUUID()}.${imageExt(file)}`;
+        const { error: upErr } = await supabase.storage
+          .from("shop-media")
+          .upload(path, file, { contentType: file.type });
+        if (upErr) throw new Error(upErr.message);
+        uploaded.push(path);
+      }
+      const res = await addProductImageRecords(productId, uploaded);
+      if ("error" in res) throw new Error(res.error);
+    } catch (err) {
+      if (uploaded.length > 0) await supabase.storage.from("shop-media").remove(uploaded);
+      setError(err instanceof Error ? err.message : "Upload failed.");
+      setBusy(false);
+      return;
+    }
+    setBusy(false);
+    onChanged();
+  }
+  // Delete the metadata row (server), then the file straight from the browser
+  // (same client that uploaded it). Best-effort on the file — an orphan is
+  // harmless; what we must avoid is a row pointing at a deleted file.
+  async function remove(imageId: string) {
+    setError(null);
+    setBusy(true);
+    const res = await removeProductImage(imageId);
+    if ("error" in res) { setError(res.error); setBusy(false); return; }
+    await createClient().storage.from("shop-media").remove([res.path]);
+    setBusy(false);
+    onChanged();
+  }
+  function move(idx: number, dir: -1 | 1) {
+    const ids = images.map((im) => im.id);
+    const j = idx + dir;
+    if (j < 0 || j >= ids.length) return;
+    [ids[idx], ids[j]] = [ids[j], ids[idx]];
+    run(() => setProductImageOrder(productId, ids));
+  }
+  function makeCover(idx: number) {
+    const ids = images.map((im) => im.id);
+    const [picked] = ids.splice(idx, 1);
+    ids.unshift(picked);
+    run(() => setProductImageOrder(productId, ids));
+  }
+
+  const hasImages = images.length > 0;
+
+  return (
+    <div className="relative mt-2 p-1.5">
+      {hasImages ? (
+        <div className="relative">
+          <div className="overflow-hidden rounded-xl" ref={emblaRef}>
+            <div className="flex">
+              {images.map((im) => (
+                <div key={im.id} className="min-w-0 flex-[0_0_100%]">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={mediaUrl(im.path)} alt={label} className="aspect-[4/3] w-full object-cover" />
+                </div>
+              ))}
+            </div>
+          </div>
+          {images.length > 1 && (
+            <>
+              <button
+                type="button" aria-label="Previous photo" onClick={() => emblaApi?.scrollPrev()}
+                className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-ink/55 p-1 text-white hover:bg-ink"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <button
+                type="button" aria-label="Next photo" onClick={() => emblaApi?.scrollNext()}
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-ink/55 p-1 text-white hover:bg-ink"
+              >
+                <ChevronRight size={16} />
+              </button>
+              <div className="absolute bottom-2 left-1/2 flex -translate-x-1/2 gap-1.5">
+                {images.map((im, i) => (
+                  <button
+                    key={im.id} type="button" aria-label={`Go to photo ${i + 1}`}
+                    onClick={() => emblaApi?.scrollTo(i)}
+                    className={`h-1.5 rounded-full transition-all ${i === selected ? "w-4 bg-white" : "w-1.5 bg-white/60"}`}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      ) : (
+        <div className="flex aspect-[4/3] w-full items-center justify-center rounded-xl bg-gradient-to-br from-rose-200 to-pink-400 text-xs font-semibold text-white/80">
+          {label}
+        </div>
+      )}
+
+      {editing && (
+        <>
+          <button
+            type="button" onClick={() => addRef.current?.click()} disabled={busy}
+            className="absolute right-3 top-3 flex items-center gap-1 rounded-full bg-ink/70 px-3 py-1.5 text-xs font-semibold text-white hover:bg-ink disabled:opacity-50"
+          >
+            {busy ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />}
+            Add photos
+          </button>
+          <input
+            ref={addRef} type="file" accept="image/jpeg,image/png,image/webp" multiple hidden onChange={add}
+          />
+          {error && (
+            <p className="mt-1.5 rounded-lg bg-rose-50 px-2 py-1 text-[11px] font-medium text-rose-600">{error}</p>
+          )}
+          {hasImages && (
+            <div className="mt-1.5 flex gap-2 overflow-x-auto pb-1">
+              {images.map((im, i) => (
+                <div key={im.id} className="relative shrink-0">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={mediaUrl(im.path)} alt=""
+                    className={`h-14 w-14 rounded-lg object-cover ring-2 ${i === 0 ? "ring-brand" : "ring-white/60"}`}
+                  />
+                  {i === 0 && (
+                    <span className="absolute left-0 top-0 rounded-br-lg rounded-tl-lg bg-brand px-1 py-0.5 text-[8px] font-bold text-white">
+                      Cover
+                    </span>
+                  )}
+                  <div className="mt-0.5 flex items-center justify-center gap-0.5">
+                    <button
+                      type="button" aria-label="Move left" disabled={busy || i === 0} onClick={() => move(i, -1)}
+                      className="rounded p-0.5 text-ink/60 hover:bg-white disabled:opacity-30"
+                    >
+                      <ChevronLeft size={12} />
+                    </button>
+                    {i !== 0 && (
+                      <button
+                        type="button" aria-label="Make cover" disabled={busy} onClick={() => makeCover(i)}
+                        className="rounded p-0.5 text-ink/60 hover:bg-white"
+                      >
+                        <Star size={12} />
+                      </button>
+                    )}
+                    <button
+                      type="button" aria-label="Remove photo" disabled={busy}
+                      onClick={() => remove(im.id)}
+                      className="rounded p-0.5 text-rose-500 hover:bg-white disabled:opacity-30"
+                    >
+                      <X size={12} />
+                    </button>
+                    <button
+                      type="button" aria-label="Move right" disabled={busy || i === images.length - 1} onClick={() => move(i, 1)}
+                      className="rounded p-0.5 text-ink/60 hover:bg-white disabled:opacity-30"
+                    >
+                      <ChevronRight size={12} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ---------- product card (read + owner controls) ----------
+function ProductCard({ p, companyId, editing, onChanged }: { p: ShopProduct; companyId: string; editing: boolean; onChanged: () => void }) {
+  const [busy, setBusy] = useState(false);
 
   async function togglePrice() {
     setBusy(true);
@@ -495,30 +715,14 @@ function ProductCard({ p, editing, onChanged }: { p: ShopProduct; editing: boole
         <button className="rounded-full bg-brand p-1.5 text-white"><Heart size={14} /></button>
         <button className="rounded-full bg-brand p-1.5 text-white"><ShoppingCart size={14} /></button>
       </div>
-      <div className="relative mt-2 p-1.5">
-        {img ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={img} alt={p.name} className="aspect-square w-full rounded-xl object-cover" />
-        ) : (
-          <div className="flex aspect-square w-full items-center justify-center rounded-xl bg-gradient-to-br from-rose-200 to-pink-400 text-xs font-semibold text-white/80">
-            {p.cultivar ?? "No photo"}
-          </div>
-        )}
-        {editing && (
-          <>
-            <button
-              type="button"
-              onClick={() => fileRef.current?.click()}
-              disabled={busy}
-              className="absolute bottom-3 right-3 flex items-center gap-1 rounded-full bg-ink/70 px-3 py-1.5 text-xs font-semibold text-white hover:bg-ink disabled:opacity-50"
-            >
-              {busy ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />}
-              {img ? "Replace" : "Add photo"}
-            </button>
-            <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={uploadImage} />
-          </>
-        )}
-      </div>
+      <ProductGallery
+        productId={p.id}
+        companyId={companyId}
+        label={p.cultivar ?? p.name}
+        images={p.images}
+        editing={editing}
+        onChanged={onChanged}
+      />
       <div className="flex items-center justify-between px-3 pb-3 text-sm">
         <span className="font-semibold text-ink">
           THC {p.thc_percent ?? "—"}% · CBD {p.cbd_percent ?? "—"}%

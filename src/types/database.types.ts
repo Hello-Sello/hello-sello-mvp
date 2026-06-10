@@ -2629,7 +2629,6 @@ export type Database = {
           deleted_by: string | null
           dominance_code: string | null
           id: string
-          image_path: string | null
           irradiation_code: string | null
           lineage_parent_a: string | null
           lineage_parent_b: string | null
@@ -2665,7 +2664,6 @@ export type Database = {
           deleted_by?: string | null
           dominance_code?: string | null
           id?: string
-          image_path?: string | null
           irradiation_code?: string | null
           lineage_parent_a?: string | null
           lineage_parent_b?: string | null
@@ -2701,7 +2699,6 @@ export type Database = {
           deleted_by?: string | null
           dominance_code?: string | null
           id?: string
-          image_path?: string | null
           irradiation_code?: string | null
           lineage_parent_a?: string | null
           lineage_parent_b?: string | null
@@ -3002,6 +2999,48 @@ export type Database = {
             columns: ["updated_by"]
             isOneToOne: false
             referencedRelation: "person"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_image: {
+        Row: {
+          company_id: string
+          created_at: string
+          id: string
+          image_path: string
+          position: number
+          product_id: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          id?: string
+          image_path: string
+          position?: number
+          product_id: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          id?: string
+          image_path?: string
+          position?: number
+          product_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_image_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "company"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_image_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "product"
             referencedColumns: ["id"]
           },
         ]

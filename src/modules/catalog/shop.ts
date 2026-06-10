@@ -8,6 +8,11 @@
  */
 import { createClient } from "@/shared/db/server";
 
+/** One image in a product's gallery, ordered by the seller. The first entry
+ *  (lowest position) is the cover / thumbnail. `path` is a `shop-media` storage
+ *  path; the UI builds the public URL from it. */
+export type ProductImage = { id: string; path: string };
+
 export type ShopProduct = {
   id: string;
   name: string;
@@ -20,7 +25,7 @@ export type ShopProduct = {
   dominance_code: string | null;
   country_of_origin: string | null;
   region: string | null;
-  image_path: string | null;
+  images: ProductImage[];
   price_public: boolean;
   price_per_gram: number | null;
   bundle_threshold_grams: number | null;
@@ -92,7 +97,7 @@ export async function getMyShop(): Promise<Shop | null> {
   const { data: rows } = await supabase
     .from("product")
     .select(
-      "id, name, cultivar, thc_percent, cbd_percent, pack_size_grams, unit_code, local_code_pzn, dominance_code, country_of_origin, region, image_path, price_public, pricelist_item(price_per_gram, bundle_threshold_grams, bundle_price_per_gram)",
+      "id, name, cultivar, thc_percent, cbd_percent, pack_size_grams, unit_code, local_code_pzn, dominance_code, country_of_origin, region, price_public, product_image(id, image_path, position), pricelist_item(price_per_gram, bundle_threshold_grams, bundle_price_per_gram)",
     )
     .eq("company_id", companyId)
     .is("deleted_at", null)
@@ -100,6 +105,10 @@ export async function getMyShop(): Promise<Shop | null> {
 
   const products: ShopProduct[] = (rows ?? []).map((r) => {
     const price = Array.isArray(r.pricelist_item) ? r.pricelist_item[0] : r.pricelist_item;
+    const images: ProductImage[] = (r.product_image ?? [])
+      .slice()
+      .sort((a, b) => a.position - b.position)
+      .map((im) => ({ id: im.id, path: im.image_path }));
     return {
       id: r.id,
       name: r.name,
@@ -112,7 +121,7 @@ export async function getMyShop(): Promise<Shop | null> {
       dominance_code: r.dominance_code,
       country_of_origin: r.country_of_origin,
       region: r.region,
-      image_path: r.image_path,
+      images,
       price_public: r.price_public,
       price_per_gram: price?.price_per_gram ?? null,
       bundle_threshold_grams: price?.bundle_threshold_grams ?? null,
