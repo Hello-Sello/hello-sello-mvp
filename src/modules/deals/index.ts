@@ -10,8 +10,6 @@ export type {
   DealType,
   DealCardStatus,
   PartySide,
-  DealCard,
-  DealCardLog,
   LineItemView,
   PartyFieldView,
   LogEntry,
@@ -30,3 +28,6 @@ export {
   lineTotalOf,
   DEMO_VAT_RATE,
 } from "./lib/derive";
+
+export { getDealCard } from "./supabase/reads";
+export { DealCard } from "./components/DealCard";
