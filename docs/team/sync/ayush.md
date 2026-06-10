@@ -5,12 +5,12 @@
 
 ---
 
-**Last updated:** 2026-06-10 11:52 CEST
+**Last updated:** 2026-06-10 11:56 CEST
 **Branch:** claude/ayush/work
-**Status:** building **3a (deal card)**. Phase 0 + **Phase 1 DONE** (`deal_party_field` applied to live DB; privacy proven in SQL). Building Phase 2 (reads). **Lock released.**
+**Status:** building **3a (deal card)**. Phase 0 + **Phase 1 DONE + MERGED to dev (#79)** - `dev` and my branch are now aligned at the same point. Building Phase 2 (reads). **Plan: phases 2-8 then ONE merge at the end** (not per phase). **No locks.**
 **Linear issue in progress:** none
-**Shared files locked:** none - `deal_party_field` migration applied (additive new table + its own RLS; no existing table or RLS touched).
-**PR open:** none - [#76](https://github.com/HelloSello/hello-sello-mvp/pull/76) (2e) merged to dev; [#77](https://github.com/HelloSello/hello-sello-mvp/pull/77) (dev → main) merged. Pull `main`/`dev` to get 2e (incl. the `relationship-artifacts` bucket + demo-world seed).
+**Shared files locked:** none - `deal_party_field` migration applied + merged (additive new table + its own RLS; no existing table or RLS touched).
+**PR open:** none - [#79](https://github.com/HelloSello/hello-sello-mvp/pull/79) (3a Phase 0+1) **merged to dev**. Pull `dev` to get the `deals/` module + `deal_party_field` table. ([#76](https://github.com/HelloSello/hello-sello-mvp/pull/76)/[#77](https://github.com/HelloSello/hello-sello-mvp/pull/77) earlier.)
 
 ---
 
