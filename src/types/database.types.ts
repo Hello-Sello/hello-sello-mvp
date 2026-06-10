@@ -2340,36 +2340,57 @@ export type Database = {
       }
       person: {
         Row: {
+          avatar_path: string | null
           company_id: string | null
           created_at: string
           deleted_at: string | null
+          display_name: string | null
           first_name: string
           id: string
+          language: string | null
           last_name: string
+          links: Json
           metadata: Json
+          phone: string | null
           preferences: Json
+          public_handle: string | null
+          title: string | null
           updated_at: string
         }
         Insert: {
+          avatar_path?: string | null
           company_id?: string | null
           created_at?: string
           deleted_at?: string | null
+          display_name?: string | null
           first_name: string
           id: string
+          language?: string | null
           last_name: string
+          links?: Json
           metadata?: Json
+          phone?: string | null
           preferences?: Json
+          public_handle?: string | null
+          title?: string | null
           updated_at?: string
         }
         Update: {
+          avatar_path?: string | null
           company_id?: string | null
           created_at?: string
           deleted_at?: string | null
+          display_name?: string | null
           first_name?: string
           id?: string
+          language?: string | null
           last_name?: string
+          links?: Json
           metadata?: Json
+          phone?: string | null
           preferences?: Json
+          public_handle?: string | null
+          title?: string | null
           updated_at?: string
         }
         Relationships: [
