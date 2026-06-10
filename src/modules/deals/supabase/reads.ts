@@ -35,6 +35,31 @@ const str = (m: Meta, k: string): string | null => {
   return typeof v === "string" && v.trim() ? v : null;
 };
 
+/** Statuses that are still "live" (not a terminal end state) - preferred as the current deal. */
+const LIVE_STATUSES = new Set<DealCardStatus>(["draft", "confirmed", "amended"]);
+
+/**
+ * The current deal card id for a relationship - the one the chat's "Talking
+ * about" pin points at. Single deal per thread for the demo (multi-deal selector
+ * is deferred, DEV-37): prefer the most recent LIVE deal, else the most recent
+ * of any status. Returns null if the relationship has no deals.
+ */
+export async function getCurrentDealCardId(relationshipId: string): Promise<string | null> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("deal_card")
+    .select("id, status, created_at")
+    .eq("relationship_id", relationshipId)
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false })
+    .limit(20);
+  if (error) throw error;
+  const rows = data ?? [];
+  if (rows.length === 0) return null;
+  const live = rows.find((r) => LIVE_STATUSES.has(r.status as DealCardStatus));
+  return (live ?? rows[0]).id;
+}
+
 /**
  * Load one deal card for the deal-card screen: the card (narrowed), the
  * current-version line items, my-side private fields, and the full version log.

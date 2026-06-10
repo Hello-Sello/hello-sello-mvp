@@ -29,5 +29,6 @@ export {
   DEMO_VAT_RATE,
 } from "./lib/derive";
 
-export { getDealCard } from "./supabase/reads";
+export { getDealCard, getCurrentDealCardId } from "./supabase/reads";
 export { DealCard } from "./components/DealCard";
+export { DealPin } from "./components/DealPin";
