@@ -9,7 +9,7 @@
 **Branch:** claude/ayush/work
 **Status:** building **3a (deal card)** - Phase 0-3 DONE (card FRONT renders live, both sides, privacy proven). Building Phase 4 (flip + Signals/Logs back). Phase 0+1 merged to dev (#79); **2-8 then ONE merge at the end.** **No locks.**
 **Linear issue in progress:** none
-**Shared files locked:** none - demo line-item seed (`20260610140000`, additive demo data on card `04695a2d`) applied. No schema/RLS change.
+**Shared files locked:** ⚠️ **live DB (demo data only)** - seeding 2 `deal_card_log` rows on demo card `04695a2d` (migration `20260610160000`) so the card-back Logs tab shows history. No schema/RLS change. Releasing right after apply.
 **PR open:** none - [#79](https://github.com/HelloSello/hello-sello-mvp/pull/79) (3a Phase 0+1) **merged to dev**. Pull `dev` to get the `deals/` module + `deal_party_field` table. ([#76](https://github.com/HelloSello/hello-sello-mvp/pull/76)/[#77](https://github.com/HelloSello/hello-sello-mvp/pull/77) earlier.)
 
 ---
