@@ -4,6 +4,16 @@
 
 ### Build log
 
+- **✅ 3b COMPLETE - Phase 6 DONE (both sides), 2026-06-10.** Logged in as **Bob** then **Alice** in the live app
+  (sign-out via the IconRail account menu → re-login `alice@greenleaf.test`). **Perfect mirror, both sides:**
+  Bob view → People "(you)"=Bob, Alice's msg LEFT (AG avatar), Bob's msg RIGHT (mine). Alice view → "(you)"=Alice,
+  Alice's msg RIGHT (mine, no avatar), Bob's msg LEFT (BS avatar). **Both sides can WRITE** through RLS (Bob's
+  test row + Alice's test row each landed under their OWN `sender_person_id`, verified in DB, both removed - chat
+  back to the 3 seed rows). **Both doors** (Deals tab row · chat card-bar "Deal workspace ↗") land on
+  `/connect/deal/[id]`. **No console errors** on any view; `tsc` clean. The topbar "Aurora Deutschland GmbH" is the
+  known hardcoded placeholder (Muskan owns) - it does NOT track login; "(you)" is the true side signal and it
+  flips correctly. 3b = Phases 0-5 built + this both-sides walk. **5 commits on `claude/ayush/work`** (not merged -
+  one merge at end per Ayush).
 - **Phase 5 DONE** (2026-06-10) - the two doors + the leak fix, all verified live.
   **Deals tab (door 1):** `ChatFilter` + `deals`; deal threads live ONLY there (All/Unread/Companies now filter
   them out - the "Unknown" P2P leak row is gone); deals group by company (reused `groupByCompany`), row = the
