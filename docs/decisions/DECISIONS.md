@@ -946,3 +946,18 @@ Marcel's directive (2026-06-10): *"Discover closed to not see shit, but a line w
 - **Ad / social feed = CUT** (was the heavier half of the session-13 "two jobs" confirmation). A campaign/ad feed contradicts a closed non-marketplace; dropped from scope.
 - **"Request to enter" wiring = OPEN** — entering = *unlock-shop* (Discover owns the access grant) **vs** = *a Connect request* (one door, reuses Connect's plumbing; gate state lives in Connect). Leaning the latter; **deferred until Connect's request/accept flow is ready**. Button stays stubbed until then.
 - **First slice = UI only** (search-first directory, placeholder data, stubbed button). Real `list_discoverable_companies()` `SECURITY DEFINER` RPC (same anon-safe projection pattern as `get_public_profile`) + the gate are the next slices. Build plan: [`docs/build/discover-directory.md`](../build/discover-directory.md).
+
+---
+
+## Cross-cutting — Storage uploads
+
+### 2026-06-11 (session 21) — Single-slot uploads: client-direct + stable filename (Option B)
+
+Hardening for avatar / cover / logo. The storefront gallery already did client-direct (session 18); this finishes the pattern for single-slot media and fixes orphaning. Full plan in [PRD/storage-uploads.md](../PRD/storage-uploads.md); engineering in `ARCHITECTURE-NOTES.md` (2026-06-11). Research-grounded (Supabase storage best-practice + Smart CDN docs).
+
+- **Single-slot media (avatar, cover, logo) uploads client-direct to storage; the server stores only the path string.** Dodges the Next/Vercel Server-Action body limit (1 MB / 4.5 MB). Avatar was already client-direct; **cover/logo migrated off the server path** (`updateShopProfile` no longer touches bytes).
+- **Stable filename + `upsert` = orphan-proof by construction.** Single-slot assets use a fixed path (`{id}/avatar`, `{companyId}/cover|logo`, **no extension**) so a re-upload overwrites the one file in place. Supersedes the prior UUID-per-upload naming, which made `upsert` dead (a random name never collides) and orphaned the old file on every replace. *Why no extension:* a path carrying the extension would change on a format switch (png→jpg) and re-orphan. **Collections (the product gallery) keep unique filenames + explicit delete-on-remove — a different rule, because 1:many genuinely needs unique paths.**
+- **Cache = `?v=updated_at` nonce on read.** Stable filename ⇒ stable URL, so a `?v=<row.updated_at>` nonce busts the browser cache after a swap (Supabase Smart CDN already auto-invalidates the object on overwrite, ≤60s). Filename-versioning — the "stronger" cache-buster — is **rejected**: it's the opposite of stable-filename and re-creates orphans.
+- **Orphan cleanup = Storage API, not SQL.** A raw `delete from storage.objects` can leave the backing file billed; the Storage API delete (RLS-scoped) removes both. Cleaned 3 legacy orphans this way.
+- **Deferred (own task): parent-delete file cascade across ALL buckets** — deleting a `product`/`company`/`deal` row leaves its storage files (a DB cascade removes rows, not storage objects). Needs a trigger/app-layer cleanup + isolation test.
+- **Shipped to dev (#98); dev→main HELD** (a promotion would also ship Ayush's offline 3c/3d — joint call).

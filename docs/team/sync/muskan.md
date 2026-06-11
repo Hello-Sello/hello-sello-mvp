@@ -5,18 +5,20 @@
 
 ---
 
-**Last updated:** 2026-06-11 (Discover directory UI — merged to dev) CEST
+**Last updated:** 2026-06-11 (storage uploads hardening — merged to dev #98, held from main) CEST
 **Branch:** claude/muskan/work
-**Status:** idle — **Discover directory UI SHIPPED to production** (closed + tagged NON-marketplace, search-first lobby; placeholder data + stubbed "Request to enter"). Real listing RPC + gate wiring deferred.
+**Status:** active (Sella in a parallel session) — **storage uploads hardening MERGED to dev (#98), HELD from main.** Avatar + cover/logo now client-direct + stable-filename (orphan-proof); all 3 legacy storage orphans cleaned. ⚠️ Production still runs the old orphan-prone upload code until the next dev→main.
 **Linear issue in progress:** none
-**Shared files locked:** none (Discover is all new files under `src/app/discover/` — nothing of yours touched)
-**PR open:** none — Discover [#95](https://github.com/HelloSello/hello-sello-mvp/pull/95) → dev **merged**, [#96](https://github.com/HelloSello/hello-sello-mvp/pull/96) dev → main **merged (admin override)**. Live in prod (UI-only / placeholder data).
-**Prev PR:** Profile & QR [#88](https://github.com/HelloSello/hello-sello-mvp/pull/88)→dev / [#89](https://github.com/HelloSello/hello-sello-mvp/pull/89)→main **merged**; mobile-hero + docs [#91](https://github.com/HelloSello/hello-sello-mvp/pull/91)/[#92](https://github.com/HelloSello/hello-sello-mvp/pull/92) **merged**.
+**Shared files locked:** none (storage work = my catalog/profile files only — nothing of yours)
+**PR open:** none — storage uploads [#98](https://github.com/HelloSello/hello-sello-mvp/pull/98) → dev **merged**; **dev→main HELD** (would also promote your offline 3c/3d — your call when prod-ready).
+**Prev PR:** Discover [#95](https://github.com/HelloSello/hello-sello-mvp/pull/95)→dev / [#96](https://github.com/HelloSello/hello-sello-mvp/pull/96)→main **merged**; Profile & QR [#88](https://github.com/HelloSello/hello-sello-mvp/pull/88)→dev / [#89](https://github.com/HelloSello/hello-sello-mvp/pull/89)→main **merged**.
 **Prev PR:** Present storefront [#75](https://github.com/HelloSello/hello-sello-mvp/pull/75) **merged** · 1b auth [#63](https://github.com/HelloSello/hello-sello-mvp/pull/63) **merged**.
 
 ---
 
 ## Notes for the other agent
+
+**2026-06-11 (Storage uploads hardening — merged to dev #98, HELD from main). My catalog/profile files only — nothing of yours.** Finished the client-direct + stable-filename pattern for single-slot media (avatar, cover, logo) — the gallery note's "cover/logo could migrate to it too" is now done. **Files: `src/app/present/ShopView.tsx`, `src/modules/catalog/{manage,shop}.ts`, `src/modules/profile/index.ts`, `src/shared/ui/AvatarUpload.tsx` + `docs/PRD/storage-uploads.md`. No migrations, no schema, no RLS, no shared shell files.** Stable filenames (`{id}/avatar`, `{companyId}/cover|logo`) + upsert → orphan-proof (overwrite in place); server stores only path strings; `?v=updated_at` cache nonce on read. Cleaned 3 legacy storage orphans via the Storage API (not SQL — SQL delete can leave bytes billed). **⚠️ dev→main HELD: I did NOT promote, because dev→main would also ship your 3c/3d (#97) to prod — that's your call when ready.** Decisions in DECISIONS.md + ARCHITECTURE-NOTES.md (2026-06-11). Deferred: parent-delete file cascade (all buckets, own task).
 
 **2026-06-11 (Discover directory UI — merged to dev, #95). Nothing of yours touched.** Built the Discover surface UI-only: a **closed, tagged NON-marketplace directory** (search-first lobby) replacing the placeholder. All new files under `src/app/discover/` (`page` + `DiscoverDirectory` + `sample-companies`). **No migrations, no shared files, no RLS.** Data is placeholder + "Request to enter" is stubbed — the real `list_discoverable_companies()` SECURITY DEFINER RPC and the gate's accept flow are the next slices. **Heads-up for when you build Connect's request/accept:** Discover's "Request to enter" likely wires into it (one of two options, leaning "entering = a Connect request"). Model recorded in DECISIONS.md ("Discover: closed + tagged directory") + DISCOVER.md. Left an unrelated in-progress upload-migration uncommitted in my tree (not in #95).
 
