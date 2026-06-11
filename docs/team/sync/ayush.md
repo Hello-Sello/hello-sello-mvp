@@ -5,16 +5,20 @@
 
 ---
 
-**Last updated:** 2026-06-10 20:40 CEST
-**Branch:** claude/ayush/work (now **current with dev** - fast-forwarded after the merge)
-**Status:** idle - **3b (Deal Workspace, screen ④) SHIPPED to production.** The deal container is live on seeded card `04695a2d`: route `/connect/deal/[dealCardId]`, header band, real People tab, deal chat hero, **three doors** (Deals tab · chat card-bar "Deal workspace ↗" · relationship-page "Open workspace"). Plus a small `fix(public-profile)`: wordmark in the left slot for public viewers. Next = **3c** (stage pipeline + Things) on the same card.
+**Last updated:** 2026-06-11 14:01 CEST
+**Branch:** claude/ayush/work (merged `origin/dev` in cleanly - your Discover #95 + docs; `tsc` clean)
+**Status:** idle - **3c (stage pipeline + Things) + 3d (confirmation gate) DONE + verified both sides.** On seeded card `04695a2d`: a screen-only 5-stage bar, a REAL per-stage Things checklist (tick + "+ add a thing", live DB), and the **two-sided confirm gate** that flips Draft→Confirmed and turns the card **golden** (live header pill + audit trail). Demo card reset to Draft. Next = **3.5 ("card v2"):** the card WRITE side (create/edit) + full-screen open mode + card rearrange + per-change confirm (reusing 3d's `ConfirmBar`), bundled.
 **Linear issue in progress:** none
-**Shared files locked:** none. **3b deal migrations are isolated from your catalog work** (`deal_workspace`/`deal_member`/`chat_thread`/`deal_card` only - never `product`/`import_products`/`product_image`).
-**PR open:** none - 3b **merged**: [#93](https://github.com/HelloSello/hello-sello-mvp/pull/93) → dev, [#94](https://github.com/HelloSello/hello-sello-mvp/pull/94) dev → main. ([#84](https://github.com/HelloSello/hello-sello-mvp/pull/84) 3a read side earlier.)
+**Shared files locked:** none. **All 3c/3d work is `modules/deals/` + 3 deal-scoped migrations** (Things seed, audit action codes, demo-card reset) - never `product`/`import_products`/`product_image`/catalog RLS.
+**PR open:** PR'ing 3c+3d → dev now. **We are NOT merging dev→main this session** (Ayush: hold main).
 
 ---
 
 ## Notes for the other agent
+
+**2026-06-11 (3c stage pipeline + Things, 3d confirmation gate - DONE; no schema of yours touched).** All in `modules/deals/` + 3 deal-scoped migrations. **3c:** screen-only 5-stage bar (clicking navigates; NOT persisted - stages go custom later, so no DB plumbing) + a REAL Things tab (tick `thing.status`, "+ add a thing" inserts a `task`; both live via RLS `thing_all`). Seed `…190000_seed_demo_things.sql` (12 Things). **3d:** two-sided confirm gate - reusable `ConfirmBar` on the card top + a server action `confirmDeal` (derives company from session → you can only confirm your own side; both confirmed → `deal_card.status` draft→confirmed + log line + audit). Card turns golden, header pill flips live. Migrations `…120000_audit_actions_deal_confirm.sql` (4 `deal.*` action codes) + `…123000_seed_demo_deal_draft.sql` (reset demo card to Draft).
+> **Two things worth knowing for when you wire audit anywhere:** (1) the correct `audit_actor_type` code for a human is **`user`**, not `person` (there is no `person` code - it FK-rejects). (2) `audit_log` is **append-only** - a trigger blocks DELETE (correct for tamper-evidence; test rows can't be cleaned).
+> **For 3.5 / your Discover "Request to enter" → Connect tie-in:** `ConfirmBar` is dumb + fed (seats + handlers, no `deal_confirmation` inside), built to be reused for the per-change "accept this edit?" confirm in 3.5.
 
 **2026-06-10 (Task 3b - Deal Workspace DONE; ⚠️ I altered ONE of your foundation tables - please read).** Built screen ④ (the deal container) on seeded card `04695a2d`. **2 schema migrations applied to live:**
 > 1. `20260610170000_deal_workspace_role_ownership.sql` - **dropped `deal_workspace.owner_person_id`** (+ its FK) and **dropped index `uq_deal_member_one_owner`**. Reason: a deal has **two owners, one per company side** (locked w/ Ayush), so ownership = **`deal_member.role='owner'`** (your `deal_member_role` lookup already guards it - nice, no work). A single not-null owner column + a one-owner-per-workspace index both contradicted that. **Safe drop:** `deal_workspace`/`deal_member` were both **empty (0 rows)**, no code read the column (only generated types), and no RLS referenced it. `created_by` still records who made the workspace. The **per-side** one-owner rule moves to the `createDeal` core (section 3.5) since a partial index can't reach `person.company_id`. *(`uq_deal_member_one_side_lead` left as-is - side_lead unused in 3b.)*
