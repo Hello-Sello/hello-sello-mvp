@@ -20,9 +20,10 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowUpRight, ChevronDown, FileText, X } from "lucide-react";
 import { getCurrentDealCardId, getDealCard } from "../supabase/reads";
+import { confirmDeal } from "../actions";
 import { docAbbr } from "../lib/derive";
 import { DealCard } from "./DealCard";
-import type { DealCardView } from "../types";
+import type { ConfirmDecision, DealCardView } from "../types";
 
 export function DealPin({
   relationshipId,
@@ -35,6 +36,28 @@ export function DealPin({
 }) {
   const [data, setData] = useState<DealCardView | null>(null);
   const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  // 3d gate: run a confirm/decline/withdraw on the server, then re-read the card
+  // so status + both seats refresh (the flip to golden happens on the re-read).
+  async function runDecision(decision: ConfirmDecision) {
+    if (!data || busy) return;
+    setBusy(true);
+    try {
+      await confirmDeal({ dealCardId: data.card.id, version: data.card.version, decision });
+      const fresh = await getDealCard(data.card.id);
+      setData(fresh);
+      // tell sibling views (the workspace header's lifecycle pill) to re-read -
+      // they loaded the card separately, so a decoupled signal keeps them in sync.
+      window.dispatchEvent(
+        new CustomEvent("hs:deal-updated", { detail: { dealCardId: data.card.id } }),
+      );
+    } catch (e) {
+      console.error("deal confirm failed", e);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   // load the current deal for this relationship. DealPin is keyed by
   // relationshipId at the mount site, so it remounts (fresh state) per
@@ -106,7 +129,15 @@ export function DealPin({
         {data && open && (
           <div className="pointer-events-none absolute inset-0 z-10 flex justify-end p-4">
             <div className="pointer-events-auto self-start">
-              <DealCard data={data} />
+              <DealCard
+                data={data}
+                confirm={{
+                  busy,
+                  onConfirm: () => void runDecision("confirm"),
+                  onDecline: () => void runDecision("decline"),
+                  onWithdraw: () => void runDecision("withdraw"),
+                }}
+              />
             </div>
           </div>
         )}

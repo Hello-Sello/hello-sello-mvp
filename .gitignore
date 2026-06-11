@@ -53,3 +53,4 @@ next-env.d.ts
 .vercel
 *.pem
 npm-debug.log*
+.obsidian/

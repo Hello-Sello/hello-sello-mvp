@@ -161,9 +161,45 @@ export interface SignalView {
 }
 
 /**
+ * deal_confirmation_status.code - one party's stance on the current version
+ * (`deal_confirmation.status`). A missing row reads as `pending` (the seat
+ * exists - both companies always have a seat - even before anyone acts).
+ */
+export type ConfirmationStatus = "pending" | "confirmed" | "rejected";
+
+/**
+ * One seat in the two-sided confirm gate (3d) - a company's stance on the
+ * current card version. The `ConfirmBar` renders the two seats and knows
+ * nothing about `deal_confirmation`; this view is its only input (so 3.5 can
+ * feed the same bar from the per-change accept source - "same face, engine swap").
+ */
+export interface ConfirmSeat {
+  side: PartySide;
+  companyId: string;
+  companyName: string;
+  status: ConfirmationStatus;
+  /** the person who responded (for "confirmed · Alice"); null while pending */
+  byName: string | null;
+  /** ISO timestamp of the response; null while pending */
+  respondedAt: string | null;
+}
+
+/** What a party can do at the gate (3d server action input). */
+export type ConfirmDecision = "confirm" | "decline" | "withdraw";
+
+/** Result of a `confirmDeal` action - a fast hint; the client re-reads the card. */
+export interface ConfirmResult {
+  /** the card status AFTER the action */
+  cardStatus: DealCardStatus;
+  /** true only when this action was the second confirm that flipped the gate */
+  bothConfirmed: boolean;
+}
+
+/**
  * The whole card, ready to render. One `getDealCard(id)` read assembles this:
  * the card (narrowed), the current-version line items, my-side private fields,
- * the seeded signals for my side, and the full version log.
+ * the seeded signals for my side, the full version log, and the two confirm
+ * seats for the current version (3d).
  */
 export interface DealCardView {
   card: DealCard;
@@ -182,6 +218,8 @@ export interface DealCardView {
   log: LogEntry[];
   /** which side the viewer is on (seller/buyer); null if the viewer has no company */
   viewerSide: PartySide | null;
+  /** the two confirm seats for the current version (3d); seller first, then buyer */
+  confirmations: ConfirmSeat[];
 }
 
 /* -------------------------------------------------------------------------- */
@@ -230,4 +268,65 @@ export interface DealWorkspaceView {
   members: MemberView[];
   /** the chat_thread (type='deal') born with the deal; the chat hero mounts this */
   dealThreadId: string;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Stages + Things - the per-stage checklist (screen ④, 3c)                   */
+/* -------------------------------------------------------------------------- */
+
+/** The thing row, verbatim. */
+export type ThingRow = Tables["thing"]["Row"];
+
+/**
+ * deal_stage.code - the 5 fixed pipeline stages (`thing.stage_code`).
+ * Seeded in 20260607090001 (sort_order 1-5). For 3c the bar that shows these
+ * is screen-only; the stage list itself is read from `deal_stage`.
+ */
+export type StageCode =
+  | "negotiation"
+  | "compliance_quality"
+  | "agreement"
+  | "payment"
+  | "fulfilment_delivery";
+
+/**
+ * thing_type.code - what kind of work a Thing is (`thing.type`).
+ * `task` = plain work; `approval` = the gate that 3d wires to deal_confirmation;
+ * `document_upload` = a required file (artifact upload is a later task).
+ */
+export type ThingType = "task" | "approval" | "document_upload";
+
+/** thing_status.code - a Thing is `open` or `done` (`thing.status`). */
+export type ThingStatus = "open" | "done";
+
+/**
+ * One checklist row in the Things tab. Bound from `thing`, lookup columns
+ * narrowed. Ticking it flips `status` open<->done (a real DB write, 3c D3).
+ */
+export interface ThingView {
+  /** thing.id */
+  id: string;
+  title: string;
+  type: ThingType;
+  status: ThingStatus;
+  stageCode: StageCode;
+  /** order within its stage */
+  sortOrder: number;
+}
+
+/**
+ * One stage with its Things, ready to render. The 5 stages come from
+ * `deal_stage` (so order + labels stay schema-driven); each carries the Things
+ * whose `stage_code` matches. `thingsDone`/`thingsTotal` drive the progress
+ * count. The "current" highlight is NOT here - it's screen-only local state (D2).
+ */
+export interface StageView {
+  code: StageCode;
+  /** display label, e.g. "Compliance & Quality" (from deal_stage.description, titled) */
+  label: string;
+  /** deal_stage.sort_order (1-5) */
+  sortOrder: number;
+  things: ThingView[];
+  thingsTotal: number;
+  thingsDone: number;
 }

@@ -87,10 +87,10 @@ The 9 demo steps the "Walk" column points to:
 
 | # | Item | Walk | MVP | Size | Status |
 |---|---|---|---|---|---|
-| 3a | Deal card - **READ side** (show card, PO/SO derived, role-private field, front + back w/ Signals/Logs tabs + flip, placed in chat) | ★ | ✓ | L | ✅ done (on branch; read side) |
-| 3b | Deal Workspace (born at draft, members, container) | ★ | ✓ | M | |
-| 3c | Stage pipeline (5-stage bar, manual advance) + Things checklist (by **stage**) | ★ | ✓ | M | |
-| 3d | Confirmation gate (two-sided confirm → Confirmed) | ★ | ✓ | M | |
+| 3a | Deal card - **READ side** (show card, PO/SO derived, role-private field, front + back w/ Signals/Logs tabs + flip, placed in chat) | ★ | ✓ | L | ✅ done (merged; read side) |
+| 3b | Deal Workspace (born at draft, members, container) | ★ | ✓ | M | ✅ done (merged #93→dev, #94→main) |
+| 3c | Stage pipeline (5-stage bar, manual advance) + Things checklist (by **stage**) | ★ | ✓ | M | ✅ done (bar screen-only; Things tick + add, real DB) |
+| 3d | Confirmation gate (two-sided confirm → Confirmed) | ★ | ✓ | M | ✅ done (golden card + live pill + audit; both sides verified) |
 | **3.5** | **Deal creation & editing** (the card's WRITE side - was 3a Phase 6+7). **ONE `createDeal` core, THREE doors: shop · chat "+" · Sella.** Create a draft (card + lines + log + chat line; card-only) + edit → version bump. Form-first; products from catalog; both sides; margin/metric optional. **May fold into Unit 4 (Sella).** | ★ | ✓ | L | |
 
 > **3a scope note (Ayush, 2026-06-10):** 3a delivered the **read side** of the deal card (display + flip + in-chat

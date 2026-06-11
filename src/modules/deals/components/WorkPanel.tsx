@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { ListChecks, FileBox } from "lucide-react";
-import type { MemberView } from "../types";
+import { FileBox } from "lucide-react";
+import type { MemberView, StageView, ThingStatus } from "../types";
 import { PeopleTab } from "./PeopleTab";
+import { ThingsTab } from "./ThingsTab";
 
 type Tab = "things" | "people" | "documents";
 
@@ -15,11 +16,27 @@ const TABS: ReadonlyArray<{ key: Tab; label: string }> = [
 
 /**
  * The workspace's left work panel (3b): C-style tabs - pick one, see it.
- * People is REAL (deal_member). Things and Documents are visual stubs here:
- * the Things checklist is 3c (the `thing` backend is already migrated) and
- * the document upload comes later (`deal_artifact` is migrated too).
+ * People is REAL (deal_member). Things is REAL as of 3c - it shows the SELECTED
+ * stage's checklist (the stage is picked in the StageBar above) and a tick is a
+ * live DB write. Documents stays a stub (`deal_artifact` is migrated; upload is
+ * a later task).
  */
-export function WorkPanel({ members }: { members: MemberView[] }) {
+export interface WorkPanelProps {
+  members: MemberView[];
+  /** the stage picked in the StageBar - the Things tab renders this stage */
+  selectedStage: StageView;
+  onToggleThing: (thingId: string, next: ThingStatus) => void;
+  onAddThing: (title: string) => Promise<void>;
+  busyThingIds: ReadonlySet<string>;
+}
+
+export function WorkPanel({
+  members,
+  selectedStage,
+  onToggleThing,
+  onAddThing,
+  busyThingIds,
+}: WorkPanelProps) {
   const [tab, setTab] = useState<Tab>("things");
 
   return (
@@ -46,11 +63,11 @@ export function WorkPanel({ members }: { members: MemberView[] }) {
         {tab === "people" ? (
           <PeopleTab members={members} />
         ) : tab === "things" ? (
-          <StubCard
-            icon={<ListChecks size={20} strokeWidth={1.5} />}
-            title="Things live here"
-            body="The per-stage checklist (Finance · Logistics · Delivery) lands with the stage pipeline (3c)."
-            action="+ Add a thing"
+          <ThingsTab
+            stage={selectedStage}
+            onToggle={onToggleThing}
+            onAdd={onAddThing}
+            busyIds={busyThingIds}
           />
         ) : (
           <StubCard

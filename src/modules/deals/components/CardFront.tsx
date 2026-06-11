@@ -11,10 +11,19 @@
  *   - the private field is whatever RLS returned for MY side (seller Margin /
  *     buyer placeholder) - the other side's value never arrives.
  */
-import { Building2, Lock } from "lucide-react";
+import { Building2, Lock, BadgeCheck } from "lucide-react";
 import { docTerm, computeGross, formatMoney } from "../lib/derive";
 import { ProductList } from "./ProductList";
+import { ConfirmBar } from "./ConfirmBar";
 import type { DealCardView, PartyFieldView } from "../types";
+
+/** Confirm handlers passed down from DealPin (which owns the card data + re-read). */
+export interface CardConfirmHandlers {
+  busy: boolean;
+  onConfirm: () => void;
+  onDecline: () => void;
+  onWithdraw: () => void;
+}
 
 function dateLabel(iso: string | null): string {
   if (!iso) return "—";
@@ -66,18 +75,70 @@ function LogoBox({ role, name, isYou }: { role: string; name: string; isYou: boo
   );
 }
 
-export function CardFront({ data }: { data: DealCardView }) {
-  const { card, sellerName, buyerName, lineItems, partyFields, viewerSide } = data;
+export function CardFront({
+  data,
+  confirm,
+}: {
+  data: DealCardView;
+  confirm?: CardConfirmHandlers;
+}) {
+  const { card, sellerName, buyerName, lineItems, partyFields, viewerSide, confirmations } = data;
   const term = docTerm(card.deal_type);
   const net = card.value_net ?? 0;
   const hsNumber = card.hs_deal_number ?? `${term} · draft`;
 
+  // golden when both sides are in (status is the source of truth, seats confirm it)
+  const confirmed =
+    card.status === "confirmed" ||
+    (confirmations.length === 2 && confirmations.every((s) => s.status === "confirmed"));
+  const withdrawn = card.status === "withdrawn";
+
+  // withdraw is the initiator's escape hatch, only before the other side confirms
+  const viewerSeat = confirmations.find((s) => s.side === viewerSide) ?? null;
+  const otherSeat = confirmations.find((s) => s.side !== viewerSide) ?? null;
+  const canWithdraw =
+    !!viewerSeat &&
+    viewerSeat.companyId === card.initiating_company_id &&
+    otherSeat?.status !== "confirmed";
+
   return (
-    <div className="w-[340px] rounded-3xl border border-brand/15 bg-[#ffe2ee] p-3 shadow-xl ring-1 ring-black/5">
-      {/* HS number band */}
-      <div className="rounded-xl bg-brand py-1.5 text-center text-sm font-bold tracking-wide text-white">
+    <div
+      className={`w-[340px] rounded-3xl border p-3 shadow-xl ring-1 ${
+        confirmed
+          ? "border-amber-300 bg-amber-50 ring-amber-200"
+          : "border-brand/15 bg-[#ffe2ee] ring-black/5"
+      }`}
+    >
+      {/* HS number band - turns gold + gains a verified tick when confirmed */}
+      <div
+        className={`flex items-center justify-center gap-1.5 rounded-xl py-1.5 text-center text-sm font-bold tracking-wide text-white ${
+          confirmed ? "bg-amber-500" : "bg-brand"
+        }`}
+      >
+        {confirmed && <BadgeCheck size={15} strokeWidth={2.5} />}
         {hsNumber}
       </div>
+
+      {/* the confirm gate (3d) - the TOP action banner, right under the title */}
+      {confirm &&
+        (withdrawn ? (
+          <div className="mt-1.5 rounded-xl bg-ink/5 py-2 text-center text-xs font-medium text-ink/55">
+            Draft withdrawn
+          </div>
+        ) : (
+          <div className="mt-1.5">
+            <ConfirmBar
+              seats={confirmations}
+              viewerSide={viewerSide}
+              busy={confirm.busy}
+              onConfirm={confirm.onConfirm}
+              onDecline={confirm.onDecline}
+              onWithdraw={confirm.onWithdraw}
+              canWithdraw={canWithdraw}
+            />
+          </div>
+        ))}
+
       {/* document term + date */}
       <div className="mt-1.5 rounded-xl bg-white py-1.5 text-center text-xs text-ink/70">
         {term} from {dateLabel(card.created_at)}

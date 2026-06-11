@@ -13,11 +13,17 @@
  */
 import { useState } from "react";
 import { FlipHorizontal2 } from "lucide-react";
-import { CardFront } from "./CardFront";
+import { CardFront, type CardConfirmHandlers } from "./CardFront";
 import { CardBack } from "./CardBack";
 import type { DealCardView } from "../types";
 
-export function DealCard({ data }: { data: DealCardView }) {
+export function DealCard({
+  data,
+  confirm,
+}: {
+  data: DealCardView;
+  confirm?: CardConfirmHandlers;
+}) {
   const [flipped, setFlipped] = useState(false);
 
   return (
@@ -40,7 +46,7 @@ export function DealCard({ data }: { data: DealCardView }) {
         }}
       >
         <div style={{ backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden" }}>
-          <CardFront data={data} />
+          <CardFront data={data} confirm={confirm} />
         </div>
         <div
           className="absolute inset-0"

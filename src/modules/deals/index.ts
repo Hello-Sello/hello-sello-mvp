@@ -18,6 +18,15 @@ export type {
   MemberView,
   WorkspaceVisibility,
   DealWorkspaceView,
+  StageCode,
+  ThingType,
+  ThingStatus,
+  ThingView,
+  StageView,
+  ConfirmationStatus,
+  ConfirmSeat,
+  ConfirmDecision,
+  ConfirmResult,
 } from "./types";
 
 export {
@@ -32,7 +41,14 @@ export {
   DEMO_VAT_RATE,
 } from "./lib/derive";
 
-export { getDealCard, getCurrentDealCardId, getWorkspace } from "./supabase/reads";
+export {
+  getDealCard,
+  getCurrentDealCardId,
+  getWorkspace,
+  getStagesAndThings,
+} from "./supabase/reads";
+export { toggleThingStatus, createThing } from "./supabase/writes";
+export { confirmDeal } from "./actions";
 export { DealCard } from "./components/DealCard";
 export { DealPin } from "./components/DealPin";
 export { DealWorkspace } from "./components/DealWorkspace";
