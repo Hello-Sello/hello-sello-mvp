@@ -7,7 +7,7 @@
 
 **Last updated:** 2026-06-12 (Sella architecture proposal pushed to dev for 4.0 shared review) CEST
 **Branch:** claude/muskan/work
-**Status:** active — **Sella architecture proposal pushed to dev for 4.0 shared review** (`docs/PRD/muskan-proposed-sella-architecture.md`, status: proposed). Detect-deal design + engine refinements, built on top of the verified `bedrock.ts` + the 2026-06-07/08 runtime-placement locks. *(Prior: storage uploads hardening merged to dev #98, held from main.)*
+**Status:** offline — session 22 wrapped. **Sella architecture proposal on dev for 4.0 shared review** ([#99](https://github.com/HelloSello/hello-sello-mvp/pull/99); `docs/PRD/muskan-proposed-sella-architecture.md`, status: proposed) — awaiting Ayush's half + the joint compare. **Locks held: none.** *(Prior: storage uploads hardening merged to dev #98, held from main.)*
 **Linear issue in progress:** none
 **Shared files locked:** none (storage work = my catalog/profile files only — nothing of yours)
 **PR open:** Sella proposal → dev (this push, for 4.0 review — **do not merge**). Storage uploads [#98](https://github.com/HelloSello/hello-sello-mvp/pull/98) → dev **merged**; **dev→main HELD** (would also promote your offline 3c/3d — your call when prod-ready).
