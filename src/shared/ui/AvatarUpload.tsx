@@ -30,7 +30,10 @@ export function AvatarUpload({
     setBusy(true)
     setError(null)
     const supabase = createClient()
-    const path = `${personId}/${crypto.randomUUID()}-${file.name}`
+    // Stable per-person path so `upsert` overwrites the one avatar file instead
+    // of orphaning the old one. (A random filename never collides, so the old
+    // upsert flag was dead and every change left an orphan behind.)
+    const path = `${personId}/avatar`
     const { error: upErr } = await supabase.storage
       .from('avatars')
       .upload(path, file, { upsert: true, contentType: file.type })
@@ -39,14 +42,16 @@ export function AvatarUpload({
       setBusy(false)
       return
     }
-    const publicUrl = supabase.storage.from('avatars').getPublicUrl(path).data.publicUrl
     const res = await onSaved(path)
     if (res.error) {
       setError(res.error)
       setBusy(false)
       return
     }
-    setUrl(publicUrl)
+    // The public URL is now stable, so the browser would show the cached old
+    // image. Preview the bytes we just uploaded directly; other viewers get the
+    // fresh image via the `?v=updated_at` nonce on read + Smart CDN invalidation.
+    setUrl(URL.createObjectURL(file))
     setBusy(false)
   }
 
