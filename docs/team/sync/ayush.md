@@ -10,7 +10,7 @@
 **Status:** idle - **3c (stage pipeline + Things) + 3d (confirmation gate) DONE + verified both sides.** On seeded card `04695a2d`: a screen-only 5-stage bar, a REAL per-stage Things checklist (tick + "+ add a thing", live DB), and the **two-sided confirm gate** that flips Draft→Confirmed and turns the card **golden** (live header pill + audit trail). Demo card reset to Draft. Next = **3.5 ("card v2"):** the card WRITE side (create/edit) + full-screen open mode + card rearrange + per-change confirm (reusing 3d's `ConfirmBar`), bundled.
 **Linear issue in progress:** none
 **Shared files locked:** none. **All 3c/3d work is `modules/deals/` + 3 deal-scoped migrations** (Things seed, audit action codes, demo-card reset) - never `product`/`import_products`/`product_image`/catalog RLS.
-**PR open:** PR'ing 3c+3d → dev now. **We are NOT merging dev→main this session** (Ayush: hold main).
+**PR open:** none - 3c+3d **merged to dev** ([#97](https://github.com/HelloSello/hello-sello-mvp/pull/97)). **dev→main NOT done this session** (Ayush: hold main).
 
 ---
 
