@@ -5,18 +5,28 @@
 
 ---
 
-**Last updated:** 2026-06-11 (Discover directory UI — merged to dev) CEST
+**Last updated:** 2026-06-12 (Sella architecture proposal pushed to dev for 4.0 shared review) CEST
 **Branch:** claude/muskan/work
-**Status:** idle — **Discover directory UI SHIPPED to production** (closed + tagged NON-marketplace, search-first lobby; placeholder data + stubbed "Request to enter"). Real listing RPC + gate wiring deferred.
+**Status:** offline — session 22 wrapped. **Sella architecture proposal on dev for 4.0 shared review** ([#99](https://github.com/HelloSello/hello-sello-mvp/pull/99); `docs/PRD/muskan-proposed-sella-architecture.md`, status: proposed) — awaiting Ayush's half + the joint compare. **Locks held: none.** *(Prior: storage uploads hardening merged to dev #98, held from main.)*
 **Linear issue in progress:** none
-**Shared files locked:** none (Discover is all new files under `src/app/discover/` — nothing of yours touched)
-**PR open:** none — Discover [#95](https://github.com/HelloSello/hello-sello-mvp/pull/95) → dev **merged**, [#96](https://github.com/HelloSello/hello-sello-mvp/pull/96) dev → main **merged (admin override)**. Live in prod (UI-only / placeholder data).
-**Prev PR:** Profile & QR [#88](https://github.com/HelloSello/hello-sello-mvp/pull/88)→dev / [#89](https://github.com/HelloSello/hello-sello-mvp/pull/89)→main **merged**; mobile-hero + docs [#91](https://github.com/HelloSello/hello-sello-mvp/pull/91)/[#92](https://github.com/HelloSello/hello-sello-mvp/pull/92) **merged**.
+**Shared files locked:** none (storage work = my catalog/profile files only — nothing of yours)
+**PR open:** Sella proposal → dev (this push, for 4.0 review — **do not merge**). Storage uploads [#98](https://github.com/HelloSello/hello-sello-mvp/pull/98) → dev **merged**; **dev→main HELD** (would also promote your offline 3c/3d — your call when prod-ready).
+**Prev PR:** Discover [#95](https://github.com/HelloSello/hello-sello-mvp/pull/95)→dev / [#96](https://github.com/HelloSello/hello-sello-mvp/pull/96)→main **merged**; Profile & QR [#88](https://github.com/HelloSello/hello-sello-mvp/pull/88)→dev / [#89](https://github.com/HelloSello/hello-sello-mvp/pull/89)→main **merged**.
 **Prev PR:** Present storefront [#75](https://github.com/HelloSello/hello-sello-mvp/pull/75) **merged** · 1b auth [#63](https://github.com/HelloSello/hello-sello-mvp/pull/63) **merged**.
 
 ---
 
 ## Notes for the other agent
+
+**2026-06-12 (Sella architecture proposal — pushed to dev for 4.0 SHARED review; my half of 4.0).** Full doc: `docs/PRD/muskan-proposed-sella-architecture.md` (status: proposed). It's the `detect-deal` job + researched refinements **built on top of** what's already locked + verified — NOT a rewrite. For your compare:
+> - **Keeps:** the verified `bedrock.ts` (plain-fetch + bearer, no SDK), the `_shared` placement, suggest-only structural, Bedrock-EU `eu.` profiles, your dedup-row-as-state. A KEEP / ADD / REFINE table maps it line-by-line.
+> - **Refines (with current primary sources):** `propose_deal_draft` tool → **Bedrock structured outputs** (GA on Converse Feb 2026 — forced-tool never guaranteed shape); ~15–20-msg window → **whole thread + dedup-state + ~20k cap**; later auto-trigger = raw `pg_net` webhook → **pgmq + cron** (pg_net non-durable). "Vercel can't fire-and-forget" is stale (waitUntil 2024) but moot.
+> - **First slice = on-demand in a Next server action** — your placement rule's "person-waiting → app" branch (chat writes still mock), not a reversal.
+> - **Adds:** guardrails/failure-mode framework, EU-AI-Act Art.50 disclosure, daily cost alert.
+> - **Needs us both:** the Sella↔deal-flow boundary (workspace spawn + accept gate). Your **§3.5 `create_deal_draft` / `edit_deal_draft` already build the draft side** — so it's mostly wiring detect-deal's suggestion → your draft flow. Let's lock it in the 4.0 compare.
+> - **Provisional** — pending our joint review; nothing reversed in `DECISIONS.md`, only clarifying notes proposed.
+
+**2026-06-11 (Storage uploads hardening — merged to dev #98, HELD from main). My catalog/profile files only — nothing of yours.** Finished the client-direct + stable-filename pattern for single-slot media (avatar, cover, logo) — the gallery note's "cover/logo could migrate to it too" is now done. **Files: `src/app/present/ShopView.tsx`, `src/modules/catalog/{manage,shop}.ts`, `src/modules/profile/index.ts`, `src/shared/ui/AvatarUpload.tsx` + `docs/PRD/storage-uploads.md`. No migrations, no schema, no RLS, no shared shell files.** Stable filenames (`{id}/avatar`, `{companyId}/cover|logo`) + upsert → orphan-proof (overwrite in place); server stores only path strings; `?v=updated_at` cache nonce on read. Cleaned 3 legacy storage orphans via the Storage API (not SQL — SQL delete can leave bytes billed). **⚠️ dev→main HELD: I did NOT promote, because dev→main would also ship your 3c/3d (#97) to prod — that's your call when ready.** Decisions in DECISIONS.md + ARCHITECTURE-NOTES.md (2026-06-11). Deferred: parent-delete file cascade (all buckets, own task).
 
 **2026-06-11 (Discover directory UI — merged to dev, #95). Nothing of yours touched.** Built the Discover surface UI-only: a **closed, tagged NON-marketplace directory** (search-first lobby) replacing the placeholder. All new files under `src/app/discover/` (`page` + `DiscoverDirectory` + `sample-companies`). **No migrations, no shared files, no RLS.** Data is placeholder + "Request to enter" is stubbed — the real `list_discoverable_companies()` SECURITY DEFINER RPC and the gate's accept flow are the next slices. **Heads-up for when you build Connect's request/accept:** Discover's "Request to enter" likely wires into it (one of two options, leaning "entering = a Connect request"). Model recorded in DECISIONS.md ("Discover: closed + tagged directory") + DISCOVER.md. Left an unrelated in-progress upload-migration uncommitted in my tree (not in #95).
 
