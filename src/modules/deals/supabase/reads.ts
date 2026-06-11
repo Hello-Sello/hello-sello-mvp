@@ -16,6 +16,7 @@ import { createClient } from "@/shared/db/client";
 import { sellerCompanyId, viewerSide, lineTotalOf } from "../lib/derive";
 import { seededSignals } from "../lib/signals";
 import type {
+  CatalogProduct,
   DealCard,
   DealCardView,
   DealType,
@@ -86,6 +87,53 @@ export async function getCurrentDealCardId(relationshipId: string): Promise<stri
 }
 
 /**
+ * The create-form product picker source: the viewer's OWN catalogue (3.5a).
+ * RLS limits `product` + `pricelist_item` to the caller's company, so this is
+ * always "my products" - which is exactly the seller's catalogue, since the
+ * creator of an offer is the seller. A product with no live pricelist item
+ * comes back with `unitPrice = null` (a price-less line is allowed, D3).
+ * Two flat fetches stitched in JS (same discipline as the other reads).
+ */
+export async function getOwnCatalog(): Promise<CatalogProduct[]> {
+  const supabase = createClient();
+
+  const { data: products, error: pErr } = await supabase
+    .from("product")
+    .select("id, name, cultivar, unit_code, thc_percent, cbd_percent, local_code_pzn")
+    .is("deleted_at", null)
+    .order("name", { ascending: true });
+  if (pErr) throw pErr;
+  const rows = products ?? [];
+  if (rows.length === 0) return [];
+
+  const { data: items, error: iErr } = await supabase
+    .from("pricelist_item")
+    .select("product_id, price_per_gram, currency")
+    .in(
+      "product_id",
+      rows.map((p) => p.id),
+    )
+    .is("deleted_at", null);
+  if (iErr) throw iErr;
+  const priceBy = new Map((items ?? []).map((i) => [i.product_id, i] as const));
+
+  return rows.map((p) => {
+    const item = priceBy.get(p.id);
+    return {
+      id: p.id,
+      name: p.name,
+      cultivar: p.cultivar,
+      unit: p.unit_code,
+      unitPrice: item ? Number(item.price_per_gram) : null,
+      currency: item?.currency ?? "EUR",
+      thcPercent: p.thc_percent,
+      cbdPercent: p.cbd_percent,
+      pzn: p.local_code_pzn,
+    };
+  });
+}
+
+/**
  * Load one deal card for the deal-card screen: the card (narrowed), the
  * current-version line items, my-side private fields, and the full version log.
  * Throws if the card is not visible to the viewer (RLS returns no row).
@@ -134,7 +182,7 @@ export async function getDealCard(cardId: string): Promise<DealCardView> {
     supabase.from("company").select("id, name").in("id", [rel.company_a_id, rel.company_b_id]),
     supabase
       .from("deal_line_item")
-      .select("id, product_name, quantity, unit, unit_price, currency, line_total, metadata, sort_order")
+      .select("id, product_id, product_name, quantity, unit, unit_price, currency, line_total, metadata, sort_order")
       .eq("deal_card_id", card.id)
       .eq("version", card.version)
       .order("sort_order", { ascending: true }),
@@ -174,6 +222,7 @@ export async function getDealCard(cardId: string): Promise<DealCardView> {
     const m = (r.metadata ?? {}) as Meta;
     return {
       id: r.id,
+      productId: r.product_id,
       productName: r.product_name,
       thumbnailTint: str(m, "dominance") ?? str(m, "cultivar"),
       cultivar: str(m, "cultivar"),

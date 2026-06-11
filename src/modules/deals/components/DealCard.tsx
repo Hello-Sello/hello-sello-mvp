@@ -20,9 +20,11 @@ import type { DealCardView } from "../types";
 export function DealCard({
   data,
   confirm,
+  onEdit,
 }: {
   data: DealCardView;
   confirm?: CardConfirmHandlers;
+  onEdit?: () => void;
 }) {
   const [flipped, setFlipped] = useState(false);
 
@@ -46,7 +48,7 @@ export function DealCard({
         }}
       >
         <div style={{ backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden" }}>
-          <CardFront data={data} confirm={confirm} />
+          <CardFront data={data} confirm={confirm} onEdit={onEdit} />
         </div>
         <div
           className="absolute inset-0"

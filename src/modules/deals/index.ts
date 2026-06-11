@@ -27,6 +27,12 @@ export type {
   ConfirmSeat,
   ConfirmDecision,
   ConfirmResult,
+  CatalogProduct,
+  DraftLineInput,
+  CreateDealInput,
+  CreateDealResult,
+  EditDealInput,
+  EditDealResult,
 } from "./types";
 
 export {
@@ -44,11 +50,12 @@ export {
 export {
   getDealCard,
   getCurrentDealCardId,
+  getOwnCatalog,
   getWorkspace,
   getStagesAndThings,
 } from "./supabase/reads";
 export { toggleThingStatus, createThing } from "./supabase/writes";
-export { confirmDeal } from "./actions";
+export { confirmDeal, createDeal, editDeal } from "./actions";
 export { DealCard } from "./components/DealCard";
 export { DealPin } from "./components/DealPin";
 export { DealWorkspace } from "./components/DealWorkspace";

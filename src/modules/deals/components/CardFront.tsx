@@ -11,7 +11,7 @@
  *   - the private field is whatever RLS returned for MY side (seller Margin /
  *     buyer placeholder) - the other side's value never arrives.
  */
-import { Building2, Lock, BadgeCheck } from "lucide-react";
+import { Building2, Lock, BadgeCheck, Pencil } from "lucide-react";
 import { docTerm, computeGross, formatMoney } from "../lib/derive";
 import { ProductList } from "./ProductList";
 import { ConfirmBar } from "./ConfirmBar";
@@ -78,9 +78,12 @@ function LogoBox({ role, name, isYou }: { role: string; name: string; isYou: boo
 export function CardFront({
   data,
   confirm,
+  onEdit,
 }: {
   data: DealCardView;
   confirm?: CardConfirmHandlers;
+  /** open the edit form (3.5b); omitted in read-only contexts */
+  onEdit?: () => void;
 }) {
   const { card, sellerName, buyerName, lineItems, partyFields, viewerSide, confirmations } = data;
   const term = docTerm(card.deal_type);
@@ -169,6 +172,18 @@ export function CardFront({
       <div className="mt-1.5">
         <ProductList items={lineItems} />
       </div>
+
+      {/* edit (3.5b) - any member can edit; a change makes a new version */}
+      {onEdit && (
+        <button
+          type="button"
+          onClick={onEdit}
+          className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-xl bg-white py-1.5 text-xs font-medium text-ink/60 ring-1 ring-black/5 transition hover:text-brand hover:ring-brand/30"
+        >
+          <Pencil size={12} strokeWidth={2} />
+          Edit deal
+        </button>
+      )}
     </div>
   );
 }

@@ -18,25 +18,32 @@
  */
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowUpRight, ChevronDown, FileText, X } from "lucide-react";
+import { ArrowUpRight, ChevronDown, FileText, Plus, X } from "lucide-react";
 import { getCurrentDealCardId, getDealCard } from "../supabase/reads";
 import { confirmDeal } from "../actions";
 import { docAbbr } from "../lib/derive";
 import { DealCard } from "./DealCard";
+import { CreateDealForm } from "./CreateDealForm";
+import { EditDealForm } from "./EditDealForm";
 import type { ConfirmDecision, DealCardView } from "../types";
 
 export function DealPin({
   relationshipId,
   variant = "chat",
+  counterpartyName,
   children,
 }: {
   relationshipId: string;
   variant?: "chat" | "workspace";
+  /** the other company's name - the recipient pre-filled in the create form */
+  counterpartyName?: string;
   children: React.ReactNode;
 }) {
   const [data, setData] = useState<DealCardView | null>(null);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   // 3d gate: run a confirm/decline/withdraw on the server, then re-read the card
   // so status + both seats refresh (the flip to golden happens on the re-read).
@@ -123,6 +130,24 @@ export function DealPin({
         </div>
       )}
 
+      {/* no deal yet (chat only): the create entry. Born here, the card fills
+          this same bar on the next read - blank slot -> live card (3.5a). */}
+      {!data && variant === "chat" && (
+        <div className="flex items-center gap-3 border-b border-black/5 px-4 py-2">
+          <span className="shrink-0 text-[11px] text-ink/45">No deal yet</span>
+          <span className="flex flex-1 justify-center">
+            <button
+              type="button"
+              onClick={() => setCreating(true)}
+              className="flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-deep"
+            >
+              <Plus size={13} strokeWidth={2.5} />
+              Create a deal
+            </button>
+          </span>
+        </div>
+      )}
+
       {/* the stream, with the card floated on the right when open */}
       <div className="relative min-h-0 flex-1">
         {children}
@@ -137,11 +162,47 @@ export function DealPin({
                   onDecline: () => void runDecision("decline"),
                   onWithdraw: () => void runDecision("withdraw"),
                 }}
+                onEdit={() => setEditing(true)}
               />
             </div>
           </div>
         )}
       </div>
+
+      {/* the create form (3.5a) - a human-pressed commit; on success the new
+          card loads here and opens (the AI fence: only this button writes). */}
+      {creating && (
+        <CreateDealForm
+          relationshipId={relationshipId}
+          counterpartyName={counterpartyName ?? "your contact"}
+          onClose={() => setCreating(false)}
+          onCreated={(cardId) => {
+            setCreating(false);
+            void getDealCard(cardId).then((d) => {
+              setData(d);
+              setOpen(true);
+            });
+          }}
+        />
+      )}
+
+      {/* the edit form (3.5b) - a change makes a new version + resets the gate;
+          on success we re-read so the card shows the new version and seats. */}
+      {editing && data && (
+        <EditDealForm
+          data={data}
+          onClose={() => setEditing(false)}
+          onUpdated={() => {
+            setEditing(false);
+            void getDealCard(data.card.id).then((d) => {
+              setData(d);
+              window.dispatchEvent(
+                new CustomEvent("hs:deal-updated", { detail: { dealCardId: data.card.id } }),
+              );
+            });
+          }}
+        />
+      )}
     </>
   );
 }

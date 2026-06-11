@@ -103,6 +103,8 @@ export type DealCardLog = Omit<DealCardLogRow, "changed_by" | "origin"> & {
 export interface LineItemView {
   /** deal_line_item.id */
   id: string;
+  /** deal_line_item.product_id - the catalogue link (null for a free-typed line) */
+  productId: string | null;
   productName: string;
   /** display thumbnail tint (metadata-driven; falls back to a neutral tint) */
   thumbnailTint: string | null;
@@ -329,4 +331,98 @@ export interface StageView {
   things: ThingView[];
   thingsTotal: number;
   thingsDone: number;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Create a deal (3.5a) - the manual create flow                              */
+/*                                                                            */
+/* 3.5a rule: the creator makes an OFFER from their OWN catalogue, so the      */
+/* creator is the seller. This is RLS-safe (product is own-company-only) and  */
+/* matches the demo (Alice/Aurora creates). A buyer-initiated ORDER that picks */
+/* the counterparty's catalogue is a later refinement.                        */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * One product the create-form picker offers, read from the creator's OWN
+ * catalogue (`getOwnCatalog`). `unitPrice` is null when the product has no live
+ * pricelist item - a deal line can still be made price-less (D3).
+ */
+export interface CatalogProduct {
+  /** product.id */
+  id: string;
+  name: string;
+  cultivar: string | null;
+  /** product_unit code (display only, e.g. "g") */
+  unit: string;
+  /** pricelist_item.price_per_gram; null when the product has no live price */
+  unitPrice: number | null;
+  currency: string;
+  thcPercent: number | null;
+  cbdPercent: number | null;
+  /** local_code_pzn (German PZN) */
+  pzn: string | null;
+}
+
+/**
+ * One line the user is assembling in the create form. Price is OPTIONAL (D3) -
+ * a card can be sent before prices are disclosed. `productId` is null for a
+ * free-typed line (no catalogue match).
+ */
+export interface DraftLineInput {
+  productId: string | null;
+  productName: string;
+  quantity: number;
+  /** deal_line_unit code: 'g' | 'kg' | 'unit' */
+  unit: string;
+  unitPrice: number | null;
+  currency: string;
+  cultivar?: string | null;
+  pzn?: string | null;
+  thcPercent?: number | null;
+  cbdPercent?: number | null;
+}
+
+/**
+ * The whole create-form payload handed to `createDeal` (the human-pressed
+ * commit - the AI-fence guardrail: only a human button starts this).
+ */
+export interface CreateDealInput {
+  relationshipId: string;
+  lines: DraftLineInput[];
+  /** terms */
+  freeDelivery?: boolean;
+  /** delivery_date_target (ISO date) */
+  dueDate?: string | null;
+  /** payment_terms.code, e.g. 'net30' */
+  paymentTermsCode?: string | null;
+  /** the creator's OWN-side private box (seller: buying price from supplier) */
+  privateValue?: string | null;
+  /** the creation note (optional at draft - D7; becomes mandatory on edits, 3.5b) */
+  note?: string | null;
+}
+
+/** Result of `createDeal` - the new card id so the chat's deal area can open it. */
+export interface CreateDealResult {
+  dealCardId: string;
+}
+
+/**
+ * The edit-form payload handed to `editDeal` (3.5b). Same shape as create but on
+ * an existing card, and the `note` is MANDATORY - every change carries a human
+ * "why" (D2). Pressing Update bumps the version and resets the confirm gate.
+ */
+export interface EditDealInput {
+  dealCardId: string;
+  lines: DraftLineInput[];
+  freeDelivery?: boolean;
+  dueDate?: string | null;
+  paymentTermsCode?: string | null;
+  privateValue?: string | null;
+  /** REQUIRED on an edit (unlike create, where it is optional at draft). */
+  note: string;
+}
+
+/** Result of `editDeal` - the new version number the card was bumped to. */
+export interface EditDealResult {
+  version: number;
 }

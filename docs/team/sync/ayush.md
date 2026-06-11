@@ -5,16 +5,19 @@
 
 ---
 
-**Last updated:** 2026-06-11 14:01 CEST
-**Branch:** claude/ayush/work (merged `origin/dev` in cleanly - your Discover #95 + docs; `tsc` clean)
-**Status:** idle - **3c (stage pipeline + Things) + 3d (confirmation gate) DONE + verified both sides.** On seeded card `04695a2d`: a screen-only 5-stage bar, a REAL per-stage Things checklist (tick + "+ add a thing", live DB), and the **two-sided confirm gate** that flips Draft→Confirmed and turns the card **golden** (live header pill + audit trail). Demo card reset to Draft. Next = **3.5 ("card v2"):** the card WRITE side (create/edit) + full-screen open mode + card rearrange + per-change confirm (reusing 3d's `ConfirmBar`), bundled.
+**Last updated:** 2026-06-11 18:17 CEST
+**Branch:** claude/ayush/work
+**Status:** offline - **3.5a (create) + 3.5b (edit) DONE + verified live (as Aurora/Alice).** The deal card now has a WRITE side: create a draft from a chat + edit it into a new version (atomic SECURITY DEFINER RPCs, MANDATORY change-note, the confirm gate auto-resets on a change). Next = **3.5d (card v2 UI)**.
 **Linear issue in progress:** none
-**Shared files locked:** none. **All 3c/3d work is `modules/deals/` + 3 deal-scoped migrations** (Things seed, audit action codes, demo-card reset) - never `product`/`import_products`/`product_image`/catalog RLS.
-**PR open:** none - 3c+3d **merged to dev** ([#97](https://github.com/HelloSello/hello-sello-mvp/pull/97)). **dev→main NOT done this session** (Ayush: hold main).
+**Shared files locked:** none. Work = `modules/deals/` + 3 deal-scoped migrations + a one-line `messaging/ThreadView.tsx` touch. **One ADDITIVE seed into your catalogue** (Aurora products - see the note below).
+**PR open:** none - **3.5a/b held on `claude/ayush/work`, NOT pushed to dev** (Ayush's call). 3c+3d remain merged to dev ([#97](https://github.com/HelloSello/hello-sello-mvp/pull/97)).
 
 ---
 
 ## Notes for the other agent
+
+**2026-06-11 (later) - 3.5a Create + 3.5b Edit DONE; ONE ADDITIVE seed into your catalogue, please read.** Built the deal card's WRITE side - create a draft from a chat + edit → a new version. All in `modules/deals/` + a one-line `messaging/ThreadView.tsx` touch (pass the counterparty name into `DealPin`). **The one thing in your domain:** seed `…140000_3p5a_create_seed.sql` adds the `deal.created` audit code **and seeds 4 of Aurora's own blueprint products into her existing "Standard" pricelist** - the seller had only **1** product, so the create-form picker was empty. **Additive + idempotent; no `product`/`pricelist` schema or RLS change.** Two new deal-only RPCs (`create_deal_draft`, `edit_deal_draft`) are SECURITY DEFINER + relationship-membership-gated - same shape as your `import_products` (a multi-row deal birth must be atomic, and the workspace/member/thread inserts have an RLS bootstrap that only a definer fn can do). **Not in `database.types.ts`** (localized cast, your documented pattern) - they appear on your next regen-from-live, no conflict expected. **Held on my branch, NOT dev.**
+> **Heads-up:** "GreenLeaf" → **"Aurora Deutschland GmbH"** (your rename) is the seller in my code paths now; the live DB has drifted from old migration NAMES (e.g. the demo card's `HS-GL25` numbers are legacy). Two **test deals** sit on Aurora↔Rheinland (`081d35c0`, now v2) from my verification - harmless (NOT the StonePharm demo card).
 
 **2026-06-11 (3c stage pipeline + Things, 3d confirmation gate - DONE; no schema of yours touched).** All in `modules/deals/` + 3 deal-scoped migrations. **3c:** screen-only 5-stage bar (clicking navigates; NOT persisted - stages go custom later, so no DB plumbing) + a REAL Things tab (tick `thing.status`, "+ add a thing" inserts a `task`; both live via RLS `thing_all`). Seed `…190000_seed_demo_things.sql` (12 Things). **3d:** two-sided confirm gate - reusable `ConfirmBar` on the card top + a server action `confirmDeal` (derives company from session → you can only confirm your own side; both confirmed → `deal_card.status` draft→confirmed + log line + audit). Card turns golden, header pill flips live. Migrations `…120000_audit_actions_deal_confirm.sql` (4 `deal.*` action codes) + `…123000_seed_demo_deal_draft.sql` (reset demo card to Draft).
 > **Two things worth knowing for when you wire audit anywhere:** (1) the correct `audit_actor_type` code for a human is **`user`**, not `person` (there is no `person` code - it FK-rejects). (2) `audit_log` is **append-only** - a trigger blocks DELETE (correct for tamper-evidence; test rows can't be cleaned).

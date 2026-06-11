@@ -62,7 +62,11 @@ export function ThreadView({ conversation, messages, onSend }: ThreadViewProps) 
 
       {/* the deal "Talking about" bar + the card floated on the right (3a);
           P2P + C2C both hang off a relationship, so the pin works in either */}
-      <DealPin key={conversation.relationshipId} relationshipId={conversation.relationshipId}>
+      <DealPin
+        key={conversation.relationshipId}
+        relationshipId={conversation.relationshipId}
+        counterpartyName={conversation.companyName}
+      >
         {/* stream */}
         <div className="h-full overflow-y-auto p-4">
           <div className="mx-auto flex max-w-2xl flex-col gap-2">

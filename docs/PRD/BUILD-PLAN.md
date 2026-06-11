@@ -81,7 +81,7 @@ The 9 demo steps the "Walk" column points to:
 | 2b | Accept → relationship + C2C created | ★ | ✓ | S | ✅ done |
 | 2c | Chat - C2C + P2P threads, send/store, message types | ★ | ✓ | L | ✅ done |
 | 2d | Realtime (Supabase Realtime subscriptions) | ★ | ✓ | M | ✅ done |
-| 2e | Relationship page (notes / terms / artifacts) | ★ | ✓ | M | 🧪 review |
+| 2e | Relationship page (notes / terms / artifacts) | ★ | ✓ | M | ✅ done (merged; 3a-3d built on it) |
 
 ### Deal (Unit 3)
 
@@ -91,7 +91,12 @@ The 9 demo steps the "Walk" column points to:
 | 3b | Deal Workspace (born at draft, members, container) | ★ | ✓ | M | ✅ done (merged #93→dev, #94→main) |
 | 3c | Stage pipeline (5-stage bar, manual advance) + Things checklist (by **stage**) | ★ | ✓ | M | ✅ done (bar screen-only; Things tick + add, real DB) |
 | 3d | Confirmation gate (two-sided confirm → Confirmed) | ★ | ✓ | M | ✅ done (golden card + live pill + audit; both sides verified) |
-| **3.5** | **Deal creation & editing** (the card's WRITE side - was 3a Phase 6+7). **ONE `createDeal` core, THREE doors: shop · chat "+" · Sella.** Create a draft (card + lines + log + chat line; card-only) + edit → version bump. Form-first; products from catalog; both sides; margin/metric optional. **May fold into Unit 4 (Sella).** | ★ | ✓ | L | |
+| **3.5a** | **Create a draft from chat** - `createDeal` → atomic `create_deal_draft` RPC (card+lines+private box+workspace+owner+thread+log+note+audit, one txn) + the shared `DealForm` + the chat entry. Recipient auto; prices optional; offer from own catalogue. | ★ | ✓ | M | ✅ done (built + verified live; my branch) |
+| **3.5b** | **Edit a draft** - `editDeal` → atomic `edit_deal_draft` RPC: version bump, immutable snapshot, carry private boxes, MANDATORY note, human Update. Same `DealForm`, prefilled. | ★ | ✓ | M | ✅ done (built + verified live; my branch) |
+| **3.5c** | **Re-confirm a change** - both sides re-confirm the new version (reuse 3d's `ConfirmBar`). | ★ | ✓ | S | ✅ done (free - the version bump resets 3d's gate; verified) |
+| **3.5d** | **Card v2 UI** - rearrange the card + the full-screen "blank + only the card" open mode. The visual pass, done once now that every field is known. | ★ | ✓ | M | (next) |
+
+> **3.5 doors note:** the three create doors were *shop · chat "+" · Sella*. 3.5a built the **chat** door (manual). Shop + Sella doors come later (Sella = 4a-4d). The AI fence: Sella may FILL the form, only a human's button click writes (server action).
 
 > **3a scope note (Ayush, 2026-06-10):** 3a delivered the **read side** of the deal card (display + flip + in-chat
 > placement + role privacy, verified both sides). The **write side** (create a draft, edit/version-bump) was pulled

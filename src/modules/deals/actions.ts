@@ -1,19 +1,49 @@
 "use server";
 
 /**
- * Deals module - 3d confirmation gate, server actions.
+ * Deals module - server actions.
  *
- * The confirm/decline/withdraw decisions run on the SERVER (not the client):
- * writing the confirmation row, checking BOTH sides, flipping `deal_card.status`,
- * logging, and auditing is one step here - no client race, and `writeAudit` is
- * server-only. The viewer's company is derived from the SESSION, never from the
- * caller - that is the guardrail (RLS `conf_all` is relationship-wide, so a
- * person could otherwise write the other side's row; here they cannot).
+ * The confirm/decline/withdraw decisions and the create run on the SERVER (not
+ * the client): writing rows, deriving the viewer's company from the SESSION
+ * (never the caller), and `writeAudit` are server-only. The session-derived
+ * company is the guardrail - a person can only act as their OWN side.
  */
 import { createClient } from "@/shared/db/server";
 import { getCurrentCompanyId } from "@/shared/auth";
 import { writeAudit } from "@/shared/audit";
-import type { ConfirmDecision, ConfirmResult, DealCardStatus } from "./types";
+import type {
+  ConfirmDecision,
+  ConfirmResult,
+  CreateDealInput,
+  CreateDealResult,
+  DealCardStatus,
+  EditDealInput,
+  EditDealResult,
+} from "./types";
+
+/** Map the form's draft lines to the RPC's jsonb line shape (shared by create + edit). */
+function rpcLines(lines: CreateDealInput["lines"]) {
+  return lines.map((l) => ({
+    productId: l.productId,
+    productName: l.productName,
+    quantity: l.quantity,
+    unit: l.unit,
+    unitPrice: l.unitPrice,
+    currency: l.currency,
+    cultivar: l.cultivar ?? null,
+    pzn: l.pzn ?? null,
+    thcPercent: l.thcPercent ?? null,
+    cbdPercent: l.cbdPercent ?? null,
+  }));
+}
+
+/** value_net = sum of the priced lines; null when NONE carry a price (D3/Q-C). */
+function sumValueNet(lines: CreateDealInput["lines"]): number | null {
+  const priced = lines.filter((l) => l.unitPrice != null);
+  return priced.length
+    ? priced.reduce((sum, l) => sum + l.quantity * (l.unitPrice as number), 0)
+    : null;
+}
 
 export async function confirmDeal(args: {
   dealCardId: string;
@@ -139,6 +169,102 @@ export async function confirmDeal(args: {
   }
 
   return { cardStatus: card.status as DealCardStatus, bothConfirmed: false };
+}
+
+/**
+ * Create a draft deal card from a chat (3.5a). The SINGLE human-pressed commit:
+ * only this action, triggered by a human Create button, writes a deal - Sella
+ * may FILL the form but never calls this directly (the AI fence).
+ *
+ * The whole deal is born in ONE transaction by the `create_deal_draft` SECURITY
+ * DEFINER RPC: the card (draft, v1) + line items + the creator's own-side
+ * private box + its container (workspace + creator-as-owner + the deal chat
+ * thread + an opening line) + the creation log line + the optional note. One
+ * transaction = no orphan cards, and it sidesteps the workspace-membership
+ * bootstrap that RLS cannot satisfy at a deal's birth. The RPC derives the
+ * creator's company from the session and gates on relationship membership (the
+ * guardrail). Audit (`deal.created`) stays here so the hash-chain helper owns it.
+ */
+export async function createDeal(input: CreateDealInput): Promise<CreateDealResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("createDeal: no authenticated user");
+
+  const currency = input.lines[0]?.currency ?? "EUR";
+
+  // The RPC is new, so it is not in the generated types yet - a localized cast
+  // (Muskan's documented pattern) avoids a full database.types regen. Call
+  // supabase.rpc DIRECTLY (not via a detached const) so its `this` stays bound.
+  const { data: cardId, error } = await supabase.rpc("create_deal_draft" as never, {
+    p_relationship_id: input.relationshipId,
+    p_deal_type: "offer",
+    p_value_net: sumValueNet(input.lines),
+    p_currency: currency,
+    p_due_date: input.dueDate ?? null,
+    p_payment_terms_code: input.paymentTermsCode ?? null,
+    p_free_delivery: input.freeDelivery ?? false,
+    p_lines: rpcLines(input.lines),
+    p_private_value: input.privateValue ?? null,
+    p_note: input.note ?? null,
+  } as never);
+  if (error) throw new Error((error as { message: string }).message);
+  const newCardId = cardId as string | null;
+  if (!newCardId) throw new Error("createDeal: no card id returned from create_deal_draft");
+
+  await writeAudit({
+    actorType: "user",
+    action: "deal.created",
+    contentType: "deal_card",
+    contentId: newCardId,
+    actorPersonId: user.id,
+  });
+
+  return { dealCardId: newCardId };
+}
+
+/**
+ * Edit a deal into a NEW version (3.5b). The human-pressed commit for a change:
+ * one atomic `edit_deal_draft` RPC bumps the version, snapshots the new lines
+ * (old version stays frozen), carries the private boxes forward, drops the card
+ * back to `draft` (so 3d's gate re-runs), and records the MANDATORY note. The
+ * note is required (the RPC also enforces it). Audit = `deal.amended`.
+ */
+export async function editDeal(input: EditDealInput): Promise<EditDealResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("editDeal: no authenticated user");
+  if (!input.note || !input.note.trim()) {
+    throw new Error("editDeal: a note is required for every change");
+  }
+
+  const currency = input.lines[0]?.currency ?? "EUR";
+
+  const { data: newVersion, error } = await supabase.rpc("edit_deal_draft" as never, {
+    p_deal_card_id: input.dealCardId,
+    p_value_net: sumValueNet(input.lines),
+    p_currency: currency,
+    p_due_date: input.dueDate ?? null,
+    p_payment_terms_code: input.paymentTermsCode ?? null,
+    p_free_delivery: input.freeDelivery ?? false,
+    p_lines: rpcLines(input.lines),
+    p_private_value: input.privateValue ?? null,
+    p_note: input.note.trim(),
+  } as never);
+  if (error) throw new Error((error as { message: string }).message);
+
+  await writeAudit({
+    actorType: "user",
+    action: "deal.amended",
+    contentType: "deal_card",
+    contentId: input.dealCardId,
+    actorPersonId: user.id,
+  });
+
+  return { version: (newVersion as number) ?? 0 };
 }
 
 /* ---- small server-only helpers (not exported) ---- */
