@@ -5,18 +5,25 @@
 
 ---
 
-**Last updated:** 2026-06-11 21:34 CEST
+**Last updated:** 2026-06-12 01:33 CEST
 **Branch:** claude/ayush/work
-**Status:** offline - **3.5 CLOSED; phase plan reshaped (no code shipped this session).** 3.5a/b/c stay done on my branch. **3.5d (card v2 UI) PARKED → new Section 5 (5A).** Next = **4.0 Sella research (SHARED, both of us).**
+**Status:** offline - **4.0 Sella research DONE + locked + on dev.** Synthesis + phase build guide written; BUILD-PLAN §4 expanded. Next session = **Phase 0 (make chat persist real `chat_message` rows) → build 4a-4d.**
 **Linear issue in progress:** none
-**Shared files locked:** none. This session edited shared docs only (AGENTS.md checkpoint + `docs/PRD/BUILD-PLAN.md` - reshape note + new 4.0 / Section 5 rows). No code, no schema. **Not committed yet** (Ayush reviewing).
-**PR open:** none - **3.5a/b/c held on `claude/ayush/work`, NOT pushed to dev** (Ayush's call). 3c+3d remain merged to dev ([#97](https://github.com/HelloSello/hello-sello-mvp/pull/97)).
+**Shared files locked:** none. This session added `_workshop/pov/sella.md` + `_workshop/build-plans/4-sella-build.md` + `docs/research/sella-research-decisions-ayush.md`, and edited `docs/PRD/BUILD-PLAN.md` §4 (not on the shared list). No code, no schema.
+**PR open:** none - **both Sella PRs merged to dev** ([#100](https://github.com/HelloSello/hello-sello-mvp/pull/100) mine, [#99](https://github.com/HelloSello/hello-sello-mvp/pull/99) Muskan's - merged on Ayush's direction, see note below). 3.5a/b/c still on `claude/ayush/work` (NOT dev, Ayush's call).
 
 ---
 
 ## Notes for the other agent
 
-**2026-06-11 (latest) - 3.5 closed; phase plan reshaped. ⚠️ Numbering, please read - keeps us in sync.** No code this session. The deal-card UI work (old 3.5d) grew into the whole UI job, so we reshaped:
+**2026-06-12 - 4.0 Sella research DONE + locked + merged to dev. ⚠️ I merged your #99 (do-not-merge) - please read.** We did the 4.0 joint compare. On dev now: the synthesis `_workshop/pov/sella.md` (single decisions reference) + the phase build guide `_workshop/build-plans/4-sella-build.md` + BUILD-PLAN §4.
+> - **Adopted from your proposal:** Bedrock structured outputs, whole-thread context, pgmq+cron trigger, the guardrail / EU-AI-Act Art.50 / cost framework. All sound - thank you.
+> - **One resolved conflict (your key-location vs mine):** we took **Path A** - fix chat writes first → auto-detection in the Edge Function - so the Bedrock key stays in **Supabase only** (no Vercel key). Your on-demand-Next first slice was the workaround for mock chat; Path A removes the need.
+> - **Your open boundary is answered:** the **two-owner `create_deal_draft` birth** + **Option B** (preview → both confirm → birth) cover workspace-spawn + the accept-gate. `detect-deal`'s suggestion hands off to my §3.5 draft flow.
+> - **⚠️ Override:** I merged your **#99** to dev on Ayush's direction while your agent was offline - **nothing in your proposal was changed**, merged as-is, with a comment on the PR. If you'd have done it differently, shout.
+> - **FYI:** #99 also carried your **session-21 STORAGE decisions** (DECISIONS.md + ARCHITECTURE-NOTES.md) onto dev - additive, harmless, just so it's not a surprise.
+
+**2026-06-11 (earlier) - 3.5 closed; phase plan reshaped. ⚠️ Numbering, please read - keeps us in sync.** No code this session. The deal-card UI work (old 3.5d) grew into the whole UI job, so we reshaped:
 > - **Section 4 = Sella stays 4a-4d** (your DECISIONS holds). New **4.0 = Sella research, SHARED** - we each research Sella on our own, then compare + lock the 4a-4d shape before any build. Plan: `_workshop/build-plans/4.0-sella-research.md`.
 > - **Section 5 = UI pass (5A)** - the old 3.5d moved here (fresh section so it doesn't clash with your Sella 4a-4d). Scope: deal card (open mode + layout), chat heading, the message typing bar (expand / formatting / a `+` menu, first item "Create a deal"), the left chat/relationship nav minimised to icon buttons, and the **Sella chat UI**. Plan: `_workshop/build-plans/5a-ui-pass.md`.
 > - **Both Section 4 (Sella) and 5A (UI) are OPEN / unassigned** - we pick them up ourselves; 4.0 research is the shared first step. You're still the Sella backstop.
