@@ -71,13 +71,16 @@ export async function getMyProfile(): Promise<MyProfile | null> {
 
   const { data } = await supabase
     .from('person')
-    .select('id, display_name, first_name, last_name, title, phone, language, links, avatar_path, public_handle, company_id')
+    .select('id, display_name, first_name, last_name, title, phone, language, links, avatar_path, public_handle, company_id, updated_at')
     .eq('id', user.id)
     .maybeSingle()
   if (!data) return null
 
+  // Stable avatar path means a stable URL; append updated_at as a cache nonce so
+  // a replaced photo busts the browser cache (Smart CDN already invalidates the
+  // object on overwrite, but the browser may hold it for up to an hour).
   const avatarUrl = data.avatar_path
-    ? supabase.storage.from('avatars').getPublicUrl(data.avatar_path).data.publicUrl
+    ? `${supabase.storage.from('avatars').getPublicUrl(data.avatar_path).data.publicUrl}?v=${new Date(data.updated_at).getTime()}`
     : null
 
   return {

@@ -50,6 +50,7 @@ export type Shop = {
     description: string | null;
     cover_path: string | null;
     logo_path: string | null;
+    updated_at: string | null;
     warehouse_location: string | null;
     country: string | null;
     address: string | null;
@@ -88,7 +89,7 @@ export async function getMyShop(): Promise<Shop | null> {
   const { data: company } = await supabase
     .from("company")
     .select(
-      "id, name, tagline, description, cover_path, logo_path, warehouse_location, country, address, website, metadata, company_type_assignment(company_type_code)",
+      "id, name, tagline, description, cover_path, logo_path, updated_at, warehouse_location, country, address, website, metadata, company_type_assignment(company_type_code)",
     )
     .eq("id", companyId)
     .single();
@@ -137,6 +138,7 @@ export async function getMyShop(): Promise<Shop | null> {
       description: company.description,
       cover_path: company.cover_path,
       logo_path: company.logo_path,
+      updated_at: company.updated_at,
       warehouse_location: company.warehouse_location,
       country: company.country,
       address: company.address,

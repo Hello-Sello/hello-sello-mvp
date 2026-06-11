@@ -7,9 +7,12 @@
  * can only ever modify their OWN shop.
  *
  * Media lands in the public `shop-media` bucket under {company_id}/..., which the
- * insert policy requires. Every upload uses a fresh uuid filename: the public URL
- * is derived from the path, so a new path is a new URL — replacing a cover/logo/
- * photo busts the browser + CDN cache for free (no stale image after an edit).
+ * insert policy requires. Gallery photos use a fresh uuid filename (new path = new
+ * URL). Cover/logo are single-slot, so they use a STABLE filename
+ * ({company_id}/cover|logo) + upsert — the upload overwrites the one file instead
+ * of orphaning the old one; a `?v=updated_at` nonce on read busts the cache. All
+ * media bytes are uploaded client-direct (see ShopView); these actions only record
+ * the resulting path string, never the file — dodging the Server-Action body limit.
  */
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/shared/db/server";
@@ -57,12 +60,6 @@ function parseLinks(raw: FormDataEntryValue | null): Array<{ platform: string; l
   });
 }
 
-function imageExt(file: File): string {
-  const m = /\.([a-z0-9]+)$/i.exec(file.name);
-  if (m) return m[1].toLowerCase();
-  return file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
-}
-
 /** Update the shop profile (text) plus optional cover/logo replacement. */
 export async function updateShopProfile(formData: FormData): Promise<ManageResult> {
   const supabase = await createClient();
@@ -94,17 +91,12 @@ export async function updateShopProfile(formData: FormData): Promise<ManageResul
       : {};
   patch.metadata = { ...baseMeta, links: parseLinks(formData.get("links")) };
 
-  for (const [field, key] of [["cover_path", "cover"], ["logo_path", "logo"]] as const) {
-    const file = formData.get(key);
-    if (file instanceof File && file.size > 0) {
-      const path = `${companyId}/${key}-${crypto.randomUUID()}.${imageExt(file)}`;
-      const { error } = await supabase.storage
-        .from("shop-media")
-        .upload(path, file, { contentType: file.type });
-      if (error) return { error: `${key} upload failed: ${error.message}` };
-      patch[field] = path;
-    }
-  }
+  // Cover/logo bytes are uploaded client-direct (ShopView) to a stable path; we
+  // persist only the path string. An empty value means "unchanged this save".
+  const coverPath = str(formData, "cover_path");
+  const logoPath = str(formData, "logo_path");
+  if (coverPath) patch.cover_path = coverPath;
+  if (logoPath) patch.logo_path = logoPath;
 
   const { error } = await supabase.from("company").update(patch).eq("id", companyId);
   if (error) return { error: error.message };

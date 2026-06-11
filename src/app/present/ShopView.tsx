@@ -25,8 +25,14 @@ import { createClient } from "@/shared/db/client";
 import { AddProductsDrawer } from "./AddProductsDrawer";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-const mediaUrl = (path: string) =>
-  `${SUPABASE_URL}/storage/v1/object/public/shop-media/${path}`;
+// Cover/logo now live at a STABLE path (overwritten in place, never orphaned), so
+// their URL no longer changes on edit. Pass the company's `updated_at` as a `?v=`
+// nonce to bust the browser cache after a swap. Gallery photos keep unique
+// filenames, so they call this without a version.
+const mediaUrl = (path: string, version?: string | null) =>
+  `${SUPABASE_URL}/storage/v1/object/public/shop-media/${path}${
+    version ? `?v=${new Date(version).getTime()}` : ""
+  }`;
 
 // Client-side guards for direct-to-storage uploads. These mirror the bucket's
 // own limits (the real enforcement lives in the shop-media bucket config); the
@@ -147,8 +153,8 @@ export function ShopView({ shop }: { shop: Shop }) {
 
 // ---------- profile: read ----------
 function ProfileHero({ company }: { company: Shop["company"] }) {
-  const cover = company.cover_path ? mediaUrl(company.cover_path) : null;
-  const logo = company.logo_path ? mediaUrl(company.logo_path) : null;
+  const cover = company.cover_path ? mediaUrl(company.cover_path, company.updated_at) : null;
+  const logo = company.logo_path ? mediaUrl(company.logo_path, company.updated_at) : null;
   const hq = company.address || company.country || "—";
 
   return (
@@ -270,8 +276,8 @@ function ProfileEditor({
     company.links.filter((l) => l.platform === "custom").map((l) => ({ label: l.label ?? "", url: l.value })),
   );
 
-  const coverUrl = cover ? URL.createObjectURL(cover) : company.cover_path ? mediaUrl(company.cover_path) : null;
-  const logoUrl = logo ? URL.createObjectURL(logo) : company.logo_path ? mediaUrl(company.logo_path) : null;
+  const coverUrl = cover ? URL.createObjectURL(cover) : company.cover_path ? mediaUrl(company.cover_path, company.updated_at) : null;
+  const logoUrl = logo ? URL.createObjectURL(logo) : company.logo_path ? mediaUrl(company.logo_path, company.updated_at) : null;
 
   const touch = () => setDirty(true);
   const pickCover = (f: File) => { setCover(f); touch(); };
@@ -282,13 +288,37 @@ function ProfileEditor({
     onCancel();
   }
 
+  // Upload a freshly-picked cover/logo straight to storage (client-direct), so the
+  // bytes never hit the Server-Action body limit (1 MB / 4.5 MB). Stable filenames
+  // (${id}/cover|logo) + upsert overwrite the one file in place — no orphans. The
+  // server action then records only the returned path string.
+  async function uploadSlot(file: File | null, slot: "cover" | "logo"): Promise<{ path?: string; error?: string }> {
+    if (!file) return {};
+    if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) return { error: "Use a JPG, PNG or WebP image." };
+    if (file.size > MAX_IMAGE_BYTES) return { error: "Image must be under 10 MB." };
+    const path = `${company.id}/${slot}`;
+    const { error } = await createClient().storage
+      .from("shop-media")
+      .upload(path, file, { upsert: true, contentType: file.type });
+    return error ? { error: `${slot} upload failed: ${error.message}` } : { path };
+  }
+
   async function save(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    // Capture the form NOW: `e.currentTarget` is nulled once the event finishes
+    // dispatching, and we await the uploads below before reading the fields.
+    const form = e.currentTarget;
     setBusy(true);
     setError(null);
-    const fd = new FormData(e.currentTarget);
-    if (cover) fd.set("cover", cover);
-    if (logo) fd.set("logo", logo);
+
+    const c = await uploadSlot(cover, "cover");
+    if (c.error) { setError(c.error); setBusy(false); return; }
+    const l = await uploadSlot(logo, "logo");
+    if (l.error) { setError(l.error); setBusy(false); return; }
+
+    const fd = new FormData(form);
+    if (c.path) fd.set("cover_path", c.path);
+    if (l.path) fd.set("logo_path", l.path);
     const links = [
       ...(linkedin.trim() ? [{ platform: "linkedin", value: linkedin.trim() }] : []),
       ...(instagram.trim() ? [{ platform: "instagram", value: instagram.trim() }] : []),

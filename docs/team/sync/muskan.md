@@ -5,17 +5,20 @@
 
 ---
 
-**Last updated:** 2026-06-10 (Profile & QR business card — SHIPPED to production) CEST
+**Last updated:** 2026-06-11 (Discover directory UI — merged to dev) CEST
 **Branch:** claude/muskan/work
-**Status:** idle — **Profile & QR business card SHIPPED** (onboarding wiring · account pages · public `/c/<handle>` page + QR + vCard + bottom-left card). Verified live (insider + outsider).
+**Status:** idle — **Discover directory UI SHIPPED to production** (closed + tagged NON-marketplace, search-first lobby; placeholder data + stubbed "Request to enter"). Real listing RPC + gate wiring deferred.
 **Linear issue in progress:** none
-**Shared files locked:** none (two of your files touched **additively** — see latest note)
-**PR open:** none — [#88](https://github.com/HelloSello/hello-sello-mvp/pull/88) → dev **merged**, [#89](https://github.com/HelloSello/hello-sello-mvp/pull/89) dev → main **merged (admin override)**; follow-up mobile-hero fix + session-19 docs [#91](https://github.com/HelloSello/hello-sello-mvp/pull/91)→dev / [#92](https://github.com/HelloSello/hello-sello-mvp/pull/92)→main **merged**.
+**Shared files locked:** none (Discover is all new files under `src/app/discover/` — nothing of yours touched)
+**PR open:** none — Discover [#95](https://github.com/HelloSello/hello-sello-mvp/pull/95) → dev **merged**, [#96](https://github.com/HelloSello/hello-sello-mvp/pull/96) dev → main **merged (admin override)**. Live in prod (UI-only / placeholder data).
+**Prev PR:** Profile & QR [#88](https://github.com/HelloSello/hello-sello-mvp/pull/88)→dev / [#89](https://github.com/HelloSello/hello-sello-mvp/pull/89)→main **merged**; mobile-hero + docs [#91](https://github.com/HelloSello/hello-sello-mvp/pull/91)/[#92](https://github.com/HelloSello/hello-sello-mvp/pull/92) **merged**.
 **Prev PR:** Present storefront [#75](https://github.com/HelloSello/hello-sello-mvp/pull/75) **merged** · 1b auth [#63](https://github.com/HelloSello/hello-sello-mvp/pull/63) **merged**.
 
 ---
 
 ## Notes for the other agent
+
+**2026-06-11 (Discover directory UI — merged to dev, #95). Nothing of yours touched.** Built the Discover surface UI-only: a **closed, tagged NON-marketplace directory** (search-first lobby) replacing the placeholder. All new files under `src/app/discover/` (`page` + `DiscoverDirectory` + `sample-companies`). **No migrations, no shared files, no RLS.** Data is placeholder + "Request to enter" is stubbed — the real `list_discoverable_companies()` SECURITY DEFINER RPC and the gate's accept flow are the next slices. **Heads-up for when you build Connect's request/accept:** Discover's "Request to enter" likely wires into it (one of two options, leaning "entering = a Connect request"). Model recorded in DECISIONS.md ("Discover: closed + tagged directory") + DISCOVER.md. Left an unrelated in-progress upload-migration uncommitted in my tree (not in #95).
 
 **2026-06-10 (Profile & QR business card — built + verified live; ⚠️ two of your shell files touched, both additive).** New feature: the "Scan to Connect" digital business card + public profile page + the in-app account pages. **2 migrations applied to live (additive, touch only `person` + a new bucket + a new function — none of your tables/RLS):**
 > 1. `profile_qr_foundation` — `person` += `display_name/title/phone/language/links/avatar_path/public_handle` (backfilled; `public_handle` UNIQUE); new **public `avatars` bucket** + own-folder storage RLS.
