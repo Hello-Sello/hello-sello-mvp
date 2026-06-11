@@ -24,15 +24,36 @@ import type {
   LineItemView,
   LogAuthor,
   ChangeOrigin,
+  ConfirmationStatus,
+  ConfirmSeat,
   LogEntry,
   MemberRole,
   MemberView,
   PartyFieldView,
   PartySide,
+  StageCode,
+  StageView,
+  ThingStatus,
+  ThingType,
+  ThingView,
   WorkspaceVisibility,
 } from "../types";
 
 type Meta = Record<string, unknown>;
+
+/**
+ * Clean display labels for the 5 stages, keyed by `deal_stage.code`. The
+ * `deal_stage.description` column reads like a sentence ("Negotiating terms");
+ * the pipeline bar + Things headings want a short title, so we map here. The
+ * stage order still comes from `deal_stage.sort_order`, never this map.
+ */
+const STAGE_LABELS: Record<StageCode, string> = {
+  negotiation: "Negotiation",
+  compliance_quality: "Compliance & Quality",
+  agreement: "Agreement",
+  payment: "Payment",
+  fulfilment_delivery: "Fulfilment & Delivery",
+};
 
 const str = (m: Meta, k: string): string | null => {
   const v = m[k];
@@ -109,7 +130,7 @@ export async function getDealCard(cardId: string): Promise<DealCardView> {
     .single();
   if (relErr) throw relErr;
 
-  const [cosRes, linesRes, fieldsRes, logRes] = await Promise.all([
+  const [cosRes, linesRes, fieldsRes, logRes, confRes] = await Promise.all([
     supabase.from("company").select("id, name").in("id", [rel.company_a_id, rel.company_b_id]),
     supabase
       .from("deal_line_item")
@@ -129,8 +150,15 @@ export async function getDealCard(cardId: string): Promise<DealCardView> {
       .select("id, version, change_summary, origin, changed_by, changed_by_person_id, created_at")
       .eq("deal_card_id", card.id)
       .order("version", { ascending: false }),
+    // the two-sided confirm gate for the CURRENT version (3d). RLS = relationship
+    // member, so both sides' rows return; a missing row reads as `pending`.
+    supabase
+      .from("deal_confirmation")
+      .select("company_id, status, responding_person_id, responded_at")
+      .eq("deal_card_id", card.id)
+      .eq("version", card.version),
   ]);
-  for (const r of [cosRes, linesRes, fieldsRes, logRes]) {
+  for (const r of [cosRes, linesRes, fieldsRes, logRes, confRes]) {
     if (r.error) throw r.error;
   }
 
@@ -167,9 +195,14 @@ export async function getDealCard(cardId: string): Promise<DealCardView> {
     value: r.value_text,
   }));
 
-  // version log - resolve person names for human authors
+  // resolve person names for log authors AND confirmation responders (one fetch)
   const personIds = Array.from(
-    new Set((logRes.data ?? []).map((r) => r.changed_by_person_id).filter((x): x is string => !!x)),
+    new Set(
+      [
+        ...(logRes.data ?? []).map((r) => r.changed_by_person_id),
+        ...(confRes.data ?? []).map((r) => r.responding_person_id),
+      ].filter((x): x is string => !!x),
+    ),
   );
   const nameById = new Map<string, string>();
   if (personIds.length) {
@@ -203,6 +236,26 @@ export async function getDealCard(cardId: string): Promise<DealCardView> {
     ? viewerSide(viewerCompanyId, card, rel.company_a_id, rel.company_b_id)
     : null;
 
+  // the two confirm seats (3d), seller first then buyer. A missing row = pending.
+  const confByCompany = new Map(
+    (confRes.data ?? []).map((r) => [r.company_id, r] as const),
+  );
+  const seatFor = (sideKind: PartySide, companyId: string, companyName: string): ConfirmSeat => {
+    const row = confByCompany.get(companyId);
+    return {
+      side: sideKind,
+      companyId,
+      companyName,
+      status: (row?.status as ConfirmationStatus) ?? "pending",
+      byName: row?.responding_person_id ? (nameById.get(row.responding_person_id) ?? null) : null,
+      respondedAt: row?.responded_at ?? null,
+    };
+  };
+  const confirmations: ConfirmSeat[] = [
+    seatFor("seller", sellerId, sellerName),
+    seatFor("buyer", buyerId, buyerName),
+  ];
+
   return {
     card,
     sellerName,
@@ -214,6 +267,7 @@ export async function getDealCard(cardId: string): Promise<DealCardView> {
     signals: side ? seededSignals(side) : [],
     log,
     viewerSide: side,
+    confirmations,
   };
 }
 
@@ -299,4 +353,62 @@ export async function getWorkspace(dealCardId: string): Promise<DealWorkspaceVie
     members,
     dealThreadId: threadRes.data.id,
   };
+}
+
+/**
+ * Load the 5 stages + their Things for the workspace (3c). The stage list and
+ * its order come from `deal_stage` (schema-driven, never hardcoded); each
+ * stage carries the Things whose `stage_code` matches, ordered by `sort_order`.
+ * RLS (`thing_all`) scopes Things to deal members - both relationship companies
+ * see the company_wide workspace's Things. A stage with no Things returns empty.
+ *
+ * The "current stage" highlight is NOT computed here: the 3c bar is screen-only
+ * (D2), so the highlight lives as local React state, not in this read.
+ */
+export async function getStagesAndThings(workspaceId: string): Promise<StageView[]> {
+  const supabase = createClient();
+
+  const [stagesRes, thingsRes] = await Promise.all([
+    supabase
+      .from("deal_stage")
+      .select("code, sort_order")
+      .order("sort_order", { ascending: true }),
+    supabase
+      .from("thing")
+      .select("id, title, type, status, stage_code, sort_order")
+      .eq("deal_workspace_id", workspaceId)
+      .is("deleted_at", null)
+      .order("sort_order", { ascending: true }),
+  ]);
+  if (stagesRes.error) throw stagesRes.error;
+  if (thingsRes.error) throw thingsRes.error;
+
+  // group Things under their stage code
+  const byStage = new Map<string, ThingView[]>();
+  for (const r of thingsRes.data ?? []) {
+    const view: ThingView = {
+      id: r.id,
+      title: r.title,
+      type: r.type as ThingType,
+      status: r.status as ThingStatus,
+      stageCode: r.stage_code as StageCode,
+      sortOrder: r.sort_order,
+    };
+    const list = byStage.get(r.stage_code) ?? [];
+    list.push(view);
+    byStage.set(r.stage_code, list);
+  }
+
+  return (stagesRes.data ?? []).map((s) => {
+    const code = s.code as StageCode;
+    const things = byStage.get(code) ?? [];
+    return {
+      code,
+      label: STAGE_LABELS[code] ?? code,
+      sortOrder: s.sort_order,
+      things,
+      thingsTotal: things.length,
+      thingsDone: things.filter((t) => t.status === "done").length,
+    };
+  });
 }
