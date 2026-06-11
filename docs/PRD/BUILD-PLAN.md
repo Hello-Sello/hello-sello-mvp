@@ -2,7 +2,7 @@
 
 **Status:** Locked. The June 11 build, split between the two of us.
 **Owners:** **Ayush** = the whole demo (Connect + Deal + Sella) · **Muskan** = Foundation → Onboarding/Home → the next surfaces (Present / Discover).
-**Created:** 2026-06-07 16:25 CEST · **Updated:** 2026-06-07 17:13 CEST (re-cut: Connect+Sella to one owner).
+**Created:** 2026-06-07 16:25 CEST · **Updated:** 2026-06-07 17:13 CEST (re-cut: Connect+Sella to one owner) · **2026-06-11 reshape (Ayush):** 3.5 closed; the UI work moved out to a new **Section 5 (5A)**; **4.0 Sella research (SHARED)** added as the first step of Section 4. Sella stays Section 4 (matches DECISIONS "4a-4d"). Section 4 (Sella) + Section 5 (UI) are **open / unassigned** - we pick them up ourselves; 4.0 research is shared first.
 **Demo:** 2026-06-11.
 
 > Who builds what for the Connect demo. Derived from the PRD ([connect-demo.md](connect-demo.md) §6 = the 9-step acceptance script) and the locked build strategy (foundation broad → surfaces vertical → Sella cross-cutting). The cut keeps the tightly-coupled connected experience under one owner so it has no internal seams, and lets the other owner build ahead on the next surfaces.
@@ -94,7 +94,7 @@ The 9 demo steps the "Walk" column points to:
 | **3.5a** | **Create a draft from chat** - `createDeal` → atomic `create_deal_draft` RPC (card+lines+private box+workspace+owner+thread+log+note+audit, one txn) + the shared `DealForm` + the chat entry. Recipient auto; prices optional; offer from own catalogue. | ★ | ✓ | M | ✅ done (built + verified live; my branch) |
 | **3.5b** | **Edit a draft** - `editDeal` → atomic `edit_deal_draft` RPC: version bump, immutable snapshot, carry private boxes, MANDATORY note, human Update. Same `DealForm`, prefilled. | ★ | ✓ | M | ✅ done (built + verified live; my branch) |
 | **3.5c** | **Re-confirm a change** - both sides re-confirm the new version (reuse 3d's `ConfirmBar`). | ★ | ✓ | S | ✅ done (free - the version bump resets 3d's gate; verified) |
-| **3.5d** | **Card v2 UI** - rearrange the card + the full-screen "blank + only the card" open mode. The visual pass, done once now that every field is known. | ★ | ✓ | M | (next) |
+| **3.5d** | **Card v2 UI** - *PARKED.* The visual pass grew into the whole UI job (card + chat + nav + Sella chat) and moved to **Section 5 (5A)** below. Re-approach fresh after Sella research (4.0). | ★ | ✓ | M | 🅿️ parked → §5 |
 
 > **3.5 doors note:** the three create doors were *shop · chat "+" · Sella*. 3.5a built the **chat** door (manual). Shop + Sella doors come later (Sella = 4a-4d). The AI fence: Sella may FILL the form, only a human's button click writes (server action).
 
@@ -104,16 +104,28 @@ The 9 demo steps the "Walk" column points to:
 > from 3 places (shop · chat · Sella) and should share **one** creation core. Version **display** (Logs tab) is
 > already done in 3a; only the version **write** moved. Build 3b-3d on the seeded card `04695a2d`.
 
-### Sella (Unit 4) - leaf, built last; the demo works without it
+### Section 4 - Sella (leaf, built last; the demo works without it)
+
+**Owner:** OPEN / unassigned (was Ayush; now either of us, Muskan = backstop). **Starts with 4.0 research, SHARED.**
 
 | # | Item | Walk | MVP | Size | Status |
 |---|---|---|---|---|---|
+| **4.0** | **Sella research - SHARED (both owners)** - each does their own research, then compare + lock the 4a-4d build shape. Plan: `_workshop/build-plans/4.0-sella-research.md`. | ★ | ✓ | M | (next - first) |
 | 4a | Bedrock wrapper (provider interface, Sonnet/Haiku, EU) | ★ | ✓ | M | |
 | 4b | Detect (read chat via DB tools → spot deal → suggestion line) | ★ | ✓ | M | |
 | 4c | Draft (chat → deal-card draft) | ★ | ✓ | L | |
 | 4d | Summarize (version one-liners) + Sella right-panel UI | ★ | ✓ | M | |
 
 **Audit** - each action emits an `audit_log` row using the helper from F5.
+
+### Section 5 - UI pass (5A) - absorbs the old 3.5d
+
+**Owner:** OPEN / unassigned (Ayush or Muskan). **Runs in PARALLEL with Section 4, AFTER 4.0 research.**
+Plan: `_workshop/build-plans/5a-ui-pass.md`. *(Why Section 5: keeps the UI clear of Sella's 4a-4d numbering.)*
+
+| # | Item | Walk | MVP | Size | Status |
+|---|---|---|---|---|---|
+| 5A | **UI pass** - deal card (open mode + layout), chat heading, the message typing bar (expand / formatting / a `+` menu, first item "Create a deal"; uploads = later storage slice), left chat/relationship nav minimised to icon buttons, and the Sella chat UI. Step-by-step (one surface, review live, next). | ○ | ✓ | L | |
 
 ---
 

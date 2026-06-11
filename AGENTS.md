@@ -120,6 +120,15 @@ If you're building and hit a doubt, go here:
 
 *(Updated at end of every session by whoever worked last.)*
 
+**2026-06-11 (latest) - Ayush (3.5 CLOSED; Phase plan reshaped - ⚠️ numbering note for Muskan)**
+- **Section 3.5 is DONE / closed.** 3.5a (create) + 3.5b (edit) + 3.5c (re-confirm, free via the version bump) shipped on `claude/ayush/work`. **3.5d (card v2 UI) is PARKED - it does NOT happen as 3.5d.** No code shipped this session (a live UI prototype was reverted).
+- **Why the reshape:** Sella (Section 4) is next and will reshape the chat + card UI. Styling now = styling twice. So we research Sella first, then do the UI in PARALLEL with the Sella build.
+- **⚠️ Numbering (so we stay in sync):**
+  - **Section 4 = Sella** - unchanged, your `DECISIONS.md` "4a-4d" still holds. New **4.0 = Sella research**, COMMON to both of us (each does their own research, then we compare + lock). See `_workshop/build-plans/4.0-sella-research.md`.
+  - **Section 5 = UI pass (5A)** - the old 3.5d grew, so the whole UI job moves to a fresh Section 5 to avoid clashing with your Sella 4a-4d. Scope: deal card (open mode + layout), chat heading, the message typing bar (expand / formatting / a `+` menu whose first item is "Create a deal"), the left chat/relationship nav minimised to icon buttons, and the Sella chat UI. See `_workshop/build-plans/5a-ui-pass.md`.
+- **Both 4 (Sella build) and 5A (UI) are OPEN / unassigned** - we pick them up ourselves. 4.0 research is the shared first step before either starts.
+- No schema, no shared-file code changes this session. The 3.5a/b work is still held on `claude/ayush/work`, NOT dev.
+
 **2026-06-11 (later) - Ayush (Deal 3.5a Create + 3.5b Edit - BUILT + verified live; held in `claude/ayush/work`, NOT dev)**
 - **3.5a (create) + 3.5b (edit) DONE, verified live as Aurora/Alice, `tsc`+eslint clean, no console errors.** The deal card now has a real WRITE side: you can **create** a draft from a chat and **edit** it into a new version. Kept on my branch (Ayush: not pushed to dev this session).
 - **3.5a:** a "Create a deal" entry in a chat's blank deal area opens a light/glass/raspberry form (the shared `DealForm`). Create runs the `createDeal` action → the **`create_deal_draft` SECURITY DEFINER RPC**, which births the whole deal in ONE transaction (card draft v1 + lines + the creator's private box + workspace + owner + deal thread + opening line + log line + optional note + `deal.created` audit). Recipient auto = the chat counterparty; prices optional ("Price TBD"); the creator makes an OFFER from their OWN catalogue (RLS-safe). *(Why an RPC: the workspace/member/thread inserts have a bootstrap chicken-and-egg under RLS, and a multi-row write must be atomic - a definer RPC solves both. Same pattern as your `import_products`.)*

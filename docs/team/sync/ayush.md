@@ -5,16 +5,22 @@
 
 ---
 
-**Last updated:** 2026-06-11 18:17 CEST
+**Last updated:** 2026-06-11 21:34 CEST
 **Branch:** claude/ayush/work
-**Status:** offline - **3.5a (create) + 3.5b (edit) DONE + verified live (as Aurora/Alice).** The deal card now has a WRITE side: create a draft from a chat + edit it into a new version (atomic SECURITY DEFINER RPCs, MANDATORY change-note, the confirm gate auto-resets on a change). Next = **3.5d (card v2 UI)**.
+**Status:** offline - **3.5 CLOSED; phase plan reshaped (no code shipped this session).** 3.5a/b/c stay done on my branch. **3.5d (card v2 UI) PARKED → new Section 5 (5A).** Next = **4.0 Sella research (SHARED, both of us).**
 **Linear issue in progress:** none
-**Shared files locked:** none. Work = `modules/deals/` + 3 deal-scoped migrations + a one-line `messaging/ThreadView.tsx` touch. **One ADDITIVE seed into your catalogue** (Aurora products - see the note below).
-**PR open:** none - **3.5a/b held on `claude/ayush/work`, NOT pushed to dev** (Ayush's call). 3c+3d remain merged to dev ([#97](https://github.com/HelloSello/hello-sello-mvp/pull/97)).
+**Shared files locked:** none. This session edited shared docs only (AGENTS.md checkpoint + `docs/PRD/BUILD-PLAN.md` - reshape note + new 4.0 / Section 5 rows). No code, no schema. **Not committed yet** (Ayush reviewing).
+**PR open:** none - **3.5a/b/c held on `claude/ayush/work`, NOT pushed to dev** (Ayush's call). 3c+3d remain merged to dev ([#97](https://github.com/HelloSello/hello-sello-mvp/pull/97)).
 
 ---
 
 ## Notes for the other agent
+
+**2026-06-11 (latest) - 3.5 closed; phase plan reshaped. ⚠️ Numbering, please read - keeps us in sync.** No code this session. The deal-card UI work (old 3.5d) grew into the whole UI job, so we reshaped:
+> - **Section 4 = Sella stays 4a-4d** (your DECISIONS holds). New **4.0 = Sella research, SHARED** - we each research Sella on our own, then compare + lock the 4a-4d shape before any build. Plan: `_workshop/build-plans/4.0-sella-research.md`.
+> - **Section 5 = UI pass (5A)** - the old 3.5d moved here (fresh section so it doesn't clash with your Sella 4a-4d). Scope: deal card (open mode + layout), chat heading, the message typing bar (expand / formatting / a `+` menu, first item "Create a deal"), the left chat/relationship nav minimised to icon buttons, and the **Sella chat UI**. Plan: `_workshop/build-plans/5a-ui-pass.md`.
+> - **Both Section 4 (Sella) and 5A (UI) are OPEN / unassigned** - we pick them up ourselves; 4.0 research is the shared first step. You're still the Sella backstop.
+> - Reflected in `AGENTS.md` (checkpoint) + `docs/PRD/BUILD-PLAN.md` (reshape note in the header + new 4.0 / Section 5 rows). I tried a card open-mode UI prototype live and **reverted it** (Ayush wants UI re-approached fresh in 5A).
 
 **2026-06-11 (later) - 3.5a Create + 3.5b Edit DONE; ONE ADDITIVE seed into your catalogue, please read.** Built the deal card's WRITE side - create a draft from a chat + edit → a new version. All in `modules/deals/` + a one-line `messaging/ThreadView.tsx` touch (pass the counterparty name into `DealPin`). **The one thing in your domain:** seed `…140000_3p5a_create_seed.sql` adds the `deal.created` audit code **and seeds 4 of Aurora's own blueprint products into her existing "Standard" pricelist** - the seller had only **1** product, so the create-form picker was empty. **Additive + idempotent; no `product`/`pricelist` schema or RLS change.** Two new deal-only RPCs (`create_deal_draft`, `edit_deal_draft`) are SECURITY DEFINER + relationship-membership-gated - same shape as your `import_products` (a multi-row deal birth must be atomic, and the workspace/member/thread inserts have an RLS bootstrap that only a definer fn can do). **Not in `database.types.ts`** (localized cast, your documented pattern) - they appear on your next regen-from-live, no conflict expected. **Held on my branch, NOT dev.**
 > **Heads-up:** "GreenLeaf" → **"Aurora Deutschland GmbH"** (your rename) is the seller in my code paths now; the live DB has drifted from old migration NAMES (e.g. the demo card's `HS-GL25` numbers are legacy). Two **test deals** sit on Aurora↔Rheinland (`081d35c0`, now v2) from my verification - harmless (NOT the StonePharm demo card).
