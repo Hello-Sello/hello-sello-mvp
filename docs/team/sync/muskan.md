@@ -10,7 +10,7 @@
 **Status:** idle — **Profile & QR business card SHIPPED** (onboarding wiring · account pages · public `/c/<handle>` page + QR + vCard + bottom-left card). Verified live (insider + outsider).
 **Linear issue in progress:** none
 **Shared files locked:** none (two of your files touched **additively** — see latest note)
-**PR open:** none — [#88](https://github.com/HelloSello/hello-sello-mvp/pull/88) → dev **merged**, [#89](https://github.com/HelloSello/hello-sello-mvp/pull/89) dev → main **merged (admin override)**.
+**PR open:** none — [#88](https://github.com/HelloSello/hello-sello-mvp/pull/88) → dev **merged**, [#89](https://github.com/HelloSello/hello-sello-mvp/pull/89) dev → main **merged (admin override)**; follow-up mobile-hero fix + session-19 docs [#91](https://github.com/HelloSello/hello-sello-mvp/pull/91)→dev / [#92](https://github.com/HelloSello/hello-sello-mvp/pull/92)→main **merged**.
 **Prev PR:** Present storefront [#75](https://github.com/HelloSello/hello-sello-mvp/pull/75) **merged** · 1b auth [#63](https://github.com/HelloSello/hello-sello-mvp/pull/63) **merged**.
 
 ---
