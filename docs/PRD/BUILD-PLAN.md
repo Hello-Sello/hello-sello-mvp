@@ -106,17 +106,20 @@ The 9 demo steps the "Walk" column points to:
 
 ### Section 4 - Sella (leaf, built last; the demo works without it)
 
-**Owner:** OPEN / unassigned (was Ayush; now either of us, Muskan = backstop). **Starts with 4.0 research, SHARED.**
+**Owner:** OPEN / unassigned (Ayush or Muskan; Muskan = backstop). **4.0 research DONE + locked (2026-06-12).**
+**Build guide:** `_workshop/build-plans/4-sella-build.md` · **decisions/synthesis:** `_workshop/pov/sella.md`.
 
 | # | Item | Walk | MVP | Size | Status |
 |---|---|---|---|---|---|
-| **4.0** | **Sella research - SHARED (both owners)** - each does their own research, then compare + lock the 4a-4d build shape. Plan: `_workshop/build-plans/4.0-sella-research.md`. | ★ | ✓ | M | (next - first) |
-| 4a | Bedrock wrapper (provider interface, Sonnet/Haiku, EU) | ★ | ✓ | M | |
-| 4b | Detect (read chat via DB tools → spot deal → suggestion line) | ★ | ✓ | M | |
-| 4c | Draft (chat → deal-card draft) | ★ | ✓ | L | |
-| 4d | Summarize (version one-liners) + Sella right-panel UI | ★ | ✓ | M | |
+| **4.0** | **Sella research - SHARED** - both researched, compared, and locked the 4a-4d shape. Synthesis: `_workshop/pov/sella.md`. | ★ | ✓ | M | ✅ done |
+| **4·0** | **Make the chat real (Path A)** - wire chat send to INSERT a real `chat_message` row (table/RLS/realtime already exist). Prereq for auto-detection; keeps the Bedrock key in Supabase only. | ★ | ✓ | M | (next - first) |
+| 4a | **Provider layer** - wrapper exists (`_shared/sella/bedrock.ts`); add retries/timeout + **Bedrock structured-outputs** body shape; smoke-test Sonnet+Haiku ids in `eu-central-1`. | ★ | ✓ | S | (mostly done) |
+| 4c | **Draft contract** - one structured-output schema (`verdict`/`confidence`/`deal` nullable + **evidence quotes**), maps 1:1 to `deal_line_item`/`deal_card`; zod-validate + fail-soft. Serves detection + the manual `+` door. | ★ | ✓ | M | |
+| 4b | **Detect** - new `chat_message` → **pgmq + pg_cron** → Edge Function (Haiku, whole-thread + cachePoint), writes a `sella` `deal_detected` msg (draft+votes in `metadata`); dedup/supersession. **Both-confirm (Option B) → two-owner birth RPC** - the AI fence: only the human button writes. | ★ | ✓ | L | |
+| 4d | **Summarize** - `deal_card_updated` "why it changed" as a `sella` chat line **and** `deal_card_log` (`changed_by=sella`); first-contact intro. (Sella right-panel/co-pilot UI = 5A / post-MVP.) | ★ | ✓ | M | |
 
-**Audit** - each action emits an `audit_log` row using the helper from F5.
+**Audit** - every Sella action: `audit_log` with `actor: sella` + `on_behalf_of: person` (dual-identity), via the F5 helper.
+**Guardrails** - AI fence (L1 suggest, propose-only) · fail-soft · EU AI Act Art. 50 AI badge · cost guardrail (`max_tokens` + AWS budget alert). See `_workshop/pov/sella.md` §5.
 
 ### Section 5 - UI pass (5A) - absorbs the old 3.5d
 
