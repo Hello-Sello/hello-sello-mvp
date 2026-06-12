@@ -255,6 +255,7 @@ export async function editDeal(input: EditDealInput): Promise<EditDealResult> {
     p_note: input.note.trim(),
   } as never);
   if (error) throw new Error((error as { message: string }).message);
+  const version = (newVersion as number) ?? 0;
 
   await writeAudit({
     actorType: "user",
@@ -264,7 +265,19 @@ export async function editDeal(input: EditDealInput): Promise<EditDealResult> {
     actorPersonId: user.id,
   });
 
-  return { version: (newVersion as number) ?? 0 };
+  // 4d: Sella explains WHY the deal changed (person-waiting -> inline, per the
+  // placement rule). The Bedrock call lives in the sella-summarize edge fn so the key
+  // stays in Supabase (Path A); this only triggers it. FAIL-SOFT: a summary failure
+  // must NOT fail the edit - the new version already committed.
+  try {
+    await supabase.functions.invoke("sella-summarize", {
+      body: { deal_card_id: input.dealCardId, version },
+    });
+  } catch {
+    // Sella down -> no summary line; the edit + deal are unaffected.
+  }
+
+  return { version };
 }
 
 /* ---- small server-only helpers (not exported) ---- */

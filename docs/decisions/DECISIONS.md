@@ -896,6 +896,33 @@ A message into a company-to-company (C2C) channel should behave like a **ticket*
 
 ---
 
+## 2026-06-12 (Sella 4b) — Detection → Dealcard journey (Option B, grounded) + the 4b build decisions
+
+The full chat→card journey, settled while building 4b. **Sella only ever DRAFTS; she never finalizes** — a card born on day 1 may not finish until day 50, so Sella can never know a deal is "done." Detection posts a read-only `deal_detected` suggestion → **both owners confirm it (Stage 1, Birth)** → the two-owner `create_deal_draft` opens a **Draft** card (always Draft, regardless of `forming`/`firm`) → negotiation → **both owners confirm the 3d gate (Stage 2, Seal)** → Confirmed.
+
+- **Two stages, two meanings: OPEN (birth) vs CLOSE (seal).** Each needs both sides. The verdict (`forming`/`firm`) **never skips a stage** — even a fully-agreed-in-chat deal is born as a Draft and sealed later. *Why:* the two confirmations answer different questions ("is this a real deal worth a card?" vs "do we agree the final terms?"), and a deal lives and changes for weeks between them. This resolves the half-open tension between POV §6 ("Option B") and the 3.5 note ("one human click") — toward **both-click birth**.
+- **Confirmer-as-initiator.** Whoever clicks the final accept births the card as the initiating side; the other p2p person becomes co-owner; **both are equal owners**. *Why:* it reuses the existing `create_deal_draft` (which keys the creator off `auth.uid()`) with zero refactor; forcing seller-always-initiates would need duplicating the birth logic. Deal type derived from who holds the catalogue (offer/order) — **precise offer/order labelling stays parked**.
+- **`deal_detected` metadata shape (resolves POV §8 open item):** `{ detection_id, verdict, confidence, draft{line_items,currency,summary}, evidence[], votes{<companyId>: null|accept|reject}, product_key, superseded_by, ai:true }`. Votes are by **company** (either colleague on a side can confirm for that side). `ai:true` = EU AI Act Art. 50 machine-readable tag.
+- **Sella's memory is a separate table, not the chat rows.** `sella_detection` (one row per run) carries idempotency + dedup + supersession; the visible `deal_detected` message is the human view. *Why:* a `no_deal` run must be REMEMBERED for dedup but must NOT spam the chat, and **GDPR** — verbatim evidence quotes are kept only on `forming|firm` rows (enforced by a DB check), never on `no_deal`.
+- **Auto-trigger = pgmq + pg_cron + pg_net, scoped to `p2p` threads.** A person message enqueues a job; a 10s cron worker dispatches it to `sella-detect`; durability via the queue + the idempotency guard (at-least-once, self-healing). The fence holds throughout: **Sella only suggests + pre-fills; a human's click is the only write path.**
+
+*Why record:* this is the load-bearing Sella product decision (it overturns nothing but grounds Option B with the "Sella only drafts" principle) + the four engineering decisions that fell out of it. Built + verified live 2026-06-12 (post / idempotent / supersede / birth on thread `91b6f4b8`). Code: `supabase/functions/_shared/sella/{dedup,detect,tools,context,prompts,bedrock}.ts` + `sella-detect/` + migrations `…120000`/`…130000`/`…140000`. Engineering detail in ARCHITECTURE-NOTES 2026-06-12.
+
+---
+
+## 2026-06-12 (Sella 4d) — Version-change summaries + AI first-contact intro; "narration follows the card"
+
+The last Sella piece. Two jobs, both single-shot Haiku, both PERSON-WAITING so they run INLINE (the placement rule), both fail-soft, both fence-safe (Sella narrates; she changes nothing).
+
+- **Version-change summary.** On a card edit, Sella reads the line diff + the human's mandatory note and writes one neutral "why it changed" sentence into `deal_card_log` (`changed_by='sella'`, shows in the Logs tab) AND a `deal_card_updated` chat message.
+- **Sella's narration follows the CARD, not a single thread.** The `deal_card_updated` summary is posted to EVERY chat the card lives in — the deal workspace chat AND the relationship's P2P chat — each linked via `metadata.deal_card_id` (a P2P chat can host several deals over its life). *Why:* the P2P chat is the people's durable home base; after a deal is born the negotiation moves into the workspace, but the people must stay aware in P2P without walking into the workspace. Supersedes the original 4d spec's "post to the deal workspace chat" (Ayush, 2026-06-12).
+- **First-contact intro = AI-written.** On accept, `sella-intro` rewrites the rollout's static seeded `intro` line into a warm, context-aware opener (the two people, companies, request kind, note), AI-origin tagged. Fail-soft: the static intro stays if Sella is down.
+- **Sella's voice uses short dashes only** (a prompt rule, matches the house style). **`tsconfig` excludes `supabase/functions/**`** from the Next typecheck (the Deno edge files were never meant for it; tsc is now clean).
+
+*Why record:* completes Chapter 4 (Sella). No migrations — all engine + inline wiring on `edit_deal_draft` / `acceptItem`. Verified live incl. a browser edit→summary end-to-end. Engine detail in ARCHITECTURE-NOTES 2026-06-12.
+
+---
+
 ## Layer 2 — Present surface (storefront)
 
 ### 2026-06-10 — Present storefront v0 (design + build, session 16)

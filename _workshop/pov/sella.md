@@ -74,6 +74,6 @@ Right-panel co-pilot (Side-Sella, needs RAG/memory) · multi-deal selector (DEV-
 ## 8. Open items / build-time riders
 
 - Smoke-test **structured outputs** against `eu.anthropic.claude-sonnet-4-5` + `…-haiku-4-5` in `eu-central-1` (and the Sonnet id) before locking the contract; measure cold-compile latency, add a daily pre-warm.
-- Confirm exact `deal_detected` metadata shape (draft + votes) when wiring detection → birth.
+- ✅ RESOLVED (4b, 2026-06-12): the `deal_detected` metadata shape = `{ detection_id, verdict, confidence, draft{line_items,currency,summary}, evidence[], votes{<companyId>: null|accept|reject}, product_key, superseded_by, ai:true }`. Votes are by **company**; `ai:true` = Art. 50 tag. See DECISIONS 2026-06-12 Sella 4b.
 - Free-text product dedup = exact/normalised match for MVP (fuzzy later).
 - Pin EU region in both homes; GDPR note on whole-thread + transient prompt-cache.
