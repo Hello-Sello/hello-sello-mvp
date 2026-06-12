@@ -116,7 +116,7 @@ The 9 demo steps the "Walk" column points to:
 | 4a | **Provider layer** - wrapper exists (`_shared/sella/bedrock.ts`); add retries/timeout + **Bedrock structured-outputs** body shape; smoke-test Sonnet+Haiku ids in `eu-central-1`. | ★ | ✓ | S | ✅ done |
 | 4c | **Draft contract** - one structured-output schema (`verdict`/`confidence`/`deal` nullable + **evidence quotes**), maps 1:1 to `deal_line_item`/`deal_card`; zod-validate + fail-soft. Serves detection + the manual `+` door. | ★ | ✓ | M | ✅ done |
 | 4b | **Detect** - new `chat_message` → **pgmq + pg_cron** → Edge Function (Haiku, whole-thread + cachePoint), writes a `sella` `deal_detected` msg (draft+votes in `metadata`); dedup/supersession. **Both-confirm (Option B) → two-owner birth RPC** - the AI fence: only the human button writes. | ★ | ✓ | L | ✅ done |
-| 4d | **Summarize** - `deal_card_updated` "why it changed" as a `sella` chat line **and** `deal_card_log` (`changed_by=sella`); first-contact intro. (Sella right-panel/co-pilot UI = 5A / post-MVP.) | ★ | ✓ | M | |
+| 4d | **Summarize** - `deal_card_updated` "why it changed" as a `sella` chat line **and** `deal_card_log` (`changed_by=sella`); first-contact intro. (Sella right-panel/co-pilot UI = 5A / post-MVP.) | ★ | ✓ | M | ✅ done |
 
 **Audit** - every Sella action: `audit_log` with `actor: sella` + `on_behalf_of: person` (dual-identity), via the F5 helper.
 **Guardrails** - AI fence (L1 suggest, propose-only) · fail-soft · EU AI Act Art. 50 AI badge · cost guardrail (`max_tokens` + AWS budget alert). See `_workshop/pov/sella.md` §5.

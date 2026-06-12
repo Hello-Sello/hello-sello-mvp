@@ -5,16 +5,23 @@
 
 ---
 
-**Last updated:** 2026-06-12 03:11 CEST
+**Last updated:** 2026-06-12 15:14 CEST
 **Branch:** claude/ayush/work
-**Status:** offline - **Sella 4a + 4c + 4b steps 1-2 BUILT + verified live.** Phase 0 verified already-done. Provider layer + detect-deal contract + detection brain (`sella-detect` edge fn) + two-owner RPC, all smoke-tested. **Next session = 4b step 3 (deal_detected message + dedup).**
+**Status:** online → wrapping. **Chapter 4 (Sella) COMPLETE - 4a/4b/4c/4d all built + verified live.** Detection → both-confirm birth → 3d seal runs end to end; Sella narrates card changes into every chat the card lives in. **→ dev this wrap-up. Next = 5A (UI).**
 **Linear issue in progress:** none
-**Shared files locked:** none (Muskan offline, no locks). Wrap-up edits to shared docs: `ARCHITECTURE-NOTES.md` (deferred per-side-owner enforcement), `AGENTS.md` (checkpoint), `_workshop/pov/sella.md` + `_workshop/build-plans/4-sella-build.md` (Phase 0 = done). Code: new Sella engine `supabase/functions/_shared/sella/` + `sella-detect/` + migration `20260612011145`.
-**PR open:** Sella 4a/4c/4b-1-2 → dev (this wrap-up). 3.5a/b/c still on branch (NOT dev, Ayush's call).
+**Shared files locked:** none (Muskan offline, no locks - cross-branch read 15:10 CEST). This wrap-up edited shared docs: `DECISIONS.md` + `ARCHITECTURE-NOTES.md` (4b journey + 4d), `AGENTS.md` (checkpoint), `BUILD-PLAN.md` + `_workshop/build-plans/4-sella-build.md` (4a-4d done), `_workshop/pov/sella.md`. One shared-config touch: `tsconfig.json` (excludes `supabase/functions/**`).
+**PR open:** Sella chapter-4 completion (4b steps 3-5 + 4d) → dev (this wrap-up). The prior 4a/4c/4b-1-2 + 3.5 are already on dev.
 
 ---
 
 ## Notes for the other agent
+
+**2026-06-12 (later, ~15:15 CEST) - Chapter 4 (Sella) COMPLETE: 4b steps 3-5 + 4d. ⚠️ Nothing of yours touched; the detection trigger is LIVE on the shared DB.** Sella is finished end to end.
+> - **4b/3-5:** Sella writes a `deal_detected` suggestion (P2P) + a private `sella_detection` memory table (dedup/idempotency/supersession; GDPR - verbatim evidence only on `forming|firm`, DB-checked). Auto-trigger LIVE: **pgmq + pg_cron (10s) + pg_net** on `p2p` person messages (3 extensions enabled on the shared DB). Both-confirm births a **Draft** via your `create_deal_draft` (new RPC `confirm_detected_deal`; confirmer-as-initiator, both equal owners).
+> - **4d:** a card edit → Haiku "why it changed" → `deal_card_log` (`changed_by='sella'`) AND a `deal_card_updated` message in BOTH the deal chat + the P2P chat (linked via `metadata.deal_card_id`). AI first-contact intro (`sella-intro` rewrites the static rollout intro on accept). Both INLINE (person-waiting), fail-soft.
+> - **Migrations (this session, all Sella/deal-only - none of your tables/RLS):** `…120000_sella_detection_table`, `…130000_sella_detect_trigger` (pgmq/cron/pg_net + the queue + a daily grammar pre-warm), `…140000_confirm_detected_deal_rpc`. Vault now holds `project_url` + `edge_anon_key` (the cron→edge auth - the **anon** key, not service-role). Live edge fns: `sella-detect`, `sella-summarize`, `sella-intro`.
+> - **One shared-config touch:** `tsconfig.json` now excludes `supabase/functions/**` (the Deno edge files were breaking `tsc` - the fix you flagged). Additive, harmless - heads-up on your next rebase.
+> - **Next = 5A (UI):** a renderer for `deal_detected` (the both-confirm buttons → `confirm_detected_deal`) + `deal_card_updated`, the Sella chat UI, deal-card open mode. You're still the Sella backstop, but Sella is built.
 
 **2026-06-12 (later) - Sella 4a + 4c + 4b steps 1-2 built + verified live; ⚠️ ONE additive deal-RPC change, nothing of yours.** Built the Sella engine in `supabase/functions/_shared/sella/` (Deno): `bedrock.ts` hardened (Bedrock **structured outputs** - `outputConfig.textFormat.structure.jsonSchema.schema`, schema STRINGIFIED, verified vs AWS docs - + retries + timeout); `tools.ts` (detect-deal JSON schema + zod fail-soft + evidence grounding); `prompts.ts`/`context.ts`/`detect.ts` (the brain). Plus the `sella-detect` edge fn (HTTP-triggered now; pgmq trigger = step 4). Verified live on the Alice↔Bob thread (Haiku: `forming`, 5kg @ €3.80, grounded). `bedrock-smoke` v5 + `sella-detect` v1 deployed (live, not git). The untested **Sonnet 4.5 id is now verified** working with structured outputs.
 > **⚠️ Your domain - additive + backward-compatible:** migration `20260612011145_two_owner_create_deal_draft.sql` adds a nullable `p_counterparty_person_id` to **`create_deal_draft`** + a second `owner` deal_member (validated to be on the other side). The 10-arg call still resolves (default null → one owner) - **nothing of yours changes**. Not in `database.types.ts` (localized cast, your pattern - appears on your next regen). Verified: 2 owners, rolled back (demo clean, 5 live deal cards intact).

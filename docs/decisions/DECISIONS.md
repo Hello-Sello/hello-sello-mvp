@@ -910,6 +910,19 @@ The full chat→card journey, settled while building 4b. **Sella only ever DRAFT
 
 ---
 
+## 2026-06-12 (Sella 4d) — Version-change summaries + AI first-contact intro; "narration follows the card"
+
+The last Sella piece. Two jobs, both single-shot Haiku, both PERSON-WAITING so they run INLINE (the placement rule), both fail-soft, both fence-safe (Sella narrates; she changes nothing).
+
+- **Version-change summary.** On a card edit, Sella reads the line diff + the human's mandatory note and writes one neutral "why it changed" sentence into `deal_card_log` (`changed_by='sella'`, shows in the Logs tab) AND a `deal_card_updated` chat message.
+- **Sella's narration follows the CARD, not a single thread.** The `deal_card_updated` summary is posted to EVERY chat the card lives in — the deal workspace chat AND the relationship's P2P chat — each linked via `metadata.deal_card_id` (a P2P chat can host several deals over its life). *Why:* the P2P chat is the people's durable home base; after a deal is born the negotiation moves into the workspace, but the people must stay aware in P2P without walking into the workspace. Supersedes the original 4d spec's "post to the deal workspace chat" (Ayush, 2026-06-12).
+- **First-contact intro = AI-written.** On accept, `sella-intro` rewrites the rollout's static seeded `intro` line into a warm, context-aware opener (the two people, companies, request kind, note), AI-origin tagged. Fail-soft: the static intro stays if Sella is down.
+- **Sella's voice uses short dashes only** (a prompt rule, matches the house style). **`tsconfig` excludes `supabase/functions/**`** from the Next typecheck (the Deno edge files were never meant for it; tsc is now clean).
+
+*Why record:* completes Chapter 4 (Sella). No migrations — all engine + inline wiring on `edit_deal_draft` / `acceptItem`. Verified live incl. a browser edit→summary end-to-end. Engine detail in ARCHITECTURE-NOTES 2026-06-12.
+
+---
+
 ## Layer 2 — Present surface (storefront)
 
 ### 2026-06-10 — Present storefront v0 (design + build, session 16)

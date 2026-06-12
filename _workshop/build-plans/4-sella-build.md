@@ -1,6 +1,6 @@
 # 4 - Sella build (phase-by-phase)
 
-**Status:** 4a · 4c · 4b ✅ DONE + verified live (Ayush, 2026-06-12) — the chat→card journey runs end to end on live (detect → both confirm → Draft born → 3d seal). **4d (summaries) = the last piece of chapter 4.** **Owner:** Ayush.
+**Status:** ✅ **Chapter 4 (Sella) COMPLETE** — 4a · 4b · 4c · 4d all DONE + verified live (Ayush, 2026-06-12). The chat→card journey runs end to end (detect → both confirm → Draft born → 3d seal), and Sella narrates changes into every chat the card lives in. **Next = 5A (UI).** **Owner:** Ayush.
 **Decisions reference:** `_workshop/pov/sella.md` (the 4.0 synthesis). **Long-form research:** `docs/research/sella-research-decisions-ayush.md` + `docs/PRD/muskan-proposed-sella-architecture.md`.
 
 > This is the **how-to-build**, in order. The **what/why** lives in `_workshop/pov/sella.md` - read that first.
