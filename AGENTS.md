@@ -120,7 +120,13 @@ If you're building and hit a doubt, go here:
 
 *(Updated at end of every session by whoever worked last.)*
 
-**2026-06-11 (latest) - Ayush (3.5 CLOSED; Phase plan reshaped - ⚠️ numbering note for Muskan)**
+**2026-06-12 (latest) - Ayush (Sella 4a + 4c + 4b steps 1-2 BUILT + verified live; → dev this session)**
+- **Phase 0 (chat real) = verified already-done** (since 2d, commit ac00a78; the "chat is mock" note was stale). **4a** provider layer (`bedrock.ts`: Bedrock structured outputs + retries + timeout) smoke-tested live - the untested **Sonnet 4.5 id works**. **4c** detect-deal contract (`tools.ts`: JSON schema + zod fail-soft + evidence grounding) smoke-tested. **4b step 1** the detection brain (`prompts.ts`/`context.ts`/`detect.ts` + the `sella-detect` edge fn) verified LIVE on the real Alice↔Bob thread (Haiku: `forming`, 5kg @ €3.80, grounded evidence). The Sella engine lives in `supabase/functions/_shared/sella/` (Deno - can't import `src/`; the placement rule's background branch).
+- **⚠️ Muskan - one deal-RPC change (additive, backward-compatible, NOTHING of yours):** migration `20260612011145_two_owner_create_deal_draft.sql` adds a nullable `p_counterparty_person_id` to `create_deal_draft` + a second `owner` deal_member (validated to the other side). The existing 10-arg call still works (default null → one owner). Verified: 2 owners created, rolled back (demo clean). Not in `database.types.ts` (localized cast, your pattern).
+- **Known issue captured (deferred to 5A):** per-side owner/side_lead DB enforcement isn't in place. Chosen fix: `company_id` on `deal_member` + partial unique indexes (owner-per-side, side_lead-per-side) + a deferred ≥1-owner trigger (this resolves the 3b "partial index can't reach person.company_id" note). Harmless today (one person/owner per company). Design in ARCHITECTURE-NOTES 2026-06-12.
+- **Deployed live (not git):** `sella-detect` v1, `bedrock-smoke` v5. **Next: 4b step 3** (deal_detected message + dedup) → step 4 (pgmq+cron trigger; ⚠️ neither extension installed) → step 5 (Option B birth).
+
+**2026-06-11 - Ayush (3.5 CLOSED; Phase plan reshaped - ⚠️ numbering note for Muskan)**
 - **Section 3.5 is DONE / closed.** 3.5a (create) + 3.5b (edit) + 3.5c (re-confirm, free via the version bump) shipped on `claude/ayush/work`. **3.5d (card v2 UI) is PARKED - it does NOT happen as 3.5d.** No code shipped this session (a live UI prototype was reverted).
 - **Why the reshape:** Sella (Section 4) is next and will reshape the chat + card UI. Styling now = styling twice. So we research Sella first, then do the UI in PARALLEL with the Sella build.
 - **⚠️ Numbering (so we stay in sync):**

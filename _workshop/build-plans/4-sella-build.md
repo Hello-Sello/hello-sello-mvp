@@ -10,13 +10,13 @@
 
 One runtime · stateless single-shot · **AI fence (L1 suggest, only propose tools)** · **Bedrock structured outputs** (not forced-tool) · **whole-thread context** (not a window) · **Path A: real chat writes first → auto-detection in the Edge Function → key in Supabase Edge secrets only** · **pgmq + pg_cron** for the trigger (not raw `pg_net`) · **two-owner birth via one RPC** · **Option B** detected-door (preview → both confirm → birth) · engine in `supabase/functions/_shared/sella/` · EU AI Act Art. 50 AI badge · cost guardrail. Full table: `_workshop/pov/sella.md` §3.
 
-## Phase 0 - Make the chat real (the Path A prerequisite)
+## Phase 0 - Make the chat real (the Path A prerequisite) - ✅ DONE (Connect 2d)
 
-Detection runs automatically off a **new `chat_message` row**. Today the chat box is **mock** (no insert). So before automatic detection can exist, the chat must persist.
+The chat already persists real messages and Realtime broadcasts both sides - built in 2d (commit `ac00a78`), not a Phase 4 task. Verified 2026-06-12 against code + the live DB (33 real `chat_message` rows; `chat_message` + `chat_thread` in the `supabase_realtime` publication; RLS `msg_all`).
 
-- Wire the chat send to **INSERT a real `chat_message` row** (table, RLS, and `realtime_chat_publication` already exist).
-- Confirm both sides see new messages live (Realtime).
-- This is real product work needed anyway; it unblocks 4b's automatic trigger and keeps the Bedrock key in Supabase only.
+- `postMessage` (`src/modules/messaging/supabase/store.ts`) inserts a real `chat_message` row; wired from `ChatView` + `DealChat`.
+- Both sides see new messages live via `useChatRealtime` (verified in 2d).
+- So 4b's automatic trigger is unblocked and the Bedrock key stays in Supabase only. *(The old "chat is mock" note was stale - a store.ts header comment lied; the function body was already real.)*
 
 ## 4a - Provider layer (mostly done)
 

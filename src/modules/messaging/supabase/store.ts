@@ -1,5 +1,5 @@
 /**
- * Messaging - REAL Supabase reads (2d, Phase 3).
+ * Messaging - REAL Supabase reads + writes (Connect 2d).
  *
  * Replaces the READ half of `mock/store.ts`. Returns the exact
  * `ConversationListItem` / `ChatMessageView` shapes the components consume, so
@@ -11,7 +11,11 @@
  * company + person NAME. We fetch each table flat (RLS-scoped) and stitch the
  * view in JS - the same "directory" resolution the mock did, just from the DB.
  *
- * WRITES (`postMessage`, `acceptInbox`) stay mock until Phase 4.
+ * WRITES are REAL too: `postMessage` inserts a real `chat_message` row (RLS
+ * `msg_all`) and `acceptInbox` mints the relationship + threads + seed lines.
+ * Realtime broadcasts each insert to both sides, so the chat persists end to
+ * end. This is the Path A prerequisite for Sella detection - see
+ * `_workshop/build-plans/4-sella-build.md`.
  */
 import { createClient } from "@/shared/db/client";
 import { previewOf } from "../lib/chat-display";
