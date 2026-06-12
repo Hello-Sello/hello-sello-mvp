@@ -1,6 +1,6 @@
 # 4 - Sella build (phase-by-phase)
 
-**Status:** 🟢 READY to build (4.0 research done + locked). **Owner:** open / unassigned (Ayush or Muskan; Muskan = backstop).
+**Status:** 4a · 4c · 4b ✅ DONE + verified live (Ayush, 2026-06-12) — the chat→card journey runs end to end on live (detect → both confirm → Draft born → 3d seal). **4d (summaries) = the last piece of chapter 4.** **Owner:** Ayush.
 **Decisions reference:** `_workshop/pov/sella.md` (the 4.0 synthesis). **Long-form research:** `docs/research/sella-research-decisions-ayush.md` + `docs/PRD/muskan-proposed-sella-architecture.md`.
 
 > This is the **how-to-build**, in order. The **what/why** lives in `_workshop/pov/sella.md` - read that first.
