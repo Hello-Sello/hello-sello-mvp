@@ -47,7 +47,7 @@
 
 ### The one resolved conflict worth spelling out: the Bedrock key
 
-Muskan's first slice ran detection **on-demand in a Next server action** (→ key in Vercel) **only because the chat is mock today** (no insert event to trigger an Edge Function). We chose **Path A instead: make the chat persist real messages first.** Once chat writes are real, detection runs **automatically in the Edge Function** (the data-triggered branch of the placement rule), so the Bedrock call lives in Supabase and the **key stays in Supabase Edge secrets only** - Ayush's decision 5 stands, no two-store split.
+Muskan's first slice ran detection **on-demand in a Next server action** (→ key in Vercel) **only because the chat is mock today** (no insert event to trigger an Edge Function). We chose **Path A instead: make the chat persist real messages first.** Once chat writes are real, detection runs **automatically in the Edge Function** (the data-triggered branch of the placement rule), so the Bedrock call lives in Supabase and the **key stays in Supabase Edge secrets only** - Ayush's decision 5 stands, no two-store split. **Update 2026-06-12:** the chat is already real (Connect 2d) - `postMessage` writes real `chat_message` rows and Realtime is live both sides. So Path A's prerequisite is already met; only the 4b trigger (pgmq + pg_cron) remains.
 
 ## 4. The detection engine spec (Muskan's `detect-deal`, adopted)
 

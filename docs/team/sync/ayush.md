@@ -5,16 +5,20 @@
 
 ---
 
-**Last updated:** 2026-06-12 01:33 CEST
+**Last updated:** 2026-06-12 03:11 CEST
 **Branch:** claude/ayush/work
-**Status:** offline - **4.0 Sella research DONE + locked + on dev.** Synthesis + phase build guide written; BUILD-PLAN §4 expanded. Next session = **Phase 0 (make chat persist real `chat_message` rows) → build 4a-4d.**
+**Status:** offline - **Sella 4a + 4c + 4b steps 1-2 BUILT + verified live.** Phase 0 verified already-done. Provider layer + detect-deal contract + detection brain (`sella-detect` edge fn) + two-owner RPC, all smoke-tested. **Next session = 4b step 3 (deal_detected message + dedup).**
 **Linear issue in progress:** none
-**Shared files locked:** none. This session added `_workshop/pov/sella.md` + `_workshop/build-plans/4-sella-build.md` + `docs/research/sella-research-decisions-ayush.md`, and edited `docs/PRD/BUILD-PLAN.md` §4 (not on the shared list). No code, no schema.
-**PR open:** none - **both Sella PRs merged to dev** ([#100](https://github.com/HelloSello/hello-sello-mvp/pull/100) mine, [#99](https://github.com/HelloSello/hello-sello-mvp/pull/99) Muskan's - merged on Ayush's direction, see note below). 3.5a/b/c still on `claude/ayush/work` (NOT dev, Ayush's call).
+**Shared files locked:** none (Muskan offline, no locks). Wrap-up edits to shared docs: `ARCHITECTURE-NOTES.md` (deferred per-side-owner enforcement), `AGENTS.md` (checkpoint), `_workshop/pov/sella.md` + `_workshop/build-plans/4-sella-build.md` (Phase 0 = done). Code: new Sella engine `supabase/functions/_shared/sella/` + `sella-detect/` + migration `20260612011145`.
+**PR open:** Sella 4a/4c/4b-1-2 → dev (this wrap-up). 3.5a/b/c still on branch (NOT dev, Ayush's call).
 
 ---
 
 ## Notes for the other agent
+
+**2026-06-12 (later) - Sella 4a + 4c + 4b steps 1-2 built + verified live; ⚠️ ONE additive deal-RPC change, nothing of yours.** Built the Sella engine in `supabase/functions/_shared/sella/` (Deno): `bedrock.ts` hardened (Bedrock **structured outputs** - `outputConfig.textFormat.structure.jsonSchema.schema`, schema STRINGIFIED, verified vs AWS docs - + retries + timeout); `tools.ts` (detect-deal JSON schema + zod fail-soft + evidence grounding); `prompts.ts`/`context.ts`/`detect.ts` (the brain). Plus the `sella-detect` edge fn (HTTP-triggered now; pgmq trigger = step 4). Verified live on the Alice↔Bob thread (Haiku: `forming`, 5kg @ €3.80, grounded). `bedrock-smoke` v5 + `sella-detect` v1 deployed (live, not git). The untested **Sonnet 4.5 id is now verified** working with structured outputs.
+> **⚠️ Your domain - additive + backward-compatible:** migration `20260612011145_two_owner_create_deal_draft.sql` adds a nullable `p_counterparty_person_id` to **`create_deal_draft`** + a second `owner` deal_member (validated to be on the other side). The 10-arg call still resolves (default null → one owner) - **nothing of yours changes**. Not in `database.types.ts` (localized cast, your pattern - appears on your next regen). Verified: 2 owners, rolled back (demo clean, 5 live deal cards intact).
+> **Known issue captured (deferred to 5A) - builds on your 3b note.** Your 3b migration said "the per-side one-owner rule moves to createDeal core since a partial index can't reach `person.company_id`." We refined it: **stamp `company_id` on `deal_member`** and a partial index CAN reach the side. Chosen fix (deferred): company_id on deal_member + partial unique indexes (owner-per-side, side_lead-per-side; the latter's index is currently wrongly one-per-*deal*) + a deferred ≥1-owner trigger. Harmless today (one person/owner per company). Full design in ARCHITECTURE-NOTES 2026-06-12. Also: `pgmq`/`pg_cron`/`pg_net` are NOT installed yet - step 4 (the auto-trigger) starts by enabling them.
 
 **2026-06-12 - 4.0 Sella research DONE + locked + merged to dev. ⚠️ I merged your #99 (do-not-merge) - please read.** We did the 4.0 joint compare. On dev now: the synthesis `_workshop/pov/sella.md` (single decisions reference) + the phase build guide `_workshop/build-plans/4-sella-build.md` + BUILD-PLAN §4.
 > - **Adopted from your proposal:** Bedrock structured outputs, whole-thread context, pgmq+cron trigger, the guardrail / EU-AI-Act Art.50 / cost framework. All sound - thank you.
