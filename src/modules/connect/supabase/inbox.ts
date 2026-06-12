@@ -206,7 +206,7 @@ export async function acceptItem(itemId: string): Promise<InboxItemView[]> {
     : "Unknown";
 
   // 1) create relationship + threads + seed lines
-  await acceptInbox({
+  const { relationshipId } = await acceptInbox({
     inboxItemId: item.id,
     requestType: item.type as AcceptRequestType,
     note: item.note,
@@ -223,6 +223,26 @@ export async function acceptItem(itemId: string): Promise<InboxItemView[]> {
       initials: personInitials(senderPerson?.first_name, senderPerson?.last_name),
     },
   });
+
+  // 1b) 4d: Sella rewrites the seeded static intro into a warm, context-aware opener
+  // (person-waiting -> inline, per the placement rule). The Bedrock call lives in the
+  // sella-intro edge fn so the key stays in Supabase (Path A). FAIL-SOFT: if Sella is
+  // down the static seeded intro simply stays - the accept is unaffected.
+  try {
+    await supabase.functions.invoke("sella-intro", {
+      body: {
+        relationship_id: relationshipId,
+        request_type: item.type,
+        note: item.note,
+        sender_company: senderCompanyName,
+        sender_person: senderPersonName,
+        recipient_company: viewer.company.name,
+        recipient_person: viewer.person.name,
+      },
+    });
+  } catch {
+    // Sella down -> the static intro stays; the accept is unaffected.
+  }
 
   // 2) flip the inbox item to accepted
   const { error: upErr } = await supabase
