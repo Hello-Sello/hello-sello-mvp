@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Discover · company shop on profile (L0 / L1 / L2)</title>
+<style>
+  :root{
+    --brand:#e30b5d; --brand-soft:#ffb7d5; --brand-deep:#76002d;
+    --ink:#1f2020; --ink-muted:#6b6470; --success:#34b233; --danger:#dc2626;
+    --glass-bg:rgba(255,255,255,.62); --glass-strong:rgba(255,255,255,.82);
+    --glass-border:rgba(255,255,255,.65); --glass-shadow:0 10px 34px -12px rgba(118,0,45,.18);
+    --line:rgba(31,32,32,.10);
+  }
+  *{box-sizing:border-box} html,body{margin:0}
+  body{
+    font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    color:var(--ink);
+    background:
+      radial-gradient(60% 50% at 15% 0%, rgba(227,11,93,.10), transparent 60%),
+      radial-gradient(50% 40% at 100% 10%, rgba(255,183,213,.35), transparent 60%),
+      linear-gradient(180deg,#fff, #fff5f9);
+    min-height:100vh; padding:24px 14px 64px;
+  }
+  .wrap{max-width:600px;margin:0 auto}
+  .glass{background:var(--glass-bg);border:1px solid var(--glass-border);box-shadow:var(--glass-shadow);backdrop-filter:blur(8px)}
+  .muted{color:var(--ink-muted)}
+
+  /* state switch (prototype-only chrome) */
+  .switch{display:flex;gap:6px;margin:0 auto 16px;max-width:600px;padding:6px;border-radius:14px;
+          background:var(--glass-strong);border:1px solid var(--glass-border);box-shadow:var(--glass-shadow)}
+  .switch button{flex:1;border:0;border-radius:10px;padding:9px 8px;font-weight:700;font-size:12.5px;cursor:pointer;
+                 background:transparent;color:var(--ink-muted)}
+  .switch button.on{background:var(--brand);color:#fff}
+  .switch .lvl{display:block;font-size:10px;font-weight:600;opacity:.7;margin-top:1px}
+  .note{max-width:600px;margin:0 auto 18px;font-size:12.5px;text-align:center;color:var(--ink-muted)}
+
+  /* profile card */
+  .card{border-radius:26px;overflow:hidden}
+  .hero{height:104px;background:linear-gradient(135deg,var(--brand),var(--brand-deep) 60%,#3a0016)}
+  .identity{display:flex;align-items:flex-end;gap:14px;padding:0 18px;margin-top:-26px}
+  .logo{width:68px;height:68px;border-radius:18px;flex:none;display:grid;place-items:center;
+        background:var(--brand);color:#fff;font-weight:800;font-size:20px;box-shadow:0 0 0 4px #fff}
+  .identity h1{margin:0;font-size:19px} .identity p{margin:2px 0 0;font-size:13px}
+  .about{padding:14px 18px 0;font-size:13.5px;color:var(--ink-muted)}
+  .meta{display:flex;gap:18px;padding:10px 18px 0;font-size:13px;color:var(--ink-muted)}
+  .meta b{color:var(--brand)}
+
+  /* existing connect block (slice 3) */
+  .connect{padding:16px 18px 4px}
+  .btn{width:100%;border:0;border-radius:16px;padding:12px;font-weight:800;font-size:14px;cursor:pointer;
+       display:flex;align-items:center;justify-content:center;gap:8px}
+  .btn-primary{background:var(--brand);color:#fff}
+  .btn-ghost{background:var(--glass-strong);color:var(--brand-deep);border:1px solid var(--glass-border)}
+  .ta{width:100%;border:1px solid var(--line);border-radius:14px;padding:10px;font:inherit;resize:none;background:rgba(255,255,255,.7);margin-bottom:9px}
+
+  /* catalogue section */
+  .cat{padding:18px}
+  .cathead{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+  .cathead h3{margin:0;font-size:15px}
+  .chip{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;border-radius:999px;
+        padding:5px 11px;border:1px solid}
+  .chip-locked{background:rgba(31,32,32,.05);color:var(--ink-muted);border-color:var(--line)}
+  .chip-req{background:var(--brand-soft);color:var(--brand-deep);border-color:transparent}
+  .chip-open{background:rgba(52,178,51,.12);color:#1f7a1e;border-color:transparent}
+
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .p{border-radius:18px;overflow:hidden;background:var(--glass-strong);border:1px solid var(--glass-border)}
+  .pimg{height:96px;background:linear-gradient(135deg,#ffe1ec,#ffc3da);display:grid;place-items:center;font-size:26px}
+  .pbody{padding:10px 12px 12px}
+  .pname{font-weight:700;font-size:13.5px;margin:0 0 2px}
+  .pspec{font-size:11.5px;color:var(--ink-muted);margin:0 0 9px;min-height:30px}
+  .price{font-weight:800;font-size:14px;color:var(--ink)}
+  .price .per{font-weight:600;font-size:11px;color:var(--ink-muted)}
+  .por{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700;color:var(--ink-muted);
+       background:rgba(31,32,32,.05);border-radius:999px;padding:4px 10px}
+  .preq{margin-top:8px;font-size:11.5px;font-weight:700;color:var(--brand);cursor:pointer}
+
+  /* L0 locked */
+  .locked .grid{filter:blur(5px);opacity:.5;pointer-events:none;user-select:none}
+  .lockbar{margin-top:14px;text-align:center}
+  .lockbar p{font-size:13px;color:var(--ink-muted);margin:0 0 10px}
+
+  /* sticky shop-level request-pricing bar (L1) */
+  .reqbar{position:sticky;bottom:14px;margin:14px 4px 0;border-radius:18px;padding:14px;
+          background:var(--glass-strong);border:1px solid var(--glass-border);box-shadow:0 12px 30px -10px rgba(118,0,45,.28)}
+  .reqbar h4{margin:0 0 8px;font-size:13.5px}
+  .reqbar .re{font-size:11.5px;color:var(--ink-muted);text-align:center;margin:9px 0 0}
+  .hide{display:none}
+</style>
+</head>
+<body>
+  <div class="switch">
+    <button data-go="0" class="on">Locked<span class="lvl">L0 · 0 visible</span></button>
+    <button data-go="1">Price on request<span class="lvl">L1 · visible, no price</span></button>
+    <button data-go="2">Open catalogue<span class="lvl">L2 · visible + price</span></button>
+  </div>
+  <p class="note">Prototype — the company shop on the in-app Discover profile (<code>/discover/[companyId]</code>), seen by a verified member <b>before</b> connecting. Toggle the seller's openness level above.</p>
+
+  <div class="wrap">
+    <div class="card glass">
+      <div class="hero"></div>
+      <div class="identity">
+        <div class="logo">NC</div>
+        <div><h1>NordCanna ApS</h1><p class="muted">Importer · Wholesaler · Denmark</p></div>
+      </div>
+      <p class="about">Danish importer of EU-GMP medical cannabis. Indoor &amp; greenhouse flower, full CoA on every batch.</p>
+      <div class="meta"><span>📍 Denmark</span><span>🌐 nordcanna.dk</span></div>
+
+      <!-- existing slice-3 connect block stays -->
+      <div class="connect">
+        <textarea class="ta" rows="2" placeholder="Add a note for NordCanna (optional)…"></textarea>
+        <button class="btn btn-primary">＋ Connect</button>
+      </div>
+
+      <!-- catalogue -->
+      <div class="cat" id="cat">
+        <div class="cathead">
+          <h3>Catalogue</h3>
+          <span class="chip" id="chip"></span>
+        </div>
+        <div class="grid" id="grid"></div>
+
+        <!-- L0 lock affordance -->
+        <div class="lockbar hide" id="lockbar">
+          <p>🔒 <b>12 products.</b> NordCanna shares their catalogue with connected partners.</p>
+          <button class="btn btn-primary">＋ Connect to view products</button>
+        </div>
+
+        <!-- L1 sticky request-pricing -->
+        <div class="reqbar hide" id="reqbar">
+          <h4>💬 Prices on request from NordCanna</h4>
+          <textarea class="ta" rows="2" placeholder="Anything specific? (optional)…"></textarea>
+          <button class="btn btn-primary">Request pricing</button>
+          <p class="re">Most sellers reply within ~1 business day.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const PRODUCTS = [
+    {emoji:"🌿", name:"San Raf 29/1 PNK", spec:"Pink OG Kush · THC 22% · CBD 1% · 1000g · Canada", price:"€4.00", per:"/g"},
+    {emoji:"🌱", name:"Superseed T30 CK", spec:"Cake City · Indica · THC 30% · CBD 1% · 10g", price:"€8.50", per:"/g"},
+    {emoji:"🍃", name:"Atlantic Haze 24", spec:"Sativa · THC 24% · CBD <1% · 500g · Portugal", price:"€5.20", per:"/g"},
+    {emoji:"🌾", name:"Nordic Dream T18", spec:"Hybrid · THC 18% · CBD 4% · 250g · Denmark", price:"€6.10", per:"/g"},
+  ];
+  const chip = document.getElementById('chip');
+  const grid = document.getElementById('grid');
+  const cat  = document.getElementById('cat');
+  const lockbar = document.getElementById('lockbar');
+  const reqbar  = document.getElementById('reqbar');
+
+  function card(p, level){
+    const priceSlot = level === 2
+      ? `<div class="price">${p.price}<span class="per">${p.per}</span></div>`
+      : `<span class="por">💬 Price on request</span><div class="preq">Request pricing →</div>`;
+    return `<div class="p"><div class="pimg">${p.emoji}</div><div class="pbody">
+      <p class="pname">${p.name}</p><p class="pspec">${p.spec}</p>${priceSlot}</div></div>`;
+  }
+
+  function render(level){
+    // chip
+    const chips = {
+      0:['chip-locked','🔒 Catalogue private · Connect to view'],
+      1:['chip-req','💬 Prices on request · Connect &amp; request pricing'],
+      2:['chip-open','✓ Open catalogue · Browse &amp; connect'],
+    };
+    chip.className = 'chip ' + chips[level][0];
+    chip.innerHTML = chips[level][1];
+
+    // grid (L0 shows blurred silhouettes behind the lock)
+    grid.innerHTML = PRODUCTS.map(p => card(p, level)).join('');
+    cat.classList.toggle('locked', level===0);
+    lockbar.classList.toggle('hide', level!==0);
+    reqbar.classList.toggle('hide', level!==1);
+  }
+
+  document.querySelectorAll('.switch button').forEach(b=>{
+    b.onclick = ()=>{
+      document.querySelectorAll('.switch button').forEach(x=>x.classList.remove('on'));
+      b.classList.add('on');
+      render(+b.dataset.go);
+    };
+  });
+  render(0);
+</script>
+</body>
+</html>

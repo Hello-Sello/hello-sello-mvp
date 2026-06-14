@@ -89,6 +89,7 @@ export type DiscoverCompanyProfile = {
   coverUrl: string | null;
   categories: string[];
   connectionState: ConnectionState;
+  pricingRequested: boolean; // a pricelist_request from us to them is pending
 };
 
 type ProfileRow = {
@@ -102,6 +103,7 @@ type ProfileRow = {
   cover_path: string | null;
   type_codes: string[] | null;
   connection_state: ConnectionState;
+  pricing_requested: boolean;
 };
 
 export async function getDiscoverableCompany(
@@ -131,6 +133,7 @@ export async function getDiscoverableCompany(
     coverUrl: mediaUrl(r.cover_path),
     categories: (r.type_codes ?? []).map(categoryLabel),
     connectionState: r.connection_state,
+    pricingRequested: r.pricing_requested,
   };
 }
 
