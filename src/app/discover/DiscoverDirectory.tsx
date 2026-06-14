@@ -1,73 +1,109 @@
 "use client";
 
 /**
- * Discover — a CLOSED, TAGGED company directory. A NON-marketplace: you search
+ * Discover — a CLOSED, TAGGED company directory (NON-marketplace). You search
  * and filter the directory, see each company as a brand line (logo · name ·
- * category · country), and request entry. A company's shop stays hidden until
- * they let you in — so this page never shows products or prices.
+ * category · country), and request entry.
  *
- * UI-only for now: data is placeholder (sample-companies) and "Request to enter"
- * is a stub. The real listing RPC and the gate's accept flow land later
- * (see docs/build/discover-directory.md).
+ * Data is real now: the page fetches `list_discoverable_companies` server-side
+ * and passes it in. Filtering is client-side over the fetched set (fine for a
+ * small directory; moves server-side when it grows). The button reflects the
+ * viewer's per-card connection state — actually *sending* the request is the
+ * next slice (Connect wiring), so `none` is an optimistic local stub for now.
  */
-import { useState } from "react";
-import {
-  Lock, Search, Check,
-  Leaf, Sprout, Snowflake, Warehouse, Boxes, Truck, Ship, Anchor,
-  Pill, Cross, Mountain, Globe, Sun, Flame,
-} from "lucide-react";
-import {
-  COMPANIES, CATEGORIES, COUNTRIES,
-  type Company, type Category, type LogoGlyph,
-} from "./sample-companies";
+import { useMemo, useState } from "react";
+import Link from "next/link";
+import { Lock, Search, Check } from "lucide-react";
+import type { DiscoverCompany, ConnectionState } from "./companies";
 
-const GLYPHS: Record<LogoGlyph, typeof Leaf> = {
-  leaf: Leaf, sprout: Sprout, snow: Snowflake, warehouse: Warehouse, boxes: Boxes,
-  truck: Truck, ship: Ship, anchor: Anchor, pill: Pill, cross: Cross,
-  mountain: Mountain, globe: Globe, sun: Sun, flame: Flame,
-};
+const initials = (name: string) =>
+  name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 
-// A glossy tinted tile + a white brand glyph stands in for a real uploaded logo.
-function Logo({ c, size = 48 }: { c: Company; size?: number }) {
-  const Glyph = GLYPHS[c.glyph];
+// Deterministic tint per company, so a logo-less tile has a stable colour.
+const TINTS = ["#34b233", "#6c7bd9", "#e30b5d", "#f59e0b", "#0ea5e9", "#8b5cf6",
+  "#ef4444", "#14b8a6", "#ec4899", "#22c55e", "#a855f7", "#64748b"];
+function tintFor(name: string): string {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  return TINTS[h % TINTS.length];
+}
+
+// Real logo if the company uploaded one; otherwise a tinted initials tile.
+function Logo({ company, size = 48 }: { company: DiscoverCompany; size?: number }) {
+  if (company.logoUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={company.logoUrl}
+        alt=""
+        style={{ width: size, height: size }}
+        className="shrink-0 rounded-xl object-cover ring-1 ring-black/5"
+      />
+    );
+  }
   return (
     <span
-      className="flex shrink-0 items-center justify-center rounded-xl text-white shadow-sm ring-1 ring-black/5"
+      className="flex shrink-0 items-center justify-center rounded-xl font-bold text-white shadow-sm ring-1 ring-black/5"
       style={{
-        width: size,
-        height: size,
-        background: `linear-gradient(135deg, rgba(255,255,255,0.28), transparent 55%), ${c.tint}`,
+        width: size, height: size, fontSize: size * 0.34,
+        background: `linear-gradient(135deg, rgba(255,255,255,0.28), transparent 55%), ${tintFor(company.name)}`,
       }}
     >
-      <Glyph size={size * 0.5} strokeWidth={2.2} />
+      {initials(company.name)}
     </span>
   );
 }
 
-function RequestButton({ requested, onRequest }: { requested: boolean; onRequest: () => void }) {
+function RequestButton({
+  state, optimistic, onRequest,
+}: { state: ConnectionState; optimistic: boolean; onRequest: () => void }) {
+  if (state === "connected")
+    return (
+      <span className="flex items-center gap-1.5 rounded-full bg-success/15 px-4 py-2 text-sm font-bold text-success">
+        <Check size={15} /> Connected
+      </span>
+    );
+  if (state === "incoming")
+    return (
+      <a href="/connect/inbox"
+        className="rounded-full bg-brand-soft/60 px-4 py-2 text-sm font-bold text-brand-deep hover:bg-brand-soft">
+        Wants to connect →
+      </a>
+    );
+  if (state === "requested" || optimistic)
+    return (
+      <span className="flex items-center gap-1.5 rounded-full bg-success/15 px-4 py-2 text-sm font-bold text-success">
+        <Check size={15} /> Requested
+      </span>
+    );
   return (
-    <button
-      onClick={onRequest}
-      disabled={requested}
-      className={`flex items-center justify-center gap-1.5 rounded-full px-4 py-2 text-sm font-bold transition ${
-        requested ? "bg-success/15 text-success" : "bg-brand text-white hover:bg-brand-deep"
-      }`}
-    >
-      {requested ? <><Check size={15} /> Requested</> : <><Lock size={14} /> Request to enter</>}
+    <button onClick={onRequest}
+      className="flex items-center justify-center gap-1.5 rounded-full bg-brand px-4 py-2 text-sm font-bold text-white transition hover:bg-brand-deep">
+      <Lock size={14} /> Request to enter
     </button>
   );
 }
 
-export function DiscoverDirectory() {
+export function DiscoverDirectory({ companies }: { companies: DiscoverCompany[] }) {
   const [q, setQ] = useState("");
-  const [cat, setCat] = useState<Category | "All">("All");
+  const [cat, setCat] = useState<string>("All");
   const [country, setCountry] = useState<string>("All");
   const [requested, setRequested] = useState<Set<string>>(new Set());
 
-  const list = COMPANIES.filter(
+  // Filter options come from the data, so we only show categories/countries that exist.
+  const categories = useMemo(
+    () => Array.from(new Set(companies.flatMap((c) => c.categories))).sort(),
+    [companies],
+  );
+  const countries = useMemo(
+    () => Array.from(new Set(companies.map((c) => c.countryName))).sort(),
+    [companies],
+  );
+
+  const list = companies.filter(
     (c) =>
-      (cat === "All" || c.category === cat) &&
-      (country === "All" || c.country === country) &&
+      (cat === "All" || c.categories.includes(cat)) &&
+      (country === "All" || c.countryName === country) &&
       c.name.toLowerCase().includes(q.toLowerCase()),
   );
 
@@ -93,9 +129,9 @@ export function DiscoverDirectory() {
         />
       </div>
 
-      {/* category pills + country filter */}
+      {/* category pills + country filter (derived from the data) */}
       <div className="flex flex-wrap items-center justify-center gap-2">
-        {(["All", ...CATEGORIES] as const).map((c) => (
+        {["All", ...categories].map((c) => (
           <button
             key={c}
             onClick={() => setCat(c)}
@@ -106,14 +142,16 @@ export function DiscoverDirectory() {
             {c}
           </button>
         ))}
-        <select
-          value={country}
-          onChange={(e) => setCountry(e.target.value)}
-          className="rounded-full bg-white/60 px-3 py-1.5 text-sm font-semibold text-ink/70"
-        >
-          <option value="All">All countries</option>
-          {COUNTRIES.map((c) => <option key={c} value={c}>{c}</option>)}
-        </select>
+        {countries.length > 1 && (
+          <select
+            value={country}
+            onChange={(e) => setCountry(e.target.value)}
+            className="rounded-full bg-white/60 px-3 py-1.5 text-sm font-semibold text-ink/70"
+          >
+            <option value="All">All countries</option>
+            {countries.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        )}
       </div>
 
       <p className="text-center text-xs font-medium text-ink/40">
@@ -123,19 +161,28 @@ export function DiscoverDirectory() {
       <div className="flex flex-col gap-2">
         {list.map((c) => (
           <div key={c.id} className="glass flex items-center gap-4 rounded-2xl p-3">
-            <Logo c={c} />
-            <div className="min-w-0 flex-1">
-              <div className="truncate font-bold text-ink">{c.name}</div>
-              <div className="text-sm text-ink/55">{c.category} · {c.country}</div>
-            </div>
+            <Link href={`/discover/${c.id}`} className="flex min-w-0 flex-1 items-center gap-4">
+              <Logo company={c} />
+              <div className="min-w-0 flex-1">
+                <div className="truncate font-bold text-ink hover:underline">{c.name}</div>
+                <div className="text-sm text-ink/55">
+                  {[c.categories.join(", "), c.countryName].filter(Boolean).join(" · ")}
+                </div>
+              </div>
+            </Link>
             <RequestButton
-              requested={requested.has(c.id)}
+              state={c.connectionState}
+              optimistic={requested.has(c.id)}
               onRequest={() => setRequested((s) => new Set(s).add(c.id))}
             />
           </div>
         ))}
         {list.length === 0 && (
-          <p className="py-10 text-center text-sm text-ink/40">No companies match your filters.</p>
+          <p className="py-10 text-center text-sm text-ink/40">
+            {companies.length === 0
+              ? "No companies listed yet."
+              : "No companies match your filters."}
+          </p>
         )}
       </div>
     </div>
