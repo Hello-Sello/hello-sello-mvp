@@ -68,6 +68,7 @@ export function DealForm({
   initialDueDate = "",
   initialPaymentTermsCode = "",
   initialPrivateValue = "",
+  showPrivate = true,
   noteRequired,
   submitLabel,
   onClose,
@@ -80,6 +81,13 @@ export function DealForm({
   initialDueDate?: string;
   initialPaymentTermsCode?: string;
   initialPrivateValue?: string;
+  /**
+   * Show the seller's own-side private box (default true for create/edit). A
+   * PROPOSAL (4.5.2) hides it: a proposal is a shared chat message both sides
+   * read, so the private box is added only AFTER birth via edit - showing it
+   * here would silently swallow what the seller types (proposeDeal drops it).
+   */
+  showPrivate?: boolean;
   /** edits require a note (D2); create makes it optional at draft. */
   noteRequired: boolean;
   submitLabel: string;
@@ -307,23 +315,26 @@ export function DealForm({
             </div>
           </section>
 
-          {/* private box (creator/seller side only) */}
-          <section className="space-y-2">
-            <p className={labelCls}>
-              <span className="inline-flex items-center gap-1">
-                <Lock size={11} /> Only you can see this
-              </span>
-            </p>
-            <label className="flex flex-col gap-1">
-              <span className="text-[11px] text-ink/55">Buying price (from your supplier)</span>
-              <input
-                value={privateValue}
-                onChange={(e) => setPrivateValue(e.target.value)}
-                className={inputCls}
-                placeholder="e.g. 3.50 € / g"
-              />
-            </label>
-          </section>
+          {/* private box (creator/seller side only) - hidden on a proposal (4.5.2),
+              where it would be saved nowhere; it is added after birth via edit */}
+          {showPrivate && (
+            <section className="space-y-2">
+              <p className={labelCls}>
+                <span className="inline-flex items-center gap-1">
+                  <Lock size={11} /> Only you can see this
+                </span>
+              </p>
+              <label className="flex flex-col gap-1">
+                <span className="text-[11px] text-ink/55">Buying price (from your supplier)</span>
+                <input
+                  value={privateValue}
+                  onChange={(e) => setPrivateValue(e.target.value)}
+                  className={inputCls}
+                  placeholder="e.g. 3.50 € / g"
+                />
+              </label>
+            </section>
+          )}
 
           {/* note */}
           <section className="space-y-2">

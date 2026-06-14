@@ -427,6 +427,68 @@ export interface ProposeDealResult {
   messageId: string;
 }
 
+/* -------------------------------------------------------------------------- */
+/* Pending proposal (4.5.2) - the pre-card object the Sella strip renders.     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Where a proposal came from (`metadata.source`). `manual` = a person pressed
+ * "Start a deal" (sender pre-accepted); `sella` = Sella detected it (both
+ * pending). Drives the strip copy ("{name} proposed a deal" vs "Sella spotted
+ * a deal") but NOT the birth path - both births run through confirm_detected_deal.
+ */
+export type ProposalSource = "manual" | "sella";
+
+/**
+ * One company's stance on a proposal (`metadata.votes[companyId]`). A missing /
+ * null entry reads as "pending" - that company has not acted yet.
+ */
+export type ProposalVote = "accept" | "reject" | null;
+
+/** One proposed line, shaped for the strip's accept popover (from `metadata.draft`). */
+export interface ProposalLineView {
+  name: string;
+  quantity: number;
+  unit: string;
+  /** null when the proposal carried no price for this line (allowed, D3) */
+  unitPrice: number | null;
+  currency: string;
+}
+
+/**
+ * A pending deal PROPOSAL, resolved for the viewer (4.5.2). The pre-card object:
+ * a `deal_detected` chat message in the p2p thread whose card is NOT yet born
+ * (no `born_deal_card_id`) and which is not withdrawn. `getPendingProposal`
+ * resolves the viewer's company against `metadata.votes` so the strip only has
+ * to RENDER a stance, never re-derive "whose turn is it" (the side logic stays
+ * in the read, the same way `getDealCard` hides it behind `viewerSide`).
+ */
+export interface PendingProposalView {
+  /** the deal_detected chat_message id - the handle confirm_detected_deal acts on */
+  messageId: string;
+  source: ProposalSource;
+  /** a short human label from the draft (the strip line) */
+  summary: string;
+  /** the proposed lines, for the popover */
+  lines: ProposalLineView[];
+  currency: string;
+  /** the viewer's OWN-company vote (null = the viewer must still act) */
+  myVote: ProposalVote;
+  /** the OTHER company's vote (null = waiting on them) */
+  otherVote: ProposalVote;
+  /** true when the viewer's company is the proposer (manual: sending was their yes) */
+  iProposed: boolean;
+}
+
+/**
+ * Result of `confirmDetectedDeal` - the born deal card id when this accept was
+ * the second yes that flipped the gate, else null (a reject, or a first accept
+ * still waiting on the other side).
+ */
+export interface ConfirmDetectedResult {
+  bornCardId: string | null;
+}
+
 /**
  * The edit-form payload handed to `editDeal` (3.5b). Same shape as create but on
  * an existing card, and the `note` is MANDATORY - every change carries a human

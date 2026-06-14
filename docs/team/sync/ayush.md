@@ -5,16 +5,21 @@
 
 ---
 
-**Last updated:** 2026-06-14 20:33 CEST
+**Last updated:** 2026-06-14 22:09 CEST
 **Branch:** claude/ayush/work
-**Status:** offline - session wrapped. **Waypoint 4.5 (deal birth/acceptance) DESIGNED + locked; 4.5.1 (engine) BUILT + HELD** (2 migrations + `proposeDeal` action; tsc/eslint clean; **NOT applied to any DB**, not behaviour-tested). Cloud apply held until 4.5.2. **Next = 4.5.2 (the Sella strip UI).**
+**Status:** offline - session wrapped. **4.5.2 (the Sella strip) BUILT + verified live on both doors** (manual propose + Sella-detect); `propose_deal` applied to the cloud (additive). **Committed, NOT pushed** (commit-only - next session opens on 4.5.3). 4.5 done: 4.5.1 engine + 4.5.2 strip; remaining 4.5.3-4.5.6.
 **Linear issue in progress:** none
-**Shared files locked:** none (Muskan offline, no locks - cross-branch read 20:30 CEST). This wrap-up edited shared docs: `DECISIONS.md` (4.5 design) + `AGENTS.md` (checkpoint) + `_workshop/build-plans/4.5-deal-birth-acceptance.md`.
-**PR open:** Waypoint 4.5 design + 4.5.1 engine → dev (this wrap-up).
+**Shared files locked:** none (Muskan offline, no locks - cross-branch read 22:09 CEST). This wrap-up edited one shared doc: `AGENTS.md` (checkpoint). Committed locally, NOT pushed.
+**PR open:** none new (4.5.2 committed to `claude/ayush/work`, NOT pushed this session).
 
 ---
 
 ## Notes for the other agent
+
+**2026-06-14 (later) - 4.5.2 the Sella strip BUILT + verified live; ⚠️ nothing of yours touched; `propose_deal` applied to the cloud (additive).** The `DealPin` bar is now the **Sella strip** - State A "Start a deal" (p2p), State B a pending proposal (loud "Review" pill → Accept/Decline → `confirm_detected_deal` → atomic birth, "Waiting for {other}" chip for the side that already voted), State C the deal selector + an `✦ AI` badge + a "thinking" animation.
+> - **New code is deal-module only** (`getPendingProposal` read, `confirmDetectedDeal` action, `CreateDealForm`→`proposeDeal`, a new `DealForm` `showPrivate` prop defaulting true so create/edit are unchanged) **+ one `messaging/ThreadView.tsx` line** (pass the p2p `threadId` into `DealPin`) **+ an inline realtime sub inside `DealPin`** (its own channel `deal-strip-realtime`, inlined to avoid a `deals ↔ messaging` module cycle - I did NOT import your `useChatRealtime`).
+> - **`propose_deal` is now on the live cloud DB** (additive - a brand-new function nothing else calls; the detect cron is unchanged). The `…120100_confirm_detected_deal_proposer_initiator` replace is **still HELD** (it would swap the function the live cron uses; backward-compatible).
+> - **Committed to `claude/ayush/work`, NOT pushed** (commit-only this session). Next = 4.5.3 (card → pure display; the Seal gate moves off `CardFront` into the strip).
 
 **2026-06-14 - Waypoint 4.5 (deal birth/acceptance) designed + 4.5.1 engine built (HELD). ⚠️ Nothing of yours touched; NOT applied to any DB.** Found + fixed the birth/acceptance tangle (blocker before 5A.4): the card was born too early and acceptance lived on the card. New model - manual-create AND Sella-detect both write a `deal_detected` **proposal** message; the card+workspace are born ONLY on both-accept (manual = sender pre-accepted). **Supersedes 3.5a D5** (workspace now born at accept, not at draft - no orphan). The card becomes pure display; the **Sella strip** (the `DealPin` bar) owns birth-accept + the change-note + the Seal gate.
 > - **4.5.1 (engine) BUILT + HELD:** 2 new deal/Sella-only migrations (`…120000_propose_deal_rpc` NEW + additive; `…120100_confirm_detected_deal_proposer_initiator` - a backward-compatible replace of `confirm_detected_deal`, detection falls back to old behaviour) + a `proposeDeal` server action. tsc/eslint clean; all migrations apply clean on a fresh DB. **NOT applied to any DB** and **not behaviour-tested** - the cloud `confirm_detected_deal` cron is unchanged. We apply + test live during 4.5.2.

@@ -108,6 +108,9 @@ export function ThreadView({ conversation, messages, onSend }: ThreadViewProps) 
       <DealPin
         key={conversation.relationshipId}
         relationshipId={conversation.relationshipId}
+        // propose + the pending-proposal strip are connected-P2P only (D13):
+        // pass the thread for a P2P, omit it for a C2C company channel.
+        threadId={isC2C ? undefined : conversation.threadId}
         counterpartyName={conversation.companyName}
       >
         {/* stream */}

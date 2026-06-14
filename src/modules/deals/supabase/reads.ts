@@ -32,6 +32,10 @@ import type {
   MemberView,
   PartyFieldView,
   PartySide,
+  PendingProposalView,
+  ProposalLineView,
+  ProposalSource,
+  ProposalVote,
   StageCode,
   StageView,
   ThingStatus,
@@ -123,6 +127,87 @@ export async function listRelationshipDeals(
     hsNumber: r.hs_deal_number,
     updatedAt: (r.updated_at ?? r.created_at) as string,
   }));
+}
+
+/**
+ * The pending PROPOSAL for a p2p thread (4.5.2), resolved for the viewer - or
+ * null when there is none. A proposal is a `deal_detected` chat message whose
+ * card is NOT yet born (no `metadata.born_deal_card_id`) and which is not
+ * withdrawn; we take the most recent such message in the thread.
+ *
+ * Resolving the viewer HERE (their company vs `metadata.votes`) keeps the strip
+ * a pure renderer - it gets `myVote` / `otherVote` already decided, the same way
+ * `getDealCard` hands back `viewerSide`. RLS limits the read to thread
+ * participants, so both sides legitimately see both shared votes (the neutral
+ * surface, D7); the proposer's PRIVATE box never enters a proposal, so there is
+ * nothing private to leak here.
+ */
+export async function getPendingProposal(
+  threadId: string,
+): Promise<PendingProposalView | null> {
+  const supabase = createClient();
+
+  // viewer's company - to read MY vote out of the company-keyed vote map
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data: viewerPerson } = await supabase
+    .from("person")
+    .select("company_id")
+    .eq("id", user.id)
+    .single();
+  const viewerCompanyId: string | null = viewerPerson?.company_id ?? null;
+  if (!viewerCompanyId) return null;
+
+  // recent proposals in this thread, newest first; pick the first still-pending one
+  const { data, error } = await supabase
+    .from("chat_message")
+    .select("id, metadata, created_at")
+    .eq("thread_id", threadId)
+    .eq("type", "deal_detected")
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false })
+    .limit(10);
+  if (error) throw error;
+
+  const row = (data ?? []).find((m) => {
+    const meta = (m.metadata ?? {}) as Meta;
+    const born = meta["born_deal_card_id"];
+    return !born && meta["withdrawn"] !== true && meta["superseded_by"] == null;
+  });
+  if (!row) return null;
+
+  const meta = (row.metadata ?? {}) as Meta;
+  const votes = (meta["votes"] ?? {}) as Record<string, ProposalVote>;
+  const otherCompanyId = Object.keys(votes).find((k) => k !== viewerCompanyId) ?? null;
+
+  const draft = (meta["draft"] ?? {}) as Meta;
+  const currency = typeof draft["currency"] === "string" ? (draft["currency"] as string) : "EUR";
+  const rawLines = Array.isArray(draft["line_items"]) ? (draft["line_items"] as Meta[]) : [];
+  const lines: ProposalLineView[] = rawLines.map((l) => ({
+    name: typeof l["name"] === "string" && l["name"].trim() ? (l["name"] as string) : "Item",
+    quantity: Number(l["quantity"] ?? 0),
+    unit: typeof l["unit"] === "string" ? (l["unit"] as string) : "g",
+    unitPrice: l["unit_price"] == null ? null : Number(l["unit_price"]),
+    currency,
+  }));
+
+  const summary =
+    typeof draft["summary"] === "string" && draft["summary"].trim()
+      ? (draft["summary"] as string)
+      : "a deal";
+
+  return {
+    messageId: row.id,
+    source: meta["source"] === "manual" ? ("manual" as ProposalSource) : ("sella" as ProposalSource),
+    summary,
+    lines,
+    currency,
+    myVote: votes[viewerCompanyId] ?? null,
+    otherVote: otherCompanyId ? (votes[otherCompanyId] ?? null) : null,
+    iProposed: meta["proposed_by_company"] === viewerCompanyId,
+  };
 }
 
 /**

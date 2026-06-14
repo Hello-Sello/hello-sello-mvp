@@ -1,46 +1,57 @@
 "use client";
 
 /**
- * Create-a-deal wrapper (3.5a) - feeds the shared DealForm empty, with an
- * optional note, and commits via the createDeal server action (the AI fence:
- * only a human Create press writes a deal).
+ * Propose-a-deal wrapper (4.5.2; was create in 3.5a) - feeds the shared DealForm
+ * empty and commits via the `proposeDeal` server action.
+ *
+ * It no longer BIRTHS a card. It writes a `deal_detected` PROPOSAL into the p2p
+ * thread (the sender's own side pre-accepted - sending IS their yes); the card
+ * is born only when the OTHER side accepts (the AI fence still holds - a human
+ * Send press writes the suggestion, a human Accept press writes the deal). The
+ * private box is hidden (`showPrivate=false`): a proposal is a shared message, so
+ * the seller's margin is added only after birth, via edit.
  */
 import { DealForm } from "./DealForm";
-import { createDeal } from "../actions";
+import { proposeDeal } from "../actions";
 
 export function CreateDealForm({
   relationshipId,
+  threadId,
   counterpartyName,
   onClose,
-  onCreated,
+  onProposed,
 }: {
   relationshipId: string;
+  /** the p2p chat thread the proposal message is posted into */
+  threadId: string;
   counterpartyName: string;
   onClose: () => void;
-  onCreated: (dealCardId: string) => void;
+  /** the proposal message was written - the strip re-reads to show "pending" */
+  onProposed: () => void;
 }) {
   return (
     <DealForm
-      title="Create a deal"
+      title="Propose a deal"
       subtitle={
         <>
           To <span className="font-medium text-ink/80">{counterpartyName}</span>
         </>
       }
+      showPrivate={false}
       noteRequired={false}
-      submitLabel="Create deal"
+      submitLabel="Send proposal"
       onClose={onClose}
       onSubmit={async (p) => {
-        const res = await createDeal({
+        await proposeDeal({
           relationshipId,
+          threadId,
           lines: p.lines,
           freeDelivery: p.freeDelivery,
           dueDate: p.dueDate,
           paymentTermsCode: p.paymentTermsCode,
-          privateValue: p.privateValue,
           note: p.note,
         });
-        onCreated(res.dealCardId);
+        onProposed();
       }}
     />
   );

@@ -120,7 +120,13 @@ If you're building and hit a doubt, go here:
 
 *(Updated at end of every session by whoever worked last.)*
 
-**2026-06-14 (latest) - Ayush (Waypoint 4.5 deal birth/acceptance DESIGNED + locked; 4.5.1 engine BUILT + HELD)**
+**2026-06-14 (latest) - Ayush (4.5.2 the Sella strip BUILT + verified live; `propose_deal` applied to the cloud; committed, NOT pushed)**
+- **4.5.2 DONE.** Rebuilt `DealPin` into the **Sella strip** (States A/B/C): **A** = "Start a deal" (p2p); **B** = a pending proposal → a loud **"Review"** pill → popover → **Accept/Decline** → `confirm_detected_deal` → **atomic birth** (a "Waiting for {other}" chip for the side that already voted); **C** = the deal selector + an `✦ AI` badge + a "thinking" animation. Verified live two-screen on BOTH doors (manual propose + Sella-detect).
+- **New code (7 files, tsc/eslint clean) - ⚠️ nothing of Muskan's touched:** `getPendingProposal` read + `confirmDetectedDeal` action (deals); `CreateDealForm` → `proposeDeal` (+ a new `DealForm` `showPrivate` prop, default true, so create/edit are unchanged); `ThreadView` passes the p2p `threadId`; an **inline** realtime subscription in `DealPin` (its own channel) to keep `deals` independent of `messaging` (no module cycle).
+- **⚠️ `propose_deal` APPLIED to the LIVE cloud DB** (additive - a new function nothing else calls; zero cron impact). The **`…120100_confirm_detected_deal_proposer_initiator` replace is STILL HELD** (it changes the function the live detect cron uses; backward-compatible, only affects offer/order labelling) - apply when we validate against the live cron.
+- **Committed, NOT pushed** (Ayush: commit-only so next session opens on 4.5.3). **Next = 4.5.3** (card → pure display; move the Seal gate from `CardFront`'s `ConfirmBar` into the strip).
+
+**2026-06-14 - Ayush (Waypoint 4.5 deal birth/acceptance DESIGNED + locked; 4.5.1 engine BUILT + HELD)**
 - **Resolved the deal birth/acceptance tangle** (the blocker before 5A.4): the card is born too early and acceptance lived on the card → "accept your own deal", orphan workspaces, and Sella had nowhere to ask (the fence). Full design + reasoning: `_workshop/build-plans/4.5-deal-birth-acceptance.md` + DECISIONS 2026-06-14.
 - **Model = one birth path, two doors.** Manual-create AND Sella-detect both write a **proposal** = a `deal_detected`-shaped chat message (no card, no new status). Manual = sender pre-voted `accept`; Sella = both null. Card + workspace born ONLY on both-accept, atomically via `confirm_detected_deal` → `create_deal_draft`. **Supersedes 3.5a D5** (workspace-at-draft → at-accept, no orphan).
 - **Card becomes pure display; the Sella strip (the `DealPin` bar) owns birth-accept + the change-note + the Seal gate** (the `ConfirmBar` moves off the card). Strip = shared/neutral; right panel = private Sella.
