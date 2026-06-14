@@ -197,3 +197,22 @@ export async function setProductPricePublic(productId: string, isPublic: boolean
   revalidatePath("/present");
   return { ok: true };
 }
+
+/**
+ * Toggle whether a product appears on the company's public Discover profile
+ * (Dial A). Off (default) → the product is hidden from non-connected viewers;
+ * on → it shows on the profile, with its price visible only if `price_public`.
+ */
+export async function setProductProfileVisible(
+  productId: string,
+  isVisible: boolean,
+): Promise<ManageResult> {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("product")
+    .update({ profile_visible: isVisible })
+    .eq("id", productId);
+  if (error) return { error: error.message };
+  revalidatePath("/present");
+  return { ok: true };
+}

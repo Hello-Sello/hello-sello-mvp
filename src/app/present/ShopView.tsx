@@ -14,12 +14,12 @@ import useEmblaCarousel from "embla-carousel-react";
 import {
   Heart, ShoppingCart, Link2, UploadCloud, Plus, FileSpreadsheet,
   Pencil, Check, ImagePlus, Loader2, Eye, EyeOff,
-  Globe, Trash2, ArrowLeft, ChevronLeft, ChevronRight, Star, X,
+  Globe, Store, Trash2, ArrowLeft, ChevronLeft, ChevronRight, Star, X,
 } from "lucide-react";
 import type { Shop, ShopLink, ShopProduct, ProductImage } from "@/modules/catalog/shop";
 import {
   updateShopProfile, addProductImageRecords, removeProductImage,
-  setProductImageOrder, setProductPricePublic,
+  setProductImageOrder, setProductPricePublic, setProductProfileVisible,
 } from "@/modules/catalog/manage";
 import { createClient } from "@/shared/db/client";
 import { AddProductsDrawer } from "./AddProductsDrawer";
@@ -734,6 +734,13 @@ function ProductCard({ p, companyId, editing, onChanged }: { p: ShopProduct; com
     onChanged();
   }
 
+  async function toggleVisible() {
+    setBusy(true);
+    await setProductProfileVisible(p.id, !p.profile_visible);
+    setBusy(false);
+    onChanged();
+  }
+
   return (
     <div className="overflow-hidden rounded-2xl bg-brand-soft/40 ring-1 ring-white/60">
       <div className="px-3 pt-3">
@@ -758,15 +765,36 @@ function ProductCard({ p, companyId, editing, onChanged }: { p: ShopProduct; com
           THC {p.thc_percent ?? "—"}% · CBD {p.cbd_percent ?? "—"}%
         </span>
         {editing ? (
-          <button
-            type="button"
-            onClick={togglePrice}
-            disabled={busy}
-            className="flex items-center gap-1 rounded-full bg-white/70 px-3 py-1 text-xs font-bold text-brand-deep hover:bg-white disabled:opacity-50"
-          >
-            {p.price_public ? <Eye size={13} /> : <EyeOff size={13} />}
-            {p.price_public ? "Price public" : "Price hidden"}
-          </button>
+          <div className="flex flex-wrap items-center justify-end gap-1.5">
+            <button
+              type="button"
+              onClick={toggleVisible}
+              disabled={busy}
+              title="Show this product on your public Discover profile"
+              className={`flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold disabled:opacity-50 ${
+                p.profile_visible
+                  ? "bg-brand text-white hover:bg-brand-deep"
+                  : "bg-white/70 text-ink/60 hover:bg-white"
+              }`}
+            >
+              <Store size={13} />
+              {p.profile_visible ? "On profile" : "Off profile"}
+            </button>
+            <button
+              type="button"
+              onClick={togglePrice}
+              disabled={busy || !p.profile_visible}
+              title={
+                p.profile_visible
+                  ? 'Show the price (vs "Request pricing")'
+                  : "Put the product on your profile first"
+              }
+              className="flex items-center gap-1 rounded-full bg-white/70 px-3 py-1 text-xs font-bold text-brand-deep hover:bg-white disabled:opacity-40"
+            >
+              {p.price_public ? <Eye size={13} /> : <EyeOff size={13} />}
+              {p.price_public ? "Price public" : "Price hidden"}
+            </button>
+          </div>
         ) : p.price_public && p.price_per_gram != null ? (
           <span className="font-bold text-brand-deep">{eur(p.price_per_gram)}/g</span>
         ) : (
