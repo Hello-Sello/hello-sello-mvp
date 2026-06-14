@@ -1,9 +1,14 @@
-import { Search } from "lucide-react";
+import { Bell, Search } from "lucide-react";
 
 /**
  * Top bar over the content area. Search on the left, the logged-in company on
  * the right. Static for 1a - search is a visual placeholder and the company is
  * seeded text (wired to real auth when Muskan's F3 lands).
+ *
+ * The notification bell (5A.2) is a UI placeholder - the future home for deal
+ * accept/decline requests (so that action can leave the card, keeping it clean).
+ * No unread dot until real notifications exist; a static dot would falsely claim
+ * you have unread items. Marked "coming soon" via its tooltip.
  */
 export function TopBar() {
   return (
@@ -14,6 +19,14 @@ export function TopBar() {
       </div>
 
       <div className="ml-auto flex shrink-0 items-center gap-2.5">
+        <button
+          type="button"
+          aria-label="Notifications"
+          title="Notifications - coming soon"
+          className="flex h-9 w-9 items-center justify-center rounded-xl text-ink/40 ring-1 ring-black/5 transition hover:bg-white/60 hover:text-brand"
+        >
+          <Bell size={17} strokeWidth={1.75} />
+        </button>
         <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand text-xs font-bold text-white shadow-sm">
           AD
         </span>

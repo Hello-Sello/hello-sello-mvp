@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { Agentation } from "agentation";
 import "./globals.css";
 import { AppShell } from "@/shared/ui/AppShell";
 
@@ -30,6 +31,7 @@ export default function RootLayout({
     >
       <body className="h-full">
         <AppShell>{children}</AppShell>
+        {process.env.NODE_ENV === "development" && <Agentation />}
       </body>
     </html>
   );

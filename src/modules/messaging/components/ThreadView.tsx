@@ -1,6 +1,6 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Building2, ArrowUpRight } from "lucide-react";
+import { Building2, Users, MoreHorizontal, BellOff, Search, type LucideIcon } from "lucide-react";
 import { DealPin } from "@/modules/deals";
 import type { ChatMessageView, ConversationListItem } from "../types";
 import { MessageBubble } from "./MessageBubble";
@@ -21,6 +21,8 @@ export interface ThreadViewProps {
 export function ThreadView({ conversation, messages, onSend }: ThreadViewProps) {
   const isC2C = conversation.threadType === "c2c";
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  // header overflow menu (⋯) - the home for secondary actions (some still stubs)
+  const [menuOpen, setMenuOpen] = useState(false);
 
   // keep the latest message in view as the stream grows
   useEffect(() => {
@@ -29,13 +31,22 @@ export function ThreadView({ conversation, messages, onSend }: ThreadViewProps) 
 
   return (
     <div className="flex h-full flex-col">
-      {/* header */}
-      <div className="flex items-center gap-3 border-b border-black/5 p-4">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-[11px] font-semibold text-ink/70 ring-1 ring-black/5">
+      {/* header (5A.2) - identity leads; the relationship door is now a quiet
+          icon button (was a wordy "My Relationship with …" pill, which read as
+          unprofessional). Pro-app pattern: words for the one thing that changes
+          (the name), an icon + tooltip for the repeated action. */}
+      <div className="flex items-center gap-3 border-b border-black/5 px-4 py-3">
+        <span className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-xs font-semibold text-ink/70 ring-1 ring-black/5">
           {isC2C ? (
-            <Building2 size={16} strokeWidth={1.75} className="text-ink/55" />
+            <Building2 size={17} strokeWidth={1.75} className="text-ink/55" />
           ) : (
             conversation.initials
+          )}
+          {/* presence dot - UI placeholder until real presence (Supabase
+              Realtime) is wired. Only on a person (P2P); a company channel is
+              never "online", so no dot there. */}
+          {!isC2C && (
+            <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-success ring-2 ring-white" />
           )}
         </span>
         <div className="flex min-w-0 flex-col">
@@ -48,16 +59,48 @@ export function ThreadView({ conversation, messages, onSend }: ThreadViewProps) 
           <span className="truncate text-[11px] text-ink/45">{conversation.subtitle}</span>
         </div>
 
-        {/* the door to the relationship page (screen ③) - one page, two doors:
-            both the P2P and the C2C thread of a pair open the same company↔company record */}
-        <Link
-          href={`/connect/relationship/${conversation.relationshipId}`}
-          className="ml-auto flex shrink-0 items-center gap-1 rounded-full bg-ink/5 px-3 py-1.5 text-[11px] font-medium text-ink/70 transition hover:bg-ink/10 hover:text-ink"
-        >
-          <span className="hidden sm:inline">My Relationship with </span>
-          <span className="max-w-[10rem] truncate">{conversation.companyName}</span>
-          <ArrowUpRight size={13} strokeWidth={2} className="shrink-0" />
-        </Link>
+        {/* actions - the relationship door (icon) + an overflow (⋯) menu for
+            secondary actions. Some menu items are UI placeholders ("soon")
+            until their backends (notifications, search) are built. */}
+        <div className="ml-auto flex shrink-0 items-center gap-1.5">
+          <Link
+            href={`/connect/relationship/${conversation.relationshipId}`}
+            aria-label={`Relationship with ${conversation.companyName}`}
+            title={`Relationship with ${conversation.companyName}`}
+            className="flex h-9 w-9 items-center justify-center rounded-xl text-ink/55 ring-1 ring-black/5 transition hover:bg-white/70 hover:text-brand hover:ring-brand/20"
+          >
+            <Users size={17} strokeWidth={1.75} />
+          </Link>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setMenuOpen((o) => !o)}
+              aria-label="More actions"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              title="More"
+              className="flex h-9 w-9 items-center justify-center rounded-xl text-ink/55 ring-1 ring-black/5 transition hover:bg-white/70 hover:text-brand hover:ring-brand/20"
+            >
+              <MoreHorizontal size={17} strokeWidth={1.75} />
+            </button>
+            {menuOpen && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+                <div className="glass-strong absolute right-0 top-full z-20 mt-1.5 w-56 rounded-2xl p-1.5">
+                  <Link
+                    href={`/connect/relationship/${conversation.relationshipId}`}
+                    onClick={() => setMenuOpen(false)}
+                    className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-ink transition hover:bg-black/[0.04]"
+                  >
+                    <Users size={15} strokeWidth={1.75} /> View relationship
+                  </Link>
+                  <MenuStub icon={BellOff} label="Mute notifications" />
+                  <MenuStub icon={Search} label="Search in conversation" />
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* the deal "Talking about" bar + the card floated on the right (3a);
@@ -88,5 +131,24 @@ export function ThreadView({ conversation, messages, onSend }: ThreadViewProps) 
         }
       />
     </div>
+  );
+}
+
+/**
+ * A disabled item in the header's ⋯ menu - a UI placeholder for an action whose
+ * backend isn't built yet (notifications, search). The "soon" tag keeps it from
+ * being mistaken for a working feature.
+ */
+function MenuStub({ icon: Icon, label }: { icon: LucideIcon; label: string }) {
+  return (
+    <button
+      type="button"
+      disabled
+      title="Coming soon"
+      className="flex w-full cursor-not-allowed items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm font-medium text-ink/35"
+    >
+      <Icon size={15} strokeWidth={1.75} /> {label}
+      <span className="ml-auto text-[10px] font-normal text-ink/30">soon</span>
+    </button>
   );
 }

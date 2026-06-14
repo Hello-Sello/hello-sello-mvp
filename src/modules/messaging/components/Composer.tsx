@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   Plus,
   Type,
@@ -14,19 +14,26 @@ import {
   Mic,
   Maximize2,
   Minimize2,
+  Handshake,
+  Upload,
+  Image as ImageIcon,
+  Video,
   type LucideIcon,
 } from "lucide-react";
 
 /**
- * The P2P message-entry area (panel 4 footer). Three stacked parts that match
- * the chat design:
- *   1. Sella suggestion chips - pre-written quick replies; clicking one drops its
- *      text into the box (the "recommendations" chip seeds a few bulleted lines).
- *   2. The textarea - the one real control. Enter sends; Shift+Enter = newline.
- *      The expand toggle grows it so longer / bulleted drafts are readable.
- *   3. A formatting toolbar - design chrome for now (rich-text is a later pass),
- *      so the icons render but don't format yet.
- * Rendered only for P2P threads; the C2C notice board is read-only.
+ * The P2P message-entry area (panel 4 footer). Three stacked parts:
+ *   1. Two pre-written quick replies - clicking one drops its text into the box.
+ *   2. The textarea - Enter sends; Shift+Enter = newline; expand grows it.
+ *   3. A toolbar:
+ *      - the `+` menu (Create a deal = real; uploads = "soon" placeholders).
+ *      - WORKING formatting (5A.3): bold/italic/underline/strike wrap the
+ *        selection in marks (**b** _i_ ++u++ ~~s~~), link inserts [text](url),
+ *        the list buttons prefix the line, and emoji inserts a character. The
+ *        marks render as real formatting in the bubble (see RichText) - the
+ *        Slack/WhatsApp pattern, all frontend, no backend.
+ *      - Text style + Mention stay "soon" (headings aren't needed; mentions need
+ *        a people list we don't wire here).
  */
 export interface ComposerProps {
   onSend: (body: string) => void;
@@ -34,47 +41,31 @@ export interface ComposerProps {
   placeholder: string;
 }
 
-/** Pre-written suggestions. `fill` is the draft each chip drops into the box. */
+/** Pre-written seller replies. `fill` is the draft each chip drops into the box. */
 const SUGGESTIONS: ReadonlyArray<{ label: string; fill: string }> = [
   {
-    label: "Sella recommendations and pre-written answers…",
-    fill: [
-      "- Thanks for reaching out!",
-      "- Here's what we currently have available:",
-      "- Happy to put a custom offer together for you.",
-    ].join("\n"),
+    label: "Share current stock",
+    fill: ["Hi! Here's what we currently have available:", "- "].join("\n"),
   },
-  { label: "What's new in stock?", fill: "Hi - what's new in your stock right now?" },
   {
-    label: "Create offer for new products…",
-    fill: "I'd like to put together an offer for our new products: ",
+    label: "Send a quick offer",
+    fill: "Happy to put an offer together for you - which products and quantities are you after?",
   },
 ];
 
-/** Left-side toolbar groups (the dividers between them are drawn in render). */
-const TOOL_GROUPS: ReadonlyArray<ReadonlyArray<{ icon: LucideIcon; label: string }>> = [
-  [
-    { icon: Plus, label: "Add attachment" },
-    { icon: Type, label: "Text style" },
-    { icon: Smile, label: "Emoji" },
-    { icon: AtSign, label: "Mention" },
-  ],
-  [
-    { icon: Bold, label: "Bold" },
-    { icon: Italic, label: "Italic" },
-    { icon: Underline, label: "Underline" },
-    { icon: Strikethrough, label: "Strikethrough" },
-  ],
-  [
-    { icon: LinkIcon, label: "Link" },
-    { icon: ListOrdered, label: "Numbered list" },
-    { icon: List, label: "Bulleted list" },
-  ],
+/** A small, B2B-friendly emoji set for the picker. */
+const EMOJIS = [
+  "👍", "🙏", "🤝", "✅", "❌", "🔥", "🎉", "💪",
+  "📦", "🚚", "💰", "📈", "⭐", "❤️", "👋", "😊",
+  "🙌", "💯", "⏰", "📝", "✨", "👀", "😅", "🚀",
 ];
 
 export function Composer({ onSend, placeholder }: ComposerProps) {
+  const taRef = useRef<HTMLTextAreaElement>(null);
   const [text, setText] = useState("");
   const [expanded, setExpanded] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [emojiOpen, setEmojiOpen] = useState(false);
   const canSend = text.trim().length > 0;
 
   function submit() {
@@ -84,9 +75,50 @@ export function Composer({ onSend, placeholder }: ComposerProps) {
     setExpanded(false);
   }
 
+  /** Wrap the current selection (or a placeholder) in `before`/`after` marks. */
+  function surround(before: string, after: string, placeholder: string) {
+    const ta = taRef.current;
+    const start = ta?.selectionStart ?? text.length;
+    const end = ta?.selectionEnd ?? text.length;
+    const sel = text.slice(start, end) || placeholder;
+    setText(text.slice(0, start) + before + sel + after + text.slice(end));
+    const selStart = start + before.length;
+    const selEnd = selStart + sel.length;
+    requestAnimationFrame(() => {
+      ta?.focus();
+      ta?.setSelectionRange(selStart, selEnd);
+    });
+  }
+
+  /** Prefix the line the cursor sits on (for the list buttons). */
+  function prefixLine(prefix: string) {
+    const ta = taRef.current;
+    const start = ta?.selectionStart ?? 0;
+    const end = ta?.selectionEnd ?? 0;
+    const lineStart = text.lastIndexOf("\n", start - 1) + 1;
+    setText(text.slice(0, lineStart) + prefix + text.slice(lineStart));
+    requestAnimationFrame(() => {
+      ta?.focus();
+      ta?.setSelectionRange(start + prefix.length, end + prefix.length);
+    });
+  }
+
+  /** Insert a string (emoji) at the cursor. */
+  function insertAtCursor(s: string) {
+    const ta = taRef.current;
+    const start = ta?.selectionStart ?? text.length;
+    const end = ta?.selectionEnd ?? text.length;
+    setText(text.slice(0, start) + s + text.slice(end));
+    const caret = start + s.length;
+    requestAnimationFrame(() => {
+      ta?.focus();
+      ta?.setSelectionRange(caret, caret);
+    });
+  }
+
   return (
     <div className="border-t border-black/5 p-3">
-      {/* 1. Sella suggestion chips */}
+      {/* 1. pre-written quick replies (two) */}
       <div className="mb-2 flex flex-wrap gap-2">
         {SUGGESTIONS.map((s) => (
           <button
@@ -113,18 +145,18 @@ export function Composer({ onSend, placeholder }: ComposerProps) {
       >
         <div className="relative">
           <textarea
+            ref={taRef}
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => {
-              // Enter sends; Shift+Enter inserts a newline (standard chat behaviour).
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
                 submit();
               }
             }}
             placeholder={placeholder}
-            rows={expanded ? 6 : 2}
-            className="w-full resize-none bg-transparent px-3.5 py-3 pr-10 text-sm text-ink outline-none placeholder:text-ink/35"
+            rows={expanded ? 10 : 2}
+            className="w-full resize-none bg-transparent px-3.5 py-3 pr-10 text-sm text-ink outline-none transition-all placeholder:text-ink/35"
           />
           <button
             type="button"
@@ -141,20 +173,26 @@ export function Composer({ onSend, placeholder }: ComposerProps) {
           </button>
         </div>
 
-        {/* formatting toolbar - design chrome (rich-text formatting is a later pass) */}
+        {/* toolbar */}
         <div className="flex items-center gap-1 px-2 pb-2 pt-1">
           <div className="flex flex-wrap items-center gap-0.5">
-            {TOOL_GROUPS.map((group, gi) => (
-              <div key={gi} className="flex items-center gap-0.5">
-                {gi > 0 && <span className="mx-1 h-4 w-px bg-black/10" aria-hidden />}
-                {group.map((tool) => (
-                  <ToolbarButton key={tool.label} icon={tool.icon} label={tool.label} />
-                ))}
-              </div>
-            ))}
+            <PlusMenu open={menuOpen} setOpen={setMenuOpen} />
+            <Divider />
+            <ToolBtn icon={Type} label="Text style" soon />
+            <EmojiButton open={emojiOpen} setOpen={setEmojiOpen} onPick={insertAtCursor} />
+            <ToolBtn icon={AtSign} label="Mention" soon />
+            <Divider />
+            <ToolBtn icon={Bold} label="Bold" onClick={() => surround("**", "**", "bold")} />
+            <ToolBtn icon={Italic} label="Italic" onClick={() => surround("_", "_", "italic")} />
+            <ToolBtn icon={Underline} label="Underline" onClick={() => surround("++", "++", "underline")} />
+            <ToolBtn icon={Strikethrough} label="Strikethrough" onClick={() => surround("~~", "~~", "strike")} />
+            <Divider />
+            <ToolBtn icon={LinkIcon} label="Link" onClick={() => surround("[", "](url)", "text")} />
+            <ToolBtn icon={ListOrdered} label="Numbered list" onClick={() => prefixLine("1. ")} />
+            <ToolBtn icon={List} label="Bulleted list" onClick={() => prefixLine("- ")} />
           </div>
           <div className="ml-auto">
-            <ToolbarButton icon={Mic} label="Voice message" />
+            <ToolBtn icon={Mic} label="Voice message" soon />
           </div>
         </div>
       </form>
@@ -162,20 +200,154 @@ export function Composer({ onSend, placeholder }: ComposerProps) {
   );
 }
 
+function Divider() {
+  return <span className="mx-1 h-4 w-px bg-black/10" aria-hidden />;
+}
+
 /**
- * One toolbar affordance. Visual-only for now: it carries a tooltip and is
- * keyboard-reachable, but formatting isn't wired yet - this is the chat's
- * design chrome, not a working rich-text editor.
+ * One toolbar affordance. With `onClick` it's a working control; with `soon` it's
+ * a clearly-disabled placeholder (its backend - headings, mentions, voice - isn't
+ * built). Formatting buttons are real (they insert marks RichText renders).
  */
-function ToolbarButton({ icon: Icon, label }: { icon: LucideIcon; label: string }) {
+function ToolBtn({
+  icon: Icon,
+  label,
+  onClick,
+  soon = false,
+}: {
+  icon: LucideIcon;
+  label: string;
+  onClick?: () => void;
+  soon?: boolean;
+}) {
   return (
     <button
       type="button"
+      onClick={onClick}
+      disabled={soon}
       aria-label={label}
-      title={`${label} - coming soon`}
-      className="flex h-7 w-7 items-center justify-center rounded-lg text-ink/40 transition-colors hover:bg-ink/5 hover:text-ink/65"
+      title={soon ? `${label} - coming soon` : label}
+      className={`flex h-7 w-7 items-center justify-center rounded-lg transition-colors ${
+        soon
+          ? "cursor-not-allowed text-ink/25"
+          : "text-ink/45 hover:bg-ink/5 hover:text-ink/70"
+      }`}
     >
       <Icon size={15} strokeWidth={1.75} />
+    </button>
+  );
+}
+
+/** Emoji button + a small popover grid; clicking inserts the emoji at the cursor. */
+function EmojiButton({
+  open,
+  setOpen,
+  onPick,
+}: {
+  open: boolean;
+  setOpen: (v: boolean) => void;
+  onPick: (emoji: string) => void;
+}) {
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        aria-label="Emoji"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title="Emoji"
+        className={`flex h-7 w-7 items-center justify-center rounded-lg transition-colors ${
+          open ? "bg-brand-soft/60 text-brand" : "text-ink/45 hover:bg-ink/5 hover:text-ink/70"
+        }`}
+      >
+        <Smile size={15} strokeWidth={1.75} />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="glass-strong absolute bottom-full left-0 z-20 mb-2 grid w-56 grid-cols-8 gap-0.5 rounded-2xl p-2">
+            {EMOJIS.map((e) => (
+              <button
+                key={e}
+                type="button"
+                onClick={() => {
+                  onPick(e);
+                  setOpen(false);
+                }}
+                className="flex h-6 w-6 items-center justify-center rounded-md text-base transition-colors hover:bg-brand-soft/50"
+              >
+                {e}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The `+` attachment menu. "Create a deal" is REAL - it fires the `hs:create-deal`
+ * window event that DealPin listens for, opening the existing create flow (a
+ * second door, no new write path - the AI fence holds). The upload items are UI
+ * placeholders ("soon") until a storage slice (bucket + RLS) lands.
+ */
+function PlusMenu({ open, setOpen }: { open: boolean; setOpen: (v: boolean) => void }) {
+  function createDeal() {
+    window.dispatchEvent(new CustomEvent("hs:create-deal"));
+    setOpen(false);
+  }
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        aria-label="Add"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title="Add"
+        className={`flex h-7 w-7 items-center justify-center rounded-lg transition-colors ${
+          open ? "bg-brand-soft/60 text-brand" : "text-ink/45 hover:bg-ink/5 hover:text-ink/70"
+        }`}
+      >
+        <Plus size={15} strokeWidth={2} />
+      </button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="glass-strong absolute bottom-full left-0 z-20 mb-2 w-56 rounded-2xl p-1.5">
+            <button
+              type="button"
+              onClick={createDeal}
+              className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm font-semibold text-brand transition-colors hover:bg-brand-soft/45"
+            >
+              <Handshake size={16} strokeWidth={2} /> Create a deal
+            </button>
+            <div className="my-1 h-px bg-black/5" />
+            <PlusStub icon={Upload} label="Upload a file" />
+            <PlusStub icon={ImageIcon} label="Photo" />
+            <PlusStub icon={Video} label="Video" />
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** A disabled `+` menu item - a UI placeholder until storage (uploads) lands. */
+function PlusStub({ icon: Icon, label }: { icon: LucideIcon; label: string }) {
+  return (
+    <button
+      type="button"
+      disabled
+      title="Coming soon"
+      className="flex w-full cursor-not-allowed items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm font-medium text-ink/35"
+    >
+      <Icon size={16} strokeWidth={1.75} /> {label}
+      <span className="ml-auto text-[10px] font-normal text-ink/30">soon</span>
     </button>
   );
 }
