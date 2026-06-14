@@ -12,11 +12,13 @@ A **closed, tagged company directory** (NON-marketplace): find a company by cate
 
 ## Model — closed + tagged (locked 2026-06-11, session 20)
 
+> **Updated 2026-06-14 — superseded by the soft openness model.** The "closed by default, never see products until accepted" rule below was a **demo simplification**. The real product (onboarding + testing) uses a **company-curated profile** (LinkedIn-style: L0 bare card → L4 full priced shop), audience-scoped to verified members. The Discover **directory** stays minimal (brand line); the chosen openness shows on the company **profile** after click. See [DECISIONS.md](../../decisions/DECISIONS.md) → "Discover & public profile: soft openness model (2026-06-14)" and the build plan [`discover-connect-loop.md`](../../muskan-build/discover-connect-loop.md).
+
 **NON-marketplace.** Per Marcel (2026-06-10): "closed to not see shit, but a line with the company logo and a request to enter." Full reasoning in [DECISIONS.md](../../decisions/DECISIONS.md) → "Discover: closed + tagged directory".
 
 - **Closed by default.** No open catalog, no prices, no feed. You never see a company's products until you **"Request to enter"** and are accepted.
 - **Tagged line.** Each company = **logo · name · category · country**, filterable by all three. Enough to *find* who to request; not enough to *browse* a shop.
-- **Layout = search-first lobby** (centred search + category pills + single-column list). Built UI-only first (placeholder data, stubbed button); real listing RPC + the gate are the next slices. Build plan: [`docs/build/discover-directory.md`](../../build/discover-directory.md).
+- **Layout = search-first lobby** (centred search + category pills + single-column list). Built UI-only first (placeholder data, stubbed button); real listing RPC + the gate are the next slices. Build plan: [`docs/muskan-build/discover-directory.md`](../../muskan-build/discover-directory.md).
 - **"Request to enter" wiring OPEN** — unlock-shop (Discover owns the grant) vs a Connect request (one door). Leaning Connect; deferred until Connect's accept flow lands.
 - **Ad / social feed = CUT** (contradicts a closed non-marketplace).
 
