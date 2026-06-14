@@ -133,3 +133,91 @@ export async function getDiscoverableCompany(
     connectionState: r.connection_state,
   };
 }
+
+// ---- Company catalogue (slice 4) ----
+
+/**
+ * One product on a company's public profile, as a verified-but-unconnected
+ * member sees it. `images` are resolved, ordered `shop-media` URLs. Price fields
+ * are null unless the seller made the product's price public (`pricePublic`); a
+ * null price = "Price on request" (the L1 state). The RPC already gates all of
+ * this server-side — the reader never sees hidden products or seller-only cost.
+ */
+export type DiscoverProduct = {
+  id: string;
+  name: string;
+  cultivar: string | null;
+  thcPercent: number | null;
+  cbdPercent: number | null;
+  packSizeGrams: number | null;
+  unitCode: string | null;
+  localCodePzn: string | null;
+  dominanceCode: string | null;
+  countryOfOrigin: string | null;
+  region: string | null;
+  images: string[]; // ordered public URLs (cover first)
+  pricePublic: boolean;
+  pricePerGram: number | null;
+  bundleThresholdGrams: number | null;
+  bundlePricePerGram: number | null;
+};
+
+type ShopRow = {
+  id: string;
+  name: string;
+  cultivar: string | null;
+  thc_percent: number | null;
+  cbd_percent: number | null;
+  pack_size_grams: number | null;
+  unit_code: string | null;
+  local_code_pzn: string | null;
+  dominance_code: string | null;
+  country_of_origin: string | null;
+  region: string | null;
+  images: { id: string; path: string; position: number }[] | null;
+  price_public: boolean;
+  price_per_gram: number | null;
+  bundle_threshold_grams: number | null;
+  bundle_price_per_gram: number | null;
+};
+
+/**
+ * The visible catalogue of a verified company, for the Discover profile. Goes
+ * through the `get_discoverable_shop` SECURITY DEFINER RPC — the audience-scoped
+ * window that returns only `profile_visible` products (prices only where public),
+ * even when the viewer isn't connected. Empty array = L0 (locked / nothing shared).
+ */
+export async function getDiscoverableShop(companyId: string): Promise<DiscoverProduct[]> {
+  const supabase = await createClient();
+
+  const res = (await supabase.rpc("get_discoverable_shop" as never, {
+    p_company_id: companyId,
+  } as never)) as unknown as { data: ShopRow[] | null; error: { message: string } | null };
+
+  if (res.error || !res.data) return [];
+
+  const imageUrl = (path: string) =>
+    supabase.storage.from("shop-media").getPublicUrl(path).data.publicUrl;
+
+  return res.data.map((r) => ({
+    id: r.id,
+    name: r.name,
+    cultivar: r.cultivar,
+    thcPercent: r.thc_percent,
+    cbdPercent: r.cbd_percent,
+    packSizeGrams: r.pack_size_grams,
+    unitCode: r.unit_code,
+    localCodePzn: r.local_code_pzn,
+    dominanceCode: r.dominance_code,
+    countryOfOrigin: r.country_of_origin,
+    region: r.region,
+    images: (r.images ?? [])
+      .slice()
+      .sort((a, b) => a.position - b.position)
+      .map((im) => imageUrl(im.path)),
+    pricePublic: r.price_public,
+    pricePerGram: r.price_per_gram,
+    bundleThresholdGrams: r.bundle_threshold_grams,
+    bundlePricePerGram: r.bundle_price_per_gram,
+  }));
+}
