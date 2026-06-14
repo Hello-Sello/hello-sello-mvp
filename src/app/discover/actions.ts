@@ -49,7 +49,9 @@ async function createPairInboxItem(
     .limit(1);
   if (existing && existing.length > 0) return { ok: true };
 
-  const trimmed = note.trim();
+  // Clamp server-side — the 280 cap is only a client maxLength, and `note` is
+  // unbounded TEXT, so a crafted call must not be able to store an essay.
+  const trimmed = note.trim().slice(0, 280);
   const { error } = await supabase.from("pending_inbox_item").insert({
     type,
     sender_person_id: uid,

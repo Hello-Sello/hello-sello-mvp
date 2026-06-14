@@ -130,6 +130,27 @@ Load-bearing (D5 enforcement, the derived-level model) → propose to `DECISIONS
 - **Per-field profile publicness toggles**, hero product/pitch polish, custom per-connection pricelists.
 - **Research follow-ups (non-blocking):** server-side filter + keyset pagination (at scale / with Flowz) · `LEFT JOIN LATERAL` for per-card state (at scale) · harden the shared `current_company_id()` helper to `search_path=''` · regenerate `database.types.ts` to drop the local RPC cast (also backfills the `get_public_profile` migration drift).
 
+## Flags & follow-ups (slices 4–6 build) — address later
+Captured 2026-06-14/15. None block Track 1; revisit before/after the dev→main promotion.
+
+| # | Flag | Notes |
+|---|---|---|
+| F1 | **Seed-in-migration** — `20260614170000` seeds Aurora's demo catalogue via a migration | Repo-consistent but debatable; now that the seller toggle (slice 5) exists, demo state could come from UI toggles. **Review caught:** the L1 product (`Superseed`) was created ad-hoc and isn't in any migration, so on a *clean rebuild* the L1 update matches 0 rows (only L2 shows) and the header's "survives a rebuild" claim is false. Decide: keep+fix (retarget L1 to a migration-seeded product), or drop. ⚠️ Already applied to the shared DB, so a clean drop needs care (don't orphan the schema_migrations row → F3-style drift). |
+| F2 | **Pre-existing eslint error** in `ShopView` carousel effect (`set-state-in-effect`, ~line 533) | Session-18 gallery code; confirmed on HEAD, NOT from slice 4–6. Fix separately (eslint-disable line or restructure the embla `onSelect` effect). |
+| F3 | **Migration drift (earlier sessions)** — `get_public_profile` + `profile_qr_foundation` applied to live but never filed as `.sql` | Backfill so the repo matches the DB. |
+| F4 | **`database.types.ts` full regen deferred** — `profile_visible` added surgically; the `get_discoverable_*` RPCs still use local `as never` casts | A regen would type the RPCs + drop the casts, but risks pulling in-flight schema (Ayush's pattern = surgical). Batch later. |
+| F5 | **Connected-viewer Request-pricing** — the bar is suppressed when already connected | A connected buyer wanting the formal pricelist has no button (asks in chat). Revisit if the C2C/connected `pricelist_request` path is wanted. |
+| F6 | **Directory badge conflation** — `list_discoverable_companies.connection_state` still flips to 'requested' for a pricing-only request | Only `get_discoverable_company` was made precise (P6a). Align the directory RPC if the badge precision matters. |
+| F7 | **Per-card "Request pricing →" accelerator** — prototype had it; shipped shop-level CTA only | Polish; feeds the same one request. |
+| F8 | **Verified-VIEWER gate** — the Discover RPCs grant to `authenticated` (any logged-in user), not strictly verified-company members | Tighten the viewer side later (matches the existing deferred list). |
+| F9 | **Anon audience-scoping** — `product_public_select` still grants `anon` (currently unused) | Scope to `authenticated` when doing the audience-scope pass. |
+| F10 | **Scale** (already deferred) — server-side filter + keyset pagination; `LEFT JOIN LATERAL` per-card state; harden `current_company_id()` to `search_path=''` | Non-blocking until the directory grows (Flowz). |
+| F11 | **`getMyShop` vs RPC price divergence** for multi-pricelist products | `getMyShop` (`shop.ts`) takes `pricelist_item[0]` with no ordering/`deleted_at` filter; `get_discoverable_shop` picks deterministically. With >1 active pricelist the seller's view and the public card could differ. Pre-existing in `getMyShop`; demo is single-pricelist so latent. |
+| F12 | **TierChip mislabel** — "Prices on request" also shows when a seller set `price_public` but has no pricelist row | `anyPriceHidden` keys on `pricePerGram == null`, which catches "price not set yet" too. Harmless; tighten if it matters. |
+| F13 | **Toggle errors swallowed** in `ShopView` (`toggleVisible`/`togglePrice`) | The `{error}` return is ignored — a failed toggle silently no-ops. Matches the existing `togglePrice` pattern; add a toast. |
+
+**Review outcome (2026-06-15, independent SWE pass):** reviewer flagged a "P0 price leak" on `pricelist_item` — **empirically verified as a FALSE POSITIVE** (anon read returns 0; transitive RLS via `product_public_select` already closes it). Applied the explicit `profile_visible` check to `pricelist_item_public_select` anyway (migration `20260614180000`) for **defense-in-depth + consistency** with `product`/`product_image`, plus a server-side `note` length clamp (`actions.ts`). No real P0s. Everything else above is P1/P2 follow-up.
+
 ## References
 - Locks/model: [`docs/decisions/DECISIONS.md`](../decisions/DECISIONS.md) (2026-06-14) · surfaces [`DISCOVER.md`](../product/surfaces/DISCOVER.md) · [`CONNECT.md`](../product/surfaces/CONNECT.md) · [`PRESENT.md`](../product/surfaces/PRESENT.md)
 - Prior slice: [`docs/muskan-build/discover-directory.md`](discover-directory.md) (Discover UI, placeholder data)
