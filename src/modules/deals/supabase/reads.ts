@@ -86,6 +86,45 @@ export async function getCurrentDealCardId(relationshipId: string): Promise<stri
   return (live ?? rows[0]).id;
 }
 
+/** A lightweight deal row for the chat's deal selector (5A.2) - enough to label
+ * + badge each deal without loading the whole card. */
+export interface RelationshipDealRow {
+  id: string;
+  status: DealCardStatus;
+  dealType: DealType;
+  /** the HS deal number when one has been minted; null on early drafts */
+  hsNumber: string | null;
+  /** updated_at, falling back to created_at - drives the "Updated …" hint */
+  updatedAt: string;
+}
+
+/**
+ * All non-deleted deals for a relationship, newest first - the source for the
+ * chat's deal selector dropdown (lets a seller pick which deal a conversation is
+ * about). One deal per relationship is the demo norm (multi-deal = DEV-37), so
+ * this usually returns a single row; the control is then honestly ready for more.
+ */
+export async function listRelationshipDeals(
+  relationshipId: string,
+): Promise<RelationshipDealRow[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("deal_card")
+    .select("id, status, deal_type, hs_deal_number, updated_at, created_at")
+    .eq("relationship_id", relationshipId)
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false })
+    .limit(20);
+  if (error) throw error;
+  return (data ?? []).map((r) => ({
+    id: r.id,
+    status: r.status as DealCardStatus,
+    dealType: r.deal_type as DealType,
+    hsNumber: r.hs_deal_number,
+    updatedAt: (r.updated_at ?? r.created_at) as string,
+  }));
+}
+
 /**
  * The create-form product picker source: the viewer's OWN catalogue (3.5a).
  * RLS limits `product` + `pricelist_item` to the caller's company, so this is

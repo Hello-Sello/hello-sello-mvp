@@ -923,6 +923,20 @@ The last Sella piece. Two jobs, both single-shot Haiku, both PERSON-WAITING so t
 
 ---
 
+## 2026-06-14 (Waypoint 4.5) — Deal birth + acceptance redesign: proposal-in-chat + the Sella strip
+
+Resolves a tangle found while opening 5A.4: the card is born too early and acceptance lives ON the card, which (1) makes a person "accept their own deal", (2) leaves orphan workspaces when no one confirms, and (3) gives Sella nowhere to ask (she may suggest but not make a card — the AI fence). The fix realigns the code to the already-locked two-confirmation journey (2026-06-12 Sella 4b), not a new flow.
+
+- **One birth path, two doors.** Manual-create AND Sella-detection both produce a **proposal** = a `deal_detected`-shaped chat message carrying the draft + per-company votes (NOT a card, NO new deal status). *Why:* detection already proves "a message is the pre-card object"; making manual-create produce the same message unifies birth and reuses `confirm_detected_deal` + `create_deal_draft` untouched.
+- **Sending = accepting (manual).** The proposer's company vote is pre-set `accept`; only the other side is pending. Detection: both votes start null. Kills "accept your own deal".
+- **Birth (card + workspace) only on both-accept, atomically. Supersedes 3.5a D5** ("workspace at Draft"): no card and no workspace exist until both accept → no orphan. The proposer is the initiating side (offer/order reads from `metadata.proposed_by_company`, not whoever accepts last).
+- **The card becomes pure display; the Sella strip owns all actions.** The deal bar (`DealPin`) becomes the **Sella strip** — one shared, neutral, system-voice surface for birth-accept, the change-note ask, and the **Seal gate** (the 3d `ConfirmBar` moves OFF the card). Private "ask Sella" stays in the right panel. One selected deal at a time; cross-deal asks collect in a chat-header notification.
+- **Privacy:** the proposal is a shared message, so the proposer's own-side private box is NOT carried in it (would leak to the counterparty) — added after birth via edit.
+
+*Why record:* revises shipped Chapter-4 behaviour (where acceptance lived) and supersedes 3.5a D5, so it is load-bearing. The AI fence still holds — Sella only suggests the proposal; a human's Accept click is the only write that births a card. Build plan: `_workshop/build-plans/4.5-deal-birth-acceptance.md`. **4.5.1 (engine) built + held (not applied to any DB); next = 4.5.2 (the strip UI).** Scope: connected-P2P only — not-connected→inbox, C2C ticketing, the shop/offer path, and global notifications are parked.
+
+---
+
 ## Layer 2 — Present surface (storefront)
 
 ### 2026-06-10 — Present storefront v0 (design + build, session 16)

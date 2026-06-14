@@ -19,6 +19,8 @@ import type {
   DealCardStatus,
   EditDealInput,
   EditDealResult,
+  ProposeDealInput,
+  ProposeDealResult,
 } from "./types";
 
 /** Map the form's draft lines to the RPC's jsonb line shape (shared by create + edit). */
@@ -222,6 +224,69 @@ export async function createDeal(input: CreateDealInput): Promise<CreateDealResu
   });
 
   return { dealCardId: newCardId };
+}
+
+/** A short human label for a proposal, from its lines (drives the message body). */
+function draftSummary(lines: CreateDealInput["lines"]): string {
+  if (!lines.length) return "a deal";
+  const first = lines[0].productName?.trim() || "a deal";
+  return lines.length === 1 ? first : `${first} +${lines.length - 1} more`;
+}
+
+/**
+ * Propose a deal from a chat (Waypoint 4.5.1) - the manual door's NEW commit.
+ *
+ * Unlike `createDeal`, this does NOT birth a card. It writes a `deal_detected`
+ * PROPOSAL message into the p2p thread (via the `propose_deal` SECURITY DEFINER
+ * RPC), with the proposer's own side pre-voted `accept` (sending IS the
+ * proposer's yes). The card is born only when the OTHER side accepts, through the
+ * unified `confirm_detected_deal` birth - one birth path, two doors (Sella detect
+ * + this manual propose). The AI fence still holds: a human's Send press writes
+ * the suggestion; a human's Accept press writes the deal.
+ *
+ * Privacy: the proposal is a shared chat message, so the proposer's own-side
+ * private box is NOT carried here (it would leak to the other side); it is added
+ * after birth via edit. No audit here - a proposal is not yet a deal; the audited
+ * `deal.created` moment is the birth.
+ */
+export async function proposeDeal(input: ProposeDealInput): Promise<ProposeDealResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("proposeDeal: no authenticated user");
+
+  const currency = input.lines[0]?.currency ?? "EUR";
+
+  // The shared draft: line_items use the SAME keys the confirm_detected_deal
+  // birth reads (name, quantity, unit, unit_price, cultivar, pzn). Shared facts
+  // only - no private box (privacy).
+  const draft = {
+    line_items: input.lines.map((l) => ({
+      name: l.productName,
+      quantity: l.quantity,
+      unit: l.unit,
+      unit_price: l.unitPrice,
+      cultivar: l.cultivar ?? null,
+      pzn: l.pzn ?? null,
+    })),
+    currency,
+    summary: draftSummary(input.lines),
+    due_date: input.dueDate ?? null,
+    payment_terms_code: input.paymentTermsCode ?? null,
+    free_delivery: input.freeDelivery ?? false,
+    note: input.note ?? null,
+  };
+
+  const { data: messageId, error } = await supabase.rpc("propose_deal" as never, {
+    p_thread_id: input.threadId,
+    p_draft: draft,
+  } as never);
+  if (error) throw new Error((error as { message: string }).message);
+  const newMessageId = messageId as string | null;
+  if (!newMessageId) throw new Error("proposeDeal: no message id returned from propose_deal");
+
+  return { messageId: newMessageId };
 }
 
 /**

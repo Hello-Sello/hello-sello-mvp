@@ -1,31 +1,89 @@
 "use client";
 
 /**
- * Deal pin (3a Phase 5, reworked in 3b Phase 5) - the deal card's home inside
- * a chat. Wraps the message stream: renders the "Talking about …" bar above it
- * and, when opened, floats the DealCard on the RIGHT of the stream.
+ * Deal pin (3a → reworked in 5A.2) - the deal card's home inside a chat. Wraps
+ * the message stream: renders the "Deal:" selector bar above it and, when
+ * opened, floats the DealCard on the RIGHT of the stream.
  *
- * Two variants (same card, different bar):
- *   - `chat` (default, screen ②): "Talking about: Current deal ▾" on the left
- *     (the selector concept stays - multi-deal per P2P is deferred, DEV-37),
- *     the card pill in the CENTER, and the "Deal workspace ↗" door on the
- *     right - the second locked door to screen ④.
- *   - `workspace` (screen ④): the deal is fixed here, so no selector and no
- *     workspace door (you are already in it) - just the label + the pill.
+ * The bar is a DEAL SELECTOR (5A.2): the active deal shows as a small "deal
+ * card" chip (no raw HS number - that lives inside the opened card), and the
+ * chevron opens a dropdown to pick a different deal of this relationship - real
+ * context for a seller juggling several deals with one company. Multi-deal is
+ * the demo norm of one (DEV-37), so the list is usually a single row; the
+ * control is honestly ready for more.
  *
- * Self-contained: finds the relationship's current deal and loads it itself,
- * so the messaging module just wraps its stream with <DealPin>.
+ * Two variants:
+ *   - `chat` (default, screen ②): the full selector + "Open card" + a quiet
+ *     "Workspace ↗" door (screen ④). No deal yet → a dashed "Start a deal".
+ *   - `workspace` (screen ④): the deal is fixed here, so just the chip (no
+ *     dropdown) + "Open card" - you are already in the workspace.
+ *
+ * Self-contained: lists the relationship's deals + loads the selected one, so
+ * the messaging module just wraps its stream with <DealPin>.
  */
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowUpRight, ChevronDown, FileText, Plus, X } from "lucide-react";
-import { getCurrentDealCardId, getDealCard } from "../supabase/reads";
+import { ArrowUpRight, Check, ChevronDown, FileText, Kanban, Plus } from "lucide-react";
+import {
+  getDealCard,
+  listRelationshipDeals,
+  type RelationshipDealRow,
+} from "../supabase/reads";
 import { confirmDeal } from "../actions";
-import { docAbbr } from "../lib/derive";
 import { DealCard } from "./DealCard";
 import { CreateDealForm } from "./CreateDealForm";
 import { EditDealForm } from "./EditDealForm";
-import type { ConfirmDecision, DealCardView } from "../types";
+import type { ConfirmDecision, DealCardStatus, DealCardView } from "../types";
+
+/** Statuses still "live" (not terminal) - the preferred default selection. */
+const LIVE_STATUSES = new Set<DealCardStatus>(["draft", "confirmed", "amended"]);
+
+/** Status → badge label + colour. Pink for in-progress, gold for confirmed. */
+const STATUS_BADGE: Record<DealCardStatus, { label: string; cls: string }> = {
+  draft: { label: "Draft", cls: "bg-brand-soft/70 text-brand-deep" },
+  amended: { label: "Amended", cls: "bg-brand-soft/70 text-brand-deep" },
+  confirmed: { label: "Confirmed", cls: "bg-amber-100 text-amber-700" },
+  done: { label: "Done", cls: "bg-success/15 text-success" },
+  withdrawn: { label: "Withdrawn", cls: "bg-ink/10 text-ink/50" },
+  cancelled: { label: "Cancelled", cls: "bg-ink/10 text-ink/50" },
+};
+
+function StatusBadge({ status }: { status: DealCardStatus }) {
+  const s = STATUS_BADGE[status] ?? STATUS_BADGE.draft;
+  return (
+    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${s.cls}`}>
+      {s.label}
+    </span>
+  );
+}
+
+/** A short "Updated 3d ago" hint from an ISO timestamp. */
+function timeAgo(iso: string): string {
+  const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.round(hrs / 24)}d ago`;
+}
+
+/**
+ * The active deal as a small "deal card" object: a raspberry spine + a card
+ * icon + "Deal card" + its status. A chevron when it doubles as a selector.
+ */
+function DealChip({ status, selectable }: { status: DealCardStatus; selectable: boolean }) {
+  return (
+    <span className="flex items-stretch overflow-hidden rounded-xl border border-brand/15 bg-white">
+      <span className="w-1.5 shrink-0 bg-brand" aria-hidden />
+      <span className="flex items-center gap-2 py-1.5 pl-2 pr-2.5">
+        <FileText size={15} strokeWidth={2} className="text-brand" />
+        <span className="text-xs font-semibold text-ink">Deal card</span>
+        <StatusBadge status={status} />
+        {selectable && <ChevronDown size={14} strokeWidth={2} className="text-ink/35" />}
+      </span>
+    </span>
+  );
+}
 
 export function DealPin({
   relationshipId,
@@ -35,18 +93,21 @@ export function DealPin({
 }: {
   relationshipId: string;
   variant?: "chat" | "workspace";
-  /** the other company's name - the recipient pre-filled in the create form */
+  /** the other company's name - the dropdown heading + the create-form recipient */
   counterpartyName?: string;
   children: React.ReactNode;
 }) {
+  const [deals, setDeals] = useState<RelationshipDealRow[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [data, setData] = useState<DealCardView | null>(null);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(false); // the card overlay
+  const [picking, setPicking] = useState(false); // the deal dropdown
   const [busy, setBusy] = useState(false);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState(false);
 
   // 3d gate: run a confirm/decline/withdraw on the server, then re-read the card
-  // so status + both seats refresh (the flip to golden happens on the re-read).
+  // (and refresh the list so the chip's status badge updates).
   async function runDecision(decision: ConfirmDecision) {
     if (!data || busy) return;
     setBusy(true);
@@ -54,8 +115,8 @@ export function DealPin({
       await confirmDeal({ dealCardId: data.card.id, version: data.card.version, decision });
       const fresh = await getDealCard(data.card.id);
       setData(fresh);
-      // tell sibling views (the workspace header's lifecycle pill) to re-read -
-      // they loaded the card separately, so a decoupled signal keeps them in sync.
+      void listRelationshipDeals(relationshipId).then(setDeals);
+      // tell sibling views (the workspace header's lifecycle pill) to re-read.
       window.dispatchEvent(
         new CustomEvent("hs:deal-updated", { detail: { dealCardId: data.card.id } }),
       );
@@ -66,13 +127,47 @@ export function DealPin({
     }
   }
 
-  // load the current deal for this relationship. DealPin is keyed by
-  // relationshipId at the mount site, so it remounts (fresh state) per
-  // relationship - no synchronous reset needed here, we only commit the result.
+  // list the relationship's deals + pick a default (prefer the most recent LIVE
+  // one, matching the old getCurrentDealCardId behaviour the workspace relies on).
+  // DealPin is keyed by relationshipId at the mount site, so it remounts fresh.
   useEffect(() => {
     let alive = true;
-    void getCurrentDealCardId(relationshipId)
-      .then((id) => (id ? getDealCard(id) : null))
+    void listRelationshipDeals(relationshipId)
+      .then((list) => {
+        if (!alive) return;
+        setDeals(list);
+        const def = list.find((d) => LIVE_STATUSES.has(d.status)) ?? list[0] ?? null;
+        setSelectedId(def?.id ?? null);
+      })
+      .catch(() => {
+        if (alive) {
+          setDeals([]);
+          setSelectedId(null);
+        }
+      });
+    return () => {
+      alive = false;
+    };
+  }, [relationshipId]);
+
+  // the composer's "+ → Create a deal" door (5A.3): it fires a window event so
+  // the footer button and this form stay decoupled. Chat variant only - the
+  // workspace chat is for an existing deal, not a place to mint a new one.
+  useEffect(() => {
+    if (variant !== "chat") return;
+    const onCreate = () => setCreating(true);
+    window.addEventListener("hs:create-deal", onCreate);
+    return () => window.removeEventListener("hs:create-deal", onCreate);
+  }, [variant]);
+
+  // load the full card for the selected deal (drives the overlay + confirm gate).
+  useEffect(() => {
+    if (!selectedId) {
+      setData(null);
+      return;
+    }
+    let alive = true;
+    void getDealCard(selectedId)
       .then((d) => {
         if (alive) setData(d);
       })
@@ -82,69 +177,110 @@ export function DealPin({
     return () => {
       alive = false;
     };
-  }, [relationshipId]);
+  }, [selectedId]);
 
-  const hsLabel =
-    data?.card.hs_deal_number ?? (data ? `${docAbbr(data.card.deal_type)} · draft` : "");
+  function pickDeal(id: string) {
+    setSelectedId(id);
+    setPicking(false);
+    setOpen(false); // fresh context - let the user open the newly chosen card
+  }
 
-  const pill = data && (
+  const selectedDeal = deals.find((d) => d.id === selectedId) ?? null;
+  const chipStatus: DealCardStatus = selectedDeal?.status ?? data?.card.status ?? "draft";
+  const hasDeal = deals.length > 0 && !!selectedId;
+
+  const openCardButton = (
     <button
+      type="button"
       onClick={() => setOpen((o) => !o)}
-      className="flex items-center gap-2 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-deep"
+      className="shrink-0 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-deep"
     >
-      <FileText size={13} />
-      <span className="tracking-wide">{hsLabel}</span>
-      <span className="text-white/70">{open ? "close" : "open"}</span>
-      {open ? <X size={13} /> : null}
+      {open ? "Close card" : "Open card"}
     </button>
   );
 
   return (
     <>
-      {/* "Talking about" bar - only when the relationship has a deal */}
-      {data && variant === "workspace" && (
-        // the workspace's chat IS this deal's chat - no selector, no door
-        <div className="flex items-center gap-3 border-b border-black/5 px-4 py-2">
-          <span className="shrink-0 text-[11px] text-ink/45">Talking about:</span>
-          {pill}
-        </div>
-      )}
-      {data && variant === "chat" && (
-        <div className="flex items-center gap-3 border-b border-black/5 px-4 py-2">
-          <span className="shrink-0 text-[11px] text-ink/45">Talking about:</span>
-          {/* single deal for the demo - selector is non-interactive (multi-deal = DEV-37) */}
-          <span className="flex items-center gap-1.5 rounded-lg bg-ink/5 px-3 py-1.5 text-xs font-medium text-ink/70">
-            Current deal
-            <ChevronDown size={13} className="text-ink/35" />
-          </span>
-          {/* the card pill, centered (Ayush, 3b Phase 5) */}
-          <span className="flex flex-1 justify-center">{pill}</span>
-          {/* the second door to screen ④ */}
+      {/* chat variant - the deal selector bar */}
+      {variant === "chat" && hasDeal && (
+        <div className="flex items-center gap-3 border-b border-black/5 px-4 py-2.5">
+          <span className="shrink-0 text-[11px] text-ink/45">Deal:</span>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setPicking((p) => !p)}
+              aria-haspopup="listbox"
+              aria-expanded={picking}
+              aria-label="Choose a deal"
+              className="block transition hover:opacity-90"
+            >
+              <DealChip status={chipStatus} selectable />
+            </button>
+            {picking && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setPicking(false)} />
+                <div className="glass-strong absolute left-0 top-full z-20 mt-1.5 w-72 rounded-2xl p-1.5">
+                  <p className="px-2.5 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wide text-ink/40">
+                    Deals with {counterpartyName ?? "this company"}
+                  </p>
+                  {deals.map((d) => (
+                    <button
+                      key={d.id}
+                      type="button"
+                      onClick={() => pickDeal(d.id)}
+                      className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition hover:bg-black/[0.04]"
+                    >
+                      <span className="w-1 self-stretch rounded-full bg-brand" aria-hidden />
+                      <span className="flex min-w-0 flex-1 flex-col">
+                        <span className="truncate text-xs font-semibold text-ink">
+                          {d.hsNumber ?? "Draft deal"}
+                        </span>
+                        <span className="text-[10px] text-ink/45">Updated {timeAgo(d.updatedAt)}</span>
+                      </span>
+                      <StatusBadge status={d.status} />
+                      {d.id === selectedId && (
+                        <Check size={14} strokeWidth={2.5} className="shrink-0 text-brand" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+          {openCardButton}
           <Link
-            href={`/connect/deal/${data.card.id}`}
-            className="flex shrink-0 items-center gap-1 rounded-full bg-ink/5 px-3 py-1.5 text-[11px] font-medium text-ink/70 transition hover:bg-ink/10 hover:text-ink"
+            href={`/connect/deal/${selectedId}`}
+            className="ml-auto flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-medium text-ink/55 transition hover:bg-ink/5 hover:text-ink"
           >
-            Deal workspace
-            <ArrowUpRight size={13} strokeWidth={2} className="shrink-0" />
+            <Kanban size={14} strokeWidth={1.75} />
+            Workspace
+            <ArrowUpRight size={13} strokeWidth={2} />
           </Link>
         </div>
       )}
 
-      {/* no deal yet (chat only): the create entry. Born here, the card fills
-          this same bar on the next read - blank slot -> live card (3.5a). */}
-      {!data && variant === "chat" && (
-        <div className="flex items-center gap-3 border-b border-black/5 px-4 py-2">
+      {/* chat variant, no deal yet - a quiet invitation (the card is born here
+          on a human press → it fills this bar on the next read, the AI fence) */}
+      {variant === "chat" && deals.length === 0 && (
+        <div className="flex items-center gap-3 border-b border-black/5 px-4 py-2.5">
           <span className="shrink-0 text-[11px] text-ink/45">No deal yet</span>
-          <span className="flex flex-1 justify-center">
-            <button
-              type="button"
-              onClick={() => setCreating(true)}
-              className="flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-deep"
-            >
-              <Plus size={13} strokeWidth={2.5} />
-              Create a deal
-            </button>
-          </span>
+          <button
+            type="button"
+            onClick={() => setCreating(true)}
+            className="flex items-center gap-1.5 rounded-lg border border-dashed border-brand/45 px-3 py-1.5 text-xs font-semibold text-brand transition hover:border-brand hover:bg-brand-soft/30"
+          >
+            <Plus size={13} strokeWidth={2.5} />
+            Start a deal
+          </button>
+        </div>
+      )}
+
+      {/* workspace variant - the deal is fixed; chip + open only */}
+      {variant === "workspace" && hasDeal && (
+        <div className="flex items-center gap-3 border-b border-black/5 px-4 py-2.5">
+          <span className="shrink-0 text-[11px] text-ink/45">Deal:</span>
+          <DealChip status={chipStatus} selectable={false} />
+          {openCardButton}
         </div>
       )}
 
@@ -170,7 +306,7 @@ export function DealPin({
       </div>
 
       {/* the create form (3.5a) - a human-pressed commit; on success the new
-          card loads here and opens (the AI fence: only this button writes). */}
+          card is selected + opened (the AI fence: only this button writes). */}
       {creating && (
         <CreateDealForm
           relationshipId={relationshipId}
@@ -178,8 +314,9 @@ export function DealPin({
           onClose={() => setCreating(false)}
           onCreated={(cardId) => {
             setCreating(false);
-            void getDealCard(cardId).then((d) => {
-              setData(d);
+            void listRelationshipDeals(relationshipId).then((list) => {
+              setDeals(list);
+              setSelectedId(cardId);
               setOpen(true);
             });
           }}
@@ -196,6 +333,7 @@ export function DealPin({
             setEditing(false);
             void getDealCard(data.card.id).then((d) => {
               setData(d);
+              void listRelationshipDeals(relationshipId).then(setDeals);
               window.dispatchEvent(
                 new CustomEvent("hs:deal-updated", { detail: { dealCardId: data.card.id } }),
               );

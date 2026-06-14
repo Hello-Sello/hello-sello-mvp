@@ -5,16 +5,21 @@
 
 ---
 
-**Last updated:** 2026-06-12 15:14 CEST
+**Last updated:** 2026-06-14 20:33 CEST
 **Branch:** claude/ayush/work
-**Status:** online → wrapping. **Chapter 4 (Sella) COMPLETE - 4a/4b/4c/4d all built + verified live.** Detection → both-confirm birth → 3d seal runs end to end; Sella narrates card changes into every chat the card lives in. **→ dev this wrap-up. Next = 5A (UI).**
+**Status:** offline - session wrapped. **Waypoint 4.5 (deal birth/acceptance) DESIGNED + locked; 4.5.1 (engine) BUILT + HELD** (2 migrations + `proposeDeal` action; tsc/eslint clean; **NOT applied to any DB**, not behaviour-tested). Cloud apply held until 4.5.2. **Next = 4.5.2 (the Sella strip UI).**
 **Linear issue in progress:** none
-**Shared files locked:** none (Muskan offline, no locks - cross-branch read 15:10 CEST). This wrap-up edited shared docs: `DECISIONS.md` + `ARCHITECTURE-NOTES.md` (4b journey + 4d), `AGENTS.md` (checkpoint), `BUILD-PLAN.md` + `_workshop/build-plans/4-sella-build.md` (4a-4d done), `_workshop/pov/sella.md`. One shared-config touch: `tsconfig.json` (excludes `supabase/functions/**`).
-**PR open:** Sella chapter-4 completion (4b steps 3-5 + 4d) → dev (this wrap-up). The prior 4a/4c/4b-1-2 + 3.5 are already on dev.
+**Shared files locked:** none (Muskan offline, no locks - cross-branch read 20:30 CEST). This wrap-up edited shared docs: `DECISIONS.md` (4.5 design) + `AGENTS.md` (checkpoint) + `_workshop/build-plans/4.5-deal-birth-acceptance.md`.
+**PR open:** Waypoint 4.5 design + 4.5.1 engine → dev (this wrap-up).
 
 ---
 
 ## Notes for the other agent
+
+**2026-06-14 - Waypoint 4.5 (deal birth/acceptance) designed + 4.5.1 engine built (HELD). ⚠️ Nothing of yours touched; NOT applied to any DB.** Found + fixed the birth/acceptance tangle (blocker before 5A.4): the card was born too early and acceptance lived on the card. New model - manual-create AND Sella-detect both write a `deal_detected` **proposal** message; the card+workspace are born ONLY on both-accept (manual = sender pre-accepted). **Supersedes 3.5a D5** (workspace now born at accept, not at draft - no orphan). The card becomes pure display; the **Sella strip** (the `DealPin` bar) owns birth-accept + the change-note + the Seal gate.
+> - **4.5.1 (engine) BUILT + HELD:** 2 new deal/Sella-only migrations (`…120000_propose_deal_rpc` NEW + additive; `…120100_confirm_detected_deal_proposer_initiator` - a backward-compatible replace of `confirm_detected_deal`, detection falls back to old behaviour) + a `proposeDeal` server action. tsc/eslint clean; all migrations apply clean on a fresh DB. **NOT applied to any DB** and **not behaviour-tested** - the cloud `confirm_detected_deal` cron is unchanged. We apply + test live during 4.5.2.
+> - **Heads-up (separate): a fresh LOCAL DB won't build cleanly** - 5 pre-existing snags surfaced when I tried local-first testing: the demo-seed migrations (`seed_demo_world` etc.) need base seed data that loads AFTER migrations; a **duplicate migration version `20260610170000`** (`deal_workspace_role_ownership` + `shop_media_owner_select` share the timestamp - the second collides on `schema_migrations_pkey`); the `::` in the repo folder name breaks Docker volume mounts; the pgmq/cron trigger + the GoTrue seed. None touch the feature or the cloud, but a fresh local/CI stand-up fails today. Worth a small cleanup task. I reverted all my local workarounds - repo is clean.
+> - **Next = 4.5.2 (the Sella strip UI).** Connected-P2P only; C2C ticketing / not-connected inbox / shop path / global notifications all parked.
 
 **2026-06-12 (later, ~15:15 CEST) - Chapter 4 (Sella) COMPLETE: 4b steps 3-5 + 4d. ⚠️ Nothing of yours touched; the detection trigger is LIVE on the shared DB.** Sella is finished end to end.
 > - **4b/3-5:** Sella writes a `deal_detected` suggestion (P2P) + a private `sella_detection` memory table (dedup/idempotency/supersession; GDPR - verbatim evidence only on `forming|firm`, DB-checked). Auto-trigger LIVE: **pgmq + pg_cron (10s) + pg_net** on `p2p` person messages (3 extensions enabled on the shared DB). Both-confirm births a **Draft** via your `create_deal_draft` (new RPC `confirm_detected_deal`; confirmer-as-initiator, both equal owners).
