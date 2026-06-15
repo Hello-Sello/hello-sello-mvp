@@ -24,7 +24,16 @@
  */
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowUpRight, Check, ChevronDown, FileText, Kanban, Plus, Sparkles } from "lucide-react";
+import {
+  ArrowUpRight,
+  BadgeCheck,
+  Check,
+  ChevronDown,
+  FileText,
+  Kanban,
+  Plus,
+  Sparkles,
+} from "lucide-react";
 import { createClient } from "@/shared/db/client";
 import {
   getDealCard,
@@ -34,6 +43,7 @@ import {
 } from "../supabase/reads";
 import { confirmDeal, confirmDetectedDeal } from "../actions";
 import { formatMoney } from "../lib/derive";
+import { ConfirmBar } from "./ConfirmBar";
 import { DealCard } from "./DealCard";
 import { CreateDealForm } from "./CreateDealForm";
 import { EditDealForm } from "./EditDealForm";
@@ -153,6 +163,9 @@ export function DealPin({
   const [asksOpen, setAsksOpen] = useState(false); // the loud pill's popover
   const [acting, setActing] = useState(false); // accept/decline in flight
 
+  // 4.5.3 - the Seal gate (was on the card) now drops down from State C here
+  const [sealOpen, setSealOpen] = useState(false); // the seal popover
+
   // whether THIS strip can host a proposal: chat variant over a real p2p thread
   const canPropose = variant === "chat" && !!threadId;
 
@@ -165,6 +178,7 @@ export function DealPin({
       await confirmDeal({ dealCardId: data.card.id, version: data.card.version, decision });
       const fresh = await getDealCard(data.card.id);
       setData(fresh);
+      setSealOpen(false); // the decision is in - drop the popover; the trigger reflects the new state
       void listRelationshipDeals(relationshipId).then(setDeals);
       // tell sibling views (the workspace header's lifecycle pill) to re-read.
       window.dispatchEvent(
@@ -344,6 +358,26 @@ export function DealPin({
   const mustAct = showProposal && proposal!.myVote == null; // my turn to accept/decline
   const waiting = showProposal && proposal!.myVote === "accept" && proposal!.otherVote !== "accept";
 
+  // 4.5.3 - the Seal gate, derived from the loaded card (was computed in CardFront).
+  // The two-seat ConfirmBar now lives in the strip; these decide how the trigger reads.
+  const viewerSeat = data?.confirmations.find((s) => s.side === data.viewerSide) ?? null;
+  const otherSeat = data?.confirmations.find((s) => s.side !== data?.viewerSide) ?? null;
+  const bothSealed =
+    !!data &&
+    (data.card.status === "confirmed" ||
+      (data.confirmations.length === 2 &&
+        data.confirmations.every((s) => s.status === "confirmed")));
+  // sealable while the card is still open business (draft / amended) and not yet sealed
+  const sealable =
+    !!data && !bothSealed && (data.card.status === "draft" || data.card.status === "amended");
+  const awaitingOther = viewerSeat?.status === "confirmed" && otherSeat?.status !== "confirmed";
+  // withdraw is the initiator's escape hatch, only before the other side confirms
+  const canWithdraw =
+    !!data &&
+    !!viewerSeat &&
+    viewerSeat.companyId === data.card.initiating_company_id &&
+    otherSeat?.status !== "confirmed";
+
   const openCardButton = (
     <button
       type="button"
@@ -353,6 +387,72 @@ export function DealPin({
       {open ? "Close card" : "Open card"}
     </button>
   );
+
+  // 4.5.3 - the Seal control: a gold "Sealed" chip once both sides are in, else a
+  // trigger that drops the ConfirmBar in a popover (same glass shell as State B's
+  // "Review"). Reused in State C + the workspace variant so neither loses sealing.
+  const sealControl =
+    !data || (!bothSealed && !sealable) ? null : bothSealed ? (
+      <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1.5 text-[11px] font-semibold text-amber-700 ring-1 ring-amber-300">
+        <BadgeCheck size={13} strokeWidth={2.5} />
+        Sealed
+      </span>
+    ) : (
+      <div className="relative shrink-0">
+        <button
+          type="button"
+          onClick={() => setSealOpen((o) => !o)}
+          aria-haspopup="dialog"
+          aria-expanded={sealOpen}
+          className={
+            awaitingOther
+              ? "inline-flex items-center gap-1.5 rounded-full bg-white/70 px-3 py-1.5 text-[11px] font-medium text-ink/55 ring-1 ring-black/5 transition hover:bg-white"
+              : "inline-flex items-center gap-1.5 rounded-full bg-brand px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-brand-deep"
+          }
+        >
+          {awaitingOther ? (
+            <>
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand/60" />
+              Awaiting {counterpartyName ?? "the other side"}
+            </>
+          ) : (
+            <>
+              <Sparkles size={13} strokeWidth={2} />
+              Seal
+            </>
+          )}
+        </button>
+
+        {sealOpen && (
+          <>
+            <div className="fixed inset-0 z-10" onClick={() => setSealOpen(false)} />
+            <div className="glass-strong absolute right-0 top-full z-20 mt-1.5 w-80 overflow-hidden rounded-2xl">
+              <div className="flex items-stretch">
+                <span className="w-1 shrink-0 bg-brand" aria-hidden />
+                <div className="min-w-0 flex-1 p-3">
+                  <div className="mb-0.5 flex items-center gap-1.5 text-[11px] font-semibold text-brand-deep">
+                    <Sparkles size={12} strokeWidth={2} />
+                    Seal the deal
+                  </div>
+                  <p className="mb-2 text-[11px] text-ink/50">
+                    {counterpartyName ? `Deal with ${counterpartyName}` : "Confirm the final terms"}
+                  </p>
+                  <ConfirmBar
+                    seats={data.confirmations}
+                    viewerSide={data.viewerSide}
+                    busy={busy}
+                    onConfirm={() => void runDecision("confirm")}
+                    onDecline={() => void runDecision("decline")}
+                    onWithdraw={() => void runDecision("withdraw")}
+                    canWithdraw={canWithdraw}
+                  />
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    );
 
   // the strip's row shell - same border + padding across all three states
   const rowCls = "flex items-center gap-3 border-b border-black/5 px-4 py-2.5";
@@ -528,6 +628,7 @@ export function DealPin({
             )}
           </div>
           {openCardButton}
+          {sealControl}
           <SellaMark thinking={busy} />
           <Link
             href={`/connect/deal/${selectedId}`}
@@ -558,12 +659,13 @@ export function DealPin({
         </div>
       )}
 
-      {/* workspace variant - the deal is fixed; chip + open only */}
+      {/* workspace variant - the deal is fixed; chip + open + seal */}
       {variant === "workspace" && hasDeal && (
         <div className={rowCls}>
           <span className="shrink-0 text-[11px] text-ink/45">Deal:</span>
           <DealChip status={chipStatus} selectable={false} />
           {openCardButton}
+          {sealControl}
         </div>
       )}
 
@@ -573,16 +675,7 @@ export function DealPin({
         {data && open && (
           <div className="pointer-events-none absolute inset-0 z-10 flex justify-end p-4">
             <div className="pointer-events-auto self-start">
-              <DealCard
-                data={data}
-                confirm={{
-                  busy,
-                  onConfirm: () => void runDecision("confirm"),
-                  onDecline: () => void runDecision("decline"),
-                  onWithdraw: () => void runDecision("withdraw"),
-                }}
-                onEdit={() => setEditing(true)}
-              />
+              <DealCard data={data} onEdit={() => setEditing(true)} />
             </div>
           </div>
         )}

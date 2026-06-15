@@ -1,6 +1,11 @@
 /**
  * Deal card - FRONT (3a, Phase 3): the deal facts.
  *
+ * 4.5.3: the card is PURE DISPLAY. The two-sided Seal gate moved to the Sella
+ * strip (DealPin State C); the Edit control moved to the card's top-right corner
+ * (DealCard). This face now only shows terms, parties, values, products, and the
+ * golden Confirmed state - it takes no handlers and triggers no action.
+ *
  * Ported from prototypes/dealcard-prototype (locked 2026-06-06) into the real
  * design system (brand / brand-soft / ink, lucide). Layout kept: HS-number band
  * → doc-term line → two logo boxes → value rows → my private field → products.
@@ -11,19 +16,10 @@
  *   - the private field is whatever RLS returned for MY side (seller Margin /
  *     buyer placeholder) - the other side's value never arrives.
  */
-import { Building2, Lock, BadgeCheck, Pencil } from "lucide-react";
+import { Building2, Lock, BadgeCheck } from "lucide-react";
 import { docTerm, computeGross, formatMoney } from "../lib/derive";
 import { ProductList } from "./ProductList";
-import { ConfirmBar } from "./ConfirmBar";
 import type { DealCardView, PartyFieldView } from "../types";
-
-/** Confirm handlers passed down from DealPin (which owns the card data + re-read). */
-export interface CardConfirmHandlers {
-  busy: boolean;
-  onConfirm: () => void;
-  onDecline: () => void;
-  onWithdraw: () => void;
-}
 
 function dateLabel(iso: string | null): string {
   if (!iso) return "—";
@@ -75,16 +71,7 @@ function LogoBox({ role, name, isYou }: { role: string; name: string; isYou: boo
   );
 }
 
-export function CardFront({
-  data,
-  confirm,
-  onEdit,
-}: {
-  data: DealCardView;
-  confirm?: CardConfirmHandlers;
-  /** open the edit form (3.5b); omitted in read-only contexts */
-  onEdit?: () => void;
-}) {
+export function CardFront({ data }: { data: DealCardView }) {
   const { card, sellerName, buyerName, lineItems, partyFields, viewerSide, confirmations } = data;
   const term = docTerm(card.deal_type);
   const net = card.value_net ?? 0;
@@ -94,15 +81,6 @@ export function CardFront({
   const confirmed =
     card.status === "confirmed" ||
     (confirmations.length === 2 && confirmations.every((s) => s.status === "confirmed"));
-  const withdrawn = card.status === "withdrawn";
-
-  // withdraw is the initiator's escape hatch, only before the other side confirms
-  const viewerSeat = confirmations.find((s) => s.side === viewerSide) ?? null;
-  const otherSeat = confirmations.find((s) => s.side !== viewerSide) ?? null;
-  const canWithdraw =
-    !!viewerSeat &&
-    viewerSeat.companyId === card.initiating_company_id &&
-    otherSeat?.status !== "confirmed";
 
   return (
     <div
@@ -121,26 +99,6 @@ export function CardFront({
         {confirmed && <BadgeCheck size={15} strokeWidth={2.5} />}
         {hsNumber}
       </div>
-
-      {/* the confirm gate (3d) - the TOP action banner, right under the title */}
-      {confirm &&
-        (withdrawn ? (
-          <div className="mt-1.5 rounded-xl bg-ink/5 py-2 text-center text-xs font-medium text-ink/55">
-            Draft withdrawn
-          </div>
-        ) : (
-          <div className="mt-1.5">
-            <ConfirmBar
-              seats={confirmations}
-              viewerSide={viewerSide}
-              busy={confirm.busy}
-              onConfirm={confirm.onConfirm}
-              onDecline={confirm.onDecline}
-              onWithdraw={confirm.onWithdraw}
-              canWithdraw={canWithdraw}
-            />
-          </div>
-        ))}
 
       {/* document term + date */}
       <div className="mt-1.5 rounded-xl bg-white py-1.5 text-center text-xs text-ink/70">
@@ -172,18 +130,6 @@ export function CardFront({
       <div className="mt-1.5">
         <ProductList items={lineItems} />
       </div>
-
-      {/* edit (3.5b) - any member can edit; a change makes a new version */}
-      {onEdit && (
-        <button
-          type="button"
-          onClick={onEdit}
-          className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-xl bg-white py-1.5 text-xs font-medium text-ink/60 ring-1 ring-black/5 transition hover:text-brand hover:ring-brand/30"
-        >
-          <Pencil size={12} strokeWidth={2} />
-          Edit deal
-        </button>
-      )}
     </div>
   );
 }
