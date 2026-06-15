@@ -26,6 +26,7 @@ export type ShopProduct = {
   country_of_origin: string | null;
   region: string | null;
   images: ProductImage[];
+  profile_visible: boolean;
   price_public: boolean;
   price_per_gram: number | null;
   bundle_threshold_grams: number | null;
@@ -98,7 +99,7 @@ export async function getMyShop(): Promise<Shop | null> {
   const { data: rows } = await supabase
     .from("product")
     .select(
-      "id, name, cultivar, thc_percent, cbd_percent, pack_size_grams, unit_code, local_code_pzn, dominance_code, country_of_origin, region, price_public, product_image(id, image_path, position), pricelist_item(price_per_gram, bundle_threshold_grams, bundle_price_per_gram)",
+      "id, name, cultivar, thc_percent, cbd_percent, pack_size_grams, unit_code, local_code_pzn, dominance_code, country_of_origin, region, profile_visible, price_public, product_image(id, image_path, position), pricelist_item(price_per_gram, bundle_threshold_grams, bundle_price_per_gram)",
     )
     .eq("company_id", companyId)
     .is("deleted_at", null)
@@ -123,6 +124,7 @@ export async function getMyShop(): Promise<Shop | null> {
       country_of_origin: r.country_of_origin,
       region: r.region,
       images,
+      profile_visible: r.profile_visible,
       price_public: r.price_public,
       price_per_gram: price?.price_per_gram ?? null,
       bundle_threshold_grams: price?.bundle_threshold_grams ?? null,

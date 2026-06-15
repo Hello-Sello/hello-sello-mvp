@@ -5,18 +5,26 @@
 
 ---
 
-**Last updated:** 2026-06-12 (Sella architecture proposal pushed to dev for 4.0 shared review) CEST
+**Last updated:** 2026-06-14 (Discover→Connect loop slices 1–3 — committed to my branch) CEST
 **Branch:** claude/muskan/work
-**Status:** offline — session 22 wrapped. **Sella architecture proposal on dev for 4.0 shared review** ([#99](https://github.com/HelloSello/hello-sello-mvp/pull/99); `docs/PRD/muskan-proposed-sella-architecture.md`, status: proposed) — awaiting Ayush's half + the joint compare. **Locks held: none.** *(Prior: storage uploads hardening merged to dev #98, held from main.)*
+**Status:** offline — session 23 wrapped. **Discover→Connect→Chat loop (slices 1–3) built + verified live, committed to `claude/muskan/work`** (NOT on dev/main). The real front door: directory → profile → connect request → accept → chat. **Locks held: none.** *(Prior: Sella proposal on dev #99 for 4.0 review; storage hardening on dev #98, held from main.)*
 **Linear issue in progress:** none
-**Shared files locked:** none (storage work = my catalog/profile files only — nothing of yours)
-**PR open:** Sella proposal → dev (this push, for 4.0 review — **do not merge**). Storage uploads [#98](https://github.com/HelloSello/hello-sello-mvp/pull/98) → dev **merged**; **dev→main HELD** (would also promote your offline 3c/3d — your call when prod-ready).
+**Shared files locked:** none (Discover = my `src/app/discover/` + 2 new RPCs; shared-doc edits are append-only)
+**PR open:** none new (Discover loop not yet PR'd to dev). Sella proposal → dev [#99](https://github.com/HelloSello/hello-sello-mvp/pull/99) (**do not merge**). Storage uploads [#98](https://github.com/HelloSello/hello-sello-mvp/pull/98) → dev **merged**; **dev→main HELD**.
 **Prev PR:** Discover [#95](https://github.com/HelloSello/hello-sello-mvp/pull/95)→dev / [#96](https://github.com/HelloSello/hello-sello-mvp/pull/96)→main **merged**; Profile & QR [#88](https://github.com/HelloSello/hello-sello-mvp/pull/88)→dev / [#89](https://github.com/HelloSello/hello-sello-mvp/pull/89)→main **merged**.
 **Prev PR:** Present storefront [#75](https://github.com/HelloSello/hello-sello-mvp/pull/75) **merged** · 1b auth [#63](https://github.com/HelloSello/hello-sello-mvp/pull/63) **merged**.
 
 ---
 
 ## Notes for the other agent
+
+**2026-06-14 (Discover→Connect loop slices 1–3 — built + verified live; committed to my branch, NOT dev). The SEND side of Connect — feeds your inbox, nothing of yours touched.** Built the Discover "front door" that creates connection requests; your accept/relationship/chat machinery handles the rest.
+> - **The seam:** a `sendConnectRequest()` server action (`src/app/discover/actions.ts`) INSERTs a `pending_inbox_item` (`connect` / `connect_message`, RLS-gated to the sender's company, dup-guarded). It lands in your Connect inbox → Accept → relationship + C2C/P2P chat. **I only insert; you read/accept** — clean boundary.
+> - **2 new SECURITY DEFINER RPCs (my Discover domain, additive):** `list_discoverable_companies()` (directory) + `get_discoverable_company(id)` (profile) — safe cross-tenant projection of verified companies + per-viewer `connection_state`. **Filed as migrations** `20260614120000` / `20260614130000`. Not in `database.types.ts` (localized cast, your pattern — appear on your next regen). New index `idx_inbox_pair_status` on `pending_inbox_item`.
+> - **Shared docs touched (append-only, low conflict):** `DECISIONS.md` + `DISCOVER.md` (Discover soft-openness model, my surface) + `ARCHITECTURE-NOTES.md` (only a path-string in a rename).
+> - **Housekeeping:** my `docs/build/` → **`docs/muskan-build/`**. New build plan `docs/muskan-build/discover-connect-loop.md`.
+> - **⚠️ Migration drift flag (team):** `get_public_profile` + `profile_qr_foundation` (my session-19 work) are live on the shared DB but their `.sql` was never committed (applied via MCP). Heads-up on your next DB-from-files rebuild; backfill is on my list. **My new Discover RPCs ARE filed.**
+> - **Model note:** Discover is now a **soft, company-curated profile** (L0→L4), not closed-by-default (that was demo-only). **Track 2** (FLOWZ shadow profiles + outbound) is documented but the outbound email is legally **RED** (UWG §7) — deferred behind legal sign-off.
 
 **2026-06-12 (Sella architecture proposal — pushed to dev for 4.0 SHARED review; my half of 4.0).** Full doc: `docs/PRD/muskan-proposed-sella-architecture.md` (status: proposed). It's the `detect-deal` job + researched refinements **built on top of** what's already locked + verified — NOT a rewrite. For your compare:
 > - **Keeps:** the verified `bedrock.ts` (plain-fetch + bearer, no SDK), the `_shared` placement, suggest-only structural, Bedrock-EU `eu.` profiles, your dedup-row-as-state. A KEEP / ADD / REFINE table maps it line-by-line.

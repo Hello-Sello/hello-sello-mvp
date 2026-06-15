@@ -2649,6 +2649,7 @@ export type Database = {
           pack_size_grams: number | null
           packaging_material: string | null
           price_public: boolean
+          profile_visible: boolean
           region: string | null
           resealable: boolean | null
           rrp_per_gram: number | null
@@ -2684,6 +2685,7 @@ export type Database = {
           pack_size_grams?: number | null
           packaging_material?: string | null
           price_public?: boolean
+          profile_visible?: boolean
           region?: string | null
           resealable?: boolean | null
           rrp_per_gram?: number | null
@@ -2719,6 +2721,7 @@ export type Database = {
           pack_size_grams?: number | null
           packaging_material?: string | null
           price_public?: boolean
+          profile_visible?: boolean
           region?: string | null
           resealable?: boolean | null
           rrp_per_gram?: number | null
