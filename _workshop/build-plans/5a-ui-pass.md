@@ -216,6 +216,13 @@ chat; upload items are visibly disabled; Expand + chips still work; Enter sends,
 > NOT redesign the card layout until 4.5 is settled. Full capture:
 > `_workshop/notes/2026-06-12-waypoint-4.5-deal-acceptance-rethink.md`.
 
+> **✅ UPDATE 2026-06-15 - partly UNBLOCKED (see [`6-pending-map.md`](6-pending-map.md)).** 4.5.3 removed the
+> card's `ConfirmBar` and moved the Seal into the **strip** (the card is now pure display; the Edit control sits
+> in the card's top-right corner). Acceptance is **not** a separate notifications backend - it lives in the
+> strip - so the "move acceptance into notifications" direction below is **superseded**. What remains in 5A.4 is
+> the pure **visual** card redesign (open mode + layout) plus the new **Note** render (the per-company optional
+> note on the card face; 6-pending-map **T5**). The deal-CHANGE flow itself is tracked in `6-pending-map.md`.
+
 **Status:** ⬜ (blocked - see Waypoint 4.5 above)
 **Goal:** the card's biggest visual rework - a better open mode + a layout where the actions (Edit, confirm)
 are easy to find. This phase has the most OPEN decisions, which is why it is last.
@@ -302,6 +309,15 @@ both-accept births the Draft card live; version history is reachable.
   (the "why it changed" summary) into BOTH the deal chat and the P2P chat, linked via
   `metadata.deal_card_id`. The chat needs a renderer for this message type - a quiet, card-linked notice (not
   a normal bubble). Lives in `MessageBubble` / a small dedicated component.
+
+**Moved in from 4.5 (2026-06-15) - see [`6-pending-map.md`](6-pending-map.md):**
+- **T6 - Sella detects changes to an existing card.** A new Sella capability: read the current card, diff it
+  against the chat, and propose a **change** (not a new birth) - the Case-1 door of the deal-change flow. Needs
+  a `deal_card`-aware detection pass + a "proposed change" message + a confirm-change path. Lands here because
+  Sella is always the last section; build it with this Sella pass.
+- **Routing note (4.5 D18 / 6-pending-map T3):** the `deal_card_updated` notice above is now posted to the
+  **deal chat on accept** and the **p2p chat on decline** (not "both") - the posting logic is 4.5.5; this
+  renderer just renders whatever message arrives.
 
 **Done check:** the panel looks final; the AI badge shows on every suggestion (visible + machine-readable); a
 card edit produces a `deal_card_updated` notice in the chat that links to the card; stubs are clearly marked.
