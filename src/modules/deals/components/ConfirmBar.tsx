@@ -24,9 +24,6 @@ export interface ConfirmBarProps {
   busy: boolean;
   onConfirm: () => void;
   onDecline: () => void;
-  onWithdraw: () => void;
-  /** viewer is the initiator AND the other side has not confirmed */
-  canWithdraw: boolean;
 }
 
 export function ConfirmBar({
@@ -35,8 +32,6 @@ export function ConfirmBar({
   busy,
   onConfirm,
   onDecline,
-  onWithdraw,
-  canWithdraw,
 }: ConfirmBarProps) {
   const bothConfirmed = seats.length === 2 && seats.every((s) => s.status === "confirmed");
   const viewerSeat = viewerSide ? seats.find((s) => s.side === viewerSide) ?? null : null;
@@ -75,20 +70,10 @@ export function ConfirmBar({
       {viewerSeat && !bothConfirmed && (
         <div className="mt-2">
           {viewerSeat.status === "confirmed" ? (
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
               <span className="text-[11px] text-ink/55">
                 Waiting for {otherSeat?.companyName ?? "the other side"}…
               </span>
-              {canWithdraw && (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={onWithdraw}
-                  className="rounded-full px-2.5 py-1 text-[11px] font-medium text-ink/55 hover:bg-ink/5 disabled:opacity-50"
-                >
-                  Withdraw
-                </button>
-              )}
             </div>
           ) : (
             <div className="flex gap-2">

@@ -371,12 +371,6 @@ export function DealPin({
   const sealable =
     !!data && !bothSealed && (data.card.status === "draft" || data.card.status === "amended");
   const awaitingOther = viewerSeat?.status === "confirmed" && otherSeat?.status !== "confirmed";
-  // withdraw is the initiator's escape hatch, only before the other side confirms
-  const canWithdraw =
-    !!data &&
-    !!viewerSeat &&
-    viewerSeat.companyId === data.card.initiating_company_id &&
-    otherSeat?.status !== "confirmed";
 
   const openCardButton = (
     <button
@@ -443,8 +437,6 @@ export function DealPin({
                     busy={busy}
                     onConfirm={() => void runDecision("confirm")}
                     onDecline={() => void runDecision("decline")}
-                    onWithdraw={() => void runDecision("withdraw")}
-                    canWithdraw={canWithdraw}
                   />
                 </div>
               </div>
