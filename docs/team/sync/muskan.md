@@ -5,18 +5,24 @@
 
 ---
 
-**Last updated:** 2026-06-14 (Discover→Connect loop slices 1–3 — committed to my branch) CEST
-**Branch:** claude/muskan/work
-**Status:** offline — session 23 wrapped. **Discover→Connect→Chat loop (slices 1–3) built + verified live, committed to `claude/muskan/work`** (NOT on dev/main). The real front door: directory → profile → connect request → accept → chat. **Locks held: none.** *(Prior: Sella proposal on dev #99 for 4.0 review; storage hardening on dev #98, held from main.)*
+**Last updated:** 2026-06-15 (Discover→Connect loop slices 4–6 — merged to dev #104) CEST
+**Branch:** claude/muskan/work (synced with dev)
+**Status:** offline — session 24 wrapped. **Discover→Connect loop COMPLETE (slices 1–6): catalogue + pricing layered on the profile; PR [#104](https://github.com/HelloSello/hello-sello-mvp/pull/104) → dev MERGED.** End to end: directory → profile → catalogue (L0/L1/L2) → Connect / Request-pricing → inbox → accept → chat. **Locks held: none.** *(Unconnected Request-pricing live walk = Muskan testing tomorrow.)*
 **Linear issue in progress:** none
-**Shared files locked:** none (Discover = my `src/app/discover/` + 2 new RPCs; shared-doc edits are append-only)
-**PR open:** none new (Discover loop not yet PR'd to dev). Sella proposal → dev [#99](https://github.com/HelloSello/hello-sello-mvp/pull/99) (**do not merge**). Storage uploads [#98](https://github.com/HelloSello/hello-sello-mvp/pull/98) → dev **merged**; **dev→main HELD**.
-**Prev PR:** Discover [#95](https://github.com/HelloSello/hello-sello-mvp/pull/95)→dev / [#96](https://github.com/HelloSello/hello-sello-mvp/pull/96)→main **merged**; Profile & QR [#88](https://github.com/HelloSello/hello-sello-mvp/pull/88)→dev / [#89](https://github.com/HelloSello/hello-sello-mvp/pull/89)→main **merged**.
-**Prev PR:** Present storefront [#75](https://github.com/HelloSello/hello-sello-mvp/pull/75) **merged** · 1b auth [#63](https://github.com/HelloSello/hello-sello-mvp/pull/63) **merged**.
+**Shared files locked:** none
+**PR open:** none. **MERGED:** Discover loop [#104](https://github.com/HelloSello/hello-sello-mvp/pull/104) → dev (slices 1–6). *(Prior: Sella proposal #99 merged to dev by Ayush; storage #98 on dev, held from main.)*
+**Prev PR:** Discover directory [#95](https://github.com/HelloSello/hello-sello-mvp/pull/95)→dev / [#96](https://github.com/HelloSello/hello-sello-mvp/pull/96)→main · Profile & QR [#88](https://github.com/HelloSello/hello-sello-mvp/pull/88)/[#89](https://github.com/HelloSello/hello-sello-mvp/pull/89) — all **merged**.
 
 ---
 
 ## Notes for the other agent
+
+**2026-06-15 (Discover→Connect loop slices 4–6 — catalogue + pricing; MERGED to dev [#104](https://github.com/HelloSello/hello-sello-mvp/pull/104)). ⚠️ I touched shared `product` RLS + `database.types.ts`, and my Present `ShopView` — please read.** Layered the catalogue + Request-pricing onto the Discover profile (the soft-openness L0/L1/L2 model).
+> - **⚠️ `product` RLS — the "dial floor":** all THREE public-read policies now gate on `profile_visible = true` — `product_public_select`, `product_image_public_select`, and a new explicit `pricelist_item_public_select` (prices also need `price_public`). SELECT-only, OR'd on top of your `*_all` write policies — **write isolation untouched**, net-narrowing. **Your `getOwnCatalog` (deal-picker) now correctly returns own-company products only** — it assumed RLS already did that, but the old broad policy was leaking other companies' products in; with `profile_visible` defaulting false it's now exactly own-company. **Heads-up:** once sellers flip products visible, add an explicit `.eq('company_id', current)` there (pre-existing latent bug, flagged).
+> - **New migrations (my Discover/Present domain):** `product_profile_visible_dial` (new `product.profile_visible` col + partial index), `get_discoverable_shop` (SECURITY DEFINER catalogue projection — gated prices, ordered images, **never `cogs`**), `discoverable_company_pricing_state` (recreated `get_discoverable_company`: added `pricing_requested`, scoped `connection_state` to connect-types so a pricing request no longer flips the Connect button to "Request sent"), `pricelist_item_public_select_profile_visible`, + a demo seed.
+> - **⚠️ `database.types.ts`:** surgically added `product.profile_visible` (Row/Insert/Update) — NOT a full regen (your pattern). Heads-up on your next rebase. **⚠️ `src/app/present/ShopView.tsx`** (my Present surface): added a per-product **On/Off-profile** toggle beside the price toggle.
+> - **Migration filename note:** my slice-1 `20260614120000_list_discoverable_companies.sql` shares the `20260614120000` prefix with your `20260614120000_propose_deal_rpc.sql`. DISTINCT in live `schema_migrations` (MCP auto-versions) + different filenames (no git conflict) — but it's a fresh-DB/CLI hygiene smell (joins the cleanup pile).
+> - **SWE review:** a flagged "price leak" on `pricelist_item` was verified a **FALSE POSITIVE** (transitive RLS already closed it); applied the explicit policy anyway for defense-in-depth. **Follow-ups F1–F13** in `docs/muskan-build/discover-connect-loop.md` (incl. the seed-in-migration question + the pre-existing `ShopView` carousel lint).
 
 **2026-06-14 (Discover→Connect loop slices 1–3 — built + verified live; committed to my branch, NOT dev). The SEND side of Connect — feeds your inbox, nothing of yours touched.** Built the Discover "front door" that creates connection requests; your accept/relationship/chat machinery handles the rest.
 > - **The seam:** a `sendConnectRequest()` server action (`src/app/discover/actions.ts`) INSERTs a `pending_inbox_item` (`connect` / `connect_message`, RLS-gated to the sender's company, dup-guarded). It lands in your Connect inbox → Accept → relationship + C2C/P2P chat. **I only insert; you read/accept** — clean boundary.
