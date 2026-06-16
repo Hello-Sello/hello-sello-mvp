@@ -5,17 +5,19 @@
 
 ---
 
-**Last updated:** 2026-06-16 (test harness setup — slice 0 of the go-to-market push) CEST
-**Branch:** claude/muskan/work (synced with dev)
-**Status:** active — **test harness DONE** (Playwright E2E; `npm test` green — login smoke). Slice 0 of the launch push. **Locks released.** Next: GSD map-codebase (separate session) → auth hardening + admin verification.
+**Last updated:** 2026-06-16 (GSD planning setup — onboarding-ready milestone) CEST
+**Branch:** claude/muskan/work (synced with dev #106)
+**Status:** offline — **GSD planning DONE.** Mapped codebase + product docs, synced branch with dev #106, ran new-project → 8-phase onboarding-ready roadmap (all in gitignored `.planning/`, not shared). Locks none. Next: `plan-phase 1` (F3 migration backfill — touches shared `product`/`avatars`, will sync first).
 **Linear issue in progress:** none
-**Shared files locked:** none (test-harness committed)
+**Shared files locked:** none
 **PR open:** [#105](https://github.com/HelloSello/hello-sello-mvp/pull/105) → dev (test harness slice 0 + session-24 docs wrap). **MERGED:** Discover loop [#104](https://github.com/HelloSello/hello-sello-mvp/pull/104) → dev (slices 1–6). *(Prior: Sella proposal #99 merged to dev by Ayush; storage #98 on dev, held from main.)*
 **Prev PR:** Discover directory [#95](https://github.com/HelloSello/hello-sello-mvp/pull/95)→dev / [#96](https://github.com/HelloSello/hello-sello-mvp/pull/96)→main · Profile & QR [#88](https://github.com/HelloSello/hello-sello-mvp/pull/88)/[#89](https://github.com/HelloSello/hello-sello-mvp/pull/89) — all **merged**.
 
 ---
 
 ## Notes for the other agent
+
+**2026-06-16 (later) — GSD planning setup for my lane. Nothing of yours touched; no shared schema/code changed (only a DECISIONS.md append + this sync).** Synced my branch with dev #106 (your 4.5.2/4.5.3 Sella strip + clean-from-files DB rebuild — thanks; the dup-timestamp + clean-rebuild fixes are in). Set up GSD for my lane entirely in **gitignored `.planning/`** (per-engineer, not shared): mapped the codebase + product docs, ran new-project → **onboarding-ready milestone** (Auth·Onboarding·Admin-verify·Discover·Present), **8-phase roadmap**. **Locked (DECISIONS.md):** local-first DB hygiene (build + `db reset` on local first, then cloud — no MCP-to-cloud without a committed migration); **Buy (DEV-77) + Sell→Allocate (DEV-76) deferred** to a follow-up milestone though Marcel assigned them; Marcel's Discover/Present/Home issues (DEV-78/81/80/79/70/69/68) folded into a UX phase. **Next: plan-phase 1 = F3 migration backfill** (`get_public_profile` + `profile_qr_foundation` still missing from files; touches shared `product`/`avatars`, sync ritual first).
 
 **2026-06-16 — Setting up the test harness (Playwright E2E) — slice 0 of the go-to-market push. ⚠️ Locking `package.json` + `.gitignore` (both append-only, low conflict).** Adding `@playwright/test` (dev dep) + a `test` script + an `e2e/` folder with one smoke test. No app code, no schema, no RLS. Foundation for TDD on the launch work (auth hardening + admin verification + Discover/Present refinement). **DONE — committed, `npm test` green (login smoke), locks released.** Also gitignored `.planning/` (GSD personal scaffolding; per the two-systems split — Linear = work queue, GSD = product knowledge, no overlap).
 
