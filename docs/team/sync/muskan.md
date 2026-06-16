@@ -5,17 +5,19 @@
 
 ---
 
-**Last updated:** 2026-06-16 (executing Phase 1 — F3 migration backfill) CEST
+**Last updated:** 2026-06-16 (Phase 1 COMPLETE — F3 backfill done) CEST
 **Branch:** claude/muskan/work (synced with dev #106)
-**Status:** active — **executing Phase 1 (Clean-Rebuild Foundation).** Committing my 2 drifted migrations as files (`profile_qr_foundation` + `get_public_profile` — session-19 work, live-but-uncommitted) so a clean from-files `supabase db reset` brings up onboarding + `/c/[handle]`. Local-first.
-**Linear issue in progress:** none (GSD Phase 1; reqs DATA-01/02/03)
-**Shared files locked:** `supabase/migrations/` (ADDING 2 new files — `20260615120000_profile_qr_foundation` + `20260615123000_get_public_profile`; no edits to existing migrations) + the **`avatars`** storage bucket/policy. NOT touching `seed.sql`, `product`, or `database.types.ts`.
+**Status:** active — **Phase 1 (Clean-Rebuild Foundation) COMPLETE.** Committed both drifted migrations as files (`profile_qr_foundation` + `get_public_profile`); a clean from-files `supabase db reset` now stands up onboarding + `/c/[handle]` — verified: SQL smoke test + Playwright e2e green. Lock released. Local-first. Next: Phase 2 (cross-tenant lockdown, SEC-01/02/03).
+**Linear issue in progress:** none (GSD Phase 1; reqs DATA-01/02/03 — done)
+**Shared files locked:** none — Phase 1 migrations committed; lock on `supabase/migrations/` + `avatars` released.
 **PR open:** [#105](https://github.com/HelloSello/hello-sello-mvp/pull/105) → dev (test harness slice 0 + session-24 docs wrap). **MERGED:** Discover loop [#104](https://github.com/HelloSello/hello-sello-mvp/pull/104) → dev (slices 1–6). *(Prior: Sella proposal #99 merged to dev by Ayush; storage #98 on dev, held from main.)*
 **Prev PR:** Discover directory [#95](https://github.com/HelloSello/hello-sello-mvp/pull/95)→dev / [#96](https://github.com/HelloSello/hello-sello-mvp/pull/96)→main · Profile & QR [#88](https://github.com/HelloSello/hello-sello-mvp/pull/88)/[#89](https://github.com/HelloSello/hello-sello-mvp/pull/89) — all **merged**.
 
 ---
 
 ## Notes for the other agent
+
+**2026-06-16 (Phase 1 COMPLETE) — F3 drift closed; lock released. ⚠️ Two NEW migrations added (no edits to yours); nothing else of yours touched.** Committed `20260615120000_profile_qr_foundation` (person profile cols + `public_handle` UNIQUE index + public `avatars` bucket with own-folder write RLS / public read) and `20260615123000_get_public_profile` (the curated SECURITY DEFINER anon RPC — body dumped verbatim from cloud, 13 cols, `revoke all from public` + `grant execute to anon, authenticated`). A clean local `supabase db reset` now applies the whole chain + seed green and `/c/<handle>` renders 200 (Playwright `e2e/public-profile.spec.ts` + a new `supabase/tests/profile_foundation_test.sql` smoke test, run via `run_profile_foundation_test.sh`). **repo == local == cloud** for these objects. Did NOT touch `seed.sql` / `product` / `database.types.ts` / your `20260612130000`. **Cloud-apply heads-up:** the `avatars` bucket + policies already exist on cloud (MCP, session-19) — when these migrations land on cloud, reconcile any old MCP-named avatars policies (mine are named `avatars_*`).
 
 **2026-06-16 (executing) — Phase 1 = F3 backfill of MY own drifted objects. ⚠️ Locked `supabase/migrations/` (2 NEW files only, no edits to yours) + the `avatars` bucket/policy. Nothing of yours touched; not editing `seed.sql` / `product` / `database.types.ts`.** Committing `profile_qr_foundation` + `get_public_profile` (live-but-uncommitted since session-19) so a clean from-files `db reset` stands up onboarding + the public profile page. Your clean-rebuild + dup-timestamp fixes confirm the untouched chain resets green — thanks; my e2e drives the handle through the app so I don't touch your `seed.sql`. I dumped the live `get_public_profile` body from cloud to commit it verbatim (13 cols incl. `company_logo_path`; grants anon + authenticated).
 
