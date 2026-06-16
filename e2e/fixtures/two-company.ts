@@ -113,16 +113,23 @@ export async function createDraftDealAsAlice(
     .click()
 
   // 2. open the create-deal form from the strip's "Start a deal" affordance.
-  await alicePage.getByRole('button', { name: /start a deal/i }).click()
+  //    `exact` so we hit the strip button, not the "Coming soon" home-card that
+  //    also contains the words "Start a deal" (strict-mode would match both).
+  await alicePage.getByRole('button', { name: 'Start a deal', exact: true }).click()
 
   // 3. add a product, set quantity + unit price, then send the proposal.
-  //    Product picks come from the catalogue grid in DealForm; pick the first.
-  await alicePage.getByRole('button', { name: /flower/i }).first().click()
+  //    The catalogue grid loads async under the "Top products" heading; wait for
+  //    the heading, then click the first enabled product card. Resilient to the
+  //    seeded product names (we never match a specific name).
+  await alicePage.getByText('Top products').waitFor()
+  await alicePage
+    .getByRole('button')
+    .filter({ hasText: /\/g$|no price/ })
+    .first()
+    .click()
   await alicePage.getByPlaceholder(/qty/i).first().fill('100')
   await alicePage.getByPlaceholder(/g \(optional\)/i).first().fill('5.00')
-  await alicePage
-    .getByRole('button', { name: /send proposal/i })
-    .click()
+  await alicePage.getByRole('button', { name: /send proposal/i }).click()
 
   // try to read the born card id from the deal route, if the app navigates there.
   const match = alicePage.url().match(/\/deal\/([0-9a-f-]{36})/)
