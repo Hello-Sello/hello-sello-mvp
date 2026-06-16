@@ -1,15 +1,30 @@
 "use client";
 
 /**
- * Edit-a-deal wrapper (3.5b) - feeds the shared DealForm the CURRENT card's
- * lines, terms, and the editor's own private box, with a REQUIRED note (D2).
- * Pressing Update commits via the editDeal server action, which bumps the
- * version, snapshots the new lines (old version stays frozen), and resets the
- * confirm gate. On success the caller re-reads the card.
+ * Edit-a-deal wrapper (3.5b → 4.5.4) - feeds the shared DealForm the CURRENT
+ * card's lines, terms, and the editor's own private box.
+ *
+ * 4.5.4 re-route (D-01/D-08): an edit is no longer the instant `editDeal` path.
+ * Pressing Done now hands the edited SHARED fields + the PRIVATE box value UP to
+ * the strip via `onProposeChange`; the STRIP collects the required change reason
+ * in its Send pop-up and calls `proposeDealChange` (held two-sided change). The
+ * reason is NEVER a buried form field (D-08), so this form no longer requires a
+ * note. The form does NOT call `proposeDealChange` itself - it only relays the
+ * payload up. `editDeal` stays in actions.ts for history (A4); this form simply
+ * stops routing shared edits through it.
  */
 import { DealForm } from "./DealForm";
-import { editDeal } from "../actions";
 import type { DealCardView, DraftLineInput } from "../types";
+
+/** The edited SHARED fields + the PRIVATE box, handed UP to the strip's Send pop-up. */
+export interface ProposeChangePayload {
+  lines: DraftLineInput[];
+  freeDelivery: boolean;
+  dueDate: string | null;
+  paymentTermsCode: string | null;
+  /** the editor's OWN-side private box - written immediately, never in the shared draft (D-09) */
+  privateValue: string | null;
+}
 
 /** Map the current card's line items back into editable draft lines. */
 function toDraftLines(data: DealCardView): DraftLineInput[] {
@@ -30,11 +45,17 @@ function toDraftLines(data: DealCardView): DraftLineInput[] {
 export function EditDealForm({
   data,
   onClose,
-  onUpdated,
+  onProposeChange,
 }: {
   data: DealCardView;
   onClose: () => void;
-  onUpdated: () => void;
+  /**
+   * Relay the edited SHARED fields + the PRIVATE box UP to the strip. The strip
+   * opens its Send pop-up to collect the required change reason and calls
+   * `proposeDealChange` (D-08). The form never owns the reason and never calls
+   * the action directly.
+   */
+  onProposeChange: (payload: ProposeChangePayload) => void;
 }) {
   const meta = (data.card.metadata ?? {}) as Record<string, unknown>;
   const freeDelivery = meta.free_delivery === true;
@@ -50,26 +71,26 @@ export function EditDealForm({
   return (
     <DealForm
       title="Edit deal"
-      subtitle={<>Version {data.card.version} · a change needs a note + re-confirmation</>}
+      subtitle={<>Version {data.card.version} · the other side reviews this change</>}
       initialLines={toDraftLines(data)}
       initialFreeDelivery={freeDelivery}
       initialDueDate={dueDate}
       initialPaymentTermsCode={paymentTermsCode}
       initialPrivateValue={privateValue}
-      noteRequired
-      submitLabel="Update deal"
+      noteRequired={false}
+      submitLabel="Review change"
       onClose={onClose}
       onSubmit={async (p) => {
-        await editDeal({
-          dealCardId: data.card.id,
+        // 4.5.4 - hand the edit UP to the strip; it collects the reason + Sends.
+        // No reason here (D-08); the private box rides up for the strip to pass
+        // into proposeDealChange (written immediately + ungated there, D-09).
+        onProposeChange({
           lines: p.lines,
           freeDelivery: p.freeDelivery,
           dueDate: p.dueDate,
           paymentTermsCode: p.paymentTermsCode,
           privateValue: p.privateValue,
-          note: p.note ?? "",
         });
-        onUpdated();
       }}
     />
   );
