@@ -98,6 +98,13 @@ The 9 demo steps the "Walk" column points to:
 
 > **3.5 doors note:** the three create doors were *shop · chat "+" · Sella*. 3.5a built the **chat** door (manual). Shop + Sella doors come later (Sella = 4a-4d). The AI fence: Sella may FILL the form, only a human's button click writes (server action).
 
+> **Waypoint 4.5 supersedes part of 3.5 (Ayush, 2026-06-16).** Deal work continued past the June-11 demo into
+> **Waypoint 4.5** (birth + acceptance + the Sella strip + the deal-CHANGE flow): birth moved to **accept** (not
+> create), and an **edit is now a HELD two-sided proposal** held until both accept - **superseding 3.5b's instant
+> `edit_deal_draft` version bump.** Current source of truth: `_workshop/build-plans/6-pending-map.md` +
+> `4.5-deal-birth-acceptance.md`. Decisions: `DECISIONS.md` 2026-06-14 + 2026-06-16; `ADR-0001`. There:
+> 4.5.1-4.5.3 done, 4.5.4 next.
+
 > **3a scope note (Ayush, 2026-06-10):** 3a delivered the **read side** of the deal card (display + flip + in-chat
 > placement + role privacy, verified both sides). The **write side** (create a draft, edit/version-bump) was pulled
 > out into the new **3.5** row above - it sits between the deal machinery (3b-3d) and Sella, because a deal is born

@@ -120,7 +120,14 @@ If you're building and hit a doubt, go here:
 
 *(Updated at end of every session by whoever worked last.)*
 
-**2026-06-14 (latest) - Ayush (4.5.2 the Sella strip BUILT + verified live; `propose_deal` applied to the cloud; committed, NOT pushed)**
+**2026-06-16 (latest) - Ayush (4.5.4 deal-CHANGE flow DESIGN locked via a grill; no code yet)**
+- **Held-change backbone (4.5.4) locked.** An edit becomes a **held two-sided proposal**, NOT an instant version bump (supersedes the 2026-06-11 instant `edit_deal_draft`): the live card is untouched until **both companies accept**; a decline or a proposer **withdraw** discards it. Full design: `_workshop/build-plans/6-pending-map.md` (§1, §2, §3A). Decision: `DECISIONS.md` 2026-06-16. **New ADR-0001.**
+- **Pending change = the strip's data, on the deal** (`deal_pending_change`, one row per deal, DB-unique), read by BOTH the p2p strip and the deal-chat strip (synced). **Full lock** while pending. Three exits: other company **Accept/Decline** (+ required **Change reason**), proposer **Withdraw** (no reason). Per-company decisions; propose = deal-workspace membership.
+- **Announcements: both chats, both outcomes** (supersedes the D18 split). Private numbers (buying price) NEVER enter the pending change (privacy - the strip syncs into the deal chat where both companies sit).
+- **Glossary:** added **Pending change / Change proposed-detected / Change reason / Note (card) / Decision strip** to `CONTEXT.md`.
+- **Parked:** final golden seal (end stage); per-product cost->margin + edit-form redesign (T5b); Sella-detects-changes (T6); C2C ticketing (T7/T8). **No code yet; nothing of Muskan's touched.**
+
+**2026-06-14 - Ayush (4.5.2 the Sella strip BUILT + verified live; `propose_deal` applied to the cloud; committed, NOT pushed)**
 - **4.5.2 DONE.** Rebuilt `DealPin` into the **Sella strip** (States A/B/C): **A** = "Start a deal" (p2p); **B** = a pending proposal → a loud **"Review"** pill → popover → **Accept/Decline** → `confirm_detected_deal` → **atomic birth** (a "Waiting for {other}" chip for the side that already voted); **C** = the deal selector + an `✦ AI` badge + a "thinking" animation. Verified live two-screen on BOTH doors (manual propose + Sella-detect).
 - **New code (7 files, tsc/eslint clean) - ⚠️ nothing of Muskan's touched:** `getPendingProposal` read + `confirmDetectedDeal` action (deals); `CreateDealForm` → `proposeDeal` (+ a new `DealForm` `showPrivate` prop, default true, so create/edit are unchanged); `ThreadView` passes the p2p `threadId`; an **inline** realtime subscription in `DealPin` (its own channel) to keep `deals` independent of `messaging` (no module cycle).
 - **⚠️ `propose_deal` APPLIED to the LIVE cloud DB** (additive - a new function nothing else calls; zero cron impact). The **`…120100_confirm_detected_deal_proposer_initiator` replace is STILL HELD** (it changes the function the live detect cron uses; backward-compatible, only affects offer/order labelling) - apply when we validate against the live cron.

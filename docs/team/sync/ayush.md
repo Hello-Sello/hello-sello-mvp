@@ -5,16 +5,21 @@
 
 ---
 
-**Last updated:** 2026-06-14 22:09 CEST
-**Branch:** claude/ayush/work
-**Status:** offline - session wrapped. **4.5.2 (the Sella strip) BUILT + verified live on both doors** (manual propose + Sella-detect); `propose_deal` applied to the cloud (additive). **Committed, NOT pushed** (commit-only - next session opens on 4.5.3). 4.5 done: 4.5.1 engine + 4.5.2 strip; remaining 4.5.3-4.5.6.
+**Last updated:** 2026-06-16 10:45 CEST
+**Branch:** claude/ayush/work (rebased onto origin/dev today - in sync with the team)
+**Status:** active - grilled + LOCKED the **4.5.4 deal-CHANGE flow** design (an edit = a held two-sided proposal + full lock; see `6-pending-map.md` §3A + `DECISIONS.md` 2026-06-16 + new ADR-0001). 4.5.3 done earlier. **No code yet** - 4.5.4 build is next. Also pulled Marcel's Linear DEV-66/67/71/72/73/74/75 into `6-pending-map.md` §8.
 **Linear issue in progress:** none
-**Shared files locked:** none (Muskan offline, no locks - cross-branch read 22:09 CEST). This wrap-up edited one shared doc: `AGENTS.md` (checkpoint). Committed locally, NOT pushed.
-**PR open:** none new (4.5.2 committed to `claude/ayush/work`, NOT pushed this session).
+**Shared files locked:** none held. Edited + pushed today (all appends / one new file, low conflict): `CONTEXT.md`, `DECISIONS.md`, `AGENTS.md`, `docs/PRD/BUILD-PLAN.md`, **new** `docs/architecture/adr/0001-held-deal-change.md`. Muskan offline, no locks - cross-branch read 10:45 CEST.
+**PR open:** none. `claude/ayush/work` rebased onto dev + pushed to origin.
 
 ---
 
 ## Notes for the other agent
+
+**2026-06-16 - 4.5.4 deal-CHANGE flow DESIGNED + LOCKED (grill); no code yet. ⚠️ Nothing of yours touched; I edited 5 shared docs (all appends / one new file).** An edit becomes a **held two-sided proposal** (not the old instant `edit_deal_draft` bump): held in a new `deal_pending_change` record (one row per deal, DB-unique); the strip shows it in BOTH the p2p + deal chats (synced); **full lock** while pending; three exits (other company Accept/Decline + a Change reason; proposer Withdraw, no reason); commit reuses the existing version-build logic on both-accept. Announcements go to BOTH chats for both outcomes.
+> - **Shared docs touched (all appends / new file, low conflict):** `DECISIONS.md` (2026-06-16 entry), **new** `docs/architecture/adr/0001-held-deal-change.md`, `CONTEXT.md` (5 glossary terms), `AGENTS.md` (checkpoint), `docs/PRD/BUILD-PLAN.md` (a Waypoint-4.5 pointer note). Design source of truth: `_workshop/build-plans/6-pending-map.md` (§3A).
+> - **Also captured Marcel's Linear feedback** (DEV-66/67/71/72/73/74/75) into `6-pending-map.md` §8 - mostly the 5A Connect/chat UI pass. DEV-66 "deal room" rename has a **naming clash** with our existing `CONTEXT.md` "Deal Room" (flagged - resolve before renaming).
+> - **Rebased onto origin/dev today** (your Discover #104 work is in) - branch in sync. **No code yet; 4.5.4 build is next.**
 
 **2026-06-14 (later) - 4.5.2 the Sella strip BUILT + verified live; ⚠️ nothing of yours touched; `propose_deal` applied to the cloud (additive).** The `DealPin` bar is now the **Sella strip** - State A "Start a deal" (p2p), State B a pending proposal (loud "Review" pill → Accept/Decline → `confirm_detected_deal` → atomic birth, "Waiting for {other}" chip for the side that already voted), State C the deal selector + an `✦ AI` badge + a "thinking" animation.
 > - **New code is deal-module only** (`getPendingProposal` read, `confirmDetectedDeal` action, `CreateDealForm`→`proposeDeal`, a new `DealForm` `showPrivate` prop defaulting true so create/edit are unchanged) **+ one `messaging/ThreadView.tsx` line** (pass the p2p `threadId` into `DealPin`) **+ an inline realtime sub inside `DealPin`** (its own channel `deal-strip-realtime`, inlined to avoid a `deals ↔ messaging` module cycle - I did NOT import your `useChatRealtime`).
