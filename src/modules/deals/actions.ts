@@ -12,6 +12,8 @@ import { createClient } from "@/shared/db/server";
 import { getCurrentCompanyId } from "@/shared/auth";
 import { writeAudit } from "@/shared/audit";
 import type {
+  ConfirmDealChangeInput,
+  ConfirmDealChangeResult,
   ConfirmDecision,
   ConfirmDetectedResult,
   ConfirmResult,
@@ -20,6 +22,8 @@ import type {
   DealCardStatus,
   EditDealInput,
   EditDealResult,
+  ProposeDealChangeInput,
+  ProposeDealChangeResult,
   ProposeDealInput,
   ProposeDealResult,
 } from "./types";
@@ -383,6 +387,198 @@ export async function editDeal(input: EditDealInput): Promise<EditDealResult> {
   }
 
   return { version };
+}
+
+/**
+ * Propose a HELD two-sided change to a deal (4.5.4) - the human-pressed Send
+ * that replaces the instant `editDeal` for SHARED terms. This does NOT bump the
+ * live card; it INSERTs one held `deal_pending_change` row (via the
+ * `propose_deal_change` RPC) with the proposer's own side pre-voted `accept`.
+ * The card moves to base+1 only when the OTHER side accepts, inside
+ * `confirmDealChange`. The AI fence holds: a human Send writes the held change;
+ * a human Accept (the other side) writes the deal.
+ *
+ * Two writes, in order:
+ *   1. PRIVATE first (D-09): the proposer's own-side private box is written
+ *      IMMEDIATELY + ungated to `deal_party_field` at the CURRENT card version.
+ *      It is the actor's own data (RLS owner-only allows it; no company id is
+ *      trusted from input - the write targets `getCurrentCompanyId()`), and it
+ *      NEVER enters the shared held draft. On commit, `confirm_deal_change`
+ *      carries every base-version private box forward to the new version.
+ *   2. SHARED next: the held draft carries SHARED keys ONLY (line_items, value,
+ *      currency, terms) - the same keys `confirm_deal_change` reads on commit.
+ *
+ * The RPC's unique lock rejects a second concurrent propose with a friendly
+ * message; we surface it (O4) so the form's error banner shows it. The reason
+ * is required (the RPC also enforces it - two layers, REAS-01).
+ */
+export async function proposeDealChange(
+  input: ProposeDealChangeInput,
+): Promise<ProposeDealChangeResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("proposeDealChange: no authenticated user");
+  if (!input.reason || !input.reason.trim()) {
+    throw new Error("proposeDealChange: a change reason is required");
+  }
+
+  const currency = input.lines[0]?.currency ?? "EUR";
+
+  // --- 1. PRIVATE box first: immediate, ungated, OWN company, CURRENT version
+  // (D-09). The private value never enters the shared held draft below. We read
+  // the card's current version so the write lands on the live version - the held
+  // change does NOT bump the card, and the commit carries this box forward.
+  if (input.privateValue && input.privateValue.trim()) {
+    const companyId = await getCurrentCompanyId();
+    if (!companyId) throw new Error("proposeDealChange: no company in session");
+
+    const { data: cardRow, error: cardErr } = await supabase
+      .from("deal_card")
+      .select("version")
+      .eq("id", input.dealCardId)
+      .single();
+    if (cardErr) throw cardErr;
+
+    // own-company write: RLS (partyfield_owner_only) allows owner_company_id =
+    // current_company_id() for a card the caller is a member of. Upsert on the
+    // table's unique key (deal_card_id, version, owner_company_id, field_key) so
+    // a re-Send overwrites the actor's own value at the current version.
+    const { error: pfErr } = await supabase.from("deal_party_field").upsert(
+      {
+        deal_card_id: input.dealCardId,
+        version: cardRow.version,
+        owner_company_id: companyId,
+        party_side: "seller",
+        field_key: "supplier_cost",
+        field_label: "Buying price (from supplier)",
+        value_text: input.privateValue.trim(),
+        sort_order: 0,
+        created_by: user.id,
+      },
+      { onConflict: "deal_card_id,version,owner_company_id,field_key" },
+    );
+    if (pfErr) throw pfErr;
+  }
+
+  // --- 2. SHARED held draft: SHARED keys ONLY (no privateValue, D-09). The
+  // line_items use the SAME keys confirm_deal_change reads on commit (name,
+  // quantity, unit, unit_price, cultivar, pzn).
+  const draft = {
+    line_items: input.lines.map((l) => ({
+      name: l.productName,
+      quantity: l.quantity,
+      unit: l.unit,
+      unit_price: l.unitPrice,
+      cultivar: l.cultivar ?? null,
+      pzn: l.pzn ?? null,
+    })),
+    value_net: sumValueNet(input.lines),
+    currency,
+    summary: draftSummary(input.lines),
+    due_date: input.dueDate ?? null,
+    payment_terms_code: input.paymentTermsCode ?? null,
+    free_delivery: input.freeDelivery ?? false,
+  };
+
+  // New RPC, not in the generated types - the localized `as never` cast (Muskan's
+  // documented pattern). Call supabase.rpc DIRECTLY so `this` stays bound. The
+  // RPC derives the caller's company from the session (no trusted company id).
+  const { data: pendingId, error } = await supabase.rpc("propose_deal_change" as never, {
+    p_deal_card_id: input.dealCardId,
+    p_draft: draft,
+    p_reason: input.reason.trim(),
+  } as never);
+  // surface the unique-violation (and any RPC raise) into the form's error banner (O4)
+  if (error) throw new Error((error as { message: string }).message);
+  const newPendingId = pendingId as string | null;
+  if (!newPendingId) {
+    throw new Error("proposeDealChange: no pending id returned from propose_deal_change");
+  }
+
+  await writeAudit({
+    actorType: "user",
+    action: "deal.change_proposed",
+    contentType: "deal_card",
+    contentId: input.dealCardId,
+    actorPersonId: user.id,
+  });
+
+  return { pendingId: newPendingId };
+}
+
+/**
+ * Respond to a held change (4.5.4) - the OTHER side's Accept/Decline from the
+ * strip pop-up, with the REQUIRED reason (REAS-01). Wraps `confirm_deal_change`:
+ * it records this side's vote and, the instant BOTH companies have accepted,
+ * commits the change to base+1 (status stays `draft`, D-06) and returns the new
+ * version; a first accept (still waiting) or a decline returns null (the decline
+ * discards the held change). The reason is required (the RPC also enforces it).
+ *
+ * No Phase-2 announcement is fired here (A5): the both-chats announcement is the
+ * next phase's design, so this commit path deliberately does NOT invoke
+ * sella-summarize. The audit code records the outcome (committed vs declined).
+ */
+export async function confirmDealChange(
+  input: ConfirmDealChangeInput,
+): Promise<ConfirmDealChangeResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("confirmDealChange: no authenticated user");
+  if (!input.reason || !input.reason.trim()) {
+    throw new Error("confirmDealChange: a change reason is required");
+  }
+
+  const { data: newVersion, error } = await supabase.rpc("confirm_deal_change" as never, {
+    p_deal_card_id: input.dealCardId,
+    p_decision: input.decision,
+    p_reason: input.reason.trim(),
+  } as never);
+  if (error) throw new Error((error as { message: string }).message);
+
+  await writeAudit({
+    actorType: "user",
+    action: input.decision === "accept" ? "deal.change_committed" : "deal.change_declined",
+    contentType: "deal_card",
+    contentId: input.dealCardId,
+    actorPersonId: user.id,
+  });
+
+  return { version: (newVersion as number | null) ?? null };
+}
+
+/**
+ * Withdraw a held change (4.5.4, DCHG-06) - the PROPOSER's take-back. The
+ * thinnest of the three: no reason, no card change. Wraps `withdraw_deal_change`
+ * (proposer-only, enforced in the RPC), which discards the held row and unlocks
+ * the Edit pencil. Distinct from the seal Withdraw (Phase 2).
+ */
+export async function withdrawDealChange({
+  dealCardId,
+}: {
+  dealCardId: string;
+}): Promise<void> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("withdrawDealChange: no authenticated user");
+
+  const { error } = await supabase.rpc("withdraw_deal_change" as never, {
+    p_deal_card_id: dealCardId,
+  } as never);
+  if (error) throw new Error((error as { message: string }).message);
+
+  await writeAudit({
+    actorType: "user",
+    action: "deal.change_withdrawn",
+    contentType: "deal_card",
+    contentId: dealCardId,
+    actorPersonId: user.id,
+  });
 }
 
 /* ---- small server-only helpers (not exported) ---- */
