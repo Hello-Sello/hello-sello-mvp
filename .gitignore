@@ -36,10 +36,6 @@ CLAUDE.md
 # Claude Code internal
 .claude/worktrees/
 
-# GSD planning workspace - personal AI working area (like CLAUDE.md above), regenerated per engineer.
-# Gitignored 2026-06-16 to avoid two-branch merge conflicts; durable facts belong in docs/ instead.
-.planning/
-
 # Product-thinking workspace - now shared with the team (build-plans, pov, notes, prototypes)
 # (was gitignored; tracked from 2026-06-10 so the team can reuse this arrangement)
 
