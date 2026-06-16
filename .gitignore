@@ -60,3 +60,6 @@ npm-debug.log*
 /playwright-report/
 /playwright/.cache/
 /blob-report/
+
+# --- GSD planning workspace (personal scaffolding, per team decision — never committed) ---
+.planning/
