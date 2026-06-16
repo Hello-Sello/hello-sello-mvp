@@ -22,11 +22,7 @@
  * contract plans 02-04 build the app up to satisfy.
  */
 import { test, expect, type Page, type BrowserContext } from '@playwright/test'
-import {
-  openTwoContexts,
-  createDraftDealAsAlice,
-  COUNTERPARTY_NAME,
-} from './fixtures/two-company.ts'
+import { openTwoContexts, createDraftDealAsAlice, COUNTERPARTY_NAME } from './fixtures/two-company'
 
 // shared two-context handles, set up fresh per test so no state leaks between them
 let aliceContext: BrowserContext
