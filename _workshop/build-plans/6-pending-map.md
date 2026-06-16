@@ -24,6 +24,12 @@ We kept confusing "the note." From now on there are **two distinct words**, neve
 - **Change reason** = the **required reason a human gives on every Accept or Decline** of a card change. It is
   **not** called a note. It always exists (consistent culture, so human intent is never lost) and it flows to
   the **log** (`deal_change_input` / `deal_card_log`) and a **system message**.
+- **Pending change** = the **single held proposal** ("one paper on the table") for a deal - the new SHARED terms,
+  waiting for the other company's yes/no. Lives in a strip-owned, card-keyed record (`deal_pending_change`),
+  **not** on the card and **not** in a chat message - so both the p2p strip and the deal-chat strip show the same
+  one, synced. At most one per deal; the card changes ONLY when it commits.
+- **Change proposed** (a human edits) vs **Change detected** (Sella spots it, later / T6) = the two **sources** of
+  a pending change, mirroring birth's manual-vs-Sella doors. Same paper underneath.
 
 Other settled words (see `docs/architecture/CONTEXT.md`): **birth** = a card is created; **seal** = the final
 two-sided golden confirmation; **the strip** = the Sella strip in the chat (DealPin); **deal chat** vs **p2p
@@ -93,6 +99,47 @@ the change reason) plus a **system message in the P2P chat** ("Person X declined
 
 ---
 
+## 3A. Held-change model - refined + locked in the 2026-06-16 grill (authoritative where it differs)
+
+The 4.5.4 backbone was grilled to its final shape. This subsection wins where it differs from §2/§3.
+
+- **Card = pure display; strip = the decision surface (separate, beside the card).** Both are bound to the DEAL,
+  so putting the deal in two chats (p2p + deal chat) shows the same card AND the same strip in both, synced. The
+  held change is the **strip's** data, never part of the card. (Confirms D5/D6.)
+- **The pending change is stored, not messaged.** A `deal_pending_change` record, **one active row per deal**
+  (DB-unique), holds the new SHARED terms + base version + proposer (company + person) + source + the proposer's
+  Change reason + votes (proposer = accept, other = pending). It is **transient** - deleted on every exit; the
+  permanent history is `deal_card_log` + `deal_change_input`. The DB-unique rule enforces the lock under races,
+  not only the disabled button.
+- **FULL LOCK while pending (supersedes the earlier "replace + notify" idea).** While a pending change exists, the
+  Edit pencil (card top-right) is **disabled for everyone** - no second paper, no concurrent edit. Because nothing
+  else can edit, the base version can never drift, so there is **no version-clash code** (pessimistic over
+  optimistic, on purpose). Re-enabled the moment it resolves.
+- **Three exits:** the other company **Accepts** (+ reason) -> commit; the other company **Declines** (+ reason)
+  -> discard; the proposer **Withdraws** (no reason) -> discard. This Withdraw is the pending-change take-back -
+  NOT the seal Withdraw removed by D16; the **seal** gate stays Accept/Decline only.
+- **Edit flow:** Edit pencil -> the form (edits SHARED **and** the editor's own PRIVATE items) -> **Done** -> the
+  **strip** pop-up collects the **Change reason** + **Send**. On Send: SHARED terms -> the pending change (held,
+  locked); PRIVATE items -> written to the editor's own side immediately (ungated, never in the pending change -
+  privacy, since both companies read the strip in the deal chat). The reason is in the strip, never a buried form
+  field (D8).
+- **Per-company decisions; propose = deal-workspace membership.** The proposer's company auto-accepts; **any
+  person in the other company**, from **either chat**, decides for that company. The proposer cannot self-accept
+  (only Withdraw or wait). Anyone in the **deal workspace** (either company) may propose.
+- **Commit (on the second yes) reuses today's version-build logic, just later.** It builds version base+1 from the
+  draft (snapshot the new shared lines, carry BOTH sides' private boxes forward), keeps status **`draft`** (the
+  golden seal is end-of-lifecycle, out of scope), writes the log line + **both** Change reasons, fires the
+  announcement, then deletes the pending row + unlocks. Earlier versions stay frozen.
+- **Announcements: both chats, both outcomes (supersedes D18's accept->deal / decline->p2p split).** Accept and
+  Decline each post a uniform system message to **both** the deal chat and the p2p chat (the strip lives in both,
+  so both audiences hear the outcome). Withdraw = a small quiet notice. Exact wording = T3 (4.5.5).
+- **Same accept/decline UI reused** for birth-accept, change-accept, and the later seal (rename Seal -> "Sella ..."
+  later). The final golden seal stays end-of-lifecycle and out of T1 scope.
+- **Out of scope / parked from this grill:** the final golden seal (end stage); per-product private cost -> margin
+  + the edit-form redesign (**T5b**); Sella detecting changes (**T6**).
+
+---
+
 ## 4. The code reality (built / missing / wrong) - checked 2026-06-15
 
 Assessed against §2. Verdicts: ✅ built · 🟡 partial · ⚠️ wrong (built but not matching) · ❌ missing.
@@ -138,6 +185,17 @@ chapter). The exact phase numbering below is a **proposal** - we finalise it tog
 - **T5 - The card Note (per-company, optional).** New content field (column or metadata) + a form input + a
   render region on the card face, one per company, both visible, optional. **-> a 4.5 card slice (propose
   4.5.7), or fold into 5A.4 card work - decide in §6.**
+- **T5b - Per-product private cost -> private margin (LATER; design captured 2026-06-15).** Replace today's
+  single deal-level "Buying price (from supplier)" box (`deal_party_field.supplier_cost`, shown "only you") with a
+  **per-product private input per side**: the SELLER fills cost (COGS) per line; the BUYER fills resale price
+  (RRP/UVP) per line. The shared `unit_price` (price to the buyer) is the pivot. **Margin is auto-computed per line
+  + total and shown ONLY to that side** (seller: price - cost; buyer: resale - price). Store as **private per-line
+  rows per company** (row-level privacy - each side sees only its own), NOT column-masked on the shared
+  `deal_line_item` (the unused `seller_margin`/`buyer_metric` columns were an early attempt). Rule: **store the
+  input, compute the margin** (no stored derived margin). These private numbers NEVER enter the pending change
+  (privacy - the strip syncs to both companies in the deal chat). **The edit-deal form needs a redesign** to put
+  the private field inline on each product row (lock badge + live margin); the current form is unclear. **Parked;
+  not part of the T1 backbone.**
 
 ### Moves to 5A.5 (Sella - always the last section)
 
@@ -179,6 +237,38 @@ chapter). The exact phase numbering below is a **proposal** - we finalise it tog
 - **In `5a-ui-pass.md`:** in 5A.4, note card-pure-display + Seal-in-strip is done (4.5.3) and add the **card Note
   render** (T5) if we fold it here; in 5A.5 (Sella), add **T6 - Sella detects changes**. Highlight what moved in
   from 4.5.
+
+---
+
+## 8. Marcel's feedback - Linear DEV issues (pending; captured 2026-06-16)
+
+Marcel's 2026-06-15 review (all assigned to Ayush, all Todo, Development team). Captured here so ALL pending work
+lives in one file. Most are **5A (Connect / chat UI)**; walk them one by one when we resume.
+
+- **[ ] DEV-66 - Deal Room rename.** Rename "deal **workspace**" -> "deal **room**." ⚠️ **Naming clash:**
+  `CONTEXT.md` already uses **"Deal Room"** for the customer-presentation surface (expand a Deal Card). Decide
+  whether Marcel means to merge those, or our glossary changes, BEFORE renaming. -> resolve the doubt first.
+- **[ ] DEV-67 - Connect layout.** Bigger spaces for main Connect elements; fewer icons + **one-word** labels;
+  clicking Connect opens the **chat-contacts list directly (WhatsApp-style)**, none pre-selected; incoming msgs
+  **grey**, ours **pink**; **Sella/Preview = a flip page** (flips when a Deal Card / pricelist opens) = an action
+  workspace that keeps the chat visible; open a product card and "send to chat," or create a deal and "send to
+  chat." (mockup on the issue) -> **5A**; the Sella/flip part overlaps our **Sella strip / SellaPanel**.
+- **[ ] DEV-71 - Connect filters.** Connect opens contacts (all closed) -> click one -> bubbles; add filter tabs
+  above contacts: **New connections / All / Unread / Companies / Deals.** -> **5A** (pairs with DEV-67).
+- **[ ] DEV-72 - THINGS copy.** Reword to **"Add something"** / **"Add something that is required to make this
+  Deal perfect."** -> small copy change (THINGS in the Deal Workspace).
+- **[ ] DEV-73 - Chat top section.** **Reduce header noise**; click **person** -> profile; click **company** ->
+  relationship page (-> company again -> **Present** if a seller); click **"Deals"** -> in-window pop-up of the
+  **latest 3 deals** + a **"See all"** -> relationship page. (mockup) -> **5A**; the "Deals" pop-up overlaps our
+  **4.5.6 header notification / deal selector** (D9/D11) - fold together.
+- **[ ] DEV-74 - Bubble colors.** Other person's bubble **grey** (contrast); our sender = dark pink **`#76002d`**.
+  -> **5A** (overlaps DEV-67's bubble note).
+- **[ ] DEV-75 - Scroll down in chat.** Always scroll to the newest message, or show a **"jump to bottom"** arrow;
+  never leave it mid-way. (mockup) -> **5A** (small).
+
+**Grouping when we resume:** DEV-67/71/73/74/75 = one Connect-chat-UI pass (5A); DEV-72 = a copy tweak; DEV-66 =
+resolve the naming clash first. DEV-73 + DEV-67's Sella-flip should fold into the existing 4.5.6 / 5A plans, not be
+built twice.
 
 ---
 
