@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Check, Clock, X, BadgeCheck } from "lucide-react";
 import type { ConfirmSeat, PartySide } from "../types";
 
@@ -15,6 +16,15 @@ import type { ConfirmSeat, PartySide } from "../types";
  * same bar from the per-change accept source ("same face, different engine").
  * The parent owns the data and the golden card-level styling; this bar only
  * shows who has confirmed and offers the viewer's action.
+ *
+ * 4.5.4: ONE dumb bar now serves BOTH gates. The SEAL gate calls it with no
+ * `requireReason` (the seats just confirm/decline a card version - unchanged).
+ * The CHANGE gate sets `requireReason` so a required reason textarea appears and
+ * both buttons stay disabled until it is non-blank (REAS-01, D-08 - the reason
+ * is collected here in the strip, never on the edit form). `onConfirm`/`onDecline`
+ * carry an OPTIONAL reason: the seal callers pass a 0-arg handler (still
+ * type-correct); the change caller reads `reason`. The bar owns only the reason
+ * input state - it makes no server call.
  */
 export interface ConfirmBarProps {
   /** [seller, buyer] seats for the current version */
@@ -22,17 +32,31 @@ export interface ConfirmBarProps {
   /** which side the viewer is on; null = an onlooker (read-only) */
   viewerSide: PartySide | null;
   busy: boolean;
-  onConfirm: () => void;
-  onDecline: () => void;
+  /**
+   * When true (the CHANGE gate) a required reason textarea renders above the
+   * buttons and both stay disabled until it is non-blank; the trimmed reason is
+   * passed to onConfirm/onDecline. When false/absent (the SEAL gate) no textarea
+   * renders and the bar behaves exactly as before (no reason).
+   */
+  requireReason?: boolean;
+  onConfirm: (reason?: string) => void;
+  onDecline: (reason?: string) => void;
 }
 
 export function ConfirmBar({
   seats,
   viewerSide,
   busy,
+  requireReason = false,
   onConfirm,
   onDecline,
 }: ConfirmBarProps) {
+  // 4.5.4 - the reason input state (CHANGE gate only). The bar stays dumb: it
+  // owns this one field and hands the trimmed value up, nothing more.
+  const [reason, setReason] = useState("");
+  const reasonOk = !requireReason || reason.trim().length > 0;
+  const reasonArg = requireReason ? reason.trim() : undefined;
+
   const bothConfirmed = seats.length === 2 && seats.every((s) => s.status === "confirmed");
   const viewerSeat = viewerSide ? seats.find((s) => s.side === viewerSide) ?? null : null;
   const otherSeat = viewerSide ? seats.find((s) => s.side !== viewerSide) ?? null : null;
@@ -76,25 +100,40 @@ export function ConfirmBar({
               </span>
             </div>
           ) : (
-            <div className="flex gap-2">
-              <button
-                type="button"
-                disabled={busy}
-                onClick={onConfirm}
-                className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-brand py-1.5 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-              >
-                <Check size={13} strokeWidth={2.5} />
-                Confirm deal
-              </button>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={onDecline}
-                className="rounded-lg px-3 py-1.5 text-xs font-medium text-ink/55 ring-1 ring-ink/15 hover:bg-ink/5 disabled:opacity-50"
-              >
-                Decline
-              </button>
-            </div>
+            <>
+              {/* 4.5.4 - the CHANGE gate's required reason. The SEAL gate omits
+                  requireReason, so this textarea never renders for sealing. Same
+                  note-textarea styling as DealForm; both buttons stay disabled
+                  until it is non-blank (REAS-01). */}
+              {requireReason && (
+                <textarea
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  rows={2}
+                  className="mb-2 w-full resize-none rounded-lg bg-white px-3 py-2 text-sm text-ink ring-1 ring-black/5 placeholder:text-ink/35 focus:outline-none focus:ring-2 focus:ring-brand/30"
+                  placeholder="Say why (everyone sees this on the deal's history)…"
+                />
+              )}
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={busy || !reasonOk}
+                  onClick={() => onConfirm(reasonArg)}
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-brand py-1.5 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                >
+                  <Check size={13} strokeWidth={2.5} />
+                  Confirm deal
+                </button>
+                <button
+                  type="button"
+                  disabled={busy || !reasonOk}
+                  onClick={() => onDecline(reasonArg)}
+                  className="rounded-lg px-3 py-1.5 text-xs font-medium text-ink/55 ring-1 ring-ink/15 hover:bg-ink/5 disabled:opacity-50"
+                >
+                  Decline
+                </button>
+              </div>
+            </>
           )}
           {otherSeat?.status === "rejected" && (
             <p className="mt-1.5 text-[11px] text-rose-600">
