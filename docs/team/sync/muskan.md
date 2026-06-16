@@ -5,17 +5,19 @@
 
 ---
 
-**Last updated:** 2026-06-15 (Discover→Connect loop slices 4–6 — merged to dev #104) CEST
+**Last updated:** 2026-06-16 (test harness setup — slice 0 of the go-to-market push) CEST
 **Branch:** claude/muskan/work (synced with dev)
-**Status:** offline — session 24 wrapped. **Discover→Connect loop COMPLETE (slices 1–6): catalogue + pricing layered on the profile; PR [#104](https://github.com/HelloSello/hello-sello-mvp/pull/104) → dev MERGED.** End to end: directory → profile → catalogue (L0/L1/L2) → Connect / Request-pricing → inbox → accept → chat. **Locks held: none.** *(Unconnected Request-pricing live walk = Muskan testing tomorrow.)*
+**Status:** active — setting up the test harness (Playwright E2E), **slice 0 of the launch push** (auth hardening · admin verification · Discover/Present refinement). **Locks held: `package.json`, `.gitignore`** (append-only, low conflict; unlocking `package.json` once committed).
 **Linear issue in progress:** none
-**Shared files locked:** none
+**Shared files locked:** `package.json`, `.gitignore` (test-harness setup — append-only)
 **PR open:** none. **MERGED:** Discover loop [#104](https://github.com/HelloSello/hello-sello-mvp/pull/104) → dev (slices 1–6). *(Prior: Sella proposal #99 merged to dev by Ayush; storage #98 on dev, held from main.)*
 **Prev PR:** Discover directory [#95](https://github.com/HelloSello/hello-sello-mvp/pull/95)→dev / [#96](https://github.com/HelloSello/hello-sello-mvp/pull/96)→main · Profile & QR [#88](https://github.com/HelloSello/hello-sello-mvp/pull/88)/[#89](https://github.com/HelloSello/hello-sello-mvp/pull/89) — all **merged**.
 
 ---
 
 ## Notes for the other agent
+
+**2026-06-16 — Setting up the test harness (Playwright E2E) — slice 0 of the go-to-market push. ⚠️ Locking `package.json` + `.gitignore` (both append-only, low conflict).** Adding `@playwright/test` (dev dep) + a `test` script + an `e2e/` folder with one smoke test. No app code, no schema, no RLS. Foundation for TDD on the launch work (auth hardening + admin verification + Discover/Present refinement). **Unlocking `package.json` as soon as it's committed.**
 
 **2026-06-15 (Discover→Connect loop slices 4–6 — catalogue + pricing; MERGED to dev [#104](https://github.com/HelloSello/hello-sello-mvp/pull/104)). ⚠️ I touched shared `product` RLS + `database.types.ts`, and my Present `ShopView` — please read.** Layered the catalogue + Request-pricing onto the Discover profile (the soft-openness L0/L1/L2 model).
 > - **⚠️ `product` RLS — the "dial floor":** all THREE public-read policies now gate on `profile_visible = true` — `product_public_select`, `product_image_public_select`, and a new explicit `pricelist_item_public_select` (prices also need `price_public`). SELECT-only, OR'd on top of your `*_all` write policies — **write isolation untouched**, net-narrowing. **Your `getOwnCatalog` (deal-picker) now correctly returns own-company products only** — it assumed RLS already did that, but the old broad policy was leaking other companies' products in; with `profile_visible` defaulting false it's now exactly own-company. **Heads-up:** once sellers flip products visible, add an explicit `.eq('company_id', current)` there (pre-existing latent bug, flagged).
