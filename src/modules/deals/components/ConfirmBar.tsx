@@ -4,7 +4,11 @@ import { Check, Clock, X, BadgeCheck } from "lucide-react";
 import type { ConfirmSeat, PartySide } from "../types";
 
 /**
- * The two-sided confirm gate UI (3d) - a top-of-card action banner.
+ * The two-sided confirm gate UI (3d) - the Seal face.
+ *
+ * 4.5.3: this lives inside the Sella strip's Seal popover (DealPin State C). It
+ * used to be a top-of-card banner; the contract is unchanged - only its host
+ * moved, which is exactly why it was kept dumb.
  *
  * REUSABLE + DUMB (3d D2): it knows only the two seats + the viewer's side and
  * calls the handlers; it has NO `deal_confirmation` knowledge. 3.5 feeds the
@@ -20,9 +24,6 @@ export interface ConfirmBarProps {
   busy: boolean;
   onConfirm: () => void;
   onDecline: () => void;
-  onWithdraw: () => void;
-  /** viewer is the initiator AND the other side has not confirmed */
-  canWithdraw: boolean;
 }
 
 export function ConfirmBar({
@@ -31,8 +32,6 @@ export function ConfirmBar({
   busy,
   onConfirm,
   onDecline,
-  onWithdraw,
-  canWithdraw,
 }: ConfirmBarProps) {
   const bothConfirmed = seats.length === 2 && seats.every((s) => s.status === "confirmed");
   const viewerSeat = viewerSide ? seats.find((s) => s.side === viewerSide) ?? null : null;
@@ -71,20 +70,10 @@ export function ConfirmBar({
       {viewerSeat && !bothConfirmed && (
         <div className="mt-2">
           {viewerSeat.status === "confirmed" ? (
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
               <span className="text-[11px] text-ink/55">
                 Waiting for {otherSeat?.companyName ?? "the other side"}…
               </span>
-              {canWithdraw && (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={onWithdraw}
-                  className="rounded-full px-2.5 py-1 text-[11px] font-medium text-ink/55 hover:bg-ink/5 disabled:opacity-50"
-                >
-                  Withdraw
-                </button>
-              )}
             </div>
           ) : (
             <div className="flex gap-2">

@@ -13,6 +13,7 @@ import { getCurrentCompanyId } from "@/shared/auth";
 import { writeAudit } from "@/shared/audit";
 import type {
   ConfirmDecision,
+  ConfirmDetectedResult,
   ConfirmResult,
   CreateDealInput,
   CreateDealResult,
@@ -287,6 +288,45 @@ export async function proposeDeal(input: ProposeDealInput): Promise<ProposeDealR
   if (!newMessageId) throw new Error("proposeDeal: no message id returned from propose_deal");
 
   return { messageId: newMessageId };
+}
+
+/**
+ * Accept or decline a deal PROPOSAL (Waypoint 4.5.2) - the unified birth-accept.
+ *
+ * Wraps `confirm_detected_deal`: records THIS side's vote on the `deal_detected`
+ * message and, the instant BOTH companies have accepted, births the Draft (card
+ * + workspace + 2 owners + deal thread) atomically and returns the new card id.
+ * A first accept (still waiting on the other side) or a reject returns null. One
+ * action serves BOTH doors - a Sella-detected and a manual proposal are the same
+ * message shape, so birth follows one path with two entry doors.
+ *
+ * No audit is written here. The birth's `deal.created` audit is a known GAP on
+ * the RPC-born path (createDeal stamps one; detection/propose never did): the
+ * RPC returns the same card id whether THIS call birthed it or an earlier one
+ * did (idempotency), so the action cannot tell "born now" from "already born"
+ * and must not risk a double-stamp into the hash-chained log. The proper fix is
+ * a "born_now" flag from the RPC - parked, and outside 4.5.2's UI scope.
+ */
+export async function confirmDetectedDeal(args: {
+  messageId: string;
+  decision: "accept" | "reject";
+}): Promise<ConfirmDetectedResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("confirmDetectedDeal: no authenticated user");
+
+  // SECURITY DEFINER RPC: derives the caller's company from the SESSION (never
+  // trusted from input) and gates on thread membership - the same guardrail as
+  // create_deal_draft. Direct supabase.rpc call so `this` stays bound.
+  const { data: cardId, error } = await supabase.rpc("confirm_detected_deal" as never, {
+    p_message_id: args.messageId,
+    p_decision: args.decision,
+  } as never);
+  if (error) throw new Error((error as { message: string }).message);
+
+  return { bornCardId: (cardId as string | null) ?? null };
 }
 
 /**

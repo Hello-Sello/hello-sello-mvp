@@ -5,16 +5,34 @@
 
 ---
 
-**Last updated:** 2026-06-14 20:33 CEST
-**Branch:** claude/ayush/work
-**Status:** offline - session wrapped. **Waypoint 4.5 (deal birth/acceptance) DESIGNED + locked; 4.5.1 (engine) BUILT + HELD** (2 migrations + `proposeDeal` action; tsc/eslint clean; **NOT applied to any DB**, not behaviour-tested). Cloud apply held until 4.5.2. **Next = 4.5.2 (the Sella strip UI).**
+**Last updated:** 2026-06-16 18:21 CEST
+**Branch:** claude/ayush/work (rebased onto origin/dev 18:21 - includes your Playwright #105 + Discover #104)
+**Status:** active - **made the DB rebuild cleanly from files** (fixes the "local DB won't build" snags I flagged 06-14) + stood up a working local stack + opened **PR #106 -> dev** (4.5.2/4.5.3 Sella strip + 4.5.4 held-change design + the clean DB rebuild). **4.5.4 build is next** (now test-first, on your Playwright harness).
 **Linear issue in progress:** none
-**Shared files locked:** none (Muskan offline, no locks - cross-branch read 20:30 CEST). This wrap-up edited shared docs: `DECISIONS.md` (4.5 design) + `AGENTS.md` (checkpoint) + `_workshop/build-plans/4.5-deal-birth-acceptance.md`.
-**PR open:** Waypoint 4.5 design + 4.5.1 engine → dev (this wrap-up).
+**Shared files locked:** none. Today's commits touched our deal migrations + `DECISIONS.md` (held-change entry merged cleanly under your Discover one) + `.gitignore` (dropped our duplicate `.planning`, kept yours). All in PR #106.
+**PR open:** [#106](https://github.com/HelloSello/hello-sello-mvp/pull/106) -> dev (4.5.2/4.5.3 Sella strip + 4.5.4 held-change design + clean from-files DB rebuild).
 
 ---
 
 ## Notes for the other agent
+
+**2026-06-16 (later) - DB now rebuilds cleanly from files + opened PR [#106](https://github.com/HelloSello/hello-sello-mvp/pull/106) -> dev. ⚠️ I renamed migration files (duplicate-timestamp fix) + emptied the demo-seed migrations - please read before your next rebase.** The "local DB won't build" snags I flagged on 06-14 are fixed:
+> - **Demo data moved out of migrations into `seed.sql`** - it referenced Alice/Bob/GreenLeaf, which `seed.sql` creates AFTER migrations, so it could never run at migration time. Emptied 8 demo-seed migrations to no-op stubs (kept as files so already-applied DBs stay consistent); the demo world + GreenLeaf catalogue now live in `seed.sql` (sections 5-6).
+> - **Fixed the 3 duplicate-timestamp pairs** (one rename each, +1 min): our `seed_demo_deal_log`->161000, **our** `deal_workspace_role_ownership`->171000 (I left **your** `shop_media_owner_select` at 170000 untouched), our `propose_deal_rpc`->121000 (this breaks the pair with your `list_discoverable_companies` - the smell you flagged).
+> - **`3p5a` trimmed** to just its `deal.created` audit reference; its Aurora products + pricelist moved to `seed.sql` (they referenced company aaaa, created after migrations).
+> - **Net:** `supabase db reset` applies everything + seeds green. Verified: Alice + Bob log in, GreenLeaf has 4 priced products. Should merge clean for you (no overlap with your files) - just glance at the renames if you have local migration state.
+> - **The `::` colon-path Docker bug is real:** `supabase start` can't run from `.../He::oSe::o/...` (Docker volume specs reject `:`). Workaround: run the stack from a colon-free copy (`~/hs-local-db`) + point `.env.local` at `127.0.0.1:54321`. Only bites you if your path also has colons.
+> - **Rebased in your Playwright harness (#105)** - we're going test-first on 4.5.4. Thank you.
+
+**2026-06-16 - 4.5.4 deal-CHANGE flow DESIGNED + LOCKED (grill); no code yet. ⚠️ Nothing of yours touched; I edited 5 shared docs (all appends / one new file).** An edit becomes a **held two-sided proposal** (not the old instant `edit_deal_draft` bump): held in a new `deal_pending_change` record (one row per deal, DB-unique); the strip shows it in BOTH the p2p + deal chats (synced); **full lock** while pending; three exits (other company Accept/Decline + a Change reason; proposer Withdraw, no reason); commit reuses the existing version-build logic on both-accept. Announcements go to BOTH chats for both outcomes.
+> - **Shared docs touched (all appends / new file, low conflict):** `DECISIONS.md` (2026-06-16 entry), **new** `docs/architecture/adr/0001-held-deal-change.md`, `CONTEXT.md` (5 glossary terms), `AGENTS.md` (checkpoint), `docs/PRD/BUILD-PLAN.md` (a Waypoint-4.5 pointer note). Design source of truth: `_workshop/build-plans/6-pending-map.md` (§3A).
+> - **Also captured Marcel's Linear feedback** (DEV-66/67/71/72/73/74/75) into `6-pending-map.md` §8 - mostly the 5A Connect/chat UI pass. DEV-66 "deal room" rename has a **naming clash** with our existing `CONTEXT.md` "Deal Room" (flagged - resolve before renaming).
+> - **Rebased onto origin/dev today** (your Discover #104 work is in) - branch in sync. **No code yet; 4.5.4 build is next.**
+
+**2026-06-14 (later) - 4.5.2 the Sella strip BUILT + verified live; ⚠️ nothing of yours touched; `propose_deal` applied to the cloud (additive).** The `DealPin` bar is now the **Sella strip** - State A "Start a deal" (p2p), State B a pending proposal (loud "Review" pill → Accept/Decline → `confirm_detected_deal` → atomic birth, "Waiting for {other}" chip for the side that already voted), State C the deal selector + an `✦ AI` badge + a "thinking" animation.
+> - **New code is deal-module only** (`getPendingProposal` read, `confirmDetectedDeal` action, `CreateDealForm`→`proposeDeal`, a new `DealForm` `showPrivate` prop defaulting true so create/edit are unchanged) **+ one `messaging/ThreadView.tsx` line** (pass the p2p `threadId` into `DealPin`) **+ an inline realtime sub inside `DealPin`** (its own channel `deal-strip-realtime`, inlined to avoid a `deals ↔ messaging` module cycle - I did NOT import your `useChatRealtime`).
+> - **`propose_deal` is now on the live cloud DB** (additive - a brand-new function nothing else calls; the detect cron is unchanged). The `…120100_confirm_detected_deal_proposer_initiator` replace is **still HELD** (it would swap the function the live cron uses; backward-compatible).
+> - **Committed to `claude/ayush/work`, NOT pushed** (commit-only this session). Next = 4.5.3 (card → pure display; the Seal gate moves off `CardFront` into the strip).
 
 **2026-06-14 - Waypoint 4.5 (deal birth/acceptance) designed + 4.5.1 engine built (HELD). ⚠️ Nothing of yours touched; NOT applied to any DB.** Found + fixed the birth/acceptance tangle (blocker before 5A.4): the card was born too early and acceptance lived on the card. New model - manual-create AND Sella-detect both write a `deal_detected` **proposal** message; the card+workspace are born ONLY on both-accept (manual = sender pre-accepted). **Supersedes 3.5a D5** (workspace now born at accept, not at draft - no orphan). The card becomes pure display; the **Sella strip** (the `DealPin` bar) owns birth-accept + the change-note + the Seal gate.
 > - **4.5.1 (engine) BUILT + HELD:** 2 new deal/Sella-only migrations (`…120000_propose_deal_rpc` NEW + additive; `…120100_confirm_detected_deal_proposer_initiator` - a backward-compatible replace of `confirm_detected_deal`, detection falls back to old behaviour) + a `proposeDeal` server action. tsc/eslint clean; all migrations apply clean on a fresh DB. **NOT applied to any DB** and **not behaviour-tested** - the cloud `confirm_detected_deal` cron is unchanged. We apply + test live during 4.5.2.

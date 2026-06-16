@@ -1,39 +1,58 @@
 "use client";
 
 /**
- * Deal pin (3a → reworked in 5A.2) - the deal card's home inside a chat. Wraps
- * the message stream: renders the "Deal:" selector bar above it and, when
- * opened, floats the DealCard on the RIGHT of the stream.
+ * The Sella strip (4.5.2; was the "Deal:" selector bar, 3a → 5A.2) - the deal's
+ * home + Sella's single in-chat action surface, wrapping the message stream.
  *
- * The bar is a DEAL SELECTOR (5A.2): the active deal shows as a small "deal
- * card" chip (no raw HS number - that lives inside the opened card), and the
- * chevron opens a dropdown to pick a different deal of this relationship - real
- * context for a seller juggling several deals with one company. Multi-deal is
- * the demo norm of one (DEV-37), so the list is usually a single row; the
- * control is honestly ready for more.
+ * It has three states (build plan 4.5 §3):
+ *   - A · no deal, no proposal → a dashed "Start a deal" (p2p only).
+ *   - B · a PROPOSAL is pending → the pre-card object. The other side accepts
+ *         here (the loud pill → confirm_detected_deal → atomic birth); the
+ *         proposer sees "waiting". This is the ONLY place a card is born now.
+ *   - C · a live deal is selected → the deal chip + selector dropdown + "Open
+ *         card" + the quiet "Workspace ↗" door.
  *
- * Two variants:
- *   - `chat` (default, screen ②): the full selector + "Open card" + a quiet
- *     "Workspace ↗" door (screen ④). No deal yet → a dashed "Start a deal".
- *   - `workspace` (screen ④): the deal is fixed here, so just the chip (no
- *     dropdown) + "Open card" - you are already in the workspace.
+ * Neutral + system-voice + both-sides (D7): both people see the same strip and
+ * press the same buttons. The PRIVATE per-side Sella stays in the right panel.
  *
- * Self-contained: lists the relationship's deals + loads the selected one, so
- * the messaging module just wraps its stream with <DealPin>.
+ * Self-contained: it lists the relationship's deals, loads the selected card,
+ * AND reads the thread's pending proposal - and refreshes itself live on its own
+ * realtime channel (a new proposal = a chat_message insert; a birth = a new deal
+ * chat_thread insert). The realtime is INLINED on the shared db client on
+ * purpose: importing messaging's hook would make deals ↔ messaging a cycle
+ * (messaging already renders this component).
  */
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowUpRight, Check, ChevronDown, FileText, Kanban, Plus } from "lucide-react";
+import {
+  ArrowUpRight,
+  BadgeCheck,
+  Check,
+  ChevronDown,
+  FileText,
+  Kanban,
+  Plus,
+  Sparkles,
+} from "lucide-react";
+import { createClient } from "@/shared/db/client";
 import {
   getDealCard,
+  getPendingProposal,
   listRelationshipDeals,
   type RelationshipDealRow,
 } from "../supabase/reads";
-import { confirmDeal } from "../actions";
+import { confirmDeal, confirmDetectedDeal } from "../actions";
+import { formatMoney } from "../lib/derive";
+import { ConfirmBar } from "./ConfirmBar";
 import { DealCard } from "./DealCard";
 import { CreateDealForm } from "./CreateDealForm";
 import { EditDealForm } from "./EditDealForm";
-import type { ConfirmDecision, DealCardStatus, DealCardView } from "../types";
+import type {
+  ConfirmDecision,
+  DealCardStatus,
+  DealCardView,
+  PendingProposalView,
+} from "../types";
 
 /** Statuses still "live" (not terminal) - the preferred default selection. */
 const LIVE_STATUSES = new Set<DealCardStatus>(["draft", "confirmed", "amended"]);
@@ -68,6 +87,32 @@ function timeAgo(iso: string): string {
 }
 
 /**
+ * The EU-AI-Act "AI" mark - the strip's system voice is Sella. Reuses the same
+ * Sparkles mark the Sella chat lines use, so it reads as one voice. Shows three
+ * gently-pulsing dots in place of "AI" while Sella is working (`thinking`).
+ */
+function SellaMark({ thinking = false }: { thinking?: boolean }) {
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-brand-soft/40 px-2 py-0.5 text-[10px] font-semibold text-brand-deep ring-1 ring-brand/15">
+      <Sparkles size={11} strokeWidth={2} className="text-brand" />
+      {thinking ? (
+        <span className="inline-flex items-center gap-0.5" aria-label="Sella is thinking">
+          {[0, 160, 320].map((d) => (
+            <span
+              key={d}
+              className="h-1 w-1 animate-pulse rounded-full bg-brand"
+              style={{ animationDelay: `${d}ms` }}
+            />
+          ))}
+        </span>
+      ) : (
+        "AI"
+      )}
+    </span>
+  );
+}
+
+/**
  * The active deal as a small "deal card" object: a raspberry spine + a card
  * icon + "Deal card" + its status. A chevron when it doubles as a selector.
  */
@@ -88,11 +133,18 @@ function DealChip({ status, selectable }: { status: DealCardStatus; selectable: 
 export function DealPin({
   relationshipId,
   variant = "chat",
+  threadId,
   counterpartyName,
   children,
 }: {
   relationshipId: string;
   variant?: "chat" | "workspace";
+  /**
+   * The p2p chat thread (chat variant only). Required to propose + to read the
+   * thread's pending proposal; absent for c2c threads and the workspace variant,
+   * which keeps propose/accept connected-P2P only (D13).
+   */
+  threadId?: string;
   /** the other company's name - the dropdown heading + the create-form recipient */
   counterpartyName?: string;
   children: React.ReactNode;
@@ -102,9 +154,20 @@ export function DealPin({
   const [data, setData] = useState<DealCardView | null>(null);
   const [open, setOpen] = useState(false); // the card overlay
   const [picking, setPicking] = useState(false); // the deal dropdown
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(false); // a seal decision (card overlay)
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState(false);
+
+  // 4.5.2 - the pending proposal (State B) + its popover + its accept/decline
+  const [proposal, setProposal] = useState<PendingProposalView | null>(null);
+  const [asksOpen, setAsksOpen] = useState(false); // the loud pill's popover
+  const [acting, setActing] = useState(false); // accept/decline in flight
+
+  // 4.5.3 - the Seal gate (was on the card) now drops down from State C here
+  const [sealOpen, setSealOpen] = useState(false); // the seal popover
+
+  // whether THIS strip can host a proposal: chat variant over a real p2p thread
+  const canPropose = variant === "chat" && !!threadId;
 
   // 3d gate: run a confirm/decline/withdraw on the server, then re-read the card
   // (and refresh the list so the chip's status badge updates).
@@ -115,6 +178,7 @@ export function DealPin({
       await confirmDeal({ dealCardId: data.card.id, version: data.card.version, decision });
       const fresh = await getDealCard(data.card.id);
       setData(fresh);
+      setSealOpen(false); // the decision is in - drop the popover; the trigger reflects the new state
       void listRelationshipDeals(relationshipId).then(setDeals);
       // tell sibling views (the workspace header's lifecycle pill) to re-read.
       window.dispatchEvent(
@@ -124,6 +188,35 @@ export function DealPin({
       console.error("deal confirm failed", e);
     } finally {
       setBusy(false);
+    }
+  }
+
+  // 4.5.2 - the birth-accept. Record this side's vote; on both-accept the RPC
+  // births the card atomically and hands back its id, so we select + open it.
+  async function runProposal(decision: "accept" | "reject") {
+    if (!proposal || acting || !threadId) return;
+    const tid = threadId;
+    setActing(true);
+    try {
+      const { bornCardId } = await confirmDetectedDeal({
+        messageId: proposal.messageId,
+        decision,
+      });
+      setAsksOpen(false);
+      const list = await listRelationshipDeals(relationshipId);
+      setDeals(list);
+      setProposal(await getPendingProposal(tid));
+      if (bornCardId) {
+        setSelectedId(bornCardId);
+        setOpen(true);
+        window.dispatchEvent(
+          new CustomEvent("hs:deal-updated", { detail: { dealCardId: bornCardId } }),
+        );
+      }
+    } catch (e) {
+      console.error("proposal decision failed", e);
+    } finally {
+      setActing(false);
     }
   }
 
@@ -150,30 +243,100 @@ export function DealPin({
     };
   }, [relationshipId]);
 
-  // the composer's "+ → Create a deal" door (5A.3): it fires a window event so
-  // the footer button and this form stay decoupled. Chat variant only - the
-  // workspace chat is for an existing deal, not a place to mint a new one.
+  // 4.5.2 - load the thread's pending proposal (chat + p2p only). setState lives
+  // only inside the async callback (never synchronously in the effect body) - no
+  // cascading render, and a non-p2p thread resolves to null the same way.
   useEffect(() => {
-    if (variant !== "chat") return;
+    let alive = true;
+    void (async () => {
+      const p =
+        canPropose && threadId ? await getPendingProposal(threadId).catch(() => null) : null;
+      if (alive) setProposal(p);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [canPropose, threadId]);
+
+  // 4.5.2 - live refresh on the strip's OWN channel so BOTH screens stay current:
+  // a new proposal arrives (chat_message insert in this thread) → re-read the
+  // proposal; a deal is born (a new deal chat_thread insert) → re-read deals +
+  // proposal (the proposal is now born → it clears; the new card appears). The
+  // re-reads only setState from fresh server data, so no stale-closure risk.
+  useEffect(() => {
+    if (!canPropose || !threadId) return;
+    const supabase = createClient();
+    let cancelled = false;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    const reloadProposal = () => {
+      void getPendingProposal(threadId)
+        .then((p) => !cancelled && setProposal(p))
+        .catch(() => {});
+    };
+    const reloadDeals = () => {
+      void listRelationshipDeals(relationshipId)
+        .then((list) => {
+          if (cancelled) return;
+          setDeals(list);
+          // adopt the freshly-born deal only when nothing is selected yet
+          setSelectedId(
+            (cur) => cur ?? (list.find((d) => LIVE_STATUSES.has(d.status)) ?? list[0])?.id ?? null,
+          );
+        })
+        .catch(() => {});
+    };
+
+    void (async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (session?.access_token) await supabase.realtime.setAuth(session.access_token);
+      if (cancelled) return;
+      channel = supabase
+        .channel("deal-strip-realtime")
+        .on(
+          "postgres_changes",
+          { event: "INSERT", schema: "public", table: "chat_message" },
+          (payload) => {
+            if ((payload.new as { thread_id?: string }).thread_id === threadId) reloadProposal();
+          },
+        )
+        .on(
+          "postgres_changes",
+          { event: "INSERT", schema: "public", table: "chat_thread" },
+          () => {
+            reloadDeals();
+            reloadProposal();
+          },
+        )
+        .subscribe();
+    })();
+
+    return () => {
+      cancelled = true;
+      if (channel) void supabase.removeChannel(channel);
+    };
+  }, [canPropose, threadId, relationshipId]);
+
+  // the composer's "+ → Create a deal" door (5A.3): it fires a window event so
+  // the footer button and this form stay decoupled. p2p chat only - propose
+  // needs a p2p thread (the workspace/c2c chats cannot mint a proposal).
+  useEffect(() => {
+    if (!canPropose) return;
     const onCreate = () => setCreating(true);
     window.addEventListener("hs:create-deal", onCreate);
     return () => window.removeEventListener("hs:create-deal", onCreate);
-  }, [variant]);
+  }, [canPropose]);
 
   // load the full card for the selected deal (drives the overlay + confirm gate).
+  // setState only inside the async callback - no selection resolves to null.
   useEffect(() => {
-    if (!selectedId) {
-      setData(null);
-      return;
-    }
     let alive = true;
-    void getDealCard(selectedId)
-      .then((d) => {
-        if (alive) setData(d);
-      })
-      .catch(() => {
-        if (alive) setData(null);
-      });
+    void (async () => {
+      const d = selectedId ? await getDealCard(selectedId).catch(() => null) : null;
+      if (alive) setData(d);
+    })();
     return () => {
       alive = false;
     };
@@ -189,6 +352,26 @@ export function DealPin({
   const chipStatus: DealCardStatus = selectedDeal?.status ?? data?.card.status ?? "draft";
   const hasDeal = deals.length > 0 && !!selectedId;
 
+  // State B applies while a proposal is pending and the viewer has not declined
+  // it (a decline reset is 4.5.5; here a declined proposal simply drops away).
+  const showProposal = !!proposal && proposal.myVote !== "reject";
+  const mustAct = showProposal && proposal!.myVote == null; // my turn to accept/decline
+  const waiting = showProposal && proposal!.myVote === "accept" && proposal!.otherVote !== "accept";
+
+  // 4.5.3 - the Seal gate, derived from the loaded card (was computed in CardFront).
+  // The two-seat ConfirmBar now lives in the strip; these decide how the trigger reads.
+  const viewerSeat = data?.confirmations.find((s) => s.side === data.viewerSide) ?? null;
+  const otherSeat = data?.confirmations.find((s) => s.side !== data?.viewerSide) ?? null;
+  const bothSealed =
+    !!data &&
+    (data.card.status === "confirmed" ||
+      (data.confirmations.length === 2 &&
+        data.confirmations.every((s) => s.status === "confirmed")));
+  // sealable while the card is still open business (draft / amended) and not yet sealed
+  const sealable =
+    !!data && !bothSealed && (data.card.status === "draft" || data.card.status === "amended");
+  const awaitingOther = viewerSeat?.status === "confirmed" && otherSeat?.status !== "confirmed";
+
   const openCardButton = (
     <button
       type="button"
@@ -199,11 +382,200 @@ export function DealPin({
     </button>
   );
 
+  // 4.5.3 - the Seal control: a gold "Sealed" chip once both sides are in, else a
+  // trigger that drops the ConfirmBar in a popover (same glass shell as State B's
+  // "Review"). Reused in State C + the workspace variant so neither loses sealing.
+  const sealControl =
+    !data || (!bothSealed && !sealable) ? null : bothSealed ? (
+      <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1.5 text-[11px] font-semibold text-amber-700 ring-1 ring-amber-300">
+        <BadgeCheck size={13} strokeWidth={2.5} />
+        Sealed
+      </span>
+    ) : (
+      <div className="relative shrink-0">
+        <button
+          type="button"
+          onClick={() => setSealOpen((o) => !o)}
+          aria-haspopup="dialog"
+          aria-expanded={sealOpen}
+          className={
+            awaitingOther
+              ? "inline-flex items-center gap-1.5 rounded-full bg-white/70 px-3 py-1.5 text-[11px] font-medium text-ink/55 ring-1 ring-black/5 transition hover:bg-white"
+              : "inline-flex items-center gap-1.5 rounded-full bg-brand px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-brand-deep"
+          }
+        >
+          {awaitingOther ? (
+            <>
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand/60" />
+              Awaiting {counterpartyName ?? "the other side"}
+            </>
+          ) : (
+            <>
+              <Sparkles size={13} strokeWidth={2} />
+              Seal
+            </>
+          )}
+        </button>
+
+        {sealOpen && (
+          <>
+            <div className="fixed inset-0 z-10" onClick={() => setSealOpen(false)} />
+            <div className="glass-strong absolute right-0 top-full z-20 mt-1.5 w-80 overflow-hidden rounded-2xl">
+              <div className="flex items-stretch">
+                <span className="w-1 shrink-0 bg-brand" aria-hidden />
+                <div className="min-w-0 flex-1 p-3">
+                  <div className="mb-0.5 flex items-center gap-1.5 text-[11px] font-semibold text-brand-deep">
+                    <Sparkles size={12} strokeWidth={2} />
+                    Seal the deal
+                  </div>
+                  <p className="mb-2 text-[11px] text-ink/50">
+                    {counterpartyName ? `Deal with ${counterpartyName}` : "Confirm the final terms"}
+                  </p>
+                  <ConfirmBar
+                    seats={data.confirmations}
+                    viewerSide={data.viewerSide}
+                    busy={busy}
+                    onConfirm={() => void runDecision("confirm")}
+                    onDecline={() => void runDecision("decline")}
+                  />
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    );
+
+  // the strip's row shell - same border + padding across all three states
+  const rowCls = "flex items-center gap-3 border-b border-black/5 px-4 py-2.5";
+
   return (
     <>
-      {/* chat variant - the deal selector bar */}
-      {variant === "chat" && hasDeal && (
-        <div className="flex items-center gap-3 border-b border-black/5 px-4 py-2.5">
+      {/* State B - a proposal is pending (the pre-card object, the new heart) */}
+      {variant === "chat" && showProposal && (
+        <div className={rowCls}>
+          <SellaMark thinking={acting} />
+          <span className="min-w-0 flex-1 truncate text-xs text-ink/70">
+            <span className="font-semibold text-ink/85">
+              {proposal!.iProposed
+                ? "You proposed a deal"
+                : proposal!.source === "sella"
+                  ? "Sella spotted a deal"
+                  : `${counterpartyName ?? "They"} proposed a deal`}
+            </span>
+            <span className="text-ink/45"> · {proposal!.summary}</span>
+          </span>
+
+          {/* the action lives on the right: a LOUD pill when it is my turn, a
+              quiet "waiting" chip when I have accepted and the other side has not */}
+          {mustAct && (
+            <div className="relative shrink-0">
+              <button
+                type="button"
+                onClick={() => setAsksOpen((o) => !o)}
+                aria-haspopup="dialog"
+                aria-expanded={asksOpen}
+                className="relative inline-flex items-center gap-1.5 rounded-full bg-brand px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-brand-deep"
+              >
+                {/* the pulse - the one high-impact moment that says "act" */}
+                <span className="absolute -right-0.5 -top-0.5 flex h-2.5 w-2.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-soft opacity-80" />
+                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-brand-soft ring-2 ring-white" />
+                </span>
+                <Sparkles size={13} strokeWidth={2} />
+                Review
+              </button>
+
+              {asksOpen && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setAsksOpen(false)} />
+                  <div className="glass-strong absolute right-0 top-full z-20 mt-1.5 w-80 overflow-hidden rounded-2xl">
+                    <div className="flex items-stretch">
+                      <span className="w-1 shrink-0 bg-brand" aria-hidden />
+                      <div className="min-w-0 flex-1 p-3">
+                        <div className="mb-0.5 flex items-center gap-1.5 text-[11px] font-semibold text-brand-deep">
+                          <Sparkles size={12} strokeWidth={2} />
+                          {proposal!.source === "sella" ? "Sella spotted a deal" : "Deal proposal"}
+                        </div>
+                        <p className="mb-2 text-[11px] text-ink/50">
+                          {proposal!.iProposed
+                            ? "Your proposal"
+                            : `From ${counterpartyName ?? "your contact"}`}
+                        </p>
+
+                        <ul className="space-y-1.5">
+                          {proposal!.lines.map((l, i) => (
+                            <li
+                              key={i}
+                              className="flex items-baseline justify-between gap-3 text-xs"
+                            >
+                              <span className="min-w-0 flex-1 truncate text-ink/80">{l.name}</span>
+                              <span className="shrink-0 font-mono text-[11px] text-ink/60">
+                                {l.quantity}
+                                {l.unit}
+                                {l.unitPrice != null
+                                  ? ` · ${formatMoney(l.unitPrice, l.currency)}`
+                                  : ""}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+
+                        {(() => {
+                          const priced = proposal!.lines.filter((l) => l.unitPrice != null);
+                          if (priced.length === 0) return null;
+                          const total = priced.reduce(
+                            (s, l) => s + l.quantity * (l.unitPrice as number),
+                            0,
+                          );
+                          return (
+                            <div className="mt-2 flex items-baseline justify-between border-t border-black/5 pt-2 text-xs">
+                              <span className="text-ink/50">Total</span>
+                              <span className="font-mono font-semibold text-ink">
+                                {formatMoney(total, proposal!.currency)}
+                              </span>
+                            </div>
+                          );
+                        })()}
+
+                        <div className="mt-3 flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => void runProposal("accept")}
+                            disabled={acting}
+                            className="flex-1 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-deep disabled:opacity-50"
+                          >
+                            {acting ? "Working…" : "Accept"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void runProposal("reject")}
+                            disabled={acting}
+                            className="rounded-lg px-3 py-1.5 text-xs font-medium text-ink/55 ring-1 ring-black/5 transition hover:bg-black/[0.04] disabled:opacity-50"
+                          >
+                            Decline
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {waiting && (
+            <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-white/70 px-3 py-1.5 text-[11px] font-medium text-ink/55 ring-1 ring-black/5">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand/60" />
+              Waiting for {counterpartyName ?? "the other side"}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* State C - a live deal is selected: the selector bar */}
+      {variant === "chat" && !showProposal && hasDeal && (
+        <div className={rowCls}>
           <span className="shrink-0 text-[11px] text-ink/45">Deal:</span>
           <div className="relative">
             <button
@@ -248,6 +620,8 @@ export function DealPin({
             )}
           </div>
           {openCardButton}
+          {sealControl}
+          <SellaMark thinking={busy} />
           <Link
             href={`/connect/deal/${selectedId}`}
             className="ml-auto flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-medium text-ink/55 transition hover:bg-ink/5 hover:text-ink"
@@ -259,28 +633,31 @@ export function DealPin({
         </div>
       )}
 
-      {/* chat variant, no deal yet - a quiet invitation (the card is born here
-          on a human press → it fills this bar on the next read, the AI fence) */}
-      {variant === "chat" && deals.length === 0 && (
-        <div className="flex items-center gap-3 border-b border-black/5 px-4 py-2.5">
+      {/* State A - no deal, no proposal: a quiet invitation. p2p only (propose
+          needs a p2p thread); a c2c thread with no deal shows just the label. */}
+      {variant === "chat" && !showProposal && !hasDeal && (
+        <div className={rowCls}>
           <span className="shrink-0 text-[11px] text-ink/45">No deal yet</span>
-          <button
-            type="button"
-            onClick={() => setCreating(true)}
-            className="flex items-center gap-1.5 rounded-lg border border-dashed border-brand/45 px-3 py-1.5 text-xs font-semibold text-brand transition hover:border-brand hover:bg-brand-soft/30"
-          >
-            <Plus size={13} strokeWidth={2.5} />
-            Start a deal
-          </button>
+          {canPropose && (
+            <button
+              type="button"
+              onClick={() => setCreating(true)}
+              className="flex items-center gap-1.5 rounded-lg border border-dashed border-brand/45 px-3 py-1.5 text-xs font-semibold text-brand transition hover:border-brand hover:bg-brand-soft/30"
+            >
+              <Plus size={13} strokeWidth={2.5} />
+              Start a deal
+            </button>
+          )}
         </div>
       )}
 
-      {/* workspace variant - the deal is fixed; chip + open only */}
+      {/* workspace variant - the deal is fixed; chip + open + seal */}
       {variant === "workspace" && hasDeal && (
-        <div className="flex items-center gap-3 border-b border-black/5 px-4 py-2.5">
+        <div className={rowCls}>
           <span className="shrink-0 text-[11px] text-ink/45">Deal:</span>
           <DealChip status={chipStatus} selectable={false} />
           {openCardButton}
+          {sealControl}
         </div>
       )}
 
@@ -290,35 +667,26 @@ export function DealPin({
         {data && open && (
           <div className="pointer-events-none absolute inset-0 z-10 flex justify-end p-4">
             <div className="pointer-events-auto self-start">
-              <DealCard
-                data={data}
-                confirm={{
-                  busy,
-                  onConfirm: () => void runDecision("confirm"),
-                  onDecline: () => void runDecision("decline"),
-                  onWithdraw: () => void runDecision("withdraw"),
-                }}
-                onEdit={() => setEditing(true)}
-              />
+              <DealCard data={data} onEdit={() => setEditing(true)} />
             </div>
           </div>
         )}
       </div>
 
-      {/* the create form (3.5a) - a human-pressed commit; on success the new
-          card is selected + opened (the AI fence: only this button writes). */}
-      {creating && (
+      {/* the propose form (4.5.2, was create 3.5a) - a human-pressed Send writes
+          a PROPOSAL (no card yet); on success the strip re-reads to show pending.
+          p2p only - guarded by canPropose + threadId so c2c never reaches it. */}
+      {creating && canPropose && threadId && (
         <CreateDealForm
           relationshipId={relationshipId}
+          threadId={threadId}
           counterpartyName={counterpartyName ?? "your contact"}
           onClose={() => setCreating(false)}
-          onCreated={(cardId) => {
+          onProposed={() => {
             setCreating(false);
-            void listRelationshipDeals(relationshipId).then((list) => {
-              setDeals(list);
-              setSelectedId(cardId);
-              setOpen(true);
-            });
+            void getPendingProposal(threadId)
+              .then(setProposal)
+              .catch(() => {});
           }}
         />
       )}

@@ -108,4 +108,14 @@ Consumed by Matt Pocock's `grill-with-docs` and `improve-codebase-architecture` 
 | **Buyer product code** | The buyer's *own* internal code for a supplier's product — **per-buyer** (relationship-scoped), not shared on the product master. |
 | **Pricelist / Pricelist item** | A supplier's standard company-wide price list (header) + its per-product price rows (basic + bundle). v0 = one standard list per company; per-customer override deferred. |
 
+## Deal change flow (2026-06-16)
+
+| Term | Definition |
+|------|-----------|
+| **Pending change** | A single held proposal of new **shared** deal terms, waiting for the other company's Accept or Decline. The Deal Card keeps showing the last agreed version until the pending change commits (both sides yes); a Decline or Withdraw discards it. At most one per deal. |
+| **Change proposed / Change detected** | The two sources of a pending change: **proposed** = a person edited the card; **detected** = Sella spotted a change (later work). Same pending change underneath. |
+| **Change reason** | The required reason a person gives on every **Accept** or **Decline** of a pending change (a Withdraw needs none). Distinct from a card **Note**. Captured as the per-person **Deal change input** and surfaced in the **Deal card log** + a system message. |
+| **Note (card)** | An optional, per-company short content note shown on the Deal Card face for the other side. Optional; distinct from a **Change reason**. |
+| **Decision strip** | The shared, deal-bound surface beside the Deal Card (the Sella strip / `DealPin`) that holds the Accept / Decline / Withdraw decision and the pending-change notice. Shown in **both** the p2p chat and the deal chat, synced - the card displays, the strip decides. |
+
 *Maintained by `grill-with-docs` (proposes additions during grilling — humans confirm) and direct edits. Add new terms when they're locked in Layer docs or surface during code review.*

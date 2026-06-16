@@ -1,9 +1,9 @@
 -- ============================================================================
--- 20260610190000_seed_demo_things.sql — INTENTIONALLY EMPTY (no-op)
+-- 20260610160000_seed_demo_deal_log.sql — INTENTIONALLY EMPTY (no-op)
 -- ----------------------------------------------------------------------------
--- Removed 2026-06-16 (Option B). Seeded Things onto the hand-made demo deal
--- workspace (card 04695a2d…), fixed UUIDs created ad-hoc on the cloud and not
--- reproducible from files. Migrations are now schema-only; demo data lives in
+-- Removed 2026-06-16 (Option B). Seeded the version log onto the hand-made demo
+-- card 04695a2d…, a fixed UUID created ad-hoc on the cloud and not reproducible
+-- from files. Migrations are now schema-only; demo data lives in
 -- supabase/seed/seed.sql and test deals are created through the app. File kept
 -- so migration history stays consistent with databases that recorded it.
 -- ============================================================================
