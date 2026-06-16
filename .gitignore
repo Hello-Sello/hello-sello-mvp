@@ -54,3 +54,12 @@ next-env.d.ts
 *.pem
 npm-debug.log*
 .obsidian/
+
+# --- Playwright (E2E tests) ---
+/test-results/
+/playwright-report/
+/playwright/.cache/
+/blob-report/
+
+# --- GSD planning workspace (personal scaffolding, per team decision — never committed) ---
+.planning/
