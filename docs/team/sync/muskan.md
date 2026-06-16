@@ -7,7 +7,7 @@
 
 **Last updated:** 2026-06-16 (Phase 1 COMPLETE — F3 backfill done) CEST
 **Branch:** claude/muskan/work (synced with dev #106)
-**Status:** active — **Phase 1 (Clean-Rebuild Foundation) COMPLETE.** Committed both drifted migrations as files (`profile_qr_foundation` + `get_public_profile`); a clean from-files `supabase db reset` now stands up onboarding + `/c/[handle]` — verified: SQL smoke test + Playwright e2e green. Lock released. Local-first. Next: Phase 2 (cross-tenant lockdown, SEC-01/02/03).
+**Status:** idle — **Phase 1 (Clean-Rebuild Foundation) COMPLETE.** Committed both drifted migrations as files (`profile_qr_foundation` + `get_public_profile`); a clean from-files `supabase db reset` now stands up onboarding + `/c/[handle]` — verified: SQL smoke test + Playwright e2e green. Lock released. Local-first. Next: Phase 2 (cross-tenant lockdown, SEC-01/02/03).
 **Linear issue in progress:** none (GSD Phase 1; reqs DATA-01/02/03 — done)
 **Shared files locked:** none — Phase 1 migrations committed; lock on `supabase/migrations/` + `avatars` released.
 **PR open:** [#105](https://github.com/HelloSello/hello-sello-mvp/pull/105) → dev (test harness slice 0 + session-24 docs wrap). **MERGED:** Discover loop [#104](https://github.com/HelloSello/hello-sello-mvp/pull/104) → dev (slices 1–6). *(Prior: Sella proposal #99 merged to dev by Ayush; storage #98 on dev, held from main.)*
