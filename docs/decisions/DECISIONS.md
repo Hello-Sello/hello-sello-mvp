@@ -26,6 +26,9 @@ Each entry: **What was decided** → **Why** (the reasoning at the time).
 - **Decisions go through DECISIONS.md (Propose mode).** *Why:* otherwise locked decisions get forgotten across sessions and the same ground gets covered twice.
 - **All writes preview first; nothing written without explicit permission.** *Why:* the user is the final reviewer of every artifact.
 - **Project-level skills live in `.claude/skills/` so teammates inherit them via the project folder.** *Why:* personal/global skills don't ship with the project; this keeps the team aligned.
+- **Local-first DB development (2026-06-16).** Build + test every schema / RLS / migration change on the local Supabase stack first (`supabase db reset` to verify it builds from committed files), then apply to cloud — no direct-to-cloud MCP apply without a committed migration. *Why:* exactly the discipline that prevents F3-style migration drift (objects live on cloud but missing from the `.sql` files).
+- **GSD drives Muskan's planning/execution; `.planning/` = execution state, `docs/` = source of truth (2026-06-16).** GSD's gitignored, per-engineer `.planning/` (PROJECT/REQUIREMENTS/ROADMAP/STATE) holds execution state only; durable knowledge (decisions, architecture, domain) still flows to `docs/` via the wrap ritual; GSD files point to `AGENTS.md` + `docs/`. *Why:* one source of truth, no redundancy between the two systems.
+- **Onboarding-ready milestone = 8-phase GSD roadmap; Buy (DEV-77) + Sell→Allocate (DEV-76) deferred (2026-06-16).** Harden + UX Auth·Onboarding·Admin-verify·Discover·Present for real-world testing (test boundary = full deal loop to Done, joint w/ Ayush); Marcel's DEV-78/81/80/79/70/69/68 folded in as the UX phase; DEV-77/76, though Marcel-assigned to Muskan, deferred to a follow-up milestone. *Why:* sellable-first — onboard real companies on the built surfaces before expanding surface area.
 
 ---
 

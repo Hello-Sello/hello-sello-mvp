@@ -5,17 +5,21 @@
 
 ---
 
-**Last updated:** 2026-06-16 (test harness setup — slice 0 of the go-to-market push) CEST
-**Branch:** claude/muskan/work (synced with dev)
-**Status:** active — **test harness DONE** (Playwright E2E; `npm test` green — login smoke). Slice 0 of the launch push. **Locks released.** Next: GSD map-codebase (separate session) → auth hardening + admin verification.
-**Linear issue in progress:** none
-**Shared files locked:** none (test-harness committed)
+**Last updated:** 2026-06-16 (executing Phase 1 — F3 migration backfill) CEST
+**Branch:** claude/muskan/work (synced with dev #106)
+**Status:** active — **executing Phase 1 (Clean-Rebuild Foundation).** Committing my 2 drifted migrations as files (`profile_qr_foundation` + `get_public_profile` — session-19 work, live-but-uncommitted) so a clean from-files `supabase db reset` brings up onboarding + `/c/[handle]`. Local-first.
+**Linear issue in progress:** none (GSD Phase 1; reqs DATA-01/02/03)
+**Shared files locked:** `supabase/migrations/` (ADDING 2 new files — `20260615120000_profile_qr_foundation` + `20260615123000_get_public_profile`; no edits to existing migrations) + the **`avatars`** storage bucket/policy. NOT touching `seed.sql`, `product`, or `database.types.ts`.
 **PR open:** [#105](https://github.com/HelloSello/hello-sello-mvp/pull/105) → dev (test harness slice 0 + session-24 docs wrap). **MERGED:** Discover loop [#104](https://github.com/HelloSello/hello-sello-mvp/pull/104) → dev (slices 1–6). *(Prior: Sella proposal #99 merged to dev by Ayush; storage #98 on dev, held from main.)*
 **Prev PR:** Discover directory [#95](https://github.com/HelloSello/hello-sello-mvp/pull/95)→dev / [#96](https://github.com/HelloSello/hello-sello-mvp/pull/96)→main · Profile & QR [#88](https://github.com/HelloSello/hello-sello-mvp/pull/88)/[#89](https://github.com/HelloSello/hello-sello-mvp/pull/89) — all **merged**.
 
 ---
 
 ## Notes for the other agent
+
+**2026-06-16 (executing) — Phase 1 = F3 backfill of MY own drifted objects. ⚠️ Locked `supabase/migrations/` (2 NEW files only, no edits to yours) + the `avatars` bucket/policy. Nothing of yours touched; not editing `seed.sql` / `product` / `database.types.ts`.** Committing `profile_qr_foundation` + `get_public_profile` (live-but-uncommitted since session-19) so a clean from-files `db reset` stands up onboarding + the public profile page. Your clean-rebuild + dup-timestamp fixes confirm the untouched chain resets green — thanks; my e2e drives the handle through the app so I don't touch your `seed.sql`. I dumped the live `get_public_profile` body from cloud to commit it verbatim (13 cols incl. `company_logo_path`; grants anon + authenticated).
+
+**2026-06-16 (later) — GSD planning setup for my lane. Nothing of yours touched; no shared schema/code changed (only a DECISIONS.md append + this sync).** Synced my branch with dev #106 (your 4.5.2/4.5.3 Sella strip + clean-from-files DB rebuild — thanks; the dup-timestamp + clean-rebuild fixes are in). Set up GSD for my lane entirely in **gitignored `.planning/`** (per-engineer, not shared): mapped the codebase + product docs, ran new-project → **onboarding-ready milestone** (Auth·Onboarding·Admin-verify·Discover·Present), **8-phase roadmap**. **Locked (DECISIONS.md):** local-first DB hygiene (build + `db reset` on local first, then cloud — no MCP-to-cloud without a committed migration); **Buy (DEV-77) + Sell→Allocate (DEV-76) deferred** to a follow-up milestone though Marcel assigned them; Marcel's Discover/Present/Home issues (DEV-78/81/80/79/70/69/68) folded into a UX phase. **Next: plan-phase 1 = F3 migration backfill** (`get_public_profile` + `profile_qr_foundation` still missing from files; touches shared `product`/`avatars`, sync ritual first).
 
 **2026-06-16 — Setting up the test harness (Playwright E2E) — slice 0 of the go-to-market push. ⚠️ Locking `package.json` + `.gitignore` (both append-only, low conflict).** Adding `@playwright/test` (dev dep) + a `test` script + an `e2e/` folder with one smoke test. No app code, no schema, no RLS. Foundation for TDD on the launch work (auth hardening + admin verification + Discover/Present refinement). **DONE — committed, `npm test` green (login smoke), locks released.** Also gitignored `.planning/` (GSD personal scaffolding; per the two-systems split — Linear = work queue, GSD = product knowledge, no overlap).
 
