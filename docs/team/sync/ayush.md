@@ -5,16 +5,24 @@
 
 ---
 
-**Last updated:** 2026-06-16 10:45 CEST
-**Branch:** claude/ayush/work (rebased onto origin/dev today - in sync with the team)
-**Status:** active - grilled + LOCKED the **4.5.4 deal-CHANGE flow** design (an edit = a held two-sided proposal + full lock; see `6-pending-map.md` §3A + `DECISIONS.md` 2026-06-16 + new ADR-0001). 4.5.3 done earlier. **No code yet** - 4.5.4 build is next. Also pulled Marcel's Linear DEV-66/67/71/72/73/74/75 into `6-pending-map.md` §8.
+**Last updated:** 2026-06-16 18:21 CEST
+**Branch:** claude/ayush/work (rebased onto origin/dev 18:21 - includes your Playwright #105 + Discover #104)
+**Status:** active - **made the DB rebuild cleanly from files** (fixes the "local DB won't build" snags I flagged 06-14) + stood up a working local stack + opened **PR #106 -> dev** (4.5.2/4.5.3 Sella strip + 4.5.4 held-change design + the clean DB rebuild). **4.5.4 build is next** (now test-first, on your Playwright harness).
 **Linear issue in progress:** none
-**Shared files locked:** none held. Edited + pushed today (all appends / one new file, low conflict): `CONTEXT.md`, `DECISIONS.md`, `AGENTS.md`, `docs/PRD/BUILD-PLAN.md`, **new** `docs/architecture/adr/0001-held-deal-change.md`. Muskan offline, no locks - cross-branch read 10:45 CEST.
-**PR open:** none. `claude/ayush/work` rebased onto dev + pushed to origin.
+**Shared files locked:** none. Today's commits touched our deal migrations + `DECISIONS.md` (held-change entry merged cleanly under your Discover one) + `.gitignore` (dropped our duplicate `.planning`, kept yours). All in PR #106.
+**PR open:** [#106](https://github.com/HelloSello/hello-sello-mvp/pull/106) -> dev (4.5.2/4.5.3 Sella strip + 4.5.4 held-change design + clean from-files DB rebuild).
 
 ---
 
 ## Notes for the other agent
+
+**2026-06-16 (later) - DB now rebuilds cleanly from files + opened PR [#106](https://github.com/HelloSello/hello-sello-mvp/pull/106) -> dev. ⚠️ I renamed migration files (duplicate-timestamp fix) + emptied the demo-seed migrations - please read before your next rebase.** The "local DB won't build" snags I flagged on 06-14 are fixed:
+> - **Demo data moved out of migrations into `seed.sql`** - it referenced Alice/Bob/GreenLeaf, which `seed.sql` creates AFTER migrations, so it could never run at migration time. Emptied 8 demo-seed migrations to no-op stubs (kept as files so already-applied DBs stay consistent); the demo world + GreenLeaf catalogue now live in `seed.sql` (sections 5-6).
+> - **Fixed the 3 duplicate-timestamp pairs** (one rename each, +1 min): our `seed_demo_deal_log`->161000, **our** `deal_workspace_role_ownership`->171000 (I left **your** `shop_media_owner_select` at 170000 untouched), our `propose_deal_rpc`->121000 (this breaks the pair with your `list_discoverable_companies` - the smell you flagged).
+> - **`3p5a` trimmed** to just its `deal.created` audit reference; its Aurora products + pricelist moved to `seed.sql` (they referenced company aaaa, created after migrations).
+> - **Net:** `supabase db reset` applies everything + seeds green. Verified: Alice + Bob log in, GreenLeaf has 4 priced products. Should merge clean for you (no overlap with your files) - just glance at the renames if you have local migration state.
+> - **The `::` colon-path Docker bug is real:** `supabase start` can't run from `.../He::oSe::o/...` (Docker volume specs reject `:`). Workaround: run the stack from a colon-free copy (`~/hs-local-db`) + point `.env.local` at `127.0.0.1:54321`. Only bites you if your path also has colons.
+> - **Rebased in your Playwright harness (#105)** - we're going test-first on 4.5.4. Thank you.
 
 **2026-06-16 - 4.5.4 deal-CHANGE flow DESIGNED + LOCKED (grill); no code yet. ⚠️ Nothing of yours touched; I edited 5 shared docs (all appends / one new file).** An edit becomes a **held two-sided proposal** (not the old instant `edit_deal_draft` bump): held in a new `deal_pending_change` record (one row per deal, DB-unique); the strip shows it in BOTH the p2p + deal chats (synced); **full lock** while pending; three exits (other company Accept/Decline + a Change reason; proposer Withdraw, no reason); commit reuses the existing version-build logic on both-accept. Announcements go to BOTH chats for both outcomes.
 > - **Shared docs touched (all appends / new file, low conflict):** `DECISIONS.md` (2026-06-16 entry), **new** `docs/architecture/adr/0001-held-deal-change.md`, `CONTEXT.md` (5 glossary terms), `AGENTS.md` (checkpoint), `docs/PRD/BUILD-PLAN.md` (a Waypoint-4.5 pointer note). Design source of truth: `_workshop/build-plans/6-pending-map.md` (§3A).
