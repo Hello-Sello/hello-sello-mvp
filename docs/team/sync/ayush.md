@@ -5,16 +5,24 @@
 
 ---
 
-**Last updated:** 2026-06-16 18:21 CEST
-**Branch:** claude/ayush/work (rebased onto origin/dev 18:21 - includes your Playwright #105 + Discover #104)
-**Status:** active - **made the DB rebuild cleanly from files** (fixes the "local DB won't build" snags I flagged 06-14) + stood up a working local stack + opened **PR #106 -> dev** (4.5.2/4.5.3 Sella strip + 4.5.4 held-change design + the clean DB rebuild). **4.5.4 build is next** (now test-first, on your Playwright harness).
+**Last updated:** 2026-06-17 10:23 CEST
+**Branch:** claude/ayush/work (not pushed this session)
+**Status:** offline (wrapping up) - **GSD Phase 1 (4.5.4 held two-sided deal change) BUILT + verified + officially complete**; e2e green (8 passed); 11 commits local, NOT pushed; cloud untouched. Next session = Phase 2 (announcements + gate cleanup).
 **Linear issue in progress:** none
-**Shared files locked:** none. Today's commits touched our deal migrations + `DECISIONS.md` (held-change entry merged cleanly under your Discover one) + `.gitignore` (dropped our duplicate `.planning`, kept yours). All in PR #106.
+**Shared files locked:** none. All work is deal-module only (`src/modules/deals/`, `supabase/migrations/`, `e2e/`) + a new `docs/deploy/` note; nothing of yours touched; nothing pushed. (Prior PR #106 -> dev still open.)
 **PR open:** [#106](https://github.com/HelloSello/hello-sello-mvp/pull/106) -> dev (4.5.2/4.5.3 Sella strip + 4.5.4 held-change design + clean from-files DB rebuild).
 
 ---
 
 ## Notes for the other agent
+
+**2026-06-17 - Phase 1 (4.5.4 held two-sided deal change) BUILT + complete. ⚠️ Nothing of yours touched; NOT pushed; cloud UNTOUCHED.** An edit to a deal card is now a HELD pending change: the editor auto-accepts, the OTHER side must Accept (commit base+1, stays `draft`) or Decline/Withdraw (discard), with a required change reason on every response → the deal log.
+> - **5 new migrations, all deal-domain + additive (none of your catalogue/product schema or RLS):** `…120000_deal_pending_change` (table + one-active-row UNIQUE lock + member RLS + 4 audit codes), `…120100_propose_deal_change_rpc`, `…120200_confirm_deal_change_rpc`, `…20260617120000_confirm_deal_change_no_seal_write`, `…20260617130000_deal_pending_change_realtime`. **All LOCAL only - NOT on cloud** (cloud-apply checklist: `docs/deploy/cloud-migrations-pending.md`).
+> - **⚠️ I removed the two-seat golden Seal control from the deal strip** (`DealPin` / `ConfirmBar` usage / `EditDealForm`) - it was leaking change-accepts into the seal state. The Seal is **deferred to the deal's final stage** (design TBD). The `ConfirmBar` component + the `confirmDeal` action remain (just not wired into the strip now). If you rely on the strip's Seal anywhere, ping me.
+> - **e2e:** the deal-change suite is green (`npm test`, 8 passed) - `e2e/deal-change.spec.ts` + `e2e/fixtures/two-company.ts` (the fixture mints its own deal; the local seed has none). Realtime: `deal_pending_change` is now in the `supabase_realtime` publication.
+> - **Committed to `claude/ayush/work`, NOT pushed.** Next = Phase 2 (announcements to both chats + gate cleanup).
+
+**2026-06-16 (later, 20:06 CEST) - set up GSD locally; NOTHING for you to read or rebase.** Initialized a GSD project under `.planning/` (PROJECT/REQUIREMENTS/ROADMAP/STATE/config) to drive my execution of the active backlog. It is **local-only / gitignored per our team decision** - touches no shared files, nothing committed or pushed, so no rebase impact for you. The 4.5.4 held-change build is unchanged in substance, now organised as GSD "Phase 1" + 5 later phases (all traced to `6-pending-map.md`). No code yet - building next session.
 
 **2026-06-16 (later) - DB now rebuilds cleanly from files + opened PR [#106](https://github.com/HelloSello/hello-sello-mvp/pull/106) -> dev. ⚠️ I renamed migration files (duplicate-timestamp fix) + emptied the demo-seed migrations - please read before your next rebase.** The "local DB won't build" snags I flagged on 06-14 are fixed:
 > - **Demo data moved out of migrations into `seed.sql`** - it referenced Alice/Bob/GreenLeaf, which `seed.sql` creates AFTER migrations, so it could never run at migration time. Emptied 8 demo-seed migrations to no-op stubs (kept as files so already-applied DBs stay consistent); the demo world + GreenLeaf catalogue now live in `seed.sql` (sections 5-6).
