@@ -6,6 +6,8 @@ import { REJECT_PRESETS } from './reject-presets'
 
 export type ActionResult = { ok: true } | { error: string }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 /**
  * approveCompany — wraps the approve_company SECURITY DEFINER RPC.
  *
@@ -17,6 +19,7 @@ export type ActionResult = { ok: true } | { error: string }
  * Un-regenerated RPC: localized cast at the .rpc() call site (codebase pattern).
  */
 export async function approveCompany(companyId: string): Promise<ActionResult> {
+  if (!UUID_RE.test(companyId)) return { error: 'Invalid company ID' }
   const supabase = await createClient()
 
   const { error } = await (supabase as unknown as {
@@ -45,6 +48,7 @@ export async function rejectCompany(
   presetCode: string,
   note: string,
 ): Promise<ActionResult> {
+  if (!UUID_RE.test(companyId)) return { error: 'Invalid company ID' }
   // T-03-13 / ASVS V5: validate preset domain before sending to DB.
   if (!(REJECT_PRESETS as readonly string[]).includes(presetCode)) {
     return { error: `Invalid rejection reason: "${presetCode}"` }

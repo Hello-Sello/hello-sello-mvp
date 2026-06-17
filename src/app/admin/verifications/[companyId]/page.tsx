@@ -31,12 +31,18 @@ function fmtDate(iso: string): string {
  * Licence viewer region is a clearly-marked placeholder — 03-03 fills it with
  * createSignedUrl inline viewing per D-02/03/04.
  */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 export default async function CompanyReviewPage({
   params,
 }: {
   params: Promise<{ companyId: string }>
 }) {
   const { companyId } = await params
+
+  // Reject non-UUID values before any DB call (CR-03 / T-03 UUID guard).
+  if (!UUID_RE.test(companyId)) notFound()
+
   const supabase = await createClient()
 
   // Un-regenerated RPC: localized cast (codebase pattern, STATE.md 2026-06-11).
