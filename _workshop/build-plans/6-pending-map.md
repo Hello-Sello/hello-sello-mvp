@@ -312,4 +312,38 @@ built twice.
 
 ---
 
+## 9. Pick-up list - open items from the 2026-06-17 session (Phase 2 DONE; resume here)
+
+Single place to resume from. Phase 2 (Announcements & Gate Cleanup, ANNC-01..04) is **COMPLETE + verified**
+(`02-VERIFICATION.md` = pass): held-change resolutions announce a Sella bubble into BOTH chats on accept +
+decline, withdraw is silent, the gate is Accept/Decline-only. Each item below says where its detail lives.
+
+**Next GSD step**
+- [ ] **Phase 3 - Card Note.** PLAN it first (`/gsd:plan-phase 3` -> then execute). Carry-in: confirm a
+  PRIVATE-only edit stays immediate (OBS-5). -> `.planning/ROADMAP.md` Phase 3.
+
+**The deep-dive we agreed to open next (big design topic)**
+- [ ] **Deal Stages + Deal Finalization.** Decide what the stages are; what counts as "the last stage";
+  **Deal Finalization** (renamed from seal/sell, locked vocab) auto-triggers at the last stage; and Ayush's
+  idea to MOVE the deal/Sella panel OUT of the chat strip INTO the deal workspace (top, next to the stages).
+  -> see the **"Deal Finalization"** subsection in §5 above. When wired, also rename `confirmDeal` to a clear
+  Deal-Finalization name so it is never confused with the everyday `confirm_deal_change`.
+
+**Open observations from the Phase 2 two-screen verify (detail in the "Phase 2 verify - new observations" block in §5)**
+- [ ] **OBS-1** - deal card shows 0 € until a quantity is set (card value/display; no phase owns it - decide).
+- [ ] **OBS-2** - grams/kg unit display is inconsistent on the card (may fold into the parked margin redesign T5b).
+- [ ] **OBS-3** - proposing a deal posts a "Deal proposed:" chat message - PRODUCT QUESTION (should it?). `/track-doubt` candidate.
+- [ ] **OBS-4** - `public-profile.spec.ts` (DATA-03) flaked once in the verifier run - Muskan's area; flag to her.
+- [ ] **OBS-5** - a private-only edit may trigger a review - routed to **Phase 3** (D-09). -> ROADMAP Phase 3 carry-in.
+
+**Deploy (deferred, deliberate human step)**
+- [ ] **Cloud apply** for ALL Phase 1 + Phase 2 migrations - one batch, human `supabase db push`, coordinate
+  with Muskan (she holds a migrations lock until her own cloud push). -> `docs/deploy/cloud-migrations-pending.md`.
+
+**Still parked from earlier chapters (unchanged)**
+- T6 Sella detects changes -> Phase 5 · T7/T8 C2C ticketing + connected differentiator -> own future chapter (§5)
+  · Marcel's DEV-66/67/71/72/73/74/75 -> the 5A Connect/chat UI pass (§8).
+
+---
+
 *This is the map we open first each session until 4.5 + 5A are closed. Update it as tasks land or move.*
