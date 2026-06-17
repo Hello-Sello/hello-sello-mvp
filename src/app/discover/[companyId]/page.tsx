@@ -124,7 +124,7 @@ function Catalogue({
               <ProductCard key={p.id} product={p} />
             ))}
           </div>
-          {anyPriceHidden && !company.pricingRequested && (
+          {anyPriceHidden && (
             <div className="mt-4">
               <RequestPricingActions
                 companyId={company.id}
