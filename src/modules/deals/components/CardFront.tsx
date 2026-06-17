@@ -18,6 +18,7 @@
  */
 import { Building2, Lock, BadgeCheck } from "lucide-react";
 import { docTerm, computeGross, formatMoney, sumLineValue } from "../lib/derive";
+import { paymentTermLabel } from "../lib/paymentTerms";
 import { ProductList } from "./ProductList";
 import type { DealCardView, PartyFieldView } from "../types";
 
@@ -77,6 +78,12 @@ export function CardFront({ data }: { data: DealCardView }) {
   // CARD-01 (OBS-1): the value is SUMMED live from the priced lines, never the
   // stale stored `value_net` (which can be a leftover 0). null = no priced line.
   const net = sumLineValue(lineItems);
+  // CARD-03: two already-stored terms the card never showed. Both arrive on
+  // `card` (no new plumbing): payment_terms_code is a column, free_delivery is a
+  // metadata boolean - same read pattern as EditDealForm.
+  const meta = (card.metadata ?? {}) as Record<string, unknown>;
+  const freeDelivery = meta.free_delivery === true;
+  const paymentLabel = paymentTermLabel(card.payment_terms_code);
   const hsNumber = card.hs_deal_number ?? `${term} · draft`;
 
   // golden when both sides are in (status is the source of truth, seats confirm it)
@@ -130,6 +137,8 @@ export function CardFront({ data }: { data: DealCardView }) {
           </Field>
         ))}
         <Field label="Delivery">{dateLabel(card.delivery_date_target)}</Field>
+        <Field label="Payment terms">{paymentLabel}</Field>
+        <Field label="Free delivery">{freeDelivery ? "Yes" : "No"}</Field>
         <Field label="Products">{String(lineItems.length)}</Field>
       </div>
       {/* products */}
