@@ -192,5 +192,37 @@ scope after this milestone lands.**
 
 ---
 
+## 10. The Deal Basket model (a reusable form, fed by every trigger) - added 2026-06-17 (post-commit)
+
+The deal **form** is promoted to a first-class, reusable concept: the **Deal Basket**. (Decision: ADR-0003.)
+
+**Rename:** "Deal Form" -> **"Deal Basket"** (the existing `DealForm` component + its `DealFormPayload` shape + the two wrapper components). Contained, low-risk refactor inside `src/modules/deals/`. If the rename is inconvenient at build time, keeping "Deal Form" is acceptable - the concept matters more than the name.
+
+**Purpose:** the Deal Basket is the single, reusable "deal-in-assembly" - one model + one form component holding a deal's editable content (products, quantities, prices, delivery conditions, terms, the per-side private price, the Note) plus a **recipient**. When **sent**, a Basket becomes a Deal Card (via the existing propose/held flow). One Basket, many doors into it.
+
+**Form <-> Basket (already half-built):** `DealForm` is already "dumb + fed" (`DealForm.tsx:4-9` - "ONE form, fed two ways... knows nothing about create vs edit (or about Sella, who will feed it the same way later)"). `CreateDealForm` feeds it empty -> `proposeDeal`; `EditDealForm` feeds it the current card -> `proposeDealChange`. So the Basket = the form's payload (`DealFormPayload`), just unnamed. An **empty** Basket -> a new deal; a **deal's content loaded into a Basket** -> an edit (the Basket is "attached to" that deal while editing). Same shape, two uses.
+
+**Option A (chosen now) vs Option B (later):**
+- **A (now):** the Basket is a reusable model + component, fed by triggers, materialising into a Deal Card on send. **Transient** - it lives only while the form is open; nothing persisted. The lighter path, mostly already built (name it, add the recipient field, let the other triggers feed it).
+- **B (later):** also **persist** the Basket as a saveable/shareable record (start it, leave, come back, hand to a teammate before sending). New table + lifecycle. Deferred until "save a basket and come back" is a real need.
+
+**The recipient field (new on the Basket):**
+- A Basket carries **who it goes to**: **company = mandatory**, **person = optional**.
+- **No person chosen -> the deal addresses the company** (lands in the company inbox / unassigned queue).
+- Defaults by trigger: from a p2p chat -> that chat's person + company (auto-filled); from a panel/shop -> CHOSEN, and only **connected** companies/people are selectable; from a C2C chat (future) -> the company auto, person optional.
+
+**Triggers (the doors into a Basket) + when buildable:**
+- **Human in a p2p chat** - NOW; recipient = the chat's other person (auto).
+- **Sella detects in a p2p chat** - Phase 5; recipient = the chat's person (auto).
+- **Sella's own panel** (Sella asks "who to?") - FUTURE (new surface; rides the Sella/seller work). Confirmed future by Ayush.
+- **The shop** - FUTURE (parked Path A).
+- **Company-only sending (no person)** - FUTURE; needs the parked **C2C ticketing** (the inbox `assigned_to` primitive). Confirmed future by Ayush.
+
+**Scope for this milestone:** add the Basket name + the recipient field (company mandatory, person optional) and wire the **p2p-chat** default; the panel/shop pickers + company-only sending are FUTURE. New requirement **BSKT-01**. It is FOUNDATIONAL to the form work (3b-3e all touch the Basket/form), so do the rename + recipient field EARLY (ideally first, or at the start of the form work).
+
+**Also flagged (later):** Deal Workspace -> "Deal Room" rename is already tracked as CONN-01 (Phase 6); not part of this milestone.
+
+---
+
 *Resume point: read this file, then `/gsd:plan-phase 3a`. The old `.planning/phases/03-card-note/`
 plan is SUPERSEDED (it assumed Note = immediate) - archived under `_superseded/`.*

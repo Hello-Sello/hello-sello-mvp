@@ -1061,3 +1061,15 @@ A long card/form grill-with-docs session (grounded against the live code + DB) w
 - **Re-scoped into phases 3a-3e** (display correctness -> held Note -> margin -> form UX -> batches); old Phase 4/5/6 shift after, and Phase 6's UI scope is re-checked once this lands.
 
 *Why record:* supersedes the card-Note "immediate" assumption, un-parks T5b into v1, and locks the card data-model rule the rest of the milestone hangs off. **Status: design locked 2026-06-17; build not started; LOCAL-only, cloud push deferred + coordinated with Muskan** (she holds the `product`/`pricelist_item`/`product_image` RLS surface + a `supabase/migrations/` lock until her own push). (Sources: 2026-06-17 grill-with-docs session; `7-dealcard-form-overhaul.md`; ADR-0002.)
+
+## 2026-06-17 - The deal form becomes a reusable "Deal Basket" (Option A) + a recipient field
+
+A post-commit continuation of the Deal Card & Form session. Decision + detail: ADR-0003; design note `7-dealcard-form-overhaul.md` section 10.
+
+- **The deal form is promoted to a reusable "Deal Basket"** - one model + form holding a deal's editable content + a recipient, fed by every trigger (human / Sella / shop); on send it becomes a Deal Card. The existing `DealForm` is already this ("dumb + fed", reused by create/edit) - we name it, and let Sella + the shop feed the same shape.
+- **Option A chosen (transient):** the Basket lives only while the form is open and materialises into a Deal Card on send; nothing persisted. Option B (a saved/shareable Basket record) is deferred.
+- **Rename** `DealForm` -> Deal Basket if convenient; keeping "Deal Form" is acceptable (the concept matters more).
+- **New recipient field:** company mandatory, person optional; no person -> the deal addresses the company. Defaults from the trigger (p2p chat -> that person; C2C -> that company); panel/shop -> chosen from CONNECTED companies/people only.
+- **Now vs future:** the Basket name + recipient field + the p2p-chat default are buildable now (foundational to the form work). Creating from Sella's panel / the shop, and company-only sending (no person), are FUTURE - the last needs the parked C2C ticketing. New req BSKT-01.
+
+*Why record:* a reusable input model that unifies how every trigger creates a deal, and adds explicit deal addressing. **Status: design locked 2026-06-17 (Option A); build folds into the Deal Card & Form milestone; LOCAL-only.** (Sources: 2026-06-17 post-commit session; ADR-0003; `7-dealcard-form-overhaul.md` section 10.)
