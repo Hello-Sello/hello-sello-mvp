@@ -52,6 +52,26 @@ App code that depends on these (ships with the same PR, not a DB step): the thre
 actions in `src/modules/deals/actions.ts`, the reads in `supabase/reads.ts`, and the strip
 UI in `DealPin.tsx` / `EditDealForm.tsx` / `ConfirmBar.tsx`.
 
+### Phase 2 — Announcements & Gate Cleanup (held-change resolutions announce into both chats)
+
+Deal-domain only and additive (a `create or replace` of one function + an additive lookup
+seed). **Nothing of Muskan's catalogue/product schema or RLS is touched.** Apply order is
+timestamp order:
+
+| # | Migration file | What it does |
+|---|----------------|--------------|
+| 6 | `20260617140000_confirm_deal_change_announce.sql` | `create or replace confirm_deal_change`: re-emits the whole Phase 1 body unchanged and adds two `sender='sella'` `chat_message` inserts — one into the deal thread + one into the p2p thread — on the decline branch and on the both-accepted commit branch. Supersedes the function body of `20260617120000_..._no_seal_write`. `withdraw_deal_change` is untouched (Withdraw stays silent). |
+| 7 | `20260617140100_chat_message_type_declined_seed.sql` | Additive lookup seed for the `deal_change_declined` message type (`on conflict do nothing`). |
+
+Cautions for the cloud apply:
+- These land AFTER `20260617120000_..._no_seal_write.sql`, so a cloud `supabase db push` runs Phase 1's final `confirm_deal_change` body and then Phase 2's `create or replace` — it ends in the correct final state; the intermediate version is never used mid-push.
+- #7 is additive (`on conflict do nothing`); safe to re-run.
+- The announcement is RLS-filtered like every `chat_message` (`msg_all` = `can_access_thread`) — only relationship members receive it, no cross-tenant leak.
+- #6 assumes Phase 1's migrations (#1–#5) are present; push the whole batch together.
+
+App code: NONE new for Phase 2 — the announcement lives entirely inside the RPC (a projection
+of the log line). No server action or component changed.
+
 ---
 
 ## APPLIED TO CLOUD
