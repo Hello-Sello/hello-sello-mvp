@@ -237,6 +237,20 @@ are not lost:
   change/review on the other side. Routed to **Phase 3** (Card Note touches per-side card fields) - see the
   ROADMAP Phase 3 carry-in note. Origin is Phase 1 D-09.
 
+### Deal Finalization — vocabulary locked 2026-06-17; full design parked to the Stages discussion
+
+- **Vocabulary (locked):** what we used to call the "golden Seal" / "seal" / "sell" / "finalize the deal" is
+  now ONE word: **Deal Finalization**. Use this everywhere; stop saying Seal/sell. It is SEPARATE from the
+  everyday Accept/Decline of a card change.
+- **Trigger:** Deal Finalization fires ONLY at the LAST stage of the deal — not in the everyday change flow.
+- **Code today:** the path already exists and is DORMANT — the `confirmDeal` server action + the
+  `deal_confirmation` table (0 callers; removed from the strip in Phase 1). It is NOT the same as
+  `confirm_deal_change` (which is the everyday card-change Accept/Decline). It will be wired when we build Stages.
+- **Parked to the Stages discussion:** what counts as "the last stage", what auto-triggers Deal Finalization,
+  and Ayush's idea to MOVE the deal/Sella panel OUT of the chat strip INTO the deal workspace (at the top, next
+  to the stages), with Deal Finalization auto-triggering at the last stage. Decide all of this when we design
+  the deal Stages — do not bolt it onto the current flow.
+
 ### Already done (this chapter, for context)
 
 - **4.5.1** propose-path engine · **4.5.2** the Sella strip · **4.5.3** card = pure display + Seal moved into
