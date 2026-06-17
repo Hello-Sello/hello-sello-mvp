@@ -92,6 +92,14 @@ export async function createCompany(formData: FormData): Promise<ActionResult> {
     currentStatus = co?.verification_status ?? null
   }
 
+  // Revocation guard (Bouncer 2 — WR-01 / AUTH-01): a revoked company must not be
+  // allowed to upload licence files or insert company_license_file rows even via a
+  // direct POST. Return an error before ANY write rather than redirect (redirect
+  // would not work from a Server Action that must return ActionResult to the client).
+  if (currentStatus === 'revoked') {
+    return { error: 'Your account access has been suspended.' }
+  }
+
   if (!companyId) {
     const { data, error } = await supabase.rpc('onboard_company', {
       p_name: name,
