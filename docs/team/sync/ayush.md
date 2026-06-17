@@ -5,16 +5,25 @@
 
 ---
 
-**Last updated:** 2026-06-17 10:23 CEST
-**Branch:** claude/ayush/work - **rebased onto origin/dev** (your PR #108 cross-tenant security work) **+ PUSHED**.
-**Status:** offline (wrapping up) - **GSD Phase 1 (4.5.4 held two-sided deal change) BUILT + verified + officially complete**; e2e green (8 passed); cloud untouched. Next session = Phase 2 (announcements + gate cleanup).
+**Last updated:** 2026-06-17 15:16 CEST
+**Branch:** claude/ayush/work - local only this session (9 new commits, **NOT pushed**, staying local by choice).
+**Status:** idle (wrapped up) - **GSD Phase 2 (Announcements & Gate Cleanup, ANNC-01..04) BUILT + verified + complete** (`02-VERIFICATION` = pass); held-change resolutions announce into BOTH chats on accept + decline, withdraw silent, gate Accept/Decline-only; deal-change e2e 11/11; cloud UNTOUCHED. Next session = Phase 3 (Card Note) - plan it first.
 **Linear issue in progress:** none
-**Shared files touched + pushed (all appends, low conflict - glance on your next rebase):** `AGENTS.md` (session checkpoint), `docs/decisions/DECISIONS.md` (2026-06-17 seal-deferral), `docs/architecture/ARCHITECTURE-NOTES.md` (held-change build note), `_workshop/build-plans/6-pending-map.md` (T1/T2 BUILT status). Code is deal-module only (`src/modules/deals/`, NEW files in `supabase/migrations/`, `e2e/`) + a new `docs/deploy/` note. Nothing of yours edited.
-**PR:** #106 (Sella strip + held-change design) is now **MERGED** to dev. Phase 1 build is on `claude/ayush/work`, NOT yet PR'd to dev (held local; cloud apply pending).
+**Shared files locked:** none (all locks cleared).
+**Shared files touched THIS session (LOCAL commits only, NOT pushed - you will NOT see these until I push):** `_workshop/build-plans/6-pending-map.md` (OBS-1..5, the "Deal Finalization" vocab, the new §9 pick-up list - all appends), `docs/deploy/cloud-migrations-pending.md` (Phase 2 migrations). Code = deal-domain only (2 NEW `supabase/migrations/`, `e2e/`, `supabase/tests/`). Nothing of yours edited.
+**PR:** none open. Phase 1 + Phase 2 builds are on `claude/ayush/work`, NOT pushed; cloud apply for both pending (deferred human `supabase db push`).
+**⚠️ Pending shared-doc edits owed at my next sync (need the ritual + propose-mode):** record in `docs/decisions/DECISIONS.md` the ANNC-03 supersede (withdraw = silent, supersedes the 2026-06-15 "quiet notice") + the "Deal Finalization" vocabulary (golden Seal / "sell" → Deal Finalization); add "Deal Finalization" to `CONTEXT.md`.
 
 ---
 
 ## Notes for the other agent
+
+**2026-06-17 (later) - Phase 2 (announcements + gate cleanup) BUILT + verified + complete. ⚠️ Nothing of yours touched; LOCAL commits only, NOT pushed; cloud UNTOUCHED.** Held-change resolutions now post a `sender='sella'` system message into BOTH the deal chat AND the p2p chat - on the both-accepted commit AND on decline (reason inline); withdraw stays silent; gate is Accept/Decline-only. Whole feature = two `chat_message` inserts INSIDE the `confirm_deal_change` RPC (a projection of the log line); `sender='sella'` so your `sella_detect` trigger (person-only) is NOT re-fired.
+> - **2 new migrations, deal-domain + additive (none of your catalogue/product/RLS):** `…20260617140000_confirm_deal_change_announce` (create-or-replace of confirm_deal_change; preserves the Phase-1 no-seal-write fix), `…20260617140100_chat_message_type_declined_seed` (additive `on conflict do nothing`). LOCAL only - in `docs/deploy/cloud-migrations-pending.md` (#6, #7); push the Phase 1 + Phase 2 batch together when we cloud-apply.
+> - **e2e green** (`npm test`, deal-change 11/11) + a hermetic SQL invariant. I saw `public-profile.spec.ts` (DATA-03) flake ONCE in a full run - your area; it was green in my run + per your sync, so likely a timing flake. Flagging in case you see it too.
+> - **No app code changed** (no `actions.ts`/component edits) - the announcement is pure DB-side.
+> - **Vocabulary heads-up:** the golden Seal / "sell" is now called **Deal Finalization** (separate from the everyday `confirm_deal_change`; the dormant `confirmDeal`; last-stage only). I owe `DECISIONS.md` + `CONTEXT.md` updates for this at my next sync.
+> - **Committed to `claude/ayush/work`, NOT pushed.** Next = Phase 3 (Card Note).
 
 **2026-06-17 - Phase 1 (4.5.4 held two-sided deal change) BUILT + complete. ⚠️ Nothing of yours touched; NOT pushed; cloud UNTOUCHED.** An edit to a deal card is now a HELD pending change: the editor auto-accepts, the OTHER side must Accept (commit base+1, stays `draft`) or Decline/Withdraw (discard), with a required change reason on every response → the deal log.
 > - **5 new migrations, all deal-domain + additive (none of your catalogue/product schema or RLS):** `…120000_deal_pending_change` (table + one-active-row UNIQUE lock + member RLS + 4 audit codes), `…120100_propose_deal_change_rpc`, `…120200_confirm_deal_change_rpc`, `…20260617120000_confirm_deal_change_no_seal_write`, `…20260617130000_deal_pending_change_realtime`. **All LOCAL only - NOT on cloud** (cloud-apply checklist: `docs/deploy/cloud-migrations-pending.md`).
