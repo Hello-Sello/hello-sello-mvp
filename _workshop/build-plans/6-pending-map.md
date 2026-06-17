@@ -212,6 +212,31 @@ chapter). The exact phase numbering below is a **proposal** - we finalise it tog
   connected companies vs not-connected (new) senders. Structurally new (a thread needs an active relationship
   today), so it needs a pre-relationship surface or an inbox-into-chat bridge.
 
+### Phase 2 verify - new observations (2026-06-17, parked / triage)
+
+Surfaced during the Phase 2 (announcements) two-screen human verify. NONE are Phase 2 (ANNC-01..04)
+regressions - the announce loop works in both chats (verified, 02-VERIFICATION = pass). Parked so they
+are not lost:
+
+- **OBS-1 - Deal card shows 0 € net/gross until quantities are set.** A freshly-proposed card lists its
+  products (e.g. 8 €/kg) but `value_net`/`value_gross` read 0 € until a quantity is entered; once set
+  (1000 kg / 1.0 kg) the values appear (16.000 € / 19.040 €). Pre-existing (seen 2026-06-16 too). Card
+  value/display - no planned phase owns it yet. Decide: is "0 until qty" acceptable, or should the proposal
+  require/seed a quantity?
+- **OBS-2 - Mixed quantity units on the card (g vs kg).** The card showed one row as `8 €/kg` (1000 kg) and
+  another as `8 €/g` (1.0 kg) - the grams<->kg unit handling/display is inconsistent and confusing. Card
+  units/display - no planned phase owns it (may fold into the parked margin/price redesign T5b).
+- **OBS-3 - Proposing a deal posts a "Deal proposed: <product>" chat message.** Source: `propose_deal_rpc.sql:69`
+  (Phase-1/earlier migration, NOT the Phase 2 announcement). PRODUCT QUESTION: should the FIRST proposal post a
+  chat bubble at all? Needs a product decision (candidate for /track-doubt).
+- **OBS-4 - `public-profile.spec.ts` (DATA-03, account "Save changes") flaked once** in the Phase 2 verifier's
+  full 14-test run, but passed in the orchestrator's run and is green per Muskan's sync. Muskan's public-profile
+  area - likely a flaky/timing test, NOT a deal-change issue. Flag to Muskan.
+- **OBS-5 (routed, not parked) - private-field edit may trigger a review.** Editing ONLY a per-company private
+  field (the "Buying price (from supplier) - only you" box) should stay IMMEDIATE (D-09) and NOT create a held
+  change/review on the other side. Routed to **Phase 3** (Card Note touches per-side card fields) - see the
+  ROADMAP Phase 3 carry-in note. Origin is Phase 1 D-09.
+
 ### Already done (this chapter, for context)
 
 - **4.5.1** propose-path engine · **4.5.2** the Sella strip · **4.5.3** card = pure display + Seal moved into
