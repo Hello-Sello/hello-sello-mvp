@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/shared/db/server";
+import { requireVerified } from "@/shared/auth";
 
 type PairInboxType = "connect" | "connect_message" | "pricelist_request";
 
@@ -70,21 +71,33 @@ async function createPairInboxItem(
 /**
  * The Discover "front door" connect. A note → `connect_message`, no note →
  * plain `connect`.
+ *
+ * Bouncer 2 (AUTH-01, D-01): requireVerified() guards this action before any
+ * write. Server Actions are public endpoints reachable without page navigation
+ * (RESEARCH Pitfall 1) — the layout guard (bouncer 1) is NOT enough. The
+ * is_caller_verified() RLS floor (SEC-01) remains the last line of defense.
  */
 export async function sendConnectRequest(
   receiverCompanyId: string,
   note: string,
 ): Promise<{ ok: true } | { error: string }> {
+  const { blocked } = await requireVerified();
+  if (blocked) return { error: "Your account is not verified to connect with other companies." };
   return createPairInboxItem(note.trim() ? "connect_message" : "connect", receiverCompanyId, note);
 }
 
 /**
  * Ask a company for their pricing — the L1 CTA. Lands as a `pricelist_request`
  * in their Connect inbox; accepting runs Connect's existing rollout.
+ *
+ * Bouncer 2 (AUTH-01, D-01): same requireVerified() guard as sendConnectRequest.
+ * Direct action invocation bypasses the layout; this check closes that gap.
  */
 export async function requestPricing(
   receiverCompanyId: string,
   note: string,
 ): Promise<{ ok: true } | { error: string }> {
+  const { blocked } = await requireVerified();
+  if (blocked) return { error: "Your account is not verified to request pricing." };
   return createPairInboxItem("pricelist_request", receiverCompanyId, note);
 }
