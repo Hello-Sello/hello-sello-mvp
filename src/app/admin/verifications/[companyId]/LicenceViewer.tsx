@@ -148,8 +148,19 @@ export function LicenceViewer({ companyId, licences, sellerDescription }: Props)
                 </span>
               </div>
 
-              {/* Inline viewer — view-only signed URL, 60 s TTL (D-02) */}
-              {!signedUrl ? (
+              {/* Scan status warning — shown for any non-clean status (WR-01) */}
+              {file.scan_status !== 'clean' && (
+                <div className="px-4 py-3 text-sm text-amber-800 bg-amber-50 border-b border-amber-200">
+                  Scan status: <strong>{file.scan_status}</strong> — file may not be safe to view.
+                </div>
+              )}
+
+              {/* Inline viewer — blocked for infected/quarantined; view-only signed URL, 60 s TTL (D-02) */}
+              {file.scan_status === 'infected' || file.scan_status === 'quarantined' ? (
+                <div className="px-4 py-8 text-center text-sm text-ink-muted">
+                  File blocked — scan status is <strong>{file.scan_status}</strong>.
+                </div>
+              ) : !signedUrl ? (
                 <div className="flex items-center justify-center px-4 py-8 text-sm text-ink-muted">
                   <span className="h-5 w-5 animate-spin rounded-full border-2 border-ink/20 border-t-ink" />
                   <span className="ml-2">Generating secure view…</span>
