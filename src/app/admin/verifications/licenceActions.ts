@@ -63,9 +63,12 @@ export async function fetchLicenceUrls(companyId: string): Promise<FetchResult> 
   //    non-blocking warning, but the viewer still renders (Pitfall 6 / T-03-12).
   let logError: string | undefined
   try {
-    await (supabase as unknown as {
+    const { error: logRpcError } = await (supabase as unknown as {
       rpc: (fn: string, args: Record<string, unknown>) => Promise<{ error: { message: string } | null }>
     }).rpc('log_license_viewed', { p_company_id: companyId })
+    if (logRpcError) {
+      logError = logRpcError.message
+    }
   } catch (err) {
     logError = err instanceof Error ? err.message : String(err)
   }
