@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { Clock } from 'lucide-react'
+import { AlertTriangle, Clock } from 'lucide-react'
 import { createClient } from '@/shared/db/server'
 import { getCurrentPerson } from '@/shared/auth'
 import { OnboardingChecklist, type ChecklistItem } from './OnboardingChecklist'
@@ -8,9 +8,11 @@ import { OnboardingChecklist, type ChecklistItem } from './OnboardingChecklist'
  * Logged-in landing (1d stub today; hosts the 1c onboarding tail). A user with
  * no company is still mid-onboarding, so bounce them back to the stepper.
  *
- * While the company is unverified this is where the "pending" banner + the
- * "finish setup" checklist live — deliberately here, not in AppShell, so company
- * onboarding doesn't reach into the shared shell component.
+ * Verification-state branches (AUTH-02 / AUTH-03):
+ *  - pending  → show VerificationBanner + the checklist
+ *  - rejected → redirect to /onboarding (reason banner + resubmit live there, 04-03)
+ *  - revoked  → render SuspendedBanner hard-block; no Discover/Connect affordances (D-10)
+ *  - verified → render the normal welcome page
  */
 export default async function HomePage() {
   const person = await getCurrentPerson()
@@ -24,7 +26,22 @@ export default async function HomePage() {
     .eq('id', person.company_id)
     .maybeSingle()
 
-  const pending = company?.verification_status === 'pending'
+  const status = company?.verification_status
+
+  // Rejected: the resubmit / reason banner lives on /onboarding (Task 2 / D-07).
+  // onboarding/page.tsx exempts rejected from its company_id guard so there is no loop.
+  if (status === 'rejected') redirect('/onboarding')
+
+  // Revoked: hard-block with a suspended banner — no gated nav (D-10 / AUTH-03).
+  if (status === 'revoked') {
+    return (
+      <div className="mx-auto flex max-w-2xl flex-col gap-5 p-4">
+        <SuspendedBanner />
+      </div>
+    )
+  }
+
+  const pending = status === 'pending'
   const flags =
     ((person.preferences ?? {}) as { onboarding?: Record<string, boolean> }).onboarding ?? {}
 
@@ -59,6 +76,28 @@ function VerificationBanner() {
         <p className="mt-0.5 text-ink-muted">
           The Hello Sello team is reviewing your licence. You can finish setting up
           internally — connecting, discovering and dealing unlock once you&apos;re verified.
+        </p>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Hard-block banner for revoked companies (AUTH-03 / D-10).
+ * Discover and Connect affordances are not rendered when this is shown.
+ */
+function SuspendedBanner() {
+  return (
+    <div data-testid="suspended-banner" className="flex items-start gap-3 rounded-2xl border border-danger/30 bg-danger/10 p-4">
+      <AlertTriangle size={18} className="mt-0.5 shrink-0 text-danger" />
+      <div className="text-sm">
+        <p className="font-semibold text-ink">Your access has been suspended</p>
+        <p className="mt-0.5 text-ink-muted">
+          Your company&apos;s access to Hello Sello has been suspended. Please contact{' '}
+          <a href="mailto:support@hello-sello.com" className="underline">
+            Hello Sello support
+          </a>{' '}
+          if you believe this is a mistake.
         </p>
       </div>
     </div>
