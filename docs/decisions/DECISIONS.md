@@ -1036,3 +1036,14 @@ Extends the 2026-06-14 Waypoint 4.5 birth/acceptance work to the deal-CHANGE flo
 - **Parked:** the final golden seal (end stage); per-product private cost -> margin + edit-form redesign (map T5b); Sella detecting changes (map T6); C2C ticketing (map T7/T8).
 
 *Why record:* changes a locked decision (the 2026-06-11 instant edit) and is the backbone the rest of 4.5.4-4.5.6 hangs off. **Status: design locked 2026-06-16; 4.5.4 build not started.** (Sources: 2026-06-16 grill-with-docs session; `6-pending-map.md`; ADR-0001.)
+
+## 2026-06-17 - Phase 1 (4.5.4) BUILT; the golden Seal is REMOVED from the strip (deferred to the deal's final stage)
+
+The 4.5.4 held-change backbone above is now built, verified, and GSD-complete (e2e green, 8 passed; 5 deal-domain migrations, LOCAL only - cloud apply pending: `docs/deploy/cloud-migrations-pending.md`). Two decisions emerged while building:
+
+- **The two-seat golden Seal control is removed from the deal strip and deferred to the deal's FINAL stage (design TBD).** *Why:* accepting a *change* was leaking into the *seal* state - `confirm_deal_change` wrote a `deal_confirmation` row with `status='confirmed'`, which the Seal gate reads as "this side has sealed", so after a change the strip showed a false "Awaiting <company>" pill and the card could turn golden. Shared table, two meanings → one feature corrupting the other. Fix is two-part: (1) `confirm_deal_change` no longer writes `deal_confirmation` at all - the canonical change-reason store is `deal_change_input` (this supersedes the D-07 "wire `deal_confirmation.note`" sub-decision, which is dropped); (2) the Seal control (`sealControl` + its popover) is removed from `DealPin`. The `ConfirmBar` component and the `confirmDeal` action are KEPT (unused by the strip) for the future final-stage seal. This also aligns with the existing "final golden seal = out of scope now, deals stay `draft`" parking.
+- **`deal_pending_change` must be in the `supabase_realtime` publication.** The strip subscribes to `postgres_changes` on that table so the lock + the "Review change" pill appear/clear LIVE on both screens; the table was missing from the publication, so it only updated after a manual refresh. Added via migration `20260617130000`. RLS still scopes realtime events to relationship members.
+
+**Reconcile in Phase 2:** because the whole Seal control is already gone from the strip, the planned "remove the seal Withdraw from the gate" (D16 / map T4) may already be moot - Phase 2 planning must check what is actually left of the seal/gate before planning that task.
+
+*Why record:* removes a shipped UI surface (the strip Seal) and drops a sub-decision (D-07's `deal_confirmation.note`), so it is load-bearing for anyone touching the strip or the final-stage seal. **Status: built + verified 2026-06-17; cloud apply deferred.** (Sources: this build session; memories `seal-deferred-to-final-stage`, `e2e-deal-setup-needs-birth-and-open`.)

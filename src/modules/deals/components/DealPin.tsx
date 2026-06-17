@@ -22,11 +22,10 @@
  * purpose: importing messaging's hook would make deals ↔ messaging a cycle
  * (messaging already renders this component).
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ArrowUpRight,
-  BadgeCheck,
   Check,
   ChevronDown,
   FileText,
@@ -41,14 +40,19 @@ import {
   listRelationshipDeals,
   type RelationshipDealRow,
 } from "../supabase/reads";
-import { confirmDeal, confirmDetectedDeal } from "../actions";
+import {
+  confirmDealChange,
+  confirmDetectedDeal,
+  proposeDealChange,
+  withdrawDealChange,
+} from "../actions";
 import { formatMoney } from "../lib/derive";
 import { ConfirmBar } from "./ConfirmBar";
 import { DealCard } from "./DealCard";
 import { CreateDealForm } from "./CreateDealForm";
-import { EditDealForm } from "./EditDealForm";
+import { EditDealForm, type ProposeChangePayload } from "./EditDealForm";
 import type {
-  ConfirmDecision,
+  ConfirmSeat,
   DealCardStatus,
   DealCardView,
   PendingProposalView,
@@ -151,10 +155,13 @@ export function DealPin({
 }) {
   const [deals, setDeals] = useState<RelationshipDealRow[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // the latest selected id for the realtime handler (avoids re-subscribing the
+  // channel on every selection just to read the current card id, 4.5.4). Kept in
+  // sync inside the card-load effect, never written during render.
+  const selectedIdRef = useRef<string | null>(null);
   const [data, setData] = useState<DealCardView | null>(null);
   const [open, setOpen] = useState(false); // the card overlay
   const [picking, setPicking] = useState(false); // the deal dropdown
-  const [busy, setBusy] = useState(false); // a seal decision (card overlay)
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState(false);
 
@@ -163,33 +170,16 @@ export function DealPin({
   const [asksOpen, setAsksOpen] = useState(false); // the loud pill's popover
   const [acting, setActing] = useState(false); // accept/decline in flight
 
-  // 4.5.3 - the Seal gate (was on the card) now drops down from State C here
-  const [sealOpen, setSealOpen] = useState(false); // the seal popover
+  // 4.5.4 - the held two-sided CHANGE. The pending change itself rides on the
+  // loaded card (`data.pendingChange`), so it stays in sync with the card on
+  // every re-read. These drive the SEND reason pop-up + the strip controls.
+  const [pendingEdit, setPendingEdit] = useState<ProposeChangePayload | null>(null); // the edit awaiting Send
+  const [sendReason, setSendReason] = useState(""); // the proposer's required Send reason
+  const [changeOpen, setChangeOpen] = useState(false); // the responder review popover
+  const [changeBusy, setChangeBusy] = useState(false); // a change action in flight (send/accept/decline/withdraw)
 
   // whether THIS strip can host a proposal: chat variant over a real p2p thread
   const canPropose = variant === "chat" && !!threadId;
-
-  // 3d gate: run a confirm/decline/withdraw on the server, then re-read the card
-  // (and refresh the list so the chip's status badge updates).
-  async function runDecision(decision: ConfirmDecision) {
-    if (!data || busy) return;
-    setBusy(true);
-    try {
-      await confirmDeal({ dealCardId: data.card.id, version: data.card.version, decision });
-      const fresh = await getDealCard(data.card.id);
-      setData(fresh);
-      setSealOpen(false); // the decision is in - drop the popover; the trigger reflects the new state
-      void listRelationshipDeals(relationshipId).then(setDeals);
-      // tell sibling views (the workspace header's lifecycle pill) to re-read.
-      window.dispatchEvent(
-        new CustomEvent("hs:deal-updated", { detail: { dealCardId: data.card.id } }),
-      );
-    } catch (e) {
-      console.error("deal confirm failed", e);
-    } finally {
-      setBusy(false);
-    }
-  }
 
   // 4.5.2 - the birth-accept. Record this side's vote; on both-accept the RPC
   // births the card atomically and hands back its id, so we select + open it.
@@ -217,6 +207,82 @@ export function DealPin({
       console.error("proposal decision failed", e);
     } finally {
       setActing(false);
+    }
+  }
+
+  // 4.5.4 - re-read the loaded card after a change resolves. The card read also
+  // refreshes `pendingChange`, so the strip control + the pencil lock both update
+  // from one fresh server read (no second state to drift). Every resolve path
+  // ends with the hs:deal-updated dispatch so the sibling chat + workspace pill
+  // re-read too (the project's cross-component refresh rule; Pitfall 4/5).
+  async function refreshAfterChange(dealCardId: string) {
+    const fresh = await getDealCard(dealCardId);
+    setData(fresh);
+    void listRelationshipDeals(relationshipId).then(setDeals);
+    window.dispatchEvent(
+      new CustomEvent("hs:deal-updated", { detail: { dealCardId } }),
+    );
+  }
+
+  // 4.5.4 - the PROPOSER's Send: the edit form handed up its SHARED fields + the
+  // private box; this collects the required reason and writes the held change.
+  // proposeDealChange writes the private box immediately + ungated (D-09) and
+  // holds the SHARED draft. On success we re-read (the pending change + the lock
+  // appear) and dispatch the refresh event.
+  async function runSendChange() {
+    if (!data || !pendingEdit || changeBusy || !sendReason.trim()) return;
+    setChangeBusy(true);
+    try {
+      await proposeDealChange({
+        dealCardId: data.card.id,
+        lines: pendingEdit.lines,
+        freeDelivery: pendingEdit.freeDelivery,
+        dueDate: pendingEdit.dueDate,
+        paymentTermsCode: pendingEdit.paymentTermsCode,
+        privateValue: pendingEdit.privateValue,
+        reason: sendReason.trim(),
+      });
+      setChangeOpen(false);
+      setPendingEdit(null);
+      setSendReason("");
+      await refreshAfterChange(data.card.id);
+    } catch (e) {
+      console.error("propose change failed", e);
+    } finally {
+      setChangeBusy(false);
+    }
+  }
+
+  // 4.5.4 - the RESPONDER's Accept/Decline (mirror runProposal): record this
+  // side's vote with the required reason; on both-accept the RPC commits to
+  // base+1, on a decline it discards. Either way we re-read + dispatch so the
+  // lock clears live on both screens.
+  async function runChangeDecision(decision: "accept" | "decline", reason?: string) {
+    if (!data || changeBusy || !reason?.trim()) return;
+    setChangeBusy(true);
+    try {
+      await confirmDealChange({ dealCardId: data.card.id, decision, reason: reason.trim() });
+      setChangeOpen(false);
+      await refreshAfterChange(data.card.id);
+    } catch (e) {
+      console.error("change decision failed", e);
+    } finally {
+      setChangeBusy(false);
+    }
+  }
+
+  // 4.5.4 - the PROPOSER's Withdraw (DCHG-06): take back the held change with NO
+  // reason. Discards the held row and unlocks the pencil; re-read + dispatch.
+  async function runWithdrawChange() {
+    if (!data || changeBusy) return;
+    setChangeBusy(true);
+    try {
+      await withdrawDealChange({ dealCardId: data.card.id });
+      await refreshAfterChange(data.card.id);
+    } catch (e) {
+      console.error("withdraw change failed", e);
+    } finally {
+      setChangeBusy(false);
     }
   }
 
@@ -286,6 +352,16 @@ export function DealPin({
         })
         .catch(() => {});
     };
+    // 4.5.4 - re-read the currently-selected card (via the ref, so we never go
+    // stale) when a held change appears or clears, so the pending pill + the
+    // Edit-pencil lock update LIVE on both screens without a manual reload.
+    const reloadCard = () => {
+      const id = selectedIdRef.current;
+      if (!id) return;
+      void getDealCard(id)
+        .then((d) => !cancelled && setData(d))
+        .catch(() => {});
+    };
 
     void (async () => {
       const {
@@ -310,6 +386,20 @@ export function DealPin({
             reloadProposal();
           },
         )
+        // 4.5.4 - a held change was proposed (INSERT) or resolved (DELETE on every
+        // exit) → re-read the selected card so the lock + pending pill flip live
+        // on the OTHER screen too (Pitfall 5). The card read also refreshes
+        // `pendingChange`, so one re-read drives both the strip and the pencil.
+        .on(
+          "postgres_changes",
+          { event: "INSERT", schema: "public", table: "deal_pending_change" },
+          () => reloadCard(),
+        )
+        .on(
+          "postgres_changes",
+          { event: "DELETE", schema: "public", table: "deal_pending_change" },
+          () => reloadCard(),
+        )
         .subscribe();
     })();
 
@@ -332,6 +422,8 @@ export function DealPin({
   // load the full card for the selected deal (drives the overlay + confirm gate).
   // setState only inside the async callback - no selection resolves to null.
   useEffect(() => {
+    // keep the realtime handler's id fresh without re-subscribing the channel.
+    selectedIdRef.current = selectedId;
     let alive = true;
     void (async () => {
       const d = selectedId ? await getDealCard(selectedId).catch(() => null) : null;
@@ -358,19 +450,26 @@ export function DealPin({
   const mustAct = showProposal && proposal!.myVote == null; // my turn to accept/decline
   const waiting = showProposal && proposal!.myVote === "accept" && proposal!.otherVote !== "accept";
 
-  // 4.5.3 - the Seal gate, derived from the loaded card (was computed in CardFront).
-  // The two-seat ConfirmBar now lives in the strip; these decide how the trigger reads.
-  const viewerSeat = data?.confirmations.find((s) => s.side === data.viewerSide) ?? null;
-  const otherSeat = data?.confirmations.find((s) => s.side !== data?.viewerSide) ?? null;
-  const bothSealed =
-    !!data &&
-    (data.card.status === "confirmed" ||
-      (data.confirmations.length === 2 &&
-        data.confirmations.every((s) => s.status === "confirmed")));
-  // sealable while the card is still open business (draft / amended) and not yet sealed
-  const sealable =
-    !!data && !bothSealed && (data.card.status === "draft" || data.card.status === "amended");
-  const awaitingOther = viewerSeat?.status === "confirmed" && otherSeat?.status !== "confirmed";
+  // 4.5.4 - the held CHANGE state, derived from the loaded card. `pendingChange`
+  // present = a change is held (the pencil locks on BOTH screens). The responder
+  // (the side that did NOT propose, with no vote yet) gets the reason gate; the
+  // proposer sees a "waiting" chip with a no-reason Withdraw.
+  const pendingChange = data?.pendingChange ?? null;
+  const changeMustAct = !!pendingChange && !pendingChange.iProposed && pendingChange.myVote == null;
+  const changeWaiting = !!pendingChange && pendingChange.iProposed;
+
+  // 4.5.4 - feed the dumb ConfirmBar the CHANGE's votes (not the seal's): reuse
+  // the two seats' side/company, but set each status from the change vote ('accept'
+  // → confirmed, else pending). The responder's own seat stays pending, so the
+  // bar shows its action buttons (the requireReason reason gate); the proposer's
+  // shows confirmed. "Same face, different engine" - exactly what the bar is for.
+  const changeSeats: ConfirmSeat[] = data
+    ? data.confirmations.map((seat) => {
+        const isViewer = seat.side === data.viewerSide;
+        const vote = isViewer ? pendingChange?.myVote : pendingChange?.otherVote;
+        return { ...seat, status: vote === "accept" ? "confirmed" : "pending", byName: null };
+      })
+    : [];
 
   const openCardButton = (
     <button
@@ -382,69 +481,94 @@ export function DealPin({
     </button>
   );
 
-  // 4.5.3 - the Seal control: a gold "Sealed" chip once both sides are in, else a
-  // trigger that drops the ConfirmBar in a popover (same glass shell as State B's
-  // "Review"). Reused in State C + the workspace variant so neither loses sealing.
-  const sealControl =
-    !data || (!bothSealed && !sealable) ? null : bothSealed ? (
-      <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1.5 text-[11px] font-semibold text-amber-700 ring-1 ring-amber-300">
-        <BadgeCheck size={13} strokeWidth={2.5} />
-        Sealed
-      </span>
-    ) : (
-      <div className="relative shrink-0">
-        <button
-          type="button"
-          onClick={() => setSealOpen((o) => !o)}
-          aria-haspopup="dialog"
-          aria-expanded={sealOpen}
-          className={
-            awaitingOther
-              ? "inline-flex items-center gap-1.5 rounded-full bg-white/70 px-3 py-1.5 text-[11px] font-medium text-ink/55 ring-1 ring-black/5 transition hover:bg-white"
-              : "inline-flex items-center gap-1.5 rounded-full bg-brand px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-brand-deep"
-          }
-        >
-          {awaitingOther ? (
-            <>
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand/60" />
-              Awaiting {counterpartyName ?? "the other side"}
-            </>
-          ) : (
-            <>
-              <Sparkles size={13} strokeWidth={2} />
-              Seal
-            </>
-          )}
-        </button>
+  // 4.5.4 - the held-CHANGE control, shown in State C whenever a change is held.
+  // RESPONDER (the other side, no vote yet): a loud "Review change" pill → a
+  // popover with the new lines, the proposer's reason, and the requireReason
+  // ConfirmBar (the reason gate, REAS-01). PROPOSER: a "waiting" chip + a
+  // no-reason Withdraw (DCHG-06). The lines come from the held draft snapshot
+  // (SHARED only - the private box is never here, D-09).
+  const changeControl = !pendingChange ? null : changeMustAct ? (
+    <div className="relative shrink-0">
+      <button
+        type="button"
+        onClick={() => setChangeOpen((o) => !o)}
+        aria-haspopup="dialog"
+        aria-expanded={changeOpen}
+        className="relative inline-flex items-center gap-1.5 rounded-full bg-brand px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-brand-deep"
+      >
+        <span className="absolute -right-0.5 -top-0.5 flex h-2.5 w-2.5">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-soft opacity-80" />
+          <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-brand-soft ring-2 ring-white" />
+        </span>
+        <Sparkles size={13} strokeWidth={2} />
+        Review change
+      </button>
 
-        {sealOpen && (
-          <>
-            <div className="fixed inset-0 z-10" onClick={() => setSealOpen(false)} />
-            <div className="glass-strong absolute right-0 top-full z-20 mt-1.5 w-80 overflow-hidden rounded-2xl">
-              <div className="flex items-stretch">
-                <span className="w-1 shrink-0 bg-brand" aria-hidden />
-                <div className="min-w-0 flex-1 p-3">
-                  <div className="mb-0.5 flex items-center gap-1.5 text-[11px] font-semibold text-brand-deep">
-                    <Sparkles size={12} strokeWidth={2} />
-                    Seal the deal
-                  </div>
-                  <p className="mb-2 text-[11px] text-ink/50">
-                    {counterpartyName ? `Deal with ${counterpartyName}` : "Confirm the final terms"}
+      {changeOpen && data && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setChangeOpen(false)} />
+          <div className="glass-strong absolute right-0 top-full z-20 mt-1.5 w-80 overflow-hidden rounded-2xl">
+            <div className="flex items-stretch">
+              <span className="w-1 shrink-0 bg-brand" aria-hidden />
+              <div className="min-w-0 flex-1 p-3">
+                <div className="mb-0.5 flex items-center gap-1.5 text-[11px] font-semibold text-brand-deep">
+                  <Sparkles size={12} strokeWidth={2} />
+                  Proposed change
+                </div>
+                <p className="mb-2 text-[11px] text-ink/50">
+                  {`From ${counterpartyName ?? "the other side"} · v${pendingChange.baseVersion} → v${pendingChange.baseVersion + 1}`}
+                </p>
+
+                <ul className="space-y-1.5">
+                  {pendingChange.lines.map((l, i) => (
+                    <li key={i} className="flex items-baseline justify-between gap-3 text-xs">
+                      <span className="min-w-0 flex-1 truncate text-ink/80">{l.name}</span>
+                      <span className="shrink-0 font-mono text-[11px] text-ink/60">
+                        {l.quantity}
+                        {l.unit}
+                        {l.unitPrice != null ? ` · ${formatMoney(l.unitPrice, l.currency)}` : ""}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+
+                {pendingChange.proposerReason && (
+                  <p className="mt-2 border-t border-black/5 pt-2 text-[11px] text-ink/55">
+                    <span className="font-semibold text-ink/70">Their reason: </span>
+                    {pendingChange.proposerReason}
                   </p>
+                )}
+
+                <div className="mt-3">
                   <ConfirmBar
-                    seats={data.confirmations}
+                    seats={changeSeats}
                     viewerSide={data.viewerSide}
-                    busy={busy}
-                    onConfirm={() => void runDecision("confirm")}
-                    onDecline={() => void runDecision("decline")}
+                    busy={changeBusy}
+                    requireReason
+                    onConfirm={(reason) => void runChangeDecision("accept", reason)}
+                    onDecline={(reason) => void runChangeDecision("decline", reason)}
                   />
                 </div>
               </div>
             </div>
-          </>
-        )}
-      </div>
-    );
+          </div>
+        </>
+      )}
+    </div>
+  ) : changeWaiting ? (
+    <span className="inline-flex shrink-0 items-center gap-2 rounded-full bg-white/70 px-3 py-1.5 text-[11px] font-medium text-ink/55 ring-1 ring-black/5">
+      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand/60" />
+      Change pending · {counterpartyName ?? "the other side"}
+      <button
+        type="button"
+        onClick={() => void runWithdrawChange()}
+        disabled={changeBusy}
+        className="ml-0.5 rounded-full px-2 py-0.5 text-[11px] font-medium text-ink/55 ring-1 ring-ink/15 transition hover:bg-ink/5 disabled:opacity-50"
+      >
+        Withdraw
+      </button>
+    </span>
+  ) : null;
 
   // the strip's row shell - same border + padding across all three states
   const rowCls = "flex items-center gap-3 border-b border-black/5 px-4 py-2.5";
@@ -620,8 +744,8 @@ export function DealPin({
             )}
           </div>
           {openCardButton}
-          {sealControl}
-          <SellaMark thinking={busy} />
+          {changeControl}
+          <SellaMark thinking={changeBusy} />
           <Link
             href={`/connect/deal/${selectedId}`}
             className="ml-auto flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-medium text-ink/55 transition hover:bg-ink/5 hover:text-ink"
@@ -657,7 +781,7 @@ export function DealPin({
           <span className="shrink-0 text-[11px] text-ink/45">Deal:</span>
           <DealChip status={chipStatus} selectable={false} />
           {openCardButton}
-          {sealControl}
+          {changeControl}
         </div>
       )}
 
@@ -667,7 +791,14 @@ export function DealPin({
         {data && open && (
           <div className="pointer-events-none absolute inset-0 z-10 flex justify-end p-4">
             <div className="pointer-events-auto self-start">
-              <DealCard data={data} onEdit={() => setEditing(true)} />
+              {/* 4.5.4 PENCIL LOCK (DCHG-03): while a change is held, pass no
+                  onEdit so the Edit pencil disappears - on BOTH screens, since
+                  `pendingChange` rides on the card both sides read. The DB unique
+                  index is the real lock (plan 02); this is the UX half. */}
+              <DealCard
+                data={data}
+                onEdit={data.pendingChange ? undefined : () => setEditing(true)}
+              />
             </div>
           </div>
         )}
@@ -691,23 +822,81 @@ export function DealPin({
         />
       )}
 
-      {/* the edit form (3.5b) - a change makes a new version + resets the gate;
-          on success we re-read so the card shows the new version and seats. */}
+      {/* the edit form (3.5b → 4.5.4) - the form no longer commits. It hands the
+          edited SHARED fields + the private box UP via onProposeChange; we stash
+          them, close the form, and open the strip Send pop-up to collect the
+          required reason (D-08) before proposeDealChange holds the change. */}
       {editing && data && (
         <EditDealForm
           data={data}
           onClose={() => setEditing(false)}
-          onUpdated={() => {
+          onProposeChange={(payload) => {
             setEditing(false);
-            void getDealCard(data.card.id).then((d) => {
-              setData(d);
-              void listRelationshipDeals(relationshipId).then(setDeals);
-              window.dispatchEvent(
-                new CustomEvent("hs:deal-updated", { detail: { dealCardId: data.card.id } }),
-              );
-            });
+            setPendingEdit(payload);
+            setSendReason("");
+            setChangeOpen(true);
           }}
         />
+      )}
+
+      {/* 4.5.4 the proposer's SEND reason pop-up (D-08) - the required change
+          reason is collected HERE in the strip, never on the edit form. On Send
+          proposeDealChange holds the change (private box written immediately +
+          ungated, D-09) and the strip re-reads so the lock + pending pill appear. */}
+      {changeOpen && pendingEdit && data && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <button
+            type="button"
+            aria-label="Close"
+            onClick={() => {
+              setChangeOpen(false);
+              setPendingEdit(null);
+            }}
+            className="absolute inset-0 bg-ink/30 backdrop-blur-sm"
+          />
+          <div className="glass-strong relative w-full max-w-sm overflow-hidden rounded-3xl">
+            <div className="flex items-stretch">
+              <span className="w-1 shrink-0 bg-brand" aria-hidden />
+              <div className="min-w-0 flex-1 p-5">
+                <div className="mb-0.5 flex items-center gap-1.5 text-sm font-bold text-ink">
+                  <Sparkles size={14} strokeWidth={2} className="text-brand" />
+                  Send this change
+                </div>
+                <p className="mb-3 text-[12px] text-ink/55">
+                  {`${counterpartyName ?? "The other side"} reviews it before it takes effect. Say what changed and why - everyone sees this on the deal's history.`}
+                </p>
+                <textarea
+                  value={sendReason}
+                  onChange={(e) => setSendReason(e.target.value)}
+                  rows={3}
+                  autoFocus
+                  className="w-full resize-none rounded-lg bg-white px-3 py-2 text-sm text-ink ring-1 ring-black/5 placeholder:text-ink/35 focus:outline-none focus:ring-2 focus:ring-brand/30"
+                  placeholder="e.g. Bumped the price to match the new supplier cost…"
+                />
+                <div className="mt-4 flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setChangeOpen(false);
+                      setPendingEdit(null);
+                    }}
+                    className="rounded-lg px-4 py-2 text-sm font-medium text-ink/55 ring-1 ring-ink/15 transition hover:bg-ink/5"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void runSendChange()}
+                    disabled={changeBusy || !sendReason.trim()}
+                    className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-deep disabled:opacity-50"
+                  >
+                    {changeBusy ? "Sending…" : "Send change"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );

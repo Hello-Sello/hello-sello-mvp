@@ -222,6 +222,14 @@ export interface DealCardView {
   viewerSide: PartySide | null;
   /** the two confirm seats for the current version (3d); seller first, then buyer */
   confirmations: ConfirmSeat[];
+  /**
+   * The HELD pending change on this deal (4.5.4), resolved for the viewer - or
+   * `null` when no change is in flight. This is the LOCK flag: when present, a
+   * change is held (the Edit pencil is disabled until it resolves); when null,
+   * the deal is unlocked and editable. The strip renders the view; the pencil
+   * reads only whether it is null.
+   */
+  pendingChange: PendingChangeView | null;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -508,4 +516,97 @@ export interface EditDealInput {
 /** Result of `editDeal` - the new version number the card was bumped to. */
 export interface EditDealResult {
   version: number;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Held two-sided change (4.5.4) - the pending CHANGE the strip + pencil read. */
+/*                                                                            */
+/* This mirrors the pending PROPOSAL (4.5.2) but for an EDIT of an existing   */
+/* card rather than a deal birth. An edit no longer commits instantly: it     */
+/* becomes a HELD change (the editor auto-accepts their own side; the OTHER   */
+/* side must accept; a decline or a proposer withdraw discards it). The card  */
+/* moves to base+1 only on the second yes. The held row lives in              */
+/* `deal_pending_change`; `getPendingChange` resolves the viewer's company    */
+/* against its company-keyed `votes` map so the strip only RENDERS a stance.  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A HELD pending CHANGE, resolved for the viewer (4.5.4). The strip's data on
+ * the deal. Reuses the proposal vote/source vocabulary verbatim: `myVote` /
+ * `otherVote` are 'accept' (a yes is recorded) or null (still to act) - a
+ * decline never persists in an active row (it discards the held change), so
+ * the active vote map only ever carries 'accept' or null. The reason flows
+ * through the strip pop-up, NOT the edit form (D-08): `proposerReason` is the
+ * Send reason captured at propose; the responder's reason is captured at the
+ * Accept/Decline pop-up and relayed by `confirmDealChange`.
+ */
+export interface PendingChangeView {
+  /** the deal card the held change is built on - the handle the RPCs act on */
+  dealCardId: string;
+  /** 'manual' = a person edited; 'sella' = Phase 5 detected change (already in the union) */
+  source: ProposalSource;
+  /** a short human label from the draft (the strip line) */
+  summary: string;
+  /** the proposed lines, for the pop-up (mapped from the held draft snapshot) */
+  lines: ProposalLineView[];
+  currency: string;
+  /** the viewer's OWN-company vote (null = the viewer must still act) */
+  myVote: ProposalVote;
+  /** the OTHER company's vote (null = waiting on them) */
+  otherVote: ProposalVote;
+  /** true when the viewer's company proposed the change (their Send was their yes) */
+  iProposed: boolean;
+  /** the live version this change is built on (the held row's base_version) */
+  baseVersion: number;
+  /** the proposer's required Send reason (D-07), for the pop-up context */
+  proposerReason: string;
+}
+
+/**
+ * The propose-a-change payload handed to `proposeDealChange` (4.5.4). Same
+ * SHARED form shape as create/edit (lines + terms) on an existing card, plus
+ * the `dealCardId` and the required Send `reason`. The reason flows through the
+ * strip Send pop-up, NOT the edit form (D-08). `privateValue` is the proposer's
+ * OWN-side private box - it is written IMMEDIATELY + ungated at the current
+ * version inside the action and NEVER enters the shared held draft (D-09).
+ */
+export interface ProposeDealChangeInput {
+  dealCardId: string;
+  lines: DraftLineInput[];
+  /** terms */
+  freeDelivery?: boolean;
+  /** delivery_date_target (ISO date) */
+  dueDate?: string | null;
+  /** payment_terms.code, e.g. 'net30' */
+  paymentTermsCode?: string | null;
+  /** the proposer's OWN-side private box - written immediately, never in the shared draft (D-09) */
+  privateValue?: string | null;
+  /** REQUIRED Send reason (D-07); the RPC also enforces it */
+  reason: string;
+}
+
+/** Result of `proposeDealChange` - the new held `deal_pending_change` id. */
+export interface ProposeDealChangeResult {
+  pendingId: string;
+}
+
+/**
+ * The respond-to-a-change payload handed to `confirmDealChange` (4.5.4). The
+ * other side's Accept/Decline plus the REQUIRED reason (REAS-01) captured in
+ * the strip pop-up. The RPC commits to base+1 only when BOTH sides accept;
+ * a decline (or a proposer `withdrawDealChange`) discards the held change.
+ */
+export interface ConfirmDealChangeInput {
+  dealCardId: string;
+  decision: "accept" | "decline";
+  reason: string;
+}
+
+/**
+ * Result of `confirmDealChange` - the new version when THIS accept was the
+ * second yes that committed the change, else null (a decline, or a first
+ * accept still waiting on the other side - the RPC returns null in both cases).
+ */
+export interface ConfirmDealChangeResult {
+  version: number | null;
 }

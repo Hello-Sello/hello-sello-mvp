@@ -7,8 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "playwright test",
-    "test:ui": "playwright test --ui"
+    "test": "PLAYWRIGHT_FORCE_ASYNC_LOADER=1 playwright test",
+    "test:ui": "PLAYWRIGHT_FORCE_ASYNC_LOADER=1 playwright test --ui"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.3",

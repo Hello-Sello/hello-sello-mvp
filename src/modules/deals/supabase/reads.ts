@@ -32,6 +32,7 @@ import type {
   MemberView,
   PartyFieldView,
   PartySide,
+  PendingChangeView,
   PendingProposalView,
   ProposalLineView,
   ProposalSource,
@@ -207,6 +208,102 @@ export async function getPendingProposal(
     myVote: votes[viewerCompanyId] ?? null,
     otherVote: otherCompanyId ? (votes[otherCompanyId] ?? null) : null,
     iProposed: meta["proposed_by_company"] === viewerCompanyId,
+  };
+}
+
+/** The held `deal_pending_change` row shape we read (the table is not in the
+ * generated types yet, so we narrow the casted `select` result here). */
+type PendingChangeRow = {
+  deal_card_id: string;
+  base_version: number;
+  source: string;
+  proposed_by_company: string;
+  proposer_reason: string;
+  draft: Meta;
+  votes: Record<string, string | null>;
+};
+
+/** Normalise a raw held-change vote to a `ProposalVote`. The active vote map
+ * only ever carries 'accept' or null (a decline discards the held row), so any
+ * non-'accept' value reads as "not accepted yet" (null) for the strip. */
+const toVote = (raw: string | null | undefined): ProposalVote =>
+  raw === "accept" ? "accept" : null;
+
+/**
+ * The held pending CHANGE on a deal (4.5.4), resolved for the viewer - or null
+ * when no change is in flight. Mirrors `getPendingProposal` but reads the single
+ * active `deal_pending_change` row by `deal_card_id` (RLS = relationship member,
+ * so it returns for BOTH sides). Resolving the viewer HERE (their company vs the
+ * company-keyed `votes` map) keeps the strip a pure renderer - it gets `myVote`
+ * / `otherVote` / `iProposed` already decided, the same way `getDealCard` hands
+ * back `viewerSide`. The shared draft carries SHARED facts only (D-09), so there
+ * is nothing private to leak.
+ *
+ * `deal_pending_change` is not in the generated types yet, so the table read uses
+ * the localized `as never` cast (Muskan's documented pattern; no full regen this
+ * phase) - the same discipline the new RPCs use in `actions.ts`.
+ */
+export async function getPendingChange(
+  dealCardId: string,
+): Promise<PendingChangeView | null> {
+  const supabase = createClient();
+
+  // viewer's company - to read MY vote out of the company-keyed vote map
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data: viewerPerson } = await supabase
+    .from("person")
+    .select("company_id")
+    .eq("id", user.id)
+    .single();
+  const viewerCompanyId: string | null = viewerPerson?.company_id ?? null;
+  if (!viewerCompanyId) return null;
+
+  // the single active held row for this card (at most one - the unique lock).
+  // The table is not in the generated types, so the table name is cast.
+  const { data, error } = await supabase
+    .from("deal_pending_change" as never)
+    .select(
+      "deal_card_id, base_version, source, proposed_by_company, proposer_reason, draft, votes",
+    )
+    .eq("deal_card_id", dealCardId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  const row = data as PendingChangeRow;
+
+  const votes = (row.votes ?? {}) as Record<string, string | null>;
+  const otherCompanyId = Object.keys(votes).find((k) => k !== viewerCompanyId) ?? null;
+
+  const draft = (row.draft ?? {}) as Meta;
+  const currency = typeof draft["currency"] === "string" ? (draft["currency"] as string) : "EUR";
+  const rawLines = Array.isArray(draft["line_items"]) ? (draft["line_items"] as Meta[]) : [];
+  const lines: ProposalLineView[] = rawLines.map((l) => ({
+    name: typeof l["name"] === "string" && l["name"].trim() ? (l["name"] as string) : "Item",
+    quantity: Number(l["quantity"] ?? 0),
+    unit: typeof l["unit"] === "string" ? (l["unit"] as string) : "g",
+    unitPrice: l["unit_price"] == null ? null : Number(l["unit_price"]),
+    currency,
+  }));
+
+  const summary =
+    typeof draft["summary"] === "string" && draft["summary"].trim()
+      ? (draft["summary"] as string)
+      : "a deal";
+
+  return {
+    dealCardId: row.deal_card_id,
+    source: row.source === "sella" ? ("sella" as ProposalSource) : ("manual" as ProposalSource),
+    summary,
+    lines,
+    currency,
+    myVote: toVote(votes[viewerCompanyId]),
+    otherVote: otherCompanyId ? toVote(votes[otherCompanyId]) : null,
+    iProposed: row.proposed_by_company === viewerCompanyId,
+    baseVersion: row.base_version,
+    proposerReason: row.proposer_reason,
   };
 }
 
@@ -409,6 +506,11 @@ export async function getDealCard(cardId: string): Promise<DealCardView> {
     ? viewerSide(viewerCompanyId, card, rel.company_a_id, rel.company_b_id)
     : null;
 
+  // the held pending CHANGE on this card (4.5.4), resolved for the viewer. Null
+  // when none is in flight; present = a change is held and the Edit pencil locks.
+  // The strip reads the resolved view; the pencil reads only whether it is null.
+  const pendingChange = await getPendingChange(card.id);
+
   // the two confirm seats (3d), seller first then buyer. A missing row = pending.
   const confByCompany = new Map(
     (confRes.data ?? []).map((r) => [r.company_id, r] as const),
@@ -441,6 +543,7 @@ export async function getDealCard(cardId: string): Promise<DealCardView> {
     log,
     viewerSide: side,
     confirmations,
+    pendingChange,
   };
 }
 
