@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { createClient } from '@/shared/db/server'
 import { ReviewActions } from './ReviewActions'
+import { LicenceViewer, type LicenceFileMeta } from './LicenceViewer'
 
 type DetailRow = {
   id: string
@@ -56,6 +57,27 @@ export default async function CompanyReviewPage({
 
   const company = data?.[0]
   if (!company) notFound()
+
+  // Fetch licence metadata for the viewer (D-02/03/04).
+  // Un-regenerated RPC: localized cast.
+  const { data: licenceData } = await (supabase as unknown as {
+    rpc: (
+      fn: string,
+      args: Record<string, unknown>,
+    ) => Promise<{ data: LicenceFileMeta[] | null; error: { message: string } | null }>
+  }).rpc('get_company_licences', { p_company_id: companyId })
+
+  const licences: LicenceFileMeta[] = licenceData ?? []
+
+  // Fetch the company-level description for the viewer (D-03).
+  // Direct read is acceptable — the layout already confirmed is_hs_team().
+  const { data: descData } = await supabase
+    .from('company')
+    .select('description')
+    .eq('id', companyId)
+    .single()
+
+  const sellerDescription: string | null = (descData as { description: string | null } | null)?.description ?? null
 
   const isPending = company.verification_status === 'pending'
 
@@ -116,15 +138,15 @@ export default async function CompanyReviewPage({
             <dd className="font-semibold text-ink capitalize">{company.verification_status}</dd>
           </dl>
 
-          {/* Licence viewer — placeholder region (03-03 fills with signed-URL inline viewer) */}
+          {/* Licence viewer — view-only, signed URL, 60 s TTL (D-02/03/04) */}
           <p className="mb-2 text-[10px] font-extrabold uppercase tracking-widest text-ink-muted/70">
             Licence document(s) · view-only
           </p>
-          <div className="rounded-xl border border-dashed border-amber-200 bg-amber-50/60 px-4 py-4 text-sm text-amber-800">
-            {/* TODO(03-03): replace with createSignedUrl inline viewer per D-02/03/04 */}
-            Licence viewer coming in 03-03 — will render document(s) inline (view-only, no download).
-            Graceful empty state when no licence was uploaded.
-          </div>
+          <LicenceViewer
+            companyId={company.id}
+            licences={licences}
+            sellerDescription={sellerDescription}
+          />
         </div>
 
         {/* Right: actions sidebar */}
