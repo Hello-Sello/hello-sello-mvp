@@ -159,7 +159,7 @@ export function LicenceViewer({ companyId, licences, sellerDescription }: Props)
                   src={signedUrl}
                   title={`Licence document: ${file.original_filename}`}
                   className="h-[480px] w-full border-0"
-                  sandbox="allow-same-origin allow-scripts"
+                  sandbox=""
                 />
               ) : isImage ? (
                 <div className="flex items-center justify-center bg-ink/[0.02] p-4">
