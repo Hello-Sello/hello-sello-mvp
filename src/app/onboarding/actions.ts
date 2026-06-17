@@ -11,9 +11,12 @@ import { updateCompanyProfile } from '@/modules/companies'
 export type ActionResult = { ok: true } | { error: string }
 
 // Licence is REQUIRED in production (2026-05-25 lock) but optional in local /
-// preview so test signups don't fill the bucket. Single source: the env var
-// `NEXT_PUBLIC_REQUIRE_LICENSE` (set to 'true' in prod). Same read on the client.
-const LICENCE_REQUIRED = process.env.NEXT_PUBLIC_REQUIRE_LICENSE === 'true'
+// preview so test signups don't fill the bucket. Authoritative server-only read:
+// `REQUIRE_LICENSE` (no NEXT_PUBLIC_ prefix — must not be readable in the browser
+// bundle; a non-NEXT_PUBLIC var is undefined client-side, silently making the
+// licence optional). The client receives the flag as a prop from the parent Server
+// Component (onboarding/page.tsx), not by reading process.env directly (D-02).
+const LICENCE_REQUIRED = process.env.REQUIRE_LICENSE === 'true'
 
 // Onboarding completion flags live in person.preferences.onboarding so the Home
 // checklist has a single source for which skippable steps are done.
