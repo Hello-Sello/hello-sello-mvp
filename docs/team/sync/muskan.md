@@ -5,17 +5,24 @@
 
 ---
 
-**Last updated:** 2026-06-16 (executing Phase 1 — F3 migration backfill) CEST
+**Last updated:** 2026-06-17 (Phase 2 executing — cross-tenant lockdown) CEST
 **Branch:** claude/muskan/work (synced with dev #106)
-**Status:** active — **executing Phase 1 (Clean-Rebuild Foundation).** Committing my 2 drifted migrations as files (`profile_qr_foundation` + `get_public_profile` — session-19 work, live-but-uncommitted) so a clean from-files `supabase db reset` brings up onboarding + `/c/[handle]`. Local-first.
-**Linear issue in progress:** none (GSD Phase 1; reqs DATA-01/02/03)
-**Shared files locked:** `supabase/migrations/` (ADDING 2 new files — `20260615120000_profile_qr_foundation` + `20260615123000_get_public_profile`; no edits to existing migrations) + the **`avatars`** storage bucket/policy. NOT touching `seed.sql`, `product`, or `database.types.ts`.
+**Status:** Phase 2 (cross-tenant lockdown, SEC-01/02/03) **LOCAL-COMPLETE + verified 9/9** — clean `db reset` applies both new migrations, the SEC-03 adversarial test went RED→GREEN, Phase-1 `/c/[handle]` e2e still green. Cloud `db push` **DEFERRED** (gated). ⚠️ **Lock intentionally HELD** (not released) until that cloud push — at push time I'll reconcile the old MCP-named `avatars_*` policies first, then push, then release. No edits to your files.
+**Linear issue in progress:** none (GSD Phase 2; reqs SEC-01/02/03)
+**Shared files locked:** `supabase/migrations/` (2 NEW files only: `20260617090000_sec01_*`, `20260617090100_sec02_*` — no edits to yours) + the `product`/`pricelist_item`/`product_image` RLS surface. NOT touching `database.types.ts` or `ShopView`.
 **PR open:** [#105](https://github.com/HelloSello/hello-sello-mvp/pull/105) → dev (test harness slice 0 + session-24 docs wrap). **MERGED:** Discover loop [#104](https://github.com/HelloSello/hello-sello-mvp/pull/104) → dev (slices 1–6). *(Prior: Sella proposal #99 merged to dev by Ayush; storage #98 on dev, held from main.)*
 **Prev PR:** Discover directory [#95](https://github.com/HelloSello/hello-sello-mvp/pull/95)→dev / [#96](https://github.com/HelloSello/hello-sello-mvp/pull/96)→main · Profile & QR [#88](https://github.com/HelloSello/hello-sello-mvp/pull/88)/[#89](https://github.com/HelloSello/hello-sello-mvp/pull/89) — all **merged**.
 
 ---
 
 ## Notes for the other agent
+
+**2026-06-17 (Phase 2 EXECUTING — cross-tenant lockdown). ⚠️ Locking the `product`/`pricelist_item`/`product_image` RLS surface via TWO NEW migrations (no edits to yours).** Closing the anon/unverified cross-tenant leaks before competing companies onboard:
+> - **`20260617090000_sec01_caller_verified_discover_gate.sql`** (SEC-01 + GAP-1): new `public.is_caller_verified()` helper (mirrors `is_hs_team()`); adds `and public.is_caller_verified()` to all three Discover RPCs (`list_discoverable_companies` / `get_discoverable_company` / `get_discoverable_shop`) so unverified/anon callers get an empty return; revokes the auto-granted **anon EXECUTE** on all three. Signatures preserved (incl. `pricing_requested`) — no client-contract break.
+> - **`20260617090100_sec02_revoke_anon_catalogue_read.sql`** (SEC-02): `revoke select ... from anon` on `product`/`pricelist_item`/`product_image` + flips the three public-read policies `TO authenticated` (row filters byte-identical — authenticated viewers see the same `profile_visible` rows). **Own-company policies (`product_all`/`pli_all`/`product_image_all`) untouched.**
+> - Your `/c/[handle]` public profile is unaffected (it reads only the `get_public_profile` DEFINER RPC, not these tables — re-confirmed green). **LOCAL-only, proven on a clean `db reset`.** Cloud `db push` is DEFERRED behind a gated checkpoint + this sync ritual + the `avatars_*` reconcile. **Lock stays HELD** until that push (not released at merge) — flagging so you don't assume the shared RLS surface is free yet.
+
+**2026-06-16 (Phase 1 COMPLETE) — F3 drift closed; lock released. ⚠️ Two NEW migrations added (no edits to yours); nothing else of yours touched.** Committed `20260615120000_profile_qr_foundation` (person profile cols + `public_handle` UNIQUE index + public `avatars` bucket with own-folder write RLS / public read) and `20260615123000_get_public_profile` (the curated SECURITY DEFINER anon RPC — body dumped verbatim from cloud, 13 cols, `revoke all from public` + `grant execute to anon, authenticated`). A clean local `supabase db reset` now applies the whole chain + seed green and `/c/<handle>` renders 200 (Playwright `e2e/public-profile.spec.ts` + a new `supabase/tests/profile_foundation_test.sql` smoke test, run via `run_profile_foundation_test.sh`). **repo == local == cloud** for these objects. Did NOT touch `seed.sql` / `product` / `database.types.ts` / your `20260612130000`. **Cloud-apply heads-up:** the `avatars` bucket + policies already exist on cloud (MCP, session-19) — when these migrations land on cloud, reconcile any old MCP-named avatars policies (mine are named `avatars_*`).
 
 **2026-06-16 (executing) — Phase 1 = F3 backfill of MY own drifted objects. ⚠️ Locked `supabase/migrations/` (2 NEW files only, no edits to yours) + the `avatars` bucket/policy. Nothing of yours touched; not editing `seed.sql` / `product` / `database.types.ts`.** Committing `profile_qr_foundation` + `get_public_profile` (live-but-uncommitted since session-19) so a clean from-files `db reset` stands up onboarding + the public profile page. Your clean-rebuild + dup-timestamp fixes confirm the untouched chain resets green — thanks; my e2e drives the handle through the app so I don't touch your `seed.sql`. I dumped the live `get_public_profile` body from cloud to commit it verbatim (13 cols incl. `company_logo_path`; grants anon + authenticated).
 
