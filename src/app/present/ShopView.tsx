@@ -726,18 +726,23 @@ function ProductGallery({
 // ---------- product card (read + owner controls) ----------
 function ProductCard({ p, companyId, editing, onChanged }: { p: ShopProduct; companyId: string; editing: boolean; onChanged: () => void }) {
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function togglePrice() {
+    setError(null);
     setBusy(true);
-    await setProductPricePublic(p.id, !p.price_public);
+    const res = await setProductPricePublic(p.id, !p.price_public);
     setBusy(false);
+    if ("error" in res) { setError(res.error); return; }
     onChanged();
   }
 
   async function toggleVisible() {
+    setError(null);
     setBusy(true);
-    await setProductProfileVisible(p.id, !p.profile_visible);
+    const res = await setProductProfileVisible(p.id, !p.profile_visible);
     setBusy(false);
+    if ("error" in res) { setError(res.error); return; }
     onChanged();
   }
 
@@ -803,6 +808,9 @@ function ProductCard({ p, companyId, editing, onChanged }: { p: ShopProduct; com
           </button>
         )}
       </div>
+      {error && (
+        <p className="mt-1.5 rounded-lg bg-rose-50 px-2 py-1 text-[11px] font-medium text-rose-600 mx-3 mb-3">{error}</p>
+      )}
     </div>
   );
 }
