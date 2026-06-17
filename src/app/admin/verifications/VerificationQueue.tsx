@@ -1,5 +1,14 @@
 'use client'
 
+/**
+ * VerificationQueue — Pending/Decided tab switch.
+ *
+ * Pending tab: Variant-B full-width sortable table (D-15), oldest-first.
+ * Decided tab: read-only verified/rejected companies with per-row audit echo
+ *              (actor · when · outcome · reason) — D-07 / VERIF-04.
+ *              NO revert/undo action (D-07, deferred).
+ */
+
 import { useState } from 'react'
 import Link from 'next/link'
 
@@ -11,6 +20,21 @@ export type PendingRow = {
   submitted_at: string
   type_codes: string[]
   has_licence: boolean
+}
+
+// Row shape returned by list_decided_verifications()
+export type DecidedRow = {
+  id: string
+  name: string
+  country: string
+  submitted_at: string
+  type_codes: string[]
+  verification_status: string
+  decision_action: string | null
+  decision_reason: string | null
+  decision_preset: string | null
+  decision_actor_id: string | null
+  decision_at: string | null
 }
 
 type Tab = 'pending' | 'decided'
@@ -53,9 +77,62 @@ function LicenceBadge({ hasLicence }: { hasLicence: boolean }) {
   )
 }
 
+function OutcomeBadge({ status }: { status: string }) {
+  if (status === 'verified') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-bold text-green-700">
+        <span className="h-1.5 w-1.5 rounded-full bg-green-600" />
+        verified
+      </span>
+    )
+  }
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-bold text-red-700">
+      <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
+      rejected
+    </span>
+  )
+}
+
+// ── Decided row expanded audit echo (D-07 / VERIF-04) ──────────────────────
+function AuditEcho({ row }: { row: DecidedRow }) {
+  if (!row.decision_at) {
+    return (
+      <p className="mt-1 text-xs text-ink-muted/70 italic">
+        No audit record found.
+      </p>
+    )
+  }
+  return (
+    <div className="mt-1 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs text-ink-muted">
+      <span className="font-semibold">When</span>
+      <span>{fmtDate(row.decision_at)}</span>
+      <span className="font-semibold">Outcome</span>
+      <span className="capitalize">{row.verification_status}</span>
+      {row.decision_preset && (
+        <>
+          <span className="font-semibold">Reason</span>
+          <span>{row.decision_preset.replaceAll('_', ' ')}</span>
+        </>
+      )}
+      {row.decision_reason && (
+        <>
+          <span className="font-semibold">Note</span>
+          <span>{row.decision_reason}</span>
+        </>
+      )}
+    </div>
+  )
+}
+
 // VerificationQueue owns the Pending/Decided tab switch (D-07).
-// The Decided tab shows a placeholder for now — the decided RPC + audit echo land in 03-03.
-export function VerificationQueue({ rows }: { rows: PendingRow[] }) {
+export function VerificationQueue({
+  rows,
+  decidedRows,
+}: {
+  rows: PendingRow[]
+  decidedRows: DecidedRow[]
+}) {
   const [tab, setTab] = useState<Tab>('pending')
 
   return (
@@ -78,21 +155,85 @@ export function VerificationQueue({ rows }: { rows: PendingRow[] }) {
           }`}
         >
           Decided
+          {decidedRows.length > 0 && (
+            <span className="ml-1.5 opacity-75">{decidedRows.length}</span>
+          )}
         </button>
       </div>
 
+      {/* ── Decided tab (D-07: read-only + audit echo, NO revert) ─────────── */}
       {tab === 'decided' ? (
-        // Placeholder — decided RPC + audit echo land in 03-03
-        <div className="rounded-2xl border border-dashed border-ink/20 bg-white px-6 py-10 text-center text-sm text-ink-muted">
-          Decided companies will appear here once the reject flow is built (03-03).
-        </div>
+        decidedRows.length === 0 ? (
+          <div className="rounded-2xl border border-ink/10 bg-white px-6 py-10 text-center">
+            <p className="text-base font-semibold text-ink">No decided companies yet</p>
+            <p className="mt-1 text-sm text-ink-muted">
+              Approved and rejected companies will appear here.
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-hidden rounded-2xl border border-ink/10 bg-white">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="border-b border-ink/10">
+                  <th className="px-4 py-3 text-left text-[11px] font-extrabold uppercase tracking-wider text-ink-muted">
+                    Company
+                  </th>
+                  <th className="px-4 py-3 text-left text-[11px] font-extrabold uppercase tracking-wider text-ink-muted">
+                    Type
+                  </th>
+                  <th className="px-4 py-3 text-left text-[11px] font-extrabold uppercase tracking-wider text-ink-muted">
+                    Location
+                  </th>
+                  <th className="px-4 py-3 text-left text-[11px] font-extrabold uppercase tracking-wider text-ink-muted">
+                    Outcome
+                  </th>
+                  <th className="px-4 py-3 text-left text-[11px] font-extrabold uppercase tracking-wider text-ink-muted">
+                    Audit record
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {decidedRows.map((row) => (
+                  <tr
+                    key={row.id}
+                    className="border-b border-ink/10 last:border-0"
+                  >
+                    <td className="px-4 py-3">
+                      {/* Read-only — link to review screen for context; no revert action (D-07) */}
+                      <Link
+                        href={`/admin/verifications/${row.id}`}
+                        className="font-extrabold text-ink hover:text-brand"
+                      >
+                        {row.name}
+                      </Link>
+                      <p className="text-xs text-ink-muted">
+                        submitted {fmtDate(row.submitted_at)}
+                      </p>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-ink-muted">
+                      {row.type_codes.length > 0 ? row.type_codes.join(', ') : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-ink-muted">{row.country}</td>
+                    <td className="px-4 py-3">
+                      <OutcomeBadge status={row.verification_status} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <AuditEcho row={row} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
       ) : rows.length === 0 ? (
+        /* ── Pending tab: empty state ──────────────────────────────────────── */
         <div className="rounded-2xl border border-ink/10 bg-white px-6 py-10 text-center">
           <p className="text-base font-semibold text-ink">All clear</p>
           <p className="mt-1 text-sm text-ink-muted">No companies are waiting for review.</p>
         </div>
       ) : (
-        /* Variant-B table (D-15) */
+        /* ── Pending tab: Variant-B table (D-15) ────────────────────────── */
         <div className="overflow-hidden rounded-2xl border border-ink/10 bg-white">
           <table className="w-full border-collapse">
             <thead>

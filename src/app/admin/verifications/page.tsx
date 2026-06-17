@@ -1,34 +1,45 @@
 import { createClient } from '@/shared/db/server'
-import { VerificationQueue, type PendingRow } from './VerificationQueue'
+import { VerificationQueue, type PendingRow, type DecidedRow } from './VerificationQueue'
 
 /**
  * VERIF-01: Pending-company queue for HS reviewers.
+ * VERIF-04: Decided tab with audit echo (D-07).
  *
  * The route-door guard (admin/layout.tsx) has already confirmed the caller is
- * an HS-team member before this RSC runs. list_pending_verifications() returns
- * oldest-first per D-08; a non-HS caller gets 0 rows (fail-safe body gate).
+ * an HS-team member before this RSC runs.
+ * list_pending_verifications() → oldest-first per D-08; non-HS caller → 0 rows.
+ * list_decided_verifications() → most-recently-decided first; non-HS caller → 0 rows.
  */
 export default async function VerificationsPage() {
   const supabase = await createClient()
 
-  // Un-regenerated RPC: localized cast (codebase pattern, STATE.md 2026-06-11).
-  const { data, error } = await (supabase as unknown as {
-    rpc: (fn: string) => Promise<{ data: PendingRow[] | null; error: { message: string } | null }>
-  }).rpc('list_pending_verifications')
+  // Un-regenerated RPCs: localized cast (codebase pattern, STATE.md 2026-06-11).
+  const supabaseTyped = supabase as unknown as {
+    rpc: (
+      fn: string,
+      args?: Record<string, unknown>,
+    ) => Promise<{ data: unknown[] | null; error: { message: string } | null }>
+  }
 
-  if (error) {
-    // Surface the error clearly for debugging; the route guard means only HS
-    // team members reach this point so this message is internal-only.
+  const [{ data: pendingData, error: pendingError }, { data: decidedData, error: decidedError }] =
+    await Promise.all([
+      supabaseTyped.rpc('list_pending_verifications'),
+      supabaseTyped.rpc('list_decided_verifications'),
+    ])
+
+  if (pendingError) {
     return (
       <div className="mx-auto max-w-4xl p-6">
         <p className="text-sm text-red-600">
-          Could not load the verification queue: {error.message}
+          Could not load the verification queue: {pendingError.message}
         </p>
       </div>
     )
   }
 
-  const rows: PendingRow[] = data ?? []
+  const rows: PendingRow[] = (pendingData as PendingRow[] | null) ?? []
+  // Decided rows are best-effort — a failure renders the tab empty, not a full page error.
+  const decidedRows: DecidedRow[] = decidedError ? [] : ((decidedData as DecidedRow[] | null) ?? [])
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-6">
@@ -39,7 +50,7 @@ export default async function VerificationsPage() {
         </p>
       </div>
 
-      <VerificationQueue rows={rows} />
+      <VerificationQueue rows={rows} decidedRows={decidedRows} />
     </div>
   )
 }
