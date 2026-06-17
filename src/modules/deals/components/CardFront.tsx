@@ -17,7 +17,7 @@
  *     buyer placeholder) - the other side's value never arrives.
  */
 import { Building2, Lock, BadgeCheck } from "lucide-react";
-import { docTerm, computeGross, formatMoney } from "../lib/derive";
+import { docTerm, computeGross, formatMoney, sumLineValue } from "../lib/derive";
 import { ProductList } from "./ProductList";
 import type { DealCardView, PartyFieldView } from "../types";
 
@@ -74,7 +74,9 @@ function LogoBox({ role, name, isYou }: { role: string; name: string; isYou: boo
 export function CardFront({ data }: { data: DealCardView }) {
   const { card, sellerName, buyerName, lineItems, partyFields, viewerSide, confirmations } = data;
   const term = docTerm(card.deal_type);
-  const net = card.value_net ?? 0;
+  // CARD-01 (OBS-1): the value is SUMMED live from the priced lines, never the
+  // stale stored `value_net` (which can be a leftover 0). null = no priced line.
+  const net = sumLineValue(lineItems);
   const hsNumber = card.hs_deal_number ?? `${term} · draft`;
 
   // golden when both sides are in (status is the source of truth, seats confirm it)
@@ -111,8 +113,12 @@ export function CardFront({ data }: { data: DealCardView }) {
       </div>
       {/* facts */}
       <div className="mt-1.5 space-y-1.5">
-        <Field label="Value net">{formatMoney(net, card.currency)}</Field>
-        <Field label="Value gross">{formatMoney(computeGross(net), card.currency)}</Field>
+        <Field label="Value net">
+          {net == null ? "—" : formatMoney(net, card.currency)}
+        </Field>
+        <Field label="Value gross">
+          {net == null ? "—" : formatMoney(computeGross(net), card.currency)}
+        </Field>
         {partyFields.map((f: PartyFieldView) => (
           <Field key={f.id} label={f.label} highlight>
             <span className="flex items-center gap-1.5">

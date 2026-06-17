@@ -9,7 +9,7 @@
  * Keeping these here (pure) means the card components stay thin and the rules
  * are testable in isolation. The prototype's PO/SO + money math ports straight in.
  */
-import type { DealType, PartySide } from "../types";
+import type { DealType, LineItemView, PartySide } from "../types";
 
 /**
  * German standard VAT. A demo simplification: gross = net × (1 + rate).
@@ -111,4 +111,36 @@ export function lineTotalOf(
   storedTotal: number | null,
 ): number {
   return storedTotal ?? quantity * unitPrice;
+}
+
+/**
+ * One line's money value on the CANONICAL PER-GRAM basis (CARD-02).
+ * Pricelist prices are per gram, so the displayed unit is presentation only and
+ * MUST NEVER move the money: `kg` is normalized to grams (×1000) before pricing,
+ * `g` is used as-is, and `unit` (a plain count, e.g. boxes) is `quantity ×
+ * unitPrice` with no gram conversion. Any unknown unit falls through to the same
+ * plain `quantity × unitPrice` so a stray code can never crash or NaN the total.
+ *
+ * Switching a line g↔kg with the per-gram price held therefore yields the
+ * IDENTICAL value: `lineValueOf(1, 'kg', 5) === lineValueOf(1000, 'g', 5)`.
+ */
+export function lineValueOf(quantity: number, unit: string, unitPrice: number): number {
+  const grams = unit === "kg" ? quantity * 1000 : quantity;
+  return grams * unitPrice;
+}
+
+/**
+ * The card's displayed value: the SUM of the PRICED line values, derived live
+ * (never the stale stored `value_net`, which can be a leftover 0 - OBS-1/CARD-01).
+ * Each line is valued on the per-gram canonical basis via {@link lineValueOf}, so
+ * the unit choice cannot move the deal money. Returns `null` when NO line carries
+ * a price - mirrors `actions.ts:sumValueNet` exactly so the shown value agrees
+ * with the write-time rule (priced.length ? sum : null), and the card renders
+ * "—" rather than a misleading "0 €".
+ */
+export function sumLineValue(lines: LineItemView[]): number | null {
+  const priced = lines.filter((l) => l.unitPrice != null);
+  return priced.length
+    ? priced.reduce((sum, l) => sum + lineValueOf(l.quantity, l.unit, l.unitPrice), 0)
+    : null;
 }
