@@ -56,6 +56,14 @@ async function patchPreferences(
  * licence to the private bucket and records a row. Idempotent on retry: if a
  * prior run already created the company, the caller reuses it instead of hitting
  * the already_has_company guard, and just finishes the licence uploads.
+ *
+ * Rejected-resume resubmit path (AUTH-02 / D-08):
+ *   When the caller's company is currently 'rejected' and a successful re-upload
+ *   completes, the status is flipped back to 'pending' so it re-enters the review
+ *   queue. The UPDATE is guarded on current status = 'rejected' only → 'pending'
+ *   so it cannot un-revoke or self-verify a company (T-04-08).
+ *   duplicate_company rejections do NOT reach this path — the UI suppresses the
+ *   resubmit CTA (OnboardingStepper) and only calls this action from the fixable path.
  */
 export async function createCompany(formData: FormData): Promise<ActionResult> {
   const name = String(formData.get('name') ?? '').trim()
@@ -72,6 +80,18 @@ export async function createCompany(formData: FormData): Promise<ActionResult> {
   const supabase = await createClient()
 
   let companyId = await getCurrentCompanyId()
+
+  // Check current status before branching — needed for the resubmit transition below.
+  let currentStatus: string | null = null
+  if (companyId) {
+    const { data: co } = await supabase
+      .from('company')
+      .select('verification_status')
+      .eq('id', companyId)
+      .maybeSingle()
+    currentStatus = co?.verification_status ?? null
+  }
+
   if (!companyId) {
     const { data, error } = await supabase.rpc('onboard_company', {
       p_name: name,
@@ -100,6 +120,18 @@ export async function createCompany(formData: FormData): Promise<ActionResult> {
       scan_status: 'pending',
     })
     if (rowError) return { error: `Could not record the licence: ${rowError.message}` }
+  }
+
+  // Resubmit transition: only when the company was rejected.
+  // Guard is strict: WHERE verification_status = 'rejected' → prevents clobbering
+  // verified or revoked status even if this action is somehow called in those states.
+  if (currentStatus === 'rejected') {
+    const { error: flipError } = await supabase
+      .from('company')
+      .update({ verification_status: 'pending' })
+      .eq('id', companyId)
+      .eq('verification_status', 'rejected')
+    if (flipError) return { error: `Could not resubmit for review: ${flipError.message}` }
   }
 
   return { ok: true }
