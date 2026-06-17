@@ -53,18 +53,20 @@ function makeAdminClient() {
  */
 export async function resetToVerified(): Promise<void> {
   const admin = makeAdminClient()
-  await admin
+  const { error: e1 } = await admin
     .from('company')
     .update({ verification_status: 'verified', verified_at: new Date().toISOString(), verified_by: null })
     .eq('id', ALICE_COMPANY_ID)
+  if (e1) throw new Error(`resetToVerified: company UPDATE failed — ${e1.message}`)
   // Remove rejection audit_log entries written by setRejected so the banner query
   // from a prior test run does not surface a stale reason.
-  await admin
+  const { error: e2 } = await admin
     .from('audit_log')
     .delete()
     .eq('content_type', 'company')
     .eq('content_id', ALICE_COMPANY_ID)
     .eq('action', 'company.verify_rejected')
+  if (e2) throw new Error(`resetToVerified: audit_log DELETE failed — ${e2.message}`)
 }
 
 /**
@@ -73,10 +75,11 @@ export async function resetToVerified(): Promise<void> {
  */
 export async function setPending(): Promise<void> {
   const admin = makeAdminClient()
-  await admin
+  const { error } = await admin
     .from('company')
     .update({ verification_status: 'pending', verified_at: null, verified_by: null })
     .eq('id', ALICE_COMPANY_ID)
+  if (error) throw new Error(`setPending: company UPDATE failed — ${error.message}`)
 }
 
 /**
