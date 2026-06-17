@@ -55,8 +55,12 @@ WHERE r.company_a_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
 -- here -- the RPC resolves the p2p thread by relationship_id + type='p2p', so it
 -- finds the seeded one; the announcement rows it inserts are rolled back with the
 -- rest. The assertions below resolve that seeded p2p thread id at runtime by the
--- relationship (never hardcoded). Any rows it already holds are excluded by the
--- sender='sella' + type filters, so they cannot inflate the counts.
+-- relationship (never hardcoded). The p2p thread is SHARED across every deal on
+-- this relationship and can already hold committed announcements from other deals
+-- (e.g. a prior committed e2e run), so the p2p counts below scope to THIS test's
+-- ephemeral card via metadata->>'deal_card_id'. A sender+type filter alone does
+-- NOT isolate them -- a leftover decline row is also sender='sella' +
+-- type='deal_change_declined' in the same thread and would inflate the count.
 
 -- ── CASE 1: COMMIT (both accept) → 2 sella 'deal_card_updated' rows + version bump ──
 -- A held change proposed by GreenLeaf/Alice, GreenLeaf already accepted (auto-accept),
@@ -111,10 +115,12 @@ BEGIN
     RAISE EXCEPTION 'FAIL(commit): expected 1 sella deal_card_updated in the deal thread, found %', v_deal_msgs;
   END IF;
 
-  -- exactly ONE in the seeded P2P thread
+  -- exactly ONE in the seeded P2P thread (scoped to THIS card: the p2p thread is
+  -- shared, so leftover announcements from other deals must not inflate the count)
   SELECT count(*) INTO v_p2p_msgs FROM public.chat_message
   WHERE thread_id = v_p2p
-    AND sender = 'sella' AND type = 'deal_card_updated';
+    AND sender = 'sella' AND type = 'deal_card_updated'
+    AND metadata->>'deal_card_id' = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
   IF v_p2p_msgs <> 1 THEN
     RAISE EXCEPTION 'FAIL(commit): expected 1 sella deal_card_updated in the p2p thread, found %', v_p2p_msgs;
   END IF;
@@ -174,9 +180,11 @@ BEGIN
     RAISE EXCEPTION 'FAIL(decline): expected 1 sella deal_change_declined in the deal thread, found %', v_deal_msgs;
   END IF;
 
+  -- scoped to THIS card (the shared p2p thread may hold leftover declines from other deals)
   SELECT count(*) INTO v_p2p_msgs FROM public.chat_message
   WHERE thread_id = v_p2p
-    AND sender = 'sella' AND type = 'deal_change_declined';
+    AND sender = 'sella' AND type = 'deal_change_declined'
+    AND metadata->>'deal_card_id' = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
   IF v_p2p_msgs <> 1 THEN
     RAISE EXCEPTION 'FAIL(decline): expected 1 sella deal_change_declined in the p2p thread, found %', v_p2p_msgs;
   END IF;
@@ -184,6 +192,7 @@ BEGIN
   -- the decline body carries the reason inline (ANNC-02)
   SELECT count(*) INTO v_reasoned FROM public.chat_message
   WHERE type = 'deal_change_declined'
+    AND metadata->>'deal_card_id' = 'dddddddd-dddd-dddd-dddd-dddddddddddd'
     AND body LIKE '%Margin too thin this quarter%';
   IF v_reasoned <> 2 THEN
     RAISE EXCEPTION 'FAIL(decline): both declined announcements must carry the reason inline, found % of 2', v_reasoned;
