@@ -22,6 +22,14 @@
  */
 
 import { test, expect, type Page, type BrowserContext } from '@playwright/test'
+
+/**
+ * All auth-gate cases mutate Alice's shared company fixture.
+ * serial mode prevents parallel runs from racing on the same row.
+ * (Mirrors admin-verification.spec.ts pattern for mutating tests.)
+ */
+test.describe.configure({ mode: 'serial' })
+
 import {
   ALICE_EMAIL,
   ALICE_PASSWORD,
