@@ -39,17 +39,35 @@ BEGIN;
 UPDATE company SET verification_status = 'pending'
   WHERE id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
 
+-- ── Fixture: give GreenLeaf a profile_visible catalogue for the verified-caller
+-- no-over-lock check. Seed ships its products profile_visible=false and product
+-- UUIDs are non-deterministic across resets, so flip them in-fixture by company
+-- (rolled back). The assertion must test the lockdown behaviour, not volatile seed
+-- state — without this it would false-fail whenever nothing happens to be opted in. ──
+UPDATE product SET profile_visible = true, price_public = true
+  WHERE company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' AND deleted_at IS NULL;
+
 -- ── (1) ANON (no JWT) — both doors must be shut ──────────────────────────────
 SET LOCAL ROLE anon;
 DO $$
 BEGIN
-  -- policy door: anon must read zero catalogue rows
-  IF (SELECT count(*) FROM product) <> 0
-    THEN RAISE EXCEPTION 'LEAK: anon read % product rows', (SELECT count(*) FROM product); END IF;
-  IF (SELECT count(*) FROM pricelist_item) <> 0
-    THEN RAISE EXCEPTION 'LEAK: anon read % pricelist_item rows', (SELECT count(*) FROM pricelist_item); END IF;
-  IF (SELECT count(*) FROM product_image) <> 0
-    THEN RAISE EXCEPTION 'LEAK: anon read % product_image rows', (SELECT count(*) FROM product_image); END IF;
+  -- policy door: anon must read zero catalogue rows.
+  -- After SEC-02 revokes anon's SELECT grant, the read raises insufficient_privilege
+  -- (permission denied) — a STRONGER close than "0 rows", since the query never
+  -- reaches RLS. Treat that as a pass; only an actual count > 0 is a leak. The
+  -- has_table_privilege grant-door checks below remain the definitive assertion.
+  BEGIN
+    IF (SELECT count(*) FROM product) <> 0
+      THEN RAISE EXCEPTION 'LEAK: anon read % product rows', (SELECT count(*) FROM product); END IF;
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN
+    IF (SELECT count(*) FROM pricelist_item) <> 0
+      THEN RAISE EXCEPTION 'LEAK: anon read % pricelist_item rows', (SELECT count(*) FROM pricelist_item); END IF;
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN
+    IF (SELECT count(*) FROM product_image) <> 0
+      THEN RAISE EXCEPTION 'LEAK: anon read % product_image rows', (SELECT count(*) FROM product_image); END IF;
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
 
   -- grant door (tables): anon must hold no SELECT privilege
   IF has_table_privilege('anon', 'public.product', 'SELECT')
