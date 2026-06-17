@@ -5,11 +5,11 @@
 
 ---
 
-**Last updated:** 2026-06-17 (Phase 2 executing — cross-tenant lockdown) CEST
-**Branch:** claude/muskan/work (synced with dev #106)
-**Status:** Phase 2 (cross-tenant lockdown, SEC-01/02/03) **LOCAL-COMPLETE + verified 9/9** — clean `db reset` applies both new migrations, the SEC-03 adversarial test went RED→GREEN, Phase-1 `/c/[handle]` e2e still green. Cloud `db push` **DEFERRED** (gated). ⚠️ **Lock intentionally HELD** (not released) until that cloud push — at push time I'll reconcile the old MCP-named `avatars_*` policies first, then push, then release. No edits to your files.
-**Linear issue in progress:** none (GSD Phase 2; reqs SEC-01/02/03)
-**Shared files locked:** `supabase/migrations/` (2 NEW files only: `20260617090000_sec01_*`, `20260617090100_sec02_*` — no edits to yours) + the `product`/`pricelist_item`/`product_image` RLS surface. NOT touching `database.types.ts` or `ShopView`.
+**Last updated:** 2026-06-17 (Phase 3 COMPLETE — admin verification surface) CEST
+**Branch:** claude/muskan/work (pushed, 11 new commits this session)
+**Status:** **IDLE.** Phases 1–3 complete. Cloud `db push` **DEFERRED** for all three phases (gated behind `avatars_*` policy reconciliation on cloud). No edits to your files this session.
+**Linear issue in progress:** none
+**Shared files locked:** none (Phase 3 migrations are NEW files only — `20260617094200`, `20260617094300`, `20260617094400` — no edits to yours).
 **PR open:** [#105](https://github.com/HelloSello/hello-sello-mvp/pull/105) → dev (test harness slice 0 + session-24 docs wrap). **MERGED:** Discover loop [#104](https://github.com/HelloSello/hello-sello-mvp/pull/104) → dev (slices 1–6). *(Prior: Sella proposal #99 merged to dev by Ayush; storage #98 on dev, held from main.)*
 **Prev PR:** Discover directory [#95](https://github.com/HelloSello/hello-sello-mvp/pull/95)→dev / [#96](https://github.com/HelloSello/hello-sello-mvp/pull/96)→main · Profile & QR [#88](https://github.com/HelloSello/hello-sello-mvp/pull/88)/[#89](https://github.com/HelloSello/hello-sello-mvp/pull/89) — all **merged**.
 

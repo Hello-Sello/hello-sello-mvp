@@ -58,6 +58,11 @@ When the formal Architecture doc is written (post Layer 4 + 5), these become its
 
 - **GDPR right-to-be-forgotten via pseudonymization** (not hard delete). Principle locked: scrub via `SECURITY DEFINER` function replaces PII fields with sentinel UUID / NULL while preserving structural audit history. Meta-audit: scrub itself logged as `person.gdpr_scrubbed` action. Recompute downstream hashes after scrub. Implementation details (function shape, scrub_pii_in_jsonb helper) deferred to build phase. *(Locked 2026-05-25.)*
 
+## Security / frontend patterns
+
+- **iframe sandbox: never combine `allow-same-origin` + `allow-scripts` (2026-06-17).** Pairing both flags cancels the sandbox for same-origin content — embedded JS can reach `document.cookie` and `window.parent`. For a view-only file viewer (licence PDFs), use `sandbox=""` (empty) or `sandbox="allow-same-origin"` alone. Caught in Phase 3 code review (CR-01, `LicenceViewer.tsx`).
+- **Supabase client errors are objects, not throws (2026-06-17).** `supabase.rpc(...)` returns `{ data, error }` — a failed RPC does not throw a JavaScript exception. Always destructure and check `{ error }` from the return value; a bare `try/catch` silently swallows RPC failures. Caught in Phase 3 code review (CR-02, `licenceActions.ts` — `log_license_viewed` audit writes were silently lost on RPC error).
+
 ## Access policy
 
 - The 16-combo access matrix is the **master access policy** for cross-company interactions. **Enforcement model = layered (B7, locked 2026-05-29):** the matrix is encoded in a central app-layer policy module — not RLS, not hardcoded inline. *(Layer 1 §11.1 + DEV-51.)*
