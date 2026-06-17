@@ -393,6 +393,22 @@ test('gate-accept-decline: the responder review gate shows only Confirm deal + D
 })
 
 /**
+ * card-terms-shown (CARD-03): the card face shows the two already-stored terms
+ * it never displayed before — a "Payment terms" row (a human label resolved from
+ * card.payment_terms_code) and a "Free delivery" row (read from
+ * card.metadata.free_delivery). The seeded birth flow sets NO payment term, so
+ * this asserts the row LABELS render (the rows exist on the card face), not a
+ * specific seeded term value. RED until plan 03A-02 Task 2 adds the two rows.
+ */
+test('card-terms-shown: the card face shows the Payment terms + Free delivery rows', async () => {
+  // birthAndOpenDeal (beforeEach) already opened the card; re-read from the server
+  // (house style) so the assertion runs against the current card view.
+  await refreshDealView(alicePage, 'alice')
+  await expect(alicePage.getByText(/payment terms/i)).toBeVisible()
+  await expect(alicePage.getByText(/free delivery/i)).toBeVisible()
+})
+
+/**
  * private-immediate (DCHG-07): Alice's private field (Buying price) edited in
  * the form persists for Alice immediately after send and is never visible to
  * Bob in the strip.
