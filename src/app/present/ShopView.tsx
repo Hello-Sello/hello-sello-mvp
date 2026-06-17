@@ -8,7 +8,7 @@
  * the profile cards for a form and reveals per-product controls (photo, price
  * visibility); products are added through the drawer.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import useEmblaCarousel from "embla-carousel-react";
 import {
@@ -524,15 +524,13 @@ function ProductGallery({
   const [error, setError] = useState<string | null>(null);
   const addRef = useRef<HTMLInputElement>(null);
 
-  const onSelect = useCallback(() => {
-    if (emblaApi) setSelected(emblaApi.selectedScrollSnap());
-  }, [emblaApi]);
   useEffect(() => {
     if (!emblaApi) return;
+    const onSelect = () => setSelected(emblaApi.selectedScrollSnap());
     emblaApi.on("select", onSelect);
     onSelect();
     return () => { emblaApi.off("select", onSelect); };
-  }, [emblaApi, onSelect]);
+  }, [emblaApi]);
   // Re-measure when photos are added / removed / reordered.
   useEffect(() => { emblaApi?.reInit(); }, [emblaApi, images.length]);
 
@@ -726,18 +724,23 @@ function ProductGallery({
 // ---------- product card (read + owner controls) ----------
 function ProductCard({ p, companyId, editing, onChanged }: { p: ShopProduct; companyId: string; editing: boolean; onChanged: () => void }) {
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function togglePrice() {
+    setError(null);
     setBusy(true);
-    await setProductPricePublic(p.id, !p.price_public);
+    const res = await setProductPricePublic(p.id, !p.price_public);
     setBusy(false);
+    if ("error" in res) { setError(res.error); return; }
     onChanged();
   }
 
   async function toggleVisible() {
+    setError(null);
     setBusy(true);
-    await setProductProfileVisible(p.id, !p.profile_visible);
+    const res = await setProductProfileVisible(p.id, !p.profile_visible);
     setBusy(false);
+    if ("error" in res) { setError(res.error); return; }
     onChanged();
   }
 
@@ -803,6 +806,9 @@ function ProductCard({ p, companyId, editing, onChanged }: { p: ShopProduct; com
           </button>
         )}
       </div>
+      {error && (
+        <p className="mt-1.5 rounded-lg bg-rose-50 px-2 py-1 text-[11px] font-medium text-rose-600 mx-3 mb-3">{error}</p>
+      )}
     </div>
   );
 }
