@@ -15,18 +15,8 @@ import { useEffect, useMemo, useState } from "react";
 import { X, Trash2, Loader2, Lock } from "lucide-react";
 import { getOwnCatalog } from "../supabase/reads";
 import { formatMoney } from "../lib/derive";
+import { PAYMENT_TERMS } from "../lib/paymentTerms";
 import type { CatalogProduct, DraftLineInput } from "../types";
-
-const PAYMENT_TERMS: { code: string; label: string }[] = [
-  { code: "", label: "—" },
-  { code: "prepaid", label: "Prepaid" },
-  { code: "cod", label: "Cash on delivery" },
-  { code: "net7", label: "Net 7" },
-  { code: "net14", label: "Net 14" },
-  { code: "net30", label: "Net 30" },
-  { code: "net60", label: "Net 60" },
-  { code: "net90", label: "Net 90" },
-];
 
 const UNITS = ["g", "kg", "unit"];
 
