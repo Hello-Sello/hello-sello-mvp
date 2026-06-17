@@ -9,10 +9,47 @@
 --
 -- The /c/[handle] public profile is unaffected: it reads only via the get_public_profile
 -- DEFINER RPC (person/auth.users/company), never these tables (02-RESEARCH § Q2).
--- Own-company policies (product_all / pli_all / product_image_all) are untouched.
+-- The three own-company write/read policies are SEPARATE and left untouched.
 -- ----------------------------------------------------------------------------
 
--- Door 1 of 2 — strip Supabase's default SELECT grant to anon (PostgREST's first gate).
+-- Door 1 of 2 — strip Supabase's default SELECT grant from the anonymous role
+-- (PostgREST's first gate).
 revoke select on public.product from anon;
 revoke select on public.pricelist_item from anon;
 revoke select on public.product_image from anon;
+
+-- Door 2 of 2 — scope the three public-read policies to the authenticated role only
+-- (was: anon + authenticated). Each USING row filter is copied verbatim from its source
+-- migration; only the role scope changes, so an authenticated viewer sees exactly the same
+-- profile_visible rows (no over-lock, no under-lock). Own-company write/read left untouched.
+
+-- product_public_select — source: 20260614140000_product_profile_visible_dial.sql
+drop policy if exists product_public_select on public.product;
+create policy product_public_select on public.product
+  for select to authenticated
+  using (deleted_at is null
+         and profile_visible = true
+         and (visibility_start is null or visibility_start <= current_date)
+         and (visibility_end   is null or visibility_end   >= current_date));
+
+-- pricelist_item_public_select — source: 20260614180000_pricelist_item_public_select_profile_visible.sql
+drop policy if exists pricelist_item_public_select on public.pricelist_item;
+create policy pricelist_item_public_select on public.pricelist_item
+  for select to authenticated
+  using (deleted_at is null
+         and exists (select 1 from public.product p
+                     where p.id = pricelist_item.product_id
+                       and p.deleted_at is null
+                       and p.profile_visible = true
+                       and p.price_public = true));
+
+-- product_image_public_select — source: 20260614150000_get_discoverable_shop.sql
+drop policy if exists product_image_public_select on public.product_image;
+create policy product_image_public_select on public.product_image
+  for select to authenticated
+  using (exists (select 1 from public.product p
+                 where p.id = product_image.product_id
+                   and p.deleted_at is null
+                   and p.profile_visible = true
+                   and (p.visibility_start is null or p.visibility_start <= current_date)
+                   and (p.visibility_end   is null or p.visibility_end   >= current_date)));
