@@ -29,9 +29,120 @@
  * password `password123`.
  */
 import type { Browser, BrowserContext, Page } from '@playwright/test'
+import { execFileSync } from 'node:child_process'
 
 /** The two seeded counterparties — Alice (GreenLeaf) and Bob (StonePharm). */
 export type Who = 'alice' | 'bob'
+
+/** The local Supabase Postgres (see CLAUDE.md / playwright notes). */
+const DB_URL = 'postgresql://postgres:postgres@127.0.0.1:54322/postgres'
+
+// The GreenLeaf <-> StonePharm relationship id is NOT hardcoded: the seed
+// regenerates it (gen_random_uuid) on every `supabase db reset`, so a frozen id
+// goes stale and resetDealData would clean the wrong relationship. It is resolved
+// at runtime by company name inside resetDealData (below).
+
+/**
+ * Reset the GreenLeaf <-> StonePharm relationship to the clean "State A"
+ * (no deal, no proposal) the held-change tests assume at start.
+ *
+ * WHY a targeted truncate, not `supabase db reset`: each test mints + mutates the
+ * ONE shared card on this relationship, so tests collide unless the deal data is
+ * wiped between them. A full `supabase db reset` would tear down the running dev
+ * server's schema/seed (slow + risks a broken next test); this scoped delete
+ * removes only this relationship's deal cards + proposal messages, leaving every
+ * other seed row (logins, ordinary chat history, the other relationship) intact.
+ *
+ * The delete order respects the FK graph:
+ *   - the deal_card <-> chat_thread loop is broken from the CARD side
+ *     (deal_card.thread_id is nullable; a 'deal' thread may NOT have a null
+ *     deal_card_id, per the chat_thread_deal_has_card CHECK);
+ *   - deal_change_input is removed before deal_card_log (it FK's the log);
+ *   - workspace + line-item children are removed before their parents.
+ *
+ * Runs straight against the local Postgres via psql (no `pg` dep in the repo).
+ */
+const RESET_SQL = `
+BEGIN;
+CREATE TEMP TABLE _cards ON COMMIT DROP AS
+  SELECT id FROM deal_card WHERE relationship_id = :'rel';
+CREATE TEMP TABLE _ws ON COMMIT DROP AS
+  SELECT id FROM deal_workspace WHERE deal_card_id IN (SELECT id FROM _cards);
+CREATE TEMP TABLE _lines ON COMMIT DROP AS
+  SELECT id FROM deal_line_item WHERE deal_card_id IN (SELECT id FROM _cards);
+CREATE TEMP TABLE _dthreads ON COMMIT DROP AS
+  SELECT id FROM chat_thread WHERE deal_card_id IN (SELECT id FROM _cards);
+UPDATE deal_card SET thread_id = NULL WHERE id IN (SELECT id FROM _cards);
+DELETE FROM chat_message    WHERE thread_id IN (SELECT id FROM _dthreads);
+DELETE FROM sella_detection WHERE thread_id IN (SELECT id FROM _dthreads);
+DELETE FROM chat_thread     WHERE id IN (SELECT id FROM _dthreads);
+DELETE FROM deal_artifact WHERE deal_workspace_id IN (SELECT id FROM _ws);
+DELETE FROM deal_member   WHERE deal_workspace_id IN (SELECT id FROM _ws);
+DELETE FROM thing         WHERE deal_workspace_id IN (SELECT id FROM _ws);
+DELETE FROM deal_line_item_private WHERE deal_line_item_id IN (SELECT id FROM _lines);
+DELETE FROM deal_change_input   WHERE deal_card_id IN (SELECT id FROM _cards);
+DELETE FROM deal_card_log       WHERE deal_card_id IN (SELECT id FROM _cards);
+DELETE FROM deal_confirmation   WHERE deal_card_id IN (SELECT id FROM _cards);
+DELETE FROM deal_line_item      WHERE deal_card_id IN (SELECT id FROM _cards);
+DELETE FROM deal_party_field    WHERE deal_card_id IN (SELECT id FROM _cards);
+DELETE FROM deal_pending_change WHERE deal_card_id IN (SELECT id FROM _cards);
+DELETE FROM deal_workspace      WHERE deal_card_id IN (SELECT id FROM _cards);
+DELETE FROM pending_inbox_item  WHERE deal_card_id IN (SELECT id FROM _cards);
+DELETE FROM deal_card WHERE id IN (SELECT id FROM _cards);
+DELETE FROM chat_message
+  WHERE type = 'deal_detected'
+  AND thread_id IN (SELECT id FROM chat_thread WHERE relationship_id = :'rel');
+DELETE FROM sella_detection
+  WHERE thread_id IN (SELECT id FROM chat_thread WHERE relationship_id = :'rel');
+COMMIT;
+`
+
+/** Locate a usable psql binary (PATH first, then the macOS Postgres.app path). */
+function psqlBin(): string {
+  const candidates = ['psql', '/Applications/Postgres.app/Contents/Versions/latest/bin/psql']
+  for (const bin of candidates) {
+    try {
+      execFileSync(bin, ['--version'], { stdio: 'ignore' })
+      return bin
+    } catch {
+      // try the next candidate
+    }
+  }
+  throw new Error('psql not found on PATH or in Postgres.app — cannot reset deal data')
+}
+
+/**
+ * Wipe this relationship's deal cards + proposal messages so the next test starts
+ * from the clean "Start a deal" state. Synchronous (psql via stdin) so it finishes
+ * before the browser contexts open in beforeEach. ON_ERROR_STOP makes a bad
+ * delete fail loud instead of leaving half-clean state.
+ */
+export function resetDealData(): void {
+  const bin = psqlBin()
+  // Resolve the GreenLeaf <-> StonePharm relationship id at RUNTIME — the seed
+  // regenerates it on every `supabase db reset`, so a hardcoded id goes stale and
+  // would silently clean the wrong relationship (leaving the seed proposal, so the
+  // chat is never in the "Start a deal" State A the tests need).
+  const rel = execFileSync(
+    bin,
+    [
+      DB_URL,
+      '-At',
+      '-c',
+      "select r.id from public.relationship r " +
+        "join public.company ca on ca.id = r.company_a_id " +
+        "join public.company cb on cb.id = r.company_b_id " +
+        "where (ca.name like 'GreenLeaf%' and cb.name like 'StonePharm%') " +
+        "or (ca.name like 'StonePharm%' and cb.name like 'GreenLeaf%') limit 1",
+    ],
+    { encoding: 'utf8' },
+  ).trim()
+  if (!rel) throw new Error('resetDealData: GreenLeaf <-> StonePharm relationship not found')
+  execFileSync(bin, [DB_URL, '-v', `rel=${rel}`, '-v', 'ON_ERROR_STOP=1', '-q', '-f', '-'], {
+    input: RESET_SQL,
+    stdio: ['pipe', 'ignore', 'pipe'],
+  })
+}
 
 const CREDENTIALS: Record<Who, { email: string; password: string }> = {
   alice: { email: 'alice@greenleaf.test', password: 'password123' },
@@ -134,4 +245,62 @@ export async function createDraftDealAsAlice(
   // try to read the born card id from the deal route, if the app navigates there.
   const match = alicePage.url().match(/\/deal\/([0-9a-f-]{36})/)
   return { dealCardId: match ? match[1] : null }
+}
+
+/**
+ * Bob accepts Alice's birth proposal. `proposeDeal` only writes a PROPOSAL — the
+ * card is born when the OTHER side accepts (confirm_detected_deal). Bob opens the
+ * GreenLeaf chat, clicks the "Review" pill, then "Accept" inside the popover.
+ */
+export async function acceptBirthAsBob(bobPage: Page): Promise<void> {
+  await bobPage.goto('/connect/chat')
+  await bobPage.getByText(COUNTERPARTY_NAME.bob, { exact: false }).first().click()
+  await bobPage.getByRole('button', { name: /review/i }).first().click()
+  await bobPage.getByRole('button', { name: /^accept/i }).first().click()
+}
+
+/**
+ * Open the deal in `who`'s counterparty chat and open the card overlay so the
+ * Edit pencil + card content are visible. Waiting for the "Open card" affordance
+ * doubles as the "card has been born" sync point.
+ */
+export async function openDealInChat(page: Page, who: Who): Promise<void> {
+  await page.goto('/connect/chat')
+  await page.getByText(COUNTERPARTY_NAME[who], { exact: false }).first().click()
+  const openCard = page.getByRole('button', { name: /open card/i })
+  await openCard.first().waitFor({ timeout: 15000 })
+  await openCard.first().click()
+}
+
+/**
+ * Re-read the deal on `who`'s screen from the server: reload the page, re-open the
+ * counterparty chat, and re-open the card overlay. The strip then reflects the
+ * CURRENT server state (the held change appeared / cleared, the lock flipped).
+ *
+ * WHY this is needed (KNOWN APP BUG, see the spec header): DealPin.tsx subscribes
+ * to postgres_changes on `deal_pending_change`, but that table was never added to
+ * the `supabase_realtime` publication (only chat_message + chat_thread are — see
+ * supabase/migrations/20260616120000_deal_pending_change.sql, which omits the
+ * `alter publication supabase_realtime add table deal_pending_change`). So the
+ * pencil-lock / "Review change" pill DOES NOT update live on the OTHER side — the
+ * user must refresh. This helper performs exactly that refresh, so the tests can
+ * still verify the real success criteria (both sides locked, the reason gate, the
+ * two-sided commit) on the correct server state without depending on the broken
+ * live transport. It does NOT weaken any assertion — it only re-reads the state
+ * the missing realtime event would have delivered.
+ */
+export async function refreshDealView(page: Page, who: Who): Promise<void> {
+  await openDealInChat(page, who)
+}
+
+/**
+ * Full two-sided setup the held-change tests need: Alice proposes, Bob accepts
+ * (births the draft card), then BOTH sides open the card overlay. After this each
+ * page shows the live draft card with the Edit pencil reachable.
+ */
+export async function birthAndOpenDeal(alicePage: Page, bobPage: Page): Promise<void> {
+  await createDraftDealAsAlice(alicePage)
+  await acceptBirthAsBob(bobPage)
+  await openDealInChat(alicePage, 'alice')
+  await openDealInChat(bobPage, 'bob')
 }
