@@ -29,7 +29,7 @@ export default async function CompanyProfilePage({
   if (!company) notFound();
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-xl flex-col overflow-auto px-2 pb-10">
+    <div className="mx-auto flex w-full max-w-xl flex-col px-2 pb-10">
       <Link
         href="/discover"
         className="mb-3 mt-4 inline-flex w-fit items-center gap-1.5 text-sm font-semibold text-ink/60 hover:text-ink"
