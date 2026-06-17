@@ -89,8 +89,14 @@ DELETE FROM deal_pending_change WHERE deal_card_id IN (SELECT id FROM _cards);
 DELETE FROM deal_workspace      WHERE deal_card_id IN (SELECT id FROM _cards);
 DELETE FROM pending_inbox_item  WHERE deal_card_id IN (SELECT id FROM _cards);
 DELETE FROM deal_card WHERE id IN (SELECT id FROM _cards);
+-- Phase 2 (announcements): the deal thread is re-minted each test (it self-cleans
+-- above with the card), but the p2p thread PERSISTS across serial tests. So a prior
+-- test's accept/decline announcement (sender='sella', type 'deal_card_updated' /
+-- 'deal_change_declined') would otherwise leak into the next test's p2p chat and make
+-- a getByText assertion match the stale bubble. Widen this delete to clear all three
+-- projection types from the relationship's p2p thread (RESEARCH Pitfall 4).
 DELETE FROM chat_message
-  WHERE type = 'deal_detected'
+  WHERE type IN ('deal_detected', 'deal_card_updated', 'deal_change_declined')
   AND thread_id IN (SELECT id FROM chat_thread WHERE relationship_id = :'rel');
 DELETE FROM sella_detection
   WHERE thread_id IN (SELECT id FROM chat_thread WHERE relationship_id = :'rel');
@@ -123,25 +129,62 @@ export function resetDealData(): void {
   // regenerates it on every `supabase db reset`, so a hardcoded id goes stale and
   // would silently clean the wrong relationship (leaving the seed proposal, so the
   // chat is never in the "Start a deal" State A the tests need).
-  const rel = execFileSync(
+  const rel = resolveRelationshipId(bin)
+  execFileSync(bin, [DB_URL, '-v', `rel=${rel}`, '-v', 'ON_ERROR_STOP=1', '-q', '-f', '-'], {
+    input: RESET_SQL,
+    stdio: ['pipe', 'ignore', 'pipe'],
+  })
+}
+
+/**
+ * The SQL that resolves the GreenLeaf <-> StonePharm relationship id by company
+ * NAME (never a hardcoded uuid — the seed regenerates ids on every
+ * `supabase db reset`). Shared by resetDealData and countRelationshipMessages.
+ */
+const RELATIONSHIP_BY_NAME_SQL =
+  'select r.id from public.relationship r ' +
+  'join public.company ca on ca.id = r.company_a_id ' +
+  'join public.company cb on cb.id = r.company_b_id ' +
+  "where (ca.name like 'GreenLeaf%' and cb.name like 'StonePharm%') " +
+  "or (ca.name like 'StonePharm%' and cb.name like 'GreenLeaf%') limit 1"
+
+/** Resolve the GreenLeaf <-> StonePharm relationship id at RUNTIME (by name). */
+function resolveRelationshipId(bin: string): string {
+  const rel = execFileSync(bin, [DB_URL, '-At', '-c', RELATIONSHIP_BY_NAME_SQL], {
+    encoding: 'utf8',
+  }).trim()
+  if (!rel) throw new Error('GreenLeaf <-> StonePharm relationship not found')
+  return rel
+}
+
+/**
+ * Count the live `chat_message` rows across ALL of the GreenLeaf <-> StonePharm
+ * relationship's threads (the deal thread + the p2p thread). Used by the
+ * `withdraw-silent` test (ANNC-03): silence is hard to prove in the UI, so we
+ * snapshot the count BEFORE the withdraw, run the withdraw, and assert the count
+ * is UNCHANGED — i.e. the withdraw announced NOTHING.
+ *
+ * The relationship id is resolved at RUNTIME by company name (never hardcoded),
+ * exactly as resetDealData does — the seed regenerates ids on every db reset.
+ * Counts only non-deleted rows (deleted_at is null), since announcements are
+ * hard inserts that never soft-delete.
+ */
+export function countRelationshipMessages(): number {
+  const bin = psqlBin()
+  const rel = resolveRelationshipId(bin)
+  const out = execFileSync(
     bin,
     [
       DB_URL,
       '-At',
       '-c',
-      "select r.id from public.relationship r " +
-        "join public.company ca on ca.id = r.company_a_id " +
-        "join public.company cb on cb.id = r.company_b_id " +
-        "where (ca.name like 'GreenLeaf%' and cb.name like 'StonePharm%') " +
-        "or (ca.name like 'StonePharm%' and cb.name like 'GreenLeaf%') limit 1",
+      `select count(*) from public.chat_message m ` +
+        `join public.chat_thread t on t.id = m.thread_id ` +
+        `where t.relationship_id = '${rel}' and m.deleted_at is null`,
     ],
     { encoding: 'utf8' },
   ).trim()
-  if (!rel) throw new Error('resetDealData: GreenLeaf <-> StonePharm relationship not found')
-  execFileSync(bin, [DB_URL, '-v', `rel=${rel}`, '-v', 'ON_ERROR_STOP=1', '-q', '-f', '-'], {
-    input: RESET_SQL,
-    stdio: ['pipe', 'ignore', 'pipe'],
-  })
+  return Number(out)
 }
 
 const CREDENTIALS: Record<Who, { email: string; password: string }> = {

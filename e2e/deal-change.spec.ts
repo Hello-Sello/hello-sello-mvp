@@ -38,7 +38,9 @@ import {
   birthAndOpenDeal,
   refreshDealView,
   resetDealData,
+  countRelationshipMessages,
   COUNTERPARTY_NAME,
+  type Who,
 } from './fixtures/two-company'
 
 // The held change is decided by BOTH sides over ONE shared StonePharm relationship,
@@ -122,6 +124,19 @@ function reviewReasonBox(page: Page) {
 async function openLogsTab(page: Page) {
   await page.getByRole('button', { name: /flip to signals and logs/i }).click()
   await page.getByRole('button', { name: /^logs$/i }).click()
+}
+
+/**
+ * Open `who`'s p2p (person-to-person) chat with the counterparty and wait for the
+ * conversation to render. Unlike refreshDealView (which opens the deal CARD
+ * overlay), this leaves us on the chat transcript itself so the Phase 2
+ * announcement bubbles posted into the p2p thread are visible to assert against.
+ * The same navigation refreshDealView uses (/connect/chat → counterparty), minus
+ * the "Open card" step.
+ */
+async function openP2pChat(page: Page, who: Who) {
+  await page.goto('/connect/chat')
+  await page.getByText(COUNTERPARTY_NAME[who], { exact: false }).first().click()
 }
 
 /**
@@ -265,6 +280,116 @@ test('withdraw: proposer withdraws with no reason prompt, clears pending, unlock
   await refreshDealView(bobPage, 'bob')
   await expect(bobPage.getByRole('button', { name: /review change/i })).toHaveCount(0)
   await expect(editPencil(bobPage)).toBeVisible()
+})
+
+/**
+ * accept-announces (ANNC-01): when Bob accepts Alice's held change (the SECOND
+ * yes / both-accepted commit), a Sella system message announcing the move to v2
+ * appears in BOTH the deal chat AND the p2p chat, on BOTH Alice's and Bob's
+ * screens. The announcement is a projection of the commit log row, inserted
+ * inside confirm_deal_change. RED until plan 02-01 Task 2 adds the insert.
+ */
+test('accept-announces: a commit posts a Sella "moved to v2" bubble in both the deal chat and the p2p chat', async () => {
+  await proposeChangeAsAlice(alicePage, '120', 'Increase quantity to 120')
+
+  await refreshDealView(bobPage, 'bob')
+  await openReviewChange(bobPage)
+  await reviewReasonBox(bobPage).fill('Agreed, 120 works')
+  await bobPage.getByRole('button', { name: /confirm deal/i }).click()
+
+  // BOTH screens, BOTH chats see the announcement. The body says the deal moved
+  // to v2 (the commit body); match either wording the RPC may use.
+  const movedToV2 = /(moved|updated) to v2/i
+
+  // Bob's p2p chat (he just acted from the deal card; go to the chat transcript).
+  await openP2pChat(bobPage, 'bob')
+  await expect(bobPage.getByText(movedToV2).first()).toBeVisible()
+
+  // Alice's p2p chat.
+  await openP2pChat(alicePage, 'alice')
+  await expect(alicePage.getByText(movedToV2).first()).toBeVisible()
+
+  // The deal chat (deal thread) on each side — re-open the card view; the deal
+  // thread also carries the announcement bubble alongside the card.
+  await refreshDealView(alicePage, 'alice')
+  await expect(alicePage.getByText(movedToV2).first()).toBeVisible()
+  await refreshDealView(bobPage, 'bob')
+  await expect(bobPage.getByText(movedToV2).first()).toBeVisible()
+})
+
+/**
+ * decline-announces (ANNC-02): when Bob declines with a UNIQUE reason string,
+ * that exact reason text appears INLINE in a Sella announcement bubble in BOTH
+ * the deal chat AND the p2p chat. The card does NOT move. The reason string is
+ * deliberately unlike any other on-screen text so the match can only be the
+ * announcement. RED until plan 02-01 Task 2 adds the decline insert.
+ */
+test('decline-announces: a decline posts a Sella bubble carrying the decline reason inline in both chats', async () => {
+  // a reason string that appears nowhere else on screen, so getByText can only
+  // match the announcement bubble (not an echo of a form field or a log row).
+  const declineReason = 'Zoryphex margin too thin this quarter'
+  await proposeChangeAsAlice(alicePage, '120', 'Increase quantity to 120')
+
+  await refreshDealView(bobPage, 'bob')
+  await openReviewChange(bobPage)
+  await reviewReasonBox(bobPage).fill(declineReason)
+  await bobPage.getByRole('button', { name: /^decline$/i }).click()
+
+  // the unique decline reason is visible inline in BOTH chats, on BOTH screens.
+  await openP2pChat(bobPage, 'bob')
+  await expect(bobPage.getByText(declineReason).first()).toBeVisible()
+  await openP2pChat(alicePage, 'alice')
+  await expect(alicePage.getByText(declineReason).first()).toBeVisible()
+
+  await refreshDealView(alicePage, 'alice')
+  await expect(alicePage.getByText(declineReason).first()).toBeVisible()
+
+  // the card did NOT move — no "updated to v2" log entry.
+  await openLogsTab(alicePage)
+  await expect(alicePage.getByText(/updated to v2/i)).toHaveCount(0)
+})
+
+/**
+ * withdraw-silent (ANNC-03): when Alice withdraws her own pending change (the
+ * no-reason take-back), NOTHING is announced — no chat message is posted to any
+ * of the relationship's threads. Silence is hard to prove in the UI, so we
+ * snapshot the chat_message count across the relationship's threads BEFORE the
+ * withdraw and assert it is UNCHANGED after. Also assert the pending state
+ * clears (no "Change pending", the pencil is back). This should PASS already
+ * (withdraw posts nothing today) — it is the ANNC-03 regression guard.
+ */
+test('withdraw-silent: a withdraw posts NO announcement (chat_message count unchanged) and clears pending', async () => {
+  await proposeChangeAsAlice(alicePage, '120', 'Increase quantity to 120')
+
+  // snapshot the live message count across the relationship's threads, then
+  // withdraw, then assert the count did not change (no announcement was posted).
+  const before = countRelationshipMessages()
+  await alicePage.getByRole('button', { name: /withdraw/i }).click()
+  await expect(alicePage.getByText(/change pending/i)).toHaveCount(0)
+  await expect(editPencil(alicePage)).toBeVisible()
+  const after = countRelationshipMessages()
+  expect(after).toBe(before)
+})
+
+/**
+ * gate-accept-decline (ANNC-04): in the responder review pop-up the only two
+ * action buttons are "Confirm deal" (accept) and "Decline" — there is NO
+ * seal-withdraw control. The seal Withdraw was removed in Phase 1; this is the
+ * regression guard. (The proposer's own pending-change Withdraw lives in the
+ * waiting chip on the PROPOSER's screen, not in the responder gate — so it must
+ * NOT be present in Bob's review pop-up.) Should PASS already.
+ */
+test('gate-accept-decline: the responder review gate shows only Confirm deal + Decline, no seal Withdraw', async () => {
+  await proposeChangeAsAlice(alicePage, '120', 'Increase quantity to 120')
+
+  await refreshDealView(bobPage, 'bob')
+  await openReviewChange(bobPage)
+
+  // exactly the two gate actions exist...
+  await expect(bobPage.getByRole('button', { name: /confirm deal/i })).toBeVisible()
+  await expect(bobPage.getByRole('button', { name: /^decline$/i })).toBeVisible()
+  // ...and no seal-withdraw control is present in the responder gate.
+  await expect(bobPage.getByRole('button', { name: /withdraw/i })).toHaveCount(0)
 })
 
 /**
