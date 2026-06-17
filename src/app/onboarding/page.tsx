@@ -67,12 +67,12 @@ export default async function OnboardingPage({
     .select('code, description')
     .order('sort_order')
 
-  const prefs = (person.preferences ?? {}) as Record<string, string>
   const prefill: {
     displayName?: string
     title?: string
     phone?: string
     language?: string
+    linkedin?: string
     address?: string
     description?: string
     primaryProducts?: string
@@ -80,11 +80,12 @@ export default async function OnboardingPage({
     companyName?: string
   } = {
     displayName:
-      prefs.display_name ||
+      person.display_name ||
       [person.first_name, person.last_name].filter(Boolean).join(' '),
-    title: prefs.title,
-    phone: prefs.phone,
-    language: prefs.language,
+    title: person.title ?? undefined,
+    phone: person.phone ?? undefined,
+    language: person.language ?? undefined,
+    linkedin: (person.links as { linkedin?: string } | null)?.linkedin ?? undefined,
   }
 
   // company_details resume needs the current company row to prefill.
