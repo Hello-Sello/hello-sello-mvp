@@ -5,12 +5,12 @@
 
 ---
 
-**Last updated:** 2026-06-17 (Phase 3 COMPLETE — admin verification surface) CEST
-**Branch:** claude/muskan/work (pushed, 11 new commits this session)
-**Status:** **IDLE.** Phases 1–3 complete. Cloud `db push` **DEFERRED** for all three phases (gated behind `avatars_*` policy reconciliation on cloud). No edits to your files this session.
+**Last updated:** 2026-06-17 (Phase 4 code review + wrap — session 28) CEST
+**Branch:** claude/muskan/work (pushed, 5 code-review fix commits this session)
+**Status:** **IDLE.** Phases 1–4 complete. Cloud `db push` **DEFERRED** for Phases 1–4 (gated behind `avatars_*` policy reconciliation on cloud). No edits to your files this session.
 **Linear issue in progress:** none
-**Shared files locked:** none (Phase 3 migrations are NEW files only — `20260617094200`, `20260617094300`, `20260617094400` — no edits to yours).
-**PR open:** [#105](https://github.com/HelloSello/hello-sello-mvp/pull/105) → dev (test harness slice 0 + session-24 docs wrap). **MERGED:** Discover loop [#104](https://github.com/HelloSello/hello-sello-mvp/pull/104) → dev (slices 1–6). *(Prior: Sella proposal #99 merged to dev by Ayush; storage #98 on dev, held from main.)*
+**Shared files locked:** none
+**PR open:** Phase 4 auth-gate hardening → dev (new this session). **MERGED:** Discover loop [#104](https://github.com/HelloSello/hello-sello-mvp/pull/104) → dev (slices 1–6). *(Prior: Sella proposal #99 merged to dev by Ayush; storage #98 on dev, held from main.)*
 **Prev PR:** Discover directory [#95](https://github.com/HelloSello/hello-sello-mvp/pull/95)→dev / [#96](https://github.com/HelloSello/hello-sello-mvp/pull/96)→main · Profile & QR [#88](https://github.com/HelloSello/hello-sello-mvp/pull/88)/[#89](https://github.com/HelloSello/hello-sello-mvp/pull/89) — all **merged**.
 
 ---

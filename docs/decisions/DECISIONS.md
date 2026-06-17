@@ -1048,3 +1048,12 @@ The 4.5.4 held-change backbone above is now built, verified, and GSD-complete (e
 **Reconcile in Phase 2:** because the whole Seal control is already gone from the strip, the planned "remove the seal Withdraw from the gate" (D16 / map T4) may already be moot - Phase 2 planning must check what is actually left of the seal/gate before planning that task.
 
 *Why record:* removes a shipped UI surface (the strip Seal) and drops a sub-decision (D-07's `deal_confirmation.note`), so it is load-bearing for anyone touching the strip or the final-stage seal. **Status: built + verified 2026-06-17; cloud apply deferred.** (Sources: this build session; memories `seal-deferred-to-final-stage`, `e2e-deal-setup-needs-birth-and-open`.)
+
+## 2026-06-17 — Phase 4 plan: a REVOKED company is a new verification status, not an overloaded `rejected`
+
+- **`company.verification_status` gains a fourth value `revoked` (additive lookup row, `is_terminal=TRUE`) rather than reusing `rejected` + a flag.** A *rejected* company never got in → routes to `/onboarding` to fix + resubmit (D-07); a *revoked* company was verified then HS-suspended → routes to `/home` with a hard-block "access suspended" banner (D-10), no resubmit. *Why:* two states with two pages and two copies — one status each keeps routing a single-field read; overloading `rejected` + a "was-verified" flag couples two unrelated UX flows onto one value and is easy to get wrong. **Status: planned (Phase 4, 04-01 migration `20260617140000`); not built.** (Source: Phase 4 plan-phase session; 04-RESEARCH.md.)
+
+## 2026-06-17 — Phase 4 BUILT + code-review complete; `createCompany` revoked guard is a direct DB check, not `requireVerified()`
+
+- **Phase 4 (auth-gate hardening) is fully executed and code-reviewed** (follows from the `revoked` status plan above — now built and green). 04-01–04-04 all complete; code review (04-REVIEW.md) found 1 critical + 4 warnings, all 5 fixed.
+- **The `createCompany` Server Action guards against revoked users with a targeted `verification_status === 'revoked'` check + early `{ error }` return, NOT `requireVerified()`.** *Why:* `requireVerified()` calls `redirect()`, which is incompatible with a Server Action that must return an `ActionResult` object. The onboarding flow uses `createCompany` to build the company record during signup; revoked users reaching it directly via POST must get an error response, not a redirect. The layout's Bouncer 1 handles redirects; the action-level guard handles direct POST. *(WR-01, Phase 4 code review — `src/app/onboarding/actions.ts`.)*
