@@ -8,7 +8,7 @@
  * the profile cards for a form and reveals per-product controls (photo, price
  * visibility); products are added through the drawer.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import useEmblaCarousel from "embla-carousel-react";
 import {
@@ -524,15 +524,13 @@ function ProductGallery({
   const [error, setError] = useState<string | null>(null);
   const addRef = useRef<HTMLInputElement>(null);
 
-  const onSelect = useCallback(() => {
-    if (emblaApi) setSelected(emblaApi.selectedScrollSnap());
-  }, [emblaApi]);
   useEffect(() => {
     if (!emblaApi) return;
+    const onSelect = () => setSelected(emblaApi.selectedScrollSnap());
     emblaApi.on("select", onSelect);
     onSelect();
     return () => { emblaApi.off("select", onSelect); };
-  }, [emblaApi, onSelect]);
+  }, [emblaApi]);
   // Re-measure when photos are added / removed / reordered.
   useEffect(() => { emblaApi?.reInit(); }, [emblaApi, images.length]);
 
