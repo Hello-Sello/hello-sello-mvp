@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "test": "PLAYWRIGHT_FORCE_ASYNC_LOADER=1 playwright test",
-    "test:ui": "PLAYWRIGHT_FORCE_ASYNC_LOADER=1 playwright test --ui"
+    "test:ui": "PLAYWRIGHT_FORCE_ASYNC_LOADER=1 playwright test --ui",
+    "test:unit": "vitest run",
+    "test:unit:watch": "vitest"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.3",
@@ -31,6 +33,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.7",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.9"
   }
 }
