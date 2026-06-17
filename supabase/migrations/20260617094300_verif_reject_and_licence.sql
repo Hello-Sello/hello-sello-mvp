@@ -128,7 +128,7 @@ as $$
     and c.verification_status in ('verified', 'rejected')
     and public.is_hs_team()                               -- false ⇒ 0 rows (fail-safe)
   group by c.id, c.name, c.country, c.created_at, c.verification_status,
-           al.action, al.reason, al.metadata, al.actor_person_id, al.created_at
+           al.action, al.reason, al.metadata, al.actor_person_id
   order by al.created_at desc nulls last;                 -- most recently decided first
 $$;
 
