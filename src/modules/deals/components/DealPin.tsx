@@ -26,7 +26,6 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ArrowUpRight,
-  BadgeCheck,
   Check,
   ChevronDown,
   FileText,
@@ -42,7 +41,6 @@ import {
   type RelationshipDealRow,
 } from "../supabase/reads";
 import {
-  confirmDeal,
   confirmDealChange,
   confirmDetectedDeal,
   proposeDealChange,
@@ -54,7 +52,6 @@ import { DealCard } from "./DealCard";
 import { CreateDealForm } from "./CreateDealForm";
 import { EditDealForm, type ProposeChangePayload } from "./EditDealForm";
 import type {
-  ConfirmDecision,
   ConfirmSeat,
   DealCardStatus,
   DealCardView,
@@ -165,7 +162,6 @@ export function DealPin({
   const [data, setData] = useState<DealCardView | null>(null);
   const [open, setOpen] = useState(false); // the card overlay
   const [picking, setPicking] = useState(false); // the deal dropdown
-  const [busy, setBusy] = useState(false); // a seal decision (card overlay)
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState(false);
 
@@ -173,9 +169,6 @@ export function DealPin({
   const [proposal, setProposal] = useState<PendingProposalView | null>(null);
   const [asksOpen, setAsksOpen] = useState(false); // the loud pill's popover
   const [acting, setActing] = useState(false); // accept/decline in flight
-
-  // 4.5.3 - the Seal gate (was on the card) now drops down from State C here
-  const [sealOpen, setSealOpen] = useState(false); // the seal popover
 
   // 4.5.4 - the held two-sided CHANGE. The pending change itself rides on the
   // loaded card (`data.pendingChange`), so it stays in sync with the card on
@@ -187,28 +180,6 @@ export function DealPin({
 
   // whether THIS strip can host a proposal: chat variant over a real p2p thread
   const canPropose = variant === "chat" && !!threadId;
-
-  // 3d gate: run a confirm/decline/withdraw on the server, then re-read the card
-  // (and refresh the list so the chip's status badge updates).
-  async function runDecision(decision: ConfirmDecision) {
-    if (!data || busy) return;
-    setBusy(true);
-    try {
-      await confirmDeal({ dealCardId: data.card.id, version: data.card.version, decision });
-      const fresh = await getDealCard(data.card.id);
-      setData(fresh);
-      setSealOpen(false); // the decision is in - drop the popover; the trigger reflects the new state
-      void listRelationshipDeals(relationshipId).then(setDeals);
-      // tell sibling views (the workspace header's lifecycle pill) to re-read.
-      window.dispatchEvent(
-        new CustomEvent("hs:deal-updated", { detail: { dealCardId: data.card.id } }),
-      );
-    } catch (e) {
-      console.error("deal confirm failed", e);
-    } finally {
-      setBusy(false);
-    }
-  }
 
   // 4.5.2 - the birth-accept. Record this side's vote; on both-accept the RPC
   // births the card atomically and hands back its id, so we select + open it.
@@ -479,20 +450,6 @@ export function DealPin({
   const mustAct = showProposal && proposal!.myVote == null; // my turn to accept/decline
   const waiting = showProposal && proposal!.myVote === "accept" && proposal!.otherVote !== "accept";
 
-  // 4.5.3 - the Seal gate, derived from the loaded card (was computed in CardFront).
-  // The two-seat ConfirmBar now lives in the strip; these decide how the trigger reads.
-  const viewerSeat = data?.confirmations.find((s) => s.side === data.viewerSide) ?? null;
-  const otherSeat = data?.confirmations.find((s) => s.side !== data?.viewerSide) ?? null;
-  const bothSealed =
-    !!data &&
-    (data.card.status === "confirmed" ||
-      (data.confirmations.length === 2 &&
-        data.confirmations.every((s) => s.status === "confirmed")));
-  // sealable while the card is still open business (draft / amended) and not yet sealed
-  const sealable =
-    !!data && !bothSealed && (data.card.status === "draft" || data.card.status === "amended");
-  const awaitingOther = viewerSeat?.status === "confirmed" && otherSeat?.status !== "confirmed";
-
   // 4.5.4 - the held CHANGE state, derived from the loaded card. `pendingChange`
   // present = a change is held (the pencil locks on BOTH screens). The responder
   // (the side that did NOT propose, with no vote yet) gets the reason gate; the
@@ -523,70 +480,6 @@ export function DealPin({
       {open ? "Close card" : "Open card"}
     </button>
   );
-
-  // 4.5.3 - the Seal control: a gold "Sealed" chip once both sides are in, else a
-  // trigger that drops the ConfirmBar in a popover (same glass shell as State B's
-  // "Review"). Reused in State C + the workspace variant so neither loses sealing.
-  const sealControl =
-    !data || (!bothSealed && !sealable) ? null : bothSealed ? (
-      <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1.5 text-[11px] font-semibold text-amber-700 ring-1 ring-amber-300">
-        <BadgeCheck size={13} strokeWidth={2.5} />
-        Sealed
-      </span>
-    ) : (
-      <div className="relative shrink-0">
-        <button
-          type="button"
-          onClick={() => setSealOpen((o) => !o)}
-          aria-haspopup="dialog"
-          aria-expanded={sealOpen}
-          className={
-            awaitingOther
-              ? "inline-flex items-center gap-1.5 rounded-full bg-white/70 px-3 py-1.5 text-[11px] font-medium text-ink/55 ring-1 ring-black/5 transition hover:bg-white"
-              : "inline-flex items-center gap-1.5 rounded-full bg-brand px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-brand-deep"
-          }
-        >
-          {awaitingOther ? (
-            <>
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand/60" />
-              Awaiting {counterpartyName ?? "the other side"}
-            </>
-          ) : (
-            <>
-              <Sparkles size={13} strokeWidth={2} />
-              Seal
-            </>
-          )}
-        </button>
-
-        {sealOpen && (
-          <>
-            <div className="fixed inset-0 z-10" onClick={() => setSealOpen(false)} />
-            <div className="glass-strong absolute right-0 top-full z-20 mt-1.5 w-80 overflow-hidden rounded-2xl">
-              <div className="flex items-stretch">
-                <span className="w-1 shrink-0 bg-brand" aria-hidden />
-                <div className="min-w-0 flex-1 p-3">
-                  <div className="mb-0.5 flex items-center gap-1.5 text-[11px] font-semibold text-brand-deep">
-                    <Sparkles size={12} strokeWidth={2} />
-                    Seal the deal
-                  </div>
-                  <p className="mb-2 text-[11px] text-ink/50">
-                    {counterpartyName ? `Deal with ${counterpartyName}` : "Confirm the final terms"}
-                  </p>
-                  <ConfirmBar
-                    seats={data.confirmations}
-                    viewerSide={data.viewerSide}
-                    busy={busy}
-                    onConfirm={() => void runDecision("confirm")}
-                    onDecline={() => void runDecision("decline")}
-                  />
-                </div>
-              </div>
-            </div>
-          </>
-        )}
-      </div>
-    );
 
   // 4.5.4 - the held-CHANGE control, shown in State C whenever a change is held.
   // RESPONDER (the other side, no vote yet): a loud "Review change" pill → a
@@ -851,9 +744,8 @@ export function DealPin({
             )}
           </div>
           {openCardButton}
-          {sealControl}
           {changeControl}
-          <SellaMark thinking={busy} />
+          <SellaMark thinking={changeBusy} />
           <Link
             href={`/connect/deal/${selectedId}`}
             className="ml-auto flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-medium text-ink/55 transition hover:bg-ink/5 hover:text-ink"
@@ -889,7 +781,6 @@ export function DealPin({
           <span className="shrink-0 text-[11px] text-ink/45">Deal:</span>
           <DealChip status={chipStatus} selectable={false} />
           {openCardButton}
-          {sealControl}
           {changeControl}
         </div>
       )}
