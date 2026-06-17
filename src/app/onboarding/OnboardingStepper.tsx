@@ -37,11 +37,6 @@ type Prefill = {
   website?: string
 }
 
-// Licence is REQUIRED in production (2026-05-25 lock), optional in local/preview
-// so test signups don't fill the bucket. Single source with the server action:
-// the env var NEXT_PUBLIC_REQUIRE_LICENSE (set 'true' in prod).
-const LICENCE_REQUIRED = process.env.NEXT_PUBLIC_REQUIRE_LICENSE === 'true'
-
 // ISO-2 codes for the markets the MVP cares about (company.country is a bare
 // CHAR(2), not a DB lookup, so this short list is the authoritative UI set).
 const COUNTRIES: { code: string; name: string }[] = [
@@ -85,11 +80,15 @@ export function OnboardingStepper({
   companyTypes,
   resumeStep = null,
   prefill = {},
+  licenceRequired = false,
 }: {
   firstName: string | null
   companyTypes: CompanyType[]
   resumeStep?: ResumeStep | null
   prefill?: Prefill
+  // Read server-side from REQUIRE_LICENSE (no NEXT_PUBLIC_ prefix) and passed as
+  // a prop so this client component never reads process.env directly (D-02).
+  licenceRequired?: boolean
 }) {
   const router = useRouter()
   const resuming = resumeStep !== null
@@ -161,7 +160,7 @@ export function OnboardingStepper({
     if (!name.trim()) return setError('Enter your company name.')
     if (country.length !== 2) return setError('Pick your country.')
     if (types.size === 0) return setError('Pick at least one business category.')
-    if (LICENCE_REQUIRED && files.length === 0) return setError('Add at least one licence file.')
+    if (licenceRequired && files.length === 0) return setError('Add at least one licence file.')
     const fd = new FormData()
     fd.set('name', name.trim())
     fd.set('country', country)
@@ -214,6 +213,7 @@ export function OnboardingStepper({
             files={files}
             onAddFiles={(fl) => setFiles((cur) => [...cur, ...fl])}
             onRemoveFile={(i) => setFiles((cur) => cur.filter((_, idx) => idx !== i))}
+            licenceRequired={licenceRequired}
           />
         )}
 
@@ -434,6 +434,7 @@ function CompanyStep({
   files,
   onAddFiles,
   onRemoveFile,
+  licenceRequired,
 }: {
   name: string
   setName: (v: string) => void
@@ -445,6 +446,7 @@ function CompanyStep({
   files: File[]
   onAddFiles: (files: File[]) => void
   onRemoveFile: (index: number) => void
+  licenceRequired: boolean
 }) {
   return (
     <div className="flex flex-col gap-4">
@@ -498,7 +500,7 @@ function CompanyStep({
       </div>
       <div className="flex flex-col gap-1.5 text-sm">
         <span className="text-ink-muted">
-          Licence or certificate{LICENCE_REQUIRED ? '' : ' (optional while testing)'}
+          Licence or certificate{licenceRequired ? '' : ' (optional while testing)'}
         </span>
         <label className="flex cursor-pointer flex-col items-center gap-2 rounded-2xl border border-dashed border-brand/40 bg-white/50 p-5 text-center transition hover:bg-white/80">
           <Plus size={20} className="text-brand" />

@@ -6,6 +6,11 @@ import { OnboardingStepper } from './OnboardingStepper'
 const RESUMABLE = ['connect_email', 'profile', 'company_details'] as const
 type ResumeStep = (typeof RESUMABLE)[number]
 
+// Read server-side only — REQUIRE_LICENSE has no NEXT_PUBLIC_ prefix so it is
+// never inlined into the browser bundle. The client component (OnboardingStepper)
+// receives the resolved boolean as a prop instead (D-02 / AUTH-01).
+const licenceRequired = process.env.REQUIRE_LICENSE === 'true'
+
 /**
  * Post-signup onboarding (1c).
  *
@@ -76,6 +81,7 @@ export default async function OnboardingPage({
       companyTypes={companyTypes ?? []}
       resumeStep={resumeStep}
       prefill={prefill}
+      licenceRequired={licenceRequired}
     />
   )
 }
