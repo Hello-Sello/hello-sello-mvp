@@ -5,10 +5,10 @@
 
 ---
 
-**Last updated:** 2026-06-17 (Phase 4 code review + wrap — session 28) CEST
-**Branch:** claude/muskan/work (pushed, 5 code-review fix commits this session)
-**Status:** **IDLE.** Phases 1–4 complete. Cloud `db push` **DEFERRED** for Phases 1–4 (gated behind `avatars_*` policy reconciliation on cloud). No edits to your files this session.
-**Linear issue in progress:** none
+**Last updated:** 2026-06-17 (Phase 5 executed + UAT — session 29) CEST
+**Branch:** claude/muskan/work (Phase 5 build + WR-01 review fix + scroll fix this session)
+**Status:** **IDLE.** Phase 5 (F-flag polish) **BUILT · UAT PENDING** — F5/F12/WR-01/F6/F2 verified live, only the F13 forced-failure path left; NOT marked complete. Phases 1–4 complete. Cloud `db push` **DEFERRED** for Phases 1–5 (F6's `20260617150000` is LOCAL-only too). **No edits to your files this session** — DEV-83 is in your rollout, tracked only (see note below).
+**Linear issue in progress:** none (filed **DEV-83** for your area — see note)
 **Shared files locked:** none
 **PR open:** [#110](https://github.com/HelloSello/hello-sello-mvp/pull/110) Phase 4 auth-gate hardening → dev. **MERGED:** Discover loop [#104](https://github.com/HelloSello/hello-sello-mvp/pull/104) → dev (slices 1–6). *(Prior: Sella proposal #99 merged to dev by Ayush; storage #98 on dev, held from main.)*
 **Prev PR:** Discover directory [#95](https://github.com/HelloSello/hello-sello-mvp/pull/95)→dev / [#96](https://github.com/HelloSello/hello-sello-mvp/pull/96)→main · Profile & QR [#88](https://github.com/HelloSello/hello-sello-mvp/pull/88)/[#89](https://github.com/HelloSello/hello-sello-mvp/pull/89) — all **merged**.
@@ -16,6 +16,8 @@
 ---
 
 ## Notes for the other agent
+
+**2026-06-17 (Phase 5 UAT) — ⚠️ filed DEV-83 (High) in YOUR accept rollout; I did NOT touch your files (tracked only).** Accepting an inbound request (`pricelist_request`, and any type) from a company you're **already connected to** crashes. `acceptInbox` (`src/modules/messaging/supabase/store.ts:291`) dedupes by `inbox_item_id`, but `uq_relationship_pair_active` is per **company-pair** — so for an already-connected pair it falls through to a 2nd `relationship` INSERT → `duplicate key … uq_relationship_pair_active` → surfaced as `[object Object]` (the `InboxView.tsx:135` `onAccept` does `void refreshWith(...)` with no `.catch`). **My Phase-5 F5 fix made this path reachable** (connected buyers can now send `pricelist_request`) but did not cause it — pre-existing gap in the accept flow. **Proposed direction (in the ticket):** split the inbox by connection-state; for already-connected senders show Claim/Accept/Reassign **without** "Accept & Connect" — accept should **reuse the existing relationship + open the pricing thread**, not mint a new one; same rule for C2C `connect_message`. Assigned to me, but it's your module's design call. → https://linear.app/hellosello/issue/DEV-83
 
 **2026-06-17 (Phase 2 EXECUTING — cross-tenant lockdown). ⚠️ Locking the `product`/`pricelist_item`/`product_image` RLS surface via TWO NEW migrations (no edits to yours).** Closing the anon/unverified cross-tenant leaks before competing companies onboard:
 > - **`20260617090000_sec01_caller_verified_discover_gate.sql`** (SEC-01 + GAP-1): new `public.is_caller_verified()` helper (mirrors `is_hs_team()`); adds `and public.is_caller_verified()` to all three Discover RPCs (`list_discoverable_companies` / `get_discoverable_company` / `get_discoverable_shop`) so unverified/anon callers get an empty return; revokes the auto-granted **anon EXECUTE** on all three. Signatures preserved (incl. `pricing_requested`) — no client-contract break.
