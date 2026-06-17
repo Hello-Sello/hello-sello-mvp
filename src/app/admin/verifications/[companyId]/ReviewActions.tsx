@@ -11,7 +11,7 @@
  * T-03-13: presetCode validated against REJECT_PRESETS in rejectCompany (action layer).
  */
 
-import { useState, useTransition } from 'react'
+import { useState, useTransition, useRef, useEffect } from 'react'
 import { approveCompany, rejectCompany } from '../actions'
 import {
   REJECT_PRESETS,
@@ -39,10 +39,16 @@ export function ReviewActions({ companyId, companyName, isPending }: Props) {
 
   const [toast, setToast] = useState<ToastState>(null)
   const [isPending_, startTransition] = useTransition()
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => () => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+  }, [])
 
   function showToast(kind: 'ok' | 'err', message: string) {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
     setToast({ kind, message })
-    setTimeout(() => setToast(null), 3_500)
+    toastTimerRef.current = setTimeout(() => setToast(null), 3_500)
   }
 
   // ── Approve ────────────────────────────────────────────────────────────────
