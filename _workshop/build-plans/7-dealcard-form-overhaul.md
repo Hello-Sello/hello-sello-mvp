@@ -150,10 +150,11 @@ existing tables**, not designing new ones - good news for risk.
 | Phase | Delivers (reqs) | Key work | Depends on |
 |---|---|---|---|
 | **3a** Card display correctness | CARD-01, CARD-02, CARD-03 | value sums lines; kg/g normalize; show payment terms + free delivery. No new storage. Smallest, do first. | Phase 2 |
-| **3b** Card Note (held) | NOTE-01 | new per-company note storage that versions with the card + rides the held flow; reuse the form note box; remove from the log; show on the face | 3a |
-| **3c** Margin per product | MRGN-01 | wire `deal_line_item_private` + `product_cost`; per-line cost/resale inputs; margin % per line + deal average; only-you; fix the mislabel | 3a |
-| **3d** Form product UX | FORM-01, FORM-02 | increment-not-duplicate; add by name + auto-fill; custom product | 3a |
-| **3e** Batches end-to-end | BTCH-01 | add `batch_id` to the line; snapshot measured values; batch picker in the form; seed demo batches; show batch number + measured THC/CBD on the card | 3d |
+| **3b** Deal Basket foundation | BSKT-01 | rename DealForm -> Deal Basket; one model fed by create/edit (ready for Sella/shop); add the recipient field (company mandatory, person optional, p2p-chat default). FOUNDATIONAL - the rest build on it. | 3a |
+| **3c** Card Note (held) | NOTE-01 | new per-company note storage that versions with the card + rides the held flow; reuse the Basket note box; remove from the log; show on the face | 3b |
+| **3d** Margin per product | MRGN-01 | wire `deal_line_item_private` + `product_cost`; per-line cost/resale inputs; margin % per line + deal average; only-you; fix the mislabel | 3b |
+| **3e** Form product UX | FORM-01, FORM-02 | increment-not-duplicate; add by name + auto-fill; custom product (all on the Basket) | 3b |
+| **3f** Batches end-to-end | BTCH-01 | add `batch_id` to the line; snapshot measured values; batch picker in the Basket; seed demo batches; show batch number + measured THC/CBD on the card | 3e |
 
 Then the old Phase 4 (cross-deal notification), 5 (Sella detection), 6 (Connect/chat UI) follow.
 Doing the card/form properly here absorbs much of the card-related UI work, so **re-check Phase 6's
@@ -218,7 +219,7 @@ The deal **form** is promoted to a first-class, reusable concept: the **Deal Bas
 - **The shop** - FUTURE (parked Path A).
 - **Company-only sending (no person)** - FUTURE; needs the parked **C2C ticketing** (the inbox `assigned_to` primitive). Confirmed future by Ayush.
 
-**Scope for this milestone:** add the Basket name + the recipient field (company mandatory, person optional) and wire the **p2p-chat** default; the panel/shop pickers + company-only sending are FUTURE. New requirement **BSKT-01**. It is FOUNDATIONAL to the form work (3b-3e all touch the Basket/form), so do the rename + recipient field EARLY (ideally first, or at the start of the form work).
+**Scope for this milestone:** add the Basket name + the recipient field (company mandatory, person optional) and wire the **p2p-chat** default; the panel/shop pickers + company-only sending are FUTURE. New requirement **BSKT-01 = its own Phase 3b** - foundational, done right after the 3a display fix, because 3c (Note), 3d (margin), 3e (form UX), and 3f (batches) all build on the Basket.
 
 **Also flagged (later):** Deal Workspace -> "Deal Room" rename is already tracked as CONN-01 (Phase 6); not part of this milestone.
 
