@@ -4,7 +4,8 @@
 # container (host psql may be absent on some machines).
 set -euo pipefail
 
-TEST_FILE="supabase/tests/auth_gate_test.sql"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TEST_FILE="$SCRIPT_DIR/auth_gate_test.sql"
 
 if command -v psql >/dev/null 2>&1; then
   DB_URL="$(supabase status -o env 2>/dev/null | grep '^DB_URL=' | cut -d= -f2- | tr -d '"')"
