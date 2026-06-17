@@ -96,17 +96,31 @@ export async function setRejected(
   reasonText: string = 'Licence expired — resubmit with a valid document.',
   presetCode: string = 'licence_expired',
 ): Promise<void> {
-  // First put the company back to pending (reject_company only works from pending).
-  await setPending()
+  // Use direct service-role writes instead of the reject_company RPC.
+  // The RPC requires is_hs_team() to pass (uses auth.uid()), but the service-role
+  // client's JWT has no user sub so auth.uid() returns NULL and the hs_team check
+  // fails. Direct writes bypass the app-layer guard and achieve the same DB state
+  // (status=rejected + audit_log row) for fixture purposes. (Rule 1 bug fix.)
   const admin = makeAdminClient()
-  const { error } = await admin.rpc('reject_company', {
-    p_company_id: ALICE_COMPANY_ID,
-    p_actor_person_id: HS_REVIEWER_ID,
-    p_reason: reasonText,
-    p_preset: presetCode,
+  const { error: statusError } = await admin
+    .from('company')
+    .update({ verification_status: 'rejected' })
+    .eq('id', ALICE_COMPANY_ID)
+  if (statusError) {
+    throw new Error(`setRejected: company status UPDATE failed — ${statusError.message}`)
+  }
+  const { error: auditError } = await admin.from('audit_log').insert({
+    company_id: ALICE_COMPANY_ID,
+    actor_person_id: HS_REVIEWER_ID,
+    actor_type: 'hs_team',
+    action: 'company.verify_rejected',
+    content_type: 'company',
+    content_id: ALICE_COMPANY_ID,
+    reason: reasonText,
+    metadata: { preset: presetCode },
   })
-  if (error) {
-    throw new Error(`setRejected: reject_company RPC failed — ${error.message}`)
+  if (auditError) {
+    throw new Error(`setRejected: audit_log INSERT failed — ${auditError.message}`)
   }
 }
 
