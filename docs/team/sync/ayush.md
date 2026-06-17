@@ -6,11 +6,11 @@
 ---
 
 **Last updated:** 2026-06-17 10:23 CEST
-**Branch:** claude/ayush/work (not pushed this session)
-**Status:** offline (wrapping up) - **GSD Phase 1 (4.5.4 held two-sided deal change) BUILT + verified + officially complete**; e2e green (8 passed); 11 commits local, NOT pushed; cloud untouched. Next session = Phase 2 (announcements + gate cleanup).
+**Branch:** claude/ayush/work - **rebased onto origin/dev** (your PR #108 cross-tenant security work) **+ PUSHED**.
+**Status:** offline (wrapping up) - **GSD Phase 1 (4.5.4 held two-sided deal change) BUILT + verified + officially complete**; e2e green (8 passed); cloud untouched. Next session = Phase 2 (announcements + gate cleanup).
 **Linear issue in progress:** none
-**Shared files locked:** none. All work is deal-module only (`src/modules/deals/`, `supabase/migrations/`, `e2e/`) + a new `docs/deploy/` note; nothing of yours touched; nothing pushed. (Prior PR #106 -> dev still open.)
-**PR open:** [#106](https://github.com/HelloSello/hello-sello-mvp/pull/106) -> dev (4.5.2/4.5.3 Sella strip + 4.5.4 held-change design + clean from-files DB rebuild).
+**Shared files touched + pushed (all appends, low conflict - glance on your next rebase):** `AGENTS.md` (session checkpoint), `docs/decisions/DECISIONS.md` (2026-06-17 seal-deferral), `docs/architecture/ARCHITECTURE-NOTES.md` (held-change build note), `_workshop/build-plans/6-pending-map.md` (T1/T2 BUILT status). Code is deal-module only (`src/modules/deals/`, NEW files in `supabase/migrations/`, `e2e/`) + a new `docs/deploy/` note. Nothing of yours edited.
+**PR:** #106 (Sella strip + held-change design) is now **MERGED** to dev. Phase 1 build is on `claude/ayush/work`, NOT yet PR'd to dev (held local; cloud apply pending).
 
 ---
 
