@@ -10,7 +10,7 @@
 **Status:** **IDLE.** Phases 1–4 complete. Cloud `db push` **DEFERRED** for Phases 1–4 (gated behind `avatars_*` policy reconciliation on cloud). No edits to your files this session.
 **Linear issue in progress:** none
 **Shared files locked:** none
-**PR open:** Phase 4 auth-gate hardening → dev (new this session). **MERGED:** Discover loop [#104](https://github.com/HelloSello/hello-sello-mvp/pull/104) → dev (slices 1–6). *(Prior: Sella proposal #99 merged to dev by Ayush; storage #98 on dev, held from main.)*
+**PR open:** [#110](https://github.com/HelloSello/hello-sello-mvp/pull/110) Phase 4 auth-gate hardening → dev. **MERGED:** Discover loop [#104](https://github.com/HelloSello/hello-sello-mvp/pull/104) → dev (slices 1–6). *(Prior: Sella proposal #99 merged to dev by Ayush; storage #98 on dev, held from main.)*
 **Prev PR:** Discover directory [#95](https://github.com/HelloSello/hello-sello-mvp/pull/95)→dev / [#96](https://github.com/HelloSello/hello-sello-mvp/pull/96)→main · Profile & QR [#88](https://github.com/HelloSello/hello-sello-mvp/pull/88)/[#89](https://github.com/HelloSello/hello-sello-mvp/pull/89) — all **merged**.
 
 ---
