@@ -2,31 +2,9 @@
 
 import { createClient } from '@/shared/db/server'
 import { revalidatePath } from 'next/cache'
+import { REJECT_PRESETS } from './reject-presets'
 
 export type ActionResult = { ok: true } | { error: string }
-
-/**
- * D-05 preset codes — the canonical domain for reject reasons (T-03-13 / ASVS V5).
- * Validated in rejectCompany before the RPC call; must match the UI radio options.
- */
-export const REJECT_PRESETS = [
-  'invalid_licence',
-  'licence_expired',
-  'details_dont_match',
-  'duplicate_company',
-  'other',
-] as const
-
-export type RejectPreset = (typeof REJECT_PRESETS)[number]
-
-/** Maps preset code → human-readable label shown in the UI and audit echo. */
-export const REJECT_PRESET_LABELS: Record<RejectPreset, string> = {
-  invalid_licence:      'Invalid licence',
-  licence_expired:      'Licence expired',
-  details_dont_match:   'Details don\'t match',
-  duplicate_company:    'Duplicate company',
-  other:                'Other',
-}
 
 /**
  * approveCompany — wraps the approve_company SECURITY DEFINER RPC.
@@ -48,7 +26,8 @@ export async function approveCompany(companyId: string): Promise<ActionResult> {
   if (error) return { error: error.message }
 
   // D-10: revalidate so the queue re-renders without the just-approved company.
-  revalidatePath('/admin/verifications')
+  // Revalidate the whole /admin subtree so detail pages also get fresh data.
+  revalidatePath('/admin', 'layout')
   return { ok: true }
 }
 
@@ -84,6 +63,7 @@ export async function rejectCompany(
   if (error) return { error: error.message }
 
   // D-10: revalidate so the queue re-renders without the just-rejected company.
-  revalidatePath('/admin/verifications')
+  // Revalidate the whole /admin subtree so detail pages also get fresh data.
+  revalidatePath('/admin', 'layout')
   return { ok: true }
 }

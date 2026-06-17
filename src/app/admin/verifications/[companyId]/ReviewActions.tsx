@@ -12,13 +12,12 @@
  */
 
 import { useState, useTransition } from 'react'
+import { approveCompany, rejectCompany } from '../actions'
 import {
-  approveCompany,
-  rejectCompany,
   REJECT_PRESETS,
   REJECT_PRESET_LABELS,
   type RejectPreset,
-} from '../actions'
+} from '../reject-presets'
 
 type Props = {
   companyId: string
@@ -79,35 +78,39 @@ export function ReviewActions({ companyId, companyName, isPending }: Props) {
     })
   }
 
-  // ── Already decided ────────────────────────────────────────────────────────
-  if (!isPending) {
-    return (
-      <div className="rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm text-ink-muted">
-        This company has already been reviewed.
-      </div>
-    )
-  }
-
+  // ── Render: toast lives OUTSIDE the isPending guard so it survives the RSC
+  //    re-render that flips isPending to false (revalidatePath causes the parent
+  //    RSC to re-render with the new status, changing the isPending prop — if the
+  //    toast were inside the guard it would be unmounted before the user sees it).
   return (
     <>
-      {/* Action bar */}
-      <div className="flex gap-3">
-        <button
-          onClick={() => setShowConfirm(true)}
-          disabled={isPending_}
-          className="flex items-center gap-2 rounded-xl bg-success px-4 py-2.5 text-sm font-extrabold text-white transition-opacity disabled:opacity-50"
-        >
-          Approve
-        </button>
+      {/* Already decided — no action buttons (but toast can still show above) */}
+      {!isPending && (
+        <div className="rounded-xl border border-ink/10 bg-white px-4 py-3 text-sm text-ink-muted">
+          This company has already been reviewed.
+        </div>
+      )}
 
-        <button
-          onClick={openRejectForm}
-          disabled={isPending_}
-          className="flex items-center gap-2 rounded-xl border border-danger/30 bg-white px-4 py-2.5 text-sm font-extrabold text-danger transition-opacity hover:bg-red-50/50 disabled:opacity-50"
-        >
-          Reject…
-        </button>
-      </div>
+      {/* ── Action bar (only when pending) ───────────────────────────────────── */}
+      {isPending && (
+        <div className="flex gap-3">
+          <button
+            onClick={() => setShowConfirm(true)}
+            disabled={isPending_}
+            className="flex items-center gap-2 rounded-xl bg-success px-4 py-2.5 text-sm font-extrabold text-white transition-opacity disabled:opacity-50"
+          >
+            Approve
+          </button>
+
+          <button
+            onClick={openRejectForm}
+            disabled={isPending_}
+            className="flex items-center gap-2 rounded-xl border border-danger/30 bg-white px-4 py-2.5 text-sm font-extrabold text-danger transition-opacity hover:bg-red-50/50 disabled:opacity-50"
+          >
+            Reject…
+          </button>
+        </div>
+      )}
 
       {/* ── Approve confirm dialog (D-09: one-click confirm) ────────────────── */}
       {showConfirm && (
