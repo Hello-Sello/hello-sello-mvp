@@ -181,7 +181,7 @@ test('revoked company visiting /discover redirects to /home with suspended banne
 // when the company is not verified (AUTH-01 Bouncer 2 per D-01).
 // RED: requireVerified() Bouncer 2 in Server Actions is not yet implemented (04-02)
 // ---------------------------------------------------------------------------
-test('pending company cannot bypass gate via direct action call', async ({ page, context }) => {
+test('pending company visiting /discover is redirected away (layout gate)', async ({ page, context }) => {
   await resetToVerified()
   await setPending()
   try {
