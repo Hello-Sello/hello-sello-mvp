@@ -650,11 +650,20 @@ test('note-not-in-log: a create-time note never writes a deal_change_input row',
  * No hardcoded gen_random_uuid id: the relationship/company/card ids are all
  * resolved at runtime by the shared two-company fixture (T-3f-01 mitigation).
  */
-test.skip('batch-snapshot: a picked batch shows its GL-24- number + measured THC on the card line', async () => {
-  // Wave 3 turns this on: open the Basket, pick a product, then pick a batch from
-  // the mandatory batch dropdown. The picker widget does not exist yet, so the
-  // selector below is the contract Wave 3 builds up to (a batch-number option
-  // matching the GL-24- seed prefix inside the product row's batch dropdown).
+test('batch-snapshot: a picked batch shows its GL-24- number + measured THC on the card line', async () => {
+  // Open the Basket, pick a product, then pick a batch from the mandatory batch
+  // dropdown the Wave 4 picker built. Clicking a product (DealForm.pickProduct)
+  // opens the inline batch panel - it does NOT add a line; the line is created
+  // only once a batch is chosen (D-06: product + batch is ONE entity). The batch
+  // options are <button>s reading "Batch GL-24-…" (NOT <option> elements - the
+  // RED test's `getByRole('option')` was the wrong contract; the real picker uses
+  // buttons). Pick any seeded GL-24- lot. No hardcoded id (T-3f-01).
+  //
+  // beforeEach already minted + opened a card on this relationship, so the strip
+  // is in State C ("Open card"), not State A ("Start a deal"). Reset back to the
+  // clean State A first (same pattern as note-on-face), then drive a fresh birth
+  // that this time picks a real batch through the picker.
+  resetDealData()
   await alicePage.goto('/connect/chat')
   await alicePage.getByText(COUNTERPARTY_NAME.alice, { exact: false }).first().click()
   await alicePage.getByRole('button', { name: 'Start a deal', exact: true }).click()
@@ -665,8 +674,9 @@ test.skip('batch-snapshot: a picked batch shows its GL-24- number + measured THC
     .first()
     .click()
 
-  // pick a seeded batch from the (Wave 3) mandatory batch picker - any GL-24- lot.
-  await alicePage.getByRole('option', { name: /GL-24-/ }).first().click()
+  // pick a seeded batch from the mandatory batch picker - any GL-24- lot. The
+  // option is a button labelled "Batch GL-24-NNNN".
+  await alicePage.getByRole('button', { name: /^Batch GL-24-/ }).first().click()
 
   await alicePage.getByLabel(/quantity in grams/i).first().fill('100')
   await alicePage.getByPlaceholder(/g \(optional\)/i).first().fill('5.00')
@@ -678,7 +688,8 @@ test.skip('batch-snapshot: a picked batch shows its GL-24- number + measured THC
   await openDealInChat(bobPage, 'bob')
 
   // the card line shows the chosen batch's number (GL-24- prefix) + a measured THC
-  // value - the frozen snapshot, on the public line, visible to the seller.
+  // value - the frozen snapshot, on the public line (ProductList subtitle:
+  // "Batch GL-24-NNNN · THC NN.N%"), visible to the seller who picked it.
   await expect(alicePage.getByText(/GL-24-/).first()).toBeVisible()
   await expect(alicePage.getByText(/THC \d/i).first()).toBeVisible()
 })

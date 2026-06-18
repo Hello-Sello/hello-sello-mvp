@@ -322,7 +322,7 @@ export async function createDraftDealAsAlice(
   //    also contains the words "Start a deal" (strict-mode would match both).
   await alicePage.getByRole('button', { name: 'Start a deal', exact: true }).click()
 
-  // 3. add a product, set quantity + unit price, then send the proposal.
+  // 3. add a product, pick its batch, set quantity + unit price, send.
   //    The catalogue grid loads async under the "Add products" search (3e); wait
   //    for the search input, then click the first enabled product card. Resilient
   //    to the seeded product names (we never match a specific name).
@@ -332,6 +332,15 @@ export async function createDraftDealAsAlice(
     .filter({ hasText: /\/g|no price/ })
     .first()
     .click()
+  // 3f (BTCH-01 / D-06): product + batch is ONE entity. Clicking a catalogue
+  // product no longer adds a line directly - it opens the MANDATORY inline batch
+  // dropdown (DealForm.pickProduct), and the line is created only once a batch is
+  // chosen. So every create/proposal flow MUST now pick a batch, or canSubmit's
+  // allBatched backstop blocks "Send proposal". The batch options are <button>s
+  // reading "Batch GL-24-…" (NOT <option> elements); pick the first seeded lot.
+  // This re-anchors the shared add-flow the same way the 3e build re-anchored the
+  // search input - centrally here, so every test inherits it.
+  await alicePage.getByRole('button', { name: /^Batch GL-24-/ }).first().click()
   await alicePage.getByLabel(/quantity in grams/i).first().fill('100')
   await alicePage.getByPlaceholder(/g \(optional\)/i).first().fill('5.00')
   // 3c (NOTE-01 D-08): optionally seed the create-time note — CreateDealForm's
