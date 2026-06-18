@@ -85,6 +85,10 @@ export function CardFront({ data }: { data: DealCardView }) {
   const freeDelivery = meta.free_delivery === true;
   const paymentLabel = paymentTermLabel(card.payment_terms_code);
   const hsNumber = card.hs_deal_number ?? `${term} · draft`;
+  // NOTE-01: myNote/theirNote resolve by structural company identity (D-06), but
+  // the viewer-relative name lines up exactly with viewerSide's seller/buyer split.
+  const myCompanyName = viewerSide === "seller" ? sellerName : buyerName;
+  const theirCompanyName = viewerSide === "seller" ? buyerName : sellerName;
 
   // golden when both sides are in (status is the source of truth, seats confirm it)
   const confirmed =
@@ -142,8 +146,8 @@ export function CardFront({ data }: { data: DealCardView }) {
         <Field label="Products">{String(lineItems.length)}</Field>
         {/* NOTE-01: both sides' card notes, from birth. Plain text children only
             (React escapes by default) - never raw-HTML injection (Security §V5). */}
-        <Field label="Your note">{myNote ?? "—"}</Field>
-        <Field label="Their note">{theirNote ?? "—"}</Field>
+        <Field label={`${myCompanyName} notes`}>{myNote ?? "—"}</Field>
+        <Field label={`${theirCompanyName} notes`}>{theirNote ?? "—"}</Field>
       </div>
       {/* products */}
       <div className="mt-1.5">

@@ -485,10 +485,11 @@ test('note-held: editing the note holds it — live note unchanged, pending awai
     alicePage.getByText(new RegExp(`change pending.*${COUNTERPARTY_NAME.alice}`, 'i')),
   ).toBeVisible()
 
-  // the card face must show a "Your note" row at all (it does not exist yet —
-  // RED until CardFront grows the row), proving the held note is observable on
-  // the face once built — not just absent because nothing renders notes.
-  await expect(alicePage.getByText(/your note/i)).toBeVisible()
+  // the card face must show Alice's own "GreenLeaf notes" row at all (it does
+  // not exist yet — RED until CardFront grows the row), proving the held note
+  // is observable on the face once built — not just absent because nothing
+  // renders notes.
+  await expect(alicePage.getByText(/greenleaf notes/i)).toBeVisible()
 
   // Bob re-reads the current LIVE state — his card face must NOT show Alice's
   // new note yet (it is held, not committed).
@@ -545,11 +546,11 @@ test('note-decline: a decline discards the note change — the note stays as it 
   await reviewReasonBox(bobPage).fill('Stay at 100 for now')
   await bobPage.getByRole('button', { name: /^decline$/i }).click()
 
-  // the card face must show a "Your note" row at all (RED until CardFront
-  // grows it), and the declined note text never lands in it — the live note is
-  // exactly what it was before the edit (none, at birth).
+  // the card face must show Alice's own "GreenLeaf notes" row at all (RED
+  // until CardFront grows it), and the declined note text never lands in it —
+  // the live note is exactly what it was before the edit (none, at birth).
   await refreshDealView(alicePage, 'alice')
-  await expect(alicePage.getByText(/your note/i)).toBeVisible()
+  await expect(alicePage.getByText(/greenleaf notes/i)).toBeVisible()
   await expect(alicePage.getByText(rejectedNote)).toHaveCount(0)
   await refreshDealView(bobPage, 'bob')
   await expect(bobPage.getByText(rejectedNote)).toHaveCount(0)
