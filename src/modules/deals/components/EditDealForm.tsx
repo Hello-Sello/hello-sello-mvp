@@ -44,8 +44,14 @@ function toDraftLines(data: DealCardView): DraftLineInput[] {
     currency: li.currency,
     cultivar: li.cultivar,
     pzn: li.pzn,
-    thcPercent: null,
-    cbdPercent: null,
+    // BTCH-01 / D-04 (third coordinated freeze change, Pitfall 2): re-seed the
+    // measured snapshot + batch from the line being edited. Hardcoding null here
+    // would feed nulls into proposeDealChange and BLANK the snapshot on the
+    // bumped version. The 3d ownInput re-seed (keyed by li.id) stays intact.
+    thcPercent: li.thcPercent,
+    cbdPercent: li.cbdPercent,
+    batchId: li.batchId ?? null,
+    batchNumber: li.batchNumber ?? null,
     ownInput: marginByLineId.get(li.id) ?? null,
   }));
 }
