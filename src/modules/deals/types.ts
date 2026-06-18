@@ -230,6 +230,10 @@ export interface DealCardView {
    * reads only whether it is null.
    */
   pendingChange: PendingChangeView | null;
+  /** the viewer's OWN company's card note (NOTE-01), resolved by company identity vs relationship.company_a_id/company_b_id - never the other side's slot */
+  myNote: string | null;
+  /** the OTHER company's card note (NOTE-01), resolved the same way - read-only here, never editable by the viewer */
+  theirNote: string | null;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -646,6 +650,8 @@ export interface ProposeDealChangeInput {
   paymentTermsCode?: string | null;
   /** the proposer's OWN-side private box - written immediately, never in the shared draft (D-09) */
   privateValue?: string | null;
+  /** the proposer's OWN-side card note (NOTE-01) - rides the SHARED held draft; commits to the proposer's own note slot only (D-02) */
+  note?: string | null;
   /** REQUIRED Send reason (D-07); the RPC also enforces it */
   reason: string;
 }

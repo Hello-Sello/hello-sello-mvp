@@ -480,6 +480,7 @@ export async function proposeDealChange(
     due_date: input.dueDate ?? null,
     payment_terms_code: input.paymentTermsCode ?? null,
     free_delivery: input.freeDelivery ?? false,
+    note: input.note ?? null,
   };
 
   // New RPC, not in the generated types - the localized `as never` cast (Muskan's
