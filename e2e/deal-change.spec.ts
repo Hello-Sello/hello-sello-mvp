@@ -462,6 +462,29 @@ test('private-immediate: per-line cost saves at once for Alice and never leaks t
 })
 
 /**
+ * margin-no-old-box (MRGN-01, D-09): the single mislabeled private box
+ * ("Buying price (from your supplier)", hardcoded seller label / party_side) is
+ * GONE from the edit form, replaced by the per-line "only you" cost/resale input.
+ * Regression guard for the box this phase retired. The positive half — asserting
+ * a per-line "only you" cost row IS rendered — means the test cannot false-pass
+ * merely because the form failed to render anything.
+ */
+test('margin-no-old-box: the mislabeled single private box is gone, replaced by a per-line input', async () => {
+  // beforeEach already births a card with one priced line + opens it, so the
+  // pencil opens the edit form with one item row.
+  await editPencil(alicePage).click()
+
+  // the old flat box label must be absent everywhere on the form (D-09 retired it)
+  await expect(
+    alicePage.getByText(/buying price \(from your supplier\)/i),
+  ).toHaveCount(0)
+
+  // positive half: the per-line own-side cost input row IS present (so the
+  // count-0 above cannot pass just because nothing rendered).
+  await expect(alicePage.getByText(/your cost \(only you\)/i).first()).toBeVisible()
+})
+
+/**
  * The note textarea inside the (Create or Edit) DealForm. The create-time
  * placeholder is "Add a note for your contact…" (optional, noteRequired=false);
  * the edit-time placeholder is "Say what changed and why…" (required on edits).
