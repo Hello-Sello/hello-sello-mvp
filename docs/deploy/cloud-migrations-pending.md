@@ -72,6 +72,27 @@ Cautions for the cloud apply:
 App code: NONE new for Phase 2 — the announcement lives entirely inside the RPC (a projection
 of the log line). No server action or component changed.
 
+### Phase 3c - Card Note (held)
+
+Deal-domain only and additive (two new columns + one publication add + two `create or replace`
+function bodies). **Nothing of Muskan's catalogue/product schema or RLS is touched.** Apply order
+is timestamp order:
+
+| # | Migration file | What it does |
+|---|----------------|--------------|
+| 8 | `20260618120000_deal_card_notes.sql` | Two nullable per-company note columns (`note_company_a` / `note_company_b`) on `deal_card`, mapped to `relationship.company_a_id` / `company_b_id`. Adds `deal_card` to the `supabase_realtime` publication. No new RLS policy - the existing row-level `card_all` policy already covers every column on the table. |
+| 9 | `20260618120100_confirm_deal_change_notes.sql` | `create or replace confirm_deal_change`: re-emits the full `20260617140000_confirm_deal_change_announce.sql` body unchanged and adds two CASE writes inside the both-accept commit block - the proposer's note lands in their slot only (`note_company_a` if `v_proposer_co = v_ca`, else `note_company_b`). The other side's note column is left untouched. Supersedes the function body of #6 (`20260617140000`). |
+| 10 | `20260618120200_create_deal_draft_notes.sql` | `create or replace create_deal_draft`: re-emits the full `20260612011145_two_owner_create_deal_draft.sql` body unchanged except the note block - the birth note now writes to the creator's card slot (`note_company_a`/`note_company_b`) instead of inserting into `deal_change_input`. Same 11-arg signature. Supersedes the function body of `20260612011145`. |
+
+Cautions for the cloud apply:
+- #9 lands AFTER `20260617140000_confirm_deal_change_announce.sql`, so a cloud push runs Phase 2's announce body and then immediately Phase 3c's `create or replace` - it ends in the correct final `confirm_deal_change` state; the intermediate version is never used mid-push.
+- #8's `alter publication supabase_realtime add table public.deal_card` is additive - confirm `deal_card` is not already published on cloud before pushing (it is not, as of writing).
+- #10 changes WHERE the create-time note lands (the card's per-company column, not the `deal_change_input` log) and does NOT back-fill any existing `deal_change_input` create-time notes - those rows are left as-is.
+- Push the whole Phase 1 + Phase 2 + Phase 3c batch together, in timestamp order; local-first, cloud push is deferred and Muskan-coordinated (she holds a migrations lock until her own cloud push).
+
+App code that ships with the same PR (not a DB step): the plan-03 edits to `types.ts`, `actions.ts`,
+`reads.ts`, `EditDealForm`, `DealPin`, `DealForm`, `CardFront`.
+
 ---
 
 ## APPLIED TO CLOUD
