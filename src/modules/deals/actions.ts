@@ -324,6 +324,13 @@ export async function proposeDeal(input: ProposeDealInput): Promise<ProposeDealR
   // The shared draft: line_items use the SAME keys the confirm_detected_deal
   // birth reads (name, quantity, unit, unit_price, cultivar, pzn). Shared facts
   // only - no private box (privacy).
+  //
+  // BTCH-01 (D-04): the batch snapshot is a SHARED fact (the buyer sees the
+  // frozen batch number + measured THC/CBD on the public card line), so it MUST
+  // ride the proposal draft through to birth. confirm_detected_deal carries these
+  // four keys into create_deal_draft, which writes them into the real line
+  // columns. Without this the proposal birth path (the demo's main door) silently
+  // dropped the batch snapshot. Custom lines carry nulls naturally.
   const draft = {
     line_items: input.lines.map((l) => ({
       name: l.productName,
@@ -332,6 +339,10 @@ export async function proposeDeal(input: ProposeDealInput): Promise<ProposeDealR
       unit_price: l.unitPrice,
       cultivar: l.cultivar ?? null,
       pzn: l.pzn ?? null,
+      batchId: l.batchId ?? null,
+      batchNumber: l.batchNumber ?? null,
+      thcPercent: l.thcPercent ?? null,
+      cbdPercent: l.cbdPercent ?? null,
     })),
     currency,
     summary: draftSummary(input.lines),
