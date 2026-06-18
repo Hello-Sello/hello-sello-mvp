@@ -1,5 +1,7 @@
 # 7 - Deal Card & Form overhaul: the authoritative build map
 
+> **⚠️ HISTORICAL / DESIGN-REFERENCE ONLY (closed 2026-06-18; the 3a-3f milestone it drove is COMPLETE).** Live status, what's left, and parked items now live in **`.planning/ROADMAP.md`** (the single source of truth). This file is kept as the Phase 3 design authority (ADR-0002/0003, margin formulas §4, batch model §5, Deal Basket §10). Do NOT track current status here.
+
 > Source of truth for the "DealCard plus" milestone. Locked in the 2026-06-17 grill-with-docs
 > session (the long card/form discussion, grounded against the live code + DB). Supersedes the
 > tiny "Phase 3 = Card Note" scope and pulls the parked margin work (T5b) into v1.

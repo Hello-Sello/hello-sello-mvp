@@ -1,5 +1,7 @@
 # 6 - Pending map: the deal-change flow + the honest gap list
 
+> **⚠️ HISTORICAL / DESIGN-REFERENCE ONLY (closed 2026-06-18).** Live status, what's left, and parked items now live in **`.planning/ROADMAP.md`** (the single source of truth). This file is kept for its design depth (the T1-T8 breakdown, the code-reality assessment §4, and the Stages + Deal Finalization design §5). Do NOT track current status here.
+
 **Status:** 🟢 LIVING DOC (the single "what is pending" map). **Owner:** Ayush. **Created:** 2026-06-15.
 **Build progress (2026-06-17):** **T1 + T2** (held-change backbone + change reason = GSD Phase 1 / 4.5.4) are **BUILT + verified** (e2e green; 5 migrations LOCAL only, cloud apply pending — `docs/deploy/cloud-migrations-pending.md`). The golden Seal was **removed from the strip + deferred to the deal's final stage** (DECISIONS.md 2026-06-17). **T3-T8 remain** — T3 (announcements to both chats) + T4 (seal-Withdraw cleanup, may be moot now) = Phase 2, next.
 **Supersedes the loose ends of:** `4.5-deal-birth-acceptance.md` (4.5.4-4.5.6) and `5a-ui-pass.md` (5A.4-5A.5).

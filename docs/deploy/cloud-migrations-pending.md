@@ -11,7 +11,7 @@
 
 ---
 
-## How to push the pending migrations to cloud (Phase 1 + Phase 2 — one batch)
+## How to push the pending migrations to cloud (Phase 1 + 2 + 3c + 3d + 3f — one batch of 15)
 
 Do this only AFTER the work is reviewed/merged, and coordinate with Muskan first — the
 shared cloud DB has her catalogue work and a live Sella detection cron.
