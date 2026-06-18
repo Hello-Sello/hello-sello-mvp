@@ -19,12 +19,36 @@ export default async function HomePage() {
   if (!person) redirect('/login')
   if (!person.company_id) redirect('/onboarding')
 
+  const companyId = person.company_id
+
   const supabase = await createClient()
-  const { data: company } = await supabase
-    .from('company')
-    .select('name, verification_status')
-    .eq('id', person.company_id)
-    .maybeSingle()
+
+  // Fetch company fields + three RLS-scoped counts in one pass (D-05/D-06/D-06b).
+  // All three count reads use head:true (no rows returned — cheapest possible read).
+  const [{ data: company }, { count: productCount }, { count: pricelistCount }, { count: connectCount }] =
+    await Promise.all([
+      supabase
+        .from('company')
+        .select('name, verification_status, logo_path, description, website')
+        .eq('id', companyId)
+        .maybeSingle(),
+      // Block 4: ≥1 product row → "Upload products" done
+      supabase
+        .from('product')
+        .select('id', { count: 'exact', head: true }),
+      // Block 5: ≥1 pricelist_item row → "Define pricelists" done
+      supabase
+        .from('pricelist_item')
+        .select('id', { count: 'exact', head: true }),
+      // Block 6: ≥1 connect-type request SENT from this company → "Find connections" done.
+      // Scoped to connect/connect_message types so a pricelist_request can't falsely flip it
+      // green (D-06b). sender_company_id scopes beyond RLS as belt-and-braces.
+      supabase
+        .from('pending_inbox_item')
+        .select('id', { count: 'exact', head: true })
+        .eq('sender_company_id', companyId)
+        .in('type', ['connect', 'connect_message']),
+    ])
 
   const status = company?.verification_status
 
@@ -45,10 +69,58 @@ export default async function HomePage() {
   const flags =
     ((person.preferences ?? {}) as { onboarding?: Record<string, boolean> }).onboarding ?? {}
 
+  /**
+   * 6-block onboarding checklist (D-05). Done-state derivation per block:
+   *
+   * Block 1 — connect_email: no email integration in Muskan's lane yet; stays as a
+   *   person.preferences flag/placeholder until that capability lands.
+   *
+   * Block 2 — profile: person is considered "complete" when first_name + last_name
+   *   are non-empty AND title (role) is set AND avatar_path (photo) is uploaded.
+   *   (Name is captured at sign-up; title + photo are set in /account.)
+   *
+   * Block 3 — company_details: company is considered "set up" when logo_path (brand
+   *   image) + description (what the company does) + website are all non-empty.
+   *   (logo_path and description are set via Account or Present banner; website via Account.)
+   *
+   * Blocks 4–6 — derived from RLS-scoped counts (no manual flag needed).
+   */
   const items: ChecklistItem[] = [
-    { key: 'connect_email', label: 'Connect your email', done: !!flags.email_connected },
-    { key: 'profile', label: 'Complete your profile', done: !!flags.profile },
-    { key: 'company_details', label: 'Add company details', done: !!flags.company_details },
+    {
+      key: 'connect_email',
+      label: 'Connect email',
+      done: !!flags.email_connected,
+    },
+    {
+      key: 'profile',
+      label: 'Your profile',
+      done: !!(
+        person.first_name &&
+        person.last_name &&
+        person.title &&
+        person.avatar_path
+      ),
+    },
+    {
+      key: 'company_details',
+      label: 'Company details',
+      done: !!(company?.logo_path && company?.description && company?.website),
+    },
+    {
+      key: 'products',
+      label: 'Upload products',
+      done: (productCount ?? 0) >= 1,
+    },
+    {
+      key: 'pricelists',
+      label: 'Pricelists',
+      done: (pricelistCount ?? 0) >= 1,
+    },
+    {
+      key: 'connections',
+      label: 'Find connections',
+      done: (connectCount ?? 0) >= 1,
+    },
   ]
 
   return (
