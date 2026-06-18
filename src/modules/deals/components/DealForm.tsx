@@ -22,11 +22,17 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { X, Trash2, Loader2, Lock, Search, Plus, Minus, User } from "lucide-react";
-import { getOwnCatalog } from "../supabase/reads";
+import { getOwnCatalog, getProductBatches } from "../supabase/reads";
 import { formatMoney } from "../lib/derive";
 import { addOrIncrement, emptyCustomLine, packStepGrams, packsOf } from "../lib/lineEditing";
 import { PAYMENT_TERMS } from "../lib/paymentTerms";
-import type { CatalogProduct, DraftLineInput, DealBasketContent, PartySide } from "../types";
+import type {
+  CatalogProduct,
+  DraftLineInput,
+  DealBasketContent,
+  PartySide,
+  ProductBatchView,
+} from "../types";
 
 const UNITS = ["g", "kg", "unit"];
 
@@ -54,8 +60,18 @@ export interface RecipientLabel {
   hint?: string;
 }
 
-/** Seed a line from a catalogue product - one pack (the product's pack size). */
-function lineFromProduct(p: CatalogProduct): DraftLineInput {
+/**
+ * Seed a line from a catalogue product + its chosen batch - one pack (the
+ * product's pack size).
+ *
+ * BTCH-01 (D-06): product + batch is ONE entity, so a catalogue line is always
+ * born with a batch. The chosen batch's id + number are stamped onto the line,
+ * and the line's `thcPercent`/`cbdPercent` are OVERWRITTEN with the batch's
+ * MEASURED values (D-03/D-05) - never the product LABEL value. The batch flows
+ * into `addOrIncrement`, whose merge key is productId + batchId (D-05): same
+ * product + same batch increments; same product + different batch is a new line.
+ */
+function lineFromProduct(p: CatalogProduct, batch: ProductBatchView): DraftLineInput {
   return {
     productId: p.id,
     productName: p.name,
@@ -66,8 +82,11 @@ function lineFromProduct(p: CatalogProduct): DraftLineInput {
     currency: p.currency,
     cultivar: p.cultivar,
     pzn: p.pzn,
-    thcPercent: p.thcPercent,
-    cbdPercent: p.cbdPercent,
+    // measured snapshot, not the product label (D-03)
+    thcPercent: batch.thcPercent,
+    cbdPercent: batch.cbdPercent,
+    batchId: batch.id,
+    batchNumber: batch.batchNumber,
   };
 }
 
@@ -123,6 +142,12 @@ export function DealForm({
 }) {
   const [catalog, setCatalog] = useState<CatalogProduct[] | null>(null);
   const [query, setQuery] = useState("");
+  // BTCH-01 (D-06): product + batch is ONE entity. Clicking a catalogue product
+  // does NOT add a line - it becomes the "pending" product and loads its batches;
+  // the line is created only when a batch is then chosen. Custom products skip
+  // this (the separate custom button adds a line directly).
+  const [pendingProduct, setPendingProduct] = useState<CatalogProduct | null>(null);
+  const [pendingBatches, setPendingBatches] = useState<ProductBatchView[] | null>(null);
   const [lines, setLines] = useState<DraftLineInput[]>(initialLines);
   const [freeDelivery, setFreeDelivery] = useState(initialFreeDelivery);
   const [dueDate, setDueDate] = useState(initialDueDate);
@@ -174,12 +199,35 @@ export function DealForm({
   const noteOk = !noteRequired || note.trim().length > 0;
   // FORM-02: a custom line starts blank - require a name before it can be sent.
   const allNamed = lines.every((l) => l.productName.trim().length > 0);
-  const canSubmit = !busy && lines.length > 0 && noteOk && allNamed;
+  // BTCH-01 (D-06) backstop: every catalogue line (productId not null) must carry
+  // a batch; custom lines (productId null) are batch-exempt. Born-with-a-batch is
+  // the primary enforcement (the picker); this guard is the safety net.
+  const allBatched = lines.every((l) => l.productId == null || l.batchId != null);
+  const canSubmit = !busy && lines.length > 0 && noteOk && allNamed && allBatched;
 
-  function addProduct(p: CatalogProduct) {
-    // FORM-01: increment an existing line, never duplicate (pure rule in lib).
-    setLines((ls) => addOrIncrement(ls, p, lineFromProduct));
+  // Clicking a catalogue product opens its MANDATORY batch dropdown (D-06) -
+  // it does NOT add a line yet. Load the product's batches; the line is created
+  // only when a batch is chosen (addBatch below).
+  function pickProduct(p: CatalogProduct) {
+    setPendingProduct(p);
+    setPendingBatches(null);
+    void getProductBatches(p.id)
+      .then((bs) => setPendingBatches(bs))
+      .catch(() => setPendingBatches([]));
+  }
+  // The batch is chosen - now create (or increment) the line through the SAME
+  // single add path the grid/typeahead use. The chosen batch is closed over in
+  // the seed so addOrIncrement's productId+batchId merge key works (D-05).
+  function addBatch(p: CatalogProduct, batch: ProductBatchView) {
+    // FORM-01 + D-05: increment a same-product/same-batch line, never duplicate.
+    setLines((ls) => addOrIncrement(ls, p, (cp) => lineFromProduct(cp, batch)));
+    setPendingProduct(null);
+    setPendingBatches(null);
     setQuery("");
+  }
+  function cancelPick() {
+    setPendingProduct(null);
+    setPendingBatches(null);
   }
   function addCustom(name: string) {
     setLines((ls) => [...ls, emptyCustomLine(name.trim())]);
@@ -305,7 +353,7 @@ export function DealForm({
                         <button
                           key={p.id}
                           type="button"
-                          onClick={() => addProduct(p)}
+                          onClick={() => pickProduct(p)}
                           className={`relative flex flex-col rounded-xl px-3 py-2 text-left ring-1 transition ${
                             selected
                               ? "bg-brand/5 ring-brand/40"
@@ -328,6 +376,56 @@ export function DealForm({
                         </button>
                       );
                     })}
+                  </div>
+                )}
+
+                {/* BTCH-01 (D-06): a chosen product opens its MANDATORY batch
+                    dropdown. The line is created only when a batch is picked, so
+                    a catalogue line is born with a batch. Functionality over
+                    looks - Phase 6 polishes the arrangement. */}
+                {pendingProduct && (
+                  <div className="space-y-2 rounded-xl bg-brand/5 p-3 ring-1 ring-brand/30">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[12px] font-semibold text-ink">
+                        Pick a batch for{" "}
+                        <span className="text-brand">{pendingProduct.name}</span>
+                      </p>
+                      <button
+                        type="button"
+                        onClick={cancelPick}
+                        className="shrink-0 rounded-full p-1 text-ink/40 transition hover:bg-ink/5 hover:text-ink"
+                        aria-label="Cancel batch pick"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                    {pendingBatches === null ? (
+                      <p className="text-[12px] text-ink/45">Loading batches…</p>
+                    ) : pendingBatches.length === 0 ? (
+                      <p className="text-[12px] text-ink/45">
+                        No batches on record for this product yet.
+                      </p>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {pendingBatches.map((b) => (
+                          <button
+                            key={b.id}
+                            type="button"
+                            onClick={() => addBatch(pendingProduct, b)}
+                            className="flex w-full items-center justify-between gap-2 rounded-lg bg-white px-3 py-2 text-left text-sm ring-1 ring-black/5 transition hover:ring-brand/40"
+                          >
+                            <span className="truncate font-medium text-ink">
+                              Batch {b.batchNumber}
+                            </span>
+                            <span className="shrink-0 text-[11px] text-ink/55">
+                              {b.thcPercent != null ? `THC ${b.thcPercent}%` : ""}
+                              {b.thcPercent != null && b.cbdPercent != null ? " · " : ""}
+                              {b.cbdPercent != null ? `CBD ${b.cbdPercent}%` : ""}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
 
