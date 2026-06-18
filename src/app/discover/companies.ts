@@ -1,4 +1,5 @@
 import { createClient } from "@/shared/db/server";
+import { countryName } from "@/shared/geo/countries";
 
 /**
  * Discover directory data (Track 1, slice 1). Reads the real verified-company
@@ -33,15 +34,8 @@ const CATEGORY_LABELS: Record<string, string> = {
   pharmacy: "Pharmacy",
 };
 
-const COUNTRY_NAMES: Record<string, string> = {
-  DE: "Germany", AT: "Austria", CH: "Switzerland", NL: "Netherlands",
-  ES: "Spain", PT: "Portugal", FR: "France", IT: "Italy", BE: "Belgium",
-  DK: "Denmark", PL: "Poland", CZ: "Czechia", SE: "Sweden", GB: "United Kingdom",
-};
-
 const categoryLabel = (code: string) =>
   CATEGORY_LABELS[code] ?? code.charAt(0).toUpperCase() + code.slice(1);
-const countryName = (code: string) => COUNTRY_NAMES[code] ?? code;
 
 // Row shape from the RPC. Typed locally — the function isn't in the generated
 // database.types, same pattern the codebase uses for get_public_profile / create_deal_draft.
