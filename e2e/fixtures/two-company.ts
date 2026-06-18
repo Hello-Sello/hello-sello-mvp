@@ -188,6 +188,29 @@ export function countRelationshipMessages(): number {
 }
 
 /**
+ * Resolve the GreenLeaf <-> StonePharm relationship's CURRENT deal card id at
+ * RUNTIME (never hardcoded — the seed regenerates ids on every
+ * `supabase db reset`, and the card itself is minted fresh per test by
+ * `birthAndOpenDeal`). `resetDealData` truncates every prior card on this
+ * relationship, so after a birth exactly one card exists — `limit 1` is safe.
+ *
+ * Needed by the "note-not-in-log" test (D-05): it must pass a real card id to
+ * `countDealChangeInputForCard`, and the card overlay exposes no id in the DOM
+ * or URL (it opens as an in-page overlay, not a routed page).
+ */
+export function resolveDealCardIdForRelationship(): string {
+  const bin = psqlBin()
+  const rel = resolveRelationshipId(bin)
+  const id = execFileSync(
+    bin,
+    [DB_URL, '-At', '-c', `select id from public.deal_card where relationship_id = '${rel}' limit 1`],
+    { encoding: 'utf8' },
+  ).trim()
+  if (!id) throw new Error('no deal_card found for the GreenLeaf <-> StonePharm relationship')
+  return id
+}
+
+/**
  * Count the live `deal_change_input` rows for ONE deal card (NOTE-01 / D-05).
  * The create-time note must NEVER add a log row — only a held CHANGE (the
  * Accept/Decline reason gate) writes `deal_change_input`. The card id is
@@ -285,6 +308,7 @@ export async function openTwoContexts(
  */
 export async function createDraftDealAsAlice(
   alicePage: Page,
+  opts?: { note?: string },
 ): Promise<{ dealCardId: string | null }> {
   // 1. land in Connect and open the StonePharm conversation.
   await alicePage.goto('/connect/chat')
@@ -310,6 +334,12 @@ export async function createDraftDealAsAlice(
     .click()
   await alicePage.getByPlaceholder(/qty/i).first().fill('100')
   await alicePage.getByPlaceholder(/g \(optional\)/i).first().fill('5.00')
+  // 3c (NOTE-01 D-08): optionally seed the create-time note — CreateDealForm's
+  // note textarea is optional at draft (noteRequired=false), placeholder "Add a
+  // note for your contact…" (DealForm.tsx:330-332).
+  if (opts?.note) {
+    await alicePage.getByPlaceholder(/add a note for your contact/i).fill(opts.note)
+  }
   await alicePage.getByRole('button', { name: /send proposal/i }).click()
 
   // try to read the born card id from the deal route, if the app navigates there.
@@ -368,8 +398,12 @@ export async function refreshDealView(page: Page, who: Who): Promise<void> {
  * (births the draft card), then BOTH sides open the card overlay. After this each
  * page shows the live draft card with the Edit pencil reachable.
  */
-export async function birthAndOpenDeal(alicePage: Page, bobPage: Page): Promise<void> {
-  await createDraftDealAsAlice(alicePage)
+export async function birthAndOpenDeal(
+  alicePage: Page,
+  bobPage: Page,
+  opts?: { note?: string },
+): Promise<void> {
+  await createDraftDealAsAlice(alicePage, opts)
   await acceptBirthAsBob(bobPage)
   await openDealInChat(alicePage, 'alice')
   await openDealInChat(bobPage, 'bob')

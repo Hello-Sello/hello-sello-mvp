@@ -39,6 +39,8 @@ import {
   refreshDealView,
   resetDealData,
   countRelationshipMessages,
+  countDealChangeInputForCard,
+  resolveDealCardIdForRelationship,
   COUNTERPARTY_NAME,
   type Who,
 } from './fixtures/two-company'
@@ -445,4 +447,142 @@ test('private-immediate: private buying price saves at once for Alice and never 
   await alicePage.getByRole('button', { name: /withdraw/i }).click()
   await editPencil(alicePage).click()
   await expect(privateBox(alicePage)).toHaveValue(/4\.20/)
+})
+
+/**
+ * The note textarea inside the (Create or Edit) DealForm. The create-time
+ * placeholder is "Add a note for your contact…" (optional, noteRequired=false);
+ * the edit-time placeholder is "Say what changed and why…" (required on edits).
+ * Both bind the same `value={note}` state (DealForm.tsx:319-335), so match by
+ * EITHER placeholder — the caller knows which flow it is driving.
+ */
+function noteBox(page: Page) {
+  return page.getByPlaceholder(/add a note for your contact|say what changed and why/i)
+}
+
+/**
+ * D-01/D-04: Alice edits ONLY her note (alongside a qty bump, to reuse the
+ * existing held-change driver shape) and sends with a reason. The change rides
+ * the EXISTING held flow — pencil → fields → "Review change" → reason → "Send
+ * change" — proving a note change is held exactly like a line/term change, not
+ * applied immediately. The LIVE card face does not yet have a note row at all
+ * (CardFront has no "Your note" / "Their note" field today — PATTERNS.md), so
+ * this is RED until the render lands; once it does, the row must still show
+ * NOTHING for Alice's pending note (held, not committed) while Bob waits.
+ */
+test('note-held: editing the note holds it — live note unchanged, pending awaits the other side', async () => {
+  const newNote = 'Bumping qty and adding a note for Bob'
+  await editPencil(alicePage).click()
+  await noteBox(alicePage).fill(newNote)
+  await alicePage.getByPlaceholder(/qty/i).first().fill('120')
+  await alicePage.getByRole('button', { name: /^review change$/i }).click()
+  await alicePage.getByPlaceholder(/bumped the price/i).fill('Note + qty change')
+  await alicePage.getByRole('button', { name: /^send change$/i }).click()
+
+  // auto-accept: Alice's own side is already in, the strip shows the change
+  // awaiting Bob — same signal the existing held-not-committed test uses.
+  await expect(
+    alicePage.getByText(new RegExp(`change pending.*${COUNTERPARTY_NAME.alice}`, 'i')),
+  ).toBeVisible()
+
+  // the card face must show a "Your note" row at all (it does not exist yet —
+  // RED until CardFront grows the row), proving the held note is observable on
+  // the face once built — not just absent because nothing renders notes.
+  await expect(alicePage.getByText(/your note/i)).toBeVisible()
+
+  // Bob re-reads the current LIVE state — his card face must NOT show Alice's
+  // new note yet (it is held, not committed).
+  await refreshDealView(bobPage, 'bob')
+  await expect(bobPage.getByText(newNote)).toHaveCount(0)
+})
+
+/**
+ * D-02 own-slot / D-03 both-visible / D-08: Bob Accepts the held change. After
+ * both sides re-read, Alice's new note shows in HER slot on BOTH faces, proving
+ * the commit-to-slot relay and the both-visible rule.
+ */
+test('note-commit: both accept commits the note to the proposer slot, visible on both faces', async () => {
+  const newNote = 'Bumping qty and adding a note for Bob'
+  await editPencil(alicePage).click()
+  await noteBox(alicePage).fill(newNote)
+  await alicePage.getByPlaceholder(/qty/i).first().fill('120')
+  await alicePage.getByRole('button', { name: /^review change$/i }).click()
+  await alicePage.getByPlaceholder(/bumped the price/i).fill('Note + qty change')
+  await alicePage.getByRole('button', { name: /^send change$/i }).click()
+
+  await refreshDealView(bobPage, 'bob')
+  await openReviewChange(bobPage)
+  await reviewReasonBox(bobPage).fill('Agreed, noted')
+  await bobPage.getByRole('button', { name: /confirm deal/i }).click()
+
+  // both sides re-read the committed card — Alice's new note now shows on BOTH
+  // faces (D-03: both members can see it), in HER slot.
+  await refreshDealView(alicePage, 'alice')
+  await expect(alicePage.getByText(newNote)).toBeVisible()
+  await refreshDealView(bobPage, 'bob')
+  await expect(bobPage.getByText(newNote)).toBeVisible()
+})
+
+/**
+ * D-02: Alice edits her note, Bob Declines. After refresh the note is UNCHANGED
+ * from before the edit — a Decline discards the whole change, note included,
+ * exactly like it discards a line/term change. The card face needs a note row
+ * at all to make this meaningful (CardFront has none today — PATTERNS.md), so
+ * assert the row renders (RED until built) AND that the rejected note never
+ * lands in it.
+ */
+test('note-decline: a decline discards the note change — the note stays as it was', async () => {
+  const rejectedNote = 'This note should never land — Bob declines'
+  await editPencil(alicePage).click()
+  await noteBox(alicePage).fill(rejectedNote)
+  await alicePage.getByPlaceholder(/qty/i).first().fill('120')
+  await alicePage.getByRole('button', { name: /^review change$/i }).click()
+  await alicePage.getByPlaceholder(/bumped the price/i).fill('Note + qty change')
+  await alicePage.getByRole('button', { name: /^send change$/i }).click()
+
+  await refreshDealView(bobPage, 'bob')
+  await openReviewChange(bobPage)
+  await reviewReasonBox(bobPage).fill('Stay at 100 for now')
+  await bobPage.getByRole('button', { name: /^decline$/i }).click()
+
+  // the card face must show a "Your note" row at all (RED until CardFront
+  // grows it), and the declined note text never lands in it — the live note is
+  // exactly what it was before the edit (none, at birth).
+  await refreshDealView(alicePage, 'alice')
+  await expect(alicePage.getByText(/your note/i)).toBeVisible()
+  await expect(alicePage.getByText(rejectedNote)).toHaveCount(0)
+  await refreshDealView(bobPage, 'bob')
+  await expect(bobPage.getByText(rejectedNote)).toHaveCount(0)
+})
+
+/**
+ * D-08: a deal born WITH a create-time note shows that note on the card FACE
+ * for BOTH sides from birth — no edit/accept cycle needed. This is a fresh
+ * birth (NOT the shared beforeEach card, which has no note), so it re-runs
+ * resetDealData + birthAndOpenDeal with a note seeded at create time.
+ */
+test('note-on-face: a create-time note shows on the card face for both sides from birth', async () => {
+  const birthNote = 'Seeded straight from creation — visible to both, no edit needed'
+  resetDealData()
+  await birthAndOpenDeal(alicePage, bobPage, { note: birthNote })
+
+  await refreshDealView(alicePage, 'alice')
+  await expect(alicePage.getByText(birthNote)).toBeVisible()
+  await refreshDealView(bobPage, 'bob')
+  await expect(bobPage.getByText(birthNote)).toBeVisible()
+})
+
+/**
+ * D-05: the create-time note must NOT add a `deal_change_input` row — that
+ * table is the held-CHANGE reason log, not the birth note's home (the note
+ * lives on the card's own slot column instead). Resolve the freshly-born card
+ * id at RUNTIME (the overlay exposes no id in the DOM/URL) and assert the
+ * per-card counter is 0.
+ */
+test('note-not-in-log: a create-time note never writes a deal_change_input row', async () => {
+  resetDealData()
+  await birthAndOpenDeal(alicePage, bobPage, { note: 'A note at birth, never logged' })
+
+  const cardId = resolveDealCardIdForRelationship()
+  expect(countDealChangeInputForCard(cardId)).toBe(0)
 })
