@@ -725,7 +725,13 @@ export async function resolveP2pRecipient(
     .eq("id", user.id)
     .single();
   if (vpErr) throw vpErr;
-  const viewerCompanyId: string | null = viewerPerson?.company_id ?? null;
+  // p2p anchors on a viewer that has a company; a missing one cannot be
+  // subtracted safely (WR-01) - fail loud instead of masking it as "" and
+  // letting otherOf hand back the wrong (or the viewer's own) company.
+  const viewerCompanyId = viewerPerson?.company_id ?? null;
+  if (!viewerCompanyId) {
+    throw new Error("deal: viewer has no company; cannot resolve p2p recipient");
+  }
 
   // the relationship pair (recipient company = the OTHER side) + the thread pair
   // (recipient person = the OTHER participant), read in parallel.
@@ -747,8 +753,14 @@ export async function resolveP2pRecipient(
   const thread = threadRes.data;
 
   // the OTHER side of each pair (the single math owner from lib/recipient)
-  const companyId = otherOf(viewerCompanyId ?? "", rel.company_a_id, rel.company_b_id);
+  const companyId = otherOf(viewerCompanyId, rel.company_a_id, rel.company_b_id);
   const personId = otherOf(user.id, thread.person_a_id, thread.person_b_id);
+  // the recipient company must resolve to a real id; a null here means the
+  // relationship row is malformed (viewer not a member) - fail rather than
+  // return "" as a valid-looking routing id (WR-01).
+  if (!companyId) {
+    throw new Error("deal: could not resolve recipient company for the relationship");
+  }
 
   // display names for the "To:" line (free - the rows are already read to subtract)
   let companyName: string | null = null;
@@ -771,7 +783,7 @@ export async function resolveP2pRecipient(
   }
 
   return {
-    companyId: companyId ?? "",
+    companyId,
     personId,
     companyName,
     personName,
