@@ -14,11 +14,13 @@
  */
 import { createClient } from "@/shared/db/client";
 import { sellerCompanyId, viewerSide, lineTotalOf } from "../lib/derive";
+import { otherOf } from "../lib/recipient";
 import { seededSignals } from "../lib/signals";
 import type {
   CatalogProduct,
   DealCard,
   DealCardView,
+  DealRecipientView,
   DealType,
   DealCardStatus,
   DealWorkspaceView,
@@ -687,4 +689,91 @@ export async function getStagesAndThings(workspaceId: string): Promise<StageView
       thingsDone: things.filter((t) => t.status === "done").length,
     };
   });
+}
+
+/**
+ * Resolve the p2p recipient for the Deal Basket (3b, BSKT-01 / D-08).
+ *
+ * The recipient is the OTHER side of the p2p chat: the company on the other end
+ * of the relationship, and the person on the other end of the thread. This is
+ * pure routing data derived LIVE from the chat context the app already holds -
+ * there is NO new DB column and NO migration. Two flat RLS-scoped fetches (the
+ * relationship pair + the thread pair) are stitched in JS, the same discipline
+ * every read in this file uses; the "other one" math is the single `otherOf`
+ * owner (shared with the company/person subtractions elsewhere). Display names
+ * are read in the same rows so the form's "To:" line is fed without touching the
+ * messaging module (Scope call Q1).
+ *
+ * For a p2p thread the DB CHECK guarantees both persons are non-null, so the
+ * resolved recipient always has a person id; the names degrade to null only if a
+ * row is missing, which the caller renders as company-only.
+ */
+export async function resolveP2pRecipient(
+  relationshipId: string,
+  threadId: string,
+): Promise<DealRecipientView> {
+  const supabase = createClient();
+
+  // viewer's company + person - the "me" anchor for both subtractions
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("deal: no authenticated user");
+  const { data: viewerPerson, error: vpErr } = await supabase
+    .from("person")
+    .select("company_id")
+    .eq("id", user.id)
+    .single();
+  if (vpErr) throw vpErr;
+  const viewerCompanyId: string | null = viewerPerson?.company_id ?? null;
+
+  // the relationship pair (recipient company = the OTHER side) + the thread pair
+  // (recipient person = the OTHER participant), read in parallel.
+  const [relRes, threadRes] = await Promise.all([
+    supabase
+      .from("relationship")
+      .select("company_a_id, company_b_id")
+      .eq("id", relationshipId)
+      .single(),
+    supabase
+      .from("chat_thread")
+      .select("person_a_id, person_b_id")
+      .eq("id", threadId)
+      .single(),
+  ]);
+  if (relRes.error) throw relRes.error;
+  if (threadRes.error) throw threadRes.error;
+  const rel = relRes.data;
+  const thread = threadRes.data;
+
+  // the OTHER side of each pair (the single math owner from lib/recipient)
+  const companyId = otherOf(viewerCompanyId ?? "", rel.company_a_id, rel.company_b_id);
+  const personId = otherOf(user.id, thread.person_a_id, thread.person_b_id);
+
+  // display names for the "To:" line (free - the rows are already read to subtract)
+  let companyName: string | null = null;
+  let personName: string | null = null;
+  if (companyId) {
+    const { data: co } = await supabase
+      .from("company")
+      .select("name")
+      .eq("id", companyId)
+      .single();
+    companyName = co?.name ?? null;
+  }
+  if (personId) {
+    const { data: per } = await supabase
+      .from("person")
+      .select("first_name, last_name")
+      .eq("id", personId)
+      .single();
+    personName = per ? `${per.first_name} ${per.last_name}`.trim() : null;
+  }
+
+  return {
+    companyId: companyId ?? "",
+    personId,
+    companyName,
+    personName,
+  };
 }

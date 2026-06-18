@@ -16,7 +16,7 @@ import { X, Trash2, Loader2, Lock } from "lucide-react";
 import { getOwnCatalog } from "../supabase/reads";
 import { formatMoney } from "../lib/derive";
 import { PAYMENT_TERMS } from "../lib/paymentTerms";
-import type { CatalogProduct, DraftLineInput } from "../types";
+import type { CatalogProduct, DraftLineInput, DealBasketContent } from "../types";
 
 const UNITS = ["g", "kg", "unit"];
 
@@ -38,16 +38,6 @@ function lineFromProduct(p: CatalogProduct): DraftLineInput {
     thcPercent: p.thcPercent,
     cbdPercent: p.cbdPercent,
   };
-}
-
-/** What the form hands back on submit; the wrapper maps it to create/edit. */
-export interface DealFormPayload {
-  lines: DraftLineInput[];
-  freeDelivery: boolean;
-  dueDate: string | null;
-  paymentTermsCode: string | null;
-  privateValue: string | null;
-  note: string | null;
 }
 
 export function DealForm({
@@ -82,7 +72,7 @@ export function DealForm({
   noteRequired: boolean;
   submitLabel: string;
   onClose: () => void;
-  onSubmit: (payload: DealFormPayload) => Promise<void>;
+  onSubmit: (payload: DealBasketContent) => Promise<void>;
 }) {
   const [catalog, setCatalog] = useState<CatalogProduct[] | null>(null);
   const [lines, setLines] = useState<DraftLineInput[]>(initialLines);

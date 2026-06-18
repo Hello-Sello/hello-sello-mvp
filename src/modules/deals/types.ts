@@ -390,6 +390,71 @@ export interface DraftLineInput {
   cbdPercent?: number | null;
 }
 
+/* -------------------------------------------------------------------------- */
+/* Deal Basket (3b, BSKT-01) - the reusable deal form's first-class model.      */
+/*                                                                            */
+/* The form's payload is promoted to a real domain concept: a Basket that      */
+/* knows WHO it is addressed to (recipient), WHERE it came from (source), and  */
+/* WHICH deal it is attached to (attachedDealId). The recipient is routing      */
+/* data derived live from the p2p chat (D-08) - never persisted in 3b, no new  */
+/* DB column. The future stored home is pending_inbox_item.assigned_to (D-09). */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Who the Basket is addressed to. Routing ids only (D-02/D-08); carries no
+ * content, never persisted in 3b. `personId` is optional because "no person ->
+ * address the company" is a FUTURE C2C path; in p2p the person is always known.
+ */
+export interface DealRecipient {
+  companyId: string;
+  personId: string | null;
+}
+
+/**
+ * The recipient plus display names, for the form's "To:" line (Scope call Q1).
+ * The ids are the model; the names are display-only so the subtitle can be fed
+ * without touching the messaging module. A name is null when not resolved yet.
+ */
+export interface DealRecipientView extends DealRecipient {
+  companyName: string | null;
+  personName: string | null;
+}
+
+/**
+ * Which trigger built the Basket. Fully typed (D-04) so the intended doors are
+ * documented, but ONLY 'p2p' is produced in 3b; 'sella' starts in Phase 5 and
+ * 'shop' is future. A string-literal union, mirroring DealType (NOT an enum).
+ */
+export type DealSource = "p2p" | "sella" | "shop";
+
+/**
+ * The reusable Deal Basket (D-01) - the rich model the shared form hands back.
+ * The 6 CONTENT fields (lines, freeDelivery, dueDate, paymentTermsCode,
+ * privateValue, note) are produced by DealForm itself; the 3 IDENTITY fields
+ * (recipient, source, attachedDealId) are wrapper-supplied (D-03):
+ *   - `attachedDealId: null` = a new deal; a set id = editing that card.
+ *   - `recipient` is the resolved p2p recipient on create; null on edit (the
+ *     Edit flow routes through the strip, which already knows the relationship).
+ *   - `source` is 'p2p' in 3b.
+ */
+export interface DealBasket {
+  lines: DraftLineInput[];
+  freeDelivery: boolean;
+  dueDate: string | null;
+  paymentTermsCode: string | null;
+  privateValue: string | null;
+  note: string | null;
+  recipient: DealRecipient | null;
+  source: DealSource;
+  attachedDealId: string | null;
+}
+
+/** Just the 6 CONTENT fields DealForm owns; the wrappers complete the Basket. */
+export type DealBasketContent = Pick<
+  DealBasket,
+  "lines" | "freeDelivery" | "dueDate" | "paymentTermsCode" | "privateValue" | "note"
+>;
+
 /**
  * The whole create-form payload handed to `createDeal` (the human-pressed
  * commit - the AI-fence guardrail: only a human button starts this).
