@@ -26,8 +26,6 @@ export type DealCardRow = Tables["deal_card"]["Row"];
 export type DealLineItemRow = Tables["deal_line_item"]["Row"];
 /** The deal_card_log row, verbatim. */
 export type DealCardLogRow = Tables["deal_card_log"]["Row"];
-/** The deal_party_field row (role-scoped private fields, Phase 1), verbatim. */
-export type DealPartyFieldRow = Tables["deal_party_field"]["Row"];
 
 /* -------------------------------------------------------------------------- */
 /* Seeded code unions - narrow the lookup `string` columns                    */
@@ -119,29 +117,14 @@ export interface LineItemView {
 }
 
 /**
- * My-side private field (seller Margin / buyer placeholder). RLS only ever
- * returns the viewer's own rows, so a `PartyFieldView` is always "mine to see".
- */
-export interface PartyFieldView {
-  /** deal_party_field.id */
-  id: string;
-  side: PartySide;
-  /** stable key, e.g. 'margin' */
-  fieldKey: string;
-  /** display label, e.g. 'Margin' */
-  label: string;
-  /** display value, e.g. '4.000 €' / '17%' / placeholder text */
-  value: string | null;
-}
-
-/**
  * One line's per-side private margin, scoped to the VIEWER'S OWN side (MRGN-01).
- * Replaces {@link PartyFieldView} in role: a per-line, owner-only view that plans
- * 03 (app/edit read path) and 05 (create path) build against.
+ * Replaces the retired per-deal private-field box in role: a per-line,
+ * owner-only view that plans 03 (app/edit read path) and 05 (create path) build
+ * against.
  *
  * RLS already returns ONLY the viewer's own `deal_line_item_private` row, so
- * `ownInput` is always "mine to see" - the same privacy discipline `PartyFieldView`
- * carried, now scoped per line. `ownInput` is the stored source of truth (D-07,
+ * `ownInput` is always "mine to see" - the same privacy discipline the old
+ * private box carried, now scoped per line. `ownInput` is the stored source of truth (D-07,
  * the viewer's frozen cost/resale); `marginPercent` is computed LIVE from
  * `ownInput` + the line's `unit_price` (D-02 - never stored), via
  * `lib/derive.lineMarginOf`.
@@ -220,7 +203,7 @@ export interface ConfirmResult {
 
 /**
  * The whole card, ready to render. One `getDealCard(id)` read assembles this:
- * the card (narrowed), the current-version line items, my-side private fields,
+ * the card (narrowed), the current-version line items, my-side per-line margins,
  * the seeded signals for my side, the full version log, and the two confirm
  * seats for the current version (3d).
  */
@@ -233,8 +216,12 @@ export interface DealCardView {
   sellerCompanyId: string;
   /** current-version line items only (never mixed across versions) */
   lineItems: LineItemView[];
-  /** my-side private fields (RLS-filtered to the viewer's company) */
-  partyFields: PartyFieldView[];
+  /**
+   * my-side per-line margin (RLS-filtered to the viewer's company): each line's
+   * own input + live margin %. The deal-level AVERAGE is NOT here - CardFront
+   * rolls it up from these via averageMarginOf, so the read never duplicates it.
+   */
+  lineMargins: LineMarginView[];
   /** my-side advisory signals (seeded in 3a) */
   signals: SignalView[];
   /** full version history, newest first */

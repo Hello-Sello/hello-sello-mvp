@@ -10,7 +10,7 @@ export type {
   DealCardStatus,
   PartySide,
   LineItemView,
-  PartyFieldView,
+  LineMarginView,
   LogEntry,
   SignalView,
   DealCardView,

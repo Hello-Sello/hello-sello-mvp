@@ -4,16 +4,18 @@
  * Same shape as relationship/messaging reads: flat, RLS-scoped fetches stitched
  * in JS, viewer from the session. RLS does the side-aware projection for us:
  *   - deal_card / deal_line_item / deal_card_log → both relationship members
- *   - deal_party_field → ONLY the viewer's own company's rows (the Margin never
- *     reaches the other side - enforced in the DB, see migration 20260610130000)
- * So whatever `deal_party_field` returns is already "my side" - no filtering here.
+ *   - deal_line_item_private → ONLY the viewer's own company's rows (the per-line
+ *     margin input never reaches the other side - enforced by the dli_private_all
+ *     RLS policy, see migration 20260607190000)
+ * So whatever `deal_line_item_private` returns is already "my side" - no
+ * filtering here; viewerSide then picks the right column (seller / buyer).
  *
  * Line items are immutable snapshots: descriptive fields with no column
  * (cultivar, pzn, image) are read from each line's `metadata`, not the live
  * product. We fetch only the CURRENT version's lines (deal_card.version).
  */
 import { createClient } from "@/shared/db/client";
-import { sellerCompanyId, viewerSide, lineTotalOf } from "../lib/derive";
+import { sellerCompanyId, viewerSide, lineTotalOf, lineMarginOf } from "../lib/derive";
 import { otherOf } from "../lib/recipient";
 import { seededSignals } from "../lib/signals";
 import type {
@@ -25,6 +27,7 @@ import type {
   DealCardStatus,
   DealWorkspaceView,
   LineItemView,
+  LineMarginView,
   LogAuthor,
   ChangeOrigin,
   ConfirmationStatus,
@@ -32,7 +35,6 @@ import type {
   LogEntry,
   MemberRole,
   MemberView,
-  PartyFieldView,
   PartySide,
   PendingChangeView,
   PendingProposalView,
@@ -406,18 +408,11 @@ export async function getDealCard(cardId: string): Promise<DealCardView> {
     .single();
   if (relErr) throw relErr;
 
-  const [cosRes, linesRes, fieldsRes, logRes, confRes] = await Promise.all([
+  const [cosRes, linesRes, logRes, confRes] = await Promise.all([
     supabase.from("company").select("id, name").in("id", [rel.company_a_id, rel.company_b_id]),
     supabase
       .from("deal_line_item")
       .select("id, product_id, product_name, quantity, unit, unit_price, currency, line_total, metadata, sort_order")
-      .eq("deal_card_id", card.id)
-      .eq("version", card.version)
-      .order("sort_order", { ascending: true }),
-    // RLS already limits this to MY company's rows
-    supabase
-      .from("deal_party_field")
-      .select("id, party_side, field_key, field_label, value_text, sort_order")
       .eq("deal_card_id", card.id)
       .eq("version", card.version)
       .order("sort_order", { ascending: true }),
@@ -434,9 +429,22 @@ export async function getDealCard(cardId: string): Promise<DealCardView> {
       .eq("deal_card_id", card.id)
       .eq("version", card.version),
   ]);
-  for (const r of [cosRes, linesRes, fieldsRes, logRes, confRes]) {
+  for (const r of [cosRes, linesRes, logRes, confRes]) {
     if (r.error) throw r.error;
   }
+
+  // my-side per-line private input (MRGN-01, D-06): read deal_line_item_private
+  // for THIS version's line ids. The table is keyed only by deal_line_item_id
+  // (no card/version column), so it reads after linesRes resolves; RLS
+  // (dli_private_all) already scopes it to MY company - no extra company filter.
+  const lineIds = (linesRes.data ?? []).map((r) => r.id);
+  const { data: privRows, error: privErr } = lineIds.length
+    ? await supabase
+        .from("deal_line_item_private")
+        .select("deal_line_item_id, seller_margin, buyer_metric")
+        .in("deal_line_item_id", lineIds)
+    : { data: [], error: null };
+  if (privErr) throw privErr;
 
   // seller / buyer names, derived from who issued the deal
   const coById = new Map((cosRes.data ?? []).map((c) => [c.id, c.name] as const));
@@ -462,15 +470,6 @@ export async function getDealCard(cardId: string): Promise<DealCardView> {
       pzn: str(m, "pzn"),
     };
   });
-
-  // my-side private fields (RLS already filtered to my company)
-  const partyFields: PartyFieldView[] = (fieldsRes.data ?? []).map((r) => ({
-    id: r.id,
-    side: r.party_side as PartySide,
-    fieldKey: r.field_key,
-    label: r.field_label,
-    value: r.value_text,
-  }));
 
   // resolve person names for log authors AND confirmation responders (one fetch)
   const personIds = Array.from(
@@ -512,6 +511,26 @@ export async function getDealCard(cardId: string): Promise<DealCardView> {
   const side = viewerCompanyId
     ? viewerSide(viewerCompanyId, card, rel.company_a_id, rel.company_b_id)
     : null;
+
+  // per-line margin (MRGN-01, D-02/D-06): pick MY column by viewerSide, then
+  // compute the % LIVE from that stored input + the line's unit_price via the
+  // pure lineMarginOf (never a stored margin). The deal-level average is NOT
+  // computed here - CardFront rolls it up from these (WARNING 4 lock).
+  const privByLine = new Map(
+    (privRows ?? []).map((p) => [p.deal_line_item_id, p] as const),
+  );
+  const lineMargins: LineMarginView[] = lineItems.map((line) => {
+    const priv = privByLine.get(line.id);
+    const ownInput =
+      side === "seller"
+        ? (priv?.seller_margin == null ? null : Number(priv.seller_margin))
+        : (priv?.buyer_metric == null ? null : Number(priv.buyer_metric));
+    return {
+      lineItemId: line.id,
+      ownInput,
+      marginPercent: lineMarginOf(line.unitPrice, ownInput, side ?? "seller"),
+    };
+  });
 
   // resolve mine/theirs by COMPANY IDENTITY (not seller/buyer role), mirroring
   // confirm_deal_change's structural slot write (D-02/D-03) - both notes are
@@ -560,7 +579,7 @@ export async function getDealCard(cardId: string): Promise<DealCardView> {
     buyerName,
     sellerCompanyId: sellerId,
     lineItems,
-    partyFields,
+    lineMargins,
     // seeded per-side signals (Phase 4); Sella writes the real ones in 4d
     signals: side ? seededSignals(side) : [],
     log,
