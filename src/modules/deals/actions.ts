@@ -11,6 +11,7 @@
 import { createClient } from "@/shared/db/server";
 import { getCurrentCompanyId } from "@/shared/auth";
 import { writeAudit } from "@/shared/audit";
+import { viewerSide } from "./lib/derive";
 import type {
   ConfirmDealChangeInput,
   ConfirmDealChangeResult,
@@ -399,14 +400,16 @@ export async function editDeal(input: EditDealInput): Promise<EditDealResult> {
  * a human Accept (the other side) writes the deal.
  *
  * Two writes, in order:
- *   1. PRIVATE first (D-09): the proposer's own-side private box is written
- *      IMMEDIATELY + ungated to `deal_party_field` at the CURRENT card version.
- *      It is the actor's own data (RLS owner-only allows it; no company id is
- *      trusted from input - the write targets `getCurrentCompanyId()`), and it
- *      NEVER enters the shared held draft. On commit, `confirm_deal_change`
- *      carries every base-version private box forward to the new version.
- *   2. SHARED next: the held draft carries SHARED keys ONLY (line_items, value,
- *      currency, terms) - the same keys `confirm_deal_change` reads on commit.
+ *   1. PER-LINE PRIVATE first (D-07/D-09, MRGN-01): each line's own-side input
+ *      (seller cost / buyer resale) is written IMMEDIATELY + ungated to
+ *      `deal_line_item_private`, keyed by the line's REAL id. It is the actor's
+ *      own data (RLS owner-only allows it; no company id is trusted from input -
+ *      the write targets `getCurrentCompanyId()`), and it NEVER enters the
+ *      shared held draft. On commit, `confirm_deal_change` carries every base-
+ *      version private row forward to the new version (by product_id, plan 02).
+ *   2. SHARED next: the held draft carries SHARED keys ONLY (line_items incl.
+ *      productId, value, currency, terms) - the same keys `confirm_deal_change`
+ *      reads on commit; no per-line cost/resale ever rides this draft.
  *
  * The RPC's unique lock rejects a second concurrent propose with a friendly
  * message; we surface it (O4) so the form's error banner shows it. The reason
@@ -426,47 +429,73 @@ export async function proposeDealChange(
 
   const currency = input.lines[0]?.currency ?? "EUR";
 
-  // --- 1. PRIVATE box first: immediate, ungated, OWN company, CURRENT version
-  // (D-09). The private value never enters the shared held draft below. We read
-  // the card's current version so the write lands on the live version - the held
-  // change does NOT bump the card, and the commit carries this box forward.
-  if (input.privateValue && input.privateValue.trim()) {
-    const companyId = await getCurrentCompanyId();
-    if (!companyId) throw new Error("proposeDealChange: no company in session");
+  // --- 1. PER-LINE PRIVATE input first: immediate, ungated, OWN company (D-07/
+  // D-09, MRGN-01). Each side types a fresh per-line cost (seller) / resale
+  // (buyer); we write it to the owner-only `deal_line_item_private` table keyed
+  // by the line's REAL id (l.lineItemId, threaded from the card by
+  // EditDealForm.toDraftLines - BLOCKER 1). This NEVER enters the shared held
+  // draft below (Pitfall 3 - ADR-0002's two-visibility-classes rule); the margin
+  // is computed live on the card from this stored input + the line's unit_price.
+  //
+  // To pick seller_margin vs buyer_metric we must know the CALLER's side. The
+  // old box hardcoded `party_side: 'seller'` (the named D-09 bug); instead we
+  // read the card's issuer facts + the relationship pair and resolve the side via
+  // viewerSide(). The create path (no lineItemId until create_deal_draft returns
+  // the new ids) wires the same per-line write separately in plan 05 (D-11).
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) throw new Error("proposeDealChange: no company in session");
 
-    const { data: cardRow, error: cardErr } = await supabase
-      .from("deal_card")
-      .select("version")
-      .eq("id", input.dealCardId)
-      .single();
-    if (cardErr) throw cardErr;
+  const { data: cardRow, error: cardErr } = await supabase
+    .from("deal_card")
+    .select("initiating_company_id, deal_type, relationship_id")
+    .eq("id", input.dealCardId)
+    .single();
+  if (cardErr) throw cardErr;
 
-    // own-company write: RLS (partyfield_owner_only) allows owner_company_id =
-    // current_company_id() for a card the caller is a member of. Upsert on the
-    // table's unique key (deal_card_id, version, owner_company_id, field_key) so
-    // a re-Send overwrites the actor's own value at the current version.
-    const { error: pfErr } = await supabase.from("deal_party_field").upsert(
+  const { data: relRow, error: relErr } = await supabase
+    .from("relationship")
+    .select("company_a_id, company_b_id")
+    .eq("id", cardRow.relationship_id)
+    .single();
+  if (relErr) throw relErr;
+
+  const side = viewerSide(
+    companyId,
+    {
+      deal_type: cardRow.deal_type as "offer" | "order",
+      initiating_company_id: cardRow.initiating_company_id,
+    },
+    relRow.company_a_id,
+    relRow.company_b_id,
+  );
+
+  // own-company per-line write: RLS (dli_private_all) allows company_id =
+  // current_company_id() for a line the caller can see. Upsert on the table's
+  // unique key (deal_line_item_id, company_id) so a re-Send overwrites the
+  // actor's own value for that line (Pitfall 2 - it IS upsert semantics).
+  for (const l of input.lines) {
+    if (l.ownInput == null || !l.lineItemId) continue;
+    const { error: privErr } = await supabase.from("deal_line_item_private").upsert(
       {
-        deal_card_id: input.dealCardId,
-        version: cardRow.version,
-        owner_company_id: companyId,
-        party_side: "seller",
-        field_key: "supplier_cost",
-        field_label: "Buying price (from supplier)",
-        value_text: input.privateValue.trim(),
-        sort_order: 0,
+        deal_line_item_id: l.lineItemId,
+        company_id: companyId,
+        seller_margin: side === "seller" ? l.ownInput : null,
+        buyer_metric: side === "buyer" ? l.ownInput : null,
         created_by: user.id,
       },
-      { onConflict: "deal_card_id,version,owner_company_id,field_key" },
+      { onConflict: "deal_line_item_id,company_id" },
     );
-    if (pfErr) throw pfErr;
+    if (privErr) throw privErr;
   }
 
-  // --- 2. SHARED held draft: SHARED keys ONLY (no privateValue, D-09). The
+  // --- 2. SHARED held draft: SHARED keys ONLY (no per-line ownInput, D-09). The
   // line_items use the SAME keys confirm_deal_change reads on commit (name,
-  // quantity, unit, unit_price, cultivar, pzn).
+  // quantity, unit, unit_price, cultivar, pzn) PLUS productId so a held commit
+  // does not wipe the line's product link and plan 02's carry-forward has a key
+  // to join on (Pitfall 1).
   const draft = {
     line_items: input.lines.map((l) => ({
+      productId: l.productId,
       name: l.productName,
       quantity: l.quantity,
       unit: l.unit,
