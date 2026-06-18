@@ -55,7 +55,17 @@ export function ProductList({ items }: { items: LineItemView[] }) {
                 </span>
               </div>
               <div className="truncate text-[10px] text-ink/45">
-                {[p.cultivar, volumeLabel(p.quantity, p.unit), p.pzn ? `PZN ${p.pzn}` : null]
+                {[
+                  p.cultivar,
+                  volumeLabel(p.quantity, p.unit),
+                  p.pzn ? `PZN ${p.pzn}` : null,
+                  // BTCH-01 (D-03): the frozen batch number + the batch's MEASURED
+                  // THC/CBD (never the product label). Functionality only - the
+                  // visual arrangement is Phase 6.
+                  p.batchNumber ? `Batch ${p.batchNumber}` : null,
+                  p.thcPercent != null ? `THC ${p.thcPercent}%` : null,
+                  p.cbdPercent != null ? `CBD ${p.cbdPercent}%` : null,
+                ]
                   .filter(Boolean)
                   .join(" · ")}
               </div>

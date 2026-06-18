@@ -224,11 +224,12 @@ export function DealPin({
     );
   }
 
-  // 4.5.4 - the PROPOSER's Send: the edit form handed up its SHARED fields + the
-  // private box; this collects the required reason and writes the held change.
-  // proposeDealChange writes the private box immediately + ungated (D-09) and
-  // holds the SHARED draft. On success we re-read (the pending change + the lock
-  // appear) and dispatch the refresh event.
+  // 4.5.4 - the PROPOSER's Send: the edit form handed up its SHARED fields (the
+  // per-line own-side input rides inside `lines`); this collects the required
+  // reason and writes the held change. proposeDealChange writes the per-line
+  // input to deal_line_item_private immediately + ungated (D-09) and holds the
+  // SHARED draft. On success we re-read (the pending change + the lock appear)
+  // and dispatch the refresh event.
   async function runSendChange() {
     if (!data || !pendingEdit || changeBusy || !sendReason.trim()) return;
     setChangeBusy(true);
@@ -239,7 +240,7 @@ export function DealPin({
         freeDelivery: pendingEdit.freeDelivery,
         dueDate: pendingEdit.dueDate,
         paymentTermsCode: pendingEdit.paymentTermsCode,
-        privateValue: pendingEdit.privateValue,
+        note: pendingEdit.note,
         reason: sendReason.trim(),
       });
       setChangeOpen(false);

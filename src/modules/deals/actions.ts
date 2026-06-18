@@ -11,6 +11,7 @@
 import { createClient } from "@/shared/db/server";
 import { getCurrentCompanyId } from "@/shared/auth";
 import { writeAudit } from "@/shared/audit";
+import { viewerSide } from "./lib/derive";
 import type {
   ConfirmDealChangeInput,
   ConfirmDealChangeResult,
@@ -41,6 +42,11 @@ function rpcLines(lines: CreateDealInput["lines"]) {
     pzn: l.pzn ?? null,
     thcPercent: l.thcPercent ?? null,
     cbdPercent: l.cbdPercent ?? null,
+    // BTCH-01 freeze (D-04, app half part 1): thread the chosen batch so
+    // create_deal_draft writes batch_id/batch_number + the measured thc/cbd
+    // into the REAL line columns on birth. Custom lines carry nulls naturally.
+    batchId: l.batchId ?? null,
+    batchNumber: l.batchNumber ?? null,
   }));
 }
 
@@ -184,13 +190,20 @@ export async function confirmDeal(args: {
  * may FILL the form but never calls this directly (the AI fence).
  *
  * The whole deal is born in ONE transaction by the `create_deal_draft` SECURITY
- * DEFINER RPC: the card (draft, v1) + line items + the creator's own-side
- * private box + its container (workspace + creator-as-owner + the deal chat
- * thread + an opening line) + the creation log line + the optional note. One
- * transaction = no orphan cards, and it sidesteps the workspace-membership
- * bootstrap that RLS cannot satisfy at a deal's birth. The RPC derives the
- * creator's company from the session and gates on relationship membership (the
- * guardrail). Audit (`deal.created`) stays here so the hash-chain helper owns it.
+ * DEFINER RPC: the card (draft, v1) + line items + its container (workspace +
+ * creator-as-owner + the deal chat thread + an opening line) + the creation log
+ * line + the optional note. One transaction = no orphan cards, and it sidesteps
+ * the workspace-membership bootstrap that RLS cannot satisfy at a deal's birth.
+ * The RPC derives the creator's company from the session and gates on
+ * relationship membership (the guardrail). Audit (`deal.created`) stays here so
+ * the hash-chain helper owns it.
+ *
+ * Per-line margin (D-11, MRGN-01): the create-time `deal_party_field` private
+ * box is retired (the RPC dropped it; plan 05). Instead, AFTER the card is born,
+ * each line's own-side input is written to the owner-only `deal_line_item_private`
+ * table. This MUST run after the RPC returns, because the private rows are keyed
+ * by `deal_line_item.id` and those ids exist only once the RPC has inserted the
+ * lines.
  */
 export async function createDeal(input: CreateDealInput): Promise<CreateDealResult> {
   const supabase = await createClient();
@@ -204,6 +217,8 @@ export async function createDeal(input: CreateDealInput): Promise<CreateDealResu
   // The RPC is new, so it is not in the generated types yet - a localized cast
   // (Muskan's documented pattern) avoids a full database.types regen. Call
   // supabase.rpc DIRECTLY (not via a detached const) so its `this` stays bound.
+  // p_private_value is now accepted-but-ignored server-side (D-09); we stop
+  // forwarding a value and write the per-line private rows after birth instead.
   const { data: cardId, error } = await supabase.rpc("create_deal_draft" as never, {
     p_relationship_id: input.relationshipId,
     p_deal_type: "offer",
@@ -213,12 +228,55 @@ export async function createDeal(input: CreateDealInput): Promise<CreateDealResu
     p_payment_terms_code: input.paymentTermsCode ?? null,
     p_free_delivery: input.freeDelivery ?? false,
     p_lines: rpcLines(input.lines),
-    p_private_value: input.privateValue ?? null,
+    p_private_value: null,
     p_note: input.note ?? null,
   } as never);
   if (error) throw new Error((error as { message: string }).message);
   const newCardId = cardId as string | null;
   if (!newCardId) throw new Error("createDeal: no card id returned from create_deal_draft");
+
+  // PER-LINE PRIVATE write (D-11, MRGN-01) - after birth, because the private
+  // rows are keyed by the real `deal_line_item.id`. Read the v1 lines back (the
+  // RPC inserts them in `input.lines` order with sort_order 0..n, so sort_order
+  // IS the input index), then upsert each line's own-side input into the
+  // owner-only `deal_line_item_private`. The company is taken from the SESSION
+  // (`getCurrentCompanyId()`), NEVER from input - the same guardrail the edit
+  // path uses. On the create path the creator is ALWAYS the seller:
+  // `create_deal_draft` hardcodes `deal_type 'offer'` + `initiating_company_id =
+  // v_company`, so the creator's `viewerSide` is "seller" - hence seller_margin
+  // is the correct column (no viewerSide call needed here, by construction).
+  if (input.lines.some((l) => l.ownInput != null)) {
+    const companyId = await getCurrentCompanyId();
+    if (!companyId) throw new Error("createDeal: no company in session");
+
+    const { data: bornLines, error: linesErr } = await supabase
+      .from("deal_line_item")
+      .select("id, sort_order")
+      .eq("deal_card_id", newCardId)
+      .eq("version", 1);
+    if (linesErr) throw linesErr;
+
+    const idBySort = new Map((bornLines ?? []).map((r) => [r.sort_order, r.id]));
+    for (let i = 0; i < input.lines.length; i++) {
+      const l = input.lines[i];
+      if (l.ownInput == null) continue;
+      const lineId = idBySort.get(i);
+      if (!lineId) {
+        throw new Error(`createDeal: no born line id for input index ${i}`);
+      }
+      const { error: privErr } = await supabase.from("deal_line_item_private").upsert(
+        {
+          deal_line_item_id: lineId,
+          company_id: companyId,
+          seller_margin: l.ownInput,
+          buyer_metric: null,
+          created_by: user.id,
+        },
+        { onConflict: "deal_line_item_id,company_id" },
+      );
+      if (privErr) throw privErr;
+    }
+  }
 
   await writeAudit({
     actorType: "user",
@@ -266,6 +324,13 @@ export async function proposeDeal(input: ProposeDealInput): Promise<ProposeDealR
   // The shared draft: line_items use the SAME keys the confirm_detected_deal
   // birth reads (name, quantity, unit, unit_price, cultivar, pzn). Shared facts
   // only - no private box (privacy).
+  //
+  // BTCH-01 (D-04): the batch snapshot is a SHARED fact (the buyer sees the
+  // frozen batch number + measured THC/CBD on the public card line), so it MUST
+  // ride the proposal draft through to birth. confirm_detected_deal carries these
+  // four keys into create_deal_draft, which writes them into the real line
+  // columns. Without this the proposal birth path (the demo's main door) silently
+  // dropped the batch snapshot. Custom lines carry nulls naturally.
   const draft = {
     line_items: input.lines.map((l) => ({
       name: l.productName,
@@ -274,6 +339,10 @@ export async function proposeDeal(input: ProposeDealInput): Promise<ProposeDealR
       unit_price: l.unitPrice,
       cultivar: l.cultivar ?? null,
       pzn: l.pzn ?? null,
+      batchId: l.batchId ?? null,
+      batchNumber: l.batchNumber ?? null,
+      thcPercent: l.thcPercent ?? null,
+      cbdPercent: l.cbdPercent ?? null,
     })),
     currency,
     summary: draftSummary(input.lines),
@@ -336,9 +405,10 @@ export async function confirmDetectedDeal(args: {
 /**
  * Edit a deal into a NEW version (3.5b). The human-pressed commit for a change:
  * one atomic `edit_deal_draft` RPC bumps the version, snapshots the new lines
- * (old version stays frozen), carries the private boxes forward, drops the card
- * back to `draft` (so 3d's gate re-runs), and records the MANDATORY note. The
- * note is required (the RPC also enforces it). Audit = `deal.amended`.
+ * (old version stays frozen), drops the card back to `draft` (so 3d's gate
+ * re-runs), and records the MANDATORY note. The note is required (the RPC also
+ * enforces it). Audit = `deal.amended`. Per-line margin is NOT carried here -
+ * it lives in deal_line_item_private now (D-09); editDeal is the dormant path.
  */
 export async function editDeal(input: EditDealInput): Promise<EditDealResult> {
   const supabase = await createClient();
@@ -360,7 +430,11 @@ export async function editDeal(input: EditDealInput): Promise<EditDealResult> {
     p_payment_terms_code: input.paymentTermsCode ?? null,
     p_free_delivery: input.freeDelivery ?? false,
     p_lines: rpcLines(input.lines),
-    p_private_value: input.privateValue ?? null,
+    // EditDealInput no longer carries a private value (the per-line margin moved
+    // to deal_line_item_private, D-09). editDeal is the dormant instant path
+    // (4.5.4 routes edits through proposeDealChange); pass null to keep it
+    // compiling without changing its behaviour.
+    p_private_value: null,
     p_note: input.note.trim(),
   } as never);
   if (error) throw new Error((error as { message: string }).message);
@@ -399,14 +473,16 @@ export async function editDeal(input: EditDealInput): Promise<EditDealResult> {
  * a human Accept (the other side) writes the deal.
  *
  * Two writes, in order:
- *   1. PRIVATE first (D-09): the proposer's own-side private box is written
- *      IMMEDIATELY + ungated to `deal_party_field` at the CURRENT card version.
- *      It is the actor's own data (RLS owner-only allows it; no company id is
- *      trusted from input - the write targets `getCurrentCompanyId()`), and it
- *      NEVER enters the shared held draft. On commit, `confirm_deal_change`
- *      carries every base-version private box forward to the new version.
- *   2. SHARED next: the held draft carries SHARED keys ONLY (line_items, value,
- *      currency, terms) - the same keys `confirm_deal_change` reads on commit.
+ *   1. PER-LINE PRIVATE first (D-07/D-09, MRGN-01): each line's own-side input
+ *      (seller cost / buyer resale) is written IMMEDIATELY + ungated to
+ *      `deal_line_item_private`, keyed by the line's REAL id. It is the actor's
+ *      own data (RLS owner-only allows it; no company id is trusted from input -
+ *      the write targets `getCurrentCompanyId()`), and it NEVER enters the
+ *      shared held draft. On commit, `confirm_deal_change` carries every base-
+ *      version private row forward to the new version (by product_id, plan 02).
+ *   2. SHARED next: the held draft carries SHARED keys ONLY (line_items incl.
+ *      productId, value, currency, terms) - the same keys `confirm_deal_change`
+ *      reads on commit; no per-line cost/resale ever rides this draft.
  *
  * The RPC's unique lock rejects a second concurrent propose with a friendly
  * message; we surface it (O4) so the form's error banner shows it. The reason
@@ -426,53 +502,90 @@ export async function proposeDealChange(
 
   const currency = input.lines[0]?.currency ?? "EUR";
 
-  // --- 1. PRIVATE box first: immediate, ungated, OWN company, CURRENT version
-  // (D-09). The private value never enters the shared held draft below. We read
-  // the card's current version so the write lands on the live version - the held
-  // change does NOT bump the card, and the commit carries this box forward.
-  if (input.privateValue && input.privateValue.trim()) {
-    const companyId = await getCurrentCompanyId();
-    if (!companyId) throw new Error("proposeDealChange: no company in session");
+  // --- 1. PER-LINE PRIVATE input first: immediate, ungated, OWN company (D-07/
+  // D-09, MRGN-01). Each side types a fresh per-line cost (seller) / resale
+  // (buyer); we write it to the owner-only `deal_line_item_private` table keyed
+  // by the line's REAL id (l.lineItemId, threaded from the card by
+  // EditDealForm.toDraftLines - BLOCKER 1). This NEVER enters the shared held
+  // draft below (Pitfall 3 - ADR-0002's two-visibility-classes rule); the margin
+  // is computed live on the card from this stored input + the line's unit_price.
+  //
+  // To pick seller_margin vs buyer_metric we must know the CALLER's side. The
+  // old box hardcoded `party_side: 'seller'` (the named D-09 bug); instead we
+  // read the card's issuer facts + the relationship pair and resolve the side via
+  // viewerSide(). The create path (no lineItemId until create_deal_draft returns
+  // the new ids) wires the same per-line write separately in plan 05 (D-11).
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) throw new Error("proposeDealChange: no company in session");
 
-    const { data: cardRow, error: cardErr } = await supabase
-      .from("deal_card")
-      .select("version")
-      .eq("id", input.dealCardId)
-      .single();
-    if (cardErr) throw cardErr;
+  const { data: cardRow, error: cardErr } = await supabase
+    .from("deal_card")
+    .select("initiating_company_id, deal_type, relationship_id")
+    .eq("id", input.dealCardId)
+    .single();
+  if (cardErr) throw cardErr;
 
-    // own-company write: RLS (partyfield_owner_only) allows owner_company_id =
-    // current_company_id() for a card the caller is a member of. Upsert on the
-    // table's unique key (deal_card_id, version, owner_company_id, field_key) so
-    // a re-Send overwrites the actor's own value at the current version.
-    const { error: pfErr } = await supabase.from("deal_party_field").upsert(
+  const { data: relRow, error: relErr } = await supabase
+    .from("relationship")
+    .select("company_a_id, company_b_id")
+    .eq("id", cardRow.relationship_id)
+    .single();
+  if (relErr) throw relErr;
+
+  const side = viewerSide(
+    companyId,
+    {
+      deal_type: cardRow.deal_type as "offer" | "order",
+      initiating_company_id: cardRow.initiating_company_id,
+    },
+    relRow.company_a_id,
+    relRow.company_b_id,
+  );
+
+  // own-company per-line write: RLS (dli_private_all) allows company_id =
+  // current_company_id() for a line the caller can see. Upsert on the table's
+  // unique key (deal_line_item_id, company_id) so a re-Send overwrites the
+  // actor's own value for that line (Pitfall 2 - it IS upsert semantics).
+  for (const l of input.lines) {
+    if (l.ownInput == null || !l.lineItemId) continue;
+    const { error: privErr } = await supabase.from("deal_line_item_private").upsert(
       {
-        deal_card_id: input.dealCardId,
-        version: cardRow.version,
-        owner_company_id: companyId,
-        party_side: "seller",
-        field_key: "supplier_cost",
-        field_label: "Buying price (from supplier)",
-        value_text: input.privateValue.trim(),
-        sort_order: 0,
+        deal_line_item_id: l.lineItemId,
+        company_id: companyId,
+        seller_margin: side === "seller" ? l.ownInput : null,
+        buyer_metric: side === "buyer" ? l.ownInput : null,
         created_by: user.id,
       },
-      { onConflict: "deal_card_id,version,owner_company_id,field_key" },
+      { onConflict: "deal_line_item_id,company_id" },
     );
-    if (pfErr) throw pfErr;
+    if (privErr) throw privErr;
   }
 
-  // --- 2. SHARED held draft: SHARED keys ONLY (no privateValue, D-09). The
+  // --- 2. SHARED held draft: SHARED keys ONLY (no per-line ownInput, D-09). The
   // line_items use the SAME keys confirm_deal_change reads on commit (name,
-  // quantity, unit, unit_price, cultivar, pzn).
+  // quantity, unit, unit_price, cultivar, pzn) PLUS productId so a held commit
+  // does not wipe the line's product link and plan 02's carry-forward has a key
+  // to join on (Pitfall 1).
   const draft = {
     line_items: input.lines.map((l) => ({
+      productId: l.productId,
       name: l.productName,
       quantity: l.quantity,
       unit: l.unit,
       unit_price: l.unitPrice,
       cultivar: l.cultivar ?? null,
       pzn: l.pzn ?? null,
+      // BTCH-01 freeze (D-04, app half part 1): carry the batch snapshot ON the
+      // held draft line (snapshot-through-draft) so confirm_deal_change writes
+      // batch_id/batch_number + measured thc/cbd into the new version's line
+      // columns verbatim - no product_id JOIN. The THIRD coordinated freeze
+      // change (EditDealForm.toDraftLines re-seeding these from LineItemView on
+      // edit) is Plan 04; until it lands, an EDIT that omits them would drop the
+      // snapshot on the bumped version (Pitfall 2).
+      batchId: l.batchId ?? null,
+      batchNumber: l.batchNumber ?? null,
+      thcPercent: l.thcPercent ?? null,
+      cbdPercent: l.cbdPercent ?? null,
     })),
     value_net: sumValueNet(input.lines),
     currency,
@@ -480,6 +593,7 @@ export async function proposeDealChange(
     due_date: input.dueDate ?? null,
     payment_terms_code: input.paymentTermsCode ?? null,
     free_delivery: input.freeDelivery ?? false,
+    note: input.note ?? null,
   };
 
   // New RPC, not in the generated types - the localized `as never` cast (Muskan's

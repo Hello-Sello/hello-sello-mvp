@@ -10,7 +10,7 @@ export type {
   DealCardStatus,
   PartySide,
   LineItemView,
-  PartyFieldView,
+  LineMarginView,
   LogEntry,
   SignalView,
   DealCardView,
@@ -29,6 +29,11 @@ export type {
   ConfirmResult,
   CatalogProduct,
   DraftLineInput,
+  DealBasket,
+  DealBasketContent,
+  DealRecipient,
+  DealRecipientView,
+  DealSource,
   CreateDealInput,
   CreateDealResult,
   EditDealInput,
@@ -53,6 +58,7 @@ export {
   getOwnCatalog,
   getWorkspace,
   getStagesAndThings,
+  resolveP2pRecipient,
 } from "./supabase/reads";
 export { toggleThingStatus, createThing } from "./supabase/writes";
 export { confirmDeal, createDeal, editDeal } from "./actions";

@@ -26,8 +26,6 @@ export type DealCardRow = Tables["deal_card"]["Row"];
 export type DealLineItemRow = Tables["deal_line_item"]["Row"];
 /** The deal_card_log row, verbatim. */
 export type DealCardLogRow = Tables["deal_card_log"]["Row"];
-/** The deal_party_field row (role-scoped private fields, Phase 1), verbatim. */
-export type DealPartyFieldRow = Tables["deal_party_field"]["Row"];
 
 /* -------------------------------------------------------------------------- */
 /* Seeded code unions - narrow the lookup `string` columns                    */
@@ -116,22 +114,63 @@ export interface LineItemView {
   /** deal_line_item.line_total when stored; else quantity × unit_price */
   lineTotal: number;
   pzn: string | null;
+  /**
+   * deal_line_item.batch_id - the chosen lot this line points at (BTCH-01,
+   * D-01). Null for custom/legacy lines that carry no batch. Read for the edit
+   * re-seed (Plan 04) so re-opening the form re-selects the same batch.
+   */
+  batchId: string | null;
+  /** deal_line_item.batch_number - the frozen batch number snapshot (D-02), shown on the card. */
+  batchNumber: string | null;
+  /**
+   * The MEASURED THC/CBD of the chosen batch, frozen onto the line at deal time
+   * (D-03 - the line shows the batch's measured value, never the product label).
+   * Null when the line has no batch.
+   */
+  thcPercent: number | null;
+  cbdPercent: number | null;
 }
 
 /**
- * My-side private field (seller Margin / buyer placeholder). RLS only ever
- * returns the viewer's own rows, so a `PartyFieldView` is always "mine to see".
+ * One batch (lot) the seller can pick for a catalogue line (BTCH-01, D-07).
+ * Read by the seller-only `getProductBatches`; the buyer never reads
+ * `product_batch` (they only ever see the frozen snapshot on the line). Carries
+ * the lab-MEASURED THC/CBD (the deal truth), distinct from the product LABEL.
  */
-export interface PartyFieldView {
-  /** deal_party_field.id */
+export interface ProductBatchView {
+  /** product_batch.id */
   id: string;
-  side: PartySide;
-  /** stable key, e.g. 'margin' */
-  fieldKey: string;
-  /** display label, e.g. 'Margin' */
-  label: string;
-  /** display value, e.g. '4.000 €' / '17%' / placeholder text */
-  value: string | null;
+  /** product_batch.batch_number (the lot's human-readable number, e.g. "GL-24-0001") */
+  batchNumber: string;
+  /** the lab-measured THC/CBD of this lot; null when not recorded */
+  thcPercent: number | null;
+  cbdPercent: number | null;
+  /** product_batch.ready_for_sale_date (ISO date string) or null */
+  readyForSaleDate: string | null;
+  /** product_batch.expiry_date (ISO date string) or null */
+  expiryDate: string | null;
+}
+
+/**
+ * One line's per-side private margin, scoped to the VIEWER'S OWN side (MRGN-01).
+ * Replaces the retired per-deal private-field box in role: a per-line,
+ * owner-only view that plans 03 (app/edit read path) and 05 (create path) build
+ * against.
+ *
+ * RLS already returns ONLY the viewer's own `deal_line_item_private` row, so
+ * `ownInput` is always "mine to see" - the same privacy discipline the old
+ * private box carried, now scoped per line. `ownInput` is the stored source of truth (D-07,
+ * the viewer's frozen cost/resale); `marginPercent` is computed LIVE from
+ * `ownInput` + the line's `unit_price` (D-02 - never stored), via
+ * `lib/derive.lineMarginOf`.
+ */
+export interface LineMarginView {
+  /** the deal_line_item.id this margin belongs to */
+  lineItemId: string;
+  /** the viewer's OWN frozen per-line input (seller cost / buyer resale, D-07); null when not yet entered */
+  ownInput: number | null;
+  /** the margin %, computed live from ownInput + the line's unit_price (D-02); null when not computable */
+  marginPercent: number | null;
 }
 
 /** One entry in the Logs tab - a row of `deal_card_log`, display-shaped. */
@@ -199,7 +238,7 @@ export interface ConfirmResult {
 
 /**
  * The whole card, ready to render. One `getDealCard(id)` read assembles this:
- * the card (narrowed), the current-version line items, my-side private fields,
+ * the card (narrowed), the current-version line items, my-side per-line margins,
  * the seeded signals for my side, the full version log, and the two confirm
  * seats for the current version (3d).
  */
@@ -212,8 +251,12 @@ export interface DealCardView {
   sellerCompanyId: string;
   /** current-version line items only (never mixed across versions) */
   lineItems: LineItemView[];
-  /** my-side private fields (RLS-filtered to the viewer's company) */
-  partyFields: PartyFieldView[];
+  /**
+   * my-side per-line margin (RLS-filtered to the viewer's company): each line's
+   * own input + live margin %. The deal-level AVERAGE is NOT here - CardFront
+   * rolls it up from these via averageMarginOf, so the read never duplicates it.
+   */
+  lineMargins: LineMarginView[];
   /** my-side advisory signals (seeded in 3a) */
   signals: SignalView[];
   /** full version history, newest first */
@@ -230,6 +273,10 @@ export interface DealCardView {
    * reads only whether it is null.
    */
   pendingChange: PendingChangeView | null;
+  /** the viewer's OWN company's card note (NOTE-01), resolved by company identity vs relationship.company_a_id/company_b_id - never the other side's slot */
+  myNote: string | null;
+  /** the OTHER company's card note (NOTE-01), resolved the same way - read-only here, never editable by the viewer */
+  theirNote: string | null;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -362,6 +409,13 @@ export interface CatalogProduct {
   cultivar: string | null;
   /** product_unit code (display only, e.g. "g") */
   unit: string;
+  /**
+   * product.pack_size_grams - how this product is physically sold (one pack =
+   * N grams). The basket steps quantity by this (one click = one pack); null
+   * when the product has no pack size on record (then the basket falls back to a
+   * default gram step). Pricing stays per-gram (CARD-02).
+   */
+  packSizeGrams: number | null;
   /** pricelist_item.price_per_gram; null when the product has no live price */
   unitPrice: number | null;
   currency: string;
@@ -378,17 +432,123 @@ export interface CatalogProduct {
  */
 export interface DraftLineInput {
   productId: string | null;
+  /**
+   * The stable `deal_line_item.id` this draft line came from (BLOCKER 1 fix).
+   * The per-line private row (`deal_line_item_private`) is keyed by this id, so
+   * plans 03/05 thread it through (seeded in `EditDealForm.toDraftLines` from
+   * `LineItemView.id`) - the private write then joins by the real line id, never
+   * by productId+position (which mis-targets duplicate-product lines and drops
+   * free-typed lines). OPTIONAL because a freshly-typed line in a not-yet-saved
+   * create form has no id until `create_deal_draft` returns one (D-11) - on the
+   * create path the private rows are written AFTER the RPC returns the new ids.
+   */
+  lineItemId?: string;
   productName: string;
+  /** quantity in the line's `unit` (grams for catalogue lines - packs x pack size). */
   quantity: number;
+  /**
+   * The product's pack size in grams (from CatalogProduct), so the basket can
+   * step quantity by one pack and show a pack count. Optional/null for custom
+   * (off-catalogue) lines and for edit lines loaded from an older card snapshot,
+   * where the basket falls back to a default gram step.
+   */
+  packSizeGrams?: number | null;
   /** deal_line_unit code: 'g' | 'kg' | 'unit' */
   unit: string;
   unitPrice: number | null;
   currency: string;
   cultivar?: string | null;
   pzn?: string | null;
+  /**
+   * The chosen batch's MEASURED THC/CBD, stamped onto the line by
+   * `lineFromProduct` when a batch is picked (BTCH-01, D-03). REUSES these
+   * existing fields for the measured snapshot - there are NO separate
+   * batchThc/batchCbd. A catalogue line always shows the batch's measured value,
+   * never the product label.
+   */
   thcPercent?: number | null;
   cbdPercent?: number | null;
+  /**
+   * deal_line_item.batch_id - the chosen lot this line points at (BTCH-01, D-01).
+   * Null/absent for a custom (off-catalogue) line, which is batch-exempt (D-06).
+   * The Basket merge key is productId + batchId (D-05): same product + same batch
+   * increments; same product + different batch is a NEW line.
+   */
+  batchId?: string | null;
+  /** the frozen batch number snapshot (D-02), threaded into the RPC line jsonb. */
+  batchNumber?: string | null;
+  /**
+   * The viewer's OWN frozen per-line private input (seller cost / buyer resale,
+   * D-07) - written IMMEDIATELY + ungated, NEVER in the shared held draft (D-09).
+   * Optional so existing call sites that build a `DraftLineInput` without it keep
+   * compiling until plans 03/05 wire it.
+   */
+  ownInput?: number | null;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Deal Basket (3b, BSKT-01) - the reusable deal form's first-class model.      */
+/*                                                                            */
+/* The form's payload is promoted to a real domain concept: a Basket that      */
+/* knows WHO it is addressed to (recipient), WHERE it came from (source), and  */
+/* WHICH deal it is attached to (attachedDealId). The recipient is routing      */
+/* data derived live from the p2p chat (D-08) - never persisted in 3b, no new  */
+/* DB column. The future stored home is pending_inbox_item.assigned_to (D-09). */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Who the Basket is addressed to. Routing ids only (D-02/D-08); carries no
+ * content, never persisted in 3b. `personId` is optional because "no person ->
+ * address the company" is a FUTURE C2C path; in p2p the person is always known.
+ */
+export interface DealRecipient {
+  companyId: string;
+  personId: string | null;
+}
+
+/**
+ * The recipient plus display names, for the form's "To:" line (Scope call Q1).
+ * The ids are the model; the names are display-only so the subtitle can be fed
+ * without touching the messaging module. A name is null when not resolved yet.
+ */
+export interface DealRecipientView extends DealRecipient {
+  companyName: string | null;
+  personName: string | null;
+}
+
+/**
+ * Which trigger built the Basket. Fully typed (D-04) so the intended doors are
+ * documented, but ONLY 'p2p' is produced in 3b; 'sella' starts in Phase 5 and
+ * 'shop' is future. A string-literal union, mirroring DealType (NOT an enum).
+ */
+export type DealSource = "p2p" | "sella" | "shop";
+
+/**
+ * The reusable Deal Basket (D-01) - the rich model the shared form hands back.
+ * The 5 CONTENT fields (lines, freeDelivery, dueDate, paymentTermsCode, note)
+ * are produced by DealForm itself; the 3 IDENTITY fields (recipient, source,
+ * attachedDealId) are wrapper-supplied (D-03):
+ *   - `attachedDealId: null` = a new deal; a set id = editing that card.
+ *   - `recipient` is the resolved p2p recipient on create; null on edit (the
+ *     Edit flow routes through the strip, which already knows the relationship).
+ *   - `source` is 'p2p' in 3b.
+ */
+export interface DealBasket {
+  lines: DraftLineInput[];
+  freeDelivery: boolean;
+  dueDate: string | null;
+  paymentTermsCode: string | null;
+  note: string | null;
+  recipient: DealRecipient | null;
+  source: DealSource;
+  attachedDealId: string | null;
+}
+
+/** Just the 5 CONTENT fields DealForm owns; the wrappers complete the Basket. */
+export type DealBasketContent = Pick<
+  DealBasket,
+  "lines" | "freeDelivery" | "dueDate" | "paymentTermsCode" | "note"
+>;
 
 /**
  * The whole create-form payload handed to `createDeal` (the human-pressed
@@ -403,8 +563,6 @@ export interface CreateDealInput {
   dueDate?: string | null;
   /** payment_terms.code, e.g. 'net30' */
   paymentTermsCode?: string | null;
-  /** the creator's OWN-side private box (seller: buying price from supplier) */
-  privateValue?: string | null;
   /** the creation note (optional at draft - D7; becomes mandatory on edits, 3.5b) */
   note?: string | null;
 }
@@ -421,9 +579,9 @@ export interface CreateDealResult {
  * (sender's side pre-accepted) and the card is born only when the other side
  * accepts (the unified `confirm_detected_deal` birth).
  *
- * Note: `privateValue` is intentionally NOT carried to the proposal - the
- * proposal is a chat message both sides can read, so the proposer's own-side
- * private box would leak. The private box is added after birth via edit.
+ * Note: no per-line private input is carried to the proposal - the proposal is a
+ * chat message both sides can read, so a proposer's own-side cost would leak.
+ * The per-line margin is added after birth via the create/edit private write.
  */
 export interface ProposeDealInput extends CreateDealInput {
   /** the p2p chat thread the proposal message is posted into */
@@ -508,7 +666,6 @@ export interface EditDealInput {
   freeDelivery?: boolean;
   dueDate?: string | null;
   paymentTermsCode?: string | null;
-  privateValue?: string | null;
   /** REQUIRED on an edit (unlike create, where it is optional at draft). */
   note: string;
 }
@@ -566,9 +723,10 @@ export interface PendingChangeView {
  * The propose-a-change payload handed to `proposeDealChange` (4.5.4). Same
  * SHARED form shape as create/edit (lines + terms) on an existing card, plus
  * the `dealCardId` and the required Send `reason`. The reason flows through the
- * strip Send pop-up, NOT the edit form (D-08). `privateValue` is the proposer's
- * OWN-side private box - it is written IMMEDIATELY + ungated at the current
- * version inside the action and NEVER enters the shared held draft (D-09).
+ * strip Send pop-up, NOT the edit form (D-08). The proposer's OWN-side per-line
+ * input rides each line's `ownInput` (DraftLineInput) - it is written IMMEDIATELY
+ * + ungated to deal_line_item_private inside the action and NEVER enters the
+ * shared held draft (D-09).
  */
 export interface ProposeDealChangeInput {
   dealCardId: string;
@@ -579,8 +737,8 @@ export interface ProposeDealChangeInput {
   dueDate?: string | null;
   /** payment_terms.code, e.g. 'net30' */
   paymentTermsCode?: string | null;
-  /** the proposer's OWN-side private box - written immediately, never in the shared draft (D-09) */
-  privateValue?: string | null;
+  /** the proposer's OWN-side card note (NOTE-01) - rides the SHARED held draft; commits to the proposer's own note slot only (D-02) */
+  note?: string | null;
   /** REQUIRED Send reason (D-07); the RPC also enforces it */
   reason: string;
 }

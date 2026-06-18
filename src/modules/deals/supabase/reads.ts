@@ -4,25 +4,30 @@
  * Same shape as relationship/messaging reads: flat, RLS-scoped fetches stitched
  * in JS, viewer from the session. RLS does the side-aware projection for us:
  *   - deal_card / deal_line_item / deal_card_log → both relationship members
- *   - deal_party_field → ONLY the viewer's own company's rows (the Margin never
- *     reaches the other side - enforced in the DB, see migration 20260610130000)
- * So whatever `deal_party_field` returns is already "my side" - no filtering here.
+ *   - deal_line_item_private → ONLY the viewer's own company's rows (the per-line
+ *     margin input never reaches the other side - enforced by the dli_private_all
+ *     RLS policy, see migration 20260607190000)
+ * So whatever `deal_line_item_private` returns is already "my side" - no
+ * filtering here; viewerSide then picks the right column (seller / buyer).
  *
  * Line items are immutable snapshots: descriptive fields with no column
  * (cultivar, pzn, image) are read from each line's `metadata`, not the live
  * product. We fetch only the CURRENT version's lines (deal_card.version).
  */
 import { createClient } from "@/shared/db/client";
-import { sellerCompanyId, viewerSide, lineTotalOf } from "../lib/derive";
+import { sellerCompanyId, viewerSide, lineTotalOf, lineMarginOf } from "../lib/derive";
+import { otherOf } from "../lib/recipient";
 import { seededSignals } from "../lib/signals";
 import type {
   CatalogProduct,
   DealCard,
   DealCardView,
+  DealRecipientView,
   DealType,
   DealCardStatus,
   DealWorkspaceView,
   LineItemView,
+  LineMarginView,
   LogAuthor,
   ChangeOrigin,
   ConfirmationStatus,
@@ -30,8 +35,8 @@ import type {
   LogEntry,
   MemberRole,
   MemberView,
-  PartyFieldView,
   PartySide,
+  ProductBatchView,
   PendingChangeView,
   PendingProposalView,
   ProposalLineView,
@@ -320,7 +325,7 @@ export async function getOwnCatalog(): Promise<CatalogProduct[]> {
 
   const { data: products, error: pErr } = await supabase
     .from("product")
-    .select("id, name, cultivar, unit_code, thc_percent, cbd_percent, local_code_pzn")
+    .select("id, name, cultivar, unit_code, pack_size_grams, thc_percent, cbd_percent, local_code_pzn")
     .is("deleted_at", null)
     .order("name", { ascending: true });
   if (pErr) throw pErr;
@@ -345,6 +350,7 @@ export async function getOwnCatalog(): Promise<CatalogProduct[]> {
       name: p.name,
       cultivar: p.cultivar,
       unit: p.unit_code,
+      packSizeGrams: p.pack_size_grams != null ? Number(p.pack_size_grams) : null,
       unitPrice: item ? Number(item.price_per_gram) : null,
       currency: item?.currency ?? "EUR",
       thcPercent: p.thc_percent,
@@ -352,6 +358,37 @@ export async function getOwnCatalog(): Promise<CatalogProduct[]> {
       pzn: p.local_code_pzn,
     };
   });
+}
+
+/**
+ * The batch picker source (BTCH-01, D-07): one product's own lots, read
+ * seller-side. The picker is only ever mounted on the seller's screen (Plan 04);
+ * RLS `batch_all` (`company_id = current_company_id()`) auto-scopes the read to
+ * the caller's own batches, so NO manual company_id filter is needed - the same
+ * discipline as `getOwnCatalog`. The buyer never reads `product_batch` (they
+ * only ever see the frozen snapshot on the public `deal_line_item`).
+ *
+ * `product_batch` is in the generated types, so no `as never` cast is needed.
+ * The batch carries the lab-MEASURED THC/CBD (the deal truth), distinct from the
+ * product LABEL value.
+ */
+export async function getProductBatches(productId: string): Promise<ProductBatchView[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("product_batch")
+    .select("id, batch_number, thc_percent, cbd_percent, ready_for_sale_date, expiry_date")
+    .eq("product_id", productId)
+    .is("deleted_at", null)
+    .order("batch_number", { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map((b) => ({
+    id: b.id,
+    batchNumber: b.batch_number,
+    thcPercent: b.thc_percent != null ? Number(b.thc_percent) : null,
+    cbdPercent: b.cbd_percent != null ? Number(b.cbd_percent) : null,
+    readyForSaleDate: b.ready_for_sale_date ?? null,
+    expiryDate: b.expiry_date ?? null,
+  }));
 }
 
 /**
@@ -376,14 +413,19 @@ export async function getDealCard(cardId: string): Promise<DealCardView> {
   const viewerCompanyId: string | null = viewerPerson?.company_id ?? null;
 
   // the card row (RLS: viewer must be a relationship member)
+  // note_company_a/b (NOTE-01) are not in the generated DealCardRow type yet -
+  // the select-string column list is cast to bypass the generated literal-union
+  // check (the same as-never discipline used for deal_pending_change below).
+  // DO NOT regenerate database.types.
   const { data: cardRow, error: cardErr } = await supabase
     .from("deal_card")
     .select(
-      "id, relationship_id, thread_id, version, status, deal_type, initiating_company_id, value_net, currency, delivery_date_target, buyer_po_number, seller_so_number, hs_deal_number, metadata, created_at, updated_at, deleted_at, created_by, updated_by, incoterms_code, offer_expires_at, payment_terms_code",
+      "id, relationship_id, thread_id, version, status, deal_type, initiating_company_id, value_net, currency, delivery_date_target, buyer_po_number, seller_so_number, hs_deal_number, metadata, created_at, updated_at, deleted_at, created_by, updated_by, incoterms_code, offer_expires_at, payment_terms_code, note_company_a, note_company_b" as "id, relationship_id, thread_id, version, status, deal_type, initiating_company_id, value_net, currency, delivery_date_target, buyer_po_number, seller_so_number, hs_deal_number, metadata, created_at, updated_at, deleted_at, created_by, updated_by, incoterms_code, offer_expires_at, payment_terms_code",
     )
     .eq("id", cardId)
     .single();
   if (cardErr) throw cardErr;
+  const noteRow = cardRow as unknown as { note_company_a: string | null; note_company_b: string | null };
 
   const card: DealCard = {
     ...cardRow,
@@ -399,18 +441,17 @@ export async function getDealCard(cardId: string): Promise<DealCardView> {
     .single();
   if (relErr) throw relErr;
 
-  const [cosRes, linesRes, fieldsRes, logRes, confRes] = await Promise.all([
+  const [cosRes, linesRes, logRes, confRes] = await Promise.all([
     supabase.from("company").select("id, name").in("id", [rel.company_a_id, rel.company_b_id]),
     supabase
       .from("deal_line_item")
-      .select("id, product_id, product_name, quantity, unit, unit_price, currency, line_total, metadata, sort_order")
-      .eq("deal_card_id", card.id)
-      .eq("version", card.version)
-      .order("sort_order", { ascending: true }),
-    // RLS already limits this to MY company's rows
-    supabase
-      .from("deal_party_field")
-      .select("id, party_side, field_key, field_label, value_text, sort_order")
+      // thc_percent/cbd_percent/batch_number/batch_id (BTCH-01) are not in the
+      // generated DealLineItemRow type yet - cast the select-string column list to
+      // bypass the generated literal-union check (same as-never discipline as the
+      // 3c note columns above). DO NOT regenerate database.types.
+      .select(
+        "id, product_id, product_name, quantity, unit, unit_price, currency, line_total, metadata, sort_order, thc_percent, cbd_percent, batch_number, batch_id" as "id, product_id, product_name, quantity, unit, unit_price, currency, line_total, metadata, sort_order",
+      )
       .eq("deal_card_id", card.id)
       .eq("version", card.version)
       .order("sort_order", { ascending: true }),
@@ -427,9 +468,22 @@ export async function getDealCard(cardId: string): Promise<DealCardView> {
       .eq("deal_card_id", card.id)
       .eq("version", card.version),
   ]);
-  for (const r of [cosRes, linesRes, fieldsRes, logRes, confRes]) {
+  for (const r of [cosRes, linesRes, logRes, confRes]) {
     if (r.error) throw r.error;
   }
+
+  // my-side per-line private input (MRGN-01, D-06): read deal_line_item_private
+  // for THIS version's line ids. The table is keyed only by deal_line_item_id
+  // (no card/version column), so it reads after linesRes resolves; RLS
+  // (dli_private_all) already scopes it to MY company - no extra company filter.
+  const lineIds = (linesRes.data ?? []).map((r) => r.id);
+  const { data: privRows, error: privErr } = lineIds.length
+    ? await supabase
+        .from("deal_line_item_private")
+        .select("deal_line_item_id, seller_margin, buyer_metric")
+        .in("deal_line_item_id", lineIds)
+    : { data: [], error: null };
+  if (privErr) throw privErr;
 
   // seller / buyer names, derived from who issued the deal
   const coById = new Map((cosRes.data ?? []).map((c) => [c.id, c.name] as const));
@@ -438,9 +492,18 @@ export async function getDealCard(cardId: string): Promise<DealCardView> {
   const sellerName = coById.get(sellerId) ?? "Unknown company";
   const buyerName = coById.get(buyerId) ?? "Unknown company";
 
-  // line items - read descriptive extras from each line's own snapshot (metadata)
+  // line items - read descriptive extras from each line's own snapshot (metadata),
+  // and the batch snapshot (BTCH-01, D-03) from the REAL columns (not metadata).
   const lineItems: LineItemView[] = (linesRes.data ?? []).map((r) => {
     const m = (r.metadata ?? {}) as Meta;
+    // batch columns are not on the generated row type yet (the select cast above);
+    // read them off a locally-cast view (same as the noteRow discipline).
+    const b = r as unknown as {
+      thc_percent: number | string | null;
+      cbd_percent: number | string | null;
+      batch_number: string | null;
+      batch_id: string | null;
+    };
     return {
       id: r.id,
       productId: r.product_id,
@@ -453,17 +516,12 @@ export async function getDealCard(cardId: string): Promise<DealCardView> {
       currency: r.currency,
       lineTotal: lineTotalOf(Number(r.quantity), Number(r.unit_price), r.line_total),
       pzn: str(m, "pzn"),
+      batchId: b.batch_id ?? null,
+      batchNumber: b.batch_number ?? null,
+      thcPercent: b.thc_percent != null ? Number(b.thc_percent) : null,
+      cbdPercent: b.cbd_percent != null ? Number(b.cbd_percent) : null,
     };
   });
-
-  // my-side private fields (RLS already filtered to my company)
-  const partyFields: PartyFieldView[] = (fieldsRes.data ?? []).map((r) => ({
-    id: r.id,
-    side: r.party_side as PartySide,
-    fieldKey: r.field_key,
-    label: r.field_label,
-    value: r.value_text,
-  }));
 
   // resolve person names for log authors AND confirmation responders (one fetch)
   const personIds = Array.from(
@@ -506,6 +564,42 @@ export async function getDealCard(cardId: string): Promise<DealCardView> {
     ? viewerSide(viewerCompanyId, card, rel.company_a_id, rel.company_b_id)
     : null;
 
+  // per-line margin (MRGN-01, D-02/D-06): pick MY column by viewerSide, then
+  // compute the % LIVE from that stored input + the line's unit_price via the
+  // pure lineMarginOf (never a stored margin). The deal-level average is NOT
+  // computed here - CardFront rolls it up from these (WARNING 4 lock).
+  const privByLine = new Map(
+    (privRows ?? []).map((p) => [p.deal_line_item_id, p] as const),
+  );
+  const lineMargins: LineMarginView[] = lineItems.map((line) => {
+    const priv = privByLine.get(line.id);
+    const ownInput =
+      side === "seller"
+        ? (priv?.seller_margin == null ? null : Number(priv.seller_margin))
+        : (priv?.buyer_metric == null ? null : Number(priv.buyer_metric));
+    return {
+      lineItemId: line.id,
+      ownInput,
+      marginPercent: lineMarginOf(line.unitPrice, ownInput, side ?? "seller"),
+    };
+  });
+
+  // resolve mine/theirs by COMPANY IDENTITY (not seller/buyer role), mirroring
+  // confirm_deal_change's structural slot write (D-02/D-03) - both notes are
+  // visible to both sides, but each side only ever sends its OWN slot.
+  const myNote =
+    viewerCompanyId === rel.company_a_id
+      ? noteRow.note_company_a
+      : viewerCompanyId === rel.company_b_id
+        ? noteRow.note_company_b
+        : null;
+  const theirNote =
+    viewerCompanyId === rel.company_a_id
+      ? noteRow.note_company_b
+      : viewerCompanyId === rel.company_b_id
+        ? noteRow.note_company_a
+        : null;
+
   // the held pending CHANGE on this card (4.5.4), resolved for the viewer. Null
   // when none is in flight; present = a change is held and the Edit pencil locks.
   // The strip reads the resolved view; the pencil reads only whether it is null.
@@ -537,13 +631,15 @@ export async function getDealCard(cardId: string): Promise<DealCardView> {
     buyerName,
     sellerCompanyId: sellerId,
     lineItems,
-    partyFields,
+    lineMargins,
     // seeded per-side signals (Phase 4); Sella writes the real ones in 4d
     signals: side ? seededSignals(side) : [],
     log,
     viewerSide: side,
     confirmations,
     pendingChange,
+    myNote,
+    theirNote,
   };
 }
 
@@ -687,4 +783,103 @@ export async function getStagesAndThings(workspaceId: string): Promise<StageView
       thingsDone: things.filter((t) => t.status === "done").length,
     };
   });
+}
+
+/**
+ * Resolve the p2p recipient for the Deal Basket (3b, BSKT-01 / D-08).
+ *
+ * The recipient is the OTHER side of the p2p chat: the company on the other end
+ * of the relationship, and the person on the other end of the thread. This is
+ * pure routing data derived LIVE from the chat context the app already holds -
+ * there is NO new DB column and NO migration. Two flat RLS-scoped fetches (the
+ * relationship pair + the thread pair) are stitched in JS, the same discipline
+ * every read in this file uses; the "other one" math is the single `otherOf`
+ * owner (shared with the company/person subtractions elsewhere). Display names
+ * are read in the same rows so the form's "To:" line is fed without touching the
+ * messaging module (Scope call Q1).
+ *
+ * For a p2p thread the DB CHECK guarantees both persons are non-null, so the
+ * resolved recipient always has a person id; the names degrade to null only if a
+ * row is missing, which the caller renders as company-only.
+ */
+export async function resolveP2pRecipient(
+  relationshipId: string,
+  threadId: string,
+): Promise<DealRecipientView> {
+  const supabase = createClient();
+
+  // viewer's company + person - the "me" anchor for both subtractions
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("deal: no authenticated user");
+  const { data: viewerPerson, error: vpErr } = await supabase
+    .from("person")
+    .select("company_id")
+    .eq("id", user.id)
+    .single();
+  if (vpErr) throw vpErr;
+  // p2p anchors on a viewer that has a company; a missing one cannot be
+  // subtracted safely (WR-01) - fail loud instead of masking it as "" and
+  // letting otherOf hand back the wrong (or the viewer's own) company.
+  const viewerCompanyId = viewerPerson?.company_id ?? null;
+  if (!viewerCompanyId) {
+    throw new Error("deal: viewer has no company; cannot resolve p2p recipient");
+  }
+
+  // the relationship pair (recipient company = the OTHER side) + the thread pair
+  // (recipient person = the OTHER participant), read in parallel.
+  const [relRes, threadRes] = await Promise.all([
+    supabase
+      .from("relationship")
+      .select("company_a_id, company_b_id")
+      .eq("id", relationshipId)
+      .single(),
+    supabase
+      .from("chat_thread")
+      .select("person_a_id, person_b_id")
+      .eq("id", threadId)
+      .single(),
+  ]);
+  if (relRes.error) throw relRes.error;
+  if (threadRes.error) throw threadRes.error;
+  const rel = relRes.data;
+  const thread = threadRes.data;
+
+  // the OTHER side of each pair (the single math owner from lib/recipient)
+  const companyId = otherOf(viewerCompanyId, rel.company_a_id, rel.company_b_id);
+  const personId = otherOf(user.id, thread.person_a_id, thread.person_b_id);
+  // the recipient company must resolve to a real id; a null here means the
+  // relationship row is malformed (viewer not a member) - fail rather than
+  // return "" as a valid-looking routing id (WR-01).
+  if (!companyId) {
+    throw new Error("deal: could not resolve recipient company for the relationship");
+  }
+
+  // display names for the "To:" line (free - the rows are already read to subtract)
+  let companyName: string | null = null;
+  let personName: string | null = null;
+  if (companyId) {
+    const { data: co } = await supabase
+      .from("company")
+      .select("name")
+      .eq("id", companyId)
+      .single();
+    companyName = co?.name ?? null;
+  }
+  if (personId) {
+    const { data: per } = await supabase
+      .from("person")
+      .select("first_name, last_name")
+      .eq("id", personId)
+      .single();
+    personName = per ? `${per.first_name} ${per.last_name}`.trim() : null;
+  }
+
+  return {
+    companyId,
+    personId,
+    companyName,
+    personName,
+  };
 }

@@ -17,9 +17,24 @@
  *     buyer placeholder) - the other side's value never arrives.
  */
 import { Building2, Lock, BadgeCheck } from "lucide-react";
-import { docTerm, computeGross, formatMoney } from "../lib/derive";
+import { docTerm, computeGross, formatMoney, sumLineValue, averageMarginOf } from "../lib/derive";
+import { paymentTermLabel } from "../lib/paymentTerms";
 import { ProductList } from "./ProductList";
-import type { DealCardView, PartyFieldView } from "../types";
+import type { DealCardView } from "../types";
+
+/** A margin % for the card, or "—" when not computable yet (D-01/D-04). */
+function marginLabel(pct: number | null): string {
+  return pct == null ? "—" : `${(pct * 100).toFixed(1)}%`;
+}
+
+/** The shared "only you" lock span used by every owner-only margin row (D-05). */
+function OnlyYou() {
+  return (
+    <span className="inline-flex items-center gap-0.5 text-[10px] font-normal text-ink/45">
+      <Lock className="h-3 w-3" /> only you
+    </span>
+  );
+}
 
 function dateLabel(iso: string | null): string {
   if (!iso) return "—";
@@ -72,10 +87,28 @@ function LogoBox({ role, name, isYou }: { role: string; name: string; isYou: boo
 }
 
 export function CardFront({ data }: { data: DealCardView }) {
-  const { card, sellerName, buyerName, lineItems, partyFields, viewerSide, confirmations } = data;
+  const { card, sellerName, buyerName, lineItems, lineMargins, viewerSide, confirmations, myNote, theirNote } = data;
   const term = docTerm(card.deal_type);
-  const net = card.value_net ?? 0;
+  // CARD-01 (OBS-1): the value is SUMMED live from the priced lines, never the
+  // stale stored `value_net` (which can be a leftover 0). null = no priced line.
+  const net = sumLineValue(lineItems);
+  // CARD-03: two already-stored terms the card never showed. Both arrive on
+  // `card` (no new plumbing): payment_terms_code is a column, free_delivery is a
+  // metadata boolean - same read pattern as EditDealForm.
+  const meta = (card.metadata ?? {}) as Record<string, unknown>;
+  const freeDelivery = meta.free_delivery === true;
+  const paymentLabel = paymentTermLabel(card.payment_terms_code);
   const hsNumber = card.hs_deal_number ?? `${term} · draft`;
+  // NOTE-01: myNote/theirNote resolve by structural company identity (D-06), but
+  // the viewer-relative name lines up exactly with viewerSide's seller/buyer split.
+  const myCompanyName = viewerSide === "seller" ? sellerName : buyerName;
+  const theirCompanyName = viewerSide === "seller" ? buyerName : sellerName;
+
+  // MRGN-01: per-line margin label needs the product name; map line id -> name.
+  // The deal AVERAGE is computed HERE from lineMargins (WARNING 4 - the read does
+  // not supply it), so a later quantity-weighted rollup is a one-file change.
+  const productNameById = new Map(lineItems.map((l) => [l.id, l.productName] as const));
+  const avgMargin = averageMarginOf(lineMargins.map((m) => m.marginPercent));
 
   // golden when both sides are in (status is the source of truth, seats confirm it)
   const confirmed =
@@ -111,20 +144,40 @@ export function CardFront({ data }: { data: DealCardView }) {
       </div>
       {/* facts */}
       <div className="mt-1.5 space-y-1.5">
-        <Field label="Value net">{formatMoney(net, card.currency)}</Field>
-        <Field label="Value gross">{formatMoney(computeGross(net), card.currency)}</Field>
-        {partyFields.map((f: PartyFieldView) => (
-          <Field key={f.id} label={f.label} highlight>
-            <span className="flex items-center gap-1.5">
-              {f.value ?? "—"}
-              <span className="inline-flex items-center gap-0.5 text-[10px] font-normal text-ink/45">
-                <Lock className="h-3 w-3" /> only you
+        <Field label="Value net">
+          {net == null ? "—" : formatMoney(net, card.currency)}
+        </Field>
+        <Field label="Value gross">
+          {net == null ? "—" : formatMoney(computeGross(net), card.currency)}
+        </Field>
+        {/* MRGN-01: an owner-only margin % per priced line + one deal average,
+            all reusing the lock-icon "only you" idiom (D-01/D-04/D-05). */}
+        {lineMargins.map((m) => {
+          const name = productNameById.get(m.lineItemId);
+          if (name == null) return null; // defensive: line not found
+          return (
+            <Field key={m.lineItemId} label={`${name} margin`} highlight>
+              <span className="flex items-center gap-1.5">
+                {marginLabel(m.marginPercent)}
+                <OnlyYou />
               </span>
-            </span>
-          </Field>
-        ))}
+            </Field>
+          );
+        })}
+        <Field label="Avg. margin" highlight>
+          <span className="flex items-center gap-1.5">
+            {marginLabel(avgMargin)}
+            <OnlyYou />
+          </span>
+        </Field>
         <Field label="Delivery">{dateLabel(card.delivery_date_target)}</Field>
+        <Field label="Payment terms">{paymentLabel}</Field>
+        <Field label="Free delivery">{freeDelivery ? "Yes" : "No"}</Field>
         <Field label="Products">{String(lineItems.length)}</Field>
+        {/* NOTE-01: both sides' card notes, from birth. Plain text children only
+            (React escapes by default) - never raw-HTML injection (Security §V5). */}
+        <Field label={`${myCompanyName} notes`}>{myNote ?? "—"}</Field>
+        <Field label={`${theirCompanyName} notes`}>{theirNote ?? "—"}</Field>
       </div>
       {/* products */}
       <div className="mt-1.5">

@@ -89,8 +89,14 @@ DELETE FROM deal_pending_change WHERE deal_card_id IN (SELECT id FROM _cards);
 DELETE FROM deal_workspace      WHERE deal_card_id IN (SELECT id FROM _cards);
 DELETE FROM pending_inbox_item  WHERE deal_card_id IN (SELECT id FROM _cards);
 DELETE FROM deal_card WHERE id IN (SELECT id FROM _cards);
+-- Phase 2 (announcements): the deal thread is re-minted each test (it self-cleans
+-- above with the card), but the p2p thread PERSISTS across serial tests. So a prior
+-- test's accept/decline announcement (sender='sella', type 'deal_card_updated' /
+-- 'deal_change_declined') would otherwise leak into the next test's p2p chat and make
+-- a getByText assertion match the stale bubble. Widen this delete to clear all three
+-- projection types from the relationship's p2p thread (RESEARCH Pitfall 4).
 DELETE FROM chat_message
-  WHERE type = 'deal_detected'
+  WHERE type IN ('deal_detected', 'deal_card_updated', 'deal_change_declined')
   AND thread_id IN (SELECT id FROM chat_thread WHERE relationship_id = :'rel');
 DELETE FROM sella_detection
   WHERE thread_id IN (SELECT id FROM chat_thread WHERE relationship_id = :'rel');
@@ -123,25 +129,112 @@ export function resetDealData(): void {
   // regenerates it on every `supabase db reset`, so a hardcoded id goes stale and
   // would silently clean the wrong relationship (leaving the seed proposal, so the
   // chat is never in the "Start a deal" State A the tests need).
-  const rel = execFileSync(
+  const rel = resolveRelationshipId(bin)
+  execFileSync(bin, [DB_URL, '-v', `rel=${rel}`, '-v', 'ON_ERROR_STOP=1', '-q', '-f', '-'], {
+    input: RESET_SQL,
+    stdio: ['pipe', 'ignore', 'pipe'],
+  })
+}
+
+/**
+ * The SQL that resolves the GreenLeaf <-> StonePharm relationship id by company
+ * NAME (never a hardcoded uuid — the seed regenerates ids on every
+ * `supabase db reset`). Shared by resetDealData and countRelationshipMessages.
+ */
+const RELATIONSHIP_BY_NAME_SQL =
+  'select r.id from public.relationship r ' +
+  'join public.company ca on ca.id = r.company_a_id ' +
+  'join public.company cb on cb.id = r.company_b_id ' +
+  "where (ca.name like 'GreenLeaf%' and cb.name like 'StonePharm%') " +
+  "or (ca.name like 'StonePharm%' and cb.name like 'GreenLeaf%') limit 1"
+
+/** Resolve the GreenLeaf <-> StonePharm relationship id at RUNTIME (by name). */
+function resolveRelationshipId(bin: string): string {
+  const rel = execFileSync(bin, [DB_URL, '-At', '-c', RELATIONSHIP_BY_NAME_SQL], {
+    encoding: 'utf8',
+  }).trim()
+  if (!rel) throw new Error('GreenLeaf <-> StonePharm relationship not found')
+  return rel
+}
+
+/**
+ * Count the live `chat_message` rows across ALL of the GreenLeaf <-> StonePharm
+ * relationship's threads (the deal thread + the p2p thread). Used by the
+ * `withdraw-silent` test (ANNC-03): silence is hard to prove in the UI, so we
+ * snapshot the count BEFORE the withdraw, run the withdraw, and assert the count
+ * is UNCHANGED — i.e. the withdraw announced NOTHING.
+ *
+ * The relationship id is resolved at RUNTIME by company name (never hardcoded),
+ * exactly as resetDealData does — the seed regenerates ids on every db reset.
+ * Counts only non-deleted rows (deleted_at is null), since announcements are
+ * hard inserts that never soft-delete.
+ */
+export function countRelationshipMessages(): number {
+  const bin = psqlBin()
+  const rel = resolveRelationshipId(bin)
+  const out = execFileSync(
     bin,
     [
       DB_URL,
       '-At',
       '-c',
-      "select r.id from public.relationship r " +
-        "join public.company ca on ca.id = r.company_a_id " +
-        "join public.company cb on cb.id = r.company_b_id " +
-        "where (ca.name like 'GreenLeaf%' and cb.name like 'StonePharm%') " +
-        "or (ca.name like 'StonePharm%' and cb.name like 'GreenLeaf%') limit 1",
+      `select count(*) from public.chat_message m ` +
+        `join public.chat_thread t on t.id = m.thread_id ` +
+        `where t.relationship_id = '${rel}' and m.deleted_at is null`,
     ],
     { encoding: 'utf8' },
   ).trim()
-  if (!rel) throw new Error('resetDealData: GreenLeaf <-> StonePharm relationship not found')
-  execFileSync(bin, [DB_URL, '-v', `rel=${rel}`, '-v', 'ON_ERROR_STOP=1', '-q', '-f', '-'], {
-    input: RESET_SQL,
-    stdio: ['pipe', 'ignore', 'pipe'],
-  })
+  return Number(out)
+}
+
+/**
+ * Resolve the GreenLeaf <-> StonePharm relationship's CURRENT deal card id at
+ * RUNTIME (never hardcoded — the seed regenerates ids on every
+ * `supabase db reset`, and the card itself is minted fresh per test by
+ * `birthAndOpenDeal`). `resetDealData` truncates every prior card on this
+ * relationship, so after a birth exactly one card exists — `limit 1` is safe.
+ *
+ * Needed by the "note-not-in-log" test (D-05): it must pass a real card id to
+ * `countDealChangeInputForCard`, and the card overlay exposes no id in the DOM
+ * or URL (it opens as an in-page overlay, not a routed page).
+ */
+export function resolveDealCardIdForRelationship(): string {
+  const bin = psqlBin()
+  const rel = resolveRelationshipId(bin)
+  const id = execFileSync(
+    bin,
+    [DB_URL, '-At', '-c', `select id from public.deal_card where relationship_id = '${rel}' limit 1`],
+    { encoding: 'utf8' },
+  ).trim()
+  if (!id) throw new Error('no deal_card found for the GreenLeaf <-> StonePharm relationship')
+  return id
+}
+
+/**
+ * Count the live `deal_change_input` rows for ONE deal card (NOTE-01 / D-05).
+ * The create-time note must NEVER add a log row — only a held CHANGE (the
+ * Accept/Decline reason gate) writes `deal_change_input`. The card id is
+ * passed in by the caller, resolved at RUNTIME from the freshly-born card
+ * (NEVER hardcoded — the seed regenerates ids on every `supabase db reset`).
+ *
+ * Mirrors countRelationshipMessages's shape exactly: psqlBin() + execFileSync
+ * + `-At -c` + `.trim()` + `Number(out)`. `deal_change_input` is already a
+ * child of `deal_card`, so resetDealData's existing truncate covers it — no
+ * new reset row needed here.
+ */
+export function countDealChangeInputForCard(dealCardId: string): number {
+  const bin = psqlBin()
+  const out = execFileSync(
+    bin,
+    [
+      DB_URL,
+      '-At',
+      '-c',
+      `select count(*) from public.deal_change_input where deal_card_id = '${dealCardId}'`,
+    ],
+    { encoding: 'utf8' },
+  ).trim()
+  return Number(out)
 }
 
 const CREDENTIALS: Record<Who, { email: string; password: string }> = {
@@ -215,6 +308,7 @@ export async function openTwoContexts(
  */
 export async function createDraftDealAsAlice(
   alicePage: Page,
+  opts?: { note?: string },
 ): Promise<{ dealCardId: string | null }> {
   // 1. land in Connect and open the StonePharm conversation.
   await alicePage.goto('/connect/chat')
@@ -228,18 +322,33 @@ export async function createDraftDealAsAlice(
   //    also contains the words "Start a deal" (strict-mode would match both).
   await alicePage.getByRole('button', { name: 'Start a deal', exact: true }).click()
 
-  // 3. add a product, set quantity + unit price, then send the proposal.
-  //    The catalogue grid loads async under the "Top products" heading; wait for
-  //    the heading, then click the first enabled product card. Resilient to the
-  //    seeded product names (we never match a specific name).
-  await alicePage.getByText('Top products').waitFor()
+  // 3. add a product, pick its batch, set quantity + unit price, send.
+  //    The catalogue grid loads async under the "Add products" search (3e); wait
+  //    for the search input, then click the first enabled product card. Resilient
+  //    to the seeded product names (we never match a specific name).
+  await alicePage.getByPlaceholder(/search your catalogue/i).waitFor()
   await alicePage
     .getByRole('button')
-    .filter({ hasText: /\/g$|no price/ })
+    .filter({ hasText: /\/g|no price/ })
     .first()
     .click()
-  await alicePage.getByPlaceholder(/qty/i).first().fill('100')
+  // 3f (BTCH-01 / D-06): product + batch is ONE entity. Clicking a catalogue
+  // product no longer adds a line directly - it opens the MANDATORY inline batch
+  // dropdown (DealForm.pickProduct), and the line is created only once a batch is
+  // chosen. So every create/proposal flow MUST now pick a batch, or canSubmit's
+  // allBatched backstop blocks "Send proposal". The batch options are <button>s
+  // reading "Batch GL-24-…" (NOT <option> elements); pick the first seeded lot.
+  // This re-anchors the shared add-flow the same way the 3e build re-anchored the
+  // search input - centrally here, so every test inherits it.
+  await alicePage.getByRole('button', { name: /^Batch GL-24-/ }).first().click()
+  await alicePage.getByLabel(/quantity in grams/i).first().fill('100')
   await alicePage.getByPlaceholder(/g \(optional\)/i).first().fill('5.00')
+  // 3c (NOTE-01 D-08): optionally seed the create-time note — CreateDealForm's
+  // note textarea is optional at draft (noteRequired=false), placeholder "Add a
+  // note for your contact…" (DealForm.tsx:330-332).
+  if (opts?.note) {
+    await alicePage.getByPlaceholder(/add a note for your contact/i).fill(opts.note)
+  }
   await alicePage.getByRole('button', { name: /send proposal/i }).click()
 
   // try to read the born card id from the deal route, if the app navigates there.
@@ -298,8 +407,12 @@ export async function refreshDealView(page: Page, who: Who): Promise<void> {
  * (births the draft card), then BOTH sides open the card overlay. After this each
  * page shows the live draft card with the Edit pencil reachable.
  */
-export async function birthAndOpenDeal(alicePage: Page, bobPage: Page): Promise<void> {
-  await createDraftDealAsAlice(alicePage)
+export async function birthAndOpenDeal(
+  alicePage: Page,
+  bobPage: Page,
+  opts?: { note?: string },
+): Promise<void> {
+  await createDraftDealAsAlice(alicePage, opts)
   await acceptBirthAsBob(bobPage)
   await openDealInChat(alicePage, 'alice')
   await openDealInChat(bobPage, 'bob')

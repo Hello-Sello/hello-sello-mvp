@@ -1,74 +1,106 @@
 "use client";
 
 /**
- * DealForm (3.5b) - the shared create/edit deal form. ONE form, fed two ways:
- * `CreateDealForm` feeds it empty + an optional note; `EditDealForm` feeds it
- * the current card + a REQUIRED note. It is "dumb + fed" - it knows nothing
- * about create vs edit (or about Sella, who will feed it the same way later); it
- * just collects fields and calls `onSubmit`. Light / glass / raspberry to match
- * the app.
+ * DealForm (3.5b -> 3e) - the shared create/edit form, a.k.a. the Deal Basket.
+ * ONE form, fed two ways: `CreateDealForm` feeds it empty + a resolved recipient;
+ * `EditDealForm` feeds it the current card. It is "dumb + fed" - it knows nothing
+ * about create vs edit (or about Sella/shop, who will feed it the same way
+ * later); it just collects fields and calls `onSubmit`. Light / glass / raspberry
+ * to match the app.
  *
- * Scope (3.5a/b): products come from the creator's OWN catalogue; prices are
- * OPTIONAL; discount + CC are parked.
+ * Phase 3e (FORM-01/FORM-02): the product browser is a single search-or-type
+ * control. Re-adding a catalogue product INCREMENTS its line (no duplicate row,
+ * FORM-01); typing a name filters the catalogue (add-by-name auto-fill) and, when
+ * nothing matches, offers to add it as a CUSTOM product (FORM-02). The add-line
+ * rule lives in the pure `lib/lineEditing` helper so the grid and the typed pick
+ * share one path.
+ *
+ * The recipient ("To") is shown as a locked row - in a p2p chat it is auto-set
+ * from the conversation and cannot be changed here. The SAME field becomes a
+ * people dropdown when a Basket is opened from Sella or the shop (future); the
+ * structure is universal, only the lock differs by source.
  */
 import { useEffect, useMemo, useState } from "react";
-import { X, Trash2, Loader2, Lock } from "lucide-react";
-import { getOwnCatalog } from "../supabase/reads";
+import { X, Trash2, Loader2, Lock, Search, Plus, Minus, User } from "lucide-react";
+import { getOwnCatalog, getProductBatches } from "../supabase/reads";
 import { formatMoney } from "../lib/derive";
-import type { CatalogProduct, DraftLineInput } from "../types";
-
-const PAYMENT_TERMS: { code: string; label: string }[] = [
-  { code: "", label: "—" },
-  { code: "prepaid", label: "Prepaid" },
-  { code: "cod", label: "Cash on delivery" },
-  { code: "net7", label: "Net 7" },
-  { code: "net14", label: "Net 14" },
-  { code: "net30", label: "Net 30" },
-  { code: "net60", label: "Net 60" },
-  { code: "net90", label: "Net 90" },
-];
+import { addOrIncrement, emptyCustomLine, packStepGrams, packsOf } from "../lib/lineEditing";
+import { PAYMENT_TERMS } from "../lib/paymentTerms";
+import type {
+  CatalogProduct,
+  DraftLineInput,
+  DealBasketContent,
+  PartySide,
+  ProductBatchView,
+} from "../types";
 
 const UNITS = ["g", "kg", "unit"];
+
+/** "1 kg pack" / "10 g pack" - how a catalogue product is sold (null if unknown). */
+function packLabel(g: number | null | undefined): string | null {
+  if (!g || g <= 0) return null;
+  return g >= 1000 && g % 1000 === 0 ? `${g / 1000} kg pack` : `${g} g pack`;
+}
+
+/** "1 pack" / "2 packs" / "1.5 packs". */
+function packCount(n: number): string {
+  const v = Number.isInteger(n) ? String(n) : n.toFixed(1);
+  return `${v} ${n === 1 ? "pack" : "packs"}`;
+}
 
 const labelCls = "text-[11px] font-semibold uppercase tracking-wide text-ink/45";
 const inputCls =
   "rounded-lg bg-white px-3 py-2 text-sm text-ink ring-1 ring-black/5 placeholder:text-ink/35 focus:outline-none focus:ring-2 focus:ring-brand/30";
 
-/** Seed a line from a catalogue product (default 1000 g - a typical wholesale qty). */
-function lineFromProduct(p: CatalogProduct): DraftLineInput {
+/** Who the Basket is addressed to, for the locked "To" row (display only). */
+export interface RecipientLabel {
+  personName: string | null;
+  companyName: string;
+  /** small chip text next to the lock (e.g. "From chat" on create, "Assigned" on edit). */
+  hint?: string;
+}
+
+/**
+ * Seed a line from a catalogue product + its chosen batch - one pack (the
+ * product's pack size).
+ *
+ * BTCH-01 (D-06): product + batch is ONE entity, so a catalogue line is always
+ * born with a batch. The chosen batch's id + number are stamped onto the line,
+ * and the line's `thcPercent`/`cbdPercent` are OVERWRITTEN with the batch's
+ * MEASURED values (D-03/D-05) - never the product LABEL value. The batch flows
+ * into `addOrIncrement`, whose merge key is productId + batchId (D-05): same
+ * product + same batch increments; same product + different batch is a new line.
+ */
+function lineFromProduct(p: CatalogProduct, batch: ProductBatchView): DraftLineInput {
   return {
     productId: p.id,
     productName: p.name,
-    quantity: 1000,
+    quantity: packStepGrams(p.packSizeGrams),
+    packSizeGrams: p.packSizeGrams,
     unit: "g",
     unitPrice: p.unitPrice,
     currency: p.currency,
     cultivar: p.cultivar,
     pzn: p.pzn,
-    thcPercent: p.thcPercent,
-    cbdPercent: p.cbdPercent,
+    // measured snapshot, not the product label (D-03)
+    thcPercent: batch.thcPercent,
+    cbdPercent: batch.cbdPercent,
+    batchId: batch.id,
+    batchNumber: batch.batchNumber,
   };
-}
-
-/** What the form hands back on submit; the wrapper maps it to create/edit. */
-export interface DealFormPayload {
-  lines: DraftLineInput[];
-  freeDelivery: boolean;
-  dueDate: string | null;
-  paymentTermsCode: string | null;
-  privateValue: string | null;
-  note: string | null;
 }
 
 export function DealForm({
   title,
   subtitle,
+  recipient,
   initialLines = [],
   initialFreeDelivery = false,
   initialDueDate = "",
   initialPaymentTermsCode = "",
-  initialPrivateValue = "",
+  initialNote = "",
   showPrivate = true,
+  side,
   noteRequired,
   submitLabel,
   onClose,
@@ -76,31 +108,51 @@ export function DealForm({
 }: {
   title: string;
   subtitle: React.ReactNode;
+  /**
+   * The locked "To" row (3e). Present on create (resolved from the p2p chat);
+   * omitted on edit (an edit is attached to an existing card, not re-addressed).
+   * When a Basket is later opened from Sella/shop this same row becomes an
+   * editable dropdown - the field is universal, only the lock differs.
+   */
+  recipient?: RecipientLabel | null;
   initialLines?: DraftLineInput[];
   initialFreeDelivery?: boolean;
   initialDueDate?: string;
   initialPaymentTermsCode?: string;
-  initialPrivateValue?: string;
+  /** seeds the note box - e.g. the editor's own existing card note (NOTE-01), so re-sending does not blank it */
+  initialNote?: string;
   /**
-   * Show the seller's own-side private box (default true for create/edit). A
+   * Show the per-line own-side private input (default true for create/edit). A
    * PROPOSAL (4.5.2) hides it: a proposal is a shared chat message both sides
-   * read, so the private box is added only AFTER birth via edit - showing it
-   * here would silently swallow what the seller types (proposeDeal drops it).
+   * read, so the per-line cost/resale is added only AFTER birth via edit -
+   * showing it here would silently swallow what the user types.
    */
   showPrivate?: boolean;
+  /**
+   * The viewer's side (MRGN-01) - drives the per-line private input's label:
+   * seller types a cost, buyer types a resale price. Undefined = default to the
+   * seller wording (e.g. the create path before the side is known).
+   */
+  side?: PartySide;
   /** edits require a note (D2); create makes it optional at draft. */
   noteRequired: boolean;
   submitLabel: string;
   onClose: () => void;
-  onSubmit: (payload: DealFormPayload) => Promise<void>;
+  onSubmit: (payload: DealBasketContent) => Promise<void>;
 }) {
   const [catalog, setCatalog] = useState<CatalogProduct[] | null>(null);
+  const [query, setQuery] = useState("");
+  // BTCH-01 (D-06): product + batch is ONE entity. Clicking a catalogue product
+  // does NOT add a line - it becomes the "pending" product and loads its batches;
+  // the line is created only when a batch is then chosen. Custom products skip
+  // this (the separate custom button adds a line directly).
+  const [pendingProduct, setPendingProduct] = useState<CatalogProduct | null>(null);
+  const [pendingBatches, setPendingBatches] = useState<ProductBatchView[] | null>(null);
   const [lines, setLines] = useState<DraftLineInput[]>(initialLines);
   const [freeDelivery, setFreeDelivery] = useState(initialFreeDelivery);
   const [dueDate, setDueDate] = useState(initialDueDate);
   const [paymentTermsCode, setPaymentTermsCode] = useState(initialPaymentTermsCode);
-  const [privateValue, setPrivateValue] = useState(initialPrivateValue);
-  const [note, setNote] = useState("");
+  const [note, setNote] = useState(initialNote);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -120,14 +172,79 @@ export function DealForm({
     [lines],
   );
   const anyPriced = lines.some((l) => l.unitPrice != null);
-  const noteOk = !noteRequired || note.trim().length > 0;
-  const canSubmit = !busy && lines.length > 0 && noteOk;
 
-  function addProduct(p: CatalogProduct) {
-    setLines((ls) => [...ls, lineFromProduct(p)]);
+  // FORM-02 add-by-name: filter the catalogue already in memory (no server
+  // search). The grid below shows matches; clicking one routes through the SAME
+  // addProduct path as a quick-pick, so increment + auto-fill come for free.
+  const q = query.trim().toLowerCase();
+  const matches = useMemo(() => {
+    const all = catalog ?? [];
+    if (!q) return all;
+    return all.filter(
+      (p) => p.name.toLowerCase().includes(q) || (p.cultivar?.toLowerCase().includes(q) ?? false),
+    );
+  }, [catalog, q]);
+  const hasExactName = (catalog ?? []).some((p) => p.name.toLowerCase() === q);
+
+  // How much of each catalogue product is already in the basket - drives the
+  // "selected" badge on the grid so a click gives instant visible feedback.
+  const qtyByProduct = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const l of lines) {
+      if (l.productId) m.set(l.productId, (m.get(l.productId) ?? 0) + l.quantity);
+    }
+    return m;
+  }, [lines]);
+
+  const noteOk = !noteRequired || note.trim().length > 0;
+  // FORM-02: a custom line starts blank - require a name before it can be sent.
+  const allNamed = lines.every((l) => l.productName.trim().length > 0);
+  // BTCH-01 (D-06) backstop: every catalogue line (productId not null) must carry
+  // a batch; custom lines (productId null) are batch-exempt. Born-with-a-batch is
+  // the primary enforcement (the picker); this guard is the safety net.
+  const allBatched = lines.every((l) => l.productId == null || l.batchId != null);
+  const canSubmit = !busy && lines.length > 0 && noteOk && allNamed && allBatched;
+
+  // Clicking a catalogue product opens its MANDATORY batch dropdown (D-06) -
+  // it does NOT add a line yet. Load the product's batches; the line is created
+  // only when a batch is chosen (addBatch below).
+  function pickProduct(p: CatalogProduct) {
+    setPendingProduct(p);
+    setPendingBatches(null);
+    void getProductBatches(p.id)
+      .then((bs) => setPendingBatches(bs))
+      .catch(() => setPendingBatches([]));
+  }
+  // The batch is chosen - now create (or increment) the line through the SAME
+  // single add path the grid/typeahead use. The chosen batch is closed over in
+  // the seed so addOrIncrement's productId+batchId merge key works (D-05).
+  function addBatch(p: CatalogProduct, batch: ProductBatchView) {
+    // FORM-01 + D-05: increment a same-product/same-batch line, never duplicate.
+    setLines((ls) => addOrIncrement(ls, p, (cp) => lineFromProduct(cp, batch)));
+    setPendingProduct(null);
+    setPendingBatches(null);
+    setQuery("");
+  }
+  function cancelPick() {
+    setPendingProduct(null);
+    setPendingBatches(null);
+  }
+  function addCustom(name: string) {
+    setLines((ls) => [...ls, emptyCustomLine(name.trim())]);
+    setQuery("");
   }
   function updateLine(i: number, patch: Partial<DraftLineInput>) {
     setLines((ls) => ls.map((l, j) => (j === i ? { ...l, ...patch } : l)));
+  }
+  // +/- one pack (basket feel). Steps by the line's pack size; floors at one pack.
+  function stepLine(i: number, dir: 1 | -1) {
+    setLines((ls) =>
+      ls.map((l, j) => {
+        if (j !== i) return l;
+        const step = packStepGrams(l.packSizeGrams);
+        return { ...l, quantity: Math.max(step, l.quantity + dir * step) };
+      }),
+    );
   }
   function removeLine(i: number) {
     setLines((ls) => ls.filter((_, j) => j !== i));
@@ -143,7 +260,6 @@ export function DealForm({
         freeDelivery,
         dueDate: dueDate || null,
         paymentTermsCode: paymentTermsCode || null,
-        privateValue: privateValue || null,
         note: note.trim() || null,
       });
       // the wrapper closes / reloads on success
@@ -181,38 +297,189 @@ export function DealForm({
 
         {/* body */}
         <div className="flex-1 space-y-5 overflow-y-auto px-5 py-4">
-          {/* quick products */}
+          {/* recipient ("To") - locked in p2p, auto-set from the chat (3e) */}
+          {recipient && (
+            <section className="space-y-1.5">
+              <p className={labelCls}>To</p>
+              <div className="flex items-center gap-2.5 rounded-xl bg-white px-3 py-2.5 ring-1 ring-black/5">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand/10 text-brand">
+                  <User size={15} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-ink">
+                    {recipient.personName ?? recipient.companyName}
+                  </p>
+                  {recipient.personName && (
+                    <p className="truncate text-[11px] text-ink/50">{recipient.companyName}</p>
+                  )}
+                </div>
+                <span
+                  title="Set automatically - locked in a p2p chat"
+                  className="inline-flex shrink-0 items-center gap-1 rounded-full bg-ink/5 px-2 py-1 text-[10px] font-medium text-ink/45"
+                >
+                  <Lock size={9} /> {recipient.hint ?? "From chat"}
+                </span>
+              </div>
+            </section>
+          )}
+
+          {/* add products - search the catalogue or type a custom name (3e) */}
           <section className="space-y-2">
-            <p className={labelCls}>Top products</p>
+            <p className={labelCls}>Add products</p>
+            <div className="relative">
+              <Search
+                size={14}
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink/35"
+              />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search your catalogue, or type a new product name…"
+                className={`${inputCls} w-full pl-9`}
+              />
+            </div>
+
             {catalog === null ? (
               <p className="text-[12px] text-ink/45">Loading your catalogue…</p>
-            ) : catalog.length === 0 ? (
-              <p className="text-[12px] text-ink/45">No products in your catalogue yet.</p>
             ) : (
-              <div className="grid grid-cols-2 gap-2">
-                {catalog.map((p) => (
+              <div className="space-y-2">
+                {matches.length > 0 && (
+                  <div className="grid grid-cols-2 gap-2">
+                    {matches.map((p) => {
+                      const inBasket = qtyByProduct.get(p.id) ?? 0;
+                      const packs = packsOf(inBasket, p.packSizeGrams);
+                      const selected = inBasket > 0;
+                      return (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => pickProduct(p)}
+                          className={`relative flex flex-col rounded-xl px-3 py-2 text-left ring-1 transition ${
+                            selected
+                              ? "bg-brand/5 ring-brand/40"
+                              : "bg-white ring-black/5 hover:ring-brand/30"
+                          }`}
+                        >
+                          {selected && (
+                            <span className="absolute right-1.5 top-1.5 inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-brand px-1.5 py-0.5 text-[10px] font-bold text-white">
+                              {packs != null ? `${packCount(packs).replace(/ packs?$/, "")}×` : `${inBasket}g`}
+                            </span>
+                          )}
+                          <span className="truncate pr-6 text-sm font-semibold text-ink">{p.name}</span>
+                          <span className="text-[11px] text-ink/50">
+                            {p.cultivar ? `${p.cultivar} · ` : ""}
+                            {p.unitPrice != null
+                              ? `${formatMoney(p.unitPrice, p.currency)}/g`
+                              : "no price"}
+                            {packLabel(p.packSizeGrams) ? ` · ${packLabel(p.packSizeGrams)}` : ""}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* BTCH-01 (D-06): a chosen product opens its MANDATORY batch
+                    dropdown. The line is created only when a batch is picked, so
+                    a catalogue line is born with a batch. Functionality over
+                    looks - Phase 6 polishes the arrangement. */}
+                {pendingProduct && (
+                  <div className="space-y-2 rounded-xl bg-brand/5 p-3 ring-1 ring-brand/30">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[12px] font-semibold text-ink">
+                        Pick a batch for{" "}
+                        <span className="text-brand">{pendingProduct.name}</span>
+                      </p>
+                      <button
+                        type="button"
+                        onClick={cancelPick}
+                        className="shrink-0 rounded-full p-1 text-ink/40 transition hover:bg-ink/5 hover:text-ink"
+                        aria-label="Cancel batch pick"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                    {pendingBatches === null ? (
+                      <p className="text-[12px] text-ink/45">Loading batches…</p>
+                    ) : pendingBatches.length === 0 ? (
+                      <p className="text-[12px] text-ink/45">
+                        No batches on record for this product yet.
+                      </p>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {pendingBatches.map((b) => (
+                          <button
+                            key={b.id}
+                            type="button"
+                            onClick={() => addBatch(pendingProduct, b)}
+                            className="flex w-full items-center justify-between gap-2 rounded-lg bg-white px-3 py-2 text-left text-sm ring-1 ring-black/5 transition hover:ring-brand/40"
+                          >
+                            <span className="truncate font-medium text-ink">
+                              Batch {b.batchNumber}
+                            </span>
+                            <span className="shrink-0 text-[11px] text-ink/55">
+                              {b.thcPercent != null ? `THC ${b.thcPercent}%` : ""}
+                              {b.thcPercent != null && b.cbdPercent != null ? " · " : ""}
+                              {b.cbdPercent != null ? `CBD ${b.cbdPercent}%` : ""}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* FORM-02 custom path: offer the typed name, or a blank custom line */}
+                {q && !hasExactName ? (
                   <button
-                    key={p.id}
                     type="button"
-                    onClick={() => addProduct(p)}
-                    className="flex flex-col rounded-xl bg-white px-3 py-2 text-left ring-1 ring-black/5 transition hover:ring-brand/30"
+                    onClick={() => addCustom(query)}
+                    className="flex w-full items-center gap-2 rounded-xl border border-dashed border-brand/40 px-3 py-2.5 text-left text-sm font-medium text-brand transition hover:bg-brand/5"
                   >
-                    <span className="truncate text-sm font-semibold text-ink">{p.name}</span>
-                    <span className="text-[11px] text-ink/50">
-                      {p.cultivar ? `${p.cultivar} · ` : ""}
-                      {p.unitPrice != null ? `${formatMoney(p.unitPrice, p.currency)}/g` : "no price"}
+                    <Plus size={15} />
+                    <span className="truncate">
+                      Add “{query.trim()}” as a custom product
                     </span>
                   </button>
-                ))}
+                ) : (
+                  !q && (
+                    <button
+                      type="button"
+                      onClick={() => addCustom("")}
+                      className="flex w-full items-center gap-2 rounded-xl border border-dashed border-black/10 px-3 py-2.5 text-left text-sm font-medium text-ink/55 transition hover:border-brand/40 hover:text-brand"
+                    >
+                      <Plus size={15} />
+                      Add a custom product
+                    </button>
+                  )
+                )}
+
+                {catalog.length === 0 && !q && (
+                  <p className="text-[12px] text-ink/45">
+                    No products in your catalogue yet - add a custom one above.
+                  </p>
+                )}
+                {q && matches.length === 0 && (
+                  <p className="text-[12px] text-ink/45">
+                    No catalogue match for “{query.trim()}”.
+                  </p>
+                )}
               </div>
             )}
           </section>
 
           {/* items */}
           <section className="space-y-2">
-            <p className={labelCls}>Items</p>
+            <div className="flex items-center justify-between">
+              <p className={labelCls}>Items</p>
+              {lines.length > 0 && (
+                <span className="text-[11px] text-ink/40">{lines.length} on this deal</span>
+              )}
+            </div>
             {lines.length === 0 ? (
-              <p className="text-[12px] text-ink/45">Pick a product above to add it to the deal.</p>
+              <p className="text-[12px] text-ink/45">
+                Add a product above to start the basket.
+              </p>
             ) : (
               <div className="space-y-2">
                 {lines.map((l, i) => (
@@ -221,8 +488,14 @@ export function DealForm({
                       <input
                         value={l.productName}
                         onChange={(e) => updateLine(i, { productName: e.target.value })}
-                        className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-ink focus:outline-none"
+                        placeholder="Product name"
+                        className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-ink placeholder:font-normal placeholder:text-ink/30 focus:outline-none"
                       />
+                      {l.productId == null && (
+                        <span className="shrink-0 rounded-full bg-ink/5 px-2 py-0.5 text-[10px] font-medium text-ink/45">
+                          Custom
+                        </span>
+                      )}
                       <button
                         type="button"
                         onClick={() => removeLine(i)}
@@ -231,15 +504,35 @@ export function DealForm({
                         <Trash2 size={14} />
                       </button>
                     </div>
-                    <div className="mt-2 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
-                      <input
-                        type="number"
-                        min={0}
-                        value={l.quantity}
-                        onChange={(e) => updateLine(i, { quantity: Number(e.target.value) })}
-                        className={inputCls}
-                        placeholder="Qty"
-                      />
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      {/* quantity = packs: +/- steps by one pack (basket feel) */}
+                      <div className="flex items-center overflow-hidden rounded-lg ring-1 ring-black/5">
+                        <button
+                          type="button"
+                          onClick={() => stepLine(i, -1)}
+                          aria-label="One pack fewer"
+                          className="flex h-9 w-9 items-center justify-center text-ink/55 transition hover:bg-ink/5 hover:text-ink"
+                        >
+                          <Minus size={14} />
+                        </button>
+                        <input
+                          type="number"
+                          min={0}
+                          value={l.quantity}
+                          onChange={(e) => updateLine(i, { quantity: Number(e.target.value) })}
+                          aria-label="Quantity in grams"
+                          placeholder="Qty"
+                          className="w-16 border-x border-black/5 bg-white px-2 py-2 text-center text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand/30"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => stepLine(i, 1)}
+                          aria-label="One pack more"
+                          className="flex h-9 w-9 items-center justify-center text-ink/55 transition hover:bg-ink/5 hover:text-ink"
+                        >
+                          <Plus size={14} />
+                        </button>
+                      </div>
                       <select
                         value={l.unit}
                         onChange={(e) => updateLine(i, { unit: e.target.value })}
@@ -261,15 +554,54 @@ export function DealForm({
                             unitPrice: e.target.value === "" ? null : Number(e.target.value),
                           })
                         }
-                        className={inputCls}
+                        className={`${inputCls} min-w-0 flex-1`}
                         placeholder="€ / g (optional)"
                       />
                     </div>
-                    <p className="mt-1.5 text-right text-[11px] text-ink/55">
-                      {l.unitPrice != null
-                        ? formatMoney(l.quantity * l.unitPrice, l.currency)
-                        : "Price TBD"}
-                    </p>
+                    <div className="mt-1.5 flex items-center justify-between text-[11px] text-ink/55">
+                      <span>
+                        {(() => {
+                          const packs = packsOf(l.quantity, l.packSizeGrams);
+                          return packs != null ? packCount(packs) : `${l.quantity} g`;
+                        })()}
+                      </span>
+                      <span>
+                        {l.unitPrice != null
+                          ? formatMoney(l.quantity * l.unitPrice, l.currency)
+                          : "Price TBD"}
+                      </span>
+                    </div>
+                    {/* MRGN-01: the per-line own-side private input (seller cost /
+                        buyer resale), shown only when showPrivate. This row mixes
+                        a SHARED input (qty/unit/price above) with a PRIVATE input
+                        (ownInput); the private/shared split is enforced
+                        server-side in proposeDealChange - ownInput is written to
+                        deal_line_item_private and stripped from the shared draft. */}
+                    {showPrivate && (
+                      <label className="mt-2 flex flex-col gap-1">
+                        <span className="inline-flex items-center gap-1 text-[11px] text-ink/55">
+                          <Lock size={10} />
+                          {side === "buyer"
+                            ? "Your resale price (only you)"
+                            : "Your cost (only you)"}
+                        </span>
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={l.ownInput ?? ""}
+                          onChange={(e) =>
+                            updateLine(i, {
+                              ownInput: e.target.value === "" ? null : Number(e.target.value),
+                            })
+                          }
+                          className={inputCls}
+                          placeholder={
+                            side === "buyer" ? "€ / g (your resale)" : "€ / g (your cost)"
+                          }
+                        />
+                      </label>
+                    )}
                   </div>
                 ))}
               </div>
@@ -314,27 +646,6 @@ export function DealForm({
               </label>
             </div>
           </section>
-
-          {/* private box (creator/seller side only) - hidden on a proposal (4.5.2),
-              where it would be saved nowhere; it is added after birth via edit */}
-          {showPrivate && (
-            <section className="space-y-2">
-              <p className={labelCls}>
-                <span className="inline-flex items-center gap-1">
-                  <Lock size={11} /> Only you can see this
-                </span>
-              </p>
-              <label className="flex flex-col gap-1">
-                <span className="text-[11px] text-ink/55">Buying price (from your supplier)</span>
-                <input
-                  value={privateValue}
-                  onChange={(e) => setPrivateValue(e.target.value)}
-                  className={inputCls}
-                  placeholder="e.g. 3.50 € / g"
-                />
-              </label>
-            </section>
-          )}
 
           {/* note */}
           <section className="space-y-2">

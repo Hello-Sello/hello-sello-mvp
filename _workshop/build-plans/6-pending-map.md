@@ -1,5 +1,7 @@
 # 6 - Pending map: the deal-change flow + the honest gap list
 
+> **⚠️ HISTORICAL / DESIGN-REFERENCE ONLY (closed 2026-06-18).** Live status, what's left, and parked items now live in **`.planning/ROADMAP.md`** (the single source of truth). This file is kept for its design depth (the T1-T8 breakdown, the code-reality assessment §4, and the Stages + Deal Finalization design §5). Do NOT track current status here.
+
 **Status:** 🟢 LIVING DOC (the single "what is pending" map). **Owner:** Ayush. **Created:** 2026-06-15.
 **Build progress (2026-06-17):** **T1 + T2** (held-change backbone + change reason = GSD Phase 1 / 4.5.4) are **BUILT + verified** (e2e green; 5 migrations LOCAL only, cloud apply pending — `docs/deploy/cloud-migrations-pending.md`). The golden Seal was **removed from the strip + deferred to the deal's final stage** (DECISIONS.md 2026-06-17). **T3-T8 remain** — T3 (announcements to both chats) + T4 (seal-Withdraw cleanup, may be moot now) = Phase 2, next.
 **Supersedes the loose ends of:** `4.5-deal-birth-acceptance.md` (4.5.4-4.5.6) and `5a-ui-pass.md` (5A.4-5A.5).
@@ -212,6 +214,45 @@ chapter). The exact phase numbering below is a **proposal** - we finalise it tog
   connected companies vs not-connected (new) senders. Structurally new (a thread needs an active relationship
   today), so it needs a pre-relationship surface or an inbox-into-chat bridge.
 
+### Phase 2 verify - new observations (2026-06-17, parked / triage)
+
+Surfaced during the Phase 2 (announcements) two-screen human verify. NONE are Phase 2 (ANNC-01..04)
+regressions - the announce loop works in both chats (verified, 02-VERIFICATION = pass). Parked so they
+are not lost:
+
+- **OBS-1 - Deal card shows 0 € net/gross until quantities are set.** A freshly-proposed card lists its
+  products (e.g. 8 €/kg) but `value_net`/`value_gross` read 0 € until a quantity is entered; once set
+  (1000 kg / 1.0 kg) the values appear (16.000 € / 19.040 €). Pre-existing (seen 2026-06-16 too). Card
+  value/display - no planned phase owns it yet. Decide: is "0 until qty" acceptable, or should the proposal
+  require/seed a quantity?
+- **OBS-2 - Mixed quantity units on the card (g vs kg).** The card showed one row as `8 €/kg` (1000 kg) and
+  another as `8 €/g` (1.0 kg) - the grams<->kg unit handling/display is inconsistent and confusing. Card
+  units/display - no planned phase owns it (may fold into the parked margin/price redesign T5b).
+- **OBS-3 - Proposing a deal posts a "Deal proposed: <product>" chat message.** Source: `propose_deal_rpc.sql:69`
+  (Phase-1/earlier migration, NOT the Phase 2 announcement). PRODUCT QUESTION: should the FIRST proposal post a
+  chat bubble at all? Needs a product decision (candidate for /track-doubt).
+- **OBS-4 - `public-profile.spec.ts` (DATA-03, account "Save changes") flaked once** in the Phase 2 verifier's
+  full 14-test run, but passed in the orchestrator's run and is green per Muskan's sync. Muskan's public-profile
+  area - likely a flaky/timing test, NOT a deal-change issue. Flag to Muskan.
+- **OBS-5 (routed, not parked) - private-field edit may trigger a review.** Editing ONLY a per-company private
+  field (the "Buying price (from supplier) - only you" box) should stay IMMEDIATE (D-09) and NOT create a held
+  change/review on the other side. Routed to **Phase 3** (Card Note touches per-side card fields) - see the
+  ROADMAP Phase 3 carry-in note. Origin is Phase 1 D-09.
+
+### Deal Finalization — vocabulary locked 2026-06-17; full design parked to the Stages discussion
+
+- **Vocabulary (locked):** what we used to call the "golden Seal" / "seal" / "sell" / "finalize the deal" is
+  now ONE word: **Deal Finalization**. Use this everywhere; stop saying Seal/sell. It is SEPARATE from the
+  everyday Accept/Decline of a card change.
+- **Trigger:** Deal Finalization fires ONLY at the LAST stage of the deal — not in the everyday change flow.
+- **Code today:** the path already exists and is DORMANT — the `confirmDeal` server action + the
+  `deal_confirmation` table (0 callers; removed from the strip in Phase 1). It is NOT the same as
+  `confirm_deal_change` (which is the everyday card-change Accept/Decline). It will be wired when we build Stages.
+- **Parked to the Stages discussion:** what counts as "the last stage", what auto-triggers Deal Finalization,
+  and Ayush's idea to MOVE the deal/Sella panel OUT of the chat strip INTO the deal workspace (at the top, next
+  to the stages), with Deal Finalization auto-triggering at the last stage. Decide all of this when we design
+  the deal Stages — do not bolt it onto the current flow.
+
 ### Already done (this chapter, for context)
 
 - **4.5.1** propose-path engine · **4.5.2** the Sella strip · **4.5.3** card = pure display + Seal moved into
@@ -270,6 +311,40 @@ lives in one file. Most are **5A (Connect / chat UI)**; walk them one by one whe
 **Grouping when we resume:** DEV-67/71/73/74/75 = one Connect-chat-UI pass (5A); DEV-72 = a copy tweak; DEV-66 =
 resolve the naming clash first. DEV-73 + DEV-67's Sella-flip should fold into the existing 4.5.6 / 5A plans, not be
 built twice.
+
+---
+
+## 9. Pick-up list - open items from the 2026-06-17 session (Phase 2 DONE; resume here)
+
+Single place to resume from. Phase 2 (Announcements & Gate Cleanup, ANNC-01..04) is **COMPLETE + verified**
+(`02-VERIFICATION.md` = pass): held-change resolutions announce a Sella bubble into BOTH chats on accept +
+decline, withdraw is silent, the gate is Accept/Decline-only. Each item below says where its detail lives.
+
+**Next GSD step**
+- [ ] **Phase 3 - Card Note.** PLAN it first (`/gsd:plan-phase 3` -> then execute). Carry-in: confirm a
+  PRIVATE-only edit stays immediate (OBS-5). -> `.planning/ROADMAP.md` Phase 3.
+
+**The deep-dive we agreed to open next (big design topic)**
+- [ ] **Deal Stages + Deal Finalization.** Decide what the stages are; what counts as "the last stage";
+  **Deal Finalization** (renamed from seal/sell, locked vocab) auto-triggers at the last stage; and Ayush's
+  idea to MOVE the deal/Sella panel OUT of the chat strip INTO the deal workspace (top, next to the stages).
+  -> see the **"Deal Finalization"** subsection in §5 above. When wired, also rename `confirmDeal` to a clear
+  Deal-Finalization name so it is never confused with the everyday `confirm_deal_change`.
+
+**Open observations from the Phase 2 two-screen verify (detail in the "Phase 2 verify - new observations" block in §5)**
+- [ ] **OBS-1** - deal card shows 0 € until a quantity is set (card value/display; no phase owns it - decide).
+- [ ] **OBS-2** - grams/kg unit display is inconsistent on the card (may fold into the parked margin redesign T5b).
+- [ ] **OBS-3** - proposing a deal posts a "Deal proposed:" chat message - PRODUCT QUESTION (should it?). `/track-doubt` candidate.
+- [ ] **OBS-4** - `public-profile.spec.ts` (DATA-03) flaked once in the verifier run - Muskan's area; flag to her.
+- [ ] **OBS-5** - a private-only edit may trigger a review - routed to **Phase 3** (D-09). -> ROADMAP Phase 3 carry-in.
+
+**Deploy (deferred, deliberate human step)**
+- [ ] **Cloud apply** for ALL Phase 1 + Phase 2 migrations - one batch, human `supabase db push`, coordinate
+  with Muskan (she holds a migrations lock until her own cloud push). -> `docs/deploy/cloud-migrations-pending.md`.
+
+**Still parked from earlier chapters (unchanged)**
+- T6 Sella detects changes -> Phase 5 · T7/T8 C2C ticketing + connected differentiator -> own future chapter (§5)
+  · Marcel's DEV-66/67/71/72/73/74/75 -> the 5A Connect/chat UI pass (§8).
 
 ---
 

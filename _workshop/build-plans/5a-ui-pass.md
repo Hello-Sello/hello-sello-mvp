@@ -1,5 +1,7 @@
 # 5A - UI pass (card + chat + nav + Sella)
 
+> **⚠️ HISTORICAL / DESIGN-REFERENCE ONLY (closed 2026-06-18).** Live status, what's left, and parked items now live in **`.planning/ROADMAP.md`** (the single source of truth). This file is kept for UI-pass context feeding Phases 5-6 (the `deal_detected` / `deal_card_updated` renderers, the card open-mode debate). Do NOT track current status here.
+
 **Status:** ⬜ OPEN (not started). **Owner:** Ayush.
 **Runs:** AFTER Chapter 4 (Sella) - which is ✅ DONE + live. So 5A now runs on a real
 detect → confirm → birth → summary journey, not on stubs.
