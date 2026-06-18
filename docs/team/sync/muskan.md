@@ -10,7 +10,7 @@
 **Status:** **idle.** Phase 6 (Discover & Home UX) COMPLETE — 4/4 plans, build green, PR → dev. Cloud apply for the 2 new migrations DEFERRED (Phases 1–5 batch; reconcile old `avatars` policies first). Next session = Phase 7 (Present UX).
 **Linear issue in progress:** none (DEV-70 logo-propagation, DEV-78 Discover, DEV-69/68 Home — all built this phase)
 **Shared files locked:** none
-**PR open:** Phase 6 Discover & Home UX → dev (this session). **MERGED:** [#111](https://github.com/HelloSello/hello-sello-mvp/pull/111) Phase 5 surface polish (F-flags) → dev. **MERGED:** Phase 4 auth-gate [#110](https://github.com/HelloSello/hello-sello-mvp/pull/110) → dev · Discover loop [#104](https://github.com/HelloSello/hello-sello-mvp/pull/104) → dev (slices 1–6). *(Prior: Sella proposal #99 merged to dev by Ayush; storage #98 on dev, held from main.)*
+**PR open:** [#112](https://github.com/HelloSello/hello-sello-mvp/pull/112) Phase 6 Discover & Home UX → dev. **MERGED:** [#111](https://github.com/HelloSello/hello-sello-mvp/pull/111) Phase 5 surface polish (F-flags) → dev. **MERGED:** Phase 4 auth-gate [#110](https://github.com/HelloSello/hello-sello-mvp/pull/110) → dev · Discover loop [#104](https://github.com/HelloSello/hello-sello-mvp/pull/104) → dev (slices 1–6). *(Prior: Sella proposal #99 merged to dev by Ayush; storage #98 on dev, held from main.)*
 **Prev PR:** Discover directory [#95](https://github.com/HelloSello/hello-sello-mvp/pull/95)→dev / [#96](https://github.com/HelloSello/hello-sello-mvp/pull/96)→main · Profile & QR [#88](https://github.com/HelloSello/hello-sello-mvp/pull/88)/[#89](https://github.com/HelloSello/hello-sello-mvp/pull/89) — all **merged**.
 
 ---
