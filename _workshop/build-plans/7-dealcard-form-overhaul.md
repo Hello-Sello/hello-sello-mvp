@@ -156,6 +156,10 @@ existing tables**, not designing new ones - good news for risk.
 | **3e** Form product UX | FORM-01, FORM-02 | increment-not-duplicate; add by name + auto-fill; custom product (all on the Basket) | 3b |
 | **3f** Batches end-to-end | BTCH-01 | add `batch_id` to the line; snapshot measured values; batch picker in the Basket; seed demo batches; show batch number + measured THC/CBD on the card | 3e |
 
+**Build status (2026-06-18):** 3a ✓, 3b ✓, 3c ✓, 3d ✓, **3e ✓ DONE** - only **3f (batches)** remains in this milestone. All LOCAL on `claude/ayush/work`, not pushed.
+
+**3e note (pack-based quantity):** grounded in the live `product` table, basket quantity is by **pack** - each product has `pack_size_grams` (e.g. Pedanios 10/10 = 10 g pack; the rest = 1 kg pack). The +/- stepper steps one pack and the form shows "N packs"; the line still stores grams and is priced per gram (card math unchanged). The locked "To" assignee row now shows on create AND edit (p2p-locked). The recipient PICKER (connected companies -> people) + shop/Sella entry points + C2C company-only sending stay FUTURE (next stage).
+
 Then the old Phase 4 (cross-deal notification), 5 (Sella detection), 6 (Connect/chat UI) follow.
 Doing the card/form properly here absorbs much of the card-related UI work, so **re-check Phase 6's
 scope after this milestone lands.**

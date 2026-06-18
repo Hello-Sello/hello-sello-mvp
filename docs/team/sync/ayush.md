@@ -5,14 +5,15 @@
 
 ---
 
-**Last updated:** 2026-06-17 15:16 CEST
-**Branch:** claude/ayush/work - local only this session (9 new commits, **NOT pushed**, staying local by choice).
-**Status:** idle (wrapped up) - **GSD Phase 2 (Announcements & Gate Cleanup, ANNC-01..04) BUILT + verified + complete** (`02-VERIFICATION` = pass); held-change resolutions announce into BOTH chats on accept + decline, withdraw silent, gate Accept/Decline-only; deal-change e2e 11/11; cloud UNTOUCHED. Next session = Phase 3 (Card Note) - plan it first.
+**Last updated:** 2026-06-18 17:43 CEST
+**Branch:** claude/ayush/work - local only (NOT pushed, staying local by choice).
+**Status:** idle (wrapped up) - **Phase 3e (Form product UX, FORM-01/02) BUILT + human-verified in-app** (deal-domain only). The Deal Basket form now: re-add a product = +1 pack (no duplicate row); search-by-name auto-fills; add a custom (off-catalogue) product; quantity is by **pack** (`product.pack_size_grams`, +/- stepper) but still stored in grams + priced per gram; the locked "To" assignee row shows on create + edit (p2p auto-locked). **NO migrations this phase** (pure client-side; custom productId-null lines already flow safely). 36 unit green, deal-change e2e 18/18, tsc+eslint clean. Committed `fb759b9`. Next session = Phase 3f (Batches, BTCH-01) - the last phase of the 3a-3f milestone; plan it first.
 **Linear issue in progress:** none
 **Shared files locked:** none (all locks cleared).
-**Shared files touched THIS session (LOCAL commits only, NOT pushed - you will NOT see these until I push):** `_workshop/build-plans/6-pending-map.md` (OBS-1..5, the "Deal Finalization" vocab, the new §9 pick-up list - all appends), `docs/deploy/cloud-migrations-pending.md` (Phase 2 migrations). Code = deal-domain only (2 NEW `supabase/migrations/`, `e2e/`, `supabase/tests/`). Nothing of yours edited.
-**PR:** none open. Phase 1 + Phase 2 builds are on `claude/ayush/work`, NOT pushed; cloud apply for both pending (deferred human `supabase db push`).
-**⚠️ Pending shared-doc edits owed at my next sync (need the ritual + propose-mode):** record in `docs/decisions/DECISIONS.md` the ANNC-03 supersede (withdraw = silent, supersedes the 2026-06-15 "quiet notice") + the "Deal Finalization" vocabulary (golden Seal / "sell" → Deal Finalization); add "Deal Finalization" to `CONTEXT.md`.
+**Shared files touched THIS session (LOCAL commits only, NOT pushed):** `e2e/fixtures/two-company.ts` (re-anchored the form selectors for the new product browser - deal-change suite still 18/18), `docs/decisions/DECISIONS.md` (3e entry), `_workshop/build-plans/7-dealcard-form-overhaul.md` (3e done + pack note), `docs/architecture/CONTEXT.md` (Deal Basket pack/recipient terms). Code = deal-domain only (`src/modules/deals/`). **Nothing of yours edited.**
+**⚠️ Heads-up for 3f (next):** it adds `batch_id` + snapshot fields to `deal_line_item` and seeds `product_batch`/`batch_terpene` - those batch tables sit near YOUR catalogue/product/RLS surface, and 3f WILL have a migration (unlike 3e). Let's coordinate before I touch anything batch-side; ping me about your migrations lock.
+**PR:** none open. Phases 1-3e are on `claude/ayush/work`, NOT pushed; cloud apply for all still pending (deferred human `supabase db push`).
+**⚠️ Pending shared-doc edits still owed from a prior session (need the ritual + propose-mode):** the "Deal Finalization" vocabulary (golden Seal / "sell" → Deal Finalization) into `docs/architecture/CONTEXT.md`.
 
 ---
 
