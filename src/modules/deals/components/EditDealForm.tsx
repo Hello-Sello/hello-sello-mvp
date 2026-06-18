@@ -14,6 +14,7 @@
  * stops routing shared edits through it.
  */
 import { DealForm } from "./DealForm";
+import { buildEditBasket } from "../lib/basket";
 import type { DealCardView, DraftLineInput } from "../types";
 
 /** The edited SHARED fields + the PRIVATE box, handed UP to the strip's Send pop-up. */
@@ -80,16 +81,21 @@ export function EditDealForm({
       noteRequired={false}
       submitLabel="Review change"
       onClose={onClose}
-      onSubmit={async (p) => {
+      onSubmit={async (content) => {
         // 4.5.4 - hand the edit UP to the strip; it collects the reason + Sends.
         // No reason here (D-08); the private box rides up for the strip to pass
         // into proposeDealChange (written immediately + ungated there, D-09).
+        // 3b: the edit identity is a Basket attached to this card (source p2p,
+        // no recipient - Scope call A1); the relay shape to the strip is the
+        // SAME 5 fields as before (the Basket carries identity, the strip the
+        // change reason). proposeDealChange is unchanged.
+        const basket = buildEditBasket(content, data.card.id);
         onProposeChange({
-          lines: p.lines,
-          freeDelivery: p.freeDelivery,
-          dueDate: p.dueDate,
-          paymentTermsCode: p.paymentTermsCode,
-          privateValue: p.privateValue,
+          lines: basket.lines,
+          freeDelivery: basket.freeDelivery,
+          dueDate: basket.dueDate,
+          paymentTermsCode: basket.paymentTermsCode,
+          privateValue: basket.privateValue,
         });
       }}
     />
