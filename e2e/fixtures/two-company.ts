@@ -187,6 +187,33 @@ export function countRelationshipMessages(): number {
   return Number(out)
 }
 
+/**
+ * Count the live `deal_change_input` rows for ONE deal card (NOTE-01 / D-05).
+ * The create-time note must NEVER add a log row — only a held CHANGE (the
+ * Accept/Decline reason gate) writes `deal_change_input`. The card id is
+ * passed in by the caller, resolved at RUNTIME from the freshly-born card
+ * (NEVER hardcoded — the seed regenerates ids on every `supabase db reset`).
+ *
+ * Mirrors countRelationshipMessages's shape exactly: psqlBin() + execFileSync
+ * + `-At -c` + `.trim()` + `Number(out)`. `deal_change_input` is already a
+ * child of `deal_card`, so resetDealData's existing truncate covers it — no
+ * new reset row needed here.
+ */
+export function countDealChangeInputForCard(dealCardId: string): number {
+  const bin = psqlBin()
+  const out = execFileSync(
+    bin,
+    [
+      DB_URL,
+      '-At',
+      '-c',
+      `select count(*) from public.deal_change_input where deal_card_id = '${dealCardId}'`,
+    ],
+    { encoding: 'utf8' },
+  ).trim()
+  return Number(out)
+}
+
 const CREDENTIALS: Record<Who, { email: string; password: string }> = {
   alice: { email: 'alice@greenleaf.test', password: 'password123' },
   bob: { email: 'bob@stonepharm.test', password: 'password123' },
