@@ -19,6 +19,7 @@ export type DiscoverCompany = {
   name: string;
   countryCode: string;
   countryName: string;
+  city: string | null;
   categories: string[]; // display labels (a company can have more than one)
   logoUrl: string | null;
   connectionState: ConnectionState;
@@ -48,6 +49,7 @@ type Row = {
   id: string;
   name: string;
   country: string;
+  city: string | null;
   logo_path: string | null;
   type_codes: string[] | null;
   connection_state: ConnectionState;
@@ -67,6 +69,7 @@ export async function getDiscoverableCompanies(): Promise<DiscoverCompany[]> {
     name: r.name,
     countryCode: r.country,
     countryName: countryName(r.country),
+    city: r.city,
     categories: (r.type_codes ?? []).map(categoryLabel),
     logoUrl: r.logo_path
       ? supabase.storage.from("shop-media").getPublicUrl(r.logo_path).data.publicUrl

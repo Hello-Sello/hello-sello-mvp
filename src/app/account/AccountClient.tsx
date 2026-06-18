@@ -4,14 +4,15 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   ArrowLeft, User, Building2, Settings as SettingsIcon, Mail, Phone, Languages,
-  Link2, Globe, MapPin, Tag, Clock, CheckCircle2, LogOut, Check, Copy, ExternalLink,
+  Link2, Clock, CheckCircle2, LogOut, Check, Copy, ExternalLink,
 } from 'lucide-react'
 import { Avatar } from '@/shared/ui/Avatar'
 import { AvatarUpload } from '@/shared/ui/AvatarUpload'
 import { signOut } from '@/app/(auth)/actions'
 import type { MyProfile } from '@/modules/profile'
 import type { CompanyProfile } from '@/modules/companies'
-import { saveMyProfile, saveCompanyProfile, saveAvatar } from './actions'
+import { saveMyProfile, saveAvatar } from './actions'
+import { BrandingEditForm } from '@/app/present/BrandingEditForm'
 
 type Tab = 'profile' | 'company' | 'settings'
 
@@ -147,6 +148,8 @@ function PublicProfileCallout({ handle, name, url }: { handle: string; name: str
 }
 
 // ---- Company Profile --------------------------------------------------------
+// Uses the shared BrandingEditForm (D-09 — one form, two edit doors).
+// The form owns logo + city + text fields via companies.updateCompanyProfile (D-07).
 function CompanyForm({ company, onDirty }: { company: CompanyProfile | null; onDirty: (d: boolean) => void }) {
   if (!company) {
     return (
@@ -155,67 +158,12 @@ function CompanyForm({ company, onDirty }: { company: CompanyProfile | null; onD
       </Panel>
     )
   }
-  return <CompanyFormInner company={company} onDirty={onDirty} />
-}
-
-function CompanyFormInner({ company, onDirty }: { company: CompanyProfile; onDirty: (d: boolean) => void }) {
-  const initial = {
-    tagline: company.tagline,
-    address: company.address,
-    description: company.description,
-    primaryProducts: company.primaryProducts,
-    website: company.website,
-  }
-  const [base, setBase] = useState(initial)
-  const [f, setF] = useState(initial)
-  const [busy, setBusy] = useState(false)
-  const [saved, setSaved] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  const dirty = JSON.stringify(f) !== JSON.stringify(base)
-  const set = (k: keyof typeof f, v: string) => {
-    setF((s) => ({ ...s, [k]: v }))
-    setSaved(false)
-    onDirty(JSON.stringify({ ...f, [k]: v }) !== JSON.stringify(base))
-  }
-  async function save() {
-    setBusy(true)
-    setError(null)
-    const r = await saveCompanyProfile(f)
-    setBusy(false)
-    if (r.error) return setError(r.error)
-    setBase(f)
-    setSaved(true)
-    onDirty(false)
-  }
-
   return (
     <Panel title="Company Profile" subtitle="Your company details, shown on your public profile.">
       <div className="mb-5 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-brand-soft/40 text-brand"><Building2 size={22} /></span>
-          <h3 className="text-base font-semibold text-ink">{company.name}</h3>
-        </div>
         <VerifyBadge status={company.verificationStatus} />
       </div>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <ReadOnly label="Company name" value={company.name} icon={Building2} />
-        <ReadOnly label="Country" value={company.country} icon={MapPin} />
-        <Field label="Tagline" value={f.tagline} onChange={(v) => set('tagline', v)} placeholder="Medical cannabis distribution…" />
-        <Field label="Website" value={f.website} onChange={(v) => set('website', v)} icon={Globe} type="url" />
-        <Field label="Address" value={f.address} onChange={(v) => set('address', v)} icon={MapPin} />
-        <Field label="Primary products" value={f.primaryProducts} onChange={(v) => set('primaryProducts', v)} icon={Tag} />
-      </div>
-      <label className="mt-4 flex flex-col gap-1 text-sm">
-        <span className="text-ink-muted">Description</span>
-        <textarea
-          value={f.description}
-          onChange={(e) => set('description', e.target.value)}
-          rows={3}
-          className="resize-none rounded-xl border border-white/70 bg-white/70 px-3 py-2 text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand-soft"
-        />
-      </label>
-      <SaveBar busy={busy} dirty={dirty} saved={saved} error={error} onSave={save} />
+      <BrandingEditForm company={company} onDirty={onDirty} />
     </Panel>
   )
 }
