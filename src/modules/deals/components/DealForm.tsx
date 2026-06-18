@@ -16,7 +16,7 @@ import { X, Trash2, Loader2, Lock } from "lucide-react";
 import { getOwnCatalog } from "../supabase/reads";
 import { formatMoney } from "../lib/derive";
 import { PAYMENT_TERMS } from "../lib/paymentTerms";
-import type { CatalogProduct, DraftLineInput, DealBasketContent } from "../types";
+import type { CatalogProduct, DraftLineInput, DealBasketContent, PartySide } from "../types";
 
 const UNITS = ["g", "kg", "unit"];
 
@@ -47,9 +47,9 @@ export function DealForm({
   initialFreeDelivery = false,
   initialDueDate = "",
   initialPaymentTermsCode = "",
-  initialPrivateValue = "",
   initialNote = "",
   showPrivate = true,
+  side,
   noteRequired,
   submitLabel,
   onClose,
@@ -61,16 +61,21 @@ export function DealForm({
   initialFreeDelivery?: boolean;
   initialDueDate?: string;
   initialPaymentTermsCode?: string;
-  initialPrivateValue?: string;
   /** seeds the note box - e.g. the editor's own existing card note (NOTE-01), so re-sending does not blank it */
   initialNote?: string;
   /**
-   * Show the seller's own-side private box (default true for create/edit). A
+   * Show the per-line own-side private input (default true for create/edit). A
    * PROPOSAL (4.5.2) hides it: a proposal is a shared chat message both sides
-   * read, so the private box is added only AFTER birth via edit - showing it
-   * here would silently swallow what the seller types (proposeDeal drops it).
+   * read, so the per-line cost/resale is added only AFTER birth via edit -
+   * showing it here would silently swallow what the user types.
    */
   showPrivate?: boolean;
+  /**
+   * The viewer's side (MRGN-01) - drives the per-line private input's label:
+   * seller types a cost, buyer types a resale price. Undefined = default to the
+   * seller wording (e.g. the create path before the side is known).
+   */
+  side?: PartySide;
   /** edits require a note (D2); create makes it optional at draft. */
   noteRequired: boolean;
   submitLabel: string;
@@ -82,7 +87,6 @@ export function DealForm({
   const [freeDelivery, setFreeDelivery] = useState(initialFreeDelivery);
   const [dueDate, setDueDate] = useState(initialDueDate);
   const [paymentTermsCode, setPaymentTermsCode] = useState(initialPaymentTermsCode);
-  const [privateValue, setPrivateValue] = useState(initialPrivateValue);
   const [note, setNote] = useState(initialNote);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -126,7 +130,11 @@ export function DealForm({
         freeDelivery,
         dueDate: dueDate || null,
         paymentTermsCode: paymentTermsCode || null,
-        privateValue: privateValue || null,
+        // MRGN-01: the single deal-level private box is retired - the per-line
+        // own input now rides each line's `ownInput`. `privateValue` is a dead
+        // field kept only so DealBasketContent still compiles; plan 05 removes
+        // the field across every call site in one commit.
+        privateValue: null,
         note: note.trim() || null,
       });
       // the wrapper closes / reloads on success
@@ -253,6 +261,37 @@ export function DealForm({
                         ? formatMoney(l.quantity * l.unitPrice, l.currency)
                         : "Price TBD"}
                     </p>
+                    {/* MRGN-01: the per-line own-side private input (seller cost /
+                        buyer resale), shown only when showPrivate. This row mixes
+                        a SHARED input (qty/unit/price above) with a PRIVATE input
+                        (ownInput); the private/shared split is enforced
+                        server-side in proposeDealChange - ownInput is written to
+                        deal_line_item_private and stripped from the shared draft. */}
+                    {showPrivate && (
+                      <label className="mt-2 flex flex-col gap-1">
+                        <span className="inline-flex items-center gap-1 text-[11px] text-ink/55">
+                          <Lock size={10} />
+                          {side === "buyer"
+                            ? "Your resale price (only you)"
+                            : "Your cost (only you)"}
+                        </span>
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={l.ownInput ?? ""}
+                          onChange={(e) =>
+                            updateLine(i, {
+                              ownInput: e.target.value === "" ? null : Number(e.target.value),
+                            })
+                          }
+                          className={inputCls}
+                          placeholder={
+                            side === "buyer" ? "€ / g (your resale)" : "€ / g (your cost)"
+                          }
+                        />
+                      </label>
+                    )}
                   </div>
                 ))}
               </div>
@@ -297,27 +336,6 @@ export function DealForm({
               </label>
             </div>
           </section>
-
-          {/* private box (creator/seller side only) - hidden on a proposal (4.5.2),
-              where it would be saved nowhere; it is added after birth via edit */}
-          {showPrivate && (
-            <section className="space-y-2">
-              <p className={labelCls}>
-                <span className="inline-flex items-center gap-1">
-                  <Lock size={11} /> Only you can see this
-                </span>
-              </p>
-              <label className="flex flex-col gap-1">
-                <span className="text-[11px] text-ink/55">Buying price (from your supplier)</span>
-                <input
-                  value={privateValue}
-                  onChange={(e) => setPrivateValue(e.target.value)}
-                  className={inputCls}
-                  placeholder="e.g. 3.50 € / g"
-                />
-              </label>
-            </section>
-          )}
 
           {/* note */}
           <section className="space-y-2">

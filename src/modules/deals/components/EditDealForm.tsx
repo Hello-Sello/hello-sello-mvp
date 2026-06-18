@@ -31,8 +31,13 @@ export interface ProposeChangePayload {
 
 /** Map the current card's line items back into editable draft lines. */
 function toDraftLines(data: DealCardView): DraftLineInput[] {
+  // MRGN-01 / BLOCKER 1: thread the REAL deal_line_item.id so the per-line
+  // private write (proposeDealChange) has its join key, and seed each line's
+  // own margin input from lineMargins so re-Sending keeps the entered value.
+  const marginByLineId = new Map(data.lineMargins.map((m) => [m.lineItemId, m.ownInput]));
   return data.lineItems.map((li) => ({
     productId: li.productId,
+    lineItemId: li.id,
     productName: li.productName,
     quantity: li.quantity,
     unit: li.unit,
@@ -42,6 +47,7 @@ function toDraftLines(data: DealCardView): DraftLineInput[] {
     pzn: li.pzn,
     thcPercent: null,
     cbdPercent: null,
+    ownInput: marginByLineId.get(li.id) ?? null,
   }));
 }
 
@@ -66,10 +72,6 @@ export function EditDealForm({
     ? data.card.delivery_date_target.slice(0, 10)
     : "";
   const paymentTermsCode = data.card.payment_terms_code ?? "";
-  const privateValue =
-    data.partyFields.find((f) => f.fieldKey === "supplier_cost")?.value ??
-    data.partyFields[0]?.value ??
-    "";
   const initialNote = data.myNote ?? "";
 
   return (
@@ -80,8 +82,8 @@ export function EditDealForm({
       initialFreeDelivery={freeDelivery}
       initialDueDate={dueDate}
       initialPaymentTermsCode={paymentTermsCode}
-      initialPrivateValue={privateValue}
       initialNote={initialNote}
+      side={data.viewerSide ?? undefined}
       noteRequired={false}
       submitLabel="Review change"
       onClose={onClose}
