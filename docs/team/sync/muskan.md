@@ -5,10 +5,10 @@
 
 ---
 
-**Last updated:** 2026-06-17 (Phase 5 executed + UAT — session 29) CEST
-**Branch:** claude/muskan/work (Phase 5 build + WR-01 review fix + scroll fix this session)
-**Status:** **IDLE.** Phase 5 (F-flag polish) **BUILT · UAT PENDING** — F5/F12/WR-01/F6/F2 verified live, only the F13 forced-failure path left; NOT marked complete. Phases 1–4 complete. Cloud `db push` **DEFERRED** for Phases 1–5 (F6's `20260617150000` is LOCAL-only too). **No edits to your files this session** — DEV-83 is in your rollout, tracked only (see note below).
-**Linear issue in progress:** none (filed **DEV-83** for your area — see note)
+**Last updated:** 2026-06-18 (Phase 6 Plan 01 complete — branding spine + TopBar wiring)
+**Branch:** claude/muskan/work (Phase 6 Plan 01 — city column + one-writer branding + TopBar wiring)
+**Status:** **BUILT.** Phase 6 Plan 01 complete — one-writer branding (D-07/D-09), TopBar wired (D-08), revalidation propagation set. PR pending.
+**Linear issue in progress:** DEV-70 (logo propagation — built), DEV-78 (Discover — next)
 **Shared files locked:** none
 **PR open:** [#111](https://github.com/HelloSello/hello-sello-mvp/pull/111) Phase 5 surface polish (F-flags) → dev. **MERGED:** Phase 4 auth-gate [#110](https://github.com/HelloSello/hello-sello-mvp/pull/110) → dev · Discover loop [#104](https://github.com/HelloSello/hello-sello-mvp/pull/104) → dev (slices 1–6). *(Prior: Sella proposal #99 merged to dev by Ayush; storage #98 on dev, held from main.)*
 **Prev PR:** Discover directory [#95](https://github.com/HelloSello/hello-sello-mvp/pull/95)→dev / [#96](https://github.com/HelloSello/hello-sello-mvp/pull/96)→main · Profile & QR [#88](https://github.com/HelloSello/hello-sello-mvp/pull/88)/[#89](https://github.com/HelloSello/hello-sello-mvp/pull/89) — all **merged**.
