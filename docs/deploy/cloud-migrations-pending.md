@@ -93,6 +93,27 @@ Cautions for the cloud apply:
 App code that ships with the same PR (not a DB step): the plan-03 edits to `types.ts`, `actions.ts`,
 `reads.ts`, `EditDealForm`, `DealPin`, `DealForm`, `CardFront`.
 
+### Phase 3d - Margin per product
+
+Deal-domain only and additive (one widening column ALTER on an empty table + one `create or replace`
+function body). **Nothing of Muskan's catalogue/product schema or RLS is touched.** Apply order is
+timestamp order:
+
+| # | Migration file | What it does |
+|---|----------------|--------------|
+| 11 | `20260618130000_resize_dli_private_columns.sql` | Widens `deal_line_item_private.seller_margin` + `buyer_metric` from `NUMERIC(6,4)` to `NUMERIC(15,4)` (a real price precision, matching `product_cost.cogs`, D-07). Additive/structural; the table has 0 rows in every environment, so the widening ALTER is instant and lossless. |
+| 12 | `20260618130100_confirm_deal_change_margin_carry.sql` | `create or replace confirm_deal_change`: re-emits the full `20260618120100_confirm_deal_change_notes.sql` body unchanged and adds ONE product_id-keyed `deal_line_item_private` carry-forward INSERT inside the both-accept commit block, so a side's per-line private input survives a version bump (D-08). Supersedes the function body of #9 (`20260618120100`). |
+
+Cautions for the cloud apply:
+- #12 lands AFTER `20260618120100_confirm_deal_change_notes.sql`, so a cloud push runs Phase 3c's note body and then immediately Phase 3d's `create or replace` - it ends in the correct final `confirm_deal_change` state; the intermediate version is never used mid-push.
+- #11 is a lossless widening ALTER on an empty table (0 rows in every environment); a widening type change cannot truncate. If ever re-run against a populated table, re-confirm no value exceeds the new precision first.
+- The carry-forward in #12 does NOTHING until the app change ships: `proposeDealChange` must add `productId` to the held draft's `line_items` map, otherwise the new-version line's `product_id` is NULL and the carry-forward join matches nothing. This is **App code that ships with the same PR (not a DB step)**: plan 03's edit to `src/modules/deals/actions.ts` (the `productId` addition to the draft builder). The DB half (#12) and the app half (plan 03) must ship together.
+- Push the whole Phase 1 + Phase 2 + Phase 3c + Phase 3d batch together, in timestamp order; local-first, cloud push is deferred and Muskan-coordinated (she holds a migrations lock until her own cloud push).
+
+App code that ships with the same PR (not a DB step): the plan-03 / plan-05 edits to `actions.ts`
+(the `productId` draft fix + the per-line private write), `reads.ts`, `types.ts`, `DealForm`,
+`EditDealForm`, `CardFront`.
+
 ---
 
 ## APPLIED TO CLOUD
