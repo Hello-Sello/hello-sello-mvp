@@ -378,14 +378,19 @@ export async function getDealCard(cardId: string): Promise<DealCardView> {
   const viewerCompanyId: string | null = viewerPerson?.company_id ?? null;
 
   // the card row (RLS: viewer must be a relationship member)
+  // note_company_a/b (NOTE-01) are not in the generated DealCardRow type yet -
+  // the select-string column list is cast to bypass the generated literal-union
+  // check (the same as-never discipline used for deal_pending_change below).
+  // DO NOT regenerate database.types.
   const { data: cardRow, error: cardErr } = await supabase
     .from("deal_card")
     .select(
-      "id, relationship_id, thread_id, version, status, deal_type, initiating_company_id, value_net, currency, delivery_date_target, buyer_po_number, seller_so_number, hs_deal_number, metadata, created_at, updated_at, deleted_at, created_by, updated_by, incoterms_code, offer_expires_at, payment_terms_code",
+      "id, relationship_id, thread_id, version, status, deal_type, initiating_company_id, value_net, currency, delivery_date_target, buyer_po_number, seller_so_number, hs_deal_number, metadata, created_at, updated_at, deleted_at, created_by, updated_by, incoterms_code, offer_expires_at, payment_terms_code, note_company_a, note_company_b" as "id, relationship_id, thread_id, version, status, deal_type, initiating_company_id, value_net, currency, delivery_date_target, buyer_po_number, seller_so_number, hs_deal_number, metadata, created_at, updated_at, deleted_at, created_by, updated_by, incoterms_code, offer_expires_at, payment_terms_code",
     )
     .eq("id", cardId)
     .single();
   if (cardErr) throw cardErr;
+  const noteRow = cardRow as unknown as { note_company_a: string | null; note_company_b: string | null };
 
   const card: DealCard = {
     ...cardRow,
@@ -508,6 +513,22 @@ export async function getDealCard(cardId: string): Promise<DealCardView> {
     ? viewerSide(viewerCompanyId, card, rel.company_a_id, rel.company_b_id)
     : null;
 
+  // resolve mine/theirs by COMPANY IDENTITY (not seller/buyer role), mirroring
+  // confirm_deal_change's structural slot write (D-02/D-03) - both notes are
+  // visible to both sides, but each side only ever sends its OWN slot.
+  const myNote =
+    viewerCompanyId === rel.company_a_id
+      ? noteRow.note_company_a
+      : viewerCompanyId === rel.company_b_id
+        ? noteRow.note_company_b
+        : null;
+  const theirNote =
+    viewerCompanyId === rel.company_a_id
+      ? noteRow.note_company_b
+      : viewerCompanyId === rel.company_b_id
+        ? noteRow.note_company_a
+        : null;
+
   // the held pending CHANGE on this card (4.5.4), resolved for the viewer. Null
   // when none is in flight; present = a change is held and the Edit pencil locks.
   // The strip reads the resolved view; the pencil reads only whether it is null.
@@ -546,6 +567,8 @@ export async function getDealCard(cardId: string): Promise<DealCardView> {
     viewerSide: side,
     confirmations,
     pendingChange,
+    myNote,
+    theirNote,
   };
 }
 

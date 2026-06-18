@@ -73,7 +73,7 @@ function LogoBox({ role, name, isYou }: { role: string; name: string; isYou: boo
 }
 
 export function CardFront({ data }: { data: DealCardView }) {
-  const { card, sellerName, buyerName, lineItems, partyFields, viewerSide, confirmations } = data;
+  const { card, sellerName, buyerName, lineItems, partyFields, viewerSide, confirmations, myNote, theirNote } = data;
   const term = docTerm(card.deal_type);
   // CARD-01 (OBS-1): the value is SUMMED live from the priced lines, never the
   // stale stored `value_net` (which can be a leftover 0). null = no priced line.
@@ -140,6 +140,10 @@ export function CardFront({ data }: { data: DealCardView }) {
         <Field label="Payment terms">{paymentLabel}</Field>
         <Field label="Free delivery">{freeDelivery ? "Yes" : "No"}</Field>
         <Field label="Products">{String(lineItems.length)}</Field>
+        {/* NOTE-01: both sides' card notes, from birth. Plain text children only
+            (React escapes by default) - never raw-HTML injection (Security §V5). */}
+        <Field label="Your note">{myNote ?? "—"}</Field>
+        <Field label="Their note">{theirNote ?? "—"}</Field>
       </div>
       {/* products */}
       <div className="mt-1.5">
