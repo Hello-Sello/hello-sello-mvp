@@ -134,6 +134,27 @@ export interface PartyFieldView {
   value: string | null;
 }
 
+/**
+ * One line's per-side private margin, scoped to the VIEWER'S OWN side (MRGN-01).
+ * Replaces {@link PartyFieldView} in role: a per-line, owner-only view that plans
+ * 03 (app/edit read path) and 05 (create path) build against.
+ *
+ * RLS already returns ONLY the viewer's own `deal_line_item_private` row, so
+ * `ownInput` is always "mine to see" - the same privacy discipline `PartyFieldView`
+ * carried, now scoped per line. `ownInput` is the stored source of truth (D-07,
+ * the viewer's frozen cost/resale); `marginPercent` is computed LIVE from
+ * `ownInput` + the line's `unit_price` (D-02 - never stored), via
+ * `lib/derive.lineMarginOf`.
+ */
+export interface LineMarginView {
+  /** the deal_line_item.id this margin belongs to */
+  lineItemId: string;
+  /** the viewer's OWN frozen per-line input (seller cost / buyer resale, D-07); null when not yet entered */
+  ownInput: number | null;
+  /** the margin %, computed live from ownInput + the line's unit_price (D-02); null when not computable */
+  marginPercent: number | null;
+}
+
 /** One entry in the Logs tab - a row of `deal_card_log`, display-shaped. */
 export interface LogEntry {
   /** deal_card_log.id */
@@ -382,6 +403,17 @@ export interface CatalogProduct {
  */
 export interface DraftLineInput {
   productId: string | null;
+  /**
+   * The stable `deal_line_item.id` this draft line came from (BLOCKER 1 fix).
+   * The per-line private row (`deal_line_item_private`) is keyed by this id, so
+   * plans 03/05 thread it through (seeded in `EditDealForm.toDraftLines` from
+   * `LineItemView.id`) - the private write then joins by the real line id, never
+   * by productId+position (which mis-targets duplicate-product lines and drops
+   * free-typed lines). OPTIONAL because a freshly-typed line in a not-yet-saved
+   * create form has no id until `create_deal_draft` returns one (D-11) - on the
+   * create path the private rows are written AFTER the RPC returns the new ids.
+   */
+  lineItemId?: string;
   productName: string;
   quantity: number;
   /** deal_line_unit code: 'g' | 'kg' | 'unit' */
@@ -392,6 +424,13 @@ export interface DraftLineInput {
   pzn?: string | null;
   thcPercent?: number | null;
   cbdPercent?: number | null;
+  /**
+   * The viewer's OWN frozen per-line private input (seller cost / buyer resale,
+   * D-07) - written IMMEDIATELY + ungated, NEVER in the shared held draft (D-09).
+   * Optional so existing call sites that build a `DraftLineInput` without it keep
+   * compiling until plans 03/05 wire it.
+   */
+  ownInput?: number | null;
 }
 
 /* -------------------------------------------------------------------------- */
