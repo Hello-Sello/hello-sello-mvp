@@ -39,23 +39,37 @@ export function packsOf(quantity: number, packSizeGrams: number | null | undefin
 }
 
 /**
- * Add `product` to `lines`, or - if a line for the SAME catalogue product is
- * already present - add one more pack to that line's quantity (FORM-01).
+ * Add `product` to `lines`, or - if a line for the SAME catalogue product AND
+ * the SAME batch is already present - add one more pack to that line's quantity
+ * (FORM-01 + D-05).
  *
  * `seed` builds a fresh line for a not-yet-present product. The form passes
  * `lineFromProduct`, so the catalogue auto-fill (pack size, price, cultivar,
- * pzn, thc/cbd) is reused here, never re-inlined - the grid buttons and the
- * add-by-name pick share this one path (D-04).
+ * pzn, thc/cbd, AND the chosen batch) is reused here, never re-inlined - the
+ * grid buttons and the add-by-name pick share this one path (D-04/D-08).
+ *
+ * D-05 - the merge key is productId + batchId. `seed` already knows which batch
+ * was picked (the form closes over the chosen batch), so we build the candidate
+ * line first and read ITS batchId, then look for an existing line that matches
+ * BOTH productId and that batchId: same product + same batch increments one
+ * pack; same product + DIFFERENT batch becomes a new line (the batch-4 /
+ * batch-5 split). The `productId != null` guard stays load-bearing so a custom
+ * (off-catalogue) line never merges.
  */
 export function addOrIncrement(
   lines: DraftLineInput[],
   product: CatalogProduct,
   seed: (p: CatalogProduct) => DraftLineInput,
 ): DraftLineInput[] {
+  const candidate = seed(product);
+  const chosenBatchId = candidate.batchId ?? null;
   const i = lines.findIndex(
-    (l) => l.productId != null && l.productId === product.id,
+    (l) =>
+      l.productId != null &&
+      l.productId === product.id &&
+      (l.batchId ?? null) === chosenBatchId,
   );
-  if (i === -1) return [...lines, seed(product)];
+  if (i === -1) return [...lines, candidate];
   const step = packStepGrams(product.packSizeGrams);
   return lines.map((l, j) =>
     j === i ? { ...l, quantity: l.quantity + step } : l,
@@ -79,5 +93,11 @@ export function emptyCustomLine(name = "", currency = "EUR"): DraftLineInput {
     unit: "g",
     unitPrice: null,
     currency,
+    // A custom line is batch-exempt (D-06): no catalogue product, no batch. The
+    // explicit nulls keep the shape consistent so a custom line never merges
+    // (D-05) and the form's batch guard can tell it apart from an un-batched
+    // catalogue line.
+    batchId: null,
+    batchNumber: null,
   };
 }

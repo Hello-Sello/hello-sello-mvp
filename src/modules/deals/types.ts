@@ -114,6 +114,41 @@ export interface LineItemView {
   /** deal_line_item.line_total when stored; else quantity × unit_price */
   lineTotal: number;
   pzn: string | null;
+  /**
+   * deal_line_item.batch_id - the chosen lot this line points at (BTCH-01,
+   * D-01). Null for custom/legacy lines that carry no batch. Read for the edit
+   * re-seed (Plan 04) so re-opening the form re-selects the same batch.
+   */
+  batchId: string | null;
+  /** deal_line_item.batch_number - the frozen batch number snapshot (D-02), shown on the card. */
+  batchNumber: string | null;
+  /**
+   * The MEASURED THC/CBD of the chosen batch, frozen onto the line at deal time
+   * (D-03 - the line shows the batch's measured value, never the product label).
+   * Null when the line has no batch.
+   */
+  thcPercent: number | null;
+  cbdPercent: number | null;
+}
+
+/**
+ * One batch (lot) the seller can pick for a catalogue line (BTCH-01, D-07).
+ * Read by the seller-only `getProductBatches`; the buyer never reads
+ * `product_batch` (they only ever see the frozen snapshot on the line). Carries
+ * the lab-MEASURED THC/CBD (the deal truth), distinct from the product LABEL.
+ */
+export interface ProductBatchView {
+  /** product_batch.id */
+  id: string;
+  /** product_batch.batch_number (the lot's human-readable number, e.g. "GL-24-0001") */
+  batchNumber: string;
+  /** the lab-measured THC/CBD of this lot; null when not recorded */
+  thcPercent: number | null;
+  cbdPercent: number | null;
+  /** product_batch.ready_for_sale_date (ISO date string) or null */
+  readyForSaleDate: string | null;
+  /** product_batch.expiry_date (ISO date string) or null */
+  expiryDate: string | null;
 }
 
 /**
@@ -424,8 +459,24 @@ export interface DraftLineInput {
   currency: string;
   cultivar?: string | null;
   pzn?: string | null;
+  /**
+   * The chosen batch's MEASURED THC/CBD, stamped onto the line by
+   * `lineFromProduct` when a batch is picked (BTCH-01, D-03). REUSES these
+   * existing fields for the measured snapshot - there are NO separate
+   * batchThc/batchCbd. A catalogue line always shows the batch's measured value,
+   * never the product label.
+   */
   thcPercent?: number | null;
   cbdPercent?: number | null;
+  /**
+   * deal_line_item.batch_id - the chosen lot this line points at (BTCH-01, D-01).
+   * Null/absent for a custom (off-catalogue) line, which is batch-exempt (D-06).
+   * The Basket merge key is productId + batchId (D-05): same product + same batch
+   * increments; same product + different batch is a NEW line.
+   */
+  batchId?: string | null;
+  /** the frozen batch number snapshot (D-02), threaded into the RPC line jsonb. */
+  batchNumber?: string | null;
   /**
    * The viewer's OWN frozen per-line private input (seller cost / buyer resale,
    * D-07) - written IMMEDIATELY + ungated, NEVER in the shared held draft (D-09).

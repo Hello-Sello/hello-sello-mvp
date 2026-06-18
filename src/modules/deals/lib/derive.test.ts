@@ -30,6 +30,10 @@ function line(partial: Partial<LineItemView>): LineItemView {
     currency: "EUR",
     lineTotal: 0,
     pzn: null,
+    batchId: null,
+    batchNumber: null,
+    thcPercent: null,
+    cbdPercent: null,
     ...partial,
   };
 }
