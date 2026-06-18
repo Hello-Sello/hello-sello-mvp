@@ -411,42 +411,54 @@ test('card-terms-shown: the card face shows the Payment terms + Free delivery ro
 })
 
 /**
- * private-immediate (DCHG-07): Alice's private field (Buying price) edited in
- * the form persists for Alice immediately after send and is never visible to
- * Bob in the strip.
+ * private-immediate (DCHG-07 / MRGN-01, D-10 / OBS-5): Alice's per-line PRIVATE
+ * cost input — the per-product margin input this phase introduced, replacing the
+ * old single mislabeled "Buying price" box — persists for Alice immediately after
+ * send and is never visible to Bob in his Review-change pop-up.
+ *
+ * Migrated from the old flat-box version: the test now targets the per-line cost
+ * input plan 03 added inside each item row (DealForm.tsx — label "Your cost (only
+ * you)", placeholder "€ / g (your cost)"), not the removed `deal_party_field` box.
+ * The invariant is identical: the per-line own input is written IMMEDIATELY +
+ * ungated to deal_line_item_private (D-07/D-09) while the SHARED qty is only held,
+ * so it must (a) never ride the shared held draft into Bob's review pop-up
+ * (Pitfall 3 / T-03D-leak) and (b) survive Alice withdrawing the held shared
+ * change (immediate + independent — the OBS-5 carry-in).
  */
-test('private-immediate: private buying price saves at once for Alice and never leaks to Bob', async () => {
-  // edit: set the seller-only "Buying price" private box + bump the shared qty,
-  // then Send. proposeDealChange writes the private box IMMEDIATELY + ungated
-  // (D-09) while the SHARED qty is only held.
+test('private-immediate: per-line cost saves at once for Alice and never leaks to Bob', async () => {
+  // edit: fill the FIRST line's per-line cost input + bump the shared qty, then
+  // Send. proposeDealChange writes the per-line cost IMMEDIATELY + ungated (D-09)
+  // to deal_line_item_private while the SHARED qty is only held.
   //
-  // The private box has its OWN placeholder ("e.g. 3.50 € / g"); the line-item
-  // price input shares "€ / g (optional)", so target the private box by its
-  // distinct placeholder. Use a value (4.20) unlike any seeded price so a match
-  // can only be the private box, never a line-item price echo.
-  const privateBox = (page: Page) => page.getByPlaceholder(/e\.g\. 3\.50/i)
+  // The per-line cost input's placeholder is "€ / g (your cost)"; the line-item
+  // PRICE input shares "€ / g (optional)", so target the cost input by its
+  // distinct "(your cost)" fragment, never the shared "€ / g". Use a value (4.20)
+  // unlike any seeded price so a match can only be the cost input, never a
+  // line-item price echo.
+  const costBox = (page: Page) => page.getByPlaceholder(/your cost/i).first()
   await editPencil(alicePage).click()
-  await privateBox(alicePage).fill('4.20')
+  await costBox(alicePage).fill('4.20')
   await alicePage.getByPlaceholder(/qty/i).first().fill('120')
   await alicePage.getByRole('button', { name: /^review change$/i }).click()
   await alicePage.getByPlaceholder(/bumped the price/i).fill('Increase quantity to 120')
   await alicePage.getByRole('button', { name: /^send change$/i }).click()
 
-  // Bob must NEVER see Alice's private buying price — not in the strip, not in his
-  // Review-change pop-up (the held draft carries SHARED lines only, D-09). Bob
+  // Bob must NEVER see Alice's per-line cost — not in the strip, not in his
+  // Review-change pop-up (the held draft carries SHARED lines only; the per-line
+  // own input is stripped to deal_line_item_private, D-09 / Pitfall 3). Bob
   // re-reads first (known-broken live push).
   await refreshDealView(bobPage, 'bob')
   await expect(bobPage.getByRole('button', { name: /review change/i })).toBeVisible()
   await openReviewChange(bobPage)
   await expect(bobPage.getByText(/4\.20/)).toHaveCount(0)
 
-  // Alice's private value persisted at once: withdraw the still-held shared change
+  // Alice's per-line cost persisted at once: withdraw the still-held shared change
   // (which unlocks her pencil), re-open edit, and the 4.20 is still there even
-  // though the shared qty change was discarded — proof the private write was
-  // immediate + independent of the gated shared change.
+  // though the shared qty change was discarded — proof the per-line write was
+  // immediate + independent of the gated shared change (OBS-5).
   await alicePage.getByRole('button', { name: /withdraw/i }).click()
   await editPencil(alicePage).click()
-  await expect(privateBox(alicePage)).toHaveValue(/4\.20/)
+  await expect(costBox(alicePage)).toHaveValue(/4\.20/)
 })
 
 /**
