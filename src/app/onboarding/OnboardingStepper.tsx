@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
+  AlertCircle,
   ArrowLeft,
   ArrowRight,
   Building2,
@@ -22,6 +23,7 @@ import {
   saveProfile,
   type ActionResult,
 } from './actions'
+import type { RejectPreset } from '@/app/admin/verifications/reject-presets'
 
 type CompanyType = { code: string; description: string }
 type ResumeStep = 'connect_email' | 'profile' | 'company_details'
@@ -35,12 +37,8 @@ type Prefill = {
   description?: string
   primaryProducts?: string
   website?: string
+  companyName?: string
 }
-
-// Licence is REQUIRED in production (2026-05-25 lock), optional in local/preview
-// so test signups don't fill the bucket. Single source with the server action:
-// the env var NEXT_PUBLIC_REQUIRE_LICENSE (set 'true' in prod).
-const LICENCE_REQUIRED = process.env.NEXT_PUBLIC_REQUIRE_LICENSE === 'true'
 
 // ISO-2 codes for the markets the MVP cares about (company.country is a bare
 // CHAR(2), not a DB lookup, so this short list is the authoritative UI set).
@@ -85,20 +83,37 @@ export function OnboardingStepper({
   companyTypes,
   resumeStep = null,
   prefill = {},
+  licenceRequired = false,
+  rejectionReason = null,
+  rejectionPreset = null,
+  isDuplicate = false,
+  isRejectedResume = false,
 }: {
   firstName: string | null
   companyTypes: CompanyType[]
   resumeStep?: ResumeStep | null
   prefill?: Prefill
+  // Read server-side from REQUIRE_LICENSE (no NEXT_PUBLIC_ prefix) and passed as
+  // a prop so this client component never reads process.env directly (D-02).
+  licenceRequired?: boolean
+  // Rejection-resume props (AUTH-02 / D-07 / D-08). Passed from the Server Component
+  // after reading audit_log — no client-side env or DB access needed.
+  rejectionReason?: string | null
+  rejectionPreset?: RejectPreset | null
+  isDuplicate?: boolean
+  isRejectedResume?: boolean
 }) {
   const router = useRouter()
-  const resuming = resumeStep !== null
-  const [step, setStep] = useState<Step>(resumeStep ?? 'start')
+  // Rejected-resume lands on the company step directly (the company already exists).
+  const resuming = resumeStep !== null || isRejectedResume
+  const [step, setStep] = useState<Step>(
+    isRejectedResume ? 'company' : (resumeStep ?? 'start'),
+  )
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Company-setup fields.
-  const [name, setName] = useState('')
+  // Company-setup fields — pre-filled for rejected-resume mode.
+  const [name, setName] = useState(prefill.companyName ?? '')
   const [country, setCountry] = useState('')
   const [types, setTypes] = useState<Set<string>>(new Set())
   const [files, setFiles] = useState<File[]>([])
@@ -161,7 +176,7 @@ export function OnboardingStepper({
     if (!name.trim()) return setError('Enter your company name.')
     if (country.length !== 2) return setError('Pick your country.')
     if (types.size === 0) return setError('Pick at least one business category.')
-    if (LICENCE_REQUIRED && files.length === 0) return setError('Add at least one licence file.')
+    if (licenceRequired && files.length === 0) return setError('Add at least one licence file.')
     const fd = new FormData()
     fd.set('name', name.trim())
     fd.set('country', country)
@@ -203,18 +218,27 @@ export function OnboardingStepper({
         )}
 
         {step === 'company' && (
-          <CompanyStep
-            name={name}
-            setName={setName}
-            country={country}
-            setCountry={setCountry}
-            types={types}
-            companyTypes={companyTypes}
-            onToggleType={toggleType}
-            files={files}
-            onAddFiles={(fl) => setFiles((cur) => [...cur, ...fl])}
-            onRemoveFile={(i) => setFiles((cur) => cur.filter((_, idx) => idx !== i))}
-          />
+          <>
+            {isRejectedResume && (
+              <RejectionBanner
+                reason={rejectionReason}
+                isDuplicate={isDuplicate}
+              />
+            )}
+            <CompanyStep
+              name={name}
+              setName={setName}
+              country={country}
+              setCountry={setCountry}
+              types={types}
+              companyTypes={companyTypes}
+              onToggleType={toggleType}
+              files={files}
+              onAddFiles={(fl) => setFiles((cur) => [...cur, ...fl])}
+              onRemoveFile={(i) => setFiles((cur) => cur.filter((_, idx) => idx !== i))}
+              licenceRequired={licenceRequired}
+            />
+          </>
         )}
 
         {step === 'submitted' && <SubmittedStep />}
@@ -256,6 +280,8 @@ export function OnboardingStepper({
         <StepNav
           step={step}
           resuming={resuming}
+          isRejectedResume={isRejectedResume}
+          isDuplicate={isDuplicate}
           pending={pending}
           onBack={goBack}
           onContinueCompany={submitCompany}
@@ -274,6 +300,8 @@ export function OnboardingStepper({
 function StepNav({
   step,
   resuming,
+  isRejectedResume,
+  isDuplicate,
   pending,
   onBack,
   onContinueCompany,
@@ -286,6 +314,10 @@ function StepNav({
 }: {
   step: Step
   resuming: boolean
+  // When isRejectedResume is true, the company step is the fix-and-resubmit form.
+  // If isDuplicate is also true, the resubmit CTA is suppressed (D-08).
+  isRejectedResume: boolean
+  isDuplicate: boolean
   pending: boolean
   onBack: () => void
   onContinueCompany: () => void
@@ -342,9 +374,15 @@ function StepNav({
             Skip
           </button>
         )}
-        {isCompany && (
+        {isCompany && !isDuplicate && (
+          // Resubmit CTA: shown for fixable rejections and for new-company creation.
+          // Suppressed for duplicate_company (D-08) — the banner already guides the user.
           <button type="button" disabled={pending} onClick={onContinueCompany} className={`flex items-center gap-1.5 ${primary}`}>
-            {pending ? 'Creating…' : 'Continue'} {!pending && <ArrowRight size={16} />}
+            {pending
+              ? isRejectedResume ? 'Resubmitting…' : 'Creating…'
+              : isRejectedResume ? 'Fix and resubmit' : 'Continue'
+            }
+            {!pending && <ArrowRight size={16} />}
           </button>
         )}
         {isSubmitted && (
@@ -434,6 +472,7 @@ function CompanyStep({
   files,
   onAddFiles,
   onRemoveFile,
+  licenceRequired,
 }: {
   name: string
   setName: (v: string) => void
@@ -445,6 +484,7 @@ function CompanyStep({
   files: File[]
   onAddFiles: (files: File[]) => void
   onRemoveFile: (index: number) => void
+  licenceRequired: boolean
 }) {
   return (
     <div className="flex flex-col gap-4">
@@ -498,7 +538,7 @@ function CompanyStep({
       </div>
       <div className="flex flex-col gap-1.5 text-sm">
         <span className="text-ink-muted">
-          Licence or certificate{LICENCE_REQUIRED ? '' : ' (optional while testing)'}
+          Licence or certificate{licenceRequired ? '' : ' (optional while testing)'}
         </span>
         <label className="flex cursor-pointer flex-col items-center gap-2 rounded-2xl border border-dashed border-brand/40 bg-white/50 p-5 text-center transition hover:bg-white/80">
           <Plus size={20} className="text-brand" />
@@ -678,6 +718,61 @@ function CompanyDetailsStep({
       </label>
       <Field label="Primary products" value={primaryProducts} onChange={setPrimaryProducts} placeholder="Dried flower, extracts" />
       <Field label="Website" value={website} onChange={setWebsite} type="url" placeholder="https://" />
+    </div>
+  )
+}
+
+/**
+ * Rejection banner shown at the top of the company-setup step when the user is
+ * in rejected-resume mode (AUTH-02 / D-07 / D-08).
+ *
+ * - duplicate_company preset → Path B "join existing" message; no resubmit (D-08).
+ * - all other presets (fixable) → rejection reason + "Fix and resubmit" affordance.
+ *   The resubmit button is the normal "Continue" in StepNav — this banner just
+ *   contextualises the action.
+ */
+function RejectionBanner({
+  reason,
+  isDuplicate,
+}: {
+  reason: string | null
+  isDuplicate: boolean
+}) {
+  if (isDuplicate) {
+    return (
+      <div
+        data-testid="rejection-banner"
+        className="mb-4 flex flex-col gap-2 rounded-2xl border border-warning/40 bg-warning/10 p-4"
+      >
+        <div className="flex items-start gap-2">
+          <AlertCircle size={16} className="mt-0.5 shrink-0 text-warning" />
+          <p className="text-sm font-semibold text-ink">Company already exists on Hello Sello</p>
+        </div>
+        <p className="text-sm text-ink-muted">
+          A company with this name already exists on Hello Sello. Instead of creating a new one,
+          ask your company admin to invite you — or{' '}
+          <a href="mailto:support@hello-sello.com" className="underline">
+            contact Hello Sello support
+          </a>{' '}
+          to get linked to the right account.
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div
+      data-testid="rejection-banner"
+      className="mb-4 flex flex-col gap-2 rounded-2xl border border-danger/30 bg-danger/10 p-4"
+    >
+      <div className="flex items-start gap-2">
+        <AlertCircle size={16} className="mt-0.5 shrink-0 text-danger" />
+        <p className="text-sm font-semibold text-ink">Your application was rejected</p>
+      </div>
+      {reason && <p className="text-sm text-ink-muted">{reason}</p>}
+      <p className="text-sm text-ink-muted">
+        Please correct the details below and resubmit for review.
+      </p>
     </div>
   )
 }

@@ -11,9 +11,12 @@ import { updateCompanyProfile } from '@/modules/companies'
 export type ActionResult = { ok: true } | { error: string }
 
 // Licence is REQUIRED in production (2026-05-25 lock) but optional in local /
-// preview so test signups don't fill the bucket. Single source: the env var
-// `NEXT_PUBLIC_REQUIRE_LICENSE` (set to 'true' in prod). Same read on the client.
-const LICENCE_REQUIRED = process.env.NEXT_PUBLIC_REQUIRE_LICENSE === 'true'
+// preview so test signups don't fill the bucket. Authoritative server-only read:
+// `REQUIRE_LICENSE` (no NEXT_PUBLIC_ prefix — must not be readable in the browser
+// bundle; a non-NEXT_PUBLIC var is undefined client-side, silently making the
+// licence optional). The client receives the flag as a prop from the parent Server
+// Component (onboarding/page.tsx), not by reading process.env directly (D-02).
+const LICENCE_REQUIRED = process.env.REQUIRE_LICENSE === 'true'
 
 // Onboarding completion flags live in person.preferences.onboarding so the Home
 // checklist has a single source for which skippable steps are done.
@@ -53,6 +56,14 @@ async function patchPreferences(
  * licence to the private bucket and records a row. Idempotent on retry: if a
  * prior run already created the company, the caller reuses it instead of hitting
  * the already_has_company guard, and just finishes the licence uploads.
+ *
+ * Rejected-resume resubmit path (AUTH-02 / D-08):
+ *   When the caller's company is currently 'rejected' and a successful re-upload
+ *   completes, the status is flipped back to 'pending' so it re-enters the review
+ *   queue. The UPDATE is guarded on current status = 'rejected' only → 'pending'
+ *   so it cannot un-revoke or self-verify a company (T-04-08).
+ *   duplicate_company rejections do NOT reach this path — the UI suppresses the
+ *   resubmit CTA (OnboardingStepper) and only calls this action from the fixable path.
  */
 export async function createCompany(formData: FormData): Promise<ActionResult> {
   const name = String(formData.get('name') ?? '').trim()
@@ -69,6 +80,26 @@ export async function createCompany(formData: FormData): Promise<ActionResult> {
   const supabase = await createClient()
 
   let companyId = await getCurrentCompanyId()
+
+  // Check current status before branching — needed for the resubmit transition below.
+  let currentStatus: string | null = null
+  if (companyId) {
+    const { data: co } = await supabase
+      .from('company')
+      .select('verification_status')
+      .eq('id', companyId)
+      .maybeSingle()
+    currentStatus = co?.verification_status ?? null
+  }
+
+  // Revocation guard (Bouncer 2 — WR-01 / AUTH-01): a revoked company must not be
+  // allowed to upload licence files or insert company_license_file rows even via a
+  // direct POST. Return an error before ANY write rather than redirect (redirect
+  // would not work from a Server Action that must return ActionResult to the client).
+  if (currentStatus === 'revoked') {
+    return { error: 'Your account access has been suspended.' }
+  }
+
   if (!companyId) {
     const { data, error } = await supabase.rpc('onboard_company', {
       p_name: name,
@@ -97,6 +128,18 @@ export async function createCompany(formData: FormData): Promise<ActionResult> {
       scan_status: 'pending',
     })
     if (rowError) return { error: `Could not record the licence: ${rowError.message}` }
+  }
+
+  // Resubmit transition: only when the company was rejected.
+  // Guard is strict: WHERE verification_status = 'rejected' → prevents clobbering
+  // verified or revoked status even if this action is somehow called in those states.
+  if (currentStatus === 'rejected') {
+    const { error: flipError } = await supabase
+      .from('company')
+      .update({ verification_status: 'pending' })
+      .eq('id', companyId)
+      .eq('verification_status', 'rejected')
+    if (flipError) return { error: `Could not resubmit for review: ${flipError.message}` }
   }
 
   return { ok: true }

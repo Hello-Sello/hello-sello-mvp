@@ -1,4 +1,5 @@
 import { createClient } from "@/shared/db/server";
+import { countryName } from "@/shared/geo/countries";
 
 /**
  * Discover directory data (Track 1, slice 1). Reads the real verified-company
@@ -19,6 +20,7 @@ export type DiscoverCompany = {
   name: string;
   countryCode: string;
   countryName: string;
+  city: string | null;
   categories: string[]; // display labels (a company can have more than one)
   logoUrl: string | null;
   connectionState: ConnectionState;
@@ -32,15 +34,8 @@ const CATEGORY_LABELS: Record<string, string> = {
   pharmacy: "Pharmacy",
 };
 
-const COUNTRY_NAMES: Record<string, string> = {
-  DE: "Germany", AT: "Austria", CH: "Switzerland", NL: "Netherlands",
-  ES: "Spain", PT: "Portugal", FR: "France", IT: "Italy", BE: "Belgium",
-  DK: "Denmark", PL: "Poland", CZ: "Czechia", SE: "Sweden", GB: "United Kingdom",
-};
-
 const categoryLabel = (code: string) =>
   CATEGORY_LABELS[code] ?? code.charAt(0).toUpperCase() + code.slice(1);
-const countryName = (code: string) => COUNTRY_NAMES[code] ?? code;
 
 // Row shape from the RPC. Typed locally — the function isn't in the generated
 // database.types, same pattern the codebase uses for get_public_profile / create_deal_draft.
@@ -48,6 +43,7 @@ type Row = {
   id: string;
   name: string;
   country: string;
+  city: string | null;
   logo_path: string | null;
   type_codes: string[] | null;
   connection_state: ConnectionState;
@@ -67,6 +63,7 @@ export async function getDiscoverableCompanies(): Promise<DiscoverCompany[]> {
     name: r.name,
     countryCode: r.country,
     countryName: countryName(r.country),
+    city: r.city,
     categories: (r.type_codes ?? []).map(categoryLabel),
     logoUrl: r.logo_path
       ? supabase.storage.from("shop-media").getPublicUrl(r.logo_path).data.publicUrl

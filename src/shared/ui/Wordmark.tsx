@@ -1,24 +1,34 @@
+import Image from "next/image";
+
 /**
- * The Hello Sello logo (placeholder for a real logo image later). The double-l
- * in each word renders as "//" - a Sella brand sign. Tuned for the LIGHT glass
- * rail: deep-maroon letters with raspberry slashes so the mark pops on white.
+ * The Hello Sello brand mark. Renders the real PNG logo asset.
+ *
+ * `stacked` — the rail slot (<Wordmark stacked /> in IconRail) shows the logo
+ * at a compact square size to fit the narrow 76 px panel. The inline variant
+ * is slightly wider for use in headers / marketing contexts.
  */
 export function Wordmark({ stacked = false }: { stacked?: boolean }) {
-  // `{"//"}` (not bare `//`) so JSX reads it as a string child, not a comment.
-  const slash = <span className="text-brand">{"//"}</span>;
-
   if (stacked) {
     return (
-      <span className="flex flex-col items-center text-[15px] font-black leading-[0.95] tracking-tight text-brand-deep">
-        <span>He{slash}o</span>
-        <span>se{slash}o</span>
-      </span>
+      <Image
+        src="/hello-sello-logo.png"
+        alt="Hello Sello"
+        width={44}
+        height={44}
+        className="object-contain"
+        priority
+      />
     );
   }
 
   return (
-    <span className="text-lg font-black tracking-tight text-brand-deep">
-      He{slash}o se{slash}o
-    </span>
+    <Image
+      src="/hello-sello-logo.png"
+      alt="Hello Sello"
+      width={120}
+      height={40}
+      className="object-contain"
+      priority
+    />
   );
 }

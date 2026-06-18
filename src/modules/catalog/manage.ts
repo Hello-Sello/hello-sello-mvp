@@ -91,12 +91,14 @@ export async function updateShopProfile(formData: FormData): Promise<ManageResul
       : {};
   patch.metadata = { ...baseMeta, links: parseLinks(formData.get("links")) };
 
-  // Cover/logo bytes are uploaded client-direct (ShopView) to a stable path; we
+  // Cover bytes are uploaded client-direct (ShopView) to a stable path; we
   // persist only the path string. An empty value means "unchanged this save".
+  // NOTE: logo_path is intentionally NOT written here (D-07 one-writer).
+  // Logo writes go exclusively through companies.updateCompanyProfile via the
+  // shared BrandingEditForm, so there is never a second writer for logo_path.
+  // cover_path stays here because the cover is ShopView's shop banner (Phase 7).
   const coverPath = str(formData, "cover_path");
-  const logoPath = str(formData, "logo_path");
   if (coverPath) patch.cover_path = coverPath;
-  if (logoPath) patch.logo_path = logoPath;
 
   const { error } = await supabase.from("company").update(patch).eq("id", companyId);
   if (error) return { error: error.message };

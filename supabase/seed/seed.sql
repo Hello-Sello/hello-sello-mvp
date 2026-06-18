@@ -102,6 +102,93 @@ INSERT INTO company_type_assignment (company_id, company_type_code, created_by) 
    '22222222-2222-2222-2222-222222222222');
 
 -- ----------------------------------------------------------------------------
+-- 4b. HS-team reviewer fixture + a pending company for the verification queue
+--     (Wave-0 test scaffolding for Phase 3)
+--
+--   HS reviewer: hsteam@hello-sello.test · UUID 99999999-9999-9999-9999-999999999999
+--   Pending company: PendingCo GmbH    · UUID cccccccc-cccc-cccc-cccc-cccccccccccc
+--
+--   The reviewer's person.company_id MUST stay NULL — they are cross-tenant staff,
+--   not attached to any company (Pitfall 1 in Phase-3 RESEARCH: the cross-tenant
+--   audit_insert RLS constraint holds only when the reviewer has no session company).
+--   All inserts are idempotent (WHERE NOT EXISTS) so repeated `db reset` is safe.
+-- ----------------------------------------------------------------------------
+
+-- 4b-i) HS reviewer auth user (triggers on_auth_user_created → person row, company_id NULL)
+INSERT INTO auth.users (
+  instance_id, id, aud, role, email, encrypted_password,
+  email_confirmed_at, raw_app_meta_data, raw_user_meta_data,
+  created_at, updated_at,
+  confirmation_token, email_change, email_change_token_new, recovery_token
+)
+SELECT
+  '00000000-0000-0000-0000-000000000000',
+  '99999999-9999-9999-9999-999999999999',
+  'authenticated', 'authenticated', 'hsteam@hello-sello.test',
+  crypt('password123', gen_salt('bf')),
+  NOW(),
+  '{"provider":"email","providers":["email"]}',
+  '{"first_name":"HS","last_name":"Reviewer"}',
+  NOW(), NOW(), '', '', '', ''
+WHERE NOT EXISTS (
+  SELECT 1 FROM auth.users WHERE id = '99999999-9999-9999-9999-999999999999'
+);
+
+-- 4b-ii) email identity for the HS reviewer (required for email login)
+INSERT INTO auth.identities (
+  id, user_id, provider_id, identity_data, provider,
+  last_sign_in_at, created_at, updated_at
+)
+SELECT
+  gen_random_uuid(),
+  '99999999-9999-9999-9999-999999999999',
+  '99999999-9999-9999-9999-999999999999',
+  '{"sub":"99999999-9999-9999-9999-999999999999","email":"hsteam@hello-sello.test"}',
+  'email', NOW(), NOW(), NOW()
+WHERE NOT EXISTS (
+  SELECT 1 FROM auth.identities
+  WHERE user_id = '99999999-9999-9999-9999-999999999999' AND provider = 'email'
+);
+
+-- 4b-iii) hs_team_member row for the reviewer (role = 'reviewer')
+-- The person row was created by the trigger above; reference it by UUID.
+INSERT INTO hs_team_member (person_id, role)
+SELECT '99999999-9999-9999-9999-999999999999', 'reviewer'
+WHERE NOT EXISTS (
+  SELECT 1 FROM hs_team_member
+  WHERE person_id = '99999999-9999-9999-9999-999999999999' AND deleted_at IS NULL
+);
+
+-- 4b-iv) A pending company for the verification queue (oldest-first ordering D-08:
+--        created_at earlier than the verified seed companies so it sorts first)
+INSERT INTO company (id, name, country, verification_status, created_by, created_at, updated_at)
+SELECT
+  'cccccccc-cccc-cccc-cccc-cccccccccccc',
+  'PendingCo GmbH',
+  'DE',
+  'pending',
+  '99999999-9999-9999-9999-999999999999',
+  NOW() - INTERVAL '30 days',
+  NOW() - INTERVAL '30 days'
+WHERE NOT EXISTS (
+  SELECT 1 FROM company WHERE id = 'cccccccc-cccc-cccc-cccc-cccccccccccc'
+);
+
+-- 4b-v) Company type for PendingCo (cultivator)
+INSERT INTO company_type_assignment (company_id, company_type_code, created_by)
+SELECT 'cccccccc-cccc-cccc-cccc-cccccccccccc', 'cultivator', '99999999-9999-9999-9999-999999999999'
+WHERE NOT EXISTS (
+  SELECT 1 FROM company_type_assignment
+  WHERE company_id = 'cccccccc-cccc-cccc-cccc-cccccccccccc'
+    AND company_type_code = 'cultivator'
+    AND deleted_at IS NULL
+);
+
+-- NOTE: the HS reviewer person row is intentionally NOT attached to any company.
+-- No UPDATE person SET company_id = ... for id = '9999...'.
+-- This is the correct state: an HS reviewer is cross-tenant, company_id stays NULL.
+
+-- ----------------------------------------------------------------------------
 -- 5. Demo world — three more companies/logins, two relationships with chat,
 --    and two pending connect requests to GreenLeaf.
 --    MOVED here on 2026-06-16 from migration 20260609180000_seed_demo_world.sql.

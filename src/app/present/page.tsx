@@ -1,4 +1,5 @@
 import { getMyShop } from "@/modules/catalog/shop";
+import { getCompanyProfile } from "@/modules/companies";
 import { SurfacePlaceholder } from "@/shared/ui/SurfacePlaceholder";
 import { ShopView } from "./ShopView";
 
@@ -8,7 +9,7 @@ import { ShopView } from "./ShopView";
  * for now an empty shop shows the first-run upload prompt.
  */
 export default async function PresentPage() {
-  const shop = await getMyShop();
+  const [shop, company] = await Promise.all([getMyShop(), getCompanyProfile()]);
   if (!shop) {
     return (
       <SurfacePlaceholder
@@ -17,5 +18,5 @@ export default async function PresentPage() {
       />
     );
   }
-  return <ShopView shop={shop} />;
+  return <ShopView shop={shop} company={company} />;
 }

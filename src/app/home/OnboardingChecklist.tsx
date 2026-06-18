@@ -2,19 +2,39 @@
 
 import { useSyncExternalStore } from 'react'
 import Link from 'next/link'
-import { Check, Mail, UserRound, Building2, X } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
+import {
+  Check,
+  Mail,
+  UserRound,
+  Building2,
+  Package,
+  ListOrdered,
+  Users,
+  X,
+} from 'lucide-react'
 
 export type ChecklistItem = {
-  key: 'connect_email' | 'profile' | 'company_details'
+  key:
+    | 'connect_email'
+    | 'profile'
+    | 'company_details'
+    | 'products'
+    | 'pricelists'
+    | 'connections'
   label: string
   done: boolean
 }
 
-const ICONS = {
+// Icon for each of the 6 blocks — one real lucide icon per key (no emoji).
+const ICONS: Record<ChecklistItem['key'], LucideIcon> = {
   connect_email: Mail,
   profile: UserRound,
   company_details: Building2,
-} as const
+  products: Package,
+  pricelists: ListOrdered,
+  connections: Users,
+}
 
 const DISMISS_KEY = 'hs-onboarding-checklist-dismissed'
 const DISMISS_EVENT = 'hs-checklist-dismissed'
@@ -32,12 +52,21 @@ function subscribe(callback: () => void) {
 }
 
 /**
- * LangSmith-style "finish setup" checklist on Home. Lists the skippable
- * onboarding steps with done/pending state; a pending tile re-opens that step
- * via /onboarding?resume=<key>. Dismissible (× persists in localStorage), and it
- * hides itself once every item is done.
+ * Slim inline onboarding bar pinned to the top of Home (D-05 / UX-09).
+ *
+ * Layout: a single horizontal row of 6 blocks (icon + short label + state dot),
+ * a small progress bar spanning all 6, and a dismiss (X) control. On mobile the
+ * row scrolls horizontally — no wrapping.
+ *
+ * Done-state is entirely derived by the Home server component (real RLS-scoped
+ * counts, not person.preferences flags — except block 1 which stays a flag until
+ * email integration lands).
+ *
+ * Dismissible via localStorage (cosmetic; no server trust). Hides automatically
+ * once every item is done.
  */
 export function OnboardingChecklist({ items }: { items: ChecklistItem[] }) {
+  // SSR-safe dismiss read via useSyncExternalStore (server snapshot = false).
   const dismissed = useSyncExternalStore(
     subscribe,
     () => localStorage.getItem(DISMISS_KEY) === '1',
@@ -47,12 +76,20 @@ export function OnboardingChecklist({ items }: { items: ChecklistItem[] }) {
   const doneCount = items.filter((i) => i.done).length
   if (dismissed || doneCount === items.length) return null
 
+  const progressPct = Math.round((doneCount / items.length) * 100)
+
   return (
-    <section className="glass rounded-2xl p-5">
-      <div className="mb-3 flex items-center justify-between">
-        <div>
-          <h2 className="text-sm font-semibold text-ink">Finish setting up</h2>
-          <p className="text-xs text-ink-muted">{doneCount}/{items.length} complete</p>
+    <section className="glass rounded-2xl px-4 py-3">
+      {/* Header row: title + progress fraction + dismiss button */}
+      <div className="mb-2 flex items-center gap-3">
+        <span className="text-xs font-semibold text-ink">Finish setting up</span>
+        <span className="text-xs text-ink-muted">{doneCount}/{items.length}</span>
+        {/* Progress bar — spans the full available width */}
+        <div className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-brand-soft/30">
+          <div
+            className="h-full rounded-full bg-success transition-all duration-500"
+            style={{ width: `${progressPct}%` }}
+          />
         </div>
         <button
           type="button"
@@ -60,37 +97,37 @@ export function OnboardingChecklist({ items }: { items: ChecklistItem[] }) {
             localStorage.setItem(DISMISS_KEY, '1')
             window.dispatchEvent(new Event(DISMISS_EVENT))
           }}
-          className="text-ink-muted transition hover:text-ink"
+          className="shrink-0 text-ink-muted transition hover:text-ink"
           aria-label="Dismiss checklist"
         >
-          <X size={16} />
+          <X size={14} />
         </button>
       </div>
 
-      <ul className="flex flex-col gap-2">
+      {/* Single-row item list — scrolls horizontally on mobile (no wrap) */}
+      <ul className="flex gap-2 overflow-x-auto pb-0.5">
         {items.map((item) => {
           const Icon = ICONS[item.key]
           return (
-            <li
-              key={item.key}
-              className="flex items-center gap-3 rounded-xl border border-white/70 bg-white/70 px-3 py-2.5"
-            >
-              <span
-                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${
-                  item.done ? 'bg-success/15 text-success' : 'bg-brand-soft/40 text-brand'
-                }`}
-              >
-                {item.done ? <Check size={15} strokeWidth={3} /> : <Icon size={15} />}
-              </span>
-              <span className="flex-1 text-sm font-medium text-ink">{item.label}</span>
+            <li key={item.key} className="shrink-0">
               {item.done ? (
-                <span className="text-xs font-medium text-success">Done</span>
+                /* Done tile — green, non-interactive */
+                <span
+                  className="flex items-center gap-1.5 rounded-lg bg-success/15 px-2.5 py-1.5 text-success"
+                  aria-label={`${item.label} — done`}
+                >
+                  <Check size={12} strokeWidth={3} />
+                  <span className="text-xs font-medium">{item.label}</span>
+                </span>
               ) : (
+                /* To-do tile — brand pink, links to the relevant onboarding step */
                 <Link
                   href={`/onboarding?resume=${item.key}`}
-                  className="text-xs font-semibold text-brand transition hover:text-brand-deep"
+                  className="flex items-center gap-1.5 rounded-lg bg-brand-soft/40 px-2.5 py-1.5 text-brand transition hover:bg-brand-soft/60"
+                  aria-label={`${item.label} — set up`}
                 >
-                  Set up ↗
+                  <Icon size={12} />
+                  <span className="text-xs font-medium">{item.label}</span>
                 </Link>
               )}
             </li>
