@@ -41,6 +41,8 @@ import {
   countRelationshipMessages,
   countDealChangeInputForCard,
   resolveDealCardIdForRelationship,
+  acceptBirthAsBob,
+  openDealInChat,
   COUNTERPARTY_NAME,
   type Who,
 } from './fixtures/two-company'
@@ -622,4 +624,61 @@ test('note-not-in-log: a create-time note never writes a deal_change_input row',
 
   const cardId = resolveDealCardIdForRelationship()
   expect(countDealChangeInputForCard(cardId)).toBe(0)
+})
+
+/**
+ * batch-snapshot (Phase 3f / BTCH-01): the deal line snapshots ONE chosen batch's
+ * measured THC/CBD + batch number at deal time, frozen onto the line, and the card
+ * face shows them. This is the phase GATE - it cannot pass until Wave 2 seeds demo
+ * batches (the 4 products have 0 today) and Wave 3 builds the batch picker + wires
+ * the snapshot through create + the card read. So it is SKIPPED now; the Wave 4
+ * plan un-skips it once the picker + seed land.
+ *
+ * Flow: Alice opens the Basket in the StonePharm chat (createDraftDealAsAlice
+ * already drives "Start a deal" -> the catalogue search -> pick a product), then -
+ * once the picker exists - picks one of that product's seeded batches from the
+ * mandatory batch dropdown (D-06: a catalogue line is born WITH a batch), sets qty +
+ * price, sends; Bob Reviews -> Accepts (births the card); both open the card.
+ *
+ * Assert (on the card line, via ProductList's subtitle join): a GL-24- batch number
+ * AND a non-empty measured THC value. We assert the GL-24- PREFIX + a "THC <digit>"
+ * label, NOT an exact seeded batch number or thc value - the seed uses distinct
+ * numbers (GL-24-0001..0008, RESEARCH Q5) and the picker may pick any one, so an
+ * exact id/number would be brittle. The card line is PUBLIC (line_all RLS), so both
+ * sides see it; assert on Alice's face (the seller who picked it) at minimum.
+ *
+ * No hardcoded gen_random_uuid id: the relationship/company/card ids are all
+ * resolved at runtime by the shared two-company fixture (T-3f-01 mitigation).
+ */
+test.skip('batch-snapshot: a picked batch shows its GL-24- number + measured THC on the card line', async () => {
+  // Wave 3 turns this on: open the Basket, pick a product, then pick a batch from
+  // the mandatory batch dropdown. The picker widget does not exist yet, so the
+  // selector below is the contract Wave 3 builds up to (a batch-number option
+  // matching the GL-24- seed prefix inside the product row's batch dropdown).
+  await alicePage.goto('/connect/chat')
+  await alicePage.getByText(COUNTERPARTY_NAME.alice, { exact: false }).first().click()
+  await alicePage.getByRole('button', { name: 'Start a deal', exact: true }).click()
+  await alicePage.getByPlaceholder(/search your catalogue/i).waitFor()
+  await alicePage
+    .getByRole('button')
+    .filter({ hasText: /\/g|no price/ })
+    .first()
+    .click()
+
+  // pick a seeded batch from the (Wave 3) mandatory batch picker - any GL-24- lot.
+  await alicePage.getByRole('option', { name: /GL-24-/ }).first().click()
+
+  await alicePage.getByLabel(/quantity in grams/i).first().fill('100')
+  await alicePage.getByPlaceholder(/g \(optional\)/i).first().fill('5.00')
+  await alicePage.getByRole('button', { name: /send proposal/i }).click()
+
+  // Bob births the card by accepting, then both open it (the shared birth flow).
+  await acceptBirthAsBob(bobPage)
+  await openDealInChat(alicePage, 'alice')
+  await openDealInChat(bobPage, 'bob')
+
+  // the card line shows the chosen batch's number (GL-24- prefix) + a measured THC
+  // value - the frozen snapshot, on the public line, visible to the seller.
+  await expect(alicePage.getByText(/GL-24-/).first()).toBeVisible()
+  await expect(alicePage.getByText(/THC \d/i).first()).toBeVisible()
 })
