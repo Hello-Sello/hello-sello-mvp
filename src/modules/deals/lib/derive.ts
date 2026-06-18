@@ -144,3 +144,56 @@ export function sumLineValue(lines: LineItemView[]): number | null {
     ? priced.reduce((sum, l) => sum + lineValueOf(l.quantity, l.unit, l.unitPrice), 0)
     : null;
 }
+
+/**
+ * One line's margin %, for the VIEWER'S OWN side only, computed live (MRGN-01).
+ *
+ * D-02: we store the INPUT (the seller's cost or the buyer's resale, per line)
+ * and compute the margin here at render time - we never persist a derived margin
+ * number as the source of truth. This mirrors {@link sumLineValue}/CARD-01: the
+ * shown number is always re-derived from the stored truth so it can never go
+ * stale relative to the line's current `unit_price`.
+ *
+ * D-03 (locked formulas):
+ *   seller % = (unit_price - cost)  / unit_price
+ *   buyer  % = (resale - unit_price) / resale   (buyer divides by THEIR resale)
+ *
+ * `ownInput` is the viewer's frozen per-line private input (D-07): the seller's
+ * cost OR the buyer's resale, by side. Returns `null` (NOT 0) when the owner has
+ * not entered an input yet - same "null, not 0" discipline as {@link sumLineValue}
+ * - and null when the divisor would be 0 (a division-by-zero guard: `unit_price`
+ * for the seller, `resale` for the buyer).
+ */
+export function lineMarginOf(
+  unitPrice: number,
+  ownInput: number | null,
+  side: PartySide,
+): number | null {
+  if (ownInput == null) return null;
+  if (side === "seller") {
+    if (unitPrice === 0) return null;
+    return (unitPrice - ownInput) / unitPrice;
+  }
+  // buyer divides by THEIR resale (ownInput), not by unit_price (D-03).
+  if (ownInput === 0) return null;
+  return (ownInput - unitPrice) / ownInput;
+}
+
+/**
+ * The deal-level average margin across priced lines (MRGN-01, D-04).
+ *
+ * Filters out the null entries (lines where the owner has not entered an input)
+ * and returns the simple unweighted mean of the rest; returns `null` when none
+ * remain - the same "null, not 0" discipline as the per-line helpers.
+ *
+ * Claude's Discretion (D-04): the simple mean is the A1 default the design doc
+ * leaves as "a build detail". Because margin is always computed live and never
+ * stored, this can become quantity-weighted later by changing this one function
+ * alone - no storage or migration is involved.
+ */
+export function averageMarginOf(margins: Array<number | null>): number | null {
+  const present = margins.filter((m): m is number => m != null);
+  return present.length
+    ? present.reduce((sum, m) => sum + m, 0) / present.length
+    : null;
+}
