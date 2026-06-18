@@ -432,12 +432,13 @@ test('private-immediate: per-line cost saves at once for Alice and never leaks t
   //
   // The per-line cost input's placeholder is "€ / g (your cost)"; the line-item
   // PRICE input shares "€ / g (optional)", so target the cost input by its
-  // distinct "(your cost)" fragment, never the shared "€ / g". Use a value (4.20)
+  // distinct "(your cost)" fragment, never the shared "€ / g". Use a value (4.23)
   // unlike any seeded price so a match can only be the cost input, never a
-  // line-item price echo.
+  // line-item price echo. 4.23 (not 4.20) avoids the <input type="number">
+  // trailing-zero normalization that would turn "4.20" into "4.2".
   const costBox = (page: Page) => page.getByPlaceholder(/your cost/i).first()
   await editPencil(alicePage).click()
-  await costBox(alicePage).fill('4.20')
+  await costBox(alicePage).fill('4.23')
   await alicePage.getByPlaceholder(/qty/i).first().fill('120')
   await alicePage.getByRole('button', { name: /^review change$/i }).click()
   await alicePage.getByPlaceholder(/bumped the price/i).fill('Increase quantity to 120')
@@ -450,15 +451,15 @@ test('private-immediate: per-line cost saves at once for Alice and never leaks t
   await refreshDealView(bobPage, 'bob')
   await expect(bobPage.getByRole('button', { name: /review change/i })).toBeVisible()
   await openReviewChange(bobPage)
-  await expect(bobPage.getByText(/4\.20/)).toHaveCount(0)
+  await expect(bobPage.getByText(/4\.23/)).toHaveCount(0)
 
   // Alice's per-line cost persisted at once: withdraw the still-held shared change
-  // (which unlocks her pencil), re-open edit, and the 4.20 is still there even
+  // (which unlocks her pencil), re-open edit, and the 4.23 is still there even
   // though the shared qty change was discarded — proof the per-line write was
   // immediate + independent of the gated shared change (OBS-5).
   await alicePage.getByRole('button', { name: /withdraw/i }).click()
   await editPencil(alicePage).click()
-  await expect(costBox(alicePage)).toHaveValue(/4\.20/)
+  await expect(costBox(alicePage)).toHaveValue(/4\.23/)
 })
 
 /**
@@ -524,7 +525,7 @@ test('note-held: editing the note holds it — live note unchanged, pending awai
   // not exist yet — RED until CardFront grows the row), proving the held note
   // is observable on the face once built — not just absent because nothing
   // renders notes.
-  await expect(alicePage.getByText(/greenleaf notes/i)).toBeVisible()
+  await expect(alicePage.getByText(/greenleaf cultivation notes/i)).toBeVisible()
 
   // Bob re-reads the current LIVE state — his card face must NOT show Alice's
   // new note yet (it is held, not committed).
@@ -585,7 +586,7 @@ test('note-decline: a decline discards the note change — the note stays as it 
   // until CardFront grows it), and the declined note text never lands in it —
   // the live note is exactly what it was before the edit (none, at birth).
   await refreshDealView(alicePage, 'alice')
-  await expect(alicePage.getByText(/greenleaf notes/i)).toBeVisible()
+  await expect(alicePage.getByText(/greenleaf cultivation notes/i)).toBeVisible()
   await expect(alicePage.getByText(rejectedNote)).toHaveCount(0)
   await refreshDealView(bobPage, 'bob')
   await expect(bobPage.getByText(rejectedNote)).toHaveCount(0)
