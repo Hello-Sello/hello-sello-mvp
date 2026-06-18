@@ -36,6 +36,7 @@ import type {
   MemberRole,
   MemberView,
   PartySide,
+  ProductBatchView,
   PendingChangeView,
   PendingProposalView,
   ProposalLineView,
@@ -360,6 +361,37 @@ export async function getOwnCatalog(): Promise<CatalogProduct[]> {
 }
 
 /**
+ * The batch picker source (BTCH-01, D-07): one product's own lots, read
+ * seller-side. The picker is only ever mounted on the seller's screen (Plan 04);
+ * RLS `batch_all` (`company_id = current_company_id()`) auto-scopes the read to
+ * the caller's own batches, so NO manual company_id filter is needed - the same
+ * discipline as `getOwnCatalog`. The buyer never reads `product_batch` (they
+ * only ever see the frozen snapshot on the public `deal_line_item`).
+ *
+ * `product_batch` is in the generated types, so no `as never` cast is needed.
+ * The batch carries the lab-MEASURED THC/CBD (the deal truth), distinct from the
+ * product LABEL value.
+ */
+export async function getProductBatches(productId: string): Promise<ProductBatchView[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("product_batch")
+    .select("id, batch_number, thc_percent, cbd_percent, ready_for_sale_date, expiry_date")
+    .eq("product_id", productId)
+    .is("deleted_at", null)
+    .order("batch_number", { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map((b) => ({
+    id: b.id,
+    batchNumber: b.batch_number,
+    thcPercent: b.thc_percent != null ? Number(b.thc_percent) : null,
+    cbdPercent: b.cbd_percent != null ? Number(b.cbd_percent) : null,
+    readyForSaleDate: b.ready_for_sale_date ?? null,
+    expiryDate: b.expiry_date ?? null,
+  }));
+}
+
+/**
  * Load one deal card for the deal-card screen: the card (narrowed), the
  * current-version line items, my-side private fields, and the full version log.
  * Throws if the card is not visible to the viewer (RLS returns no row).
@@ -413,7 +445,13 @@ export async function getDealCard(cardId: string): Promise<DealCardView> {
     supabase.from("company").select("id, name").in("id", [rel.company_a_id, rel.company_b_id]),
     supabase
       .from("deal_line_item")
-      .select("id, product_id, product_name, quantity, unit, unit_price, currency, line_total, metadata, sort_order")
+      // thc_percent/cbd_percent/batch_number/batch_id (BTCH-01) are not in the
+      // generated DealLineItemRow type yet - cast the select-string column list to
+      // bypass the generated literal-union check (same as-never discipline as the
+      // 3c note columns above). DO NOT regenerate database.types.
+      .select(
+        "id, product_id, product_name, quantity, unit, unit_price, currency, line_total, metadata, sort_order, thc_percent, cbd_percent, batch_number, batch_id" as "id, product_id, product_name, quantity, unit, unit_price, currency, line_total, metadata, sort_order",
+      )
       .eq("deal_card_id", card.id)
       .eq("version", card.version)
       .order("sort_order", { ascending: true }),
@@ -454,9 +492,18 @@ export async function getDealCard(cardId: string): Promise<DealCardView> {
   const sellerName = coById.get(sellerId) ?? "Unknown company";
   const buyerName = coById.get(buyerId) ?? "Unknown company";
 
-  // line items - read descriptive extras from each line's own snapshot (metadata)
+  // line items - read descriptive extras from each line's own snapshot (metadata),
+  // and the batch snapshot (BTCH-01, D-03) from the REAL columns (not metadata).
   const lineItems: LineItemView[] = (linesRes.data ?? []).map((r) => {
     const m = (r.metadata ?? {}) as Meta;
+    // batch columns are not on the generated row type yet (the select cast above);
+    // read them off a locally-cast view (same as the noteRow discipline).
+    const b = r as unknown as {
+      thc_percent: number | string | null;
+      cbd_percent: number | string | null;
+      batch_number: string | null;
+      batch_id: string | null;
+    };
     return {
       id: r.id,
       productId: r.product_id,
@@ -469,6 +516,10 @@ export async function getDealCard(cardId: string): Promise<DealCardView> {
       currency: r.currency,
       lineTotal: lineTotalOf(Number(r.quantity), Number(r.unit_price), r.line_total),
       pzn: str(m, "pzn"),
+      batchId: b.batch_id ?? null,
+      batchNumber: b.batch_number ?? null,
+      thcPercent: b.thc_percent != null ? Number(b.thc_percent) : null,
+      cbdPercent: b.cbd_percent != null ? Number(b.cbd_percent) : null,
     };
   });
 
