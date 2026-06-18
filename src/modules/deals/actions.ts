@@ -42,6 +42,11 @@ function rpcLines(lines: CreateDealInput["lines"]) {
     pzn: l.pzn ?? null,
     thcPercent: l.thcPercent ?? null,
     cbdPercent: l.cbdPercent ?? null,
+    // BTCH-01 freeze (D-04, app half part 1): thread the chosen batch so
+    // create_deal_draft writes batch_id/batch_number + the measured thc/cbd
+    // into the REAL line columns on birth. Custom lines carry nulls naturally.
+    batchId: l.batchId ?? null,
+    batchNumber: l.batchNumber ?? null,
   }));
 }
 
@@ -559,6 +564,17 @@ export async function proposeDealChange(
       unit_price: l.unitPrice,
       cultivar: l.cultivar ?? null,
       pzn: l.pzn ?? null,
+      // BTCH-01 freeze (D-04, app half part 1): carry the batch snapshot ON the
+      // held draft line (snapshot-through-draft) so confirm_deal_change writes
+      // batch_id/batch_number + measured thc/cbd into the new version's line
+      // columns verbatim - no product_id JOIN. The THIRD coordinated freeze
+      // change (EditDealForm.toDraftLines re-seeding these from LineItemView on
+      // edit) is Plan 04; until it lands, an EDIT that omits them would drop the
+      // snapshot on the bumped version (Pitfall 2).
+      batchId: l.batchId ?? null,
+      batchNumber: l.batchNumber ?? null,
+      thcPercent: l.thcPercent ?? null,
+      cbdPercent: l.cbdPercent ?? null,
     })),
     value_net: sumValueNet(input.lines),
     currency,
