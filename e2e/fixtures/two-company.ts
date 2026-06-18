@@ -323,16 +323,16 @@ export async function createDraftDealAsAlice(
   await alicePage.getByRole('button', { name: 'Start a deal', exact: true }).click()
 
   // 3. add a product, set quantity + unit price, then send the proposal.
-  //    The catalogue grid loads async under the "Top products" heading; wait for
-  //    the heading, then click the first enabled product card. Resilient to the
-  //    seeded product names (we never match a specific name).
-  await alicePage.getByText('Top products').waitFor()
+  //    The catalogue grid loads async under the "Add products" search (3e); wait
+  //    for the search input, then click the first enabled product card. Resilient
+  //    to the seeded product names (we never match a specific name).
+  await alicePage.getByPlaceholder(/search your catalogue/i).waitFor()
   await alicePage
     .getByRole('button')
-    .filter({ hasText: /\/g$|no price/ })
+    .filter({ hasText: /\/g|no price/ })
     .first()
     .click()
-  await alicePage.getByPlaceholder(/qty/i).first().fill('100')
+  await alicePage.getByLabel(/quantity in grams/i).first().fill('100')
   await alicePage.getByPlaceholder(/g \(optional\)/i).first().fill('5.00')
   // 3c (NOTE-01 D-08): optionally seed the create-time note — CreateDealForm's
   // note textarea is optional at draft (noteRequired=false), placeholder "Add a

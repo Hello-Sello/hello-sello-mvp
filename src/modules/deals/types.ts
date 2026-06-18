@@ -374,6 +374,13 @@ export interface CatalogProduct {
   cultivar: string | null;
   /** product_unit code (display only, e.g. "g") */
   unit: string;
+  /**
+   * product.pack_size_grams - how this product is physically sold (one pack =
+   * N grams). The basket steps quantity by this (one click = one pack); null
+   * when the product has no pack size on record (then the basket falls back to a
+   * default gram step). Pricing stays per-gram (CARD-02).
+   */
+  packSizeGrams: number | null;
   /** pricelist_item.price_per_gram; null when the product has no live price */
   unitPrice: number | null;
   currency: string;
@@ -402,7 +409,15 @@ export interface DraftLineInput {
    */
   lineItemId?: string;
   productName: string;
+  /** quantity in the line's `unit` (grams for catalogue lines - packs x pack size). */
   quantity: number;
+  /**
+   * The product's pack size in grams (from CatalogProduct), so the basket can
+   * step quantity by one pack and show a pack count. Optional/null for custom
+   * (off-catalogue) lines and for edit lines loaded from an older card snapshot,
+   * where the basket falls back to a default gram step.
+   */
+  packSizeGrams?: number | null;
   /** deal_line_unit code: 'g' | 'kg' | 'unit' */
   unit: string;
   unitPrice: number | null;

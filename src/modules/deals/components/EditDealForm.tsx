@@ -67,6 +67,12 @@ export function EditDealForm({
 }) {
   const meta = (data.card.metadata ?? {}) as Record<string, unknown>;
   const freeDelivery = meta.free_delivery === true;
+  // Show who the deal is with (the OTHER company) as a locked "To" row, so the
+  // assignee is visible on edit too - in p2p it is fixed by the relationship.
+  // Person name needs the p2p chat thread (not carried into the deal workspace),
+  // so this is company-level for now; the person can be threaded in later.
+  const counterpartyCompany =
+    data.viewerSide === "buyer" ? data.sellerName : data.buyerName;
   const dueDate = data.card.delivery_date_target
     ? data.card.delivery_date_target.slice(0, 10)
     : "";
@@ -77,6 +83,7 @@ export function EditDealForm({
     <DealForm
       title="Edit deal"
       subtitle={<>Version {data.card.version} · the other side reviews this change</>}
+      recipient={{ personName: null, companyName: counterpartyCompany, hint: "Assigned" }}
       initialLines={toDraftLines(data)}
       initialFreeDelivery={freeDelivery}
       initialDueDate={dueDate}

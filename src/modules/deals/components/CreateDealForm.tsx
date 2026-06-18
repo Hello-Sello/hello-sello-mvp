@@ -63,17 +63,8 @@ export function CreateDealForm({
   return (
     <DealForm
       title="Propose a deal"
-      subtitle={
-        <>
-          To{" "}
-          {personLabel && (
-            <>
-              <span className="font-medium text-ink/80">{personLabel}</span> ·{" "}
-            </>
-          )}
-          <span className="font-medium text-ink/80">{companyLabel}</span>
-        </>
-      }
+      subtitle="Build the basket, then send it to your contact"
+      recipient={{ personName: personLabel, companyName: companyLabel }}
       showPrivate={false}
       noteRequired={false}
       submitLabel="Send proposal"

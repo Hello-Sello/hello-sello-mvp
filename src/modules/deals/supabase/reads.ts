@@ -324,7 +324,7 @@ export async function getOwnCatalog(): Promise<CatalogProduct[]> {
 
   const { data: products, error: pErr } = await supabase
     .from("product")
-    .select("id, name, cultivar, unit_code, thc_percent, cbd_percent, local_code_pzn")
+    .select("id, name, cultivar, unit_code, pack_size_grams, thc_percent, cbd_percent, local_code_pzn")
     .is("deleted_at", null)
     .order("name", { ascending: true });
   if (pErr) throw pErr;
@@ -349,6 +349,7 @@ export async function getOwnCatalog(): Promise<CatalogProduct[]> {
       name: p.name,
       cultivar: p.cultivar,
       unit: p.unit_code,
+      packSizeGrams: p.pack_size_grams != null ? Number(p.pack_size_grams) : null,
       unitPrice: item ? Number(item.price_per_gram) : null,
       currency: item?.currency ?? "EUR",
       thcPercent: p.thc_percent,
