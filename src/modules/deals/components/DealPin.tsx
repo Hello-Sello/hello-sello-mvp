@@ -240,6 +240,7 @@ export function DealPin({
         dueDate: pendingEdit.dueDate,
         paymentTermsCode: pendingEdit.paymentTermsCode,
         privateValue: pendingEdit.privateValue,
+        note: pendingEdit.note,
         reason: sendReason.trim(),
       });
       setChangeOpen(false);

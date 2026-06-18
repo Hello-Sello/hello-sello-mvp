@@ -25,6 +25,8 @@ export interface ProposeChangePayload {
   paymentTermsCode: string | null;
   /** the editor's OWN-side private box - written immediately, never in the shared draft (D-09) */
   privateValue: string | null;
+  /** the editor's OWN-side card note (NOTE-01) - rides the shared held draft, commits to the editor's own note slot only */
+  note: string | null;
 }
 
 /** Map the current card's line items back into editable draft lines. */
@@ -68,6 +70,7 @@ export function EditDealForm({
     data.partyFields.find((f) => f.fieldKey === "supplier_cost")?.value ??
     data.partyFields[0]?.value ??
     "";
+  const initialNote = data.myNote ?? "";
 
   return (
     <DealForm
@@ -78,6 +81,7 @@ export function EditDealForm({
       initialDueDate={dueDate}
       initialPaymentTermsCode={paymentTermsCode}
       initialPrivateValue={privateValue}
+      initialNote={initialNote}
       noteRequired={false}
       submitLabel="Review change"
       onClose={onClose}
@@ -96,6 +100,7 @@ export function EditDealForm({
           dueDate: basket.dueDate,
           paymentTermsCode: basket.paymentTermsCode,
           privateValue: basket.privateValue,
+          note: basket.note,
         });
       }}
     />

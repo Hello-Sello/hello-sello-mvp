@@ -48,6 +48,7 @@ export function DealForm({
   initialDueDate = "",
   initialPaymentTermsCode = "",
   initialPrivateValue = "",
+  initialNote = "",
   showPrivate = true,
   noteRequired,
   submitLabel,
@@ -61,6 +62,8 @@ export function DealForm({
   initialDueDate?: string;
   initialPaymentTermsCode?: string;
   initialPrivateValue?: string;
+  /** seeds the note box - e.g. the editor's own existing card note (NOTE-01), so re-sending does not blank it */
+  initialNote?: string;
   /**
    * Show the seller's own-side private box (default true for create/edit). A
    * PROPOSAL (4.5.2) hides it: a proposal is a shared chat message both sides
@@ -80,7 +83,7 @@ export function DealForm({
   const [dueDate, setDueDate] = useState(initialDueDate);
   const [paymentTermsCode, setPaymentTermsCode] = useState(initialPaymentTermsCode);
   const [privateValue, setPrivateValue] = useState(initialPrivateValue);
-  const [note, setNote] = useState("");
+  const [note, setNote] = useState(initialNote);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
