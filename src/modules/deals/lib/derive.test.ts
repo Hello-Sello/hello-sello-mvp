@@ -13,7 +13,7 @@
  * presentation; per-gram is the canonical basis.
  */
 import { describe, it, expect } from "vitest";
-import { lineValueOf, sumLineValue } from "./derive";
+import { lineValueOf, sumLineValue, lineMarginOf, averageMarginOf } from "./derive";
 import type { LineItemView } from "../types";
 
 /** A minimal priced line - only the fields the money math reads matter. */
@@ -92,5 +92,40 @@ describe("sumLineValue (CARD-01 - sum the priced lines, never a stale 0)", () =>
     const inG = [line({ quantity: 1000, unit: "g", unitPrice: 5 })];
     const inKg = [line({ quantity: 1, unit: "kg", unitPrice: 5 })];
     expect(sumLineValue(inKg)).toBe(sumLineValue(inG));
+  });
+});
+
+describe("lineMarginOf (MRGN-01 - D-03 locked formulas, computed live)", () => {
+  it("seller margin = (unit_price - cost) / unit_price", () => {
+    // unit_price 10, cost 6 -> (10-6)/10 = 0.4
+    expect(lineMarginOf(10, 6, "seller")).toBeCloseTo(0.4);
+  });
+
+  it("buyer margin = (resale - unit_price) / resale - buyer divides by THEIR resale", () => {
+    // unit_price 10, resale 16 -> (16-10)/16 = 0.375 (NOT (16-10)/10)
+    expect(lineMarginOf(10, 16, "buyer")).toBeCloseTo(0.375);
+  });
+
+  it("returns null (NOT 0) when the owner has not entered an input yet", () => {
+    expect(lineMarginOf(10, null, "seller")).toBeNull();
+  });
+
+  it("seller side returns null when unit_price is 0 (division-by-zero guard)", () => {
+    expect(lineMarginOf(0, 5, "seller")).toBeNull();
+  });
+
+  it("buyer side returns null when resale is 0 (division-by-zero guard)", () => {
+    expect(lineMarginOf(10, 0, "buyer")).toBeNull();
+  });
+});
+
+describe("averageMarginOf (MRGN-01 - D-04 deal-level rollup, A1 simple mean)", () => {
+  it("averages only the non-null margins", () => {
+    // (0.4 + 0.2) / 2 = 0.3, the null is skipped
+    expect(averageMarginOf([0.4, null, 0.2])).toBeCloseTo(0.3);
+  });
+
+  it("returns null when no margin is present", () => {
+    expect(averageMarginOf([null, null])).toBeNull();
   });
 });
