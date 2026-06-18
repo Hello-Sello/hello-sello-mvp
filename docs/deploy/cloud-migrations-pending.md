@@ -117,6 +117,24 @@ App code that ships with the same PR (not a DB step): the plan-03 / plan-05 edit
 (the `productId` draft fix + the per-line private write), `reads.ts`, `types.ts`, `DealForm`,
 `EditDealForm`, `CardFront`.
 
+### Phase 3f - Batches end-to-end
+
+Deal-domain only and additive (two new columns + one index + two `create or replace` function
+bodies + a demo seed in `seed.sql`). The migration ADDS a FK from `deal_line_item.batch_id` to
+Muskan's `product_batch(id)`, but it does NOT alter `product_batch` itself or any catalogue
+schema/RLS - it only references an existing table. Apply order is timestamp order:
+
+| # | Migration file | What it does |
+|---|----------------|--------------|
+| 14 | `20260618140000_deal_line_item_batch.sql` | Adds `deal_line_item.batch_id UUID NULL REFERENCES product_batch(id)` + `batch_number VARCHAR(60) NULL` (nullable; required is form-enforced, D-01/D-02) + `idx_deal_line_item_batch`. `create or replace create_deal_draft`: re-emits the full `20260618130200` body, changing ONLY the section-2 line insert to write `batch_id`/`batch_number`/`thc_percent`/`cbd_percent` into the REAL columns on birth (D-03/D-04; fixes the dead-metadata latent bug). `create or replace confirm_deal_change`: re-emits the full `20260618130100` body, (a) carrying the same four fields forward verbatim from the held draft on a version bump (snapshot-through-draft, no product_id JOIN, D-04; fixes the drop-on-bump latent bug) and (b) upgrading the 3d `deal_line_item_private` margin carry-forward join to key on `product_id` AND `batch_id` (`new_line.batch_id is not distinct from old_line.batch_id`, D-09) so two batches of one product keep their own margins. Supersedes the function bodies of #12 and #13. |
+
+Cautions for the cloud apply:
+- #14 lands AFTER `20260618130100` (margin carry) and `20260618130200` (retire private box), so a cloud push runs Phase 3d's bodies and then immediately Phase 3f's `create or replace` for each RPC - it ends in the correct final state; the intermediate version is never used mid-push.
+- The new `batch_id` FK targets `product_batch`, which exists on cloud already (0 rows). Confirm the `product_batch` table is present before pushing (it is, as of writing). No catalogue schema or RLS of Muskan's is altered - only referenced.
+- The demo `product_batch` seed lives in `seed.sql` (LOCAL `supabase db reset` only). Cloud is seeded separately/never by `db push`; coordinate any cloud demo-batch seeding with Muskan (she owns the catalogue surface).
+- The matching app change (the batch picker + `batchId` flowing into the create/propose drafts) is **App code that ships with the same PR (not a DB step)**: plan 03F-03's edits to `types.ts`, `reads.ts`, `actions.ts`, `DealForm`, `CardFront`. The carry-forward + snapshot do nothing until that app half feeds `batchId`/`batchNumber`/`thcPercent`/`cbdPercent` into the draft lines.
+- Push the whole Phase 1 + Phase 2 + Phase 3c + Phase 3d + Phase 3f batch together, in timestamp order; local-first, cloud push is deferred and Muskan-coordinated (she holds a migrations lock until her own cloud push).
+
 ---
 
 ## APPLIED TO CLOUD
