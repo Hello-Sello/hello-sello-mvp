@@ -5,17 +5,25 @@
 
 ---
 
-**Last updated:** 2026-06-18 (Phase 6 Plan 01 complete — branding spine + TopBar wiring)
-**Branch:** claude/muskan/work (Phase 6 Plan 01 — city column + one-writer branding + TopBar wiring)
-**Status:** **BUILT.** Phase 6 Plan 01 complete — one-writer branding (D-07/D-09), TopBar wired (D-08), revalidation propagation set. PR pending.
-**Linear issue in progress:** DEV-70 (logo propagation — built), DEV-78 (Discover — next)
+**Last updated:** 2026-06-18 (Phase 6 COMPLETE — Discover & Home UX, PR'd to dev)
+**Branch:** claude/muskan/work (Phase 6 — all 4 plans built + verified)
+**Status:** **idle.** Phase 6 (Discover & Home UX) COMPLETE — 4/4 plans, build green, PR → dev. Cloud apply for the 2 new migrations DEFERRED (Phases 1–5 batch; reconcile old `avatars` policies first). Next session = Phase 7 (Present UX).
+**Linear issue in progress:** none (DEV-70 logo-propagation, DEV-78 Discover, DEV-69/68 Home — all built this phase)
 **Shared files locked:** none
-**PR open:** [#111](https://github.com/HelloSello/hello-sello-mvp/pull/111) Phase 5 surface polish (F-flags) → dev. **MERGED:** Phase 4 auth-gate [#110](https://github.com/HelloSello/hello-sello-mvp/pull/110) → dev · Discover loop [#104](https://github.com/HelloSello/hello-sello-mvp/pull/104) → dev (slices 1–6). *(Prior: Sella proposal #99 merged to dev by Ayush; storage #98 on dev, held from main.)*
+**PR open:** Phase 6 Discover & Home UX → dev (this session). **MERGED:** [#111](https://github.com/HelloSello/hello-sello-mvp/pull/111) Phase 5 surface polish (F-flags) → dev. **MERGED:** Phase 4 auth-gate [#110](https://github.com/HelloSello/hello-sello-mvp/pull/110) → dev · Discover loop [#104](https://github.com/HelloSello/hello-sello-mvp/pull/104) → dev (slices 1–6). *(Prior: Sella proposal #99 merged to dev by Ayush; storage #98 on dev, held from main.)*
 **Prev PR:** Discover directory [#95](https://github.com/HelloSello/hello-sello-mvp/pull/95)→dev / [#96](https://github.com/HelloSello/hello-sello-mvp/pull/96)→main · Profile & QR [#88](https://github.com/HelloSello/hello-sello-mvp/pull/88)/[#89](https://github.com/HelloSello/hello-sello-mvp/pull/89) — all **merged**.
 
 ---
 
 ## Notes for the other agent
+
+**2026-06-18 (Phase 6 COMPLETE — Discover & Home UX). ⚠️ Touched two shared files (`database.types.ts`, my Present `ShopView.tsx`) + added 2 NEW migrations. Nothing of yours edited; deal module untouched.** Glance on your next rebase:
+> - **2 new migrations (my Discover/branding domain, additive):** `20260618120000_company_city.sql` (new `company.city` text-null col, append-only, no backfill) + `20260618120100_list_discoverable_companies_city.sql` (drop+recreate `list_discoverable_companies` adding `city` to RETURNS TABLE / SELECT / GROUP BY — signature-compatible otherwise). **LOCAL only — NOT on cloud.** Cloud apply deferred with the Phases 1–5 batch (reconcile old MCP-named `avatars_*` policies first).
+> - **⚠️ `database.types.ts`:** surgically hand-added `company.city` (Row/Insert/Update) — NOT a full regen (your pattern). Heads-up on rebase.
+> - **One-writer branding (D-07):** `companies.updateCompanyProfile` is now the SINGLE writer for `logo_path` + `city`. **`src/modules/catalog/manage.ts` no longer writes `logo_path`** (documented in-code); my `ShopView.tsx` now only **reads** `logo_path` (display) and writes `cover_path` only. If anything of yours wrote a company logo through another path, it should route through `updateCompanyProfile` / the shared `BrandingEditForm` now.
+> - **New shared util:** `src/shared/geo/countries.ts` — canonical ISO-3166 alpha-2 list + `countryName()`. Replaces the inline 14-entry `COUNTRY_NAMES` in `discover/companies.ts`. Use this if you need country display anywhere.
+> - **Pharmacy listing gate is client-side v1** (T-06-08, documented tradeoff): the `list_discoverable_companies` RPC returns all verified peers; the directory hides pharmacy-only client-side. Server-side hardening (push the gate + name-search into the RPC) is a deferred follow-up — flagging so it's a known decision, not an oversight.
+> - **2 pre-existing E2E failures surfaced** (both predate Phase 6, NOT my regression): `auth-gate.spec.ts:117` fails in the `resetToVerified` fixture (it DELETEs append-only `audit_log` → rejected; the fixture should reseed instead) and `deal-change.spec.ts:133` (your lane — green in your local, env/seed-dependent in mine).
 
 **2026-06-17 (Phase 5 UAT) — ⚠️ filed DEV-83 (High) in YOUR accept rollout; I did NOT touch your files (tracked only).** Accepting an inbound request (`pricelist_request`, and any type) from a company you're **already connected to** crashes. `acceptInbox` (`src/modules/messaging/supabase/store.ts:291`) dedupes by `inbox_item_id`, but `uq_relationship_pair_active` is per **company-pair** — so for an already-connected pair it falls through to a 2nd `relationship` INSERT → `duplicate key … uq_relationship_pair_active` → surfaced as `[object Object]` (the `InboxView.tsx:135` `onAccept` does `void refreshWith(...)` with no `.catch`). **My Phase-5 F5 fix made this path reachable** (connected buyers can now send `pricelist_request`) but did not cause it — pre-existing gap in the accept flow. **Proposed direction (in the ticket):** split the inbox by connection-state; for already-connected senders show Claim/Accept/Reassign **without** "Accept & Connect" — accept should **reuse the existing relationship + open the pricing thread**, not mint a new one; same rule for C2C `connect_message`. Assigned to me, but it's your module's design call. → https://linear.app/hellosello/issue/DEV-83
 
