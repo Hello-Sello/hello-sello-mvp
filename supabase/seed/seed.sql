@@ -258,3 +258,45 @@ where not exists (
   select 1 from public.pricelist_item pi
   where pi.pricelist_id = '3fe179d5-c0e7-4eff-9726-f707c04572f9'::uuid and pi.product_id = p.id and pi.deleted_at is null
 );
+
+-- ----------------------------------------------------------------------------
+-- 7. GreenLeaf demo batches (BTCH-01 / Phase 3f) — each of the 4 products gets
+--    >=2 physical lots (product_batch) so the Deal Basket batch picker has real
+--    rows to choose from (the table exists in every environment but had 0 rows).
+--    Same idempotent values-join-product pattern as 6c: resolve product_id by
+--    supplier_product_code joined on GreenLeaf (aaaa) — NEVER hardcode a
+--    gen_random_uuid() product id. Batch numbers are GLOBALLY distinct per
+--    company (uq_product_batch_number_active is per-company, not per-product),
+--    so GL-24-0001 .. GL-24-0008. Measured thc/cbd cluster within ~1% of each
+--    product's label (the deal line snapshots the BATCH's measured value, never
+--    the label). ready_for_sale_date 30-90 days ago, expiry ~12 months out.
+--    Guarded by where-not-exists on (company_id, batch_number) so re-seeds are
+--    idempotent.
+-- ----------------------------------------------------------------------------
+insert into public.product_batch (
+  company_id, product_id, batch_number, thc_percent, cbd_percent,
+  ready_for_sale_date, expiry_date, created_by)
+select 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid, p.id, v.batch_number,
+       v.thc, v.cbd, v.ready, v.expiry, '11111111-1111-1111-1111-111111111111'
+from (values
+  -- AUR-1A · Pedanios 31/1 COS-CA (label 31/1)
+  ('AUR-1A', 'GL-24-0001', 30.2, 1.1, (now() - interval '90 days')::date, (now() + interval '12 months')::date),
+  ('AUR-1A', 'GL-24-0002', 31.8, 0.9, (now() - interval '45 days')::date, (now() + interval '13 months')::date),
+  -- AUR-1B · Pedanios 31/1 PND-CA (label 31/1)
+  ('AUR-1B', 'GL-24-0003', 31.1, 1.0, (now() - interval '75 days')::date, (now() + interval '12 months')::date),
+  ('AUR-1B', 'GL-24-0004', 30.6, 1.2, (now() - interval '30 days')::date, (now() + interval '14 months')::date),
+  -- AUR-1C · San Raf 29/1 PNK (label 22/1)
+  ('AUR-1C', 'GL-24-0005', 21.4, 0.8, (now() - interval '60 days')::date, (now() + interval '12 months')::date),
+  ('AUR-1C', 'GL-24-0006', 22.7, 1.1, (now() - interval '40 days')::date, (now() + interval '13 months')::date),
+  -- AUR-1D · Pedanios 10/10 MBE-CA (label 10/10)
+  ('AUR-1D', 'GL-24-0007', 10.3, 9.7, (now() - interval '85 days')::date, (now() + interval '12 months')::date),
+  ('AUR-1D', 'GL-24-0008',  9.8, 10.4, (now() - interval '35 days')::date, (now() + interval '14 months')::date)
+) as v(code, batch_number, thc, cbd, ready, expiry)
+join public.product p
+  on p.company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid
+ and p.supplier_product_code = v.code and p.deleted_at is null
+where not exists (
+  select 1 from public.product_batch pb
+  where pb.company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid
+    and pb.batch_number = v.batch_number and pb.deleted_at is null
+);
