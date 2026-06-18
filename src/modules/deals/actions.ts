@@ -185,13 +185,20 @@ export async function confirmDeal(args: {
  * may FILL the form but never calls this directly (the AI fence).
  *
  * The whole deal is born in ONE transaction by the `create_deal_draft` SECURITY
- * DEFINER RPC: the card (draft, v1) + line items + the creator's own-side
- * private box + its container (workspace + creator-as-owner + the deal chat
- * thread + an opening line) + the creation log line + the optional note. One
- * transaction = no orphan cards, and it sidesteps the workspace-membership
- * bootstrap that RLS cannot satisfy at a deal's birth. The RPC derives the
- * creator's company from the session and gates on relationship membership (the
- * guardrail). Audit (`deal.created`) stays here so the hash-chain helper owns it.
+ * DEFINER RPC: the card (draft, v1) + line items + its container (workspace +
+ * creator-as-owner + the deal chat thread + an opening line) + the creation log
+ * line + the optional note. One transaction = no orphan cards, and it sidesteps
+ * the workspace-membership bootstrap that RLS cannot satisfy at a deal's birth.
+ * The RPC derives the creator's company from the session and gates on
+ * relationship membership (the guardrail). Audit (`deal.created`) stays here so
+ * the hash-chain helper owns it.
+ *
+ * Per-line margin (D-11, MRGN-01): the create-time `deal_party_field` private
+ * box is retired (the RPC dropped it; plan 05). Instead, AFTER the card is born,
+ * each line's own-side input is written to the owner-only `deal_line_item_private`
+ * table. This MUST run after the RPC returns, because the private rows are keyed
+ * by `deal_line_item.id` and those ids exist only once the RPC has inserted the
+ * lines.
  */
 export async function createDeal(input: CreateDealInput): Promise<CreateDealResult> {
   const supabase = await createClient();
@@ -205,6 +212,8 @@ export async function createDeal(input: CreateDealInput): Promise<CreateDealResu
   // The RPC is new, so it is not in the generated types yet - a localized cast
   // (Muskan's documented pattern) avoids a full database.types regen. Call
   // supabase.rpc DIRECTLY (not via a detached const) so its `this` stays bound.
+  // p_private_value is now accepted-but-ignored server-side (D-09); we stop
+  // forwarding a value and write the per-line private rows after birth instead.
   const { data: cardId, error } = await supabase.rpc("create_deal_draft" as never, {
     p_relationship_id: input.relationshipId,
     p_deal_type: "offer",
@@ -214,12 +223,55 @@ export async function createDeal(input: CreateDealInput): Promise<CreateDealResu
     p_payment_terms_code: input.paymentTermsCode ?? null,
     p_free_delivery: input.freeDelivery ?? false,
     p_lines: rpcLines(input.lines),
-    p_private_value: input.privateValue ?? null,
+    p_private_value: null,
     p_note: input.note ?? null,
   } as never);
   if (error) throw new Error((error as { message: string }).message);
   const newCardId = cardId as string | null;
   if (!newCardId) throw new Error("createDeal: no card id returned from create_deal_draft");
+
+  // PER-LINE PRIVATE write (D-11, MRGN-01) - after birth, because the private
+  // rows are keyed by the real `deal_line_item.id`. Read the v1 lines back (the
+  // RPC inserts them in `input.lines` order with sort_order 0..n, so sort_order
+  // IS the input index), then upsert each line's own-side input into the
+  // owner-only `deal_line_item_private`. The company is taken from the SESSION
+  // (`getCurrentCompanyId()`), NEVER from input - the same guardrail the edit
+  // path uses. On the create path the creator is ALWAYS the seller:
+  // `create_deal_draft` hardcodes `deal_type 'offer'` + `initiating_company_id =
+  // v_company`, so the creator's `viewerSide` is "seller" - hence seller_margin
+  // is the correct column (no viewerSide call needed here, by construction).
+  if (input.lines.some((l) => l.ownInput != null)) {
+    const companyId = await getCurrentCompanyId();
+    if (!companyId) throw new Error("createDeal: no company in session");
+
+    const { data: bornLines, error: linesErr } = await supabase
+      .from("deal_line_item")
+      .select("id, sort_order")
+      .eq("deal_card_id", newCardId)
+      .eq("version", 1);
+    if (linesErr) throw linesErr;
+
+    const idBySort = new Map((bornLines ?? []).map((r) => [r.sort_order, r.id]));
+    for (let i = 0; i < input.lines.length; i++) {
+      const l = input.lines[i];
+      if (l.ownInput == null) continue;
+      const lineId = idBySort.get(i);
+      if (!lineId) {
+        throw new Error(`createDeal: no born line id for input index ${i}`);
+      }
+      const { error: privErr } = await supabase.from("deal_line_item_private").upsert(
+        {
+          deal_line_item_id: lineId,
+          company_id: companyId,
+          seller_margin: l.ownInput,
+          buyer_metric: null,
+          created_by: user.id,
+        },
+        { onConflict: "deal_line_item_id,company_id" },
+      );
+      if (privErr) throw privErr;
+    }
+  }
 
   await writeAudit({
     actorType: "user",
@@ -337,9 +389,10 @@ export async function confirmDetectedDeal(args: {
 /**
  * Edit a deal into a NEW version (3.5b). The human-pressed commit for a change:
  * one atomic `edit_deal_draft` RPC bumps the version, snapshots the new lines
- * (old version stays frozen), carries the private boxes forward, drops the card
- * back to `draft` (so 3d's gate re-runs), and records the MANDATORY note. The
- * note is required (the RPC also enforces it). Audit = `deal.amended`.
+ * (old version stays frozen), drops the card back to `draft` (so 3d's gate
+ * re-runs), and records the MANDATORY note. The note is required (the RPC also
+ * enforces it). Audit = `deal.amended`. Per-line margin is NOT carried here -
+ * it lives in deal_line_item_private now (D-09); editDeal is the dormant path.
  */
 export async function editDeal(input: EditDealInput): Promise<EditDealResult> {
   const supabase = await createClient();
@@ -361,7 +414,11 @@ export async function editDeal(input: EditDealInput): Promise<EditDealResult> {
     p_payment_terms_code: input.paymentTermsCode ?? null,
     p_free_delivery: input.freeDelivery ?? false,
     p_lines: rpcLines(input.lines),
-    p_private_value: input.privateValue ?? null,
+    // EditDealInput no longer carries a private value (the per-line margin moved
+    // to deal_line_item_private, D-09). editDeal is the dormant instant path
+    // (4.5.4 routes edits through proposeDealChange); pass null to keep it
+    // compiling without changing its behaviour.
+    p_private_value: null,
     p_note: input.note.trim(),
   } as never);
   if (error) throw new Error((error as { message: string }).message);

@@ -21,7 +21,6 @@ const content: DealBasketContent = {
   freeDelivery: false,
   dueDate: null,
   paymentTermsCode: null,
-  privateValue: null,
   note: null,
 };
 

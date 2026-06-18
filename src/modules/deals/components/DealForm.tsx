@@ -131,10 +131,8 @@ export function DealForm({
         dueDate: dueDate || null,
         paymentTermsCode: paymentTermsCode || null,
         // MRGN-01: the single deal-level private box is retired - the per-line
-        // own input now rides each line's `ownInput`. `privateValue` is a dead
-        // field kept only so DealBasketContent still compiles; plan 05 removes
-        // the field across every call site in one commit.
-        privateValue: null,
+        // own input now rides each line's `ownInput`. The dead per-deal private
+        // field is gone from DealBasketContent (plan 05, WARNING 5).
         note: note.trim() || null,
       });
       // the wrapper closes / reloads on success

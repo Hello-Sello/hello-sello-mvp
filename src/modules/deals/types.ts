@@ -459,9 +459,9 @@ export type DealSource = "p2p" | "sella" | "shop";
 
 /**
  * The reusable Deal Basket (D-01) - the rich model the shared form hands back.
- * The 6 CONTENT fields (lines, freeDelivery, dueDate, paymentTermsCode,
- * privateValue, note) are produced by DealForm itself; the 3 IDENTITY fields
- * (recipient, source, attachedDealId) are wrapper-supplied (D-03):
+ * The 5 CONTENT fields (lines, freeDelivery, dueDate, paymentTermsCode, note)
+ * are produced by DealForm itself; the 3 IDENTITY fields (recipient, source,
+ * attachedDealId) are wrapper-supplied (D-03):
  *   - `attachedDealId: null` = a new deal; a set id = editing that card.
  *   - `recipient` is the resolved p2p recipient on create; null on edit (the
  *     Edit flow routes through the strip, which already knows the relationship).
@@ -472,17 +472,16 @@ export interface DealBasket {
   freeDelivery: boolean;
   dueDate: string | null;
   paymentTermsCode: string | null;
-  privateValue: string | null;
   note: string | null;
   recipient: DealRecipient | null;
   source: DealSource;
   attachedDealId: string | null;
 }
 
-/** Just the 6 CONTENT fields DealForm owns; the wrappers complete the Basket. */
+/** Just the 5 CONTENT fields DealForm owns; the wrappers complete the Basket. */
 export type DealBasketContent = Pick<
   DealBasket,
-  "lines" | "freeDelivery" | "dueDate" | "paymentTermsCode" | "privateValue" | "note"
+  "lines" | "freeDelivery" | "dueDate" | "paymentTermsCode" | "note"
 >;
 
 /**
@@ -498,8 +497,6 @@ export interface CreateDealInput {
   dueDate?: string | null;
   /** payment_terms.code, e.g. 'net30' */
   paymentTermsCode?: string | null;
-  /** the creator's OWN-side private box (seller: buying price from supplier) */
-  privateValue?: string | null;
   /** the creation note (optional at draft - D7; becomes mandatory on edits, 3.5b) */
   note?: string | null;
 }
@@ -516,9 +513,9 @@ export interface CreateDealResult {
  * (sender's side pre-accepted) and the card is born only when the other side
  * accepts (the unified `confirm_detected_deal` birth).
  *
- * Note: `privateValue` is intentionally NOT carried to the proposal - the
- * proposal is a chat message both sides can read, so the proposer's own-side
- * private box would leak. The private box is added after birth via edit.
+ * Note: no per-line private input is carried to the proposal - the proposal is a
+ * chat message both sides can read, so a proposer's own-side cost would leak.
+ * The per-line margin is added after birth via the create/edit private write.
  */
 export interface ProposeDealInput extends CreateDealInput {
   /** the p2p chat thread the proposal message is posted into */
@@ -603,7 +600,6 @@ export interface EditDealInput {
   freeDelivery?: boolean;
   dueDate?: string | null;
   paymentTermsCode?: string | null;
-  privateValue?: string | null;
   /** REQUIRED on an edit (unlike create, where it is optional at draft). */
   note: string;
 }
@@ -661,9 +657,10 @@ export interface PendingChangeView {
  * The propose-a-change payload handed to `proposeDealChange` (4.5.4). Same
  * SHARED form shape as create/edit (lines + terms) on an existing card, plus
  * the `dealCardId` and the required Send `reason`. The reason flows through the
- * strip Send pop-up, NOT the edit form (D-08). `privateValue` is the proposer's
- * OWN-side private box - it is written IMMEDIATELY + ungated at the current
- * version inside the action and NEVER enters the shared held draft (D-09).
+ * strip Send pop-up, NOT the edit form (D-08). The proposer's OWN-side per-line
+ * input rides each line's `ownInput` (DraftLineInput) - it is written IMMEDIATELY
+ * + ungated to deal_line_item_private inside the action and NEVER enters the
+ * shared held draft (D-09).
  */
 export interface ProposeDealChangeInput {
   dealCardId: string;
@@ -674,8 +671,6 @@ export interface ProposeDealChangeInput {
   dueDate?: string | null;
   /** payment_terms.code, e.g. 'net30' */
   paymentTermsCode?: string | null;
-  /** the proposer's OWN-side private box - written immediately, never in the shared draft (D-09) */
-  privateValue?: string | null;
   /** the proposer's OWN-side card note (NOTE-01) - rides the SHARED held draft; commits to the proposer's own note slot only (D-02) */
   note?: string | null;
   /** REQUIRED Send reason (D-07); the RPC also enforces it */
