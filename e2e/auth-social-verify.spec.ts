@@ -110,27 +110,42 @@ test('control: signed-out user on a gated route still redirects to /login', asyn
 // button has its cooldown. Left as `fixme` so the suite stays green meanwhile.
 // ===========================================================================
 
-test.fixme(
-  'signed-out user can fully load /verify-email?email= (unblocked by plan 06.1-04)',
-  async ({ page, context }) => {
-    // The proxy already allows /verify-email (06.1-02). This stays RED until
-    // plan 06.1-04 reworks verify-email/page.tsx to read ?email= instead of
-    // calling getCurrentUser() (which redirects a session-less visitor to
-    // /login). Once that lands, this asserts the page renders and the URL stays
-    // on /verify-email.
-    await ensureSignedOut(page, context)
-    await page.goto('/verify-email?email=x@y.test')
-    await expect(page).toHaveURL(/\/verify-email/)
-    expect(page.url()).not.toContain('/login')
-  },
-)
-
-test.fixme('signup → lands on /verify-email?email= (plan 06.1-04)', async () => {
-  // Submitting the signup form with confirmation ON returns no session and
-  // redirects to /verify-email?email=<encoded>. Implemented in plan 06.1-04.
+// Now GREEN (plan 06.1-04): verify-email/page.tsx reads ?email= instead of
+// calling getCurrentUser(), so a signed-out visitor loads the page and stays on
+// /verify-email, with the email rendered.
+test('signed-out user can fully load /verify-email?email= (unblocked by plan 06.1-04)', async ({
+  page,
+  context,
+}) => {
+  await ensureSignedOut(page, context)
+  await page.goto('/verify-email?email=x@y.test')
+  await expect(page).toHaveURL(/\/verify-email/)
+  expect(page.url()).not.toContain('/login')
+  // The page must show the email it was handed in the URL.
+  await expect(page.getByText('x@y.test')).toBeVisible()
 })
 
-test.fixme('resend button disables for cooldown (plan 06.1-04)', async () => {
-  // The verify screen's "Resend" link disables for the cooldown window
-  // (~45s per research) after a click. Implemented in plan 06.1-04.
+// Still owned by a follow-up: asserting signup → /verify-email?email= requires
+// submitting the real signup form, which writes to Supabase and sends a Resend
+// email — neither is available in this E2E env (no cloud creds/SMTP). The
+// server-side redirect is already in place (actions.ts signUp). Left as fixme so
+// the suite stays green; gap documented in 06.1-04-SUMMARY.md.
+test.fixme('signup → lands on /verify-email?email= (needs live Supabase + Resend)', async () => {
+  // Submitting the signup form with confirmation ON returns no session and
+  // redirects to /verify-email?email=<encoded>. Requires a configured cloud
+  // Supabase project + Resend SMTP to exercise end-to-end.
+})
+
+// Now GREEN (plan 06.1-04): clicking Resend swaps the link for a disabled
+// "Sent — you can resend in Ns" cooldown state (~45s).
+test('resend button disables for cooldown (plan 06.1-04)', async ({ page, context }) => {
+  await ensureSignedOut(page, context)
+  await page.goto('/verify-email?email=x@y.test')
+  const resend = page.getByRole('button', { name: 'Resend email' })
+  await expect(resend).toBeVisible()
+  await resend.click()
+  // The button is gone, replaced by the cooling-down text; the live button is no
+  // longer clickable during the window.
+  await expect(page.getByRole('button', { name: 'Resend email' })).toHaveCount(0)
+  await expect(page.getByText(/you can resend in \d+s/)).toBeVisible()
 })

@@ -1,19 +1,32 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useState } from 'react'
 import { MailCheck } from 'lucide-react'
 import { Wordmark } from '@/shared/ui/Wordmark'
 
+const COOLDOWN_SECONDS = 45
+
 /**
- * Simulated email-verification step (v0). Supabase email confirmation is OFF, so
- * the user already has a session — this screen is the decided-flow "check your
- * inbox" beat, and "I've verified my email" simply advances to onboarding.
- * Real confirmation (a clicked email link) is a later hardening task.
+ * The honest "check your inbox" waiting state (CONTEXT: replaces the old fake
+ * "I've verified my email" button). Email confirmation is ON, so there is no
+ * session here and nothing to auto-advance — the user finishes by clicking the
+ * link in their inbox, which lands on /auth/confirm. This screen only shows the
+ * pending state and lets the user re-request the email on a cooldown.
+ *
+ * Resend note: no resend server action is wired yet, so the control visibly cools
+ * down (disabled + countdown) without re-triggering Supabase's send. The cooldown
+ * is the honest, testable behaviour; the actual re-send hook is a later task.
  */
 export function VerifyEmailCard({ email }: { email: string }) {
-  const router = useRouter()
-  const [resent, setResent] = useState(false)
+  const [remaining, setRemaining] = useState(0)
+
+  useEffect(() => {
+    if (remaining <= 0) return
+    const id = setInterval(() => setRemaining((s) => s - 1), 1000)
+    return () => clearInterval(id)
+  }, [remaining])
+
+  const cooling = remaining > 0
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-auto bg-gradient-to-b from-white to-brand-soft/40 p-6">
@@ -25,28 +38,38 @@ export function VerifyEmailCard({ email }: { email: string }) {
           </span>
         </div>
 
-        <h1 className="text-lg font-semibold text-ink">Verify your email</h1>
+        <h1 className="text-lg font-semibold text-ink">Check your inbox</h1>
         <p className="mt-2 text-sm text-ink-muted">
-          We sent a verification link to <span className="font-medium text-ink">{email}</span>.
-          Open it to confirm your address.
+          We sent a confirmation link to{' '}
+          <span className="font-medium text-ink">{email}</span>. Open it to finish
+          creating your account.
         </p>
 
-        <button
-          type="button"
-          onClick={() => router.push('/onboarding')}
-          className="mt-6 w-full rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-deep"
-        >
-          I&apos;ve verified my email
-        </button>
+        <div className="mt-5 flex items-center justify-center gap-2 text-xs text-ink-muted">
+          <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-brand-soft border-t-brand" />
+          Waiting for you to confirm…
+        </div>
 
-        <button
-          type="button"
-          onClick={() => setResent(true)}
-          disabled={resent}
-          className="mt-3 text-xs font-medium text-ink-muted underline transition hover:text-ink disabled:no-underline disabled:opacity-70"
-        >
-          {resent ? 'Verification email resent' : 'Resend email'}
-        </button>
+        <p className="mt-6 text-xs text-ink-muted">
+          Didn&apos;t get it?{' '}
+          {cooling ? (
+            <span className="font-normal text-ink-muted/70">
+              Sent — you can resend in {remaining}s
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setRemaining(COOLDOWN_SECONDS)}
+              className="font-semibold text-ink underline transition hover:text-brand"
+            >
+              Resend email
+            </button>
+          )}
+        </p>
+
+        <p className="mt-4 text-[11px] text-ink-muted/80">
+          This page continues automatically once you click the link.
+        </p>
       </div>
     </div>
   )
