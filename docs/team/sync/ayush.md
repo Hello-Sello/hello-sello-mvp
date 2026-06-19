@@ -5,9 +5,9 @@
 
 ---
 
-**Last updated:** 2026-06-19 00:45 CEST
+**Last updated:** 2026-06-19 13:41 CEST
 **Branch:** claude/ayush/work - **PUSHED + merged with dev + PR [#113](https://github.com/HelloSello/hello-sello-mvp/pull/113) → dev OPEN.**
-**Status:** idle. **The whole 1 + 2 + 3a-3f Deal Card & Form milestone is COMPLETE, merged with your dev, and PR'd** (deal-domain only). Merged `origin/dev` into my branch (your Phases 4/5/6: Discover, Home, branding, verification all came in clean). `supabase db reset` applies the **full 75-migration chain green** (yours + mine interleaved), tsc clean, unit 41/41, deal-change e2e 19/19. Next for me = P4 (cross-deal notification) / P5 (Sella change detection) / P6 (Connect UI pass).
+**Status:** idle. **The whole 1 + 2 + 3a-3f Deal Card & Form milestone is COMPLETE, merged with your dev, and PR'd** (deal-domain only). **This session = a recategorisation + decision sweep (no code):** closed OBS-1/2/3 + DEV-66, set the build order, updated DECISIONS.md + CONTEXT.md (shared) + my local ROADMAP/STATE. **Next build order (finalised 2026-06-19): 1 UI & chat (Phase 6) -> 2 Deal Basket/form (NEW) -> 3 Sella (P5) -> 4 C2C (NEW) -> 5 Notification (P4) -> 6 Other (parked).** Next session starts with `/gsd:plan-phase 6`.
 **Linear issue in progress:** none
 **Shared files locked:** none (all locks cleared).
 **⚠️ I RENAMED 3 of MY migrations (NOT yours) to fix timestamp collisions with your dev migrations:** `20260617140000_confirm_deal_change_announce` → `…140050`; `20260618120000_deal_card_notes` → `…120010`; `20260618120100_confirm_deal_change_notes` → `…120110`. Yours (`auth04_revoked_status`@140000, `company_city`@120000, `list_discoverable_companies_city`@120100) are UNTOUCHED. The chain now has no duplicate timestamps - `db reset` green.
@@ -18,6 +18,12 @@
 ---
 
 ## Notes for the other agent
+
+**2026-06-19 (13:41 CEST) - Recategorisation + decision sweep + roadmap reorg. ⚠️ I touched two SHARED docs (DECISIONS.md + CONTEXT.md) - appends + a surgical rename, nothing of yours edited; NO code/schema/migration; committed + pushed to my branch.** A planning session (no build):
+> - **Closed decisions:** OBS-1 (a product pick defaults its line to qty 1 in the product's natural unit), OBS-2 (count-of-pack card display - drop the free g/kg unit; builds in the deal-form phase), OBS-3 (first proposal posts a quiet notice; the System-vs-Sella VOICE deferred to a new message-voice discussion), DEV-66 rename.
+> - **⚠️ DEV-66 rename (CONTEXT.md term rows):** the deal container "Deal Workspace" -> **"Deal Room"**; the old "Deal Room" (customer-presentation surface) -> **"Presentation mode"** (aligns with the DEV-18 concept). I changed only the two glossary term rows + dated notes; the full text + code sweep + the `deal_workspace` DB-table rename are left for the UI phase. Heads-up if you reference "Deal Room" / "Deal Workspace" anywhere.
+> - **Build order finalised:** 1 UI & chat (P6) -> 2 Deal Basket/form (NEW) -> 3 Sella (P5) -> 4 C2C (NEW) -> 5 Notification (P4, a subset of global notifications) -> 6 Other (parked). Full reasoning in DECISIONS.md (the two 2026-06-19 entries); categorised board at `_workshop/notes/2026-06-19-recategorise-roadmap.html`.
+> - **Cloud push unchanged** - still the joint 15-migration batch when we coordinate.
 
 **2026-06-18 (later) - Phase 3f (Batches end-to-end) BUILT + verified; the 3a-3f milestone is COMPLETE. ⚠️ I touched the BATCH tables (additive) - please read before your next rebase; NOT pushed; cloud UNTOUCHED.** A deal line now points at one `product_batch` (the chosen lot) and freezes that lot's MEASURED thc/cbd + batch number onto the line at deal time (so a later catalogue/batch edit can never rewrite a past deal). The Basket got a mandatory batch picker; the card shows batch number + measured THC/CBD.
 > - **2 new migrations, deal-domain + additive (no schema change to YOUR catalogue/product/RLS):** `…140000_deal_line_item_batch` ALTERs **my** `deal_line_item` (adds `batch_id` FK -> product_batch + `batch_number`; writes the measured snapshot into the existing thc/cbd columns; freezes both deal RPCs; upgrades the 3d margin carry-forward to key on product+batch) and `…150000_confirm_detected_deal_batch` (carries the snapshot through the proposal birth door). **I did NOT alter `product_batch`/`batch_terpene` or their RLS** - I only INSERT 8 demo rows and READ via your existing `owns_product_batch`/`batch_all`. The buyer never reads `product_batch` (RLS-blocked); they see only the frozen public snapshot on the line.

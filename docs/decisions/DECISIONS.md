@@ -1147,3 +1147,57 @@ A single engineer now runs several sessions at once (one per phase) to work in p
 - **Industry-validated:** git worktrees are the consensus mechanism for parallel coding agents; Claude Code ships native `--worktree` + `.worktreeinclude`. Agent-teams (shared task list + mailbox) exists but is for one-session multi-teammate work, not N independent long-running phase sessions, and still requires ownership boundaries.
 
 *Why record:* locks the team's parallel-execution model so future sessions don't re-derive it, and documents why neither GSD workspaces (start empty) nor workstreams (don't isolate code) fit "parallel phases of one roadmap." **Status: setup DONE 2026-06-20 — personal gitignored `.worktreeinclude` + `.claude/hooks/session-start-coord.sh` + settings; general protocol added to `docs/team/WORKFLOW.md` "Parallel worktree sessions".** (Sources: this session; Claude Code worktrees + agent-teams docs; 2026 parallel-agent coordination research.)
+
+## 2026-06-19 - Recategorisation + decision sweep (UI-first reorder, notification, message-voice, pack model, Deal Room rename)
+
+A working session that re-sorted all open/not-done work into categories and closed the small open decisions. Working scratch (categorised board): `_workshop/notes/2026-06-19-recategorise-roadmap.html`. No code this session - decisions + doc updates only.
+
+**Build order / prioritisation**
+
+- **The UI pass (old Phase 6) moves to the FRONT - build it next, before notification + Sella.** *Why:* the notification bell, the Deals pop-up, and Sella's "proposed change" renderer all need a settled chat header + chat-top section; building them first then reshaping the chat in the UI pass means touching `ThreadView` / `DealPin` / `MessageBubble` twice. Settle the container first; inside the UI pass settle the deal-card layout early so the deal-card *content* work is not redone on a changing shape.
+- **Suggested order after UI:** Notification (as part of global notifications) → Sella change-detection → Deal Basket / Deal-form flexibility. Ops (the cloud migration push) runs alongside, not far down.
+
+**Notification**
+
+- **The cross-deal alert ("another of your deals changed") is a SUBSET of the global app-wide notification feature - build it once, inside global notifications, not as a standalone piece.** *Why:* a separate bell + dot + read/unread just for deals would be rebuilt when global notifications land.
+- **The unread dot must PERSIST across refresh until opened.** *Why:* a live-only ping cannot answer "what happened that I have not seen yet" - that needs a stored notification + a per-person seen flag; this is the design driver that gives the global feature its own small table.
+- **Direction:** a bell in the chat + a bell in the global header (same data, two places); reuse the existing RLS-scoped realtime (`use-chat-realtime.ts`) as the live "re-check" signal and derive the actionable badge from the authoritative `deal_pending_change` row (do not store a second copy of that fact). Exact shape decided when built.
+
+**Message-voice model (NEW discussion - belongs to Sella)**
+
+- **Open topic: define the difference between a System message and a Sella message, and which voice narrates a deal event in the deal/p2p thread.** The three voices are `person`, `system`, `sella` (`MessageBubble.tsx`); the intended rule (`types.ts`) is `system` = the C2C audit voice, `sella` = the narrator in p2p/deal threads. But there is DRIFT: "Deal draft created" posts as `system` into the deal thread (`create_deal_draft`), while accept/decline announcements post as `sella` into the deal + p2p threads. *Why record:* this drift is the root of OBS-3; the fix is one rule ("a deal-lifecycle event in the deal/p2p thread always speaks in voice X"), decided in the Sella discussion. Until then OBS-3's voice is open.
+
+**OBS decisions (deal card / form)**
+
+- **OBS-3 - the first proposal SHOULD post a quiet notice (option three), not a person-style chat bubble.** The VOICE (System vs Sella) is deferred to the message-voice discussion above. *Why:* a "Deal proposed" person-bubble competes with the rule that the card/strip is the one signal a deal moved; a quiet notice matches how resolutions are announced. (Today's person-style bubble comes from the pre-Phase-2 `propose_deal_rpc.sql:69`.)
+- **OBS-1 - picking a product defaults its line to quantity `1`, in the product's own natural unit.** *Why:* removes the misleading `0 €` card (value = price x quantity, so quantity 0 reads 0) without forcing a mandatory-quantity rule; the user types the real quantity over the default.
+- **OBS-2 - the card display follows the already-built pack model; drop the free g/kg line unit so a per-gram price can never sit against a kg quantity.** The pack-count model already exists for input (2026-06-18 / Phase 3e: the basket counts packs of `product.pack_size_grams`; the line stores grams + is priced per gram). OBS-2 extends it to the card display: every product is a fixed pack, quantity is a COUNT of packs, weight = count x `pack_size_grams`, the user picks counts and sees grams, and the free g/kg `unit` choice is removed so the `8 EUR/g`-against-`1.0 kg` mismatch cannot be expressed. *Why:* fewer independent inputs (unit fixed by the product, weight derived) makes the bad state impossible by construction. **Implementation lands in the deal-form / Deal Basket phase.**
+
+**Deal Room rename (DEV-66) - supersedes the 2026-05-19 "Deal Room" (DEV-22) + "Deal Workspace" naming**
+
+- **The internal deal container is renamed "Deal Workspace" -> "Deal Room"; the customer-presentation surface is renamed "Deal Room" -> "Presentation mode".** One name = one surface. *Why:* Marcel's DEV-66 wants the friendlier "Deal Room" for the working container, but "Deal Room" was already the presentation surface - the swap frees the name and removes the clash. "Presentation mode" also aligns with the existing DEV-18 "Presentation Mode" concept (turning a product selection into a customer presentation), so it unifies rather than adds a term. The DB table stays `deal_workspace` (internal); the user-facing + docs sweep happens in the UI phase. **Watch:** "Presentation mode" sits near the surface name "Present" - confirm final wording at the UI-phase kickoff. CONTEXT.md term rows updated 2026-06-19.
+
+**Triage of the not-a-phase backlog (parked / folded)**
+
+- **Per-side owner / side_lead DB enforcement - PARKED until multi-person-per-company is real.** *Why:* with one person/owner per company today the invariant cannot be broken; triggers/indexes now are speculative.
+- **Manual-create counterparty-person threading - FOLDED into C2C ticketing (T7).** A deal addressed to a company with no contact person only makes sense once a queue-and-claim flow can catch it. C2C routing: select a person -> routes like today's p2p but lands in the connected company's inbox; not a mandatory claim - pick up or reassign. Connected vs not-connected companies (T8) is built first and gates inbox-vs-p2p.
+- **Audit-chain "born_now" flag fix - FOLDED into the Sella phase (P5).** RPC-born (Sella-detected / proposed) deals miss their `deal.created` audit entry because the idempotent RPC cannot tell "born now" from "already born" (`actions.ts:381`); fix when P5 reworks the detect/propose RPCs (touch the hash-chained log once). *Why:* the missing trace is exactly on AI-detected deals, where the audit trail matters most.
+- **Access-matrix encoding (16-combo, DEV-51) - PARKED as post-MVP research.** Keep RLS as the floor + the app-layer policy module (locked 2026-05-29, B7); revisit a DSL/engine only when the hand-written matrix gets hard to verify.
+- **Home / landing view (DEV-13) - PARKED (not for now);** revisit in the UI/nav work, leaning chat-first (the product is conversation-centric).
+- **Deal origins beyond P2P (Shop + Sella) - land as part of the Deal Basket work** (the Basket, 3b, was built reusable for Sella/shop), not a separate task.
+- **File uploads in the `+` menu - PARKED as a separate backend slice** (storage bucket + RLS).
+- **The top-bar "Aurora Deutschland" placeholder is Muskan's** (wire to the real logged-in company) - removed from Ayush's list.
+
+*Why record:* closes the small open product decisions (OBS-1/2/3, DEV-66), sets the UI-first build order, frames the notification + message-voice work, and parks/folds the backlog so the roadmap reflects one agreed plan. **Status: decisions locked 2026-06-19; no code this session; OBS-2 + the rename + notification + message-voice are to-build / to-discuss in their phases.** (Sources: 2026-06-19 recategorisation session; scratch `_workshop/notes/2026-06-19-recategorise-roadmap.html`; `MessageBubble.tsx` / `types.ts` voices; `product.pack_size_grams`.)
+
+## 2026-06-19 (later) - Build order FINALISED (supersedes the "suggested order" above)
+
+Ayush set the build order for the remaining work: **1. UI & chat -> 2. Deal Basket / Deal form (NEW phase) -> 3. Sella -> 4. C2C chat (NEW phase) -> 5. Notification -> 6. Other items (parked).** This supersedes the "suggested order" in the entry above (which had Notification at #2 and no separate Deal Basket / C2C phases).
+
+- **The UI pass moves to the FRONT** (old Phase 6, built first); inside it, settle the deal-card layout early so the next phase's content work is not redone.
+- **Deal Basket / Deal form becomes its own NEW phase** (#2): the OBS-2 count-of-pack display, card flexibility (text + link cards, pre-sell non-catalogue), clickable detail, configurable display panel, Shop + Sella origins, persistent Basket. Needs a `/gsd:phase add`.
+- **C2C chat is promoted to a NEW phase** (#4): T7 ticketing + T8 connected/not-connected, absorbing manual-create person-threading. Needs a `/gsd:phase add`.
+- **Notification drops to #5** (still built as a subset of global notifications).
+- **Everything else parks** until 1-5 are done.
+
+*Why:* one agreed sequence so the next session starts on UI & chat immediately (`/gsd:plan-phase 6`), with the heavier card-content + C2C work sequenced behind the surface they sit on. **Status: order locked 2026-06-19; the UI phase (P6) is next; the two NEW phases need `/gsd:phase add` before planning.** (Source: 2026-06-19 prioritisation session; `.planning/ROADMAP.md`.)
