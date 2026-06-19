@@ -200,4 +200,12 @@ Cautions for the cloud apply:
 
 ## APPLIED TO CLOUD
 
-*(none yet — move rows here with the date once `supabase db push` is run)*
+### 2026-06-20 — combined batch (Muskan + Ayush), reconciled + pushed
+Ran the "⚠️ READ FIRST" reconciliation against `byipusuthdlskdxoexkt`:
+1. `migration repair --status reverted` × 47 (cleared wrong-timestamp records)
+2. `migration repair --status applied` × 49 (already-applied/superseded — incl. `profile_qr_foundation`, `get_public_profile`, no-op `seed_demo_world`, `confirm_detected_deal_proposer_initiator` superseded by `confirm_detected_deal_batch`)
+3. `db push` — **25 applied, 0 errors**, in timestamp order `deal_pending_change` → `oauth_person_trigger_fix`
+
+Result: cloud history = **74**, matches local. Security advisor: **0 errors** (warnings all pre-existing/by-design). No demo seed pushed. `oauth_person_trigger_fix` live → Google/Azure sign-up unblocked.
+
+Post-push: `.env.local` flipped to cloud; Google + Azure enabled in dashboard. Open: drop orphan `avatars_read` policy (cosmetic); 6.1 cloud UAT (sign-up tests 10–12).
