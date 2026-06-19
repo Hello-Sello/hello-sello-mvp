@@ -153,7 +153,10 @@ enabled = true
 # in emails.
 site_url = "http://127.0.0.1:3000"
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-additional_redirect_urls = ["https://127.0.0.1:3000"]
+# Local-parity (06.1-05): the two new auth-flow routes must be allowlisted so the LOCAL
+# stack can exercise the OAuth callback + email-confirm round-trips. Cloud uses the
+# dashboard URL allowlist (source of truth for the running app).
+additional_redirect_urls = ["https://127.0.0.1:3000", "http://127.0.0.1:3000/auth/callback", "http://127.0.0.1:3000/auth/confirm"]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to the local API URL (http://127.0.0.1:<port>/auth/v1).
@@ -206,7 +209,10 @@ enable_signup = true
 # addresses. If disabled, only the new email is required to confirm.
 double_confirm_changes = true
 # If enabled, users need to confirm their email address before signing in.
-enable_confirmations = false
+# Local-parity (06.1-05): mirror the cloud "Confirm email" = ON so the LOCAL stack
+# behaves like production (signUp returns no session; user must click the email link).
+# Local mail is captured by Inbucket (port 54324); cloud uses Resend SMTP (dashboard).
+enable_confirmations = true
 # If enabled, users will need to reauthenticate or have logged in recently to change their password.
 secure_password_change = false
 # Controls the minimum amount of time that must pass before sending another signup confirmation or password reset email.
