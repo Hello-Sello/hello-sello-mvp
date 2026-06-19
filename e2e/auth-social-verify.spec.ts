@@ -49,35 +49,45 @@ async function ensureSignedOut(page: Page, context: BrowserContext): Promise<voi
 }
 
 // ---------------------------------------------------------------------------
-// Test A — /auth/confirm passes the proxy gate (handler arrives in plan 03).
-// Proxy-level contract only: a signed-out hit is NOT redirected to /login.
-// Until the handler exists this resolves to a 404, which still satisfies
-// "the gate let it through". The handler's own redirect to /login?error=confirm
-// is asserted by the fixme stub below.
+// Test A — /auth/confirm: proxy lets it through AND the handler (plan 03) runs.
+// The proxy must not bounce a public route to /login. With the handler now
+// present (plan 06.1-03), a token-less hit is no longer a 404 — the handler
+// runs verifyOtp's guard (no token_hash/type) and redirects to
+// /login?error=confirm. The `error=confirm` marker is what distinguishes a
+// HANDLER redirect from a bare proxy gate redirect (which carries no query):
+// its presence proves the gate let the request reach the handler.
 // ---------------------------------------------------------------------------
-test('signed-out user reaching /auth/confirm is not gated out to /login', async ({
+test('signed-out user reaching /auth/confirm is handled (not gated to bare /login)', async ({
   page,
   context,
 }) => {
   await ensureSignedOut(page, context)
   await page.goto('/auth/confirm')
-  // The proxy gate must not bounce a public route to /login. (No ?token_hash so
-  // the future handler would redirect to /login?error=confirm — distinct from a
-  // bare /login gate redirect, and not yet present anyway.)
-  expect(new URL(page.url()).pathname).not.toBe('/login')
+  const url = new URL(page.url())
+  // Proxy contract: a bare gate redirect would be /login with NO query.
+  const isBareGateRedirect =
+    url.pathname === '/login' && url.searchParams.get('error') === null
+  expect(isBareGateRedirect).toBe(false)
+  // Handler contract: token-less confirm → /login?error=confirm (handler ran).
+  expect(url.searchParams.get('error')).toBe('confirm')
 })
 
 // ---------------------------------------------------------------------------
-// Test B — /auth/callback passes the proxy gate (handler arrives in plan 03).
-// Same proxy-level contract as Test A.
+// Test B — /auth/callback: same shape as Test A. A code-less hit runs the
+// handler's guard and redirects to /login?error=oauth (NOT a bare gate
+// redirect). The `error=oauth` marker proves the handler ran.
 // ---------------------------------------------------------------------------
-test('signed-out user reaching /auth/callback is not gated out to /login', async ({
+test('signed-out user reaching /auth/callback is handled (not gated to bare /login)', async ({
   page,
   context,
 }) => {
   await ensureSignedOut(page, context)
   await page.goto('/auth/callback')
-  expect(new URL(page.url()).pathname).not.toBe('/login')
+  const url = new URL(page.url())
+  const isBareGateRedirect =
+    url.pathname === '/login' && url.searchParams.get('error') === null
+  expect(isBareGateRedirect).toBe(false)
+  expect(url.searchParams.get('error')).toBe('oauth')
 })
 
 // ---------------------------------------------------------------------------
