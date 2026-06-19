@@ -5,17 +5,23 @@
 
 ---
 
-**Last updated:** 2026-06-18 (Phase 6 COMPLETE — Discover & Home UX, PR'd to dev)
-**Branch:** claude/muskan/work (Phase 6 — all 4 plans built + verified)
-**Status:** **idle.** Phase 6 (Discover & Home UX) COMPLETE — 4/4 plans, build green, PR → dev. Cloud apply for the 2 new migrations DEFERRED (Phases 1–5 batch; reconcile old `avatars` policies first). Next session = Phase 7 (Present UX).
-**Linear issue in progress:** none (DEV-70 logo-propagation, DEV-78 Discover, DEV-69/68 Home — all built this phase)
+**Last updated:** 2026-06-19 (Phase 6.1 social sign-in + email verification VERIFIED, PR'd to dev)
+**Branch:** claude/muskan/work (Phase 6.1 — code-complete, UAT 9/12, 3 cloud-blocked)
+**Status:** **idle.** Phase 6.1 (social sign-in + email verification) code-complete; `/gsd-verify-work 6.1` → 9/12 passed, 0 issues, 3 blocked-on-cloud (Google/Outlook/email round-trip). Logo sizing fix shipped. Resend domain `hello-sello.com` VERIFIED + SMTP configured; branded confirm-signup email pasted. Cloud apply for migrations still DEFERRED (Phases 1–5 batch; reconcile old `avatars` policies first). Next: close 6.1 cloud UAT (10–12), then Phase 7 (Present UX).
+**Linear issue in progress:** none
 **Shared files locked:** none
-**PR open:** [#112](https://github.com/HelloSello/hello-sello-mvp/pull/112) Phase 6 Discover & Home UX → dev. **MERGED:** [#111](https://github.com/HelloSello/hello-sello-mvp/pull/111) Phase 5 surface polish (F-flags) → dev. **MERGED:** Phase 4 auth-gate [#110](https://github.com/HelloSello/hello-sello-mvp/pull/110) → dev · Discover loop [#104](https://github.com/HelloSello/hello-sello-mvp/pull/104) → dev (slices 1–6). *(Prior: Sella proposal #99 merged to dev by Ayush; storage #98 on dev, held from main.)*
+**PR open:** [#114](https://github.com/HelloSello/hello-sello-mvp/pull/114) Phase 6.1 social sign-in + email verification → dev. [#112](https://github.com/HelloSello/hello-sello-mvp/pull/112) Phase 6 Discover & Home UX → dev. **MERGED:** [#111](https://github.com/HelloSello/hello-sello-mvp/pull/111) Phase 5 surface polish (F-flags) → dev. **MERGED:** Phase 4 auth-gate [#110](https://github.com/HelloSello/hello-sello-mvp/pull/110) → dev · Discover loop [#104](https://github.com/HelloSello/hello-sello-mvp/pull/104) → dev (slices 1–6). *(Prior: Sella proposal #99 merged to dev by Ayush; storage #98 on dev, held from main.)*
 **Prev PR:** Discover directory [#95](https://github.com/HelloSello/hello-sello-mvp/pull/95)→dev / [#96](https://github.com/HelloSello/hello-sello-mvp/pull/96)→main · Profile & QR [#88](https://github.com/HelloSello/hello-sello-mvp/pull/88)/[#89](https://github.com/HelloSello/hello-sello-mvp/pull/89) — all **merged**.
 
 ---
 
 ## Notes for the other agent
+
+**2026-06-19 (Phase 6.1 social sign-in + email verification — code-complete, PR #114 → dev). ⚠️ One shared display file touched: `src/shared/ui/Wordmark.tsx` (logo sizing). Nothing of yours edited; no schema/RPC/deal changes.** Glance on rebase:
+> - **`Wordmark.tsx` logo fix (`f8ac223`):** the inline brand mark rendered ~72px (oversized) — declared `<Image>` dims (120×40) lied about the PNG's real ratio (1900×1136), so Tailwind preflight `height:auto` inflated it. Now uses true intrinsic dims + `h-10 w-auto` (40px) / `w-11 h-auto` for the `stacked` rail variant (rail size unchanged). Affects anywhere `<Wordmark />` renders (auth/onboarding + your Present/Discover headers) — they were all oversized too; this fixes them uniformly.
+> - **Phase 6.1 surface (all mine, additive):** `src/app/(auth)/*` (SocialButtons, AuthCard Field/OrDivider, verify-email rework), `src/app/auth/callback|confirm/route.ts`, `(auth)/actions.ts` (`signInWithProvider` + `signUp` confirmation-ON redirect). Trigger migration `20260619162618_oauth_person_trigger_fix.sql` (CREATE OR REPLACE `handle_new_user`, **LOCAL-only**, cloud-apply deferred with the batch).
+> - **Cloud config done by operator (dashboard, no code/git):** Resend domain `hello-sello.com` verified + custom SMTP; redirect-URL allowlist needs **full** URLs; branded confirm-signup email template uses the custom `/auth/confirm?token_hash={{ .TokenHash }}&...` link (not default `{{ .ConfirmationURL }}`).
+> - **3 cloud round-trips still PENDING-HUMAN** (Google/Outlook/email E2E) — need Google provider creds + `.env.local`→cloud; tracked in `06.1-HUMAN-UAT.md`.
 
 **2026-06-18 (Phase 6 COMPLETE — Discover & Home UX). ⚠️ Touched two shared files (`database.types.ts`, my Present `ShopView.tsx`) + added 2 NEW migrations. Nothing of yours edited; deal module untouched.** Glance on your next rebase:
 > - **2 new migrations (my Discover/branding domain, additive):** `20260618120000_company_city.sql` (new `company.city` text-null col, append-only, no backfill) + `20260618120100_list_discoverable_companies_city.sql` (drop+recreate `list_discoverable_companies` adding `city` to RETURNS TABLE / SELECT / GROUP BY — signature-compatible otherwise). **LOCAL only — NOT on cloud.** Cloud apply deferred with the Phases 1–5 batch (reconcile old MCP-named `avatars_*` policies first).
