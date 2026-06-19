@@ -41,8 +41,18 @@ export async function updateSession(request: NextRequest) {
   const path = request.nextUrl.pathname
   const isAuthRoute = path === '/login' || path === '/signup'
   // Public routes — viewable by anyone, signed in or not. `/c/<handle>` is the
-  // public profile page opened by scanning the QR.
-  const isPublicRoute = path.startsWith('/c/')
+  // public profile page opened by scanning the QR. The three auth-flow routes
+  // are reached by signed-OUT users mid-flow and must not bounce to /login:
+  //   /auth/callback — OAuth provider returns here before the session exists
+  //   /auth/confirm  — the email-confirmation link lands here pre-session
+  //   /verify-email  — with email confirmation ON there is no session on this
+  //                    "check your inbox" screen post-signup (was implicitly
+  //                    reachable only because confirmation was OFF).
+  const isPublicRoute =
+    path.startsWith('/c/') ||
+    path === '/auth/callback' ||
+    path === '/auth/confirm' ||
+    path === '/verify-email'
 
   // Signed-out users may only reach the auth + public routes.
   if (!user && !isAuthRoute && !isPublicRoute) {
