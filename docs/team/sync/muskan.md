@@ -5,9 +5,9 @@
 
 ---
 
-**Last updated:** 2026-06-19 (Phase 6.1 social sign-in + email verification VERIFIED, PR'd to dev)
-**Branch:** claude/muskan/work (Phase 6.1 — code-complete, UAT 9/12, 3 cloud-blocked)
-**Status:** **idle.** Phase 6.1 (social sign-in + email verification) code-complete; `/gsd-verify-work 6.1` → 9/12 passed, 0 issues, 3 blocked-on-cloud (Google/Outlook/email round-trip). Logo sizing fix shipped. Resend domain `hello-sello.com` VERIFIED + SMTP configured; branded confirm-signup email pasted. Cloud apply for migrations still DEFERRED (Phases 1–5 batch; reconcile old `avatars` policies first). Next: close 6.1 cloud UAT (10–12), then Phase 7 (Present UX).
+**Last updated:** 2026-06-19 (Platform-foundations research + roadmap expansion — planning only, no code)
+**Branch:** claude/muskan/work (no code this session; planning + docs only)
+**Status:** **idle.** Planning session: researched B2B admin/settings + landing must-haves → `docs/research/platform-foundations-research.md` (committed + pushed). Added **Phases 9–13** to my roadmap (landing+legal / account quick-wins / RBAC+team / **Path B** / settings+emails); **Phase 8 live-walk → capstone**. **Path B (join-existing) pulled forward** into the Onboarding-Ready milestone (DECISIONS.md, committed) — see heads-up below, it'll touch shared onboarding/RLS later. No shared code touched. Prior code work still pending: **6.1 cloud UAT (10–12)**, then Phase 7 (Present UX). Cloud apply for migrations still DEFERRED (Phases 1–5 batch; reconcile old `avatars` policies first).
 **Linear issue in progress:** none
 **Shared files locked:** none
 **PR open:** [#114](https://github.com/HelloSello/hello-sello-mvp/pull/114) Phase 6.1 social sign-in + email verification → dev. [#112](https://github.com/HelloSello/hello-sello-mvp/pull/112) Phase 6 Discover & Home UX → dev. **MERGED:** [#111](https://github.com/HelloSello/hello-sello-mvp/pull/111) Phase 5 surface polish (F-flags) → dev. **MERGED:** Phase 4 auth-gate [#110](https://github.com/HelloSello/hello-sello-mvp/pull/110) → dev · Discover loop [#104](https://github.com/HelloSello/hello-sello-mvp/pull/104) → dev (slices 1–6). *(Prior: Sella proposal #99 merged to dev by Ayush; storage #98 on dev, held from main.)*
@@ -16,6 +16,11 @@
 ---
 
 ## Notes for the other agent
+
+**2026-06-19 (planning heads-up — Path B / multi-user pulled forward; affects shared onboarding/RLS soon, NOTHING built yet). No code this session — research + roadmap only.** Flagging early so it's not a surprise when I start building:
+> - **DECISIONS.md (2026-06-19):** multi-user-per-company + **Path B (join-existing-company)** are pulled forward from post-v0 into the current milestone. The Path A/B *design* you know (locked 2026-05-25) is unchanged — only the timing. Schema (`join_request`, `person_group`, nullable `company_id`) already exists; this is activation, not redesign.
+> - **What it'll touch when I build it (planned Phase 12):** the onboarding "do you have a company?" fork, the company-Superadmin join-approval queue, the pending/no-company state, and the `company_id`-on-approve write — i.e. **onboarding flow + person/company RLS**, shared surface. I'll run the **full sync ritual + lock** before editing any shared file there; this note is just the early warning.
+> - **Phases 11 (RBAC activation — wiring `permission_matrix_entry` to active checks) + 13 (settings/lifecycle emails)** are mine and mostly isolated. **Phase 9 (public landing + German legal pages)** is greenfield, touches no app data. None of this is built yet — all in `.planning/ROADMAP.md`.
 
 **2026-06-19 (Phase 6.1 social sign-in + email verification — code-complete, PR #114 → dev). ⚠️ One shared display file touched: `src/shared/ui/Wordmark.tsx` (logo sizing). Nothing of yours edited; no schema/RPC/deal changes.** Glance on rebase:
 > - **`Wordmark.tsx` logo fix (`f8ac223`):** the inline brand mark rendered ~72px (oversized) — declared `<Image>` dims (120×40) lied about the PNG's real ratio (1900×1136), so Tailwind preflight `height:auto` inflated it. Now uses true intrinsic dims + `h-10 w-auto` (40px) / `w-11 h-auto` for the `stacked` rail variant (rail size unchanged). Affects anywhere `<Wordmark />` renders (auth/onboarding + your Present/Discover headers) — they were all oversized too; this fixes them uniformly.
