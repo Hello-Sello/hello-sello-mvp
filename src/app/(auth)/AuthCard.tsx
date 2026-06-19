@@ -55,6 +55,21 @@ export function AuthCard({
   )
 }
 
+/**
+ * A horizontal "or" divider — a centered label flanked by hairlines. Sits between
+ * the social buttons and the email/password form (login uses "or"; signup uses
+ * "or sign up with email"). Matches the prototype's faint ink/12 rules.
+ */
+export function OrDivider({ label }: { label: string }) {
+  return (
+    <div className="my-4 flex items-center gap-3 text-xs text-ink-muted">
+      <span className="h-px flex-1 bg-ink/12" />
+      {label}
+      <span className="h-px flex-1 bg-ink/12" />
+    </div>
+  )
+}
+
 /** A labelled text input — the only field shape the auth forms use. */
 export function Field({
   label,
@@ -70,12 +85,15 @@ export function Field({
   return (
     <label className="flex flex-col gap-1 text-sm">
       <span className="text-ink-muted">{label}</span>
+      {/* Medium border (prototype): grey ink/30 at rest, ink/45 on hover, white
+          fill, brand border + brand-soft ring on focus. Replaces the old
+          near-invisible white/70 outline. */}
       <input
         name={name}
         type={type}
         required
         autoComplete={autoComplete}
-        className="w-full rounded-xl border border-white/70 bg-white/70 px-3 py-2 text-sm text-ink outline-none transition focus:border-brand focus:ring-2 focus:ring-brand-soft"
+        className="w-full rounded-xl border border-ink/30 bg-white/90 px-3 py-2 text-sm text-ink outline-none transition hover:border-ink/[0.45] focus:border-brand focus:ring-2 focus:ring-brand-soft"
       />
     </label>
   )
