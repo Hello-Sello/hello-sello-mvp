@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Building2, Users, MoreHorizontal, BellOff, Search, type LucideIcon } from "lucide-react";
+import { Building2, Users, MoreHorizontal, BellOff, Search, ChevronDown, type LucideIcon } from "lucide-react";
 import { DealPin } from "@/modules/deals";
 import type { ChatMessageView, ConversationListItem } from "../types";
 import { MessageBubble } from "./MessageBubble";
@@ -21,13 +21,49 @@ export interface ThreadViewProps {
 export function ThreadView({ conversation, messages, onSend }: ThreadViewProps) {
   const isC2C = conversation.threadType === "c2c";
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
   // header overflow menu (⋯) - the home for secondary actions (some still stubs)
   const [menuOpen, setMenuOpen] = useState(false);
 
-  // keep the latest message in view as the stream grows
+  // at-bottom detection: a reader scrolled up is NOT yanked down by a new
+  // message, and the jump-to-bottom arrow shows only when scrolled up. The ref
+  // mirrors the state so the auto-scroll effect reads the latest value without
+  // re-running on every scroll (and without an exhaustive-deps warning).
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  const isAtBottomRef = useRef(true);
+  const NEAR_BOTTOM_PX = 80; // "near the bottom" still counts as at-bottom
+
+  function handleScroll() {
+    const el = scrollRef.current;
+    if (!el) return;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight <= NEAR_BOTTOM_PX;
+    isAtBottomRef.current = atBottom;
+    setIsAtBottom(atBottom);
+  }
+
+  function jumpToBottom() {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    isAtBottomRef.current = true;
+    setIsAtBottom(true);
+  }
+
+  // keep the latest message in view as the stream grows - but ONLY when the
+  // reader is already at the bottom, so reading history is never interrupted.
+  useEffect(() => {
+    if (isAtBottomRef.current) {
+      bottomRef.current?.scrollIntoView({ block: "end" });
+    }
+  }, [messages.length]);
+
+  // one-time initial scroll: opening or switching a thread ALWAYS lands at the
+  // newest message, regardless of isAtBottom (the at-bottom gate only governs
+  // messages that arrive AFTER open). Keyed on the thread id so it re-fires on
+  // a thread switch. We only reset the ref + scroll the DOM here; onScroll
+  // remains the single owner of isAtBottom state (avoids a cascading render).
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: "end" });
-  }, [messages.length]);
+    isAtBottomRef.current = true;
+  }, [conversation.threadId]);
 
   return (
     <div className="flex h-full flex-col">
@@ -113,14 +149,29 @@ export function ThreadView({ conversation, messages, onSend }: ThreadViewProps) 
         threadId={isC2C ? undefined : conversation.threadId}
         counterpartyName={conversation.companyName}
       >
-        {/* stream */}
-        <div className="h-full overflow-y-auto p-4">
-          <div className="mx-auto flex max-w-2xl flex-col gap-2">
-            {messages.map((m) => (
-              <MessageBubble key={m.id} message={m} />
-            ))}
-            <div ref={bottomRef} />
+        {/* stream - relative so the floating jump-to-bottom arrow anchors here */}
+        <div className="relative h-full">
+          <div ref={scrollRef} onScroll={handleScroll} className="h-full overflow-y-auto p-4">
+            <div className="mx-auto flex max-w-2xl flex-col gap-2">
+              {messages.map((m) => (
+                <MessageBubble key={m.id} message={m} />
+              ))}
+              <div ref={bottomRef} />
+            </div>
           </div>
+          {/* jump-to-bottom arrow - shown ONLY when scrolled up; glass surface
+              with a raspberry-accent icon, matching the header buttons */}
+          {!isAtBottom && (
+            <button
+              type="button"
+              onClick={jumpToBottom}
+              aria-label="Jump to latest message"
+              title="Jump to latest message"
+              className="glass-strong absolute bottom-4 right-4 z-10 flex h-10 w-10 items-center justify-center rounded-full text-brand ring-1 ring-black/5 transition hover:text-brand-deep hover:ring-brand/20"
+            >
+              <ChevronDown size={20} strokeWidth={2} />
+            </button>
+          )}
         </div>
       </DealPin>
 
