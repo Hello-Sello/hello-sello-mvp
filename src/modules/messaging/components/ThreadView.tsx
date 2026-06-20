@@ -67,33 +67,30 @@ export function ThreadView({ conversation, messages, onSend }: ThreadViewProps) 
 
   return (
     <div className="flex h-full flex-col">
-      {/* header (5A.2) - identity leads; the relationship door is now a quiet
-          icon button (was a wordy "My Relationship with …" pill, which read as
-          unprofessional). Pro-app pattern: words for the one thing that changes
-          (the name), an icon + tooltip for the repeated action. */}
+      {/* header (5A.2) - identity reconciliation (04A-04, D-02): on a C2C company
+          channel the identity LIVES HERE (the strip's top tier has no identity
+          source on a C2C thread - DealPin gets threadId={undefined} there). On a
+          P2P deal thread the identity is DELEGATED to the DealPin top tier below,
+          so the C2C-only identity block keeps the chat from showing it twice. The
+          relationship door + ⋯ menu stay on BOTH branches as the header actions. */}
       <div className="flex items-center gap-3 border-b border-black/5 px-4 py-3">
-        <span className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-xs font-semibold text-ink/70 ring-1 ring-black/5">
-          {isC2C ? (
-            <Building2 size={17} strokeWidth={1.75} className="text-ink/55" />
-          ) : (
-            conversation.initials
-          )}
-          {/* presence dot - UI placeholder until real presence (Supabase
-              Realtime) is wired. Only on a person (P2P); a company channel is
-              never "online", so no dot there. */}
-          {!isC2C && (
-            <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-success ring-2 ring-white" />
-          )}
-        </span>
-        <div className="flex min-w-0 flex-col">
-          <div className="flex items-center gap-2">
-            <span className="truncate text-sm font-semibold text-ink">{conversation.name}</span>
-            <span className="shrink-0 rounded-full bg-ink/5 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-ink/45">
-              {isC2C ? "C2C" : "P2P"}
+        {isC2C && (
+          <>
+            <span className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-xs font-semibold text-ink/70 ring-1 ring-black/5">
+              <Building2 size={17} strokeWidth={1.75} className="text-ink/55" />
+              {/* a company channel is never "online", so no presence dot here */}
             </span>
-          </div>
-          <span className="truncate text-[11px] text-ink/45">{conversation.subtitle}</span>
-        </div>
+            <div className="flex min-w-0 flex-col">
+              <div className="flex items-center gap-2">
+                <span className="truncate text-sm font-semibold text-ink">{conversation.name}</span>
+                <span className="shrink-0 rounded-full bg-ink/5 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-ink/45">
+                  C2C
+                </span>
+              </div>
+              <span className="truncate text-[11px] text-ink/45">{conversation.subtitle}</span>
+            </div>
+          </>
+        )}
 
         {/* actions - the relationship door (icon) + an overflow (⋯) menu for
             secondary actions. Some menu items are UI placeholders ("soon")
@@ -148,6 +145,9 @@ export function ThreadView({ conversation, messages, onSend }: ThreadViewProps) 
         // pass the thread for a P2P, omit it for a C2C company channel.
         threadId={isC2C ? undefined : conversation.threadId}
         counterpartyName={conversation.companyName}
+        // 04A-04 D-02: the strip's top tier owns identity on the P2P deal path,
+        // so the avatar + Name + Relationship pill render once, in the strip.
+        counterpartyInitials={conversation.initials}
       >
         {/* stream - relative so the floating jump-to-bottom arrow anchors here */}
         <div className="relative h-full">
