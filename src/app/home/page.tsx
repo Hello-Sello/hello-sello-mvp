@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { AlertTriangle, Clock } from 'lucide-react'
 import { createClient } from '@/shared/db/server'
 import { getCurrentPerson } from '@/shared/auth'
+import { isProfileComplete } from '@/modules/profile'
 import { OnboardingChecklist, type ChecklistItem } from './OnboardingChecklist'
 
 /**
@@ -75,9 +76,10 @@ export default async function HomePage() {
    * Block 1 — connect_email: no email integration in Muskan's lane yet; stays as a
    *   person.preferences flag/placeholder until that capability lands.
    *
-   * Block 2 — profile: person is considered "complete" when first_name + last_name
-   *   are non-empty AND title (role) is set AND avatar_path (photo) is uploaded.
-   *   (Name is captured at sign-up; title + photo are set in /account.)
+   * Block 2 — profile: completeness rule lives in profile.isProfileComplete() —
+   *   the canonical display_name is non-empty AND title (role) is set AND avatar_path
+   *   (photo) is uploaded. display_name (not first/last) so single-name / social-login
+   *   identities can complete it. (Name is captured at sign-up; title + photo in /account.)
    *
    * Block 3 — company_details: company is considered "set up" when logo_path (brand
    *   image) + description (what the company does) + website are all non-empty.
@@ -94,12 +96,11 @@ export default async function HomePage() {
     {
       key: 'profile',
       label: 'Your profile',
-      done: !!(
-        person.first_name &&
-        person.last_name &&
-        person.title &&
-        person.avatar_path
-      ),
+      done: isProfileComplete({
+        displayName: person.display_name,
+        title: person.title,
+        avatarPath: person.avatar_path,
+      }),
     },
     {
       key: 'company_details',

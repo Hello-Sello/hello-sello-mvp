@@ -106,7 +106,7 @@ function ProfileForm({ profile, onDirty }: { profile: MyProfile; onDirty: (d: bo
     <Panel title="My Profile" subtitle="How you appear on your card and to partners.">
       <AvatarUpload personId={profile.id} name={f.displayName} initialUrl={profile.avatarUrl} onSaved={saveAvatar} />
       <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Field label="Display name" value={f.displayName} onChange={(v) => set('displayName', v)} icon={User} />
+        <Field label="Full name" value={f.displayName} onChange={(v) => set('displayName', v)} icon={User} />
         <Field label="Title / role" value={f.title} onChange={(v) => set('title', v)} placeholder="Head of Procurement" />
         <Field label="Phone" value={f.phone} onChange={(v) => set('phone', v)} icon={Phone} type="tel" />
         <Field label="Language" value={f.language} onChange={(v) => set('language', v)} icon={Languages} placeholder="English" />
