@@ -57,17 +57,23 @@ export async function signUp(
   redirect(`/verify-email?email=${encodeURIComponent(email)}`)
 }
 
+// Forgot-password result. `sent` flips true once the request completes so the page
+// can swap in the neutral confirmation — it is true on EVERY outcome (anti-enumeration),
+// so it never signals whether the address is registered.
+export type ResetRequestState = { sent?: boolean }
+
 // Forgot-password entry (ACCT-02 / D-07). Mails a recovery link that lands on the
 // existing /auth/confirm handler (verifyOtp type=recovery) and forwards to
 // /reset-password, where the set-password form runs with the recovery session.
 //
-// ANTI-ENUMERATION (T-10-04a): the action ALWAYS returns {} — never an error — so the
-// page shows the same neutral "if an account exists, we sent a link" screen whether or
-// not the address is registered. Any GoTrue error is logged server-side ONLY.
+// ANTI-ENUMERATION (T-10-04a): the action ALWAYS returns { sent: true } — never an
+// error — so the page shows the same neutral "if an account exists, we sent a link"
+// screen whether or not the address is registered. Any GoTrue error is logged
+// server-side ONLY.
 export async function requestPasswordReset(
-  _prev: AuthState,
+  _prev: ResetRequestState,
   formData: FormData,
-): Promise<AuthState> {
+): Promise<ResetRequestState> {
   const email = String(formData.get('email') ?? '')
 
   const supabase = await createClient()
@@ -84,7 +90,7 @@ export async function requestPasswordReset(
     console.error('[requestPasswordReset]', error.message)
   }
   // Always the neutral screen, regardless of outcome.
-  return {}
+  return { sent: true }
 }
 
 // One provider-agnostic OAuth entry for both buttons: Google = 'google',

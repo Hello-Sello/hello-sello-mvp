@@ -1,60 +1,62 @@
 /**
- * Reusable Inbucket link-extraction helper (Phase 10, Plan 01 — Wave-0 RED contract).
+ * Reusable local-mail link-extraction helper (Phase 10, Plan 01 — Wave-0 RED contract).
  *
  * Both auth round-trips (password-reset ACCT-02, email-change ACCT-03) need to read
  * the confirmation email Supabase mails during E2E and pull out the same-origin
  * `/auth/confirm?token_hash=…&type=…&next=…` link to "click". Locally, Supabase routes
- * all outbound mail to **Inbucket** (the local mail catcher) instead of Resend, exposed
- * over a REST API at `http://127.0.0.1:54324/api/v1/mailbox/<addr>`.
+ * all outbound mail to its bundled mail catcher (exposed on port 54324) instead of Resend.
  *
- * This helper polls that mailbox, reads the latest matching message, and returns the
- * absolute confirm URL. It mirrors the local-stack-constants + simple-fetch style of
- * `e2e/fixtures/auth-gate-fixtures.ts` (service-role admin) — local stack only, never
- * the cloud project (T-10-01/T-10-02: the link is asserted same-origin before return).
+ * NOTE (10-04): recent Supabase CLI bundles **Mailpit** (not Inbucket) under the same
+ * `supabase_inbucket_*` container name. Mailpit's REST API differs from Inbucket's, so
+ * this helper talks to the Mailpit API (`/api/v1/search`, `/api/v1/message/<id>`). The
+ * file name and the exported `extractConfirmLink` contract are kept so the two specs that
+ * import it are unaffected; only the transport changed.
  *
- * Alternative (faster, no mailbox poll): mint the link directly with the `sb_secret_`
- * admin client's `auth.admin.generateLink({ type, email })` API (mirrors the
- * service-role admin pattern in `local-supabase.ts`). This helper takes the Inbucket
- * path because it exercises the real template→link shape the human dashboard checkpoint
- * verifies (10-VALIDATION § Manual-Only).
+ * The link is asserted same-origin by the caller before use (T-10-01/T-10-02). Local
+ * stack only, never the cloud project.
  */
 
-/** Local Inbucket REST endpoint — the stack maps SMTP into this mailbox API. */
+/** Local mail-catcher REST endpoint (Mailpit). */
 export const INBUCKET_URL = 'http://127.0.0.1:54324'
 
-/** Inbucket REST shapes (only the fields we read). */
-interface InbucketMessageHeader {
-  id: string
-  date: string
+/** Mailpit REST shapes (only the fields we read). */
+interface MailpitSummary {
+  ID: string
+  Created: string
 }
-interface InbucketMessage {
-  body: { text?: string; html?: string }
+interface MailpitMessage {
+  Text?: string
+  HTML?: string
 }
 
 /** Matches the same-origin confirm link the recovery / email_change templates emit. */
 const CONFIRM_LINK_RE = /https?:\/\/[^\s"'<>]*\/auth\/confirm\?[^\s"'<>]+/g
 
-async function listMailbox(mailbox: string): Promise<InbucketMessageHeader[]> {
-  const res = await fetch(`${INBUCKET_URL}/api/v1/mailbox/${encodeURIComponent(mailbox)}`)
+/** Newest-first list of messages addressed to `mailbox`. */
+async function searchMailbox(mailbox: string): Promise<MailpitSummary[]> {
+  const res = await fetch(
+    `${INBUCKET_URL}/api/v1/search?query=${encodeURIComponent(`to:${mailbox}`)}`,
+  )
   if (!res.ok) {
-    if (res.status === 404) return [] // mailbox not created until first mail arrives
-    throw new Error(`Inbucket: mailbox list failed (${res.status}) for ${mailbox}`)
+    if (res.status === 404) return []
+    throw new Error(`Mailpit: search failed (${res.status}) for ${mailbox}`)
   }
-  return (await res.json()) as InbucketMessageHeader[]
+  const data = (await res.json()) as { messages?: MailpitSummary[] }
+  // Mailpit returns newest-first already; keep that order.
+  return data.messages ?? []
 }
 
-async function readMessage(mailbox: string, id: string): Promise<InbucketMessage> {
-  const res = await fetch(
-    `${INBUCKET_URL}/api/v1/mailbox/${encodeURIComponent(mailbox)}/${id}`,
-  )
-  if (!res.ok) throw new Error(`Inbucket: message read failed (${res.status}) for ${id}`)
-  return (await res.json()) as InbucketMessage
+async function readMessage(id: string): Promise<MailpitMessage> {
+  const res = await fetch(`${INBUCKET_URL}/api/v1/message/${id}`)
+  if (!res.ok) throw new Error(`Mailpit: message read failed (${res.status}) for ${id}`)
+  return (await res.json()) as MailpitMessage
 }
 
 /** Pull every `/auth/confirm?…` link out of a message body (text + html). */
-function confirmLinksIn(msg: InbucketMessage): string[] {
-  const haystack = `${msg.body.text ?? ''}\n${msg.body.html ?? ''}`
-  return haystack.match(CONFIRM_LINK_RE) ?? []
+function confirmLinksIn(msg: MailpitMessage): string[] {
+  const haystack = `${msg.Text ?? ''}\n${msg.HTML ?? ''}`
+  // Decode HTML-entity ampersands so URL parsing of the query string is reliable.
+  return (haystack.match(CONFIRM_LINK_RE) ?? []).map((l) => l.replace(/&amp;/g, '&'))
 }
 
 /**
@@ -62,7 +64,7 @@ function confirmLinksIn(msg: InbucketMessage): string[] {
  * link found. If `opts.type` is given, prefer the message whose confirm link carries
  * that `type` (e.g. `recovery` for reset, `email_change` for the address swap).
  *
- * @param mailbox  The recipient address (the part Inbucket indexes by).
+ * @param mailbox  The recipient address (the part the catcher indexes by).
  * @param opts.type  Optional `type=` filter (`'recovery'` | `'email_change'` | …).
  * @returns the absolute, same-origin confirm URL.
  * @throws if no matching confirm link arrives within the poll window.
@@ -75,10 +77,10 @@ export async function extractConfirmLink(
   const deadline = Date.now() + timeoutMs
 
   while (Date.now() < deadline) {
-    const headers = await listMailbox(mailbox)
-    // Newest first — Inbucket returns oldest→newest, so walk in reverse.
-    for (const header of [...headers].reverse()) {
-      const msg = await readMessage(mailbox, header.id)
+    const summaries = await searchMailbox(mailbox)
+    // Newest first — walk in arrival order so the freshest matching link wins.
+    for (const summary of summaries) {
+      const msg = await readMessage(summary.ID)
       const links = confirmLinksIn(msg)
       const match = type
         ? links.find((l) => new URL(l).searchParams.get('type') === type)
@@ -89,6 +91,6 @@ export async function extractConfirmLink(
   }
 
   throw new Error(
-    `Inbucket: no /auth/confirm link${type ? ` (type=${type})` : ''} arrived for ${mailbox} within ${timeoutMs}ms`,
+    `Mailpit: no /auth/confirm link${type ? ` (type=${type})` : ''} arrived for ${mailbox} within ${timeoutMs}ms`,
   )
 }

@@ -63,6 +63,11 @@ test('logged-out reset round-trip: forgot-password → recovery link → reset-p
   await page.goto('/forgot-password')
   await page.locator('input[name="email"]').fill(ALICE_EMAIL)
   await page.getByRole('button', { name: /send reset link/i }).click()
+  // Wait for the action to complete (neutral screen) before polling the mailbox —
+  // otherwise extractConfirmLink races the request and returns the previous,
+  // already-consumed recovery email (which then fails verifyOtp with 403). Mirrors
+  // the same wait the initial request does above.
+  await expect(page.getByText(/if an account exists/i)).toBeVisible({ timeout: 10_000 })
   const restoreUrl = await extractConfirmLink(ALICE_EMAIL, { type: 'recovery' })
   await page.goto(restoreUrl)
   await page.waitForURL((url) => url.pathname === '/reset-password', { timeout: 15_000 })

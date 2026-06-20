@@ -1,18 +1,14 @@
 'use client'
 
-import { useActionState, useState } from 'react'
+import { useActionState } from 'react'
 import Link from 'next/link'
-import { requestPasswordReset, type AuthState } from '../actions'
+import { requestPasswordReset, type ResetRequestState } from '../actions'
 import { AuthCard, Field } from '../AuthCard'
 
-const initial: AuthState = {}
+const initial: ResetRequestState = {}
 
 export default function ForgotPasswordPage() {
-  const [, action, pending] = useActionState(requestPasswordReset, initial)
-  // The action always returns {} (anti-enumeration), so the page tracks its own
-  // "submitted" flag to swap in the neutral confirmation screen — we never reveal
-  // whether the address is registered.
-  const [submitted, setSubmitted] = useState(false)
+  const [state, action, pending] = useActionState(requestPasswordReset, initial)
 
   return (
     <AuthCard
@@ -24,19 +20,15 @@ export default function ForgotPasswordPage() {
         </Link>
       }
     >
-      {submitted ? (
+      {state.sent ? (
+        // Neutral confirmation — the action returns { sent: true } on every outcome,
+        // so this screen never reveals whether the address is registered.
         <p className="text-sm text-ink-muted">
           If an account exists for that email, we&apos;ve sent a link to reset your
           password. Check your inbox (and spam) for the next step.
         </p>
       ) : (
-        <form
-          action={(formData) => {
-            setSubmitted(true)
-            action(formData)
-          }}
-          className="flex flex-col gap-3"
-        >
+        <form action={action} className="flex flex-col gap-3">
           <Field label="Email" name="email" type="email" autoComplete="email" />
           <button
             type="submit"
