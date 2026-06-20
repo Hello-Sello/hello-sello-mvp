@@ -145,6 +145,23 @@ Two AI agents working in parallel can step on each other's edits faster than cha
 
 ---
 
+## Parallel worktree sessions (multiple agents, one repo)
+
+Beyond the two-engineer split, one engineer may run several sessions at once — typically one per phase — to work in parallel. Each session runs in its **own git worktree on its own branch**, so code edits never collide; sessions meet only through git (push → PR → merge). This applies to any number of sessions and any phase — it is not tied to a specific set.
+
+**One-time personal setup** (gitignored, per-engineer — does not affect anyone else):
+- **`.worktreeinclude`** auto-copies the per-engineer scaffolding (`.planning/`, `CLAUDE.md`, the coordination hook) into every new worktree. Because it *copies*, each worktree keeps its OWN `STATE.md` / session-log — no clobbering — and GSD works there out of the box.
+- A personal **`SessionStart` hook** (`.claude/hooks/session-start-coord.sh`) surfaces the sync state at the start of every session, so coordination is automatic rather than remembered.
+
+**Start a parallel session:** `claude --worktree <name>` (one phase per worktree). The copy + hook run automatically; nothing manual at startup.
+
+**Coordination is the same sync ritual above, applied across worktrees:**
+- The coordination channel is **git-tracked files only** (code + `docs/team/sync/*`). `.planning/` is per-worktree/gitignored and is **never** used to coordinate.
+- **Ownership first:** prefer splitting work so sessions own disjoint files. A file an in-flight phase is editing belongs to that phase until it merges — other sessions rebase onto it rather than editing it concurrently.
+- For any genuinely shared file, follow the lock ritual: fetch → check every `docs/team/sync/*` → lock it in your sync file (commit+push alone) → edit → release.
+
+---
+
 ## Owned areas — light touch
 
 We work separately on different modules / components - a natural, flexible split, settled per task rather than fixed to folders. Touch the area someone is actively in only with a quick heads-up first.

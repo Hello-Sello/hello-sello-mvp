@@ -11,7 +11,67 @@
 
 ---
 
+## ⚠️ READ FIRST (2026-06-20, Muskan) — cloud history has DIVERGED; a naive `db push` FAILS
+
+A `supabase db push --dry-run` on 2026-06-20 **failed**: *"Remote migration versions not found
+in local migrations directory."* Cause: the cloud `schema_migrations` table recorded the early
+migrations under **different timestamps** than the repo files (cloud was first seeded via MCP /
+an earlier push with other timestamps — e.g. cloud `auth_person_trigger` = `20260607161101`,
+local file = `20260607160000`). The CLI matches by exact version string, so it can't line them up
+and refuses to push. **The "How to push" section below is SUPERSEDED for this batch** — use the
+reconciliation here instead.
+
+### Mapping — cloud's 47 recorded versions vs 74 local files
+- **49 local files already on cloud (or superseded)** → mark applied in history, do NOT re-run:
+  - the early 46 (same migrations, wrong cloud timestamp)
+  - two F3 drift-backfills: `profile_qr_foundation`, `get_public_profile` (= cloud's `get_public_profile_rpc`; body captured verbatim from cloud)
+  - `seed_demo_world` — now an INTENTIONALLY-EMPTY no-op (demo moved to `seed.sql`)
+  - `confirm_detected_deal_proposer_initiator` — superseded by #15 `confirm_detected_deal_batch`
+- **25 genuinely-new** → the real push set (deal-domain Phase 1–3f + Muskan's sec/verif/discover/city + `oauth_person_trigger_fix`). **No demo seed** (only the `chat_message_type_declined_seed` lookup row).
+
+### Reconciliation commands — run from a LINKED machine, coordinated, in one sitting
+Steps 1–2 edit ONLY the `schema_migrations` history table (no schema/data change, recoverable).
+Step 4 is the only real change. After step 4: optionally drop orphan `avatars_read` policy
+(cosmetic), enable Google/Azure in the dashboard, flip `.env.local` → cloud, run 6.1 cloud UAT.
+
+```bash
+# 1. revert cloud's 47 wrong-timestamp records (history table only)
+supabase migration repair --status reverted 20260607153213 20260607153307 20260607153438 20260607153514 20260607153558 20260607153751 20260607161101 20260607161156 20260607161418 20260607162313 20260607222021 20260609165519 20260609173745 20260609174802 20260609215708 20260609221619 20260609223440 20260609225546 20260610095712 20260610103436 20260610105256 20260610105408 20260610105607 20260610114841 20260610162647 20260610165011 20260610165032 20260610170809 20260610215912 20260611111522 20260611111904 20260611143301 20260611154759 20260611160131 20260612011423 20260612103438 20260612110434 20260612113030 20260612211018 20260614182314 20260614184134 20260614194457 20260614200037 20260614200513 20260614210220 20260614212704 20260614221510
+
+# 2. mark the 49 already-applied/superseded local versions as applied (no re-run)
+supabase migration repair --status applied 20260607090001 20260607090002 20260607090003 20260607090004 20260607090005 20260607090006 20260607160000 20260607170000 20260607180000 20260607190000 20260608120000 20260609180000 20260609183000 20260609193000 20260609194500 20260609210000 20260610010000 20260610020000 20260610120000 20260610130000 20260610140000 20260610150000 20260610160000 20260610161000 20260610170000 20260610171000 20260610180000 20260610190000 20260611120000 20260611123000 20260611140000 20260611150000 20260611160000 20260612011145 20260612120000 20260612130000 20260612140000 20260612160000 20260614120000 20260614120100 20260614121000 20260614130000 20260614140000 20260614150000 20260614160000 20260614170000 20260614180000 20260615120000 20260615123000
+
+# 3. dry-run — expect EXACTLY 25 pending, in timestamp order
+supabase db push --dry-run
+
+# 4. push the 25 genuinely-new
+supabase db push
+```
+
+### The 25 that actually push (verify against the dry-run output)
+`deal_pending_change` · `propose_deal_change_rpc` · `confirm_deal_change_rpc` ·
+`sec01_caller_verified_discover_gate` · `sec02_revoke_anon_catalogue_read` · `verif_admin_rpcs` ·
+`verif_reject_and_licence` · `verif_revoke_anon` · `confirm_deal_change_no_seal_write` ·
+`deal_pending_change_realtime` · `auth04_revoked_status` · `confirm_deal_change_announce` ·
+`chat_message_type_declined_seed` · `list_discoverable_companies_connect_scope` · `company_city` ·
+`deal_card_notes` · `list_discoverable_companies_city` · `confirm_deal_change_notes` ·
+`create_deal_draft_notes` · `resize_dli_private_columns` · `confirm_deal_change_margin_carry` ·
+`create_deal_draft_retire_private_box` · `deal_line_item_batch` · `confirm_detected_deal_batch` ·
+`oauth_person_trigger_fix`
+
+### Before running
+- **Ayush:** confirm #15 `confirm_detected_deal_batch` carries ALL of
+  `confirm_detected_deal_proposer_initiator`'s logic — we mark the June-14 file applied on that
+  assumption (it's your code).
+- Math check: 49 marked-applied + 25 pushed = 74 local total. All 25 are dated after the highest
+  marked-applied (`20260615123000`), so the push is sequential — **no `--include-all` needed**.
+
+---
+
 ## How to push the pending migrations to cloud (Phase 1 + 2 + 3c + 3d + 3f — one batch of 15)
+
+> **SUPERSEDED for the combined batch — see "⚠️ READ FIRST" above.** A plain `db push` fails on
+> the history divergence; the steps below only work after the reconciliation repair.
 
 Do this only AFTER the work is reviewed/merged, and coordinate with Muskan first — the
 shared cloud DB has her catalogue work and a live Sella detection cron.
@@ -140,4 +200,15 @@ Cautions for the cloud apply:
 
 ## APPLIED TO CLOUD
 
-*(none yet — move rows here with the date once `supabase db push` is run)*
+### 2026-06-20 — combined batch (Muskan + Ayush), reconciled + pushed
+Ran the "⚠️ READ FIRST" reconciliation against `byipusuthdlskdxoexkt`:
+1. `migration repair --status reverted` × 47 (cleared wrong-timestamp records)
+2. `migration repair --status applied` × 49 (already-applied/superseded — incl. `profile_qr_foundation`, `get_public_profile`, no-op `seed_demo_world`, `confirm_detected_deal_proposer_initiator` superseded by `confirm_detected_deal_batch`)
+3. `db push` — **25 applied, 0 errors**, in timestamp order `deal_pending_change` → `oauth_person_trigger_fix`
+
+Result: cloud history = **74**, matches local. Security advisor: **0 errors** (warnings all pre-existing/by-design). No demo seed pushed. `oauth_person_trigger_fix` live → Google/Azure sign-up unblocked.
+
+Post-push: `.env.local` flipped to cloud; Google + Azure enabled in dashboard. Open: drop orphan `avatars_read` policy (cosmetic); 6.1 cloud UAT (sign-up tests 10–12).
+
+### 2026-06-20 — canonical display_name (single migration)
+`20260620120000_canonical_display_name.sql` pushed via a clean sequential `db push` (1 migration; history already reconciled, no repair needed). Updates `handle_new_user` to set the canonical `display_name` on every signup path + one-time backfill of existing rows. **Applied, 0 errors; cloud history = 75.** Verified: the test account's `display_name` backfilled, `profile_complete = true`. (See DECISIONS.md 2026-06-20 canonical-name entry.)

@@ -26,8 +26,7 @@ export async function signUp(
   _prev: AuthState,
   formData: FormData,
 ): Promise<AuthState> {
-  const firstName = String(formData.get('first_name') ?? '').trim()
-  const lastName = String(formData.get('last_name') ?? '').trim()
+  const fullName = String(formData.get('full_name') ?? '').trim()
   const email = String(formData.get('email') ?? '')
   const password = String(formData.get('password') ?? '')
 
@@ -37,15 +36,15 @@ export async function signUp(
   // server-render paths).
   const origin =
     (await headers()).get('origin') ?? process.env.NEXT_PUBLIC_SITE_URL!
-  // first_name / last_name ride in user metadata; the handle_new_user trigger
-  // reads them to fill the person row. company_id is left NULL (Path-B) and set
-  // later at company setup (1c). emailRedirectTo points the confirmation link
-  // at our /auth/confirm handler (then onward to onboarding).
+  // full_name rides in user metadata; the handle_new_user trigger reads it to set
+  // the canonical display_name (and derive first/last for the vCard). company_id is
+  // left NULL (Path-B) and set later at company setup (1c). emailRedirectTo points
+  // the confirmation link at our /auth/confirm handler (then onward to onboarding).
   const { error } = await supabase.auth.signUp({
     email,
     password,
     options: {
-      data: { first_name: firstName, last_name: lastName },
+      data: { full_name: fullName },
       emailRedirectTo: `${origin}/auth/confirm?next=/onboarding`,
     },
   })

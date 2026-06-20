@@ -4,6 +4,10 @@ import { createClient } from '@/shared/db/server'
 // columns, so onboarding, the account page, the bottom-left card, and the public
 // page all go through the same door. Callers never see the column / links shape.
 
+// The onboarding-completeness rule lives in its own pure (DB-free) file so it stays
+// unit-testable and can't drift from the check the checklist renders.
+export { isProfileComplete, type ProfileCompletenessInput } from './completeness'
+
 export type MyProfile = {
   id: string
   displayName: string

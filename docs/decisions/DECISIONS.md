@@ -1108,3 +1108,42 @@ Phase 3f wired the dormant batch layer end-to-end (deal-domain only). A deal lin
 - **RLS:** `product_batch` stays seller-private (`batch_all`); the buyer only ever sees the frozen public snapshot on the line. 2 migrations (`20260618140000_deal_line_item_batch`, `20260618150000_confirm_detected_deal_batch`); 8 demo batches seeded.
 
 *Why record:* locks the batch data path (one line = one chosen lot, frozen) and the two refinements Ayush drove - product+batch as one entity (D-06) and the margin join now batch-aware (D-09, which removes the prior limitation). **Status: built + verified 2026-06-18 (7/7 must-haves; unit 41/41; deal-change e2e 20/20; full 75-migration `supabase db reset` green after merging Muskan's dev work). LOCAL - cloud push deferred + coordinated with Muskan (15-migration batch).** (Sources: this build session; the `03F-*` planning artifacts; ADR-0002.)
+
+## 2026-06-20 — Person name is a single canonical `display_name`, set by every signup path; onboarding gates on it (not first/last)
+
+The split `first_name`/`last_name` model couldn't represent mononyms / single-name social logins — the first real Google signup ("Muskan", no surname) got `last_name = ''` and could never complete the "Your profile" onboarding step (which required `last_name`). Root cause: two competing name representations (the UI edits `display_name`; the check read first/last) that disagreed.
+
+- **`display_name` is the canonical name.** Every signup path populates it: the `handle_new_user` trigger now sets it (provider `full_name`/`name`, else a compose from the resolved first/last), and the email signup form sends a single `full_name`. `first_name`/`last_name` stay only as DERIVED values for the QR vCard — no longer the source of truth for "the name".
+- **Onboarding "Your profile" completeness is a pure, unit-tested rule** (`profile.isProfileComplete()` — single source of truth), NOT an inline first/last check. Research-backed (W3C personal-names; single-full-name-field UX): never require a surname; one field absorbs mononyms, middle names, reordered names. No academic-title / middle-name field (the single field covers them).
+- **One-time backfill** filled `display_name` for existing rows from first+last (idempotent), in the SAME migration as the trigger change — data and rule migrate together, so pre-change accounts aren't broken by the new rule.
+
+*Why record:* locks the canonical-name model and that the completeness rule lives in one tested function. **Status: built + verified 2026-06-20 (46 unit green, tsc clean; trigger + backfill verified on local `db reset` and applied to cloud `20260620120000_canonical_display_name`; auth-trigger e2e written but blocked by pre-existing local fixture-key rot).** (Sources: this session; W3C Personal Names; SaaS onboarding research.)
+
+## 2026-06-20 — Onboarding profile completion = name + title only; profile photo is OPTIONAL (not a completion gate)
+
+Surfaced during 6.1 UAT: the home checklist sends an unfinished "Your profile" to the onboarding stepper, which collects name + title but NO photo — yet completion required a photo, so the step could never tick it (you had to detour to `/account`).
+
+- **Decision: drop the photo from the required completion check** → profile complete = `display_name && title`. Photo stays available (and can be nudged) but never blocks. Resolves the stepper-vs-settings disparity (the step now collects enough) AND follows industry practice.
+- **Why (researched, per the "research common patterns first" rule):** SaaS onboarding best practice — only require a field if the product can't function without it; every extra required field ≈ 7% conversion drop; request photos AFTER first value (progressive profiling), not during setup. (ProductLed, Candu, DesignRevision, 2025.)
+
+*Why record:* locks that onboarding completion is name+title and photo is optional, with the reasoning. **Status: DECIDED 2026-06-20, NOT yet built — implement next session (small change to `isProfileComplete` + its unit tests + the home comment).** (Sources: this session UAT; SaaS onboarding research.)
+
+## 2026-06-20 — E2E fixtures derive the local Supabase key from the running stack; never hardcode
+
+The 3 auth specs hardcoded the legacy demo service-role JWT. The local stack (Supabase CLI 2.75) now uses asymmetric **ES256 JWT signing** (CLI default) + the new **`sb_secret_`** API-key format, so the hardcoded HS256 JWT no longer authenticates → every auth E2E failed ("key rot").
+
+- **One source of truth: `e2e/fixtures/local-supabase.ts`.** Resolves `LOCAL_SERVICE_KEY` in order: `SUPABASE_SECRET_KEY` env override → parse `supabase status -o env` (`SECRET_KEY`) → throw a clear "is the stack up?" error. The running stack OWNS its keys; tests derive from it. Deletes the 3 duplicated hardcoded copies. Fail-loud beats a cryptic 401.
+- **`auth-trigger` is deferred, not fixed.** It calls `auth.admin.createUser`, which needs an **ES256 `service_role` JWT**; the new stack 403s `sb_secret_` on GoTrue admin endpoints (works for PostgREST/DB, not admin auth). The clean fix needs a direct-DB insert into `auth.users` (a `pg` dev-dependency) — deferred since signup was manually verified end-to-end (session 33).
+
+*Why record:* locks the "never hardcode a rotating local key" rule and the single-source-of-truth fixture. **Status: built + pushed 2026-06-20 (commit `f42f04b`) — `admin-verification` green, `auth-gate` 5/6 (1 fail = known append-only `audit_log` DELETE bug, unrelated), `auth-trigger` deferred.** (Sources: this session.)
+
+## 2026-06-20 — Parallel work uses git worktrees + `.worktreeinclude`; `.planning` coordination is git-tracked only
+
+A single engineer now runs several sessions at once (one per phase) to work in parallel. Settled how those sessions isolate and coordinate.
+
+- **Isolation:** each parallel session runs in its **own git worktree on its own branch** (`claude --worktree <name>`). Code edits never collide; sessions meet only through git (push → PR → merge).
+- **GSD planning inside worktrees:** a personal (gitignored) **`.worktreeinclude`** auto-copies `.planning/`, `CLAUDE.md`, and a personal `SessionStart` hook into every new worktree. Because it *copies*, each worktree keeps its OWN `STATE.md`/session-log (no clobbering); `ROADMAP.md`/`REQUIREMENTS.md` are read-mostly and edited in ONE place (the main checkout) — new worktrees inherit the latest at creation time.
+- **Coordination channel = git-tracked files only** (code + `docs/team/sync/*`). `.planning/` is per-worktree/gitignored and is never used to coordinate. Ownership-first (split work into disjoint files); lock genuinely-shared files via the sync ritual.
+- **Industry-validated:** git worktrees are the consensus mechanism for parallel coding agents; Claude Code ships native `--worktree` + `.worktreeinclude`. Agent-teams (shared task list + mailbox) exists but is for one-session multi-teammate work, not N independent long-running phase sessions, and still requires ownership boundaries.
+
+*Why record:* locks the team's parallel-execution model so future sessions don't re-derive it, and documents why neither GSD workspaces (start empty) nor workstreams (don't isolate code) fit "parallel phases of one roadmap." **Status: setup DONE 2026-06-20 — personal gitignored `.worktreeinclude` + `.claude/hooks/session-start-coord.sh` + settings; general protocol added to `docs/team/WORKFLOW.md` "Parallel worktree sessions".** (Sources: this session; Claude Code worktrees + agent-teams docs; 2026 parallel-agent coordination research.)

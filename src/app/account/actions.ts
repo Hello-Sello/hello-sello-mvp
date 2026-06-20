@@ -10,7 +10,10 @@ import { createClient } from '@/shared/db/server'
 
 export async function saveMyProfile(fields: ProfileFields) {
   const r = await updateMyProfile(fields)
-  if (!r.error) revalidatePath('/account')
+  if (!r.error) {
+    revalidatePath('/account')
+    revalidatePath('/home') // refresh the onboarding "Your profile" check
+  }
   return r
 }
 
@@ -31,7 +34,10 @@ export async function saveCompanyProfile(fields: Partial<CompanyFields>) {
 
 export async function saveAvatar(path: string) {
   const r = await setMyAvatarPath(path)
-  if (!r.error) revalidatePath('/account')
+  if (!r.error) {
+    revalidatePath('/account')
+    revalidatePath('/home') // photo completes the onboarding "Your profile" check
+  }
   return r
 }
 

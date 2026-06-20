@@ -320,3 +320,9 @@ Prototyped in `prototypes/chat-prototype` (decisions: DECISIONS.md `## 2026-06-0
 ## Phase 4 auth-gate hardening — `person.preferences` is flags-only (2026-06-17, code review)
 
 - **`person.preferences` is an onboarding-completion flags blob, NOT a profile data store.** It holds `{ onboarding: { email_connected, profile, company_details } }`. Profile display fields — `display_name`, `title`, `phone`, `language`, and `links` (a `{ linkedin?: string }` JSONB bag) — are **direct typed `person` columns**, read/written by `src/modules/profile/index.ts`. Onboarding page code must read them from the `person` row directly, never from `preferences`. *(Source: CR-01 in Phase 4 code review — `onboarding/page.tsx` was silently reading `prefs.display_name` etc. from the flags blob, causing a blank prefill form on every resume. Fixed commit `4e217b9`.)*
+
+## Local Supabase stack uses asymmetric JWT signing — legacy service key dead (2026-06-20, E2E fix)
+
+- **The local stack (CLI 2.75+) auto-generates asymmetric ES256 JWT signing keys** (`GOTRUE_JWT_KEYS=[{kty:EC…}]`), even with `signing_keys_path` unset in `config.toml`. Consequence: the old hardcoded HS256 demo `service_role` JWT no longer authenticates anywhere ("signing method HS256 is invalid").
+- **The new `sb_secret_` key works for PostgREST/DB (service_role) but NOT GoTrue admin endpoints** (`/auth/v1/admin/*` → 403 — it's not a JWT, so no `service_role` claim). So any local test/tooling needing `auth.admin.*` (createUser/deleteUser) needs a real ES256-signed service JWT or a direct-DB path; `sb_secret_` alone is insufficient.
+- **Tests derive the key from the running stack** (`e2e/fixtures/local-supabase.ts`), never hardcode it — the key rotates per stack recreate. *(Source: E2E auth key-rot fix, 2026-06-20; DECISIONS.md same date.)*

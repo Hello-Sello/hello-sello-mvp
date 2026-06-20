@@ -49,6 +49,12 @@ export async function updateSession(request: NextRequest) {
   //                    "check your inbox" screen post-signup (was implicitly
   //                    reachable only because confirmation was OFF).
   const isPublicRoute =
+    // EXACT match on '/' — never path.startsWith('/'), which would match every
+    // path and allowlist the entire app to signed-out users (V4 / T-09-02).
+    path === '/' ||              // public landing (LAND-01)
+    path === '/impressum' ||     // legal — Impressum (§5 DDG)
+    path === '/datenschutz' ||   // legal — Datenschutzerklärung
+    path === '/agb' ||           // legal — AGB
     path.startsWith('/c/') ||
     path === '/auth/callback' ||
     path === '/auth/confirm' ||

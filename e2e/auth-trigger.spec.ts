@@ -28,13 +28,11 @@
 
 import { test, expect } from '@playwright/test'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { LOCAL_SUPABASE_URL, LOCAL_SERVICE_KEY } from './fixtures/local-supabase'
 
-// Local Supabase service-role constants (standard local dev values — same as
-// e2e/fixtures/auth-gate-fixtures.ts). The service-role key bypasses RLS and
-// unlocks the auth.admin API needed to mint auth.users rows directly.
-const LOCAL_SUPABASE_URL = 'http://127.0.0.1:54321'
-const LOCAL_SERVICE_KEY =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU'
+// The service-role key bypasses RLS and unlocks the auth.admin API needed to
+// mint auth.users rows directly. Credentials come from the running local stack
+// (fixtures/local-supabase.ts) — never hardcoded, since the key rotates.
 
 function makeAdminClient(): SupabaseClient {
   return createClient(LOCAL_SUPABASE_URL, LOCAL_SERVICE_KEY, {
@@ -53,7 +51,7 @@ async function withSignedUpUser(
   admin: SupabaseClient,
   email: string,
   user_metadata: Record<string, unknown>,
-  assertPerson: (person: { first_name: string; last_name: string }) => void,
+  assertPerson: (person: { first_name: string; last_name: string; display_name: string | null }) => void,
 ): Promise<void> {
   const uniqueEmail = email.replace('@', `+${Date.now()}@`)
   const { data, error } = await admin.auth.admin.createUser({
@@ -67,13 +65,13 @@ async function withSignedUpUser(
   try {
     const { data: person, error: personError } = await admin
       .from('person')
-      .select('first_name, last_name')
+      .select('first_name, last_name, display_name')
       .eq('id', userId)
       .single()
     if (personError) {
       throw new Error(`person lookup failed for ${userId}: ${personError.message}`)
     }
-    assertPerson(person as { first_name: string; last_name: string })
+    assertPerson(person as { first_name: string; last_name: string; display_name: string | null })
   } finally {
     await admin.auth.admin.deleteUser(userId)
   }
@@ -97,6 +95,7 @@ test.describe('handle_new_user() trigger — name resolution across signup shape
       (person) => {
         expect(person.first_name).toBe('Ada')
         expect(person.last_name).toBe('Lovelace')
+        expect(person.display_name).toBe('Ada Lovelace')
       },
     )
   })
@@ -113,6 +112,7 @@ test.describe('handle_new_user() trigger — name resolution across signup shape
       (person) => {
         expect(person.first_name).toBe('Grace')
         expect(person.last_name).toBe('Hopper')
+        expect(person.display_name).toBe('Grace Hopper')
       },
     )
   })
@@ -129,6 +129,7 @@ test.describe('handle_new_user() trigger — name resolution across signup shape
       (person) => {
         expect(person.first_name).toBe('Linus')
         expect(person.last_name).toBe('Torvalds')
+        expect(person.display_name).toBe('Linus Torvalds')
       },
     )
   })
@@ -149,6 +150,26 @@ test.describe('handle_new_user() trigger — name resolution across signup shape
         expect(person.first_name.length).toBeGreaterThan(0)
         // last_name is allowed to be empty for a single-name / no-name signup.
         expect(person.last_name).toBeDefined()
+        // display_name (canonical) must also be non-empty so onboarding completes.
+        expect((person.display_name ?? '').length).toBeGreaterThan(0)
+      },
+    )
+  })
+
+  // ------------------------------------------------------------------------
+  // Test 5 — mononym (single-name social login, e.g. Google "Muskan"): the
+  // canonical display_name must be set even though last_name is empty. This is
+  // the exact case that blocked onboarding before display_name became canonical.
+  // ------------------------------------------------------------------------
+  test('mononym signup (name only, no surname) → display_name set, last_name empty', async () => {
+    await withSignedUpUser(
+      admin,
+      'muskan.mono@example.test',
+      { name: 'Muskan' },
+      (person) => {
+        expect(person.display_name).toBe('Muskan')
+        expect(person.first_name).toBe('Muskan')
+        expect(person.last_name).toBe('') // mononym: no surname, and that's fine
       },
     )
   })
