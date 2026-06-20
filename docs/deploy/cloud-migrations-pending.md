@@ -90,6 +90,21 @@ in the correct final state; the intermediate version is never used mid-push.
 
 ## PENDING (local only — NOT on cloud yet)
 
+### ⚠️ 2026-06-21 (Muskan) — verified against live cloud: the batch below is DONE; only Phase 10 remains
+
+A live `list_migrations` on 2026-06-21 shows cloud's tip = `20260620120000_canonical_display_name`.
+**Everything in the "READ FIRST" reconciliation and the Phase 1–3f / sec / verif / discover / city /
+oauth / canonical_display_name lists below is now APPLIED to cloud** (reconciled + pushed 2026-06-20).
+Those sections are kept for history only — they are no longer pending.
+
+**The only migration still local-ahead-of-cloud:**
+
+| Migration file | What it does | Push when / how |
+|----------------|--------------|-----------------|
+| `20260620160000_get_public_profile_verification.sql` | Adds `company_verification_status` (14th column) to the `get_public_profile` RPC → the verified pill on the public `/c/[handle]` card (Phase 10 / ACCT-01). | **Deferred** — Phase 10 isn't in prod. Push when it ships: a clean single `supabase db push` (cloud now matches local through `canonical_display_name`, no reconcile needed). **Migration before code** — if Phase 10 app code goes live without it, `/c/[handle]` errors (app reads a column the old RPC won't return). |
+
+---
+
 ### Phase 1 — Held Two-Sided Deal Change (the held-change backbone)
 
 All deal-domain, additive (a new table + new functions + one publication add). **Nothing of
