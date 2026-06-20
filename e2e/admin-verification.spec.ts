@@ -1,5 +1,6 @@
 import { test, expect, type Page, type BrowserContext } from '@playwright/test'
 import { createClient } from '@supabase/supabase-js'
+import { LOCAL_SUPABASE_URL, LOCAL_SERVICE_KEY } from './fixtures/local-supabase'
 
 // Phase 3 — Admin Verification Surface E2E spec
 // Covers VERIF-01/02/03/05 (queue, approve, reject, route gate).
@@ -30,11 +31,8 @@ const NON_HS_PASSWORD = 'password123'
 const PENDING_CO_ID = 'cccccccc-cccc-cccc-cccc-cccccccccccc'
 const PENDING_CO_DETAIL_URL = `/admin/verifications/${PENDING_CO_ID}`
 
-// Local Supabase service-role client for fixture management.
-// These are the standard local dev constants — safe to use in tests.
-const LOCAL_SUPABASE_URL = 'http://127.0.0.1:54321'
-const LOCAL_SERVICE_KEY =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU'
+// Service-role client for fixture management — credentials from the running
+// local stack (see fixtures/local-supabase.ts; never hardcoded — the key rotates).
 
 async function resetPendingCo(): Promise<void> {
   const admin = createClient(LOCAL_SUPABASE_URL, LOCAL_SERVICE_KEY)
