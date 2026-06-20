@@ -53,7 +53,7 @@ import {
   Leaf,
 } from "lucide-react";
 import { getOwnCatalog, getProductBatches } from "../supabase/reads";
-import { formatMoney } from "../lib/derive";
+import { formatMoney, lineMarginOf, averageMarginOf } from "../lib/derive";
 import { addOrIncrement, emptyCustomLine, packStepGrams, packsOf } from "../lib/lineEditing";
 import { PAYMENT_TERMS } from "../lib/paymentTerms";
 import type {
@@ -226,6 +226,22 @@ export function DealForm({
     [lines],
   );
   const anyPriced = lines.some((l) => l.unitPrice != null);
+
+  // MRGN-01 (D-04): the deal-level AVERAGE margin - the ONLY margin shown
+  // anywhere in the form, private to the owner. Each priced line's margin is
+  // derived live from its `unitPrice` + the owner's `ownInput` (seller cost /
+  // buyer resale), then rolled up with the unweighted mean. Returns null when no
+  // line is priced+costed, so the footer renders "—" not a misleading 0%. It is
+  // derived purely from client state and is NEVER added to the onSubmit payload,
+  // so the private cost never leaks into a shared/proposal message. Recomputes
+  // live as cost/sell/qty/batch change (it depends on `lines`). The owner side
+  // defaults to "seller" when undefined (the create path before side is known).
+  const avgMargin = useMemo(() => {
+    const margins = lines.map((l) =>
+      l.unitPrice != null ? lineMarginOf(l.unitPrice, l.ownInput ?? null, side ?? "seller") : null,
+    );
+    return averageMarginOf(margins);
+  }, [lines, side]);
 
   // FORM-02 add-by-name: filter the catalogue already in memory (no server
   // search). The grid below shows matches; clicking one routes through the SAME
@@ -825,7 +841,38 @@ export function DealForm({
                 {anyPriced ? formatMoney(total) : "—"}
               </span>
             </div>
-            {/* avg-margin pill is added in Task 2 */}
+
+            {/* MRGN-01 (D-04): the deal-level "Avg. margin - only you" pill - the
+                ONLY margin shown anywhere. Owner-only: rendered ONLY when
+                showPrivate (a proposal passes showPrivate=false, so margin never
+                leaks). Colour-coded by health (green >=25 / amber <25 / red <=0),
+                "—" when nothing is priced; recomputes live (derived from lines).
+                `avgMargin` is a fraction (e.g. 0.28) -> shown as a signed %. */}
+            {showPrivate &&
+              (() => {
+                const pct = avgMargin == null ? null : Math.round(avgMargin * 100);
+                const tone =
+                  pct == null
+                    ? "text-ink/45"
+                    : pct <= 0
+                      ? "text-danger"
+                      : pct < 25
+                        ? "text-amber-600"
+                        : "text-emerald-600";
+                return (
+                  <span className="inline-flex w-max items-center gap-2 rounded-full border border-dashed border-black/10 bg-ink/[0.02] px-2.5 py-1 text-[11.5px] text-ink/55">
+                    <span className="font-mono text-[10px] uppercase tracking-wide text-ink/45">
+                      Avg. margin
+                    </span>
+                    <span className={`font-mono text-[13px] font-semibold tabular-nums ${tone}`}>
+                      {pct == null ? "—" : `${pct > 0 ? "+" : ""}${pct}%`}
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-[10px] text-ink/45">
+                      <Lock size={10} /> only you
+                    </span>
+                  </span>
+                );
+              })()}
           </div>
 
           <div className="flex items-center justify-end gap-2.5">
