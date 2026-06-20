@@ -65,3 +65,6 @@ export { confirmDeal, createDeal, editDeal } from "./actions";
 export { DealCard } from "./components/DealCard";
 export { DealPin } from "./components/DealPin";
 export { DealWorkspace } from "./components/DealWorkspace";
+export { SellaMark } from "./components/SellaMark";
+export { SellaCurtain } from "./components/SellaCurtain";
+export { TranslateButton } from "./components/TranslateButton";
