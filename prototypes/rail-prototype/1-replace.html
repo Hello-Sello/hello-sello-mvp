@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Hello Sello Rail - Model 1: Replace (drill-down)</title>
+<!--
+  Hello Sello global LEFT NAVIGATION RAIL - Model 1: Replace (drill-down).
+  Throwaway INTERACTIVE prototype. One file, inline CSS + JS, no build, no external assets.
+
+  Model 1 behaviour: clicking Connect REPLACES the surface list in the SAME space with
+  Connect's sub-nav (CONNECT context header + Inbox / Chat / Relationships). Surfaces are
+  hidden while inside Connect. A back chevron returns to the surfaces. The swap animates as a
+  horizontal slide (surfaces out left, Connect in from right; back reverses).
+
+  Collapse shrinks the whole rail to a ~64px icon rail: labels become hover tooltips, profile
+  becomes avatar-only, the collapse glyph flips to an expand glyph. Works at both levels
+  (surfaces level + inside Connect, where the back control becomes a tooltipped back icon).
+
+  Search note: in the REAL app, search may live in the top bar instead. It sits inside the
+  rail here purely to match the two reference screenshots Ayush gave.
+
+  Brand tokens copied from src/app/globals.css (read-only). Pink-glass skin only.
+-->
+<style>
+  :root{
+    /* brand tokens - from globals.css */
+    --bg-from:#ffffff;
+    --bg-to:#fff1f7;
+    --brand:#e30b5d;
+    --brand-soft:#ffb7d5;
+    --brand-deep:#76002d;
+    --brand-fill:#fde7f1;          /* soft pink pill fill for active items */
+    --ink:#1f2020;
+    --muted:#6b6470;
+    --line:#ecdfe9;
+    --glass-bg:rgba(255,255,255,0.62);
+    --glass-bg-strong:rgba(255,255,255,1);
+    --glass-border:rgba(255,255,255,0.65);
+    --glass-shadow:0 10px 34px -12px rgba(118,0,45,0.18);
+
+    /* layout rhythm - spacing is the top priority, so it lives in named tokens */
+    --rail-w:300px;               /* comfortable expanded width */
+    --rail-w-collapsed:64px;      /* clean icon rail */
+    --rail-pad:16px;              /* breathing room around the rail edge */
+    --row-h:44px;                 /* comfortable touch-friendly row height */
+    --row-gap:4px;                /* gentle gap between rows, never cramped */
+    --radius:14px;
+    --radius-pill:11px;
+    --ease:cubic-bezier(.22,.61,.36,1);
+  }
+
+  *{box-sizing:border-box;}
+  html,body{height:100%;margin:0;}
+  body{
+    color:var(--ink);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    background:
+      radial-gradient(60rem 60rem at 10% -12%, rgba(255,183,213,.55), transparent 60%),
+      radial-gradient(46rem 46rem at 108% 6%, rgba(227,11,93,.10), transparent 55%),
+      linear-gradient(160deg, var(--bg-from) 0%, var(--bg-to) 100%);
+    background-attachment:fixed;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  .shell{display:flex;gap:18px;height:100vh;padding:18px;}
+
+  /* ---------- glass primitives ---------- */
+  .glass{
+    background:var(--glass-bg);
+    backdrop-filter:blur(20px) saturate(140%);
+    -webkit-backdrop-filter:blur(20px) saturate(140%);
+    border:1px solid var(--glass-border);
+    box-shadow:var(--glass-shadow);
+  }
+  .glass-strong{
+    background:var(--glass-bg-strong);
+    backdrop-filter:blur(24px) saturate(160%);
+    -webkit-backdrop-filter:blur(24px) saturate(160%);
+    border:1px solid var(--glass-border);
+    box-shadow:var(--glass-shadow);
+  }
+
+  /* ---------- the rail ---------- */
+  .rail{
+    position:relative;
+    flex:0 0 auto;
+    width:var(--rail-w);
+    border-radius:22px;
+    display:flex;
+    flex-direction:column;
+    padding:var(--rail-pad);
+    overflow:hidden;
+    transition:width .34s var(--ease);
+  }
+  .rail.collapsed{width:var(--rail-w-collapsed);padding:14px 8px;}
+
+  /* TOP: wordmark + single state-aware collapse control */
+  .rail-top{
+    display:flex;align-items:center;justify-content:space-between;
+    gap:10px;min-height:40px;margin-bottom:14px;
+  }
+  .wordmark{
+    display:flex;align-items:center;gap:9px;font-weight:800;font-size:17px;
+    letter-spacing:-.2px;white-space:nowrap;color:var(--ink);
+  }
+  .logo-badge{
+    width:30px;height:30px;border-radius:9px;flex:0 0 auto;
+    background:linear-gradient(135deg,var(--brand) 0%, var(--brand-deep) 100%);
+    color:#fff;display:grid;place-items:center;font-weight:800;font-size:14px;
+    box-shadow:0 6px 16px -6px rgba(227,11,93,.6);
+  }
+  .wordmark .word{transition:opacity .18s ease;}
+  .rail.collapsed .wordmark .word{opacity:0;width:0;overflow:hidden;}
+  .rail.collapsed .rail-top{justify-content:center;}
+  .rail.collapsed .wordmark{gap:0;}
+
+  /* single collapse control - left-chevron that flips to right-chevron */
+  .collapse-btn{
+    flex:0 0 auto;width:32px;height:32px;border-radius:9px;border:1px solid var(--line);
+    background:rgba(255,255,255,.55);color:var(--muted);
+    display:grid;place-items:center;cursor:pointer;
+    transition:background .15s ease,color .15s ease,transform .15s ease;
+  }
+  .collapse-btn:hover{background:#fff;color:var(--brand);}
+  .collapse-btn svg{transition:transform .34s var(--ease);}
+  .rail.collapsed .collapse-btn svg{transform:rotate(180deg);}
+  /* in collapsed mode the control sits below the logo so it stays centred + reachable */
+  .rail.collapsed .rail-top{flex-direction:column;gap:12px;}
+
+  /* SEARCH */
+  .search{
+    position:relative;display:flex;align-items:center;gap:9px;height:40px;
+    padding:0 12px;border-radius:12px;border:1px solid var(--line);
+    background:rgba(255,255,255,.5);color:var(--muted);margin-bottom:16px;
+    cursor:text;transition:border-color .15s ease,background .15s ease;
+  }
+  .search:hover{background:#fff;}
+  .search input{
+    border:0;outline:0;background:transparent;font-size:13.5px;color:var(--ink);
+    width:100%;font-family:inherit;
+  }
+  .search input::placeholder{color:var(--muted);}
+  .kbd{
+    flex:0 0 auto;font-size:11px;font-weight:600;color:var(--muted);
+    background:#fff;border:1px solid var(--line);border-radius:6px;padding:2px 6px;
+    white-space:nowrap;
+  }
+  .rail.collapsed .search{
+    padding:0;justify-content:center;width:48px;height:40px;margin:0 auto 14px;
+  }
+  .rail.collapsed .search input,.rail.collapsed .search .kbd{display:none;}
+
+  /* MIDDLE - the swap stage. Two panels stacked; one slides in, one out. */
+  .nav-stage{
+    position:relative;flex:1 1 auto;min-height:0;overflow:hidden;
+  }
+  .panel{
+    position:absolute;inset:0;display:flex;flex-direction:column;
+    transition:transform .34s var(--ease),opacity .26s ease;
+    overflow-y:auto;overflow-x:hidden;
+  }
+  .panel::-webkit-scrollbar{width:6px;}
+  .panel::-webkit-scrollbar-thumb{background:rgba(118,0,45,.14);border-radius:99px;}
+
+  /* surfaces panel default visible; connect panel parked to the right */
+  .panel-surfaces{transform:translateX(0);opacity:1;}
+  .panel-connect{transform:translateX(24px);opacity:0;pointer-events:none;}
+  /* when drilled in: surfaces slide out left, connect slides to centre */
+  .rail.in-connect .panel-surfaces{transform:translateX(-24px);opacity:0;pointer-events:none;}
+  .rail.in-connect .panel-connect{transform:translateX(0);opacity:1;pointer-events:auto;}
+
+  /* section label */
+  .sect-label{
+    font-size:11px;font-weight:700;letter-spacing:.12em;color:var(--muted);
+    padding:2px 10px;margin:2px 0 8px;text-transform:uppercase;white-space:nowrap;
+  }
+  .rail.collapsed .sect-label{opacity:0;height:8px;margin:0;padding:0;}
+
+  /* nav rows - the core comfortable list item */
+  .nav-list{display:flex;flex-direction:column;gap:var(--row-gap);}
+  .nav-row{
+    position:relative;display:flex;align-items:center;gap:12px;
+    height:var(--row-h);padding:0 12px;border-radius:var(--radius-pill);
+    color:var(--ink);background:transparent;border:0;width:100%;cursor:pointer;
+    font-size:14px;font-weight:500;font-family:inherit;text-align:left;
+    transition:background .14s ease,color .14s ease;white-space:nowrap;
+  }
+  .nav-row:hover{background:rgba(255,255,255,.7);}
+  .nav-row .ic{flex:0 0 auto;width:20px;height:20px;display:grid;place-items:center;color:var(--muted);}
+  .nav-row .lbl{flex:1 1 auto;overflow:hidden;}
+  .nav-row .chev{flex:0 0 auto;color:var(--muted);opacity:.7;transition:transform .2s ease;}
+  .nav-row:hover .ic{color:var(--ink);}
+
+  /* active state - soft pink pill */
+  .nav-row.active{background:var(--brand-fill);color:var(--brand-deep);font-weight:650;}
+  .nav-row.active .ic{color:var(--brand);}
+
+  /* disabled / greyed surfaces */
+  .nav-row.disabled{color:#bcb3bd;cursor:not-allowed;}
+  .nav-row.disabled .ic{color:#cfc6d0;}
+  .nav-row.disabled:hover{background:transparent;}
+  .nav-row .soon{
+    font-size:10px;font-weight:700;letter-spacing:.04em;color:#c9aebd;
+    border:1px solid var(--line);border-radius:6px;padding:1px 6px;background:#fff;
+  }
+
+  /* CONNECT context header (back chevron + title) */
+  .ctx-head{
+    display:flex;align-items:center;gap:8px;height:var(--row-h);
+    padding:0 6px;margin-bottom:6px;
+  }
+  .ctx-back{
+    width:34px;height:34px;flex:0 0 auto;border-radius:10px;border:1px solid var(--line);
+    background:rgba(255,255,255,.6);color:var(--brand-deep);display:grid;place-items:center;
+    cursor:pointer;transition:background .14s ease,transform .14s ease;
+  }
+  .ctx-back:hover{background:#fff;transform:translateX(-1px);}
+  .ctx-title{font-size:12px;font-weight:700;letter-spacing:.12em;color:var(--brand-deep);text-transform:uppercase;}
+
+  /* collapsed icon-rail tweaks: centre everything, hide labels */
+  .rail.collapsed .nav-row{justify-content:center;padding:0;width:48px;height:48px;margin:0 auto;border-radius:13px;}
+  .rail.collapsed .nav-row .lbl,
+  .rail.collapsed .nav-row .chev,
+  .rail.collapsed .nav-row .soon{display:none;}
+  .rail.collapsed .ctx-head{justify-content:center;padding:0;margin-bottom:8px;}
+  .rail.collapsed .ctx-title{display:none;}
+  .rail.collapsed .ctx-back{width:48px;height:44px;}
+
+  /* tooltips for collapsed mode (and disabled-soon hints) */
+  .tip{position:relative;}
+  .tip::after{
+    content:attr(data-tip);position:absolute;left:calc(100% + 12px);top:50%;
+    transform:translateY(-50%) scale(.96);transform-origin:left center;
+    background:var(--ink);color:#fff;font-size:12px;font-weight:600;white-space:nowrap;
+    padding:6px 10px;border-radius:8px;pointer-events:none;opacity:0;
+    transition:opacity .12s ease,transform .12s ease;z-index:30;
+    box-shadow:0 8px 22px -8px rgba(0,0,0,.4);
+  }
+  .tip::before{
+    content:"";position:absolute;left:calc(100% + 6px);top:50%;
+    transform:translateY(-50%);border:5px solid transparent;border-right-color:var(--ink);
+    opacity:0;transition:opacity .12s ease;z-index:30;
+  }
+  /* only show rail tooltips when collapsed; disabled-soon tip shows always */
+  .rail.collapsed .tip:hover::after{opacity:1;transform:translateY(-50%) scale(1);}
+  .rail.collapsed .tip:hover::before{opacity:1;}
+
+  /* BOTTOM: profile card */
+  .rail-bottom{margin-top:12px;padding-top:12px;border-top:1px solid var(--line);}
+  .profile{
+    display:flex;align-items:center;gap:11px;width:100%;
+    padding:9px 10px;border-radius:14px;border:1px solid var(--line);
+    background:rgba(255,255,255,.55);cursor:pointer;font-family:inherit;
+    transition:background .14s ease;
+  }
+  .profile:hover{background:#fff;}
+  .avatar{
+    width:38px;height:38px;flex:0 0 auto;border-radius:11px;
+    background:linear-gradient(135deg,var(--brand-soft) 0%, var(--brand) 100%);
+    color:#fff;display:grid;place-items:center;font-weight:800;font-size:14px;
+    box-shadow:0 4px 12px -4px rgba(227,11,93,.5);
+  }
+  .profile .who{flex:1 1 auto;min-width:0;text-align:left;}
+  .profile .who .nm{font-size:13.5px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .profile .who .org{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .profile .pchev{flex:0 0 auto;color:var(--muted);}
+  .rail.collapsed .rail-bottom{border-top:0;padding-top:8px;}
+  .rail.collapsed .profile{justify-content:center;padding:0;width:48px;height:48px;margin:0 auto;border:0;background:transparent;}
+  .rail.collapsed .profile:hover .avatar{transform:scale(1.05);}
+  .rail.collapsed .profile .who,.rail.collapsed .profile .pchev{display:none;}
+
+  /* focus visibility on every control */
+  .collapse-btn:focus-visible,.search:focus-within,.nav-row:focus-visible,
+  .ctx-back:focus-visible,.profile:focus-visible{
+    outline:2px solid var(--brand);outline-offset:2px;
+  }
+
+  /* ---------- faux chat content to the right ---------- */
+  .content{flex:1 1 auto;border-radius:22px;display:flex;flex-direction:column;overflow:hidden;min-width:0;}
+  .content-top{
+    display:flex;align-items:center;gap:12px;padding:18px 22px;border-bottom:1px solid var(--line);
+  }
+  .content-top .c-av{
+    width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,#ffd0e3,#ff8fbd);
+    display:grid;place-items:center;color:#fff;font-weight:800;
+  }
+  .content-top .c-name{font-weight:700;font-size:15px;}
+  .content-top .c-sub{font-size:12px;color:var(--muted);}
+  .content-top .dot{width:8px;height:8px;border-radius:99px;background:var(--success,#34b233);display:inline-block;margin-right:5px;}
+  .crumbs{margin-left:auto;font-size:12px;color:var(--muted);}
+  .crumbs b{color:var(--brand-deep);}
+
+  .thread{flex:1 1 auto;overflow-y:auto;padding:24px 22px;display:flex;flex-direction:column;gap:14px;}
+  .bub{max-width:62%;padding:11px 15px;border-radius:16px;font-size:14px;line-height:1.45;}
+  .bub.them{align-self:flex-start;background:#fff;border:1px solid var(--line);border-bottom-left-radius:5px;}
+  .bub.me{align-self:flex-end;background:linear-gradient(135deg,var(--brand) 0%,var(--brand-deep) 100%);color:#fff;border-bottom-right-radius:5px;}
+  .day{align-self:center;font-size:11px;color:var(--muted);background:rgba(255,255,255,.6);padding:3px 12px;border-radius:99px;}
+
+  .composer{padding:14px 18px;border-top:1px solid var(--line);display:flex;gap:10px;align-items:center;}
+  .composer .field{flex:1 1 auto;height:44px;border-radius:14px;border:1px solid var(--line);background:#fff;display:flex;align-items:center;padding:0 16px;color:var(--muted);font-size:14px;}
+  .composer .send{width:44px;height:44px;border-radius:13px;border:0;background:linear-gradient(135deg,var(--brand),var(--brand-deep));color:#fff;display:grid;place-items:center;cursor:pointer;}
+
+  /* hint banner so the reviewer knows what to click */
+  .hint{
+    position:fixed;left:50%;bottom:16px;transform:translateX(-50%);
+    font-size:12px;color:var(--muted);background:rgba(255,255,255,.8);
+    border:1px solid var(--line);border-radius:99px;padding:7px 16px;
+    box-shadow:var(--glass-shadow);z-index:50;
+  }
+  .hint b{color:var(--brand-deep);}
+
+  @media (prefers-reduced-motion:reduce){
+    *{transition:none !important;}
+  }
+</style>
+</head>
+<body>
+  <div class="shell">
+
+    <!-- ===================== RAIL ===================== -->
+    <nav class="rail glass" id="rail" aria-label="Primary navigation">
+
+      <!-- TOP: wordmark + single state-aware collapse control -->
+      <div class="rail-top">
+        <div class="wordmark">
+          <span class="logo-badge">HS</span>
+          <span class="word">Hello Sello</span>
+        </div>
+        <button class="collapse-btn tip" id="collapseBtn" data-tip="Expand"
+                aria-label="Collapse navigation" aria-expanded="true">
+          <!-- panel-collapse glyph: chevron-left; CSS rotates it 180deg when collapsed -->
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M15 18l-6-6 6-6"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- SEARCH (prototype: in rail to match references; real app may use top bar) -->
+      <div class="search tip" id="search" data-tip="Search" role="search">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <input placeholder="Search" aria-label="Search" />
+        <span class="kbd">&#8984;S</span>
+      </div>
+
+      <!-- MIDDLE: swap stage holding two panels -->
+      <div class="nav-stage">
+
+        <!-- ---- PANEL A: surfaces ---- -->
+        <div class="panel panel-surfaces" id="panelSurfaces">
+          <div class="sect-label">Main</div>
+          <div class="nav-list">
+
+            <button class="nav-row tip" data-tip="Home">
+              <span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg></span>
+              <span class="lbl">Home</span>
+            </button>
+
+            <!-- Connect = the only surface with sub-items; drills in -->
+            <button class="nav-row tip" id="connectRow" data-tip="Connect"
+                    aria-haspopup="true" aria-expanded="false">
+              <span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 12h8"/><circle cx="5" cy="12" r="2.2"/><circle cx="19" cy="12" r="2.2"/></svg></span>
+              <span class="lbl">Connect</span>
+              <span class="chev"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></span>
+            </button>
+
+            <button class="nav-row tip" data-tip="Discover">
+              <span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M14 8l-2.5 5.5L6 16l2.5-5.5z"/></svg></span>
+              <span class="lbl">Discover</span>
+            </button>
+
+            <button class="nav-row tip" data-tip="Present">
+              <span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg></span>
+              <span class="lbl">Present</span>
+            </button>
+
+            <!-- greyed / disabled surfaces -->
+            <div class="nav-row disabled tip" data-tip="Buy &middot; coming soon" aria-disabled="true">
+              <span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6h15l-1.5 9h-12z"/><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M6 6L5 3H3"/></svg></span>
+              <span class="lbl">Buy</span>
+              <span class="soon">Soon</span>
+            </div>
+            <div class="nav-row disabled tip" data-tip="Sell &middot; coming soon" aria-disabled="true">
+              <span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18v4a3 3 0 01-6 0 3 3 0 01-6 0 3 3 0 01-6 0z"/><path d="M5 11v9h14v-9"/></svg></span>
+              <span class="lbl">Sell</span>
+              <span class="soon">Soon</span>
+            </div>
+            <div class="nav-row disabled tip" data-tip="Trade &middot; coming soon" aria-disabled="true">
+              <span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h11l-3-3M17 17H6l3 3"/></svg></span>
+              <span class="lbl">Trade</span>
+              <span class="soon">Soon</span>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- ---- PANEL B: Connect sub-nav (replaces surfaces) ---- -->
+        <div class="panel panel-connect" id="panelConnect" aria-hidden="true">
+
+          <!-- context header: back chevron + CONNECT title -->
+          <div class="ctx-head">
+            <button class="ctx-back tip" id="backBtn" data-tip="Back to surfaces" aria-label="Back to surfaces">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+            </button>
+            <span class="ctx-title">Connect</span>
+          </div>
+
+          <div class="nav-list">
+            <button class="nav-row tip" data-tip="Inbox">
+              <span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h5l2 3h4l2-3h5"/><path d="M5 6h14l2 6v6H3v-6z"/></svg></span>
+              <span class="lbl">Inbox</span>
+            </button>
+            <button class="nav-row active tip" data-tip="Chat" aria-current="page">
+              <span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 01-11.5 7.2L4 20l1-4.5A8 8 0 1121 12z"/></svg></span>
+              <span class="lbl">Chat</span>
+            </button>
+            <button class="nav-row tip" data-tip="Relationships">
+              <span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="3"/><path d="M3 20a6 6 0 0112 0"/><circle cx="17" cy="8" r="2.4"/><path d="M15 20a6 6 0 016-5"/></svg></span>
+              <span class="lbl">Relationships</span>
+            </button>
+          </div>
+        </div>
+
+      </div><!-- /nav-stage -->
+
+      <!-- BOTTOM: profile card -->
+      <div class="rail-bottom">
+        <button class="profile tip" data-tip="Bina Sharma" aria-label="Bina Sharma, Greenleaf - account menu">
+          <span class="avatar">BS</span>
+          <span class="who">
+            <span class="nm">Bina Sharma</span>
+            <span class="org">Greenleaf</span>
+          </span>
+          <span class="pchev"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
+        </button>
+      </div>
+
+    </nav>
+
+    <!-- ===================== FAUX CHAT CONTENT ===================== -->
+    <main class="content glass-strong" aria-label="Chat">
+      <div class="content-top">
+        <span class="c-av">DK</span>
+        <div>
+          <div class="c-name">Devraj Kumar</div>
+          <div class="c-sub"><span class="dot"></span>Active now</div>
+        </div>
+        <div class="crumbs">Connect &middot; <b>Chat</b></div>
+      </div>
+      <div class="thread">
+        <span class="day">Today</span>
+        <div class="bub them">Hi Bina! Got the new sample batch in. Want me to send pricing?</div>
+        <div class="bub me">Yes please &#8212; and a photo of the packaging if you have one.</div>
+        <div class="bub them">On it. The mint variant moved really well last week.</div>
+        <div class="bub me">Great. Let's hold a small deal on 40 units to start.</div>
+        <div class="bub them">Perfect, drafting it now.</div>
+      </div>
+      <div class="composer">
+        <div class="field">Write a message&#8230;</div>
+        <button class="send" aria-label="Send">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </button>
+      </div>
+    </main>
+
+  </div>
+
+  <div class="hint">Try: click <b>Connect</b> to drill in &middot; the <b>back</b> chevron to return &middot; the <b>top-left chevron</b> to collapse the rail</div>
+
+<script>
+  // ---- Model 1 wiring: collapse toggle + Connect drill / back ----
+  const rail        = document.getElementById('rail');
+  const collapseBtn = document.getElementById('collapseBtn');
+  const connectRow  = document.getElementById('connectRow');
+  const backBtn     = document.getElementById('backBtn');
+  const panelConnect= document.getElementById('panelConnect');
+
+  // Collapse / expand the whole rail
+  function setCollapsed(on){
+    rail.classList.toggle('collapsed', on);
+    collapseBtn.setAttribute('aria-expanded', String(!on));
+    collapseBtn.setAttribute('aria-label', on ? 'Expand navigation' : 'Collapse navigation');
+    collapseBtn.setAttribute('data-tip', on ? 'Expand' : 'Collapse');
+  }
+  collapseBtn.addEventListener('click', () => setCollapsed(!rail.classList.contains('collapsed')));
+
+  // Drill into Connect (surfaces slide out left, Connect slides in from right)
+  function enterConnect(){
+    rail.classList.add('in-connect');
+    connectRow.setAttribute('aria-expanded','true');
+    panelConnect.setAttribute('aria-hidden','false');
+  }
+  // Back to surfaces (reverse)
+  function exitConnect(){
+    rail.classList.remove('in-connect');
+    connectRow.setAttribute('aria-expanded','false');
+    panelConnect.setAttribute('aria-hidden','true');
+  }
+  connectRow.addEventListener('click', enterConnect);
+  backBtn.addEventListener('click', exitConnect);
+
+  // Esc backs out of Connect (matches the "level-switch near the eye" research)
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && rail.classList.contains('in-connect')) exitConnect();
+  });
+</script>
+</body>
+</html>

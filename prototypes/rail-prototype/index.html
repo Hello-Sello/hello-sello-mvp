@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Hello Sello rail - 3 models to compare</title>
+<style>
+  :root{
+    --brand:#e30b5d;
+    --brand-soft:#ffe6f0;
+    --brand-deep:#76002d;
+    --ink:#1f2020;
+    --muted:#6b6470;
+    --line:#f0e3ec;
+    --bg:#fffafc;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ height:100%; margin:0; }
+  body{
+    color:var(--ink);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background:
+      radial-gradient(60rem 60rem at 8% -14%, rgba(255,183,213,0.50), transparent 60%),
+      radial-gradient(46rem 46rem at 110% 4%, rgba(227,11,93,0.08), transparent 55%),
+      var(--bg);
+    background-attachment:fixed;
+    -webkit-font-smoothing:antialiased;
+    min-height:100%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:48px 24px;
+  }
+
+  .wrap{
+    width:100%;
+    max-width:560px;
+    text-align:center;
+  }
+
+  .brand-mark{
+    display:inline-grid; place-items:center;
+    width:38px; height:38px; border-radius:11px;
+    background:linear-gradient(150deg, var(--brand) 0%, var(--brand-deep) 120%);
+    color:#fff; font-weight:800; font-size:18px; letter-spacing:-.5px;
+    box-shadow:0 6px 16px -6px rgba(227,11,93,0.55);
+    margin-bottom:18px;
+  }
+
+  h1{
+    font-size:24px; font-weight:800; letter-spacing:-.5px;
+    margin:0 0 8px;
+  }
+  .sub{
+    font-size:14.5px; color:var(--muted); margin:0 auto 28px; max-width:460px; line-height:1.55;
+  }
+
+  .models{
+    display:grid; gap:14px; text-align:left;
+  }
+
+  .model{
+    display:flex; align-items:center; gap:16px;
+    text-decoration:none; color:inherit;
+    background:rgba(255,255,255,0.78);
+    -webkit-backdrop-filter:blur(16px) saturate(140%);
+    backdrop-filter:blur(16px) saturate(140%);
+    border:1px solid var(--line);
+    border-radius:18px;
+    padding:18px 20px;
+    box-shadow:0 16px 40px -22px rgba(118,0,45,0.26);
+    transition:transform .16s ease, box-shadow .16s ease, border-color .16s ease;
+  }
+  .model:hover{
+    transform:translateY(-2px);
+    border-color:var(--brand-soft);
+    box-shadow:0 22px 44px -22px rgba(227,11,93,0.4);
+  }
+  .model:focus-visible{ outline:2px solid var(--brand); outline-offset:3px; }
+
+  .num{
+    flex:0 0 auto;
+    display:inline-grid; place-items:center;
+    width:34px; height:34px; border-radius:10px;
+    background:var(--brand-soft); color:var(--brand-deep);
+    font-weight:800; font-size:16px;
+  }
+  .meta{ flex:1 1 auto; min-width:0; }
+  .name{ font-size:15.5px; font-weight:750; letter-spacing:-.3px; margin:0 0 3px; }
+  .desc{ font-size:13px; color:var(--muted); line-height:1.45; margin:0; }
+  .arrow{
+    flex:0 0 auto; color:var(--brand);
+    display:inline-flex; opacity:.7; transition:opacity .16s ease, transform .16s ease;
+  }
+  .model:hover .arrow{ opacity:1; transform:translate(2px,-2px); }
+  .arrow svg{ width:18px; height:18px; }
+
+  .foot{
+    margin-top:24px; font-size:12px; color:var(--muted); line-height:1.5;
+  }
+  .foot code{
+    font-family:ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size:11.5px; color:var(--brand-deep);
+    background:var(--brand-soft); padding:2px 7px; border-radius:6px;
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="brand-mark">H</div>
+    <h1>Hello Sello rail - 3 models to compare</h1>
+    <p class="sub">
+      One global left rail, three ways it can show Connect's sub-items when you drill in.
+      Open each model and play with the collapse toggle and the drill control.
+    </p>
+
+    <div class="models">
+      <a class="model" href="1-replace.html" target="_blank" rel="noopener">
+        <span class="num">1</span>
+        <span class="meta">
+          <p class="name">Replace (drill-down)</p>
+          <p class="desc">Connect's sub-nav slides in and takes the place of the surface list - one level at a time.</p>
+        </span>
+        <span class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7"/><path d="M8 7h9v9"/></svg></span>
+      </a>
+
+      <a class="model" href="2-accordion.html" target="_blank" rel="noopener">
+        <span class="num">2</span>
+        <span class="meta">
+          <p class="name">Accordion (tree)</p>
+          <p class="desc">Connect opens in place as a sub-tree under itself - siblings stay visible the whole time.</p>
+        </span>
+        <span class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7"/><path d="M8 7h9v9"/></svg></span>
+      </a>
+
+      <a class="model" href="3-accordion-messages.html" target="_blank" rel="noopener">
+        <span class="num">3</span>
+        <span class="meta">
+          <p class="name">Accordion + Messages</p>
+          <p class="desc">Same accordion tree, plus a Messages people-list below it - closest to the reference screenshots.</p>
+        </span>
+        <span class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7"/><path d="M8 7h9v9"/></svg></span>
+      </a>
+    </div>
+
+    <p class="foot">
+      Source: Connect/Chat UI overhaul build plan, slice <code>F2</code> (nav merge).
+      See <code>NOTES.md</code> for the shared model and the recommendation.
+    </p>
+  </div>
+</body>
+</html>
