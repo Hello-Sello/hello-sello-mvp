@@ -264,15 +264,15 @@ function DealsTab({ deals }: { deals: DealSummaryView[] }) {
                   href={`/connect/deal/${d.id}`}
                   className="flex shrink-0 items-center gap-1 text-[11px] font-medium text-brand-deep transition hover:gap-1.5 hover:text-brand"
                 >
-                  Open workspace
+                  Open Deal Room
                   <ArrowRight size={12} strokeWidth={2} />
                 </Link>
               ) : (
                 <span
                   className="shrink-0 text-[11px] font-medium text-ink/25"
-                  title="No workspace for this deal"
+                  title="No Deal Room for this deal"
                 >
-                  No workspace
+                  No Deal Room
                 </span>
               )}
             </div>
