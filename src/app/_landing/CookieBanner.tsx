@@ -40,7 +40,16 @@ export function CookieBanner() {
   const [decided, setDecided] = useState<boolean | null>(null);
 
   useEffect(() => {
-    setDecided(localStorage.getItem(CONSENT_KEY) !== null);
+    // Storage can throw (Safari Private Mode, storage-blocked/embedded contexts).
+    // A throw here would blank the public front door, so fail safe: if we can't
+    // read a prior choice, show the banner (default to "not decided").
+    let priorChoice = false;
+    try {
+      priorChoice = localStorage.getItem(CONSENT_KEY) !== null;
+    } catch {
+      priorChoice = false;
+    }
+    setDecided(priorChoice);
   }, []);
 
   // Footer "Cookie settings" dispatches this to re-open after a choice.
@@ -53,15 +62,24 @@ export function CookieBanner() {
   function choose(value: "accepted" | "rejected") {
     // Extension point: when analytics lands, branch optional categories off the
     // stored value here before persisting. Essential-only for now.
-    localStorage.setItem(CONSENT_KEY, value);
+    // Guard storage: if it throws we still dismiss for this session — the choice
+    // just won't persist across reloads, which is an acceptable fail-safe.
+    try {
+      localStorage.setItem(CONSENT_KEY, value);
+    } catch {
+      // storage unavailable — nothing to persist; dismiss for this session.
+    }
     setDecided(true);
   }
 
   if (decided === null || decided === true) return null;
 
   return (
+    // role="region" (not "dialog"): the banner does NOT trap focus or block the
+    // page (you can keep reading/scrolling), so a modal-dialog contract would be
+    // a false a11y promise. A labelled region is the honest semantic.
     <div
-      role="dialog"
+      role="region"
       aria-label="Cookie consent"
       className="fixed inset-x-4 bottom-4 z-[60] mx-auto max-w-xl glass-strong rounded-2xl border border-ink/10 p-5 shadow-[0_30px_80px_-20px_rgba(118,0,45,0.4)]"
     >

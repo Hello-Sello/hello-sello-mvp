@@ -31,11 +31,13 @@ export function Footer() {
           <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-ink">
             Product
           </h3>
+          {/* Absolute anchors (/#how, /#faq) — the footer also renders on the
+              legal pages, which don't have those section ids. */}
           <nav className="mt-3 flex flex-col gap-2">
-            <a href="#how" className="transition hover:text-brand">
+            <a href="/#how" className="transition hover:text-brand">
               How it works
             </a>
-            <a href="#faq" className="transition hover:text-brand">
+            <a href="/#faq" className="transition hover:text-brand">
               FAQ
             </a>
             <a href="/signup" className="transition hover:text-brand">

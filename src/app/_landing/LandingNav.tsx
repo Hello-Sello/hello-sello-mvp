@@ -24,15 +24,17 @@ export function LandingNav() {
           <Wordmark />
         </Link>
 
+        {/* Absolute anchors (/#how, /#faq) so they also resolve from the legal
+            pages, which reuse this nav but don't have those section ids. */}
         <div className="ml-2 hidden items-center gap-6 md:flex">
           <a
-            href="#how"
+            href="/#how"
             className="text-sm font-medium text-ink-muted transition hover:text-brand"
           >
             How it works
           </a>
           <a
-            href="#faq"
+            href="/#faq"
             className="text-sm font-medium text-ink-muted transition hover:text-brand"
           >
             FAQ
