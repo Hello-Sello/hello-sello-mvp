@@ -1,9 +1,9 @@
 /**
  * Phase 10 — Email-change round-trip E2E (10-01 Wave-0 RED scaffold, ACCT-03).
  *
- * RED now: the account Settings email-change affordance, the `changeEmail`
- * (`updateUser({ email })`) action, and the pending-state UX are NOT built yet
- * (they land in 10-02 / 10-03). This spec is the contract those tasks turn GREEN.
+ * The account Settings email-change affordance, the `changeEmail`
+ * (`updateUser({ email })`) action, and the pending-state UX are built in 10-05.
+ * This spec is the contract that plan turned GREEN (authored RED in 10-01).
  *
  * Flow under test (D-10/D-11/D-12, OWASP double-confirm = Supabase default):
  *   signed in → account Settings → submit a new email → updateUser({ email })
@@ -48,8 +48,10 @@ test('email-change round-trip: request → new_email pending → confirm → aut
   // 1. Open Settings and request the new email.
   await page.goto('/account')
   await page.getByRole('button', { name: /settings/i }).click()
+  // Click-to-edit: reveal the field first, then submit with Save.
+  await page.getByRole('button', { name: /change email/i }).click()
   await page.locator('input[name="email"]').fill(NEW_EMAIL)
-  await page.getByRole('button', { name: /change email|update email|save/i }).click()
+  await page.getByRole('button', { name: /^save$/i }).click()
 
   // 2. Pending state — the new address is shown (from user.new_email); the change is
   //    NOT yet effective on the sign-in address.
@@ -69,8 +71,9 @@ test('email-change round-trip: request → new_email pending → confirm → aut
   await expect(page.getByText(new RegExp(NEW_EMAIL, 'i'))).toBeVisible({ timeout: 10_000 })
 
   // Restore the seeded email so the shared fixture is not left mutated.
+  await page.getByRole('button', { name: /change email/i }).click()
   await page.locator('input[name="email"]').fill(ALICE_EMAIL)
-  await page.getByRole('button', { name: /change email|update email|save/i }).click()
+  await page.getByRole('button', { name: /^save$/i }).click()
   const restoreUrl = await extractConfirmLink(ALICE_EMAIL, { type: 'email_change' })
   await page.goto(restoreUrl)
 })

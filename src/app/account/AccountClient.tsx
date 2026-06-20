@@ -184,14 +184,16 @@ function SettingsPanel({ email, pendingEmail }: { email: string; pendingEmail: s
   )
 }
 
-// Change-email affordance (ACCT-03 / D-12): replaces the old read-only email row.
-// Submitting calls changeEmail(); on success GoTrue mails BOTH the old + new address
-// (double-confirm) and stages the new value in auth.users.new_email — surfaced here as
-// the pending state. `pendingEmail` comes from the server read (page.tsx) so a refresh
-// or revalidate after the request shows the pending banner; the local `requested` flag
-// covers the same-render window between submit and revalidate.
+// Change-email affordance (ACCT-03 / D-12): a read-only email row with a "Change email"
+// button that reveals the new-email field + Save / Cancel — the standard settings
+// click-to-edit pattern, so nothing changes until the user explicitly asks to. Save calls
+// changeEmail(); on success the new value is staged in auth.users.new_email and surfaced as
+// the pending banner. `pendingEmail` comes from the server read (page.tsx) so a refresh or
+// revalidate shows the pending state; the local `requested` flag covers the same-render
+// window between submit and revalidate.
 function EmailChangeRow({ email, pendingEmail }: { email: string; pendingEmail: string | null }) {
-  const [next, setNext] = useState(email)
+  const [editing, setEditing] = useState(false)
+  const [next, setNext] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [requested, setRequested] = useState<string | null>(null)
@@ -199,17 +201,28 @@ function EmailChangeRow({ email, pendingEmail }: { email: string; pendingEmail: 
   // The address awaiting confirmation: server-read pending wins, else the just-requested
   // address from this session (covers the pre-revalidate render).
   const awaiting = pendingEmail ?? requested
-  const dirty = next.trim().length > 0 && next.trim() !== email
+  const target = next.trim()
+  const canSave = target.length > 0 && target !== email
 
+  function openEdit() {
+    setNext('')
+    setError(null)
+    setEditing(true)
+  }
+  function cancel() {
+    setEditing(false)
+    setNext('')
+    setError(null)
+  }
   async function save() {
-    const target = next.trim()
-    if (!target || target === email) return
+    if (!canSave) return
     setBusy(true)
     setError(null)
     const r = await changeEmail(target)
     setBusy(false)
     if ('error' in r) return setError(r.error)
     setRequested(target)
+    setEditing(false)
   }
 
   return (
@@ -220,6 +233,15 @@ function EmailChangeRow({ email, pendingEmail }: { email: string; pendingEmail: 
           <p className="text-sm font-medium text-ink">Email</p>
           <p className="truncate text-xs text-ink-muted">{email} · sign-in address</p>
         </div>
+        {!awaiting && !editing && (
+          <button
+            type="button"
+            onClick={openEdit}
+            className="shrink-0 rounded-xl border border-brand/40 px-3 py-1.5 text-sm font-semibold text-brand transition hover:bg-brand-soft/20"
+          >
+            Change email
+          </button>
+        )}
       </div>
 
       {awaiting ? (
@@ -231,7 +253,7 @@ function EmailChangeRow({ email, pendingEmail }: { email: string; pendingEmail: 
             is verified.
           </p>
         </div>
-      ) : (
+      ) : editing ? (
         <div className="mt-3 ml-12 flex flex-col gap-2 sm:flex-row sm:items-end">
           <label className="flex flex-1 flex-col gap-1 text-sm">
             <span className="text-ink-muted">New email</span>
@@ -240,22 +262,34 @@ function EmailChangeRow({ email, pendingEmail }: { email: string; pendingEmail: 
               <input
                 name="email"
                 type="email"
+                autoFocus
+                placeholder="you@company.com"
                 value={next}
                 onChange={(e) => { setNext(e.target.value); setError(null) }}
                 className="w-full bg-transparent outline-none"
               />
             </span>
           </label>
-          <button
-            type="button"
-            disabled={!dirty || busy}
-            onClick={save}
-            className="rounded-xl bg-brand px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-deep disabled:opacity-50"
-          >
-            {busy ? 'Sending…' : 'Change email'}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={!canSave || busy}
+              onClick={save}
+              className="rounded-xl bg-brand px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-deep disabled:opacity-50"
+            >
+              {busy ? 'Sending…' : 'Save'}
+            </button>
+            <button
+              type="button"
+              onClick={cancel}
+              disabled={busy}
+              className="rounded-xl px-4 py-2 text-sm font-semibold text-ink-muted transition hover:bg-black/[0.04] disabled:opacity-50"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
-      )}
+      ) : null}
       {error && <p className="mt-2 ml-12 text-sm text-danger">{error}</p>}
     </div>
   )
