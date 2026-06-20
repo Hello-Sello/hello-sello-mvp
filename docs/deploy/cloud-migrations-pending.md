@@ -209,3 +209,6 @@ Ran the "⚠️ READ FIRST" reconciliation against `byipusuthdlskdxoexkt`:
 Result: cloud history = **74**, matches local. Security advisor: **0 errors** (warnings all pre-existing/by-design). No demo seed pushed. `oauth_person_trigger_fix` live → Google/Azure sign-up unblocked.
 
 Post-push: `.env.local` flipped to cloud; Google + Azure enabled in dashboard. Open: drop orphan `avatars_read` policy (cosmetic); 6.1 cloud UAT (sign-up tests 10–12).
+
+### 2026-06-20 — canonical display_name (single migration)
+`20260620120000_canonical_display_name.sql` pushed via a clean sequential `db push` (1 migration; history already reconciled, no repair needed). Updates `handle_new_user` to set the canonical `display_name` on every signup path + one-time backfill of existing rows. **Applied, 0 errors; cloud history = 75.** Verified: the test account's `display_name` backfilled, `profile_complete = true`. (See DECISIONS.md 2026-06-20 canonical-name entry.)
