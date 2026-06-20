@@ -17,7 +17,7 @@ import { BrandingEditForm } from '@/app/present/BrandingEditForm'
 
 type Tab = 'profile' | 'company' | 'settings'
 
-export function AccountClient({ profile, company, initialTab = 'profile' }: { profile: MyProfile; company: CompanyProfile | null; initialTab?: Tab }) {
+export function AccountClient({ profile, company, pendingEmail = null, initialTab = 'profile' }: { profile: MyProfile; company: CompanyProfile | null; pendingEmail?: string | null; initialTab?: Tab }) {
   const router = useRouter()
   const [tab, setTab] = useState<Tab>(initialTab)
   const [dirty, setDirty] = useState(false)
@@ -53,7 +53,7 @@ export function AccountClient({ profile, company, initialTab = 'profile' }: { pr
         <section className="glass-strong flex-1 rounded-3xl p-7">
           {tab === 'profile' && <ProfileForm profile={profile} onDirty={setDirty} />}
           {tab === 'company' && <CompanyForm company={company} onDirty={setDirty} />}
-          {tab === 'settings' && <SettingsPanel email={profile.email} />}
+          {tab === 'settings' && <SettingsPanel email={profile.email} pendingEmail={pendingEmail} />}
         </section>
       </div>
     </div>
@@ -170,7 +170,7 @@ function CompanyForm({ company, onDirty }: { company: CompanyProfile | null; onD
 }
 
 // ---- Settings ---------------------------------------------------------------
-function SettingsPanel({ email }: { email: string }) {
+function SettingsPanel({ email, pendingEmail }: { email: string; pendingEmail: string | null }) {
   return (
     <Panel title="Settings" subtitle="Account and sign-out. More options coming soon.">
       <div className="divide-y divide-black/5">

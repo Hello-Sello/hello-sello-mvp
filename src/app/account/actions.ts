@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { headers } from 'next/headers'
 import { updateMyProfile, setMyAvatarPath, type ProfileFields } from '@/modules/profile'
 import { updateCompanyProfile, getCompanyProfile, type CompanyFields } from '@/modules/companies'
 import { createClient } from '@/shared/db/server'
@@ -30,6 +31,36 @@ export async function saveCompanyProfile(fields: Partial<CompanyFields>) {
     revalidatePath('/c/[handle]', 'page')
   }
   return r
+}
+
+/**
+ * Change the caller's sign-in email via the OWASP double-confirm round-trip (ACCT-03).
+ *
+ * The auth-client email update with `double_confirm_changes=true` (the Supabase default,
+ * config.toml:215) does NOT flip `auth.users.email` immediately — it stages the new
+ * address in `auth.users.new_email` and mails BOTH addresses: the OLD address is
+ * notified+confirms (the real owner authorized the change) AND the NEW address must
+ * validate (proves control). The email only flips after the NEW address confirms via
+ * the same-origin `/auth/confirm?type=email_change` link (verifyOtp). This is a thin
+ * pass-through to the auth client — NO `person`-row write: `auth.users.email` is the
+ * single source of truth (D-13; `person.email_encrypted` was dropped 2026-05-27).
+ */
+export async function changeEmail(newEmail: string): Promise<{ ok: true } | { error: string }> {
+  const supabase = await createClient()
+  const origin = (await headers()).get('origin') ?? process.env.NEXT_PUBLIC_SITE_URL!
+  const { error } = await supabase.auth.updateUser(
+    { email: newEmail },
+    { emailRedirectTo: `${origin}/auth/confirm?type=email_change&next=/account` },
+  )
+  if (error) {
+    // Surface GoTrue's rejection (e.g. the address is already registered) so the user
+    // sees why nothing was sent, rather than a silent "pending" that never arrives.
+    return { error: error.message }
+  }
+  // `/account` is a literal route → plain revalidatePath, NO 'page' second arg
+  // (Pitfall 2: passing 'page' on a literal is a silent no-op).
+  revalidatePath('/account')
+  return { ok: true }
 }
 
 export async function saveAvatar(path: string) {
