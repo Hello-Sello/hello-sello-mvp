@@ -5,17 +5,23 @@
 
 ---
 
-**Last updated:** 2026-06-19 (Platform-foundations research + roadmap expansion — planning only, no code)
-**Branch:** claude/muskan/work (no code this session; planning + docs only)
-**Status:** **idle.** Planning session: researched B2B admin/settings + landing must-haves → `docs/research/platform-foundations-research.md` (committed + pushed). Added **Phases 9–13** to my roadmap (landing+legal / account quick-wins / RBAC+team / **Path B** / settings+emails); **Phase 8 live-walk → capstone**. **Path B (join-existing) pulled forward** into the Onboarding-Ready milestone (DECISIONS.md, committed) — see heads-up below, it'll touch shared onboarding/RLS later. No shared code touched. Prior code work still pending: **6.1 cloud UAT (10–12)**, then Phase 7 (Present UX). Cloud apply for migrations still DEFERRED (Phases 1–5 batch; reconcile old `avatars` policies first).
+**Last updated:** 2026-06-20 (Cloud migration reconciliation + name-model fix — code + cloud changes)
+**Branch:** claude/muskan/work
+**Status:** **idle.** ⚠️ **CLOUD IS NOW FULLY CURRENT (75 migrations) — the long-deferred cloud apply is DONE.** Reconciled the diverged cloud migration history (repair: reverted 47 wrong-timestamp records, marked 49 applied) then pushed the combined **25-migration batch (your deal-domain work + my sec/verif/discover/oauth)** — 0 errors. So your Phase 1–3f deal migrations are **live on cloud** now. Then fixed a 6.1 UAT bug: single-name Google signup couldn't finish onboarding → made `display_name` the canonical name (new migration `20260620120000_canonical_display_name`, also on cloud). Google sign-up verified working end-to-end. Loose ends for next session: E2E auth-fixture key rot (pre-existing, all auth specs blocked); onboarding photo→optional (DECIDED, not built).
 **Linear issue in progress:** none
-**Shared files locked:** none
+**Shared files locked:** none (all cloud/migration work pushed)
 **PR open:** [#114](https://github.com/HelloSello/hello-sello-mvp/pull/114) Phase 6.1 social sign-in + email verification → dev. [#112](https://github.com/HelloSello/hello-sello-mvp/pull/112) Phase 6 Discover & Home UX → dev. **MERGED:** [#111](https://github.com/HelloSello/hello-sello-mvp/pull/111) Phase 5 surface polish (F-flags) → dev. **MERGED:** Phase 4 auth-gate [#110](https://github.com/HelloSello/hello-sello-mvp/pull/110) → dev · Discover loop [#104](https://github.com/HelloSello/hello-sello-mvp/pull/104) → dev (slices 1–6). *(Prior: Sella proposal #99 merged to dev by Ayush; storage #98 on dev, held from main.)*
 **Prev PR:** Discover directory [#95](https://github.com/HelloSello/hello-sello-mvp/pull/95)→dev / [#96](https://github.com/HelloSello/hello-sello-mvp/pull/96)→main · Profile & QR [#88](https://github.com/HelloSello/hello-sello-mvp/pull/88)/[#89](https://github.com/HelloSello/hello-sello-mvp/pull/89) — all **merged**.
 
 ---
 
 ## Notes for the other agent
+
+**2026-06-20 (⚠️ CLOUD MIGRATIONS RECONCILED + APPLIED — read before any cloud work). Touched shared: `supabase/migrations/*` (pushed to cloud), `docs/deploy/cloud-migrations-pending.md`, `docs/decisions/DECISIONS.md`.** The big one:
+> - **Cloud history was DIVERGED** (cloud recorded the early migrations under different timestamps than the repo files — a naive `db push` failed). I reconciled it with `migration repair` (reverted 47 stale records, marked 49 applied), then pushed the **combined 25-migration batch** in order. **Your Phase 1–3f deal-domain migrations (deal_pending_change, notes, batch, etc.) are now LIVE on cloud.** `confirm_detected_deal_proposer_initiator` was marked applied (superseded by your `confirm_detected_deal_batch` — verified by diff). Cloud history = **75**, matches local. Full repair steps + the 49/25 split are in the ledger ("APPLIED TO CLOUD" + the "⚠️ READ FIRST" section).
+> - **`db push` now works cleanly** for any new migration (history is fixed) — no more reconciliation needed. I added `20260620120000_canonical_display_name` after.
+> - **Name-model change (DECISIONS.md 2026-06-20):** `display_name` is now the canonical person name (set by every signup path; trigger updated + backfill). `first_name`/`last_name` stay only as derived vCard values. Heads-up if you read person names anywhere — your deal-party name reads (`[first_name, last_name].join`) still work (both still populated), but `display_name` is the new source of truth.
+> - **Not PR'd yet** — name-model fix is on `claude/muskan/work` (commit `f137961`), no PR opened.
 
 **2026-06-19 (planning heads-up — Path B / multi-user pulled forward; affects shared onboarding/RLS soon, NOTHING built yet). No code this session — research + roadmap only.** Flagging early so it's not a surprise when I start building:
 > - **DECISIONS.md (2026-06-19):** multi-user-per-company + **Path B (join-existing-company)** are pulled forward from post-v0 into the current milestone. The Path A/B *design* you know (locked 2026-05-25) is unchanged — only the timing. Schema (`join_request`, `person_group`, nullable `company_id`) already exists; this is activation, not redesign.
