@@ -1,39 +1,34 @@
 /**
- * Deal card - FRONT (3a, Phase 3): the deal facts.
+ * Deal card - FRONT (V3 port, Phase 4 S2).
  *
- * 4.5.3: the card is PURE DISPLAY. The two-sided Seal gate moved to the Sella
- * strip (DealPin State C); the Edit control moved to the card's top-right corner
- * (DealCard). This face now only shows terms, parties, values, products, and the
- * golden Confirmed state - it takes no handlers and triggers no action.
+ * The card is PURE DISPLAY (4.5.3): no Accept / Decline / Change buttons - those
+ * live on the Sella strip (DealPin). This face only shows the deal facts. The two
+ * corner controls (flip top-left, Edit top-right) are owned by DealCard and sit in
+ * the maroon header corners; this face leaves header padding for them.
  *
- * Ported from prototypes/dealcard-prototype (locked 2026-06-06) into the real
- * design system (brand / brand-soft / ink, lucide). Layout kept: HS-number band
- * → doc-term line → two logo boxes → value rows → my private field → products.
+ * Layout (V3 prototype `prototypes/dealcard-v3-prototype/`, D-06 + D-14), top→bottom:
+ *   1. maroon (#76002d) header band: DEAL eyebrow, HS number, offered-story line,
+ *      and a headline row = value-net (the ONLY place net shows) + status·version.
+ *   2. centered Seller → Buyer party row with "· you" on the viewer's side.
+ *   3. dense product rows (ProductList).
+ *   4. terms .sec - hairline top divider, 3-up grid (Delivery / Payment / Free).
+ *   5. owner margin .sec - a SINGLE "Your avg. margin" row behind the "only you"
+ *      lock (D-14: per-line margins + value-gross are GONE from the front).
+ *   6. notes .sec - theirNote then myNote, EACH only when non-empty (else nothing).
+ *   7. things .sec - read-only, shown ONLY when a `things[]` prop is passed (D-12).
  *
- * Everything here is DERIVED or stored truth:
- *   - doc term (PO/SO) from deal_type (who issued it) - same for both viewers
- *   - gross computed from net + VAT (not stored)
- *   - the private field is whatever RLS returned for MY side (seller Margin /
- *     buyer placeholder) - the other side's value never arrives.
+ * Everything is DERIVED or stored truth; the owner margin uses lineMargins, which
+ * RLS already filters to the viewer's OWN side, so no counterpart value is read.
  */
-import { Building2, Lock, BadgeCheck } from "lucide-react";
-import { docTerm, computeGross, formatMoney, sumLineValue, averageMarginOf } from "../lib/derive";
+import { Lock, ArrowRight, Check, Info } from "lucide-react";
+import { docTerm, formatMoney, sumLineValue, averageMarginOf } from "../lib/derive";
 import { paymentTermLabel } from "../lib/paymentTerms";
 import { ProductList } from "./ProductList";
-import type { DealCardView } from "../types";
+import type { DealCardView, ThingView } from "../types";
 
-/** A margin % for the card, or "—" when not computable yet (D-01/D-04). */
+/** A margin % for the card, or "—" when not computable yet (D-04). */
 function marginLabel(pct: number | null): string {
   return pct == null ? "—" : `${(pct * 100).toFixed(1)}%`;
-}
-
-/** The shared "only you" lock span used by every owner-only margin row (D-05). */
-function OnlyYou() {
-  return (
-    <span className="inline-flex items-center gap-0.5 text-[10px] font-normal text-ink/45">
-      <Lock className="h-3 w-3" /> only you
-    </span>
-  );
 }
 
 function dateLabel(iso: string | null): string {
@@ -45,144 +40,210 @@ function dateLabel(iso: string | null): string {
   }).format(new Date(iso));
 }
 
-/** A label-chip + value-box row, the prototype's field shape. */
-function Field({
-  label,
-  children,
-  highlight = false,
+/** A human label for the card status, used in the maroon header pill. */
+const STATUS_LABEL: Record<string, string> = {
+  draft: "Draft",
+  withdrawn: "Withdrawn",
+  confirmed: "Confirmed",
+  amended: "Open",
+  done: "Done",
+  cancelled: "Cancelled",
+};
+function statusLabel(status: string): string {
+  return STATUS_LABEL[status] ?? "Open";
+}
+
+/** Up-to-two-letter initials from a company name, for the note avatar / things chip. */
+function initialsOf(name: string): string {
+  return name
+    .split(/\s+/)
+    .map((w) => w[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+}
+
+/** One conditional note row. Renders nothing when the text is empty/blank. */
+function Note({ company, text }: { company: string; text: string | null }) {
+  if (!text || !text.trim()) return null; // empty -> render NOTHING (D-06)
+  return (
+    <div className="border-t border-ink/10 py-2 first:border-t-0">
+      <div className="mb-1 flex items-center gap-1.5">
+        <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full bg-brand text-[9px] font-bold text-white">
+          {initialsOf(company)}
+        </span>
+        <span className="text-[11px] font-semibold text-ink">{company}</span>
+      </div>
+      <div className="pl-6 text-[12px] text-ink/55">{text}</div>
+    </div>
+  );
+}
+
+/** A hairline-divided section (the V3 `.sec` primitive): one top divider, one inset. */
+function Sec({ children }: { children: React.ReactNode }) {
+  return <div className="mx-4 border-t border-ink/10 py-3">{children}</div>;
+}
+
+export function CardFront({
+  data,
+  things = [],
 }: {
-  label: string;
-  children: React.ReactNode;
-  highlight?: boolean;
+  data: DealCardView;
+  /** read-only assigned THINGS (D-12); hidden when empty. Wired from the strip later (S1). */
+  things?: ThingView[];
 }) {
-  return (
-    <div className="flex items-stretch gap-2">
-      <div className="flex w-28 items-center rounded-lg bg-brand px-3 py-2 text-xs font-bold text-white">
-        {label}
-      </div>
-      <div
-        className={`flex flex-1 items-center rounded-lg px-3 py-2 text-sm font-medium text-ink ${
-          highlight ? "bg-brand/10" : "bg-white"
-        }`}
-      >
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function LogoBox({ role, name, isYou }: { role: string; name: string; isYou: boolean }) {
-  return (
-    <div className="flex flex-1 flex-col rounded-xl bg-white p-2">
-      <div className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-ink/40">
-        <Building2 className="h-3 w-3" />
-        {role}
-        {isYou && <span className="text-brand">· you</span>}
-      </div>
-      <div className="flex flex-1 items-center justify-center py-1.5 text-center text-sm font-black leading-tight text-ink">
-        {name}
-      </div>
-    </div>
-  );
-}
-
-export function CardFront({ data }: { data: DealCardView }) {
-  const { card, sellerName, buyerName, lineItems, lineMargins, viewerSide, confirmations, myNote, theirNote } = data;
+  const { card, sellerName, buyerName, lineItems, lineMargins, viewerSide, myNote, theirNote } = data;
   const term = docTerm(card.deal_type);
+
   // CARD-01 (OBS-1): the value is SUMMED live from the priced lines, never the
-  // stale stored `value_net` (which can be a leftover 0). null = no priced line.
+  // stale stored `value_net`. null = no priced line. This is the ONLY place the
+  // net is shown on the front (D-14).
   const net = sumLineValue(lineItems);
-  // CARD-03: two already-stored terms the card never showed. Both arrive on
-  // `card` (no new plumbing): payment_terms_code is a column, free_delivery is a
-  // metadata boolean - same read pattern as EditDealForm.
+  const valueNet = net == null ? "—" : formatMoney(net, card.currency);
+
+  // CARD-03: two already-stored terms. free_delivery is a metadata boolean.
   const meta = (card.metadata ?? {}) as Record<string, unknown>;
   const freeDelivery = meta.free_delivery === true;
   const paymentLabel = paymentTermLabel(card.payment_terms_code);
   const hsNumber = card.hs_deal_number ?? `${term} · draft`;
-  // NOTE-01: myNote/theirNote resolve by structural company identity (D-06), but
-  // the viewer-relative name lines up exactly with viewerSide's seller/buyer split.
+
+  // NOTE-01: myNote/theirNote map to the viewer-relative seller/buyer company name.
   const myCompanyName = viewerSide === "seller" ? sellerName : buyerName;
   const theirCompanyName = viewerSide === "seller" ? buyerName : sellerName;
 
-  // MRGN-01: per-line margin label needs the product name; map line id -> name.
-  // The deal AVERAGE is computed HERE from lineMargins (WARNING 4 - the read does
-  // not supply it), so a later quantity-weighted rollup is a one-file change.
-  const productNameById = new Map(lineItems.map((l) => [l.id, l.productName] as const));
+  // MRGN-01 (D-14): a SINGLE owner-only average; per-line margins are gone.
   const avgMargin = averageMarginOf(lineMargins.map((m) => m.marginPercent));
 
-  // golden when both sides are in (status is the source of truth, seats confirm it)
-  const confirmed =
-    card.status === "confirmed" ||
-    (confirmations.length === 2 && confirmations.every((s) => s.status === "confirmed"));
+  const productCount = lineItems.length;
+  const doneThings = things.filter((t) => t.status === "done").length;
 
   return (
-    <div
-      className={`w-[340px] rounded-3xl border p-3 shadow-xl ring-1 ${
-        confirmed
-          ? "border-amber-300 bg-amber-50 ring-amber-200"
-          : "border-brand/15 bg-[#ffe2ee] ring-black/5"
-      }`}
-    >
-      {/* HS number band - turns gold + gains a verified tick when confirmed */}
-      <div
-        className={`flex items-center justify-center gap-1.5 rounded-xl py-1.5 text-center text-sm font-bold tracking-wide text-white ${
-          confirmed ? "bg-amber-500" : "bg-brand"
-        }`}
-      >
-        {confirmed && <BadgeCheck size={15} strokeWidth={2.5} />}
-        {hsNumber}
+    <div className="w-[390px] max-w-full overflow-hidden rounded-3xl bg-white shadow-xl ring-1 ring-black/5">
+      {/* ---- MAROON HEADER BAND (#76002d) - padded for the two corner buttons ---- */}
+      <div className="relative bg-[#76002d] px-12 pb-4 pt-4 text-center text-white">
+        <div className="text-[11px] font-extrabold tracking-[0.16em] text-white/85">DEAL</div>
+        <div className="mt-0.5 text-[16px] font-bold tracking-wide tabular-nums">{hsNumber}</div>
+        <div className="mt-1.5 text-[12px] text-white/90">
+          On <span className="font-bold text-white">{dateLabel(card.created_at)}</span>,{" "}
+          <span className="font-bold text-white">{sellerName}</span> offered{" "}
+          <span className="font-bold text-white">{buyerName}</span>
+          {viewerSide === "buyer" && <span> · you</span>}
+        </div>
+
+        {/* headline row: value-net (left) + status·version pill (right) */}
+        <div className="mt-3 flex items-center justify-between border-t border-white/20 pt-3 text-left">
+          <div>
+            <div className="text-[11px] text-white/80">
+              Value net · {productCount} {productCount === 1 ? "product" : "products"}
+            </div>
+            <div className="text-[19px] font-bold tabular-nums">{valueNet}</div>
+          </div>
+          <span className="rounded-full bg-white/20 px-2.5 py-1 text-[11px] font-semibold text-white">
+            {statusLabel(card.status)} · v{card.version}
+          </span>
+        </div>
       </div>
 
-      {/* document term + date */}
-      <div className="mt-1.5 rounded-xl bg-white py-1.5 text-center text-xs text-ink/70">
-        {term} from {dateLabel(card.created_at)}
+      {/* ---- PARTY ROW (centered) ---- */}
+      <div className="flex items-center justify-center gap-2.5 border-b border-ink/10 px-4 py-3">
+        <div className="text-center">
+          <div className="text-[9.5px] uppercase tracking-wider text-ink/45">Seller</div>
+          <div className="text-[13px] font-bold text-ink">
+            {sellerName}
+            {viewerSide === "seller" && <span className="ml-1 text-[10px] font-bold text-brand">· you</span>}
+          </div>
+        </div>
+        <ArrowRight className="h-4 w-4 shrink-0 text-brand" strokeWidth={2.2} />
+        <div className="text-center">
+          <div className="text-[9.5px] uppercase tracking-wider text-ink/45">Buyer</div>
+          <div className="text-[13px] font-bold text-ink">
+            {buyerName}
+            {viewerSide === "buyer" && <span className="ml-1 text-[10px] font-bold text-brand">· you</span>}
+          </div>
+        </div>
       </div>
-      {/* the two parties */}
-      <div className="mt-1.5 flex gap-2">
-        <LogoBox role="Seller" name={sellerName} isYou={viewerSide === "seller"} />
-        <LogoBox role="Buyer" name={buyerName} isYou={viewerSide === "buyer"} />
-      </div>
-      {/* facts */}
-      <div className="mt-1.5 space-y-1.5">
-        <Field label="Value net">
-          {net == null ? "—" : formatMoney(net, card.currency)}
-        </Field>
-        <Field label="Value gross">
-          {net == null ? "—" : formatMoney(computeGross(net), card.currency)}
-        </Field>
-        {/* MRGN-01: an owner-only margin % per priced line + one deal average,
-            all reusing the lock-icon "only you" idiom (D-01/D-04/D-05). */}
-        {lineMargins.map((m) => {
-          const name = productNameById.get(m.lineItemId);
-          if (name == null) return null; // defensive: line not found
-          return (
-            <Field key={m.lineItemId} label={`${name} margin`} highlight>
-              <span className="flex items-center gap-1.5">
-                {marginLabel(m.marginPercent)}
-                <OnlyYou />
-              </span>
-            </Field>
-          );
-        })}
-        <Field label="Avg. margin" highlight>
-          <span className="flex items-center gap-1.5">
-            {marginLabel(avgMargin)}
-            <OnlyYou />
-          </span>
-        </Field>
-        <Field label="Delivery">{dateLabel(card.delivery_date_target)}</Field>
-        <Field label="Payment terms">{paymentLabel}</Field>
-        <Field label="Free delivery">{freeDelivery ? "Yes" : "No"}</Field>
-        <Field label="Products">{String(lineItems.length)}</Field>
-        {/* NOTE-01: both sides' card notes, from birth. Plain text children only
-            (React escapes by default) - never raw-HTML injection (Security §V5). */}
-        <Field label={`${myCompanyName} notes`}>{myNote ?? "—"}</Field>
-        <Field label={`${theirCompanyName} notes`}>{theirNote ?? "—"}</Field>
-      </div>
-      {/* products */}
-      <div className="mt-1.5">
+
+      {/* ---- PRODUCT LINES (dense V3 rows) ---- */}
+      <div className="px-4 pt-2">
         <ProductList items={lineItems} />
       </div>
+
+      {/* ---- TERMS - 3-up hairline section ---- */}
+      <Sec>
+        <div className="grid grid-cols-3 gap-2">
+          <div>
+            <div className="text-[10px] uppercase tracking-wide text-ink/45">Delivery</div>
+            <div className="text-[13px] font-semibold tabular-nums text-ink">
+              {dateLabel(card.delivery_date_target)}
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-wide text-ink/45">Payment</div>
+            <div className="text-[13px] font-semibold text-ink">{paymentLabel}</div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-wide text-ink/45">Free delivery</div>
+            <div className="text-[13px] font-semibold text-ink">{freeDelivery ? "Yes" : "No"}</div>
+          </div>
+        </div>
+      </Sec>
+
+      {/* ---- OWNER MARGIN - a SINGLE owner-only row behind the "only you" lock (D-14) ---- */}
+      <Sec>
+        <div className="flex items-center justify-between text-[12px]">
+          <span className="text-ink/55">Your avg. margin</span>
+          <span className="flex items-center gap-1.5">
+            <span className="font-bold tabular-nums text-ink">{marginLabel(avgMargin)}</span>
+            <span className="inline-flex items-center gap-0.5 text-[10.5px] text-ink/45">
+              <Lock className="h-[11px] w-[11px]" /> only you
+            </span>
+          </span>
+        </div>
+      </Sec>
+
+      {/* ---- NOTES (conditional: render only the non-empty ones) ---- */}
+      {((theirNote && theirNote.trim()) || (myNote && myNote.trim())) && (
+        <Sec>
+          <Note company={theirCompanyName} text={theirNote} />
+          <Note company={myCompanyName} text={myNote} />
+        </Sec>
+      )}
+
+      {/* ---- THINGS (read-only) - shown ONLY when things are passed (D-12) ---- */}
+      {things.length > 0 && (
+        <Sec>
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase tracking-wide text-ink/45">Things</span>
+            <span className="text-[11px] font-semibold tabular-nums text-brand">
+              {doneThings} / {things.length} done
+            </span>
+          </div>
+          {things.map((t) => {
+            const done = t.status === "done";
+            return (
+              <div key={t.id} className="flex items-center gap-2 py-1 text-[12.5px]">
+                <span
+                  className={`flex h-[15px] w-[15px] shrink-0 items-center justify-center rounded border-[1.5px] ${
+                    done ? "border-success bg-success" : "border-ink/15"
+                  }`}
+                  // read-only checkbox - styled div, never an input (V3 rule)
+                  style={{ pointerEvents: "none" }}
+                >
+                  {done && <Check className="h-2.5 w-2.5 text-white" strokeWidth={3} />}
+                </span>
+                <span className={`flex-1 ${done ? "text-ink/45 line-through" : "text-ink"}`}>
+                  {t.title}
+                </span>
+              </div>
+            );
+          })}
+          <div className="mt-2 flex items-center gap-1 text-[10.5px] italic text-ink/45">
+            <Info className="h-[11px] w-[11px] shrink-0" /> Things are managed from the Deal Room.
+          </div>
+        </Sec>
+      )}
+
+      <div className="h-2" />
     </div>
   );
 }
