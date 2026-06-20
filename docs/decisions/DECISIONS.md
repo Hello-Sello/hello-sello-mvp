@@ -1136,3 +1136,14 @@ The 3 auth specs hardcoded the legacy demo service-role JWT. The local stack (Su
 - **`auth-trigger` is deferred, not fixed.** It calls `auth.admin.createUser`, which needs an **ES256 `service_role` JWT**; the new stack 403s `sb_secret_` on GoTrue admin endpoints (works for PostgREST/DB, not admin auth). The clean fix needs a direct-DB insert into `auth.users` (a `pg` dev-dependency) — deferred since signup was manually verified end-to-end (session 33).
 
 *Why record:* locks the "never hardcode a rotating local key" rule and the single-source-of-truth fixture. **Status: built + pushed 2026-06-20 (commit `f42f04b`) — `admin-verification` green, `auth-gate` 5/6 (1 fail = known append-only `audit_log` DELETE bug, unrelated), `auth-trigger` deferred.** (Sources: this session.)
+
+## 2026-06-20 — Parallel work uses git worktrees + `.worktreeinclude`; `.planning` coordination is git-tracked only
+
+A single engineer now runs several sessions at once (one per phase) to work in parallel. Settled how those sessions isolate and coordinate.
+
+- **Isolation:** each parallel session runs in its **own git worktree on its own branch** (`claude --worktree <name>`). Code edits never collide; sessions meet only through git (push → PR → merge).
+- **GSD planning inside worktrees:** a personal (gitignored) **`.worktreeinclude`** auto-copies `.planning/`, `CLAUDE.md`, and a personal `SessionStart` hook into every new worktree. Because it *copies*, each worktree keeps its OWN `STATE.md`/session-log (no clobbering); `ROADMAP.md`/`REQUIREMENTS.md` are read-mostly and edited in ONE place (the main checkout) — new worktrees inherit the latest at creation time.
+- **Coordination channel = git-tracked files only** (code + `docs/team/sync/*`). `.planning/` is per-worktree/gitignored and is never used to coordinate. Ownership-first (split work into disjoint files); lock genuinely-shared files via the sync ritual.
+- **Industry-validated:** git worktrees are the consensus mechanism for parallel coding agents; Claude Code ships native `--worktree` + `.worktreeinclude`. Agent-teams (shared task list + mailbox) exists but is for one-session multi-teammate work, not N independent long-running phase sessions, and still requires ownership boundaries.
+
+*Why record:* locks the team's parallel-execution model so future sessions don't re-derive it, and documents why neither GSD workspaces (start empty) nor workstreams (don't isolate code) fit "parallel phases of one roadmap." **Status: setup DONE 2026-06-20 — personal gitignored `.worktreeinclude` + `.claude/hooks/session-start-coord.sh` + settings; general protocol added to `docs/team/WORKFLOW.md` "Parallel worktree sessions".** (Sources: this session; Claude Code worktrees + agent-teams docs; 2026 parallel-agent coordination research.)
