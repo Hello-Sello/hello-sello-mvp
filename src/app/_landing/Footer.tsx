@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Wordmark } from "@/shared/ui/Wordmark";
+import { CookieSettingsButton } from "./CookieSettingsButton";
 
 /**
  * Footer (§11). This plan (09-02) establishes the footer STRUCTURE + the
@@ -62,9 +63,9 @@ export function Footer() {
             <Link href="/agb" className="transition hover:text-brand">
               AGB
             </Link>
-            {/* COOKIE-SETTINGS SLOT — wired by 09-04: a "Cookie settings" button
-                that dispatches new CustomEvent("hs-open-cookie-settings") to
-                re-open the consent banner. Intentionally absent here. */}
+            {/* COOKIE-SETTINGS SLOT (09-04): re-opens the consent banner via
+                CustomEvent("hs-open-cookie-settings"). */}
+            <CookieSettingsButton />
           </nav>
         </div>
 
