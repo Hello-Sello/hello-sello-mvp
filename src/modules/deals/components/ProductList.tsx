@@ -1,23 +1,44 @@
 /**
- * Deal card - product line-item list (3a, Phase 3).
+ * Deal card - product line-item list (3a, Phase 3; V3 reskin, Phase 4 S2).
  *
- * The scrollable products block on the card front. Each row = one snapshot line
- * item: a small tinted thumbnail (by dominance), the name + per-unit price, and
- * cultivar · volume · PZN underneath. The thumbnail is NOT clickable yet (a later
- * layer opens that product's own card - prototype note + DEV-37).
+ * The dense products block on the card front (V3 prototype `.prod` row). Each row
+ * = one snapshot line item: a cultivar-coded gradient thumb (IND / SAT / HYB), the
+ * name, a wrapping meta line (cultivar · volume · PZN · Batch) with THC/CBD shown
+ * as small coloured chips, and the per-unit price + quantity on the right.
+ *
+ * 3f clip fix (Phase 4): the old single `truncate` meta line clipped Batch / THC /
+ * CBD on a narrow card. The meta is now split into a descriptive text line plus a
+ * `flex-wrap` THC/CBD chip row, so nothing clips when the card is 390px wide.
+ *
+ * The thumbnail is NOT clickable yet (a later layer opens that product's own card
+ * - prototype note + DEV-37).
  */
-import { Leaf } from "lucide-react";
 import { formatMoney } from "../lib/derive";
 import type { LineItemView } from "../types";
 
-/** Soft tint per dominance, echoing the prototype's per-strain colour chips. */
+/**
+ * Per-cultivar thumbnail gradient (V3 `.tint-*`), so the three thumbs read as
+ * intentionally distinct, not placeholder repeats. Falls back to a neutral
+ * grey-pink for custom / unknown cultivars.
+ */
 const TINT: Record<string, string> = {
-  indica: "bg-violet-100 text-violet-600",
-  sativa: "bg-amber-100 text-amber-600",
-  hybrid: "bg-emerald-100 text-emerald-600",
+  indica: "bg-gradient-to-br from-[#8b5cf6] to-[#6d28d9]",
+  sativa: "bg-gradient-to-br from-[#f59e0b] to-[#d97706]",
+  hybrid: "bg-gradient-to-br from-[#10b981] to-[#047857]",
 };
 const tintFor = (hint: string | null): string =>
-  (hint && TINT[hint.toLowerCase()]) || "bg-ink/5 text-ink/40";
+  (hint && TINT[hint.toLowerCase()]) || "bg-gradient-to-br from-[#cbb8c6] to-[#9a8a96]";
+
+/** The 3-letter code baked into each thumb (IND / SAT / HYB; else first 3 letters). */
+const CULTIVAR_CODE: Record<string, string> = {
+  indica: "IND",
+  sativa: "SAT",
+  hybrid: "HYB",
+};
+const codeFor = (cultivar: string | null): string => {
+  if (!cultivar) return "CST";
+  return CULTIVAR_CODE[cultivar.toLowerCase()] ?? cultivar.slice(0, 3).toUpperCase();
+};
 
 /** "2000 g" → "2.0 kg"; otherwise "{qty} {unit}". */
 function volumeLabel(quantity: number, unit: string): string {
@@ -29,53 +50,78 @@ function volumeLabel(quantity: number, unit: string): string {
 }
 
 export function ProductList({ items }: { items: LineItemView[] }) {
-  return (
-    <div className="rounded-xl bg-white p-2">
-      <div className="flex items-center justify-between px-1 pb-1.5">
-        <span className="text-xs font-semibold text-ink/60">Products ({items.length})</span>
-        {items.length > 4 && <span className="text-[10px] text-ink/35">scroll ↓</span>}
+  if (items.length === 0) {
+    return (
+      <div className="px-1 py-3 text-center text-[11px] text-ink/40">
+        No products on this deal yet.
       </div>
-      <div className="max-h-36 divide-y divide-ink/5 overflow-y-auto">
-        {items.map((p) => (
+    );
+  }
+
+  return (
+    <div className="flex max-h-44 flex-col overflow-y-auto px-1">
+      {items.map((p) => {
+        // 3f fix: the descriptive meta (cultivar · volume · PZN · Batch) is one
+        // line; THC/CBD are CHIPS on a flex-wrap row so they wrap, never clip.
+        const meta = [
+          p.cultivar,
+          volumeLabel(p.quantity, p.unit),
+          p.pzn ? `PZN ${p.pzn}` : null,
+          p.batchNumber ? `Batch ${p.batchNumber}` : null,
+        ]
+          .filter(Boolean)
+          .join(" · ");
+
+        return (
           <div
             key={p.id}
-            className="flex items-center gap-2.5 px-1 py-1.5"
+            className="flex items-center gap-2.5 border-b border-ink/10 py-1.5 last:border-b-0"
             title="Product card opens here (coming soon)"
           >
+            {/* cultivar-coded gradient thumb - distinct per strain */}
             <div
-              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${tintFor(p.thumbnailTint)}`}
+              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${tintFor(p.thumbnailTint ?? p.cultivar)}`}
             >
-              <Leaf className="h-4 w-4" />
+              <span className="text-[10px] font-bold tracking-wide text-white [text-shadow:0_1px_2px_rgba(0,0,0,0.22)]">
+                {codeFor(p.thumbnailTint ?? p.cultivar)}
+              </span>
             </div>
+
             <div className="min-w-0 flex-1">
-              <div className="flex items-center justify-between gap-2">
-                <span className="truncate text-xs font-semibold text-ink">{p.productName}</span>
-                <span className="shrink-0 text-[11px] font-medium text-ink/80">
-                  {formatMoney(p.unitPrice, p.currency)}/{p.unit}
-                </span>
+              <div className="truncate text-[13px] font-semibold text-ink">{p.productName}</div>
+              {/* line 1: descriptive text */}
+              {meta && (
+                <div className="truncate text-[11px] tabular-nums text-ink/55">{meta}</div>
+              )}
+              {/* line 2: THC/CBD chips - flex-wrap so Batch/THC/CBD never clip (3f) */}
+              {(p.thcPercent != null || p.cbdPercent != null) && (
+                <div className="mt-0.5 flex flex-wrap items-center gap-1">
+                  {p.thcPercent != null && (
+                    <span className="inline-flex items-center rounded-md bg-[#b5179e]/10 px-1.5 py-px text-[11px] font-semibold tabular-nums text-[#b5179e]">
+                      THC {p.thcPercent}
+                    </span>
+                  )}
+                  {p.cbdPercent != null && (
+                    <span className="inline-flex items-center rounded-md bg-[#1b998b]/12 px-1.5 py-px text-[11px] font-semibold tabular-nums text-[#1b998b]">
+                      CBD {p.cbdPercent}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="shrink-0 text-right">
+              <div className="text-[13px] font-bold tabular-nums text-ink">
+                {formatMoney(p.unitPrice, p.currency)}
+                <span className="text-[10px] font-normal text-ink/45">/{p.unit}</span>
               </div>
-              <div className="truncate text-[10px] text-ink/45">
-                {[
-                  p.cultivar,
-                  volumeLabel(p.quantity, p.unit),
-                  p.pzn ? `PZN ${p.pzn}` : null,
-                  // BTCH-01 (D-03): the frozen batch number + the batch's MEASURED
-                  // THC/CBD (never the product label). Functionality only - the
-                  // visual arrangement is Phase 6.
-                  p.batchNumber ? `Batch ${p.batchNumber}` : null,
-                  p.thcPercent != null ? `THC ${p.thcPercent}%` : null,
-                  p.cbdPercent != null ? `CBD ${p.cbdPercent}%` : null,
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}
+              <div className="text-[11px] tabular-nums text-ink/55">
+                {volumeLabel(p.quantity, p.unit)}
               </div>
             </div>
           </div>
-        ))}
-        {items.length === 0 && (
-          <div className="px-1 py-3 text-center text-[11px] text-ink/40">No products on this deal yet.</div>
-        )}
-      </div>
+        );
+      })}
     </div>
   );
 }
