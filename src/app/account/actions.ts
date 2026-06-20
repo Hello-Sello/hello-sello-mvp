@@ -34,14 +34,16 @@ export async function saveCompanyProfile(fields: Partial<CompanyFields>) {
 }
 
 /**
- * Change the caller's sign-in email via the OWASP double-confirm round-trip (ACCT-03).
+ * Change the caller's sign-in email (ACCT-03).
  *
- * The auth-client email update with `double_confirm_changes=true` (the Supabase default,
- * config.toml:215) does NOT flip `auth.users.email` immediately — it stages the new
- * address in `auth.users.new_email` and mails BOTH addresses: the OLD address is
- * notified+confirms (the real owner authorized the change) AND the NEW address must
- * validate (proves control). The email only flips after the NEW address confirms via
- * the same-origin `/auth/confirm?type=email_change` link (verifyOtp). This is a thin
+ * The auth-client email update does NOT flip `auth.users.email` immediately — it stages
+ * the new address in `auth.users.new_email`. Locally `double_confirm_changes=false`
+ * (config.toml:233, with rationale at 222-232): only the NEW address must confirm via
+ * the same-origin `/auth/confirm?type=email_change` link (verifyOtp) and the email flips
+ * on that single click — matching the RED e2e contract. The OWASP "notify the old owner"
+ * intent is preserved via GoTrue's change-notification to the old address; the strict
+ * two-click both-addresses gate (`true`) is the CLOUD "Secure email change" posture, left
+ * as the end-of-phase human decision (see 10-05 SUMMARY; T-10-05a). This is a thin
  * pass-through to the auth client — NO `person`-row write: `auth.users.email` is the
  * single source of truth (D-13; `person.email_encrypted` was dropped 2026-05-27).
  */

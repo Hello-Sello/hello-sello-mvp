@@ -1,9 +1,9 @@
 /**
  * Phase 10 — Password-reset round-trip E2E (10-01 Wave-0 RED scaffold, ACCT-02).
  *
- * RED now: `/forgot-password`, the `requestPasswordReset` action, the `/reset-password`
- * set-password page, and the proxy `/forgot-password` allowlist entry are NOT built yet
- * (they land in 10-02 / 10-03). This spec is the executable contract those tasks turn GREEN.
+ * `/forgot-password`, the `requestPasswordReset` action, the `/reset-password`
+ * set-password page, and the proxy `/forgot-password` allowlist entry are built in 10-04.
+ * This spec is the executable contract that plan turned GREEN (authored RED in 10-01).
  *
  * Flow under test (D-06/D-07, RESEARCH § System Architecture):
  *   signed-out → /forgot-password → submit email → resetPasswordForEmail()
