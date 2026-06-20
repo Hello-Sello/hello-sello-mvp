@@ -70,7 +70,7 @@ export function DealWorkspace({ dealCardId, chat }: DealWorkspaceProps) {
         if (alive)
           setState({
             kind: "error",
-            message: e instanceof Error ? e.message : "Could not load this deal workspace.",
+            message: e instanceof Error ? e.message : "Could not load this Deal Room.",
           });
       }
     })();
@@ -141,7 +141,7 @@ export function DealWorkspace({ dealCardId, chat }: DealWorkspaceProps) {
   if (state.kind === "loading") {
     return (
       <div className="glass flex h-full items-center justify-center rounded-3xl p-10 text-center text-sm text-ink/40">
-        Loading deal workspace…
+        Loading Deal Room…
       </div>
     );
   }
