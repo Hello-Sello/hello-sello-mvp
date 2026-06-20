@@ -1127,3 +1127,12 @@ Surfaced during 6.1 UAT: the home checklist sends an unfinished "Your profile" t
 - **Why (researched, per the "research common patterns first" rule):** SaaS onboarding best practice — only require a field if the product can't function without it; every extra required field ≈ 7% conversion drop; request photos AFTER first value (progressive profiling), not during setup. (ProductLed, Candu, DesignRevision, 2025.)
 
 *Why record:* locks that onboarding completion is name+title and photo is optional, with the reasoning. **Status: DECIDED 2026-06-20, NOT yet built — implement next session (small change to `isProfileComplete` + its unit tests + the home comment).** (Sources: this session UAT; SaaS onboarding research.)
+
+## 2026-06-20 — E2E fixtures derive the local Supabase key from the running stack; never hardcode
+
+The 3 auth specs hardcoded the legacy demo service-role JWT. The local stack (Supabase CLI 2.75) now uses asymmetric **ES256 JWT signing** (CLI default) + the new **`sb_secret_`** API-key format, so the hardcoded HS256 JWT no longer authenticates → every auth E2E failed ("key rot").
+
+- **One source of truth: `e2e/fixtures/local-supabase.ts`.** Resolves `LOCAL_SERVICE_KEY` in order: `SUPABASE_SECRET_KEY` env override → parse `supabase status -o env` (`SECRET_KEY`) → throw a clear "is the stack up?" error. The running stack OWNS its keys; tests derive from it. Deletes the 3 duplicated hardcoded copies. Fail-loud beats a cryptic 401.
+- **`auth-trigger` is deferred, not fixed.** It calls `auth.admin.createUser`, which needs an **ES256 `service_role` JWT**; the new stack 403s `sb_secret_` on GoTrue admin endpoints (works for PostgREST/DB, not admin auth). The clean fix needs a direct-DB insert into `auth.users` (a `pg` dev-dependency) — deferred since signup was manually verified end-to-end (session 33).
+
+*Why record:* locks the "never hardcode a rotating local key" rule and the single-source-of-truth fixture. **Status: built + pushed 2026-06-20 (commit `f42f04b`) — `admin-verification` green, `auth-gate` 5/6 (1 fail = known append-only `audit_log` DELETE bug, unrelated), `auth-trigger` deferred.** (Sources: this session.)

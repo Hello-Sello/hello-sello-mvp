@@ -5,11 +5,11 @@
 
 ---
 
-**Last updated:** 2026-06-20 (Cloud migration reconciliation + name-model fix — code + cloud changes)
+**Last updated:** 2026-06-20 (E2E auth-fixture key rot fixed — test-only changes, no schema/app code)
 **Branch:** claude/muskan/work
-**Status:** **idle.** ⚠️ **CLOUD IS NOW FULLY CURRENT (75 migrations) — the long-deferred cloud apply is DONE.** Reconciled the diverged cloud migration history (repair: reverted 47 wrong-timestamp records, marked 49 applied) then pushed the combined **25-migration batch (your deal-domain work + my sec/verif/discover/oauth)** — 0 errors. So your Phase 1–3f deal migrations are **live on cloud** now. Then fixed a 6.1 UAT bug: single-name Google signup couldn't finish onboarding → made `display_name` the canonical name (new migration `20260620120000_canonical_display_name`, also on cloud). Google sign-up verified working end-to-end. Loose ends for next session: E2E auth-fixture key rot (pre-existing, all auth specs blocked); onboarding photo→optional (DECIDED, not built).
+**Status:** **idle.** Fixed the E2E auth-fixture **key rot** (loose-end from the prior session): the 3 auth specs hardcoded the dead legacy HS256 service JWT — the local stack (CLI 2.75) now uses **asymmetric ES256 signing** + the new `sb_secret_` key format. New single-source-of-truth `e2e/fixtures/local-supabase.ts` derives the key from `supabase status` (env override wins). **`admin-verification` green, `auth-gate` 5/6, `auth-trigger` deferred** (its `auth.admin.createUser` needs an ES256 service JWT; `sb_secret_` 403s GoTrue admin — clean fix needs a `pg` devDep, deferred as signup was manually verified). Commit `f42f04b`, pushed. **Touched ONLY `e2e/*` — nothing of yours, no schema/migrations/app code.** `.env.local` flipped back to LOCAL. (Cloud still fully current at 75 from prior session.)
 **Linear issue in progress:** none
-**Shared files locked:** none (all cloud/migration work pushed)
+**Shared files locked:** none
 **PR open:** [#114](https://github.com/HelloSello/hello-sello-mvp/pull/114) Phase 6.1 social sign-in + email verification → dev. [#112](https://github.com/HelloSello/hello-sello-mvp/pull/112) Phase 6 Discover & Home UX → dev. **MERGED:** [#111](https://github.com/HelloSello/hello-sello-mvp/pull/111) Phase 5 surface polish (F-flags) → dev. **MERGED:** Phase 4 auth-gate [#110](https://github.com/HelloSello/hello-sello-mvp/pull/110) → dev · Discover loop [#104](https://github.com/HelloSello/hello-sello-mvp/pull/104) → dev (slices 1–6). *(Prior: Sella proposal #99 merged to dev by Ayush; storage #98 on dev, held from main.)*
 **Prev PR:** Discover directory [#95](https://github.com/HelloSello/hello-sello-mvp/pull/95)→dev / [#96](https://github.com/HelloSello/hello-sello-mvp/pull/96)→main · Profile & QR [#88](https://github.com/HelloSello/hello-sello-mvp/pull/88)/[#89](https://github.com/HelloSello/hello-sello-mvp/pull/89) — all **merged**.
 
