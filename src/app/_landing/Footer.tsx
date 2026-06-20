@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Wordmark } from "@/shared/ui/Wordmark";
 
 /**
@@ -46,13 +47,21 @@ export function Footer() {
           <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-ink">
             Legal
           </h3>
-          {/* LEGAL-LINK SLOT — filled by 09-03 with <Link href="/impressum" />,
-              <Link href="/datenschutz" />, <Link href="/agb" /> (≤2 clicks,
-              LAND-03). Intentionally empty here — owned by 09-03. */}
+          {/* LEGAL-LINK SLOT — filled by 09-03: direct <Link>s to the three
+              German legal pages (≤2 clicks, LAND-03). */}
           <nav
             aria-label="Legal"
             className="mt-3 flex flex-col gap-2"
           >
+            <Link href="/impressum" className="transition hover:text-brand">
+              Impressum
+            </Link>
+            <Link href="/datenschutz" className="transition hover:text-brand">
+              Datenschutz
+            </Link>
+            <Link href="/agb" className="transition hover:text-brand">
+              AGB
+            </Link>
             {/* COOKIE-SETTINGS SLOT — wired by 09-04: a "Cookie settings" button
                 that dispatches new CustomEvent("hs-open-cookie-settings") to
                 re-open the consent banner. Intentionally absent here. */}
