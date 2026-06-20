@@ -23,7 +23,12 @@ interface RealtimeHandlers {
  */
 export function useChatRealtime(handlers: RealtimeHandlers): void {
   const ref = useRef(handlers);
-  ref.current = handlers;
+  // Keep the ref pointed at the latest handlers WITHOUT writing it during render
+  // (react-hooks/refs): update it in an effect that runs after every render, so
+  // the mount-only subscription below always calls the current closures.
+  useEffect(() => {
+    ref.current = handlers;
+  });
 
   useEffect(() => {
     const supabase = createClient();
