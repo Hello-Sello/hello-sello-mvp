@@ -9,8 +9,8 @@ import { RichText } from "./RichText";
  *   - system -> a quiet centered notice (the platform narrating a fact)
  *   - sella  -> a centered copilot card with a Sella mark (an agent intervening)
  * The two party voices take sides, driven by `isMine` (the viewer's perspective):
- *   - person mine   -> right + brand
- *   - person theirs -> left + glass
+ *   - person mine   -> right + brand pink
+ *   - person theirs -> left + ash-gray (bg-ink/5 on the white/pink page)
  */
 export interface MessageBubbleProps {
   message: ChatMessageView;
@@ -61,7 +61,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         {message.authorInitials}
       </span>
       <div className="flex flex-col items-start">
-        <div className="max-w-[80%] whitespace-pre-line rounded-2xl rounded-tl-sm bg-white/70 px-3 py-2 text-sm leading-snug text-ink/85 ring-1 ring-black/5">
+        <div className="max-w-[80%] whitespace-pre-line rounded-2xl rounded-tl-sm bg-ink/5 px-3 py-2 text-sm leading-snug text-ink/85">
           <RichText body={message.body} />
         </div>
         <span className="mt-0.5 pl-1 text-[10px] text-ink/35">
