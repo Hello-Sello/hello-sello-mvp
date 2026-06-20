@@ -2,26 +2,44 @@
 
 import Link from "next/link";
 import { Wordmark } from "@/shared/ui/Wordmark";
+import { CTAButton } from "./CTAButton";
 
 /**
- * Public landing nav (§1). Client component so the reserved language-toggle slot
- * and any later smooth-scroll polish can live here without pulling the page out
- * of server-rendering. Renders the Wordmark, a "Log in" link, the disabled
- * German language-toggle slot (D-09 — reserved, non-functional), and the single
- * primary "Request access" CTA → existing /signup (D-02).
+ * Public landing nav (§1). Client component so the reserved German
+ * language-toggle slot (D-09 — non-functional this phase) can live here without
+ * pulling the page out of server-rendering. Renders the Wordmark, in-page nav
+ * anchors, "Log in", the disabled language slot, and the single primary "Request
+ * access" CTA → /signup (D-02, via the shared CTAButton).
  *
- * Do NOT gold-plate (D-15) — smooth-scroll / sticky polish is optional and
- * deliberately omitted here; Ayush owns the final UI.
+ * IMPORTANT: this header must NOT carry the `glass-strong` class — the signed-in
+ * TopBar uses `header.glass-strong`, and the "no app chrome" E2E guard counts
+ * `header.glass-strong === 0` on the public page. A translucent `bg-surface/70`
+ * blur gives the sticky-glass look without that class.
  */
 export function LandingNav() {
   return (
     <header className="sticky top-0 z-40 border-b border-ink/10 bg-surface/70 backdrop-blur-md">
-      <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3">
+      <nav className="mx-auto flex max-w-6xl items-center gap-6 px-6 py-3">
         <Link href="/" aria-label="Hello Sello home">
           <Wordmark />
         </Link>
 
-        <div className="flex items-center gap-3">
+        <div className="ml-2 hidden items-center gap-6 md:flex">
+          <a
+            href="#how"
+            className="text-sm font-medium text-ink-muted transition hover:text-brand"
+          >
+            How it works
+          </a>
+          <a
+            href="#faq"
+            className="text-sm font-medium text-ink-muted transition hover:text-brand"
+          >
+            FAQ
+          </a>
+        </div>
+
+        <div className="ml-auto flex items-center gap-3">
           {/* TODO(i18n): German toggle mounts here. D-09 — reserved slot,
               non-functional this phase; English copy ships now. A content swap,
               not a route restructure. */}
@@ -41,12 +59,7 @@ export function LandingNav() {
             Log in
           </Link>
 
-          <a
-            href="/signup"
-            className="rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-deep"
-          >
-            Request access
-          </a>
+          <CTAButton>Request access</CTAButton>
         </div>
       </nav>
     </header>

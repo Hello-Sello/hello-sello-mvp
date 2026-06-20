@@ -1,11 +1,14 @@
 import { Search, Handshake, FileCheck } from "lucide-react";
+import { SectionHeading } from "./SectionHeading";
+import { Reveal } from "./Reveal";
 
 /**
  * How it works (§5). The three core surfaces as a 3-step flow
  * Discover → Connect → Deal, iterated over a STEPS array + a co-located `Step`
- * sub-component (the `Meta` idiom). Placeholder bodies — real copy later.
+ * sub-component (the `Meta` idiom), with a flow-line of pills underneath. Section
+ * id="how" is the scroll target for the nav + hero "See how it works" anchor.
+ * Placeholder bodies — real copy later.
  */
-
 const STEPS = [
   {
     icon: Search,
@@ -26,19 +29,34 @@ const STEPS = [
 
 export function HowItWorks() {
   return (
-    <section className="mx-auto max-w-6xl px-6 py-16">
-      <p className="text-center text-xs font-semibold uppercase tracking-widest text-brand">
-        How it works
-      </p>
-      <h2 className="mt-3 text-center text-3xl font-bold tracking-tight text-ink">
-        Three steps, one flow
-      </h2>
+    <section id="how" className="mx-auto max-w-6xl scroll-mt-24 px-6 py-20">
+      <SectionHeading
+        eyebrow="How it works"
+        title="Three steps from stranger to deal"
+      />
 
-      <ol className="mt-10 grid gap-5 sm:grid-cols-3">
+      <ol className="mt-12 grid gap-5 sm:grid-cols-3">
         {STEPS.map((s, i) => (
-          <Step key={s.title} step={i + 1} icon={s.icon} title={s.title} body={s.body} />
+          <Reveal key={s.title} delayMs={i * 90}>
+            <Step step={i + 1} icon={s.icon} title={s.title} body={s.body} />
+          </Reveal>
         ))}
       </ol>
+
+      <Reveal delayMs={120}>
+        <div className="mt-10 flex flex-wrap items-center justify-center gap-3 text-sm font-semibold text-ink-muted">
+          {STEPS.map((s, i) => (
+            <span key={s.title} className="flex items-center gap-3">
+              <span className="glass rounded-full px-4 py-2">{s.title}</span>
+              {i < STEPS.length - 1 && (
+                <span className="text-brand" aria-hidden>
+                  →
+                </span>
+              )}
+            </span>
+          ))}
+        </div>
+      </Reveal>
     </section>
   );
 }
@@ -55,16 +73,16 @@ function Step({
   body: string;
 }) {
   return (
-    <li className="glass rounded-3xl p-6">
+    <li className="glass h-full rounded-3xl p-6">
       <div className="flex items-center gap-3">
-        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-soft/30 text-brand">
+        <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-brand to-brand-deep text-white shadow-[0_8px_20px_-8px_rgba(227,11,93,0.6)]">
           <Icon size={20} />
         </span>
-        <span className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
+        <span className="text-xs font-semibold uppercase tracking-[0.14em] text-brand">
           Step {step}
         </span>
       </div>
-      <h3 className="mt-4 text-lg font-semibold text-ink">{title}</h3>
+      <h3 className="mt-5 text-lg font-semibold text-ink">{title}</h3>
       <p className="mt-1.5 text-sm text-ink-muted">{body}</p>
     </li>
   );

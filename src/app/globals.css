@@ -67,3 +67,33 @@ body {
   border: 1px solid var(--glass-border);
   box-shadow: var(--glass-shadow);
 }
+
+/*
+  Landing aurora motion (Phase 9). Additive + decorative only. The floating
+  gradient blobs behind the public hero/CTA give the marketing pages their
+  "dreamy" depth without any JS or animation library. All motion is disabled
+  under prefers-reduced-motion.
+*/
+@keyframes hs-float-a {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(28px, -24px) scale(1.06); }
+  66% { transform: translate(-20px, 16px) scale(0.96); }
+}
+@keyframes hs-float-b {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(-26px, 22px) scale(1.05); }
+}
+@keyframes hs-float-c {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(22px, 18px) scale(1.04); }
+}
+.hs-blob-a { animation: hs-float-a 18s ease-in-out infinite; }
+.hs-blob-b { animation: hs-float-b 22s ease-in-out infinite; }
+.hs-blob-c { animation: hs-float-c 20s ease-in-out infinite; }
+
+html { scroll-behavior: smooth; }
+
+@media (prefers-reduced-motion: reduce) {
+  .hs-blob-a, .hs-blob-b, .hs-blob-c { animation: none; }
+  html { scroll-behavior: auto; }
+}
