@@ -131,7 +131,12 @@ test('legal links resolve: /impressum, /datenschutz, /agb each return 200', asyn
 test('B2B only string: landing shows "nicht an Verbraucher"', async ({ page, context }) => {
   await context.clearCookies()
   await page.goto('/')
-  await expect(page.getByText('nicht an Verbraucher')).toBeVisible()
+  // The substring renders in BOTH the dedicated B2B band (§8) and the footer
+  // line (§11) — LAND-02 mandates the verbatim phrase in both (09-02 plan:
+  // must_haves + B2BOnlyBand/Footer artifacts). getByText is a substring match,
+  // so it resolves to two elements; assert the first is visible (presence is the
+  // contract — dual placement is by design, not a regression).
+  await expect(page.getByText('nicht an Verbraucher').first()).toBeVisible()
 })
 
 // ---------------------------------------------------------------------------
