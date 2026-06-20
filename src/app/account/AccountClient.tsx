@@ -4,9 +4,10 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   ArrowLeft, User, Building2, Settings as SettingsIcon, Mail, Phone, Languages,
-  Link2, Clock, CheckCircle2, LogOut, Check, Copy, ExternalLink,
+  Link2, LogOut, Check, Copy, ExternalLink,
 } from 'lucide-react'
 import { Avatar } from '@/shared/ui/Avatar'
+import { VerifiedBadge } from '@/shared/ui/VerifiedBadge'
 import { AvatarUpload } from '@/shared/ui/AvatarUpload'
 import { signOut } from '@/app/(auth)/actions'
 import type { MyProfile } from '@/modules/profile'
@@ -161,18 +162,10 @@ function CompanyForm({ company, onDirty }: { company: CompanyProfile | null; onD
   return (
     <Panel title="Company Profile" subtitle="Your company details, shown on your public profile.">
       <div className="mb-5 flex items-center justify-between">
-        <VerifyBadge status={company.verificationStatus} />
+        <VerifiedBadge status={company.verificationStatus} variant="pill" />
       </div>
       <BrandingEditForm company={company} onDirty={onDirty} />
     </Panel>
-  )
-}
-
-function VerifyBadge({ status }: { status: string }) {
-  return status === 'verified' ? (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-success/15 px-3 py-1 text-xs font-semibold text-success"><CheckCircle2 size={13} /> Verified</span>
-  ) : (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-info/10 px-3 py-1 text-xs font-semibold text-info"><Clock size={13} /> Verification pending</span>
   )
 }
 

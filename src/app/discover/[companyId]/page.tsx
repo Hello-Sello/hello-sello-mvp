@@ -9,6 +9,7 @@ import {
 } from "../companies";
 import { ConnectActions } from "./ConnectActions";
 import { RequestPricingActions } from "./RequestPricingActions";
+import { VerifiedBadge } from "@/shared/ui/VerifiedBadge";
 
 // In-app company profile opened from Discover (Track 1). Keeps the app shell
 // (authenticated, verified members only — not the bare anon /c/ page). L0 = card
@@ -50,7 +51,11 @@ export default async function CompanyProfilePage({
         <div className="-mt-7 flex items-end gap-4 px-5">
           <CompanyLogo company={company} />
           <div className="min-w-0 flex-1 pb-0.5">
-            <h1 className="truncate text-xl font-bold text-ink">{company.name}</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="truncate text-xl font-bold text-ink">{company.name}</h1>
+              {/* UNCONDITIONAL — get_discoverable_company shares the verified-only WHERE. */}
+              <VerifiedBadge status="verified" variant="pill" />
+            </div>
             <p className="text-sm text-ink/55">
               {[company.categories.join(", "), company.countryName].filter(Boolean).join(" · ")}
             </p>
