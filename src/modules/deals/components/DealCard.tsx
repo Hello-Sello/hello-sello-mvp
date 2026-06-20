@@ -3,79 +3,87 @@
 /**
  * Deal card (3a) - the card object with its FRONT and BACK.
  *
- * Phase 3 built the front; Phase 4 adds the flip + the back (Signals + Logs).
- * The flip is a CSS 3D rotate (inline styles - no Tailwind 3D plugin needed):
- * the front defines the box; the back fills it (absolute inset-0) rotated 180°,
- * both with backface hidden so only the facing side shows.
+ * V3 flip (Phase 4 S2): the old CSS-3D `rotateY` flip is replaced by a CLEAN
+ * CROSS-FADE - two `position:absolute; inset-0` faces toggled by opacity +
+ * visibility on a `flipped` state. The 3D flip glitched in Chrome/Safari; the
+ * cross-fade never does. Because both faces are absolutely positioned, the card
+ * carries an explicit `min-height` so it cannot collapse (the front is the tall
+ * face).
  *
- * 4.5.3: the card's two corner controls live HERE (outside the flipping faces so
- * they stay upright): flip top-left, Edit top-right. The Seal gate is no longer
- * on the card - it moved to the Sella strip. So the faces are pure display.
+ * The two corner controls live in the maroon HEADER corners (V3): flip top-left,
+ * Edit top-right - ~30px round translucent-white buttons, layered above the faces
+ * (z-index) so they stay visible and upright on both faces.
  *
- * Kept as the single card entry point so the chat placement (Phase 5) mounts
- * one component.
+ * PENCIL LOCK (DCHG-03): the Edit button renders only when `onEdit` is defined.
+ * DealPin passes `onEdit={data.pendingChange ? undefined : ...}`, so a held change
+ * hides the pencil. The Seal gate is NOT on the card - it moved to the Sella strip.
+ *
+ * Kept as the single card entry point so the chat placement mounts one component.
  */
 import { useState } from "react";
 import { FlipHorizontal2, Pencil } from "lucide-react";
 import { CardFront } from "./CardFront";
 import { CardBack } from "./CardBack";
-import type { DealCardView } from "../types";
+import type { DealCardView, ThingView } from "../types";
 
 export function DealCard({
   data,
   onEdit,
+  things = [],
 }: {
   data: DealCardView;
   /** open the edit form (3.5b); omitted in read-only contexts (no Edit corner) */
   onEdit?: () => void;
+  /** read-only assigned THINGS for the front (D-12); wired from the strip later (S1) */
+  things?: ThingView[];
 }) {
   const [flipped, setFlipped] = useState(false);
 
   return (
-    <div className="relative w-[340px]" style={{ perspective: "1600px" }}>
-      {/* flip control - top-left, stays upright above the flipping faces */}
+    <div className="relative w-[390px] min-h-[640px]">
+      {/* ---- HEADER-CORNER CONTROLS (over the maroon band, above both faces) ---- */}
+      {/* flip - top-left corner */}
       <button
         onClick={() => setFlipped((f) => !f)}
-        className="absolute left-2 top-2 z-20 flex h-6 w-6 items-center justify-center rounded-full bg-white/80 text-brand shadow-sm transition hover:bg-white"
-        title={flipped ? "Flip to facts" : "Flip to signals & logs"}
-        aria-label={flipped ? "Flip to facts" : "Flip to signals and logs"}
+        className="absolute left-3 top-3 z-20 flex h-[30px] w-[30px] items-center justify-center rounded-full border border-white/25 bg-white/15 text-white transition hover:bg-white/30"
+        title={flipped ? "Flip to deal" : "Flip to signals & logs"}
+        aria-label={flipped ? "Flip to deal" : "Flip to signals and logs"}
       >
-        <FlipHorizontal2 className="h-3.5 w-3.5" />
+        <FlipHorizontal2 className="h-[15px] w-[15px]" />
       </button>
 
-      {/* edit control - top-right, the matching corner to flip (4.5.3). Opens the
-          edit form; only when an edit handler is given (read-only omits it). */}
+      {/* edit - top-right corner; pencil-lock: only when an edit handler is given */}
       {onEdit && (
         <button
           onClick={onEdit}
-          className="absolute right-2 top-2 z-20 flex h-6 w-6 items-center justify-center rounded-full bg-white/80 text-brand shadow-sm transition hover:bg-white"
+          className="absolute right-3 top-3 z-20 flex h-[30px] w-[30px] items-center justify-center rounded-full border border-white/25 bg-white/15 text-white transition hover:bg-white/30"
           title="Edit deal"
           aria-label="Edit deal"
         >
-          <Pencil className="h-3.5 w-3.5" />
+          <Pencil className="h-[15px] w-[15px]" />
         </button>
       )}
 
+      {/* ---- FRONT FACE - shown by default, cross-fades out when flipped ---- */}
       <div
-        className="relative transition-transform duration-500"
+        className="absolute inset-0 transition-[opacity,visibility] duration-300 ease-in-out"
         style={{
-          transformStyle: "preserve-3d",
-          transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)",
+          opacity: flipped ? 0 : 1,
+          visibility: flipped ? "hidden" : "visible",
         }}
       >
-        <div style={{ backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden" }}>
-          <CardFront data={data} />
-        </div>
-        <div
-          className="absolute inset-0"
-          style={{
-            backfaceVisibility: "hidden",
-            WebkitBackfaceVisibility: "hidden",
-            transform: "rotateY(180deg)",
-          }}
-        >
-          <CardBack data={data} />
-        </div>
+        <CardFront data={data} things={things} />
+      </div>
+
+      {/* ---- BACK FACE - hidden by default, cross-fades in when flipped ---- */}
+      <div
+        className="absolute inset-0 transition-[opacity,visibility] duration-300 ease-in-out"
+        style={{
+          opacity: flipped ? 1 : 0,
+          visibility: flipped ? "visible" : "hidden",
+        }}
+      >
+        <CardBack data={data} />
       </div>
     </div>
   );
