@@ -13,6 +13,7 @@ import { FinalCTA } from "./_landing/FinalCTA";
 import { Footer } from "./_landing/Footer";
 import { SectionHeading } from "./_landing/SectionHeading";
 import { Reveal } from "./_landing/Reveal";
+import { CookieBanner } from "./_landing/CookieBanner";
 
 // Server component (required for both `export const metadata` and `redirect()`).
 // Do NOT mark this "use client" — that breaks the metadata export AND the D-01
@@ -107,6 +108,8 @@ export default async function RootPage() {
         <FinalCTA />
       </main>
       <Footer />
+      {/* Last child — a "use client" island; page.tsx stays a server component. */}
+      <CookieBanner />
     </div>
   );
 }
