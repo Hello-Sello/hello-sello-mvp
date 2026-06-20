@@ -9,7 +9,7 @@ import { ThingsTab } from "./ThingsTab";
 type Tab = "things" | "people" | "documents";
 
 const TABS: ReadonlyArray<{ key: Tab; label: string }> = [
-  { key: "things", label: "Things" },
+  { key: "things", label: "Add something" },
   { key: "people", label: "People" },
   { key: "documents", label: "Documents" },
 ];
