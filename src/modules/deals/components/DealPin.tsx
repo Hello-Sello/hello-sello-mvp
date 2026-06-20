@@ -9,8 +9,8 @@
  *   - B · a PROPOSAL is pending → the pre-card object. The other side accepts
  *         here (the loud pill → confirm_detected_deal → atomic birth); the
  *         proposer sees "waiting". This is the ONLY place a card is born now.
- *   - C · a live deal is selected → the deal chip + selector dropdown + "Open
- *         card" + the quiet "Workspace ↗" door.
+ *   - C · a live deal is selected → the two-tier strip: identity on top, the
+ *         [Deal Room | Deal Card] toggle + the // Sella mark + a translate glyph.
  *
  * Neutral + system-voice + both-sides (D7): both people see the same strip and
  * press the same buttons. The PRIVATE per-side Sella stays in the right panel.
@@ -25,13 +25,13 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
-  ArrowUpRight,
   Check,
   ChevronDown,
   FileText,
-  Kanban,
+  MoreHorizontal,
   Plus,
   Sparkles,
+  Users,
 } from "lucide-react";
 import { createClient } from "@/shared/db/client";
 import {
@@ -52,6 +52,7 @@ import { CreateDealForm } from "./CreateDealForm";
 import { EditDealForm, type ProposeChangePayload } from "./EditDealForm";
 import { SellaMark } from "./SellaMark";
 import { SellaCurtain } from "./SellaCurtain";
+import { TranslateButton } from "./TranslateButton";
 import type {
   ConfirmSeat,
   DealCardStatus,
@@ -114,6 +115,7 @@ export function DealPin({
   variant = "chat",
   threadId,
   counterpartyName,
+  counterpartyInitials,
   children,
 }: {
   relationshipId: string;
@@ -126,6 +128,12 @@ export function DealPin({
   threadId?: string;
   /** the other company's name - the dropdown heading + the create-form recipient */
   counterpartyName?: string;
+  /**
+   * The counterparty avatar initials for the strip's top-tier identity (D-02).
+   * ThreadView passes `conversation.initials` on the P2P deal path; the workspace
+   * variant supplies none, so the top tier only renders when this/name is present.
+   */
+  counterpartyInitials?: string;
   children: React.ReactNode;
 }) {
   const [deals, setDeals] = useState<RelationshipDealRow[]>([]);
@@ -137,6 +145,7 @@ export function DealPin({
   const [data, setData] = useState<DealCardView | null>(null);
   const [open, setOpen] = useState(false); // the card overlay
   const [picking, setPicking] = useState(false); // the deal dropdown
+  const [menuOpen, setMenuOpen] = useState(false); // the top-tier three-dot menu
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState(false);
 
@@ -447,14 +456,34 @@ export function DealPin({
       })
     : [];
 
-  const openCardButton = (
-    <button
-      type="button"
-      onClick={() => setOpen((o) => !o)}
-      className="shrink-0 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-deep"
-    >
-      {open ? "Close card" : "Open card"}
-    </button>
+  // D-04 - the bottom-tier left [Deal Room | Deal Card] segmented toggle. Deal
+  // Card is the REAL control (it toggles the card overlay - today's "Open card");
+  // when the card is open it reads as the active segment. Deal Room is a
+  // PLACEHOLDER button this phase (the real Deal Room build wires it later), so
+  // its onClick is a no-op and it carries a "coming soon" title - never linked.
+  const dealRoomCardToggle = (
+    <div className="inline-flex shrink-0 items-center rounded-lg bg-black/[0.04] p-0.5 ring-1 ring-black/5">
+      <button
+        type="button"
+        title="Deal Room (coming soon)"
+        onClick={() => {}}
+        className="rounded-md px-3 py-1 text-xs font-semibold text-ink/45 transition hover:text-ink/65"
+      >
+        Deal Room
+      </button>
+      <button
+        type="button"
+        aria-pressed={open}
+        onClick={() => setOpen((o) => !o)}
+        className={`rounded-md px-3 py-1 text-xs font-semibold transition ${
+          open
+            ? "bg-brand text-white shadow-sm"
+            : "text-brand-deep hover:bg-white/70"
+        }`}
+      >
+        {open ? "Close card" : "Deal Card"}
+      </button>
+    </div>
   );
 
   // 4.5.4 / D-09 hybrid cue on the SINGLE `//` Sella mark. The mark is now the
@@ -625,62 +654,129 @@ export function DealPin({
         </div>
       )}
 
-      {/* State C - a live deal is selected: the selector bar */}
+      {/* State C - a live deal is selected: the two-tier target layout (D-02).
+          TOP tier: rounded-square avatar + online dot + bold Name + pink
+          Relationship pill + pink Deals-dropdown pill + three-dot menu. BOTTOM
+          tier: the [Deal Room | Deal Card] toggle + the // Sella mark/curtain +
+          the TranslateButton in the old translate-door slot. */}
       {variant === "chat" && !showProposal && hasDeal && (
-        <div className={rowCls}>
-          <span className="shrink-0 text-[11px] text-ink/45">Deal:</span>
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setPicking((p) => !p)}
-              aria-haspopup="listbox"
-              aria-expanded={picking}
-              aria-label="Choose a deal"
-              className="block transition hover:opacity-90"
+        <div className="flex flex-col border-b border-black/5 px-4 py-2.5">
+          {/* TOP tier - identity (D-02). Avatar/name are NOT a nav target (no
+              person profile route exists, CONTEXT). */}
+          <div className="flex items-center gap-3">
+            <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-xs font-semibold text-ink/70 ring-1 ring-black/5">
+              {counterpartyInitials}
+              {/* presence dot - UI placeholder until real presence is wired */}
+              <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-success ring-2 ring-white" />
+            </span>
+            <span className="truncate text-sm font-semibold text-ink">
+              {counterpartyName ?? "Deal"}
+            </span>
+
+            {/* pink Relationship pill (people icon + company) → relationship page */}
+            <Link
+              href={`/connect/relationship/${relationshipId}`}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-brand-soft/40 px-2.5 py-1 text-[11px] font-semibold text-brand-deep ring-1 ring-brand/15 transition hover:bg-brand-soft/60"
             >
-              <DealChip status={chipStatus} selectable />
-            </button>
-            {picking && (
-              <>
-                <div className="fixed inset-0 z-10" onClick={() => setPicking(false)} />
-                <div className="glass-strong absolute left-0 top-full z-20 mt-1.5 w-72 rounded-2xl p-1.5">
-                  <p className="px-2.5 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wide text-ink/40">
-                    Deals with {counterpartyName ?? "this company"}
-                  </p>
-                  {deals.map((d) => (
-                    <button
-                      key={d.id}
-                      type="button"
-                      onClick={() => pickDeal(d.id)}
-                      className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition hover:bg-black/[0.04]"
-                    >
-                      <span className="w-1 self-stretch rounded-full bg-brand" aria-hidden />
-                      <span className="flex min-w-0 flex-1 flex-col">
-                        <span className="truncate text-xs font-semibold text-ink">
-                          {d.hsNumber ?? "Draft deal"}
+              <Users size={13} strokeWidth={2} />
+              <span className="max-w-[10rem] truncate">{counterpartyName ?? "Relationship"}</span>
+            </Link>
+
+            {/* pink Deals-dropdown pill (the HS short-code + chevron). Reuses the
+                wired listRelationshipDeals + hsNumber + pickDeal; only restyled. */}
+            <div className="relative shrink-0">
+              <button
+                type="button"
+                onClick={() => setPicking((p) => !p)}
+                aria-haspopup="listbox"
+                aria-expanded={picking}
+                aria-label="Choose a deal"
+                className="inline-flex items-center gap-1.5 rounded-full bg-brand-soft/40 px-2.5 py-1 text-[11px] font-semibold text-brand-deep ring-1 ring-brand/15 transition hover:bg-brand-soft/60"
+              >
+                {selectedDeal?.hsNumber ?? "Draft deal"}
+                <ChevronDown size={13} strokeWidth={2} className="text-brand-deep/60" />
+              </button>
+              {picking && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setPicking(false)} />
+                  <div className="glass-strong absolute left-0 top-full z-20 mt-1.5 w-72 rounded-2xl p-1.5">
+                    <p className="px-2.5 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wide text-ink/40">
+                      Deals with {counterpartyName ?? "this company"}
+                    </p>
+                    {deals.map((d) => (
+                      <button
+                        key={d.id}
+                        type="button"
+                        onClick={() => pickDeal(d.id)}
+                        className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition hover:bg-black/[0.04]"
+                      >
+                        <span className="w-1 self-stretch rounded-full bg-brand" aria-hidden />
+                        <span className="flex min-w-0 flex-1 flex-col">
+                          <span className="truncate text-xs font-semibold text-ink">
+                            {d.hsNumber ?? "Draft deal"}
+                          </span>
+                          <span className="text-[10px] text-ink/45">
+                            Updated {timeAgo(d.updatedAt)}
+                          </span>
                         </span>
-                        <span className="text-[10px] text-ink/45">Updated {timeAgo(d.updatedAt)}</span>
-                      </span>
-                      <StatusBadge status={d.status} />
-                      {d.id === selectedId && (
-                        <Check size={14} strokeWidth={2.5} className="shrink-0 text-brand" />
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
+                        <StatusBadge status={d.status} />
+                        {d.id === selectedId && (
+                          <Check size={14} strokeWidth={2.5} className="shrink-0 text-brand" />
+                        )}
+                      </button>
+                    ))}
+                    {/* D-03 - "See all N deals" → the relationship page (the
+                        dedicated all-deals page is deferred). */}
+                    <Link
+                      href={`/connect/relationship/${relationshipId}`}
+                      onClick={() => setPicking(false)}
+                      className="mt-0.5 flex items-center justify-center rounded-lg px-2.5 py-2 text-[11px] font-semibold text-brand-deep transition hover:bg-brand-soft/40"
+                    >
+                      See all {deals.length} deals
+                    </Link>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* three-dot menu - secondary actions live here */}
+            <div className="relative ml-auto shrink-0">
+              <button
+                type="button"
+                onClick={() => setMenuOpen((o) => !o)}
+                aria-label="More actions"
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
+                title="More"
+                className="flex h-9 w-9 items-center justify-center rounded-xl text-ink/55 ring-1 ring-black/5 transition hover:bg-white/70 hover:text-brand hover:ring-brand/20"
+              >
+                <MoreHorizontal size={17} strokeWidth={1.75} />
+              </button>
+              {menuOpen && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+                  <div className="glass-strong absolute right-0 top-full z-20 mt-1.5 w-56 rounded-2xl p-1.5">
+                    <Link
+                      href={`/connect/relationship/${relationshipId}`}
+                      onClick={() => setMenuOpen(false)}
+                      className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-ink transition hover:bg-black/[0.04]"
+                    >
+                      <Users size={15} strokeWidth={1.75} /> View relationship
+                    </Link>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
-          {openCardButton}
-          {changeControl}
-          <Link
-            href={`/connect/deal/${selectedId}`}
-            className="ml-auto flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-medium text-ink/55 transition hover:bg-ink/5 hover:text-ink"
-          >
-            <Kanban size={14} strokeWidth={1.75} />
-            Workspace
-            <ArrowUpRight size={13} strokeWidth={2} />
-          </Link>
+
+          {/* BOTTOM tier - the [Deal Room | Deal Card] toggle (left), the //
+              Sella mark/curtain, and the TranslateButton in the old translate-
+              door slot (right). */}
+          <div className="mt-2 flex items-center gap-3">
+            {dealRoomCardToggle}
+            {changeControl}
+            <TranslateButton className="ml-auto" />
+          </div>
         </div>
       )}
 
@@ -702,12 +798,14 @@ export function DealPin({
         </div>
       )}
 
-      {/* workspace variant - the deal is fixed; chip + open + seal */}
+      {/* workspace variant - the deal is fixed; NO top-tier identity (no source
+          in the Deal Room host, D-02): only the chip + the [Deal Room | Deal
+          Card] toggle + the // Sella mark/curtain. */}
       {variant === "workspace" && hasDeal && (
         <div className={rowCls}>
           <span className="shrink-0 text-[11px] text-ink/45">Deal:</span>
           <DealChip status={chipStatus} selectable={false} />
-          {openCardButton}
+          {dealRoomCardToggle}
           {changeControl}
         </div>
       )}
