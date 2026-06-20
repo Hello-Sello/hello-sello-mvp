@@ -47,10 +47,11 @@ import {
   withdrawDealChange,
 } from "../actions";
 import { formatMoney } from "../lib/derive";
-import { ConfirmBar } from "./ConfirmBar";
 import { DealCard } from "./DealCard";
 import { CreateDealForm } from "./CreateDealForm";
 import { EditDealForm, type ProposeChangePayload } from "./EditDealForm";
+import { SellaMark } from "./SellaMark";
+import { SellaCurtain } from "./SellaCurtain";
 import type {
   ConfirmSeat,
   DealCardStatus,
@@ -88,32 +89,6 @@ function timeAgo(iso: string): string {
   const hrs = Math.round(mins / 60);
   if (hrs < 24) return `${hrs}h ago`;
   return `${Math.round(hrs / 24)}d ago`;
-}
-
-/**
- * The EU-AI-Act "AI" mark - the strip's system voice is Sella. Reuses the same
- * Sparkles mark the Sella chat lines use, so it reads as one voice. Shows three
- * gently-pulsing dots in place of "AI" while Sella is working (`thinking`).
- */
-function SellaMark({ thinking = false }: { thinking?: boolean }) {
-  return (
-    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-brand-soft/40 px-2 py-0.5 text-[10px] font-semibold text-brand-deep ring-1 ring-brand/15">
-      <Sparkles size={11} strokeWidth={2} className="text-brand" />
-      {thinking ? (
-        <span className="inline-flex items-center gap-0.5" aria-label="Sella is thinking">
-          {[0, 160, 320].map((d) => (
-            <span
-              key={d}
-              className="h-1 w-1 animate-pulse rounded-full bg-brand"
-              style={{ animationDelay: `${d}ms` }}
-            />
-          ))}
-        </span>
-      ) : (
-        "AI"
-      )}
-    </span>
-  );
 }
 
 /**
@@ -482,94 +457,46 @@ export function DealPin({
     </button>
   );
 
-  // 4.5.4 - the held-CHANGE control, shown in State C whenever a change is held.
-  // RESPONDER (the other side, no vote yet): a loud "Review change" pill → a
-  // popover with the new lines, the proposer's reason, and the requireReason
-  // ConfirmBar (the reason gate, REAS-01). PROPOSER: a "waiting" chip + a
-  // no-reason Withdraw (DCHG-06). The lines come from the held draft snapshot
-  // (SHARED only - the private box is never here, D-09).
-  const changeControl = !pendingChange ? null : changeMustAct ? (
-    <div className="relative shrink-0">
-      <button
-        type="button"
-        onClick={() => setChangeOpen((o) => !o)}
-        aria-haspopup="dialog"
-        aria-expanded={changeOpen}
-        className="relative inline-flex items-center gap-1.5 rounded-full bg-brand px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-brand-deep"
-      >
-        <span className="absolute -right-0.5 -top-0.5 flex h-2.5 w-2.5">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-soft opacity-80" />
-          <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-brand-soft ring-2 ring-white" />
-        </span>
-        <Sparkles size={13} strokeWidth={2} />
-        Review change
-      </button>
+  // 4.5.4 / D-09 hybrid cue on the SINGLE `//` Sella mark. The mark is now the
+  // one entry point (D-08): loud "review" dot + label when it is my turn, a quiet
+  // "Awaiting reply" chip (no company name) while I wait, a clean mark otherwise.
+  const changeCue: "review" | "awaiting" | null = changeMustAct
+    ? "review"
+    : changeWaiting
+      ? "awaiting"
+      : null;
 
-      {changeOpen && data && (
-        <>
-          <div className="fixed inset-0 z-10" onClick={() => setChangeOpen(false)} />
-          <div className="glass-strong absolute right-0 top-full z-20 mt-1.5 w-80 overflow-hidden rounded-2xl">
-            <div className="flex items-stretch">
-              <span className="w-1 shrink-0 bg-brand" aria-hidden />
-              <div className="min-w-0 flex-1 p-3">
-                <div className="mb-0.5 flex items-center gap-1.5 text-[11px] font-semibold text-brand-deep">
-                  <Sparkles size={12} strokeWidth={2} />
-                  Proposed change
-                </div>
-                <p className="mb-2 text-[11px] text-ink/50">
-                  {`From ${counterpartyName ?? "the other side"} · v${pendingChange.baseVersion} → v${pendingChange.baseVersion + 1}`}
-                </p>
-
-                <ul className="space-y-1.5">
-                  {pendingChange.lines.map((l, i) => (
-                    <li key={i} className="flex items-baseline justify-between gap-3 text-xs">
-                      <span className="min-w-0 flex-1 truncate text-ink/80">{l.name}</span>
-                      <span className="shrink-0 font-mono text-[11px] text-ink/60">
-                        {l.quantity}
-                        {l.unit}
-                        {l.unitPrice != null ? ` · ${formatMoney(l.unitPrice, l.currency)}` : ""}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-
-                {pendingChange.proposerReason && (
-                  <p className="mt-2 border-t border-black/5 pt-2 text-[11px] text-ink/55">
-                    <span className="font-semibold text-ink/70">Their reason: </span>
-                    {pendingChange.proposerReason}
-                  </p>
-                )}
-
-                <div className="mt-3">
-                  <ConfirmBar
-                    seats={changeSeats}
-                    viewerSide={data.viewerSide}
-                    busy={changeBusy}
-                    requireReason
-                    onConfirm={(reason) => void runChangeDecision("accept", reason)}
-                    onDecline={(reason) => void runChangeDecision("decline", reason)}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-        </>
+  // 4.5.4 / D-06/D-07/D-08/D-09 - the held-CHANGE control: the shared SellaMark is
+  // the single entry point and the SellaCurtain drops from it. The mark toggles
+  // the existing `changeOpen` flag; the curtain re-homes the wired held-change
+  // flow (Accept/Decline/Reason via the reused ConfirmBar inside it, + Withdraw),
+  // calling the EXISTING runChangeDecision/runWithdrawChange handlers (which call
+  // confirmDealChange/withdrawDealChange from ../actions). No new flow, no new
+  // action - just a new VIEW over the proven wiring. The Withdraw lives ONLY
+  // inside the curtain now (D-09). When there is no held change the mark is clean.
+  const changeControl = (
+    <span className="relative inline-flex shrink-0 items-center">
+      <SellaMark
+        thinking={changeBusy}
+        onClick={pendingChange ? () => setChangeOpen((o) => !o) : undefined}
+        cue={changeCue}
+      />
+      {data && pendingChange && (
+        <SellaCurtain
+          open={changeOpen && !!pendingChange}
+          pendingChange={pendingChange}
+          seats={changeSeats}
+          viewerSide={data.viewerSide}
+          busy={changeBusy}
+          counterpartyName={counterpartyName}
+          onConfirm={(reason) => void runChangeDecision("accept", reason)}
+          onDecline={(reason) => void runChangeDecision("decline", reason)}
+          onWithdraw={() => void runWithdrawChange()}
+          onClose={() => setChangeOpen(false)}
+        />
       )}
-    </div>
-  ) : changeWaiting ? (
-    <span className="inline-flex shrink-0 items-center gap-2 rounded-full bg-white/70 px-3 py-1.5 text-[11px] font-medium text-ink/55 ring-1 ring-black/5">
-      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand/60" />
-      Change pending · {counterpartyName ?? "the other side"}
-      <button
-        type="button"
-        onClick={() => void runWithdrawChange()}
-        disabled={changeBusy}
-        className="ml-0.5 rounded-full px-2 py-0.5 text-[11px] font-medium text-ink/55 ring-1 ring-ink/15 transition hover:bg-ink/5 disabled:opacity-50"
-      >
-        Withdraw
-      </button>
     </span>
-  ) : null;
+  );
 
   // the strip's row shell - same border + padding across all three states
   const rowCls = "flex items-center gap-3 border-b border-black/5 px-4 py-2.5";
@@ -746,7 +673,6 @@ export function DealPin({
           </div>
           {openCardButton}
           {changeControl}
-          <SellaMark thinking={changeBusy} />
           <Link
             href={`/connect/deal/${selectedId}`}
             className="ml-auto flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-medium text-ink/55 transition hover:bg-ink/5 hover:text-ink"
