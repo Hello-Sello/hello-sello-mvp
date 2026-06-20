@@ -40,6 +40,20 @@
   .legend{font-size:12px; color:var(--muted); margin:8px 0 22px}
   .legend .badge{margin-right:6px}
   footer{margin-top:40px; color:var(--muted); font-size:12px; border-top:1px solid var(--line); padding-top:14px}
+  /* --- progress dashboard --- */
+  .dash{background:#fff; border:1px solid var(--line); border-radius:12px; padding:18px 20px; margin:6px 0 8px; box-shadow:0 1px 3px rgba(120,0,60,.05)}
+  .dash h3{margin:0 0 14px; font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted)}
+  .dbar{display:flex; align-items:flex-start; gap:18px; margin:0 0 16px}
+  .dbar:last-of-type{margin-bottom:0}
+  .dbar .pct{font-size:30px; font-weight:800; line-height:1; color:var(--accent-deep); min-width:78px; padding-top:2px}
+  .dbar .grow{flex:1; min-width:240px}
+  .dbar .lab{font-size:13px; color:var(--ink)}
+  .dbar .lab a{color:var(--accent)}
+  .track{display:flex; height:13px; border-radius:8px; overflow:hidden; background:#efe7ec; margin:7px 0 5px}
+  .track .seg{height:100%; transition:width .35s ease}
+  .s-d{background:#1a7f4b} .s-p{background:#e0a225} .s-t{background:#cfc8d4}
+  .counts{font-size:12.5px; color:var(--muted)}
+  .dash-hint{font-size:12px; color:var(--muted); margin:12px 0 0; border-top:1px dashed var(--line); padding-top:10px}
 </style>
 </head>
 <body>
@@ -61,23 +75,53 @@
     (3) Do the <em>UI pass first</em> (old Phase 6 becomes next); settle the deal-card layout early so card-content work does not get redone.
   </div>
 
+  <div class="dash">
+    <h3>Where we are</h3>
+    <div class="dbar">
+      <div class="pct">44%</div>
+      <div class="grow">
+        <div class="lab"><b>Active &middot; Phase 1 - UI &amp; chat.</b> Live slice board &rarr; <a href="2026-06-19-chat-ui-overhaul.html">chat-ui-overhaul</a></div>
+        <div class="track">
+          <span class="seg s-d" style="width:44%"></span>
+          <span class="seg s-p" style="width:45%"></span>
+          <span class="seg s-t" style="width:11%"></span>
+        </div>
+        <div class="counts">4 done (F1 glass &middot; F2 one-rail nav &middot; B1 bubbles &middot; B4 auto-scroll) &middot; 4 prototyped (S1 strip &middot; S2 card &middot; S3 form &middot; B3 Sella mark) &middot; 1 to design (B2 list)</div>
+      </div>
+    </div>
+    <div class="dbar">
+      <div class="pct" id="spct">--</div>
+      <div class="grow">
+        <div class="lab"><b>Sprint 2 - the 5 phases.</b> Phases started, out of 5.</div>
+        <div class="track">
+          <span class="seg s-d" id="sb-d" style="width:0"></span>
+          <span class="seg s-p" id="sb-p" style="width:0"></span>
+          <span class="seg s-t" id="sb-t" style="width:0"></span>
+        </div>
+        <div class="counts" id="scounts">counting...</div>
+      </div>
+    </div>
+    <p class="dash-hint">The Sprint-2 bar counts the phase table just below and recomputes itself when a status chip changes. Claude works in <code>.planning/</code> + notes; this HTML is your read-only dashboard.</p>
+  </div>
+
   <h2>Sprint 2 - build order (fresh numbering, 2026-06-19)</h2>
-  <p class="lead">Sprint 1 (Held deal-change + Deal Card &amp; Form) is DONE. The old phase numbers are RETIRED. Most phases run via GSD quick.</p>
-  <ol class="prio">
-    <li><b>Phase 1 - UI &amp; chat</b> - NEXT. Settle the deal-card layout early so Phase 2 is not redone.</li>
-    <li><b>Phase 2 - Deal Basket / Deal form</b> - OBS-2 pack display, flexibility (text+link cards, pre-sell non-catalogue), clickable detail, configurable display, Shop+Sella origins, persistent basket.</li>
-    <li><b>Phase 3 - Sella</b> - change detection + the "born_now" audit fix + the message-voice (System vs Sella) rule.</li>
-    <li><b>Phase 4 - C2C chat</b> - T7 ticketing + T8 connected/not-connected; absorbs manual-create person-threading.</li>
-    <li><b>Phase 5 - Notification</b> - cross-deal alert, built as a subset of global notifications (persistent dot).</li>
-    <li><b>Parked</b> - other items, until Phases 1-5 are done.</li>
-  </ol>
+  <p class="lead">Sprint 1 (Held deal-change + Deal Card &amp; Form) is DONE. The old phase numbers are RETIRED. Most phases run via GSD quick. <b>This table drives the Sprint-2 bar above.</b></p>
+  <table id="phasebar">
+    <tr><th>#</th><th>Phase</th><th>Status</th><th>What it covers</th></tr>
+    <tr><td class="ref">1</td><td><b>UI &amp; chat</b></td><td><span class="badge b-partial">active &middot; 4/9</span></td><td>Connect/chat re-skin. Settle the deal-card layout early so Phase 2 is not redone. Live board &rarr; <a href="2026-06-19-chat-ui-overhaul.html">chat-ui-overhaul</a>.</td></tr>
+    <tr><td class="ref">2</td><td><b>Deal Basket / Deal form</b></td><td><span class="badge b-todo">queued</span></td><td>OBS-2 pack display, flexibility (text+link cards, pre-sell non-catalogue), clickable detail, configurable display, Shop+Sella origins, persistent basket.</td></tr>
+    <tr><td class="ref">3</td><td><b>Sella</b></td><td><span class="badge b-todo">queued</span></td><td>Change detection + the "born_now" audit fix + the message-voice (System vs Sella) rule.</td></tr>
+    <tr><td class="ref">4</td><td><b>C2C chat</b></td><td><span class="badge b-todo">queued</span></td><td>T7 ticketing + T8 connected/not-connected; absorbs manual-create person-threading.</td></tr>
+    <tr><td class="ref">5</td><td><b>Notification</b></td><td><span class="badge b-todo">queued</span></td><td>Cross-deal alert, built as a subset of global notifications (persistent dot).</td></tr>
+  </table>
+  <p class="lead" style="margin-top:8px"><b>Parked</b> - other items, until Phases 1-5 are done (not counted in the bar).</p>
 
   <h2>Done (shipped + verified)</h2>
   <table>
     <tr><th>Area</th><th>What is done</th></tr>
     <tr><td>Deal-change backbone</td><td>Phase 1 held two-sided change &middot; Phase 2 announcements + gate = Accept/Decline only</td></tr>
     <tr><td>Deal Card &amp; Form</td><td>3a card display &middot; 3b Deal Basket &middot; 3c Card Note (held) &middot; 3d margin/product &middot; 3e form UX &middot; 3f batches</td></tr>
-    <tr><td>UI / Chat</td><td>5A.1 Connect icon rail &middot; 5A.2 chat heading + deal selector &middot; 5A.3 composer (+ working formatting, <code>+</code> menu)</td></tr>
+    <tr><td>UI / Chat</td><td>5A.1 Connect icon rail &middot; 5A.2 chat heading + deal selector &middot; 5A.3 composer &middot; <b>F1</b> solid glass &middot; <b>F2</b> one-rail accordion nav + full-width TopBar &middot; <b>B1</b> pink/ash bubbles &middot; <b>B4</b> auto-scroll <span style="color:var(--muted);font-size:12px">(local-only on <code>claude/ayush/work</code>)</span></td></tr>
     <tr><td>Realtime infra</td><td><code>use-chat-realtime.ts</code> - RLS-scoped live socket (reusable for notifications)</td></tr>
   </table>
 
@@ -94,13 +138,13 @@
   <p class="lead">The new front-runner phase. Settle the chat-top + card layout before hanging notifications / Sella renderers on them.</p>
   <table>
     <tr><th>Item</th><th>Status</th><th>Ref</th></tr>
-    <tr><td>WhatsApp-style Connect contacts list</td><td><span class="badge b-todo">not started</span></td><td class="ref">DEV-67</td></tr>
+    <tr><td>WhatsApp-style Connect contacts list (B2)</td><td><span class="badge b-todo">not started &middot; V1.5</span></td><td class="ref">DEV-67</td></tr>
     <tr><td>Sella / Preview flip page (keeps chat visible)</td><td><span class="badge b-todo">not started</span></td><td class="ref">DEV-67</td></tr>
     <tr><td>Filter tabs: New / All / Unread / Companies / Deals</td><td><span class="badge b-todo">not started</span></td><td class="ref">DEV-71</td></tr>
-    <tr><td>Bubble colours: incoming grey, own <code>#76002d</code></td><td><span class="badge b-todo">not started</span></td><td class="ref">DEV-74</td></tr>
-    <tr><td>Scroll-to-newest + jump-to-bottom arrow</td><td><span class="badge b-todo">not started</span></td><td class="ref">DEV-75</td></tr>
-    <tr><td>Chat-top cleanup + Deals pop-up + link fixes (moved here from P4)</td><td><span class="badge b-todo">not started</span></td><td class="ref">DEV-73</td></tr>
-    <tr><td>Deal card open mode + layout (panel vs overlay, orientation, actions, history home)</td><td><span class="badge b-todo">not started</span></td><td class="ref">old 5A.4</td></tr>
+    <tr><td>Bubble colours: mine right/pink, theirs left/ash-gray <span style="color:var(--muted);font-size:12px">(shipped as B1; the <code>#76002d</code> maroon idea was dropped for pink)</span></td><td><span class="badge b-done">done &middot; B1</span></td><td class="ref">DEV-74</td></tr>
+    <tr><td>Scroll-to-newest on open (auto, <code>scrollIntoView</code>) <span style="color:var(--muted);font-size:12px">- jump-to-bottom arrow still to add</span></td><td><span class="badge b-partial">auto done &middot; B4</span></td><td class="ref">DEV-75</td></tr>
+    <tr><td>Chat-top cleanup + Deals pop-up + link fixes <span style="color:var(--muted);font-size:12px">(TopBar made full-width via F2; the in-chat strip is S1, prototyping)</span></td><td><span class="badge b-partial">partial &middot; F2</span></td><td class="ref">DEV-73</td></tr>
+    <tr><td>Deal card open mode + layout (panel vs overlay, orientation, actions, history home)</td><td><span class="badge b-partial">prototyped &middot; S2</span></td><td class="ref">old 5A.4 &middot; dealcard-v2-prototype</td></tr>
     <tr><td>DECIDED rename (DEV-66): the internal container "Deal Workspace" &rarr; <b>"Deal Room"</b>; the old "Deal Room" (customer-presentation surface) &rarr; <b>"Presentation mode"</b>. One name = one surface. Apply labels in the UI phase; update CONTEXT.md via the sync ritual; DB table <code>deal_workspace</code> can stay (internal). Watch: "Presentation mode" sits near the existing surface name "Present" - confirm wording at UI kickoff.</td><td><span class="badge b-done">decided 06-19</span></td><td class="ref">DEV-66 &middot; CONTEXT.md</td></tr>
     <tr><td>THINGS copy &rarr; "Add something"</td><td><span class="badge b-todo">not started (small)</span></td><td class="ref">DEV-72</td></tr>
     <tr><td>3f card line clips batch number + measured THC/CBD</td><td><span class="badge b-todo">visual fix deferred</span></td><td class="ref">ProductList.tsx</td></tr>
@@ -155,7 +199,7 @@
   <table>
     <tr><th>Item</th><th>Status</th><th>Ref</th></tr>
     <tr><td>Cloud apply 15 migrations (<code>supabase db push</code>, coordinate Muskan)</td><td><span class="badge b-decide">pending</span></td><td class="ref">cloud-migrations-pending.md</td></tr>
-    <tr><td>Git push local commits (a recent sync commit mentions PR #113 - reconcile actual state)</td><td><span class="badge b-decide">pending / verify</span></td><td class="ref">claude/ayush/work</td></tr>
+    <tr><td>Push 5 local-only UI commits on <code>claude/ayush/work</code> (F1/F2/B1 + lint + docs) - not pushed yet. PR #113 is the deal-domain work, already merged to dev.</td><td><span class="badge b-decide">unpushed</span></td><td class="ref">claude/ayush/work</td></tr>
   </table>
 
   <h2>Big parked: Deal Stages + Deal Finalization</h2>
@@ -185,5 +229,24 @@
   </footer>
 
 </div>
+<script>
+(function () {
+  var badges = document.querySelectorAll('#phasebar .badge');
+  var c = { done: 0, prog: 0, todo: 0 };
+  badges.forEach(function (el) {
+    if (el.classList.contains('b-done')) c.done++;
+    else if (el.classList.contains('b-partial')) c.prog++;
+    else c.todo++; // b-todo, b-decide
+  });
+  var total = c.done + c.prog + c.todo || 1;
+  var p = function (n) { return Math.round(n / total * 100); };
+  document.getElementById('sb-d').style.width = p(c.done) + '%';
+  document.getElementById('sb-p').style.width = p(c.prog) + '%';
+  document.getElementById('sb-t').style.width = p(c.todo) + '%';
+  document.getElementById('spct').textContent = (c.done + c.prog) + '/' + total;
+  document.getElementById('scounts').textContent =
+    c.done + ' done · ' + c.prog + ' active · ' + c.todo + ' queued · ' + total + ' phases';
+})();
+</script>
 </body>
 </html>

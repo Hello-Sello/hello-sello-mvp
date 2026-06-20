@@ -47,6 +47,22 @@
   code { background:#f4e9f1; padding:1px 5px; border-radius:4px; font-size:12.5px; }
   .small { font-size:12.5px; color:var(--muted); }
   .tag { font-size:11px; color:var(--muted); white-space:nowrap; }
+  /* --- progress dashboard (auto-counts the scorecard below) --- */
+  .dash { background:#fff; border:1px solid var(--line); border-radius:12px; padding:18px 20px; margin:16px 0 8px; box-shadow:0 1px 3px rgba(120,0,60,0.06); }
+  .dash-row { display:flex; gap:24px; align-items:center; flex-wrap:wrap; }
+  .dash-pct { font-size:42px; font-weight:800; line-height:1; color:var(--brand); }
+  .dash-cap { font-size:11.5px; color:var(--muted); margin-top:3px; text-transform:uppercase; letter-spacing:.06em; }
+  .dash-meta { flex:1; min-width:280px; }
+  .dash-counts { font-size:13px; color:var(--muted); margin-bottom:8px; }
+  .dash-bar { display:flex; height:14px; border-radius:8px; overflow:hidden; background:#f0e7ee; }
+  .dash-bar .seg { height:100%; transition:width .35s ease; }
+  .seg-done { background:#1a7f4b; }
+  .seg-prog { background:#e0a225; }
+  .seg-todo { background:#cfc8d4; }
+  .dash-key { display:flex; flex-wrap:wrap; gap:14px; font-size:12px; color:var(--muted); margin-top:9px; }
+  .dash-key i { display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:5px; vertical-align:middle; }
+  .k-done{background:#1a7f4b} .k-prog{background:#e0a225} .k-todo{background:#cfc8d4}
+  .dash-hint { font-size:12px; color:var(--muted); margin:8px 0 0; }
 </style>
 </head>
 <body>
@@ -55,6 +71,29 @@
   <h1>Connect / Chat UI Overhaul</h1>
   <p class="sub">Build plan &middot; 2026-06-19 &middot; surface: <code>/connect/chat</code></p>
   <p class="note">Source: Ayush walked the live app with Agentation across two viewports (24 notes) plus three reference screenshots. This page is the readable master view. The raw notes live in <code>build-plans/notes/2026-06-19-connect-chat-ui-overhaul.md</code>.</p>
+
+  <div class="dash">
+    <div class="dash-row">
+      <div>
+        <div class="dash-pct" id="pct-num">--</div>
+        <div class="dash-cap">slices done</div>
+      </div>
+      <div class="dash-meta">
+        <div class="dash-counts" id="counts">counting...</div>
+        <div class="dash-bar">
+          <span class="seg seg-done" id="bar-done" style="width:0"></span>
+          <span class="seg seg-prog" id="bar-prog" style="width:0"></span>
+          <span class="seg seg-todo" id="bar-todo" style="width:0"></span>
+        </div>
+        <div class="dash-key">
+          <span><i class="k-done"></i>done</span>
+          <span><i class="k-prog"></i>in progress (prototyped)</span>
+          <span><i class="k-todo"></i>to do</span>
+        </div>
+      </div>
+    </div>
+    <p class="dash-hint">This bar counts the 9-slice scorecard below and recomputes itself when a status chip changes - so it never lies. Claude works in the notes/<code>.md</code>; this page is your read-only dashboard.</p>
+  </div>
 
   <h2>Status legend</h2>
   <div class="legend">
@@ -114,8 +153,8 @@
   </table>
 
   <h2>The 9 slices (grouped, with files)</h2>
-  <p class="note">Same work, grouped by the file it touches. This is what decides what can run in parallel.</p>
-  <table>
+  <p class="note">Same work, grouped by the file it touches. This is what decides what can run in parallel. <b>This table drives the bar at the top.</b></p>
+  <table id="scorecard">
     <thead>
       <tr><th>Slice</th><th>What changes</th><th>Main file(s)</th><th>Status</th><th>Parallel-safe?</th></tr>
     </thead>
@@ -155,6 +194,21 @@
     </tbody>
   </table>
 
+  <h2>Polish backlog &mdash; old vs new shell (raised 2026-06-20)</h2>
+  <p class="note">Ayush compared the <b>old</b> shell (narrow icon rail + a "CONNECT" label + Inbox/Chat/Relationships) against the <b>new</b> F2 one-rail accordion. A few things read better in the old one. <b>Not blocking the build</b> &mdash; these are saved for the overall polish pass at the very end. We may prototype the whole Connect look first, then close.</p>
+  <table>
+    <thead>
+      <tr><th>#</th><th>Old shell</th><th>New shell (now)</th><th>What Ayush wants</th><th>Status</th></tr>
+    </thead>
+    <tbody>
+      <tr><td class="id">P1</td><td>He//o Se//o wordmark in <b>dark ink</b>.</td><td>Wordmark renders in <b>brand pink</b>.</td><td>Pick one and make the logo colour <b>consistent</b> across the shells.</td><td><span class="badge s-discuss">Discuss</span></td></tr>
+      <tr><td class="id">P2</td><td>A small <b>"CONNECT" label</b> sat above the sub-items &mdash; Ayush says this read <b>cleaner / nicer</b>.</td><td>The "CONNECT" word is <b>gone</b>; sub-items hang under the accordion with no label.</td><td><b>Bring the old Connect presentation back</b> (the labelled, nicer way). <b>This is the main one.</b></td><td><span class="badge s-discuss">Discuss</span></td></tr>
+      <tr><td class="id">P3</td><td>Extreme-left rail was a <b>narrow</b> icon rail (~64px).</td><td>Left rail is <b>wider</b> than before.</td><td>Make the extreme-left nav rail the <b>same (narrow) width</b> as the old one.</td><td><span class="badge s-discuss">Discuss</span></td></tr>
+      <tr><td class="id">P4</td><td colspan="2"><b>Overall:</b> the whole Connect/Chat surface still needs a final look-and-feel pass.</td><td>Do a dedicated <b>overall polish pass at the end</b>; maybe <b>prototype the whole Connect look</b> first, pick, then close.</td><td><span class="badge s-discuss">Discuss</span></td></tr>
+    </tbody>
+  </table>
+  <p class="small">All four trace back to <b>F2</b> (the one-rail accordion merge). F2 is marked Done for <i>function</i>; these are <i>look-and-feel</i> decisions we deferred to the polish pass. They do not change the progress bar above (it counts only the 9-slice scorecard).</p>
+
   <h2>Progress so far</h2>
   <table>
     <thead><tr><th>Item</th><th>State</th></tr></thead>
@@ -170,5 +224,24 @@
   </table>
 
 </div>
+<script>
+(function () {
+  var badges = document.querySelectorAll('#scorecard tbody .badge');
+  var c = { done: 0, prog: 0, todo: 0 };
+  badges.forEach(function (el) {
+    if (el.classList.contains('s-done') || el.classList.contains('s-clear')) c.done++;
+    else if (el.classList.contains('s-proto') || el.classList.contains('s-partial')) c.prog++;
+    else c.todo++; // s-discuss, s-research
+  });
+  var total = c.done + c.prog + c.todo || 1;
+  var p = function (n) { return Math.round(n / total * 100); };
+  document.getElementById('bar-done').style.width = p(c.done) + '%';
+  document.getElementById('bar-prog').style.width = p(c.prog) + '%';
+  document.getElementById('bar-todo').style.width = p(c.todo) + '%';
+  document.getElementById('pct-num').textContent = p(c.done) + '%';
+  document.getElementById('counts').textContent =
+    c.done + ' done · ' + c.prog + ' in progress · ' + c.todo + ' to do · ' + total + ' slices';
+})();
+</script>
 </body>
 </html>
