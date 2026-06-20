@@ -38,9 +38,8 @@ export function ChatView() {
     void getConversations().then((list) => {
       if (!alive) return;
       setConversations(list);
-      // auto-select the first CHAT - a deal row is a door, not a conversation here
-      const firstChat = list.find((c) => c.threadType !== "deal");
-      if (firstChat) setSelectedThreadId(firstChat.threadId);
+      // No auto-select: Chat opens on the empty pink state (locked decision, F2).
+      // A thread opens only when a conversation is tapped (WhatsApp-style).
       setLoading(false);
     });
     return () => {

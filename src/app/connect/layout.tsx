@@ -1,22 +1,21 @@
 import { redirect } from "next/navigation";
-import { ConnectSubNav } from "@/modules/connect";
 import { requireVerified } from "@/shared/auth";
 
 /**
- * Connect surface layout: the sub-nav (panel 2) beside the active tab's
- * content. The global shell (rail + top bar) comes from the root layout; this
- * only adds Connect's internal two-column frame.
+ * Connect surface layout. After F2 there is only ONE global nav rail (IconRail),
+ * and Connect's tabs (Chat / Connection Request / Relationship) live there as the
+ * Connect accordion children - so this layout no longer renders a second nav
+ * column. It is now just the Connect surface's auth gate + a full-width content
+ * frame. The global shell (rail + slim top bar) comes from the root layout.
  *
- * Bouncer 1 — Connect surface gate (AUTH-01, D-01). Converted from a sync
- * Server Component to an async one so the verification guard can run before
- * rendering any Connect content. Redirect logic mirrors discover/layout.tsx:
+ * Bouncer 1 — Connect surface gate (AUTH-01, D-01). An async Server Component so
+ * the verification guard runs before rendering any Connect content. Redirect
+ * logic mirrors discover/layout.tsx:
  *
  *   pending  → /home  (pending banner explains the wait)
  *   rejected → /onboarding  (rejection reason banner + resubmit, 04-03)
  *   revoked  → /home  (suspended banner, 04-03)
  *   null     → /onboarding  (no company yet — D-03 no-company bounce)
- *
- * The ConnectSubNav and two-column frame are preserved unchanged.
  */
 export default async function ConnectLayout({
   children,
@@ -34,9 +33,6 @@ export default async function ConnectLayout({
   }
 
   return (
-    <div className="flex h-full gap-3">
-      <ConnectSubNav />
-      <section className="flex min-w-0 flex-1 flex-col">{children}</section>
-    </div>
+    <section className="flex h-full min-w-0 flex-1 flex-col">{children}</section>
   );
 }
