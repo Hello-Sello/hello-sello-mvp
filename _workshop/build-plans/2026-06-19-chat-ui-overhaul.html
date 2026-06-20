@@ -3,244 +3,623 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Connect / Chat UI Overhaul - Build Plan (2026-06-19)</title>
+<title>Phase 4 - UI &amp; chat</title>
 <style>
-  :root {
-    --ink: #1f1430;
-    --muted: #6b6477;
-    --line: #ecdfe9;
-    --brand: #c4156b;
-    --brand-soft: #fde7f1;
-    --bg: #fffafc;
-  }
-  * { box-sizing: border-box; }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    color: var(--ink);
-    background: var(--bg);
-    margin: 0;
-    padding: 32px 20px 80px;
-    line-height: 1.55;
-  }
-  .wrap { max-width: 1180px; margin: 0 auto; }
-  h1 { font-size: 26px; margin: 0 0 4px; }
-  h2 { font-size: 19px; margin: 38px 0 12px; padding-bottom: 6px; border-bottom: 2px solid var(--brand-soft); }
-  .sub { color: var(--muted); margin: 0 0 8px; font-size: 14px; }
-  p.note { font-size: 14px; color: var(--muted); }
-  table { border-collapse: collapse; width: 100%; font-size: 13.5px; margin: 8px 0 4px; background: #fff; box-shadow: 0 1px 3px rgba(120,0,60,0.06); border-radius: 8px; overflow: hidden; }
-  th { background: #4a0d2c; color: #fff; text-align: left; padding: 9px 11px; font-weight: 600; font-size: 12.5px; }
-  td { padding: 9px 11px; border-top: 1px solid var(--line); vertical-align: top; }
-  tr:nth-child(even) td { background: #fdf6fa; }
-  td.id { font-weight: 700; color: var(--brand); white-space: nowrap; }
-  .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
-  .s-clear   { background: #d7f5dd; color: #176b30; }
-  .s-discuss { background: #ffeccc; color: #8a5300; }
-  .s-proto   { background: #e6e0ff; color: #4b2ea8; }
-  .s-research{ background: #d2f1f4; color: #0d6470; }
-  .s-done    { background: #e3e8ee; color: #3a4757; }
-  .s-partial { background: #ffe0cf; color: #9a3b06; }
-  .wave { display:inline-block; padding:2px 7px; border-radius:6px; font-size:11.5px; font-weight:600; background:#f2e9f0; color:#5a2147; white-space:nowrap; }
-  .legend { display: flex; flex-wrap: wrap; gap: 8px 14px; font-size: 12.5px; margin: 6px 0 2px; }
-  .legend span { display:inline-flex; align-items:center; gap:6px; }
-  .locked { background:#fff; border:1px solid var(--line); border-radius:8px; padding:12px 16px; }
-  .locked li { margin: 5px 0; }
-  code { background:#f4e9f1; padding:1px 5px; border-radius:4px; font-size:12.5px; }
-  .small { font-size:12.5px; color:var(--muted); }
-  .tag { font-size:11px; color:var(--muted); white-space:nowrap; }
-  /* --- progress dashboard (auto-counts the scorecard below) --- */
-  .dash { background:#fff; border:1px solid var(--line); border-radius:12px; padding:18px 20px; margin:16px 0 8px; box-shadow:0 1px 3px rgba(120,0,60,0.06); }
-  .dash-row { display:flex; gap:24px; align-items:center; flex-wrap:wrap; }
-  .dash-pct { font-size:42px; font-weight:800; line-height:1; color:var(--brand); }
-  .dash-cap { font-size:11.5px; color:var(--muted); margin-top:3px; text-transform:uppercase; letter-spacing:.06em; }
-  .dash-meta { flex:1; min-width:280px; }
-  .dash-counts { font-size:13px; color:var(--muted); margin-bottom:8px; }
-  .dash-bar { display:flex; height:14px; border-radius:8px; overflow:hidden; background:#f0e7ee; }
-  .dash-bar .seg { height:100%; transition:width .35s ease; }
-  .seg-done { background:#1a7f4b; }
-  .seg-prog { background:#e0a225; }
-  .seg-todo { background:#cfc8d4; }
-  .dash-key { display:flex; flex-wrap:wrap; gap:14px; font-size:12px; color:var(--muted); margin-top:9px; }
-  .dash-key i { display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:5px; vertical-align:middle; }
-  .k-done{background:#1a7f4b} .k-prog{background:#e0a225} .k-todo{background:#cfc8d4}
-  .dash-hint { font-size:12px; color:var(--muted); margin:8px 0 0; }
+:root{
+  --ink:#1f2020;--muted:#6b6477;--line:#ecdfe9;--bg:#faf7f9;--card:#fff;
+  --brand:#e30b5d;--deep:#76002d;--brand-soft:#fde7f1;
+  --done:#1a7f4b;--done-bg:#e6f6ee;--prog:#9a6a00;--prog-bg:#fdf2dc;
+  --todo:#3a4757;--todo-bg:#eef0f3;--decide:#1f5fbf;--decide-bg:#e7f0fd;--park:#6b6b76;--park-bg:#f0eef2;
+}
+*{box-sizing:border-box}
+body{font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg);margin:0;padding:28px 18px 90px}
+.wrap{max-width:1040px;margin:0 auto}
+h1{font-size:24px;margin:0 0 2px}.sub{color:var(--muted);font-size:13.5px;margin:0 0 16px}
+.dash{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin:0 0 14px;box-shadow:0 1px 3px rgba(120,0,60,.05)}
+.dash .top{display:flex;gap:22px;align-items:center;flex-wrap:wrap}
+.dash .pct{font-size:42px;font-weight:800;line-height:1;color:var(--deep);min-width:84px}
+.dash .grow{flex:1;min-width:240px}
+.track{display:flex;height:14px;border-radius:8px;overflow:hidden;background:#efe7ec;margin:4px 0 8px}
+.track .seg{height:100%;transition:width .4s ease}.s-d{background:var(--done)}.s-p{background:var(--prog)}.s-t{background:var(--todo)}
+.counts{font-size:12.5px;color:var(--muted)}
+.legend{display:flex;flex-wrap:wrap;gap:9px 16px;font-size:12px;color:var(--muted);margin-top:10px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:middle}
+.k-d{background:var(--done)}.k-p{background:var(--prog)}.k-t{background:var(--todo)}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px}
+.toolbar button{font:600 12.5px/1 inherit;color:var(--deep);background:#fff;border:1px solid var(--line);border-radius:999px;padding:8px 14px;cursor:pointer}
+.toolbar button:hover{background:var(--brand-soft)}.toolbar button.on{background:var(--deep);color:#fff;border-color:var(--deep)}
+details.sec{background:var(--card);border:1px solid var(--line);border-radius:12px;margin:0 0 10px;overflow:hidden}
+details.sec>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:10px;padding:13px 16px;font-weight:700;font-size:15px}
+details.sec>summary::-webkit-details-marker{display:none}
+details.sec>summary .chev{transition:transform .2s;color:var(--muted);font-size:13px;width:12px}
+details.sec[open]>summary .chev{transform:rotate(90deg)}
+details.sec>summary .ttl{flex:1}
+.banner{background:var(--done-bg);border:1px solid #bfe6cd;border-left:4px solid var(--done);border-radius:10px;padding:11px 15px;margin:0 0 14px;font-size:13.5px;color:#176b30}
+.body{padding:2px 16px 14px}
+.chip{display:inline-block;font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;white-space:nowrap}
+.c-done{color:var(--done);background:var(--done-bg)}.c-prog{color:var(--prog);background:var(--prog-bg)}
+.c-todo{color:var(--todo);background:var(--todo-bg)}.c-decide{color:var(--decide);background:var(--decide-bg)}.c-park{color:var(--park);background:var(--park-bg)}
+.row{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-top:1px solid var(--line)}
+.row:first-child{border-top:none}.row .rmain{flex:1;min-width:0}
+.row .rt{font-weight:600;font-size:13.5px}.row .rd{font-size:12.5px;color:var(--muted);margin-top:3px}
+.row .rf{font-size:11.5px;color:var(--muted);margin-top:3px}
+.mini{font-size:11.5px;color:var(--muted);font-weight:600}
+code{background:#f0ecef;padding:1px 5px;border-radius:5px;font-size:12.5px}
+.hide{display:none!important}
+footer{margin-top:34px;color:var(--muted);font-size:12px;border-top:1px solid var(--line);padding-top:14px}
 </style>
 </head>
 <body>
 <div class="wrap">
 
-  <h1>Connect / Chat UI Overhaul</h1>
-  <p class="sub">Build plan &middot; 2026-06-19 &middot; surface: <code>/connect/chat</code></p>
-  <p class="note">Source: Ayush walked the live app with Agentation across two viewports (24 notes) plus three reference screenshots. This page is the readable master view. The raw notes live in <code>build-plans/notes/2026-06-19-connect-chat-ui-overhaul.md</code>.</p>
+  <h1>Phase 4 - UI &amp; chat</h1>
+  <p class="sub">2026-06-19 &middot; the Connect/chat overhaul slice board &middot; surface <code>/connect/chat</code></p>
+
+  <div class="banner">
+    <b>Status 2026-06-20.</b> The design-SETTLED slices are <b>built &amp; gate-green</b> (tsc + eslint 0 errors + 41/41 unit), local on <code>claude/ayush/work</code> (unpushed):
+    <b>F1/F2/B1/B4</b> (verified), <b>S2</b> V3 Card with a <b>real 3D flip</b>, <b>S3</b> V2 Form, and the DEV-66/72 rename.
+    <b>All three prototyped &amp; locked (06-20):</b> <b>S1</b> the strip, <b>B2</b> the new-chat picker (Option A), <b>B3</b> the <code>//</code> Sella mark - build pending.
+    <b>Newly flagged:</b> after S1, build the <b>Deal Room</b> (old "Deal Workspace") - that container is where the card's read-only THINGS gets wired.
+  </div>
 
   <div class="dash">
-    <div class="dash-row">
-      <div>
-        <div class="dash-pct" id="pct-num">--</div>
-        <div class="dash-cap">slices done</div>
-      </div>
-      <div class="dash-meta">
-        <div class="dash-counts" id="counts">counting...</div>
-        <div class="dash-bar">
-          <span class="seg seg-done" id="bar-done" style="width:0"></span>
-          <span class="seg seg-prog" id="bar-prog" style="width:0"></span>
-          <span class="seg seg-todo" id="bar-todo" style="width:0"></span>
+    <div class="top">
+      <div class="pct" id="pct">--</div>
+      <div class="grow">
+        <div class="track">
+          <span class="seg s-d" id="bd" style="width:0"></span>
+          <span class="seg s-p" id="bp" style="width:0"></span>
+          <span class="seg s-t" id="bt" style="width:0"></span>
         </div>
-        <div class="dash-key">
-          <span><i class="k-done"></i>done</span>
-          <span><i class="k-prog"></i>in progress (prototyped)</span>
-          <span><i class="k-todo"></i>to do</span>
+        <div class="counts" id="counts">counting...</div>
+        <div class="legend">
+          <span><i class="k-d"></i>done</span>
+          <span><i class="k-p"></i>in progress (prototype / next)</span>
+          <span><i class="k-t"></i>to do / to design</span>
         </div>
       </div>
     </div>
-    <p class="dash-hint">This bar counts the 9-slice scorecard below and recomputes itself when a status chip changes - so it never lies. Claude works in the notes/<code>.md</code>; this page is your read-only dashboard.</p>
   </div>
 
-  <h2>Status legend</h2>
-  <div class="legend">
-    <span><span class="badge s-clear">Clear</span> build directly, no discussion</span>
-    <span><span class="badge s-discuss">Discuss</span> align the shape first</span>
-    <span><span class="badge s-proto">Prototype</span> throwaway variations, you pick</span>
-    <span><span class="badge s-research">Research</span> find the right pattern first</span>
-    <span><span class="badge s-partial">Partial</span> started, more to do</span>
-    <span><span class="badge s-done">Done</span> already in code, verify only</span>
-  </div>
-  <p class="small" style="margin-top:10px;">Order: <span class="wave">Wave 0</span> foundation (everything sits inside it) &rarr; <span class="wave">Proto</span> prototype the unsure ones &rarr; <span class="wave">Wave 1</span> parallel build &rarr; <span class="wave">Parked</span> decide later.</p>
-
-  <h2>Locked decisions</h2>
-  <div class="locked">
-    <ul>
-      <li><b>Default tab:</b> opening Connect lands on <b>Chat</b>, not Inbox (<code>/connect</code> &rarr; <code>/connect/chat</code>).</li>
-      <li><b>Empty chat state:</b> Chat opens with <b>no conversation selected</b> &mdash; just a blank pink background. The thread opens only when you tap a conversation (WhatsApp-style). No thread auto-loads.</li>
-      <li><b>Rename:</b> "Workspace" &rarr; <b>"Deal Room"</b>.</li>
-      <li><b>The "AI" pill is fake</b> - cosmetic only, no engine behind it. So your idea of a fixed Sella tile that holds the notification + Review-change feed is the clean path; nothing real breaks.</li>
-      <li><b>Inbox rename:</b> parked on purpose - we name it once the Sella-tile design lands (same idea at two scales).</li>
-    </ul>
+  <div class="toolbar">
+    <button id="expand">Expand all</button>
+    <button id="collapse">Collapse all</button>
+    <button id="filter">Show only not-done</button>
   </div>
 
-  <h2>Everything you told me &mdash; master table</h2>
-  <p class="note">Every note, in plain words, with its category, status, and when we solve it.</p>
-  <table>
-    <thead>
-      <tr><th>#</th><th>What you said (plain words)</th><th>Slice</th><th>Status</th><th>Order</th></tr>
-    </thead>
-    <tbody>
-      <tr><td class="id">V1&middot;1</td><td>Two navigation bars exist. Use just <b>one</b>.</td><td>F2 &middot; Global chrome</td><td><span class="badge s-done">Done</span></td><td><span class="wave">Wave 0</span></td></tr>
-      <tr><td class="id">V1&middot;2</td><td>The second nav bar wastes space and confuses &mdash; <b>merge</b> it into the first.</td><td>F2 &middot; Global chrome</td><td><span class="badge s-done">Done</span></td><td><span class="wave">Wave 0</span></td></tr>
-      <tr><td class="id">V1&middot;3</td><td>On open, show <b>Connect/Chat first</b> (not Inbox). And "Inbox" is a confusing name &mdash; rename it (you didn't like my first words). <span class="tag">"Inbox" now renamed to "Connection Request" (done).</span></td><td>F2 + Inbox-name</td><td><span class="badge s-done">Done</span></td><td><span class="wave">Wave 0</span> / <span class="wave">Parked</span></td></tr>
-      <tr><td class="id">V1&middot;4</td><td>Top bar is too big. Make it <b>thinner</b>, search in the <b>center</b>, push the <b>notification</b> and the <b>company name</b> out of the bar.</td><td>F2 &middot; Global chrome</td><td><span class="badge s-done">Done</span></td><td><span class="wave">Wave 0</span></td></tr>
-      <tr><td class="id">V1&middot;5</td><td>New chat like WhatsApp: pick a person from your connections with search; search past conversations; show unread company deals; a "new connection" section that pops names by date.</td><td>B2 &middot; Conversation list</td><td><span class="badge s-discuss">Discuss</span></td><td><span class="wave">Wave 1</span></td></tr>
-      <tr><td class="id">V1&middot;6</td><td>The main strip should be the person's name + the deal workspace entry (screenshot to follow).</td><td>S1 &middot; The Strip</td><td><span class="badge s-proto">Prototype</span></td><td><span class="wave">Proto</span></td></tr>
-      <tr><td class="id">V1&middot;7</td><td>The strip looks clumsy now (DealCard / open card / Sella / workspace all crammed). Make it cleaner.</td><td>S1 &middot; The Strip</td><td><span class="badge s-proto">Prototype</span></td><td><span class="wave">Proto</span></td></tr>
-      <tr><td class="id">V1&middot;8</td><td>Chat bubbles: <b>my</b> messages on the <b>right</b> in <b>pink</b>; the other person on the <b>left</b> in <b>ash-gray</b> bubble on white.</td><td>B1 &middot; Bubbles</td><td><span class="badge s-done">Done</span></td><td><span class="wave">Wave 1</span></td></tr>
-      <tr><td class="id">V1&middot;9</td><td>Rename "Workspace" &rarr; <b>"Deal Room"</b>. Maybe open it from the card too (still a thought).</td><td>S1 &middot; The Strip</td><td><span class="badge s-proto">Prototype</span> <span class="tag">(name locked)</span></td><td><span class="wave">Proto</span></td></tr>
-      <tr><td class="id">V1&middot;10</td><td>Chat must be scrollable and open at the <b>bottom</b> (latest message), like WhatsApp/Slack.</td><td>B4 &middot; Scroll</td><td><span class="badge s-done">Done</span> <span class="tag">verify</span></td><td><span class="wave">Wave 1</span></td></tr>
-      <tr><td class="id">V1&middot;11</td><td>Change the AI logo to a <b>"//" double-slash</b> with a bubbly AI feel. Applies to every Sella mark.</td><td>B3 &middot; Sella logo</td><td><span class="badge s-proto">Prototype</span></td><td><span class="wave">Proto</span></td></tr>
-      <tr><td class="id">V1&middot;12</td><td>Move the DealCard + dropdown <b>up</b> in the strip. Keep only "open card" &mdash; and show it as a <b>card icon</b>, not the words "open card".</td><td>S1 &middot; The Strip</td><td><span class="badge s-proto">Prototype</span></td><td><span class="wave">Proto</span></td></tr>
-      <tr><td class="id">V1&middot;13</td><td>The PlusMenu popup is too transparent &mdash; busy background bleeds through. Make it more <b>opaque/clear</b>.</td><td>F1 &middot; Glass opacity</td><td><span class="badge s-clear">Done</span></td><td><span class="wave">Wave 0</span></td></tr>
-      <tr><td class="id">V1&middot;14</td><td>The Sella logo in the right panel also changes.</td><td>B3 &middot; Sella logo</td><td><span class="badge s-proto">Prototype</span></td><td><span class="wave">Proto</span></td></tr>
-      <tr><td class="id">V1&middot;15</td><td>Card style changes <b>completely</b> &mdash; looks unprofessional, boxes too big, too much info. Screenshot 3 is the target. Decide how it opens, how much shows, where edit + flip buttons go; later fold Deal Room into it.</td><td>S2 &middot; The Card</td><td><span class="badge s-proto">Prototype</span></td><td><span class="wave">Proto</span></td></tr>
-      <tr><td class="id">V1&middot;16</td><td>The deal basket / deal form changes completely too.</td><td>S3 &middot; The Form</td><td><span class="badge s-proto">Prototype</span></td><td><span class="wave">Proto</span></td></tr>
-      <tr><td class="id">V1&middot;17</td><td>The product list is a bad, unclear representation. Make it <b>user-friendly and easy to read</b>.</td><td>S3 &middot; The Form</td><td><span class="badge s-proto">Prototype</span></td><td><span class="wave">Proto</span></td></tr>
-      <tr><td class="id">V1&middot;18</td><td>Brainstorm what information the form/card should actually carry.</td><td>S3 &middot; The Form</td><td><span class="badge s-discuss">Discuss</span></td><td><span class="wave">Proto</span></td></tr>
-      <tr><td class="id">V1&middot;19</td><td>When a change is sent, the AI mark shifts aside &mdash; you don't want that. Idea: a <b>fixed tile</b> that always is the AI ("//"); notifications open and close from it as a Sella <b>feed</b>; call it <b>Sella</b>, not "AI"; put withdraw / review in a dropdown.</td><td>S1 &middot; The Strip</td><td><span class="badge s-proto">Prototype</span></td><td><span class="wave">Proto</span></td></tr>
-      <tr><td class="id">V2&middot;1</td><td>"Review change" is shown separately from the AI &mdash; <b>fold it into the Sella tile</b>. Also: does the "AI" label even do anything? &rarr; Checked: <b>no, it is cosmetic</b>.</td><td>S1 + B3</td><td><span class="badge s-proto">Prototype</span></td><td><span class="wave">Proto</span></td></tr>
-      <tr><td class="id">V2&middot;2</td><td>When the card opens it is very blurry &mdash; transparency problem, make it <b>clear</b>.</td><td>F1 &middot; Glass opacity</td><td><span class="badge s-clear">Done</span></td><td><span class="wave">Wave 0</span></td></tr>
-      <tr><td class="id">V2&middot;3</td><td>On the seller's side the product display is bad. <b>Research</b> how a proper product should look (image thumbnail + plus/minus stepper).</td><td>S3 &middot; The Form</td><td><span class="badge s-research">Research</span></td><td><span class="wave">Proto</span></td></tr>
-      <tr><td class="id">SS&middot;1</td><td><b>Layout screenshot:</b> one left rail; contacts column collapses behind a "&lt;" back arrow; search center-top; company name + notifications outside the bar top-right; 3-panel body.</td><td>F2 &middot; Global chrome</td><td><span class="badge s-done">Done</span></td><td><span class="wave">Wave 0</span></td></tr>
-      <tr><td class="id">SS&middot;2</td><td><b>Person row screenshot:</b> "LB Luca Brunner &middot; [Helvetia Pharma AG] &middot; [Deals]". Company pill &rarr; relationship page. Selected deal moves from the dropdown into the strip. Show first 3 deals by time + a "see all".</td><td>S1 &middot; The Strip</td><td><span class="badge s-proto">Prototype</span></td><td><span class="wave">Proto</span></td></tr>
-      <tr><td class="id">SS&middot;3</td><td><b>Card screenshot:</b> clean card &mdash; "DEAL - id" header, "On DATE X offered to Y this deal", product lines, Decline / Change / Accept, a Message, a "Things" checklist, tiny product thumbnails on the left.</td><td>S2 &middot; The Card</td><td><span class="badge s-proto">Prototype</span></td><td><span class="wave">Proto</span></td></tr>
-    </tbody>
-  </table>
+  <!-- ============ SLICE BOARD (open, the active section) ============ -->
+  <details class="sec" open>
+    <summary><span class="chev">&#9656;</span><span class="ttl">Slice board (9)</span><span class="chip c-prog">6 done / 3 prog / 0 to do</span><span class="mini">67%</span></summary>
+    <div class="body">
 
-  <h2>The 9 slices (grouped, with files)</h2>
-  <p class="note">Same work, grouped by the file it touches. This is what decides what can run in parallel. <b>This table drives the bar at the top.</b></p>
-  <table id="scorecard">
-    <thead>
-      <tr><th>Slice</th><th>What changes</th><th>Main file(s)</th><th>Status</th><th>Parallel-safe?</th></tr>
-    </thead>
-    <tbody>
-      <tr><td class="id">F1</td><td>Glass opacity &mdash; floating popups now solid (pure white)</td><td><code>globals.css</code></td><td><span class="badge s-clear">Done</span></td><td>Yes &mdash; tiny, first</td></tr>
-      <tr><td class="id">F2</td><td>One-rail accordion nav: Connect opens in place; rename Inbox &rarr; Connection Request; full-width TopBar; default tab Chat</td><td>AppShell, IconRail, TopBar, connect layout</td><td><span class="badge s-done">Done</span></td><td>Solo (global frame)</td></tr>
-      <tr><td class="id">S1</td><td><b>The Strip</b> &mdash; card icon, dropdown&rarr;3+see all, person row, Deal Room, Sella tile feed</td><td><code>DealPin.tsx</code></td><td><span class="badge s-proto">Prototype</span></td><td>Solo (bottleneck)</td></tr>
-      <tr><td class="id">S2</td><td><b>The Card</b> &mdash; clean layout, thumbnails, open/scroll, edit+flip placement &mdash; 3 variations, build next</td><td>CardFront, CardBack, DealCard</td><td><span class="badge s-partial">Prototyped</span></td><td>Yes</td></tr>
-      <tr><td class="id">S3</td><td><b>The Form</b> &mdash; product-list redesign, proper product display &mdash; 3 variations, build next</td><td><code>DealForm.tsx</code></td><td><span class="badge s-partial">Prototyped</span></td><td>Yes</td></tr>
-      <tr><td class="id">B1</td><td>Chat bubbles &mdash; pink right (me), ash-gray left (them)</td><td><code>MessageBubble.tsx</code></td><td><span class="badge s-done">Done</span></td><td>Yes</td></tr>
-      <tr><td class="id">B2</td><td>Conversation list &mdash; WhatsApp-style picker, search, unread deals, new connections</td><td>ConversationList, ChatView</td><td><span class="badge s-discuss">Discuss</span></td><td>Mostly</td></tr>
-      <tr><td class="id">B3</td><td>Sella logo &mdash; "//" bubbly mark, shared everywhere</td><td>extract SellaMark, SellaPanel</td><td><span class="badge s-proto">Prototype</span></td><td>Folds into S1</td></tr>
-      <tr><td class="id">B4</td><td>Auto-scroll to latest on open</td><td>ThreadView</td><td><span class="badge s-done">Done</span></td><td>Verify</td></tr>
-    </tbody>
-  </table>
+      <div class="row" data-status="done">
+        <div class="rmain">
+          <div class="rt">F1 &middot; Glass opacity</div>
+          <div class="rf"><code>globals.css</code> &middot; <code>glass-strong</code></div>
+          <div class="rd">Floating popups now solid pure white (100%), no busy-background bleed - account menu, PlusMenu, change popover, card. Done.</div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
 
-  <h2>Order of work (waves)</h2>
-  <table>
-    <thead><tr><th>Wave</th><th>What runs</th><th>Why</th></tr></thead>
-    <tbody>
-      <tr><td><span class="wave">Wave 0</span></td><td>F1 (glass) + F2 (global chrome)</td><td>Everything else sits inside the shell and the glass. Do them first.</td></tr>
-      <tr><td><span class="wave">Proto</span></td><td>S1 strip, S2 card, S3 form</td><td>The three you are unsure about. Throwaway variations, you pick, then we build the real one.</td></tr>
-      <tr><td><span class="wave">Wave 1</span></td><td>Picked card (S2), picked form (S3), bubbles (B1), conversation list (B2) &mdash; up to 4 parallel agents. Strip (S1) runs solo. Sella logo (B3) folds into S1.</td><td>These live in separate files, so they can run at the same time without colliding.</td></tr>
-      <tr><td><span class="wave">Close</span></td><td>Update <code>.planning/STATE.md</code> + decisions</td><td>The one GSD step we keep, at the end.</td></tr>
-    </tbody>
-  </table>
+      <div class="row" data-status="done">
+        <div class="rmain">
+          <div class="rt">F2 &middot; Global chrome (one-rail accordion nav)</div>
+          <div class="rf">AppShell, IconRail, TopBar, connect layout</div>
+          <div class="rd">2 nav bars merged into one accordion rail: Connect opens in place, Inbox renamed &rarr; Connection Request, full-width TopBar, default tab Chat. Solo global frame. Verified.</div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
 
-  <h2>Open questions (not blocking the build)</h2>
-  <table>
-    <thead><tr><th>Question</th><th>Where it gets answered</th></tr></thead>
-    <tbody>
-      <tr><td>What to rename "Inbox" to</td><td>When the Sella tile design lands (the tab is the all-deals version of that tile)</td></tr>
-      <tr><td>Exact nav-merge shape</td><td>Screenshot 1 + the F2 chrome step</td></tr>
-      <tr><td>Conversation list contents</td><td>B2 discussion</td></tr>
-      <tr><td>Proper product display (image + stepper)</td><td>S3 research</td></tr>
-      <tr><td><b>F1 glass &mdash; remaining spots</b></td><td><b>You will tell me where it is still too transparent</b></td></tr>
-    </tbody>
-  </table>
+      <div class="row" data-status="done">
+        <div class="rmain">
+          <div class="rt">B1 &middot; Chat bubbles</div>
+          <div class="rf"><code>MessageBubble.tsx</code></div>
+          <div class="rd">Pink right (me), ash-gray left (them) on white. Done.</div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
 
-  <h2>Polish backlog &mdash; old vs new shell (raised 2026-06-20)</h2>
-  <p class="note">Ayush compared the <b>old</b> shell (narrow icon rail + a "CONNECT" label + Inbox/Chat/Relationships) against the <b>new</b> F2 one-rail accordion. A few things read better in the old one. <b>Not blocking the build</b> &mdash; these are saved for the overall polish pass at the very end. We may prototype the whole Connect look first, then close.</p>
-  <table>
-    <thead>
-      <tr><th>#</th><th>Old shell</th><th>New shell (now)</th><th>What Ayush wants</th><th>Status</th></tr>
-    </thead>
-    <tbody>
-      <tr><td class="id">P1</td><td>He//o Se//o wordmark in <b>dark ink</b>.</td><td>Wordmark renders in <b>brand pink</b>.</td><td>Pick one and make the logo colour <b>consistent</b> across the shells.</td><td><span class="badge s-discuss">Discuss</span></td></tr>
-      <tr><td class="id">P2</td><td>A small <b>"CONNECT" label</b> sat above the sub-items &mdash; Ayush says this read <b>cleaner / nicer</b>.</td><td>The "CONNECT" word is <b>gone</b>; sub-items hang under the accordion with no label.</td><td><b>Bring the old Connect presentation back</b> (the labelled, nicer way). <b>This is the main one.</b></td><td><span class="badge s-discuss">Discuss</span></td></tr>
-      <tr><td class="id">P3</td><td>Extreme-left rail was a <b>narrow</b> icon rail (~64px).</td><td>Left rail is <b>wider</b> than before.</td><td>Make the extreme-left nav rail the <b>same (narrow) width</b> as the old one.</td><td><span class="badge s-discuss">Discuss</span></td></tr>
-      <tr><td class="id">P4</td><td colspan="2"><b>Overall:</b> the whole Connect/Chat surface still needs a final look-and-feel pass.</td><td>Do a dedicated <b>overall polish pass at the end</b>; maybe <b>prototype the whole Connect look</b> first, pick, then close.</td><td><span class="badge s-discuss">Discuss</span></td></tr>
-    </tbody>
-  </table>
-  <p class="small">All four trace back to <b>F2</b> (the one-rail accordion merge). F2 is marked Done for <i>function</i>; these are <i>look-and-feel</i> decisions we deferred to the polish pass. They do not change the progress bar above (it counts only the 9-slice scorecard).</p>
+      <div class="row" data-status="done">
+        <div class="rmain">
+          <div class="rt">B4 &middot; Scroll behaviour</div>
+          <div class="rf">ThreadView, DealChat</div>
+          <div class="rd">Auto-scroll to latest + jump-to-bottom arrow + at-bottom gate + first-load scroll (WhatsApp/Slack feel). Built 06-20, gate-green.</div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
 
-  <h2>Progress so far</h2>
-  <table>
-    <thead><tr><th>Item</th><th>State</th></tr></thead>
-    <tbody>
-      <tr><td>Source-of-truth doc (this page + the .md)</td><td><span class="badge s-clear">Done</span></td></tr>
-      <tr><td>Deal Room rename decided</td><td><span class="badge s-clear">Done</span></td></tr>
-      <tr><td>F1 glass: all floating popups (account menu, PlusMenu, change popover, card) &mdash; <code>glass-strong</code> set to pure white (100%), no bleed</td><td><span class="badge s-clear">Done</span></td></tr>
-      <tr><td>notes/ moved inside build-plans/</td><td><span class="badge s-clear">Done</span></td></tr>
-      <tr><td>F2 one-rail accordion nav (merge 2 bars, Inbox &rarr; Connection Request, full-width TopBar)</td><td><span class="badge s-done">Done</span></td></tr>
-      <tr><td>B1 chat bubbles (pink right me, ash-gray left them)</td><td><span class="badge s-done">Done</span></td></tr>
-      <tr><td>S2 + S3 card/form prototypes (3 variations each)</td><td><span class="badge s-partial">Prototyped &mdash; build next</span></td></tr>
-    </tbody>
-  </table>
+      <div class="row" data-status="done">
+        <div class="rmain">
+          <div class="rt">S2 &middot; The Card</div>
+          <div class="rf">CardFront, CardBack, DealCard, ProductList</div>
+          <div class="rd">V3 ported: maroon header, dense rows, 3f clip fix, <b>real 3D flip</b> (rotateY + preserve-3d; cross-fade overridden); read-only THINGS built behind an optional prop, wired later in the Deal Room. Built 06-20.</div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+
+      <div class="row" data-status="done">
+        <div class="rmain">
+          <div class="rt">S3 &middot; The Form</div>
+          <div class="rf"><code>DealForm.tsx</code></div>
+          <div class="rd">V2 ported: shopping-bag tiles, THC/CBD chips, deal-level "Avg. margin - only you" pill, maroon Proceed. Built 06-20.</div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+
+      <div class="row" data-status="prog">
+        <div class="rmain">
+          <div class="rt">S1 &middot; The Strip <span class="mini">(prototype DONE - build next; bottleneck)</span></div>
+          <div class="rf"><code>DealPin.tsx</code> &middot; proto <code>prototypes/strip-prototype/</code></div>
+          <div class="rd"><b>Prototype LOCKED 06-20</b> (one faithful build). A <b>two-tier header</b>. Top: rounded-square avatar + name, a pink <b>Relationship</b> pill (icon + the other company's name &rarr; relationship page), a pink <b>Deals</b> dropdown showing the selected deal number (first 3 + "see all"), a three-dot menu. Bottom: a <b>[Deal Room | Deal Card]</b> segmented box (left), the <b>// Sella parallel bars</b> (middle; no "Review" word, no AI pill - a dot when a change is pending, click drops a <b>curtain</b> with the change inside), a <b>translator</b> placeholder (far right; old Workspace slot). Solo - build = port into DealPin.tsx.</div>
+        </div>
+        <span class="chip c-prog">prototyped</span>
+      </div>
+
+      <div class="row" data-status="prog">
+        <div class="rmain">
+          <div class="rt">B3 &middot; Sella logo <span class="mini">(prototype DONE - folds into S1)</span></div>
+          <div class="rf">extract SellaMark, SellaPanel &middot; proto <code>prototypes/strip-prototype/</code></div>
+          <div class="rd"><b>Prototype LOCKED 06-20</b> (lives inside S1): the "//" is CSS-drawn <b>parallel bars</b> (replaces the AI-sparkle pill), shared everywhere. Earlier <code>prototypes/sella-mark-prototype/</code> superseded - only the parallel-bars idea carried over.</div>
+        </div>
+        <span class="chip c-prog">prototyped</span>
+      </div>
+
+      <div class="row" data-status="prog">
+        <div class="rmain">
+          <div class="rt">B2 &middot; Conversation list <span class="mini">(picker prototype DONE - build next)</span></div>
+          <div class="rf">ConversationList, ChatView &middot; proto <code>prototypes/newchat-prototype/</code></div>
+          <div class="rd"><b>New-chat picker LOCKED 06-20 = Option A (anchored dropdown).</b> Tapping <b>+ New chat</b> drops a sheet inside the list: a <b>Person | Company toggle</b> (P2P vs. whole-company C2C), search, a <b>New connections</b> section that pops fresh connections by date (Today / Nd ago), and <b>"N deal updates"</b> badges on companies. Selecting opens the P2P or C2C thread. Variants B (directory modal) + C (command palette) dropped. The list's own filter tabs fold into the build/discuss.</div>
+        </div>
+        <span class="chip c-prog">prototyped</span>
+      </div>
+
+    </div>
+  </details>
+
+  <!-- ============ WHAT'S LEFT (open) ============ -->
+  <details class="sec" open>
+    <summary><span class="chev">&#9656;</span><span class="ttl">What's left</span><span class="chip c-todo">to build / decide</span></summary>
+    <div class="body">
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">S1 &middot; The Strip <span class="mini">(already counted - prototype)</span></div>
+          <div class="rf"><code>DealPin.tsx</code> &middot; solo / bottleneck</div>
+          <div class="rd">Build the cleaner strip: move DealCard + dropdown up, keep only a <b>card icon</b> for "open card"; selected deal moves from the dropdown into the strip; person row "LB Luca Brunner &middot; [Helvetia Pharma AG] &middot; [Deals]" (company pill &rarr; relationship page); first 3 deals by time + "see all"; Deal Room entry; a fixed Sella tile that always shows the "//" mark and opens/closes the notification + Review-change feed (call it Sella, not AI; withdraw / review in a dropdown).</div>
+        </div>
+        <span class="chip c-prog">prototype</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">B2 &middot; Conversation list <span class="mini">(already counted - picker prototyped)</span></div>
+          <div class="rf">ConversationList, ChatView &middot; proto <code>prototypes/newchat-prototype/</code> &middot; mostly parallel-safe</div>
+          <div class="rd"><b>New-chat picker LOCKED = Option A</b> (anchored dropdown; Person | Company toggle, search, New-connections-by-date, unread-deal badges). Build = port the sheet into the <code>ConversationList</code> header + wire selection to start/open the P2P or C2C thread; backend = my connections &rarr; their people. The list's own filter tabs settle in the B2 discuss.</div>
+        </div>
+        <span class="chip c-prog">prototyped</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">B3 &middot; The "//" Sella mark <span class="mini">(already counted - prototype)</span></div>
+          <div class="rf">extract SellaMark, SellaPanel &middot; folds into S1</div>
+          <div class="rd">Change the AI logo to a <b>"//" double-slash</b> with a bubbly AI feel. Applies to every Sella mark - chat and the right panel. The "AI" pill is fake (cosmetic only), so a fixed Sella mark that holds the feed breaks nothing.</div>
+        </div>
+        <span class="chip c-prog">prototype</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Deal Room build (after S1 - wires the card THINGS)</div>
+          <div class="rf">old "Deal Workspace" container</div>
+          <div class="rd">Newly flagged 06-20: after S1, build the <b>Deal Room</b> (the renamed Deal Workspace). That container is where the card's read-only THINGS (built behind an optional prop in S2) finally gets wired.</div>
+        </div>
+        <span class="chip c-decide">next</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Final UI polish round (Agentation-driven)</div>
+          <div class="rf">whole Connect/Chat surface</div>
+          <div class="rd">A dedicated Agentation-driven polish pass at the very end: after the whole UI is built, Ayush walks the app with Agentation, flags every component mistake, and we fix them in one pass. P1-P4 (see Polish backlog) are part of this round. May prototype the whole Connect look first, pick, then close.</div>
+        </div>
+        <span class="chip c-decide">end</span>
+      </div>
+
+    </div>
+  </details>
+
+  <!-- ============ LOCKED DECISIONS (collapsed) ============ -->
+  <details class="sec">
+    <summary><span class="chev">&#9656;</span><span class="ttl">Locked decisions</span><span class="chip c-decide">decided</span></summary>
+    <div class="body">
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Default tab</div>
+          <div class="rd">Opening Connect lands on <b>Chat</b>, not Inbox (<code>/connect</code> &rarr; <code>/connect/chat</code>).</div>
+        </div>
+        <span class="chip c-decide">locked</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Empty chat state</div>
+          <div class="rd">Chat opens with <b>no conversation selected</b> - just a blank pink background. The thread opens only when you tap a conversation (WhatsApp-style). No thread auto-loads.</div>
+        </div>
+        <span class="chip c-decide">locked</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Rename: "Workspace" &rarr; "Deal Room"</div>
+          <div class="rd">"Workspace" becomes <b>"Deal Room"</b>.</div>
+        </div>
+        <span class="chip c-decide">locked</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">The "AI" pill is fake</div>
+          <div class="rd">Cosmetic only, no engine behind it. So a fixed Sella tile that holds the notification + Review-change feed is the clean path; nothing real breaks.</div>
+        </div>
+        <span class="chip c-decide">locked</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Inbox rename</div>
+          <div class="rd">Parked on purpose - we name it once the Sella-tile design lands (same idea at two scales). (Interim: "Inbox" is shown as "Connection Request" in F2.)</div>
+        </div>
+        <span class="chip c-park">parked</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Card flip (decided 2026-06-20)</div>
+          <div class="rd">A <b>real 3D flip</b> (rotateY + preserve-3d + backface-hidden). The V3 cross-fade was tried then <b>overridden</b> - the physical flip is the intended feel.</div>
+        </div>
+        <span class="chip c-decide">locked</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Rename DONE</div>
+          <div class="rd">"Deal Workspace" &rarr; <b>"Deal Room"</b> shipped. The "old Deal Room &rarr; Presentation mode" half is Muskan's <code>Present</code> surface - out of scope here.</div>
+        </div>
+        <span class="chip c-done">shipped</span>
+      </div>
+
+    </div>
+  </details>
+
+  <!-- ============ ORDER OF WORK / WAVES (collapsed) ============ -->
+  <details class="sec">
+    <summary><span class="chev">&#9656;</span><span class="ttl">Order of work (waves)</span><span class="chip c-decide">plan</span></summary>
+    <div class="body">
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Wave 0 &middot; F1 (glass) + F2 (global chrome)</div>
+          <div class="rd">Everything else sits inside the shell and the glass. Do them first. <span class="mini">(both done)</span></div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Proto &middot; S1 strip, S2 card, S3 form</div>
+          <div class="rd">The three Ayush was unsure about. Throwaway variations, you pick, then we build the real one. <span class="mini">(S2 + S3 picked &amp; built; S1 still to prototype)</span></div>
+        </div>
+        <span class="chip c-prog">in progress</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Wave 1 &middot; parallel build</div>
+          <div class="rd">Picked card (S2), picked form (S3), bubbles (B1), conversation list (B2) - up to 4 parallel agents. Strip (S1) runs solo. Sella logo (B3) folds into S1. Separate files, so they run at the same time without colliding.</div>
+        </div>
+        <span class="chip c-prog">in progress</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Close &middot; update STATE + decisions</div>
+          <div class="rd">Update <code>.planning/STATE.md</code> + decisions. The one GSD step we keep, at the end.</div>
+        </div>
+        <span class="chip c-decide">end</span>
+      </div>
+
+    </div>
+  </details>
+
+  <!-- ============ POLISH BACKLOG (collapsed) ============ -->
+  <details class="sec">
+    <summary><span class="chev">&#9656;</span><span class="ttl">Polish backlog - Agentation round</span><span class="chip c-decide">deferred</span></summary>
+    <div class="body">
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Plan (06-20): the final Agentation-driven UI polish round</div>
+          <div class="rd">This is a dedicated round at the very end. After the whole UI is built, Ayush walks the app with <b>Agentation</b>, flags every component mistake he spots, and we fix them in one pass. P1-P4 below are part of that round. All four trace back to <b>F2</b> (the one-rail accordion merge). F2 is Done for <i>function</i>; these are <i>look-and-feel</i> decisions deferred to the polish pass - they do not change the progress bar above (it counts only the 9-slice board).</div>
+        </div>
+        <span class="chip c-decide">round</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">P1 &middot; Logo colour consistency</div>
+          <div class="rd">Old shell: He//o Se//o wordmark in <b>dark ink</b>. New shell: wordmark renders in <b>brand pink</b>. Want: pick one and make the logo colour <b>consistent</b> across the shells.</div>
+        </div>
+        <span class="chip c-decide">discuss</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">P2 &middot; Bring back the "CONNECT" label <span class="mini">(the main one)</span></div>
+          <div class="rd">Old shell: a small <b>"CONNECT" label</b> sat above the sub-items - read cleaner / nicer. New shell: the "CONNECT" word is <b>gone</b>; sub-items hang under the accordion with no label. Want: bring the old labelled Connect presentation back.</div>
+        </div>
+        <span class="chip c-decide">discuss</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">P3 &middot; Narrow the left rail</div>
+          <div class="rd">Old shell: extreme-left rail was a <b>narrow</b> icon rail (~64px). New shell: left rail is <b>wider</b> than before. Want: make the extreme-left nav rail the <b>same (narrow) width</b> as the old one.</div>
+        </div>
+        <span class="chip c-decide">discuss</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">P4 &middot; Overall look-and-feel pass</div>
+          <div class="rd">The whole Connect/Chat surface still needs a final look-and-feel pass. Do a dedicated <b>overall polish pass at the end</b>; maybe <b>prototype the whole Connect look</b> first, pick, then close.</div>
+        </div>
+        <span class="chip c-decide">discuss</span>
+      </div>
+
+    </div>
+  </details>
+
+  <!-- ============ MASTER NOTES (collapsed) ============ -->
+  <details class="sec">
+    <summary><span class="chev">&#9656;</span><span class="ttl">Everything Ayush said (master notes)</span><span class="chip c-decide">24 notes</span></summary>
+    <div class="body">
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">V1&middot;1 &rarr; F2 &middot; Global chrome <span class="mini">(Wave 0)</span></div>
+          <div class="rd">Two navigation bars exist. Use just <b>one</b>. <span class="mini">- done</span></div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">V1&middot;2 &rarr; F2 &middot; Global chrome <span class="mini">(Wave 0)</span></div>
+          <div class="rd">The second nav bar wastes space and confuses - <b>merge</b> it into the first. <span class="mini">- done</span></div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">V1&middot;3 &rarr; F2 + Inbox-name <span class="mini">(Wave 0 / Parked)</span></div>
+          <div class="rd">On open, show <b>Connect/Chat first</b> (not Inbox). "Inbox" is a confusing name - rename it. ("Inbox" now renamed to "Connection Request".) <span class="mini">- done</span></div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">V1&middot;4 &rarr; F2 &middot; Global chrome <span class="mini">(Wave 0)</span></div>
+          <div class="rd">Top bar too big. Make it <b>thinner</b>, search in the <b>center</b>, push the <b>notification</b> and the <b>company name</b> out of the bar. <span class="mini">- done</span></div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">V1&middot;5 &rarr; B2 &middot; Conversation list <span class="mini">(Wave 1)</span></div>
+          <div class="rd">New chat like WhatsApp: pick a person from connections with search; search past conversations; show unread company deals; a "new connection" section that pops names by date. <span class="mini">- discuss</span></div>
+        </div>
+        <span class="chip c-todo">discuss</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">V1&middot;6 &rarr; S1 &middot; The Strip <span class="mini">(Proto)</span></div>
+          <div class="rd">The main strip should be the person's name + the deal workspace entry (screenshot to follow). <span class="mini">- prototype</span></div>
+        </div>
+        <span class="chip c-prog">prototype</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">V1&middot;7 &rarr; S1 &middot; The Strip <span class="mini">(Proto)</span></div>
+          <div class="rd">The strip looks clumsy now (DealCard / open card / Sella / workspace all crammed). Make it cleaner. <span class="mini">- prototype</span></div>
+        </div>
+        <span class="chip c-prog">prototype</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">V1&middot;8 &rarr; B1 &middot; Bubbles <span class="mini">(Wave 1)</span></div>
+          <div class="rd">Chat bubbles: <b>my</b> messages on the <b>right</b> in <b>pink</b>; the other person on the <b>left</b> in <b>ash-gray</b> bubble on white. <span class="mini">- done</span></div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">V1&middot;9 &rarr; S1 &middot; The Strip <span class="mini">(Proto, name locked)</span></div>
+          <div class="rd">Rename "Workspace" &rarr; <b>"Deal Room"</b>. Maybe open it from the card too (still a thought). <span class="mini">- prototype</span></div>
+        </div>
+        <span class="chip c-prog">prototype</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">V1&middot;10 &rarr; B4 &middot; Scroll <span class="mini">(Wave 1)</span></div>
+          <div class="rd">Chat must be scrollable and open at the <b>bottom</b> (latest message), like WhatsApp/Slack. <span class="mini">- done (verify)</span></div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">V1&middot;11 &rarr; B3 &middot; Sella logo <span class="mini">(Proto)</span></div>
+          <div class="rd">Change the AI logo to a <b>"//" double-slash</b> with a bubbly AI feel. Applies to every Sella mark. <span class="mini">- prototype</span></div>
+        </div>
+        <span class="chip c-prog">prototype</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">V1&middot;12 &rarr; S1 &middot; The Strip <span class="mini">(Proto)</span></div>
+          <div class="rd">Move the DealCard + dropdown <b>up</b> in the strip. Keep only "open card" - and show it as a <b>card icon</b>, not the words "open card". <span class="mini">- prototype</span></div>
+        </div>
+        <span class="chip c-prog">prototype</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">V1&middot;13 &rarr; F1 &middot; Glass opacity <span class="mini">(Wave 0)</span></div>
+          <div class="rd">The PlusMenu popup is too transparent - busy background bleeds through. Make it more <b>opaque/clear</b>. <span class="mini">- done</span></div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">V1&middot;14 &rarr; B3 &middot; Sella logo <span class="mini">(Proto)</span></div>
+          <div class="rd">The Sella logo in the right panel also changes. <span class="mini">- prototype</span></div>
+        </div>
+        <span class="chip c-prog">prototype</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">V1&middot;15 &rarr; S2 &middot; The Card <span class="mini">(Proto)</span></div>
+          <div class="rd">Card style changes <b>completely</b> - looks unprofessional, boxes too big, too much info. Screenshot 3 is the target. Decide how it opens, how much shows, where edit + flip buttons go; later fold Deal Room into it. <span class="mini">- prototype (now built as V3)</span></div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">V1&middot;16 &rarr; S3 &middot; The Form <span class="mini">(Proto)</span></div>
+          <div class="rd">The deal basket / deal form changes completely too. <span class="mini">- prototype (now built as V2)</span></div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">V1&middot;17 &rarr; S3 &middot; The Form <span class="mini">(Proto)</span></div>
+          <div class="rd">The product list is a bad, unclear representation. Make it <b>user-friendly and easy to read</b>. <span class="mini">- prototype (now built as V2)</span></div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">V1&middot;18 &rarr; S3 &middot; The Form <span class="mini">(Proto)</span></div>
+          <div class="rd">Brainstorm what information the form/card should actually carry. <span class="mini">- discuss (folded into V2 build)</span></div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">V1&middot;19 &rarr; S1 &middot; The Strip <span class="mini">(Proto)</span></div>
+          <div class="rd">When a change is sent, the AI mark shifts aside - you don't want that. Idea: a <b>fixed tile</b> that always is the AI ("//"); notifications open and close from it as a Sella <b>feed</b>; call it <b>Sella</b>, not "AI"; put withdraw / review in a dropdown. <span class="mini">- prototype</span></div>
+        </div>
+        <span class="chip c-prog">prototype</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">V2&middot;1 &rarr; S1 + B3 <span class="mini">(Proto)</span></div>
+          <div class="rd">"Review change" is shown separately from the AI - <b>fold it into the Sella tile</b>. Does the "AI" label even do anything? &rarr; Checked: <b>no, it is cosmetic</b>. <span class="mini">- prototype</span></div>
+        </div>
+        <span class="chip c-prog">prototype</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">V2&middot;2 &rarr; F1 &middot; Glass opacity <span class="mini">(Wave 0)</span></div>
+          <div class="rd">When the card opens it is very blurry - transparency problem, make it <b>clear</b>. <span class="mini">- done</span></div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">V2&middot;3 &rarr; S3 &middot; The Form <span class="mini">(Proto)</span></div>
+          <div class="rd">On the seller's side the product display is bad. <b>Research</b> how a proper product should look (image thumbnail + plus/minus stepper). <span class="mini">- research (folded into V2 build)</span></div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">SS&middot;1 &rarr; F2 &middot; Global chrome <span class="mini">(Wave 0)</span></div>
+          <div class="rd"><b>Layout screenshot:</b> one left rail; contacts column collapses behind a "&lt;" back arrow; search center-top; company name + notifications outside the bar top-right; 3-panel body. <span class="mini">- done</span></div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">SS&middot;2 &rarr; S1 &middot; The Strip <span class="mini">(Proto)</span></div>
+          <div class="rd"><b>Person row screenshot:</b> "LB Luca Brunner &middot; [Helvetia Pharma AG] &middot; [Deals]". Company pill &rarr; relationship page. Selected deal moves from the dropdown into the strip. Show first 3 deals by time + a "see all". <span class="mini">- prototype</span></div>
+        </div>
+        <span class="chip c-prog">prototype</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">SS&middot;3 &rarr; S2 &middot; The Card <span class="mini">(Proto)</span></div>
+          <div class="rd"><b>Card screenshot:</b> clean card - "DEAL - id" header, "On DATE X offered to Y this deal", product lines, Decline / Change / Accept, a Message, a "Things" checklist, tiny product thumbnails on the left. <span class="mini">- prototype (now built as V3)</span></div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Source &amp; raw notes</div>
+          <div class="rd">Ayush walked the live app with Agentation across two viewports (24 notes) plus three reference screenshots. Raw notes live in <code>build-plans/notes/2026-06-19-connect-chat-ui-overhaul.md</code>.</div>
+        </div>
+        <span class="chip c-decide">info</span>
+      </div>
+
+    </div>
+  </details>
+
+  <footer>
+    Detailed Phase-4 board - source of truth is <code>.planning/ROADMAP.md</code> + <code>04-CONTEXT.md</code>. Rebuilt 2026-06-20.
+  </footer>
 
 </div>
 <script>
-(function () {
-  var badges = document.querySelectorAll('#scorecard tbody .badge');
-  var c = { done: 0, prog: 0, todo: 0 };
-  badges.forEach(function (el) {
-    if (el.classList.contains('s-done') || el.classList.contains('s-clear')) c.done++;
-    else if (el.classList.contains('s-proto') || el.classList.contains('s-partial')) c.prog++;
-    else c.todo++; // s-discuss, s-research
-  });
-  var total = c.done + c.prog + c.todo || 1;
-  var p = function (n) { return Math.round(n / total * 100); };
-  document.getElementById('bar-done').style.width = p(c.done) + '%';
-  document.getElementById('bar-prog').style.width = p(c.prog) + '%';
-  document.getElementById('bar-todo').style.width = p(c.todo) + '%';
-  document.getElementById('pct-num').textContent = p(c.done) + '%';
-  document.getElementById('counts').textContent =
-    c.done + ' done · ' + c.prog + ' in progress · ' + c.todo + ' to do · ' + total + ' slices';
+(function(){
+  function recount(){
+    var it=document.querySelectorAll('[data-status]');var d=0,p=0,t=0;
+    it.forEach(function(e){var s=e.getAttribute('data-status');if(s==='done')d++;else if(s==='prog')p++;else t++;});
+    var tot=d+p+t||1;var f=function(n){return Math.round(n/tot*100)};
+    var pe=document.getElementById('pct');if(pe)pe.textContent=f(d)+'%';
+    var bd=document.getElementById('bd'),bp=document.getElementById('bp'),bt=document.getElementById('bt');
+    if(bd)bd.style.width=f(d)+'%';if(bp)bp.style.width=f(p)+'%';if(bt)bt.style.width=f(t)+'%';
+    var c=document.getElementById('counts');if(c)c.textContent=d+' done · '+p+' in progress · '+t+' to do · '+tot+' tracked';
+  }
+  function setAll(o){document.querySelectorAll('details.sec').forEach(function(d){d.open=o});}
+  var e=document.getElementById('expand');if(e)e.onclick=function(){setAll(true)};
+  var c=document.getElementById('collapse');if(c)c.onclick=function(){setAll(false)};
+  var ft=document.getElementById('filter');var on=false;
+  if(ft)ft.onclick=function(){on=!on;ft.classList.toggle('on',on);if(on)setAll(true);
+    document.querySelectorAll('.row[data-status="done"]').forEach(function(el){el.classList.toggle('hide',on)});};
+  recount();
 })();
 </script>
 </body>
