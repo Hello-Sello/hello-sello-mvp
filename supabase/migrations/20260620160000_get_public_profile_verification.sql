@@ -16,7 +16,15 @@
 -- (already public on Discover), no new sensitive surface. search_path stays empty →
 -- every reference schema-qualified (blocks search_path hijack). revoke all from
 -- public, then grant execute to anon + authenticated only — no broader grant.
+--
+-- NOTE: adding a column to a RETURNS TABLE(...) signature CHANGES the return type,
+-- which `create or replace function` rejects (SQLSTATE 42P13). So we drop the
+-- existing 13-col definition first, then recreate at 14 columns. The drop+recreate
+-- is the only way to evolve the result shape; the body/security/grants below are
+-- otherwise verbatim from the defining migration.
 -- ============================================================================
+
+drop function if exists public.get_public_profile(text);
 
 create or replace function public.get_public_profile(p_handle text)
 returns table(
