@@ -138,8 +138,9 @@ export function ThreadView({ conversation, messages, onSend }: ThreadViewProps) 
         // pass the thread for a P2P, omit it for a C2C company channel.
         threadId={isC2C ? undefined : conversation.threadId}
         counterpartyName={conversation.companyName}
-        // 04A-04 D-02: the strip's top tier owns identity on the P2P deal path,
-        // so the avatar + Name + Relationship pill render once, in the strip.
+        // 04A polish: the strip's top bar owns identity on the P2P deal path - the
+        // PERSON's name on the left, the company on the relationship button (right).
+        counterpartyPersonName={conversation.name}
         counterpartyInitials={conversation.initials}
       >
         {/* stream - relative so the floating jump-to-bottom arrow anchors here */}

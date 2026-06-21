@@ -28,6 +28,8 @@
 export interface SellaMarkProps {
   /** Play a gentle processing/thinking pulse on the bars (D-07, Tailwind-only). */
   thinking?: boolean;
+  /** The curtain is open - the two bars part like a curtain (D-10 polish). */
+  open?: boolean;
   /** When provided, the mark becomes the curtain's entry button (D-08). */
   onClick?: () => void;
   /**
@@ -41,14 +43,27 @@ export interface SellaMarkProps {
   className?: string;
 }
 
-/** One slanted maroon bar of the `//` mark, CSS-drawn (not an icon/glyph). */
-function Bar({ thinking, delayMs }: { thinking: boolean; delayMs: number }) {
+/** One slanted maroon bar of the `//` mark, CSS-drawn (not an icon/glyph). On
+ *  `open` the two bars PART like a curtain (translate-x apart) just before the
+ *  drawer drops; on `thinking` they pulse. */
+function Bar({
+  thinking,
+  open,
+  side,
+  delayMs,
+}: {
+  thinking: boolean;
+  open: boolean;
+  side: "left" | "right";
+  delayMs: number;
+}) {
   return (
     <span
       aria-hidden
       className={[
-        "block h-3.5 w-[3px] -skew-x-12 rounded-full bg-[var(--color-brand-deep)] transition-opacity",
+        "block h-4 w-[3px] -skew-x-12 rounded-full bg-[var(--color-brand-deep)] transition-transform duration-300 ease-out",
         thinking ? "animate-pulse" : "",
+        open ? (side === "left" ? "-translate-x-1.5" : "translate-x-1.5") : "",
       ].join(" ")}
       style={thinking ? { animationDelay: `${delayMs}ms` } : undefined}
     />
@@ -57,38 +72,39 @@ function Bar({ thinking, delayMs }: { thinking: boolean; delayMs: number }) {
 
 export function SellaMark({
   thinking = false,
+  open = false,
   onClick,
   cue = null,
   className = "",
 }: SellaMarkProps) {
   // The two skewed bars + the cue dot/halo live together so the loud "review"
-  // halo hangs off the mark itself (matches the existing loud pill, DealPin).
+  // halo hangs off the mark itself. The bars PART on `open` (the curtain).
   const mark = (
     <span className="relative inline-flex items-center gap-1">
       {cue === "review" && (
-        <span className="absolute -right-1 -top-1 flex h-2.5 w-2.5" aria-hidden>
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-soft opacity-80" />
+        <span className="absolute -right-1.5 -top-1.5 flex h-2.5 w-2.5" aria-hidden>
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand/50" />
           <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-brand ring-2 ring-white" />
         </span>
       )}
-      <Bar thinking={thinking} delayMs={0} />
-      <Bar thinking={thinking} delayMs={140} />
+      <Bar thinking={thinking} open={open} side="left" delayMs={0} />
+      <Bar thinking={thinking} open={open} side="right" delayMs={140} />
     </span>
   );
 
   const label =
     cue === "review" ? (
-      <span className="text-[10px] font-semibold text-brand-deep">Review</span>
+      <span className="text-[11px] font-semibold text-brand-deep">Review</span>
     ) : cue === "awaiting" ? (
-      <span className="rounded-full px-1.5 py-0.5 text-[10px] font-medium text-ink/55 ring-1 ring-black/5">
-        Awaiting reply
-      </span>
+      <span className="text-[11px] font-medium text-ink/50">Awaiting reply</span>
     ) : null;
 
+  // Premium + calm (04A polish): the cheap-looking pink fill is gone. Just the
+  // mark + label, with a whisper-soft glass hover only when it is the curtain's
+  // interactive entry point. The maroon `//` is the one accent.
   const rootClass = [
-    "inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5",
-    "ring-1 ring-brand/15 bg-brand-soft/40",
-    onClick ? "cursor-pointer transition-colors hover:bg-brand-soft/60" : "",
+    "inline-flex shrink-0 items-center gap-2 rounded-full px-2.5 py-1",
+    onClick ? "cursor-pointer transition hover:bg-black/[0.04]" : "",
     className,
   ]
     .filter(Boolean)
