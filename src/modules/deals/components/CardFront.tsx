@@ -6,9 +6,11 @@
  * corner controls (flip top-left, Edit top-right) are owned by DealCard and sit in
  * the maroon header corners; this face leaves header padding for them.
  *
- * Layout (V3 prototype `prototypes/dealcard-v3-prototype/`, D-06 + D-14), top→bottom:
- *   1. maroon (#76002d) header band: DEAL eyebrow, HS number, offered-story line,
- *      and a headline row = value-net (the ONLY place net shows) + status·version.
+ * Layout (04C V4 - slim shaded header; was the V3 maroon band), top→bottom:
+ *   1. slim SHADED header: a soft deep-pink glass wash (NOT a solid band) holding the
+ *      DEAL eyebrow + HS number, the value-net as a calm ink hero with a deep-pink
+ *      hairline underline (the ONLY place net shows), and product count + status·version.
+ *   1b. the offered-story line, moved BELOW the header so the header stays light.
  *   2. centered Seller → Buyer party row with "· you" on the viewer's side.
  *   3. dense product rows (ProductList).
  *   4. terms .sec - hairline top divider, 3-up grid (Delivery / Payment / Free).
@@ -118,31 +120,49 @@ export function CardFront({
   const doneThings = things.filter((t) => t.status === "done").length;
 
   return (
-    <div className="w-[390px] max-w-full overflow-hidden rounded-3xl bg-white shadow-xl ring-1 ring-black/5">
-      {/* ---- MAROON HEADER BAND (#76002d) - padded for the two corner buttons ---- */}
-      <div className="relative bg-[#76002d] px-12 pb-4 pt-4 text-center text-white">
-        <div className="text-[11px] font-extrabold tracking-[0.16em] text-white/85">DEAL</div>
-        <div className="mt-0.5 text-[16px] font-bold tracking-wide tabular-nums">{hsNumber}</div>
-        <div className="mt-1.5 text-[12px] text-white/90">
-          On <span className="font-bold text-white">{dateLabel(card.created_at)}</span>,{" "}
-          <span className="font-bold text-white">{sellerName}</span> offered{" "}
-          <span className="font-bold text-white">{buyerName}</span>
-          {viewerSide === "buyer" && <span> · you</span>}
+    <div className="w-full max-w-full overflow-hidden rounded-3xl bg-white shadow-xl ring-1 ring-black/5">
+      {/* ---- SLIM SHADED HEADER (V4) - a soft deep-pink glass wash (NOT the old loud
+           solid band) with a calm ink value hero + a deep-pink hairline underline. The
+           shade gives the header presence and makes the deep-pink accent visible; the
+           pl-8 on the eyebrow clears the two corner controls (flip / edit) above. ---- */}
+      <div
+        className="relative rounded-t-3xl px-4 pb-3 pt-3"
+        style={{
+          background:
+            "linear-gradient(135deg, color-mix(in srgb, var(--color-brand-deep) 15%, #fff) 0%, color-mix(in srgb, var(--color-brand-soft) 34%, #fff) 100%)",
+        }}
+      >
+        <div className="flex items-center gap-2 pl-8 font-mono">
+          <span className="text-[9px] font-bold tracking-[0.18em] text-brand-deep">DEAL</span>
+          <span className="truncate text-[10px] tracking-wide tabular-nums text-ink/55">{hsNumber}</span>
         </div>
-
-        {/* headline row: value-net (left) + status·version pill (right) */}
-        <div className="mt-3 flex items-center justify-between border-t border-white/20 pt-3 text-left">
-          <div>
-            <div className="text-[11px] text-white/80">
-              Value net · {productCount} {productCount === 1 ? "product" : "products"}
-            </div>
-            <div className="text-[19px] font-bold tabular-nums">{valueNet}</div>
-          </div>
-          <span className="rounded-full bg-white/20 px-2.5 py-1 text-[11px] font-semibold text-white">
+        <div className="relative mt-1 inline-block pb-1.5">
+          <span className="text-[26px] font-semibold leading-none tracking-tight tabular-nums text-ink">
+            {valueNet}
+          </span>
+          <span className="absolute bottom-0 left-0 h-[2px] w-9 rounded bg-brand-deep" />
+        </div>
+        <div className="mt-1.5 flex items-center justify-between">
+          <span className="text-[10px] text-ink/55">
+            {productCount} {productCount === 1 ? "product" : "products"}
+          </span>
+          <span
+            className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-semibold text-brand-deep"
+            style={{ background: "color-mix(in srgb, var(--color-brand-deep) 10%, transparent)" }}
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-success" />
             {statusLabel(card.status)} · v{card.version}
           </span>
         </div>
       </div>
+
+      {/* offered-story line - moved BELOW the slim header so the header stays light */}
+      <p className="px-4 pt-2.5 text-[11px] leading-snug text-ink/55">
+        On <span className="font-semibold text-ink">{dateLabel(card.created_at)}</span>,{" "}
+        <span className="font-semibold text-ink">{sellerName}</span> offered{" "}
+        <span className="font-semibold text-ink">{buyerName}</span>
+        {viewerSide === "buyer" && <span className="font-semibold text-brand-deep"> · you</span>}
+      </p>
 
       {/* ---- PARTY ROW (centered) ---- */}
       <div className="flex items-center justify-center gap-2.5 border-b border-ink/10 px-4 py-3">
@@ -190,13 +210,18 @@ export function CardFront({
 
       {/* ---- OWNER MARGIN - a SINGLE owner-only row behind the "only you" lock (D-14) ---- */}
       <Sec>
-        <div className="flex items-center justify-between text-[12px]">
+        <div
+          className="flex items-center gap-2 rounded-xl border border-dashed px-3 py-2 text-[12px]"
+          style={{
+            borderColor: "color-mix(in srgb, var(--color-brand-deep) 32%, transparent)",
+            background: "color-mix(in srgb, var(--color-brand-deep) 5%, transparent)",
+          }}
+        >
+          <Lock className="h-[12px] w-[12px] text-brand-deep" />
           <span className="text-ink/55">Your avg. margin</span>
-          <span className="flex items-center gap-1.5">
-            <span className="font-bold tabular-nums text-ink">{marginLabel(avgMargin)}</span>
-            <span className="inline-flex items-center gap-0.5 text-[10.5px] text-ink/45">
-              <Lock className="h-[11px] w-[11px]" /> only you
-            </span>
+          <span className="ml-auto font-bold tabular-nums text-brand-deep">{marginLabel(avgMargin)}</span>
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-brand-deep/70">
+            only you
           </span>
         </div>
       </Sec>

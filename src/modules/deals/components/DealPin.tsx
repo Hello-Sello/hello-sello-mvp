@@ -23,6 +23,7 @@
  * (messaging already renders this component).
  */
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import {
   Check,
@@ -152,6 +153,18 @@ export function DealPin({
   const [menuOpen, setMenuOpen] = useState(false); // the top-tier three-dot menu
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState(false);
+
+  // 04C - the conversation-rail slot the card portals into (chat variant only). The
+  // card now opens as a LEAFLET over the conversation rail (same place/shape as the
+  // New chat picker), not floating inside the thread. Read at render time (guarded for
+  // SSR); the card defaults closed, so the slot need not exist on the first client
+  // render - by the time the user opens the card the rail has long since mounted and
+  // getElementById resolves it. The workspace variant has no rail, so this stays null
+  // and the inline overlay is used instead.
+  const cardHost =
+    variant === "chat" && typeof document !== "undefined"
+      ? document.getElementById("hs-deal-card-slot")
+      : null;
 
   // 4.5.2 - the pending proposal (State B) + its popover + its accept/decline
   const [proposal, setProposal] = useState<PendingProposalView | null>(null);
@@ -816,16 +829,17 @@ export function DealPin({
         </div>
       )}
 
-      {/* the stream, with the card floated on the right when open */}
+      {/* the stream. 04C: the card no longer floats inside the thread - in the chat
+          variant it opens as a LEAFLET over the conversation rail (portaled into the
+          rail slot below). The workspace variant has no rail, so it keeps the inline
+          right-floated overlay. PENCIL LOCK (DCHG-03): while a change is held, pass no
+          onEdit so the Edit pencil disappears on both sides (the DB unique index is the
+          real lock; this is the UX half). */}
       <div className="relative min-h-0 flex-1">
         {children}
-        {data && open && (
+        {data && open && variant === "workspace" && (
           <div className="pointer-events-none absolute inset-0 z-10 flex justify-end p-4">
-            <div className="pointer-events-auto self-start">
-              {/* 4.5.4 PENCIL LOCK (DCHG-03): while a change is held, pass no
-                  onEdit so the Edit pencil disappears - on BOTH screens, since
-                  `pendingChange` rides on the card both sides read. The DB unique
-                  index is the real lock (plan 02); this is the UX half. */}
+            <div className="pointer-events-auto w-[390px] max-w-full self-start">
               <DealCard
                 data={data}
                 onEdit={data.pendingChange ? undefined : () => setEditing(true)}
@@ -834,6 +848,24 @@ export function DealPin({
           </div>
         )}
       </div>
+
+      {/* 04C - chat variant: portal the card into the conversation-rail slot as a
+          glass leaflet (same place/shape as the New chat picker). */}
+      {data &&
+        open &&
+        variant === "chat" &&
+        cardHost &&
+        createPortal(
+          <div className="glass-strong pointer-events-auto absolute inset-x-2 bottom-2 top-1 z-50 flex flex-col overflow-hidden rounded-2xl">
+            <div className="min-h-0 flex-1 overflow-y-auto p-3">
+              <DealCard
+                data={data}
+                onEdit={data.pendingChange ? undefined : () => setEditing(true)}
+              />
+            </div>
+          </div>,
+          cardHost,
+        )}
 
       {/* the propose form (4.5.2, was create 3.5a) - a human-pressed Send writes
           a PROPOSAL (no card yet); on success the strip re-reads to show pending.

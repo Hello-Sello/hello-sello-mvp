@@ -154,8 +154,9 @@ export function ChatView() {
 
   return (
     <div className="flex h-full gap-3">
-      {/* panel 3 - conversation list */}
-      <div className="glass flex w-64 shrink-0 flex-col overflow-hidden rounded-3xl">
+      {/* panel 3 - conversation list (w-72: a touch wider so the Deal Card leaflet
+          that now opens over this rail has room to breathe, 04C) */}
+      <div className="glass flex w-72 shrink-0 flex-col overflow-hidden rounded-3xl">
         {loading ? (
           <p className="flex-1 p-6 text-center text-sm text-ink/40">Loading conversations…</p>
         ) : (

@@ -97,12 +97,12 @@ export function ProductList({ items }: { items: LineItemView[] }) {
               {(p.thcPercent != null || p.cbdPercent != null) && (
                 <div className="mt-0.5 flex flex-wrap items-center gap-1">
                   {p.thcPercent != null && (
-                    <span className="inline-flex items-center rounded-md bg-[#b5179e]/10 px-1.5 py-px text-[11px] font-semibold tabular-nums text-[#b5179e]">
+                    <span className="inline-flex items-center rounded-md bg-brand-deep/10 px-1.5 py-px text-[11px] font-semibold tabular-nums text-brand-deep">
                       THC {p.thcPercent}
                     </span>
                   )}
                   {p.cbdPercent != null && (
-                    <span className="inline-flex items-center rounded-md bg-[#1b998b]/12 px-1.5 py-px text-[11px] font-semibold tabular-nums text-[#1b998b]">
+                    <span className="inline-flex items-center rounded-md bg-info/12 px-1.5 py-px text-[11px] font-semibold tabular-nums text-info">
                       CBD {p.cbdPercent}
                     </span>
                   )}

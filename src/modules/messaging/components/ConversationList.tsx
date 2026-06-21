@@ -134,6 +134,12 @@ export function ConversationList({
             onClose={onClosePicker}
           />
         )}
+
+        {/* 04C portal target: the Deal Card opens here as a leaflet over the rail
+            (DealPin portals into this slot for the chat variant) - the same place and
+            shape as the New chat picker. pointer-events-none so it never blocks the
+            rail when empty; the portaled leaflet re-enables pointer events on itself. */}
+        <div id="hs-deal-card-slot" className="pointer-events-none absolute inset-0 z-40" />
       </div>
     </div>
   );

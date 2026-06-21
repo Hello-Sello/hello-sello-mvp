@@ -196,12 +196,12 @@ export function DealForm({
 }) {
   const [catalog, setCatalog] = useState<CatalogProduct[] | null>(null);
   const [query, setQuery] = useState("");
-  // BTCH-01 (D-06): product + batch is ONE entity. Clicking a catalogue product
-  // does NOT add a line - it becomes the "pending" product and loads its batches;
-  // the line is created only when a batch is then chosen. Custom products skip
-  // this (the separate custom button adds a line directly).
-  const [pendingProduct, setPendingProduct] = useState<CatalogProduct | null>(null);
-  const [pendingBatches, setPendingBatches] = useState<ProductBatchView[] | null>(null);
+  // BTCH-01 (D-06): product + batch is ONE entity, but 04C makes choosing it ONE
+  // TAP - the catalogue's batches are loaded up front and shown inline as tap-to-add
+  // chips on each result (no separate "pick a batch" step / popup). Keyed by product
+  // id; a missing key = not loaded yet. Each chip still carries its batch's MEASURED
+  // THC/CBD, so the batch truth is preserved at the moment of choice.
+  const [batchesByProduct, setBatchesByProduct] = useState<Record<string, ProductBatchView[]>>({});
   const [lines, setLines] = useState<DraftLineInput[]>(initialLines);
   const [freeDelivery, setFreeDelivery] = useState(initialFreeDelivery);
   const [dueDate, setDueDate] = useState(initialDueDate);
@@ -219,6 +219,26 @@ export function DealForm({
       alive = false;
     };
   }, []);
+
+  // 04C one-tap: once the catalogue is in, load every product's batches so each
+  // result can show its batches as inline tap-to-add chips. Async setState in an
+  // effect is the allowed subscribe pattern (mirrors the catalogue load above).
+  useEffect(() => {
+    if (!catalog) return;
+    let alive = true;
+    void Promise.all(
+      catalog.map((p) =>
+        getProductBatches(p.id)
+          .then((bs) => [p.id, bs] as const)
+          .catch(() => [p.id, [] as ProductBatchView[]] as const),
+      ),
+    ).then((entries) => {
+      if (alive) setBatchesByProduct(Object.fromEntries(entries));
+    });
+    return () => {
+      alive = false;
+    };
+  }, [catalog]);
 
   const total = useMemo(
     () =>
@@ -278,29 +298,13 @@ export function DealForm({
   // bag count = priced (batched + present) lines, mirroring the V2 header chip.
   const bagCount = lines.length;
 
-  // Clicking a catalogue product opens its MANDATORY batch dropdown (D-06) -
-  // it does NOT add a line yet. Load the product's batches; the line is created
-  // only when a batch is chosen (addBatch below).
-  function pickProduct(p: CatalogProduct) {
-    setPendingProduct(p);
-    setPendingBatches(null);
-    void getProductBatches(p.id)
-      .then((bs) => setPendingBatches(bs))
-      .catch(() => setPendingBatches([]));
-  }
-  // The batch is chosen - now create (or increment) the line through the SAME
-  // single add path the grid/typeahead use. The chosen batch is closed over in
-  // the seed so addOrIncrement's productId+batchId merge key works (D-05).
+  // One tap on a batch chip creates (or increments) the line through the single add
+  // path. The chosen batch is closed over so addOrIncrement's productId+batchId merge
+  // key works (D-05): same product + same batch increments, a different batch is a new
+  // line. The search stays open so several products can be added in a row; the just-
+  // added product shows an "in basket" cue via qtyByProduct.
   function addBatch(p: CatalogProduct, batch: ProductBatchView) {
-    // FORM-01 + D-05: increment a same-product/same-batch line, never duplicate.
     setLines((ls) => addOrIncrement(ls, p, (cp) => lineFromProduct(cp, batch)));
-    setPendingProduct(null);
-    setPendingBatches(null);
-    setQuery("");
-  }
-  function cancelPick() {
-    setPendingProduct(null);
-    setPendingBatches(null);
   }
   function addCustom(name: string) {
     setLines((ls) => [...ls, emptyCustomLine(name.trim())]);
@@ -425,99 +429,72 @@ export function DealForm({
               {catalog === null ? (
                 <p className="text-[12px] text-ink/45">Loading your catalogue…</p>
               ) : (
-                (q !== "" || pendingProduct) && (
+                q !== "" && (
                   <div className="space-y-2">
-                    {matches.length > 0 && q !== "" && (
-                      <div className="grid grid-cols-2 gap-2">
-                        {matches.map((p) => {
-                          const inBasket = qtyByProduct.get(p.id) ?? 0;
-                          const packs = packsOf(inBasket, p.packSizeGrams);
-                          const selected = inBasket > 0;
-                          return (
-                            <button
-                              key={p.id}
-                              type="button"
-                              onClick={() => pickProduct(p)}
-                              className={`relative flex flex-col rounded-xl px-3 py-2 text-left ring-1 transition ${
-                                selected
-                                  ? "bg-brand/5 ring-brand/40"
-                                  : "bg-white ring-black/5 hover:ring-brand/30"
-                              }`}
-                            >
-                              {selected && (
-                                <span className="absolute right-1.5 top-1.5 inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-brand px-1.5 py-0.5 text-[10px] font-bold text-white">
-                                  {packs != null
-                                    ? `${packCount(packs).replace(/ packs?$/, "")}×`
-                                    : `${inBasket}g`}
-                                </span>
-                              )}
-                              <span className="truncate pr-6 text-sm font-semibold text-ink">
-                                {p.name}
+                    {/* 04C one-tap rail: each match shows its batches as tap-to-add
+                        chips. ONE tap on a chip adds product + that exact batch (D-06),
+                        no separate "pick a batch" popup. The search stays open so a
+                        few products can be added in a row. */}
+                    {matches.map((p) => {
+                      const inBasket = qtyByProduct.get(p.id) ?? 0;
+                      const batches = batchesByProduct[p.id];
+                      return (
+                        <div key={p.id} className="rounded-xl bg-white/60 p-2.5 ring-1 ring-black/5">
+                          <div className="mb-2 flex items-center gap-2">
+                            <span
+                              className={`h-2.5 w-2.5 shrink-0 rounded-full bg-gradient-to-br ${cultivarGradient(p.cultivar)}`}
+                            />
+                            <span className="truncate text-sm font-semibold text-ink">{p.name}</span>
+                            {p.cultivar && (
+                              <span className="shrink-0 rounded-full bg-ink/5 px-1.5 py-0.5 text-[10px] text-ink/50">
+                                {p.cultivar}
                               </span>
-                              <span className="text-[11px] text-ink/50">
-                                {p.cultivar ? `${p.cultivar} · ` : ""}
-                                {p.unitPrice != null
-                                  ? `${formatMoney(p.unitPrice, p.currency)}/g`
-                                  : "no price"}
-                                {packLabel(p.packSizeGrams)
-                                  ? ` · ${packLabel(p.packSizeGrams)}`
-                                  : ""}
-                              </span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    {/* BTCH-01 (D-06): a chosen product opens its MANDATORY batch
-                        dropdown. The line is created only when a batch is picked,
-                        so a catalogue line is born with a batch. Stock label is
-                        OMITTED (D-13: ProductBatchView has no stock field). */}
-                    {pendingProduct && (
-                      <div className="space-y-2 rounded-xl bg-brand/5 p-3 ring-1 ring-brand/30">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="text-[12px] font-semibold text-ink">
-                            Pick a batch for{" "}
-                            <span className="text-brand">{pendingProduct.name}</span>
-                          </p>
-                          <button
-                            type="button"
-                            onClick={cancelPick}
-                            className="shrink-0 rounded-full p-1 text-ink/40 transition hover:bg-ink/5 hover:text-ink"
-                            aria-label="Cancel batch pick"
-                          >
-                            <X size={14} />
-                          </button>
-                        </div>
-                        {pendingBatches === null ? (
-                          <p className="text-[12px] text-ink/45">Loading batches…</p>
-                        ) : pendingBatches.length === 0 ? (
-                          <p className="text-[12px] text-ink/45">
-                            No batches on record for this product yet.
-                          </p>
-                        ) : (
-                          <div className="space-y-1.5">
-                            {pendingBatches.map((b) => (
-                              <button
-                                key={b.id}
-                                type="button"
-                                onClick={() => addBatch(pendingProduct, b)}
-                                className="flex w-full items-center justify-between gap-2 rounded-lg bg-white px-3 py-2 text-left text-sm ring-1 ring-black/5 transition hover:ring-brand/40"
-                              >
-                                <span className="truncate font-medium text-ink">
-                                  Batch {b.batchNumber}
-                                </span>
-                                <span className="shrink-0 text-[11px] text-ink/55">
-                                  {b.thcPercent != null ? `THC ${b.thcPercent}%` : ""}
-                                  {b.thcPercent != null && b.cbdPercent != null ? " · " : ""}
-                                  {b.cbdPercent != null ? `CBD ${b.cbdPercent}%` : ""}
-                                </span>
-                              </button>
-                            ))}
+                            )}
+                            <span className="ml-auto shrink-0 text-[10px] uppercase tracking-wide text-ink/40">
+                              {p.unitPrice != null
+                                ? `${formatMoney(p.unitPrice, p.currency)}/g`
+                                : "no price"}
+                              {inBasket > 0 ? " · in basket" : ""}
+                            </span>
                           </div>
-                        )}
-                      </div>
-                    )}
+
+                          {batches === undefined ? (
+                            <p className="px-1 text-[11px] text-ink/40">Loading batches…</p>
+                          ) : batches.length === 0 ? (
+                            <p className="px-1 text-[11px] text-ink/40">
+                              No batches on record yet.
+                            </p>
+                          ) : (
+                            <div className="flex flex-wrap gap-1.5">
+                              {batches.map((b) => (
+                                <button
+                                  key={b.id}
+                                  type="button"
+                                  onClick={() => addBatch(p, b)}
+                                  title={`Add ${p.name} · batch ${b.batchNumber}`}
+                                  className="group flex items-center gap-2 rounded-lg bg-white px-2.5 py-1.5 text-left ring-1 ring-black/5 transition hover:shadow-sm hover:ring-brand/40"
+                                >
+                                  <span className="font-mono text-[11px] text-ink">{b.batchNumber}</span>
+                                  {b.thcPercent != null && (
+                                    <span className="rounded bg-brand-deep/10 px-1.5 py-0.5 font-mono text-[10px] font-semibold tabular-nums text-brand-deep">
+                                      THC {b.thcPercent}
+                                    </span>
+                                  )}
+                                  {b.cbdPercent != null && (
+                                    <span className="rounded bg-info/10 px-1.5 py-0.5 font-mono text-[10px] font-semibold tabular-nums text-info">
+                                      CBD {b.cbdPercent}
+                                    </span>
+                                  )}
+                                  <span className="ml-0.5 flex h-5 w-5 items-center justify-center rounded-md bg-ink/5 text-ink/40 transition group-hover:bg-brand group-hover:text-white">
+                                    <Plus size={12} strokeWidth={2.5} />
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
 
                     {/* FORM-02 custom path: offer the typed name as a custom line */}
                     {q && !hasExactName && (
@@ -887,7 +864,7 @@ export function DealForm({
               type="button"
               onClick={() => void submit()}
               disabled={!canSubmit}
-              className="flex items-center gap-1.5 rounded-xl bg-brand-deep px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#8c0036] disabled:opacity-50"
+              className="flex items-center gap-1.5 rounded-xl bg-brand-deep px-5 py-2.5 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-50"
             >
               {busy && <Loader2 size={14} className="animate-spin" />}
               {submitLabel}

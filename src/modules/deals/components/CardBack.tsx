@@ -29,13 +29,19 @@ export function CardBack({ data }: { data: DealCardView }) {
   const [tab, setTab] = useState<Tab>("signals");
 
   return (
-    <div className="flex min-h-[640px] w-[390px] max-w-full flex-col overflow-hidden rounded-3xl bg-white shadow-xl ring-1 ring-black/5">
-      {/* maroon-accented heading band (matches the front's signature) */}
-      <div className="bg-[#76002d] px-12 pb-4 pt-4 text-center text-white">
-        <div className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-white/85">
+    <div className="flex min-h-[640px] w-full max-w-full flex-col overflow-hidden rounded-3xl bg-white shadow-xl ring-1 ring-black/5">
+      {/* slim SHADED heading band (matches the front's V4 signature) */}
+      <div
+        className="rounded-t-3xl px-12 pb-4 pt-4 text-center"
+        style={{
+          background:
+            "linear-gradient(135deg, color-mix(in srgb, var(--color-brand-deep) 15%, #fff) 0%, color-mix(in srgb, var(--color-brand-soft) 34%, #fff) 100%)",
+        }}
+      >
+        <div className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-brand-deep">
           {tab === "signals" ? "Signals" : "Version history"}
         </div>
-        <div className="mt-0.5 text-[13px] font-bold tracking-wide tabular-nums">
+        <div className="mt-0.5 text-[13px] font-bold tracking-wide tabular-nums text-ink">
           {data.card.hs_deal_number ?? "Deal"}
         </div>
       </div>
@@ -47,7 +53,7 @@ export function CardBack({ data }: { data: DealCardView }) {
             key={id}
             onClick={() => setTab(id)}
             className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-              tab === id ? "bg-[#76002d] text-white" : "text-ink/55 hover:text-ink"
+              tab === id ? "bg-brand-deep text-white" : "text-ink/55 hover:text-ink"
             }`}
           >
             <Icon className="h-3.5 w-3.5" />

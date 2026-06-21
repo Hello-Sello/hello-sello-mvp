@@ -39,7 +39,7 @@ export default async function PublicProfilePage({ params }: { params: Promise<{ 
         </span>
       </div>
 
-      <div className="relative h-44 w-full bg-gradient-to-br from-brand via-brand-deep to-[#3a0016] md:h-52">
+      <div className="relative h-44 w-full bg-gradient-to-br from-brand via-brand-deep to-brand-deep md:h-52">
         <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(white 1px, transparent 1px)', backgroundSize: '22px 22px' }} />
         {co && (
           <div className="absolute bottom-4 left-6 right-6 text-white md:bottom-5">
