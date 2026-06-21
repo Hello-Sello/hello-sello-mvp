@@ -34,34 +34,55 @@ export function WorkspaceHeader({
   // best. viewerSide null (no company) falls back to the seller name.
   const counterpartyName = viewerSide === "seller" ? buyerName : sellerName;
 
-  const dealName = card.hs_deal_number ?? "Deal";
+  // the deal's human reference - the SAME source the strip's deal dropdown uses
+  // (DealPin reads `hs_deal_number` as `hsNumber`), so the number is consistent
+  // across the app. Null on a brand-new draft before a number is minted.
+  const dealNumber = card.hs_deal_number;
   const price =
     card.value_net != null ? formatMoney(Number(card.value_net), card.currency) : null;
 
   return (
-    <div className="glass flex shrink-0 items-center gap-3 rounded-3xl px-3 py-2">
-      {/* top-left BACK control - returns to the CHAT (D-02/D-03), never the
-          relationship page. Corner placement modeled on DealCard's flip button. */}
-      <button
-        type="button"
-        onClick={onClose}
-        title="Back to chat"
-        aria-label="Back to chat"
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-black/[0.07] bg-white/70 text-ink/55 transition hover:bg-brand-soft hover:text-brand-deep"
-      >
-        <ArrowLeft size={16} strokeWidth={2} />
-      </button>
-
-      {/* deal identity inline: deal name -> company name -> price */}
-      <span className="truncate text-sm font-bold tracking-wide text-ink">{dealName}</span>
-      <span className="hidden truncate text-[11px] text-ink/45 sm:inline">{counterpartyName}</span>
-      {price && (
-        <span className="hidden shrink-0 text-[13px] font-bold tabular-nums text-ink md:inline">
-          {price}
+    // `relative` so the centered title block can be absolutely centered to the BAR
+    // (not to the gap between the side items), keeping it dead-centre while the
+    // back button stays left and the lifecycle pill stays right.
+    <div className="glass relative flex shrink-0 items-center gap-3 rounded-3xl px-3 py-2.5">
+      {/* LEFT: back-to-chat + the counterparty company (collapses on small screens) */}
+      <div className="flex min-w-0 items-center gap-3">
+        {/* top-left BACK control - returns to the CHAT (D-02/D-03), never the
+            relationship page. Corner placement modeled on DealCard's flip button. */}
+        <button
+          type="button"
+          onClick={onClose}
+          title="Back to chat"
+          aria-label="Back to chat"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-black/[0.07] bg-white/70 text-ink/55 transition hover:bg-brand-soft hover:text-brand-deep"
+        >
+          <ArrowLeft size={16} strokeWidth={2} />
+        </button>
+        <span className="hidden truncate text-[11px] text-ink/45 sm:inline">
+          {counterpartyName}
         </span>
-      )}
+        {price && (
+          <span className="hidden shrink-0 text-[13px] font-bold tabular-nums text-ink lg:inline">
+            {price}
+          </span>
+        )}
+      </div>
 
-      {/* the lifecycle pill, pushed RIGHT */}
+      {/* CENTER: the bar's identity - "Deal Room" with the deal number beneath.
+          Absolutely centred to the bar; `pointer-events-none` so it never blocks
+          the side controls. The "Deal Room" eyebrow is set small + tracked-out in
+          the Damson maroon (the brand voice); the number is the calm hero line. */}
+      <div className="pointer-events-none absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center leading-none">
+        <span className="text-[9.5px] font-bold uppercase tracking-[0.18em] text-brand-deep/70">
+          Deal Room
+        </span>
+        <span className="mt-1 text-sm font-bold tracking-wide text-ink tabular-nums">
+          {dealNumber ?? "Draft deal"}
+        </span>
+      </div>
+
+      {/* RIGHT: the lifecycle pill, pushed to the edge */}
       <div className="ml-auto shrink-0">
         <LifecyclePill status={card.status} />
       </div>

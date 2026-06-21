@@ -64,6 +64,10 @@ export function StageDropdown({
   // nudge = every current thing is ticked, but the stage is NOT yet marked done.
   const nudge = !activeDone && allThingsDone(active);
   const activeBusy = busyStageCodes.has(active.code);
+  // an EMPTY stage (no things) cannot be marked done - there is nothing to
+  // complete. The capsule disables (muted) and explains why on hover.
+  const isEmpty = active.thingsTotal === 0;
+  const markDisabled = activeBusy || activeDone || isEmpty;
 
   return (
     <div className="flex items-stretch gap-2">
@@ -179,38 +183,73 @@ export function StageDropdown({
         )}
       </div>
 
-      {/* --- the MANUAL "Mark stage done" pill (D-14) --- */}
-      <button
-        type="button"
-        disabled={activeBusy || activeDone}
-        onClick={() => onMarkStageDone(active.code)}
-        className={[
-          "relative flex flex-1 items-center justify-center gap-2 rounded-xl px-3.5 text-[12.5px] font-bold transition",
-          activeDone
-            ? "bg-success/12 text-success ring-1 ring-success/40"
-            : "bg-brand text-white shadow-sm hover:bg-brand-deep",
-          nudge && !activeBusy ? "animate-pulse" : "",
-          activeBusy ? "opacity-50" : "",
-        ].join(" ")}
-      >
-        {/* the glow nudge - the SellaMark animate-ping cue, only when nudging */}
-        {nudge && !activeBusy && (
-          <span className="absolute -right-1 -top-1 flex h-2.5 w-2.5">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-soft opacity-80" />
-            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-brand-soft ring-2 ring-white" />
-          </span>
+      {/* --- the MANUAL "Mark stage done" CAPSULE (D-14) ---
+          A fully-rounded pill: two parallel straight long sides + sharp
+          half-circle end caps ("like a C"). Premium Damson maroon with a soft
+          deep gradient + the frosted glass shadow for depth; the GLOW nudge is a
+          soft brand-deep halo (not a flat box). Disabled (empty/busy/done) reads
+          intentionally muted but stays capsule-shaped. */}
+      <div className="relative flex-1">
+        {/* premium glow halo - a soft brand-deep ring breathing behind the
+            capsule when every thing is ticked but the stage is not yet marked.
+            Sits BEHIND the button (-z) so it reads as a halo, not a badge. */}
+        {nudge && !markDisabled && (
+          <span
+            aria-hidden
+            className="pointer-events-none absolute -inset-1 -z-10 animate-pulse rounded-full bg-brand-deep/30 blur-md"
+          />
         )}
-        <span
-          className={`flex h-[19px] w-[19px] shrink-0 items-center justify-center rounded-full ${
-            activeDone ? "bg-success text-white" : "bg-white/20 text-white"
-          }`}
+        <button
+          type="button"
+          disabled={markDisabled}
+          onClick={() => onMarkStageDone(active.code)}
+          title={
+            isEmpty
+              ? "Add a thing first"
+              : activeDone
+                ? "Stage complete"
+                : nudge
+                  ? "All items ticked - mark this stage done"
+                  : "Mark this stage done"
+          }
+          className={[
+            "relative flex h-10 w-full items-center justify-center gap-2 overflow-hidden rounded-full px-4 text-[12.5px] font-bold tracking-wide transition",
+            activeDone
+              ? // completed: calm success capsule
+                "bg-success/12 text-success ring-1 ring-success/40"
+              : isEmpty
+                ? // empty stage: muted, still capsule-shaped, not clickable
+                  "cursor-not-allowed bg-ink/[0.06] text-ink/35 ring-1 ring-black/[0.05]"
+                : // live: premium maroon capsule. The deep gradient derives from
+                  // the Damson token (color-mix toward black) so depth stays in
+                  // ONE source of truth - no hardcoded hex (mirrors --glass-shadow).
+                  "bg-gradient-to-b from-brand-deep to-[color-mix(in_srgb,var(--color-brand-deep)_72%,black)] text-white shadow-[var(--glass-shadow)] ring-1 ring-brand-deep/40 hover:brightness-110",
+            nudge && !markDisabled ? "ring-2 ring-brand-soft/70" : "",
+            activeBusy ? "opacity-60" : "",
+          ].join(" ")}
         >
-          <Check size={12} strokeWidth={3.4} />
-        </span>
-        <span className="truncate">
-          {activeDone ? "Stage done" : nudge ? "All set - mark stage done" : "Mark stage done"}
-        </span>
-      </button>
+          <span
+            className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full ${
+              activeDone
+                ? "bg-success text-white"
+                : isEmpty
+                  ? "bg-ink/10 text-ink/40"
+                  : "bg-white/20 text-white"
+            }`}
+          >
+            <Check size={11} strokeWidth={3.4} />
+          </span>
+          <span className="truncate">
+            {activeDone
+              ? "Stage done"
+              : isEmpty
+                ? "Add a thing first"
+                : nudge
+                  ? "All set - mark done"
+                  : "Mark stage done"}
+          </span>
+        </button>
+      </div>
     </div>
   );
 }
