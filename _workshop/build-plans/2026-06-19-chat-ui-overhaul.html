@@ -57,9 +57,9 @@ footer{margin-top:34px;color:var(--muted);font-size:12px;border-top:1px solid va
 
   <div class="banner">
     <b>Status 2026-06-21 (end of session).</b> ALL 9 slices are now <b>built &amp; gate-green</b> (tsc + eslint 0 errors + 62/62 unit + <code>next build</code> ok), local on <code>claude/ayush/work</code> (UNPUSHED):
-    <b>F1/F2/B1/B4</b> (verified), <b>S2</b> V3 Card with a <b>real 3D flip</b>, <b>S3</b> V2 Form, the DEV-66/72 rename, <b>04A the Deal Strip</b> (S1 + B3 folded in, + 3 Agentation polish rounds), and now <b>04B the Conversation list</b> = the new-chat picker (Option A) + its backend, built via full GSD (research &rarr; plan &rarr; 2 waves BE+FE &rarr; verify). The picker is a leaflet that drops from <b>+ New chat</b> and <b>COVERS</b> the All/Unread/Companies/Deals tabs (fixed the stacked double-filter); verified live with a screenshot.
-    <b>Build NEXT (new session):</b> <b>04C</b> = S2 Card + S3 Form small UI touch (two parallel plans) &rarr; then the <b>Deal Room build</b> (wires the card's THINGS) &rarr; then the final <b>Agentation polish round</b> (P1-P4 + deferred strip polish). Phases 5-8 after.
-    <b>Owed:</b> the local 04A+04B commits are UNPUSHED; 04B awaits a human click-through UAT (<code>04B-HUMAN-UAT.md</code>); cloud <code>supabase db push</code> (15 migrations, with Muskan) + <code>.planning</code> untrack still pending.
+    <b>F1/F2/B1/B4</b> (verified), <b>S2</b> V3 Card, <b>S3</b> V2 Form, the DEV-66/72 rename, <b>04A the Deal Strip</b> (S1 + B3 + 3 polish rounds), <b>04B the Conversation list</b> (new-chat picker Option A + backend), and now <b>04C the Card + Form UI touch</b> - card <b>slim shaded header</b> + the card now opens as a <b>leaflet over the conversation rail</b> (not floating in the thread) + a <b>one-tap-batch</b> Deal Form + the <b>Damson</b> deep-pink recolor (#76002d&rarr;#7a1638). Phase 04 (UI &amp; chat) is now DONE.
+    <b>Build NEXT (new session):</b> the <b>Deal Room build</b> (the old Deal Workspace - wires the card's read-only THINGS + the deferred <code>assigned_to</code>) &rarr; then the final <b>Agentation polish round</b> (P1-P4 + deferred strip polish). Phases 5-8 after.
+    <b>Owed:</b> the local Phase-04 commits (~24, incl. 04C <code>c29ea4c</code>/<code>37ec4e8</code>) are UNPUSHED; <b>04B + 04C await a human click-through UAT</b> (04C needs a minted deal to see the card live); cloud <code>supabase db push</code> (15 migrations, with Muskan) + <code>.planning</code> untrack still pending.
   </div>
 
   <div class="dash">
@@ -183,16 +183,16 @@ footer{margin-top:34px;color:var(--muted);font-size:12px;border-top:1px solid va
 
       <div class="row">
         <div class="rmain">
-          <div class="rt">04C &middot; Card + Form UI touch <span class="mini">(NEXT - new session)</span></div>
-          <div class="rf">S2 Card + S3 Form &middot; two independent parallel plans (different files)</div>
-          <div class="rd"><b>The immediate next build.</b> Small UI touch-up on the S2 Deal Card + S3 Deal Form (colour, icon look) so the final Agentation polish round is light. Two file-independent plans run as a parallel wave. Run through full GSD. <span class="mini">(S1/B2/B3 are all built now - moved to the slice board above.)</span></div>
+          <div class="rt">04C &middot; Card + Form UI touch <span class="mini">(BUILT 06-21)</span></div>
+          <div class="rf">S2 Card + S3 Form &middot; applied directly to the app (no GSD), gate-green</div>
+          <div class="rd"><b>BUILT 06-21.</b> See-first prototype (<code>prototypes/04c-touch-prototype/</code>, approved) &rarr; ported direct. (1) DealCard <b>slim SHADED header</b> (deep-pink glass wash, not the old #76002d band) + ink value + dashed-lock margin + fluid width; (2) <b>card opens as a LEAFLET over the conversation rail</b> (DealPin portals into a <code>hs-deal-card-slot</code>; rail w-72), no longer floats in the thread; (3) DealForm <b>one-tap batch rail</b> (no modal); (4) <b>Damson recolor</b> --color-brand-deep #76002d&rarr;#7a1638 (token-derived glass shadow; THC=deep-pink/CBD=periwinkle). Commits c29ea4c + 37ec4e8. Human visual UAT owed.</div>
         </div>
-        <span class="chip c-decide">next</span>
+        <span class="chip c-done">built</span>
       </div>
 
       <div class="row">
         <div class="rmain">
-          <div class="rt">Deal Room build (after S1 - wires the card THINGS)</div>
+          <div class="rt">Deal Room build <span class="mini">(NEXT - new session - wires the card THINGS)</span></div>
           <div class="rf">old "Deal Workspace" container</div>
           <div class="rd">Newly flagged 06-20: after S1, build the <b>Deal Room</b> (the renamed Deal Workspace). That container is where the card's read-only THINGS (built behind an optional prop in S2) finally gets wired.</div>
         </div>
@@ -306,8 +306,8 @@ footer{margin-top:34px;color:var(--muted);font-size:12px;border-top:1px solid va
 
       <div class="row">
         <div class="rmain">
-          <div class="rt">Next &middot; 04C card+form touch &rarr; Deal Room &rarr; Agentation polish</div>
-          <div class="rd"><b>04C</b> (two parallel plans) is the next build, then the <b>Deal Room</b> (wires the card THINGS), then the final <b>Agentation polish round</b>. Phases 5-8 after.</div>
+          <div class="rt">Next &middot; Deal Room build &rarr; Agentation polish</div>
+          <div class="rd">04A/04B/04C all built - <b>Phase 04 (UI &amp; chat) is DONE</b>. The <b>Deal Room</b> (wires the card's read-only THINGS + deferred <code>assigned_to</code>) is the next build, then the final <b>Agentation polish round</b>. Phases 5-8 after.</div>
         </div>
         <span class="chip c-decide">next</span>
       </div>
