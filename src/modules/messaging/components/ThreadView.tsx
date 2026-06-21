@@ -67,74 +67,67 @@ export function ThreadView({ conversation, messages, onSend }: ThreadViewProps) 
 
   return (
     <div className="flex h-full flex-col">
-      {/* header (5A.2) - identity reconciliation (04A-04, D-02): on a C2C company
-          channel the identity LIVES HERE (the strip's top tier has no identity
-          source on a C2C thread - DealPin gets threadId={undefined} there). On a
-          P2P deal thread the identity is DELEGATED to the DealPin top tier below,
-          so the C2C-only identity block keeps the chat from showing it twice. The
-          relationship door + ⋯ menu stay on BOTH branches as the header actions. */}
-      <div className="flex items-center gap-3 border-b border-black/5 px-4 py-3">
-        {isC2C && (
-          <>
-            <span className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-xs font-semibold text-ink/70 ring-1 ring-black/5">
-              <Building2 size={17} strokeWidth={1.75} className="text-ink/55" />
-              {/* a company channel is never "online", so no presence dot here */}
-            </span>
-            <div className="flex min-w-0 flex-col">
-              <div className="flex items-center gap-2">
-                <span className="truncate text-sm font-semibold text-ink">{conversation.name}</span>
-                <span className="shrink-0 rounded-full bg-ink/5 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-ink/45">
-                  C2C
-                </span>
-              </div>
-              <span className="truncate text-[11px] text-ink/45">{conversation.subtitle}</span>
+      {/* C2C company channels keep their identity header here. A P2P deal thread
+          delegates the whole top bar (avatar + relationship + deal + actions) to
+          DealPin below, so there is NO separate header bar for P2P - it used to
+          render almost blank, which read as a wasted strip. */}
+      {isC2C && (
+        <div className="flex items-center gap-3 border-b border-black/5 px-4 py-3">
+          <span className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-xs font-semibold text-ink/70 ring-1 ring-black/5">
+            <Building2 size={17} strokeWidth={1.75} className="text-ink/55" />
+          </span>
+          <div className="flex min-w-0 flex-col">
+            <div className="flex items-center gap-2">
+              <span className="truncate text-sm font-semibold text-ink">{conversation.name}</span>
+              <span className="shrink-0 rounded-full bg-ink/5 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-ink/45">
+                C2C
+              </span>
             </div>
-          </>
-        )}
+            <span className="truncate text-[11px] text-ink/45">{conversation.subtitle}</span>
+          </div>
 
-        {/* actions - the relationship door (icon) + an overflow (⋯) menu for
-            secondary actions. Some menu items are UI placeholders ("soon")
-            until their backends (notifications, search) are built. */}
-        <div className="ml-auto flex shrink-0 items-center gap-1.5">
-          <Link
-            href={`/connect/relationship/${conversation.relationshipId}`}
-            aria-label={`Relationship with ${conversation.companyName}`}
-            title={`Relationship with ${conversation.companyName}`}
-            className="flex h-9 w-9 items-center justify-center rounded-xl text-ink/55 ring-1 ring-black/5 transition hover:bg-white/70 hover:text-brand hover:ring-brand/20"
-          >
-            <Users size={17} strokeWidth={1.75} />
-          </Link>
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setMenuOpen((o) => !o)}
-              aria-label="More actions"
-              aria-haspopup="menu"
-              aria-expanded={menuOpen}
-              title="More"
+          {/* actions - the relationship door + an overflow (⋯) menu */}
+          <div className="ml-auto flex shrink-0 items-center gap-1.5">
+            <Link
+              href={`/connect/relationship/${conversation.relationshipId}`}
+              aria-label={`Relationship with ${conversation.companyName}`}
+              title={`Relationship with ${conversation.companyName}`}
               className="flex h-9 w-9 items-center justify-center rounded-xl text-ink/55 ring-1 ring-black/5 transition hover:bg-white/70 hover:text-brand hover:ring-brand/20"
             >
-              <MoreHorizontal size={17} strokeWidth={1.75} />
-            </button>
-            {menuOpen && (
-              <>
-                <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-                <div className="glass-strong absolute right-0 top-full z-20 mt-1.5 w-56 rounded-2xl p-1.5">
-                  <Link
-                    href={`/connect/relationship/${conversation.relationshipId}`}
-                    onClick={() => setMenuOpen(false)}
-                    className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-ink transition hover:bg-black/[0.04]"
-                  >
-                    <Users size={15} strokeWidth={1.75} /> View relationship
-                  </Link>
-                  <MenuStub icon={BellOff} label="Mute notifications" />
-                  <MenuStub icon={Search} label="Search in conversation" />
-                </div>
-              </>
-            )}
+              <Users size={17} strokeWidth={1.75} />
+            </Link>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setMenuOpen((o) => !o)}
+                aria-label="More actions"
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
+                title="More"
+                className="flex h-9 w-9 items-center justify-center rounded-xl text-ink/55 ring-1 ring-black/5 transition hover:bg-white/70 hover:text-brand hover:ring-brand/20"
+              >
+                <MoreHorizontal size={17} strokeWidth={1.75} />
+              </button>
+              {menuOpen && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+                  <div className="glass-strong absolute right-0 top-full z-20 mt-1.5 w-56 rounded-2xl p-1.5">
+                    <Link
+                      href={`/connect/relationship/${conversation.relationshipId}`}
+                      onClick={() => setMenuOpen(false)}
+                      className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-ink transition hover:bg-black/[0.04]"
+                    >
+                      <Users size={15} strokeWidth={1.75} /> View relationship
+                    </Link>
+                    <MenuStub icon={BellOff} label="Mute notifications" />
+                    <MenuStub icon={Search} label="Search in conversation" />
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* the deal "Talking about" bar + the card floated on the right (3a);
           P2P + C2C both hang off a relationship, so the pin works in either */}
