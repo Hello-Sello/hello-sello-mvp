@@ -12,6 +12,7 @@ import { createClient } from "@/shared/db/server";
 import { getCurrentCompanyId } from "@/shared/auth";
 import { writeAudit } from "@/shared/audit";
 import { viewerSide } from "./lib/derive";
+import { allStagesDone } from "./lib/finalize";
 import type {
   ConfirmDealChangeInput,
   ConfirmDealChangeResult,
@@ -23,6 +24,7 @@ import type {
   DealCardStatus,
   EditDealInput,
   EditDealResult,
+  FinalizeDealResult,
   ProposeDealChangeInput,
   ProposeDealChangeResult,
   ProposeDealInput,
@@ -182,6 +184,117 @@ export async function confirmDeal(args: {
   }
 
   return { cardStatus: card.status as DealCardStatus, bothConfirmed: false };
+}
+
+/**
+ * Finalize a deal (Phase 5, D-15/D-16/D-17) - the LAST-stage commit that moves
+ * the card to Done and writes the single golden seal.
+ *
+ * Gate (D-15): finalization is available ONLY when every one of the deal's
+ * stages has a deal_stage_completion row (the stored, manual stage-done state).
+ * The gate decision is `allStagesDone` (pure, unit-tested) over the stage codes
+ * vs the workspace's completion rows; if any stage is missing, this throws and
+ * never flips the status.
+ *
+ * The seal (D-17): the deal_confirmation seal is written ONLY here, NEVER via
+ * confirm_deal_change (the seal-deferred-to-final-stage rule). An idempotency
+ * guard - if the card is already 'done', return WITHOUT a second write - plus
+ * the onConflict upsert key prevent a double-write race with the draft gate
+ * (T-05-04). The company is resolved from the SESSION (never input), so only a
+ * relationship member acting as their own side can finalize (T-05-03).
+ */
+export async function finalizeDeal(args: {
+  dealCardId: string;
+}): Promise<FinalizeDealResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("finalizeDeal: no authenticated user");
+
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) throw new Error("finalizeDeal: no company in session");
+
+  // the card (status + version drive the idempotency guard and the seal key)
+  const { data: card, error: cardErr } = await supabase
+    .from("deal_card")
+    .select("id, relationship_id, status, version")
+    .eq("id", args.dealCardId)
+    .single();
+  if (cardErr) throw cardErr;
+
+  // idempotency guard (D-17): if already done, do NOT write a second seal.
+  if (card.status === "done") {
+    return { cardStatus: "done" };
+  }
+
+  // the workspace this card belongs to (the stage-completion rows hang off it)
+  const { data: ws, error: wsErr } = await supabase
+    .from("deal_workspace")
+    .select("id")
+    .eq("deal_card_id", card.id)
+    .is("deleted_at", null)
+    .single();
+  if (wsErr) throw wsErr;
+
+  // GATE (D-15): every stage must have a completion row. deal_stage_completion is
+  // not in the generated types, so the table name is cast (as-never discipline).
+  const [stagesRes, doneRes] = await Promise.all([
+    supabase.from("deal_stage").select("code"),
+    supabase
+      .from("deal_stage_completion" as never)
+      .select("stage_code")
+      .eq("deal_workspace_id", ws.id),
+  ]);
+  if (stagesRes.error) throw stagesRes.error;
+  if (doneRes.error) throw doneRes.error;
+
+  const stageCodes = (stagesRes.data ?? []).map((s) => s.code);
+  const doneCodes = (
+    (doneRes.data ?? []) as unknown as { stage_code: string }[]
+  ).map((r) => r.stage_code);
+  if (!allStagesDone(stageCodes, doneCodes)) {
+    throw new Error("All stages must be marked done before finalizing.");
+  }
+
+  // flip status -> done (reuse the existing helper)
+  await updateStatus(supabase, card.id, "done");
+
+  // write the SINGLE finalize seal (D-17): the viewer's company, current version,
+  // status 'confirmed'. This is the ONLY place a finalize-seal is written - it
+  // MUST NOT route through confirm_deal_change. onConflict makes a re-call a
+  // no-op rather than a duplicate seat row.
+  const now = new Date().toISOString();
+  const { error: sealErr } = await supabase.from("deal_confirmation").upsert(
+    {
+      deal_card_id: card.id,
+      version: card.version,
+      company_id: companyId,
+      status: "confirmed",
+      responding_person_id: user.id,
+      responded_at: now,
+      note: "Deal finalized - all stages done.",
+    },
+    { onConflict: "deal_card_id,version,company_id" },
+  );
+  if (sealErr) throw sealErr;
+
+  await logLine(
+    supabase,
+    card.id,
+    card.version,
+    user.id,
+    "Deal finalized - all stages done.",
+  );
+  await writeAudit({
+    actorType: "user",
+    action: "deal.finalized",
+    contentType: "deal_card",
+    contentId: card.id,
+    actorPersonId: user.id,
+  });
+
+  return { cardStatus: "done" };
 }
 
 /**

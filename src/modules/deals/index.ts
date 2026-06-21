@@ -61,10 +61,18 @@ export {
   getOwnCatalog,
   getWorkspace,
   getStagesAndThings,
+  getStageCompletions,
+  getDealArtifacts,
   resolveP2pRecipient,
 } from "./supabase/reads";
-export { toggleThingStatus, createThing } from "./supabase/writes";
-export { confirmDeal, createDeal, editDeal } from "./actions";
+export {
+  toggleThingStatus,
+  createThing,
+  setThingVisibility,
+  assignThing,
+  markStageDone,
+} from "./supabase/writes";
+export { confirmDeal, createDeal, editDeal, finalizeDeal } from "./actions";
 export { DealCard } from "./components/DealCard";
 export { DealPin } from "./components/DealPin";
 export { DealWorkspace } from "./components/DealWorkspace";

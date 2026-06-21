@@ -19,6 +19,7 @@ import { sellerCompanyId, viewerSide, lineTotalOf, lineMarginOf } from "../lib/d
 import { otherOf } from "../lib/recipient";
 import { seededSignals } from "../lib/signals";
 import type {
+  ArtifactView,
   CatalogProduct,
   DealCard,
   DealCardView,
@@ -43,6 +44,7 @@ import type {
   ProposalSource,
   ProposalVote,
   StageCode,
+  StageCompletionView,
   StageView,
   ThingStatus,
   ThingType,
@@ -756,7 +758,14 @@ export async function getStagesAndThings(workspaceId: string): Promise<StageView
       .order("sort_order", { ascending: true }),
     supabase
       .from("thing")
-      .select("id, title, type, status, stage_code, sort_order")
+      // assignee_person_id (D-09, column exists) + is_private/owner_company_id
+      // (D-10, new columns) are not in the generated row type yet, so the
+      // select-string is cast to its narrower literal and the extras are read off
+      // a locally-cast view below (same as-never discipline as getDealCard's
+      // batch/note columns). DO NOT regenerate database.types.
+      .select(
+        "id, title, type, status, stage_code, sort_order, assignee_person_id, is_private, owner_company_id" as "id, title, type, status, stage_code, sort_order",
+      )
       .eq("deal_workspace_id", workspaceId)
       .is("deleted_at", null)
       .order("sort_order", { ascending: true }),
@@ -767,6 +776,13 @@ export async function getStagesAndThings(workspaceId: string): Promise<StageView
   // group Things under their stage code
   const byStage = new Map<string, ThingView[]>();
   for (const r of thingsRes.data ?? []) {
+    // the new columns are not on the generated row type (the select cast above);
+    // read them off a locally-cast view (same as the batch/note discipline).
+    const v = r as unknown as {
+      assignee_person_id: string | null;
+      is_private: boolean;
+      owner_company_id: string | null;
+    };
     const view: ThingView = {
       id: r.id,
       title: r.title,
@@ -774,11 +790,9 @@ export async function getStagesAndThings(workspaceId: string): Promise<StageView
       status: r.status as ThingStatus,
       stageCode: r.stage_code as StageCode,
       sortOrder: r.sort_order,
-      // assignment + visibility are read off the cast row in Task 3; null/false
-      // until the SELECT is extended.
-      assigneePersonId: null,
-      isPrivate: false,
-      ownerCompanyId: null,
+      assigneePersonId: v.assignee_person_id ?? null,
+      isPrivate: v.is_private ?? false,
+      ownerCompanyId: v.owner_company_id ?? null,
     };
     const list = byStage.get(r.stage_code) ?? [];
     list.push(view);
@@ -797,6 +811,95 @@ export async function getStagesAndThings(workspaceId: string): Promise<StageView
       thingsDone: things.filter((t) => t.status === "done").length,
     };
   });
+}
+
+/**
+ * Read a workspace's STORED stage-done state (Phase 5, D-14). Each row is a
+ * deliberate "Mark stage done" click; a stage with NO row reads as not-done.
+ * `deal_stage_completion` is SHARED (both sides see progress), so RLS already
+ * returns every member's view - no manual filter. The table is not in the
+ * generated types yet, so the table name uses the `as never` cast (Muskan's
+ * documented pattern; no full regen this phase).
+ */
+export async function getStageCompletions(
+  workspaceId: string,
+): Promise<StageCompletionView[]> {
+  const supabase = createClient();
+
+  const { data, error } = await supabase
+    .from("deal_stage_completion" as never)
+    .select("stage_code, marked_done_at, marked_done_by_person_id")
+    .eq("deal_workspace_id", workspaceId);
+  if (error) throw error;
+
+  const rows = (data ?? []) as unknown as {
+    stage_code: string;
+    marked_done_at: string | null;
+    marked_done_by_person_id: string | null;
+  }[];
+  return rows.map((r) => ({
+    stageCode: r.stage_code as StageCode,
+    markedDoneAt: r.marked_done_at ?? null,
+    markedDoneByPersonId: r.marked_done_by_person_id ?? null,
+  }));
+}
+
+/**
+ * Read the Deal Room's Documents list (Phase 5). RLS (`dealart_all`, rewritten
+ * in 20260622090000) already hides the OTHER side's private documents, so this is
+ * a flat workspace-scoped fetch with no manual company filter. A document's
+ * visibility FOLLOWS its linked thing (resolved decision): the link lives on
+ * `thing.linked_artifact_id` (the REVERSE direction), so we read the linking
+ * Things and build an artifactId -> thingId map to attach `linkedThingId`.
+ *
+ * `is_private` is not on the generated deal_artifact row type yet, so the
+ * select-string is cast to its narrower literal (same as-never discipline as
+ * getDealCard). DO NOT regenerate database.types.
+ */
+export async function getDealArtifacts(workspaceId: string): Promise<ArtifactView[]> {
+  const supabase = createClient();
+
+  const [artRes, linkRes] = await Promise.all([
+    supabase
+      .from("deal_artifact")
+      .select(
+        "id, title, category, scan_status, is_private" as "id, title, category, scan_status",
+      )
+      .eq("deal_workspace_id", workspaceId)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: true }),
+    // the link lives on thing.linked_artifact_id (the reverse direction). RLS
+    // already scopes Things to the workspace; we only need the id <-> link pairs.
+    supabase
+      .from("thing")
+      .select("id, linked_artifact_id")
+      .eq("deal_workspace_id", workspaceId)
+      .not("linked_artifact_id", "is", null),
+  ]);
+  if (artRes.error) throw artRes.error;
+  if (linkRes.error) throw linkRes.error;
+
+  // artifactId -> the thing that links it
+  const thingByArtifact = new Map<string, string>();
+  for (const t of linkRes.data ?? []) {
+    if (t.linked_artifact_id) thingByArtifact.set(t.linked_artifact_id, t.id);
+  }
+
+  const rows = (artRes.data ?? []) as unknown as {
+    id: string;
+    title: string;
+    category: string | null;
+    scan_status: string;
+    is_private: boolean;
+  }[];
+  return rows.map((r) => ({
+    id: r.id,
+    title: r.title,
+    category: r.category ?? null,
+    scanStatus: r.scan_status,
+    isPrivate: r.is_private ?? false,
+    linkedThingId: thingByArtifact.get(r.id) ?? null,
+  }));
 }
 
 /**
