@@ -63,17 +63,20 @@ type RpcClient = {
 }
 
 /**
- * inviteMember — RPC precheck/audit, then send the invite email (RBAC-02, D-06/08/09).
+ * inviteMember — RPC precheck, send the invite email, THEN audit (RBAC-02, D-06/08/09).
  *
- * `invite_member` validates the role, blocks re-inviting an existing active member,
- * and writes the team.member_invited audit row. Then the admin client creates the
- * auth user + emails the invite link; the Phase 06.1 person signup trigger consumes
- * the `company_id` + `role` metadata on accept. company_id comes from the caller's
- * session (never the client — T-11-17). The invite link lands on the existing
- * /auth/confirm handler (token_hash + type=invite).
+ * `invite_member` (precheck-only) validates the role and blocks re-inviting an existing
+ * active member — it does NOT write the audit row. The admin client then creates the
+ * auth user + emails the invite link; the Phase 06.1 person signup trigger consumes the
+ * `company_id` + `role` metadata on accept. Only after a successful send do we call
+ * `record_invite_sent`, which writes the team.member_invited audit row. This ordering
+ * (WR-01) keeps the append-only audit chain free of phantom "invited" rows for invites
+ * that never sent (e.g. the D-09 already-has-an-account failure). company_id comes from
+ * the caller's session (never the client — T-11-17). The invite link lands on the
+ * existing /auth/confirm handler (token_hash + type=invite).
  *
  * D-09: if the email already has a Hello-Sello account, inviteUserByEmail errors —
- * we return a clean "already has an account" message instead of throwing.
+ * we return a clean "already has an account" message instead of throwing (no audit).
  */
 export async function inviteMember(email: string, role: Role): Promise<ActionResult> {
   if (!EMAIL_RE.test(email)) return { error: 'Enter a valid email address' }
@@ -84,7 +87,7 @@ export async function inviteMember(email: string, role: Role): Promise<ActionRes
 
   const supabase = await createClient()
 
-  // RPC precheck + audit (Superadmin-gated, same-company-member guard).
+  // RPC precheck only — Superadmin-gated, same-company-member guard (NO audit; WR-01).
   const { error: rpcError } = await (supabase as unknown as RpcClient).rpc('invite_member', {
     p_email: email,
     p_role: role,
@@ -107,11 +110,22 @@ export async function inviteMember(email: string, role: Role): Promise<ActionRes
   if (inviteError) {
     // D-09: an existing account makes inviteUserByEmail return "User already registered".
     // Surface a clean message rather than throwing (join-existing-company is Phase 12).
+    // No audit row is written on this path — the invite never sent (WR-01).
     if (/already.*regist|already.*exist/i.test(inviteError.message)) {
       return { error: 'This email already has a Hello-Sello account' }
     }
     return { error: inviteError.message }
   }
+
+  // The invite actually sent — NOW write the team.member_invited audit row (WR-01/WR-02).
+  // record_invite_sent re-asserts the Superadmin gate + tenant scope (audit_insert
+  // WITH CHECK company_id = current_company_id()). A failure here means the email went
+  // out but the audit didn't land — surface it rather than silently dropping the trail.
+  const { error: auditError } = await (supabase as unknown as RpcClient).rpc('record_invite_sent', {
+    p_email: email,
+    p_role: role,
+  })
+  if (auditError) return { error: auditError.message }
 
   revalidatePath('/team')
   return { ok: true }
