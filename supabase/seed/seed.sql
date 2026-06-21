@@ -235,6 +235,19 @@ where p.id = u.id and (
   (u.email='david@nordcanna.test' and c.name='NordCanna Distribution GmbH') or
   (u.email='eva@bavaria.test'     and c.name='Bavaria Medical Cannabis GmbH'));
 
+-- 5c-ii) Stamp each demo-2d company's founder (created_by) to its sole member.
+-- These three companies were created (5b) without a founder; the Phase-11 founder
+-- backfill (20260621*_phase11_backfill_superadmin.sql) seeds the Superadmin group
+-- strictly from company.created_by and never guesses, so a NULL founder would leave
+-- the company headless. The founder is the single linked person, set explicitly here
+-- (seed data, not a runtime guess).
+update public.company c set created_by = u.id
+from auth.users u
+where c.created_by is null and (
+  (u.email='clara@rheinland.test' and c.name='Rheinland Apotheke GmbH') or
+  (u.email='david@nordcanna.test' and c.name='NordCanna Distribution GmbH') or
+  (u.email='eva@bavaria.test'     and c.name='Bavaria Medical Cannabis GmbH'));
+
 -- 5d) GreenLeaf <-> StonePharm (rich: c2c + p2p + 5 msgs)
 with ids as (select
    (select id from company where name='GreenLeaf Cultivation') gl,
