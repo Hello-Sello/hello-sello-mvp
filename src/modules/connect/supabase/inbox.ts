@@ -78,7 +78,7 @@ export async function getInbox(): Promise<InboxItemView[]> {
     .select(
       `id, type, status, note, sender_company_id, sender_person_id, receiver_company_id,
        assigned_to, assigned_by, assigned_at, deal_card_id, metadata, created_at, updated_at, deleted_at,
-       sender:company!pending_inbox_item_sender_company_id_fkey ( name, verification_status ),
+       sender:company!pending_inbox_item_sender_company_id_fkey ( name ),
        assignee:person!pending_inbox_item_assigned_to_fkey ( id, first_name, last_name )`,
     )
     .is("deleted_at", null)
@@ -108,7 +108,6 @@ export async function getInbox(): Promise<InboxItemView[]> {
         companyId: row.sender_company_id,
         companyName: sender?.name ?? "Unknown company",
         initials: companyInitials(sender?.name ?? "?"),
-        verified: sender?.verification_status === "verified",
       },
       assignee: assignee
         ? {

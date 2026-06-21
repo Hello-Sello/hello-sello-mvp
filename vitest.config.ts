@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 /**
@@ -5,14 +6,25 @@ import { defineConfig } from "vitest/config";
  *
  * Scoped to `src/**` ONLY so it can never pick up the Playwright specs in
  * `e2e/` (those run via the separate `npm test` script with a forced async
- * loader). The unit suite is pure-math over `src/modules/deals/lib/derive.ts`,
- * so the node environment is enough - no jsdom, no React, no DB/app setup.
+ * loader). The original suite is pure-math over `src/modules/deals/lib/derive.ts`,
+ * so the node environment is enough - no jsdom, no DB/app setup.
+ *
+ * Phase 10 (10-01) extends the glob to `*.test.tsx` for the <VerifiedBadge> render
+ * test. It renders via `react-dom/server` `renderToStaticMarkup`, so the node env
+ * still suffices — no jsdom and no @testing-library needed. Vitest 4's oxc transform
+ * handles the JSX (automatic runtime) with no extra config.
  */
 export default defineConfig({
+  // Mirror the tsconfig `@/* -> ./src/*` path alias so specs can import app code.
+  resolve: {
+    alias: {
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
+    },
+  },
   test: {
     environment: "node",
     globals: true,
-    include: ["src/**/*.test.ts"],
+    include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
     exclude: ["e2e/**", "node_modules/**", ".next/**"],
   },
 });

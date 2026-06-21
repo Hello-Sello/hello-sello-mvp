@@ -25,9 +25,12 @@ async function signIn(page: Page) {
 test('an assigned public handle renders the /c/<handle> card (DATA-03)', async ({ page }) => {
   await signIn(page)
 
-  // Saving the profile assigns a public_handle via ensureHandle().
+  // Saving the profile assigns a public_handle via ensureHandle(). The account
+  // "My Profile" tab is active by default; the display-name field is labelled
+  // "Full name" (the canonical display_name rename — the old "Display name" label
+  // this selector targeted no longer exists).
   await page.goto('/account')
-  await page.locator('label:has-text("Display name") input').fill(DISPLAY_NAME)
+  await page.locator('label:has-text("Full name") input').fill(DISPLAY_NAME)
   await page.getByRole('button', { name: /save changes/i }).click()
   await expect(page.getByText('Saved')).toBeVisible()
 
@@ -42,6 +45,23 @@ test('an assigned public handle renders the /c/<handle> card (DATA-03)', async (
   const res = await page.goto(`/c/${handle}`)
   expect(res?.status()).toBe(200)
   await expect(page.getByRole('heading', { name: new RegExp(DISPLAY_NAME, 'i') })).toBeVisible()
+
+  // ACCT-01: alice's company (GreenLeaf Cultivation) is seeded `verified`, so the
+  // form-E "Verified" pill MUST render on the public card (gated on the real
+  // company_verification_status now threaded through get_public_profile).
+  await expect(page.getByText('Verified', { exact: true })).toBeVisible()
+})
+
+test('the verified pill is gated on the real status — absent for a non-verified company (ACCT-01)', async ({ page }) => {
+  // The gating rule (render ONLY on status==='verified', null otherwise — D-02) is
+  // proven at the component boundary by src/shared/ui/VerifiedBadge.test.tsx. Here we
+  // assert it at the route level: the unknown-handle card 404s (no pill leaks on a
+  // missing/unresolved profile), complementing the verified-case assertion above.
+  // Every seeded signed-in-able user belongs to a verified company, so a non-verified
+  // card cannot be reached through the app sign-in flow — the unit test owns that branch.
+  const res = await page.goto('/c/no-such-handle-xyz-acct01')
+  expect(res?.status()).toBe(404)
+  await expect(page.getByText('Verified', { exact: true })).toHaveCount(0)
 })
 
 test('the /c/<handle> route mounts (unknown handle → 404)', async ({ page }) => {

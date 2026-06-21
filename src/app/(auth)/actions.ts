@@ -57,6 +57,42 @@ export async function signUp(
   redirect(`/verify-email?email=${encodeURIComponent(email)}`)
 }
 
+// Forgot-password result. `sent` flips true once the request completes so the page
+// can swap in the neutral confirmation — it is true on EVERY outcome (anti-enumeration),
+// so it never signals whether the address is registered.
+export type ResetRequestState = { sent?: boolean }
+
+// Forgot-password entry (ACCT-02 / D-07). Mails a recovery link that lands on the
+// existing /auth/confirm handler (verifyOtp type=recovery) and forwards to
+// /reset-password, where the set-password form runs with the recovery session.
+//
+// ANTI-ENUMERATION (T-10-04a): the action ALWAYS returns { sent: true } — never an
+// error — so the page shows the same neutral "if an account exists, we sent a link"
+// screen whether or not the address is registered. Any GoTrue error is logged
+// server-side ONLY.
+export async function requestPasswordReset(
+  _prev: ResetRequestState,
+  formData: FormData,
+): Promise<ResetRequestState> {
+  const email = String(formData.get('email') ?? '')
+
+  const supabase = await createClient()
+  const origin =
+    (await headers()).get('origin') ?? process.env.NEXT_PUBLIC_SITE_URL!
+  // redirectTo mirrors signUp's emailRedirectTo shape: same-origin /auth/confirm,
+  // then onward to /reset-password. The recovery email template (supabase/templates/
+  // recovery.html) builds the link as ?token_hash=…&type=recovery&next=/reset-password.
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${origin}/auth/confirm?next=/reset-password`,
+  })
+  if (error) {
+    // Server-side only — do NOT leak whether the address exists.
+    console.error('[requestPasswordReset]', error.message)
+  }
+  // Always the neutral screen, regardless of outcome.
+  return { sent: true }
+}
+
 // One provider-agnostic OAuth entry for both buttons: Google = 'google',
 // Outlook = 'azure' (CONTEXT lock — do NOT split into two actions). signInWithOAuth
 // returns the provider's authorize URL; we server-redirect the browser to it.

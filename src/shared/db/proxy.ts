@@ -58,7 +58,13 @@ export async function updateSession(request: NextRequest) {
     path.startsWith('/c/') ||
     path === '/auth/callback' ||
     path === '/auth/confirm' ||
-    path === '/verify-email'
+    path === '/verify-email' ||
+    // Reached signed-OUT to request a recovery link (ACCT-02 / D-09). ONLY this
+    // route is public; the set-password page stays GATED, because by the time a
+    // user reaches it they hold a recovery session (set at /auth/confirm), so the
+    // gate is already satisfied. Allowlisting the set-password page would let any
+    // signed-out visitor open it (Pitfall 3).
+    path === '/forgot-password'
 
   // Signed-out users may only reach the auth + public routes.
   if (!user && !isAuthRoute && !isPublicRoute) {

@@ -82,8 +82,6 @@ export interface InboxItemView extends InboxItem {
     companyName: string;
     /** computed avatar initials */
     initials: string;
-    /** company.verification_status === 'verified' */
-    verified: boolean;
   };
   /** the owner, or null when unassigned (assigned_to === null) */
   assignee: TeamMember | null;

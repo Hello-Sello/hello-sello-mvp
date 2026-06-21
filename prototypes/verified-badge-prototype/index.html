@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Hello-Sello · Verified badge — signed-off contract (E + G)</title>
+<style>
+  /* ── Real app tokens (globals.css, locked 2026-06-07) ───────────────── */
+  :root{
+    --brand:#e30b5d; --brand-soft:#ffb7d5; --brand-deep:#76002d;
+    --ink:#1f2020; --ink-muted:#6b6470; --surface:#fff;
+    --success:#34b233; --info:#6c7bd9; --danger:#dc2626;
+    --bg-from:#fff; --bg-to:#fff1f7;
+    --glass-bg:rgba(255,255,255,.62); --glass-strong:rgba(255,255,255,.82);
+    --glass-border:rgba(255,255,255,.65);
+    --glass-shadow:0 10px 34px -12px rgba(118,0,45,.18);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    min-height:100%; color:var(--ink);
+    font-family:"Geist",system-ui,-apple-system,"Segoe UI",sans-serif;
+    background:
+      radial-gradient(60rem 60rem at 10% -12%, rgba(255,183,213,.55), transparent 60%),
+      radial-gradient(46rem 46rem at 108% 6%, rgba(227,11,93,.10), transparent 55%),
+      linear-gradient(160deg, var(--bg-from) 0%, var(--bg-to) 100%);
+    background-attachment:fixed;
+    padding:48px 24px 80px;
+  }
+  .wrap{max-width:1080px;margin:0 auto}
+  header.page{margin-bottom:32px}
+  header.page h1{font-size:26px;font-weight:800;letter-spacing:-.02em}
+  header.page p{color:var(--ink-muted);margin-top:6px;font-size:14px;max-width:64ch}
+  header.page code{background:rgba(31,32,32,.06);padding:1px 5px;border-radius:5px;font-size:.92em}
+  .glass{
+    background:var(--glass-bg);backdrop-filter:blur(20px) saturate(140%);
+    -webkit-backdrop-filter:blur(20px) saturate(140%);
+    border:1px solid var(--glass-border);box-shadow:var(--glass-shadow);
+  }
+  h2.section{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
+    color:var(--brand-deep);margin:40px 0 16px}
+
+  /* ── gallery grid ───────────────────────────────────────────────────── */
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px}
+  .card{border-radius:20px;padding:22px}
+  .card .tag{font-size:11px;font-weight:700;color:var(--success);letter-spacing:.04em}
+  .card h3{font-size:16px;font-weight:700;margin:2px 0 4px}
+  .card .note{font-size:12.5px;color:var(--ink-muted);line-height:1.5;margin-top:10px}
+  .stage{display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;
+    min-height:96px;margin-top:14px;padding:18px;border-radius:14px;
+    background:rgba(255,255,255,.45);border:1px dashed rgba(118,0,45,.14)}
+
+  /* ── badge variants — only the two SIGNED-OFF forms ─────────────────── */
+  .b{display:inline-flex;align-items:center;gap:6px;font-weight:600;white-space:nowrap}
+  .b svg{flex:0 0 auto}
+
+  /* E — frosted-glass pill (form E, for roomy surfaces: account + Discover detail) */
+  .b--glass{background:rgba(255,255,255,.6);backdrop-filter:blur(8px);
+    border:1px solid rgba(52,178,51,.35);color:var(--success);
+    padding:5px 12px;border-radius:999px;font-size:12px;box-shadow:0 6px 18px -8px rgba(52,178,51,.35)}
+
+  .swatch-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+
+  /* ── in-context: discover row ───────────────────────────────────────── */
+  .ctx{display:flex;flex-direction:column;gap:14px}
+  .row{display:flex;align-items:center;gap:16px;padding:14px 18px;border-radius:16px}
+  .logo{position:relative;width:48px;height:48px;border-radius:14px;flex:0 0 auto;
+    display:flex;align-items:center;justify-content:center;font-weight:800;color:#fff;font-size:15px;
+    background:linear-gradient(135deg,var(--brand),var(--brand-deep))}
+  /* G — verified tick overlaid on the logo corner (form G, for dense rows) */
+  .logo .overlay{position:absolute;right:-5px;bottom:-5px;width:20px;height:20px;border-radius:999px;
+    background:var(--success);border:2.5px solid #fff;display:flex;align-items:center;justify-content:center;
+    box-shadow:0 2px 6px -1px rgba(52,178,51,.6)}
+  .logo .overlay svg{width:11px;height:11px}
+  .row .name{font-weight:700;font-size:15px;display:flex;align-items:center;gap:8px}
+  .row .loc{font-size:12.5px;color:var(--ink-muted);margin-top:2px}
+  .row .grow{flex:1}
+  .chip{font-size:11px;font-weight:600;color:var(--ink-muted);background:rgba(31,32,32,.05);
+    padding:3px 9px;border-radius:999px}
+  .connect{display:inline-flex;align-items:center;gap:6px;background:var(--brand);color:#fff;
+    font-size:13px;font-weight:600;padding:8px 16px;border-radius:12px;border:none;cursor:pointer;
+    box-shadow:0 6px 16px -6px rgba(227,11,93,.6)}
+
+  /* ── in-context: company detail / business card ─────────────────────── */
+  .bizgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px;margin-top:4px}
+  .biz{border-radius:22px;padding:26px;text-align:center}
+  .biz .blogo{width:72px;height:72px;border-radius:20px;margin:0 auto 14px;position:relative;
+    display:flex;align-items:center;justify-content:center;font-weight:800;color:#fff;font-size:22px;
+    background:linear-gradient(135deg,var(--brand),var(--brand-deep))}
+  .biz .blogo .overlay{position:absolute;right:-6px;bottom:-6px;width:28px;height:28px;border-radius:999px;
+    background:var(--success);border:3px solid #fff;display:flex;align-items:center;justify-content:center}
+  .biz .blogo .overlay svg{width:15px;height:15px}
+  .biz h3{font-size:18px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:8px}
+  .biz .tagline{font-size:13px;color:var(--ink-muted);margin-top:6px}
+  .label{font-size:11px;color:var(--brand);font-weight:700;margin-bottom:10px;text-align:left}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="page">
+    <h1>Verified badge — signed-off visual contract</h1>
+    <p>The two chosen forms in the real app theme (success green <code>#34b233</code>, raspberry brand,
+       <code>.glass</code>). Per CONTEXT D-03/D-04: <strong>form E</strong> (frosted-glass pill) on roomy
+       surfaces — the account page and the Discover company detail — and <strong>form G</strong>
+       (logo-corner tick) on dense Discover rows. The badge renders <em>only</em> for a verified
+       company (D-02 — absence = no claim). The earlier "match account pill A" lean is superseded.</p>
+  </header>
+
+  <!-- ════════ THE TWO FORMS ════════ -->
+  <h2 class="section">The two forms</h2>
+  <div class="grid">
+
+    <div class="card glass">
+      <div class="tag">E · frosted-glass pill</div>
+      <h3>Verified pill (roomy surfaces)</h3>
+      <div class="stage">
+        <span class="b b--glass">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+          Verified
+        </span>
+      </div>
+      <p class="note">White frosted pill, green hairline + soft glow, CheckCircle2 icon + "Verified" label.
+        Sits beautifully on the glass cards. Used on the <strong>account page</strong> and the
+        <strong>Discover company detail</strong> header.</p>
+    </div>
+
+    <div class="card glass">
+      <div class="tag">G · logo-corner tick</div>
+      <h3>Verified tick (dense rows)</h3>
+      <div class="stage">
+        <div class="logo" style="width:48px;height:48px;border-radius:14px">AD
+          <span class="overlay"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg></span>
+        </div>
+      </div>
+      <p class="note">A green tick pinned bottom-right of the company logo (LinkedIn / Instagram style),
+        white border + soft glow. Reads instantly, needs no text, keeps the list clean. Used on the
+        <strong>Discover rows</strong>. The caller's logo box must be <code>relative</code>.</p>
+    </div>
+
+  </div>
+
+  <!-- ════════ IN CONTEXT: DISCOVER ROW (G) ════════ -->
+  <h2 class="section">On a Discover row — form G</h2>
+  <div class="ctx">
+
+    <div class="label">G — logo-corner tick, no row text (cleanest for the list)</div>
+    <div class="row glass">
+      <div class="logo">AD<span class="overlay"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg></span></div>
+      <div>
+        <div class="name">Aurora Deutschland GmbH</div>
+        <div class="loc">Berlin, Germany</div>
+      </div>
+      <div class="grow"></div>
+      <span class="chip">Wholesaler</span><span class="chip">Importer</span>
+      <button class="connect">Connect →</button>
+    </div>
+
+    <div class="row glass">
+      <div class="logo">CM<span class="overlay"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg></span></div>
+      <div>
+        <div class="name">Cannamedical Pharma</div>
+        <div class="loc">Cologne, Germany</div>
+      </div>
+      <div class="grow"></div>
+      <span class="chip">Cultivator</span>
+      <button class="connect">Connect →</button>
+    </div>
+
+  </div>
+
+  <!-- ════════ IN CONTEXT: COMPANY DETAIL / ACCOUNT (E) ════════ -->
+  <h2 class="section">On the company detail / account — form E</h2>
+  <div class="bizgrid">
+
+    <div class="biz glass">
+      <div class="blogo">AD</div>
+      <h3>Aurora Deutschland
+        <span class="b b--glass"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>Verified</span>
+      </h3>
+      <div class="tagline">E · frosted pill next to the company name (Discover detail)</div>
+    </div>
+
+    <div class="biz glass">
+      <div class="blogo">DM</div>
+      <h3>Demecan
+        <span class="b b--glass"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>Verified</span>
+      </h3>
+      <div class="tagline">E · same frosted pill on the account page</div>
+    </div>
+
+  </div>
+
+</div>
+</body>
+</html>
