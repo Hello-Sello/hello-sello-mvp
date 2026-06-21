@@ -3,14 +3,20 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { MessageSquare } from "lucide-react";
-import type { ChatMessageView, ConversationListItem } from "../types";
+import type { ChatMessageView, ConversationListItem, MyConnectionsView } from "../types";
 import type { ChatFilter } from "./ConversationList";
+import type { NewChatSelection } from "./NewChatDropdown";
 import {
   getConversations,
   getMessages,
   markRead,
   postMessage,
 } from "../supabase/store";
+import {
+  getMyConnections,
+  openOrCreateP2pThread,
+  resolveC2cThread,
+} from "@/modules/messaging";
 import { useChatRealtime } from "../lib/use-chat-realtime";
 import { ConversationList } from "./ConversationList";
 import { ThreadView } from "./ThreadView";
@@ -31,6 +37,11 @@ export function ChatView() {
   const [loading, setLoading] = useState(true);
   // live unread counts per thread, cleared on open - in-memory for the demo
   const [unread, setUnread] = useState<Record<string, number>>({});
+  // the new-chat picker: the connected directory + its open/closed flag + the
+  // live conversation-search value (local useState only - no global store)
+  const [connections, setConnections] = useState<MyConnectionsView>({ companies: [] });
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [search, setSearch] = useState("");
 
   // initial load - auto-select the first conversation
   useEffect(() => {
@@ -41,6 +52,10 @@ export function ChatView() {
       // No auto-select: Chat opens on the empty pink state (locked decision, F2).
       // A thread opens only when a conversation is tapped (WhatsApp-style).
       setLoading(false);
+    });
+    // the new-chat picker directory (connected companies + their people)
+    void getMyConnections().then((c) => {
+      if (alive) setConnections(c);
     });
     return () => {
       alive = false;
@@ -80,6 +95,19 @@ export function ChatView() {
     setMessages([]); // drop the prior thread's stream so it can't flash under the new header
     setUnread((prev) => ({ ...prev, [threadId]: 0 })); // opening a thread clears its badge
     setSelectedThreadId(threadId);
+  }
+
+  // a new-chat pick: person -> open/create the P2P thread, company -> the C2C.
+  async function handleNewChatSelect(sel: NewChatSelection) {
+    const threadId =
+      sel.kind === "person"
+        ? await openOrCreateP2pThread(sel.relationshipId, sel.otherPersonId!)
+        : await resolveC2cThread(sel.relationshipId);
+    // refresh the list FIRST so selectedConversation (looked up from the list)
+    // resolves the brand-new thread - else the panel shows the empty state (Pitfall 5).
+    await getConversations().then(setConversations);
+    setSelectedThreadId(threadId);
+    setPickerOpen(false);
   }
 
   async function handleSend(body: string) {
@@ -137,6 +165,13 @@ export function ChatView() {
             onFilterChange={setFilter}
             selectedThreadId={selectedThreadId}
             onSelect={handleSelect}
+            connections={connections}
+            search={search}
+            onSearchChange={setSearch}
+            pickerOpen={pickerOpen}
+            onTogglePicker={() => setPickerOpen((v) => !v)}
+            onClosePicker={() => setPickerOpen(false)}
+            onNewChatSelect={handleNewChatSelect}
           />
         )}
       </div>
