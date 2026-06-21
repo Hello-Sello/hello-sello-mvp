@@ -7,14 +7,27 @@
  *   - acceptInbox    -> call from connect's acceptItem to run the rollout
  *   - AcceptInput    -> the DTO that bridges connect -> messaging
  *   - View types     -> for any consumer that needs to read conversation/message data
+ *
+ * New-chat picker (04B) - the FE dropdown imports ALL of these via this barrel:
+ *   - getMyConnections          -> the connected companies/people directory read
+ *   - openOrCreateP2pThread     -> person-mode selection (resolve-or-create P2P)
+ *   - resolveC2cThread          -> company-mode selection (resolve C2C)
+ *   - isNewConnection           -> the 30-day recency rule (ONE owner; FE never recomputes)
+ *   - relativeDayLabel          -> the "Today / N days ago" label (ONE owner)
+ *   - MyConnectionsView et al.  -> the picker view contract
  */
 export { ChatView } from "./components/ChatView";
 export { DealChat } from "./components/DealChat";
-export { acceptInbox } from "./supabase/store";
+export { acceptInbox, openOrCreateP2pThread, resolveC2cThread } from "./supabase/store";
+export { getMyConnections } from "./supabase/connections";
+export { isNewConnection, relativeDayLabel } from "./lib/connections-shape";
 export type {
   AcceptInput,
   ConversationListItem,
   ChatMessageView,
   ThreadType,
   AcceptRequestType,
+  MyConnectionsView,
+  ConnectedCompany,
+  ConnectedPerson,
 } from "./types";
