@@ -276,10 +276,18 @@ content_path = "./supabase/templates/recovery.html"
 subject = "Confirm your new email"
 content_path = "./supabase/templates/email_change.html"
 
-# Uncomment to customize email template
-# [auth.email.template.invite]
-# subject = "You have been invited"
-# content_path = "./supabase/templates/invite.html"
+# Team-invite email template (RBAC-02 / D-06, Pitfall 1). Same rationale as recovery
+# and email_change above: the DEFAULT GoTrue invite template emits {{ .ConfirmationURL }},
+# which links to …:54321/auth/v1/verify — NOT our app — and uses the PKCE/implicit flow,
+# bypassing the safeNext-guarded /auth/confirm route. We override it to build a same-origin
+# link with token_hash + type=invite, so verifyOtp sets the session and forwards to /home.
+# On accept the Phase 06.1 person signup trigger reads the invite metadata (company_id +
+# role from inviteUserByEmail's `data`) and links the new person to the inviting company.
+# Cloud: this template must ALSO be pasted into the Supabase dashboard by hand (the
+# config.toml template only applies to the local stack — Phase 10 pattern).
+[auth.email.template.invite]
+subject = "You've been invited to join Hello Sello"
+content_path = "./supabase/templates/invite.html"
 
 # Uncomment to customize notification email template
 # [auth.email.notification.password_changed]
