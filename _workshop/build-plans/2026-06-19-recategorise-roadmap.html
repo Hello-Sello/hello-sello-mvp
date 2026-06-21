@@ -62,12 +62,12 @@ footer{margin-top:34px;color:var(--muted);font-size:12px;border-top:1px solid va
     <div class="top">
       <div class="pct">67%</div>
       <div class="grow">
-        <div style="font-size:13px;margin:0 0 6px"><b>Phase 4 - UI &amp; chat (active): 6 of 9 slices built.</b> The big % tracks the phase in progress. Phases 5-8 are queued, so 0 of 5 phases are fully complete yet - that is normal this early.</div>
+        <div style="font-size:13px;margin:0 0 6px"><b>Phase 4 - UI &amp; chat: all 9 slices BUILT (04A + 04B done 06-21).</b> The remaining work inside Phase 4 = <b>04C</b> (card+form UI touch) &rarr; the <b>Deal Room</b> build &rarr; the final <b>Agentation polish</b>. The big % tracks phases; Phases 5-8 are queued, so 0 of 5 phases are fully complete yet - normal this early.</div>
         <div class="track">
           <span class="seg s-d" style="width:67%"></span>
           <span class="seg s-t" style="width:33%"></span>
         </div>
-        <div class="counts"><b>Phase 4:</b> 6 built &middot; 3 to build &middot; 0 to design = 67% &nbsp;|&nbsp; <b>Sprint 2 phases:</b> 0 complete &middot; 1 in progress (P4) &middot; 4 queued (P5-8)</div>
+        <div class="counts"><b>Phase 4:</b> 9 built &middot; 0 to build &middot; 0 to design = 100% &nbsp;(04C touch + Deal Room + polish remain inside the phase)&nbsp;|&nbsp; <b>Sprint 2 phases:</b> 0 complete &middot; 1 in progress (P4) &middot; 4 queued (P5-8)</div>
         <div class="legend">
           <span><i class="k-d"></i>built</span>
           <span><i class="k-t"></i>remaining</span>
@@ -96,7 +96,7 @@ footer{margin-top:34px;color:var(--muted);font-size:12px;border-top:1px solid va
       <span class="mini">6 built / 3 left</span>
     </summary>
     <div class="body">
-      <div class="goal">Goal: apply Marcel's Connect/chat review so the conversation surface feels like a familiar messaging app. Runs as a full plan-phase pass (discuss &rarr; plan &rarr; parallel execute). All code local on <code>claude/ayush/work</code> (unpushed); gate-green (tsc + eslint 0 errors + 41/41 unit). Settle the deal-card LAYOUT early so Phase 5's content work is not redone.</div>
+      <div class="goal">Goal: apply Marcel's Connect/chat review so the conversation surface feels like a familiar messaging app. Run as GSD sub-phases (04, 04A, 04B done; 04C next). All code local on <code>claude/ayush/work</code> (UNPUSHED); gate-green (tsc + eslint 0 errors + 62/62 unit + next build ok). Settle the deal-card LAYOUT early so Phase 5's content work is not redone.</div>
 
       <div class="row">
         <div class="rmain">
@@ -148,28 +148,38 @@ footer{margin-top:34px;color:var(--muted);font-size:12px;border-top:1px solid va
         <span class="chip c-done">done</span>
       </div>
 
+      <!-- BUILT 06-21 (04A + 04B) -->
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">S1 - the Strip <span class="mini">BUILT 06-21 = 04A (+ 3 polish rounds)</span></div>
+          <div class="rd"><code>DealPin.tsx</code> rebuilt as a two-tier strip (person name left; relationship + deal dropdown + &hellip; right; [Deal Room | Deal Card] toggle + the maroon <code>//</code> SellaMark + translate placeholder bottom). The <code>//</code> bars part like a curtain and re-home the held-change Accept/Decline/Reason/Withdraw flow. Deal Room + translate = placeholders.</div>
+          <div class="rf">DEV-73 &middot; built (04A)</div>
+        </div>
+        <span class="chip c-done">built</span>
+      </div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">B2 - Conversation list <span class="mini">BUILT 06-21 = 04B</span></div>
+          <div class="rd"><b>Option A picker built.</b> The <b>+ New chat</b> button opens a leaflet that <b>covers</b> the All/Unread/Companies/Deals tabs (Person | Company toggle, per-mode search, New-connections-by-date, real open-deal badges). Shows ONLY connected people/companies; the base list keeps its <b>4 tabs (no 5th)</b>. Backend = <code>getMyConnections</code> + open-or-create P2P / resolve C2C thread. Gate-green (62/62 unit + next build); awaits a human UAT.</div>
+          <div class="rf">DEV-67 / DEV-71 &middot; built (04B)</div>
+        </div>
+        <span class="chip c-done">built</span>
+      </div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">B3 - Sella <code>//</code> mark <span class="mini">BUILT 06-21 (folded into 04A)</span></div>
+          <div class="rd">One shared <code>SellaMark</code> component (CSS-drawn maroon parallel bars), used everywhere; the AI-sparkle pill is gone.</div>
+          <div class="rf">folded into S1 / 04A</div>
+        </div>
+        <span class="chip c-done">built</span>
+      </div>
+
       <!-- REMAINING items -->
       <div class="row">
         <div class="rmain">
-          <div class="rt">S1 - the Strip <span class="mini">prototype-gated</span></div>
-          <div class="rd"><code>DealPin.tsx</code>: card icon (not "open card"), deal dropdown (first 3 + "see all"), the person row (name + company/Deals pills), the "Deal Room" door, and the <b>fixed Sella tile</b> (the <code>//</code> mark never shifts; holds notifications + the Review/Withdraw feed). Solo file - runs alone. Not started; the big un-blocker for the Deal Room follow-up.</div>
-          <div class="rf">DEV-73 &middot; not started</div>
-        </div>
-        <span class="chip c-todo">to build</span>
-      </div>
-      <div class="row">
-        <div class="rmain">
-          <div class="rt">B2 - Conversation list <span class="mini">V1.5 &middot; picker prototyped (06-20)</span></div>
-          <div class="rd"><b>New-chat picker LOCKED = Option A</b> (anchored dropdown): <b>Person | Company toggle</b>, search, a <b>New connections by date</b> section, <b>unread company-deal</b> badges - proto <code>prototypes/newchat-prototype/</code>. The 5 filter tabs (New connections / All / Unread / Companies / Deals) settle in the build/discuss.</div>
-          <div class="rf">DEV-67 / DEV-71 &middot; to build</div>
-        </div>
-        <span class="chip c-todo">to build</span>
-      </div>
-      <div class="row">
-        <div class="rmain">
-          <div class="rt">B3 - Sella <code>//</code> mark</div>
-          <div class="rd">One shared <code>SellaMark</code> component, used everywhere (folds into S1).</div>
-          <div class="rf">folds into S1</div>
+          <div class="rt">04C - Card + Form UI touch <span class="mini">NEXT build (new session)</span></div>
+          <div class="rd">Small UI touch-up on the S2 Card + S3 Form (colour, icon look) so the final Agentation polish round is light. Two file-independent parallel plans. Run through full GSD.</div>
+          <div class="rf">two parallel plans &middot; next session</div>
         </div>
         <span class="chip c-todo">to build</span>
       </div>

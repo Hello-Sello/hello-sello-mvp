@@ -56,10 +56,10 @@ footer{margin-top:34px;color:var(--muted);font-size:12px;border-top:1px solid va
   <p class="sub">2026-06-19 &middot; the Connect/chat overhaul slice board &middot; surface <code>/connect/chat</code></p>
 
   <div class="banner">
-    <b>Status 2026-06-21.</b> The design-SETTLED slices + <b>S1/B3</b> are <b>built &amp; gate-green</b> (tsc + eslint 0 errors + 46/46 unit + <code>next build</code> ok), local on <code>claude/ayush/work</code> (unpushed):
-    <b>F1/F2/B1/B4</b> (verified), <b>S2</b> V3 Card with a <b>real 3D flip</b>, <b>S3</b> V2 Form, the DEV-66/72 rename, and now <b>04A the Deal Strip</b> (S1 + B3 folded in) - built via full GSD + 3 Agentation polish rounds (one clean two-tier strip modeled on the C2C: person-name-left + relationship/deal-right; a premium <code>//</code> with "Review" between the bars + the parting-bar curtain animation). Deeper visual polish parked for the Agentation round.
-    <b>Still prototyped (build next):</b> <b>B2</b> the new-chat picker (Option A) = <b>04B</b>, next session.
-    <b>Newly flagged:</b> after the strip, build the <b>Deal Room</b> (old "Deal Workspace") - that container is where the card's read-only THINGS gets wired.
+    <b>Status 2026-06-21 (end of session).</b> ALL 9 slices are now <b>built &amp; gate-green</b> (tsc + eslint 0 errors + 62/62 unit + <code>next build</code> ok), local on <code>claude/ayush/work</code> (UNPUSHED):
+    <b>F1/F2/B1/B4</b> (verified), <b>S2</b> V3 Card with a <b>real 3D flip</b>, <b>S3</b> V2 Form, the DEV-66/72 rename, <b>04A the Deal Strip</b> (S1 + B3 folded in, + 3 Agentation polish rounds), and now <b>04B the Conversation list</b> = the new-chat picker (Option A) + its backend, built via full GSD (research &rarr; plan &rarr; 2 waves BE+FE &rarr; verify). The picker is a leaflet that drops from <b>+ New chat</b> and <b>COVERS</b> the All/Unread/Companies/Deals tabs (fixed the stacked double-filter); verified live with a screenshot.
+    <b>Build NEXT (new session):</b> <b>04C</b> = S2 Card + S3 Form small UI touch (two parallel plans) &rarr; then the <b>Deal Room build</b> (wires the card's THINGS) &rarr; then the final <b>Agentation polish round</b> (P1-P4 + deferred strip polish). Phases 5-8 after.
+    <b>Owed:</b> the local 04A+04B commits are UNPUSHED; 04B awaits a human click-through UAT (<code>04B-HUMAN-UAT.md</code>); cloud <code>supabase db push</code> (15 migrations, with Muskan) + <code>.planning</code> untrack still pending.
   </div>
 
   <div class="dash">
@@ -89,7 +89,7 @@ footer{margin-top:34px;color:var(--muted);font-size:12px;border-top:1px solid va
 
   <!-- ============ SLICE BOARD (open, the active section) ============ -->
   <details class="sec" open>
-    <summary><span class="chev">&#9656;</span><span class="ttl">Slice board (9)</span><span class="chip c-prog">8 done / 1 prog / 0 to do</span><span class="mini">89%</span></summary>
+    <summary><span class="chev">&#9656;</span><span class="ttl">Slice board (9)</span><span class="chip c-done">9 done / 0 prog / 0 to do</span><span class="mini">100%</span></summary>
     <div class="body">
 
       <div class="row" data-status="done">
@@ -164,13 +164,13 @@ footer{margin-top:34px;color:var(--muted);font-size:12px;border-top:1px solid va
         <span class="chip c-done">built</span>
       </div>
 
-      <div class="row" data-status="prog">
+      <div class="row" data-status="done">
         <div class="rmain">
-          <div class="rt">B2 &middot; Conversation list <span class="mini">(picker prototype DONE - build next)</span></div>
-          <div class="rf">ConversationList, ChatView &middot; proto <code>prototypes/newchat-prototype/</code></div>
-          <div class="rd"><b>New-chat picker LOCKED 06-20 = Option A (anchored dropdown).</b> Tapping <b>+ New chat</b> drops a sheet inside the list: a <b>Person | Company toggle</b> (P2P vs. whole-company C2C), search, a <b>New connections</b> section that pops fresh connections by date (Today / Nd ago), and <b>"N deal updates"</b> badges on companies. Selecting opens the P2P or C2C thread. Variants B (directory modal) + C (command palette) dropped. The list's own filter tabs fold into the build/discuss.</div>
+          <div class="rt">B2 &middot; Conversation list <span class="mini">(BUILT 06-21 as 04B)</span></div>
+          <div class="rf"><code>NewChatDropdown.tsx</code> (new) &middot; <code>ConversationList.tsx</code> &middot; <code>ChatView.tsx</code> &middot; backend <code>messaging/supabase/connections.ts</code> + thread helpers</div>
+          <div class="rd"><b>BUILT 06-21 (GSD phase 04B).</b> The <b>+ New chat</b> button is live and opens the <b>Option A</b> picker as a <b>leaflet that COVERS</b> the search box + the All/Unread/Companies/Deals tabs + the rows (no more stacked double-filter - fixed after the first build). It has a <b>Person | Company toggle</b>, per-mode search, a <b>New connections</b> section (30-day, relative-day labels), and a real <b>open-deal badge</b> (no faked unread). Backend = <code>getMyConnections</code> (RLS-scoped my-connections &rarr; their people/companies) + <code>openOrCreateP2pThread</code> / <code>resolveC2cThread</code>. Shows ONLY connected people/companies; base list keeps its 4 tabs (no 5th). Gate-green: tsc + eslint 0 + 62/62 unit + next build ok; verified live (screenshot). <b>Awaits a human click-through UAT.</b></div>
         </div>
-        <span class="chip c-prog">prototyped</span>
+        <span class="chip c-done">built</span>
       </div>
 
     </div>
@@ -183,29 +183,11 @@ footer{margin-top:34px;color:var(--muted);font-size:12px;border-top:1px solid va
 
       <div class="row">
         <div class="rmain">
-          <div class="rt">S1 &middot; The Strip <span class="mini">(already counted - prototype)</span></div>
-          <div class="rf"><code>DealPin.tsx</code> &middot; solo / bottleneck</div>
-          <div class="rd">Build the cleaner strip: move DealCard + dropdown up, keep only a <b>card icon</b> for "open card"; selected deal moves from the dropdown into the strip; person row "LB Luca Brunner &middot; [Helvetia Pharma AG] &middot; [Deals]" (company pill &rarr; relationship page); first 3 deals by time + "see all"; Deal Room entry; a fixed Sella tile that always shows the "//" mark and opens/closes the notification + Review-change feed (call it Sella, not AI; withdraw / review in a dropdown).</div>
+          <div class="rt">04C &middot; Card + Form UI touch <span class="mini">(NEXT - new session)</span></div>
+          <div class="rf">S2 Card + S3 Form &middot; two independent parallel plans (different files)</div>
+          <div class="rd"><b>The immediate next build.</b> Small UI touch-up on the S2 Deal Card + S3 Deal Form (colour, icon look) so the final Agentation polish round is light. Two file-independent plans run as a parallel wave. Run through full GSD. <span class="mini">(S1/B2/B3 are all built now - moved to the slice board above.)</span></div>
         </div>
-        <span class="chip c-prog">prototype</span>
-      </div>
-
-      <div class="row">
-        <div class="rmain">
-          <div class="rt">B2 &middot; Conversation list <span class="mini">(already counted - picker prototyped)</span></div>
-          <div class="rf">ConversationList, ChatView &middot; proto <code>prototypes/newchat-prototype/</code> &middot; mostly parallel-safe</div>
-          <div class="rd"><b>New-chat picker LOCKED = Option A</b> (anchored dropdown; Person | Company toggle, search, New-connections-by-date, unread-deal badges). Build = port the sheet into the <code>ConversationList</code> header + wire selection to start/open the P2P or C2C thread; backend = my connections &rarr; their people. The list's own filter tabs settle in the B2 discuss.</div>
-        </div>
-        <span class="chip c-prog">prototyped</span>
-      </div>
-
-      <div class="row">
-        <div class="rmain">
-          <div class="rt">B3 &middot; The "//" Sella mark <span class="mini">(already counted - prototype)</span></div>
-          <div class="rf">extract SellaMark, SellaPanel &middot; folds into S1</div>
-          <div class="rd">Change the AI logo to a <b>"//" double-slash</b> with a bubbly AI feel. Applies to every Sella mark - chat and the right panel. The "AI" pill is fake (cosmetic only), so a fixed Sella mark that holds the feed breaks nothing.</div>
-        </div>
-        <span class="chip c-prog">prototype</span>
+        <span class="chip c-decide">next</span>
       </div>
 
       <div class="row">
@@ -309,25 +291,33 @@ footer{margin-top:34px;color:var(--muted);font-size:12px;border-top:1px solid va
       <div class="row">
         <div class="rmain">
           <div class="rt">Proto &middot; S1 strip, S2 card, S3 form</div>
-          <div class="rd">The three Ayush was unsure about. Throwaway variations, you pick, then we build the real one. <span class="mini">(S2 + S3 picked &amp; built; S1 still to prototype)</span></div>
+          <div class="rd">The three Ayush was unsure about. Throwaway variations, picked, then built. <span class="mini">(all picked &amp; built - S2/S3 06-20, S1 06-21 as 04A)</span></div>
         </div>
-        <span class="chip c-prog">in progress</span>
+        <span class="chip c-done">done</span>
       </div>
 
       <div class="row">
         <div class="rmain">
           <div class="rt">Wave 1 &middot; parallel build</div>
-          <div class="rd">Picked card (S2), picked form (S3), bubbles (B1), conversation list (B2) - up to 4 parallel agents. Strip (S1) runs solo. Sella logo (B3) folds into S1. Separate files, so they run at the same time without colliding.</div>
+          <div class="rd"><b>All built.</b> S2 card, S3 form, B1 bubbles, B4 scroll (06-20); S1 strip + B3 mark = <b>04A</b> (06-21); B2 conversation list = <b>04B</b> (06-21, BE+FE waves). Each ran as its own GSD sub-phase on separate files, gate-green.</div>
         </div>
-        <span class="chip c-prog">in progress</span>
+        <span class="chip c-done">done</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Next &middot; 04C card+form touch &rarr; Deal Room &rarr; Agentation polish</div>
+          <div class="rd"><b>04C</b> (two parallel plans) is the next build, then the <b>Deal Room</b> (wires the card THINGS), then the final <b>Agentation polish round</b>. Phases 5-8 after.</div>
+        </div>
+        <span class="chip c-decide">next</span>
       </div>
 
       <div class="row">
         <div class="rmain">
           <div class="rt">Close &middot; update STATE + decisions</div>
-          <div class="rd">Update <code>.planning/STATE.md</code> + decisions. The one GSD step we keep, at the end.</div>
+          <div class="rd">Update <code>.planning/STATE.md</code> + decisions + these boards. The one GSD step we keep, at the end of each sub-phase.</div>
         </div>
-        <span class="chip c-decide">end</span>
+        <span class="chip c-decide">ongoing</span>
       </div>
 
     </div>
@@ -385,6 +375,14 @@ footer{margin-top:34px;color:var(--muted);font-size:12px;border-top:1px solid va
   <details class="sec">
     <summary><span class="chev">&#9656;</span><span class="ttl">Everything Ayush said (master notes)</span><span class="chip c-decide">24 notes</span></summary>
     <div class="body">
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">&#9989; All slices these notes map to are now BUILT (2026-06-21)</div>
+          <div class="rd">F1/F2/B1/B4/S2/S3 built 06-20; <b>S1 + B3 = 04A</b> and <b>B2 = 04B</b> built 06-21. The per-note chips below are the <b>original triage status</b> (kept as a historical record), not the current state - see the Slice board at the top for live status.</div>
+        </div>
+        <span class="chip c-done">all built</span>
+      </div>
 
       <div class="row">
         <div class="rmain">
