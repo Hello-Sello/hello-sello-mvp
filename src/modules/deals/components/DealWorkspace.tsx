@@ -155,7 +155,7 @@ export function DealWorkspace({ dealCardId, chat }: DealWorkspaceProps) {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
-      <WorkspaceHeader deal={state.deal} workspace={state.workspace} />
+      <WorkspaceHeader deal={state.deal} onClose={() => {}} />
       {selectedCode && (
         <StageBar stages={stages} selected={selectedCode} onSelect={setSelectedCode} />
       )}

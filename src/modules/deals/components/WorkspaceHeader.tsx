@@ -1,84 +1,79 @@
-import Link from "next/link";
-import { ArrowLeft, FileText, Sparkles } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { formatMoney } from "../lib/derive";
-import type { DealCardStatus, DealCardView, DealWorkspaceView } from "../types";
+import type { DealCardStatus, DealCardView } from "../types";
 
 /**
- * The workspace's top band (3b): deal facts + lifecycle pill, then the shrunk
- * one-line Deal-Sella. Ported from the prototype's `dealHeader` + `sellaInsight`
- * (elements, not pixels). The pill is DISPLAY-ONLY in 3b - the gate that flips
- * Draft → Confirmed is 3d; Sella's line is static until 4x writes real reads.
+ * The Deal Room's slim top bar (Phase 5, D-06). ONE thin glass row - the three
+ * tall tiers the old WorkspaceHeader carried (the relationship band, the
+ * deal-facts row, and the one-line Deal-Sella) are GONE so the three columns
+ * reclaim that vertical height.
+ *
+ * Read left-to-right: a top-left BACK button that returns straight to the CHAT
+ * (D-02/D-03 - the old "route back through the relationship page" detour is
+ * killed; this calls the `onClose` prop the route owns, never a relationship
+ * Link), then the deal identity inline (deal name -> counterparty company ->
+ * price), then the `LifecyclePill` pushed to the RIGHT via `ml-auto`.
+ *
+ * The `LifecyclePill` (Draft -> Confirmed -> Done) is KEPT verbatim - it is the
+ * finalization surface Plan 04 makes interactive (the "Confirmed" segment shines
+ * when all stages are done, then a "Is the deal done?" confirm flips it to Done).
+ * Leave its export/shape so Plan 04 can extend it.
  */
 export function WorkspaceHeader({
   deal,
-  workspace,
+  onClose,
 }: {
   deal: DealCardView;
-  workspace: DealWorkspaceView;
+  /** return straight to the chat (D-03); the route owns the overlay-close */
+  onClose: () => void;
 }) {
-  const { card } = deal;
-  const owners = workspace.members.filter((m) => m.role === "owner");
-  const ownerNames = owners.map((m) => m.name.split(" ")[0]).join(" · ");
+  const { card, sellerName, buyerName, viewerSide } = deal;
+
+  // the company shown in the bar is the COUNTERPARTY (the other side of the
+  // deal): the viewer's own company is implicit, so naming the other party reads
+  // best. viewerSide null (no company) falls back to the seller name.
+  const counterpartyName = viewerSide === "seller" ? buyerName : sellerName;
+
+  const dealName = card.hs_deal_number ?? "Deal";
+  const price =
+    card.value_net != null ? formatMoney(Number(card.value_net), card.currency) : null;
 
   return (
-    <div className="flex flex-col gap-2">
-      <div className="glass rounded-3xl p-4">
-        <div className="flex items-center justify-between gap-3">
-          <Link
-            href={`/connect/relationship/${card.relationship_id}`}
-            className="flex items-center gap-1 text-xs text-ink/40 transition hover:text-ink/70"
-          >
-            <ArrowLeft size={13} strokeWidth={2} />
-            Relationship · {deal.sellerName} · {deal.buyerName}
-          </Link>
-          <span className="rounded-full bg-ink/5 px-2 py-0.5 text-[10px] uppercase tracking-wide text-ink/50">
-            {workspace.visibility === "company_wide" ? "Company-wide" : "Private · invited only"}
-          </span>
-        </div>
+    <div className="glass flex shrink-0 items-center gap-3 rounded-3xl px-3 py-2">
+      {/* top-left BACK control - returns to the CHAT (D-02/D-03), never the
+          relationship page. Corner placement modeled on DealCard's flip button. */}
+      <button
+        type="button"
+        onClick={onClose}
+        title="Back to chat"
+        aria-label="Back to chat"
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-black/[0.07] bg-white/70 text-ink/55 transition hover:bg-brand-soft hover:text-brand-deep"
+      >
+        <ArrowLeft size={16} strokeWidth={2} />
+      </button>
 
-        <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-soft/40 text-brand-deep">
-              <FileText size={18} strokeWidth={1.75} />
-            </div>
-            <div>
-              <div className="text-sm font-bold tracking-wide text-ink">
-                {card.hs_deal_number ?? "Deal"}
-              </div>
-              <div className="text-[11px] text-ink/45">
-                {deal.sellerName} ◦ {deal.buyerName}
-                {ownerNames ? ` · owners ${ownerNames}` : ""}
-              </div>
-            </div>
-          </div>
-          <div className="flex items-center gap-4">
-            {card.value_net != null && (
-              <div className="text-right">
-                <div className="text-base font-bold text-ink">
-                  {formatMoney(Number(card.value_net), card.currency)}
-                </div>
-                <div className="text-[10px] uppercase tracking-wide text-ink/40">net</div>
-              </div>
-            )}
-            <LifecyclePill status={card.status} />
-          </div>
-        </div>
-      </div>
-
-      {/* Deal-Sella, shrunk to one line (static in 3b; 4x writes the real read) */}
-      <div className="flex items-start gap-2 rounded-2xl bg-brand-soft/20 px-3 py-2 ring-1 ring-brand/10">
-        <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded bg-brand text-white">
-          <Sparkles size={11} strokeWidth={2} />
+      {/* deal identity inline: deal name -> company name -> price */}
+      <span className="truncate text-sm font-bold tracking-wide text-ink">{dealName}</span>
+      <span className="hidden truncate text-[11px] text-ink/45 sm:inline">{counterpartyName}</span>
+      {price && (
+        <span className="hidden shrink-0 text-[13px] font-bold tabular-nums text-ink md:inline">
+          {price}
         </span>
-        <p className="text-xs leading-snug text-ink/75">
-          <span className="font-semibold text-ink/60">Deal-Sella:</span> {sellaLine(card.status)}
-        </p>
+      )}
+
+      {/* the lifecycle pill, pushed RIGHT */}
+      <div className="ml-auto shrink-0">
+        <LifecyclePill status={card.status} />
       </div>
     </div>
   );
 }
 
-/** Draft → Confirmed → Done, display-only (the flip gate is 3d). */
+/**
+ * Draft -> Confirmed -> Done. Display-only today; Plan 04 makes it interactive
+ * (shine on "Confirmed" when all stages are done -> "Is the deal done?" confirm
+ * -> finalizeDeal -> Done). Kept as a named sub-component so Plan 04 extends it.
+ */
 function LifecyclePill({ status }: { status: DealCardStatus }) {
   const steps: ReadonlyArray<{ key: string; label: string }> = [
     { key: "draft", label: "Draft" },
@@ -116,12 +111,4 @@ function LifecyclePill({ status }: { status: DealCardStatus }) {
       ))}
     </div>
   );
-}
-
-/** Static placeholder line per lifecycle state (real Sella reads land in 4x). */
-function sellaLine(status: DealCardStatus): string {
-  if (status === "draft")
-    return "Draft - both sides still need to confirm before execution starts.";
-  if (status === "done") return "Done - this deal is closed; the card holds the final state.";
-  return "Confirmed - both sides are in. The deal chat and members are live; the Things checklist lands next.";
 }
