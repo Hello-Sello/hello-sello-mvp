@@ -1,9 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { FileBox } from "lucide-react";
-import type { MemberView, StageView, ThingStatus } from "../types";
+import type {
+  ArtifactView,
+  MemberView,
+  StageCode,
+  StageCompletionView,
+  StageView,
+  ThingStatus,
+} from "../types";
+import { DocumentsTab } from "./DocumentsTab";
 import { PeopleTab } from "./PeopleTab";
+import { StageDropdown } from "./StageDropdown";
 import { ThingsTab } from "./ThingsTab";
 
 type Tab = "things" | "people" | "documents";
@@ -15,32 +23,76 @@ const TABS: ReadonlyArray<{ key: Tab; label: string }> = [
 ];
 
 /**
- * The workspace's left work panel (3b): C-style tabs - pick one, see it.
- * People is REAL (deal_member). Things is REAL as of 3c - it shows the SELECTED
- * stage's checklist (the stage is picked in the StageBar above) and a tick is a
- * live DB write. Documents stays a stub (`deal_artifact` is migrated; upload is
- * a later task).
+ * The Deal Room's RIGHT work panel (Phase 5, moved from the left). It now owns
+ * the V7 StageDropdown at the top (the stage selector + the manual glowing
+ * "mark stage done" pill) so the active stage drives which stage the Things tab
+ * shows. Below it: the C-style tabs - Add something (Things) | People | Documents.
+ *
+ * Things is collaborative (per-thing assign + private/shared + lock icons,
+ * D-08..D-13). Documents is the REAL `deal_artifact` list (lock icons on private
+ * docs, D-13). People is unchanged.
+ *
+ * Cross-plan seam: DealWorkspace (Plan 02 / Plan 04's load extension) supplies
+ * all the new props - see the SUMMARY for the exact contract.
  */
 export interface WorkPanelProps {
   members: MemberView[];
-  /** the stage picked in the StageBar - the Things tab renders this stage */
-  selectedStage: StageView;
+  /** all 5 stages (the StageDropdown overview + the Things tab) */
+  stages: StageView[];
+  /** the stage currently selected; the Things tab renders this stage */
+  selectedCode: StageCode;
+  onSelectStage: (code: StageCode) => void;
+  /** stored stage-done rows (D-14) - the dropdown reads these for the done state */
+  completions: StageCompletionView[];
+  onMarkStageDone: (code: StageCode) => void;
+  /** stage codes whose markStageDone write is in flight */
+  busyStageCodes: ReadonlySet<string>;
+  /** the deal's documents (the Documents tab list) */
+  artifacts: ArtifactView[];
+  /** the viewer's own company id (own-side vs other-side, D-10); null when none */
+  viewerCompanyId: string | null;
+  /** the other side as a WHOLE (D-11, company-level), or null */
+  otherCompany: { id: string; name: string } | null;
   onToggleThing: (thingId: string, next: ThingStatus) => void;
   onAddThing: (title: string) => Promise<void>;
+  onAssign: (thingId: string, assigneePersonId: string | null, ownerCompanyId: string | null) => void;
+  onSetVisibility: (thingId: string, isPrivate: boolean, ownerCompanyId: string | null) => void;
   busyThingIds: ReadonlySet<string>;
 }
 
 export function WorkPanel({
   members,
-  selectedStage,
+  stages,
+  selectedCode,
+  onSelectStage,
+  completions,
+  onMarkStageDone,
+  busyStageCodes,
+  artifacts,
+  viewerCompanyId,
+  otherCompany,
   onToggleThing,
   onAddThing,
+  onAssign,
+  onSetVisibility,
   busyThingIds,
 }: WorkPanelProps) {
   const [tab, setTab] = useState<Tab>("things");
 
+  const selectedStage = stages.find((s) => s.code === selectedCode) ?? stages[0];
+
   return (
     <div className="flex h-full min-h-0 flex-col gap-2">
+      {/* the V7 stage selector + the manual glowing mark-stage-done pill (D-14) */}
+      <StageDropdown
+        stages={stages}
+        selectedCode={selectedCode}
+        onSelect={onSelectStage}
+        completions={completions}
+        onMarkStageDone={onMarkStageDone}
+        busyStageCodes={busyStageCodes}
+      />
+
       <div className="glass flex shrink-0 gap-1 rounded-2xl p-1.5">
         {TABS.map((t) => (
           <button
@@ -63,50 +115,27 @@ export function WorkPanel({
         {tab === "people" ? (
           <PeopleTab members={members} />
         ) : tab === "things" ? (
-          <ThingsTab
-            stage={selectedStage}
-            onToggle={onToggleThing}
-            onAdd={onAddThing}
-            busyIds={busyThingIds}
-          />
+          selectedStage ? (
+            <ThingsTab
+              stage={selectedStage}
+              members={members}
+              viewerCompanyId={viewerCompanyId}
+              otherCompany={otherCompany}
+              onToggle={onToggleThing}
+              onAssign={onAssign}
+              onSetVisibility={onSetVisibility}
+              onAdd={onAddThing}
+              busyIds={busyThingIds}
+            />
+          ) : (
+            <div className="glass rounded-2xl p-6 text-center text-xs text-ink/45">
+              No stages on this deal yet.
+            </div>
+          )
         ) : (
-          <StubCard
-            icon={<FileBox size={20} strokeWidth={1.5} />}
-            title="Deal documents live here"
-            body="Deal-level files (COA, contract, delivery note, invoice). Company-wide docs stay on the relationship page."
-            action="Upload"
-          />
+          <DocumentsTab artifacts={artifacts} />
         )}
       </div>
-    </div>
-  );
-}
-
-/** A quiet placeholder card for the tabs that later phases fill. */
-function StubCard({
-  icon,
-  title,
-  body,
-  action,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  body: string;
-  action: string;
-}) {
-  return (
-    <div className="glass flex flex-col items-center gap-2 rounded-2xl p-6 text-center">
-      <span className="text-ink/30">{icon}</span>
-      <p className="text-sm font-medium text-ink/70">{title}</p>
-      <p className="text-xs leading-snug text-ink/45">{body}</p>
-      <button
-        type="button"
-        disabled
-        title="Coming soon"
-        className="mt-1 rounded-full bg-ink/5 px-3 py-1 text-[11px] font-medium text-ink/40"
-      >
-        {action}
-      </button>
     </div>
   );
 }

@@ -1,9 +1,29 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { getDealCard, getWorkspace, getStagesAndThings } from "../supabase/reads";
-import { toggleThingStatus, createThing } from "../supabase/writes";
-import type { DealCardView, DealWorkspaceView, StageCode, StageView, ThingStatus } from "../types";
+import {
+  getDealCard,
+  getWorkspace,
+  getStagesAndThings,
+  getStageCompletions,
+  getDealArtifacts,
+} from "../supabase/reads";
+import {
+  toggleThingStatus,
+  createThing,
+  assignThing,
+  setThingVisibility,
+  markStageDone,
+} from "../supabase/writes";
+import type {
+  ArtifactView,
+  DealCardView,
+  DealWorkspaceView,
+  StageCode,
+  StageCompletionView,
+  StageView,
+  ThingStatus,
+} from "../types";
 import { WorkspaceHeader } from "./WorkspaceHeader";
 import { WorkPanel } from "./WorkPanel";
 import { CardFront } from "./CardFront";
@@ -18,12 +38,13 @@ import { CardFront } from "./CardFront";
  * the route page is the composition root (messaging already imports deals for
  * DealPin; a back-import would make a cycle).
  *
- * State lives here: the 5 stages + their Things (loaded once), the SCREEN-ONLY
- * selected stage (now driven by the right panel's stage dropdown in Plan 03,
- * never persisted), and the set of Things whose tick write is in flight. Ticks
- * update optimistically and revert on a write error. The top StageBar strip is
- * gone (D-14: stages move into the right panel in Plan 03) - the selection state
- * stays because the WorkPanel still needs `selectedStage`.
+ * State lives here: the 5 stages + their Things, the stored stage completions
+ * (D-14) and the deal's documents (all loaded once), the SCREEN-ONLY selected
+ * stage (driven by the right panel's StageDropdown, never persisted), and the
+ * sets of Things / stages whose write is in flight. Ticks, assignment and
+ * visibility flips update optimistically and revert on a write error. The top
+ * StageBar strip is GONE (D-06/D-14: the stages live inside the right panel's
+ * StageDropdown now), so there is no top-bar stage selection state here.
  */
 export interface DealWorkspaceProps {
   dealCardId: string;
@@ -54,11 +75,35 @@ function setThingStatus(stages: StageView[], thingId: string, status: ThingStatu
   });
 }
 
+/** Find one Thing across all stages (for capturing its pre-write state to revert to). */
+function findThing(stages: StageView[], thingId: string): StageView["things"][number] | null {
+  for (const s of stages) {
+    const t = s.things.find((x) => x.id === thingId);
+    if (t) return t;
+  }
+  return null;
+}
+
+/** Immutably patch one Thing's fields (assignment / visibility) inside the stages array. */
+function patchThing(
+  stages: StageView[],
+  thingId: string,
+  patch: Partial<Pick<StageView["things"][number], "assigneePersonId" | "isPrivate" | "ownerCompanyId">>,
+): StageView[] {
+  return stages.map((s) => {
+    if (!s.things.some((t) => t.id === thingId)) return s;
+    return { ...s, things: s.things.map((t) => (t.id === thingId ? { ...t, ...patch } : t)) };
+  });
+}
+
 export function DealWorkspace({ dealCardId, chat, onClose = () => {} }: DealWorkspaceProps) {
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [stages, setStages] = useState<StageView[]>([]);
+  const [completions, setCompletions] = useState<StageCompletionView[]>([]);
+  const [artifacts, setArtifacts] = useState<ArtifactView[]>([]);
   const [selectedCode, setSelectedCode] = useState<StageCode | null>(null);
   const [busyThingIds, setBusyThingIds] = useState<ReadonlySet<string>>(new Set());
+  const [busyStageCodes, setBusyStageCodes] = useState<ReadonlySet<string>>(new Set());
 
   // the route remounts on a new id, so the effect only commits async results
   useEffect(() => {
@@ -69,10 +114,16 @@ export function DealWorkspace({ dealCardId, chat, onClose = () => {} }: DealWork
           getDealCard(dealCardId),
           getWorkspace(dealCardId),
         ]);
-        const loadedStages = await getStagesAndThings(workspace.workspaceId);
+        const [loadedStages, loadedCompletions, loadedArtifacts] = await Promise.all([
+          getStagesAndThings(workspace.workspaceId),
+          getStageCompletions(workspace.workspaceId),
+          getDealArtifacts(workspace.workspaceId),
+        ]);
         if (!alive) return;
         setState({ kind: "ready", deal, workspace });
         setStages(loadedStages);
+        setCompletions(loadedCompletions);
+        setArtifacts(loadedArtifacts);
         setSelectedCode(defaultStage(loadedStages));
       } catch (e: unknown) {
         if (alive)
@@ -146,6 +197,95 @@ export function DealWorkspace({ dealCardId, chat, onClose = () => {} }: DealWork
     );
   }
 
+  // assign a Thing (own-side person or the other company): optimistic patch + revert
+  async function handleAssign(
+    thingId: string,
+    assigneePersonId: string | null,
+    ownerCompanyId: string | null,
+  ) {
+    const before = findThing(stages, thingId);
+    setStages((prev) => patchThing(prev, thingId, { assigneePersonId, ownerCompanyId }));
+    setBusyThingIds((prev) => new Set(prev).add(thingId));
+    try {
+      await assignThing(thingId, assigneePersonId, ownerCompanyId);
+    } catch {
+      if (before)
+        setStages((prev) =>
+          patchThing(prev, thingId, {
+            assigneePersonId: before.assigneePersonId,
+            ownerCompanyId: before.ownerCompanyId,
+          }),
+        );
+    } finally {
+      setBusyThingIds((prev) => {
+        const n = new Set(prev);
+        n.delete(thingId);
+        return n;
+      });
+    }
+  }
+
+  // flip a Thing's visibility (own items only): optimistic patch + revert
+  async function handleSetVisibility(
+    thingId: string,
+    isPrivate: boolean,
+    ownerCompanyId: string | null,
+  ) {
+    const before = findThing(stages, thingId);
+    setStages((prev) => patchThing(prev, thingId, { isPrivate, ownerCompanyId }));
+    setBusyThingIds((prev) => new Set(prev).add(thingId));
+    try {
+      await setThingVisibility(thingId, isPrivate, ownerCompanyId);
+    } catch {
+      if (before)
+        setStages((prev) =>
+          patchThing(prev, thingId, {
+            isPrivate: before.isPrivate,
+            ownerCompanyId: before.ownerCompanyId,
+          }),
+        );
+    } finally {
+      setBusyThingIds((prev) => {
+        const n = new Set(prev);
+        n.delete(thingId);
+        return n;
+      });
+    }
+  }
+
+  // mark a stage done (manual, STORED): optimistic completion row + revert
+  async function handleMarkStageDone(stageCode: StageCode) {
+    if (!state || state.kind !== "ready") return;
+    const already = completions.some((c) => c.stageCode === stageCode && c.markedDoneAt !== null);
+    if (already || busyStageCodes.has(stageCode)) return;
+    const optimistic: StageCompletionView = {
+      stageCode,
+      markedDoneAt: new Date().toISOString(),
+      markedDoneByPersonId: null,
+    };
+    setCompletions((prev) => [...prev.filter((c) => c.stageCode !== stageCode), optimistic]);
+    setBusyStageCodes((prev) => new Set(prev).add(stageCode));
+    try {
+      await markStageDone(state.workspace.workspaceId, stageCode);
+    } catch {
+      setCompletions((prev) => prev.filter((c) => c.stageCode !== stageCode));
+    } finally {
+      setBusyStageCodes((prev) => {
+        const n = new Set(prev);
+        n.delete(stageCode);
+        return n;
+      });
+    }
+  }
+
+  // the OTHER side as a whole (D-11) - the one member company that is not the viewer's
+  const otherCompany = useMemo(() => {
+    if (state.kind !== "ready") return null;
+    const viewerCompanyId = state.workspace.viewerCompanyId;
+    const other = state.workspace.members.find((m) => m.companyId !== viewerCompanyId);
+    return other ? { id: other.companyId, name: other.companyName } : null;
+  }, [state]);
+
   if (state.kind === "loading") {
     return (
       <div className="glass flex h-full items-center justify-center rounded-3xl p-10 text-center text-sm text-ink/40">
@@ -185,15 +325,26 @@ export function DealWorkspace({ dealCardId, chat, onClose = () => {} }: DealWork
         </div>
         {/* MIDDLE: the deal chat, the wide hero (the slot prop, kept acyclic) */}
         <div className="glass min-w-0 overflow-hidden rounded-3xl">{chat}</div>
-        {/* RIGHT: the work panel (things / people / documents + stages). Plan 03
-            moves the stages into it; this plan just sets it in the right track. */}
+        {/* RIGHT: the work panel - the V7 StageDropdown (stage selector + manual
+            glowing mark-stage-done, D-14) over the Things / People / Documents
+            tabs, with per-thing assign + private/shared (D-08..D-13). */}
         <div className="min-w-0">
-          {selectedStage && (
+          {selectedCode && selectedStage && (
             <WorkPanel
               members={state.workspace.members}
-              selectedStage={selectedStage}
+              stages={stages}
+              selectedCode={selectedCode}
+              onSelectStage={setSelectedCode}
+              completions={completions}
+              onMarkStageDone={handleMarkStageDone}
+              busyStageCodes={busyStageCodes}
+              artifacts={artifacts}
+              viewerCompanyId={state.workspace.viewerCompanyId}
+              otherCompany={otherCompany}
               onToggleThing={handleToggleThing}
               onAddThing={handleAddThing}
+              onAssign={handleAssign}
+              onSetVisibility={handleSetVisibility}
               busyThingIds={busyThingIds}
             />
           )}
