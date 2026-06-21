@@ -56,10 +56,10 @@ footer{margin-top:34px;color:var(--muted);font-size:12px;border-top:1px solid va
   <p class="sub">2026-06-19 &middot; the Connect/chat overhaul slice board &middot; surface <code>/connect/chat</code></p>
 
   <div class="banner">
-    <b>Status 2026-06-20.</b> The design-SETTLED slices are <b>built &amp; gate-green</b> (tsc + eslint 0 errors + 41/41 unit), local on <code>claude/ayush/work</code> (unpushed):
-    <b>F1/F2/B1/B4</b> (verified), <b>S2</b> V3 Card with a <b>real 3D flip</b>, <b>S3</b> V2 Form, and the DEV-66/72 rename.
-    <b>All three prototyped &amp; locked (06-20):</b> <b>S1</b> the strip, <b>B2</b> the new-chat picker (Option A), <b>B3</b> the <code>//</code> Sella mark - build pending.
-    <b>Newly flagged:</b> after S1, build the <b>Deal Room</b> (old "Deal Workspace") - that container is where the card's read-only THINGS gets wired.
+    <b>Status 2026-06-21.</b> The design-SETTLED slices + <b>S1/B3</b> are <b>built &amp; gate-green</b> (tsc + eslint 0 errors + 46/46 unit + <code>next build</code> ok), local on <code>claude/ayush/work</code> (unpushed):
+    <b>F1/F2/B1/B4</b> (verified), <b>S2</b> V3 Card with a <b>real 3D flip</b>, <b>S3</b> V2 Form, the DEV-66/72 rename, and now <b>04A the Deal Strip</b> (S1 + B3 folded in) - built via full GSD + 3 Agentation polish rounds (one clean two-tier strip modeled on the C2C: person-name-left + relationship/deal-right; a premium <code>//</code> with "Review" between the bars + the parting-bar curtain animation). Deeper visual polish parked for the Agentation round.
+    <b>Still prototyped (build next):</b> <b>B2</b> the new-chat picker (Option A) = <b>04B</b>, next session.
+    <b>Newly flagged:</b> after the strip, build the <b>Deal Room</b> (old "Deal Workspace") - that container is where the card's read-only THINGS gets wired.
   </div>
 
   <div class="dash">
@@ -89,7 +89,7 @@ footer{margin-top:34px;color:var(--muted);font-size:12px;border-top:1px solid va
 
   <!-- ============ SLICE BOARD (open, the active section) ============ -->
   <details class="sec" open>
-    <summary><span class="chev">&#9656;</span><span class="ttl">Slice board (9)</span><span class="chip c-prog">6 done / 3 prog / 0 to do</span><span class="mini">67%</span></summary>
+    <summary><span class="chev">&#9656;</span><span class="ttl">Slice board (9)</span><span class="chip c-prog">8 done / 1 prog / 0 to do</span><span class="mini">89%</span></summary>
     <div class="body">
 
       <div class="row" data-status="done">
@@ -146,22 +146,22 @@ footer{margin-top:34px;color:var(--muted);font-size:12px;border-top:1px solid va
         <span class="chip c-done">done</span>
       </div>
 
-      <div class="row" data-status="prog">
+      <div class="row" data-status="done">
         <div class="rmain">
-          <div class="rt">S1 &middot; The Strip <span class="mini">(prototype DONE - build next; bottleneck)</span></div>
-          <div class="rf"><code>DealPin.tsx</code> &middot; proto <code>prototypes/strip-prototype/</code></div>
-          <div class="rd"><b>Prototype LOCKED 06-20</b> (one faithful build). A <b>two-tier header</b>. Top: rounded-square avatar + name, a pink <b>Relationship</b> pill (icon + the other company's name &rarr; relationship page), a pink <b>Deals</b> dropdown showing the selected deal number (first 3 + "see all"), a three-dot menu. Bottom: a <b>[Deal Room | Deal Card]</b> segmented box (left), the <b>// Sella parallel bars</b> (middle; no "Review" word, no AI pill - a dot when a change is pending, click drops a <b>curtain</b> with the change inside), a <b>translator</b> placeholder (far right; old Workspace slot). Solo - build = port into DealPin.tsx.</div>
+          <div class="rt">S1 &middot; The Strip <span class="mini">(BUILT 06-21 as 04A + 3 polish rounds)</span></div>
+          <div class="rf"><code>DealPin.tsx</code> &middot; <code>ThreadView.tsx</code> &middot; new <code>SellaMark / SellaCurtain / TranslateButton</code></div>
+          <div class="rd"><b>BUILT 06-21 (GSD phase 04A).</b> A <b>two-tier strip</b> modeled on the C2C: TOP a circle avatar + the <b>person's name</b> (left), the company <b>relationship</b> button + <b>deal</b> dropdown + &hellip; menu (right, by the three dots); a thin divider; BOTTOM the <b>[Deal Room | Deal Card]</b> toggle (left), the maroon <b>// Sella mark</b> (centered) with "Review" <b>between the bars</b> + an animated dot, and a <b>translate</b> placeholder (right). The <code>//</code> bars <b>part like a curtain</b> on click and the held-change Accept/Decline/Reason/Withdraw flow drops down (re-homed, no new action). Deal Room + translate = placeholders; deeper visual polish parked for the Agentation round.</div>
         </div>
-        <span class="chip c-prog">prototyped</span>
+        <span class="chip c-done">built</span>
       </div>
 
-      <div class="row" data-status="prog">
+      <div class="row" data-status="done">
         <div class="rmain">
-          <div class="rt">B3 &middot; Sella logo <span class="mini">(prototype DONE - folds into S1)</span></div>
-          <div class="rf">extract SellaMark, SellaPanel &middot; proto <code>prototypes/strip-prototype/</code></div>
-          <div class="rd"><b>Prototype LOCKED 06-20</b> (lives inside S1): the "//" is CSS-drawn <b>parallel bars</b> (replaces the AI-sparkle pill), shared everywhere. Earlier <code>prototypes/sella-mark-prototype/</code> superseded - only the parallel-bars idea carried over.</div>
+          <div class="rt">B3 &middot; Sella logo <span class="mini">(BUILT 06-21 - folded into S1/04A)</span></div>
+          <div class="rf">shared <code>SellaMark.tsx</code> + <code>SellaCurtain.tsx</code></div>
+          <div class="rd"><b>BUILT 06-21 (inside 04A).</b> The "//" is CSS-drawn <b>parallel bars</b> in maroon <code>--color-brand-deep</code> (replaces the AI-sparkle pill), one shared <code>SellaMark</code> used everywhere. The bars <b>part like a curtain</b> on click; the <code>SellaCurtain</code> drawer re-homes the held-change flow. Earlier <code>prototypes/sella-mark-prototype/</code> superseded - only the parallel-bars idea carried over.</div>
         </div>
-        <span class="chip c-prog">prototyped</span>
+        <span class="chip c-done">built</span>
       </div>
 
       <div class="row" data-status="prog">
