@@ -118,10 +118,19 @@ export function DealPin({
   counterpartyName,
   counterpartyPersonName,
   counterpartyInitials,
+  inRoom = false,
   children,
 }: {
   relationshipId: string;
   variant?: "chat" | "workspace";
+  /**
+   * true when this strip is rendered INSIDE the Deal Room overlay (D-05). The
+   * card + chat are both permanently visible there, so the strip drops the
+   * [Deal Card]/[Deal Room] segmented toggle (and any picker dropdown) and keeps
+   * ONLY Sella (the // mark/curtain) + the Translator. Sella STAYS on the strip -
+   * it is NOT moved into the room.
+   */
+  inRoom?: boolean;
   /**
    * The p2p chat thread (chat variant only). Required to propose + to read the
    * thread's pending proposal; absent for c2c threads and the workspace variant,
@@ -473,17 +482,30 @@ export function DealPin({
       })
     : [];
 
+  // Phase 5 / D-01 - open the Deal Room as a full blurred overlay. The strip only
+  // DISPATCHES a window event; the route-level DealRoomOverlayHost (in the Connect
+  // layout) listens and mounts the overlay. This keeps deals <-> messaging acyclic
+  // (no back-import), mirroring the app's existing hs:deal-updated / hs:create-deal
+  // contract. Carries the selected card id so the host knows which deal to open.
+  function openDealRoom() {
+    if (!selectedId) return;
+    window.dispatchEvent(
+      new CustomEvent("hs:open-deal-room", { detail: { dealCardId: selectedId } }),
+    );
+  }
+
   // D-04 - the bottom-tier left [Deal Room | Deal Card] segmented toggle. Deal
   // Card is the REAL control (it toggles the card overlay - today's "Open card");
-  // when the card is open it reads as the active segment. Deal Room is a
-  // PLACEHOLDER button this phase (the real Deal Room build wires it later), so
-  // its onClick is a no-op and it carries a "coming soon" title - never linked.
+  // when the card is open it reads as the active segment. Deal Room (Phase 5)
+  // OPENS the full blurred overlay (D-01) via openDealRoom. Inside the Room this
+  // whole toggle is hidden (D-05) - the card + chat are both permanently visible.
   const dealRoomCardToggle = (
     <div className="inline-flex shrink-0 items-center rounded-lg bg-black/[0.04] p-0.5 ring-1 ring-black/5">
       <button
         type="button"
-        title="Deal Room (coming soon)"
-        onClick={() => {}}
+        title="Open the Deal Room"
+        aria-label="Open the Deal Room"
+        onClick={openDealRoom}
         className="rounded-md px-3 py-1 text-xs font-semibold text-ink/45 transition hover:text-ink/65"
       >
         Deal Room
@@ -817,15 +839,27 @@ export function DealPin({
         </div>
       )}
 
-      {/* workspace variant - the deal is fixed; NO top-tier identity (no source
-          in the Deal Room host, D-02): only the chip + the [Deal Room | Deal
+      {/* workspace variant, OUTSIDE the Room - the deal is fixed; NO top-tier
+          identity (no source in the host, D-02): the chip + the [Deal Room | Deal
           Card] toggle + the // Sella mark/curtain. */}
-      {variant === "workspace" && hasDeal && (
+      {variant === "workspace" && !inRoom && hasDeal && (
         <div className={rowCls}>
           <span className="shrink-0 text-[11px] text-ink/45">Deal:</span>
           <DealChip status={chipStatus} selectable={false} />
           {dealRoomCardToggle}
           {changeControl}
+        </div>
+      )}
+
+      {/* workspace variant, INSIDE the Room (D-05) - the card + chat are both
+          permanently visible, so the [Deal Room | Deal Card] toggle + the chip
+          are redundant and dropped. The strip keeps ONLY Sella (the // mark/
+          curtain, which STAYS on the strip - not moved into the room) + the
+          Translator. */}
+      {variant === "workspace" && inRoom && hasDeal && (
+        <div className="flex items-center gap-3 border-b border-black/[0.06] px-4 py-3">
+          <div className="mx-auto">{changeControl}</div>
+          <TranslateButton />
         </div>
       )}
 
