@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Present rebuild — prototype (DEV-81/80/79 · CARDS board)</title>
+<!--
+  THROWAWAY PROTOTYPE — Phase 7 Present rebuild (Muskan's prototype-first rule).
+  Single standalone file, no build step, no React, no Supabase. Open via file://.
+  This is the VISUAL SPEC for the React build (UI-SPEC skipped per D-15).
+  Decisions mocked: D-03 flip card, D-04 front, D-05 back (+ inert R1 Sella stub),
+  D-06 location tabs, D-09 banner controls + Fullscreen, D-10 expandable info,
+  UX-02 square 4-up grid, UX-03 per-company basket.
+  Fake seed data only — see NOTES.md for what this does / does not prove.
+-->
+<style>
+  :root {
+    --raspberry: #E30B5D;
+    --cotton: #FFB7D5;
+    --red-pink: #76002D;
+    --ink: #1F2020;
+    --success: #34B233;
+    --periwinkle: #6C7BD9;
+    --line: #ececef;
+    --muted: #6b6b72;
+    --glass: rgba(255, 255, 255, 0.72);
+    --radius: 16px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: var(--ink);
+    background:
+      radial-gradient(900px 500px at 85% -10%, #ffe3ee 0%, transparent 60%),
+      radial-gradient(700px 500px at -10% 10%, #f1f0ff 0%, transparent 55%),
+      #fafafb;
+    min-height: 100vh;
+  }
+  /* ---------------- App shell (left sidebar hidden in fullscreen) ----------- */
+  .app { display: grid; grid-template-columns: 64px 1fr; min-height: 100vh; }
+  .sidebar {
+    background: var(--red-pink); color: #fff; display: flex; flex-direction: column;
+    align-items: center; gap: 22px; padding: 18px 0;
+  }
+  .sidebar .logo { font-weight: 800; letter-spacing: -1px; font-size: 18px; }
+  .sidebar .nav-ico {
+    width: 36px; height: 36px; border-radius: 11px; display: grid; place-items: center;
+    background: rgba(255, 255, 255, 0.12); font-size: 15px; cursor: default;
+  }
+  .sidebar .nav-ico.active { background: #fff; color: var(--red-pink); }
+  /* In Presentation/fullscreen mode the sidebar collapses away (D-09). */
+  body:fullscreen .app, .app.is-fullscreen { grid-template-columns: 1fr; }
+  body:fullscreen .sidebar, .app.is-fullscreen .sidebar { display: none; }
+
+  .main { padding: 0 0 80px; }
+
+  /* ---------------- Banner / hero with top-right controls (DEV-79, D-09) ---- */
+  .banner {
+    position: relative; margin: 18px; border-radius: var(--radius); overflow: hidden;
+    background: linear-gradient(120deg, #76002d, #e30b5d 70%, #ff5e9c);
+    color: #fff; min-height: 150px; padding: 22px 24px;
+  }
+  .banner h1 { margin: 0 0 4px; font-size: 24px; }
+  .banner .sub { opacity: 0.92; font-size: 13px; }
+  .banner-controls {
+    position: absolute; top: 16px; right: 16px; display: flex; gap: 8px; flex-wrap: wrap;
+  }
+  .btn {
+    border: 0; cursor: pointer; font-size: 13px; font-weight: 600; border-radius: 999px;
+    padding: 9px 14px; background: #fff; color: var(--ink); display: inline-flex; gap: 6px;
+    align-items: center; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  }
+  .btn.ghost { background: rgba(255, 255, 255, 0.18); color: #fff; box-shadow: none; backdrop-filter: blur(6px); }
+  .btn.primary { background: var(--ink); color: #fff; }
+  .btn:hover { filter: brightness(0.97); }
+
+  /* ---------------- Filter row: location tabs + category + view + sort ------ */
+  .toolbar {
+    margin: 0 18px 14px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
+    padding: 12px 14px; background: var(--glass); border: 1px solid var(--line);
+    border-radius: 14px; backdrop-filter: blur(8px);
+  }
+  .tabs { display: inline-flex; gap: 4px; background: #f1f1f4; border-radius: 999px; padding: 4px; }
+  .tab {
+    border: 0; background: transparent; padding: 7px 16px; border-radius: 999px;
+    font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer;
+  }
+  .tab.active { background: #fff; color: var(--raspberry); box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08); }
+  .toolbar .pill {
+    font-size: 12px; color: var(--muted); border: 1px solid var(--line);
+    background: #fff; border-radius: 999px; padding: 7px 12px;
+  }
+  .toolbar .spacer { flex: 1; }
+
+  /* ---------------- Square 4-up grid (UX-02) -------------------------------- */
+  .grid {
+    margin: 0 18px; display: grid; gap: 16px;
+    grid-template-columns: repeat(2, 1fr);
+  }
+  @media (min-width: 760px) { .grid { grid-template-columns: repeat(3, 1fr); } }
+  @media (min-width: 1080px) { .grid { grid-template-columns: repeat(4, 1fr); } }
+
+  /* ---------------- Flip card (D-03) — rotateY 3D flip --------------------- */
+  .card { perspective: 1400px; }
+  .card-inner {
+    position: relative; width: 100%; transition: transform 0.55s cubic-bezier(0.4, 0.1, 0.2, 1);
+    transform-style: preserve-3d; min-height: 430px;
+  }
+  .card.flipped .card-inner { transform: rotateY(180deg); }
+  .face {
+    position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden;
+    border-radius: var(--radius); background: #fff; border: 1px solid var(--line);
+    box-shadow: 0 6px 22px rgba(118, 0, 45, 0.06); overflow: hidden; display: flex; flex-direction: column;
+  }
+  .face.back { transform: rotateY(180deg); }
+
+  /* Front — square image + carousel + qty stepper + add-to-basket + spec table */
+  .photo { position: relative; aspect-ratio: 1 / 1; overflow: hidden; background: #f3f3f5; }
+  .photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .carousel-dots { position: absolute; bottom: 8px; left: 0; right: 0; display: flex; gap: 5px; justify-content: center; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(255, 255, 255, 0.6); }
+  .dot.on { background: #fff; }
+  .carousel-arrow {
+    position: absolute; top: 50%; transform: translateY(-50%); width: 28px; height: 28px;
+    border-radius: 50%; border: 0; background: rgba(255, 255, 255, 0.85); cursor: pointer; font-size: 14px;
+  }
+  .carousel-arrow.l { left: 8px; } .carousel-arrow.r { right: 8px; }
+  .flip-btn {
+    position: absolute; top: 8px; right: 8px; border: 0; cursor: pointer; border-radius: 999px;
+    background: rgba(31, 32, 32, 0.7); color: #fff; font-size: 11px; padding: 6px 10px;
+  }
+  .loc-tag {
+    position: absolute; top: 8px; left: 8px; font-size: 11px; font-weight: 600;
+    background: rgba(255, 255, 255, 0.9); border-radius: 999px; padding: 4px 9px;
+  }
+  .card-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
+  .card-title { font-weight: 700; font-size: 15px; }
+  .card-sub { font-size: 12px; color: var(--muted); margin-top: -4px; }
+  .spec {
+    display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; font-size: 11.5px;
+    border-top: 1px dashed var(--line); padding-top: 8px;
+  }
+  .spec dt { color: var(--muted); }
+  .spec dd { margin: 0; font-weight: 600; text-align: right; }
+  .price { font-weight: 800; color: var(--raspberry); font-size: 14px; }
+  .buyrow { display: flex; align-items: center; gap: 8px; margin-top: auto; }
+  .stepper { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 999px; }
+  .stepper button { width: 30px; height: 30px; border: 0; background: transparent; font-size: 16px; cursor: pointer; }
+  .stepper .qty { min-width: 30px; text-align: center; font-size: 13px; font-weight: 700; }
+  .add-btn { flex: 1; background: var(--raspberry); color: #fff; border: 0; border-radius: 999px; padding: 9px; font-weight: 700; cursor: pointer; }
+
+  /* Back — COA/Images/Videos/Other-docs dropdown + Sella stub + present link */
+  .back-body { padding: 14px; display: flex; flex-direction: column; gap: 12px; flex: 1; }
+  .back-title { font-weight: 700; font-size: 14px; }
+  .docs select { width: 100%; padding: 9px; border-radius: 10px; border: 1px solid var(--line); font-size: 13px; }
+  .doc-list { font-size: 12px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
+  .doc-list a { color: var(--periwinkle); text-decoration: none; }
+  /* R1 — INERT Sella "Marktvergleich" stub: NO number, identical for every viewer */
+  .sella-stub {
+    border: 1px dashed var(--periwinkle); border-radius: 12px; padding: 11px 12px;
+    background: #f6f6ff; font-size: 12px; color: var(--muted);
+  }
+  .sella-stub .tag { font-weight: 700; color: var(--periwinkle); display: block; margin-bottom: 3px; }
+  .present-link { font-size: 12px; }
+  .present-link a { color: var(--raspberry); font-weight: 600; text-decoration: none; }
+
+  /* ---------------- Basket panel — top-right, grouped per company (UX-03) --- */
+  .basket {
+    position: fixed; top: 18px; right: 18px; width: 300px; max-height: 80vh; overflow: auto;
+    background: #fff; border: 1px solid var(--line); border-radius: 16px;
+    box-shadow: 0 12px 40px rgba(118, 0, 45, 0.16); z-index: 40; display: none;
+  }
+  .basket.open { display: block; }
+  .basket-head { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+  .basket-head strong { font-size: 15px; }
+  .basket-head .x { border: 0; background: transparent; cursor: pointer; font-size: 18px; color: var(--muted); }
+  .basket-group { padding: 10px 16px; border-bottom: 1px solid var(--line); }
+  .basket-group h4 { margin: 0 0 6px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  .basket-line { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; padding: 4px 0; }
+  .basket-line .ln-q { color: var(--muted); }
+  .basket-empty { padding: 22px 16px; color: var(--muted); font-size: 13px; text-align: center; }
+  .basket-foot { padding: 12px 16px; }
+  .basket-cta { width: 100%; background: var(--ink); color: #fff; border: 0; border-radius: 999px; padding: 11px; font-weight: 700; cursor: pointer; }
+  .basket-foot .note { font-size: 11px; color: var(--muted); margin-top: 6px; text-align: center; }
+
+  /* Floating basket button (when panel closed) */
+  .basket-fab {
+    position: fixed; top: 18px; right: 18px; z-index: 39; background: var(--raspberry);
+    color: #fff; border: 0; border-radius: 999px; padding: 11px 16px; font-weight: 700;
+    cursor: pointer; box-shadow: 0 6px 20px rgba(227, 11, 93, 0.35);
+  }
+  .basket-fab .count {
+    background: #fff; color: var(--raspberry); border-radius: 999px; padding: 1px 7px;
+    font-size: 12px; margin-left: 6px;
+  }
+
+  /* ---------------- Expandable info cards (DEV-80, D-10) ------------------- */
+  .info-row { margin: 22px 18px 0; display: grid; gap: 16px; grid-template-columns: 1fr 1fr; }
+  @media (max-width: 760px) { .info-row { grid-template-columns: 1fr; } }
+  .info-card {
+    background: var(--glass); border: 1px solid var(--line); border-radius: 14px;
+    padding: 14px 16px; cursor: pointer; backdrop-filter: blur(8px); position: relative;
+  }
+  .info-card h3 { margin: 0 0 6px; font-size: 14px; }
+  .info-card .base { font-size: 13px; color: var(--ink); }
+  .info-card .more { display: none; margin-top: 10px; border-top: 1px dashed var(--line); padding-top: 10px; font-size: 13px; color: var(--ink); }
+  .info-card .more .row { padding: 3px 0; }
+  .info-card.open .more { display: block; }
+  .info-card .x {
+    position: absolute; top: 10px; right: 12px; border: 0; background: transparent; cursor: pointer;
+    font-size: 16px; color: var(--muted); display: none;
+  }
+  .info-card.open .x { display: block; }
+  .info-card .hint { font-size: 11px; color: var(--muted); margin-top: 8px; }
+
+  .pres-banner {
+    display: none; position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+    background: var(--ink); color: #fff; padding: 9px 16px; border-radius: 999px; font-size: 12px; z-index: 50;
+  }
+  body:fullscreen .pres-banner, .app.is-fullscreen .pres-banner { display: block; }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <!-- Left sidebar (hidden in Presentation/fullscreen mode) -->
+  <aside class="sidebar">
+    <div class="logo">//</div>
+    <div class="nav-ico">◎</div>
+    <div class="nav-ico active">▦</div>
+    <div class="nav-ico">⊞</div>
+    <div class="nav-ico">◰</div>
+    <div class="nav-ico">✦</div>
+  </aside>
+
+  <main class="main">
+    <!-- Banner with top-right controls (DEV-79 / D-09) -->
+    <section class="banner">
+      <h1>GreenLeaf Cultivation — Present</h1>
+      <div class="sub">Your live catalogue. Present it in a call, or let a connected buyer browse it.</div>
+      <div class="banner-controls">
+        <button class="btn ghost">＋ Add products</button>
+        <button class="btn ghost">⚙ Manage shop</button>
+        <button class="btn primary" id="fsBtn">⛶ Fullscreen</button>
+      </div>
+    </section>
+
+    <!-- Filter row: location tabs + category + view toggle + sort -->
+    <section class="toolbar">
+      <div class="tabs" id="tabs">
+        <button class="tab active" data-loc="All">All</button>
+        <button class="tab" data-loc="Germany">Germany</button>
+        <button class="tab" data-loc="UK">UK</button>
+      </div>
+      <span class="pill">Category: Flowers ▾</span>
+      <span class="pill">View: Cards / List</span>
+      <div class="spacer"></div>
+      <span class="pill">Sort by ▾</span>
+    </section>
+
+    <!-- Square 4-up product grid (UX-02) -->
+    <section class="grid" id="grid"></section>
+
+    <!-- Expandable info cards (DEV-80 / D-10) -->
+    <section class="info-row">
+      <div class="info-card" data-info="warehouse">
+        <button class="x" aria-label="Collapse">×</button>
+        <h3>HQ &amp; warehouses</h3>
+        <div class="base">Headquarters — Berlin, Germany</div>
+        <div class="more">
+          <div class="row">Warehouse DE-1 — Frankfurt, Germany</div>
+          <div class="row">Warehouse DE-2 — Hamburg, Germany</div>
+          <div class="row">Warehouse UK-1 — Manchester, United Kingdom</div>
+        </div>
+        <div class="hint">Click to expand · click ✕ or outside to collapse</div>
+      </div>
+      <div class="info-card" data-info="links">
+        <button class="x" aria-label="Collapse">×</button>
+        <h3>Links &amp; pages</h3>
+        <div class="base">Presentation DE (private)</div>
+        <div class="more">
+          <div class="row"><a href="#" onclick="return false">Company website ↗</a></div>
+          <div class="row"><a href="#" onclick="return false">Compliance / licences ↗</a></div>
+          <div class="row"><a href="#" onclick="return false">Presentation UK (private) ↗</a></div>
+        </div>
+        <div class="hint">Click to expand · click ✕ or outside to collapse</div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- Basket: floating button + panel (top-right, grouped per company, UX-03) -->
+<button class="basket-fab" id="basketFab">🧺 Basket <span class="count" id="fabCount">0</span></button>
+<aside class="basket" id="basket">
+  <div class="basket-head">
+    <strong>Basket</strong>
+    <button class="x" id="basketClose">×</button>
+  </div>
+  <div id="basketBody"></div>
+  <div class="basket-foot">
+    <button class="basket-cta">Build deal →</button>
+    <div class="note">Transient — clears on reload (D-12). One deal per company.</div>
+  </div>
+</aside>
+
+<div class="pres-banner">Presentation mode — press ESC to exit · basket stays live</div>
+
+<script>
+  // ----- Fake seed: 6 products across 2 locations (2 companies for basket demo) -----
+  const PLACEHOLDER = (label, c1, c2) =>
+    "data:image/svg+xml;utf8," + encodeURIComponent(
+      `<svg xmlns='http://www.w3.org/2000/svg' width='400' height='400'>
+        <rect width='400' height='400' fill='${c1}'/>
+        <circle cx='200' cy='150' r='90' fill='${c2}' opacity='0.55'/>
+        <text x='200' y='330' font-size='26' font-family='sans-serif' fill='#fff'
+          text-anchor='middle'>${label}</text></svg>`);
+
+  const products = [
+    { id: "p1", name: "Aurora Haze 24", cultivar: "Aurora Haze", company: "GreenLeaf Cultivation",
+      location: "Germany", thc: "22.4%", cbd: "0.8%", dominance: "Sativa", origin: "Germany",
+      region: "Brandenburg", irradiation: "Beta (e-beam)", pack: "10 g", pzn: "17000001",
+      price: "8.90 €/g", imgs: [PLACEHOLDER("Aurora Haze", "#76002d", "#ff5e9c"), PLACEHOLDER("AH · macro", "#5a0024", "#e30b5d")] },
+    { id: "p2", name: "Frost Kush 18", cultivar: "Frost Kush", company: "GreenLeaf Cultivation",
+      location: "Germany", thc: "18.1%", cbd: "1.2%", dominance: "Indica", origin: "Germany",
+      region: "Bavaria", irradiation: "None", pack: "5 g", pzn: "17000002",
+      price: "7.40 €/g", imgs: [PLACEHOLDER("Frost Kush", "#3a0a52", "#9b6bd9")] },
+    { id: "p3", name: "Citrus Drift 21", cultivar: "Citrus Drift", company: "GreenLeaf Cultivation",
+      location: "UK", thc: "21.0%", cbd: "0.5%", dominance: "Hybrid", origin: "United Kingdom",
+      region: "Kent", irradiation: "Gamma", pack: "10 g", pzn: "17000003",
+      price: "9.20 €/g", imgs: [PLACEHOLDER("Citrus Drift", "#0a4a4a", "#34b233"), PLACEHOLDER("CD · trichomes", "#063838", "#5fd96b")] },
+    { id: "p4", name: "Northern Mist 26", cultivar: "Northern Mist", company: "GreenLeaf Cultivation",
+      location: "UK", thc: "26.3%", cbd: "0.3%", dominance: "Sativa", origin: "United Kingdom",
+      region: "Yorkshire", irradiation: "Beta (e-beam)", pack: "10 g", pzn: "17000004",
+      price: "11.50 €/g", imgs: [PLACEHOLDER("Northern Mist", "#1b2a6b", "#6c7bd9")] },
+    { id: "p5", name: "Velvet OG 19", cultivar: "Velvet OG", company: "BloomPartner GmbH",
+      location: "Germany", thc: "19.5%", cbd: "1.0%", dominance: "Indica", origin: "Germany",
+      region: "Saxony", irradiation: "None", pack: "5 g", pzn: "18000001",
+      price: "6.80 €/g", imgs: [PLACEHOLDER("Velvet OG", "#5b2a00", "#ffb347")] },
+    { id: "p6", name: "Solar Flare 23", cultivar: "Solar Flare", company: "BloomPartner GmbH",
+      location: "UK", thc: "23.2%", cbd: "0.4%", dominance: "Hybrid", origin: "United Kingdom",
+      region: "London", irradiation: "Gamma", pack: "10 g", pzn: "18000002",
+      price: "10.10 €/g", imgs: [PLACEHOLDER("Solar Flare", "#7a1f00", "#ff7a45")] },
+  ];
+
+  // ----- Transient per-company basket (D-12): { companyName: [{name, qty}] } -----
+  const cart = {};
+  let activeLoc = "All";
+
+  const grid = document.getElementById("grid");
+
+  function specRow(label, val) { return `<dt>${label}</dt><dd>${val}</dd>`; }
+
+  function renderGrid() {
+    const shown = products.filter((p) => activeLoc === "All" || p.location === activeLoc);
+    grid.innerHTML = shown.map((p) => `
+      <div class="card" data-id="${p.id}">
+        <div class="card-inner">
+          <!-- FRONT (D-04): carousel + qty stepper + add-to-basket + spec table -->
+          <div class="face front">
+            <div class="photo" data-slide="0">
+              <span class="loc-tag">${p.location}</span>
+              <button class="flip-btn" data-flip>Flip ↻</button>
+              <img src="${p.imgs[0]}" alt="${p.name}" />
+              ${p.imgs.length > 1 ? `
+                <button class="carousel-arrow l" data-prev>‹</button>
+                <button class="carousel-arrow r" data-next>›</button>
+                <div class="carousel-dots">${p.imgs.map((_, i) => `<span class="dot ${i === 0 ? "on" : ""}"></span>`).join("")}</div>` : ""}
+            </div>
+            <div class="card-body">
+              <div class="card-title">${p.name}</div>
+              <div class="card-sub">${p.company}</div>
+              <div class="price">${p.price}</div>
+              <dl class="spec">
+                ${specRow("THC", p.thc)}${specRow("CBD", p.cbd)}
+                ${specRow("Cultivar", p.cultivar)}${specRow("Dominance", p.dominance)}
+                ${specRow("Origin", p.origin + " · " + p.region)}
+                ${specRow("Irradiation", p.irradiation)}${specRow("Pack", p.pack)}
+              </dl>
+              <div class="buyrow">
+                <div class="stepper" data-stepper>
+                  <button data-dec>−</button><span class="qty">1</span><button data-inc>+</button>
+                </div>
+                <button class="add-btn" data-add>Add to basket</button>
+              </div>
+            </div>
+          </div>
+          <!-- BACK (D-05): COA/Images/Videos/Other-docs dropdown + R1 stub + link -->
+          <div class="face back">
+            <div class="back-body">
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <span class="back-title">${p.name} — documents</span>
+                <button class="flip-btn" style="position:static;" data-flip>↺ Front</button>
+              </div>
+              <div class="docs">
+                <select>
+                  <option>COAs (2)</option>
+                  <option>Images (${p.imgs.length})</option>
+                  <option>Videos (1 — Loom link)</option>
+                  <option>Other docs (1)</option>
+                </select>
+                <div class="doc-list">
+                  <a href="#" onclick="return false">COA — batch ${p.pzn} (PDF) ↓</a>
+                  <a href="#" onclick="return false">COA — heavy metals (PDF) ↓</a>
+                  <a href="#" onclick="return false">Grow video (Loom) ↗</a>
+                </div>
+              </div>
+              <!-- R1: INERT Sella stub — NO number, viewer-identical (T-07-01) -->
+              <div class="sella-stub">
+                <span class="tag">✦ Sella · Marktvergleich</span>
+                Market comparison available on request. (Coming soon — no live data in v1.)
+              </div>
+              <div class="present-link">
+                <a href="#" onclick="return false">View full Present page for ${p.company} ↗</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>`).join("");
+  }
+
+  // ----- Basket rendering (grouped per company) -----
+  function renderBasket() {
+    const body = document.getElementById("basketBody");
+    const companies = Object.keys(cart).filter((c) => cart[c].length > 0);
+    let total = 0;
+    companies.forEach((c) => cart[c].forEach((l) => (total += l.qty)));
+    document.getElementById("fabCount").textContent = total;
+    if (companies.length === 0) {
+      body.innerHTML = `<div class="basket-empty">Your basket is empty.<br/>Add products to start a deal.</div>`;
+      return;
+    }
+    body.innerHTML = companies.map((c) => `
+      <div class="basket-group">
+        <h4>${c}</h4>
+        ${cart[c].map((l) => `<div class="basket-line"><span>${l.name}</span><span class="ln-q">×${l.qty}</span></div>`).join("")}
+      </div>`).join("");
+  }
+
+  function addToCart(product, qty) {
+    const co = product.company;
+    cart[co] = cart[co] || [];
+    const existing = cart[co].find((l) => l.id === product.id);
+    if (existing) existing.qty += qty;
+    else cart[co].push({ id: product.id, name: product.name, qty });
+    renderBasket();
+    document.getElementById("basket").classList.add("open");
+  }
+
+  // ----- Delegated interactions on the grid -----
+  grid.addEventListener("click", (e) => {
+    const card = e.target.closest(".card");
+    if (!card) return;
+    const product = products.find((p) => p.id === card.dataset.id);
+
+    if (e.target.closest("[data-flip]")) { card.classList.toggle("flipped"); return; }
+
+    if (e.target.closest("[data-inc]") || e.target.closest("[data-dec]")) {
+      const qtyEl = card.querySelector(".qty");
+      let q = parseInt(qtyEl.textContent, 10);
+      q += e.target.closest("[data-inc]") ? 1 : -1;
+      if (q < 1) q = 1; // floor at 1 (the contract: never below the step)
+      qtyEl.textContent = q; return;
+    }
+    if (e.target.closest("[data-add]")) {
+      const q = parseInt(card.querySelector(".qty").textContent, 10);
+      addToCart(product, q); return;
+    }
+    // carousel
+    const photo = card.querySelector(".photo");
+    if (e.target.closest("[data-next]") || e.target.closest("[data-prev]")) {
+      let i = parseInt(photo.dataset.slide, 10);
+      i += e.target.closest("[data-next]") ? 1 : -1;
+      if (i < 0) i = product.imgs.length - 1;
+      if (i >= product.imgs.length) i = 0;
+      photo.dataset.slide = i;
+      photo.querySelector("img").src = product.imgs[i];
+      photo.querySelectorAll(".dot").forEach((d, di) => d.classList.toggle("on", di === i));
+    }
+  });
+
+  // ----- Location tabs (D-06) -----
+  document.getElementById("tabs").addEventListener("click", (e) => {
+    const tab = e.target.closest(".tab");
+    if (!tab) return;
+    document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
+    tab.classList.add("active");
+    activeLoc = tab.dataset.loc;
+    renderGrid();
+  });
+
+  // ----- Basket open/close -----
+  document.getElementById("basketFab").addEventListener("click", () =>
+    document.getElementById("basket").classList.toggle("open"));
+  document.getElementById("basketClose").addEventListener("click", () =>
+    document.getElementById("basket").classList.remove("open"));
+
+  // ----- Fullscreen / Presentation mode (D-09) -----
+  const fsBtn = document.getElementById("fsBtn");
+  fsBtn.addEventListener("click", () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen?.();
+    } else {
+      document.exitFullscreen?.();
+    }
+  });
+  document.addEventListener("fullscreenchange", () => {
+    const inFs = !!document.fullscreenElement;
+    document.getElementById("app").classList.toggle("is-fullscreen", inFs);
+    fsBtn.textContent = inFs ? "⛶ Exit fullscreen" : "⛶ Fullscreen";
+  });
+
+  // ----- Expandable info cards (D-10): expand on click, collapse on X / click-away -
+  document.querySelectorAll(".info-card").forEach((card) => {
+    card.addEventListener("click", (e) => {
+      if (e.target.closest(".x")) { card.classList.remove("open"); e.stopPropagation(); return; }
+      card.classList.add("open");
+    });
+  });
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest(".info-card")) {
+      document.querySelectorAll(".info-card.open").forEach((c) => c.classList.remove("open"));
+    }
+  });
+
+  renderGrid();
+  renderBasket();
+</script>
+</body>
+</html>
