@@ -718,12 +718,21 @@ export async function getWorkspace(dealCardId: string): Promise<DealWorkspaceVie
   // owners first, then joining order
   members.sort((a, b) => Number(b.role === "owner") - Number(a.role === "owner"));
 
+  // the viewer's own company - resolved from the session so the Room can decide
+  // own-side vs other-side without a second read (D-10).
+  const { data: viewerPerson } = await supabase
+    .from("person")
+    .select("company_id")
+    .eq("id", user.id)
+    .single();
+
   return {
     workspaceId: wsRes.data.id,
     dealCardId: wsRes.data.deal_card_id,
     visibility: wsRes.data.visibility as WorkspaceVisibility,
     members,
     dealThreadId: threadRes.data.id,
+    viewerCompanyId: viewerPerson?.company_id ?? null,
   };
 }
 
@@ -765,6 +774,11 @@ export async function getStagesAndThings(workspaceId: string): Promise<StageView
       status: r.status as ThingStatus,
       stageCode: r.stage_code as StageCode,
       sortOrder: r.sort_order,
+      // assignment + visibility are read off the cast row in Task 3; null/false
+      // until the SELECT is extended.
+      assigneePersonId: null,
+      isPrivate: false,
+      ownerCompanyId: null,
     };
     const list = byStage.get(r.stage_code) ?? [];
     list.push(view);

@@ -237,6 +237,16 @@ export interface ConfirmResult {
 }
 
 /**
+ * Result of a `finalizeDeal` action (D-16) - a fast hint; the client re-reads
+ * the card and the golden skin follows the DB status. Modelled on
+ * `ConfirmResult`; the status after a successful finalize is always 'done'.
+ */
+export interface FinalizeDealResult {
+  /** the card status AFTER finalization (always 'done' on success) */
+  cardStatus: DealCardStatus;
+}
+
+/**
  * The whole card, ready to render. One `getDealCard(id)` read assembles this:
  * the card (narrowed), the current-version line items, my-side per-line margins,
  * the seeded signals for my side, the full version log, and the two confirm
@@ -325,6 +335,12 @@ export interface DealWorkspaceView {
   members: MemberView[];
   /** the chat_thread (type='deal') born with the deal; the chat hero mounts this */
   dealThreadId: string;
+  /**
+   * The VIEWER's own company id, resolved from the session (D-10). The Room uses
+   * it to decide own-side vs other-side for visibility/assignment without a
+   * second read; null when the viewer has no company.
+   */
+  viewerCompanyId: string | null;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -369,6 +385,45 @@ export interface ThingView {
   stageCode: StageCode;
   /** order within its stage */
   sortOrder: number;
+  /** thing.assignee_person_id - the person this Thing is assigned to (D-09); null when unassigned. */
+  assigneePersonId: string | null;
+  /** thing.is_private - true = visible only to its owner company; drives the lock icon (D-10/D-13). */
+  isPrivate: boolean;
+  /** thing.owner_company_id - the company that owns this Thing (D-10/D-11); the side a private item belongs to. */
+  ownerCompanyId: string | null;
+}
+
+/**
+ * One document row in the Deal Room's Documents list (Phase 5). The
+ * `deal_artifact` projection: the lock icon needs `isPrivate` (D-13), and a
+ * document's visibility FOLLOWS its linked thing (resolved decision) via
+ * `thing.linked_artifact_id` - `linkedThingId` carries that reverse link.
+ */
+export interface ArtifactView {
+  /** deal_artifact.id */
+  id: string;
+  title: string;
+  /** deal_artifact.category code (e.g. 'invoice'); null when uncategorised. */
+  category: string | null;
+  /** deal_artifact.scan_status code (e.g. 'pending' | 'clean'). */
+  scanStatus: string;
+  /** deal_artifact.is_private - true = visible only to its owner company; drives the lock icon (D-13). */
+  isPrivate: boolean;
+  /** the thing.id whose linked_artifact_id points at this document, or null (a standalone document). */
+  linkedThingId: string | null;
+}
+
+/**
+ * One stage's STORED done state (D-14). Stage-done is a manual user action,
+ * never auto-flipped, so it lives in a `deal_stage_completion` row. A stage with
+ * NO row reads as not-done (markedDoneAt/By null).
+ */
+export interface StageCompletionView {
+  stageCode: StageCode;
+  /** ISO timestamp the stage was marked done; null when no completion row exists. */
+  markedDoneAt: string | null;
+  /** the person who marked the stage done; null when no completion row exists. */
+  markedDoneByPersonId: string | null;
 }
 
 /**

@@ -86,5 +86,10 @@ export async function createThing(args: {
     status: data.status as ThingStatus,
     stageCode: data.stage_code as StageCode,
     sortOrder: data.sort_order,
+    // visibility/assignment default to unset on a plain create (extended in the
+    // assignment-aware createThing below; Task 3).
+    assigneePersonId: null,
+    isPrivate: false,
+    ownerCompanyId: null,
   };
 }
