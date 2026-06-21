@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Hello-Sello · Team management — sign-off prototype (Phase 11)</title>
+<style>
+  /* ── Real app tokens (globals.css, locked 2026-06-07) ───────────────── */
+  :root{
+    --brand:#e30b5d; --brand-soft:#ffb7d5; --brand-deep:#76002d;
+    --ink:#1f2020; --ink-muted:#6b6470; --surface:#fff;
+    --success:#34b233; --info:#6c7bd9; --danger:#dc2626;
+    --bg-from:#fff; --bg-to:#fff1f7;
+    --glass-bg:rgba(255,255,255,.62); --glass-strong:rgba(255,255,255,.82);
+    --glass-border:rgba(255,255,255,.65);
+    --glass-shadow:0 10px 34px -12px rgba(118,0,45,.18);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    min-height:100%; color:var(--ink);
+    font-family:"Geist",system-ui,-apple-system,"Segoe UI",sans-serif;
+    background:
+      radial-gradient(60rem 60rem at 10% -12%, rgba(255,183,213,.55), transparent 60%),
+      radial-gradient(46rem 46rem at 108% 6%, rgba(227,11,93,.10), transparent 55%),
+      linear-gradient(160deg, var(--bg-from) 0%, var(--bg-to) 100%);
+    background-attachment:fixed;
+    padding:48px 24px 80px;
+  }
+  .wrap{max-width:920px;margin:0 auto}
+  header.page{margin-bottom:28px}
+  header.page h1{font-size:26px;font-weight:800;letter-spacing:-.02em}
+  header.page p{color:var(--ink-muted);margin-top:6px;font-size:14px;max-width:70ch}
+  header.page code{background:rgba(31,32,32,.06);padding:1px 5px;border-radius:5px;font-size:.92em}
+  .glass{
+    background:var(--glass-bg);backdrop-filter:blur(20px) saturate(140%);
+    -webkit-backdrop-filter:blur(20px) saturate(140%);
+    border:1px solid var(--glass-border);box-shadow:var(--glass-shadow);
+  }
+  h2.section{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
+    color:var(--brand-deep);margin:34px 0 14px}
+
+  /* ── the standalone /team page card (D-14) ──────────────────────────── */
+  .team-card{border-radius:22px;padding:0;overflow:hidden}
+  .team-head{display:flex;align-items:center;gap:16px;padding:24px 26px 20px}
+  .team-head .titles h3{font-size:19px;font-weight:800;letter-spacing:-.01em}
+  .team-head .titles p{font-size:13px;color:var(--ink-muted);margin-top:3px}
+  .team-head .grow{flex:1}
+
+  /* primary / secondary / ghost buttons (match app pink CTA) */
+  .btn{display:inline-flex;align-items:center;gap:7px;font-family:inherit;font-size:13.5px;
+    font-weight:600;border-radius:12px;border:1px solid transparent;cursor:pointer;
+    padding:9px 16px;transition:filter .15s,background .15s,border-color .15s}
+  .btn--primary{background:var(--brand);color:#fff;box-shadow:0 6px 16px -6px rgba(227,11,93,.6)}
+  .btn--primary:hover{filter:brightness(1.05)}
+  .btn--ghost{background:rgba(31,32,32,.04);color:var(--ink);border-color:rgba(31,32,32,.08)}
+  .btn--ghost:hover{background:rgba(31,32,32,.07)}
+  .btn--danger{background:rgba(220,38,38,.06);color:var(--danger);border-color:rgba(220,38,38,.22)}
+  .btn--danger:hover{background:rgba(220,38,38,.1)}
+  .btn--solid-danger{background:var(--danger);color:#fff;box-shadow:0 6px 16px -6px rgba(220,38,38,.5)}
+  .btn--sm{padding:6px 11px;font-size:12.5px;border-radius:10px}
+
+  /* ── member list ────────────────────────────────────────────────────── */
+  .list{display:flex;flex-direction:column}
+  .row{display:flex;align-items:center;gap:16px;padding:16px 26px;border-top:1px solid rgba(118,0,45,.07)}
+  .row:hover{background:rgba(255,255,255,.4)}
+  .avatar{width:42px;height:42px;border-radius:13px;flex:0 0 auto;
+    display:flex;align-items:center;justify-content:center;font-weight:800;color:#fff;font-size:14px;
+    background:linear-gradient(135deg,var(--brand),var(--brand-deep))}
+  .avatar.pending{background:linear-gradient(135deg,#b9b3c0,#7d7689)}
+  .row .who .name{font-weight:700;font-size:14.5px;display:flex;align-items:center;gap:8px}
+  .row .who .email{font-size:12.5px;color:var(--ink-muted);margin-top:2px}
+  .row .grow{flex:1}
+
+  /* role + status badges */
+  .badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;
+    letter-spacing:.02em;padding:4px 10px;border-radius:999px;white-space:nowrap}
+  .badge--super{color:var(--brand-deep);background:rgba(227,11,93,.1);border:1px solid rgba(227,11,93,.22)}
+  .badge--member{color:var(--ink-muted);background:rgba(31,32,32,.05);border:1px solid rgba(31,32,32,.08)}
+  .badge--pending{color:#9a6a00;background:rgba(255,176,32,.14);border:1px solid rgba(255,176,32,.3)}
+  .badge--you{color:var(--info);background:rgba(108,123,217,.12);border:1px solid rgba(108,123,217,.25)}
+
+  /* inline role select (the role-change flow) */
+  .role-select{font-family:inherit;font-size:12.5px;font-weight:600;color:var(--ink);
+    padding:6px 28px 6px 11px;border-radius:10px;border:1px solid rgba(31,32,32,.14);
+    background:rgba(255,255,255,.7)
+      url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b6470' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='m6 9 6 6 6-6'/></svg>")
+      no-repeat right 9px center;
+    -webkit-appearance:none;appearance:none;cursor:pointer}
+  .row-actions{display:flex;align-items:center;gap:8px}
+
+  /* per-row inline error (D-15 lockout shown right under the row) */
+  .row-error{display:none;font-size:12.5px;color:var(--danger);font-weight:600;
+    padding:0 26px 14px 84px;margin-top:-6px}
+  .row-error.show{display:block}
+  .row-error svg{vertical-align:-2px;margin-right:4px}
+
+  /* ── modal / dialog shell ───────────────────────────────────────────── */
+  .overlay-bg{position:fixed;inset:0;background:rgba(118,0,45,.18);backdrop-filter:blur(3px);
+    display:none;align-items:center;justify-content:center;padding:24px;z-index:50}
+  .overlay-bg.show{display:flex}
+  .dialog{width:100%;max-width:420px;border-radius:20px;padding:24px;background:var(--glass-strong);
+    backdrop-filter:blur(24px) saturate(150%);border:1px solid var(--glass-border);
+    box-shadow:0 24px 60px -18px rgba(118,0,45,.4)}
+  .dialog h4{font-size:17px;font-weight:800;letter-spacing:-.01em}
+  .dialog .sub{font-size:13px;color:var(--ink-muted);margin-top:6px;line-height:1.5}
+  .field{margin-top:16px}
+  .field label{display:block;font-size:12px;font-weight:700;color:var(--ink);
+    text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
+  .field input,.field select{width:100%;font-family:inherit;font-size:14px;color:var(--ink);
+    padding:10px 12px;border-radius:11px;border:1px solid rgba(31,32,32,.14);
+    background:rgba(255,255,255,.8);-webkit-appearance:none;appearance:none}
+  .field select{
+    background:rgba(255,255,255,.8)
+      url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%236b6470' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><path d='m6 9 6 6 6-6'/></svg>")
+      no-repeat right 12px center;cursor:pointer}
+  .field .hint{font-size:11.5px;color:var(--ink-muted);margin-top:5px}
+  .dialog-error{display:none;align-items:flex-start;gap:7px;margin-top:14px;padding:11px 13px;
+    border-radius:11px;background:rgba(220,38,38,.07);border:1px solid rgba(220,38,38,.2);
+    font-size:13px;color:var(--danger);font-weight:600;line-height:1.45}
+  .dialog-error.show{display:flex}
+  .dialog-error svg{flex:0 0 auto;margin-top:1px}
+  .dialog-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:22px}
+
+  /* toast (success feedback the actions drive) */
+  .toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%) translateY(20px);
+    opacity:0;pointer-events:none;transition:.25s;z-index:60;
+    background:var(--ink);color:#fff;font-size:13.5px;font-weight:600;
+    padding:12px 20px;border-radius:13px;box-shadow:0 14px 34px -10px rgba(0,0,0,.4);
+    display:flex;align-items:center;gap:9px}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .toast svg{flex:0 0 auto}
+
+  /* the state-switcher (mirrors landing-prototype's pinned switcher) */
+  .switcher{position:fixed;left:50%;transform:translateX(-50%);bottom:24px;z-index:40;
+    display:flex;gap:6px;padding:7px;border-radius:16px;background:var(--glass-strong);
+    backdrop-filter:blur(20px);border:1px solid var(--glass-border);box-shadow:var(--glass-shadow)}
+  .switcher button{font-family:inherit;font-size:12.5px;font-weight:600;color:var(--ink-muted);
+    background:transparent;border:none;padding:8px 13px;border-radius:11px;cursor:pointer}
+  .switcher button:hover{color:var(--ink)}
+  .switcher button.on{color:#fff;background:var(--brand)}
+
+  .legend{font-size:12.5px;color:var(--ink-muted);line-height:1.6;margin-top:18px}
+  .legend b{color:var(--ink)}
+  .legend code{background:rgba(31,32,32,.06);padding:1px 5px;border-radius:5px;font-size:.92em}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="page">
+    <h1>Team management — sign-off prototype</h1>
+    <p>The standalone <code>/team</code> page (D-14) where a Superadmin manages their company's people.
+       Static throwaway mock — <strong>not React</strong>. Buttons are wired with plain JS so you can
+       click through all four flows + the error states. Copy + layout here are the contract for the real
+       build. Brand tokens, <code>.glass</code> cards, and the verified-pill style match the live app.</p>
+  </header>
+
+  <h2 class="section">The /team page · member list</h2>
+
+  <!-- ════════ THE TEAM PAGE ════════ -->
+  <div class="team-card glass">
+
+    <div class="team-head">
+      <div class="titles">
+        <h3>Team</h3>
+        <p>Aurora Deutschland GmbH · 4 people</p>
+      </div>
+      <div class="grow"></div>
+      <button class="btn btn--primary" onclick="openInvite()">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+        Invite member
+      </button>
+    </div>
+
+    <div class="list" id="list">
+
+      <!-- you (a Superadmin) -->
+      <div class="row" data-row="self">
+        <div class="avatar">MV</div>
+        <div class="who">
+          <div class="name">Muskan Verma <span class="badge badge--you">You</span></div>
+          <div class="email">muskan@aurora.de</div>
+        </div>
+        <div class="grow"></div>
+        <div class="row-actions">
+          <select class="role-select" onchange="onRoleChange(this,'self')">
+            <option value="superadmin" selected>Superadmin</option>
+            <option value="member">Member</option>
+          </select>
+          <button class="btn btn--danger btn--sm" onclick="openRemove('self')">Remove</button>
+        </div>
+      </div>
+      <div class="row-error" id="err-self"></div>
+
+      <!-- another active Superadmin -->
+      <div class="row" data-row="ayush">
+        <div class="avatar">AS</div>
+        <div class="who">
+          <div class="name">Ayush Sharma</div>
+          <div class="email">ayush@aurora.de</div>
+        </div>
+        <div class="grow"></div>
+        <div class="row-actions">
+          <select class="role-select" onchange="onRoleChange(this,'ayush')">
+            <option value="superadmin" selected>Superadmin</option>
+            <option value="member">Member</option>
+          </select>
+          <button class="btn btn--danger btn--sm" onclick="openRemove('ayush')">Remove</button>
+        </div>
+      </div>
+      <div class="row-error" id="err-ayush"></div>
+
+      <!-- an active Member -->
+      <div class="row" data-row="lena">
+        <div class="avatar">LK</div>
+        <div class="who">
+          <div class="name">Lena Krause</div>
+          <div class="email">lena@aurora.de</div>
+        </div>
+        <div class="grow"></div>
+        <div class="row-actions">
+          <span class="badge badge--member">Member</span>
+          <select class="role-select" onchange="onRoleChange(this,'lena')">
+            <option value="member" selected>Member</option>
+            <option value="superadmin">Superadmin</option>
+          </select>
+          <button class="btn btn--danger btn--sm" onclick="openRemove('lena')">Remove</button>
+        </div>
+      </div>
+      <div class="row-error" id="err-lena"></div>
+
+      <!-- a pending invitee (no person row yet → no role select / remove) -->
+      <div class="row" data-row="tom">
+        <div class="avatar pending">T</div>
+        <div class="who">
+          <div class="name">tom@newhire.de</div>
+          <div class="email">Invited as Member · awaiting accept</div>
+        </div>
+        <div class="grow"></div>
+        <div class="row-actions">
+          <span class="badge badge--pending">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 7v5l3 2"/></svg>
+            Pending
+          </span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <p class="legend">
+    <b>Role badge</b> = derived from Superadmin-group membership (Superadmin = pink, Member = grey).
+    <b>Pending</b> (amber) = invited but not yet accepted (derived from auth state, no role select / remove).
+    A Superadmin can manage themselves and others; the <b>last Superadmin is protected</b> (D-15).
+  </p>
+
+</div>
+
+<!-- ════════ INVITE MODAL (flow 2) ════════ -->
+<div class="overlay-bg" id="m-invite">
+  <div class="dialog" role="dialog" aria-modal="true">
+    <h4>Invite a colleague</h4>
+    <p class="sub">They'll get an email link to set a password and join Aurora Deutschland. They become
+      active as soon as they accept — no second approval.</p>
+
+    <div class="field">
+      <label for="inv-email">Email</label>
+      <input id="inv-email" type="email" placeholder="name@company.de" autocomplete="off" />
+    </div>
+
+    <div class="field">
+      <label for="inv-role">Role</label>
+      <select id="inv-role">
+        <option value="member" selected>Member</option>
+        <option value="superadmin">Superadmin</option>
+      </select>
+      <div class="hint">Defaults to Member (D-08). Members can do everything except manage the team and company profile.</div>
+    </div>
+
+    <!-- D-09: existing-account error state -->
+    <div class="dialog-error" id="inv-error">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+      <span id="inv-error-text">This email already has a Hello-Sello account</span>
+    </div>
+
+    <div class="dialog-actions">
+      <button class="btn btn--ghost" onclick="closeInvite()">Cancel</button>
+      <button class="btn btn--primary" onclick="submitInvite()">Send invite</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ REMOVE CONFIRM DIALOG (flow 4) ════════ -->
+<div class="overlay-bg" id="m-remove">
+  <div class="dialog" role="dialog" aria-modal="true">
+    <h4 id="rm-title">Remove member?</h4>
+    <p class="sub" id="rm-sub">
+      <strong id="rm-name">Lena Krause</strong> will lose access to Aurora Deutschland immediately and their
+      active session ends. Their account and everything they authored stay intact — you can re-invite them later.
+    </p>
+
+    <!-- D-15: lockout error shown inside the dialog when removing the last Superadmin -->
+    <div class="dialog-error" id="rm-error">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+      <span>Promote another Superadmin before removing this one</span>
+    </div>
+
+    <div class="dialog-actions">
+      <button class="btn btn--ghost" onclick="closeRemove()">Cancel</button>
+      <button class="btn btn--solid-danger" id="rm-confirm" onclick="confirmRemove()">Remove</button>
+    </div>
+  </div>
+</div>
+
+<!-- toast -->
+<div class="toast" id="toast">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+  <span id="toast-text">Done</span>
+</div>
+
+<!-- state switcher: jump straight to each error/edge state for sign-off -->
+<div class="switcher">
+  <button class="on" onclick="reset(this)">Normal</button>
+  <button onclick="demoInviteExisting(this)">Invite · existing account (D-09)</button>
+  <button onclick="demoRoleLockout(this)">Demote last Superadmin (D-15)</button>
+  <button onclick="demoRemoveLockout(this)">Remove last Superadmin (D-15)</button>
+</div>
+
+<script>
+  /* ── people fixtures (mirror listTeam's TeamMember shape) ───────────── */
+  const NAMES = {
+    self:  'You (Muskan Verma)',
+    ayush: 'Ayush Sharma',
+    lena:  'Lena Krause',
+  };
+
+  const $  = (id) => document.getElementById(id);
+  const overlay = (id, on) => $(id).classList.toggle('show', on);
+
+  function toast(text){
+    const t = $('toast'); $('toast-text').textContent = text;
+    t.classList.add('show'); clearTimeout(t._t);
+    t._t = setTimeout(() => t.classList.remove('show'), 2600);
+  }
+
+  /* ── flow 2 · INVITE ────────────────────────────────────────────────── */
+  function openInvite(){
+    $('inv-email').value = ''; $('inv-role').value = 'member';
+    $('inv-error').classList.remove('show');
+    overlay('m-invite', true); $('inv-email').focus();
+  }
+  function closeInvite(){ overlay('m-invite', false); }
+  function submitInvite(){
+    const email = $('inv-email').value.trim().toLowerCase();
+    $('inv-error').classList.remove('show');
+    // D-09 demo: any address containing "existing" maps to the existing-account error
+    if (email.includes('existing')) {
+      $('inv-error-text').textContent = 'This email already has a Hello-Sello account';
+      $('inv-error').classList.add('show'); return;
+    }
+    if (!email || !email.includes('@')) {
+      $('inv-error-text').textContent = 'Enter a valid email address';
+      $('inv-error').classList.add('show'); return;
+    }
+    closeInvite();
+    toast('Invite sent to ' + email);
+  }
+
+  /* ── flow 3 · INLINE ROLE CHANGE ────────────────────────────────────── */
+  // Last-Superadmin guard for the demo: self + ayush are the two Superadmins.
+  function isLastSuperDemote(who){
+    // demoting either of the two Superadmins is fine here UNLESS forced lockout is on
+    return forceRoleLockout && who === 'self';
+  }
+  let forceRoleLockout = false;
+  function onRoleChange(sel, who){
+    const errEl = $('err-' + who);
+    errEl.classList.remove('show');
+    const toMember = sel.value === 'member';
+    if (toMember && isLastSuperDemote(who)) {
+      // D-15: block the demote, revert the select, show the lockout under the row
+      sel.value = 'superadmin';
+      errEl.innerHTML = "<svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'/><path d='M12 8v4M12 16h.01'/></svg>Promote another Superadmin before changing this one";
+      errEl.classList.add('show');
+      return;
+    }
+    toast((NAMES[who]||'Member') + ' is now ' + (toMember ? 'a Member' : 'a Superadmin'));
+  }
+
+  /* ── flow 4 · REMOVE (confirm dialog) ───────────────────────────────── */
+  let removeTarget = null, forceRemoveLockout = false;
+  function openRemove(who){
+    removeTarget = who;
+    $('rm-name').textContent = (NAMES[who]||'This member').replace('You (','').replace(')','');
+    $('rm-title').textContent = who === 'self' ? 'Remove yourself?' : 'Remove member?';
+    $('rm-error').classList.remove('show');
+    $('rm-confirm').textContent = 'Remove';
+    overlay('m-remove', true);
+  }
+  function closeRemove(){ overlay('m-remove', false); removeTarget = null; }
+  function confirmRemove(){
+    // D-15: removing the last Superadmin is blocked server-side → surfaced in the dialog
+    if (forceRemoveLockout && removeTarget === 'self') {
+      $('rm-error').classList.add('show'); return;
+    }
+    const name = (NAMES[removeTarget]||'Member').replace('You (','').replace(')','');
+    closeRemove();
+    toast(name + ' removed and access revoked');
+  }
+
+  /* ── switcher: jump to each edge state for sign-off ─────────────────── */
+  function clearActive(){ document.querySelectorAll('.switcher button').forEach(b=>b.classList.remove('on')); }
+  function reset(btn){
+    clearActive(); btn.classList.add('on');
+    forceRoleLockout = false; forceRemoveLockout = false;
+    document.querySelectorAll('.row-error').forEach(e=>e.classList.remove('show'));
+    closeInvite(); closeRemove();
+  }
+  function demoInviteExisting(btn){
+    clearActive(); btn.classList.add('on');
+    openInvite();
+    $('inv-email').value = 'colleague@existing-account.de';
+    $('inv-role').value = 'member';
+    submitInvite(); // immediately shows the D-09 error
+  }
+  function demoRoleLockout(btn){
+    clearActive(); btn.classList.add('on');
+    forceRoleLockout = true;
+    // simulate the user trying to demote themselves (the would-be last Superadmin scenario)
+    const sel = document.querySelector('[data-row="self"] .role-select');
+    sel.value = 'member';
+    onRoleChange(sel, 'self');
+  }
+  function demoRemoveLockout(btn){
+    clearActive(); btn.classList.add('on');
+    forceRemoveLockout = true;
+    openRemove('self');
+    confirmRemove(); // immediately shows the D-15 lockout in the dialog
+  }
+
+  // close dialogs on backdrop click / Esc
+  document.querySelectorAll('.overlay-bg').forEach(bg=>{
+    bg.addEventListener('click', e=>{ if(e.target===bg){ closeInvite(); closeRemove(); }});
+  });
+  document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ closeInvite(); closeRemove(); }});
+</script>
+</body>
+</html>
