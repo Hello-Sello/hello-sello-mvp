@@ -1,529 +1,569 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Present rebuild — prototype (DEV-81/80/79 · CARDS board)</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Present — redesign prototype (interactive)</title>
 <!--
-  THROWAWAY PROTOTYPE — Phase 7 Present rebuild (Muskan's prototype-first rule).
-  Single standalone file, no build step, no React, no Supabase. Open via file://.
-  This is the VISUAL SPEC for the React build (UI-SPEC skipped per D-15).
-  Decisions mocked: D-03 flip card, D-04 front, D-05 back (+ inert R1 Sella stub),
-  D-06 location tabs, D-09 banner controls + Fullscreen, D-10 expandable info,
-  UX-02 square 4-up grid, UX-03 per-company basket.
-  Fake seed data only — see NOTES.md for what this does / does not prove.
+  THROWAWAY PROTOTYPE — Phase 7 (Present Catalogue UX). Real app theme (tokens
+  mirror src/app/globals.css). Fully clickable: two screens (Shop / Manage),
+  dense "Wholesale Pro" product cards (4-up, no flip), a small LOCATION dropdown
+  (many locations) that re-contexts the shop, a compact info ribbon, a working
+  basket + quick-view, and working Manage actions (add/edit product, branding,
+  locations, share link, send price list) as modals. Nav is clickable.
+  No build, no React, no real data. Open directly.
 -->
 <style>
-  :root {
-    --raspberry: #E30B5D;
-    --cotton: #FFB7D5;
-    --red-pink: #76002D;
-    --ink: #1F2020;
-    --success: #34B233;
-    --periwinkle: #6C7BD9;
-    --line: #ececef;
-    --muted: #6b6b72;
-    --glass: rgba(255, 255, 255, 0.72);
-    --radius: 16px;
+  :root{
+    --brand:#e30b5d; --brand-soft:#ffb7d5; --brand-deep:#76002d;
+    --surface:#fff; --ink:#1f2020; --ink-muted:#6b6470;
+    --success:#34b233; --info:#6c7bd9; --danger:#dc2626;
+    --bg-from:#fff; --bg-to:#fff1f7;
+    --glass-bg:rgba(255,255,255,.62); --glass-bg-strong:rgba(255,255,255,.80);
+    --glass-border:rgba(255,255,255,.65); --glass-shadow:0 10px 34px -12px rgba(118,0,45,.18);
+    --ease:cubic-bezier(.4,.15,.2,1); --ease-over:cubic-bezier(.67,.17,.32,.95);
   }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    color: var(--ink);
-    background:
-      radial-gradient(900px 500px at 85% -10%, #ffe3ee 0%, transparent 60%),
-      radial-gradient(700px 500px at -10% 10%, #f1f0ff 0%, transparent 55%),
-      #fafafb;
-    min-height: 100vh;
-  }
-  /* ---------------- App shell (left sidebar hidden in fullscreen) ----------- */
-  .app { display: grid; grid-template-columns: 64px 1fr; min-height: 100vh; }
-  .sidebar {
-    background: var(--red-pink); color: #fff; display: flex; flex-direction: column;
-    align-items: center; gap: 22px; padding: 18px 0;
-  }
-  .sidebar .logo { font-weight: 800; letter-spacing: -1px; font-size: 18px; }
-  .sidebar .nav-ico {
-    width: 36px; height: 36px; border-radius: 11px; display: grid; place-items: center;
-    background: rgba(255, 255, 255, 0.12); font-size: 15px; cursor: default;
-  }
-  .sidebar .nav-ico.active { background: #fff; color: var(--red-pink); }
-  /* In Presentation/fullscreen mode the sidebar collapses away (D-09). */
-  body:fullscreen .app, .app.is-fullscreen { grid-template-columns: 1fr; }
-  body:fullscreen .sidebar, .app.is-fullscreen .sidebar { display: none; }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{height:100vh;display:flex;flex-direction:column;overflow:hidden;color:var(--ink);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased;
+    background:radial-gradient(60rem 60rem at 10% -12%,rgba(255,183,213,.55),transparent 60%),radial-gradient(46rem 46rem at 108% 6%,rgba(227,11,93,.10),transparent 55%),linear-gradient(160deg,var(--bg-from),var(--bg-to));
+    background-attachment:fixed;}
+  .glass{background:var(--glass-bg);backdrop-filter:blur(20px) saturate(140%);-webkit-backdrop-filter:blur(20px) saturate(140%);border:1px solid var(--glass-border);box-shadow:var(--glass-shadow)}
+  .glass-strong{background:var(--glass-bg-strong);backdrop-filter:blur(24px) saturate(160%);-webkit-backdrop-filter:blur(24px) saturate(160%);border:1px solid var(--glass-border);box-shadow:var(--glass-shadow)}
+  svg{display:block}
+  .ic{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+  .ic.sm{width:15px;height:15px}.ic.xs{width:13px;height:13px}
+  button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+  a{color:inherit;text-decoration:none}
+  input,select,textarea{font-family:inherit}
 
-  .main { padding: 0 0 80px; }
+  .switch{flex:0 0 auto;display:flex;align-items:center;gap:10px;padding:8px 14px;background:rgba(31,32,32,.92);color:#fff;font-size:12.5px;z-index:80}
+  .switch b{color:#ffb7d5}
+  .switch .seg2{display:flex;gap:4px;margin-left:auto}
+  .switch .seg2 button{border-radius:999px;padding:6px 14px;font-size:12px;font-weight:700;color:rgba(255,255,255,.7);background:rgba(255,255,255,.08)}
+  .switch .seg2 button.on{background:var(--brand);color:#fff}
 
-  /* ---------------- Banner / hero with top-right controls (DEV-79, D-09) ---- */
-  .banner {
-    position: relative; margin: 18px; border-radius: var(--radius); overflow: hidden;
-    background: linear-gradient(120deg, #76002d, #e30b5d 70%, #ff5e9c);
-    color: #fff; min-height: 150px; padding: 22px 24px;
-  }
-  .banner h1 { margin: 0 0 4px; font-size: 24px; }
-  .banner .sub { opacity: 0.92; font-size: 13px; }
-  .banner-controls {
-    position: absolute; top: 16px; right: 16px; display: flex; gap: 8px; flex-wrap: wrap;
-  }
-  .btn {
-    border: 0; cursor: pointer; font-size: 13px; font-weight: 600; border-radius: 999px;
-    padding: 9px 14px; background: #fff; color: var(--ink); display: inline-flex; gap: 6px;
-    align-items: center; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  }
-  .btn.ghost { background: rgba(255, 255, 255, 0.18); color: #fff; box-shadow: none; backdrop-filter: blur(6px); }
-  .btn.primary { background: var(--ink); color: #fff; }
-  .btn:hover { filter: brightness(0.97); }
+  .app{flex:1;min-height:0;display:flex;overflow:hidden}
+  .rail{margin:12px 0 12px 12px;width:76px;flex:0 0 76px;display:flex;flex-direction:column;gap:4px;border-radius:24px;padding:10px}
+  .wordmark{display:flex;flex-direction:column;align-items:center;gap:3px;margin:4px 0 12px}
+  .wordmark .badge{width:34px;height:34px;border-radius:11px;background:var(--brand);color:#fff;display:grid;place-items:center;font-weight:800;font-size:13px}
+  .wordmark small{font-size:8.5px;font-weight:700;color:var(--ink-muted)}
+  .nav{display:flex;flex-direction:column;gap:4px}
+  .navitem{position:relative;display:flex;flex-direction:column;align-items:center;gap:5px;border-radius:16px;padding:10px 4px;font-size:10px;font-weight:600;line-height:1;color:rgba(31,32,32,.55);transition:all .2s;cursor:pointer}
+  .navitem:hover{background:rgba(255,255,255,.55);color:var(--brand)}
+  .navitem.active{background:rgba(255,183,213,.7);color:var(--brand)}
+  .navitem.active .edge{position:absolute;left:0;top:50%;transform:translateY(-50%);height:28px;width:3px;border-radius:0 4px 4px 0;background:var(--brand)}
+  .navitem.soon{color:rgba(31,32,32,.3);cursor:not-allowed}.navitem.soon .ic{opacity:.4}
+  .rail .acct{margin-top:auto;display:flex;justify-content:center;padding-top:12px;position:relative}
+  .avatar{width:40px;height:40px;border-radius:999px;background:linear-gradient(135deg,#ffb7d5,#e30b5d);color:#fff;display:grid;place-items:center;font-weight:800;font-size:14px;box-shadow:0 0 0 2px #fff;cursor:pointer}
 
-  /* ---------------- Filter row: location tabs + category + view + sort ------ */
-  .toolbar {
-    margin: 0 18px 14px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
-    padding: 12px 14px; background: var(--glass); border: 1px solid var(--line);
-    border-radius: 14px; backdrop-filter: blur(8px);
-  }
-  .tabs { display: inline-flex; gap: 4px; background: #f1f1f4; border-radius: 999px; padding: 4px; }
-  .tab {
-    border: 0; background: transparent; padding: 7px 16px; border-radius: 999px;
-    font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer;
-  }
-  .tab.active { background: #fff; color: var(--raspberry); box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08); }
-  .toolbar .pill {
-    font-size: 12px; color: var(--muted); border: 1px solid var(--line);
-    background: #fff; border-radius: 999px; padding: 7px 12px;
-  }
-  .toolbar .spacer { flex: 1; }
+  .col{display:flex;min-width:0;flex:1;flex-direction:column}
+  .screen{display:none;min-width:0;flex:1;flex-direction:column;min-height:0}
+  body[data-screen="shop"] #shopScreen{display:flex}
+  body[data-screen="manage"] #manageScreen{display:flex}
 
-  /* ---------------- Square 4-up grid (UX-02) -------------------------------- */
-  .grid {
-    margin: 0 18px; display: grid; gap: 16px;
-    grid-template-columns: repeat(2, 1fr);
-  }
-  @media (min-width: 760px) { .grid { grid-template-columns: repeat(3, 1fr); } }
-  @media (min-width: 1080px) { .grid { grid-template-columns: repeat(4, 1fr); } }
+  .topbar{margin:12px 12px 0;display:flex;align-items:center;gap:10px;border-radius:18px;padding:8px 12px;position:relative;z-index:30}
+  .srch{display:flex;align-items:center;border-radius:999px;background:rgba(255,255,255,.55)}
+  .srch button{width:40px;height:40px;border-radius:999px;display:grid;place-items:center;color:var(--ink-muted)}
+  .srch .inp{width:0;overflow:hidden;transition:width .25s var(--ease)}
+  .srch.open{background:#fff}.srch.open .inp{width:230px}
+  .srch input{width:100%;border:none;background:transparent;font-size:13.5px;outline:none;padding-right:10px}
+  .tbspace{flex:1}
+  .tbbtn{display:inline-flex;align-items:center;gap:7px;border-radius:999px;padding:8px 14px;font-size:13px;font-weight:700;background:rgba(255,255,255,.6)}
+  .tbbtn:hover{background:#fff}.tbbtn.brand{background:var(--brand);color:#fff}.tbbtn.brand:hover{background:var(--brand-deep)}
+  .tbicon{position:relative;width:40px;height:40px;border-radius:999px;background:rgba(255,255,255,.6);display:grid;place-items:center}
+  .tbicon:hover{background:#fff}
+  .badge-dot{position:absolute;top:-3px;right:-3px;min-width:18px;height:18px;border-radius:999px;background:var(--brand);color:#fff;font-size:10px;font-weight:800;display:grid;place-items:center;padding:0 4px;box-shadow:0 0 0 2px #fff}
+  .badge-dot.bump{animation:bump .4s var(--ease-over)}
+  @keyframes bump{0%{transform:scale(1)}30%{transform:scale(1.55)}60%{transform:scale(.9)}100%{transform:scale(1)}}
+  .menu-wrap{position:relative;z-index:60}
+  .menu{position:absolute;top:calc(100% + 8px);right:0;width:248px;border-radius:18px;padding:8px;transform-origin:top right;transform:scale(.96);opacity:0;pointer-events:none;transition:all .15s var(--ease);z-index:70}
+  .menu.show{transform:scale(1);opacity:1;pointer-events:auto}
+  .menu a{display:flex;align-items:center;gap:10px;border-radius:11px;padding:9px 11px;font-size:13px;font-weight:600;cursor:pointer}
+  .menu a:hover{background:rgba(255,183,213,.3);color:var(--brand-deep)}
+  .menu .sep{height:1px;background:rgba(0,0,0,.07);margin:6px 4px}
+  .menu .lbl{font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-muted);padding:6px 11px 2px}
 
-  /* ---------------- Flip card (D-03) — rotateY 3D flip --------------------- */
-  .card { perspective: 1400px; }
-  .card-inner {
-    position: relative; width: 100%; transition: transform 0.55s cubic-bezier(0.4, 0.1, 0.2, 1);
-    transform-style: preserve-3d; min-height: 430px;
-  }
-  .card.flipped .card-inner { transform: rotateY(180deg); }
-  .face {
-    position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden;
-    border-radius: var(--radius); background: #fff; border: 1px solid var(--line);
-    box-shadow: 0 6px 22px rgba(118, 0, 45, 0.06); overflow: hidden; display: flex; flex-direction: column;
-  }
-  .face.back { transform: rotateY(180deg); }
+  main{min-height:0;flex:1;overflow:auto;padding:12px;position:relative}
+  .wrap{display:flex;flex-direction:column;gap:14px;padding-bottom:30px}
 
-  /* Front — square image + carousel + qty stepper + add-to-basket + spec table */
-  .photo { position: relative; aspect-ratio: 1 / 1; overflow: hidden; background: #f3f3f5; }
-  .photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .carousel-dots { position: absolute; bottom: 8px; left: 0; right: 0; display: flex; gap: 5px; justify-content: center; }
-  .dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(255, 255, 255, 0.6); }
-  .dot.on { background: #fff; }
-  .carousel-arrow {
-    position: absolute; top: 50%; transform: translateY(-50%); width: 28px; height: 28px;
-    border-radius: 50%; border: 0; background: rgba(255, 255, 255, 0.85); cursor: pointer; font-size: 14px;
-  }
-  .carousel-arrow.l { left: 8px; } .carousel-arrow.r { right: 8px; }
-  .flip-btn {
-    position: absolute; top: 8px; right: 8px; border: 0; cursor: pointer; border-radius: 999px;
-    background: rgba(31, 32, 32, 0.7); color: #fff; font-size: 11px; padding: 6px 10px;
-  }
-  .loc-tag {
-    position: absolute; top: 8px; left: 8px; font-size: 11px; font-weight: 600;
-    background: rgba(255, 255, 255, 0.9); border-radius: 999px; padding: 4px 9px;
-  }
-  .card-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
-  .card-title { font-weight: 700; font-size: 15px; }
-  .card-sub { font-size: 12px; color: var(--muted); margin-top: -4px; }
-  .spec {
-    display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; font-size: 11.5px;
-    border-top: 1px dashed var(--line); padding-top: 8px;
-  }
-  .spec dt { color: var(--muted); }
-  .spec dd { margin: 0; font-weight: 600; text-align: right; }
-  .price { font-weight: 800; color: var(--raspberry); font-size: 14px; }
-  .buyrow { display: flex; align-items: center; gap: 8px; margin-top: auto; }
-  .stepper { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 999px; }
-  .stepper button { width: 30px; height: 30px; border: 0; background: transparent; font-size: 16px; cursor: pointer; }
-  .stepper .qty { min-width: 30px; text-align: center; font-size: 13px; font-weight: 700; }
-  .add-btn { flex: 1; background: var(--raspberry); color: #fff; border: 0; border-radius: 999px; padding: 9px; font-weight: 700; cursor: pointer; }
+  .cover{position:relative;height:182px;width:100%;border-radius:24px;overflow:hidden;background:linear-gradient(110deg,#0f3d2e,#1f7a4d 55%,#86c232)}
+  .cover::after{content:"";position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.55),transparent 55%)}
+  .cover .id{position:absolute;left:24px;bottom:18px;right:24px;z-index:2;display:flex;align-items:flex-end;gap:16px;color:#fff}
+  .logo-tile{width:80px;height:80px;border-radius:18px;background:rgba(255,255,255,.16);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.4);display:grid;place-items:center;font-size:30px;flex:0 0 80px}
+  .cover h1{margin:0;font-size:24px;font-weight:800;text-shadow:0 2px 12px rgba(0,0,0,.4)}
+  .cover .tag{margin:3px 0 0;font-size:13px;font-weight:600;opacity:.92}
+  .cover .loc-flag{position:absolute;top:16px;right:18px;z-index:2;display:inline-flex;align-items:center;gap:7px;border-radius:999px;background:rgba(255,255,255,.92);color:var(--ink);font-size:12px;font-weight:800;padding:6px 13px}
 
-  /* Back — COA/Images/Videos/Other-docs dropdown + Sella stub + present link */
-  .back-body { padding: 14px; display: flex; flex-direction: column; gap: 12px; flex: 1; }
-  .back-title { font-weight: 700; font-size: 14px; }
-  .docs select { width: 100%; padding: 9px; border-radius: 10px; border: 1px solid var(--line); font-size: 13px; }
-  .doc-list { font-size: 12px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
-  .doc-list a { color: var(--periwinkle); text-decoration: none; }
-  /* R1 — INERT Sella "Marktvergleich" stub: NO number, identical for every viewer */
-  .sella-stub {
-    border: 1px dashed var(--periwinkle); border-radius: 12px; padding: 11px 12px;
-    background: #f6f6ff; font-size: 12px; color: var(--muted);
-  }
-  .sella-stub .tag { font-weight: 700; color: var(--periwinkle); display: block; margin-bottom: 3px; }
-  .present-link { font-size: 12px; }
-  .present-link a { color: var(--raspberry); font-weight: 600; text-decoration: none; }
+  /* info RIBBON */
+  .ribbon{position:relative;display:flex;border-radius:16px}
+  .rseg{flex:1;display:flex;align-items:center;gap:10px;padding:12px 16px;cursor:pointer;border-right:1px solid rgba(0,0,0,.06);transition:background .15s}
+  .rseg:last-child{border-right:none}.rseg:hover{background:rgba(255,255,255,.5)}.rseg.on{background:rgba(255,183,213,.35)}
+  .rseg .ico{width:32px;height:32px;border-radius:10px;background:rgba(255,183,213,.45);color:var(--brand-deep);display:grid;place-items:center;flex:0 0 32px}
+  .rseg .lab{font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-muted)}
+  .rseg .val{font-size:13.5px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .rseg .chev{margin-left:auto;color:var(--ink-muted);transition:transform .2s}.rseg.on .chev{transform:rotate(180deg)}
+  .rpanel{position:absolute;top:calc(100% + 8px);left:0;right:0;z-index:20;border-radius:16px;padding:16px;opacity:0;transform:translateY(-6px);pointer-events:none;transition:all .2s var(--ease)}
+  .rpanel.show{opacity:1;transform:none;pointer-events:auto}
+  .rpanel .pclose{position:absolute;top:12px;right:12px;width:26px;height:26px;border-radius:999px;background:rgba(255,255,255,.7);display:grid;place-items:center;color:var(--ink-muted)}
+  .rgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px 24px}
+  .irow{display:flex;gap:10px;font-size:13px}.irow .k{color:var(--ink-muted);min-width:88px;font-weight:600}.irow .v{font-weight:700}
+  .pres-link{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;color:var(--brand);border:1px dashed rgba(227,11,93,.4);border-radius:9px;padding:5px 9px;margin-top:6px}
 
-  /* ---------------- Basket panel — top-right, grouped per company (UX-03) --- */
-  .basket {
-    position: fixed; top: 18px; right: 18px; width: 300px; max-height: 80vh; overflow: auto;
-    background: #fff; border: 1px solid var(--line); border-radius: 16px;
-    box-shadow: 0 12px 40px rgba(118, 0, 45, 0.16); z-index: 40; display: none;
-  }
-  .basket.open { display: block; }
-  .basket-head { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; border-bottom: 1px solid var(--line); }
-  .basket-head strong { font-size: 15px; }
-  .basket-head .x { border: 0; background: transparent; cursor: pointer; font-size: 18px; color: var(--muted); }
-  .basket-group { padding: 10px 16px; border-bottom: 1px solid var(--line); }
-  .basket-group h4 { margin: 0 0 6px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
-  .basket-line { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; padding: 4px 0; }
-  .basket-line .ln-q { color: var(--muted); }
-  .basket-empty { padding: 22px 16px; color: var(--muted); font-size: 13px; text-align: center; }
-  .basket-foot { padding: 12px 16px; }
-  .basket-cta { width: 100%; background: var(--ink); color: #fff; border: 0; border-radius: 999px; padding: 11px; font-weight: 700; cursor: pointer; }
-  .basket-foot .note { font-size: 11px; color: var(--muted); margin-top: 6px; text-align: center; }
+  /* filter row */
+  .filters{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .fdrop{position:relative}
+  .chip{border-radius:999px;padding:8px 14px;font-size:12.5px;font-weight:700;background:rgba(255,255,255,.6);color:rgba(31,32,32,.78);display:inline-flex;align-items:center;gap:7px}
+  .chip:hover{background:rgba(255,255,255,.95)}
+  .chip.loc{background:#fff;box-shadow:inset 0 0 0 1px rgba(118,0,45,.14)}
+  .chip .cnt{background:var(--brand);color:#fff;border-radius:999px;font-size:10px;font-weight:800;min-width:16px;height:16px;display:grid;place-items:center;padding:0 4px}
+  .fmenu{position:absolute;top:calc(100% + 8px);left:0;width:236px;border-radius:16px;padding:8px;opacity:0;transform:scale(.97);transform-origin:top left;pointer-events:none;transition:all .15s var(--ease);z-index:25;max-height:320px;overflow:auto}
+  .fmenu.show{opacity:1;transform:none;pointer-events:auto}
+  .fmenu .grp{font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-muted);padding:8px 8px 4px}
+  .opt{display:flex;align-items:center;gap:9px;border-radius:10px;padding:8px;font-size:13px;font-weight:600;cursor:pointer}
+  .opt:hover{background:rgba(255,183,213,.25)}
+  .opt .box{width:18px;height:18px;border-radius:6px;border:1.5px solid rgba(118,0,45,.3);display:grid;place-items:center;color:#fff;flex:0 0 18px}
+  .opt.sel .box{background:var(--brand);border-color:var(--brand)}
+  .opt .radio{width:16px;height:16px;border-radius:999px;border:1.5px solid rgba(118,0,45,.3);flex:0 0 16px}
+  .opt.sel .radio{border:5px solid var(--brand)}
+  .filters .spacer{flex:1}.count{font-size:12px;color:var(--ink-muted);font-weight:600}
+  .seg{display:flex;border-radius:999px;background:rgba(255,255,255,.6);padding:3px}
+  .seg button{border-radius:999px;padding:6px 11px;font-size:12px;font-weight:700;color:rgba(31,32,32,.6);display:flex;align-items:center;gap:5px}
+  .seg button.on{background:#fff;color:var(--brand-deep);box-shadow:0 1px 4px rgba(0,0,0,.08)}
 
-  /* Floating basket button (when panel closed) */
-  .basket-fab {
-    position: fixed; top: 18px; right: 18px; z-index: 39; background: var(--raspberry);
-    color: #fff; border: 0; border-radius: 999px; padding: 11px 16px; font-weight: 700;
-    cursor: pointer; box-shadow: 0 6px 20px rgba(227, 11, 93, 0.35);
-  }
-  .basket-fab .count {
-    background: #fff; color: var(--raspberry); border-radius: 999px; padding: 1px 7px;
-    font-size: 12px; margin-left: 6px;
-  }
+  /* PRODUCT GRID — variant B: dense, solid, 4-up */
+  .grid{display:grid;gap:12px;grid-template-columns:repeat(4,minmax(0,1fr))}
+  @media(max-width:1180px){.grid{grid-template-columns:repeat(3,1fr)}}
+  @media(max-width:820px){.grid{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:520px){.grid{grid-template-columns:1fr}}
+  .grid.list{grid-template-columns:1fr;gap:8px}
+  .card{border-radius:16px;overflow:hidden;background:#fff;border:1px solid rgba(118,0,45,.10);box-shadow:0 6px 18px -12px rgba(118,0,45,.25);display:flex;flex-direction:column;transition:transform .15s var(--ease),box-shadow .15s}
+  .card:hover{transform:translateY(-3px);box-shadow:0 16px 34px -16px rgba(118,0,45,.32)}
+  .photo{position:relative;aspect-ratio:16/11;overflow:hidden;cursor:pointer}
+  .photo .img{position:absolute;inset:0;display:grid;place-items:center;color:rgba(255,255,255,.92);font-weight:800;font-size:14px;text-shadow:0 1px 8px rgba(0,0,0,.3)}
+  .photo .badges{position:absolute;top:8px;left:8px;display:flex;gap:5px}
+  .mini{background:rgba(31,32,32,.55);color:#fff;border-radius:999px;font-size:9.5px;font-weight:700;padding:3px 7px;backdrop-filter:blur(4px)}
+  .qvbtn{position:absolute;top:8px;right:8px;width:28px;height:28px;border-radius:999px;background:rgba(255,255,255,.9);color:var(--ink);display:grid;place-items:center;opacity:0;transition:opacity .15s}
+  .photo:hover .qvbtn{opacity:1}
+  .body{padding:10px 11px 11px;display:flex;flex-direction:column;flex:1}
+  .pname{font-weight:800;font-size:13.5px;line-height:1.15}
+  .pcult{font-size:11px;color:var(--ink-muted);margin-top:1px}
+  .spec{margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:2px 12px;font-size:11px}
+  .spec div{display:flex;justify-content:space-between;border-bottom:1px dotted rgba(118,0,45,.16);padding-bottom:1px}
+  .spec .k{color:var(--ink-muted)}.spec .v{font-weight:700;font-variant-numeric:tabular-nums}
+  .pricefoot{margin-top:9px;display:flex;align-items:center;justify-content:space-between;gap:6px}
+  .price{font-weight:800;color:var(--brand-deep);font-size:14px;font-variant-numeric:tabular-nums}
+  .price small{font-weight:600;color:var(--ink-muted);font-size:10px}
+  .reqprice{font-size:11px;font-weight:800;color:var(--brand-deep);background:rgba(255,183,213,.3);border-radius:999px;padding:5px 10px}
+  .qtyrow{margin-top:10px;display:flex;align-items:center;gap:7px}
+  .stepper{display:flex;align-items:center;border-radius:999px;background:#fff;box-shadow:inset 0 0 0 1px rgba(118,0,45,.18)}
+  .stepper button{width:28px;height:28px;border-radius:999px;color:var(--brand-deep);display:grid;place-items:center}
+  .stepper button:hover{background:rgba(255,183,213,.4)}
+  .stepper .qv2{min-width:30px;text-align:center;font-weight:800;font-size:12.5px;font-variant-numeric:tabular-nums}
+  .addbtn{flex:1;border-radius:999px;background:var(--brand);color:#fff;font-weight:800;font-size:12px;padding:7px;display:flex;align-items:center;justify-content:center;gap:5px}
+  .addbtn:hover{background:var(--brand-deep)}
+  /* list mode */
+  .grid.list .card{flex-direction:row;align-items:stretch}
+  .grid.list .photo{aspect-ratio:1/1;width:84px;flex:0 0 84px}
+  .grid.list .body{flex-direction:row;align-items:center;gap:16px;flex:1}
+  .grid.list .spec{flex:1;grid-template-columns:repeat(4,1fr);margin:0}
+  .grid.list .pcult{display:none}.grid.list .qtyrow{margin:0;width:auto}.grid.list .pricefoot{margin:0;flex-direction:column;align-items:flex-end}
 
-  /* ---------------- Expandable info cards (DEV-80, D-10) ------------------- */
-  .info-row { margin: 22px 18px 0; display: grid; gap: 16px; grid-template-columns: 1fr 1fr; }
-  @media (max-width: 760px) { .info-row { grid-template-columns: 1fr; } }
-  .info-card {
-    background: var(--glass); border: 1px solid var(--line); border-radius: 14px;
-    padding: 14px 16px; cursor: pointer; backdrop-filter: blur(8px); position: relative;
-  }
-  .info-card h3 { margin: 0 0 6px; font-size: 14px; }
-  .info-card .base { font-size: 13px; color: var(--ink); }
-  .info-card .more { display: none; margin-top: 10px; border-top: 1px dashed var(--line); padding-top: 10px; font-size: 13px; color: var(--ink); }
-  .info-card .more .row { padding: 3px 0; }
-  .info-card.open .more { display: block; }
-  .info-card .x {
-    position: absolute; top: 10px; right: 12px; border: 0; background: transparent; cursor: pointer;
-    font-size: 16px; color: var(--muted); display: none;
-  }
-  .info-card.open .x { display: block; }
-  .info-card .hint { font-size: 11px; color: var(--muted); margin-top: 8px; }
+  /* drawers */
+  .scrim{position:fixed;inset:0;background:rgba(31,32,32,.2);backdrop-filter:blur(2px);opacity:0;pointer-events:none;transition:opacity .25s;z-index:40}
+  .scrim.show{opacity:1;pointer-events:auto}
+  .drawer{position:fixed;top:0;right:0;height:100%;width:400px;max-width:94vw;transform:translateX(105%);transition:transform .34s var(--ease-over);z-index:50;display:flex;flex-direction:column;border-radius:24px 0 0 24px;padding:18px;overflow:auto}
+  .drawer.show{transform:translateX(0)}
+  .drawer h3{margin:0;font-size:17px;font-weight:800;display:flex;align-items:center;gap:8px}
+  .drawer .close,.dhead .close{margin-left:auto;width:32px;height:32px;border-radius:999px;background:rgba(255,255,255,.6);display:grid;place-items:center}
+  .dhead{display:flex;align-items:center;gap:8px}
+  .qvphoto{margin-top:14px;border-radius:16px;aspect-ratio:16/11;display:grid;place-items:center;color:#fff;font-weight:800;font-size:18px;text-shadow:0 1px 8px rgba(0,0,0,.3)}
+  .qvspec{margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;font-size:12.5px}
+  .qvspec div{display:flex;justify-content:space-between;border-bottom:1px dotted rgba(118,0,45,.18);padding-bottom:3px}
+  .qvspec .k{color:var(--ink-muted)}.qvspec .v{font-weight:700}
+  .docsel{margin-top:14px;width:100%;border-radius:10px;background:#fff;box-shadow:inset 0 0 0 1px rgba(118,0,45,.18);padding:9px 11px;font-size:13px;font-weight:700}
+  .doclist{margin-top:8px;display:flex;flex-direction:column;gap:6px}
+  .docitem{display:flex;align-items:center;gap:8px;font-size:12px;border-radius:9px;background:rgba(255,183,213,.22);padding:8px 10px}
+  .docitem .grow{flex:1}.docitem .dl{color:var(--brand)}
+  .sella{margin-top:12px;border-radius:12px;border:1px dashed rgba(108,123,217,.55);background:rgba(108,123,217,.08);padding:11px}
+  .sella .t{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:800;color:#4854a8}
+  .sella .m{margin-top:4px;font-size:11px;color:var(--ink-muted);line-height:1.45}
+  .sella .stub{margin-top:6px;font-size:10.5px;font-weight:700;color:#4854a8;background:rgba(108,123,217,.14);border-radius:7px;padding:6px 9px;text-align:center}
+  .grp{margin-top:14px}
+  .grp .gh{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:800;color:var(--brand-deep)}
+  .grp .gh .av{width:22px;height:22px;border-radius:7px;background:var(--ink);color:#fff;display:grid;place-items:center;font-size:10px;font-weight:800}
+  .line{margin-top:8px;display:flex;align-items:center;gap:10px;border-radius:12px;background:rgba(255,255,255,.6);padding:9px 10px;animation:slidein .25s var(--ease)}
+  @keyframes slidein{from{opacity:0;transform:translateX(12px)}to{opacity:1;transform:none}}
+  .line .nm{flex:1;min-width:0}.line .nm b{display:block;font-size:12.5px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.line .nm small{font-size:11px;color:var(--ink-muted)}
+  .line .q{display:flex;align-items:center;gap:4px;font-size:11px;font-weight:800}
+  .line .q button{width:22px;height:22px;border-radius:999px;background:#fff;color:var(--brand-deep);display:grid;place-items:center;box-shadow:inset 0 0 0 1px rgba(118,0,45,.18)}
+  .line .x{color:rgba(220,38,38,.8)}
+  .empty{margin-top:46px;text-align:center;color:var(--ink-muted);font-size:13px}
+  .dfoot{margin-top:auto;padding-top:14px;border-top:1px solid rgba(0,0,0,.07)}
+  .total{display:flex;justify-content:space-between;font-size:13px;font-weight:800;margin-bottom:10px}
+  .transient{font-size:11px;color:var(--ink-muted);display:flex;gap:6px;margin-bottom:10px}
+  .cta{width:100%;border-radius:999px;background:var(--brand);color:#fff;font-weight:800;font-size:14px;padding:12px;display:flex;align-items:center;justify-content:center;gap:8px}
+  .cta:hover{background:var(--brand-deep)}
+  .fly{position:fixed;z-index:70;border-radius:12px;pointer-events:none;box-shadow:0 10px 24px -8px rgba(0,0,0,.4);transition:all .65s cubic-bezier(.45,-.2,.3,1);opacity:.95}
 
-  .pres-banner {
-    display: none; position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
-    background: var(--ink); color: #fff; padding: 9px 16px; border-radius: 999px; font-size: 12px; z-index: 50;
-  }
-  body:fullscreen .pres-banner, .app.is-fullscreen .pres-banner { display: block; }
+  /* account popover */
+  .pop{position:absolute;bottom:0;left:calc(100% + 10px);width:230px;border-radius:18px;padding:10px;opacity:0;transform:scale(.95);transform-origin:bottom left;pointer-events:none;transition:all .15s var(--ease);z-index:75}
+  .pop.show{opacity:1;transform:none;pointer-events:auto}
+  .pop a{display:flex;align-items:center;gap:10px;border-radius:11px;padding:9px 11px;font-size:13px;font-weight:600;cursor:pointer}
+  .pop a:hover{background:rgba(255,183,213,.3);color:var(--brand-deep)}
+
+  /* MANAGE screen */
+  .mhead{margin:12px 12px 0;display:flex;align-items:center;gap:10px;border-radius:18px;padding:10px 14px;flex-wrap:wrap}
+  .mhead h2{margin:0;font-size:17px;font-weight:800}.mhead .sub{font-size:12px;color:var(--ink-muted);font-weight:600}
+  .mtabs{display:flex;gap:6px;margin:0 12px}
+  .mtab{border-radius:999px;padding:8px 16px;font-size:13px;font-weight:700;background:rgba(255,255,255,.5);color:var(--ink-muted)}
+  .mtab.on{background:var(--brand);color:#fff}
+  .mtable{width:100%;border-collapse:separate;border-spacing:0 8px;font-size:12.5px}
+  .mtable th{text-align:left;font-size:10px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-muted);padding:0 12px 4px}
+  .mtable td{background:rgba(255,255,255,.66);padding:10px 12px;vertical-align:middle}
+  .mtable tr td:first-child{border-radius:12px 0 0 12px}.mtable tr td:last-child{border-radius:0 12px 12px 0}
+  .mprod{display:flex;align-items:center;gap:11px}.mthumb{width:40px;height:40px;border-radius:10px;flex:0 0 40px}.mprod b{font-weight:800}.mprod small{display:block;color:var(--ink-muted);font-size:11px}
+  .pmode{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:4px 10px;font-size:11px;font-weight:800}
+  .pmode.pub{background:rgba(52,178,51,.14);color:#1f7a1e}.pmode.req{background:rgba(108,123,217,.14);color:#4854a8}
+  .toggle{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:5px 10px;font-size:11px;font-weight:800;cursor:pointer}
+  .toggle.on{background:var(--brand);color:#fff}.toggle.off{background:rgba(255,255,255,.7);color:var(--ink-muted);box-shadow:inset 0 0 0 1px rgba(0,0,0,.08)}
+  .micon{width:30px;height:30px;border-radius:9px;background:rgba(255,255,255,.7);display:grid;place-items:center;color:var(--ink-muted)}
+  .micon:hover{color:var(--brand);background:#fff}
+  .mediadot{display:inline-flex;gap:6px;align-items:center;font-size:11px;color:var(--ink-muted)}
+  .cost{font-weight:700}.margin{font-size:11px;font-weight:800;color:#1f7a1e}
+  .bundle{font-size:11px;font-weight:700;color:var(--brand-deep)}
+  .chg{font-size:11px;font-weight:800;color:var(--brand);border-radius:999px;padding:3px 9px}.chg:hover{background:rgba(255,183,213,.35)}
+  .pval b{font-size:13.5px}
+  .priceedit{display:inline-flex;align-items:center;gap:5px}
+  .priceedit input{width:58px;border-radius:8px;border:1.5px solid var(--brand);padding:5px 7px;font-size:13px;font-weight:700;outline:none}
+  .priceedit .savep{width:26px;height:26px;border-radius:8px;background:var(--brand);color:#fff;display:grid;place-items:center}
+  .priceedit .cancelp{width:26px;height:26px;border-radius:8px;background:rgba(255,255,255,.8);color:var(--ink-muted);display:grid;place-items:center;box-shadow:inset 0 0 0 1px rgba(0,0,0,.08)}
+
+  /* MODAL */
+  .mscrim{position:fixed;inset:0;background:rgba(31,32,32,.35);backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:opacity .2s;z-index:100;display:grid;place-items:center;padding:20px}
+  .mscrim.show{opacity:1;pointer-events:auto}
+  .modal{width:520px;max-width:100%;max-height:88vh;overflow:auto;border-radius:22px;padding:20px;transform:scale(.96);transition:transform .2s var(--ease)}
+  .mscrim.show .modal{transform:scale(1)}
+  .modal .mtop{display:flex;align-items:center;gap:10px;margin-bottom:4px}
+  .modal h3{margin:0;font-size:18px;font-weight:800}
+  .modal .mclose{margin-left:auto;width:32px;height:32px;border-radius:999px;background:rgba(255,255,255,.6);display:grid;place-items:center}
+  .modal .msub{font-size:12px;color:var(--ink-muted);margin-bottom:14px}
+  .field{margin-top:12px}.field>label{display:block;font-size:11px;font-weight:800;color:var(--ink-muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.04em}
+  .field input,.field select,.field textarea{width:100%;border-radius:11px;border:1px solid rgba(118,0,45,.18);background:#fff;padding:10px 12px;font-size:13.5px;outline:none}
+  .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--brand)}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .drop{border:1.5px dashed rgba(118,0,45,.3);border-radius:14px;padding:20px;text-align:center;color:var(--ink-muted);font-size:13px;background:rgba(255,183,213,.12)}
+  .drop:hover{background:rgba(255,183,213,.2)}
+  .mactions{display:flex;gap:10px;margin-top:18px}
+  .mactions .cta{flex:1}.mactions .ghost{background:rgba(255,255,255,.7);color:var(--ink);flex:0 0 auto;padding:12px 20px;border-radius:999px;font-weight:800}
+  .locrow{display:flex;align-items:center;gap:10px;border-radius:12px;background:rgba(255,255,255,.6);padding:10px 12px;margin-top:8px}
+  .locrow .grow{flex:1}.locrow b{font-size:13px}.locrow small{color:var(--ink-muted);font-size:11px}
+  .pickrow{display:flex;align-items:center;gap:10px;border-radius:11px;padding:8px 10px;font-size:13px;cursor:pointer}.pickrow:hover{background:rgba(255,183,213,.2)}
+  .pickrow .box{width:18px;height:18px;border-radius:6px;border:1.5px solid rgba(118,0,45,.3);display:grid;place-items:center;color:#fff;flex:0 0 18px}.pickrow.sel .box{background:var(--brand);border-color:var(--brand)}
+  .infonote{border-radius:12px;background:rgba(108,123,217,.1);border:1px solid rgba(108,123,217,.3);padding:10px 12px;font-size:11.5px;color:#3f4a96;margin-top:14px;line-height:1.5}
+
+  .preschip{display:none;align-items:center;gap:8px;border-radius:999px;background:var(--brand);color:#fff;font-weight:800;font-size:12px;padding:7px 14px}
+  .app.presenting .rail,.app.presenting .srch{display:none}.app.presenting .preschip{display:inline-flex}
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;font-weight:700;font-size:13px;padding:11px 18px;border-radius:999px;opacity:0;pointer-events:none;transition:all .25s;z-index:120}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
-<body>
-<div class="app" id="app">
-  <!-- Left sidebar (hidden in Presentation/fullscreen mode) -->
-  <aside class="sidebar">
-    <div class="logo">//</div>
-    <div class="nav-ico">◎</div>
-    <div class="nav-ico active">▦</div>
-    <div class="nav-ico">⊞</div>
-    <div class="nav-ico">◰</div>
-    <div class="nav-ico">✦</div>
-  </aside>
+<body data-screen="shop">
 
-  <main class="main">
-    <!-- Banner with top-right controls (DEV-79 / D-09) -->
-    <section class="banner">
-      <h1>GreenLeaf Cultivation — Present</h1>
-      <div class="sub">Your live catalogue. Present it in a call, or let a connected buyer browse it.</div>
-      <div class="banner-controls">
-        <button class="btn ghost">＋ Add products</button>
-        <button class="btn ghost">⚙ Manage shop</button>
-        <button class="btn primary" id="fsBtn">⛶ Fullscreen</button>
-      </div>
-    </section>
-
-    <!-- Filter row: location tabs + category + view toggle + sort -->
-    <section class="toolbar">
-      <div class="tabs" id="tabs">
-        <button class="tab active" data-loc="All">All</button>
-        <button class="tab" data-loc="Germany">Germany</button>
-        <button class="tab" data-loc="UK">UK</button>
-      </div>
-      <span class="pill">Category: Flowers ▾</span>
-      <span class="pill">View: Cards / List</span>
-      <div class="spacer"></div>
-      <span class="pill">Sort by ▾</span>
-    </section>
-
-    <!-- Square 4-up product grid (UX-02) -->
-    <section class="grid" id="grid"></section>
-
-    <!-- Expandable info cards (DEV-80 / D-10) -->
-    <section class="info-row">
-      <div class="info-card" data-info="warehouse">
-        <button class="x" aria-label="Collapse">×</button>
-        <h3>HQ &amp; warehouses</h3>
-        <div class="base">Headquarters — Berlin, Germany</div>
-        <div class="more">
-          <div class="row">Warehouse DE-1 — Frankfurt, Germany</div>
-          <div class="row">Warehouse DE-2 — Hamburg, Germany</div>
-          <div class="row">Warehouse UK-1 — Manchester, United Kingdom</div>
-        </div>
-        <div class="hint">Click to expand · click ✕ or outside to collapse</div>
-      </div>
-      <div class="info-card" data-info="links">
-        <button class="x" aria-label="Collapse">×</button>
-        <h3>Links &amp; pages</h3>
-        <div class="base">Presentation DE (private)</div>
-        <div class="more">
-          <div class="row"><a href="#" onclick="return false">Company website ↗</a></div>
-          <div class="row"><a href="#" onclick="return false">Compliance / licences ↗</a></div>
-          <div class="row"><a href="#" onclick="return false">Presentation UK (private) ↗</a></div>
-        </div>
-        <div class="hint">Click to expand · click ✕ or outside to collapse</div>
-      </div>
-    </section>
-  </main>
+<div class="switch">
+  <b>✦ Present prototype</b>
+  <span style="color:rgba(255,255,255,.5);font-size:11px">fully clickable · dense card · location dropdown · working Manage</span>
+  <div class="seg2" id="screenSeg"><button data-s="shop" class="on">Shop view</button><button data-s="manage">Manage shop</button></div>
 </div>
 
-<!-- Basket: floating button + panel (top-right, grouped per company, UX-03) -->
-<button class="basket-fab" id="basketFab">🧺 Basket <span class="count" id="fabCount">0</span></button>
-<aside class="basket" id="basket">
-  <div class="basket-head">
-    <strong>Basket</strong>
-    <button class="x" id="basketClose">×</button>
-  </div>
-  <div id="basketBody"></div>
-  <div class="basket-foot">
-    <button class="basket-cta">Build deal →</button>
-    <div class="note">Transient — clears on reload (D-12). One deal per company.</div>
-  </div>
-</aside>
+<div class="app" id="app">
+  <aside class="rail glass">
+    <div class="wordmark"><div class="badge">hs</div><small>hello sello</small></div>
+    <nav class="nav" id="nav"></nav>
+    <div class="acct">
+      <div class="avatar" id="acctBtn">CW</div>
+      <div class="pop glass-strong" id="acctPop">
+        <div style="text-align:center;padding:8px 0 10px"><div class="avatar" style="margin:0 auto 6px;width:52px;height:52px;font-size:18px">CW</div><div style="font-weight:800;font-size:14px">Carla Weber</div><div style="font-size:11px;color:var(--ink-muted)">GreenLeaf Pharma</div></div>
+        <div style="height:1px;background:rgba(0,0,0,.07);margin:4px"></div>
+        <a data-modal="profile"><svg class="ic sm" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M5 21a7 7 0 0 1 14 0"/></svg> My profile</a>
+        <a data-goManage><svg class="ic sm" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg> Company profile</a>
+        <a data-modal="settings"><svg class="ic sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.3 1a7 7 0 0 0-1.7-1l-.3-2.6h-4l-.3 2.6a7 7 0 0 0-1.7 1l-2.3-1-2 3.4 2 1.5a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 1.7 1l.3 2.6h4l.3-2.6a7 7 0 0 0 1.7-1l2.3 1 2-3.4-2-1.5a7 7 0 0 0 .1-1z"/></svg> Settings</a>
+        <a data-modal="signout"><svg class="ic sm" viewBox="0 0 24 24"><path d="M9 21H5V3h4M16 17l5-5-5-5M21 12H9"/></svg> Sign out</a>
+      </div>
+    </div>
+  </aside>
 
-<div class="pres-banner">Presentation mode — press ESC to exit · basket stays live</div>
-
-<script>
-  // ----- Fake seed: 6 products across 2 locations (2 companies for basket demo) -----
-  const PLACEHOLDER = (label, c1, c2) =>
-    "data:image/svg+xml;utf8," + encodeURIComponent(
-      `<svg xmlns='http://www.w3.org/2000/svg' width='400' height='400'>
-        <rect width='400' height='400' fill='${c1}'/>
-        <circle cx='200' cy='150' r='90' fill='${c2}' opacity='0.55'/>
-        <text x='200' y='330' font-size='26' font-family='sans-serif' fill='#fff'
-          text-anchor='middle'>${label}</text></svg>`);
-
-  const products = [
-    { id: "p1", name: "Aurora Haze 24", cultivar: "Aurora Haze", company: "GreenLeaf Cultivation",
-      location: "Germany", thc: "22.4%", cbd: "0.8%", dominance: "Sativa", origin: "Germany",
-      region: "Brandenburg", irradiation: "Beta (e-beam)", pack: "10 g", pzn: "17000001",
-      price: "8.90 €/g", imgs: [PLACEHOLDER("Aurora Haze", "#76002d", "#ff5e9c"), PLACEHOLDER("AH · macro", "#5a0024", "#e30b5d")] },
-    { id: "p2", name: "Frost Kush 18", cultivar: "Frost Kush", company: "GreenLeaf Cultivation",
-      location: "Germany", thc: "18.1%", cbd: "1.2%", dominance: "Indica", origin: "Germany",
-      region: "Bavaria", irradiation: "None", pack: "5 g", pzn: "17000002",
-      price: "7.40 €/g", imgs: [PLACEHOLDER("Frost Kush", "#3a0a52", "#9b6bd9")] },
-    { id: "p3", name: "Citrus Drift 21", cultivar: "Citrus Drift", company: "GreenLeaf Cultivation",
-      location: "UK", thc: "21.0%", cbd: "0.5%", dominance: "Hybrid", origin: "United Kingdom",
-      region: "Kent", irradiation: "Gamma", pack: "10 g", pzn: "17000003",
-      price: "9.20 €/g", imgs: [PLACEHOLDER("Citrus Drift", "#0a4a4a", "#34b233"), PLACEHOLDER("CD · trichomes", "#063838", "#5fd96b")] },
-    { id: "p4", name: "Northern Mist 26", cultivar: "Northern Mist", company: "GreenLeaf Cultivation",
-      location: "UK", thc: "26.3%", cbd: "0.3%", dominance: "Sativa", origin: "United Kingdom",
-      region: "Yorkshire", irradiation: "Beta (e-beam)", pack: "10 g", pzn: "17000004",
-      price: "11.50 €/g", imgs: [PLACEHOLDER("Northern Mist", "#1b2a6b", "#6c7bd9")] },
-    { id: "p5", name: "Velvet OG 19", cultivar: "Velvet OG", company: "BloomPartner GmbH",
-      location: "Germany", thc: "19.5%", cbd: "1.0%", dominance: "Indica", origin: "Germany",
-      region: "Saxony", irradiation: "None", pack: "5 g", pzn: "18000001",
-      price: "6.80 €/g", imgs: [PLACEHOLDER("Velvet OG", "#5b2a00", "#ffb347")] },
-    { id: "p6", name: "Solar Flare 23", cultivar: "Solar Flare", company: "BloomPartner GmbH",
-      location: "UK", thc: "23.2%", cbd: "0.4%", dominance: "Hybrid", origin: "United Kingdom",
-      region: "London", irradiation: "Gamma", pack: "10 g", pzn: "18000002",
-      price: "10.10 €/g", imgs: [PLACEHOLDER("Solar Flare", "#7a1f00", "#ff7a45")] },
-  ];
-
-  // ----- Transient per-company basket (D-12): { companyName: [{name, qty}] } -----
-  const cart = {};
-  let activeLoc = "All";
-
-  const grid = document.getElementById("grid");
-
-  function specRow(label, val) { return `<dt>${label}</dt><dd>${val}</dd>`; }
-
-  function renderGrid() {
-    const shown = products.filter((p) => activeLoc === "All" || p.location === activeLoc);
-    grid.innerHTML = shown.map((p) => `
-      <div class="card" data-id="${p.id}">
-        <div class="card-inner">
-          <!-- FRONT (D-04): carousel + qty stepper + add-to-basket + spec table -->
-          <div class="face front">
-            <div class="photo" data-slide="0">
-              <span class="loc-tag">${p.location}</span>
-              <button class="flip-btn" data-flip>Flip ↻</button>
-              <img src="${p.imgs[0]}" alt="${p.name}" />
-              ${p.imgs.length > 1 ? `
-                <button class="carousel-arrow l" data-prev>‹</button>
-                <button class="carousel-arrow r" data-next>›</button>
-                <div class="carousel-dots">${p.imgs.map((_, i) => `<span class="dot ${i === 0 ? "on" : ""}"></span>`).join("")}</div>` : ""}
-            </div>
-            <div class="card-body">
-              <div class="card-title">${p.name}</div>
-              <div class="card-sub">${p.company}</div>
-              <div class="price">${p.price}</div>
-              <dl class="spec">
-                ${specRow("THC", p.thc)}${specRow("CBD", p.cbd)}
-                ${specRow("Cultivar", p.cultivar)}${specRow("Dominance", p.dominance)}
-                ${specRow("Origin", p.origin + " · " + p.region)}
-                ${specRow("Irradiation", p.irradiation)}${specRow("Pack", p.pack)}
-              </dl>
-              <div class="buyrow">
-                <div class="stepper" data-stepper>
-                  <button data-dec>−</button><span class="qty">1</span><button data-inc>+</button>
-                </div>
-                <button class="add-btn" data-add>Add to basket</button>
-              </div>
-            </div>
-          </div>
-          <!-- BACK (D-05): COA/Images/Videos/Other-docs dropdown + R1 stub + link -->
-          <div class="face back">
-            <div class="back-body">
-              <div style="display:flex;justify-content:space-between;align-items:center;">
-                <span class="back-title">${p.name} — documents</span>
-                <button class="flip-btn" style="position:static;" data-flip>↺ Front</button>
-              </div>
-              <div class="docs">
-                <select>
-                  <option>COAs (2)</option>
-                  <option>Images (${p.imgs.length})</option>
-                  <option>Videos (1 — Loom link)</option>
-                  <option>Other docs (1)</option>
-                </select>
-                <div class="doc-list">
-                  <a href="#" onclick="return false">COA — batch ${p.pzn} (PDF) ↓</a>
-                  <a href="#" onclick="return false">COA — heavy metals (PDF) ↓</a>
-                  <a href="#" onclick="return false">Grow video (Loom) ↗</a>
-                </div>
-              </div>
-              <!-- R1: INERT Sella stub — NO number, viewer-identical (T-07-01) -->
-              <div class="sella-stub">
-                <span class="tag">✦ Sella · Marktvergleich</span>
-                Market comparison available on request. (Coming soon — no live data in v1.)
-              </div>
-              <div class="present-link">
-                <a href="#" onclick="return false">View full Present page for ${p.company} ↗</a>
-              </div>
-            </div>
+  <div class="col">
+    <!-- ===== SHOP ===== -->
+    <div class="screen" id="shopScreen">
+      <header class="topbar glass">
+        <div class="srch" id="srch"><button id="srchBtn"><svg class="ic sm" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg></button><div class="inp"><input placeholder="Search products…" /></div></div>
+        <span class="preschip">● Presentation mode — live</span>
+        <div class="tbspace"></div>
+        <div class="menu-wrap">
+          <button class="tbbtn brand" id="manageBtn"><svg class="ic sm" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg> Manage shop <svg class="ic xs" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
+          <div class="menu glass-strong" id="manageMenu">
+            <div class="lbl">Products &amp; prices</div>
+            <a data-modal="addproduct"><svg class="ic sm" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> Add product</a>
+            <a data-goManage><svg class="ic sm" viewBox="0 0 24 24"><path d="M4 7h16M7 4h10M6 7l1 13h10l1-13"/></svg> Manage products &amp; price list</a>
+            <a data-modal="import"><svg class="ic sm" viewBox="0 0 24 24"><path d="M4 9h16M4 15h16M9 4 7 20M17 4l-2 16"/></svg> Import CSV</a>
+            <div class="sep"></div>
+            <div class="lbl">Storefront</div>
+            <a data-modal="branding"><svg class="ic sm" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg> Edit shop &amp; branding</a>
+            <a data-modal="locations"><svg class="ic sm" viewBox="0 0 24 24"><path d="M12 21s-7-5-7-11a7 7 0 0 1 14 0c0 6-7 11-7 11z"/></svg> Manage locations</a>
+            <a data-modal="share"><svg class="ic sm" viewBox="0 0 24 24"><path d="M4 12v8h16v-8M12 3v13m-4-4 4 4 4-4"/></svg> Share Present link</a>
           </div>
         </div>
-      </div>`).join("");
-  }
+        <button class="tbicon" id="fsBtn" title="Fullscreen"><svg class="ic" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+        <button class="tbicon" id="basketBtn" title="Basket"><svg class="ic" viewBox="0 0 24 24"><circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/><path d="M2 3h3l2.5 12h11"/><path d="M6 6h15l-2 7H7.5"/></svg><span class="badge-dot" id="basketCount" style="display:none">0</span></button>
+      </header>
+      <main>
+        <div class="wrap">
+          <section><div class="cover"><span class="loc-flag" id="locFlag">📍 All locations</span><div class="id"><div class="logo-tile">❀</div><div><h1>GreenLeaf Pharma GmbH</h1><p class="tag" id="coverTag">EU-GMP medical cannabis · cultivator &amp; wholesaler</p></div></div></div></section>
+          <div class="ribbon glass" id="ribbon"></div>
+          <div class="filters">
+            <div class="fdrop"><button class="chip loc" id="locBtn"><svg class="ic sm" viewBox="0 0 24 24"><path d="M12 21s-7-5-7-11a7 7 0 0 1 14 0c0 6-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg> <span id="locLabel">All locations</span> <svg class="ic xs" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button><div class="fmenu glass-strong" id="locMenu"></div></div>
+            <div class="fdrop"><button class="chip" id="filterBtn"><svg class="ic sm" viewBox="0 0 24 24"><path d="M3 5h18M6 12h12M10 19h4"/></svg> Filter <span class="cnt" id="filterCnt" style="display:none">0</span></button><div class="fmenu glass-strong" id="filterMenu"></div></div>
+            <span class="count" id="count"></span>
+            <div class="spacer"></div>
+            <div class="seg" id="viewSeg"><button class="on" data-view="cards" title="Cards"><svg class="ic xs" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></button><button data-view="list" title="List"><svg class="ic xs" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg></button></div>
+            <span class="chip">Sort ▾</span>
+          </div>
+          <div class="grid" id="grid"></div>
+        </div>
+      </main>
+    </div>
 
-  // ----- Basket rendering (grouped per company) -----
-  function renderBasket() {
-    const body = document.getElementById("basketBody");
-    const companies = Object.keys(cart).filter((c) => cart[c].length > 0);
-    let total = 0;
-    companies.forEach((c) => cart[c].forEach((l) => (total += l.qty)));
-    document.getElementById("fabCount").textContent = total;
-    if (companies.length === 0) {
-      body.innerHTML = `<div class="basket-empty">Your basket is empty.<br/>Add products to start a deal.</div>`;
-      return;
-    }
-    body.innerHTML = companies.map((c) => `
-      <div class="basket-group">
-        <h4>${c}</h4>
-        ${cart[c].map((l) => `<div class="basket-line"><span>${l.name}</span><span class="ln-q">×${l.qty}</span></div>`).join("")}
-      </div>`).join("");
-  }
+    <!-- ===== MANAGE ===== -->
+    <div class="screen" id="manageScreen">
+      <header class="mhead glass">
+        <button class="tbbtn" data-goShop><svg class="ic sm" viewBox="0 0 24 24"><path d="m14 6-6 6 6 6"/></svg> Back to shop</button>
+        <div><h2>Manage shop</h2><div class="sub" id="mSub">GreenLeaf Pharma · Standard price list</div></div>
+        <div style="flex:1"></div>
+        <button class="tbbtn" data-modal="import"><svg class="ic sm" viewBox="0 0 24 24"><path d="M4 9h16M4 15h16M9 4 7 20M17 4l-2 16"/></svg> Import CSV</button>
+        <button class="tbbtn brand" data-modal="addproduct"><svg class="ic sm" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> Add product</button>
+        <button class="tbbtn" style="background:rgba(108,123,217,.15);color:#4854a8" data-modal="send"><svg class="ic sm" viewBox="0 0 24 24"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></svg> Send price list…</button>
+      </header>
+      <div class="mtabs" id="mtabs"><button class="mtab on" data-mt="products">Products &amp; prices</button><button class="mtab" data-mt="branding" data-modal="branding">Branding</button><button class="mtab" data-mt="locations" data-modal="locations">Locations</button><button class="mtab" data-mt="share" data-modal="share">Share link</button></div>
+      <main>
+        <div class="wrap">
+          <div class="glass" style="border-radius:18px;padding:14px 16px;display:flex;align-items:center;gap:14px">
+            <span style="width:42px;height:42px;border-radius:12px;background:rgba(255,183,213,.45);color:var(--brand-deep);display:grid;place-items:center"><svg class="ic" viewBox="0 0 24 24"><path d="M4 7h16M7 4h10M6 7l1 13h10l1-13"/></svg></span>
+            <div style="flex:1"><div style="font-size:15px;font-weight:800">Standard price list <span class="pmode pub" style="vertical-align:middle">Published</span></div><div style="font-size:12px;color:var(--ink-muted)">Company-wide · EUR · prices live here, not on the product. <b>1 list in v0</b> — per-customer lists later.</div></div>
+            <div style="font-size:11px;color:var(--ink-muted);max-width:260px;text-align:right">Cost &amp; margin are seller-only (RLS). Buyers see a price only when <b>On profile</b> + <b>Price</b> are both on.</div>
+          </div>
+          <table class="mtable"><thead><tr><th>Product</th><th>Pack</th><th>Cost · margin (you)</th><th>Price /g</th><th>Bundle ≥</th><th>On profile</th><th>Price</th><th>Media</th><th></th></tr></thead><tbody id="mbody"></tbody></table>
+        </div>
+      </main>
+    </div>
+  </div>
+</div>
 
-  function addToCart(product, qty) {
-    const co = product.company;
-    cart[co] = cart[co] || [];
-    const existing = cart[co].find((l) => l.id === product.id);
-    if (existing) existing.qty += qty;
-    else cart[co].push({ id: product.id, name: product.name, qty });
-    renderBasket();
-    document.getElementById("basket").classList.add("open");
-  }
+<!-- drawers -->
+<div class="scrim" id="scrim"></div>
+<aside class="drawer glass-strong" id="quickview"></aside>
+<aside class="drawer glass-strong" id="basket">
+  <div class="dhead"><h3><svg class="ic" viewBox="0 0 24 24"><circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/><path d="M2 3h3l2.5 12h11"/><path d="M6 6h15l-2 7H7.5"/></svg> Basket</h3><button class="close" data-closeDrawer><svg class="ic sm" viewBox="0 0 24 24"><path d="M6 6 18 18M18 6 6 18"/></svg></button></div>
+  <div id="basketBody" style="flex:1"></div>
+  <div class="dfoot"><div class="total"><span>Est. total</span><span id="basketTotal">—</span></div><div class="transient"><svg class="ic xs" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg> Transient — becomes a deal card on send.</div><button class="cta" id="sendBtn"><svg class="ic sm" viewBox="0 0 24 24"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></svg> Send as deal card</button></div>
+</aside>
 
-  // ----- Delegated interactions on the grid -----
-  grid.addEventListener("click", (e) => {
-    const card = e.target.closest(".card");
-    if (!card) return;
-    const product = products.find((p) => p.id === card.dataset.id);
+<!-- modal -->
+<div class="mscrim" id="mscrim"><div class="modal glass-strong" id="modal"></div></div>
+<div class="toast" id="toast"></div>
 
-    if (e.target.closest("[data-flip]")) { card.classList.toggle("flipped"); return; }
+<script>
+const $=id=>document.getElementById(id);
+const P={home:'<path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/>',connect:'<path d="M4 5h16v11H9l-5 4z"/>',discover:'<circle cx="12" cy="12" r="9"/><path d="m15 9-2 5-5 2 2-5z"/>',present:'<path d="M4 9h16v11H4z"/><path d="M3 9 5 4h14l2 5"/><path d="M9 20v-6h6v6"/>',buy:'<circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/><path d="M2 3h3l2.5 12h11"/><path d="M6 6h15l-2 7H7.5"/>',sell:'<path d="M3 3h8l9 9-8 8-9-9z"/><circle cx="7.5" cy="7.5" r="1.2"/>',trade:'<path d="M7 4 3 8l4 4"/><path d="M3 8h13"/><path d="m17 20 4-4-4-4"/><path d="M21 16H8"/>'};
+const SURF=[['home','Home',0],['connect','Connect',0],['discover','Discover',0],['present','Present',1],['buy','Buy',2],['sell','Sell',2],['trade','Trade',2]];
+$('nav').innerHTML=SURF.map(([k,l,s])=>`<div class="navitem ${s===1?'active':s===2?'soon':''}" data-surf="${l}" data-st="${s}">${s===1?'<span class="edge"></span>':''}<svg class="ic" viewBox="0 0 24 24">${P[k]}</svg>${l}</div>`).join('');
+$('nav').addEventListener('click',e=>{const n=e.target.closest('.navitem');if(!n)return;const st=n.dataset.st;if(st==='2'){toast(`${n.dataset.surf} — coming soon`);return;}if(n.dataset.surf!=='Present'){toast(`${n.dataset.surf} — only Present is in this prototype`);return;}goShop();});
 
-    if (e.target.closest("[data-inc]") || e.target.closest("[data-dec]")) {
-      const qtyEl = card.querySelector(".qty");
-      let q = parseInt(qtyEl.textContent, 10);
-      q += e.target.closest("[data-inc]") ? 1 : -1;
-      if (q < 1) q = 1; // floor at 1 (the contract: never below the step)
-      qtyEl.textContent = q; return;
-    }
-    if (e.target.closest("[data-add]")) {
-      const q = parseInt(card.querySelector(".qty").textContent, 10);
-      addToCart(product, q); return;
-    }
-    // carousel
-    const photo = card.querySelector(".photo");
-    if (e.target.closest("[data-next]") || e.target.closest("[data-prev]")) {
-      let i = parseInt(photo.dataset.slide, 10);
-      i += e.target.closest("[data-next]") ? 1 : -1;
-      if (i < 0) i = product.imgs.length - 1;
-      if (i >= product.imgs.length) i = 0;
-      photo.dataset.slide = i;
-      photo.querySelector("img").src = product.imgs[i];
-      photo.querySelectorAll(".dot").forEach((d, di) => d.classList.toggle("on", di === i));
-    }
-  });
+/* catalogue across MANY locations */
+const G=['linear-gradient(135deg,#6a3,#284)','linear-gradient(135deg,#b56,#723)','linear-gradient(135deg,#7a6cd9,#3a2f8f)','linear-gradient(135deg,#e0a,#812)','linear-gradient(135deg,#4aa,#077)','linear-gradient(135deg,#caa64a,#7a5a12)','linear-gradient(135deg,#8a6,#365)','linear-gradient(135deg,#c47,#812)'];
+const LOCATIONS=['Berlin, DE','Frankfurt, DE','Manchester, UK','Amsterdam, NL','Barcelona, ES'];
+const PRODUCTS=[
+ {n:'GL Indica 22/1',cult:'Northern Lights',loc:'Berlin, DE',cat:'Flowers',thc:22,cbd:1,dom:'Indica',o:'Canada',r:'BC',irr:'β-irr.',pack:'10 g',priceShown:true,perG:7.40},
+ {n:'GL Sativa 18/1',cult:'Sour Diesel',loc:'Berlin, DE',cat:'Flowers',thc:18,cbd:1,dom:'Sativa',o:'Portugal',r:'Alentejo',irr:'Non-irr.',pack:'10 g',priceShown:true,perG:6.90},
+ {n:'GL Hybrid 20/4',cult:'Gelato 41',loc:'Frankfurt, DE',cat:'Flowers',thc:20,cbd:4,dom:'Hybrid',o:'Germany',r:'Brandenburg',irr:'β-irr.',pack:'5 g',priceShown:false},
+ {n:'GL CBD 1/12',cult:'Harlequin',loc:'Frankfurt, DE',cat:'Flowers',thc:1,cbd:12,dom:'Sativa',o:'Spain',r:'Andalusia',irr:'Non-irr.',pack:'10 g',priceShown:true,perG:5.20},
+ {n:'GL Live Resin',cult:'Gelato 41',loc:'Berlin, DE',cat:'Extracts',thc:78,cbd:2,dom:'Hybrid',o:'Germany',r:'Brandenburg',irr:'n/a',pack:'1 g',priceShown:true,perG:32.0},
+ {n:'GL Hybrid 21/2',cult:'Wedding Cake',loc:'Manchester, UK',cat:'Flowers',thc:21,cbd:2,dom:'Hybrid',o:'UK',r:'Kent',irr:'Non-irr.',pack:'10 g',priceShown:true,perG:8.10},
+ {n:'GL Sativa 19/1',cult:'Jack Herer',loc:'Amsterdam, NL',cat:'Flowers',thc:19,cbd:1,dom:'Sativa',o:'NL',r:'Utrecht',irr:'β-irr.',pack:'10 g',priceShown:false},
+ {n:'GL CBD Oil 2/20',cult:'Cannatonic',loc:'Barcelona, ES',cat:'Extracts',thc:2,cbd:20,dom:'Hybrid',o:'ES',r:'Catalonia',irr:'n/a',pack:'10 ml',priceShown:true,perG:5.80},
+];
+PRODUCTS.forEach((p,i)=>p.grad=G[i%G.length]);
+const COMPANY='GreenLeaf Pharma GmbH';
+const eur=n=>n.toFixed(2).replace('.',',')+'€';
+const packG=p=>parseInt(p.pack)||1;
 
-  // ----- Location tabs (D-06) -----
-  document.getElementById("tabs").addEventListener("click", (e) => {
-    const tab = e.target.closest(".tab");
-    if (!tab) return;
-    document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
-    tab.classList.add("active");
-    activeLoc = tab.dataset.loc;
-    renderGrid();
-  });
+/* location dropdown (single-select, re-contexts shop) */
+let loc='All';
+function locCount(id){return PRODUCTS.filter(p=>id==='All'||p.loc===id).length;}
+function renderLocMenu(){
+  const opts=[['All','All locations'],...LOCATIONS.map(l=>[l,l])];
+  $('locMenu').innerHTML=`<div class="grp">Shop location</div>`+opts.map(([id,lab])=>`<div class="opt ${loc===id?'sel':''}" data-loc="${id}"><span class="radio"></span><span style="flex:1">${lab}</span><span style="color:var(--ink-muted);font-size:11px">${locCount(id)}</span></div>`).join('');
+}
+function applyLocation(){
+  const lab=loc==='All'?'All locations':loc; $('locLabel').textContent=lab;
+  $('locFlag').textContent=`📍 ${loc==='All'?'All locations':loc.split(',')[0]+' shop'}`;
+  $('coverTag').textContent= loc==='All'?'EU-GMP medical cannabis · cultivator & wholesaler':`EU-GMP medical cannabis · viewing the ${loc.split(',')[0]} shop`;
+  renderRibbon();
+}
+$('locBtn').addEventListener('click',e=>{e.stopPropagation();$('locMenu').classList.toggle('show');});
+$('locMenu').addEventListener('click',e=>{const o=e.target.closest('[data-loc]');if(!o)return;loc=o.dataset.loc;$('locMenu').classList.remove('show');renderLocMenu();applyLocation();renderGrid();});
 
-  // ----- Basket open/close -----
-  document.getElementById("basketFab").addEventListener("click", () =>
-    document.getElementById("basket").classList.toggle("open"));
-  document.getElementById("basketClose").addEventListener("click", () =>
-    document.getElementById("basket").classList.remove("open"));
+/* info ribbon */
+const WH={'All':['Berlin DE (HQ)','Frankfurt DE','Manchester UK','Amsterdam NL','Barcelona ES']};
+function whFor(){return loc==='All'?WH.All:[loc+(loc.startsWith('Berlin')?' (HQ)':'')];}
+function ribbonData(){const w=whFor();return [
+ {key:'loc',ico:'<path d="M12 21s-7-5-7-11a7 7 0 0 1 14 0c0 6-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/>',lab:'Locations',val:`${w.length} site${w.length>1?'s':''}`,rows:[['HQ','Hauptstraße 90, Berlin DE'],...w.map((x,i)=>[`Warehouse ${i+1}`,x])],link:'Presentation DE (private)'},
+ {key:'links',ico:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',lab:'Links & pages',val:'5 links',rows:[['Website','greenleaf-pharma.de'],['LinkedIn','/greenleaf'],['Instagram','@greenleaf_cannabis'],['X','@greenleafcb']],link:'Product catalogue (PDF)'},
+ {key:'about',ico:'<path d="M5 3h14v18l-7-4-7 4z"/>',lab:'About & certs',val:'EU-GMP · since 2019',rows:[['Founded','2019, Berlin'],['Certs','EU-GMP · GACP · ISO 9001'],['Team','42 people'],['Specialty','Flower + extracts']],link:'Company one-pager (PDF)'},
+];}
+let openSeg=null;
+function renderRibbon(){const data=ribbonData();$('ribbon').innerHTML=data.map(d=>`<div class="rseg ${openSeg===d.key?'on':''}" data-seg="${d.key}"><span class="ico"><svg class="ic sm" viewBox="0 0 24 24">${d.ico}</svg></span><div style="min-width:0"><div class="lab">${d.lab}</div><div class="val">${d.val}</div></div><svg class="ic sm chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></div>`).join('')+`<div class="rpanel glass-strong" id="rpanel"></div>`;if(openSeg)paintPanel(data.find(x=>x.key===openSeg));}
+function paintPanel(d){const p=$('rpanel');if(!d){return;}p.innerHTML=`<button class="pclose" data-rclose><svg class="ic xs" viewBox="0 0 24 24"><path d="M6 6 18 18M18 6 6 18"/></svg></button><div class="rgrid">${d.rows.map(([k,v])=>`<div class="irow"><span class="k">${k}</span><span class="v">${v}</span></div>`).join('')}</div><a class="pres-link"><svg class="ic xs" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/></svg> ${d.link}</a>`;p.classList.add('show');}
+$('ribbon').addEventListener('click',e=>{if(e.target.closest('[data-rclose]')){openSeg=null;renderRibbon();return;}const seg=e.target.closest('[data-seg]');if(!seg)return;openSeg=openSeg===seg.dataset.seg?null:seg.dataset.seg;renderRibbon();});
+document.addEventListener('click',e=>{if(!e.target.closest('#ribbon')&&openSeg){openSeg=null;renderRibbon();}});
 
-  // ----- Fullscreen / Presentation mode (D-09) -----
-  const fsBtn = document.getElementById("fsBtn");
-  fsBtn.addEventListener("click", () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen?.();
-    } else {
-      document.exitFullscreen?.();
-    }
-  });
-  document.addEventListener("fullscreenchange", () => {
-    const inFs = !!document.fullscreenElement;
-    document.getElementById("app").classList.toggle("is-fullscreen", inFs);
-    fsBtn.textContent = inFs ? "⛶ Exit fullscreen" : "⛶ Fullscreen";
-  });
+/* product filters */
+const CATS=['Flowers','Extracts'],STRAINS=['Indica','Sativa','Hybrid','CBD'];
+const sel={cat:new Set(),strain:new Set()};
+function renderFilterMenu(){const m=$('filterMenu');const o=(g,v)=>`<div class="opt ${sel[g].has(v)?'sel':''}" data-g="${g}" data-v="${v}"><span class="box"><svg class="ic xs" viewBox="0 0 24 24"><path d="m5 12 5 5 9-11"/></svg></span>${v}</div>`;m.innerHTML=`<div class="grp">Category</div>${CATS.map(v=>o('cat',v)).join('')}<div class="grp">Strain</div>${STRAINS.map(v=>o('strain',v)).join('')}`;const n=sel.cat.size+sel.strain.size,c=$('filterCnt');c.style.display=n?'grid':'none';c.textContent=n;}
+$('filterBtn').addEventListener('click',e=>{e.stopPropagation();$('filterMenu').classList.toggle('show');});
+$('filterMenu').addEventListener('click',e=>{e.stopPropagation();const o=e.target.closest('[data-g]');if(!o)return;const g=o.dataset.g,v=o.dataset.v;sel[g].has(v)?sel[g].delete(v):sel[g].add(v);renderFilterMenu();renderGrid();});
+document.addEventListener('click',()=>{$('filterMenu').classList.remove('show');$('locMenu').classList.remove('show');});
+function matchStrain(p){if(!sel.strain.size)return true;for(const s of sel.strain){if(s==='CBD'&&p.cbd>=10)return true;if(p.dom===s)return true;}return false;}
+function visible(){return PRODUCTS.map((p,i)=>({p,i})).filter(({p})=>(loc==='All'||p.loc===loc)&&(!sel.cat.size||sel.cat.has(p.cat))&&matchStrain(p));}
+let view='cards';
+$('viewSeg').addEventListener('click',e=>{const b=e.target.closest('[data-view]');if(!b)return;view=b.dataset.view;document.querySelectorAll('#viewSeg button').forEach(x=>x.classList.toggle('on',x.dataset.view===view));$('grid').classList.toggle('list',view==='list');});
 
-  // ----- Expandable info cards (D-10): expand on click, collapse on X / click-away -
-  document.querySelectorAll(".info-card").forEach((card) => {
-    card.addEventListener("click", (e) => {
-      if (e.target.closest(".x")) { card.classList.remove("open"); e.stopPropagation(); return; }
-      card.classList.add("open");
-    });
-  });
-  document.addEventListener("click", (e) => {
-    if (!e.target.closest(".info-card")) {
-      document.querySelectorAll(".info-card.open").forEach((c) => c.classList.remove("open"));
-    }
-  });
+/* product grid — dense card (variant B), no flip */
+const gridEl=$('grid');
+function cardHTML(p,idx){
+  const spec=[['THC',p.thc+'%'],['CBD',p.cbd+'%'],['Type',p.dom],['Pack',p.pack]];
+  const price=p.priceShown?`<span class="price">${eur(p.perG)}<small>/g</small></span>`:`<span class="reqprice">On request</span>`;
+  return `<div class="card" data-idx="${idx}">
+    <div class="photo" data-qview style="background:${p.grad}"><div class="img">${p.cult}</div><div class="badges"><span class="mini">${p.loc.split(',')[0]}</span><span class="mini">${p.dom}</span></div><button class="qvbtn" title="Quick view"><svg class="ic xs" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg></button></div>
+    <div class="body">
+      <div class="pname">${p.n}</div><div class="pcult">${p.cult} · ${p.cat}</div>
+      <div class="spec">${spec.map(([k,v])=>`<div><span class="k">${k}</span><span class="v">${v}</span></div>`).join('')}</div>
+      <div class="pricefoot">${price}<span style="font-size:10px;color:var(--ink-muted)">${p.irr}</span></div>
+      <div class="qtyrow"><div class="stepper"><button data-step="-1"><svg class="ic xs" viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button><span class="qv2 qn">1</span><button data-step="1"><svg class="ic xs" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></div><button class="addbtn" data-add><svg class="ic xs" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> Add</button></div>
+    </div></div>`;
+}
+function renderGrid(){const v=visible();gridEl.innerHTML=v.map(({p,i})=>cardHTML(p,i)).join('');$('count').textContent=`${v.length} product${v.length===1?'':'s'}`;}
+gridEl.addEventListener('click',e=>{const card=e.target.closest('.card');if(!card)return;const idx=+card.dataset.idx;if(e.target.closest('[data-qview]')){openQuickview(idx);return;}const s=e.target.closest('[data-step]');if(s){const qn=card.querySelector('.qn');qn.textContent=Math.max(1,+qn.textContent+(+s.dataset.step));return;}if(e.target.closest('[data-add]'))addToBasket(idx,+card.querySelector('.qn').textContent,card);});
 
-  renderGrid();
-  renderBasket();
+/* quick view */
+function openQuickview(idx){const p=PRODUCTS[idx];const spec=[['THC',p.thc+'%'],['CBD',p.cbd+'%'],['Type',p.dom],['Origin',p.o],['Region',p.r],['Pack',p.pack],['Irradiation',p.irr],['Location',p.loc]];const price=p.priceShown?`<span class="price" style="font-size:18px">${eur(p.perG)}<small>/g</small></span>`:`<span class="reqprice">Prices on request</span>`;
+  $('quickview').innerHTML=`<div class="dhead"><h3>${p.n}</h3><button class="close" data-closeDrawer><svg class="ic sm" viewBox="0 0 24 24"><path d="M6 6 18 18M18 6 6 18"/></svg></button></div><div class="qvphoto" style="background:${p.grad}">${p.cult}</div><div style="margin-top:10px;display:flex;align-items:center;justify-content:space-between">${price}<div class="stepper"><button data-qstep="-1"><svg class="ic xs" viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button><span class="qv2" id="qvqn">1</span><button data-qstep="1"><svg class="ic xs" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></div></div><div class="qvspec">${spec.map(([k,v])=>`<div><span class="k">${k}</span><span class="v">${v}</span></div>`).join('')}</div><select class="docsel"><option>COAs (2)</option><option>Images (4)</option><option>Videos (1)</option><option>Other docs (1)</option></select><div class="doclist"><div class="docitem"><svg class="ic xs" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/></svg><span class="grow">COA — GL-24-00${idx+1}.pdf</span><svg class="ic xs dl" viewBox="0 0 24 24"><path d="M12 4v10m-4-4 4 4 4-4"/><path d="M5 20h14"/></svg></div><div class="docitem"><svg class="ic xs" viewBox="0 0 24 24"><path d="m5 3 14 9-14 9z"/></svg><span class="grow">Walkthrough (Loom)</span><svg class="ic xs dl" viewBox="0 0 24 24"><path d="m10 6 6 6-6 6"/></svg></div></div><div class="sella"><div class="t"><svg class="ic xs" viewBox="0 0 24 24"><path d="M12 2 4 7v6c0 5 3.5 7.5 8 9 4.5-1.5 8-4 8-9V7z"/></svg> Sella · Marktvergleich</div><div class="m">One-time Flowzz price pull on request. Shown neutrally, identical for every viewer.</div><div class="stub">Comparison available on request — no figure shown (R1)</div></div><div class="dfoot"><button class="cta" id="qvAdd"><svg class="ic sm" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> Add to basket</button></div>`;
+  const dr=$('quickview');dr.querySelector('[data-closeDrawer]').onclick=closeDrawers;dr.querySelectorAll('[data-qstep]').forEach(b=>b.onclick=()=>{const e=$('qvqn');e.textContent=Math.max(1,+e.textContent+(+b.dataset.qstep));});$('qvAdd').onclick=()=>{addToBasket(idx,+$('qvqn').textContent);closeDrawers();};openDrawer(dr);}
+
+/* basket */
+const basket={};
+function addToBasket(idx,qty,card){basket[COMPANY]=basket[COMPANY]||{};basket[COMPANY][idx]=(basket[COMPANY][idx]||0)+qty;renderBasket();bumpBadge();if(card)flyToCart(card);toast(`Added ${qty} × ${PRODUCTS[idx].n}`);}
+function count(){let c=0;for(const co in basket)for(const k in basket[co])c+=basket[co][k];return c;}
+function bumpBadge(){const b=$('basketCount');b.classList.remove('bump');void b.offsetWidth;b.classList.add('bump');}
+function flyToCart(card){if(matchMedia('(prefers-reduced-motion:reduce)').matches)return;const img=card.querySelector('.photo'),cart=$('basketBtn');if(!img)return;const a=img.getBoundingClientRect(),b=cart.getBoundingClientRect();const g=document.createElement('div');g.className='fly';g.style.cssText+=`left:${a.left}px;top:${a.top}px;width:${a.width}px;height:${a.height}px;background:${PRODUCTS[+card.dataset.idx].grad}`;document.body.appendChild(g);requestAnimationFrame(()=>{g.style.left=b.left+'px';g.style.top=b.top+'px';g.style.width='28px';g.style.height='28px';g.style.opacity='0';});setTimeout(()=>g.remove(),700);}
+function renderBasket(){const body=$('basketBody'),cnt=count(),badge=$('basketCount');badge.style.display=cnt?'grid':'none';badge.textContent=cnt;let total=0;const cos=Object.keys(basket).filter(co=>Object.keys(basket[co]).length);if(!cos.length){body.innerHTML='<div class="empty">Your basket is empty.<br>Add products to build a deal card.</div>';$('basketTotal').textContent='—';return;}body.innerHTML=cos.map(co=>{const lines=Object.entries(basket[co]).map(([idx,q])=>{const p=PRODUCTS[idx];if(p.priceShown)total+=q*packG(p)*p.perG;return `<div class="line" data-idx="${idx}"><div class="nm"><b>${p.n}</b><small>${p.cult} · ${q}×${p.pack}</small></div><div class="q"><button data-bstep="-1"><svg class="ic xs" viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button>${q}<button data-bstep="1"><svg class="ic xs" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></div><button class="x" data-brm><svg class="ic xs" viewBox="0 0 24 24"><path d="M6 6 18 18M18 6 6 18"/></svg></button></div>`;}).join('');return `<div class="grp"><div class="gh"><span class="av">GL</span> ${co}</div>${lines}</div>`;}).join('');$('basketTotal').textContent=total?eur(total):'on request';}
+$('basketBody').addEventListener('click',e=>{const line=e.target.closest('.line');if(!line)return;const idx=line.dataset.idx;if(e.target.closest('[data-brm]'))delete basket[COMPANY][idx];const s=e.target.closest('[data-bstep]');if(s)basket[COMPANY][idx]=Math.max(1,basket[COMPANY][idx]+(+s.dataset.bstep));renderBasket();});
+const scrim=$('scrim');
+function openDrawer(d){document.querySelectorAll('.drawer').forEach(x=>x.classList.remove('show'));d.classList.add('show');scrim.classList.add('show');}
+function closeDrawers(){document.querySelectorAll('.drawer').forEach(x=>x.classList.remove('show'));scrim.classList.remove('show');}
+scrim.addEventListener('click',closeDrawers);
+document.querySelectorAll('[data-closeDrawer]').forEach(b=>b.onclick=closeDrawers);
+$('basketBtn').addEventListener('click',()=>openDrawer($('basket')));
+$('sendBtn').addEventListener('click',()=>{count()?toast('→ Deal card created via Ayush’s deal seam (mock)'):toast('Basket is empty');});
+
+/* search */
+const srch=$('srch');$('srchBtn').addEventListener('click',e=>{e.stopPropagation();srch.classList.toggle('open');if(srch.classList.contains('open'))srch.querySelector('input').focus();});
+document.addEventListener('click',e=>{if(!e.target.closest('#srch'))srch.classList.remove('open');});
+
+/* manage ▾ menu + account pop */
+const mBtn=$('manageBtn'),mMenu=$('manageMenu');mBtn.addEventListener('click',e=>{e.stopPropagation();mMenu.classList.toggle('show');});
+const acctBtn=$('acctBtn'),acctPop=$('acctPop');acctBtn.addEventListener('click',e=>{e.stopPropagation();acctPop.classList.toggle('show');});
+document.addEventListener('click',e=>{if(!e.target.closest('.menu-wrap'))mMenu.classList.remove('show');if(!e.target.closest('.acct'))acctPop.classList.remove('show');});
+
+/* screen toggle */
+function goManage(){document.body.dataset.screen='manage';document.querySelectorAll('#screenSeg button').forEach(x=>x.classList.toggle('on',x.dataset.s==='manage'));mMenu.classList.remove('show');acctPop.classList.remove('show');renderManage();}
+function goShop(){document.body.dataset.screen='shop';document.querySelectorAll('#screenSeg button').forEach(x=>x.classList.toggle('on',x.dataset.s==='shop'));}
+$('screenSeg').addEventListener('click',e=>{const b=e.target.closest('[data-s]');if(!b)return;b.dataset.s==='manage'?goManage():goShop();});
+$('mtabs').addEventListener('click',e=>{const t=e.target.closest('.mtab');if(!t)return;if(t.dataset.modal){openModal(t.dataset.modal);return;}document.querySelectorAll('.mtab').forEach(x=>x.classList.toggle('on',x===t));});
+
+/* manage table */
+const EDIT={idx:null};
+function renderManage(){const body=$('mbody');body.innerHTML=PRODUCTS.map((p,i)=>{const onProfile=i%4!==3,base=p.perG||6.5,cogs=base*0.56,margin=p.priceShown?Math.round((p.perG-cogs)/p.perG*100):null,bundle=p.priceShown&&packG(p)>=10?`≥100g · ${eur(p.perG-0.6)}/g`:null,editing=EDIT.idx===i;
+  const priceCell=editing?`<div class="priceedit"><input id="priceInput" value="${p.priceShown?p.perG.toFixed(2).replace('.',','):''}" placeholder="0,00" /><span>/g</span><button class="savep" data-saveprice><svg class="ic xs" viewBox="0 0 24 24"><path d="m5 12 5 5 9-11"/></svg></button><button class="cancelp" data-cancelprice><svg class="ic xs" viewBox="0 0 24 24"><path d="M6 6 18 18M18 6 6 18"/></svg></button></div>`:(p.priceShown?`<span class="pval"><b>${eur(p.perG)}</b>/g</span> <button class="chg" data-editprice>Change</button>`:`<span style="color:var(--ink-muted)">— no price</span> <button class="chg" data-editprice>Set</button>`);
+  return `<tr data-idx="${i}"><td><div class="mprod"><div class="mthumb" style="background:${p.grad}"></div><div><b>${p.n}</b><small>${p.cult} · ${p.loc}</small></div></div></td><td>${p.pack}</td><td><span class="cost">${eur(cogs)}</span> ${margin!=null?`<span class="margin">+${margin}%</span>`:'<span style="color:var(--ink-muted);font-size:11px">—</span>'}</td><td class="pricecell">${priceCell}</td><td>${bundle?`<span class="bundle">${bundle}</span>`:'<span style="color:var(--ink-muted)">—</span>'} <button class="micon" title="Edit bundle" style="width:24px;height:24px" data-modal="addproduct"><svg class="ic xs" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg></button></td><td><span class="toggle ${onProfile?'on':'off'}" data-dial="profile">${onProfile?'On':'Off'}</span></td><td><span class="toggle ${p.priceShown?'on':'off'}" data-dial="price" style="${onProfile?'':'opacity:.4;pointer-events:none'}">${p.priceShown?'Public':'On request'}</span></td><td><span class="mediadot"><svg class="ic xs" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m4 17 5-4 4 3 3-2 4 3"/></svg>4 <svg class="ic xs" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/></svg>2 <svg class="ic xs" viewBox="0 0 24 24"><path d="m5 3 14 9-14 9z"/></svg>1</span></td><td><div style="display:flex;gap:6px;justify-content:flex-end"><button class="micon" title="Edit product" data-modal="addproduct"><svg class="ic sm" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg></button><button class="micon" title="Delete" data-del><svg class="ic sm" viewBox="0 0 24 24"><path d="M5 7h14M9 7V5h6v2M7 7l1 13h8l1-13"/></svg></button></div></td></tr>`;}).join('');
+  $('mSub').textContent=`GreenLeaf Pharma · ${PRODUCTS.length} products · Standard price list`;}
+$('mbody').addEventListener('click',e=>{const tr=e.target.closest('tr[data-idx]');if(!tr)return;const i=+tr.dataset.idx;
+  if(e.target.closest('[data-modal]')){openModal(e.target.closest('[data-modal]').dataset.modal);return;}
+  if(e.target.closest('[data-del]')){toast('Delete product (mock) — confirm dialog would show');return;}
+  if(e.target.closest('[data-editprice]')){EDIT.idx=i;renderManage();const inp=$('priceInput');inp&&inp.focus();return;}
+  if(e.target.closest('[data-cancelprice]')){EDIT.idx=null;renderManage();return;}
+  if(e.target.closest('[data-saveprice]')){const v=parseFloat($('priceInput').value.replace(',','.'));if(!isNaN(v)&&v>0){PRODUCTS[i].perG=v;PRODUCTS[i].priceShown=true;}EDIT.idx=null;renderManage();toast('Price saved to Standard list');return;}
+  const dial=e.target.closest('[data-dial]');if(dial){if(dial.dataset.dial==='price')PRODUCTS[i].priceShown=!PRODUCTS[i].priceShown;renderManage();}});
+
+/* ---- MODALS (working settings) ---- */
+const F=(label,inner)=>`<div class="field"><label>${label}</label>${inner}</div>`;
+const inp=(v='',ph='')=>`<input value="${v}" placeholder="${ph}" />`;
+const optList=arr=>arr.map(o=>`<option>${o}</option>`).join('');
+function modalContent(kind){
+  if(kind==='addproduct')return{t:'Add / edit product',s:'Writes to the catalog + the Standard price list.',body:
+    F('Product name',inp('GL Indica 22/1'))+`<div class="row2">${F('Category',`<select>${optList(CATS)}</select>`)}${F('Strain',`<select>${optList(STRAINS)}</select>`)}</div>`+
+    `<div class="row2">${F('Shop location',`<select>${optList(LOCATIONS)}</select>`)}${F('Cultivar',inp('Northern Lights'))}</div>`+
+    `<div class="row2">${F('THC %',inp('22'))}${F('CBD %',inp('1'))}</div>`+
+    `<div class="row2">${F('Pack size',inp('10 g'))}${F('Price /g (Standard list)',inp('7,40'))}</div>`+
+    F('Cost /g (you only)',inp('4,10'))+
+    F('Images / COA / video',`<div class="drop"><svg class="ic" viewBox="0 0 24 24" style="margin:0 auto 6px"><path d="M12 16V4m-5 5 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>Drop images, COA PDFs or paste a video link (Loom/YouTube/Vimeo)</div>`),
+    save:'Save product'};
+  if(kind==='import')return{t:'Import products (CSV)',s:'Bulk-create products + price list rows.',body:
+    `<div class="drop"><svg class="ic" viewBox="0 0 24 24" style="margin:0 auto 6px"><path d="M12 16V4m-5 5 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>Drop your CSV here, or click to browse</div>`+
+    `<div class="infonote">Off-template CSVs are fuzzy-parsed; you confirm the column mapping before import. Each row creates a <b>product</b> + a <b>pricelist_item</b> in the Standard list.</div>`+
+    F('',`<a class="chg">↓ Download CSV template</a>`),save:'Upload & map'};
+  if(kind==='branding')return{t:'Edit shop & branding',s:'Cover, logo, name and links shown on your storefront.',body:
+    F('Cover image',`<div class="drop">Drop a cover image (16:9)</div>`)+`<div class="row2">${F('Logo',`<div class="drop">Logo</div>`)}${F('Company name',inp('GreenLeaf Pharma GmbH'))}</div>`+
+    F('Tagline',inp('EU-GMP medical cannabis · cultivator & wholesaler'))+
+    F('Description',`<textarea rows="3">Pharmaceutical-grade flower and extracts…</textarea>`)+
+    `<div class="row2">${F('Website',inp('greenleaf-pharma.de'))}${F('LinkedIn',inp('/greenleaf'))}</div>`,save:'Save branding'};
+  if(kind==='locations')return{t:'Manage shop locations',s:'These drive the location dropdown + the warehouse info.',body:
+    LOCATIONS.map(l=>`<div class="locrow"><svg class="ic sm" viewBox="0 0 24 24" style="color:var(--brand)"><path d="M12 21s-7-5-7-11a7 7 0 0 1 14 0c0 6-7 11-7 11z"/></svg><div class="grow"><b>${l}</b><small>${locCount(l)} products</small></div><button class="micon"><svg class="ic sm" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg></button><button class="micon"><svg class="ic sm" viewBox="0 0 24 24"><path d="M5 7h14M9 7V5h6v2M7 7l1 13h8l1-13"/></svg></button></div>`).join('')+
+    F('Add a location',`<div style="display:flex;gap:8px"><input placeholder="City, Country" style="flex:1"/><button class="cta" style="width:auto;padding:10px 18px" data-msave>Add</button></div>`),save:null};
+  if(kind==='share')return{t:'Share your Present link',s:'A public storefront link buyers can open.',body:
+    F('Public link',`<div style="display:flex;gap:8px"><input value="hello-sello.com/c/greenleaf-pharma" style="flex:1" readonly/><button class="cta" style="width:auto;padding:10px 18px" id="copyLink">Copy</button></div>`)+
+    `<div style="display:flex;gap:14px;align-items:center;margin-top:14px"><div style="width:96px;height:96px;border-radius:12px;background:#fff;display:grid;place-items:center;box-shadow:inset 0 0 0 1px rgba(0,0,0,.08);font-size:10px;color:var(--ink-muted)">QR</div><div style="font-size:12px;color:var(--ink-muted)">Buyers scan or open the link → your public shop. Only <b>On-profile</b> products show; prices follow each product's <b>Price</b> dial.</div></div>`,save:null};
+  if(kind==='send')return{t:'Send price list to a customer',s:'Net-new flow — prototyped originating from Present (option C).',body:
+    F('Customer (connected contacts)',`<select>${optList(['Apotheke Nord (Berlin)','MediCanna GmbH','GrünPharm AG','Cologne Health Pharmacy'])}</select>`)+
+    F('What to send',`<div class="pickrow sel"><span class="box"><svg class="ic xs" viewBox="0 0 24 24"><path d="m5 12 5 5 9-11"/></svg></span> Whole Standard price list (${PRODUCTS.filter(p=>p.priceShown).length} priced products)</div><div class="pickrow"><span class="box"></span> Selected products only…</div><div class="pickrow"><span class="box"></span> A custom price list for this customer <span style="color:var(--ink-muted);font-size:11px">(future)</span></div>`)+
+    F('Message (optional)',`<textarea rows="2" placeholder="Hi — here are our current prices…"></textarea>`)+
+    `<div class="infonote">⚠ Seller-initiated price-send is <b>not built yet</b>. Open question: should it originate here (Present), on the Relationship page (per-customer list, DEV-41), or via an offer/deal card (DEV-1 cascade)? This modal prototypes the <b>Present-origin</b> option.</div>`,save:'Send price list'};
+  if(kind==='profile')return{t:'My profile',s:'Your personal card.',body:F('Display name',inp('Carla Weber'))+F('Title',inp('Head of Procurement'))+F('Email',inp('carla@greenleaf-pharma.de')),save:'Save'};
+  if(kind==='settings')return{t:'Settings',s:'User + company settings (role-gated in the real app).',body:
+    `<div class="pickrow"><span style="flex:1">Language</span><b>English</b></div><div class="pickrow"><span style="flex:1">Email notifications</span><span class="toggle on">On</span></div><div class="pickrow"><span style="flex:1">Company verified badge</span><span class="pmode pub">Verified</span></div>`+
+    `<div class="infonote">Full settings (org vs user split, password, deactivation, lifecycle emails) land in Phase 13.</div>`,save:null};
+  if(kind==='signout')return{t:'Sign out?',s:'',body:`<div style="font-size:14px;padding:6px 0">You'll be returned to the login screen.</div>`,save:'Sign out'};
+  return{t:kind,s:'',body:'',save:null};
+}
+function openModal(kind){const c=modalContent(kind);$('modal').innerHTML=`<div class="mtop"><h3>${c.t}</h3><button class="mclose" data-mclose><svg class="ic sm" viewBox="0 0 24 24"><path d="M6 6 18 18M18 6 6 18"/></svg></button></div>${c.s?`<div class="msub">${c.s}</div>`:''}${c.body}${c.save?`<div class="mactions"><button class="cta" data-msave>${c.save}</button><button class="ghost" data-mclose>Cancel</button></div>`:''}`;
+  $('mscrim').classList.add('show');mMenu.classList.remove('show');acctPop.classList.remove('show');
+  const cp=$('copyLink');if(cp)cp.onclick=()=>toast('Link copied');}
+function closeModal(){$('mscrim').classList.remove('show');}
+$('mscrim').addEventListener('click',e=>{if(e.target===$('mscrim'))closeModal();if(e.target.closest('[data-mclose]'))closeModal();if(e.target.closest('[data-msave]')){closeModal();toast('Saved (mock)');}});
+document.body.addEventListener('click',e=>{const t=e.target.closest('[data-modal]');if(t){e.preventDefault();openModal(t.dataset.modal);}const gm=e.target.closest('[data-goManage]');if(gm){e.preventDefault();goManage();}const gs=e.target.closest('[data-goShop]');if(gs){e.preventDefault();goShop();}});
+
+/* fullscreen */
+const app=$('app');$('fsBtn').addEventListener('click',()=>{document.fullscreenElement?document.exitFullscreen?.():document.documentElement.requestFullscreen?.();});
+document.addEventListener('fullscreenchange',()=>app.classList.toggle('presenting',!!document.fullscreenElement));
+
+/* toast */
+let tt;function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('show'),1900);}
+
+/* init */
+renderLocMenu();applyLocation();renderFilterMenu();renderGrid();renderBasket();
 </script>
 </body>
 </html>

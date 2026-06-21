@@ -1,69 +1,57 @@
 # present-redesign-prototype
 
-**Throwaway prototype.** Built 2026-06-21 (Phase 7, plan 07-01, Wave 0). Muskan's
-prototype-first rule; UI-SPEC is deliberately skipped (D-15) — **this prototype IS
-the visual spec for the React build.** Open `index.html` directly in a browser
-(no build step, no server).
+**Throwaway prototype.** Phase 7 / plan 07-01 / Wave 0. Muskan's prototype-first
+rule; UI-SPEC skipped (D-15) — **this prototype IS the visual spec for the React
+build.** Open `index.html` directly in a browser (no build, no server).
 
-**Decides:** the full Present rebuild (DEV-81 products · DEV-80 infos · DEV-79
-header) per Marcel's "CARDS" design board + the 2026-06-21 lock.
+> **Status: design exploration — 3 variations, pick a direction.** Switch with the
+> dark bar at the very top: **A · Editorial** · **B · Wholesale Pro** · **C ·
+> Collectible** (default). Everything below re-renders. All three share the real
+> app theme (tokens copied from `src/app/globals.css`), the light-glass IconRail,
+> the banner, the basket, and the filter bar — they differ in card style + density.
 
-## What it proves
+## The three directions (from the web-inspiration brief)
 
-- **Square 4-up grid (UX-02):** `repeat(4)` at the top breakpoint, each tile
-  `aspect-ratio:1/1` + `object-fit:cover`. Responsive down to 2-up.
-- **Location tabs (D-06):** Germany | UK | All filter the grid client-side. One
-  product sits in one location (default; multi-location deferred).
-- **Flippable product card (D-03):** CSS 3D `rotateY(180deg)` +
-  `transform-style:preserve-3d` + `backface-visibility:hidden`. Front ↔ back flip
-  feels right; the flip control sits top-right.
-- **Card FRONT (D-04):** image carousel (arrows + dots) · qty +/− stepper ·
-  "Add to basket" · spec table (THC/CBD, cultivar, dominance, origin/region,
-  irradiation, pack).
-- **Card BACK (D-05, buyer's study view):** COA/Images/Videos/Other-docs dropdown
-  + a scrollable "View full Present page" link + the **inert R1 Sella stub**.
-- **R1 Sella stub (T-07-01):** a labelled "Marktvergleich" box with **NO number** —
-  static copy, identical for every viewer (Sella-neutrality by construction).
-- **Per-company basket (UX-03 / D-12):** top-right panel, lines grouped per
-  company, transient (clears on reload). Two companies in the seed (GreenLeaf +
-  BloomPartner) demo the per-company separation.
-- **Banner controls (DEV-79 / D-09):** +Add products, Manage shop, and a
-  **Fullscreen** button (`document.documentElement.requestFullscreen()`) that
-  hides the left sidebar — the Presentation mode demo.
-- **Expandable info cards (DEV-80 / D-10):** HQ/warehouse + links cards expand on
-  click (multiple warehouses, more links) and collapse on click-away / ✕.
+| Variant | Feel | Grid | Card | Best for |
+|---|---|---|---|---|
+| **A · Editorial Boutique** | airy, brand-forward, image-led | 3-up | big image, hover-reveals qty/add, minimal spec | premium/curated lines, first impression |
+| **B · Wholesale Pro** | dense, solid, fast to scan | 5-up (+ List view) | compact, tabular specs, always-visible add | repeat buyers scanning many SKUs |
+| **C · Collectible Showcase** *(rec.)* | graded-card identity | 4-up | sheen + grade badge + tilt, flip→COA | differentiated storefront; quality is the pitch |
+
+Recommended: a hybrid of **B + C** — dense & scannable, but each tile carries the
+graded-card identity (grade badge always on, subtle sheen, flip-to-COA on demand).
+
+## Muskan's 2026-06-21 feedback — incorporated
+
+- **Compact search** — starts as a 42px icon, expands to ~280px on focus/hover (CSS `:focus-within`, no JS). No more giant search bar.
+- **Dropped** the "Present · your shop" title label.
+- **`Manage shop ▾`** moved into the top bar; **Add products lives inside it** (with Edit products/media, Import CSV, Edit branding, Manage locations, Share link). Banner is now clean.
+- **Animated basket** — count badge **bumps** on add, a product **flies to the cart**, slide-over eases in (`cubic-bezier(.67,.17,.32,.95)`). All gated by `prefers-reduced-motion`.
+- **Info chips** — compact glass chips that **expand to the bottom** (`grid-template-rows 0fr→1fr`, staggered row reveal), **transient**: collapse on click-away or ✕ — exactly Marcel's PRESENT-INFOS note.
+- **Filters = location AND products** — Location (All/DE/UK) + Category (Flowers/Extracts) + Strain (Indica/Sativa/Hybrid/CBD). ⚠️ **open to discuss** (see below).
+- **"Fancy shop, all info"** — drives the whole visual pass.
+
+## Marcel's "PRESENT INFOS" screenshot — decoded
+
+- Both info fields need **more background space for more data**.
+- Make them **expand to the bottom** to show more video links, more pages, **3 different warehouse addresses**.
+- A **temporary** open link that **collapses on click-away or X**.
+→ Implemented as the compact-chip → expand-to-bottom interaction above (3 warehouses, socials, catalogue PDF, etc.).
+
+## What every variant proves
+
+- **Square 4-up grid (UX-02):** `aspect-ratio:1/1` tiles (16:10 in Pro for density).
+- **Location + product filters (D-06):** client-side, location × category × strain.
+- **Flip card (D-03/04/05):** CSS 3D `rotateY(180deg)` + `backface-visibility`. Front = image + qty stepper + Add + specs; **back (buyer's study view)** = COA/Images/Videos/Other-docs dropdown + **inert R1 Sella "Marktvergleich" (NO number)** + "View full Present page".
+- **Per-company basket (UX-03 / D-12):** top-right slide-over, grouped per company, transient, est. total. Store keyed by company so multi-company carts stay separate.
+- **Presentation mode (DEV-79 / D-09):** Fullscreen button (`requestFullscreen()`) → hides the left rail.
 
 ## What it does NOT prove
+- Real data / RLS / Supabase (all fake seed); cross-tenant buyer read (`get_discoverable_shop`, R3); the deal hand-off (`createDeal`, connected-only, D-02/13) + the gated buyer door; media upload UX (R2); download-all; live fullscreen-in-Teams feel.
 
-- **Real data / RLS / Supabase** — all products are fake seed; no network, no auth.
-- **Cross-tenant buyer read** — the `get_discoverable_shop` RPC gate (R3) is not
-  exercised; the back is shown as if the buyer already has access.
-- **Deal hand-off** — "Build deal →" is inert. The seller→deal seam (`createDeal`,
-  connected-only, D-02/D-13) and the buyer-door gap (no `source:"shop"` yet, gated
-  on Ayush) are out of scope here.
-- **Media upload UX** — COA/doc/video links are static placeholders; the
-  client-direct `shop-media` upload + the MIME-allowlist widen (R2) are not built.
-- **Download-all** — not mocked (Claude's-discretion; sequential vs zip settled
-  in the build, not here).
-- **Fullscreen in Teams/Zoom** — the API call is real, but the live-presentation
-  feel is a human-UAT item.
-
-## Decisions it settles
-
-- **Grid breakpoints:** 2-up (mobile) → 3-up (≥760px) → 4-up (≥1080px). Square
-  tiles throughout.
-- **Flip mechanic:** pure CSS 3D flip (no library) — confirms RESEARCH's
-  "don't add framer-motion for one card".
-- **Square treatment:** `aspect-ratio:1/1` + `object-fit:cover` (crop, not letterbox).
-- **Basket placement:** fixed top-right, per-company groups, floating FAB when closed.
-- **Sella stub framing:** inert "available on request / coming soon" copy — no
-  value rendered (locks the R1 v1 posture visually).
-- **Info-card interaction:** click-to-expand, ✕-or-click-away to collapse.
-
-## Open questions for Muskan's review (eyeball vs Marcel's sources)
-
-1. Fidelity to Marcel's DEV-81 mockup image (Linear) + the "CARDS" board + the
-   finalized Present design on Google Drive (~28 May) — agents can't see these.
-2. Card-back dropdown grouping (COA/Images/Videos/Other) — right buckets?
-3. Spec-table field set on the front — enough, too much, reorder?
-4. Square crop vs a contained image — does crop lose label detail Marcel wants?
+## Open questions for review
+1. **Pick a direction** (A / B / C, or a blend) — the biggest decision.
+2. **Filters:** is location + category + strain right, or too many chips? Left filter rail vs top bar?
+3. Fidelity to Marcel's DEV-81 mockup + the CARDS board + the ~28-May Drive design (agents can't see these).
+4. Should Fullscreen sit in the top bar (current) or back on the banner top-right (Marcel's DEV-54 wording)?
+5. Card-back doc buckets (COA/Images/Videos/Other) — right grouping?
