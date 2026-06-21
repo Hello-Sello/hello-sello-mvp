@@ -4,9 +4,11 @@ import type { ConnectedCompany, MyConnectionsView } from "@/modules/messaging";
 import { isNewConnection, relativeDayLabel } from "@/modules/messaging";
 
 /**
- * The "+ New chat" picker (B2, Option A) - an anchored dropdown that OVERLAYS
- * the conversation-list column (it mounts inside the list header and drops under
- * the New chat button, D-04). It shows ONLY the viewer's connected people /
+ * The "+ New chat" picker (B2, Option A) - a leaflet that drops from the New chat
+ * button and COVERS the whole conversation-list region below it (the base
+ * "Search conversations" box, the All/Unread/Companies/Deals tabs, and the rows
+ * all sit behind this opaque overlay), so only ONE list shows at a time - never
+ * the base filters AND the picker stacked (D-04). It shows ONLY the viewer's connected people /
  * companies (D-01) in a Person|Company toggle, with a per-mode search and a
  * "New connections by date" section (D-03). Picking a person opens/creates a
  * P2P thread; picking a company opens the C2C thread (the parent routes it).
@@ -116,7 +118,7 @@ export function NewChatDropdown({ connections, onSelect, onClose }: NewChatDropd
   return (
     <div
       ref={ref}
-      className="glass-strong absolute left-0 right-0 top-full z-50 mt-1 flex max-h-[28rem] flex-col overflow-hidden rounded-2xl"
+      className="glass-strong absolute inset-x-2 bottom-2 top-1 z-50 flex flex-col overflow-hidden rounded-2xl shadow-xl ring-1 ring-black/5"
     >
       {/* Person | Company toggle (pink active state, matches the list chips) */}
       <div className="flex gap-1.5 border-b border-black/5 p-2.5">

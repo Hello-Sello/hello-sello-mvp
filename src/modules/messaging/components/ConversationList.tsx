@@ -62,9 +62,10 @@ export function ConversationList({
 }: ConversationListProps) {
   return (
     <div className="flex h-full flex-col">
-      {/* header: live new-chat trigger + real search + filter chips. `relative`
-          so the new-chat picker overlay drops UNDER the button (D-04). */}
-      <div className="relative space-y-2 border-b border-black/5 p-3">
+      {/* The New chat trigger stays on top. The picker leaflet drops out of it and
+          COVERS everything below (search + filter tabs + rows) so only ONE list
+          shows at a time - never the base filters AND the picker stacked (D-04). */}
+      <div className="p-3 pb-2">
         <button
           type="button"
           onClick={onTogglePicker}
@@ -74,34 +75,56 @@ export function ConversationList({
           <Plus size={15} strokeWidth={2.25} />
           New chat
         </button>
-        <div className="flex items-center gap-2 rounded-full bg-ink/5 px-3 py-1.5">
-          <Search size={13} strokeWidth={1.75} className="text-ink/40" />
-          <input
-            value={search}
-            onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Search conversations…"
-            className="flex-1 bg-transparent text-xs text-ink outline-none placeholder:text-ink/40"
-          />
-        </div>
-        <div className="flex gap-1.5">
-          {FILTERS.map((f) => {
-            const isActive = f.key === filter;
-            return (
-              <button
-                key={f.key}
-                type="button"
-                onClick={() => onFilterChange(f.key)}
-                aria-current={isActive ? "true" : undefined}
-                className={`rounded-full px-2.5 py-1 text-xs transition-colors ${
-                  isActive
-                    ? "bg-brand font-medium text-white"
-                    : "bg-ink/5 text-ink/50 hover:bg-ink/10"
-                }`}
-              >
-                {f.label}
-              </button>
-            );
-          })}
+      </div>
+
+      {/* Everything below the button. `relative` so the new-chat picker can cover
+          this WHOLE region (search + filter tabs + conversation rows) as one clean
+          leaflet; picking someone (or esc / click-away) closes it and the normal
+          list returns. */}
+      <div className="relative min-h-0 flex-1">
+        <div className="flex h-full flex-col">
+          <div className="space-y-2 border-b border-black/5 px-3 pb-3">
+            <div className="flex items-center gap-2 rounded-full bg-ink/5 px-3 py-1.5">
+              <Search size={13} strokeWidth={1.75} className="text-ink/40" />
+              <input
+                value={search}
+                onChange={(e) => onSearchChange(e.target.value)}
+                placeholder="Search conversations…"
+                className="flex-1 bg-transparent text-xs text-ink outline-none placeholder:text-ink/40"
+              />
+            </div>
+            <div className="flex gap-1.5">
+              {FILTERS.map((f) => {
+                const isActive = f.key === filter;
+                return (
+                  <button
+                    key={f.key}
+                    type="button"
+                    onClick={() => onFilterChange(f.key)}
+                    aria-current={isActive ? "true" : undefined}
+                    className={`rounded-full px-2.5 py-1 text-xs transition-colors ${
+                      isActive
+                        ? "bg-brand font-medium text-white"
+                        : "bg-ink/5 text-ink/50 hover:bg-ink/10"
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* body */}
+          <div className="min-h-0 flex-1 overflow-y-auto p-2">
+            <ListBody
+              conversations={conversations}
+              filter={filter}
+              selectedThreadId={selectedThreadId}
+              onSelect={onSelect}
+              search={search}
+            />
+          </div>
         </div>
 
         {pickerOpen && (
@@ -111,17 +134,6 @@ export function ConversationList({
             onClose={onClosePicker}
           />
         )}
-      </div>
-
-      {/* body */}
-      <div className="min-h-0 flex-1 overflow-y-auto p-2">
-        <ListBody
-          conversations={conversations}
-          filter={filter}
-          selectedThreadId={selectedThreadId}
-          onSelect={onSelect}
-          search={search}
-        />
       </div>
     </div>
   );
