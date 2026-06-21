@@ -18,7 +18,16 @@ import { Composer } from "./Composer";
  * realtime). No ThreadView header here - the workspace header band plays that
  * role; the DealPin "Talking about" bar tops the stream with the card pill.
  */
-export function DealChat({ dealCardId }: { dealCardId: string }) {
+export function DealChat({
+  dealCardId,
+  inRoom = false,
+}: {
+  dealCardId: string;
+  /** true when this chat is rendered INSIDE the Deal Room overlay - the strip
+   *  then drops the [Deal Card]/[Deal Room] toggle + dropdown, keeping only
+   *  Sella + Translator (D-05). */
+  inRoom?: boolean;
+}) {
   const [thread, setThread] = useState<{ threadId: string; relationshipId: string } | null>(null);
   const [messages, setMessages] = useState<ChatMessageView[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -123,6 +132,7 @@ export function DealChat({ dealCardId }: { dealCardId: string }) {
         key={thread.relationshipId}
         relationshipId={thread.relationshipId}
         variant="workspace"
+        inRoom={inRoom}
       >
         {/* stream - relative so the floating jump-to-bottom arrow anchors here */}
         <div className="relative h-full">

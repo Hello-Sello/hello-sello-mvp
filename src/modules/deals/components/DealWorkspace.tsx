@@ -5,25 +5,33 @@ import { getDealCard, getWorkspace, getStagesAndThings } from "../supabase/reads
 import { toggleThingStatus, createThing } from "../supabase/writes";
 import type { DealCardView, DealWorkspaceView, StageCode, StageView, ThingStatus } from "../types";
 import { WorkspaceHeader } from "./WorkspaceHeader";
-import { StageBar } from "./StageBar";
 import { WorkPanel } from "./WorkPanel";
+import { CardFront } from "./CardFront";
 
 /**
- * Deal Workspace (screen ④) - the deal container, the A&C-mix layout: header
- * band + the screen-only StageBar (3c) on top, the tabbed work panel left, and
- * the deal chat as the WIDE hero right. The chat arrives as a slot (`chat`) so
- * this module never imports messaging - the route page is the composition root
- * (messaging already imports deals for DealPin; a back-import would make a cycle).
+ * Deal Room (screen ④, Phase 5) - the deal container, restructured into the
+ * THREE permanent columns (D-04): a slim top bar, then LEFT a thin read-only
+ * card (the goods we have), MIDDLE the chat (the wide hero), RIGHT the work
+ * panel (things / people / documents + the stages, moved over from the left).
  *
- * 3c state lives here: the 5 stages + their Things (loaded once), the
- * SCREEN-ONLY selected stage (the StageBar highlight, never persisted), and the
- * set of Things whose tick write is in flight. Ticks update optimistically and
- * revert on a write error.
+ * The chat arrives as a slot (`chat`) so this module never imports messaging -
+ * the route page is the composition root (messaging already imports deals for
+ * DealPin; a back-import would make a cycle).
+ *
+ * State lives here: the 5 stages + their Things (loaded once), the SCREEN-ONLY
+ * selected stage (now driven by the right panel's stage dropdown in Plan 03,
+ * never persisted), and the set of Things whose tick write is in flight. Ticks
+ * update optimistically and revert on a write error. The top StageBar strip is
+ * gone (D-14: stages move into the right panel in Plan 03) - the selection state
+ * stays because the WorkPanel still needs `selectedStage`.
  */
 export interface DealWorkspaceProps {
   dealCardId: string;
   /** the deal chat hero (messaging's <DealChat/>), composed by the route */
   chat: React.ReactNode;
+  /** return straight to the chat (D-02/D-03); the route owns the overlay-close.
+   *  Defaults to a no-op so the workspace compiles/renders standalone. */
+  onClose?: () => void;
 }
 
 type LoadState =
@@ -46,7 +54,7 @@ function setThingStatus(stages: StageView[], thingId: string, status: ThingStatu
   });
 }
 
-export function DealWorkspace({ dealCardId, chat }: DealWorkspaceProps) {
+export function DealWorkspace({ dealCardId, chat, onClose = () => {} }: DealWorkspaceProps) {
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [stages, setStages] = useState<StageView[]>([]);
   const [selectedCode, setSelectedCode] = useState<StageCode | null>(null);
@@ -153,15 +161,33 @@ export function DealWorkspace({ dealCardId, chat }: DealWorkspaceProps) {
     );
   }
 
+  // the read-only card's THINGS section (D-12) wants the FULL list flattened
+  // across the 5 stages, not just the selected stage's.
+  const allThings = stages.flatMap((s) => s.things);
+
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
-      <WorkspaceHeader deal={state.deal} workspace={state.workspace} />
-      {selectedCode && (
-        <StageBar stages={stages} selected={selectedCode} onSelect={setSelectedCode} />
-      )}
-      <div className="flex min-h-0 flex-1 gap-3">
-        {/* left: the tabbed work panel (~330px, per the locked prototype) */}
-        <div className="w-[330px] shrink-0">
+      <WorkspaceHeader deal={state.deal} onClose={onClose} />
+      {/* the 3 permanent columns (D-04). A CSS grid, NOT three fixed-width flex
+          boxes, so the widths follow the ~20% / ~48% / ~32% target: a THIN card
+          (~20%, min 260px), the chat WIDEST (1.5fr), the work panel a bit
+          narrower than the chat (1fr). */}
+      <div
+        className="grid min-h-0 flex-1 gap-3"
+        style={{ gridTemplateColumns: "minmax(260px, 20%) 1.5fr 1fr" }}
+      >
+        {/* LEFT: the thin read-only card (the goods we have). CardFront DIRECTLY -
+            NO DealCard wrapper, so no 3D flip, no CardBack, no edit pencil. The
+            flattened things light up its read-only THINGS section (D-12). Colors
+            come from the existing Damson tokens the card already uses. */}
+        <div className="min-w-0 overflow-y-auto">
+          <CardFront data={state.deal} things={allThings} />
+        </div>
+        {/* MIDDLE: the deal chat, the wide hero (the slot prop, kept acyclic) */}
+        <div className="glass min-w-0 overflow-hidden rounded-3xl">{chat}</div>
+        {/* RIGHT: the work panel (things / people / documents + stages). Plan 03
+            moves the stages into it; this plan just sets it in the right track. */}
+        <div className="min-w-0">
           {selectedStage && (
             <WorkPanel
               members={state.workspace.members}
@@ -172,8 +198,6 @@ export function DealWorkspace({ dealCardId, chat }: DealWorkspaceProps) {
             />
           )}
         </div>
-        {/* right: the deal chat, the wide hero - the workspace is a DOING surface */}
-        <div className="glass min-w-0 flex-1 overflow-hidden rounded-3xl">{chat}</div>
       </div>
     </div>
   );

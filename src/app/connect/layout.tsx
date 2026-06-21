@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { requireVerified } from "@/shared/auth";
+import { DealRoomOverlayHost } from "./DealRoomOverlayHost";
 
 /**
  * Connect surface layout. After F2 there is only ONE global nav rail (IconRail),
@@ -33,6 +34,13 @@ export default async function ConnectLayout({
   }
 
   return (
-    <section className="flex h-full min-w-0 flex-1 flex-col">{children}</section>
+    <section className="flex h-full min-w-0 flex-1 flex-col">
+      {children}
+      {/* the Deal Room overlay host (D-01) - mounted once at the Connect root so
+          the strip's "Deal Room" button can open the Room over any Connect page;
+          it is the acyclic composition point for deals' container + messaging's
+          chat (it listens for the strip's window event and mounts the overlay). */}
+      <DealRoomOverlayHost />
+    </section>
   );
 }
