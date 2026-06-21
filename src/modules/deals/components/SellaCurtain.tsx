@@ -105,9 +105,9 @@ export function SellaCurtain({
         role="dialog"
         aria-label="Sella - proposed change"
         aria-hidden={!open}
-        className={`absolute left-1/2 top-full z-20 mt-1.5 w-80 max-w-[calc(100vw-2rem)] origin-top -translate-x-1/2 overflow-hidden rounded-2xl transition-all duration-300 ease-out ${
+        className={`absolute left-1/2 top-full z-20 mt-2 w-96 max-w-[calc(100vw-2rem)] origin-top -translate-x-1/2 overflow-hidden rounded-2xl transition-all duration-300 ease-out ${
           open
-            ? "max-h-[36rem] translate-y-0 opacity-100"
+            ? "max-h-[36rem] translate-y-0 opacity-100 delay-75"
             : "pointer-events-none max-h-0 -translate-y-1 opacity-0"
         }`}
       >

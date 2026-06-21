@@ -63,7 +63,7 @@ function Bar({
       className={[
         "block h-4 w-[3px] -skew-x-12 rounded-full bg-[var(--color-brand-deep)] transition-transform duration-300 ease-out",
         thinking ? "animate-pulse" : "",
-        open ? (side === "left" ? "-translate-x-1.5" : "translate-x-1.5") : "",
+        open ? (side === "left" ? "-translate-x-2" : "translate-x-2") : "",
       ].join(" ")}
       style={thinking ? { animationDelay: `${delayMs}ms` } : undefined}
     />
@@ -77,33 +77,32 @@ export function SellaMark({
   cue = null,
   className = "",
 }: SellaMarkProps) {
-  // The two skewed bars + the cue dot/halo live together so the loud "review"
-  // halo hangs off the mark itself. The bars PART on `open` (the curtain).
-  const mark = (
-    <span className="relative inline-flex items-center gap-1">
+  // The `//` mark with the cue WORD held BETWEEN the two bars (| Review |), a
+  // strong attention dot ON TOP for "review", and the bars parting on `open`.
+  const inner = (
+    <span className="relative inline-flex items-center gap-1.5">
       {cue === "review" && (
-        <span className="absolute -right-1.5 -top-1.5 flex h-2.5 w-2.5" aria-hidden>
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand/50" />
-          <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-brand ring-2 ring-white" />
+        // the attention dot sits ON TOP of the mark with a strong ping + pulse so
+        // it actually pulls a general user's eye (D-09 "your turn"); centered.
+        <span className="absolute -top-2.5 left-1/2 flex h-3 w-3 -translate-x-1/2" aria-hidden>
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand opacity-75" />
+          <span className="relative inline-flex h-3 w-3 animate-pulse rounded-full bg-brand ring-2 ring-white" />
         </span>
       )}
       <Bar thinking={thinking} open={open} side="left" delayMs={0} />
+      {cue === "review" ? (
+        <span className="text-[11px] font-semibold text-brand-deep">Review</span>
+      ) : cue === "awaiting" ? (
+        <span className="text-[11px] font-medium text-ink/50">Awaiting reply</span>
+      ) : null}
       <Bar thinking={thinking} open={open} side="right" delayMs={140} />
     </span>
   );
 
-  const label =
-    cue === "review" ? (
-      <span className="text-[11px] font-semibold text-brand-deep">Review</span>
-    ) : cue === "awaiting" ? (
-      <span className="text-[11px] font-medium text-ink/50">Awaiting reply</span>
-    ) : null;
-
-  // Premium + calm (04A polish): the cheap-looking pink fill is gone. Just the
-  // mark + label, with a whisper-soft glass hover only when it is the curtain's
-  // interactive entry point. The maroon `//` is the one accent.
+  // Premium + calm (04A polish): no pink fill. A whisper-soft glass hover only
+  // when it is the curtain's interactive entry. The maroon `//` is the one accent.
   const rootClass = [
-    "inline-flex shrink-0 items-center gap-2 rounded-full px-2.5 py-1",
+    "inline-flex shrink-0 items-center rounded-full px-2.5 py-1",
     onClick ? "cursor-pointer transition hover:bg-black/[0.04]" : "",
     className,
   ]
@@ -112,22 +111,15 @@ export function SellaMark({
 
   if (onClick) {
     return (
-      <button
-        type="button"
-        onClick={onClick}
-        aria-label="Sella"
-        className={rootClass}
-      >
-        {mark}
-        {label}
+      <button type="button" onClick={onClick} aria-label="Sella" className={rootClass}>
+        {inner}
       </button>
     );
   }
 
   return (
     <span aria-label="Sella" className={rootClass}>
-      {mark}
-      {label}
+      {inner}
     </span>
   );
 }
