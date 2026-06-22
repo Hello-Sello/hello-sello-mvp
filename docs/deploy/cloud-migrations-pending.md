@@ -132,6 +132,7 @@ One additive migration. The `join_request` table + status enum (incl. `cancelled
 | # | Migration file | What it does |
 |---|----------------|--------------|
 | 1 | `20260622091500_phase12_join_request_rpcs.sql` | 5 SECURITY DEFINER RPCs (`search_joinable_companies`, `list_pending_join_requests`, `request_to_join`, `approve_join_request`, `reject_join_request`, `withdraw_join_request`) + the `uq_join_request_active_pending` partial-unique index (one active pending request, D-12) + 4 `join.*` audit action codes. All `search_path=''`, two-door granted. Additive only — no `create table`/`create type`/`auditable_content_type` insert. |
+| 2 | `20260622100000_phase12_join_request_fixes.sql` | Code-review follow-up: `create or replace` of two RPCs from #1. **Fix A** — `request_to_join` rejects a caller who already belongs to a company (`current_company_id() is not null → raise`), closing a queue-pollution hole. **Fix B** — `approve_join_request` raises `'superadmin group missing'` instead of silently linking a Superadmin approval as an effective Member with a lying audit. No schema change; must be pushed in the same batch AFTER #1. |
 
 **Cautions:**
 - ⚠️ **Timestamp renamed `20260622090000` → `20260622091500`** to avoid a collision with Ayush's merged `20260622090000_thing_artifact_visibility.sql`; the new stamp sits after his `20260622091000` tail. Independent of his deal migrations (mine touches only `join_request`/`company`/`person`/`audit_log` + the RBAC helpers `current_company_id()`/`has_permission()`).

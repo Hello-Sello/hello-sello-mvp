@@ -411,5 +411,85 @@ BEGIN
     THEN RAISE EXCEPTION 'PB-04 FAIL: withdraw did NOT write a join.withdrawn audit_log row'; END IF;
 END $$;
 
+-- ════════════════════════════════════════════════════════════════════════════
+-- (PB-05, FIX A — 20260622100000) request_to_join REJECTS a caller who ALREADY
+--   belongs to a company. Before the fix an existing member could POST a join
+--   request at another company and pollute its approval queue; now request_to_join
+--   RAISEs at submit (the same 'requester already belongs to a company' string the
+--   action layer maps to the "already part of a company" copy). A-super (company A)
+--   is the company-holder; the call targets B.
+-- ════════════════════════════════════════════════════════════════════════════
+SELECT set_config('request.jwt.claim.sub', 'a1111111-1111-1111-1111-111111111111', true);
+SELECT set_config('request.jwt.claims', '{"sub":"a1111111-1111-1111-1111-111111111111","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE
+  v_raised boolean := false;
+BEGIN
+  BEGIN
+    PERFORM public.request_to_join('b0000000-0000-0000-0000-000000000000', 'should be blocked');
+  EXCEPTION WHEN others THEN
+    IF SQLERRM LIKE '%already belongs to a company%' THEN v_raised := true; ELSE RAISE; END IF;
+  END;
+  IF NOT v_raised
+    THEN RAISE EXCEPTION 'PB-05 FAIL: request_to_join did NOT reject a caller who already belongs to a company'; END IF;
+END $$;
+RESET ROLE;
+
+-- ════════════════════════════════════════════════════════════════════════════
+-- (PB-06, FIX B — 20260622100000) approve_join_request as 'superadmin' RAISEs and
+--   rolls back when the company has NO live 'Superadmin' group, instead of silently
+--   linking the requester as an effective Member with an audit row that claims
+--   role='superadmin'. Rename B's group so has_permission still resolves (it keys on
+--   group_id, not name) but approve's name lookup finds none. d2222222 withdrew from
+--   B above (cancelled is terminal), so it is still company-less and can re-request.
+-- ════════════════════════════════════════════════════════════════════════════
+UPDATE "group" SET name = 'Owners' WHERE id = 'b9000000-0000-0000-0000-000000000000';
+
+SELECT set_config('request.jwt.claim.sub', 'd2222222-2222-2222-2222-222222222222', true);
+SELECT set_config('request.jwt.claims', '{"sub":"d2222222-2222-2222-2222-222222222222","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+DO $$
+BEGIN
+  PERFORM set_config('public.pathb_super_req',
+    public.request_to_join('b0000000-0000-0000-0000-000000000000', 'wants superadmin')::text, true);
+END $$;
+RESET ROLE;
+
+SELECT set_config('request.jwt.claim.sub', 'b1111111-1111-1111-1111-111111111111', true);
+SELECT set_config('request.jwt.claims', '{"sub":"b1111111-1111-1111-1111-111111111111","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE
+  v_req_id uuid := current_setting('public.pathb_super_req', true)::uuid;
+  v_raised boolean := false;
+BEGIN
+  BEGIN
+    PERFORM public.approve_join_request(v_req_id, 'superadmin');
+  EXCEPTION WHEN others THEN
+    IF SQLERRM LIKE '%superadmin group missing%' THEN v_raised := true; ELSE RAISE; END IF;
+  END;
+  IF NOT v_raised
+    THEN RAISE EXCEPTION 'PB-06 FAIL: approve as superadmin did NOT raise when the Superadmin group is missing'; END IF;
+END $$;
+RESET ROLE;
+
+-- The raised approval must have rolled back atomically: requester stays
+-- company-less and the request stays pending (no half-applied 'approved').
+DO $$
+DECLARE
+  v_company uuid;
+  v_status  text;
+BEGIN
+  SELECT company_id INTO v_company FROM public.person
+    WHERE id = 'd2222222-2222-2222-2222-222222222222';
+  IF v_company IS NOT NULL
+    THEN RAISE EXCEPTION 'PB-06 FAIL: failed superadmin approval still linked the requester (company_id = %)', v_company; END IF;
+  SELECT status INTO v_status FROM public.join_request
+    WHERE id = current_setting('public.pathb_super_req', true)::uuid;
+  IF v_status IS DISTINCT FROM 'pending'
+    THEN RAISE EXCEPTION 'PB-06 FAIL: failed superadmin approval left join_request.status = % (expected ''pending'' — rollback)', v_status; END IF;
+END $$;
+
 ROLLBACK;
 SELECT 'ALL PATH-B ISOLATION TESTS PASSED' AS result;
