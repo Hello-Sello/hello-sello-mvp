@@ -1,4 +1,7 @@
-import { ArrowLeft } from "lucide-react";
+"use client";
+
+import { useState } from "react";
+import { ArrowLeft, BadgeCheck } from "lucide-react";
 import { formatMoney } from "../lib/derive";
 import type { DealCardStatus, DealCardView } from "../types";
 
@@ -22,10 +25,22 @@ import type { DealCardStatus, DealCardView } from "../types";
 export function WorkspaceHeader({
   deal,
   onClose,
+  allStagesDone = false,
+  onFinalize,
+  finalizing = false,
 }: {
   deal: DealCardView;
   /** return straight to the chat (D-03); the route owns the overlay-close */
   onClose: () => void;
+  /** true when every tick box across all 5 stages is done (D-15) - arms the
+   *  "Confirmed" segment glow; computed in DealWorkspace from getStageCompletions. */
+  allStagesDone?: boolean;
+  /** the finalize handler (D-16) - DealWorkspace calls finalizeDeal then re-reads
+   *  the card via hs:deal-updated so the pill/gold follow the DB status. */
+  onFinalize?: () => Promise<void> | void;
+  /** a finalize write is in flight - disables the confirm so a double-click can't
+   *  fire two finalizeDeal calls. */
+  finalizing?: boolean;
 }) {
   const { card, sellerName, buyerName, viewerSide } = deal;
 
@@ -87,18 +102,46 @@ export function WorkspaceHeader({
 
       {/* RIGHT: the lifecycle pill, pushed to the edge */}
       <div className="ml-auto shrink-0">
-        <LifecyclePill status={card.status} />
+        <LifecyclePill
+          status={card.status}
+          allStagesDone={allStagesDone}
+          onFinalize={onFinalize}
+          finalizing={finalizing}
+        />
       </div>
     </div>
   );
 }
 
 /**
- * Draft -> Confirmed -> Done. Display-only today; Plan 04 makes it interactive
- * (shine on "Confirmed" when all stages are done -> "Is the deal done?" confirm
- * -> finalizeDeal -> Done). Kept as a named sub-component so Plan 04 extends it.
+ * Draft -> Confirmed -> Done - the finalization surface (D-16).
+ *
+ * Default behaviour is the plain progress display. INTERACTIVE when every tick
+ * box across all 5 stages is done (`allStagesDone`) AND the card is not yet
+ * `done`: the "Confirmed" segment GLOWS (the SellaMark shine - animate-ping halo
+ * + animate-pulse) as a nudge that finalization is available, and it becomes a
+ * button. Clicking it opens a small "Is the deal done?" dropdown (the DealPin
+ * dropdown + outside-click click-catcher pattern); Confirm calls `onFinalize`,
+ * which runs finalizeDeal in DealWorkspace -> deal_card.status='done'.
+ *
+ * Load-bearing rule (D-16/D-17): the click NEVER sets the pill's status locally.
+ * The pill reaches "Done" + the card turns gold only after the DB re-reads as
+ * `done` via the hs:deal-updated path - the gold/Done follow the DB, not the
+ * click. A failed finalizeDeal therefore leaves the pill where it was.
  */
-function LifecyclePill({ status }: { status: DealCardStatus }) {
+function LifecyclePill({
+  status,
+  allStagesDone = false,
+  onFinalize,
+  finalizing = false,
+}: {
+  status: DealCardStatus;
+  allStagesDone?: boolean;
+  onFinalize?: () => Promise<void> | void;
+  finalizing?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+
   const steps: ReadonlyArray<{ key: string; label: string }> = [
     { key: "draft", label: "Draft" },
     { key: "confirmed", label: "Confirmed" },
@@ -114,25 +157,109 @@ function LifecyclePill({ status }: { status: DealCardStatus }) {
       </span>
     );
   }
+
+  const isDone = status === "done";
+  // the nudge: glow the "Confirmed" segment only when finalization is available
+  // (all stages done) AND the deal is not already done.
+  const canFinalize = allStagesDone && !isDone && !!onFinalize;
+
+  async function confirmFinalize() {
+    if (!onFinalize || finalizing) return;
+    await onFinalize();
+    // do NOT flip the pill locally - the re-read drives Done/gold (D-16). Just
+    // close the dropdown; if finalize failed the pill simply stays put.
+    setOpen(false);
+  }
+
   return (
-    <div className="flex items-center gap-1">
-      {steps.map((s, i) => (
-        <span key={s.key} className="flex items-center gap-1">
-          <span
-            className={`rounded-full px-2 py-0.5 text-[10px] ${
-              i === idx
-                ? "bg-brand font-medium text-white"
-                : i < idx
-                  ? "bg-emerald-50 text-emerald-700"
-                  : "bg-ink/5 text-ink/40"
-            }`}
-          >
+    <div className="relative flex items-center gap-1">
+      {steps.map((s, i) => {
+        const isConfirmedSeg = s.key === "confirmed";
+        const glow = isConfirmedSeg && canFinalize;
+        // the Done segment wears the amber accent when the deal is done (matches
+        // the golden card); otherwise the standard active/complete/future tints.
+        const segClass =
+          i === idx
+            ? isDone && s.key === "done"
+              ? "bg-amber-100 font-medium text-amber-700"
+              : "bg-brand font-medium text-white"
+            : i < idx
+              ? "bg-emerald-50 text-emerald-700"
+              : "bg-ink/5 text-ink/40";
+
+        const segLabel = (
+          <span className="inline-flex items-center gap-1">
+            {isDone && s.key === "done" && (
+              <BadgeCheck className="h-3 w-3 text-amber-600" strokeWidth={2} />
+            )}
             {i < idx ? "✓ " : ""}
             {s.label}
           </span>
-          {i < steps.length - 1 && <span className="text-[10px] text-ink/25">→</span>}
-        </span>
-      ))}
+        );
+
+        return (
+          <span key={s.key} className="relative flex items-center gap-1">
+            {glow ? (
+              // the GLOWING, clickable "Confirmed" segment - the finalize nudge.
+              // animate-ping halo behind + animate-pulse on the chip (the
+              // SellaMark shine). Clicking opens the "Is the deal done?" dropdown.
+              <span className="relative inline-flex">
+                <span
+                  aria-hidden
+                  className="absolute inset-0 animate-ping rounded-full bg-brand/40"
+                />
+                <button
+                  type="button"
+                  onClick={() => setOpen((o) => !o)}
+                  aria-haspopup="dialog"
+                  aria-expanded={open}
+                  title="Finalize this deal"
+                  className="relative animate-pulse rounded-full bg-brand px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm transition hover:bg-brand-deep"
+                >
+                  {s.label}
+                </button>
+              </span>
+            ) : (
+              <span className={`rounded-full px-2 py-0.5 text-[10px] ${segClass}`}>{segLabel}</span>
+            )}
+            {i < steps.length - 1 && <span className="text-[10px] text-ink/25">→</span>}
+          </span>
+        );
+      })}
+
+      {/* "Is the deal done?" dropdown (D-16) - DealPin dropdown + outside-click
+          click-catcher pattern. Confirm calls onFinalize; the pill flips to Done
+          only via the DB re-read, never here. */}
+      {open && canFinalize && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="glass-strong absolute right-0 top-full z-20 mt-2 w-56 rounded-2xl p-3">
+            <p className="px-0.5 pb-2 text-[12px] font-semibold text-ink">Is the deal done?</p>
+            <p className="px-0.5 pb-3 text-[10.5px] leading-snug text-ink/55">
+              All stages are marked done. Finalizing seals the deal and turns the card golden.
+            </p>
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                disabled={finalizing}
+                className="rounded-full px-3 py-1.5 text-[11px] font-medium text-ink/55 transition hover:bg-black/[0.04] disabled:opacity-50"
+              >
+                Not yet
+              </button>
+              <button
+                type="button"
+                onClick={() => void confirmFinalize()}
+                disabled={finalizing}
+                className="inline-flex items-center gap-1 rounded-full bg-amber-500 px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm transition hover:bg-amber-600 disabled:opacity-60"
+              >
+                <BadgeCheck className="h-3.5 w-3.5" strokeWidth={2} />
+                {finalizing ? "Finalizing…" : "Yes, it's done"}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
