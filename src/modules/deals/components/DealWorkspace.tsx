@@ -15,6 +15,8 @@ import {
   setThingVisibility,
   markStageDone,
 } from "../supabase/writes";
+import { finalizeDeal } from "../actions";
+import { allStagesDone as computeAllStagesDone } from "../lib/finalize";
 import type {
   ArtifactView,
   DealCardView,
@@ -104,6 +106,7 @@ export function DealWorkspace({ dealCardId, chat, onClose = () => {} }: DealWork
   const [selectedCode, setSelectedCode] = useState<StageCode | null>(null);
   const [busyThingIds, setBusyThingIds] = useState<ReadonlySet<string>>(new Set());
   const [busyStageCodes, setBusyStageCodes] = useState<ReadonlySet<string>>(new Set());
+  const [finalizing, setFinalizing] = useState(false);
 
   // the route remounts on a new id, so the effect only commits async results
   useEffect(() => {
@@ -278,6 +281,43 @@ export function DealWorkspace({ dealCardId, chat, onClose = () => {} }: DealWork
     }
   }
 
+  // finalize the deal (D-16/D-17): call finalizeDeal (status -> 'done' + the single
+  // golden seal, gated server-side on all stages done), then fire the existing
+  // "hs:deal-updated" event so the load engine's listener re-reads getDealCard.
+  // The gold + the pill's move to Done follow the DB status from that re-read,
+  // NEVER the click - a failed finalize leaves the UI un-gold. Never routes
+  // through confirm_deal_change (D-17): finalizeDeal owns the seal.
+  async function handleFinalize() {
+    if (state.kind !== "ready" || finalizing) return;
+    setFinalizing(true);
+    try {
+      await finalizeDeal({ dealCardId });
+      window.dispatchEvent(
+        new CustomEvent("hs:deal-updated", { detail: { dealCardId } }),
+      );
+    } catch (e: unknown) {
+      // surface the error; the UI stays un-gold because the re-read never ran
+      const message = e instanceof Error ? e.message : "Could not finalize this deal.";
+      if (typeof window !== "undefined") window.alert(message);
+    } finally {
+      setFinalizing(false);
+    }
+  }
+
+  // the finalization gate (D-15): every one of the 5 stages must have a stored
+  // completion row. Reuse the pure helper finalizeDeal gates on server-side, so
+  // the client nudge and the server authority share one rule. This only ARMS the
+  // pill's "Confirmed" glow; finalizeDeal re-checks server-side (the client gate
+  // is a nicety, not the authority - threat T-05-11).
+  const allStagesDone = useMemo(
+    () =>
+      computeAllStagesDone(
+        stages.map((s) => s.code),
+        completions.filter((c) => c.markedDoneAt !== null).map((c) => c.stageCode),
+      ),
+    [stages, completions],
+  );
+
   // the OTHER side as a whole (D-11) - the one member company that is not the viewer's
   const otherCompany = useMemo(() => {
     if (state.kind !== "ready") return null;
@@ -307,7 +347,13 @@ export function DealWorkspace({ dealCardId, chat, onClose = () => {} }: DealWork
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
-      <WorkspaceHeader deal={state.deal} onClose={onClose} />
+      <WorkspaceHeader
+        deal={state.deal}
+        onClose={onClose}
+        allStagesDone={allStagesDone}
+        onFinalize={handleFinalize}
+        finalizing={finalizing}
+      />
       {/* the 3 permanent columns (D-04). A CSS grid, NOT three fixed-width flex
           boxes, so the widths follow the ~20% / ~48% / ~32% target: a THIN card
           (~20%, min 260px), the chat WIDEST (1.5fr), the work panel a bit
