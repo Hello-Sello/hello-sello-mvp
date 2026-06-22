@@ -125,6 +125,19 @@ Those sections are kept for history only — they are no longer pending.
 - `supabase/seed/seed.sql` (founder-Superadmin backfill block + Carla demo member) is **LOCAL demo data only — never pushed** (cloud is seeded separately).
 - **Migration before code** — when Phase 11 app code (`/team`, the account gate, `admin.ts`) goes to prod, these 6 must be on cloud first or those paths error.
 
+#### Phase 12 — Path B (join existing company) (Muskan, 2026-06-22, local-first) — NOT on cloud
+
+One additive migration. The `join_request` table + status enum (incl. `cancelled`) + `jr_*` RLS already exist from Phase 1; this adds only RPCs + one index + 4 audit codes. No non-migration cloud steps (pure DB — no new env var or email template).
+
+| # | Migration file | What it does |
+|---|----------------|--------------|
+| 1 | `20260622091500_phase12_join_request_rpcs.sql` | 5 SECURITY DEFINER RPCs (`search_joinable_companies`, `list_pending_join_requests`, `request_to_join`, `approve_join_request`, `reject_join_request`, `withdraw_join_request`) + the `uq_join_request_active_pending` partial-unique index (one active pending request, D-12) + 4 `join.*` audit action codes. All `search_path=''`, two-door granted. Additive only — no `create table`/`create type`/`auditable_content_type` insert. |
+
+**Cautions:**
+- ⚠️ **Timestamp renamed `20260622090000` → `20260622091500`** to avoid a collision with Ayush's merged `20260622090000_thing_artifact_visibility.sql`; the new stamp sits after his `20260622091000` tail. Independent of his deal migrations (mine touches only `join_request`/`company`/`person`/`audit_log` + the RBAC helpers `current_company_id()`/`has_permission()`).
+- **Migration before code** — when the Phase 12 app code (onboarding Path B fork + the `/team` pending-requests queue) goes to prod, this must be on cloud first or those paths error (the RPCs won't exist).
+- Push alongside the Phase 10/11 deferred batch (Muskan-coordinated, local-first).
+
 ---
 
 ### Phase 1 — Held Two-Sided Deal Change (the held-change backbone)
