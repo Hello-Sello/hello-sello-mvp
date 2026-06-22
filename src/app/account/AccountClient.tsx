@@ -4,19 +4,20 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   ArrowLeft, User, Building2, Settings as SettingsIcon, Mail, Phone, Languages,
-  Link2, Clock, CheckCircle2, LogOut, Check, Copy, ExternalLink,
+  Link2, LogOut, Check, Copy, ExternalLink,
 } from 'lucide-react'
 import { Avatar } from '@/shared/ui/Avatar'
+import { VerifiedBadge } from '@/shared/ui/VerifiedBadge'
 import { AvatarUpload } from '@/shared/ui/AvatarUpload'
 import { signOut } from '@/app/(auth)/actions'
 import type { MyProfile } from '@/modules/profile'
 import type { CompanyProfile } from '@/modules/companies'
-import { saveMyProfile, saveAvatar } from './actions'
+import { saveMyProfile, saveAvatar, changeEmail } from './actions'
 import { BrandingEditForm } from '@/app/present/BrandingEditForm'
 
 type Tab = 'profile' | 'company' | 'settings'
 
-export function AccountClient({ profile, company, initialTab = 'profile' }: { profile: MyProfile; company: CompanyProfile | null; initialTab?: Tab }) {
+export function AccountClient({ profile, company, pendingEmail = null, initialTab = 'profile' }: { profile: MyProfile; company: CompanyProfile | null; pendingEmail?: string | null; initialTab?: Tab }) {
   const router = useRouter()
   const [tab, setTab] = useState<Tab>(initialTab)
   const [dirty, setDirty] = useState(false)
@@ -52,7 +53,7 @@ export function AccountClient({ profile, company, initialTab = 'profile' }: { pr
         <section className="glass-strong flex-1 rounded-3xl p-7">
           {tab === 'profile' && <ProfileForm profile={profile} onDirty={setDirty} />}
           {tab === 'company' && <CompanyForm company={company} onDirty={setDirty} />}
-          {tab === 'settings' && <SettingsPanel email={profile.email} />}
+          {tab === 'settings' && <SettingsPanel email={profile.email} pendingEmail={pendingEmail} />}
         </section>
       </div>
     </div>
@@ -161,33 +162,136 @@ function CompanyForm({ company, onDirty }: { company: CompanyProfile | null; onD
   return (
     <Panel title="Company Profile" subtitle="Your company details, shown on your public profile.">
       <div className="mb-5 flex items-center justify-between">
-        <VerifyBadge status={company.verificationStatus} />
+        <VerifiedBadge status={company.verificationStatus} variant="pill" />
       </div>
       <BrandingEditForm company={company} onDirty={onDirty} />
     </Panel>
   )
 }
 
-function VerifyBadge({ status }: { status: string }) {
-  return status === 'verified' ? (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-success/15 px-3 py-1 text-xs font-semibold text-success"><CheckCircle2 size={13} /> Verified</span>
-  ) : (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-info/10 px-3 py-1 text-xs font-semibold text-info"><Clock size={13} /> Verification pending</span>
-  )
-}
-
 // ---- Settings ---------------------------------------------------------------
-function SettingsPanel({ email }: { email: string }) {
+function SettingsPanel({ email, pendingEmail }: { email: string; pendingEmail: string | null }) {
   return (
     <Panel title="Settings" subtitle="Account and sign-out. More options coming soon.">
       <div className="divide-y divide-black/5">
-        <Row icon={Mail} label="Email" sub={email} right={<span className="text-xs text-ink-muted">sign-in address</span>} />
+        <EmailChangeRow email={email} pendingEmail={pendingEmail} />
         <Row icon={SettingsIcon} label="Theme" sub="Light is the current platform theme" right={<span className="rounded-full bg-brand-soft/40 px-2.5 py-0.5 text-xs font-medium text-brand-deep">Light</span>} />
       </div>
       <form action={signOut} className="mt-6 rounded-2xl border border-danger/20 bg-danger/5 p-4">
         <button type="submit" className="inline-flex items-center gap-2 text-sm font-semibold text-danger"><LogOut size={16} /> Sign out</button>
       </form>
     </Panel>
+  )
+}
+
+// Change-email affordance (ACCT-03 / D-12): a read-only email row with a "Change email"
+// button that reveals the new-email field + Save / Cancel — the standard settings
+// click-to-edit pattern, so nothing changes until the user explicitly asks to. Save calls
+// changeEmail(); on success the new value is staged in auth.users.new_email and surfaced as
+// the pending banner. `pendingEmail` comes from the server read (page.tsx) so a refresh or
+// revalidate shows the pending state; the local `requested` flag covers the same-render
+// window between submit and revalidate.
+function EmailChangeRow({ email, pendingEmail }: { email: string; pendingEmail: string | null }) {
+  const [editing, setEditing] = useState(false)
+  const [next, setNext] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [requested, setRequested] = useState<string | null>(null)
+
+  // The address awaiting confirmation: server-read pending wins, else the just-requested
+  // address from this session (covers the pre-revalidate render).
+  const awaiting = pendingEmail ?? requested
+  const target = next.trim()
+  const canSave = target.length > 0 && target !== email
+
+  function openEdit() {
+    setNext('')
+    setError(null)
+    setEditing(true)
+  }
+  function cancel() {
+    setEditing(false)
+    setNext('')
+    setError(null)
+  }
+  async function save() {
+    if (!canSave) return
+    setBusy(true)
+    setError(null)
+    const r = await changeEmail(target)
+    setBusy(false)
+    if ('error' in r) return setError(r.error)
+    setRequested(target)
+    setEditing(false)
+  }
+
+  return (
+    <div className="px-1 py-3">
+      <div className="flex items-center gap-3">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-black/[0.04] text-ink-muted"><Mail size={17} /></span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium text-ink">Email</p>
+          <p className="truncate text-xs text-ink-muted">{email} · sign-in address</p>
+        </div>
+        {!awaiting && !editing && (
+          <button
+            type="button"
+            onClick={openEdit}
+            className="shrink-0 rounded-xl border border-brand/40 px-3 py-1.5 text-sm font-semibold text-brand transition hover:bg-brand-soft/20"
+          >
+            Change email
+          </button>
+        )}
+      </div>
+
+      {awaiting ? (
+        <div className="mt-3 ml-12 rounded-2xl border border-brand/20 bg-brand-soft/10 p-4">
+          <p className="text-sm font-semibold text-ink">Confirmation sent to {awaiting}</p>
+          <p className="mt-1 text-xs text-ink-muted">
+            We emailed both your current and new address. Confirm from the current address and open
+            the link we sent to the new one — your sign-in email switches only once the new address
+            is verified.
+          </p>
+        </div>
+      ) : editing ? (
+        <div className="mt-3 ml-12 flex flex-col gap-2 sm:flex-row sm:items-end">
+          <label className="flex flex-1 flex-col gap-1 text-sm">
+            <span className="text-ink-muted">New email</span>
+            <span className="flex items-center gap-2 rounded-xl border border-white/70 bg-white/70 px-3 py-2 text-ink focus-within:border-brand focus-within:ring-2 focus-within:ring-brand-soft">
+              <Mail size={15} className="shrink-0 text-brand" />
+              <input
+                name="email"
+                type="email"
+                autoFocus
+                placeholder="you@company.com"
+                value={next}
+                onChange={(e) => { setNext(e.target.value); setError(null) }}
+                className="w-full bg-transparent outline-none"
+              />
+            </span>
+          </label>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={!canSave || busy}
+              onClick={save}
+              className="rounded-xl bg-brand px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-deep disabled:opacity-50"
+            >
+              {busy ? 'Sending…' : 'Save'}
+            </button>
+            <button
+              type="button"
+              onClick={cancel}
+              disabled={busy}
+              className="rounded-xl px-4 py-2 text-sm font-semibold text-ink-muted transition hover:bg-black/[0.04] disabled:opacity-50"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
+      {error && <p className="mt-2 ml-12 text-sm text-danger">{error}</p>}
+    </div>
   )
 }
 

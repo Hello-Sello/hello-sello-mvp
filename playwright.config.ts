@@ -21,6 +21,11 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   reporter: 'html',
   use: {
+    // Must match the auth `site_url` host (config.toml) one-for-one. The browser
+    // treats localhost and 127.0.0.1 as distinct cookie hosts, so a mismatch drops
+    // the session cookie set on the confirm redirect and breaks every auth
+    // round-trip (recovery/email-change). Next dev reports request.url on the
+    // `localhost` canonical host, so the whole stack is pinned to localhost.
     baseURL: 'http://localhost:3000',
     trace: 'on-first-retry',
   },

@@ -34,6 +34,12 @@ export default function LoginPage() {
           type="password"
           autoComplete="current-password"
         />
+        <Link
+          href="/forgot-password"
+          className="self-end text-xs font-semibold text-brand"
+        >
+          Forgot password?
+        </Link>
         {state.error && <p className="text-sm text-danger">{state.error}</p>}
         <button
           type="submit"

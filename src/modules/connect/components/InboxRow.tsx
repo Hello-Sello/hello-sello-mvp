@@ -1,4 +1,4 @@
-import { BadgeCheck, Users } from "lucide-react";
+import { Users } from "lucide-react";
 import type { InboxItemView } from "@/modules/connect/types";
 import {
   REQUEST_TYPE_META,
@@ -10,7 +10,7 @@ import {
  * One inbox row (panel 3). Pure + presentational - it renders an item and
  * reports clicks via `onSelect`; all state lives in the parent InboxView.
  *
- * Anatomy: sender avatar · company name (+ verified) · time-ago · type badge ·
+ * Anatomy: sender avatar · company name · time-ago · type badge ·
  * note/deal/blurb preview · assignee chip · mutual count.
  */
 export interface InboxRowProps {
@@ -55,9 +55,6 @@ export function InboxRow({ item, isSelected, viewerPersonId, onSelect }: InboxRo
             <span className="truncate text-sm font-semibold text-ink">
               {item.sender.companyName}
             </span>
-            {item.sender.verified && (
-              <BadgeCheck size={14} className="shrink-0 text-info" aria-label="Verified" />
-            )}
           </span>
           <span className="shrink-0 text-[11px] text-ink/40">
             {formatTimeAgo(item.created_at)}

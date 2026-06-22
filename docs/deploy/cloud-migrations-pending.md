@@ -90,6 +90,43 @@ in the correct final state; the intermediate version is never used mid-push.
 
 ## PENDING (local only — NOT on cloud yet)
 
+### ⚠️ 2026-06-21 (Muskan) — verified against live cloud: the batch below is DONE; only Phase 10 remains
+
+A live `list_migrations` on 2026-06-21 shows cloud's tip = `20260620120000_canonical_display_name`.
+**Everything in the "READ FIRST" reconciliation and the Phase 1–3f / sec / verif / discover / city /
+oauth / canonical_display_name lists below is now APPLIED to cloud** (reconciled + pushed 2026-06-20).
+Those sections are kept for history only — they are no longer pending.
+
+**Migrations still local-ahead-of-cloud:**
+
+| Migration file | What it does | Push when / how |
+|----------------|--------------|-----------------|
+| `20260620160000_get_public_profile_verification.sql` | Adds `company_verification_status` (14th column) to the `get_public_profile` RPC → the verified pill on the public `/c/[handle]` card (Phase 10 / ACCT-01). | **Deferred** — Phase 10 isn't in prod. Push when it ships: a clean single `supabase db push` (cloud now matches local through `canonical_display_name`, no reconcile needed). **Migration before code** — if Phase 10 app code goes live without it, `/c/[handle]` errors (app reads a column the old RPC won't return). |
+
+#### Phase 11 — RBAC activation + company team (Muskan, 2026-06-21, local-first) — NOT on cloud
+
+6 migrations applied LOCAL only (clean `db reset` green; cloud tip is still `canonical_display_name`, so these push cleanly in timestamp order — **no reconcile needed**):
+
+| # | Migration file | What it does |
+|---|----------------|--------------|
+| 1 | `20260621100000_phase11_rbac_activation.sql` | `has_permission()` + `seed_company_superadmin()` (SECURITY DEFINER, `search_path=''`); **§9 lockdown** — `person_group`/`permission_matrix_entry` → SELECT-only; gated permission codes (`team.manage`, `company.edit_profile`) + `team.*` audit codes |
+| 2 | `20260621110000_phase11_onboard_superadmin.sql` | `onboard_company` `CREATE OR REPLACE` — one additive `PERFORM seed_company_superadmin(...)` (founder→Superadmin); stays SECURITY INVOKER, `already_has_company` guard intact |
+| 3 | `20260621120000_phase11_backfill_superadmin.sql` | idempotent backfill of existing companies' founders → Superadmin |
+| 4 | `20260621130000_phase11_team_rpcs.sql` | `invite_member` / `change_member_role` / `remove_member` / `list_company_members` (SECURITY DEFINER, tenant-scoped, `has_permission`-gated, D-15 lockout) |
+| 5 | `20260621140000_phase11_invite_accept_link.sql` | `handle_new_user` `CREATE OR REPLACE` — links invited person to company+role from invite metadata; additive + metadata-gated (password/Google/Outlook signups unchanged) |
+| 6 | `20260621150000_phase11_lockout_race_fix.sql` | `pg_advisory_xact_lock` on the D-15 lockout (CR-01 race fix) + `record_invite_sent` audit RPC (WR-01/02) |
+
+**Non-migration cloud steps — REQUIRED for live invite/remove (do WITH the push):**
+- Set **`SUPABASE_SECRET_KEY`** in Vercel env (server-only service-role key) — `src/shared/db/admin.ts` / `inviteUserByEmail` / admin `signOut` all need it. Until then the local `sb_secret_` key 403s the GoTrue admin API (HS256 caveat) → invite/remove can't run end-to-end.
+- Paste **`supabase/templates/invite.html`** into the cloud dashboard → Auth → Email Templates → **Invite** (`config.toml` is local-only; cloud templates are dashboard-managed).
+
+**Cautions:**
+- Migrations 2 + 5 are `CREATE OR REPLACE` of shared functions (`onboard_company`, `handle_new_user`). Both compose cleanly on top of cloud's current `handle_new_user` (canonical `display_name` @ `20260620120000`) — the invite-linking + founder-seed are additive. Confirm the final body before push.
+- `supabase/seed/seed.sql` (founder-Superadmin backfill block + Carla demo member) is **LOCAL demo data only — never pushed** (cloud is seeded separately).
+- **Migration before code** — when Phase 11 app code (`/team`, the account gate, `admin.ts`) goes to prod, these 6 must be on cloud first or those paths error.
+
+---
+
 ### Phase 1 — Held Two-Sided Deal Change (the held-change backbone)
 
 All deal-domain, additive (a new table + new functions + one publication add). **Nothing of

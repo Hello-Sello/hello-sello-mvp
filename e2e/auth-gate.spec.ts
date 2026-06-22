@@ -197,3 +197,39 @@ test('pending company visiting /discover is redirected away (layout gate)', asyn
     await resetToVerified()
   }
 })
+
+// ---------------------------------------------------------------------------
+// Phase 10 (10-01 Wave-0 RED) — reset-flow proxy allowlist precision (ACCT-02)
+//
+// D-09 / Pitfall 3 (CRITICAL): the proxy must allowlist ONLY /forgot-password
+// (reached signed-OUT to request a link). /reset-password must STAY gated — by
+// the time a user reaches it they hold a recovery session, so the gate is
+// already satisfied; allowlisting it would let any signed-out visitor open the
+// set-password form.
+//
+// RED now: /forgot-password is not yet in src/shared/db/proxy.ts (10-03), so a
+// signed-out visit currently bounces to /login — this block flips GREEN when the
+// allowlist entry lands. These cases need no fixture mutation (pure proxy), so
+// they run in their own non-serial describe.
+// ---------------------------------------------------------------------------
+test.describe('reset-flow proxy allowlist (Phase 10 ACCT-02)', () => {
+  test('signed-out /forgot-password stays public (allowlisted)', async ({ page, context }) => {
+    await context.clearCookies()
+    await page.goto('/forgot-password')
+    // Give any redirect a beat to fire, then assert we are still on the page.
+    await page.waitForTimeout(1_000)
+    expect(page.url()).toContain('/forgot-password')
+    expect(page.url()).not.toContain('/login')
+  })
+
+  test('signed-out /reset-password redirects to /login (gated, NOT allowlisted)', async ({
+    page,
+    context,
+  }) => {
+    await context.clearCookies()
+    await page.goto('/reset-password')
+    await page.waitForURL((url) => url.pathname === '/login', { timeout: 10_000 })
+    expect(page.url()).toContain('/login')
+    expect(page.url()).not.toContain('/reset-password')
+  })
+})

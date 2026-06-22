@@ -25,6 +25,7 @@ import { MapPin, Search, Check, ChevronDown, ArrowRight, X, Lock } from "lucide-
 import type { DiscoverCompany, ConnectionState } from "./companies";
 import { COUNTRIES } from "@/shared/geo/countries";
 import { sendConnectRequest } from "./actions";
+import { VerifiedBadge } from "@/shared/ui/VerifiedBadge";
 
 // Seller-side types only — no Pharmacy filter (D-12 Instagram model).
 const SELLER_TYPES = ["Cultivator", "Wholesaler", "Importer"] as const;
@@ -47,27 +48,33 @@ function tintFor(name: string): string {
 }
 
 // Real logo if the company uploaded one; otherwise a tinted initials tile.
+// The outer span is `relative` so the form-G verified tick anchors to the logo
+// corner. The tick is UNCONDITIONAL — the Discover RPC hard-filters
+// `verification_status='verified'`, so every row is verified by construction
+// (do NOT thread a status field through DiscoverCompany — see RESEARCH Anti-Pattern).
 function Logo({ company, size = 48 }: { company: DiscoverCompany; size?: number }) {
-  if (company.logoUrl) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={company.logoUrl}
-        alt=""
-        style={{ width: size, height: size }}
-        className="shrink-0 rounded-2xl object-cover ring-1 ring-black/5"
-      />
-    );
-  }
   return (
-    <span
-      className="flex shrink-0 items-center justify-center rounded-2xl font-bold text-white shadow-sm ring-1 ring-black/5"
-      style={{
-        width: size, height: size, fontSize: size * 0.34,
-        background: `linear-gradient(140deg, rgba(255,255,255,0.28), transparent 55%), ${tintFor(company.name)}`,
-      }}
-    >
-      {initials(company.name)}
+    <span className="relative inline-flex shrink-0" style={{ width: size, height: size }}>
+      {company.logoUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={company.logoUrl}
+          alt=""
+          style={{ width: size, height: size }}
+          className="rounded-2xl object-cover ring-1 ring-black/5"
+        />
+      ) : (
+        <span
+          className="flex items-center justify-center rounded-2xl font-bold text-white shadow-sm ring-1 ring-black/5"
+          style={{
+            width: size, height: size, fontSize: size * 0.34,
+            background: `linear-gradient(140deg, rgba(255,255,255,0.28), transparent 55%), ${tintFor(company.name)}`,
+          }}
+        >
+          {initials(company.name)}
+        </span>
+      )}
+      <VerifiedBadge status="verified" variant="tick" />
     </span>
   );
 }

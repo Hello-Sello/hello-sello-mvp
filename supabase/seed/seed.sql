@@ -102,6 +102,45 @@ INSERT INTO company_type_assignment (company_id, company_type_code, created_by) 
    '22222222-2222-2222-2222-222222222222');
 
 -- ----------------------------------------------------------------------------
+-- 4a-bis. Carla — a SECOND member of GreenLeaf, role = Member, for team-mgmt UAT.
+--   Alice (GreenLeaf founder) is the Superadmin (seeded in section 6 below); Carla
+--   is a plain company person NOT in the Superadmin group (D-01 = Member), so the
+--   /team page has someone to promote / demote / remove. Reuses the existing
+--   GreenLeaf company + Alice login; login carla@greenleaf.test / password123.
+--   Idempotent (WHERE NOT EXISTS) so repeated `db reset` is safe.
+-- ----------------------------------------------------------------------------
+INSERT INTO auth.users (
+  instance_id, id, aud, role, email, encrypted_password,
+  email_confirmed_at, raw_app_meta_data, raw_user_meta_data,
+  created_at, updated_at, confirmation_token, email_change, email_change_token_new, recovery_token
+)
+SELECT
+  '00000000-0000-0000-0000-000000000000',
+  '33333333-3333-3333-3333-333333333333',
+  'authenticated', 'authenticated', 'carla@greenleaf.test',
+  crypt('password123', gen_salt('bf')), NOW(),
+  '{"provider":"email","providers":["email"]}',
+  '{"first_name":"Carla","last_name":"Klein"}',
+  NOW(), NOW(), '', '', '', ''
+WHERE NOT EXISTS (SELECT 1 FROM auth.users WHERE id = '33333333-3333-3333-3333-333333333333');
+
+INSERT INTO auth.identities (
+  id, user_id, provider_id, identity_data, provider, last_sign_in_at, created_at, updated_at
+)
+SELECT
+  gen_random_uuid(), '33333333-3333-3333-3333-333333333333',
+  '33333333-3333-3333-3333-333333333333',
+  '{"sub":"33333333-3333-3333-3333-333333333333","email":"carla@greenleaf.test"}',
+  'email', NOW(), NOW(), NOW()
+WHERE NOT EXISTS (
+  SELECT 1 FROM auth.identities WHERE user_id = '33333333-3333-3333-3333-333333333333' AND provider = 'email'
+);
+
+-- Attach Carla to GreenLeaf (the trigger created her person row with company_id NULL).
+UPDATE person SET company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+  WHERE id = '33333333-3333-3333-3333-333333333333';
+
+-- ----------------------------------------------------------------------------
 -- 4b. HS-team reviewer fixture + a pending company for the verification queue
 --     (Wave-0 test scaffolding for Phase 3)
 --
@@ -231,6 +270,19 @@ where not exists (select 1 from company c where c.name = v.name);
 update public.person p set company_id = c.id, metadata = jsonb_build_object('seed','demo-2d')
 from auth.users u, company c
 where p.id = u.id and (
+  (u.email='clara@rheinland.test' and c.name='Rheinland Apotheke GmbH') or
+  (u.email='david@nordcanna.test' and c.name='NordCanna Distribution GmbH') or
+  (u.email='eva@bavaria.test'     and c.name='Bavaria Medical Cannabis GmbH'));
+
+-- 5c-ii) Stamp each demo-2d company's founder (created_by) to its sole member.
+-- These three companies were created (5b) without a founder; the Phase-11 founder
+-- backfill (20260621*_phase11_backfill_superadmin.sql) seeds the Superadmin group
+-- strictly from company.created_by and never guesses, so a NULL founder would leave
+-- the company headless. The founder is the single linked person, set explicitly here
+-- (seed data, not a runtime guess).
+update public.company c set created_by = u.id
+from auth.users u
+where c.created_by is null and (
   (u.email='clara@rheinland.test' and c.name='Rheinland Apotheke GmbH') or
   (u.email='david@nordcanna.test' and c.name='NordCanna Distribution GmbH') or
   (u.email='eva@bavaria.test'     and c.name='Bavaria Medical Cannabis GmbH'));
@@ -387,3 +439,20 @@ where not exists (
   where pb.company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid
     and pb.batch_number = v.batch_number and pb.deleted_at is null
 );
+
+-- ----------------------------------------------------------------------------
+-- 6. RBAC (Phase 11): seed each company's founder as its Superadmin.
+--   The Phase-11 founder-backfill MIGRATION runs BEFORE seed.sql, so at migration
+--   time no demo company exists yet and it no-ops. We re-run the same idempotent
+--   seeding here so a plain `supabase db reset` lands headless=0 with every founder
+--   a Superadmin — no manual backfill step. Keyed on company.created_by (the founder);
+--   non-founder members (e.g. Carla) are intentionally NOT seeded → they stay Members.
+--   seed_company_superadmin() is SECURITY DEFINER + idempotent (skips if the group exists).
+-- ----------------------------------------------------------------------------
+select public.seed_company_superadmin(c.id, c.created_by)
+from public.company c
+where c.created_by is not null
+  and not exists (
+    select 1 from public."group" g
+    where g.company_id = c.id and g.name = 'Superadmin' and g.deleted_at is null
+  );

@@ -164,6 +164,10 @@ export type PublicProfile = {
     products: string
     country: string
     website: string
+    // Real verification status (the card is anon-readable and shows ANY company,
+    // so the pill gates on this — unlike Discover where every row is verified by
+    // construction via the RPC's hard filter). 'pending' | 'verified' | 'rejected'.
+    verificationStatus: string
   } | null
 }
 
@@ -188,6 +192,7 @@ type PublicRow = {
   company_products: string | null
   company_country: string | null
   company_website: string | null
+  company_verification_status: string | null
 }
 
 export async function getPublicProfile(handle: string): Promise<PublicProfile | null> {
@@ -222,6 +227,7 @@ export async function getPublicProfile(handle: string): Promise<PublicProfile | 
           products: r.company_products ?? '',
           country: r.company_country ?? '',
           website: r.company_website ?? '',
+          verificationStatus: r.company_verification_status ?? 'pending',
         }
       : null,
   }
