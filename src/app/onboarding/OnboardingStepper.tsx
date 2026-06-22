@@ -569,18 +569,22 @@ function JoinSearchStep({
       setSearching(false)
       return
     }
+    // `ignore` guards against a stale-response race: if the term changes (or the
+    // component unmounts) while a request is in flight, the cleanup flips ignore so
+    // the older reply can't overwrite the newer term's results.
+    let ignore = false
     setSearching(true)
     const handle = setTimeout(async () => {
       const r = await searchCompanies(trimmed)
-      if ('error' in r) {
-        setResults([])
-      } else {
-        setResults(r.rows)
-      }
+      if (ignore) return
+      setResults('error' in r ? [] : r.rows)
       setSearched(true)
       setSearching(false)
     }, 280)
-    return () => clearTimeout(handle)
+    return () => {
+      ignore = true
+      clearTimeout(handle)
+    }
   }, [trimmed])
 
   return (

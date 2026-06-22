@@ -258,7 +258,8 @@ export async function requestToJoin(companyId: string, note?: string): Promise<A
     if (error.code === '23505') {
       return { error: 'You already have a pending request. Withdraw it before requesting another company.' }
     }
-    // (2) Concurrent Path-A self-onboard or already a member.
+    // (2) Caller already has a company: request_to_join's company-less guard
+    //     (20260622100000) raises this, as does a raced Path-A self-onboard.
     if (error.message.includes('already belongs to a company')) {
       return { error: "You're already part of a company." }
     }
