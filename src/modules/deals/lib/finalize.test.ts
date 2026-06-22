@@ -9,7 +9,8 @@
  * marked done), so it lives in `allStagesDone` and is unit-tested here.
  */
 import { describe, it, expect } from "vitest";
-import { allStagesDone } from "./finalize";
+import { allStagesDone, canFinalizeFromStatus } from "./finalize";
+import type { DealCardStatus } from "../types";
 
 describe("allStagesDone (the D-15 finalization gate)", () => {
   const FIVE = [
@@ -42,5 +43,24 @@ describe("allStagesDone (the D-15 finalization gate)", () => {
     // a deal with no stages can never be 'all done' - guards an empty-set
     // false-positive (every() over [] is vacuously true, which would be wrong).
     expect(allStagesDone([], [])).toBe(false);
+  });
+});
+
+describe("canFinalizeFromStatus (the HI-02 status precondition)", () => {
+  it("ALLOWS finalize from an agreed status (confirmed / amended)", () => {
+    // the two live agreed states - both sides have sealed (confirmed) or a
+    // two-sided change committed (amended). `done` must be reachable from these.
+    expect(canFinalizeFromStatus("confirmed")).toBe(true);
+    expect(canFinalizeFromStatus("amended")).toBe(true);
+  });
+
+  it("BLOCKS finalize from a never-agreed or terminal status", () => {
+    // the load-bearing guard: a draft was never confirmed by both sides, so it
+    // must not be finalizable straight to `done` (bypassing the confirm gate);
+    // withdrawn/cancelled are dead; done is handled by the idempotency early-return.
+    const blocked: DealCardStatus[] = ["draft", "withdrawn", "cancelled", "done"];
+    for (const status of blocked) {
+      expect(canFinalizeFromStatus(status)).toBe(false);
+    }
   });
 });

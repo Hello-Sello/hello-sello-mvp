@@ -12,7 +12,7 @@ import { createClient } from "@/shared/db/server";
 import { getCurrentCompanyId } from "@/shared/auth";
 import { writeAudit } from "@/shared/audit";
 import { viewerSide } from "./lib/derive";
-import { allStagesDone } from "./lib/finalize";
+import { allStagesDone, canFinalizeFromStatus } from "./lib/finalize";
 import type {
   ConfirmDealChangeInput,
   ConfirmDealChangeResult,
@@ -215,10 +215,11 @@ export async function finalizeDeal(args: {
   const companyId = await getCurrentCompanyId();
   if (!companyId) throw new Error("finalizeDeal: no company in session");
 
-  // the card (status + version drive the idempotency guard and the seal key)
+  // the card (status + version drive the idempotency guard, the status
+  // precondition, and the seal key)
   const { data: card, error: cardErr } = await supabase
     .from("deal_card")
-    .select("id, relationship_id, status, version")
+    .select("id, status, version")
     .eq("id", args.dealCardId)
     .single();
   if (cardErr) throw cardErr;
@@ -226,6 +227,18 @@ export async function finalizeDeal(args: {
   // idempotency guard (D-17): if already done, do NOT write a second seal.
   if (card.status === "done") {
     return { cardStatus: "done" };
+  }
+
+  // STATUS PRECONDITION (HI-02): `done` is a terminal status that must only be
+  // reachable from an AGREED deal. Stage-done rows can be marked from a deal's
+  // birth (the workspace exists while the card is still `draft`), so without this
+  // guard a never-confirmed `draft` (or a `withdrawn`/`cancelled`) deal could be
+  // finalized straight to `done`, bypassing the two-sided confirm gate (D-15).
+  // The live agreed states are `confirmed` (both sides sealed) and `amended` (a
+  // committed change) per the deal_card_status lookup; nothing else may finalize.
+  // The decision is the pure, unit-tested `canFinalizeFromStatus`.
+  if (!canFinalizeFromStatus(card.status as DealCardStatus)) {
+    throw new Error("Only a confirmed deal can be finalized.");
   }
 
   // the workspace this card belongs to (the stage-completion rows hang off it)
