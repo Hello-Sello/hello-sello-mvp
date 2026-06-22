@@ -506,7 +506,7 @@ export function DealPin({
         title="Open the Deal Room"
         aria-label="Open the Deal Room"
         onClick={openDealRoom}
-        className="rounded-md px-3 py-1 text-xs font-semibold text-ink/45 transition hover:text-ink/65"
+        className="rounded-md px-3 py-1 text-xs font-semibold text-brand-deep transition hover:bg-white/70"
       >
         Deal Room
       </button>
