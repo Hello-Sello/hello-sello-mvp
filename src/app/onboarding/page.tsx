@@ -60,6 +60,33 @@ export default async function OnboardingPage({
   // Rejected is explicitly exempted to prevent the /home ↔ /onboarding redirect loop.
   if (person.company_id && !resumeStep && companyStatus !== 'rejected') redirect('/home')
 
+  // Path B (D-10): a COMPANY-LESS requester with a PENDING join_request lands on the
+  // S2 "Request sent" screen instead of the create-company fork. This read is
+  // unconditional for the company-less person and runs BEFORE the stepper renders,
+  // so a pending requester is never bounced past their own pending screen. This page
+  // does NOT call requireVerified() (its only gate is getCurrentPerson → /login), so
+  // there is no verification short-circuit to reorder around (review finding #1).
+  //
+  // jr_select lets the requester read their OWN row even while company-less. The
+  // target company NAME comes from the row's OWN metadata (captured at submit by
+  // request_to_join), NEVER a `company` read — company_select denies the
+  // company-less caller (Pitfall 5 / T-12-03-I).
+  let pendingJoin: { companyName: string; requestId: string } | null = null
+  if (!person.company_id) {
+    const { data: jr } = await supabase
+      .from('join_request')
+      .select('id, metadata, status')
+      .eq('requester_person_id', person.id)
+      .eq('status', 'pending')
+      .is('deleted_at', null)
+      .limit(1)
+      .maybeSingle()
+    if (jr) {
+      const companyName = (jr.metadata as { company_name?: string } | null)?.company_name ?? ''
+      pendingJoin = { companyName, requestId: jr.id }
+    }
+  }
+
   // Business-category options come straight from the lookup so the codes stay
   // owned by the DB.
   const { data: companyTypes } = await supabase
@@ -151,6 +178,7 @@ export default async function OnboardingPage({
       rejectionPreset={rejectionPreset}
       isDuplicate={isDuplicate}
       isRejectedResume={companyStatus === 'rejected'}
+      pendingJoin={pendingJoin}
     />
   )
 }
