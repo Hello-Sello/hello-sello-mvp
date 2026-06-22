@@ -56,29 +56,29 @@ footer{margin-top:34px;color:var(--muted);font-size:12px;border-top:1px solid va
 <div class="wrap">
 
   <h1>Hello Sello - Sprint 2 Roadmap</h1>
-  <p class="sub">Higher-level phase board &middot; rebuilt 2026-06-20 &middot; source of truth: <code>.planning/ROADMAP.md</code></p>
+  <p class="sub">Higher-level phase board &middot; rebuilt 2026-06-20 &middot; updated 2026-06-22 &middot; source of truth: <code>.planning/ROADMAP.md</code></p>
 
   <div class="dash">
     <div class="top">
-      <div class="pct">67%</div>
+      <div class="pct">25%</div>
       <div class="grow">
-        <div style="font-size:13px;margin:0 0 6px"><b>Phase 4 - UI &amp; chat: all 9 slices BUILT (04A + 04B done 06-21).</b> The remaining work inside Phase 4 = <b>04C</b> (card+form UI touch) &rarr; the <b>Deal Room</b> build &rarr; the final <b>Agentation polish</b>. The big % tracks phases; Phases 5-8 are queued, so 0 of 5 phases are fully complete yet - normal this early.</div>
+        <div style="font-size:13px;margin:0 0 6px"><b>Phases 4 &amp; 5 are DONE; current = Phase 6 (Deal Basket / Deal Form).</b> Sprint 2 now has <b>8 build phases (4-11)</b>: Phase 4 (UI &amp; chat) and Phase 5 (Deal Room) are <b>built &amp; verified</b>. <b>2 new phases were added</b> after C2C - <b>Phase 9 (Documents)</b> and <b>Phase 10 (Final UI pass)</b> - and <b>Notification moved to LAST (Phase 11)</b>. So 2 of 8 build phases are complete = 25%.</div>
         <div class="track">
-          <span class="seg s-d" style="width:67%"></span>
-          <span class="seg s-t" style="width:33%"></span>
+          <span class="seg s-d" style="width:25%"></span>
+          <span class="seg s-t" style="width:75%"></span>
         </div>
-        <div class="counts"><b>Phase 4:</b> 9 built &middot; 0 to build &middot; 0 to design = 100% &nbsp;(04C touch + Deal Room + polish remain inside the phase)&nbsp;|&nbsp; <b>Sprint 2 phases:</b> 0 complete &middot; 1 in progress (P4) &middot; 4 queued (P5-8)</div>
+        <div class="counts"><b>Sprint 2 build phases:</b> 2 done (P4, P5) &middot; 1 active (P6) &middot; 5 queued (P7, P8, P9, P10, P11) = 8 total, 25% done. <b>Current phase = Phase 6.</b> The 9-slice Phase-4 detail is on the chat-ui board.</div>
         <div class="legend">
-          <span><i class="k-d"></i>built</span>
-          <span><i class="k-t"></i>remaining</span>
-          <span>big % = the active phase (Phase 4); the 9-slice detail is on the chat-ui board</span>
+          <span><i class="k-d"></i>done</span>
+          <span><i class="k-t"></i>queued / active</span>
+          <span>big % = build phases complete (2 of 8); current = Phase 6</span>
         </div>
       </div>
     </div>
   </div>
 
   <div class="note">
-    <b>Decisions locked this re-prioritising session:</b> (1) cross-deal notification is a <em>subset</em> of global notifications - build once. (2) The unread dot must <em>persist</em> across refresh until opened (needs a stored notification row + per-person seen flag). (3) Do the <em>UI pass first</em> (Phase 4 becomes the front-runner); settle the deal-card layout early so card-content work does not get redone.
+    <b>Current truth (2026-06-22):</b> <b>Phase 4 (UI &amp; chat)</b> and <b>Phase 5 (Deal Room)</b> are <b>DONE</b>. <b>Phase 6 (Deal Basket / Deal Form) is NEXT / active.</b> Then Phase 7 (Sella) and Phase 8 (C2C chat) are pending. Two NEW phases were added after C2C: <b>Phase 9 (Documents)</b> and <b>Phase 10 (Final UI pass)</b>. <b>Phase 11 (Notification)</b> is now LAST. Earlier locked decisions still hold: cross-deal notification is a <em>subset</em> of global notifications (build once); the unread dot must <em>persist</em> across refresh; the UI pass went first (done).
   </div>
 
   <div class="toolbar">
@@ -87,16 +87,16 @@ footer{margin-top:34px;color:var(--muted);font-size:12px;border-top:1px solid va
     <button id="filter">Show only not-done</button>
   </div>
 
-  <!-- ===== PHASE 4 (ACTIVE) ===== -->
-  <details class="sec" open>
+  <!-- ===== PHASE 4 (DONE) ===== -->
+  <details class="sec">
     <summary>
       <span class="chev">&#9656;</span>
       <span class="ttl">Phase 4 - UI &amp; chat</span>
-      <span class="chip c-prog" data-status="prog">active</span>
-      <span class="mini">6 built / 3 left</span>
+      <span class="chip c-done" data-status="done">&#9989; done</span>
+      <span class="mini">all 9 slices built + UAT passed</span>
     </summary>
     <div class="body">
-      <div class="goal">Goal: apply Marcel's Connect/chat review so the conversation surface feels like a familiar messaging app. Run as GSD sub-phases (04, 04A, 04B done; 04C next). All code local on <code>claude/ayush/work</code> (UNPUSHED); gate-green (tsc + eslint 0 errors + 62/62 unit + next build ok). Settle the deal-card LAYOUT early so Phase 5's content work is not redone.</div>
+      <div class="goal">&#9989; DONE &amp; CLOSED. Applied Marcel's Connect/chat review so the conversation surface feels like a familiar messaging app. Ran as GSD sub-phases (04, 04A, 04B, 04C - all done); gate-green (tsc + eslint 0 errors + 62/62 unit + next build ok); human UAT PASSED. Settled the deal-card LAYOUT early so Phase 6's content work is not redone.</div>
 
       <div class="row">
         <div class="rmain">
@@ -174,45 +174,83 @@ footer{margin-top:34px;color:var(--muted);font-size:12px;border-top:1px solid va
         <span class="chip c-done">built</span>
       </div>
 
-      <!-- REMAINING items -->
+      <!-- 04C now done -->
       <div class="row">
         <div class="rmain">
-          <div class="rt">04C - Card + Form UI touch <span class="mini">NEXT build (new session)</span></div>
-          <div class="rd">Small UI touch-up on the S2 Card + S3 Form (colour, icon look) so the final Agentation polish round is light. Two file-independent parallel plans. Run through full GSD.</div>
-          <div class="rf">two parallel plans &middot; next session</div>
+          <div class="rt">04C - Card + Form UI touch <span class="mini">BUILT 06-21, UAT PASSED</span></div>
+          <div class="rd">Slim shaded DealCard header, the card opens as a leaflet over the conversation rail, a one-tap-batch Deal Form, and the Damson recolor (#76002d&rarr;#7a1638). Applied directly to the app, gate-green. Human visual UAT PASSED.</div>
+          <div class="rf">commits c29ea4c + 37ec4e8</div>
         </div>
-        <span class="chip c-todo">to build</span>
+        <span class="chip c-done">done</span>
       </div>
 
-      <!-- Follow-ups -->
+      <!-- Deal Room: promoted to Phase 5, now done -->
       <div class="row">
         <div class="rmain">
-          <div class="rt">Deal Room build (after S1)</div>
-          <div class="rd">Old "Deal Workspace" &rarr; "Deal Room" container polish. This is where the card's read-only <b>THINGS</b> gets wired (incl. the deferred <code>assigned_to</code> field), since THINGS belong to the Deal Room. Likely its own discuss-phase - see the Big-parked section below.</div>
-          <div class="rf">CONTEXT.md &middot; 04-ui-chat</div>
+          <div class="rt">Deal Room &rarr; promoted to Phase 5 (DONE)</div>
+          <div class="rd">The old "Deal Workspace" container moved OUT of Phase 4 into its own <b>Phase 5</b> and has since been built &amp; verified (where the card's read-only <b>THINGS</b> + the deferred <code>assigned_to</code> got wired). See the Phase 5 card below.</div>
+          <div class="rf">now Phase 5</div>
         </div>
-        <span class="chip c-decide">follow-up</span>
+        <span class="chip c-done">done (Phase 5)</span>
       </div>
       <div class="row">
         <div class="rmain">
-          <div class="rt">Final Agentation-driven UI polish round</div>
-          <div class="rd">Once the whole UI is built, Ayush walks the app with <b>Agentation</b>, flags the component mistakes he's already spotting, and we fix them in one dedicated pass. Folds in the <b>P1-P4</b> polish backlog (logo colour consistency, the old "CONNECT" label, narrower rail width, overall look-and-feel) - full list on the chat-ui-overhaul board.</div>
-          <div class="rf">P1-P4 backlog</div>
+          <div class="rt">P1-P4 chrome polish</div>
+          <div class="rd">The concrete chrome fixes (logo colour tokens, "CONNECT" label restored, narrower rail, capsule mark-done button, "DEAL ROOM"+number top bar) <b>shipped inside Phase 5</b>. The broader Agentation-driven look-and-feel round is now its own <b>Phase 10 (Final UI pass)</b>, scheduled last-but-one.</div>
+          <div class="rf">P1-P3 in Phase 5 &middot; deep pass = Phase 10</div>
         </div>
-        <span class="chip c-decide">final pass</span>
+        <span class="chip c-done">done / moved</span>
       </div>
     </div>
   </details>
 
-  <!-- ===== PHASE 5 ===== -->
+  <!-- ===== PHASE 5 (DONE) - Deal Room ===== -->
   <details class="sec">
     <summary>
       <span class="chev">&#9656;</span>
-      <span class="ttl">Phase 5 - Deal Basket / Deal form</span>
-      <span class="chip c-todo" data-status="todo">queued</span>
+      <span class="ttl">Phase 5 - Deal Room</span>
+      <span class="chip c-done" data-status="done">&#9989; done</span>
+      <span class="mini">built + code-reviewed + goal verified 31/31</span>
     </summary>
     <div class="body">
-      <div class="goal">Goal: finish the deal-side form + card content (mine; the Present "product card" is Muskan's). Reqs: (new - define on plan) + DEV-84 / DEV-37.</div>
+      <div class="goal">&#9989; DONE. The 3-column Deal Room (promoted out of Phase 4). Goal verified 31/31.</div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">3-column room + open/close from chat</div>
+          <div class="rd">Thin <b>read-only card</b> | chat | <b>V7 work panel</b> (dropdown-only). Opens and closes from the chat as a <b>full-blurred overlay</b>. The card's read-only <b>THINGS</b> + the deferred <code>assigned_to</code> were wired here.</div>
+          <div class="rf">V7 panel &middot; finalizeDeal</div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Per-thing/per-doc visibility + stages + finalization</div>
+          <div class="rd">Per-thing/per-doc <b>private-or-shared</b> (lock; own-side defaults private, auto-shared when assigned to the other company; docs follow their thing). Each stage has a manual <b>"mark done"</b> that glows when all its things tick. Finalization on the <b>LifecyclePill</b> &rarr; "Is the deal done?" &rarr; <b>golden card</b> (via <code>finalizeDeal</code>, never <code>confirm_deal_change</code>).</div>
+          <div class="rf">stages &middot; LifecyclePill</div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">P1-P4 chrome polish + bug fixes</div>
+          <div class="rd">Folded-in chrome polish (logo tokens, CONNECT label restored, narrower rail, capsule mark-done button, "DEAL ROOM"+number top bar). All code-review bugs fixed (RLS write-ownership, finalize-requires-confirmed, seal-no-clobber) + a realtime channel fix.</div>
+          <div class="rf">code-review + verify</div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+    </div>
+  </details>
+
+  <!-- ===== PHASE 6 (ACTIVE) - Deal Basket / Deal Form ===== -->
+  <details class="sec" open>
+    <summary>
+      <span class="chev">&#9656;</span>
+      <span class="ttl">Phase 6 - Deal Basket / Deal Form</span>
+      <span class="chip c-prog" data-status="prog">&#9654; NEXT / active</span>
+      <span class="mini">current phase</span>
+    </summary>
+    <div class="body">
+      <div class="goal">Goal: finish the deal-side form + card content (mine; the Present "product card" is Muskan's). Reqs: (new - define on plan) + DEV-84 / DEV-37. <b>This is the current phase - not started yet.</b></div>
       <div class="row">
         <div class="rmain">
           <div class="rt">OBS-2 count-of-pack display</div>
@@ -261,12 +299,12 @@ footer{margin-top:34px;color:var(--muted);font-size:12px;border-top:1px solid va
     </div>
   </details>
 
-  <!-- ===== PHASE 6 ===== -->
+  <!-- ===== PHASE 7 - Sella ===== -->
   <details class="sec">
     <summary>
       <span class="chev">&#9656;</span>
-      <span class="ttl">Phase 6 - Sella</span>
-      <span class="chip c-todo" data-status="todo">queued</span>
+      <span class="ttl">Phase 7 - Sella</span>
+      <span class="chip c-todo" data-status="todo">pending</span>
     </summary>
     <div class="body">
       <div class="goal">Goal: Sella detects a CHANGE to an existing card and proposes it through the held Accept/Decline flow (not a new birth). Backend-heavy, reuses the held flow. Req: SELL-01.</div>
@@ -282,7 +320,7 @@ footer{margin-top:34px;color:var(--muted);font-size:12px;border-top:1px solid va
         <div class="rmain">
           <div class="rt">Audit "born_now" fix</div>
           <div class="rd"><code>actions.ts:381</code> - RPC-born (Sella-detected/proposed) deals miss their <code>deal.created</code> audit entry; fix when this phase reworks the detect/propose RPCs.</div>
-          <div class="rf">folded 06-19 &rarr; P6</div>
+          <div class="rf">folded 06-19 &rarr; P7</div>
         </div>
         <span class="chip c-todo">queued</span>
       </div>
@@ -305,12 +343,12 @@ footer{margin-top:34px;color:var(--muted);font-size:12px;border-top:1px solid va
     </div>
   </details>
 
-  <!-- ===== PHASE 7 ===== -->
+  <!-- ===== PHASE 8 - C2C chat ===== -->
   <details class="sec">
     <summary>
       <span class="chev">&#9656;</span>
-      <span class="ttl">Phase 7 - C2C chat</span>
-      <span class="chip c-todo" data-status="todo">queued</span>
+      <span class="ttl">Phase 8 - C2C chat</span>
+      <span class="chip c-todo" data-status="todo">pending</span>
     </summary>
     <div class="body">
       <div class="goal">Goal: company-to-company as a ticketing system + the connection-state differentiator. Reqs: C2C-01, C2C-02. Absorbs manual-create counterparty-person threading.</div>
@@ -333,22 +371,78 @@ footer{margin-top:34px;color:var(--muted);font-size:12px;border-top:1px solid va
     </div>
   </details>
 
-  <!-- ===== PHASE 8 ===== -->
+  <!-- ===== PHASE 9 (NEW) - Documents ===== -->
   <details class="sec">
     <summary>
       <span class="chev">&#9656;</span>
-      <span class="ttl">Phase 8 - Notification</span>
-      <span class="chip c-todo" data-status="todo">queued</span>
+      <span class="ttl">Phase 9 - Documents</span>
+      <span class="chip c-todo" data-status="todo">pending</span>
+      <span class="mini">&#10024; NEW phase (after C2C)</span>
     </summary>
     <div class="body">
-      <div class="goal">Goal: the cross-deal "another of your deals changed" alert, built as a SUBSET of global notifications. The persistent dot is the design driver. Req: HEAD-01. (The chat-top "Deals pop-up" half, old CONN-05, moved to Phase 4.)</div>
+      <div class="goal">&#10024; <b>NEW phase, added by Ayush after C2C.</b> Goal: document upload / write + the "documents follow their thing" rule.</div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Document upload + write</div>
+          <div class="rd">Upload / write documents into the Deal Room (storage bucket + RLS).</div>
+        </div>
+        <span class="chip c-todo">pending</span>
+      </div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">"Documents follow their thing"</div>
+          <div class="rd">A document inherits its thing's visibility - a <b>private task's file auto-becomes private</b>. Includes the two document edge cases. Deferred to here (after C2C) on purpose.</div>
+        </div>
+        <span class="chip c-todo">pending</span>
+      </div>
+    </div>
+  </details>
+
+  <!-- ===== PHASE 10 (NEW) - Final UI pass ===== -->
+  <details class="sec">
+    <summary>
+      <span class="chev">&#9656;</span>
+      <span class="ttl">Phase 10 - Final UI pass</span>
+      <span class="chip c-todo" data-status="todo">pending</span>
+      <span class="mini">&#10024; NEW phase (after C2C)</span>
+    </summary>
+    <div class="body">
+      <div class="goal">&#10024; <b>NEW phase, added by Ayush.</b> Goal: the deep look-and-feel / <b>Agentation</b> polish round - deliberately scheduled after everything else is built so it polishes the finished product, not a moving target.</div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Deep Agentation look-and-feel pass</div>
+          <div class="rd">Ayush walks the finished app with <b>Agentation</b>, flags every component mistake, and we fix them in one dedicated pass. This is the broad visual round - the narrow P1-P3 chrome fixes already shipped inside Phase 5.</div>
+          <div class="rf">P4 backlog &middot; chat-ui board</div>
+        </div>
+        <span class="chip c-todo">pending</span>
+      </div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Lock the finalized deal</div>
+          <div class="rd">Also folds in: a <b>Done deal becomes read-only</b> with just an Archive dialog (no further edits once finalized).</div>
+        </div>
+        <span class="chip c-todo">pending</span>
+      </div>
+    </div>
+  </details>
+
+  <!-- ===== PHASE 11 (LAST) - Notification ===== -->
+  <details class="sec">
+    <summary>
+      <span class="chev">&#9656;</span>
+      <span class="ttl">Phase 11 - Notification</span>
+      <span class="chip c-todo" data-status="todo">pending</span>
+      <span class="mini">now LAST (was Phase 9/8)</span>
+    </summary>
+    <div class="body">
+      <div class="goal">Goal: the cross-deal "another of your deals changed" alert, built as a SUBSET of global notifications. The persistent dot is the design driver. Req: HEAD-01. <b>Now scheduled LAST.</b> (The chat-top "Deals pop-up" half, old CONN-05, was done in Phase 4.)</div>
       <div class="row">
         <div class="rmain">
           <div class="rt">One bell + PERSISTENT unread dot</div>
           <div class="rd">Survives refresh until opened - in the chat AND the global header. Global app-wide notifications are the superset (scaffolding only today); the cross-deal alert is the first concrete subset.</div>
           <div class="rf">old P4 / HEAD-01 &middot; writes.ts</div>
         </div>
-        <span class="chip c-todo">queued</span>
+        <span class="chip c-todo">pending</span>
       </div>
       <div class="row">
         <div class="rmain">
@@ -356,7 +450,7 @@ footer{margin-top:34px;color:var(--muted);font-size:12px;border-top:1px solid va
           <div class="rd">Reuse the RLS-scoped realtime (<code>use-chat-realtime.ts</code>) as the live "re-check" signal; derive the actionable badge from the authoritative <code>deal_pending_change</code> row (don't store a second copy of the fact).</div>
           <div class="rf">use-chat-realtime.ts</div>
         </div>
-        <span class="chip c-todo">queued</span>
+        <span class="chip c-todo">pending</span>
       </div>
     </div>
   </details>
@@ -405,7 +499,7 @@ footer{margin-top:34px;color:var(--muted);font-size:12px;border-top:1px solid va
       <span class="chip c-park">parked</span>
     </summary>
     <div class="body">
-      <div class="goal">After Phases 4-8. Not counted in the bar.</div>
+      <div class="goal">After Phases 4-11. Not counted in the bar.</div>
       <div class="row">
         <div class="rmain">
           <div class="rt">Minor card extras</div>
@@ -454,30 +548,30 @@ footer{margin-top:34px;color:var(--muted);font-size:12px;border-top:1px solid va
     </div>
   </details>
 
-  <!-- ===== BIG PARKED ===== -->
+  <!-- ===== WAS BIG PARKED - NOW SHIPPED AS PHASE 5 ===== -->
   <details class="sec">
     <summary>
       <span class="chev">&#9656;</span>
-      <span class="ttl">Big parked - Deal Room + Deal Stages + Deal Finalization</span>
-      <span class="chip c-park">parked</span>
+      <span class="ttl">Deal Room + Deal Stages + Deal Finalization</span>
+      <span class="chip c-done">&#9989; shipped as Phase 5</span>
     </summary>
     <div class="body">
-      <div class="goal">Needs its own discuss-phase. Source: <code>_workshop/build-plans/6-pending-map.md</code> §5.</div>
+      <div class="goal">&#9989; DONE - this whole "big parked" block became <b>Phase 5</b> and shipped (goal verified 31/31). See the Phase 5 card above. Source: <code>_workshop/build-plans/6-pending-map.md</code> §5.</div>
       <div class="row">
         <div class="rmain">
-          <div class="rt">Deal Room build (post-S1 follow-up, flagged 06-20)</div>
-          <div class="rd">The old "Deal Workspace" container polish; this is where the card's read-only THINGS gets wired (incl. the deferred <code>assigned_to</code>), since THINGS belong to the Deal Room. The Deal Room is the home for the stages/finalization design below.</div>
-          <div class="rf">CONTEXT.md &middot; 04-ui-chat</div>
+          <div class="rt">Deal Room build</div>
+          <div class="rd">Built as the 3-column Deal Room; the card's read-only THINGS + the deferred <code>assigned_to</code> were wired here. Per-thing/per-doc private-or-shared visibility.</div>
+          <div class="rf">Phase 5 &middot; CONTEXT.md</div>
         </div>
-        <span class="chip c-park">after Phase-4 S1</span>
+        <span class="chip c-done">done</span>
       </div>
       <div class="row">
         <div class="rmain">
           <div class="rt">Deal Stages + Deal Finalization</div>
-          <div class="rd">Define stages, "last stage", auto-trigger, move the deal/Sella panel out of the chat strip into the Deal Room (next to the stages). <b>Deal Finalization</b> = the dormant <code>confirmDeal</code> action + <code>deal_confirmation</code> table, fired only at the LAST stage (separate from the everyday <code>confirm_deal_change</code>). Stages likely custom per deal.</div>
-          <div class="rf">6-pending-map §5 &middot; needs its own discuss-phase</div>
+          <div class="rd">Stages each with a manual "mark done" that glows when all its things tick. <b>Finalization</b> on the LifecyclePill &rarr; "Is the deal done?" &rarr; golden card via the new <code>finalizeDeal</code> (never <code>confirm_deal_change</code>).</div>
+          <div class="rf">Phase 5 &middot; finalizeDeal</div>
         </div>
-        <span class="chip c-park">parked</span>
+        <span class="chip c-done">done</span>
       </div>
     </div>
   </details>
@@ -500,8 +594,8 @@ footer{margin-top:34px;color:var(--muted);font-size:12px;border-top:1px solid va
       </div>
       <div class="row">
         <div class="rmain">
-          <div class="rt">Push 5 local-only UI commits</div>
-          <div class="rd">On <code>claude/ayush/work</code> (F1/F2/B1 + lint + docs) - not pushed yet. PR #113 is the deal-domain work, already merged to dev.</div>
+          <div class="rt">Push the local Phase 4 + Phase 5 commits</div>
+          <div class="rd">The Phase-04 (UI &amp; chat) commits plus the Phase-05 (Deal Room) commits are local on <code>claude/ayush/work</code> and not pushed yet (plan: one push together). PR #113 is the deal-domain work, already merged to dev.</div>
           <div class="rf">claude/ayush/work</div>
         </div>
         <span class="chip c-park">unpushed</span>
@@ -517,7 +611,7 @@ footer{margin-top:34px;color:var(--muted);font-size:12px;border-top:1px solid va
   </details>
 
   <footer>
-    Scratch dashboard - source of truth is <code>.planning/ROADMAP.md</code>. Rebuilt 2026-06-20.
+    Sprint-2 roadmap dashboard - 8 build phases (4-11): Phases 4 &amp; 5 DONE, Phase 6 current, 9 &amp; 10 are new, 11 Notification last. Source of truth is <code>.planning/ROADMAP.md</code>. Rebuilt 2026-06-20, updated 2026-06-22.
   </footer>
 
 </div>

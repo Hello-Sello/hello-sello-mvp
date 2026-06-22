@@ -52,14 +52,13 @@ footer{margin-top:34px;color:var(--muted);font-size:12px;border-top:1px solid va
 <body>
 <div class="wrap">
 
-  <h1>Phase 4 - UI &amp; chat</h1>
-  <p class="sub">2026-06-19 &middot; the Connect/chat overhaul slice board &middot; surface <code>/connect/chat</code></p>
+  <h1>Phase 4 - UI &amp; chat <span class="chip c-done" style="font-size:13px;vertical-align:middle">&#9989; DONE - closed</span></h1>
+  <p class="sub">2026-06-19 &middot; the Connect/chat overhaul slice board &middot; surface <code>/connect/chat</code> &middot; <b>phase complete &amp; closed</b></p>
 
   <div class="banner">
-    <b>Status 2026-06-21 (end of session).</b> ALL 9 slices are now <b>built &amp; gate-green</b> (tsc + eslint 0 errors + 62/62 unit + <code>next build</code> ok), local on <code>claude/ayush/work</code> (UNPUSHED):
-    <b>F1/F2/B1/B4</b> (verified), <b>S2</b> V3 Card, <b>S3</b> V2 Form, the DEV-66/72 rename, <b>04A the Deal Strip</b> (S1 + B3 + 3 polish rounds), <b>04B the Conversation list</b> (new-chat picker Option A + backend), and now <b>04C the Card + Form UI touch</b> - card <b>slim shaded header</b> + the card now opens as a <b>leaflet over the conversation rail</b> (not floating in the thread) + a <b>one-tap-batch</b> Deal Form + the <b>Damson</b> deep-pink recolor (#76002d&rarr;#7a1638). Phase 04 (UI &amp; chat) is now DONE.
-    <b>Build NEXT (new session):</b> the <b>Deal Room build</b> (the old Deal Workspace - wires the card's read-only THINGS + the deferred <code>assigned_to</code>) &rarr; then the final <b>Agentation polish round</b> (P1-P4 + deferred strip polish). Phases 5-8 after.
-    <b>Owed:</b> the local Phase-04 commits (~24, incl. 04C <code>c29ea4c</code>/<code>37ec4e8</code>) are UNPUSHED; <b>04B + 04C await a human click-through UAT</b> (04C needs a minted deal to see the card live); cloud <code>supabase db push</code> (15 migrations, with Muskan) + <code>.planning</code> untrack still pending.
+    <b>&#9989; PHASE 4 IS DONE - CLOSED.</b> ALL 9 slices <b>built, gate-green, and human-UAT PASSED</b>: <b>F1/F2/B1/B4</b>, <b>S2</b> V3 Card, <b>S3</b> V2 Form, the DEV-66/72 rename, <b>04A the Deal Strip</b> (S1 + B3 + 3 polish rounds), <b>04B the Conversation list</b> (new-chat picker Option A + backend), and <b>04C the Card + Form UI touch</b> - card <b>slim shaded header</b> + card opens as a <b>leaflet over the conversation rail</b> + a <b>one-tap-batch</b> Deal Form + the <b>Damson</b> deep-pink recolor (#76002d&rarr;#7a1638). Nothing in this phase is pending anymore.
+    <br><br><b>Deal Room became its own Phase 5 - and that is ALSO now DONE.</b> The work this plan originally lumped in / pushed forward (the 3-column Deal Room, stages, finalization, the P1-P4 chrome polish) was promoted to <b>Phase 5</b> and has since been built, code-reviewed, and goal-verified (31/31). The chrome polish P1-P4 below shipped inside Phase 5.
+    <br><br><b>NEXT (whole project): Phase 6 - Deal Basket / Deal Form.</b> See the Sprint-2 roadmap board for the live 11-phase plan (4 &amp; 5 done; 6 next; 7-8 pending; 9 Documents + 10 Final UI pass are new; 11 Notification is last).
   </div>
 
   <div class="dash">
@@ -176,36 +175,36 @@ footer{margin-top:34px;color:var(--muted);font-size:12px;border-top:1px solid va
     </div>
   </details>
 
-  <!-- ============ WHAT'S LEFT (open) ============ -->
+  <!-- ============ WHAT WAS LEFT - NOW ALL DONE ============ -->
   <details class="sec" open>
-    <summary><span class="chev">&#9656;</span><span class="ttl">What's left</span><span class="chip c-todo">to build / decide</span></summary>
+    <summary><span class="chev">&#9656;</span><span class="ttl">What was left (now all done)</span><span class="chip c-done">all done</span></summary>
     <div class="body">
 
       <div class="row">
         <div class="rmain">
-          <div class="rt">04C &middot; Card + Form UI touch <span class="mini">(BUILT 06-21)</span></div>
+          <div class="rt">04C &middot; Card + Form UI touch <span class="mini">(BUILT 06-21, UAT PASSED)</span></div>
           <div class="rf">S2 Card + S3 Form &middot; applied directly to the app (no GSD), gate-green</div>
-          <div class="rd"><b>BUILT 06-21.</b> See-first prototype (<code>prototypes/04c-touch-prototype/</code>, approved) &rarr; ported direct. (1) DealCard <b>slim SHADED header</b> (deep-pink glass wash, not the old #76002d band) + ink value + dashed-lock margin + fluid width; (2) <b>card opens as a LEAFLET over the conversation rail</b> (DealPin portals into a <code>hs-deal-card-slot</code>; rail w-72), no longer floats in the thread; (3) DealForm <b>one-tap batch rail</b> (no modal); (4) <b>Damson recolor</b> --color-brand-deep #76002d&rarr;#7a1638 (token-derived glass shadow; THC=deep-pink/CBD=periwinkle). Commits c29ea4c + 37ec4e8. Human visual UAT owed.</div>
+          <div class="rd"><b>BUILT 06-21.</b> See-first prototype (<code>prototypes/04c-touch-prototype/</code>, approved) &rarr; ported direct. (1) DealCard <b>slim SHADED header</b> (deep-pink glass wash, not the old #76002d band) + ink value + dashed-lock margin + fluid width; (2) <b>card opens as a LEAFLET over the conversation rail</b> (DealPin portals into a <code>hs-deal-card-slot</code>; rail w-72), no longer floats in the thread; (3) DealForm <b>one-tap batch rail</b> (no modal); (4) <b>Damson recolor</b> --color-brand-deep #76002d&rarr;#7a1638 (token-derived glass shadow; THC=deep-pink/CBD=periwinkle). Commits c29ea4c + 37ec4e8. Human visual UAT PASSED.</div>
         </div>
         <span class="chip c-done">built</span>
       </div>
 
       <div class="row">
         <div class="rmain">
-          <div class="rt">Deal Room build <span class="mini">(NEXT - new session - wires the card THINGS)</span></div>
-          <div class="rf">old "Deal Workspace" container</div>
-          <div class="rd">Newly flagged 06-20: after S1, build the <b>Deal Room</b> (the renamed Deal Workspace). That container is where the card's read-only THINGS (built behind an optional prop in S2) finally gets wired.</div>
+          <div class="rt">Deal Room &rarr; promoted to Phase 5 <span class="mini">(BUILT - goal verified 31/31)</span></div>
+          <div class="rf">old "Deal Workspace" container &middot; now its own phase</div>
+          <div class="rd"><b>DONE.</b> Promoted out of Phase 4 into its own <b>Phase 5</b> and since BUILT: a 3-column Deal Room (thin read-only card | chat | V7 work panel), full-blurred-overlay open/close from chat, per-thing/per-doc private-or-shared visibility (lock), manual stage "mark done" (glows when all its things tick), finalization on the LifecyclePill &rarr; "Is the deal done?" &rarr; <b>golden card</b> (via <code>finalizeDeal</code>, never <code>confirm_deal_change</code>). The card's read-only THINGS + the deferred <code>assigned_to</code> were wired here. Right column = <b>V7</b> (dropdown-only). Code-review bugs fixed (RLS write-ownership, finalize-requires-confirmed, seal-no-clobber) + a realtime channel fix. Goal verified 31/31.</div>
         </div>
-        <span class="chip c-decide">next</span>
+        <span class="chip c-done">done (Phase 5)</span>
       </div>
 
       <div class="row">
         <div class="rmain">
-          <div class="rt">Final UI polish round (Agentation-driven)</div>
+          <div class="rt">P1-P4 chrome polish <span class="mini">(shipped inside Phase 5)</span></div>
           <div class="rf">whole Connect/Chat surface</div>
-          <div class="rd">A dedicated Agentation-driven polish pass at the very end: after the whole UI is built, Ayush walks the app with Agentation, flags every component mistake, and we fix them in one pass. P1-P4 (see Polish backlog) are part of this round. May prototype the whole Connect look first, pick, then close.</div>
+          <div class="rd"><b>DONE - shipped inside Phase 5.</b> The P1-P4 chrome polish landed: logo colour tokens made consistent, the "CONNECT" label restored, the left rail narrowed, a capsule "mark done" button, and a "DEAL ROOM" + number top bar. The deeper Agentation look-and-feel pass is NOT this - that is the separate new <b>Phase 10 (Final UI pass)</b>, deliberately scheduled after everything else is built. See the Sprint-2 roadmap board.</div>
         </div>
-        <span class="chip c-decide">end</span>
+        <span class="chip c-done">done</span>
       </div>
 
     </div>
@@ -306,18 +305,18 @@ footer{margin-top:34px;color:var(--muted);font-size:12px;border-top:1px solid va
 
       <div class="row">
         <div class="rmain">
-          <div class="rt">Next &middot; Deal Room build &rarr; Agentation polish</div>
-          <div class="rd">04A/04B/04C all built - <b>Phase 04 (UI &amp; chat) is DONE</b>. The <b>Deal Room</b> (wires the card's read-only THINGS + deferred <code>assigned_to</code>) is the next build, then the final <b>Agentation polish round</b>. Phases 5-8 after.</div>
+          <div class="rt">Done &middot; Phase 5 (Deal Room) built &rarr; chrome polish shipped</div>
+          <div class="rd">04A/04B/04C all built - <b>Phase 04 (UI &amp; chat) is DONE &amp; CLOSED</b>. The <b>Deal Room shipped as Phase 5</b> (built, code-reviewed, goal verified 31/31); it wired the card's THINGS + <code>assigned_to</code>, and the <b>P1-P4 chrome polish shipped inside it</b>. Whole-project NEXT = <b>Phase 6 (Deal Basket / Deal Form)</b>; see the Sprint-2 roadmap board.</div>
         </div>
-        <span class="chip c-decide">next</span>
+        <span class="chip c-done">done</span>
       </div>
 
       <div class="row">
         <div class="rmain">
           <div class="rt">Close &middot; update STATE + decisions</div>
-          <div class="rd">Update <code>.planning/STATE.md</code> + decisions + these boards. The one GSD step we keep, at the end of each sub-phase.</div>
+          <div class="rd">Updated <code>.planning/STATE.md</code> + decisions + these boards. The one GSD step we keep, at the end of each sub-phase. Phase 4 is closed.</div>
         </div>
-        <span class="chip c-decide">ongoing</span>
+        <span class="chip c-done">done</span>
       </div>
 
     </div>
@@ -325,47 +324,47 @@ footer{margin-top:34px;color:var(--muted);font-size:12px;border-top:1px solid va
 
   <!-- ============ POLISH BACKLOG (collapsed) ============ -->
   <details class="sec">
-    <summary><span class="chev">&#9656;</span><span class="ttl">Polish backlog - Agentation round</span><span class="chip c-decide">deferred</span></summary>
+    <summary><span class="chev">&#9656;</span><span class="ttl">Polish backlog - P1-P3 chrome SHIPPED (in Phase 5); deep pass = Phase 10</span><span class="chip c-done">P1-P3 done</span></summary>
     <div class="body">
 
       <div class="row">
         <div class="rmain">
-          <div class="rt">Plan (06-20): the final Agentation-driven UI polish round</div>
-          <div class="rd">This is a dedicated round at the very end. After the whole UI is built, Ayush walks the app with <b>Agentation</b>, flags every component mistake he spots, and we fix them in one pass. P1-P4 below are part of that round. All four trace back to <b>F2</b> (the one-rail accordion merge). F2 is Done for <i>function</i>; these are <i>look-and-feel</i> decisions deferred to the polish pass - they do not change the progress bar above (it counts only the 9-slice board).</div>
+          <div class="rt">P1-P3 chrome polish shipped inside Phase 5; the deep look-and-feel pass = new Phase 10</div>
+          <div class="rd">All four trace back to <b>F2</b> (the one-rail accordion merge). The concrete chrome fixes (P1-P3 below) <b>shipped inside Phase 5</b>. The broader Agentation-driven look-and-feel round (the old P4) became its own <b>Phase 10 (Final UI pass)</b>, deliberately scheduled after everything else is built - see the Sprint-2 roadmap board.</div>
         </div>
-        <span class="chip c-decide">round</span>
+        <span class="chip c-done">done / moved</span>
       </div>
 
       <div class="row">
         <div class="rmain">
           <div class="rt">P1 &middot; Logo colour consistency</div>
-          <div class="rd">Old shell: He//o Se//o wordmark in <b>dark ink</b>. New shell: wordmark renders in <b>brand pink</b>. Want: pick one and make the logo colour <b>consistent</b> across the shells.</div>
+          <div class="rd"><b>DONE (Phase 5).</b> Logo colour made consistent via shared tokens across the shells (old shell dark-ink vs new-shell pink mismatch resolved).</div>
         </div>
-        <span class="chip c-decide">discuss</span>
+        <span class="chip c-done">done</span>
       </div>
 
       <div class="row">
         <div class="rmain">
           <div class="rt">P2 &middot; Bring back the "CONNECT" label <span class="mini">(the main one)</span></div>
-          <div class="rd">Old shell: a small <b>"CONNECT" label</b> sat above the sub-items - read cleaner / nicer. New shell: the "CONNECT" word is <b>gone</b>; sub-items hang under the accordion with no label. Want: bring the old labelled Connect presentation back.</div>
+          <div class="rd"><b>DONE (Phase 5).</b> The "CONNECT" label was restored above the sub-items.</div>
         </div>
-        <span class="chip c-decide">discuss</span>
+        <span class="chip c-done">done</span>
       </div>
 
       <div class="row">
         <div class="rmain">
           <div class="rt">P3 &middot; Narrow the left rail</div>
-          <div class="rd">Old shell: extreme-left rail was a <b>narrow</b> icon rail (~64px). New shell: left rail is <b>wider</b> than before. Want: make the extreme-left nav rail the <b>same (narrow) width</b> as the old one.</div>
+          <div class="rd"><b>DONE (Phase 5).</b> The extreme-left nav rail was narrowed back toward the old icon-rail width.</div>
         </div>
-        <span class="chip c-decide">discuss</span>
+        <span class="chip c-done">done</span>
       </div>
 
       <div class="row">
         <div class="rmain">
-          <div class="rt">P4 &middot; Overall look-and-feel pass</div>
-          <div class="rd">The whole Connect/Chat surface still needs a final look-and-feel pass. Do a dedicated <b>overall polish pass at the end</b>; maybe <b>prototype the whole Connect look</b> first, pick, then close.</div>
+          <div class="rt">P4 &middot; Overall look-and-feel pass <span class="mini">(became Phase 10)</span></div>
+          <div class="rd"><b>Moved out to its own phase.</b> The whole-surface Agentation-driven look-and-feel round is now <b>Phase 10 (Final UI pass)</b>, scheduled after everything else is built (it also folds in "lock the finalized deal" - a Done deal becomes read-only with just an Archive dialog). Not part of Phase 4.</div>
         </div>
-        <span class="chip c-decide">discuss</span>
+        <span class="chip c-decide">Phase 10</span>
       </div>
 
     </div>
@@ -596,7 +595,7 @@ footer{margin-top:34px;color:var(--muted);font-size:12px;border-top:1px solid va
   </details>
 
   <footer>
-    Detailed Phase-4 board - source of truth is <code>.planning/ROADMAP.md</code> + <code>04-CONTEXT.md</code>. Rebuilt 2026-06-20.
+    Detailed Phase-4 board - <b>Phase 4 is DONE &amp; CLOSED</b> (Deal Room shipped as Phase 5; whole-project next = Phase 6). Source of truth is <code>.planning/ROADMAP.md</code> + <code>04-CONTEXT.md</code>. Rebuilt 2026-06-20, closed-out 2026-06-22.
   </footer>
 
 </div>
