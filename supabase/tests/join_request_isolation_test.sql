@@ -214,13 +214,15 @@ BEGIN
   IF v_named <> 1
     THEN RAISE EXCEPTION 'PB-04 FAIL: list_pending_join_requests projected a NULL requester_name (the name column does not resolve)'; END IF;
 
-  -- and the A Superadmin must NOT see any of B's pending requests (there are none
-  -- seeded for B, so this is also a sanity floor that the queue is tenant-scoped).
+  -- and the A Superadmin's queue must be tenant-scoped: list_pending_join_requests()
+  -- filters target_company_id = current_company_id() INTERNALLY and does not project
+  -- that column, so it can only ever return A's own rows. Assert no returned row
+  -- belongs to a requester other than A's seeded one — any such row is a cross-tenant leak.
   SELECT count(*) INTO v_b_seen
     FROM public.list_pending_join_requests()
-    WHERE target_company_id = 'b0000000-0000-0000-0000-000000000000';
+    WHERE requester_person_id <> 'd1111111-1111-1111-1111-111111111111';
   IF v_b_seen <> 0
-    THEN RAISE EXCEPTION 'PB-04 LEAK: company-A Superadmin saw % of company-B''s pending requests', v_b_seen; END IF;
+    THEN RAISE EXCEPTION 'PB-04 LEAK: company-A''s tenant-scoped queue returned % row(s) not from A''s own requester', v_b_seen; END IF;
 END $$;
 RESET ROLE;
 
@@ -377,7 +379,6 @@ DO $$
 DECLARE
   v_req_id  uuid;
   v_status  text;
-  v_audit   integer;
 BEGIN
   v_req_id := public.request_to_join('b0000000-0000-0000-0000-000000000000', 'will withdraw');
   PERFORM public.withdraw_join_request(v_req_id);
@@ -385,7 +386,23 @@ BEGIN
   SELECT status INTO v_status FROM public.join_request WHERE id = v_req_id;
   IF v_status IS DISTINCT FROM 'cancelled'
     THEN RAISE EXCEPTION 'PB-04 FAIL: withdraw set join_request.status = % (expected the terminal code ''cancelled'')', v_status; END IF;
+END $$;
+RESET ROLE;
 
+-- The join.withdrawn audit row is company_id = target (B), written by the SECURITY
+-- DEFINER RPC. The company-less requester is RLS-blocked from SELECTing it
+-- (audit_select USING company_id = current_company_id()), so verify its EXISTENCE
+-- here as the privileged runner role (postgres, post-RESET ROLE → RLS bypassed).
+DO $$
+DECLARE
+  v_req_id  uuid;
+  v_audit   integer;
+BEGIN
+  SELECT id INTO v_req_id FROM public.join_request
+    WHERE requester_person_id = 'd2222222-2222-2222-2222-222222222222'
+      AND target_company_id = 'b0000000-0000-0000-0000-000000000000'
+      AND status = 'cancelled'
+    LIMIT 1;
   SELECT count(*) INTO v_audit FROM public.audit_log
     WHERE action = 'join.withdrawn'
       AND content_type = 'join_request'
@@ -393,7 +410,6 @@ BEGIN
   IF v_audit < 1
     THEN RAISE EXCEPTION 'PB-04 FAIL: withdraw did NOT write a join.withdrawn audit_log row'; END IF;
 END $$;
-RESET ROLE;
 
 ROLLBACK;
 SELECT 'ALL PATH-B ISOLATION TESTS PASSED' AS result;
