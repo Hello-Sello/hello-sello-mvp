@@ -1,64 +1,59 @@
 # present-redesign-prototype
 
-**Throwaway prototype — DESIGN LOCKED 2026-06-22.** Phase 7 (Present Catalogue UX).
-This prototype IS the visual + interaction spec for the React build. Open
-`index.html` directly in a browser (no build, no server). Theme tokens mirror
-`src/app/globals.css`.
+**Throwaway prototype — Phase 7 (Present Catalogue UX).** This prototype IS the
+visual + interaction spec for the React build. Open `index.html` directly in a
+browser (no build, no server). Theme tokens mirror `src/app/globals.css`.
 
-> Switch views with the dark bar at the very top: **Shop view** (seller's own shop) ·
-> **Manage shop** (price-list table + modals) · **Buyer view** (what a visiting buyer sees).
+> Top dark bar switches views: **Shop view** (seller) · **Manage shop** (price table + modals) · **Buyer view**.
+
+---
+
+## ▶ NEXT SESSION — start here (one open decision)
+
+**Open decision: where do custom (per-customer) price lists live?** Right now it's inconsistent:
+- The **seller send step** (basket → Send as deal card) lets the seller **edit a price per line**, which saves a per-customer list (`customLists`) — but the UI made it *look like editing the Standard list* (it doesn't — Standard is untouched).
+- The older **"Send price list to a customer"** modal (Manage shop) still marks **"custom price list (future)"**. → inconsistent.
+
+**Proposed fix (await Muskan's go):** make the custom price list **first-class with one home** — a **"Price lists" area in Manage shop**: the **Standard** (public) list + **custom lists** (one per customer, each = *"based on Standard, with a few overrides"*, clearly separate). Then BOTH sends just *pick a list*; the "Send price list" custom option becomes **real**.
+
+**Two distinct "sends" to keep separate:** **Send price list** = "here are our prices" (catalogue, no order) vs **Send deal/offer** = a concrete order (products + qty). Both *use* a price list.
+
+**Pricing rollout decided:** **B now, A later.** B = custom list is seller-pushed (born at send / attached). A = shop auto-shows a customer their prices on login (industry standard; same data, later trigger). Research + reasoning in session history.
 
 ---
 
 ## Locked design
 
-### The product card (flip)
-- **FRONT = product label + price** (everything buyer-safe): photo carousel, grade badge,
-  ♥, name/cultivar/PZN, country flag, **label** THC/CBD/CBG/CBN quad, full spec list
-  (dominance · cultivator · origin · region · lineage · irradiation · format · packaging ·
-  resealable · supplier code), price (price/g + UVP strike-through + bundle tier) or
-  "Price on request".
-- **BACK = "Documents & lab reports"** — a **folder shelf** (click a folder to open all its files):
-  **COAs**, **Lab results**, **Certificates & specs**; plus a single **walkthrough video** link.
-  Photos are NOT here (they're on the front). Inert **Sella · Marktvergleich** stub (no figure, R1).
-- Collectible feel: subtle tilt + sheen on hover; click flips. "Documents" button flips to the back.
+### Product card (flip)
+- **FRONT** = product label + price (buyer-safe): photo, grade, ♥, name/cultivar/PZN, flag, **label** THC/CBD/CBG/CBN quad, full spec list, price (price/g + UVP strike + bundle) or "Price on request".
+- **BACK** = "Documents & lab reports" — **folder shelf** (COAs · Lab results · Certificates & specs) + a walkthrough video link. Photos are on the front. Inert **Sella · Marktvergleich** (no figure, R1).
 
 ### Add-to-basket — batch lives with the product (seller only)
-- The card footer has **two controls**: a **batch dropdown ("Select lots ▾")** + a separate **Add to basket** button.
-- Opening the dropdown lists **every lot** with measured THC/CBD · expiry · kg available, each with a **+/− quantity**.
-  A seller can **split one order across lots** (e.g. 30 of lot A + 20 of lot B). Add stays disabled until a lot has a qty.
-- Each (product + lot) becomes its **own basket line** (merge key = product + batch) — mirrors Ayush's BTCH-01 / D-06.
-- **Buyer view shows NO batch UI** — a plain qty stepper + Add. Buyers never pick or see lots.
+- Card footer has **two controls**: a batch dropdown (**"Select lots ▾"**) + a separate **Add to basket** button.
+- The dropdown opens an inline panel listing **every lot** with measured THC/CBD · expiry · kg, each with **+/− quantity** → an order can be **split across lots**. Each (product+lot) = its own basket line.
+- **Buyer view shows NO batch UI** — plain qty stepper + Add.
 
 ### Basket + send
-- Basket is **per-company, transient**. A line = product+batch (seller) or product (buyer).
-- **Seller send = a deal `offer`** (`source: "shop"`): the batches are already on the lines, so the send step
-  just picks the **connected customer** (recipient). Hands off to Ayush's **Deal Basket + `createDeal`**.
-- **Buyer send = a deal `order`** (`source: "shop"`), addressed to the shop's company, **batch-less**
-  (buyer can't pick) — the **seller assigns the lot when they respond**. Gated: a not-connected buyer must connect first.
-
-### Chrome (premium pass)
-Layered low-opacity shadows · light heading weights · hairline borders · restrained accent (one brand pink) ·
-generous whitespace · compact search · `Manage shop ▾` menu · animated basket (count-bump + fly-to-cart + slide-over).
+- Basket per-company, transient. Line = product+batch (seller) / product (buyer).
+- **Seller send = deal `offer`** (`source:"shop"`): batches already on lines; the send step picks the **customer** and shows an **editable price per line** (custom-list-born-at-send — *the bit under discussion above*). Hands to Ayush's Deal Basket + `createDeal`.
+- **Buyer send = deal `order`** (`source:"shop"`), **batch-less** — seller assigns the lot on response. Not-connected buyer must connect first (gate).
+- **Buyer "Request pricing"** for unpriced products → lands in the seller's Connect inbox.
 
 ---
 
-## Decisions captured here (need to land in docs/decisions later)
-- **D — batch chosen at add-time** (product + batch = one line), **split across lots** supported.
-- **D — public card carries NO batch number/identity.** The binding lot + its COA surface on the **deal**, not the listing.
-- **D — COAs / lab results are per-batch.** The per-batch *numbers* exist (`product_batch`, `batch_terpene`);
-  storing per-lot COA/lab **PDF files** needs a **new `batch_document` table** (file + `batch_id` + type) on the
-  `shop-media` bucket — a Phase 7 build item, not yet in schema.
-- **D — quick-view drawer dropped** (the flip card is the detail view).
-- **Sella Marktvergleich stays inert** (no figure) — Flowzz pull is **legally gated** (German competition/data law)
-  and **co-owned with Ayush**; real design parked for a joint Sella session.
+## Decisions (captured)
+- **Products are location-scoped — one product = one location.** Now in `docs/decisions/DECISIONS.md` (2026-06-22). Model: **Company → Locations → Products → Batches**.
+- Batch chosen at add-time; split across lots; public card carries no batch identity (binding lot surfaces on the deal).
+- COAs/lab results are **per-batch** (numbers exist; per-lot COA **PDF files** need a new **`batch_document`** table — not in schema).
+- Sella Marktvergleich **inert** (Flowzz legally gated; co-owned with Ayush).
+- Quick-view drawer dropped (flip card is the detail view).
 
 ## Reuse (verified in code)
-- `DealSource = "p2p" | "sella" | "shop"` — **"shop" already supported**.
-- Ayush's **DealForm** has the mandatory batch picker; **DealBasket** carries recipient + lines; `createDeal` mints it.
-- Buyer vs seller = `deal_type` **`order`** vs **`offer`**.
+- `DealSource = "p2p" | "sella" | "shop"` — **"shop" supported**. Ayush's **DealForm** has the batch picker; **DealBasket** carries recipient + lines; `createDeal` mints it. Buyer=`order`, seller=`offer`. Multiple named price lists already supported (`pricelist` + `pricelist_item`) — so custom lists need **no new schema**, only UI.
 
-## Open / not proven here
-- Buyer **order view** (the buyer's send/confirm + "Request pricing") — next.
-- **Ayush sync:** batch-less buyer order; seller assigns the lot on response.
-- Real data / RLS / cross-tenant buyer read; the `batch_document` storage; live deal hand-off.
+## Gaps needing new schema (Phase 7 build)
+1. **`location`** entity per company + `product.location_id` (location-scoped products — no column today).
+2. **`batch_document`** (per-lot COA/lab PDFs on the `shop-media` bucket).
+
+## Manage shop scope (from Linear — to prototype next)
+DEV-81 (products: group-to-location, full edit, media re-sort/delete/upload/download-all, video), DEV-12 (price visibility: show all / hide all / show one list publicly + per-product dials), DEV-1/DEV-41/DEV-54 (custom per-customer lists), DEV-43 (Streichpreis / strike-through discount).
