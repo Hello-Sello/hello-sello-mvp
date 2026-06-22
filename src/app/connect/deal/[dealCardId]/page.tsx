@@ -2,9 +2,9 @@ import { DealWorkspace } from "@/modules/deals";
 import { DealChat } from "@/modules/messaging";
 
 /**
- * Deal Workspace route (screen ④, 3b) - the deal container, deep-linked by
+ * Deal Room route (screen ④, Phase 5) - the deal container, deep-linked by
  * card id (both doors know it: the Chat list's Deals tab and the chat card
- * bar's "Deal workspace ↗"). RLS scopes every read to the two deal companies.
+ * bar's "Open Deal Room ↗"). RLS scopes every read to the two deal companies.
  *
  * This page is the deep-link composition root: deals owns the container,
  * messaging owns the deal chat - composing them HERE keeps the modules acyclic.
