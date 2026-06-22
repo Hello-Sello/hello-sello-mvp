@@ -23,7 +23,7 @@
  * RLS already filters to the viewer's OWN side, so no counterpart value is read.
  */
 import { Lock, ArrowRight, Check, Info, BadgeCheck } from "lucide-react";
-import { docTerm, formatMoney, sumLineValue, averageMarginOf } from "../lib/derive";
+import { formatMoney, sumLineValue, averageMarginOf } from "../lib/derive";
 import { paymentTermLabel } from "../lib/paymentTerms";
 import { ProductList } from "./ProductList";
 import type { DealCardView, ThingView } from "../types";
@@ -95,7 +95,6 @@ export function CardFront({
   things?: ThingView[];
 }) {
   const { card, sellerName, buyerName, lineItems, lineMargins, viewerSide, myNote, theirNote } = data;
-  const term = docTerm(card.deal_type);
 
   // CARD-01 (OBS-1): the value is SUMMED live from the priced lines, never the
   // stale stored `value_net`. null = no priced line. This is the ONLY place the
@@ -107,7 +106,11 @@ export function CardFront({
   const meta = (card.metadata ?? {}) as Record<string, unknown>;
   const freeDelivery = meta.free_delivery === true;
   const paymentLabel = paymentTermLabel(card.payment_terms_code);
-  const hsNumber = card.hs_deal_number ?? `${term} · draft`;
+  // unnumbered draft: derive the SAME short ref the top bar uses (HS- + last 4 of
+  // the card id) so the card and the Deal Room top bar match; flips to the real
+  // HS-#### once a number is minted on confirmation.
+  const hsNumber =
+    card.hs_deal_number ?? `HS-${card.id.replace(/-/g, "").slice(-4).toUpperCase()}`;
 
   // NOTE-01: myNote/theirNote map to the viewer-relative seller/buyer company name.
   const myCompanyName = viewerSide === "seller" ? sellerName : buyerName;
