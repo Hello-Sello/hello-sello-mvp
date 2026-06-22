@@ -22,7 +22,7 @@
  * Everything is DERIVED or stored truth; the owner margin uses lineMargins, which
  * RLS already filters to the viewer's OWN side, so no counterpart value is read.
  */
-import { Lock, ArrowRight, Check, Info } from "lucide-react";
+import { Lock, ArrowRight, Check, Info, BadgeCheck } from "lucide-react";
 import { docTerm, formatMoney, sumLineValue, averageMarginOf } from "../lib/derive";
 import { paymentTermLabel } from "../lib/paymentTerms";
 import { ProductList } from "./ProductList";
@@ -119,8 +119,20 @@ export function CardFront({
   const productCount = lineItems.length;
   const doneThings = things.filter((t) => t.status === "done").length;
 
+  // GOLDEN skin (D-16): a finished deal wears the agreed amber scheme reused from
+  // ConfirmBar (bg-amber-50 / ring-amber-300 / text-amber-700 / BadgeCheck). The
+  // gold follows the DB status ONLY (card.status === "done"), NEVER a click - the
+  // pill calls finalizeDeal, the card re-reads, and only then does this flip. It
+  // is a SKIN swap conditioned on status, not a restructure: the non-done path
+  // keeps byte-identical classNames via the join below.
+  const gold = card.status === "done";
+
   return (
-    <div className="w-full max-w-full overflow-hidden rounded-3xl bg-white shadow-xl ring-1 ring-black/5">
+    <div
+      className={`w-full max-w-full overflow-hidden rounded-3xl shadow-xl ${
+        gold ? "bg-amber-50 ring-1 ring-amber-300" : "bg-white ring-1 ring-black/5"
+      }`}
+    >
       {/* ---- SLIM SHADED HEADER (V4) - a soft deep-pink glass wash (NOT the old loud
            solid band) with a calm ink value hero + a deep-pink hairline underline. The
            shade gives the header presence and makes the deep-pink accent visible; the
@@ -128,8 +140,11 @@ export function CardFront({
       <div
         className="relative rounded-t-3xl px-4 pb-3 pt-3"
         style={{
-          background:
-            "linear-gradient(135deg, color-mix(in srgb, var(--color-brand-deep) 15%, #fff) 0%, color-mix(in srgb, var(--color-brand-soft) 34%, #fff) 100%)",
+          // gold: a calm amber wash for the finished deal; otherwise the Damson
+          // deep-pink wash. Both stay light (no loud solid band).
+          background: gold
+            ? "linear-gradient(135deg, #fef3c7 0%, #fffbeb 100%)"
+            : "linear-gradient(135deg, color-mix(in srgb, var(--color-brand-deep) 15%, #fff) 0%, color-mix(in srgb, var(--color-brand-soft) 34%, #fff) 100%)",
         }}
       >
         <div className="flex items-center gap-2 pl-8 font-mono">
@@ -146,13 +161,22 @@ export function CardFront({
           <span className="text-[10px] text-ink/55">
             {productCount} {productCount === 1 ? "product" : "products"}
           </span>
-          <span
-            className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-semibold text-brand-deep"
-            style={{ background: "color-mix(in srgb, var(--color-brand-deep) 10%, transparent)" }}
-          >
-            <span className="h-1.5 w-1.5 rounded-full bg-success" />
-            {statusLabel(card.status)} · v{card.version}
-          </span>
+          {/* gold: the agreed amber "Done" chip with a BadgeCheck (the ConfirmBar
+              scheme); otherwise the calm deep-pink status pill. */}
+          {gold ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-semibold text-amber-700">
+              <BadgeCheck className="h-3 w-3 text-amber-600" strokeWidth={2} />
+              {statusLabel(card.status)} · v{card.version}
+            </span>
+          ) : (
+            <span
+              className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-semibold text-brand-deep"
+              style={{ background: "color-mix(in srgb, var(--color-brand-deep) 10%, transparent)" }}
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-success" />
+              {statusLabel(card.status)} · v{card.version}
+            </span>
+          )}
         </div>
       </div>
 
