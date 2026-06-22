@@ -1229,3 +1229,11 @@ The light "UI touch" on the deal card + deal form, so the final Agentation polis
 ## RBAC / permissions
 
 - **Configurable RBAC matrix approved as Phase 14 (post-v1.0), reversing the v1 two-role-only scope (2026-06-21).** Phase 11 shipped two fixed company roles (Superadmin / Member) on top of the flexible `permission_matrix_entry` tables — only two actions (`team.manage`, `company.edit_profile`) seeded + enforced. Product now wants the full configurable matrix: a Superadmin defines custom roles, grants/revokes individual actions per role through a matrix UI, and assigns people to roles. **Scoped as its own Phase 14 (NOT folded into Phase 13)** because the real cost is enumerating a gated-action catalogue across the app + wiring `has_permission()` enforcement at each call site — the UI is the small part. **Post-v1.0:** does not gate the Phase 8 capstone (the live walk runs on the two-role model); the two-role default stays until Phase 14 lands. *Why:* makes the dormant matrix a real product surface, but honestly sized — the value is in enforced-action coverage, not the screen; deferring keeps the onboarding-ready milestone shippable. (Req IDs RBAC-05–08; ROADMAP Phase 14.)
+
+---
+
+## 2026-06-22 — Products are location-scoped (one product = one location)
+
+A product belongs to **exactly one shop location**; there are **no multi-location products**. A company has many locations (e.g. Berlin DE, Manchester UK); each location has its own product list. Same-named products across locations are **separate** entries because they genuinely differ — German vs UK **packaging, labelling, regulatory** (Marcel). Model: **Company → many Locations → each Location's own Products → each Product's Batches**.
+
+*Why:* matches reality (a German product carries German packaging and differs from its UK equivalent) and keeps the model simple — no product↔location many-to-many. *Schema implication:* a `location` entity per company + `product.location_id` — a **Phase-7 build, not yet in the schema** (verified: `product` has no location column today). (Source: 2026-06-22 Present / Manage-shop design session with Muskan; Marcel's packaging rationale.)
