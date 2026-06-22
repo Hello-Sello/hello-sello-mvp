@@ -74,7 +74,7 @@ export function IconRail() {
     <aside
       aria-label="Primary"
       className={`glass m-3 mr-0 flex shrink-0 flex-col rounded-3xl p-3 transition-[width] duration-200 ease-out motion-reduce:transition-none ${
-        collapsed ? "w-[64px]" : "w-[236px]"
+        collapsed ? "w-[64px]" : "w-[200px]"
       }`}
     >
       {/* top: wordmark (always visible) + the single state-aware collapse toggle.
@@ -183,7 +183,7 @@ function SurfaceRow({
         collapsed ? "w-11 justify-center self-center" : "w-full gap-3 px-3"
       } ${
         isActive
-          ? "bg-brand-soft/70 text-brand shadow-[0_4px_14px_-6px_rgba(227,11,93,0.45)]"
+          ? "bg-brand-soft/70 text-brand shadow-[0_4px_14px_-6px_color-mix(in_srgb,var(--color-brand)_45%,transparent)]"
           : "text-ink/55 hover:bg-white/55 hover:text-brand"
       }`}
     >
@@ -285,7 +285,7 @@ function AccordionSurface({
           collapsed ? "w-11 justify-center self-center" : "w-full gap-3 px-3"
         } ${
           parentActive
-            ? "bg-brand-soft/70 text-brand shadow-[0_4px_14px_-6px_rgba(227,11,93,0.45)]"
+            ? "bg-brand-soft/70 text-brand shadow-[0_4px_14px_-6px_color-mix(in_srgb,var(--color-brand)_45%,transparent)]"
             : open
               ? "text-brand"
               : "text-ink/55 hover:bg-white/55 hover:text-brand"
@@ -324,6 +324,14 @@ function AccordionSurface({
           }`}
         >
           <div className="overflow-hidden">
+            {/* P2 (D-18): the small uppercase section label above the sub-items.
+                It was dropped in F2; restored here so the expanded Connect group
+                reads with the old labelled presentation. Shown only when the rail
+                is expanded (this whole inline tree never renders when collapsed -
+                the children move to the flyout, which carries its own heading). */}
+            <p className="px-3 pb-1 pt-0.5 text-[11px] font-bold uppercase tracking-widest text-ink-muted">
+              {surface.label}
+            </p>
             <div className="relative ml-[10px] mb-1.5 mt-0.5 pl-4">
               {/* the thin vertical connector line */}
               <span
