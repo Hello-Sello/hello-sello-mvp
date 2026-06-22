@@ -13,12 +13,21 @@ import { defineConfig } from "vitest/config";
  * test. It renders via `react-dom/server` `renderToStaticMarkup`, so the node env
  * still suffices — no jsdom and no @testing-library needed. Vitest 4's oxc transform
  * handles the JSX (automatic runtime) with no extra config.
+ *
+ * Phase 12 (12-01) aliases `server-only` to an empty stand-in so the Path-B
+ * server-action unit specs can import 'use server' modules that transitively pull
+ * in Next's vendored `server-only` marker (team/actions.ts → @/shared/db/admin).
+ * That marker only throws when bundled into a Client Component — never under the
+ * unit runner — so the empty module is a zero-effect stand-in.
  */
 export default defineConfig({
   // Mirror the tsconfig `@/* -> ./src/*` path alias so specs can import app code.
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
+      "server-only": fileURLToPath(
+        new URL("./src/test/server-only-shim.ts", import.meta.url),
+      ),
     },
   },
   test: {

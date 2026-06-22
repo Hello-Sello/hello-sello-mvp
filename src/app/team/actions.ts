@@ -264,3 +264,115 @@ export async function listTeam(): Promise<{ members: TeamMember[] } | { error: s
 
   return { members: [...active, ...pending] }
 }
+
+// ---- Path B: join-request approval queue (PATHB-02 / PATHB-04) ---------------
+//
+// These three actions wrap the 12-02 Path-B RPCs the same way the Phase 11 team
+// actions above wrap theirs (SP-3): never throw, UUID-validate ids, map the RPC's
+// RAISE messages to verbatim UI copy, revalidate after a write. They add NO
+// service-role admin path (A4) — approve writes only public.* tables through the
+// SECURITY DEFINER RPC, with no auth.admin call, so @/shared/db/admin is not used.
+//
+// The RPCs are the real boundary: list/approve/reject each re-assert
+// has_permission('team.manage') + tenant scope (target_company_id =
+// current_company_id()) internally, so a non-Superadmin gets 0 rows and a
+// Company-B Superadmin can never touch Company-A's requests. These actions only
+// validate input and translate errors.
+
+export type PendingJoinRequest = {
+  id: string
+  requesterPersonId: string
+  requesterName: string
+  note: string | null
+  requestedAt: string
+}
+
+// One mapping for both approve + reject: the RPC RAISEs we surface verbatim,
+// everything else fails closed to the generic copy (no internal leak — T-12-04-I).
+function joinDecisionError(message: string): string {
+  // Defense-in-depth: the page already gates, but the RPC re-asserts the gate too.
+  // (Check first — 'forbidden' must win even though it never co-occurs with the
+  // raced strings below.)
+  if (message.includes('forbidden')) {
+    return 'Only a Superadmin can approve or reject requests.'
+  }
+  // Raced out: another Superadmin already decided it (the RPC's pending guard
+  // 'join request not pending or not in your company'), OR the requester self-
+  // onboarded into a company between request and approval ('requester already
+  // belongs to a company'). Either way the row leaves the queue on refresh.
+  if (message.includes('not pending') || message.includes('already belongs')) {
+    return 'This request was already handled.'
+  }
+  return 'Something went wrong. Please try again.'
+}
+
+/**
+ * listPendingJoinRequests — the Superadmin's queue read (mirrors listTeam's
+ * `{ rows } | { error }` shape). A non-Superadmin (or a company-less caller) gets
+ * 0 rows from the RPC (fail-safe), so this returns `{ rows: [] }`. It is a READ —
+ * no revalidatePath. The page relies on the SHAPE distinction: an empty-but-OK
+ * read is `{ rows: [] }` (render the inline empty section); a FAILED read is
+ * `{ error }` (the page short-circuits to the error card, never an empty section).
+ */
+export async function listPendingJoinRequests(): Promise<
+  { rows: PendingJoinRequest[] } | { error: string }
+> {
+  const supabase = await createClient()
+  const { data, error } = await (supabase as unknown as RpcClient).rpc(
+    'list_pending_join_requests',
+    {},
+  )
+  if (error) return { error: 'Something went wrong. Please try again.' }
+
+  const rows: PendingJoinRequest[] = ((data as Array<Record<string, unknown>>) ?? []).map((r) => ({
+    id: r.id as string,
+    requesterPersonId: r.requester_person_id as string,
+    requesterName: (r.requester_name as string | null) ?? '',
+    note: (r.note as string | null) ?? null,
+    requestedAt: r.requested_at as string,
+  }))
+  return { rows }
+}
+
+/**
+ * approveJoin — approve a pending request with a role (default Member, D-08).
+ * The RPC owns the atomic link + the conditional Superadmin-group grant + the
+ * pending/tenant guard; we validate inputs and map its RAISEs. A raced-out
+ * request (another Superadmin already decided) maps to "This request was already
+ * handled." — the queue reconciles on the caller's next router.refresh().
+ */
+export async function approveJoin(requestId: string, role: Role): Promise<ActionResult> {
+  if (!UUID_RE.test(requestId)) return { error: 'Something went wrong. Please try again.' }
+  if (role !== 'member' && role !== 'superadmin') {
+    return { error: 'Something went wrong. Please try again.' }
+  }
+
+  const supabase = await createClient()
+  const { error } = await (supabase as unknown as RpcClient).rpc('approve_join_request', {
+    p_request_id: requestId,
+    p_role: role,
+  })
+  if (error) return { error: joinDecisionError(error.message) }
+
+  revalidatePath('/team')
+  return { ok: true }
+}
+
+/**
+ * rejectJoin — reject a pending request with an optional reason (D-08). The RPC
+ * stores the reason in the audit trail + flips status to rejected, guarded by
+ * pending + tenant scope. Same RAISE→copy mapping as approveJoin.
+ */
+export async function rejectJoin(requestId: string, reason?: string): Promise<ActionResult> {
+  if (!UUID_RE.test(requestId)) return { error: 'Something went wrong. Please try again.' }
+
+  const supabase = await createClient()
+  const { error } = await (supabase as unknown as RpcClient).rpc('reject_join_request', {
+    p_request_id: requestId,
+    p_reason: reason ?? null,
+  })
+  if (error) return { error: joinDecisionError(error.message) }
+
+  revalidatePath('/team')
+  return { ok: true }
+}

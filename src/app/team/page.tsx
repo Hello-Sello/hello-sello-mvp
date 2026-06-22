@@ -3,7 +3,7 @@ import { ShieldAlert } from 'lucide-react'
 import { createClient } from '@/shared/db/server'
 import { getCurrentUser } from '@/shared/auth'
 import { getCompanyProfile } from '@/modules/companies'
-import { listTeam } from './actions'
+import { listTeam, listPendingJoinRequests } from './actions'
 import { TeamClient } from './TeamClient'
 
 /**
@@ -31,13 +31,18 @@ export default async function TeamPage() {
   if (canManage !== true) return <NotAuthorized />
 
   const company = await getCompanyProfile()
-  const result = await listTeam()
+  // Fold the Path B pending-requests read alongside listTeam (D-07). Both must
+  // succeed before TeamClient renders — a failed pending fetch fails closed to the
+  // SAME error card (which REPLACES the page body), never to an empty "No pending
+  // requests" section (T-12-04-I: a silent failure must not look like an empty queue).
+  const [result, pending] = await Promise.all([listTeam(), listPendingJoinRequests()])
 
-  if ('error' in result) {
+  if ('error' in result || 'error' in pending) {
+    const message = 'error' in result ? result.error : (pending as { error: string }).error
     return (
       <div className="mx-auto max-w-3xl px-6 py-10">
         <div className="glass-strong rounded-3xl p-8 text-center">
-          <p className="text-sm font-medium text-danger">{result.error}</p>
+          <p className="text-sm font-medium text-danger">{message}</p>
         </div>
       </div>
     )
@@ -46,6 +51,7 @@ export default async function TeamPage() {
   return (
     <TeamClient
       members={result.members}
+      pendingRequests={pending.rows}
       companyName={company?.name ?? null}
       currentUserId={user.id}
     />
