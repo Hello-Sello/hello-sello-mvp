@@ -275,8 +275,19 @@ export async function finalizeDeal(args: {
 
   // write the SINGLE finalize seal (D-17): the viewer's company, current version,
   // status 'confirmed'. This is the ONLY place a finalize-seal is written - it
-  // MUST NOT route through confirm_deal_change. onConflict makes a re-call a
-  // no-op rather than a duplicate seat row.
+  // MUST NOT route through confirm_deal_change.
+  //
+  // INSERT-ONLY (HI-03): the seal is written at card.version (finalize does NOT
+  // bump the version). At a confirmed deal, `confirmDeal` already wrote this
+  // company's deal_confirmation row at (card, version) with the REAL "who sealed
+  // the deal" provenance (responding_person_id + responded_at + note). An
+  // ON CONFLICT ... DO UPDATE would overwrite that legal seal with the finalizer's
+  // identity + the finalize note, destroying the original audit. So we use
+  // ignoreDuplicates (INSERT ... ON CONFLICT DO NOTHING): an existing confirm seal
+  // is PRESERVED untouched, and a fresh finalize seal is inserted only when none
+  // exists. This also keeps a re-call idempotent (no duplicate seat row). The
+  // deal.finalized event itself is recorded separately in deal_card_log +
+  // audit_log below, so finalize provenance is never lost.
   const now = new Date().toISOString();
   const { error: sealErr } = await supabase.from("deal_confirmation").upsert(
     {
@@ -288,7 +299,7 @@ export async function finalizeDeal(args: {
       responded_at: now,
       note: "Deal finalized - all stages done.",
     },
-    { onConflict: "deal_card_id,version,company_id" },
+    { onConflict: "deal_card_id,version,company_id", ignoreDuplicates: true },
   );
   if (sealErr) throw sealErr;
 
