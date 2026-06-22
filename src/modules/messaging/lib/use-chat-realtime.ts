@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useRef } from "react";
 import { createClient } from "@/shared/db/client";
 
 interface RealtimeHandlers {
@@ -23,6 +23,12 @@ interface RealtimeHandlers {
  */
 export function useChatRealtime(handlers: RealtimeHandlers): void {
   const ref = useRef(handlers);
+  // A per-instance channel name. Supabase reuses a channel by NAME, so a FIXED
+  // name breaks when two instances mount at once (e.g. ChatView under the Deal
+  // Room overlay + DealChat inside it): the second `.channel(name).on(...)` hits
+  // the first's already-subscribed channel and throws "cannot add postgres_changes
+  // callbacks ... after subscribe()". `useId` gives each instance its own channel.
+  const instanceId = useId();
   // Keep the ref pointed at the latest handlers WITHOUT writing it during render
   // (react-hooks/refs): update it in an effect that runs after every render, so
   // the mount-only subscription below always calls the current closures.
@@ -44,7 +50,7 @@ export function useChatRealtime(handlers: RealtimeHandlers): void {
       if (cancelled) return;
 
       channel = supabase
-        .channel("connect-chat-realtime")
+        .channel(`connect-chat-realtime-${instanceId}`)
         .on(
           "postgres_changes",
           { event: "INSERT", schema: "public", table: "chat_message" },
@@ -65,5 +71,5 @@ export function useChatRealtime(handlers: RealtimeHandlers): void {
       cancelled = true;
       if (channel) void supabase.removeChannel(channel);
     };
-  }, []);
+  }, [instanceId]);
 }
