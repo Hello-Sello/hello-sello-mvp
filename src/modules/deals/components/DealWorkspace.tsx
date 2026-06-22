@@ -107,6 +107,9 @@ export function DealWorkspace({ dealCardId, chat, onClose = () => {} }: DealWork
   const [busyThingIds, setBusyThingIds] = useState<ReadonlySet<string>>(new Set());
   const [busyStageCodes, setBusyStageCodes] = useState<ReadonlySet<string>>(new Set());
   const [finalizing, setFinalizing] = useState(false);
+  // a failed finalize surfaces here as an inline banner (LO-02) - same in-state
+  // pattern the load error uses, NOT a jarring/untestable window.alert.
+  const [finalizeError, setFinalizeError] = useState<string | null>(null);
 
   // the route remounts on a new id, so the effect only commits async results
   useEffect(() => {
@@ -335,15 +338,17 @@ export function DealWorkspace({ dealCardId, chat, onClose = () => {} }: DealWork
   async function handleFinalize() {
     if (state.kind !== "ready" || finalizing) return;
     setFinalizing(true);
+    setFinalizeError(null);
     try {
       await finalizeDeal({ dealCardId });
       window.dispatchEvent(
         new CustomEvent("hs:deal-updated", { detail: { dealCardId } }),
       );
     } catch (e: unknown) {
-      // surface the error; the UI stays un-gold because the re-read never ran
+      // surface the error INLINE (LO-02); the UI stays un-gold because the
+      // re-read never ran. The banner renders below the header.
       const message = e instanceof Error ? e.message : "Could not finalize this deal.";
-      if (typeof window !== "undefined") window.alert(message);
+      setFinalizeError(message);
     } finally {
       setFinalizing(false);
     }
@@ -399,6 +404,24 @@ export function DealWorkspace({ dealCardId, chat, onClose = () => {} }: DealWork
         onFinalize={handleFinalize}
         finalizing={finalizing}
       />
+      {/* finalize error (LO-02) - an inline dismissible banner instead of a
+          native alert, mirroring how the load error renders in-component. */}
+      {finalizeError && (
+        <div
+          role="alert"
+          className="glass flex shrink-0 items-center justify-between gap-3 rounded-2xl px-4 py-2.5 text-sm text-danger"
+        >
+          <span className="min-w-0 flex-1">{finalizeError}</span>
+          <button
+            type="button"
+            onClick={() => setFinalizeError(null)}
+            aria-label="Dismiss"
+            className="shrink-0 rounded-full px-2 py-0.5 text-xs font-medium text-danger/70 transition hover:bg-danger/10 hover:text-danger"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
       {/* the 3 permanent columns (D-04). A CSS grid, NOT three fixed-width flex
           boxes, so the widths follow the ~20% / ~48% / ~32% target: a THIN card
           (~20%, min 260px), the chat WIDEST (1.5fr), the work panel a bit
