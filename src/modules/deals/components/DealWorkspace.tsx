@@ -200,12 +200,16 @@ export function DealWorkspace({ dealCardId, chat, onClose = () => {} }: DealWork
     );
   }
 
-  // assign a Thing (own-side person or the other company): optimistic patch + revert
+  // assign a Thing to an OWN-SIDE person: optimistic patch + revert.
+  // Entry-guarded on busyThingIds (ME-02): a second rapid click while the first
+  // write is in flight is dropped, so two handlers can never capture the SAME
+  // stale `before` and revert each other to a wrong pre-state.
   async function handleAssign(
     thingId: string,
     assigneePersonId: string | null,
     ownerCompanyId: string | null,
   ) {
+    if (busyThingIds.has(thingId)) return;
     const before = findThing(stages, thingId);
     setStages((prev) => patchThing(prev, thingId, { assigneePersonId, ownerCompanyId }));
     setBusyThingIds((prev) => new Set(prev).add(thingId));
@@ -228,12 +232,53 @@ export function DealWorkspace({ dealCardId, chat, onClose = () => {} }: DealWork
     }
   }
 
-  // flip a Thing's visibility (own items only): optimistic patch + revert
+  // assign a Thing to the OTHER company AND auto-share it (D-10/D-11) as ONE
+  // atomic write (ME-01). assignToOther previously fired onAssign + onSetVisibility
+  // back-to-back: two optimistic patches, two reverts, two busy entries - a
+  // partial failure could leave the Thing owner=other but still is_private=true,
+  // breaking the "assigning to the other company auto-shares it" invariant, and
+  // the first finally un-disabled the row mid-flight. Now: one optimistic patch,
+  // one busy entry, one DB write (assignThing sets owner + is_private=false
+  // together), one revert. Entry-guarded like handleAssign (ME-02).
+  async function handleAssignToOther(thingId: string, otherCompanyId: string) {
+    if (busyThingIds.has(thingId)) return;
+    const before = findThing(stages, thingId);
+    setStages((prev) =>
+      patchThing(prev, thingId, {
+        assigneePersonId: null,
+        ownerCompanyId: otherCompanyId,
+        isPrivate: false,
+      }),
+    );
+    setBusyThingIds((prev) => new Set(prev).add(thingId));
+    try {
+      await assignThing(thingId, null, otherCompanyId, false);
+    } catch {
+      if (before)
+        setStages((prev) =>
+          patchThing(prev, thingId, {
+            assigneePersonId: before.assigneePersonId,
+            ownerCompanyId: before.ownerCompanyId,
+            isPrivate: before.isPrivate,
+          }),
+        );
+    } finally {
+      setBusyThingIds((prev) => {
+        const n = new Set(prev);
+        n.delete(thingId);
+        return n;
+      });
+    }
+  }
+
+  // flip a Thing's visibility (own items only): optimistic patch + revert.
+  // Entry-guarded on busyThingIds (ME-02), same reasoning as handleAssign.
   async function handleSetVisibility(
     thingId: string,
     isPrivate: boolean,
     ownerCompanyId: string | null,
   ) {
+    if (busyThingIds.has(thingId)) return;
     const before = findThing(stages, thingId);
     setStages((prev) => patchThing(prev, thingId, { isPrivate, ownerCompanyId }));
     setBusyThingIds((prev) => new Set(prev).add(thingId));
@@ -390,6 +435,7 @@ export function DealWorkspace({ dealCardId, chat, onClose = () => {} }: DealWork
               onToggleThing={handleToggleThing}
               onAddThing={handleAddThing}
               onAssign={handleAssign}
+              onAssignToOther={handleAssignToOther}
               onSetVisibility={handleSetVisibility}
               busyThingIds={busyThingIds}
             />

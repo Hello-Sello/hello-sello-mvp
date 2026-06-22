@@ -147,14 +147,19 @@ export async function setThingVisibility(
  * A single `thing` update. Per D-10 the CALLER derives visibility: assigning to
  * the OTHER company means owner_company_id = the other company and is_private
  * must be false (auto-shared); assigning to your OWN side keeps the current
- * private/shared choice. This write just persists the assignee + owner; the
- * own-side-vs-other-side decision (and any visibility flip) is the component's
- * job, applied via this write's `ownerCompanyId` and `setThingVisibility`.
+ * private/shared choice.
+ *
+ * `isPrivate` is OPTIONAL (ME-01): when provided, the assignee, owner, AND
+ * visibility are set in ONE atomic update so "assign to the other company +
+ * auto-share" is a single write (one revert, one busy entry) - no partial-
+ * failure window where the Thing is owner=other but still is_private=true. When
+ * omitted (own-side assign), the current private/shared choice is left untouched.
  */
 export async function assignThing(
   thingId: string,
   assigneePersonId: string | null,
   ownerCompanyId: string | null,
+  isPrivate?: boolean,
 ): Promise<void> {
   const supabase = createClient();
 
@@ -163,13 +168,18 @@ export async function assignThing(
   } = await supabase.auth.getUser();
   if (!user) throw new Error("assignThing: no authenticated user");
 
+  const patch: Record<string, unknown> = {
+    assignee_person_id: assigneePersonId,
+    owner_company_id: ownerCompanyId,
+    updated_by: user.id,
+  };
+  // only touch is_private when the caller asked to (own-side assign keeps the
+  // existing visibility; other-side assign sets is_private=false in the SAME write).
+  if (isPrivate !== undefined) patch.is_private = isPrivate;
+
   const { error } = await supabase
     .from("thing")
-    .update({
-      assignee_person_id: assigneePersonId,
-      owner_company_id: ownerCompanyId,
-      updated_by: user.id,
-    } as never)
+    .update(patch as never)
     .eq("id", thingId);
   if (error) throw error;
 }

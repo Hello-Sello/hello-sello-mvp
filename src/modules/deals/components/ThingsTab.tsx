@@ -32,8 +32,10 @@ export interface ThingsTabProps {
   /** the other side as a WHOLE (D-11, company-level), or null when not resolvable */
   otherCompany: { id: string; name: string } | null;
   onToggle: (thingId: string, next: ThingStatus) => void;
-  /** assign to an own-side person (companyId = viewer) or the other company (personId = null) */
+  /** assign to an OWN-SIDE person (companyId = viewer); keeps the current visibility */
   onAssign: (thingId: string, assigneePersonId: string | null, ownerCompanyId: string | null) => void;
+  /** assign to the OTHER company AND auto-share (D-10/D-11) as ONE atomic write (ME-01) */
+  onAssignToOther: (thingId: string, otherCompanyId: string) => void;
   /** flip a thing's visibility; only ever called for the viewer's own items (D-12) */
   onSetVisibility: (thingId: string, isPrivate: boolean, ownerCompanyId: string | null) => void;
   /** create a new (task) Thing in this stage; resolves when saved */
@@ -54,6 +56,7 @@ export function ThingsTab({
   otherCompany,
   onToggle,
   onAssign,
+  onAssignToOther,
   onSetVisibility,
   onAdd,
   busyIds,
@@ -96,6 +99,7 @@ export function ThingsTab({
               otherCompany={otherCompany}
               onToggle={onToggle}
               onAssign={onAssign}
+              onAssignToOther={onAssignToOther}
               onSetVisibility={onSetVisibility}
               busy={busyIds.has(t.id)}
             />
@@ -186,6 +190,7 @@ function ThingRow({
   otherCompany,
   onToggle,
   onAssign,
+  onAssignToOther,
   onSetVisibility,
   busy,
 }: {
@@ -195,6 +200,7 @@ function ThingRow({
   otherCompany: { id: string; name: string } | null;
   onToggle: (thingId: string, next: ThingStatus) => void;
   onAssign: (thingId: string, assigneePersonId: string | null, ownerCompanyId: string | null) => void;
+  onAssignToOther: (thingId: string, otherCompanyId: string) => void;
   onSetVisibility: (thingId: string, isPrivate: boolean, ownerCompanyId: string | null) => void;
   busy: boolean;
 }) {
@@ -301,7 +307,7 @@ function ThingRow({
           viewerCompanyId={viewerCompanyId}
           otherCompany={otherCompany}
           onAssign={onAssign}
-          onSetVisibility={onSetVisibility}
+          onAssignToOther={onAssignToOther}
           busy={busy}
         />
       </div>
@@ -315,6 +321,11 @@ function ThingRow({
  * own-side member keeps the thing on the viewer's side (private by default,
  * D-10); selecting "the other company" assigns it company-level AND auto-shares
  * it (D-10 - the other side must be able to act on it).
+ *
+ * "Assign to the other company + auto-share" is ONE atomic operation via
+ * `onAssignToOther` (ME-01): a single DB write sets owner=other AND is_private
+ * =false together, so there is no partial-failure window between the assign and
+ * the share. Own-side assign goes through `onAssign` and leaves visibility alone.
  */
 function AssigneePicker({
   thing,
@@ -322,7 +333,7 @@ function AssigneePicker({
   viewerCompanyId,
   otherCompany,
   onAssign,
-  onSetVisibility,
+  onAssignToOther,
   busy,
 }: {
   thing: ThingView;
@@ -330,7 +341,7 @@ function AssigneePicker({
   viewerCompanyId: string | null;
   otherCompany: { id: string; name: string } | null;
   onAssign: (thingId: string, assigneePersonId: string | null, ownerCompanyId: string | null) => void;
-  onSetVisibility: (thingId: string, isPrivate: boolean, ownerCompanyId: string | null) => void;
+  onAssignToOther: (thingId: string, otherCompanyId: string) => void;
   busy: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -348,9 +359,9 @@ function AssigneePicker({
 
   function assignToOtherCompany() {
     if (!otherCompany) return;
-    // assign company-level (no specific person, D-11) AND auto-share (D-10)
-    onAssign(thing.id, null, otherCompany.id);
-    onSetVisibility(thing.id, false, otherCompany.id);
+    // ONE atomic write: company-level (no specific person, D-11) AND auto-share
+    // (D-10) in a single update + a single optimistic patch/revert (ME-01).
+    onAssignToOther(thing.id, otherCompany.id);
     setOpen(false);
   }
 

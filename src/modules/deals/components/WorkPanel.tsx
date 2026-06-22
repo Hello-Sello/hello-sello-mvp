@@ -56,6 +56,8 @@ export interface WorkPanelProps {
   onToggleThing: (thingId: string, next: ThingStatus) => void;
   onAddThing: (title: string) => Promise<void>;
   onAssign: (thingId: string, assigneePersonId: string | null, ownerCompanyId: string | null) => void;
+  /** assign to the other company + auto-share, as ONE atomic write (ME-01) */
+  onAssignToOther: (thingId: string, otherCompanyId: string) => void;
   onSetVisibility: (thingId: string, isPrivate: boolean, ownerCompanyId: string | null) => void;
   busyThingIds: ReadonlySet<string>;
 }
@@ -74,6 +76,7 @@ export function WorkPanel({
   onToggleThing,
   onAddThing,
   onAssign,
+  onAssignToOther,
   onSetVisibility,
   busyThingIds,
 }: WorkPanelProps) {
@@ -123,6 +126,7 @@ export function WorkPanel({
               otherCompany={otherCompany}
               onToggle={onToggleThing}
               onAssign={onAssign}
+              onAssignToOther={onAssignToOther}
               onSetVisibility={onSetVisibility}
               onAdd={onAddThing}
               busyIds={busyThingIds}
