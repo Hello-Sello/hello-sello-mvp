@@ -1,0 +1,870 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Present — shop (premium)</title>
+<!--
+  THROWAWAY PROTOTYPE — Phase 7 (Present Catalogue UX). Real app theme (tokens
+  mirror src/app/globals.css). The FINALIZED flip product card (front = all product
+  info, back = lab data) folded into the shop grid, 4-up. Slim info ribbon whose
+  panel floats ABOVE the page and opens one section at a time. Premium chrome pass
+  (layered shadows, hairlines, lighter headings, restrained accent, more whitespace).
+  Two screens (Shop / Manage), working basket, working Manage modals. No build, no React.
+-->
+<style>
+  :root{
+    --brand:#e30b5d; --brand-soft:#ffb7d5; --brand-deep:#76002d;
+    --surface:#fff;
+    --ink:rgba(20,10,16,.92); --ink-muted:rgba(20,10,16,.55); --ink-faint:rgba(20,10,16,.40);
+    --line:rgba(20,10,16,.07); --line-strong:rgba(20,10,16,.11);
+    --success:#34b233; --info:#6c7bd9; --danger:#dc2626;
+    --bg-from:#fff; --bg-to:#fff1f7;
+    --glass-bg:rgba(255,255,255,.64); --glass-bg-strong:rgba(255,255,255,.84);
+    --glass-border:rgba(255,255,255,.7);
+    /* layered, low-opacity, raspberry-tinted shadows (Stripe/Linear/Apple style) */
+    --shadow-sm:0 1px 2px rgba(20,10,16,.04),0 2px 6px -1px rgba(118,0,45,.06);
+    --shadow-md:0 1px 2px rgba(20,10,16,.04),0 5px 12px -3px rgba(118,0,45,.07),0 12px 26px -8px rgba(118,0,45,.08);
+    --shadow-lg:0 1px 2px rgba(20,10,16,.05),0 8px 18px -6px rgba(118,0,45,.09),0 18px 40px -12px rgba(118,0,45,.11),0 30px 64px -20px rgba(118,0,45,.10);
+    --glass-shadow:var(--shadow-md);
+    --ease:cubic-bezier(.4,.15,.2,1); --ease-over:cubic-bezier(.67,.17,.32,.95); --ease-out:cubic-bezier(0,0,.2,1);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{height:100vh;display:flex;flex-direction:column;overflow:hidden;color:var(--ink);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased;
+    background:radial-gradient(60rem 60rem at 10% -12%,rgba(255,183,213,.5),transparent 60%),radial-gradient(46rem 46rem at 108% 6%,rgba(227,11,93,.08),transparent 55%),linear-gradient(160deg,var(--bg-from),var(--bg-to));
+    background-attachment:fixed;}
+  .glass{background:var(--glass-bg);backdrop-filter:blur(20px) saturate(180%);-webkit-backdrop-filter:blur(20px) saturate(180%);border:1px solid var(--glass-border);box-shadow:var(--glass-shadow)}
+  .glass-strong{background:var(--glass-bg-strong);backdrop-filter:blur(24px) saturate(180%);-webkit-backdrop-filter:blur(24px) saturate(180%);border:1px solid var(--glass-border);box-shadow:var(--shadow-lg)}
+  svg{display:block}
+  .ic{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+  .ic.sm{width:15px;height:15px}.ic.xs{width:13px;height:13px}
+  button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+  a{color:inherit;text-decoration:none}
+  input,select,textarea{font-family:inherit}
+  /* shared micro-label: uppercase, generous tracking, medium weight */
+  .ulabel{font-size:10.5px;font-weight:600;letter-spacing:.11em;text-transform:uppercase;color:var(--ink-faint)}
+
+  .switch{flex:0 0 auto;display:flex;align-items:center;gap:10px;padding:8px 14px;background:rgba(20,10,16,.92);color:#fff;font-size:12.5px;z-index:80}
+  .switch b{color:#ffb7d5;font-weight:600;letter-spacing:.01em}
+  .switch .seg2{display:flex;gap:4px;margin-left:auto}
+  .switch .seg2 button{border-radius:999px;padding:6px 14px;font-size:12px;font-weight:600;color:rgba(255,255,255,.7);background:rgba(255,255,255,.08)}
+  .switch .seg2 button.on{background:var(--brand);color:#fff}
+
+  .app{flex:1;min-height:0;display:flex;overflow:hidden}
+  .rail{margin:14px 0 14px 14px;width:76px;flex:0 0 76px;display:flex;flex-direction:column;gap:4px;border-radius:24px;padding:10px}
+  .wordmark{display:flex;flex-direction:column;align-items:center;gap:3px;margin:4px 0 14px}
+  .wordmark .badge{width:34px;height:34px;border-radius:11px;background:var(--brand);color:#fff;display:grid;place-items:center;font-weight:700;font-size:13px;box-shadow:var(--shadow-sm)}
+  .wordmark small{font-size:8.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint)}
+  .nav{display:flex;flex-direction:column;gap:4px}
+  .navitem{position:relative;display:flex;flex-direction:column;align-items:center;gap:5px;border-radius:16px;padding:10px 4px;font-size:10px;font-weight:600;line-height:1;color:var(--ink-muted);transition:all .2s var(--ease-out);cursor:pointer}
+  .navitem:hover{background:rgba(255,255,255,.6);color:var(--brand)}
+  .navitem.active{background:rgba(227,11,93,.09);color:var(--brand)}
+  .navitem.active .edge{position:absolute;left:0;top:50%;transform:translateY(-50%);height:28px;width:3px;border-radius:0 4px 4px 0;background:var(--brand)}
+  .navitem.soon{color:var(--ink-faint);cursor:not-allowed}.navitem.soon .ic{opacity:.4}
+  .rail .acct{margin-top:auto;display:flex;justify-content:center;padding-top:12px;position:relative}
+  .avatar{width:40px;height:40px;border-radius:999px;background:linear-gradient(135deg,#ffb7d5,#e30b5d);color:#fff;display:grid;place-items:center;font-weight:700;font-size:14px;box-shadow:0 0 0 2px #fff,var(--shadow-sm);cursor:pointer}
+
+  .col{display:flex;min-width:0;flex:1;flex-direction:column}
+  .screen{display:none;min-width:0;flex:1;flex-direction:column;min-height:0}
+  body[data-screen="shop"] #shopScreen{display:flex}
+  body[data-screen="manage"] #manageScreen{display:flex}
+
+  .topbar{margin:14px 14px 0;display:flex;align-items:center;gap:10px;border-radius:18px;padding:9px 14px;position:relative;z-index:30}
+  .srch{display:flex;align-items:center;border-radius:999px;background:rgba(255,255,255,.55)}
+  .srch button{width:40px;height:40px;border-radius:999px;display:grid;place-items:center;color:var(--ink-muted)}
+  .srch .inp{width:0;overflow:hidden;transition:width .25s var(--ease)}
+  .srch.open{background:#fff;box-shadow:var(--shadow-sm)}.srch.open .inp{width:230px}
+  .srch input{width:100%;border:none;background:transparent;font-size:13.5px;outline:none;padding-right:10px}
+  .tbspace{flex:1}
+  .tbbtn{display:inline-flex;align-items:center;gap:7px;border-radius:999px;padding:9px 15px;font-size:13px;font-weight:600;background:rgba(255,255,255,.6);transition:all .18s var(--ease-out)}
+  .tbbtn:hover{background:#fff;box-shadow:var(--shadow-sm)}.tbbtn.brand{background:var(--brand);color:#fff}.tbbtn.brand:hover{background:var(--brand-deep)}
+  .tbicon{position:relative;width:40px;height:40px;border-radius:999px;background:rgba(255,255,255,.6);display:grid;place-items:center;transition:all .18s var(--ease-out)}
+  .tbicon:hover{background:#fff;box-shadow:var(--shadow-sm)}
+  .badge-dot{position:absolute;top:-3px;right:-3px;min-width:18px;height:18px;border-radius:999px;background:var(--brand);color:#fff;font-size:10px;font-weight:700;display:grid;place-items:center;padding:0 4px;box-shadow:0 0 0 2px #fff}
+  .badge-dot.bump{animation:bump .4s var(--ease-over)}
+  @keyframes bump{0%{transform:scale(1)}30%{transform:scale(1.55)}60%{transform:scale(.9)}100%{transform:scale(1)}}
+  .menu-wrap{position:relative;z-index:60}
+  .menu{position:absolute;top:calc(100% + 8px);right:0;width:248px;border-radius:18px;padding:8px;transform-origin:top right;transform:scale(.96);opacity:0;pointer-events:none;transition:all .15s var(--ease);z-index:70}
+  .menu.show{transform:scale(1);opacity:1;pointer-events:auto}
+  .menu a{display:flex;align-items:center;gap:10px;border-radius:11px;padding:9px 11px;font-size:13px;font-weight:500;cursor:pointer}
+  .menu a:hover{background:rgba(227,11,93,.07);color:var(--brand-deep)}
+  .menu .sep{height:1px;background:var(--line);margin:6px 4px}
+  .menu .lbl{font-size:10px;font-weight:600;letter-spacing:.11em;text-transform:uppercase;color:var(--ink-faint);padding:6px 11px 2px}
+
+  main{min-height:0;flex:1;overflow:auto;padding:16px;position:relative}
+  .wrap{display:flex;flex-direction:column;gap:22px;padding-bottom:36px}
+
+  /* COVER — refined botanical, robust (always visible) */
+  .cover{position:relative;height:204px;width:100%;border-radius:24px;overflow:hidden;
+    background:radial-gradient(120% 150% at 10% -10%,rgba(227,11,93,.20),transparent 52%),linear-gradient(135deg,#13241c 0%,#1d3c2b 46%,#14211b 100%);
+    box-shadow:var(--shadow-md)}
+  .cover::after{content:"";position:absolute;inset:0;background:linear-gradient(to top,rgba(8,12,10,.62),transparent 58%)}
+  .cover .id{position:absolute;left:26px;bottom:20px;right:26px;z-index:2;display:flex;align-items:flex-end;gap:16px;color:#fff}
+  .logo-tile{width:78px;height:78px;border-radius:18px;background:rgba(255,255,255,.14);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.35);display:grid;place-items:center;font-size:30px;flex:0 0 78px}
+  .cover h1{margin:0;font-size:25px;font-weight:600;letter-spacing:-.02em;text-shadow:0 2px 14px rgba(0,0,0,.4)}
+  .cover .tag{margin:4px 0 0;font-size:13px;font-weight:500;opacity:.9}
+  .cover .loc-flag{position:absolute;top:16px;right:18px;z-index:2;display:inline-flex;align-items:center;gap:7px;border-radius:999px;background:rgba(255,255,255,.94);color:var(--ink);font-size:12px;font-weight:600;padding:7px 14px;box-shadow:var(--shadow-sm)}
+
+  /* INFO RIBBON — slim; its own stacking context so the panel floats ABOVE the cards */
+  .ribbon{position:relative;z-index:30;display:flex;border-radius:16px}
+  .rseg{flex:1;display:flex;align-items:center;gap:11px;padding:11px 15px;cursor:pointer;border-right:1px solid var(--line);transition:background .15s}
+  .rseg:last-child{border-right:none}.rseg:hover{background:rgba(255,255,255,.55)}.rseg.on{background:rgba(227,11,93,.07)}
+  .rseg .ico{width:30px;height:30px;border-radius:9px;background:rgba(227,11,93,.08);color:var(--brand-deep);display:grid;place-items:center;flex:0 0 30px}
+  .rseg .lab{font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint)}
+  .rseg .val{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+  .rseg .chev{margin-left:auto;color:var(--ink-faint);transition:transform .2s}.rseg.on .chev{transform:rotate(180deg)}
+  .rpanel{position:absolute;top:calc(100% + 8px);left:0;right:0;z-index:5;border-radius:16px;padding:18px 18px 16px;
+    background:#fff;border:1px solid var(--line);box-shadow:var(--shadow-lg);
+    opacity:0;transform:translateY(-6px);pointer-events:none;transition:all .2s var(--ease-out)}
+  .rpanel.show{opacity:1;transform:none;pointer-events:auto}
+  .rpanel .pclose{position:absolute;top:13px;right:13px;width:26px;height:26px;border-radius:999px;background:rgba(20,10,16,.05);display:grid;place-items:center;color:var(--ink-muted)}
+  .rpanel .ptitle{font-size:10px;font-weight:600;letter-spacing:.11em;text-transform:uppercase;color:var(--ink-faint);margin:0 0 12px}
+  .rgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:11px 26px}
+  .irow{display:flex;gap:10px;font-size:13px}.irow .k{color:var(--ink-muted);min-width:92px;font-weight:500}.irow .v{font-weight:600}
+  .pres-link{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;color:var(--brand-deep);border:1px solid var(--line-strong);border-radius:9px;padding:6px 10px;margin-top:14px;transition:all .15s}
+  .pres-link:hover{background:rgba(227,11,93,.06)}
+
+  /* FILTER ROW */
+  .filters{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .fdrop{position:relative}
+  .chip{border-radius:999px;padding:9px 15px;font-size:12.5px;font-weight:600;background:rgba(255,255,255,.6);color:var(--ink);display:inline-flex;align-items:center;gap:7px;transition:all .15s var(--ease-out)}
+  .chip:hover{background:#fff;box-shadow:var(--shadow-sm)}
+  .chip.loc{background:#fff;box-shadow:inset 0 0 0 1px var(--line-strong),var(--shadow-sm)}
+  .chip .cnt{background:var(--brand);color:#fff;border-radius:999px;font-size:10px;font-weight:700;min-width:16px;height:16px;display:grid;place-items:center;padding:0 4px}
+  .fmenu{position:absolute;top:calc(100% + 8px);left:0;width:236px;border-radius:16px;padding:8px;opacity:0;transform:scale(.97);transform-origin:top left;pointer-events:none;transition:all .15s var(--ease);z-index:25;max-height:320px;overflow:auto}
+  .fmenu.show{opacity:1;transform:none;pointer-events:auto}
+  .fmenu .grp{font-size:10px;font-weight:600;letter-spacing:.11em;text-transform:uppercase;color:var(--ink-faint);padding:8px 8px 4px}
+  .opt{display:flex;align-items:center;gap:9px;border-radius:10px;padding:8px;font-size:13px;font-weight:500;cursor:pointer}
+  .opt:hover{background:rgba(227,11,93,.06)}
+  .opt .box{width:18px;height:18px;border-radius:6px;border:1.5px solid var(--line-strong);display:grid;place-items:center;color:#fff;flex:0 0 18px}
+  .opt.sel .box{background:var(--brand);border-color:var(--brand)}
+  .opt .radio{width:16px;height:16px;border-radius:999px;border:1.5px solid var(--line-strong);flex:0 0 16px}
+  .opt.sel .radio{border:5px solid var(--brand)}
+  .filters .spacer{flex:1}.count{font-size:12px;color:var(--ink-muted);font-weight:500}
+
+  /* PRODUCT GRID — the finalized FLIP card (namespaced pc-*), 4-up */
+  .grid{display:grid;gap:18px;grid-template-columns:repeat(4,minmax(0,1fr))}
+  @media(max-width:1240px){.grid{grid-template-columns:repeat(3,1fr)}}
+  @media(max-width:900px){.grid{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:560px){.grid{grid-template-columns:1fr}}
+  .pc-card{perspective:1900px;height:604px}
+  .pc-tilt{height:100%;transition:transform .12s var(--ease);transform-style:preserve-3d}
+  .pc-inner{position:relative;width:100%;height:100%;transform-style:preserve-3d;transition:transform .6s var(--ease)}
+  .pc-card.flip .pc-inner{transform:rotateY(180deg)}
+  .pc-face{position:absolute;inset:0;border-radius:20px;overflow:hidden;backface-visibility:hidden;-webkit-backface-visibility:hidden;display:flex;flex-direction:column;background:#fff;box-shadow:var(--shadow-lg),inset 0 0 0 1px rgba(255,255,255,.6)}
+  .pc-back{transform:rotateY(180deg)}
+  .pc-photo{position:relative;height:176px;flex:0 0 176px;overflow:hidden;cursor:pointer}
+  .pc-photo img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  .pc-sheen{position:absolute;inset:0;background:radial-gradient(circle at var(--px,50%) var(--py,50%),rgba(255,255,255,.5),transparent 42%);mix-blend-mode:overlay;opacity:0;transition:opacity .2s;pointer-events:none}
+  .pc-card:hover .pc-sheen{opacity:1}
+  .pc-badges{position:absolute;top:10px;left:10px;display:flex;gap:6px;flex-wrap:wrap;max-width:70%}
+  .pc-chiplet{background:rgba(20,10,16,.5);color:#fff;border-radius:999px;font-size:10px;font-weight:600;padding:3px 9px;backdrop-filter:blur(4px)}
+  .pc-grade{position:absolute;top:10px;right:46px;display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,.94);color:var(--brand-deep);border-radius:999px;font-size:10px;font-weight:700;padding:3px 9px}
+  .pc-heart{position:absolute;top:9px;right:10px;width:30px;height:30px;border-radius:999px;background:rgba(255,255,255,.92);color:var(--brand);display:grid;place-items:center}
+  .pc-heart.on{background:var(--brand);color:#fff}
+  .pc-dots{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);display:flex;gap:5px}
+  .pc-dots span{height:5px;width:5px;border-radius:999px;background:rgba(255,255,255,.6)}.pc-dots span.on{width:14px;background:#fff}
+  .pc-flipbtn{position:absolute;bottom:9px;right:10px;display:inline-flex;align-items:center;gap:6px;background:rgba(20,10,16,.55);color:#fff;border-radius:999px;font-size:11px;font-weight:600;padding:6px 11px;backdrop-filter:blur(4px)}
+  .pc-flipbtn:hover{background:rgba(20,10,16,.8)}
+  .pc-fhead{padding:12px 13px 0;display:flex;align-items:flex-start;gap:8px}
+  .pc-name{font-weight:700;font-size:16px;color:var(--brand-deep);line-height:1.15;letter-spacing:-.01em}
+  .pc-cult{font-size:12px;color:var(--ink-muted);margin-top:1px}.pc-code{font-size:10.5px;color:var(--ink-faint);font-weight:500;margin-top:2px}
+  .pc-fhead .pc-flag{font-size:18px;margin-left:auto}
+  .pc-quad{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:11px 13px 0}
+  .pc-quad .c{border:1px solid var(--line);border-radius:10px;padding:7px 2px;text-align:center;background:rgba(227,11,93,.025)}
+  .pc-quad .c b{display:block;font-size:15px;color:var(--brand-deep);font-variant-numeric:tabular-nums;line-height:1;font-weight:700}
+  .pc-quad .c small{font-size:8.5px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.06em;font-weight:600}
+  .pc-specs{flex:1;overflow:auto;padding:12px 13px 4px;display:flex;flex-direction:column;gap:6px}
+  .pc-srow{display:flex;align-items:flex-start;gap:8px;font-size:11.5px;border-bottom:1px solid var(--line);padding-bottom:5px}
+  .pc-srow .k{flex:0 0 84px;color:var(--ink-muted);font-weight:500}
+  .pc-srow .v{font-weight:600;line-height:1.25}
+  .pc-ffoot{padding:12px 13px 13px;border-top:1px solid var(--line);position:relative;z-index:5;background:#fff}
+  .pc-priceline{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+  .pc-price{font-weight:700;color:var(--brand-deep);font-size:18px;font-variant-numeric:tabular-nums}
+  .pc-price small{font-size:11px;font-weight:500;color:var(--ink-muted)}
+  .pc-rrp{font-size:10.5px;color:var(--ink-faint);text-decoration:line-through}
+  .pc-bundle{font-size:10.5px;font-weight:600;color:var(--success)}
+  .pc-reqprice{font-size:12px;font-weight:700;color:var(--brand-deep);background:rgba(227,11,93,.08);border-radius:999px;padding:6px 12px}
+  .pc-addrow{margin-top:10px;display:flex;gap:8px}
+  .pc-stepper{display:flex;align-items:center;border-radius:999px;background:#fff;box-shadow:inset 0 0 0 1px var(--line-strong)}
+  .pc-stepper button{width:30px;height:30px;border-radius:999px;color:var(--brand-deep);display:grid;place-items:center}
+  .pc-stepper button:hover{background:rgba(227,11,93,.08)}
+  .pc-stepper .pc-q{min-width:32px;text-align:center;font-weight:700;font-size:13px;font-variant-numeric:tabular-nums}
+  .pc-add{flex:1;border-radius:999px;background:var(--brand);color:#fff;font-weight:700;font-size:12.5px;display:flex;align-items:center;justify-content:center;gap:6px}
+  .pc-add:hover{background:var(--brand-deep)}
+  .pc-add.dim{opacity:.4;pointer-events:none}
+  .pc-bsel{width:100%;margin-top:9px;border-radius:10px;border:1.5px solid var(--line-strong);background:#fff;padding:8px 10px;font-size:11.5px;font-weight:600;color:var(--ink);outline:none;cursor:pointer}
+  .pc-bsel:focus{border-color:var(--brand)}
+  /* TWO controls: a batch dropdown (opens lots with +/-) + a separate Add to basket button */
+  .pc-bopen{flex:1;border-radius:999px;background:rgba(20,10,16,.05);color:var(--ink);font-weight:700;font-size:12px;padding:8px 10px;display:flex;align-items:center;justify-content:center;gap:5px}
+  .pc-bopen:hover{background:rgba(20,10,16,.09)}
+  .pc-bpanel{position:absolute;left:0;right:0;top:176px;bottom:0;z-index:4;background:#fff;display:flex;flex-direction:column;opacity:0;transform:translateY(8px);pointer-events:none;transition:opacity .2s var(--ease-out),transform .2s var(--ease-out)}
+  .pc-bpanel.show{opacity:1;transform:none;pointer-events:auto}
+  .pc-bphead{display:flex;align-items:center;gap:8px;padding:11px 13px 9px;border-bottom:1px solid var(--line);font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint)}
+  .pc-bphead .pc-bptotal{margin-left:auto}
+  .pc-bphead button{width:24px;height:24px;border-radius:999px;background:rgba(20,10,16,.05);display:grid;place-items:center;color:var(--ink-muted)}
+  .pc-bptotal{font-size:11px;font-weight:600;color:var(--ink-muted);text-transform:none;letter-spacing:0}
+  .pc-bptotal b{color:var(--brand-deep);font-size:13px}
+  .pc-bplist{flex:1;overflow:auto;padding:10px 13px 110px;display:flex;flex-direction:column;gap:7px}
+  .pc-bprow{display:flex;align-items:center;gap:8px;border:1.5px solid var(--line);border-radius:11px;padding:8px 9px;transition:all .15s var(--ease-out)}
+  .pc-bprow.on{border-color:var(--brand);background:rgba(227,11,93,.05)}
+  .pc-bpinfo{flex:1;min-width:0}
+  /* back */
+  .pc-bhead{padding:13px 14px;background:linear-gradient(120deg,var(--brand-deep),var(--brand));color:#fff;display:flex;align-items:center;gap:8px}
+  .pc-bhead b{font-size:14px;font-weight:700}.pc-bhead .batch{margin-left:auto;font-size:10.5px;font-weight:600;opacity:.9;background:rgba(255,255,255,.18);border-radius:999px;padding:3px 9px}
+  .pc-bscroll{flex:1;overflow:auto;padding:13px 14px}
+  .pc-sec{font-size:10px;font-weight:600;letter-spacing:.11em;text-transform:uppercase;color:var(--ink-faint);margin:0 0 8px}.pc-sec.mt{margin-top:14px}
+  .pc-grid2{display:grid;grid-template-columns:1fr 1fr;gap:5px 12px;font-size:11px}
+  .pc-grid2 div{display:flex;justify-content:space-between;border-bottom:1px solid var(--line);padding-bottom:3px}
+  .pc-grid2 .k{color:var(--ink-muted)}.pc-grid2 .v{font-weight:600}
+  .pc-terps{display:flex;flex-direction:column;gap:6px}
+  .pc-terp{display:flex;align-items:center;gap:8px;font-size:11px}.pc-terp .tn{width:96px;font-weight:600}
+  .pc-terp .b{flex:1;height:6px;border-radius:999px;background:rgba(227,11,93,.08);overflow:hidden}.pc-terp .b i{display:block;height:100%;background:linear-gradient(90deg,var(--brand-soft),var(--brand))}
+  .pc-terp .pct{width:38px;text-align:right;color:var(--ink-muted);font-variant-numeric:tabular-nums}
+  .pc-docrow{display:flex;flex-wrap:wrap;gap:6px}
+  .pc-doc{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;border-radius:9px;background:rgba(227,11,93,.07);padding:7px 10px;cursor:pointer}
+  .pc-doc:hover{background:rgba(227,11,93,.12)}
+  /* documents shelf — replaces the structured per-batch readout on the back */
+  .pc-docshelf{display:flex;flex-direction:column;gap:7px}
+  .pc-docitem{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border-radius:11px;background:rgba(20,10,16,.03);border:1px solid var(--line);padding:9px 11px;transition:all .15s var(--ease-out)}
+  .pc-docitem:hover{background:rgba(227,11,93,.06);border-color:rgba(227,11,93,.18)}
+  .pc-docitem .di-ic{width:30px;height:30px;border-radius:8px;background:#fff;border:1px solid var(--line);display:grid;place-items:center;color:var(--brand-deep);flex:0 0 30px}
+  .pc-docitem .di-tx{flex:1;min-width:0}
+  .pc-docitem .di-tx b{display:block;font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pc-docitem .di-tx small{font-size:9.5px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.07em}
+  .pc-docitem .di-go{color:var(--ink-faint);flex:0 0 auto}
+  .pc-docnote{margin:12px 0 0;font-size:10.5px;line-height:1.5;color:var(--ink-muted)}
+  /* document FOLDERS (click to open → all files of that type) */
+  .pc-folders{display:flex;flex-direction:column;gap:8px}
+  .pc-folder{border:1px solid var(--line);border-radius:11px;overflow:hidden;background:rgba(20,10,16,.02)}
+  .pc-folderhd{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:10px 11px;cursor:pointer}
+  .pc-folderhd:hover{background:rgba(227,11,93,.04)}
+  .pc-folderhd .di-ic{width:30px;height:30px;border-radius:8px;background:#fff;border:1px solid var(--line);display:grid;place-items:center;color:var(--brand-deep);flex:0 0 30px}
+  .pc-folderhd .di-tx{flex:1;min-width:0}
+  .pc-folderhd .di-tx b{display:block;font-size:12px;font-weight:600}
+  .pc-folderhd .di-tx small{font-size:9.5px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.07em}
+  .pc-folderhd .fcount{font-size:10px;font-weight:700;color:var(--brand-deep);background:rgba(227,11,93,.08);border-radius:999px;min-width:18px;height:18px;display:grid;place-items:center;padding:0 5px}
+  .pc-folderhd .fchev{color:var(--ink-faint);transition:transform .2s}
+  .pc-folder.open .pc-folderhd .fchev{transform:rotate(90deg)}
+  .pc-files{max-height:0;overflow:hidden;transition:max-height .28s var(--ease)}
+  .pc-folder.open .pc-files{max-height:360px}
+  .pc-fileitem{display:flex;align-items:center;gap:8px;width:100%;text-align:left;border-top:1px solid var(--line);padding:8px 11px 8px 14px;color:var(--ink);transition:background .15s}
+  .pc-fileitem:hover{background:rgba(227,11,93,.05)}
+  .pc-fileitem svg:first-child{color:var(--brand-deep);flex:0 0 auto}
+  .pc-fileitem .ff{flex:1;min-width:0;font-size:11.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pc-fileitem small{font-size:9px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.06em;flex:0 0 auto}
+  .pc-fileitem .di-go{color:var(--ink-faint);flex:0 0 auto}
+  .pc-sella{margin-top:12px;border-radius:12px;border:1px solid rgba(108,123,217,.35);background:rgba(108,123,217,.06);padding:11px}
+  .pc-sella .t{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;color:#4854a8}
+  .pc-sella .stub{margin-top:6px;font-size:10.5px;font-weight:600;color:#4854a8;background:rgba(108,123,217,.12);border-radius:7px;padding:6px 9px;text-align:center}
+  .pc-bfoot{padding:11px 14px;border-top:1px solid var(--line);display:flex;gap:8px}
+  .pc-flipback{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;border-radius:999px;background:rgba(20,10,16,.05);color:var(--brand-deep);font-weight:700;font-size:12px;padding:9px}
+  .pc-flipback:hover{background:rgba(20,10,16,.09)}
+  .pc-viewpres{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;border-radius:999px;background:var(--brand);color:#fff;font-weight:700;font-size:12px;padding:9px}
+  .pc-viewpres:hover{background:var(--brand-deep)}
+
+  /* drawers (basket) */
+  .scrim{position:fixed;inset:0;background:rgba(20,10,16,.22);backdrop-filter:blur(2px);opacity:0;pointer-events:none;transition:opacity .25s;z-index:40}
+  .scrim.show{opacity:1;pointer-events:auto}
+  .drawer{position:fixed;top:0;right:0;height:100%;width:400px;max-width:94vw;transform:translateX(105%);transition:transform .34s var(--ease-over);z-index:50;display:flex;flex-direction:column;border-radius:24px 0 0 24px;padding:18px;overflow:auto}
+  .drawer.show{transform:translateX(0)}
+  .drawer h3{margin:0;font-size:17px;font-weight:700;letter-spacing:-.01em;display:flex;align-items:center;gap:8px}
+  .drawer .close,.dhead .close{margin-left:auto;width:32px;height:32px;border-radius:999px;background:rgba(20,10,16,.05);display:grid;place-items:center}
+  .dhead{display:flex;align-items:center;gap:8px}
+  .grp{margin-top:14px}
+  .grp .gh{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--brand-deep)}
+  .grp .gh .av{width:22px;height:22px;border-radius:7px;background:var(--ink);color:#fff;display:grid;place-items:center;font-size:10px;font-weight:700}
+  .line{margin-top:8px;display:flex;align-items:center;gap:10px;border-radius:12px;background:rgba(255,255,255,.6);padding:9px 10px;animation:slidein .25s var(--ease);box-shadow:var(--shadow-sm)}
+  @keyframes slidein{from{opacity:0;transform:translateX(12px)}to{opacity:1;transform:none}}
+  .line .nm{flex:1;min-width:0}.line .nm b{display:block;font-size:12.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.line .nm small{font-size:11px;color:var(--ink-muted)}
+  .line .q{display:flex;align-items:center;gap:4px;font-size:11px;font-weight:700}
+  .line .q button{width:22px;height:22px;border-radius:999px;background:#fff;color:var(--brand-deep);display:grid;place-items:center;box-shadow:inset 0 0 0 1px var(--line-strong)}
+  .line .x{color:rgba(220,38,38,.8)}
+  .empty{margin-top:46px;text-align:center;color:var(--ink-muted);font-size:13px}
+  .dfoot{margin-top:auto;padding-top:14px;border-top:1px solid var(--line)}
+  .total{display:flex;justify-content:space-between;font-size:13px;font-weight:700;margin-bottom:10px}
+  .transient{font-size:11px;color:var(--ink-muted);display:flex;gap:6px;margin-bottom:10px}
+  .cta{width:100%;border-radius:999px;background:var(--brand);color:#fff;font-weight:700;font-size:14px;padding:12px;display:flex;align-items:center;justify-content:center;gap:8px}
+  .cta:hover{background:var(--brand-deep)}
+  .fly{position:fixed;z-index:70;border-radius:12px;pointer-events:none;box-shadow:0 10px 24px -8px rgba(0,0,0,.4);transition:all .65s cubic-bezier(.45,-.2,.3,1);opacity:.95}
+
+  /* account popover */
+  .pop{position:absolute;bottom:0;left:calc(100% + 10px);width:230px;border-radius:18px;padding:10px;opacity:0;transform:scale(.95);transform-origin:bottom left;pointer-events:none;transition:all .15s var(--ease);z-index:75}
+  .pop.show{opacity:1;transform:none;pointer-events:auto}
+  .pop a{display:flex;align-items:center;gap:10px;border-radius:11px;padding:9px 11px;font-size:13px;font-weight:500;cursor:pointer}
+  .pop a:hover{background:rgba(227,11,93,.07);color:var(--brand-deep)}
+
+  /* MANAGE screen */
+  .mhead{margin:14px 14px 0;display:flex;align-items:center;gap:10px;border-radius:18px;padding:11px 15px;flex-wrap:wrap}
+  .mhead h2{margin:0;font-size:17px;font-weight:700;letter-spacing:-.01em}.mhead .sub{font-size:12px;color:var(--ink-muted);font-weight:500}
+  .mtabs{display:flex;gap:6px;margin:0 14px}
+  .mtab{border-radius:999px;padding:8px 16px;font-size:13px;font-weight:600;background:rgba(255,255,255,.5);color:var(--ink-muted)}
+  .mtab.on{background:var(--brand);color:#fff}
+  .mtable{width:100%;border-collapse:separate;border-spacing:0 8px;font-size:12.5px}
+  .mtable th{text-align:left;font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint);padding:0 12px 4px}
+  .mtable td{background:rgba(255,255,255,.7);padding:11px 12px;vertical-align:middle}
+  .mtable tr td:first-child{border-radius:12px 0 0 12px}.mtable tr td:last-child{border-radius:0 12px 12px 0}
+  .mprod{display:flex;align-items:center;gap:11px}.mthumb{width:40px;height:40px;border-radius:10px;flex:0 0 40px}.mprod b{font-weight:700}.mprod small{display:block;color:var(--ink-muted);font-size:11px}
+  .pmode{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:4px 10px;font-size:11px;font-weight:700}
+  .pmode.pub{background:rgba(52,178,51,.13);color:#1f7a1e}.pmode.req{background:rgba(108,123,217,.13);color:#4854a8}
+  .toggle{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer}
+  .toggle.on{background:var(--brand);color:#fff}.toggle.off{background:rgba(255,255,255,.7);color:var(--ink-muted);box-shadow:inset 0 0 0 1px var(--line-strong)}
+  .micon{width:30px;height:30px;border-radius:9px;background:rgba(255,255,255,.7);display:grid;place-items:center;color:var(--ink-muted)}
+  .micon:hover{color:var(--brand);background:#fff}
+  .mediadot{display:inline-flex;gap:6px;align-items:center;font-size:11px;color:var(--ink-muted)}
+  .cost{font-weight:600}.margin{font-size:11px;font-weight:700;color:#1f7a1e}
+  .bundle{font-size:11px;font-weight:600;color:var(--brand-deep)}
+  .chg{font-size:11px;font-weight:700;color:var(--brand);border-radius:999px;padding:3px 9px}.chg:hover{background:rgba(227,11,93,.08)}
+  .pval b{font-size:13.5px}
+  .priceedit{display:inline-flex;align-items:center;gap:5px}
+  .priceedit input{width:58px;border-radius:8px;border:1.5px solid var(--brand);padding:5px 7px;font-size:13px;font-weight:700;outline:none}
+  .priceedit .savep{width:26px;height:26px;border-radius:8px;background:var(--brand);color:#fff;display:grid;place-items:center}
+  .priceedit .cancelp{width:26px;height:26px;border-radius:8px;background:rgba(255,255,255,.8);color:var(--ink-muted);display:grid;place-items:center;box-shadow:inset 0 0 0 1px var(--line-strong)}
+
+  /* MODAL */
+  .mscrim{position:fixed;inset:0;background:rgba(20,10,16,.38);backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:opacity .2s;z-index:100;display:grid;place-items:center;padding:20px}
+  .mscrim.show{opacity:1;pointer-events:auto}
+  .modal{width:520px;max-width:100%;max-height:88vh;overflow:auto;border-radius:22px;padding:22px;transform:scale(.96);transition:transform .2s var(--ease)}
+  .mscrim.show .modal{transform:scale(1)}
+  .modal .mtop{display:flex;align-items:center;gap:10px;margin-bottom:4px}
+  .modal h3{margin:0;font-size:18px;font-weight:700;letter-spacing:-.01em}
+  .modal .mclose{margin-left:auto;width:32px;height:32px;border-radius:999px;background:rgba(20,10,16,.05);display:grid;place-items:center}
+  .modal .msub{font-size:12px;color:var(--ink-muted);margin-bottom:14px}
+  .field{margin-top:13px}.field>label{display:block;font-size:10.5px;font-weight:600;color:var(--ink-faint);margin-bottom:6px;text-transform:uppercase;letter-spacing:.1em}
+  .field input,.field select,.field textarea{width:100%;border-radius:11px;border:1px solid var(--line-strong);background:#fff;padding:10px 12px;font-size:13.5px;outline:none}
+  .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--brand)}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .drop{border:1.5px dashed var(--line-strong);border-radius:14px;padding:20px;text-align:center;color:var(--ink-muted);font-size:13px;background:rgba(227,11,93,.04)}
+  .drop:hover{background:rgba(227,11,93,.07)}
+  .mactions{display:flex;gap:10px;margin-top:18px}
+  .mactions .cta{flex:1}.mactions .ghost{background:rgba(20,10,16,.05);color:var(--ink);flex:0 0 auto;padding:12px 20px;border-radius:999px;font-weight:700}
+  .locrow{display:flex;align-items:center;gap:10px;border-radius:12px;background:rgba(255,255,255,.6);padding:10px 12px;margin-top:8px}
+  .locrow .grow{flex:1}.locrow b{font-size:13px}.locrow small{color:var(--ink-muted);font-size:11px}
+  .pickrow{display:flex;align-items:center;gap:10px;border-radius:11px;padding:9px 10px;font-size:13px;cursor:pointer}.pickrow:hover{background:rgba(227,11,93,.06)}
+  .pickrow .box{width:18px;height:18px;border-radius:6px;border:1.5px solid var(--line-strong);display:grid;place-items:center;color:#fff;flex:0 0 18px}.pickrow.sel .box{background:var(--brand);border-color:var(--brand)}
+  .infonote{border-radius:12px;background:rgba(108,123,217,.08);border:1px solid rgba(108,123,217,.25);padding:10px 12px;font-size:11.5px;color:#3f4a96;margin-top:14px;line-height:1.5}
+  /* send-deal flow — seller picks a batch per line + a recipient */
+  .sd-lines{display:flex;flex-direction:column;gap:12px;margin-top:4px}
+  .sd-line{border:1px solid var(--line);border-radius:14px;padding:12px}
+  .sd-prod{display:flex;align-items:center;gap:10px}
+  .sd-prod .sd-th{width:38px;height:38px;border-radius:10px;flex:0 0 38px}
+  .sd-prod b{font-size:13px;font-weight:700}.sd-prod small{display:block;color:var(--ink-muted);font-size:11px}
+  .sd-batchlabel{font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint);margin:11px 0 7px}
+  .sd-batches{display:flex;flex-direction:column;gap:6px}
+  .sd-batch{display:block;width:100%;text-align:left;border:1.5px solid var(--line);border-radius:11px;padding:9px 11px;background:#fff;cursor:pointer;transition:all .15s var(--ease-out)}
+  .sd-batch:hover{border-color:rgba(227,11,93,.25);background:rgba(227,11,93,.03)}
+  .sd-batch.sel{border-color:var(--brand);background:rgba(227,11,93,.06)}
+  .sd-batch .sd-bno{font-size:12.5px;font-weight:700;color:var(--brand-deep);display:flex;align-items:center;gap:7px}
+  .sd-batch .sd-cur{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#1f7a1e;background:rgba(52,178,51,.13);border-radius:999px;padding:2px 7px}
+  .sd-batch .sd-bmeta{font-size:10.5px;color:var(--ink-muted);margin-top:2px;font-variant-numeric:tabular-nums}
+  .ab-step{display:flex;align-items:center;gap:4px;border-radius:999px;background:#fff;box-shadow:inset 0 0 0 1px var(--line-strong);padding:2px}
+  .ab-step button{width:28px;height:28px;border-radius:999px;color:var(--brand-deep);display:grid;place-items:center}
+  .ab-step button:hover{background:rgba(227,11,93,.08)}
+  .ab-step span{min-width:28px;text-align:center;font-weight:700;font-size:13px;font-variant-numeric:tabular-nums}
+  .sd-chosen{display:flex;align-items:center;gap:6px;margin-top:9px;font-size:11.5px;color:#1f7a1e;background:rgba(52,178,51,.08);border-radius:9px;padding:7px 10px}
+  .sd-chosen b{color:var(--brand-deep)}.sd-chosen svg{color:#1f7a1e;flex:0 0 auto}
+  .sd-to{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;border:1px solid var(--line);border-radius:11px;padding:9px 11px}
+  .sd-to .av{width:22px;height:22px;border-radius:7px;background:var(--ink);color:#fff;display:grid;place-items:center;font-size:10px;font-weight:700}
+  .sd-to .sd-conn{margin-left:auto;font-size:10px;font-weight:700;color:#1f7a1e;background:rgba(52,178,51,.13);border-radius:999px;padding:3px 9px}
+  .pc-reqbtn{width:100%;margin-top:10px;border-radius:999px;background:rgba(227,11,93,.1);color:var(--brand-deep);font-weight:700;font-size:12px;padding:9px;display:flex;align-items:center;justify-content:center;gap:6px}
+  .pc-reqbtn:hover{background:rgba(227,11,93,.16)}
+  .ab-batch{display:flex;align-items:center;gap:10px;border:1.5px solid var(--line);border-radius:11px;padding:9px 11px;transition:all .15s var(--ease-out)}
+  .ab-batch.active{border-color:var(--brand);background:rgba(227,11,93,.05)}
+  .ab-binfo{flex:1;min-width:0}
+  .ab-total{display:flex;justify-content:flex-end;gap:6px;align-items:baseline;font-size:12px;font-weight:600;color:var(--ink-muted);margin-top:12px}
+  .ab-total b{color:var(--brand-deep);font-size:15px}
+  .cta[disabled]{opacity:.45;pointer-events:none}
+
+  /* seller / buyer role views */
+  .buyerbar{display:none;align-items:center;gap:8px}
+  body[data-role="buyer"] .buyerbar{display:inline-flex}
+  body[data-role="buyer"] #manageWrap{display:none}
+  .bview{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--ink-muted);background:rgba(255,255,255,.6);border-radius:999px;padding:8px 13px}
+  .connchip{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:8px 13px;font-size:12px;font-weight:700;cursor:pointer}
+  .connchip.on{background:rgba(52,178,51,.13);color:#1f7a1e}
+  .connchip.off{background:rgba(20,10,16,.06);color:var(--ink-muted)}
+  .pc-chiplet.pc-hidden{background:rgba(20,10,16,.8)}
+  .buyer-note{display:none;align-items:center;gap:9px;font-size:12.5px;color:var(--brand-deep);background:rgba(227,11,93,.06);border:1px solid var(--line);border-radius:14px;padding:11px 14px}
+  body[data-role="buyer"] .buyer-note{display:flex}
+  .buyer-note svg{flex:0 0 auto;color:var(--brand)}
+  .preschip{display:none;align-items:center;gap:8px;border-radius:999px;background:var(--brand);color:#fff;font-weight:700;font-size:12px;padding:7px 14px}
+  .app.presenting .rail,.app.presenting .srch{display:none}.app.presenting .preschip{display:inline-flex}
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;font-weight:600;font-size:13px;padding:11px 18px;border-radius:999px;opacity:0;pointer-events:none;transition:all .25s;z-index:120;box-shadow:var(--shadow-lg)}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body data-screen="shop">
+
+<div class="switch">
+  <b>✦ Present prototype</b>
+  <span style="color:rgba(255,255,255,.5);font-size:11px">seller vs buyer views · flip cards · slim info ribbon · premium chrome</span>
+  <div class="seg2" id="screenSeg"><button data-s="shop" class="on">Shop view</button><button data-s="manage">Manage shop</button><button data-s="buyer">Buyer view</button></div>
+</div>
+
+<div class="app" id="app">
+  <aside class="rail glass">
+    <div class="wordmark"><div class="badge">hs</div><small>hello sello</small></div>
+    <nav class="nav" id="nav"></nav>
+    <div class="acct">
+      <div class="avatar" id="acctBtn">CW</div>
+      <div class="pop glass-strong" id="acctPop">
+        <div style="text-align:center;padding:8px 0 10px"><div class="avatar" style="margin:0 auto 6px;width:52px;height:52px;font-size:18px">CW</div><div style="font-weight:700;font-size:14px">Carla Weber</div><div style="font-size:11px;color:var(--ink-muted)">GreenLeaf Pharma</div></div>
+        <div style="height:1px;background:var(--line);margin:4px"></div>
+        <a data-modal="profile"><svg class="ic sm" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M5 21a7 7 0 0 1 14 0"/></svg> My profile</a>
+        <a data-goManage><svg class="ic sm" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg> Company profile</a>
+        <a data-modal="settings"><svg class="ic sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.3 1a7 7 0 0 0-1.7-1l-.3-2.6h-4l-.3 2.6a7 7 0 0 0-1.7 1l-2.3-1-2 3.4 2 1.5a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 1.7 1l.3 2.6h4l.3-2.6a7 7 0 0 0 1.7-1l2.3 1 2-3.4-2-1.5a7 7 0 0 0 .1-1z"/></svg> Settings</a>
+        <a data-modal="signout"><svg class="ic sm" viewBox="0 0 24 24"><path d="M9 21H5V3h4M16 17l5-5-5-5M21 12H9"/></svg> Sign out</a>
+      </div>
+    </div>
+  </aside>
+
+  <div class="col">
+    <!-- ===== SHOP ===== -->
+    <div class="screen" id="shopScreen">
+      <header class="topbar glass">
+        <div class="srch" id="srch"><button id="srchBtn"><svg class="ic sm" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg></button><div class="inp"><input placeholder="Search products…" /></div></div>
+        <span class="preschip">● Presentation mode — live</span>
+        <div class="tbspace"></div>
+        <div class="buyerbar" id="buyerBar"><span class="bview"><svg class="ic sm" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M5 21a7 7 0 0 1 14 0"/></svg> Viewing as buyer</span><button class="connchip on" id="connBtn">● Connected</button></div>
+        <div class="menu-wrap" id="manageWrap">
+          <button class="tbbtn brand" id="manageBtn"><svg class="ic sm" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg> Manage shop <svg class="ic xs" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
+          <div class="menu glass-strong" id="manageMenu">
+            <div class="lbl">Products &amp; prices</div>
+            <a data-modal="addproduct"><svg class="ic sm" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> Add product</a>
+            <a data-goManage><svg class="ic sm" viewBox="0 0 24 24"><path d="M4 7h16M7 4h10M6 7l1 13h10l1-13"/></svg> Manage products &amp; price list</a>
+            <a data-modal="import"><svg class="ic sm" viewBox="0 0 24 24"><path d="M4 9h16M4 15h16M9 4 7 20M17 4l-2 16"/></svg> Import CSV</a>
+            <div class="sep"></div>
+            <div class="lbl">Storefront</div>
+            <a data-modal="branding"><svg class="ic sm" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg> Edit shop &amp; branding</a>
+            <a data-modal="locations"><svg class="ic sm" viewBox="0 0 24 24"><path d="M12 21s-7-5-7-11a7 7 0 0 1 14 0c0 6-7 11-7 11z"/></svg> Manage locations</a>
+            <a data-modal="share"><svg class="ic sm" viewBox="0 0 24 24"><path d="M4 12v8h16v-8M12 3v13m-4-4 4 4 4-4"/></svg> Share Present link</a>
+          </div>
+        </div>
+        <button class="tbicon" id="fsBtn" title="Fullscreen"><svg class="ic" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+        <button class="tbicon" id="basketBtn" title="Basket"><svg class="ic" viewBox="0 0 24 24"><circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/><path d="M2 3h3l2.5 12h11"/><path d="M6 6h15l-2 7H7.5"/></svg><span class="badge-dot" id="basketCount" style="display:none">0</span></button>
+      </header>
+      <main>
+        <div class="wrap">
+          <section><div class="cover"><span class="loc-flag" id="locFlag">📍 All locations</span><div class="id"><div class="logo-tile">❀</div><div><h1>GreenLeaf Pharma GmbH</h1><p class="tag" id="coverTag">EU-GMP medical cannabis · cultivator &amp; wholesaler</p></div></div></div></section>
+          <div class="ribbon glass" id="ribbon"></div>
+          <div class="filters">
+            <div class="fdrop"><button class="chip loc" id="locBtn"><svg class="ic sm" viewBox="0 0 24 24"><path d="M12 21s-7-5-7-11a7 7 0 0 1 14 0c0 6-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg> <span id="locLabel">All locations</span> <svg class="ic xs" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button><div class="fmenu glass-strong" id="locMenu"></div></div>
+            <div class="fdrop"><button class="chip" id="filterBtn"><svg class="ic sm" viewBox="0 0 24 24"><path d="M3 5h18M6 12h12M10 19h4"/></svg> Filter <span class="cnt" id="filterCnt" style="display:none">0</span></button><div class="fmenu glass-strong" id="filterMenu"></div></div>
+            <span class="count" id="count"></span>
+            <div class="spacer"></div>
+            <span class="chip">Sort ▾</span>
+          </div>
+          <div class="buyer-note"><svg class="ic sm" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg> <span>You're browsing <b>GreenLeaf Pharma</b> as a buyer — add items and send a <b>deal card</b> to start. Seller-only details and hidden products aren't shown.</span></div>
+          <div class="grid" id="grid"></div>
+        </div>
+      </main>
+    </div>
+
+    <!-- ===== MANAGE ===== -->
+    <div class="screen" id="manageScreen">
+      <header class="mhead glass">
+        <button class="tbbtn" data-goShop><svg class="ic sm" viewBox="0 0 24 24"><path d="m14 6-6 6 6 6"/></svg> Back to shop</button>
+        <div><h2>Manage shop</h2><div class="sub" id="mSub">GreenLeaf Pharma · Standard price list</div></div>
+        <div style="flex:1"></div>
+        <button class="tbbtn" data-modal="import"><svg class="ic sm" viewBox="0 0 24 24"><path d="M4 9h16M4 15h16M9 4 7 20M17 4l-2 16"/></svg> Import CSV</button>
+        <button class="tbbtn brand" data-modal="addproduct"><svg class="ic sm" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> Add product</button>
+        <button class="tbbtn" style="background:rgba(108,123,217,.13);color:#4854a8" data-modal="send"><svg class="ic sm" viewBox="0 0 24 24"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></svg> Send price list…</button>
+      </header>
+      <div class="mtabs" id="mtabs"><button class="mtab on" data-mt="products">Products &amp; prices</button><button class="mtab" data-mt="branding" data-modal="branding">Branding</button><button class="mtab" data-mt="locations" data-modal="locations">Locations</button><button class="mtab" data-mt="share" data-modal="share">Share link</button></div>
+      <main>
+        <div class="wrap">
+          <div class="glass" style="border-radius:18px;padding:14px 16px;display:flex;align-items:center;gap:14px">
+            <span style="width:42px;height:42px;border-radius:12px;background:rgba(227,11,93,.08);color:var(--brand-deep);display:grid;place-items:center"><svg class="ic" viewBox="0 0 24 24"><path d="M4 7h16M7 4h10M6 7l1 13h10l1-13"/></svg></span>
+            <div style="flex:1"><div style="font-size:15px;font-weight:700">Standard price list <span class="pmode pub" style="vertical-align:middle">Published</span></div><div style="font-size:12px;color:var(--ink-muted)">Company-wide · EUR · prices live here, not on the product. <b>1 list in v0</b> — per-customer lists later.</div></div>
+            <div style="font-size:11px;color:var(--ink-muted);max-width:260px;text-align:right">Cost &amp; margin are seller-only. Buyers see a price only when <b>On profile</b> + <b>Price</b> are both on.</div>
+          </div>
+          <table class="mtable"><thead><tr><th>Product</th><th>Pack</th><th>Cost · margin (you)</th><th>Price /g</th><th>Bundle ≥</th><th>On profile</th><th>Price</th><th>Media</th><th></th></tr></thead><tbody id="mbody"></tbody></table>
+        </div>
+      </main>
+    </div>
+  </div>
+</div>
+
+<!-- basket drawer -->
+<div class="scrim" id="scrim"></div>
+<aside class="drawer glass-strong" id="basket">
+  <div class="dhead"><h3><svg class="ic" viewBox="0 0 24 24"><circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/><path d="M2 3h3l2.5 12h11"/><path d="M6 6h15l-2 7H7.5"/></svg> Basket</h3><button class="close" data-closeDrawer><svg class="ic sm" viewBox="0 0 24 24"><path d="M6 6 18 18M18 6 6 18"/></svg></button></div>
+  <div id="basketBody" style="flex:1"></div>
+  <div class="dfoot"><div class="total"><span>Est. total</span><span id="basketTotal">—</span></div><div class="transient"><svg class="ic xs" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg> Transient — becomes a deal card on send.</div><button class="cta" id="sendBtn"><svg class="ic sm" viewBox="0 0 24 24"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></svg> Send as deal card</button></div>
+</aside>
+
+<!-- modal -->
+<div class="mscrim" id="mscrim"><div class="modal glass-strong" id="modal"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const $=id=>document.getElementById(id);
+const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+const P={home:'<path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/>',connect:'<path d="M4 5h16v11H9l-5 4z"/>',discover:'<circle cx="12" cy="12" r="9"/><path d="m15 9-2 5-5 2 2-5z"/>',present:'<path d="M4 9h16v11H4z"/><path d="M3 9 5 4h14l2 5"/><path d="M9 20v-6h6v6"/>',buy:'<circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/><path d="M2 3h3l2.5 12h11"/><path d="M6 6h15l-2 7H7.5"/>',sell:'<path d="M3 3h8l9 9-8 8-9-9z"/><circle cx="7.5" cy="7.5" r="1.2"/>',trade:'<path d="M7 4 3 8l4 4"/><path d="M3 8h13"/><path d="m17 20 4-4-4-4"/><path d="M21 16H8"/>'};
+const SURF=[['home','Home',0],['connect','Connect',0],['discover','Discover',0],['present','Present',1],['buy','Buy',2],['sell','Sell',2],['trade','Trade',2]];
+$('nav').innerHTML=SURF.map(([k,l,s])=>`<div class="navitem ${s===1?'active':s===2?'soon':''}" data-surf="${l}" data-st="${s}">${s===1?'<span class="edge"></span>':''}<svg class="ic" viewBox="0 0 24 24">${P[k]}</svg>${l}</div>`).join('');
+$('nav').addEventListener('click',e=>{const n=e.target.closest('.navitem');if(!n)return;const st=n.dataset.st;if(st==='2'){toast(`${n.dataset.surf} — coming soon`);return;}if(n.dataset.surf!=='Present'){toast(`${n.dataset.surf} — only Present is in this prototype`);return;}goShop();});
+
+/* ===== catalogue (full product fields for the flip card) ===== */
+const G=['linear-gradient(135deg,#6a3,#284)','linear-gradient(135deg,#caa64a,#7a5a12)','linear-gradient(135deg,#7a6cd9,#3a2f8f)','linear-gradient(135deg,#4aa,#077)','linear-gradient(135deg,#b56,#723)','linear-gradient(135deg,#8a6,#365)','linear-gradient(135deg,#c47,#812)','linear-gradient(135deg,#e0a,#812)'];
+const LOCATIONS=['Berlin, DE','Frankfurt, DE','Manchester, UK','Amsterdam, NL','Barcelona, ES'];
+const PRODUCTS=[
+ {n:'GL Indica 22/1',cult:'Northern Lights',code:'PZN 17542830',flag:'🇨🇦',loc:'Berlin, DE',cat:'Flowers',dom:'Indica',grade:'AAA',img:'cannabis,bud',
+  thc:22,cbd:1,cbg:0.8,cbn:0.3,cultivator:'Aurora Farms',origin:'Canada',region:'British Columbia',parentA:'Afghani',parentB:'Thai',
+  irr:'Beta',pack:'10 g',packaging:'Glass jar',resealable:true,format:'10 g jar (also 1000 g bulk)',supplierCode:'GL-NL-22',
+  rrp:9.50,perG:7.40,priceShown:true,bundleAt:'100 g',bundlePrice:6.80,
+  batch:'GL-24-0001',mThc:21.6,mCbd:0.9,mCbg:0.7,mCbn:0.3,lod:8.2,aw:0.55,ready:'2025-01-10',expiry:'2026-12',shelf:18,
+  terps:[['Myrcene',0.92],['β-Caryophyllene',0.61],['Limonene',0.44],['Pinene',0.31],['Linalool',0.18]],coas:2,imgs:4,vids:1,docs:1},
+ {n:'GL Sativa 18/1',cult:'Sour Diesel',code:'PZN 17542847',flag:'🇵🇹',loc:'Berlin, DE',cat:'Flowers',dom:'Sativa',grade:'AA',img:'cannabis,flower',
+  thc:18,cbd:1,cbg:0.6,cbn:0.2,cultivator:'Iberia Bloom',origin:'Portugal',region:'Alentejo',parentA:'Chemdawg',parentB:'Skunk',
+  irr:'Not irradiated',pack:'10 g',packaging:'Resealable pouch',resealable:true,format:'10 g pouch',supplierCode:'GL-SD-18',
+  rrp:8.20,perG:6.90,priceShown:true,bundleAt:'100 g',bundlePrice:6.30,
+  batch:'GL-24-0002',mThc:17.8,mCbd:1.1,mCbg:0.5,mCbn:0.2,lod:9.1,aw:0.58,ready:'2025-02-02',expiry:'2027-01',shelf:18,
+  terps:[['Limonene',0.71],['Myrcene',0.40],['β-Caryophyllene',0.33],['Terpinolene',0.22],['Ocimene',0.14]],coas:2,imgs:5,vids:1,docs:0},
+ {n:'GL Hybrid 20/4',cult:'Gelato 41',code:'PZN 17542854',flag:'🇩🇪',loc:'Frankfurt, DE',cat:'Flowers',dom:'Indica-Dominant',grade:'AAA',img:'cannabis,jar',
+  thc:20,cbd:4,cbg:1.0,cbn:0.4,cultivator:'GreenLeaf In-house',origin:'Germany',region:'Brandenburg',parentA:'Sunset Sherbet',parentB:'Thin Mint GSC',
+  irr:'Beta',pack:'5 g',packaging:'Glass jar',resealable:true,format:'5 g jar',supplierCode:'GL-G41-20',
+  rrp:11.0,perG:null,priceShown:false,bundleAt:null,bundlePrice:null,
+  batch:'GL-24-0003',mThc:19.4,mCbd:4.2,mCbg:0.9,mCbn:0.4,lod:7.6,aw:0.53,ready:'2025-03-15',expiry:'2027-02',shelf:24,
+  terps:[['β-Caryophyllene',0.58],['Limonene',0.49],['Linalool',0.30],['Humulene',0.20],['Myrcene',0.16]],coas:1,imgs:3,vids:0,docs:1},
+ {n:'GL CBD 1/12',cult:'Harlequin',code:'PZN 17542861',flag:'🇪🇸',loc:'Frankfurt, DE',cat:'Flowers',dom:'Sativa',grade:'AA',img:'cannabis,plant',
+  thc:1,cbd:12,cbg:0.5,cbn:0.1,cultivator:'Andalucía Greens',origin:'Spain',region:'Andalusia',parentA:'Colombian Gold',parentB:'Swiss Sativa',
+  irr:'Not irradiated',pack:'10 g',packaging:'Resealable pouch',resealable:true,format:'10 g pouch',supplierCode:'GL-HQ-12',
+  rrp:6.40,perG:5.20,priceShown:true,bundleAt:'100 g',bundlePrice:4.80,
+  batch:'GL-24-0004',mThc:0.9,mCbd:11.6,mCbg:0.4,mCbn:0.1,lod:8.8,aw:0.56,ready:'2025-02-20',expiry:'2027-01',shelf:18,
+  terps:[['Myrcene',0.54],['Pinene',0.38],['β-Caryophyllene',0.29],['Limonene',0.20],['Linalool',0.12]],coas:2,imgs:3,vids:0,docs:0},
+ {n:'GL Live Resin',cult:'Gelato 41',code:'PZN 17542878',flag:'🇩🇪',loc:'Berlin, DE',cat:'Extracts',dom:'Hybrid',grade:'AAA',img:'cannabis,extract',
+  thc:78,cbd:2,cbg:2.0,cbn:0.5,cultivator:'GreenLeaf In-house',origin:'Germany',region:'Brandenburg',parentA:'Sunset Sherbet',parentB:'Thin Mint GSC',
+  irr:'n/a',pack:'1 g',packaging:'Glass concentrate jar',resealable:true,format:'1 g jar',supplierCode:'GL-LR-78',
+  rrp:38.0,perG:32.0,priceShown:true,bundleAt:'50 g',bundlePrice:29.0,
+  batch:'GL-24-0005',mThc:76.4,mCbd:1.8,mCbg:1.9,mCbn:0.5,lod:0,aw:0,ready:'2025-04-01',expiry:'2027-03',shelf:24,
+  terps:[['Limonene',2.10],['β-Caryophyllene',1.80],['Linalool',1.10],['Myrcene',0.90],['Humulene',0.55]],coas:2,imgs:4,vids:1,docs:1},
+ {n:'GL Hybrid 21/2',cult:'Wedding Cake',code:'PZN 17542885',flag:'🇬🇧',loc:'Manchester, UK',cat:'Flowers',dom:'Indica-Dominant',grade:'AAA',img:'cannabis,bud',
+  thc:21,cbd:2,cbg:0.9,cbn:0.3,cultivator:'Pennine Cultivation',origin:'UK',region:'Kent',parentA:'Triangle Kush',parentB:'Animal Mints',
+  irr:'Not irradiated',pack:'10 g',packaging:'Glass jar',resealable:true,format:'10 g jar',supplierCode:'GL-WC-21',
+  rrp:9.80,perG:8.10,priceShown:true,bundleAt:'100 g',bundlePrice:7.50,
+  batch:'GL-24-0006',mThc:20.6,mCbd:2.1,mCbg:0.8,mCbn:0.3,lod:8.0,aw:0.54,ready:'2025-03-05',expiry:'2027-02',shelf:18,
+  terps:[['β-Caryophyllene',0.74],['Limonene',0.52],['Linalool',0.41],['Humulene',0.24],['Myrcene',0.19]],coas:2,imgs:5,vids:0,docs:1},
+ {n:'GL Sativa 19/1',cult:'Jack Herer',code:'PZN 17542892',flag:'🇳🇱',loc:'Amsterdam, NL',cat:'Flowers',dom:'Sativa',grade:'AA',img:'cannabis,flower',
+  thc:19,cbd:1,cbg:0.7,cbn:0.2,cultivator:'Lowlands Botanics',origin:'Netherlands',region:'Utrecht',parentA:'Haze',parentB:'Northern Lights #5',
+  irr:'Beta',pack:'10 g',packaging:'Resealable pouch',resealable:true,format:'10 g pouch',supplierCode:'GL-JH-19',
+  rrp:8.60,perG:null,priceShown:false,bundleAt:null,bundlePrice:null,
+  batch:'GL-24-0007',mThc:18.6,mCbd:1.0,mCbg:0.6,mCbn:0.2,lod:8.9,aw:0.57,ready:'2025-02-12',expiry:'2027-01',shelf:18,
+  terps:[['Terpinolene',0.66],['Limonene',0.44],['Myrcene',0.33],['Pinene',0.27],['Ocimene',0.15]],coas:1,imgs:3,vids:0,docs:0},
+ {n:'GL CBD Oil 2/20',cult:'Cannatonic',code:'PZN 17542908',flag:'🇪🇸',loc:'Barcelona, ES',cat:'Extracts',dom:'Hybrid',grade:'AA',img:'cannabis,oil',
+  thc:2,cbd:20,cbg:1.2,cbn:0.2,cultivator:'Catalonia Labs',origin:'Spain',region:'Catalonia',parentA:'MK Ultra',parentB:'G13 Haze',
+  irr:'n/a',pack:'10 ml',packaging:'Dropper bottle',resealable:true,format:'10 ml bottle',supplierCode:'GL-CT-20',
+  rrp:7.20,perG:5.80,priceShown:true,bundleAt:'20 units',bundlePrice:5.30,
+  batch:'GL-24-0008',mThc:1.9,mCbd:19.4,mCbg:1.1,mCbn:0.2,lod:0,aw:0,ready:'2025-03-22',expiry:'2027-03',shelf:24,
+  terps:[['Myrcene',0.48],['Pinene',0.36],['Linalool',0.30],['β-Caryophyllene',0.22],['Limonene',0.14]],coas:2,imgs:2,vids:0,docs:0},
+];
+PRODUCTS.forEach((p,i)=>{p.grad=G[i%G.length];if(p.profile===undefined)p.profile=true;});
+PRODUCTS[6].profile=false; // Jack Herer — kept OFF the public profile: sellers see it (marked Hidden), buyers don't.
+const COMPANY='GreenLeaf Pharma GmbH';
+const eur=n=>n.toFixed(2).replace('.',',')+'€';
+const C=v=>v==null?'n.a.':String(v).replace('.',',');
+const yn=b=>b?'Yes':'No';
+const packG=p=>parseInt(p.pack)||1;
+// photo: local img/pN.jpg → loremflickr → gradient (the .pc-photo background)
+const photo=(p,i)=>`<img src="img/p${(i%3)+1}.jpg" data-fb="https://loremflickr.com/640/400/${p.img}?lock=${i+5}" onerror="if(this.dataset.fb){this.src=this.dataset.fb;this.dataset.fb='';}else{this.style.display='none';}" alt="">`;
+
+/* location dropdown (single-select, re-contexts the shop) */
+let loc='All';
+function locCount(id){return PRODUCTS.filter(p=>id==='All'||p.loc===id).length;}
+function renderLocMenu(){
+  const opts=[['All','All locations'],...LOCATIONS.map(l=>[l,l])];
+  $('locMenu').innerHTML=`<div class="grp">Shop location</div>`+opts.map(([id,lab])=>`<div class="opt ${loc===id?'sel':''}" data-loc="${id}"><span class="radio"></span><span style="flex:1">${lab}</span><span style="color:var(--ink-muted);font-size:11px">${locCount(id)}</span></div>`).join('');
+}
+function applyLocation(){
+  const lab=loc==='All'?'All locations':loc; $('locLabel').textContent=lab;
+  $('locFlag').textContent=`📍 ${loc==='All'?'All locations':loc.split(',')[0]+' shop'}`;
+  $('coverTag').textContent= loc==='All'?'EU-GMP medical cannabis · cultivator & wholesaler':`EU-GMP medical cannabis · viewing the ${loc.split(',')[0]} shop`;
+  renderRibbon();
+}
+$('locBtn').addEventListener('click',e=>{e.stopPropagation();$('filterMenu').classList.remove('show');$('locMenu').classList.toggle('show');});
+$('locMenu').addEventListener('click',e=>{e.stopPropagation();const o=e.target.closest('[data-loc]');if(!o)return;loc=o.dataset.loc;$('locMenu').classList.remove('show');renderLocMenu();applyLocation();renderGrid();});
+
+/* ===== slim info ribbon — one section opens at a time, panel floats above ===== */
+const WH={'All':['Berlin DE (HQ)','Frankfurt DE','Manchester UK','Amsterdam NL','Barcelona ES']};
+function whFor(){return loc==='All'?WH.All:[loc+(loc.startsWith('Berlin')?' (HQ)':'')];}
+function ribbonData(){const w=whFor();return [
+ {key:'loc',ico:'<path d="M12 21s-7-5-7-11a7 7 0 0 1 14 0c0 6-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/>',lab:'Locations',val:`${w.length} site${w.length>1?'s':''}`,title:'Warehouses & addresses',rows:[['HQ','Hauptstraße 90, Berlin DE'],...w.map((x,i)=>[`Warehouse ${i+1}`,x])],link:'Presentation DE (private)'},
+ {key:'links',ico:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',lab:'Links & pages',val:'5 links',title:'Websites, socials & catalogue',rows:[['Website','greenleaf-pharma.de'],['LinkedIn','/greenleaf'],['Instagram','@greenleaf_cannabis'],['X','@greenleafcb']],link:'Product catalogue (PDF)'},
+ {key:'about',ico:'<path d="M5 3h14v18l-7-4-7 4z"/>',lab:'About & certs',val:'EU-GMP · since 2019',title:'Company & certifications',rows:[['Founded','2019, Berlin'],['Certs','EU-GMP · GACP · ISO 9001'],['Team','42 people'],['Specialty','Flower + extracts']],link:'Company one-pager (PDF)'},
+];}
+let openSeg=null;
+function renderRibbon(){const data=ribbonData();$('ribbon').innerHTML=data.map(d=>`<div class="rseg ${openSeg===d.key?'on':''}" data-seg="${d.key}"><span class="ico"><svg class="ic sm" viewBox="0 0 24 24">${d.ico}</svg></span><div style="min-width:0"><div class="lab">${d.lab}</div><div class="val">${d.val}</div></div><svg class="ic sm chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></div>`).join('')+`<div class="rpanel" id="rpanel"></div>`;if(openSeg)paintPanel(data.find(x=>x.key===openSeg));}
+function paintPanel(d){const p=$('rpanel');if(!d)return;p.innerHTML=`<button class="pclose" data-rclose><svg class="ic xs" viewBox="0 0 24 24"><path d="M6 6 18 18M18 6 6 18"/></svg></button><p class="ptitle">${d.title}</p><div class="rgrid">${d.rows.map(([k,v])=>`<div class="irow"><span class="k">${k}</span><span class="v">${v}</span></div>`).join('')}</div><a class="pres-link"><svg class="ic xs" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/></svg> ${d.link}</a>`;p.classList.add('show');}
+// stopPropagation: clicking inside the ribbon must not reach the document close-handler (which would
+// instantly re-close the section, because re-rendering detaches the clicked element).
+$('ribbon').addEventListener('click',e=>{e.stopPropagation();if(e.target.closest('[data-rclose]')){openSeg=null;renderRibbon();return;}const seg=e.target.closest('[data-seg]');if(!seg)return;openSeg=openSeg===seg.dataset.seg?null:seg.dataset.seg;renderRibbon();});
+document.addEventListener('click',()=>{if(openSeg){openSeg=null;renderRibbon();}});
+
+/* product filters */
+const CATS=['Flowers','Extracts'],STRAINS=['Indica','Sativa','Hybrid','CBD'];
+const sel={cat:new Set(),strain:new Set()};
+function renderFilterMenu(){const m=$('filterMenu');const o=(g,v)=>`<div class="opt ${sel[g].has(v)?'sel':''}" data-g="${g}" data-v="${v}"><span class="box"><svg class="ic xs" viewBox="0 0 24 24"><path d="m5 12 5 5 9-11"/></svg></span>${v}</div>`;m.innerHTML=`<div class="grp">Category</div>${CATS.map(v=>o('cat',v)).join('')}<div class="grp">Strain</div>${STRAINS.map(v=>o('strain',v)).join('')}`;const n=sel.cat.size+sel.strain.size,c=$('filterCnt');c.style.display=n?'grid':'none';c.textContent=n;}
+$('filterBtn').addEventListener('click',e=>{e.stopPropagation();$('locMenu').classList.remove('show');$('filterMenu').classList.toggle('show');});
+$('filterMenu').addEventListener('click',e=>{e.stopPropagation();const o=e.target.closest('[data-g]');if(!o)return;const g=o.dataset.g,v=o.dataset.v;sel[g].has(v)?sel[g].delete(v):sel[g].add(v);renderFilterMenu();renderGrid();});
+document.addEventListener('click',()=>{$('filterMenu').classList.remove('show');$('locMenu').classList.remove('show');});
+function matchStrain(p){if(!sel.strain.size)return true;for(const s of sel.strain){if(s==='CBD'&&p.cbd>=10)return true;if(p.dom.includes(s))return true;}return false;}
+function visible(){return PRODUCTS.map((p,i)=>({p,i})).filter(({p})=>(role!=='buyer'||p.profile!==false)&&(loc==='All'||p.loc===loc)&&(!sel.cat.size||sel.cat.has(p.cat))&&matchStrain(p));}
+
+/* ===== product grid — the FINALIZED flip card ===== */
+const gridEl=$('grid');
+function front(p,i){
+  const price=p.priceShown
+    ? `<div class="pc-priceline"><span class="pc-price">${eur(p.perG)}<small>/g</small></span><span class="pc-bundle">${p.bundleAt?`≥${p.bundleAt} · ${eur(p.bundlePrice)}/g`:''}</span></div><div style="margin-top:2px;font-size:10.5px;color:var(--ink-faint)">UVP <span class="pc-rrp">${eur(p.rrp)}/g</span></div>`
+    : `<div class="pc-priceline"><span class="pc-reqprice">Price on request</span></div>`;
+  const rows=[
+    ['Dominance',p.dom],['Cultivator',p.cultivator],['Origin',`${p.flag} ${p.origin}`],['Region',p.region],
+    ['Lineage',`${p.parentA} × ${p.parentB}`],['Irradiation',p.irr],['Format',p.format],
+    ['Packaging',p.packaging],['Resealable',yn(p.resealable)],['Supplier code',p.supplierCode],
+  ];
+  return `<div class="pc-face pc-front">
+    <div class="pc-photo" style="background:${p.grad}">${photo(p,i)}<div class="pc-sheen"></div>
+      <div class="pc-badges"><span class="pc-chiplet">${p.dom}</span><span class="pc-chiplet">${p.pack}</span><span class="pc-chiplet">${p.loc.split(',')[0]}</span>${p.profile===false&&role!=='buyer'?'<span class="pc-chiplet pc-hidden">Hidden</span>':''}</div>
+      <span class="pc-grade"><svg class="ic xs" viewBox="0 0 24 24"><path d="m12 3 2.5 5.5L20 9l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-.5z"/></svg> ${p.grade}</span>
+      <button class="pc-heart" data-heart><svg class="ic xs" viewBox="0 0 24 24"><path d="M12 20s-7-4.5-7-10a4 4 0 0 1 7-2 4 4 0 0 1 7 2c0 5.5-7 10-7 10z"/></svg></button>
+      <div class="pc-dots"><span class="on"></span><span></span><span></span><span></span></div>
+      <button class="pc-flipbtn" data-flip><svg class="ic xs" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 7"/><path d="M3 4v3h3"/></svg> Documents</button>
+    </div>
+    <div class="pc-fhead"><div><div class="pc-name">${p.n}</div><div class="pc-cult">${p.cult}</div><div class="pc-code">${p.code}</div></div><span class="pc-flag">${p.flag}</span></div>
+    <div class="pc-quad"><div class="c"><b>${C(p.thc)}</b><small>THC%</small></div><div class="c"><b>${C(p.cbd)}</b><small>CBD%</small></div><div class="c"><b>${C(p.cbg)}</b><small>CBG%</small></div><div class="c"><b>${C(p.cbn)}</b><small>CBN%</small></div></div>
+    <div class="pc-specs">${rows.map(([k,v])=>`<div class="pc-srow"><span class="k">${k}</span><span class="v">${v}</span></div>`).join('')}</div>
+    <div class="pc-ffoot">${price}${role==='buyer'
+      ? (p.priceShown
+          ? `<div class="pc-addrow"><div class="pc-stepper"><button data-step="-1"><svg class="ic xs" viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button><span class="pc-q">1</span><button data-step="1"><svg class="ic xs" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></div><button class="pc-add" data-add><svg class="ic xs" viewBox="0 0 24 24"><circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/><path d="M2 3h3l2.5 12h11"/><path d="M6 6h15l-2 7H7.5"/></svg> Add to basket</button></div>`
+          : `<button class="pc-reqbtn" data-reqprice><svg class="ic xs" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8M8 13h5"/></svg> Request pricing</button>`)
+      : `<div class="pc-addrow"><button class="pc-bopen" data-bopen><span class="bopen-lbl">Select lots</span> ▾</button><button class="pc-add dim" data-badd><svg class="ic xs" viewBox="0 0 24 24"><circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/><path d="M2 3h3l2.5 12h11"/><path d="M6 6h15l-2 7H7.5"/></svg> Add to basket</button></div>`}</div>${role!=='buyer'?`<div class="pc-bpanel" data-bpanel><div class="pc-bphead"><span>Choose lots &amp; quantities</span><span class="pc-bptotal"><b>0</b> packs</span><button data-bclose><svg class="ic xs" viewBox="0 0 24 24"><path d="M6 6 18 18M18 6 6 18"/></svg></button></div><div class="pc-bplist">${batchesFor(p).map(b=>`<div class="pc-bprow" data-lot="${b.no}"><div class="pc-bpinfo"><div class="sd-bno">${b.no}${b.current?' <span class="sd-cur">current</span>':''}</div><div class="sd-bmeta">THC ${C(b.thc)}% · CBD ${C(b.cbd)}% · exp ${b.expiry} · ${b.kg} kg</div></div><div class="ab-step"><button data-bdec><svg class="ic xs" viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button><span class="pc-bpq">0</span><button data-binc><svg class="ic xs" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></div></div>`).join('')}</div></div>`:''}
+  </div>`;
+}
+function back(p){
+  const coaFiles=Array.from({length:p.coas},(_,i)=>[i===0?'COA — current batch':`COA — batch ${String(p.coas-i).padStart(4,'0')}`,'PDF']);
+  const folders=[
+    ['COAs','Certificates of Analysis',coaFiles],
+    ['Lab results','Potency · microbial · pesticides',[['Cannabinoid potency report','PDF'],['Microbial & heavy-metal screen','PDF'],['Pesticide & mycotoxin screen','PDF']]],
+    ['Certificates & specs','GMP & product spec',[['EU-GMP certificate','PDF'],['Product specification sheet','PDF']]],
+  ];
+  const FOLD='<path d="M3 7a2 2 0 0 1 2-2h3.9l1.6 2H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>';
+  const FILEIC='<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/>';
+  const DL='<path d="M12 4v9m-4-4 4 4 4-4"/><path d="M5 20h14"/>';
+  const foldersHTML=folders.map(([name,meta,files])=>`<div class="pc-folder" data-folder><button class="pc-folderhd"><span class="di-ic"><svg class="ic sm" viewBox="0 0 24 24">${FOLD}</svg></span><span class="di-tx"><b>${name}</b><small>${meta}</small></span><span class="fcount">${files.length}</span><svg class="ic xs fchev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></button><div class="pc-files">${files.map(([fn,ft])=>`<button class="pc-fileitem" data-doc><svg class="ic xs" viewBox="0 0 24 24">${FILEIC}</svg><span class="ff">${fn}</span><small>${ft}</small><svg class="ic xs di-go" viewBox="0 0 24 24">${DL}</svg></button>`).join('')}</div></div>`).join('');
+  const videoHTML=p.vids?`<button class="pc-docitem" data-doc><span class="di-ic"><svg class="ic sm" viewBox="0 0 24 24"><path d="m5 3 14 9-14 9z"/></svg></span><span class="di-tx"><b>Product walkthrough</b><small>Video</small></span><svg class="ic xs di-go" viewBox="0 0 24 24"><path d="m10 6 6 6-6 6"/></svg></button>`:'';
+  return `<div class="pc-face pc-back">
+    <div class="pc-bhead"><svg class="ic sm" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M9 13h6M9 17h4"/></svg><b>Documents &amp; lab reports</b></div>
+    <div class="pc-bscroll">
+      <div class="pc-folders">${foldersHTML}${videoHTML}</div>
+      <div class="pc-sella"><div class="t"><svg class="ic xs" viewBox="0 0 24 24"><path d="M12 2 4 7v6c0 5 3.5 7.5 8 9 4.5-1.5 8-4 8-9V7z"/></svg> Sella · Marktvergleich</div><div class="stub">Neutral market comparison — available on request, no figure shown (R1)</div></div>
+    </div>
+    <div class="pc-bfoot"><button class="pc-flipback" data-flip><svg class="ic xs" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 1 3 6.7L3 17"/><path d="M3 20v-3h3"/></svg> Back to front</button></div>
+  </div>`;
+}
+function cardHTML(p,idx){return `<div class="pc-card" data-idx="${idx}"><div class="pc-tilt"><div class="pc-inner">${front(p,idx)}${back(p)}</div></div></div>`;}
+function renderGrid(){const v=visible();gridEl.innerHTML=v.map(({p,i})=>cardHTML(p,i)).join('');$('count').textContent=`${v.length} product${v.length===1?'':'s'}`;}
+gridEl.addEventListener('click',e=>{const card=e.target.closest('.pc-card');if(!card)return;const idx=+card.dataset.idx;
+  if(e.target.closest('[data-step]')){const q=card.querySelector('.pc-q');q.textContent=Math.max(1,+q.textContent+(+e.target.closest('[data-step]').dataset.step));return;}
+  if(e.target.closest('[data-add]')){addToBasket(idx,+card.querySelector('.pc-q').textContent,card,null);return;} // buyer: no batch
+  if(e.target.closest('[data-reqprice]')){openReqPricing(idx);return;} // buyer: unpriced product
+  if(e.target.closest('[data-bopen]')){card.querySelector('[data-bpanel]').classList.toggle('show');return;}
+  if(e.target.closest('[data-bclose]')){card.querySelector('[data-bpanel]').classList.remove('show');return;}
+  if(e.target.closest('[data-binc]')||e.target.closest('[data-bdec]')){const row=e.target.closest('.pc-bprow'),sp=row.querySelector('.pc-bpq'),d=e.target.closest('[data-binc]')?1:-1;sp.textContent=Math.max(0,+sp.textContent+d);bpRefresh(card);return;}
+  if(e.target.closest('[data-badd]')){const pn=card.querySelector('[data-bpanel]'),picks=[];pn.querySelectorAll('.pc-bprow').forEach(r=>{const q=+r.querySelector('.pc-bpq').textContent;if(q>0)picks.push([r.dataset.lot,q]);});if(!picks.length)return;picks.forEach(([no,q],i)=>addToBasket(idx,q,i===0?card:null,no));pn.classList.remove('show');pn.querySelectorAll('.pc-bpq').forEach(s=>s.textContent='0');bpRefresh(card);return;}
+  if(e.target.closest('[data-heart]')){e.target.closest('[data-heart]').classList.toggle('on');return;}
+  if(e.target.closest('[data-doc]')){toast('Opens document (mock)');return;}
+  {const f=e.target.closest('[data-folder]');if(f){f.classList.toggle('open');return;}}
+  if(e.target.closest('[data-viewpres]')){toast('Opens the full Present page (mock)');return;}
+  if(e.target.closest('[data-bpanel]'))return; // clicks inside the batch panel don't flip the card
+  card.classList.toggle('flip');});
+// recompute the batch panel: active rows + total in the panel header, the dropdown label, and the separate Add button
+function bpRefresh(card){const panel=card.querySelector('[data-bpanel]');let total=0,lots=0;panel.querySelectorAll('.pc-bprow').forEach(r=>{const q=+r.querySelector('.pc-bpq').textContent;r.classList.toggle('on',q>0);if(q>0)lots++;total+=q;});panel.querySelector('.pc-bptotal b').textContent=total;card.querySelector('[data-badd]').classList.toggle('dim',total===0);const lbl=card.querySelector('.bopen-lbl');if(lbl)lbl.textContent=total?`${lots} lot${lots>1?'s':''} · ${total}`:'Select lots';}
+// collectible tilt + sheen (skipped when reduced-motion is on)
+if(!reduce){
+  gridEl.addEventListener('mousemove',e=>{const c=e.target.closest('.pc-card');if(!c)return;const t=c.querySelector('.pc-tilt'),r=c.getBoundingClientRect();const px=(e.clientX-r.left)/r.width,py=(e.clientY-r.top)/r.height;if(!c.classList.contains('flip'))t.style.transform=`rotateY(${(px-.5)*6}deg) rotateX(${(.5-py)*6}deg)`;c.querySelectorAll('.pc-sheen').forEach(s=>{s.style.setProperty('--px',px*100+'%');s.style.setProperty('--py',py*100+'%');});});
+  gridEl.addEventListener('mouseout',e=>{const c=e.target.closest('.pc-card');if(c&&!c.contains(e.relatedTarget))c.querySelector('.pc-tilt').style.transform='';});
+}
+
+/* basket (per-company, transient) */
+const basket={}; // basket[COMPANY] = { [key]: {idx, batch, qty} }  — key = product (buyer) or product@batch (seller)
+function lineKey(idx,batch){return batch?`${idx}@${batch}`:`${idx}`;}
+function addToBasket(idx,qty,card,batch){basket[COMPANY]=basket[COMPANY]||{};const k=lineKey(idx,batch||null);const ex=basket[COMPANY][k];basket[COMPANY][k]={idx,batch:batch||null,qty:(ex?ex.qty:0)+qty};renderBasket();bumpBadge();if(card)flyToCart(card);toast(`Added ${qty} × ${PRODUCTS[idx].n}${batch?' · '+batch:''}`);}
+function count(){let c=0;for(const co in basket)for(const k in basket[co])c+=basket[co][k].qty;return c;}
+function bumpBadge(){const b=$('basketCount');b.classList.remove('bump');void b.offsetWidth;b.classList.add('bump');}
+function flyToCart(card){if(reduce)return;const img=card.querySelector('.pc-photo'),cart=$('basketBtn');if(!img)return;const a=img.getBoundingClientRect(),b=cart.getBoundingClientRect();const g=document.createElement('div');g.className='fly';g.style.cssText+=`left:${a.left}px;top:${a.top}px;width:${a.width}px;height:${a.height}px;background:${PRODUCTS[+card.dataset.idx].grad}`;document.body.appendChild(g);requestAnimationFrame(()=>{g.style.left=b.left+'px';g.style.top=b.top+'px';g.style.width='28px';g.style.height='28px';g.style.opacity='0';});setTimeout(()=>g.remove(),700);}
+function renderBasket(){const body=$('basketBody'),cnt=count(),badge=$('basketCount');badge.style.display=cnt?'grid':'none';badge.textContent=cnt;let total=0;const cos=Object.keys(basket).filter(co=>Object.keys(basket[co]).length);if(!cos.length){body.innerHTML='<div class="empty">Your basket is empty.<br>Add products to build a deal card.</div>';$('basketTotal').textContent='—';return;}body.innerHTML=cos.map(co=>{const lines=Object.entries(basket[co]).map(([k,L])=>{const p=PRODUCTS[L.idx];if(p.priceShown)total+=L.qty*packG(p)*p.perG;return `<div class="line" data-key="${k}"><div class="nm"><b>${p.n}</b><small>${p.cult} · ${L.qty}×${p.pack}${L.batch?` · <span style="color:var(--brand-deep);font-weight:700">Lot ${L.batch}</span>`:''}</small></div><div class="q"><button data-bstep="-1"><svg class="ic xs" viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button>${L.qty}<button data-bstep="1"><svg class="ic xs" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></div><button class="x" data-brm><svg class="ic xs" viewBox="0 0 24 24"><path d="M6 6 18 18M18 6 6 18"/></svg></button></div>`;}).join('');return `<div class="grp"><div class="gh"><span class="av">GL</span> ${co}</div>${lines}</div>`;}).join('');$('basketTotal').textContent=total?eur(total):'on request';}
+$('basketBody').addEventListener('click',e=>{const line=e.target.closest('.line');if(!line)return;const k=line.dataset.key;if(e.target.closest('[data-brm]'))delete basket[COMPANY][k];const s=e.target.closest('[data-bstep]');if(s&&basket[COMPANY][k])basket[COMPANY][k].qty=Math.max(1,basket[COMPANY][k].qty+(+s.dataset.bstep));renderBasket();});
+const scrim=$('scrim');
+function openDrawer(d){d.classList.add('show');scrim.classList.add('show');}
+function closeDrawers(){document.querySelectorAll('.drawer').forEach(x=>x.classList.remove('show'));scrim.classList.remove('show');}
+scrim.addEventListener('click',closeDrawers);
+document.querySelectorAll('[data-closeDrawer]').forEach(b=>b.onclick=closeDrawers);
+$('basketBtn').addEventListener('click',()=>openDrawer($('basket')));
+/* ----- seller send flow: pick a batch per line + a recipient ----- */
+function batchesFor(p){const stem=p.batch.slice(0,-2);return [
+  {no:p.batch,thc:p.mThc,cbd:p.mCbd,expiry:p.expiry,kg:42,current:true},
+  {no:stem+'07',thc:+(p.mThc-0.9).toFixed(1),cbd:p.mCbd,expiry:'2026-11',kg:18},
+  {no:stem+'05',thc:+(p.mThc+0.6).toFixed(1),cbd:p.mCbd,expiry:'2026-09',kg:6},
+];}
+/* seller adds a product → allocate packs PER batch (lot) at add-time; an order can be split across lots */
+function openAddBatch(idx,qty,card){
+  const p=PRODUCTS[idx],bs=batchesFor(p);const alloc={};bs.forEach((b,i)=>alloc[b.no]=i===0?(qty||1):0);
+  const render=()=>{
+    const total=Object.values(alloc).reduce((a,n)=>a+n,0),lots=Object.values(alloc).filter(n=>n>0).length;
+    $('modal').innerHTML=`<div class="mtop"><h3>Add to basket</h3><button class="mclose" data-mclose><svg class="ic sm" viewBox="0 0 24 24"><path d="M6 6 18 18M18 6 6 18"/></svg></button></div>
+      <div class="msub"><b>${p.n}</b> · ${p.cult} — choose how many packs from each batch (lot). You can <b>split one order across lots</b>. Buyers never see this; each lot's measured values freeze onto its own deal line.</div>
+      <div class="sd-batchlabel">Batches (lots) — packs of ${p.pack}</div>
+      <div class="sd-batches">${bs.map(b=>`<div class="ab-batch${alloc[b.no]>0?' active':''}"><div class="ab-binfo"><div class="sd-bno">${b.no}${b.current?' <span class="sd-cur">current</span>':''}</div><div class="sd-bmeta">THC ${C(b.thc)}% · CBD ${C(b.cbd)}% · exp ${b.expiry} · ${b.kg} kg available</div></div><div class="ab-step"><button data-dec="${b.no}"><svg class="ic xs" viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button><span>${alloc[b.no]}</span><button data-inc="${b.no}"><svg class="ic xs" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></div></div>`).join('')}</div>
+      <div class="ab-total">Total <b>${total}</b> pack${total===1?'':'s'}${lots>1?` across ${lots} lots`:''}</div>
+      <div class="mactions"><button class="cta" id="abAdd"${total?'':' disabled'}><svg class="ic sm" viewBox="0 0 24 24"><circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/><path d="M2 3h3l2.5 12h11"/><path d="M6 6h15l-2 7H7.5"/></svg> Add ${total||''} to basket</button><button class="ghost" data-mclose>Cancel</button></div>`;
+    $('modal').querySelectorAll('[data-inc]').forEach(b=>b.onclick=()=>{alloc[b.dataset.inc]=(alloc[b.dataset.inc]||0)+1;render();});
+    $('modal').querySelectorAll('[data-dec]').forEach(b=>b.onclick=()=>{alloc[b.dataset.dec]=Math.max(0,(alloc[b.dataset.dec]||0)-1);render();});
+    const add=$('abAdd');if(add)add.onclick=()=>{const picks=Object.entries(alloc).filter(([,n])=>n>0);if(!picks.length)return;closeModal();picks.forEach(([no,n],i)=>addToBasket(idx,n,i===0?card:null,no));};
+  };
+  render();$('mscrim').classList.add('show');mMenu.classList.remove('show');acctPop.classList.remove('show');
+}
+/* seller send → batch already chosen per line; just pick the recipient */
+function openSendDeal(){
+  const lines=Object.entries(basket[COMPANY]||{});
+  if(!lines.length){toast('Basket is empty');return;}
+  const contacts=['Apotheke Nord (Berlin)','MediCanna GmbH','GrünPharm AG','Cologne Health Pharmacy'];
+  const lineHTML=lines.map(([k,L])=>{const p=PRODUCTS[L.idx];
+    return `<div class="sd-line"><div class="sd-prod"><div class="sd-th" style="background:${p.grad}"></div><div><b>${p.n}</b><small>${L.qty} × ${p.pack} · ${p.cult}</small></div></div><div class="sd-chosen"><svg class="ic xs" viewBox="0 0 24 24"><path d="m5 12 5 5 9-11"/></svg> Lot <b>${L.batch||'—'}</b> · measured values freeze onto the deal</div></div>`;}).join('');
+  $('modal').innerHTML=`<div class="mtop"><h3>Send deal card</h3><button class="mclose" data-mclose><svg class="ic sm" viewBox="0 0 24 24"><path d="M6 6 18 18M18 6 6 18"/></svg></button></div>
+    <div class="msub">A seller <b>offer</b> from your shop — the batch for each product was chosen when you added it. Pick the customer to send to.</div>
+    <div class="field"><label>Send to — connected customer</label><select id="sdContact">${contacts.map(c=>`<option>${c}</option>`).join('')}</select></div>
+    <div class="sd-lines">${lineHTML}</div>
+    <div class="field"><label>Message (optional)</label><textarea rows="2" placeholder="Hi — here's an offer for you…"></textarea></div>
+    <div class="infonote">Becomes a deal <b>offer</b> (source: shop), handing off to Ayush's deal basket + <code>createDeal</code> with each line's chosen batch.</div>
+    <div class="mactions"><button class="cta" id="sdSend"><svg class="ic sm" viewBox="0 0 24 24"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></svg> Send offer</button><button class="ghost" data-mclose>Cancel</button></div>`;
+  $('mscrim').classList.add('show');mMenu.classList.remove('show');acctPop.classList.remove('show');
+  $('sdSend').onclick=()=>{const to=$('sdContact').value;closeModal();closeDrawers();basket[COMPANY]={};renderBasket();toast('→ Offer sent to '+to+' (mock)');};
+}
+/* buyer: request pricing for an unpriced product (lands in the seller's Connect inbox) */
+function openReqPricing(idx){const p=PRODUCTS[idx];
+  $('modal').innerHTML=`<div class="mtop"><h3>Request pricing</h3><button class="mclose" data-mclose><svg class="ic sm" viewBox="0 0 24 24"><path d="M6 6 18 18M18 6 6 18"/></svg></button></div>
+    <div class="msub"><b>${p.n}</b> · ${p.cult} — ask ${COMPANY} for a price.</div>
+    <div class="field"><label>Message (optional)</label><textarea rows="3" placeholder="Hi — could you send pricing for ${p.n}? Expected volume…"></textarea></div>
+    <div class="infonote">Sends a <b>pricing request</b> to ${COMPANY} — it lands in their Connect inbox; accepting connects you and opens a chat.</div>
+    <div class="mactions"><button class="cta" id="rpSend"><svg class="ic sm" viewBox="0 0 24 24"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></svg> Send request</button><button class="ghost" data-mclose>Cancel</button></div>`;
+  $('mscrim').classList.add('show');mMenu.classList.remove('show');acctPop.classList.remove('show');
+  $('rpSend').onclick=()=>{closeModal();toast('→ Pricing request sent to '+COMPANY+' (mock)');};
+}
+/* buyer: confirm + send the basket as a deal ORDER (no batch; seller assigns the lot on response) */
+function openSendOrder(){
+  const lines=Object.entries(basket[COMPANY]||{});
+  if(!lines.length){toast('Basket is empty');return;}
+  const lineHTML=lines.map(([k,L])=>{const p=PRODUCTS[L.idx];return `<div class="sd-line"><div class="sd-prod"><div class="sd-th" style="background:${p.grad}"></div><div><b>${p.n}</b><small>${L.qty} × ${p.pack} · ${p.cult}</small></div></div></div>`;}).join('');
+  $('modal').innerHTML=`<div class="mtop"><h3>Send order</h3><button class="mclose" data-mclose><svg class="ic sm" viewBox="0 0 24 24"><path d="M6 6 18 18M18 6 6 18"/></svg></button></div>
+    <div class="msub">An <b>order</b> to ${COMPANY} — they confirm availability and assign the batch when they respond.</div>
+    <div class="field"><label>To</label><div class="sd-to"><span class="av">GL</span> ${COMPANY} <span class="sd-conn">Connected</span></div></div>
+    <div class="sd-lines">${lineHTML}</div>
+    <div class="field"><label>Message (optional)</label><textarea rows="2" placeholder="Hi — we'd like to order the following…"></textarea></div>
+    <div class="infonote">Becomes a deal <b>order</b> (source: shop) to ${COMPANY}, with <b>no batch</b> — the seller picks the lot when they respond. Hands off to Ayush's deal basket + <code>createDeal</code>.</div>
+    <div class="mactions"><button class="cta" id="soSend"><svg class="ic sm" viewBox="0 0 24 24"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></svg> Send order</button><button class="ghost" data-mclose>Cancel</button></div>`;
+  $('mscrim').classList.add('show');mMenu.classList.remove('show');acctPop.classList.remove('show');
+  $('soSend').onclick=()=>{closeModal();closeDrawers();basket[COMPANY]={};renderBasket();toast('→ Order sent to '+COMPANY+' (mock)');};
+}
+$('sendBtn').addEventListener('click',()=>{
+  if(role==='buyer'){if(!connected){toast('🔒 Connect with GreenLeaf Pharma first to send a deal');return;}if(!count()){toast('Basket is empty');return;}openSendOrder();return;}
+  if(!count()){toast('Basket is empty');return;}
+  openSendDeal();
+});
+
+/* search */
+const srch=$('srch');$('srchBtn').addEventListener('click',e=>{e.stopPropagation();srch.classList.toggle('open');if(srch.classList.contains('open'))srch.querySelector('input').focus();});
+document.addEventListener('click',e=>{if(!e.target.closest('#srch'))srch.classList.remove('open');});
+
+/* manage ▾ menu + account pop */
+const mBtn=$('manageBtn'),mMenu=$('manageMenu');mBtn.addEventListener('click',e=>{e.stopPropagation();mMenu.classList.toggle('show');});
+const acctBtn=$('acctBtn'),acctPop=$('acctPop');acctBtn.addEventListener('click',e=>{e.stopPropagation();acctPop.classList.toggle('show');});
+document.addEventListener('click',e=>{if(!e.target.closest('.menu-wrap'))mMenu.classList.remove('show');if(!e.target.closest('.acct'))acctPop.classList.remove('show');});
+
+/* screen toggle + seller/buyer role */
+let role='seller',connected=true;
+function setSeg(s){document.querySelectorAll('#screenSeg button').forEach(x=>x.classList.toggle('on',x.dataset.s===s));}
+function applyRole(){document.body.dataset.role=role;updateSendBtn();}
+function goManage(){role='seller';document.body.dataset.screen='manage';setSeg('manage');applyRole();mMenu.classList.remove('show');acctPop.classList.remove('show');renderManage();}
+function goShop(){role='seller';document.body.dataset.screen='shop';setSeg('shop');applyRole();renderGrid();}
+function goBuyer(){role='buyer';document.body.dataset.screen='shop';setSeg('buyer');applyRole();mMenu.classList.remove('show');renderGrid();renderBasket();}
+$('screenSeg').addEventListener('click',e=>{const b=e.target.closest('[data-s]');if(!b)return;const s=b.dataset.s;s==='manage'?goManage():s==='buyer'?goBuyer():goShop();});
+$('connBtn').addEventListener('click',()=>{connected=!connected;const b=$('connBtn');b.classList.toggle('on',connected);b.classList.toggle('off',!connected);b.textContent=connected?'● Connected':'○ Not connected';updateSendBtn();});
+function updateSendBtn(){const btn=$('sendBtn');if(!btn)return;if(role==='buyer'&&!connected){btn.innerHTML='<svg class="ic sm" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg> Connect to start a deal';}else{btn.innerHTML='<svg class="ic sm" viewBox="0 0 24 24"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></svg> '+(role==='buyer'?'Send deal card':'Send as deal card');}}
+$('mtabs').addEventListener('click',e=>{const t=e.target.closest('.mtab');if(!t)return;if(t.dataset.modal){openModal(t.dataset.modal);return;}document.querySelectorAll('.mtab').forEach(x=>x.classList.toggle('on',x===t));});
+
+/* manage table */
+const EDIT={idx:null};
+function renderManage(){const body=$('mbody');body.innerHTML=PRODUCTS.map((p,i)=>{const onProfile=p.priceShown||i%4!==3,base=p.perG||6.5,cogs=base*0.56,margin=p.priceShown?Math.round((p.perG-cogs)/p.perG*100):null,bundle=p.priceShown&&packG(p)>=10?`≥100g · ${eur(p.perG-0.6)}/g`:null,editing=EDIT.idx===i;
+  const priceCell=editing?`<div class="priceedit"><input id="priceInput" value="${p.priceShown?p.perG.toFixed(2).replace('.',','):''}" placeholder="0,00" /><span>/g</span><button class="savep" data-saveprice><svg class="ic xs" viewBox="0 0 24 24"><path d="m5 12 5 5 9-11"/></svg></button><button class="cancelp" data-cancelprice><svg class="ic xs" viewBox="0 0 24 24"><path d="M6 6 18 18M18 6 6 18"/></svg></button></div>`:(p.priceShown?`<span class="pval"><b>${eur(p.perG)}</b>/g</span> <button class="chg" data-editprice>Change</button>`:`<span style="color:var(--ink-muted)">— no price</span> <button class="chg" data-editprice>Set</button>`);
+  return `<tr data-idx="${i}"><td><div class="mprod"><div class="mthumb" style="background:${p.grad}"></div><div><b>${p.n}</b><small>${p.cult} · ${p.loc}</small></div></div></td><td>${p.pack}</td><td><span class="cost">${eur(cogs)}</span> ${margin!=null?`<span class="margin">+${margin}%</span>`:'<span style="color:var(--ink-muted);font-size:11px">—</span>'}</td><td class="pricecell">${priceCell}</td><td>${bundle?`<span class="bundle">${bundle}</span>`:'<span style="color:var(--ink-muted)">—</span>'} <button class="micon" title="Edit bundle" style="width:24px;height:24px" data-modal="addproduct"><svg class="ic xs" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg></button></td><td><span class="toggle ${onProfile?'on':'off'}" data-dial="profile">${onProfile?'On':'Off'}</span></td><td><span class="toggle ${p.priceShown?'on':'off'}" data-dial="price" style="${onProfile?'':'opacity:.4;pointer-events:none'}">${p.priceShown?'Public':'On request'}</span></td><td><span class="mediadot"><svg class="ic xs" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m4 17 5-4 4 3 3-2 4 3"/></svg>${p.imgs} <svg class="ic xs" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/></svg>${p.coas} <svg class="ic xs" viewBox="0 0 24 24"><path d="m5 3 14 9-14 9z"/></svg>${p.vids}</span></td><td><div style="display:flex;gap:6px;justify-content:flex-end"><button class="micon" title="Edit product" data-modal="addproduct"><svg class="ic sm" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg></button><button class="micon" title="Delete" data-del><svg class="ic sm" viewBox="0 0 24 24"><path d="M5 7h14M9 7V5h6v2M7 7l1 13h8l1-13"/></svg></button></div></td></tr>`;}).join('');
+  $('mSub').textContent=`GreenLeaf Pharma · ${PRODUCTS.length} products · Standard price list`;}
+$('mbody').addEventListener('click',e=>{const tr=e.target.closest('tr[data-idx]');if(!tr)return;const i=+tr.dataset.idx;
+  if(e.target.closest('[data-modal]')){openModal(e.target.closest('[data-modal]').dataset.modal);return;}
+  if(e.target.closest('[data-del]')){toast('Delete product (mock) — confirm dialog would show');return;}
+  if(e.target.closest('[data-editprice]')){EDIT.idx=i;renderManage();const inp=$('priceInput');inp&&inp.focus();return;}
+  if(e.target.closest('[data-cancelprice]')){EDIT.idx=null;renderManage();return;}
+  if(e.target.closest('[data-saveprice]')){const v=parseFloat($('priceInput').value.replace(',','.'));if(!isNaN(v)&&v>0){PRODUCTS[i].perG=v;PRODUCTS[i].priceShown=true;}EDIT.idx=null;renderManage();toast('Price saved to Standard list');return;}
+  const dial=e.target.closest('[data-dial]');if(dial){if(dial.dataset.dial==='price')PRODUCTS[i].priceShown=!PRODUCTS[i].priceShown;renderManage();}});
+
+/* ---- MODALS (working settings) ---- */
+const F=(label,inner)=>`<div class="field"><label>${label}</label>${inner}</div>`;
+const inp=(v='',ph='')=>`<input value="${v}" placeholder="${ph}" />`;
+const optList=arr=>arr.map(o=>`<option>${o}</option>`).join('');
+function modalContent(kind){
+  if(kind==='addproduct')return{t:'Add / edit product',s:'Writes to the catalog + the Standard price list.',body:
+    F('Product name',inp('GL Indica 22/1'))+`<div class="row2">${F('Category',`<select>${optList(CATS)}</select>`)}${F('Strain',`<select>${optList(STRAINS)}</select>`)}</div>`+
+    `<div class="row2">${F('Shop location',`<select>${optList(LOCATIONS)}</select>`)}${F('Cultivar',inp('Northern Lights'))}</div>`+
+    `<div class="row2">${F('THC %',inp('22'))}${F('CBD %',inp('1'))}</div>`+
+    `<div class="row2">${F('Pack size',inp('10 g'))}${F('Price /g (Standard list)',inp('7,40'))}</div>`+
+    F('Cost /g (you only)',inp('4,10'))+
+    F('Images / COA / video',`<div class="drop"><svg class="ic" viewBox="0 0 24 24" style="margin:0 auto 6px"><path d="M12 16V4m-5 5 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>Drop images, COA PDFs or paste a video link (Loom/YouTube/Vimeo)</div>`),
+    save:'Save product'};
+  if(kind==='import')return{t:'Import products (CSV)',s:'Bulk-create products + price list rows.',body:
+    `<div class="drop"><svg class="ic" viewBox="0 0 24 24" style="margin:0 auto 6px"><path d="M12 16V4m-5 5 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>Drop your CSV here, or click to browse</div>`+
+    `<div class="infonote">Off-template CSVs are fuzzy-parsed; you confirm the column mapping before import. Each row creates a <b>product</b> + a <b>pricelist_item</b> in the Standard list.</div>`+
+    F('',`<a class="chg">↓ Download CSV template</a>`),save:'Upload & map'};
+  if(kind==='branding')return{t:'Edit shop & branding',s:'Cover, logo, name and links shown on your storefront.',body:
+    F('Cover image',`<div class="drop">Drop a cover image (16:9)</div>`)+`<div class="row2">${F('Logo',`<div class="drop">Logo</div>`)}${F('Company name',inp('GreenLeaf Pharma GmbH'))}</div>`+
+    F('Tagline',inp('EU-GMP medical cannabis · cultivator & wholesaler'))+
+    F('Description',`<textarea rows="3">Pharmaceutical-grade flower and extracts…</textarea>`)+
+    `<div class="row2">${F('Website',inp('greenleaf-pharma.de'))}${F('LinkedIn',inp('/greenleaf'))}</div>`,save:'Save branding'};
+  if(kind==='locations')return{t:'Manage shop locations',s:'These drive the location dropdown + the warehouse info.',body:
+    LOCATIONS.map(l=>`<div class="locrow"><svg class="ic sm" viewBox="0 0 24 24" style="color:var(--brand)"><path d="M12 21s-7-5-7-11a7 7 0 0 1 14 0c0 6-7 11-7 11z"/></svg><div class="grow"><b>${l}</b><small>${locCount(l)} products</small></div><button class="micon"><svg class="ic sm" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg></button><button class="micon"><svg class="ic sm" viewBox="0 0 24 24"><path d="M5 7h14M9 7V5h6v2M7 7l1 13h8l1-13"/></svg></button></div>`).join('')+
+    F('Add a location',`<div style="display:flex;gap:8px"><input placeholder="City, Country" style="flex:1"/><button class="cta" style="width:auto;padding:10px 18px" data-msave>Add</button></div>`),save:null};
+  if(kind==='share')return{t:'Share your Present link',s:'A public storefront link buyers can open.',body:
+    F('Public link',`<div style="display:flex;gap:8px"><input value="hello-sello.com/c/greenleaf-pharma" style="flex:1" readonly/><button class="cta" style="width:auto;padding:10px 18px" id="copyLink">Copy</button></div>`)+
+    `<div style="display:flex;gap:14px;align-items:center;margin-top:14px"><div style="width:96px;height:96px;border-radius:12px;background:#fff;display:grid;place-items:center;box-shadow:inset 0 0 0 1px var(--line-strong);font-size:10px;color:var(--ink-muted)">QR</div><div style="font-size:12px;color:var(--ink-muted)">Buyers scan or open the link → your public shop. Only <b>On-profile</b> products show; prices follow each product's <b>Price</b> dial.</div></div>`,save:null};
+  if(kind==='send')return{t:'Send price list to a customer',s:'Net-new flow — prototyped originating from Present (option C).',body:
+    F('Customer (connected contacts)',`<select>${optList(['Apotheke Nord (Berlin)','MediCanna GmbH','GrünPharm AG','Cologne Health Pharmacy'])}</select>`)+
+    F('What to send',`<div class="pickrow sel"><span class="box"><svg class="ic xs" viewBox="0 0 24 24"><path d="m5 12 5 5 9-11"/></svg></span> Whole Standard price list (${PRODUCTS.filter(p=>p.priceShown).length} priced products)</div><div class="pickrow"><span class="box"></span> Selected products only…</div><div class="pickrow"><span class="box"></span> A custom price list for this customer <span style="color:var(--ink-muted);font-size:11px">(future)</span></div>`)+
+    F('Message (optional)',`<textarea rows="2" placeholder="Hi — here are our current prices…"></textarea>`)+
+    `<div class="infonote">⚠ Seller-initiated price-send is <b>not built yet</b>. Open question: should it originate here (Present), on the Relationship page (per-customer list, DEV-41), or via an offer/deal card (DEV-1 cascade)? This modal prototypes the <b>Present-origin</b> option.</div>`,save:'Send price list'};
+  if(kind==='profile')return{t:'My profile',s:'Your personal card.',body:F('Display name',inp('Carla Weber'))+F('Title',inp('Head of Procurement'))+F('Email',inp('carla@greenleaf-pharma.de')),save:'Save'};
+  if(kind==='settings')return{t:'Settings',s:'User + company settings (role-gated in the real app).',body:
+    `<div class="pickrow"><span style="flex:1">Language</span><b>English</b></div><div class="pickrow"><span style="flex:1">Email notifications</span><span class="toggle on">On</span></div><div class="pickrow"><span style="flex:1">Company verified badge</span><span class="pmode pub">Verified</span></div>`+
+    `<div class="infonote">Full settings (org vs user split, password, deactivation, lifecycle emails) land in Phase 13.</div>`,save:null};
+  if(kind==='signout')return{t:'Sign out?',s:'',body:`<div style="font-size:14px;padding:6px 0">You'll be returned to the login screen.</div>`,save:'Sign out'};
+  return{t:kind,s:'',body:'',save:null};
+}
+function openModal(kind){const c=modalContent(kind);$('modal').innerHTML=`<div class="mtop"><h3>${c.t}</h3><button class="mclose" data-mclose><svg class="ic sm" viewBox="0 0 24 24"><path d="M6 6 18 18M18 6 6 18"/></svg></button></div>${c.s?`<div class="msub">${c.s}</div>`:''}${c.body}${c.save?`<div class="mactions"><button class="cta" data-msave>${c.save}</button><button class="ghost" data-mclose>Cancel</button></div>`:''}`;
+  $('mscrim').classList.add('show');mMenu.classList.remove('show');acctPop.classList.remove('show');
+  const cp=$('copyLink');if(cp)cp.onclick=()=>toast('Link copied');}
+function closeModal(){$('mscrim').classList.remove('show');}
+$('mscrim').addEventListener('click',e=>{if(e.target===$('mscrim'))closeModal();if(e.target.closest('[data-mclose]'))closeModal();if(e.target.closest('[data-msave]')){closeModal();toast('Saved (mock)');}});
+document.body.addEventListener('click',e=>{const t=e.target.closest('[data-modal]');if(t){e.preventDefault();openModal(t.dataset.modal);}const gm=e.target.closest('[data-goManage]');if(gm){e.preventDefault();goManage();}const gs=e.target.closest('[data-goShop]');if(gs){e.preventDefault();goShop();}});
+
+/* fullscreen */
+const app=$('app');$('fsBtn').addEventListener('click',()=>{document.fullscreenElement?document.exitFullscreen?.():document.documentElement.requestFullscreen?.();});
+document.addEventListener('fullscreenchange',()=>app.classList.toggle('presenting',!!document.fullscreenElement));
+
+/* toast */
+let tt;function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('show'),1900);}
+
+/* init */
+document.body.dataset.role='seller';
+renderLocMenu();applyLocation();renderFilterMenu();renderGrid();renderBasket();updateSendBtn();
+</script>
+</body>
+</html>

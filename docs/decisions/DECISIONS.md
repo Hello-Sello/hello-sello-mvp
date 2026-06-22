@@ -26,6 +26,10 @@ Each entry: **What was decided** → **Why** (the reasoning at the time).
 - **Decisions go through DECISIONS.md (Propose mode).** *Why:* otherwise locked decisions get forgotten across sessions and the same ground gets covered twice.
 - **All writes preview first; nothing written without explicit permission.** *Why:* the user is the final reviewer of every artifact.
 - **Project-level skills live in `.claude/skills/` so teammates inherit them via the project folder.** *Why:* personal/global skills don't ship with the project; this keeps the team aligned.
+- **Local-first DB development (2026-06-16).** Build + test every schema / RLS / migration change on the local Supabase stack first (`supabase db reset` to verify it builds from committed files), then apply to cloud — no direct-to-cloud MCP apply without a committed migration. *Why:* exactly the discipline that prevents F3-style migration drift (objects live on cloud but missing from the `.sql` files).
+- **GSD drives Muskan's planning/execution; `.planning/` = execution state, `docs/` = source of truth (2026-06-16).** GSD's gitignored, per-engineer `.planning/` (PROJECT/REQUIREMENTS/ROADMAP/STATE) holds execution state only; durable knowledge (decisions, architecture, domain) still flows to `docs/` via the wrap ritual; GSD files point to `AGENTS.md` + `docs/`. *Why:* one source of truth, no redundancy between the two systems.
+- **Schema drift gate bypassed for local-verified + cloud-deferred phases (2026-06-17).** When a phase's `supabase db reset` is GREEN locally and cloud apply is explicitly deferred (documented in a deploy ledger), the `GSD_SKIP_SCHEMA_CHECK=true` bypass is correct — the gate's false-positive risk (TypeScript types come from config, not the live DB) is already mitigated by the clean reset. *Why:* same pattern established in Phase 2; Phase 3 confirms it as the standard across phases where cloud push is gated behind policy reconciliation.
+- **Onboarding-ready milestone = 8-phase GSD roadmap; Buy (DEV-77) + Sell→Allocate (DEV-76) deferred (2026-06-16).** Harden + UX Auth·Onboarding·Admin-verify·Discover·Present for real-world testing (test boundary = full deal loop to Done, joint w/ Ayush); Marcel's DEV-78/81/80/79/70/69/68 folded in as the UX phase; DEV-77/76, though Marcel-assigned to Muskan, deferred to a follow-up milestone. *Why:* sellable-first — onboard real companies on the built surfaces before expanding surface area.
 
 ---
 
@@ -169,6 +173,8 @@ This subsection finalizes the authentication & onboarding flow for the Phase 1 p
 - **(2026-05-25) Group setup in onboarding = lightweight template, not full matrix.** Onboarding step shows 4 templated default Groups (Sales / Procurement / Compliance-QA / Approver) with a prominent **Skip** CTA. **Full Action × Group toggle matrix lives in Settings → Team & Permissions**, NOT in onboarding. *Why:* DEV-40 locks "configured at setup," but a v0 solo Superadmin has no one to assign; surfacing the full matrix at onboarding adds friction without value. Templates educate; the deep config is a click away. *(Refines DEV-40's "at registration" → "templates at registration, full matrix in settings".)*
 
 - **(2026-05-25) v0 scope = one user per company.** First test users (Marcel + Victor) each act as solo Superadmin for their test company. Multi-user-per-company lands post-v0. **Path B (join existing) is coded but unexercised by default in v0** — deliberately testable (e.g., a third tester joining one of the existing companies). *Why:* keeps v0 surface area minimal while preserving the multi-user design and the exercise path for early validation.
+
+- **(2026-06-19) Multi-user-per-company + Path B exercised now — pulled forward from post-v0 (supersedes the 2026-05-25 "v0 = one user per company" timing).** The Onboarding-Ready milestone now builds the full multi-user surface: company roles (Superadmin + team) wired to active permission-matrix checks, colleague invites with role assignment + clean deactivation (kills sessions), and Path B (join-existing-company) fully exercised — the onboarding "do you have a company?" fork, request-to-join, the company-Superadmin approval queue, and the pending/no-company-yet state. The Path A/B *design* locked 2026-05-25 is unchanged; only its timing moves to the current milestone. *Why:* "user-ready now" — real companies bring colleagues and join existing companies from day one; the schema (`join_request`, `person_group`, nullable `company_id` invariants) already exists, so this is activation, not redesign. Roadmap: Phases 9–13 (Track A landing/legal + Track B foundations); see `.planning/ROADMAP.md` and `docs/research/platform-foundations-research.md`.
 
 - **(2026-05-25) Default Group seed research deferred to v0.1.** Real cannabis-pharma team-structure research (distributor + pharmacy team taxonomies grounded in industry sources — career pages, ABDA, BfArM, BPC, trade associations) is not blocking v0 because solo Superadmins won't exercise the Group seed in practice. Research happens before multi-user lands in v0.1. v0 ships the prototype's current placeholder seed (Sales / Procurement / Compliance-QA / Approver).
 
@@ -896,6 +902,47 @@ A message into a company-to-company (C2C) channel should behave like a **ticket*
 
 ---
 
+## 2026-06-12 (Sella 4b) — Detection → Dealcard journey (Option B, grounded) + the 4b build decisions
+
+The full chat→card journey, settled while building 4b. **Sella only ever DRAFTS; she never finalizes** — a card born on day 1 may not finish until day 50, so Sella can never know a deal is "done." Detection posts a read-only `deal_detected` suggestion → **both owners confirm it (Stage 1, Birth)** → the two-owner `create_deal_draft` opens a **Draft** card (always Draft, regardless of `forming`/`firm`) → negotiation → **both owners confirm the 3d gate (Stage 2, Seal)** → Confirmed.
+
+- **Two stages, two meanings: OPEN (birth) vs CLOSE (seal).** Each needs both sides. The verdict (`forming`/`firm`) **never skips a stage** — even a fully-agreed-in-chat deal is born as a Draft and sealed later. *Why:* the two confirmations answer different questions ("is this a real deal worth a card?" vs "do we agree the final terms?"), and a deal lives and changes for weeks between them. This resolves the half-open tension between POV §6 ("Option B") and the 3.5 note ("one human click") — toward **both-click birth**.
+- **Confirmer-as-initiator.** Whoever clicks the final accept births the card as the initiating side; the other p2p person becomes co-owner; **both are equal owners**. *Why:* it reuses the existing `create_deal_draft` (which keys the creator off `auth.uid()`) with zero refactor; forcing seller-always-initiates would need duplicating the birth logic. Deal type derived from who holds the catalogue (offer/order) — **precise offer/order labelling stays parked**.
+- **`deal_detected` metadata shape (resolves POV §8 open item):** `{ detection_id, verdict, confidence, draft{line_items,currency,summary}, evidence[], votes{<companyId>: null|accept|reject}, product_key, superseded_by, ai:true }`. Votes are by **company** (either colleague on a side can confirm for that side). `ai:true` = EU AI Act Art. 50 machine-readable tag.
+- **Sella's memory is a separate table, not the chat rows.** `sella_detection` (one row per run) carries idempotency + dedup + supersession; the visible `deal_detected` message is the human view. *Why:* a `no_deal` run must be REMEMBERED for dedup but must NOT spam the chat, and **GDPR** — verbatim evidence quotes are kept only on `forming|firm` rows (enforced by a DB check), never on `no_deal`.
+- **Auto-trigger = pgmq + pg_cron + pg_net, scoped to `p2p` threads.** A person message enqueues a job; a 10s cron worker dispatches it to `sella-detect`; durability via the queue + the idempotency guard (at-least-once, self-healing). The fence holds throughout: **Sella only suggests + pre-fills; a human's click is the only write path.**
+
+*Why record:* this is the load-bearing Sella product decision (it overturns nothing but grounds Option B with the "Sella only drafts" principle) + the four engineering decisions that fell out of it. Built + verified live 2026-06-12 (post / idempotent / supersede / birth on thread `91b6f4b8`). Code: `supabase/functions/_shared/sella/{dedup,detect,tools,context,prompts,bedrock}.ts` + `sella-detect/` + migrations `…120000`/`…130000`/`…140000`. Engineering detail in ARCHITECTURE-NOTES 2026-06-12.
+
+---
+
+## 2026-06-12 (Sella 4d) — Version-change summaries + AI first-contact intro; "narration follows the card"
+
+The last Sella piece. Two jobs, both single-shot Haiku, both PERSON-WAITING so they run INLINE (the placement rule), both fail-soft, both fence-safe (Sella narrates; she changes nothing).
+
+- **Version-change summary.** On a card edit, Sella reads the line diff + the human's mandatory note and writes one neutral "why it changed" sentence into `deal_card_log` (`changed_by='sella'`, shows in the Logs tab) AND a `deal_card_updated` chat message.
+- **Sella's narration follows the CARD, not a single thread.** The `deal_card_updated` summary is posted to EVERY chat the card lives in — the deal workspace chat AND the relationship's P2P chat — each linked via `metadata.deal_card_id` (a P2P chat can host several deals over its life). *Why:* the P2P chat is the people's durable home base; after a deal is born the negotiation moves into the workspace, but the people must stay aware in P2P without walking into the workspace. Supersedes the original 4d spec's "post to the deal workspace chat" (Ayush, 2026-06-12).
+- **First-contact intro = AI-written.** On accept, `sella-intro` rewrites the rollout's static seeded `intro` line into a warm, context-aware opener (the two people, companies, request kind, note), AI-origin tagged. Fail-soft: the static intro stays if Sella is down.
+- **Sella's voice uses short dashes only** (a prompt rule, matches the house style). **`tsconfig` excludes `supabase/functions/**`** from the Next typecheck (the Deno edge files were never meant for it; tsc is now clean).
+
+*Why record:* completes Chapter 4 (Sella). No migrations — all engine + inline wiring on `edit_deal_draft` / `acceptItem`. Verified live incl. a browser edit→summary end-to-end. Engine detail in ARCHITECTURE-NOTES 2026-06-12.
+
+---
+
+## 2026-06-14 (Waypoint 4.5) — Deal birth + acceptance redesign: proposal-in-chat + the Sella strip
+
+Resolves a tangle found while opening 5A.4: the card is born too early and acceptance lives ON the card, which (1) makes a person "accept their own deal", (2) leaves orphan workspaces when no one confirms, and (3) gives Sella nowhere to ask (she may suggest but not make a card — the AI fence). The fix realigns the code to the already-locked two-confirmation journey (2026-06-12 Sella 4b), not a new flow.
+
+- **One birth path, two doors.** Manual-create AND Sella-detection both produce a **proposal** = a `deal_detected`-shaped chat message carrying the draft + per-company votes (NOT a card, NO new deal status). *Why:* detection already proves "a message is the pre-card object"; making manual-create produce the same message unifies birth and reuses `confirm_detected_deal` + `create_deal_draft` untouched.
+- **Sending = accepting (manual).** The proposer's company vote is pre-set `accept`; only the other side is pending. Detection: both votes start null. Kills "accept your own deal".
+- **Birth (card + workspace) only on both-accept, atomically. Supersedes 3.5a D5** ("workspace at Draft"): no card and no workspace exist until both accept → no orphan. The proposer is the initiating side (offer/order reads from `metadata.proposed_by_company`, not whoever accepts last).
+- **The card becomes pure display; the Sella strip owns all actions.** The deal bar (`DealPin`) becomes the **Sella strip** — one shared, neutral, system-voice surface for birth-accept, the change-note ask, and the **Seal gate** (the 3d `ConfirmBar` moves OFF the card). Private "ask Sella" stays in the right panel. One selected deal at a time; cross-deal asks collect in a chat-header notification.
+- **Privacy:** the proposal is a shared message, so the proposer's own-side private box is NOT carried in it (would leak to the counterparty) — added after birth via edit.
+
+*Why record:* revises shipped Chapter-4 behaviour (where acceptance lived) and supersedes 3.5a D5, so it is load-bearing. The AI fence still holds — Sella only suggests the proposal; a human's Accept click is the only write that births a card. Build plan: `_workshop/build-plans/4.5-deal-birth-acceptance.md`. **4.5.1 (engine) built + held (not applied to any DB); next = 4.5.2 (the strip UI).** Scope: connected-P2P only — not-connected→inbox, C2C ticketing, the shop/offer path, and global notifications are parked.
+
+---
+
 ## Layer 2 — Present surface (storefront)
 
 ### 2026-06-10 — Present storefront v0 (design + build, session 16)
@@ -945,4 +992,248 @@ Marcel's directive (2026-06-10): *"Discover closed to not see shit, but a line w
 - **Page structure DECIDED = search-first lobby** (centred search + category pills + single-column company list). Chosen from a 3-variant throwaway prototype (registry table / filter-rail grid / search-first lobby). *Why:* search-first sells "ask to come in," not "scroll a feed" — truest to NON-marketplace. The "Tagged" line (vs bare logo / vs teaser) is the minimum needed to *find* who to request without *browsing* a catalog.
 - **Ad / social feed = CUT** (was the heavier half of the session-13 "two jobs" confirmation). A campaign/ad feed contradicts a closed non-marketplace; dropped from scope.
 - **"Request to enter" wiring = OPEN** — entering = *unlock-shop* (Discover owns the access grant) **vs** = *a Connect request* (one door, reuses Connect's plumbing; gate state lives in Connect). Leaning the latter; **deferred until Connect's request/accept flow is ready**. Button stays stubbed until then.
-- **First slice = UI only** (search-first directory, placeholder data, stubbed button). Real `list_discoverable_companies()` `SECURITY DEFINER` RPC (same anon-safe projection pattern as `get_public_profile`) + the gate are the next slices. Build plan: [`docs/build/discover-directory.md`](../build/discover-directory.md).
+- **First slice = UI only** (search-first directory, placeholder data, stubbed button). Real `list_discoverable_companies()` `SECURITY DEFINER` RPC (same anon-safe projection pattern as `get_public_profile`) + the gate are the next slices. Build plan: [`docs/muskan-build/discover-directory.md`](../muskan-build/discover-directory.md).
+
+### 2026-06-14 — Discover & public profile: soft openness model (supersedes "closed + tagged" 2026-06-11)
+
+The "closed by default" lock above was a demo simplification (Marcel: build closed *for the demo*). Building the real product now — for onboarding + testing — we move to a **company-curated profile, LinkedIn-style**.
+
+- **Public profile is company-curated (soft), not closed-by-default.** Openness = two per-product dials: visible-on-profile (`product.profile_visible`, **new**) × price-visible (`product.price_public`, exists). Levels emerge: **L0** bare card → **L1** products/no price → **L4** full priced shop. *Why:* the soft model is a **superset** of "closed" — a company that wants closed just stays at L0; gives each company go-to-market flexibility; matches B2B norm (LinkedIn / Alibaba / Faire).
+- **Audience-scoped for compliance.** Products/prices show to logged-in **verified members** only; the anonymous public card (`/c/<handle>`) stays **bare**. *Why:* contains German **HWG** public-advertising risk for prescription cannabis — showing to verified members ≠ showing to the open internet.
+- **Discover directory stays minimal** (brand line: logo · name · category · country); the chosen openness shows on the company's **profile** after click. *Why:* listing ≠ browsing — reconciles the closed directory with the soft profile.
+- **Connect CTAs map to the 4 existing inbox types**, surfaced contextually on the profile: Connect (`connect`) · Connect + note (`connect_message`) · Request pricing (`pricelist_request`) · Offer card (`deal_card`). A note is optional on every connect. *Why:* reuse locked inbox machinery; **no new request types**.
+- **Two-track build.** **Track 1 (now)** = the real connect loop between two onboarded companies (Discover real data → profile → connect/note/request-pricing → accept → C2C/P2P chat), buildable on existing schema + one `profile_visible` column. **Track 2 (later)** = the FLOWZ growth engine — already documented (LAYER-1 §13, LAYER-5, [`research/dev-62-dev-44-flowzz-mirror-shop.md`](../research/dev-62-dev-44-flowzz-mirror-shop.md)); its **outbound offer/inquiry email is legally RED** (UWG §7(2) per-se rule), deferred behind consent/partnership. The shadow-profile + claim-on-signup part is the defensible half. *Why:* ship the testable loop first; don't build the RED outbound until consent exists. Build plan: [`docs/muskan-build/discover-connect-loop.md`](../muskan-build/discover-connect-loop.md).
+
+---
+
+## Cross-cutting — Storage uploads
+
+### 2026-06-11 (session 21) — Single-slot uploads: client-direct + stable filename (Option B)
+
+Hardening for avatar / cover / logo. The storefront gallery already did client-direct (session 18); this finishes the pattern for single-slot media and fixes orphaning. Full plan in [PRD/storage-uploads.md](../PRD/storage-uploads.md); engineering in `ARCHITECTURE-NOTES.md` (2026-06-11). Research-grounded (Supabase storage best-practice + Smart CDN docs).
+
+- **Single-slot media (avatar, cover, logo) uploads client-direct to storage; the server stores only the path string.** Dodges the Next/Vercel Server-Action body limit (1 MB / 4.5 MB). Avatar was already client-direct; **cover/logo migrated off the server path** (`updateShopProfile` no longer touches bytes).
+- **Stable filename + `upsert` = orphan-proof by construction.** Single-slot assets use a fixed path (`{id}/avatar`, `{companyId}/cover|logo`, **no extension**) so a re-upload overwrites the one file in place. Supersedes the prior UUID-per-upload naming, which made `upsert` dead (a random name never collides) and orphaned the old file on every replace. *Why no extension:* a path carrying the extension would change on a format switch (png→jpg) and re-orphan. **Collections (the product gallery) keep unique filenames + explicit delete-on-remove — a different rule, because 1:many genuinely needs unique paths.**
+- **Cache = `?v=updated_at` nonce on read.** Stable filename ⇒ stable URL, so a `?v=<row.updated_at>` nonce busts the browser cache after a swap (Supabase Smart CDN already auto-invalidates the object on overwrite, ≤60s). Filename-versioning — the "stronger" cache-buster — is **rejected**: it's the opposite of stable-filename and re-creates orphans.
+- **Orphan cleanup = Storage API, not SQL.** A raw `delete from storage.objects` can leave the backing file billed; the Storage API delete (RLS-scoped) removes both. Cleaned 3 legacy orphans this way.
+- **Deferred (own task): parent-delete file cascade across ALL buckets** — deleting a `product`/`company`/`deal` row leaves its storage files (a DB cascade removes rows, not storage objects). Needs a trigger/app-layer cleanup + isolation test.
+- **Shipped to dev (#98); dev→main HELD** (a promotion would also ship Ayush's offline 3c/3d — joint call).
+
+## 2026-06-15 — Discover soft-openness catalogue BUILT (slices 4–6)
+
+- **Built per the 2026-06-14 L0→L4 lock.** A seller opts each product onto their public profile via `profile_visible` (Dial A) × `price_public` (Dial B); the **L0/L1/L2 level is derived at render** (no stored level column). A verified member sees another company's catalogue before connecting through the `get_discoverable_shop` SECURITY DEFINER RPC (safe projection, gated prices, never `cogs`); the RLS **"dial floor"** — `product` / `product_image` / `pricelist_item` public-reads all gate on `profile_visible` — is the backstop for direct reads. **Request pricing** = a `pricelist_request` inbox item; viewer state separates connect-pending from pricing-pending. Engineering in ARCHITECTURE-NOTES (2026-06-15); build + follow-ups (F1–F13) in `docs/muskan-build/discover-connect-loop.md`. PR [#104](https://github.com/HelloSello/hello-sello-mvp/pull/104) → dev **merged**.
+
+---
+
+## 2026-06-16 - Deal CHANGE flow: an edit is a HELD two-sided proposal (pending change + full lock), not an instant version bump
+
+Extends the 2026-06-14 Waypoint 4.5 birth/acceptance work to the deal-CHANGE flow (4.5.4 = the backbone). Full design + the built/missing/wrong map: `_workshop/build-plans/6-pending-map.md` (§1, §2, §3A). ADR: `docs/architecture/adr/0001-held-deal-change.md`.
+
+- **An edit is HELD until both companies accept (supersedes 2026-06-11 "edit_deal_draft commits a new version immediately").** Editing no longer touches the live card; the change waits as a **pending change** and the card keeps showing the last agreed version, changing ONLY on both-accept. A decline or a proposer withdraw discards it. *Why:* the card is the one honest signal the deal moved, and a human confirms every move (guards a Sella/system mistake).
+- **The pending change is the strip's data, stored on the deal - not the card, not a chat message.** A `deal_pending_change` record, one active row per deal (DB-unique), holds the new SHARED terms + base version + proposer + source + the proposer's Change reason + votes. Transient (deleted on every exit); permanent history stays in `deal_card_log` + `deal_change_input`. Both the p2p strip and the deal-chat strip read this one row, so they stay synced (card displays, strip decides - confirms D5/D6).
+- **Full lock while pending (pessimistic, on purpose).** While a pending change exists the Edit pencil is disabled for everyone; the DB-unique row enforces it under races, not just the button. *Why:* a two-company negotiation edits rarely and serially, so locking removes all version-clash code (chosen over optimistic concurrency).
+- **Three exits, per company:** the OTHER company Accepts (+ Change reason) -> commit; the OTHER company Declines (+ Change reason) -> discard; the PROPOSER Withdraws (no reason) -> discard. Any person in the responding company, from either chat, decides for the company; the proposer cannot self-accept; anyone in the deal workspace (either company) may propose. **This pending-change Withdraw is NOT the seal Withdraw removed by D16** - the seal gate stays Accept/Decline only.
+- **Change reason is captured in the strip, never a buried form field (confirms D8).** Edit pencil -> form (shared + the editor's own private items) -> Done -> strip pop-up collects the Change reason + Send. SHARED terms -> the pending change; PRIVATE numbers (buying price / COGS) -> written to the editor's own side immediately, NEVER in the pending change (privacy - both companies read the strip in the deal chat).
+- **Announcements: both chats, both outcomes (supersedes the 2026-06-15 D18 accept->deal / decline->p2p split).** Accept and Decline each post a uniform system message to BOTH the deal chat and the p2p chat; Withdraw = a quiet notice. (Exact wording = 4.5.5 / T3.)
+- **Commit reuses today's version-build logic, run later.** On the second yes, the existing `edit_deal_draft` body builds version base+1 (snapshot shared lines, carry both sides' private boxes forward), status stays `draft` (the final golden seal is end-of-lifecycle, out of scope now), writes the log line + BOTH Change reasons, fires the announcement, deletes the pending row, unlocks.
+- **Parked:** the final golden seal (end stage); per-product private cost -> margin + edit-form redesign (map T5b); Sella detecting changes (map T6); C2C ticketing (map T7/T8).
+
+*Why record:* changes a locked decision (the 2026-06-11 instant edit) and is the backbone the rest of 4.5.4-4.5.6 hangs off. **Status: design locked 2026-06-16; 4.5.4 build not started.** (Sources: 2026-06-16 grill-with-docs session; `6-pending-map.md`; ADR-0001.)
+
+## 2026-06-17 - Phase 1 (4.5.4) BUILT; the golden Seal is REMOVED from the strip (deferred to the deal's final stage)
+
+The 4.5.4 held-change backbone above is now built, verified, and GSD-complete (e2e green, 8 passed; 5 deal-domain migrations, LOCAL only - cloud apply pending: `docs/deploy/cloud-migrations-pending.md`). Two decisions emerged while building:
+
+- **The two-seat golden Seal control is removed from the deal strip and deferred to the deal's FINAL stage (design TBD).** *Why:* accepting a *change* was leaking into the *seal* state - `confirm_deal_change` wrote a `deal_confirmation` row with `status='confirmed'`, which the Seal gate reads as "this side has sealed", so after a change the strip showed a false "Awaiting <company>" pill and the card could turn golden. Shared table, two meanings → one feature corrupting the other. Fix is two-part: (1) `confirm_deal_change` no longer writes `deal_confirmation` at all - the canonical change-reason store is `deal_change_input` (this supersedes the D-07 "wire `deal_confirmation.note`" sub-decision, which is dropped); (2) the Seal control (`sealControl` + its popover) is removed from `DealPin`. The `ConfirmBar` component and the `confirmDeal` action are KEPT (unused by the strip) for the future final-stage seal. This also aligns with the existing "final golden seal = out of scope now, deals stay `draft`" parking.
+- **`deal_pending_change` must be in the `supabase_realtime` publication.** The strip subscribes to `postgres_changes` on that table so the lock + the "Review change" pill appear/clear LIVE on both screens; the table was missing from the publication, so it only updated after a manual refresh. Added via migration `20260617130000`. RLS still scopes realtime events to relationship members.
+
+**Reconcile in Phase 2:** because the whole Seal control is already gone from the strip, the planned "remove the seal Withdraw from the gate" (D16 / map T4) may already be moot - Phase 2 planning must check what is actually left of the seal/gate before planning that task.
+
+*Why record:* removes a shipped UI surface (the strip Seal) and drops a sub-decision (D-07's `deal_confirmation.note`), so it is load-bearing for anyone touching the strip or the final-stage seal. **Status: built + verified 2026-06-17; cloud apply deferred.** (Sources: this build session; memories `seal-deferred-to-final-stage`, `e2e-deal-setup-needs-birth-and-open`.)
+
+## 2026-06-17 - Deal Card & Form overhaul: card data-model rule locked; margin (T5b) pulled into v1; the card Note is HELD
+
+A long card/form grill-with-docs session (grounded against the live code + DB) widened the tiny "Phase 3 = Card Note" into a proper **Deal Card & Form** milestone, built for real (backend + data); visual polish deferred to the UI phase. Source of truth: `_workshop/build-plans/7-dealcard-form-overhaul.md`; data-model decision: ADR-0002.
+
+- **One rule for the card:** a field shown on the shared card (both see it) is HELD - a change needs the other side's Accept/Decline; a field private to its owner is IMMEDIATE (own-side, ungated). Derived totals (value net/gross) follow their inputs.
+- **The card Note is HELD, not immediate** (reverses the plan-phase working guess "D-34"). Per-company authored, both-visible; the other side Accepts/Declines a note change but cannot rewrite it; a Decline discards it. Reuses the edit-form note box; shows on the card face from birth; **removed from the log** (the create note lands in `deal_card_log.change_summary` today). Needs NEW storage that versions with the card.
+- **Margin (T5b) moves from out-of-scope into v1, PER PRODUCT, shown as a percentage, owner-only.** Seller margin = (unit_price - cost) / unit_price; buyer margin = (resale - unit_price) / resale; per line + a deal average. Store the input (cost / resale), compute the margin. Wired through the EXISTING dormant tables `deal_line_item_private` (per-line, owner-only RLS) + `product_cost` (COGS) - not new schema, and not the public `deal_line_item`. Replaces today's single, mislabeled `deal_party_field` box (it hardcodes the seller label + `party_side='seller'`, so the buyer's number renders under the wrong label).
+- **The card shows** batch number + measured THC/CBD (per line), payment terms, free delivery, and the per-side margin %. A deal line **belongs to a batch** (`product_batch`); measured values are snapshotted at deal time (frozen pattern). `deal_line_item` needs a `batch_id`; demo batches must be seeded.
+- **Two value bugs fixed in the same area:** the card value must SUM the line totals (OBS-1: it can read 0 because `value_net` is stored, not recomputed live); the unit/price math must normalize kg vs g (OBS-2: prices are per-gram but the unit dropdown changes g->kg without converting the price).
+- **Parked:** incoterms on the card (dormant column - never written, never shown; revisit with the team); the clickable product card + full detail/terpenes (reads the deal-time snapshot, ~1 week out); a configurable "pick what shows" display panel; SIGNALS stay per-company.
+- **Re-scoped into phases 3a-3e** (display correctness -> held Note -> margin -> form UX -> batches); old Phase 4/5/6 shift after, and Phase 6's UI scope is re-checked once this lands.
+
+*Why record:* supersedes the card-Note "immediate" assumption, un-parks T5b into v1, and locks the card data-model rule the rest of the milestone hangs off. **Status: design locked 2026-06-17; build not started; LOCAL-only, cloud push deferred + coordinated with Muskan** (she holds the `product`/`pricelist_item`/`product_image` RLS surface + a `supabase/migrations/` lock until her own push). (Sources: 2026-06-17 grill-with-docs session; `7-dealcard-form-overhaul.md`; ADR-0002.)
+
+## 2026-06-17 - The deal form becomes a reusable "Deal Basket" (Option A) + a recipient field
+
+A post-commit continuation of the Deal Card & Form session. Decision + detail: ADR-0003; design note `7-dealcard-form-overhaul.md` section 10.
+
+- **The deal form is promoted to a reusable "Deal Basket"** - one model + form holding a deal's editable content + a recipient, fed by every trigger (human / Sella / shop); on send it becomes a Deal Card. The existing `DealForm` is already this ("dumb + fed", reused by create/edit) - we name it, and let Sella + the shop feed the same shape.
+- **Option A chosen (transient):** the Basket lives only while the form is open and materialises into a Deal Card on send; nothing persisted. Option B (a saved/shareable Basket record) is deferred.
+- **Rename** `DealForm` -> Deal Basket if convenient; keeping "Deal Form" is acceptable (the concept matters more).
+- **New recipient field:** company mandatory, person optional; no person -> the deal addresses the company. Defaults from the trigger (p2p chat -> that person; C2C -> that company); panel/shop -> chosen from CONNECTED companies/people only.
+- **Now vs future:** the Basket name + recipient field + the p2p-chat default are buildable now (foundational to the form work). Creating from Sella's panel / the shop, and company-only sending (no person), are FUTURE - the last needs the parked C2C ticketing. New req BSKT-01.
+
+*Why record:* a reusable input model that unifies how every trigger creates a deal, and adds explicit deal addressing. **Status: design locked 2026-06-17 (Option A); build folds into the Deal Card & Form milestone; LOCAL-only.** (Sources: 2026-06-17 post-commit session; ADR-0003; `7-dealcard-form-overhaul.md` section 10.)
+
+## 2026-06-18 - Phase 3e (Form product UX, FORM-01/02) built: pack-based basket quantity + the recipient row shown on create AND edit
+
+Phase 3e shipped the Deal Basket's product-adding UX (built directly for speed + a frontend-design polish pass; backend untouched - no DB/RPC/migration). Code on `claude/ayush/work`, LOCAL only.
+
+- **FORM-01 - increment, never duplicate:** re-adding a product that is already on the deal adds to its line instead of making a second row. Matched by `productId`; a custom line (`productId: null`) never merges. Pure rule in `src/modules/deals/lib/lineEditing.ts` (`addOrIncrement`), unit-tested.
+- **FORM-02 - add by name + custom:** one search box over the in-memory own catalogue (`getOwnCatalog`) auto-fills a picked product; typing a name not in the catalogue offers "Add '<name>' as a custom product" (`emptyCustomLine`, `productId: null`). Custom productId-null lines were research-confirmed safe through create + held change + card read; the `confirm_deal_change` margin carry-forward deliberately skips null-product lines (documented limitation, left untouched).
+- **Quantity is by PACK, not raw grams (grounded in the product table).** Each product has `pack_size_grams`; the basket steps quantity by one pack (+/- buttons), shows "N packs", and the grid shows a "selected" badge + the pack label ("10 g pack" / "1 kg pack"). The line still STORES grams and is still priced per gram, so the card money math (CARD-01/02) is unchanged. `getOwnCatalog` now also reads `pack_size_grams`. Fallback step = 1000 g when a product has no pack size (and for custom/edit lines).
+- **The locked "To" (recipient/assignee) row now shows on BOTH the create form ("From chat") and the edit form ("Assigned").** This is the universal Deal Basket assignee field, **locked in p2p** (auto from the relationship). On edit it is company-level (the person needs the p2p chat thread, which the deal workspace does not carry yet - a small future add).
+
+**Still future (the next-stage shop/Sella work, confirmed NOT built):** the editable recipient PICKER (a dropdown of connected companies -> their people), the shop/Sella basket entry points that would produce `source` 'shop'/'sella', and company-only sending via C2C chat. The recipient data model + `source` union already exist; the picker UI, the "list connected companies/people" read, and the C2C routing do not.
+
+*Why record:* locks how basket quantity works (packs over a per-gram price) and that the assignee is now visible-but-locked everywhere, and states precisely what of the recipient-picker is built vs deferred so the shop/Sella stage starts from truth. **Status: built + verified locally 2026-06-18 (36 unit green, tsc+eslint clean, deal-change e2e green); LOCAL-only, no cloud changes (no migrations this phase).** (Sources: this build session; `7-dealcard-form-overhaul.md` §3/§10; ADR-0003; the live `product` table.)
+## 2026-06-17 — Phase 4 plan: a REVOKED company is a new verification status, not an overloaded `rejected`
+
+- **`company.verification_status` gains a fourth value `revoked` (additive lookup row, `is_terminal=TRUE`) rather than reusing `rejected` + a flag.** A *rejected* company never got in → routes to `/onboarding` to fix + resubmit (D-07); a *revoked* company was verified then HS-suspended → routes to `/home` with a hard-block "access suspended" banner (D-10), no resubmit. *Why:* two states with two pages and two copies — one status each keeps routing a single-field read; overloading `rejected` + a "was-verified" flag couples two unrelated UX flows onto one value and is easy to get wrong. **Status: planned (Phase 4, 04-01 migration `20260617140000`); not built.** (Source: Phase 4 plan-phase session; 04-RESEARCH.md.)
+
+## 2026-06-17 — Phase 4 BUILT + code-review complete; `createCompany` revoked guard is a direct DB check, not `requireVerified()`
+
+- **Phase 4 (auth-gate hardening) is fully executed and code-reviewed** (follows from the `revoked` status plan above — now built and green). 04-01–04-04 all complete; code review (04-REVIEW.md) found 1 critical + 4 warnings, all 5 fixed.
+- **The `createCompany` Server Action guards against revoked users with a targeted `verification_status === 'revoked'` check + early `{ error }` return, NOT `requireVerified()`.** *Why:* `requireVerified()` calls `redirect()`, which is incompatible with a Server Action that must return an `ActionResult` object. The onboarding flow uses `createCompany` to build the company record during signup; revoked users reaching it directly via POST must get an error response, not a redirect. The layout's Bouncer 1 handles redirects; the action-level guard handles direct POST. *(WR-01, Phase 4 code review — `src/app/onboarding/actions.ts`.)*
+
+## 2026-06-18 - Phase 3f (Batches end-to-end, BTCH-01) built: a deal line points at one batch with frozen measured values; product+batch is one entity; margin carry-forward keyed on product+batch
+
+Phase 3f wired the dormant batch layer end-to-end (deal-domain only). A deal line now references one `product_batch` (the chosen lot); the batch's MEASURED THC/CBD + batch number are snapshotted (frozen) onto the line at deal time and shown on the card. Design: `_workshop/build-plans/7-dealcard-form-overhaul.md` §5; ADR-0002 (snapshot/frozen rule).
+
+- **D-06 - product + batch is ONE entity.** Picking a catalogue product does NOT create a line by itself; it opens a MANDATORY batch dropdown, and the line is born only once a batch is chosen - so a catalogue line can never exist without a batch (enforced at add-time; `canSubmit` is the backstop). An off-catalogue custom product (`productId: null`) is exempt - no batch.
+- **D-09 - the per-line margin carry-forward keys on `product_id` + `batch_id`** (supersedes the earlier "known limitation" that joined on `product_id` alone). Because the merge key lets the same product sit on two lines (batch 4 vs batch 5), a product-only join would land a margin on the wrong line on a version bump. The `confirm_deal_change` private carry-forward now adds `and new_line.batch_id is not distinct from old_line.batch_id` (`is not distinct from` keeps legacy null-batch lines matching). The only case left ambiguous - two custom lines (null product + null batch) carrying a margin across an edit - is a deferred recorded fix (the existing `product_id is not null` guard already skips custom lines).
+- **Snapshot storage:** the batch's measured THC/CBD is written into the line's EXISTING (empty) `thc_percent`/`cbd_percent` columns; only `batch_id` + `batch_number` are new columns. The freeze rides on the held draft (snapshot-through-draft), carried verbatim across version bumps - never re-read from the live batch. This also fixed a latent bug where measured values were written to dead `metadata` on birth and dropped on a version bump, across all three birth doors (`createDeal`, the proposal path `confirm_detected_deal`, and the version rebuild `confirm_deal_change`).
+- **RLS:** `product_batch` stays seller-private (`batch_all`); the buyer only ever sees the frozen public snapshot on the line. 2 migrations (`20260618140000_deal_line_item_batch`, `20260618150000_confirm_detected_deal_batch`); 8 demo batches seeded.
+
+*Why record:* locks the batch data path (one line = one chosen lot, frozen) and the two refinements Ayush drove - product+batch as one entity (D-06) and the margin join now batch-aware (D-09, which removes the prior limitation). **Status: built + verified 2026-06-18 (7/7 must-haves; unit 41/41; deal-change e2e 20/20; full 75-migration `supabase db reset` green after merging Muskan's dev work). LOCAL - cloud push deferred + coordinated with Muskan (15-migration batch).** (Sources: this build session; the `03F-*` planning artifacts; ADR-0002.)
+
+## 2026-06-20 — Person name is a single canonical `display_name`, set by every signup path; onboarding gates on it (not first/last)
+
+The split `first_name`/`last_name` model couldn't represent mononyms / single-name social logins — the first real Google signup ("Muskan", no surname) got `last_name = ''` and could never complete the "Your profile" onboarding step (which required `last_name`). Root cause: two competing name representations (the UI edits `display_name`; the check read first/last) that disagreed.
+
+- **`display_name` is the canonical name.** Every signup path populates it: the `handle_new_user` trigger now sets it (provider `full_name`/`name`, else a compose from the resolved first/last), and the email signup form sends a single `full_name`. `first_name`/`last_name` stay only as DERIVED values for the QR vCard — no longer the source of truth for "the name".
+- **Onboarding "Your profile" completeness is a pure, unit-tested rule** (`profile.isProfileComplete()` — single source of truth), NOT an inline first/last check. Research-backed (W3C personal-names; single-full-name-field UX): never require a surname; one field absorbs mononyms, middle names, reordered names. No academic-title / middle-name field (the single field covers them).
+- **One-time backfill** filled `display_name` for existing rows from first+last (idempotent), in the SAME migration as the trigger change — data and rule migrate together, so pre-change accounts aren't broken by the new rule.
+
+*Why record:* locks the canonical-name model and that the completeness rule lives in one tested function. **Status: built + verified 2026-06-20 (46 unit green, tsc clean; trigger + backfill verified on local `db reset` and applied to cloud `20260620120000_canonical_display_name`; auth-trigger e2e written but blocked by pre-existing local fixture-key rot).** (Sources: this session; W3C Personal Names; SaaS onboarding research.)
+
+## 2026-06-20 — Onboarding profile completion = name + title only; profile photo is OPTIONAL (not a completion gate)
+
+Surfaced during 6.1 UAT: the home checklist sends an unfinished "Your profile" to the onboarding stepper, which collects name + title but NO photo — yet completion required a photo, so the step could never tick it (you had to detour to `/account`).
+
+- **Decision: drop the photo from the required completion check** → profile complete = `display_name && title`. Photo stays available (and can be nudged) but never blocks. Resolves the stepper-vs-settings disparity (the step now collects enough) AND follows industry practice.
+- **Why (researched, per the "research common patterns first" rule):** SaaS onboarding best practice — only require a field if the product can't function without it; every extra required field ≈ 7% conversion drop; request photos AFTER first value (progressive profiling), not during setup. (ProductLed, Candu, DesignRevision, 2025.)
+
+*Why record:* locks that onboarding completion is name+title and photo is optional, with the reasoning. **Status: DECIDED 2026-06-20, NOT yet built — implement next session (small change to `isProfileComplete` + its unit tests + the home comment).** (Sources: this session UAT; SaaS onboarding research.)
+
+## 2026-06-20 — E2E fixtures derive the local Supabase key from the running stack; never hardcode
+
+The 3 auth specs hardcoded the legacy demo service-role JWT. The local stack (Supabase CLI 2.75) now uses asymmetric **ES256 JWT signing** (CLI default) + the new **`sb_secret_`** API-key format, so the hardcoded HS256 JWT no longer authenticates → every auth E2E failed ("key rot").
+
+- **One source of truth: `e2e/fixtures/local-supabase.ts`.** Resolves `LOCAL_SERVICE_KEY` in order: `SUPABASE_SECRET_KEY` env override → parse `supabase status -o env` (`SECRET_KEY`) → throw a clear "is the stack up?" error. The running stack OWNS its keys; tests derive from it. Deletes the 3 duplicated hardcoded copies. Fail-loud beats a cryptic 401.
+- **`auth-trigger` is deferred, not fixed.** It calls `auth.admin.createUser`, which needs an **ES256 `service_role` JWT**; the new stack 403s `sb_secret_` on GoTrue admin endpoints (works for PostgREST/DB, not admin auth). The clean fix needs a direct-DB insert into `auth.users` (a `pg` dev-dependency) — deferred since signup was manually verified end-to-end (session 33).
+
+*Why record:* locks the "never hardcode a rotating local key" rule and the single-source-of-truth fixture. **Status: built + pushed 2026-06-20 (commit `f42f04b`) — `admin-verification` green, `auth-gate` 5/6 (1 fail = known append-only `audit_log` DELETE bug, unrelated), `auth-trigger` deferred.** (Sources: this session.)
+
+## 2026-06-20 — Parallel work uses git worktrees + `.worktreeinclude`; `.planning` coordination is git-tracked only
+
+A single engineer now runs several sessions at once (one per phase) to work in parallel. Settled how those sessions isolate and coordinate.
+
+- **Isolation:** each parallel session runs in its **own git worktree on its own branch** (`claude --worktree <name>`). Code edits never collide; sessions meet only through git (push → PR → merge).
+- **GSD planning inside worktrees:** a personal (gitignored) **`.worktreeinclude`** auto-copies `.planning/`, `CLAUDE.md`, and a personal `SessionStart` hook into every new worktree. Because it *copies*, each worktree keeps its OWN `STATE.md`/session-log (no clobbering); `ROADMAP.md`/`REQUIREMENTS.md` are read-mostly and edited in ONE place (the main checkout) — new worktrees inherit the latest at creation time.
+- **Coordination channel = git-tracked files only** (code + `docs/team/sync/*`). `.planning/` is per-worktree/gitignored and is never used to coordinate. Ownership-first (split work into disjoint files); lock genuinely-shared files via the sync ritual.
+- **Industry-validated:** git worktrees are the consensus mechanism for parallel coding agents; Claude Code ships native `--worktree` + `.worktreeinclude`. Agent-teams (shared task list + mailbox) exists but is for one-session multi-teammate work, not N independent long-running phase sessions, and still requires ownership boundaries.
+
+*Why record:* locks the team's parallel-execution model so future sessions don't re-derive it, and documents why neither GSD workspaces (start empty) nor workstreams (don't isolate code) fit "parallel phases of one roadmap." **Status: setup DONE 2026-06-20 — personal gitignored `.worktreeinclude` + `.claude/hooks/session-start-coord.sh` + settings; general protocol added to `docs/team/WORKFLOW.md` "Parallel worktree sessions".** (Sources: this session; Claude Code worktrees + agent-teams docs; 2026 parallel-agent coordination research.)
+
+## 2026-06-19 - Recategorisation + decision sweep (UI-first reorder, notification, message-voice, pack model, Deal Room rename)
+
+A working session that re-sorted all open/not-done work into categories and closed the small open decisions. Working scratch (categorised board): `_workshop/notes/2026-06-19-recategorise-roadmap.html`. No code this session - decisions + doc updates only.
+
+**Build order / prioritisation**
+
+- **The UI pass (old Phase 6) moves to the FRONT - build it next, before notification + Sella.** *Why:* the notification bell, the Deals pop-up, and Sella's "proposed change" renderer all need a settled chat header + chat-top section; building them first then reshaping the chat in the UI pass means touching `ThreadView` / `DealPin` / `MessageBubble` twice. Settle the container first; inside the UI pass settle the deal-card layout early so the deal-card *content* work is not redone on a changing shape.
+- **Suggested order after UI:** Notification (as part of global notifications) → Sella change-detection → Deal Basket / Deal-form flexibility. Ops (the cloud migration push) runs alongside, not far down.
+
+**Notification**
+
+- **The cross-deal alert ("another of your deals changed") is a SUBSET of the global app-wide notification feature - build it once, inside global notifications, not as a standalone piece.** *Why:* a separate bell + dot + read/unread just for deals would be rebuilt when global notifications land.
+- **The unread dot must PERSIST across refresh until opened.** *Why:* a live-only ping cannot answer "what happened that I have not seen yet" - that needs a stored notification + a per-person seen flag; this is the design driver that gives the global feature its own small table.
+- **Direction:** a bell in the chat + a bell in the global header (same data, two places); reuse the existing RLS-scoped realtime (`use-chat-realtime.ts`) as the live "re-check" signal and derive the actionable badge from the authoritative `deal_pending_change` row (do not store a second copy of that fact). Exact shape decided when built.
+
+**Message-voice model (NEW discussion - belongs to Sella)**
+
+- **Open topic: define the difference between a System message and a Sella message, and which voice narrates a deal event in the deal/p2p thread.** The three voices are `person`, `system`, `sella` (`MessageBubble.tsx`); the intended rule (`types.ts`) is `system` = the C2C audit voice, `sella` = the narrator in p2p/deal threads. But there is DRIFT: "Deal draft created" posts as `system` into the deal thread (`create_deal_draft`), while accept/decline announcements post as `sella` into the deal + p2p threads. *Why record:* this drift is the root of OBS-3; the fix is one rule ("a deal-lifecycle event in the deal/p2p thread always speaks in voice X"), decided in the Sella discussion. Until then OBS-3's voice is open.
+
+**OBS decisions (deal card / form)**
+
+- **OBS-3 - the first proposal SHOULD post a quiet notice (option three), not a person-style chat bubble.** The VOICE (System vs Sella) is deferred to the message-voice discussion above. *Why:* a "Deal proposed" person-bubble competes with the rule that the card/strip is the one signal a deal moved; a quiet notice matches how resolutions are announced. (Today's person-style bubble comes from the pre-Phase-2 `propose_deal_rpc.sql:69`.)
+- **OBS-1 - picking a product defaults its line to quantity `1`, in the product's own natural unit.** *Why:* removes the misleading `0 €` card (value = price x quantity, so quantity 0 reads 0) without forcing a mandatory-quantity rule; the user types the real quantity over the default.
+- **OBS-2 - the card display follows the already-built pack model; drop the free g/kg line unit so a per-gram price can never sit against a kg quantity.** The pack-count model already exists for input (2026-06-18 / Phase 3e: the basket counts packs of `product.pack_size_grams`; the line stores grams + is priced per gram). OBS-2 extends it to the card display: every product is a fixed pack, quantity is a COUNT of packs, weight = count x `pack_size_grams`, the user picks counts and sees grams, and the free g/kg `unit` choice is removed so the `8 EUR/g`-against-`1.0 kg` mismatch cannot be expressed. *Why:* fewer independent inputs (unit fixed by the product, weight derived) makes the bad state impossible by construction. **Implementation lands in the deal-form / Deal Basket phase.**
+
+**Deal Room rename (DEV-66) - supersedes the 2026-05-19 "Deal Room" (DEV-22) + "Deal Workspace" naming**
+
+- **The internal deal container is renamed "Deal Workspace" -> "Deal Room"; the customer-presentation surface is renamed "Deal Room" -> "Presentation mode".** One name = one surface. *Why:* Marcel's DEV-66 wants the friendlier "Deal Room" for the working container, but "Deal Room" was already the presentation surface - the swap frees the name and removes the clash. "Presentation mode" also aligns with the existing DEV-18 "Presentation Mode" concept (turning a product selection into a customer presentation), so it unifies rather than adds a term. The DB table stays `deal_workspace` (internal); the user-facing + docs sweep happens in the UI phase. **Watch:** "Presentation mode" sits near the surface name "Present" - confirm final wording at the UI-phase kickoff. CONTEXT.md term rows updated 2026-06-19.
+
+**Triage of the not-a-phase backlog (parked / folded)**
+
+- **Per-side owner / side_lead DB enforcement - PARKED until multi-person-per-company is real.** *Why:* with one person/owner per company today the invariant cannot be broken; triggers/indexes now are speculative.
+- **Manual-create counterparty-person threading - FOLDED into C2C ticketing (T7).** A deal addressed to a company with no contact person only makes sense once a queue-and-claim flow can catch it. C2C routing: select a person -> routes like today's p2p but lands in the connected company's inbox; not a mandatory claim - pick up or reassign. Connected vs not-connected companies (T8) is built first and gates inbox-vs-p2p.
+- **Audit-chain "born_now" flag fix - FOLDED into the Sella phase (P5).** RPC-born (Sella-detected / proposed) deals miss their `deal.created` audit entry because the idempotent RPC cannot tell "born now" from "already born" (`actions.ts:381`); fix when P5 reworks the detect/propose RPCs (touch the hash-chained log once). *Why:* the missing trace is exactly on AI-detected deals, where the audit trail matters most.
+- **Access-matrix encoding (16-combo, DEV-51) - PARKED as post-MVP research.** Keep RLS as the floor + the app-layer policy module (locked 2026-05-29, B7); revisit a DSL/engine only when the hand-written matrix gets hard to verify.
+- **Home / landing view (DEV-13) - PARKED (not for now);** revisit in the UI/nav work, leaning chat-first (the product is conversation-centric).
+- **Deal origins beyond P2P (Shop + Sella) - land as part of the Deal Basket work** (the Basket, 3b, was built reusable for Sella/shop), not a separate task.
+- **File uploads in the `+` menu - PARKED as a separate backend slice** (storage bucket + RLS).
+- **The top-bar "Aurora Deutschland" placeholder is Muskan's** (wire to the real logged-in company) - removed from Ayush's list.
+
+*Why record:* closes the small open product decisions (OBS-1/2/3, DEV-66), sets the UI-first build order, frames the notification + message-voice work, and parks/folds the backlog so the roadmap reflects one agreed plan. **Status: decisions locked 2026-06-19; no code this session; OBS-2 + the rename + notification + message-voice are to-build / to-discuss in their phases.** (Sources: 2026-06-19 recategorisation session; scratch `_workshop/notes/2026-06-19-recategorise-roadmap.html`; `MessageBubble.tsx` / `types.ts` voices; `product.pack_size_grams`.)
+
+## 2026-06-19 (later) - Build order FINALISED (supersedes the "suggested order" above)
+
+Ayush set the build order for the remaining work: **1. UI & chat -> 2. Deal Basket / Deal form (NEW phase) -> 3. Sella -> 4. C2C chat (NEW phase) -> 5. Notification -> 6. Other items (parked).** This supersedes the "suggested order" in the entry above (which had Notification at #2 and no separate Deal Basket / C2C phases).
+
+- **The UI pass moves to the FRONT** (old Phase 6, built first); inside it, settle the deal-card layout early so the next phase's content work is not redone.
+- **Deal Basket / Deal form becomes its own NEW phase** (#2): the OBS-2 count-of-pack display, card flexibility (text + link cards, pre-sell non-catalogue), clickable detail, configurable display panel, Shop + Sella origins, persistent Basket. Needs a `/gsd:phase add`.
+- **C2C chat is promoted to a NEW phase** (#4): T7 ticketing + T8 connected/not-connected, absorbing manual-create person-threading. Needs a `/gsd:phase add`.
+- **Notification drops to #5** (still built as a subset of global notifications).
+- **Everything else parks** until 1-5 are done.
+
+*Why:* one agreed sequence so the next session starts on UI & chat immediately (`/gsd:plan-phase 6`), with the heavier card-content + C2C work sequenced behind the surface they sit on. **Status: order locked 2026-06-19; the UI phase (P6) is next; the two NEW phases need `/gsd:phase add` before planning.** (Source: 2026-06-19 prioritisation session; `.planning/ROADMAP.md`.)
+
+## 2026-06-20 - Connect/Chat F2 navigation BUILT: one accordion rail, full-width glass TopBar
+
+F2 (global chrome) of the Connect/Chat UI overhaul: the two old nav bars merge into ONE rail and the chrome settles before the card/strip/form content work lands on it. Source plan: `_workshop/build-plans/2026-06-19-chat-ui-overhaul.html` (slice F2); the three nav models were built as throwaway prototypes in `prototypes/rail-prototype/` and compared before locking the accordion.
+
+- **D-11 - one-rail ACCORDION navigation (supersedes the two-nav-bar layout).** The two old nav bars merge into a single rail (`IconRail`). Connect is an accordion: clicking it expands its sub-items IN PLACE as an indented tree and the other surfaces STAY visible; collapsed, the rail shrinks to a 64px icon strip with hover tooltips and a flyout popover for Connect's children. *Why:* chosen over a "replace / drill-down" model (where the other surfaces disappear while you are inside Connect) after building all three models as prototypes and comparing them - the accordion never hides the other surfaces, so a user can never feel lost about where they are, and it matches the reference apps Ayush supplied. The drill machinery is written generic, so any future surface can carry sub-items without new plumbing.
+- **D-12 - "Inbox" is relabelled "Connection Request"** (label only; the route stays `/connect/inbox`). *Why:* the word names what the item actually is (an incoming request to connect), with zero routing change.
+- **D-13 - Connect sub-item order is Chat, Connection Request, Relationship** (Relationship still disabled / "soon"). *Why:* Chat is the daily surface so it sits first; the dormant Relationship item stays last and visibly disabled.
+- **D-14 - the TopBar is a full-width glass bar, not a floating slim pill; the search field lives in the TopBar, NOT in the rail.** *Why:* a full-width bar gives the search a stable home and keeps the rail purely navigational (icons + accordion), so search and navigation do not compete for the same edge.
+
+*Why record:* locks the global chrome shape (one accordion rail + full-width glass TopBar + search location) that the rest of the Connect/Chat overhaul - the deal card, strip, and form - will sit inside, so later content work starts from a settled container. **Status: built + verified 2026-06-20 (prod build green; unit 41/41; tsc + eslint clean; adversarial 3-lens review - 1 real bug found + fixed). LOCAL only (branch `claude/ayush/work`, not pushed).** (Sources: this session; `_workshop/build-plans/2026-06-19-chat-ui-overhaul.html` slice F2; the rail prototypes in `prototypes/rail-prototype/`.)
+
+## 2026-06-21 - Phase 04C (Card + Form UI touch) BUILT: slim shaded card header, card-as-leaflet over the conversation rail, one-tap Deal Form pick, Damson deep-pink recolor
+
+The light "UI touch" on the deal card + deal form, so the final Agentation polish stays light. Decided SEE-FIRST: a parallel design workflow (8 agents = maroon recolor + 3 card + 3 form variants + a design critique) produced a throwaway glass prototype (`prototypes/04c-touch-prototype/`); Ayush approved it, then the winners were ported directly to the app (no GSD ceremony - Ayush said apply it fast).
+
+- **D-15 - the brand deep-pink recolors `#76002d` → `#7a1638` (Damson), app-wide.** *Why:* the old maroon was dark but 100%-saturated, so against the cotton-candy pinks + white glass it read "too bright"/harsh. Damson keeps the depth (AAA white-text contrast) but drops saturation to ~69% and nudges the hue toward raspberry, so it reads as the same berry family. `--glass-shadow` now DERIVES from `--color-brand-deep` via `color-mix` (single source of truth), so the recolor re-tints the whole glass language in one place. All hardcoded deep-pink hexes (`#76002d` / `#8c0036` / `#3a0016`) removed.
+- **D-16 - the Deal Card opens as a LEAFLET over the conversation rail, not floating in the chat thread.** `DealPin` (chat variant) portals the card into a `hs-deal-card-slot` in `ConversationList`; the rail widened `w-64`→`w-72`. The Deal Room (workspace) variant keeps the inline card. *Why:* the card floating inside the thread was disturbing (Ayush); the rail is the same place/shape the New chat picker already uses, so it reuses a known surface and gets the card out of the message stream.
+- **D-17 - the card header is a SLIM SHADED band, not the old tall solid maroon block.** A soft deep-pink glass wash holds a calm ink value hero + a deep-pink hairline underline; the offered-story line moved below it. *Why:* the old ~118px solid band dominated the card (worse in the narrow rail); a slim shaded header reads professional AND gives the Damson accent a surface so the colour is actually visible (a plain white header made the recolor invisible).
+- **D-18 - the Deal Form picks product + batch in ONE tap (a batch rail), no modal popup.** Each search result shows its batches as tap-to-add chips carrying that batch's measured THC/CBD; batches are preloaded. *Why:* the old click-product → modal-batch-picker → add was a two-step interruption; one inline tap preserves the batch-level truth (BTCH-01 / D-06) while removing the popup.
+
+*Why record:* these are the visual-language + card-placement decisions the Deal Room build (next) and the final Agentation polish will sit on top of. **Status: built + gate-green 2026-06-21 (tsc 0 + eslint 0 + 62/62 unit + next build ok); COMPILE/BUILD verified only - the card was not seen live (needs a minted deal), so a human visual UAT is owed. LOCAL only (branch `claude/ayush/work`, commits `c29ea4c` + `37ec4e8`, not pushed).** (Sources: this session; `prototypes/04c-touch-prototype/NOTES.md`.)
+
+---
+
+## RBAC / permissions
+
+- **Configurable RBAC matrix approved as Phase 14 (post-v1.0), reversing the v1 two-role-only scope (2026-06-21).** Phase 11 shipped two fixed company roles (Superadmin / Member) on top of the flexible `permission_matrix_entry` tables — only two actions (`team.manage`, `company.edit_profile`) seeded + enforced. Product now wants the full configurable matrix: a Superadmin defines custom roles, grants/revokes individual actions per role through a matrix UI, and assigns people to roles. **Scoped as its own Phase 14 (NOT folded into Phase 13)** because the real cost is enumerating a gated-action catalogue across the app + wiring `has_permission()` enforcement at each call site — the UI is the small part. **Post-v1.0:** does not gate the Phase 8 capstone (the live walk runs on the two-role model); the two-role default stays until Phase 14 lands. *Why:* makes the dormant matrix a real product surface, but honestly sized — the value is in enforced-action coverage, not the screen; deferring keeps the onboarding-ready milestone shippable. (Req IDs RBAC-05–08; ROADMAP Phase 14.)
+
+---
+
+## 2026-06-22 — Products are location-scoped (one product = one location)
+
+A product belongs to **exactly one shop location**; there are **no multi-location products**. A company has many locations (e.g. Berlin DE, Manchester UK); each location has its own product list. Same-named products across locations are **separate** entries because they genuinely differ — German vs UK **packaging, labelling, regulatory** (Marcel). Model: **Company → many Locations → each Location's own Products → each Product's Batches**.
+
+*Why:* matches reality (a German product carries German packaging and differs from its UK equivalent) and keeps the model simple — no product↔location many-to-many. *Schema implication:* a `location` entity per company + `product.location_id` — a **Phase-7 build, not yet in the schema** (verified: `product` has no location column today). (Source: 2026-06-22 Present / Manage-shop design session with Muskan; Marcel's packaging rationale.)

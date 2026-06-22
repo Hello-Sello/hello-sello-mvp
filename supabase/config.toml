@@ -151,9 +151,17 @@ max_indexes = 5
 enabled = true
 # The base URL of your website. Used as an allow-list for redirects and for constructing URLs used
 # in emails.
-site_url = "http://127.0.0.1:3000"
+# Use `localhost` (NOT 127.0.0.1): Next dev normalizes request.url to the `localhost`
+# host, so /auth/confirm always redirects to localhost. site_url must match that host
+# so the recovery/confirm email link, the confirm redirect, and the session cookie all
+# live on ONE cookie host — a mismatch drops the session on the redirect (10-04).
+site_url = "http://localhost:3000"
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-additional_redirect_urls = ["https://127.0.0.1:3000"]
+# Local-parity (06.1-05): the auth-flow routes must be allowlisted so the LOCAL stack can
+# exercise the OAuth callback + email-confirm/recovery round-trips. Cloud uses the
+# dashboard URL allowlist (source of truth for the running app). All on `localhost` to
+# match site_url + the Next dev request host (10-04).
+additional_redirect_urls = ["http://localhost:3000", "http://localhost:3000/auth/callback", "http://localhost:3000/auth/confirm"]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to the local API URL (http://127.0.0.1:<port>/auth/v1).
@@ -179,7 +187,12 @@ password_requirements = ""
 
 [auth.rate_limit]
 # Number of emails that can be sent per hour. Requires auth.email.smtp to be enabled.
-email_sent = 2
+# Raised from 2 → 30 (10-05): the email-change E2E fires several auth emails per run
+# (change → confirm → restore, and double-confirm mails both addresses); the prod-tiny
+# default of 2/hour tripped `over_email_send_rate_limit` mid-round-trip on the LOCAL
+# stack. 30/hour is comfortable headroom for local E2E and is local-only (cloud rate
+# limits are managed in the dashboard).
+email_sent = 30
 # Number of SMS messages that can be sent per hour. Requires auth.sms to be enabled.
 sms_sent = 30
 # Number of anonymous sign-ins that can be made per hour per IP address. Requires enable_anonymous_sign_ins = true.
@@ -204,9 +217,25 @@ web3 = 30
 enable_signup = true
 # If enabled, a user will be required to confirm any email change on both the old, and new email
 # addresses. If disabled, only the new email is required to confirm.
-double_confirm_changes = true
+#
+# Set to FALSE (10-05, ACCT-03) — deliberate deviation from D-10's "keep true". With
+# `true`, this GoTrue version strictly requires confirming BOTH the old AND the new
+# address (email_change_confirm_status must reach 2) before auth.users.email flips —
+# clicking only the new-address link advances the counter to 1 and never flips. But the
+# whole ACCT-03 design (the RED e2e/email-change.spec.ts contract, the human-verify
+# step, RESEARCH §3 line 75) assumes the NEW-address confirmation alone completes the
+# change. With `false`, only the new address confirms (proves control) and the email
+# flips on that single click — matching the contract. The OWASP "notify the old owner"
+# intent is preserved via GoTrue's change-notification to the old address; the strict
+# two-click gate is the part that conflicts with the contract. The CLOUD setting
+# ("Secure email change") is the human's call at the end-of-phase checkpoint — see the
+# 10-05 SUMMARY "Human verification" + "Deviations" sections. (T-10-05a/f.)
+double_confirm_changes = false
 # If enabled, users need to confirm their email address before signing in.
-enable_confirmations = false
+# Local-parity (06.1-05): mirror the cloud "Confirm email" = ON so the LOCAL stack
+# behaves like production (signUp returns no session; user must click the email link).
+# Local mail is captured by Inbucket (port 54324); cloud uses Resend SMTP (dashboard).
+enable_confirmations = true
 # If enabled, users will need to reauthenticate or have logged in recently to change their password.
 secure_password_change = false
 # Controls the minimum amount of time that must pass before sending another signup confirmation or password reset email.
@@ -226,10 +255,39 @@ otp_expiry = 3600
 # admin_email = "admin@email.com"
 # sender_name = "Admin"
 
-# Uncomment to customize email template
-# [auth.email.template.invite]
-# subject = "You have been invited"
-# content_path = "./supabase/templates/invite.html"
+# Recovery (password-reset) email template (ACCT-02 / D-09, Pitfall 1). The DEFAULT
+# GoTrue template emits {{ .ConfirmationURL }}, which links to the GoTrue verify
+# endpoint (…:54321/auth/v1/verify) — NOT our app. We override it to build a
+# same-origin link to our /auth/confirm route with token_hash + type=recovery, so
+# verifyOtp sets the session and forwards to /reset-password. Lives in a committed
+# template file (not the dashboard) so the local stack + E2E exercise the real shape.
+[auth.email.template.recovery]
+subject = "Reset your password"
+content_path = "./supabase/templates/recovery.html"
+
+# Email-change confirmation template (ACCT-03 / D-11, Pitfall 1). Same rationale as
+# recovery above: the DEFAULT GoTrue template emits {{ .ConfirmationURL }}, which links
+# to …:54321/auth/v1/verify — NOT our app — so the same-origin /auth/confirm round-trip
+# the E2E (and extractConfirmLink) drives could never match. We override it to build a
+# same-origin link with token_hash + type=email_change. With double_confirm_changes=true
+# this template is mailed to BOTH the old and new address; clicking the new-address link
+# is what flips auth.users.email.
+[auth.email.template.email_change]
+subject = "Confirm your new email"
+content_path = "./supabase/templates/email_change.html"
+
+# Team-invite email template (RBAC-02 / D-06, Pitfall 1). Same rationale as recovery
+# and email_change above: the DEFAULT GoTrue invite template emits {{ .ConfirmationURL }},
+# which links to …:54321/auth/v1/verify — NOT our app — and uses the PKCE/implicit flow,
+# bypassing the safeNext-guarded /auth/confirm route. We override it to build a same-origin
+# link with token_hash + type=invite, so verifyOtp sets the session and forwards to /home.
+# On accept the Phase 06.1 person signup trigger reads the invite metadata (company_id +
+# role from inviteUserByEmail's `data`) and links the new person to the inviting company.
+# Cloud: this template must ALSO be pasted into the Supabase dashboard by hand (the
+# config.toml template only applies to the local stack — Phase 10 pattern).
+[auth.email.template.invite]
+subject = "You've been invited to join Hello Sello"
+content_path = "./supabase/templates/invite.html"
 
 # Uncomment to customize notification email template
 # [auth.email.notification.password_changed]

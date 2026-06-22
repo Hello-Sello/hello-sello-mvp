@@ -1,0 +1,803 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Hello Sello Rail - Model 3: Accordion + Messages</title>
+<!--
+  Hello Sello global LEFT NAVIGATION RAIL prototype.
+  Model 3 - Accordion + Messages (closest to reference 1).
+
+  Brand tokens copied verbatim from src/app/globals.css (read-only).
+  Structure + interactions mimic the two dark/blue reference dashboards Ayush gave,
+  re-skinned into the Hello Sello soft-pink glass language.
+
+  NOTE: in the real app the global SEARCH may live in the top bar, not the rail.
+  Putting it under the wordmark here is a deliberate PROTOTYPE choice so this
+  prototype matches the reference screenshots (which place search in the sidebar).
+
+  Everything is one self-contained file: inline CSS + vanilla JS, no build, no assets.
+-->
+<style>
+  /* ---- Brand tokens (verbatim from globals.css) ---- */
+  :root {
+    --brand: #e30b5d;          /* raspberry  - primary accent */
+    --brand-soft: #ffb7d5;     /* cotton candy - light fills */
+    --brand-deep: #76002d;     /* deep accent / pressed */
+    --brand-tint: #fde7f1;     /* soft pink wash for pills/sections */
+
+    --bg-from: #ffffff;
+    --bg-to: #fff1f7;
+
+    --ink: #1f2020;            /* text + icons */
+    --muted: #6b6470;          /* muted text */
+    --line: #ecdfe9;           /* hairline */
+
+    --glass-bg: rgba(255, 255, 255, 0.62);
+    --glass-bg-strong: rgba(255, 255, 255, 1);
+    --glass-border: rgba(255, 255, 255, 0.65);
+    --glass-shadow: 0 10px 34px -12px rgba(118, 0, 45, 0.18);
+
+    --success: #34b233;
+    --danger: #dc2626;
+    --warn: #e8a30b;
+
+    /* layout rhythm */
+    --rail-w: 288px;           /* comfortable expanded width */
+    --rail-w-collapsed: 64px;  /* clean icon rail */
+    --radius: 14px;
+    --radius-sm: 10px;
+    --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+    --dur: 280ms;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+
+  body {
+    color: var(--ink);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    background:
+      radial-gradient(60rem 60rem at 10% -12%, rgba(255, 183, 213, 0.55), transparent 60%),
+      radial-gradient(46rem 46rem at 108% 6%, rgba(227, 11, 93, 0.10), transparent 55%),
+      linear-gradient(160deg, var(--bg-from) 0%, var(--bg-to) 100%);
+    background-attachment: fixed;
+  }
+
+  .app {
+    display: flex;
+    height: 100vh;
+    padding: 16px;
+    gap: 16px;
+  }
+
+  /* ============ GLASS RAIL ============ */
+  .rail {
+    position: relative;
+    flex: 0 0 auto;
+    width: var(--rail-w);
+    display: flex;
+    flex-direction: column;
+    border-radius: 22px;
+    padding: 14px 12px;
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px) saturate(140%);
+    -webkit-backdrop-filter: blur(20px) saturate(140%);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+    transition: width var(--dur) var(--ease), padding var(--dur) var(--ease);
+    overflow: visible; /* let flyout/tooltip escape */
+  }
+  .rail.collapsed { width: var(--rail-w-collapsed); padding: 14px 8px; }
+
+  /* ---- TOP: wordmark + single state-aware collapse control ---- */
+  .rail-top {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 4px 6px 4px 6px;
+    min-height: 40px;
+  }
+  .brand-mark {
+    width: 30px; height: 30px; flex: 0 0 auto;
+    border-radius: 9px;
+    background: linear-gradient(150deg, var(--brand) 0%, var(--brand-deep) 100%);
+    color: #fff; display: grid; place-items: center;
+    font-weight: 800; font-size: 13px; letter-spacing: -0.5px;
+    box-shadow: 0 4px 12px -4px rgba(227, 11, 93, 0.5);
+  }
+  .wordmark {
+    font-weight: 750; font-size: 16px; letter-spacing: -0.3px; color: var(--ink);
+    white-space: nowrap; overflow: hidden;
+    flex: 1 1 auto;
+    transition: opacity 160ms var(--ease);
+  }
+  .wordmark .lo { color: var(--brand); }
+
+  .collapse-btn {
+    flex: 0 0 auto;
+    width: 30px; height: 30px;
+    border: 1px solid var(--line);
+    background: rgba(255,255,255,0.7);
+    border-radius: 9px;
+    color: var(--muted);
+    display: grid; place-items: center;
+    cursor: pointer;
+    transition: background 140ms var(--ease), color 140ms var(--ease), transform 140ms var(--ease);
+  }
+  .collapse-btn:hover { background: var(--brand-tint); color: var(--brand); }
+  .collapse-btn svg { width: 17px; height: 17px; transition: transform var(--dur) var(--ease); }
+  /* single chevron flips direction by state */
+  .rail.collapsed .collapse-btn svg { transform: rotate(180deg); }
+
+  /* ---- SEARCH ---- */
+  .search {
+    margin: 12px 4px 4px;
+    display: flex; align-items: center; gap: 8px;
+    height: 38px; padding: 0 10px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--line);
+    background: rgba(255,255,255,0.72);
+    transition: opacity 160ms var(--ease), border-color 140ms var(--ease);
+  }
+  .search:focus-within { border-color: var(--brand-soft); }
+  .search svg { width: 16px; height: 16px; color: var(--muted); flex: 0 0 auto; }
+  .search input {
+    border: 0; background: transparent; outline: none;
+    font-size: 13.5px; color: var(--ink); width: 100%;
+    font-family: inherit;
+  }
+  .search input::placeholder { color: var(--muted); }
+  .kbd {
+    flex: 0 0 auto;
+    font-size: 11px; color: var(--muted);
+    border: 1px solid var(--line);
+    background: rgba(255,255,255,0.85);
+    border-radius: 6px; padding: 2px 6px;
+    font-family: ui-monospace, "SF Mono", monospace;
+  }
+
+  /* ---- SCROLL BODY ---- */
+  .rail-body {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    overflow-x: hidden;
+    margin-top: 6px;
+    padding: 2px;
+    scrollbar-width: thin;
+  }
+  .rail-body::-webkit-scrollbar { width: 6px; }
+  .rail-body::-webkit-scrollbar-thumb { background: var(--brand-soft); border-radius: 6px; }
+
+  /* ---- SECTION LABEL (small-caps) ---- */
+  .section-label {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 10px 6px;
+    font-size: 11px; font-weight: 700;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--muted);
+    transition: opacity 160ms var(--ease);
+  }
+  .section-label .add-btn {
+    width: 20px; height: 20px; border-radius: 6px;
+    border: 1px solid var(--line); background: rgba(255,255,255,0.7);
+    color: var(--muted); cursor: pointer;
+    display: grid; place-items: center; font-size: 14px; line-height: 1;
+    transition: background 140ms var(--ease), color 140ms var(--ease);
+  }
+  .section-label .add-btn:hover { background: var(--brand-tint); color: var(--brand); }
+
+  /* ---- NAV ITEM (flat surface or accordion parent) ---- */
+  .nav-item {
+    position: relative;
+    display: flex; align-items: center; gap: 11px;
+    width: 100%;
+    padding: 9px 10px;
+    border: 0; background: transparent;
+    border-radius: var(--radius-sm);
+    color: var(--ink);
+    font-size: 14px; font-weight: 550; font-family: inherit;
+    cursor: pointer; text-align: left;
+    transition: background 140ms var(--ease), color 140ms var(--ease);
+  }
+  .nav-item:hover { background: rgba(255,255,255,0.74); }
+  .nav-item .ico { width: 20px; height: 20px; flex: 0 0 auto; display: grid; place-items: center; color: var(--muted); }
+  .nav-item .ico svg { width: 19px; height: 19px; }
+  .nav-item .label { flex: 1 1 auto; white-space: nowrap; overflow: hidden; }
+  .nav-item .chev {
+    width: 16px; height: 16px; color: var(--muted); flex: 0 0 auto;
+    transition: transform var(--dur) var(--ease);
+  }
+  .nav-item[aria-expanded="true"] .chev { transform: rotate(90deg); }
+  .nav-item[aria-current="true"] { color: var(--brand); }
+  .nav-item[aria-current="true"] .ico { color: var(--brand); }
+
+  /* active flat item = soft pill */
+  .nav-item.is-active {
+    background: var(--brand-tint);
+    color: var(--brand);
+    font-weight: 650;
+  }
+  .nav-item.is-active .ico { color: var(--brand); }
+
+  /* disabled / greyed surfaces */
+  .nav-item.is-disabled { color: #b6aeb8; cursor: not-allowed; }
+  .nav-item.is-disabled .ico { color: #cdbfca; }
+  .nav-item.is-disabled:hover { background: transparent; }
+  .nav-item .soon {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.04em;
+    color: #b6aeb8; border: 1px solid var(--line); border-radius: 6px;
+    padding: 1px 5px; text-transform: uppercase;
+  }
+
+  /* ---- ACCORDION CHILD TREE (indented, connector line) ---- */
+  .subtree {
+    overflow: hidden;
+    max-height: 0;
+    transition: max-height var(--dur) var(--ease);
+  }
+  .subtree.open { max-height: 260px; }
+  .subtree-inner {
+    position: relative;
+    margin: 2px 0 4px 21px;   /* indent so connector aligns under parent icon */
+    padding-left: 14px;
+  }
+  /* vertical connector line */
+  .subtree-inner::before {
+    content: "";
+    position: absolute; left: 0; top: 4px; bottom: 8px;
+    width: 1.5px; background: var(--line);
+    border-radius: 2px;
+  }
+  .sub-item {
+    position: relative;
+    display: flex; align-items: center; gap: 9px;
+    width: 100%;
+    padding: 8px 10px;
+    border: 0; background: transparent;
+    border-radius: var(--radius-sm);
+    color: var(--muted);
+    font-size: 13.5px; font-weight: 550; font-family: inherit;
+    cursor: pointer; text-align: left;
+    transition: background 140ms var(--ease), color 140ms var(--ease);
+  }
+  /* little elbow tick into the connector */
+  .sub-item::before {
+    content: "";
+    position: absolute; left: -14px; top: 50%;
+    width: 11px; height: 1.5px; background: var(--line);
+  }
+  .sub-item:hover { background: rgba(255,255,255,0.74); color: var(--ink); }
+  .sub-item .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); flex: 0 0 auto; opacity: 0.6; }
+  .sub-item.is-active {
+    background: var(--brand-tint);
+    color: var(--brand);
+    font-weight: 650;
+  }
+  .sub-item.is-active .dot { background: var(--brand); opacity: 1; }
+
+  /* ---- DIVIDER ---- */
+  .divider { height: 1px; background: var(--line); margin: 12px 8px; border: 0; }
+
+  /* ---- MESSAGES: people rows ---- */
+  .person {
+    display: flex; align-items: center; gap: 11px;
+    width: 100%;
+    padding: 8px 10px;
+    border: 0; background: transparent;
+    border-radius: var(--radius-sm);
+    cursor: pointer; text-align: left; font-family: inherit;
+    transition: background 140ms var(--ease);
+  }
+  .person:hover { background: rgba(255,255,255,0.74); }
+  .avatar {
+    position: relative;
+    width: 32px; height: 32px; flex: 0 0 auto;
+    border-radius: 50%;
+    display: grid; place-items: center;
+    font-size: 12px; font-weight: 700; color: #fff;
+    letter-spacing: -0.2px;
+  }
+  .avatar .status {
+    position: absolute; right: -1px; bottom: -1px;
+    width: 9px; height: 9px; border-radius: 50%;
+    border: 2px solid #fff;
+  }
+  .status.on { background: var(--success); }
+  .status.off { background: #c4bcc6; }
+  .status.busy { background: var(--warn); }
+  .person-meta { flex: 1 1 auto; min-width: 0; }
+  .person-name { font-size: 13.5px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .person-snip { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* ---- BOTTOM PROFILE CARD ---- */
+  .profile {
+    margin-top: 10px;
+    display: flex; align-items: center; gap: 11px;
+    padding: 9px 10px;
+    border-radius: var(--radius);
+    border: 1px solid var(--line);
+    background: rgba(255,255,255,0.7);
+    cursor: pointer; font-family: inherit; width: 100%;
+    transition: background 140ms var(--ease), border-color 140ms var(--ease);
+  }
+  .profile:hover { background: var(--brand-tint); border-color: var(--brand-soft); }
+  .profile .avatar { background: linear-gradient(150deg, var(--brand) 0%, var(--brand-deep) 100%); }
+  .profile-meta { flex: 1 1 auto; min-width: 0; }
+  .profile-name { font-size: 13.5px; font-weight: 700; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .profile-org { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .profile .chev { width: 16px; height: 16px; color: var(--muted); flex: 0 0 auto; }
+
+  /* ============ COLLAPSED STATE ============ */
+  /* hide text-y bits, center icons */
+  .rail.collapsed .wordmark,
+  .rail.collapsed .search input,
+  .rail.collapsed .search .kbd,
+  .rail.collapsed .nav-item .label,
+  .rail.collapsed .nav-item .chev,
+  .rail.collapsed .nav-item .soon,
+  .rail.collapsed .section-label .txt,
+  .rail.collapsed .section-label .add-btn,
+  .rail.collapsed .person-meta,
+  .rail.collapsed .profile-meta,
+  .rail.collapsed .profile .chev {
+    opacity: 0;
+    width: 0;
+    pointer-events: none;
+    visibility: hidden;
+  }
+  .rail.collapsed .rail-top { justify-content: center; gap: 0; flex-wrap: wrap; }
+  .rail.collapsed .brand-mark { margin: 0 auto; }
+  /* collapse button drops below the mark so both stay centered + reachable */
+  .rail.collapsed .collapse-btn { margin: 8px auto 0; }
+  .rail.collapsed .search { justify-content: center; padding: 0; }
+  .rail.collapsed .search svg { margin: 0 auto; }
+  .rail.collapsed .nav-item { justify-content: center; padding: 9px 0; }
+  .rail.collapsed .sub-item { display: none; }   /* children move to flyout */
+  .rail.collapsed .subtree { max-height: 0 !important; }
+  .rail.collapsed .section-label { justify-content: center; padding: 12px 0 4px; min-height: 8px; }
+  .rail.collapsed .section-label::after {
+    content: ""; display: block; width: 18px; height: 1px; background: var(--line);
+  }
+  .rail.collapsed .person { justify-content: center; padding: 7px 0; }
+  .rail.collapsed .profile { justify-content: center; padding: 8px 0; border-color: transparent; background: transparent; }
+  .rail.collapsed .profile:hover { background: var(--brand-tint); }
+
+  /* ---- TOOLTIP (collapsed hover label) ---- */
+  .tip {
+    position: absolute;
+    left: calc(100% + 12px);
+    top: 50%; transform: translateY(-50%) translateX(-4px);
+    background: var(--ink);
+    color: #fff;
+    font-size: 12.5px; font-weight: 600;
+    padding: 6px 10px; border-radius: 8px;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0; visibility: hidden;
+    transition: opacity 120ms var(--ease), transform 120ms var(--ease);
+    box-shadow: 0 6px 18px -6px rgba(118,0,45,0.4);
+    z-index: 40;
+  }
+  .tip::before {
+    content: ""; position: absolute; left: -4px; top: 50%;
+    transform: translateY(-50%) rotate(45deg);
+    width: 8px; height: 8px; background: var(--ink);
+  }
+  /* only show tooltips when collapsed */
+  .rail.collapsed .has-tip:hover .tip,
+  .rail.collapsed .has-tip:focus-visible .tip {
+    opacity: 1; visibility: visible; transform: translateY(-50%) translateX(0);
+  }
+
+  /* ---- FLYOUT POPOVER (collapsed Connect children) ---- */
+  .flyout {
+    position: absolute;
+    left: calc(100% + 12px);
+    top: 0;
+    width: 200px;
+    padding: 8px;
+    border-radius: var(--radius);
+    background: var(--glass-bg-strong);
+    border: 1px solid var(--glass-border);
+    box-shadow: 0 18px 44px -14px rgba(118,0,45,0.28);
+    opacity: 0; visibility: hidden;
+    transform: translateX(-6px);
+    transition: opacity 140ms var(--ease), transform 140ms var(--ease);
+    z-index: 50;
+  }
+  .flyout-title {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--muted); padding: 4px 8px 8px;
+  }
+  .rail.collapsed .has-flyout:hover .flyout,
+  .rail.collapsed .has-flyout:focus-within .flyout {
+    opacity: 1; visibility: visible; transform: translateX(0);
+  }
+  /* flyout items reuse sub-item look but no connector */
+  .flyout .sub-item { color: var(--ink); }
+  .flyout .sub-item::before { display: none; }
+  .flyout .sub-item .dot { opacity: 0.55; }
+
+  /* ============ FAUX CHAT CONTENT (right) ============ */
+  .content {
+    flex: 1 1 auto;
+    display: flex; flex-direction: column;
+    border-radius: 22px;
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px) saturate(140%);
+    -webkit-backdrop-filter: blur(20px) saturate(140%);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+    overflow: hidden;
+    min-width: 0;
+  }
+  .topbar {
+    display: flex; align-items: center; gap: 12px;
+    padding: 16px 22px;
+    border-bottom: 1px solid var(--line);
+  }
+  .topbar .crumb { font-size: 13px; color: var(--muted); }
+  .topbar .crumb b { color: var(--ink); }
+  .topbar .spacer { flex: 1 1 auto; }
+  .topbar .hint {
+    font-size: 12px; color: var(--muted);
+    background: rgba(255,255,255,0.6); border: 1px solid var(--line);
+    border-radius: 999px; padding: 5px 12px;
+  }
+  .chat-scroll { flex: 1 1 auto; overflow-y: auto; padding: 26px 22px; display: flex; flex-direction: column; gap: 14px; }
+  .bubble { max-width: 460px; padding: 11px 15px; border-radius: 16px; font-size: 14px; line-height: 1.45; }
+  .bubble.them { align-self: flex-start; background: #fff; border: 1px solid var(--line); border-bottom-left-radius: 5px; }
+  .bubble.me { align-self: flex-end; color: #fff; border-bottom-right-radius: 5px;
+    background: linear-gradient(150deg, var(--brand) 0%, var(--brand-deep) 100%); }
+  .bubble .who { font-size: 11px; font-weight: 700; color: var(--brand); margin-bottom: 3px; }
+  .composer {
+    display: flex; align-items: center; gap: 10px;
+    padding: 14px 22px; border-top: 1px solid var(--line);
+  }
+  .composer .field {
+    flex: 1 1 auto; height: 42px; border-radius: 999px;
+    border: 1px solid var(--line); background: rgba(255,255,255,0.78);
+    display: flex; align-items: center; padding: 0 16px; color: var(--muted); font-size: 14px;
+  }
+  .composer .send {
+    width: 42px; height: 42px; border-radius: 50%; border: 0; cursor: pointer;
+    background: linear-gradient(150deg, var(--brand) 0%, var(--brand-deep) 100%);
+    color: #fff; display: grid; place-items: center;
+    box-shadow: 0 6px 16px -6px rgba(227,11,93,0.6);
+  }
+
+  /* ---- accessibility: visible keyboard focus everywhere ---- */
+  .collapse-btn:focus-visible,
+  .nav-item:focus-visible,
+  .sub-item:focus-visible,
+  .person:focus-visible,
+  .profile:focus-visible,
+  .section-label .add-btn:focus-visible,
+  .search input:focus-visible,
+  .composer .send:focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+
+  /* ---- respect reduced motion ---- */
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+  }
+
+  /* small helper to keep collapsed avatars + status visible in MESSAGES stack */
+  .rail.collapsed .avatar { margin: 0 auto; }
+</style>
+</head>
+<body>
+  <div class="app">
+    <!-- =================== RAIL =================== -->
+    <nav class="rail" id="rail" aria-label="Primary">
+      <!-- TOP: wordmark + single state-aware collapse control -->
+      <div class="rail-top">
+        <div class="brand-mark" aria-hidden="true">HS</div>
+        <div class="wordmark">Hello&nbsp;<span class="lo">Sello</span></div>
+        <button class="collapse-btn" id="collapseBtn" type="button"
+                aria-label="Collapse navigation" aria-pressed="false" title="Collapse">
+          <!-- single chevron-left; flips to right via CSS rotate when collapsed -->
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
+        </button>
+      </div>
+
+      <!-- SEARCH (prototype choice - real app search may live in top bar) -->
+      <div class="search has-tip">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input type="text" placeholder="Search" aria-label="Search" />
+        <span class="kbd">⌘S</span>
+        <span class="tip">Search</span>
+      </div>
+
+      <!-- SCROLLABLE BODY -->
+      <div class="rail-body">
+
+        <!-- ===== MAIN section ===== -->
+        <div class="section-label"><span class="txt">Main</span></div>
+
+        <!-- Home (flat, active surface to start) -->
+        <div class="has-tip has-flyout" style="position:relative;">
+          <button class="nav-item is-active" type="button" data-surface="home" aria-current="true">
+            <span class="ico">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-8 9 8"></path><path d="M5 10v10h14V10"></path></svg>
+            </span>
+            <span class="label">Home</span>
+          </button>
+          <span class="tip">Home</span>
+        </div>
+
+        <!-- Connect = accordion parent (the only surface with sub-items) -->
+        <div class="has-tip has-flyout" style="position:relative;">
+          <button class="nav-item" type="button" id="connectParent"
+                  data-surface="connect" aria-expanded="false" aria-controls="connectTree">
+            <span class="ico">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+            </span>
+            <span class="label">Connect</span>
+            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18"></polyline></svg>
+          </button>
+          <!-- collapsed flyout shows the same children -->
+          <div class="flyout" role="menu" aria-label="Connect sub-navigation">
+            <div class="flyout-title">Connect</div>
+            <button class="sub-item" type="button" data-sub="inbox" role="menuitem"><span class="dot"></span>Inbox</button>
+            <button class="sub-item is-active" type="button" data-sub="chat" role="menuitem"><span class="dot"></span>Chat</button>
+            <button class="sub-item" type="button" data-sub="relationships" role="menuitem"><span class="dot"></span>Relationships</button>
+          </div>
+          <span class="tip">Connect</span>
+        </div>
+
+        <!-- the in-place accordion child tree (GENERIC machinery, reusable per surface) -->
+        <div class="subtree" id="connectTree">
+          <div class="subtree-inner">
+            <button class="sub-item" type="button" data-sub="inbox"><span class="dot"></span>Inbox</button>
+            <button class="sub-item is-active" type="button" data-sub="chat"><span class="dot"></span>Chat</button>
+            <button class="sub-item" type="button" data-sub="relationships"><span class="dot"></span>Relationships</button>
+          </div>
+        </div>
+
+        <!-- Discover (flat) -->
+        <div class="has-tip" style="position:relative;">
+          <button class="nav-item" type="button" data-surface="discover">
+            <span class="ico">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            </span>
+            <span class="label">Discover</span>
+          </button>
+          <span class="tip">Discover</span>
+        </div>
+
+        <!-- Present (flat) -->
+        <div class="has-tip" style="position:relative;">
+          <button class="nav-item" type="button" data-surface="present">
+            <span class="ico">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+            </span>
+            <span class="label">Present</span>
+          </button>
+          <span class="tip">Present</span>
+        </div>
+
+        <!-- greyed / disabled surfaces -->
+        <div class="has-tip" style="position:relative;">
+          <button class="nav-item is-disabled" type="button" data-surface="buy" aria-disabled="true" tabindex="-1">
+            <span class="ico">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6"></path></svg>
+            </span>
+            <span class="label">Buy</span>
+            <span class="soon">Soon</span>
+          </button>
+          <span class="tip">Buy &middot; coming soon</span>
+        </div>
+        <div class="has-tip" style="position:relative;">
+          <button class="nav-item is-disabled" type="button" data-surface="sell" aria-disabled="true" tabindex="-1">
+            <span class="ico">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+            </span>
+            <span class="label">Sell</span>
+            <span class="soon">Soon</span>
+          </button>
+          <span class="tip">Sell &middot; coming soon</span>
+        </div>
+        <div class="has-tip" style="position:relative;">
+          <button class="nav-item is-disabled" type="button" data-surface="trade" aria-disabled="true" tabindex="-1">
+            <span class="ico">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="17 1 21 5 17 9"></polyline><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><polyline points="7 23 3 19 7 15"></polyline><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>
+            </span>
+            <span class="label">Trade</span>
+            <span class="soon">Soon</span>
+          </button>
+          <span class="tip">Trade &middot; coming soon</span>
+        </div>
+
+        <hr class="divider" />
+
+        <!-- ===== MESSAGES section (Model 3 extra) ===== -->
+        <div class="section-label">
+          <span class="txt">Messages</span>
+          <button class="add-btn" type="button" aria-label="New message" title="New message">+</button>
+        </div>
+
+        <!-- people rows: avatar + name + status dot + faint snippet -->
+        <div class="has-tip" style="position:relative;">
+          <button class="person" type="button">
+            <span class="avatar" style="background:#7b61ff;">PR<span class="status on"></span></span>
+            <span class="person-meta">
+              <span class="person-name">Dr. Priya Rao</span>
+              <span class="person-snip">Batch B-204 specs attached</span>
+            </span>
+          </button>
+          <span class="tip">Dr. Priya Rao &middot; online</span>
+        </div>
+        <div class="has-tip" style="position:relative;">
+          <button class="person" type="button">
+            <span class="avatar" style="background:#0ea5a4;">MK<span class="status busy"></span></span>
+            <span class="person-meta">
+              <span class="person-name">Marcus Klein</span>
+              <span class="person-snip">Can we revise the margin?</span>
+            </span>
+          </button>
+          <span class="tip">Marcus Klein &middot; busy</span>
+        </div>
+        <div class="has-tip" style="position:relative;">
+          <button class="person" type="button">
+            <span class="avatar" style="background:#e8730b;">SN<span class="status off"></span></span>
+            <span class="person-meta">
+              <span class="person-name">StonePharm Sales</span>
+              <span class="person-snip">Order #4471 confirmed</span>
+            </span>
+          </button>
+          <span class="tip">StonePharm Sales &middot; offline</span>
+        </div>
+        <div class="has-tip" style="position:relative;">
+          <button class="person" type="button">
+            <span class="avatar" style="background:#2563eb;">AN<span class="status on"></span></span>
+            <span class="person-meta">
+              <span class="person-name">Aisha Nuwair</span>
+              <span class="person-snip">Sending the compliance doc</span>
+            </span>
+          </button>
+          <span class="tip">Aisha Nuwair &middot; online</span>
+        </div>
+
+      </div><!-- /rail-body -->
+
+      <!-- BOTTOM: profile card -->
+      <div class="has-tip" style="position:relative;">
+        <button class="profile" type="button" aria-label="Bina Sharma, Greenleaf - account menu">
+          <span class="avatar">BS</span>
+          <span class="profile-meta">
+            <span class="profile-name">Bina Sharma</span>
+            <span class="profile-org">Greenleaf</span>
+          </span>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
+        </button>
+        <span class="tip">Bina Sharma &middot; Greenleaf</span>
+      </div>
+    </nav>
+
+    <!-- =================== FAUX CHAT CONTENT =================== -->
+    <main class="content">
+      <div class="topbar">
+        <span class="crumb">Connect&nbsp;/&nbsp;<b>Chat</b></span>
+        <span class="spacer"></span>
+        <span class="hint">Click the chevron beside the logo to collapse the rail</span>
+      </div>
+      <div class="chat-scroll">
+        <div class="bubble them"><div class="who">Dr. Priya Rao</div>Hi Bina - here are the specs for batch B-204. Let me know if the purity grade works for Greenleaf.</div>
+        <div class="bubble me">Thanks Priya. The grade looks good. Can we hold 200 units at the agreed margin?</div>
+        <div class="bubble them"><div class="who">Dr. Priya Rao</div>Yes, holding 200 units. I'll send the deal card across in a moment.</div>
+        <div class="bubble me">Perfect. I'll review and accept from the card.</div>
+      </div>
+      <div class="composer">
+        <div class="field">Message Dr. Priya Rao...</div>
+        <button class="send" type="button" aria-label="Send">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+        </button>
+      </div>
+    </main>
+  </div>
+
+<script>
+  // ---- Collapse / expand the whole rail ----
+  const rail = document.getElementById('rail');
+  const collapseBtn = document.getElementById('collapseBtn');
+
+  collapseBtn.addEventListener('click', () => {
+    const collapsed = rail.classList.toggle('collapsed');
+    collapseBtn.setAttribute('aria-pressed', String(collapsed));
+    collapseBtn.setAttribute('aria-label', collapsed ? 'Expand navigation' : 'Collapse navigation');
+    collapseBtn.title = collapsed ? 'Expand' : 'Collapse';
+    // when collapsing, close any open accordion (children live in the flyout instead)
+    if (collapsed) closeConnect();
+  });
+
+  // ---- GENERIC accordion machinery (any surface could reuse data-surface + a subtree) ----
+  const connectParent = document.getElementById('connectParent');
+  const connectTree = document.getElementById('connectTree');
+
+  function openConnect() {
+    connectTree.classList.add('open');
+    connectParent.setAttribute('aria-expanded', 'true');
+  }
+  function closeConnect() {
+    connectTree.classList.remove('open');
+    connectParent.setAttribute('aria-expanded', 'false');
+  }
+  connectParent.addEventListener('click', () => {
+    // in collapsed mode the parent click just expands the rail back open
+    if (rail.classList.contains('collapsed')) {
+      rail.classList.remove('collapsed');
+      collapseBtn.setAttribute('aria-pressed', 'false');
+      collapseBtn.setAttribute('aria-label', 'Collapse navigation');
+      openConnect();
+      return;
+    }
+    const isOpen = connectParent.getAttribute('aria-expanded') === 'true';
+    isOpen ? closeConnect() : openConnect();
+  });
+
+  // ---- Surface selection (flat items) - move the active pill + crumb ----
+  const crumbEl = document.querySelector('.topbar .crumb');
+  function clearSurfaceActive() {
+    document.querySelectorAll('.nav-item').forEach(n => {
+      n.classList.remove('is-active');
+      if (n.getAttribute('aria-current')) n.removeAttribute('aria-current');
+    });
+  }
+  document.querySelectorAll('.nav-item:not(.is-disabled)').forEach(item => {
+    item.addEventListener('click', () => {
+      const surface = item.dataset.surface;
+      if (surface === 'connect') return; // handled by accordion logic above
+      clearSurfaceActive();
+      item.classList.add('is-active');
+      item.setAttribute('aria-current', 'true');
+      crumbEl.innerHTML = surface.charAt(0).toUpperCase() + surface.slice(1);
+      closeConnect();
+    });
+  });
+
+  // ---- Sub-item (child) selection - in-tree AND flyout share data-sub ----
+  function selectSub(name) {
+    document.querySelectorAll('.sub-item').forEach(s => {
+      s.classList.toggle('is-active', s.dataset.sub === name);
+    });
+    // Connect becomes the active surface, clear flat pills
+    clearSurfaceActive();
+    const pretty = name.charAt(0).toUpperCase() + name.slice(1);
+    crumbEl.innerHTML = 'Connect&nbsp;/&nbsp;<b>' + pretty + '</b>';
+  }
+  document.querySelectorAll('.sub-item').forEach(sub => {
+    sub.addEventListener('click', () => {
+      selectSub(sub.dataset.sub);
+      // if a flyout item was clicked while collapsed, expand + open the tree to show context
+      if (rail.classList.contains('collapsed')) {
+        rail.classList.remove('collapsed');
+        collapseBtn.setAttribute('aria-pressed', 'false');
+        collapseBtn.setAttribute('aria-label', 'Collapse navigation');
+      }
+      openConnect();
+    });
+  });
+
+  // ---- People rows update the chat crumb (faux) ----
+  document.querySelectorAll('.person').forEach(p => {
+    p.addEventListener('click', () => {
+      const name = p.querySelector('.person-name').textContent;
+      crumbEl.innerHTML = 'Connect&nbsp;/&nbsp;<b>' + name + '</b>';
+      selectSub('chat');
+    });
+  });
+</script>
+</body>
+</html>

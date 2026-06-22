@@ -26,6 +26,7 @@ export type ShopProduct = {
   country_of_origin: string | null;
   region: string | null;
   images: ProductImage[];
+  profile_visible: boolean;
   price_public: boolean;
   price_per_gram: number | null;
   bundle_threshold_grams: number | null;
@@ -50,6 +51,7 @@ export type Shop = {
     description: string | null;
     cover_path: string | null;
     logo_path: string | null;
+    updated_at: string | null;
     warehouse_location: string | null;
     country: string | null;
     address: string | null;
@@ -88,7 +90,7 @@ export async function getMyShop(): Promise<Shop | null> {
   const { data: company } = await supabase
     .from("company")
     .select(
-      "id, name, tagline, description, cover_path, logo_path, warehouse_location, country, address, website, metadata, company_type_assignment(company_type_code)",
+      "id, name, tagline, description, cover_path, logo_path, updated_at, warehouse_location, country, address, website, metadata, company_type_assignment(company_type_code)",
     )
     .eq("id", companyId)
     .single();
@@ -97,7 +99,7 @@ export async function getMyShop(): Promise<Shop | null> {
   const { data: rows } = await supabase
     .from("product")
     .select(
-      "id, name, cultivar, thc_percent, cbd_percent, pack_size_grams, unit_code, local_code_pzn, dominance_code, country_of_origin, region, price_public, product_image(id, image_path, position), pricelist_item(price_per_gram, bundle_threshold_grams, bundle_price_per_gram)",
+      "id, name, cultivar, thc_percent, cbd_percent, pack_size_grams, unit_code, local_code_pzn, dominance_code, country_of_origin, region, profile_visible, price_public, product_image(id, image_path, position), pricelist_item(price_per_gram, bundle_threshold_grams, bundle_price_per_gram)",
     )
     .eq("company_id", companyId)
     .is("deleted_at", null)
@@ -122,6 +124,7 @@ export async function getMyShop(): Promise<Shop | null> {
       country_of_origin: r.country_of_origin,
       region: r.region,
       images,
+      profile_visible: r.profile_visible,
       price_public: r.price_public,
       price_per_gram: price?.price_per_gram ?? null,
       bundle_threshold_grams: price?.bundle_threshold_grams ?? null,
@@ -137,6 +140,7 @@ export async function getMyShop(): Promise<Shop | null> {
       description: company.description,
       cover_path: company.cover_path,
       logo_path: company.logo_path,
+      updated_at: company.updated_at,
       warehouse_location: company.warehouse_location,
       country: company.country,
       address: company.address,

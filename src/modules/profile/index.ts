@@ -4,6 +4,10 @@ import { createClient } from '@/shared/db/server'
 // columns, so onboarding, the account page, the bottom-left card, and the public
 // page all go through the same door. Callers never see the column / links shape.
 
+// The onboarding-completeness rule lives in its own pure (DB-free) file so it stays
+// unit-testable and can't drift from the check the checklist renders.
+export { isProfileComplete, type ProfileCompletenessInput } from './completeness'
+
 export type MyProfile = {
   id: string
   displayName: string
@@ -71,13 +75,16 @@ export async function getMyProfile(): Promise<MyProfile | null> {
 
   const { data } = await supabase
     .from('person')
-    .select('id, display_name, first_name, last_name, title, phone, language, links, avatar_path, public_handle, company_id')
+    .select('id, display_name, first_name, last_name, title, phone, language, links, avatar_path, public_handle, company_id, updated_at')
     .eq('id', user.id)
     .maybeSingle()
   if (!data) return null
 
+  // Stable avatar path means a stable URL; append updated_at as a cache nonce so
+  // a replaced photo busts the browser cache (Smart CDN already invalidates the
+  // object on overwrite, but the browser may hold it for up to an hour).
   const avatarUrl = data.avatar_path
-    ? supabase.storage.from('avatars').getPublicUrl(data.avatar_path).data.publicUrl
+    ? `${supabase.storage.from('avatars').getPublicUrl(data.avatar_path).data.publicUrl}?v=${new Date(data.updated_at).getTime()}`
     : null
 
   return {
@@ -157,6 +164,10 @@ export type PublicProfile = {
     products: string
     country: string
     website: string
+    // Real verification status (the card is anon-readable and shows ANY company,
+    // so the pill gates on this — unlike Discover where every row is verified by
+    // construction via the RPC's hard filter). 'pending' | 'verified' | 'rejected'.
+    verificationStatus: string
   } | null
 }
 
@@ -181,6 +192,7 @@ type PublicRow = {
   company_products: string | null
   company_country: string | null
   company_website: string | null
+  company_verification_status: string | null
 }
 
 export async function getPublicProfile(handle: string): Promise<PublicProfile | null> {
@@ -215,6 +227,7 @@ export async function getPublicProfile(handle: string): Promise<PublicProfile | 
           products: r.company_products ?? '',
           country: r.company_country ?? '',
           website: r.company_website ?? '',
+          verificationStatus: r.company_verification_status ?? 'pending',
         }
       : null,
   }

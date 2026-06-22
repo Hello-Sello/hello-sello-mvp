@@ -1,6 +1,7 @@
 import { Sparkles } from "lucide-react";
 import type { ChatMessageView } from "../types";
 import { formatTimeAgo } from "../lib/chat-display";
+import { RichText } from "./RichText";
 
 /**
  * One line in the thread stream (panel 4), rendered in its sender's voice.
@@ -8,8 +9,8 @@ import { formatTimeAgo } from "../lib/chat-display";
  *   - system -> a quiet centered notice (the platform narrating a fact)
  *   - sella  -> a centered copilot card with a Sella mark (an agent intervening)
  * The two party voices take sides, driven by `isMine` (the viewer's perspective):
- *   - person mine   -> right + brand
- *   - person theirs -> left + glass
+ *   - person mine   -> right + brand pink
+ *   - person theirs -> left + ash-gray (bg-ink/5 on the white/pink page)
  */
 export interface MessageBubbleProps {
   message: ChatMessageView;
@@ -44,8 +45,8 @@ export function MessageBubble({ message }: MessageBubbleProps) {
   if (message.isMine) {
     return (
       <div className="flex flex-col items-end">
-        <div className="max-w-[80%] rounded-2xl rounded-br-sm bg-brand px-3 py-2 text-sm leading-snug text-white">
-          {message.body}
+        <div className="max-w-[80%] whitespace-pre-line rounded-2xl rounded-br-sm bg-brand px-3 py-2 text-sm leading-snug text-white">
+          <RichText body={message.body} />
         </div>
         <span className="mt-0.5 pr-1 text-[10px] text-ink/35">
           {formatTimeAgo(message.created_at)}
@@ -60,8 +61,8 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         {message.authorInitials}
       </span>
       <div className="flex flex-col items-start">
-        <div className="max-w-[80%] rounded-2xl rounded-tl-sm bg-white/70 px-3 py-2 text-sm leading-snug text-ink/85 ring-1 ring-black/5">
-          {message.body}
+        <div className="max-w-[80%] whitespace-pre-line rounded-2xl rounded-tl-sm bg-ink/5 px-3 py-2 text-sm leading-snug text-ink/85">
+          <RichText body={message.body} />
         </div>
         <span className="mt-0.5 pl-1 text-[10px] text-ink/35">
           {message.authorName} · {formatTimeAgo(message.created_at)}

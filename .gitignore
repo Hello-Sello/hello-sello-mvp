@@ -36,6 +36,10 @@ CLAUDE.md
 # Claude Code internal
 .claude/worktrees/
 
+# Personal parallel-worktree coordination (per-engineer; never committed)
+.claude/hooks/
+.worktreeinclude
+
 # Product-thinking workspace - now shared with the team (build-plans, pov, notes, prototypes)
 # (was gitignored; tracked from 2026-06-10 so the team can reuse this arrangement)
 
@@ -53,3 +57,16 @@ next-env.d.ts
 .vercel
 *.pem
 npm-debug.log*
+.obsidian/
+
+# --- Playwright (E2E tests) ---
+/test-results/
+/playwright-report/
+/playwright/.cache/
+/blob-report/
+
+# --- GSD planning workspace (personal scaffolding, per team decision — never committed) ---
+.planning/
+
+# --- Personal project tracker (Muskan's private reading aid) ---
+docs/muskan-build/tracker.html

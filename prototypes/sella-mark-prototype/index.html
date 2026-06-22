@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>B3 — the // Sella mark (prototype)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+<!--
+  THROWAWAY PROTOTYPE — answers B3: "what should the // Sella mark look like?"
+  The mark is Sella's identity (He//o Se//o brand mark, reused for the AI).
+  Build plan asks for a "// double-slash with a bubbly AI feel", used EVERYWHERE
+  Sella shows up, that "lights up in place" when a change is pending.
+
+  STRUCTURE: the 4 context cards are a CONSTANT harness (real app chrome).
+  The "variant" is the MARK ITSELF — switching swaps only the // treatment so
+  you judge the same mark across chat avatar / strip tile / panel header / inline.
+  Toggle Idle <-> Change pending to see the lit-up state.
+
+  Run: open this file in a browser. Switch with the top bar or  <-  /  ->  keys.
+-->
+<style>
+  :root {
+    --maroon: #76002d;
+    --brand: #c4156b;
+    --brand-2: #e30b5d;
+    --brand-soft: #ffb7d5;
+    --brand-tint: #fde7f1;
+    --ink: #1f1430;
+    --ash: #6b6477;
+    --line: #ecdfe9;
+    --bg: #fffafc;
+    --white: #ffffff;
+    --sella-bubble: #fbeaf2;
+    --sella-bubble-line: #f4d6e5;
+    --r-lg: 20px;
+    --r-md: 14px;
+    --r-sm: 10px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background:
+      radial-gradient(1100px 520px at 82% -8%, #fff1f7 0%, rgba(255,241,247,0) 60%),
+      var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+  }
+  .grotesk { font-family: "Space Grotesk", -apple-system, sans-serif; }
+
+  /* ---------- top switcher bar ---------- */
+  .bar {
+    position: sticky; top: 0; z-index: 50;
+    display: flex; align-items: center; gap: 14px;
+    padding: 11px 18px;
+    background: rgba(255,250,252,0.92); backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line);
+  }
+  .arrow {
+    width: 32px; height: 32px; border-radius: 999px; border: 1px solid var(--line);
+    background: var(--white); color: var(--ink); cursor: pointer; font-size: 16px;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .arrow:hover { background: var(--brand-tint); }
+  .vlabel {
+    font-weight: 700; font-size: 13px; color: var(--maroon);
+    padding: 7px 15px; border-radius: 999px; min-width: 232px; text-align: center;
+    background: var(--white); border: 1px solid var(--line); letter-spacing: .01em;
+  }
+  .vlabel b { color: var(--brand); }
+  .spacer { flex: 1; }
+  .state-toggle { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; background: var(--white); }
+  .state-toggle button {
+    border: 0; background: transparent; cursor: pointer; font-weight: 600;
+    padding: 6px 14px; font-size: 12px; color: var(--ash);
+  }
+  .state-toggle button.on { background: var(--brand); color: #fff; }
+  .hint { font-size: 11.5px; color: var(--ash); }
+  .hint b { color: var(--ink); }
+
+  /* ---------- page shell ---------- */
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 30px 22px 90px; }
+  .titlerow { display: flex; align-items: baseline; gap: 12px; margin-bottom: 4px; }
+  .h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
+  .sub { color: var(--ash); font-size: 13.5px; }
+  .bet {
+    margin: 16px 0 26px; padding: 11px 15px; border-radius: var(--r-md);
+    background: #fff; border: 1px solid var(--line); font-size: 13px; color: var(--ink);
+    display: flex; gap: 10px; align-items: center;
+  }
+  .bet .k { font-weight: 700; color: var(--brand); font-family: "Space Grotesk", sans-serif; }
+  .bet .sep { color: var(--line); }
+
+  .grid { display: grid; grid-template-columns: 1.15fr 1fr; gap: 18px; }
+  @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--white); border: 1px solid var(--line); border-radius: var(--r-lg);
+    padding: 18px 18px 20px; box-shadow: 0 18px 44px -34px rgba(31,20,48,.6);
+  }
+  .card .lbl {
+    font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--ash); margin-bottom: 14px;
+  }
+
+  /* ================= THE MARK ================= */
+  /* Sized by --s (font-size em scale). Slashes drawn as skewed pills so the
+     roundness/cap is fully controllable (the "bubbly" knob). */
+  .mk {
+    --s: 22px;
+    font-size: var(--s);
+    width: 1.55em; height: 1.55em; flex: 0 0 auto;
+    display: inline-flex; align-items: center; justify-content: center;
+    position: relative;
+  }
+  .mk .slashes { display: inline-flex; gap: .05em; align-items: center; }
+  .mk .slash { width: .19em; height: .74em; border-radius: .12em; transform: skewX(-13deg); }
+  .mk.lg { --s: 40px; }
+  .mk.md { --s: 26px; }
+  .mk.sm { --s: 21px; }
+  .mk.xs { --s: 16px; }
+
+  /* ---- Variant A — BUBBLE BADGE (soft squircle, gradient, white slashes) ---- */
+  [data-variant="A"] .mk {
+    border-radius: 34%;
+    background: linear-gradient(145deg, var(--maroon) 8%, var(--brand) 78%, var(--brand-2));
+    box-shadow:
+      inset 0 .04em 0 rgba(255,255,255,.4),
+      inset 0 -.07em .18em rgba(0,0,0,.28),
+      0 .18em .4em -.18em rgba(118,0,45,.65);
+    transition: transform .25s ease, box-shadow .25s ease;
+  }
+  [data-variant="A"] .mk .slash { background: #fff; box-shadow: 0 0 .1em rgba(255,255,255,.7); }
+  body.active [data-variant="A"] .mk { animation: bubblePulse 1.7s ease-in-out infinite; }
+  @keyframes bubblePulse {
+    0%,100% { transform: scale(1);    box-shadow: inset 0 .04em 0 rgba(255,255,255,.4), inset 0 -.07em .18em rgba(0,0,0,.28), 0 0 0 0 rgba(227,11,93,.5); }
+    55%     { transform: scale(1.07); box-shadow: inset 0 .04em 0 rgba(255,255,255,.4), inset 0 -.07em .18em rgba(0,0,0,.28), 0 0 0 .42em rgba(227,11,93,0); }
+  }
+
+  /* ---- Variant B — AI ORB (circle, rotating conic halo, glowing slashes) ---- */
+  [data-variant="B"] .mk { border-radius: 50%; }
+  [data-variant="B"] .mk::before {       /* the living halo ring */
+    content: ""; position: absolute; inset: -.1em; border-radius: 50%;
+    background: conic-gradient(from 0deg, var(--brand), var(--brand-soft), var(--brand-2), var(--maroon), var(--brand));
+    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - .14em), #000 calc(100% - .13em));
+            mask: radial-gradient(farthest-side, transparent calc(100% - .14em), #000 calc(100% - .13em));
+    animation: spin 7s linear infinite; opacity: .85;
+  }
+  [data-variant="B"] .mk .core {
+    position: absolute; inset: .1em; border-radius: 50%;
+    background: radial-gradient(120% 120% at 32% 26%, #9c1c51 0%, var(--maroon) 72%);
+    display: inline-flex; align-items: center; justify-content: center;
+    box-shadow: inset 0 .05em .1em rgba(255,255,255,.18);
+  }
+  [data-variant="B"] .mk .slash { background: linear-gradient(180deg, #fff, var(--brand-soft)); box-shadow: 0 0 .14em rgba(255,183,213,.9); }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  body.active [data-variant="B"] .mk::before { animation-duration: 1.5s; opacity: 1; }
+  body.active [data-variant="B"] .mk { filter: drop-shadow(0 0 .26em rgba(227,11,93,.55)); }
+
+  /* ---- Variant C — SPEECH MARK (chat bubble shape, tinted, ink+pink slashes) ---- */
+  [data-variant="C"] .mk {
+    border-radius: 46% 46% 46% 12% / 46%;
+    background: var(--brand-tint);
+    border: 1px solid #f3cbdf;
+    box-shadow: 0 .1em .26em -.16em rgba(118,0,45,.35);
+    transition: background .25s ease, border-color .25s ease;
+  }
+  [data-variant="C"] .mk::after {        /* the little tail dot */
+    content: ""; position: absolute; left: -.04em; bottom: -.04em;
+    width: .3em; height: .3em; border-radius: 50% 50% 50% 2px;
+    background: var(--brand-tint); border: 1px solid #f3cbdf; border-top: 0; border-right: 0;
+  }
+  [data-variant="C"] .mk .slash:first-child { background: var(--maroon); }
+  [data-variant="C"] .mk .slash:last-child  { background: var(--brand); }
+  body.active [data-variant="C"] .mk { background: var(--brand-soft); border-color: #f3a9c9; }
+  body.active [data-variant="C"] .mk::after { background: var(--brand-soft); border-color: #f3a9c9; animation: tailPing 1.6s ease-in-out infinite; }
+  @keyframes tailPing { 0%,100% { box-shadow: 0 0 0 0 rgba(227,11,93,.5); } 60% { box-shadow: 0 0 0 .34em rgba(227,11,93,0); } }
+
+  .mk-helper { display: none; } /* reserved */
+
+  /* ================= CONTEXT 1 — chat avatar ================= */
+  .chat { display: flex; flex-direction: column; gap: 12px; }
+  .row { display: flex; gap: 9px; align-items: flex-end; max-width: 86%; }
+  .row.me { align-self: flex-end; flex-direction: row-reverse; }
+  .bubble {
+    padding: 9px 13px; border-radius: 16px; font-size: 13.5px; line-height: 1.45;
+  }
+  .row.sella .bubble {
+    background: var(--sella-bubble); border: 1px solid var(--sella-bubble-line);
+    color: var(--ink); border-bottom-left-radius: 5px;
+  }
+  .row.me .bubble {
+    background: linear-gradient(135deg, var(--brand), var(--brand-2)); color: #fff;
+    border-bottom-right-radius: 5px;
+  }
+  .who { font-size: 10.5px; color: var(--ash); margin: 0 0 3px 2px; font-weight: 600; }
+
+  /* ================= CONTEXT 2 — strip tile ================= */
+  .strip {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 11px; border: 1px solid var(--line); border-radius: var(--r-md);
+    background: linear-gradient(0deg, #fff, #fffdfe);
+  }
+  .av-sq { width: 30px; height: 30px; border-radius: 9px; background: #e9e6ec; color: #4a4458;
+    display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px; }
+  .pinfo { display: flex; flex-direction: column; line-height: 1.15; }
+  .pinfo .nm { font-weight: 600; font-size: 13.5px; }
+  .pinfo .co { font-size: 11px; color: var(--ash); }
+  .strip .spacer2 { flex: 1; }
+  .sella-tile {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 5px 6px 5px 7px; border-radius: 999px;
+    border: 1px solid var(--line); background: #fff; cursor: pointer; position: relative;
+  }
+  .sella-tile .nm2 { font-size: 12.5px; font-weight: 600; color: var(--ink); }
+  .sella-tile .chev { color: var(--ash); font-size: 11px; margin-right: 2px; }
+  .unread {
+    position: absolute; top: -2px; right: -2px; width: 10px; height: 10px;
+    border-radius: 50%; background: var(--brand-2); border: 2px solid #fff; opacity: 0;
+  }
+  body.active .unread { opacity: 1; animation: dotPing 1.5s infinite; }
+  @keyframes dotPing { 0% { box-shadow: 0 0 0 0 rgba(227,11,93,.5); } 70% { box-shadow: 0 0 0 7px rgba(227,11,93,0); } 100% { box-shadow: 0 0 0 0 rgba(227,11,93,0); } }
+
+  /* ================= CONTEXT 3 — right panel header ================= */
+  .panel { display: flex; align-items: center; gap: 13px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+  .panel .ttl { font-size: 18px; font-weight: 700; letter-spacing: -0.01em; }
+  .panel .desc { font-size: 12.5px; color: var(--ash); margin-top: 1px; }
+  .thinking { font-size: 12px; color: var(--brand); margin-top: 14px; display: none; align-items: center; gap: 7px; }
+  body.active .thinking { display: flex; }
+  .thinking .dots { display: inline-flex; gap: 3px; }
+  .thinking .dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--brand); display: inline-block; animation: blink 1.2s infinite; }
+  .thinking .dots i:nth-child(2) { animation-delay: .2s; }
+  .thinking .dots i:nth-child(3) { animation-delay: .4s; }
+  @keyframes blink { 0%,80%,100% { opacity: .25; } 40% { opacity: 1; } }
+  .idle-note { font-size: 12px; color: var(--ash); margin-top: 14px; }
+  body.active .idle-note { display: none; }
+
+  /* ================= CONTEXT 4 — inline system line ================= */
+  .sysline {
+    display: flex; align-items: center; gap: 9px; font-size: 13px; color: var(--ash);
+    padding: 10px 12px; border-radius: var(--r-md); background: #fff8fb; border: 1px dashed var(--sella-bubble-line);
+  }
+  .sysline b { color: var(--ink); font-weight: 600; }
+  .sysline .review { margin-left: auto; color: var(--brand); font-weight: 700; font-size: 12.5px; cursor: pointer; }
+
+  .footnote { margin-top: 26px; font-size: 12px; color: var(--ash); text-align: center; }
+  .footnote code { background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; font-family: "Space Grotesk", monospace; color: var(--maroon); }
+</style>
+</head>
+<body class="active">
+
+  <div class="bar">
+    <button class="arrow" id="prev" aria-label="previous">&#8592;</button>
+    <div class="vlabel" id="vlabel">A &mdash; <b>Bubble badge</b></div>
+    <button class="arrow" id="next" aria-label="next">&#8594;</button>
+    <div class="spacer"></div>
+    <div class="hint"><b>State</b> &middot; how the mark lights up</div>
+    <div class="state-toggle">
+      <button id="st-idle">Idle</button>
+      <button id="st-active" class="on">Change pending</button>
+    </div>
+  </div>
+
+  <div class="wrap" data-variant="A" id="stage">
+    <div class="titlerow">
+      <div class="h1 grotesk">B3 &middot; the <span style="color:var(--brand)">//</span> Sella mark</div>
+      <div class="sub">same mark, four real homes &mdash; judged in context, not in a vacuum</div>
+    </div>
+
+    <div class="bet" id="bet"></div>
+
+    <div class="grid">
+
+      <!-- CONTEXT 1 — chat avatar -->
+      <div class="card">
+        <div class="lbl">1 &middot; Chat &mdash; Sella's avatar</div>
+        <div class="chat">
+          <div class="row me">
+            <div class="bubble">Can you flag if Luca's price is off?</div>
+          </div>
+          <div>
+            <div class="who">Sella</div>
+            <div class="row sella">
+              <span class="mk sm"><span class="slashes"><span class="slash"></span><span class="slash"></span></span><span class="core" style="display:none"></span></span>
+              <div class="bubble">Luca proposed <b>&euro;2.40/unit</b> &mdash; that's 6% under your floor. Want me to draft a counter?</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CONTEXT 2 — strip tile -->
+      <div class="card">
+        <div class="lbl">2 &middot; Strip &mdash; the fixed Sella tile</div>
+        <div class="strip">
+          <span class="av-sq">LB</span>
+          <div class="pinfo"><span class="nm">Luca Brunner</span><span class="co">Helvetia Pharma AG</span></div>
+          <div class="spacer2"></div>
+          <div class="sella-tile">
+            <span class="mk sm"><span class="slashes"><span class="slash"></span><span class="slash"></span></span><span class="core" style="display:none"></span></span>
+            <span class="nm2">Sella</span>
+            <span class="chev">&#9662;</span>
+            <span class="unread"></span>
+          </div>
+        </div>
+        <div style="font-size:11.5px;color:var(--ash);margin-top:11px">The mark never shifts &mdash; it lights up <i>in place</i> when a change lands.</div>
+      </div>
+
+      <!-- CONTEXT 3 — right panel header -->
+      <div class="card">
+        <div class="lbl">3 &middot; Right panel &mdash; Sella header</div>
+        <div class="panel">
+          <span class="mk lg"><span class="slashes"><span class="slash"></span><span class="slash"></span></span><span class="core" style="display:none"></span></span>
+          <div>
+            <div class="ttl grotesk">Sella</div>
+            <div class="desc">Your deal copilot</div>
+          </div>
+        </div>
+        <div class="idle-note">Quiet. Nothing needs you right now.</div>
+        <div class="thinking"><span>Reviewing Luca's change</span><span class="dots"><i></i><i></i><i></i></span></div>
+      </div>
+
+      <!-- CONTEXT 4 — inline system line -->
+      <div class="card">
+        <div class="lbl">4 &middot; Inline &mdash; system / feed line</div>
+        <div class="sysline">
+          <span class="mk xs"><span class="slashes"><span class="slash"></span><span class="slash"></span></span><span class="core" style="display:none"></span></span>
+          <span><b>Sella</b> &middot; Luca proposed a change to this deal</span>
+          <span class="review">Review</span>
+        </div>
+        <div style="font-size:11.5px;color:var(--ash);margin-top:11px">Tiny size is the real test &mdash; the <b>//</b> has to stay legible at 16px.</div>
+      </div>
+
+    </div>
+
+    <div class="footnote">
+      Switch marks with <code>&larr;</code> / <code>&rarr;</code> &middot; toggle <b>Idle / Change pending</b> top-right &middot; URL keeps <code>?variant=</code>
+    </div>
+  </div>
+
+<script>
+  const VARIANTS = [
+    { key: "A", name: "Bubble badge", bet: "Soft squircle, maroon&rarr;pink gradient, white rounded slashes. Reads like an app icon / sticker. Lights up with a gentle scale-pulse + glow ring." },
+    { key: "B", name: "AI orb",       bet: "Round assistant orb with a slow rotating halo ring and glowing slashes. Most overtly “living AI”. On a pending change the halo speeds up + brightens." },
+    { key: "C", name: "Speech mark",  bet: "The // sits in a chat-bubble shape with a little tail; two-tone ink+pink slashes. Editorial, brand-forward. Lights up by warming the fill + pinging the tail." },
+  ];
+  const stage = document.getElementById("stage");
+  const vlabel = document.getElementById("vlabel");
+  const bet = document.getElementById("bet");
+  let idx = 0;
+
+  function showCore(on) {
+    // Variant B needs an inner .core wrapper around the slashes; others don't.
+    document.querySelectorAll(".mk").forEach(mk => {
+      const core = mk.querySelector(".core");
+      const slashes = mk.querySelector(".slashes");
+      if (!core) return;
+      if (on) { core.style.display = "inline-flex"; core.appendChild(slashes); }
+      else    { core.style.display = "none"; mk.insertBefore(slashes, core); }
+    });
+  }
+
+  function render() {
+    const v = VARIANTS[idx];
+    stage.setAttribute("data-variant", v.key);
+    vlabel.innerHTML = v.key + " &mdash; <b>" + v.name + "</b>";
+    bet.innerHTML = '<span class="k">' + v.key + '</span><span class="sep">|</span><span>' + v.bet + '</span>';
+    showCore(v.key === "B");
+    try { history.replaceState(null, "", "?variant=" + v.key); } catch (e) {}
+  }
+
+  function go(d) { idx = (idx + d + VARIANTS.length) % VARIANTS.length; render(); }
+
+  document.getElementById("prev").onclick = () => go(-1);
+  document.getElementById("next").onclick = () => go(1);
+  document.addEventListener("keydown", e => {
+    const t = e.target;
+    if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+    if (e.key === "ArrowLeft") go(-1);
+    if (e.key === "ArrowRight") go(1);
+  });
+
+  const stIdle = document.getElementById("st-idle");
+  const stActive = document.getElementById("st-active");
+  function setState(active) {
+    document.body.classList.toggle("active", active);
+    stActive.classList.toggle("on", active);
+    stIdle.classList.toggle("on", !active);
+  }
+  stIdle.onclick = () => setState(false);
+  stActive.onclick = () => setState(true);
+
+  // boot from URL
+  const start = new URLSearchParams(location.search).get("variant");
+  const found = VARIANTS.findIndex(v => v.key === (start || "").toUpperCase());
+  if (found >= 0) idx = found;
+  render();
+</script>
+</body>
+</html>

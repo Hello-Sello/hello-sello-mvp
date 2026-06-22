@@ -5,9 +5,12 @@ import { TopBar } from "./TopBar";
 import { IconRail } from "./IconRail";
 
 // Routes rendered bare (no rail / top bar): the auth pages (nothing to navigate
-// to pre-login) and `/c/<handle>` public profile pages (shown to outsiders, must
-// not leak app chrome).
-const BARE_ROUTES = ["/login", "/signup", "/c"];
+// to pre-login), `/c/<handle>` public profile pages (shown to outsiders, must
+// not leak app chrome), and the public landing + German legal pages (anonymous
+// marketing surface — TopBar calls the auth-only getCompanyChrome() action).
+// NOTE: "/" is NOT in this array — the matcher uses startsWith(r + "/"), so a
+// bare "/" is inert; the root is handled by the explicit exact check below.
+const BARE_ROUTES = ["/login", "/signup", "/c", "/impressum", "/datenschutz", "/agb"];
 
 /**
  * The frame every page sits inside: a full-height dark rail down the left, and
@@ -18,9 +21,13 @@ const BARE_ROUTES = ["/login", "/signup", "/c"];
  */
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const bare = BARE_ROUTES.some(
-    (r) => pathname === r || pathname.startsWith(r + "/"),
-  );
+  // The explicit `pathname === "/"` is what makes the public landing render bare
+  // (Pitfall 1 — the highest-probability miss). Without it the landing renders
+  // inside the signed-in shell (IconRail + auth-only TopBar) for anonymous
+  // visitors (T-09-03).
+  const bare =
+    pathname === "/" ||
+    BARE_ROUTES.some((r) => pathname === r || pathname.startsWith(r + "/"));
 
   if (bare) return <>{children}</>;
 

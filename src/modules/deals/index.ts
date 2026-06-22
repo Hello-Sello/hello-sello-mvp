@@ -10,7 +10,7 @@ export type {
   DealCardStatus,
   PartySide,
   LineItemView,
-  PartyFieldView,
+  LineMarginView,
   LogEntry,
   SignalView,
   DealCardView,
@@ -18,6 +18,29 @@ export type {
   MemberView,
   WorkspaceVisibility,
   DealWorkspaceView,
+  StageCode,
+  ThingType,
+  ThingStatus,
+  ThingView,
+  ArtifactView,
+  StageCompletionView,
+  StageView,
+  ConfirmationStatus,
+  ConfirmSeat,
+  ConfirmDecision,
+  ConfirmResult,
+  FinalizeDealResult,
+  CatalogProduct,
+  DraftLineInput,
+  DealBasket,
+  DealBasketContent,
+  DealRecipient,
+  DealRecipientView,
+  DealSource,
+  CreateDealInput,
+  CreateDealResult,
+  EditDealInput,
+  EditDealResult,
 } from "./types";
 
 export {
@@ -32,7 +55,27 @@ export {
   DEMO_VAT_RATE,
 } from "./lib/derive";
 
-export { getDealCard, getCurrentDealCardId, getWorkspace } from "./supabase/reads";
+export {
+  getDealCard,
+  getCurrentDealCardId,
+  getOwnCatalog,
+  getWorkspace,
+  getStagesAndThings,
+  getStageCompletions,
+  getDealArtifacts,
+  resolveP2pRecipient,
+} from "./supabase/reads";
+export {
+  toggleThingStatus,
+  createThing,
+  setThingVisibility,
+  assignThing,
+  markStageDone,
+} from "./supabase/writes";
+export { confirmDeal, createDeal, editDeal, finalizeDeal } from "./actions";
 export { DealCard } from "./components/DealCard";
 export { DealPin } from "./components/DealPin";
 export { DealWorkspace } from "./components/DealWorkspace";
+export { SellaMark } from "./components/SellaMark";
+export { SellaCurtain } from "./components/SellaCurtain";
+export { TranslateButton } from "./components/TranslateButton";

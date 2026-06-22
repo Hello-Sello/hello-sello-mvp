@@ -3,7 +3,8 @@
 import { useActionState } from 'react'
 import Link from 'next/link'
 import { signIn, type AuthState } from '../actions'
-import { AuthCard, Field } from '../AuthCard'
+import { AuthCard, Field, OrDivider } from '../AuthCard'
+import { SocialButtons } from '../SocialButtons'
 
 const initial: AuthState = {}
 
@@ -23,6 +24,8 @@ export default function LoginPage() {
         </>
       }
     >
+      <SocialButtons />
+      <OrDivider label="or" />
       <form action={action} className="flex flex-col gap-3">
         <Field label="Email" name="email" type="email" autoComplete="email" />
         <Field
@@ -31,6 +34,12 @@ export default function LoginPage() {
           type="password"
           autoComplete="current-password"
         />
+        <Link
+          href="/forgot-password"
+          className="self-end text-xs font-semibold text-brand"
+        >
+          Forgot password?
+        </Link>
         {state.error && <p className="text-sm text-danger">{state.error}</p>}
         <button
           type="submit"

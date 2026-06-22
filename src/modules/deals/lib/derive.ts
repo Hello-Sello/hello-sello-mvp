@@ -9,7 +9,7 @@
  * Keeping these here (pure) means the card components stay thin and the rules
  * are testable in isolation. The prototype's PO/SO + money math ports straight in.
  */
-import type { DealType, PartySide } from "../types";
+import type { DealType, LineItemView, PartySide } from "../types";
 
 /**
  * German standard VAT. A demo simplification: gross = net × (1 + rate).
@@ -111,4 +111,89 @@ export function lineTotalOf(
   storedTotal: number | null,
 ): number {
   return storedTotal ?? quantity * unitPrice;
+}
+
+/**
+ * One line's money value on the CANONICAL PER-GRAM basis (CARD-02).
+ * Pricelist prices are per gram, so the displayed unit is presentation only and
+ * MUST NEVER move the money: `kg` is normalized to grams (×1000) before pricing,
+ * `g` is used as-is, and `unit` (a plain count, e.g. boxes) is `quantity ×
+ * unitPrice` with no gram conversion. Any unknown unit falls through to the same
+ * plain `quantity × unitPrice` so a stray code can never crash or NaN the total.
+ *
+ * Switching a line g↔kg with the per-gram price held therefore yields the
+ * IDENTICAL value: `lineValueOf(1, 'kg', 5) === lineValueOf(1000, 'g', 5)`.
+ */
+export function lineValueOf(quantity: number, unit: string, unitPrice: number): number {
+  const grams = unit === "kg" ? quantity * 1000 : quantity;
+  return grams * unitPrice;
+}
+
+/**
+ * The card's displayed value: the SUM of the PRICED line values, derived live
+ * (never the stale stored `value_net`, which can be a leftover 0 - OBS-1/CARD-01).
+ * Each line is valued on the per-gram canonical basis via {@link lineValueOf}, so
+ * the unit choice cannot move the deal money. Returns `null` when NO line carries
+ * a price - mirrors `actions.ts:sumValueNet` exactly so the shown value agrees
+ * with the write-time rule (priced.length ? sum : null), and the card renders
+ * "—" rather than a misleading "0 €".
+ */
+export function sumLineValue(lines: LineItemView[]): number | null {
+  const priced = lines.filter((l) => l.unitPrice != null);
+  return priced.length
+    ? priced.reduce((sum, l) => sum + lineValueOf(l.quantity, l.unit, l.unitPrice), 0)
+    : null;
+}
+
+/**
+ * One line's margin %, for the VIEWER'S OWN side only, computed live (MRGN-01).
+ *
+ * D-02: we store the INPUT (the seller's cost or the buyer's resale, per line)
+ * and compute the margin here at render time - we never persist a derived margin
+ * number as the source of truth. This mirrors {@link sumLineValue}/CARD-01: the
+ * shown number is always re-derived from the stored truth so it can never go
+ * stale relative to the line's current `unit_price`.
+ *
+ * D-03 (locked formulas):
+ *   seller % = (unit_price - cost)  / unit_price
+ *   buyer  % = (resale - unit_price) / resale   (buyer divides by THEIR resale)
+ *
+ * `ownInput` is the viewer's frozen per-line private input (D-07): the seller's
+ * cost OR the buyer's resale, by side. Returns `null` (NOT 0) when the owner has
+ * not entered an input yet - same "null, not 0" discipline as {@link sumLineValue}
+ * - and null when the divisor would be 0 (a division-by-zero guard: `unit_price`
+ * for the seller, `resale` for the buyer).
+ */
+export function lineMarginOf(
+  unitPrice: number,
+  ownInput: number | null,
+  side: PartySide,
+): number | null {
+  if (ownInput == null) return null;
+  if (side === "seller") {
+    if (unitPrice === 0) return null;
+    return (unitPrice - ownInput) / unitPrice;
+  }
+  // buyer divides by THEIR resale (ownInput), not by unit_price (D-03).
+  if (ownInput === 0) return null;
+  return (ownInput - unitPrice) / ownInput;
+}
+
+/**
+ * The deal-level average margin across priced lines (MRGN-01, D-04).
+ *
+ * Filters out the null entries (lines where the owner has not entered an input)
+ * and returns the simple unweighted mean of the rest; returns `null` when none
+ * remain - the same "null, not 0" discipline as the per-line helpers.
+ *
+ * Claude's Discretion (D-04): the simple mean is the A1 default the design doc
+ * leaves as "a build detail". Because margin is always computed live and never
+ * stored, this can become quantity-weighted later by changing this one function
+ * alone - no storage or migration is involved.
+ */
+export function averageMarginOf(margins: Array<number | null>): number | null {
+  const present = margins.filter((m): m is number => m != null);
+  return present.length
+    ? present.reduce((sum, m) => sum + m, 0) / present.length
+    : null;
 }

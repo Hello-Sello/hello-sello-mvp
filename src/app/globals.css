@@ -9,7 +9,8 @@
   /* brand */
   --color-brand: #e30b5d;        /* raspberry  - primary accent */
   --color-brand-soft: #ffb7d5;   /* cotton candy - light fills */
-  --color-brand-deep: #76002d;   /* red pink   - deep accent / pressed */
+  --color-brand-deep: #7a1638;   /* damson - deep accent / pressed (was #76002d: 100% sat read too bright;
+                                    Damson keeps the depth but drops saturation + nudges toward raspberry) */
 
   /* base + ink */
   --color-surface: #ffffff;
@@ -30,9 +31,13 @@
   --bg-from: #ffffff;
   --bg-to: #fff1f7;
   --glass-bg: rgba(255, 255, 255, 0.62);
-  --glass-bg-strong: rgba(255, 255, 255, 0.78);
+  /* overlay tier (cards, popovers, PlusMenu, notification drops) - raised so
+     busy chat behind floating overlays no longer bleeds through (F1). Tunable. */
+  --glass-bg-strong: rgba(255, 255, 255, 1);
   --glass-border: rgba(255, 255, 255, 0.65);
-  --glass-shadow: 0 10px 34px -12px rgba(118, 0, 45, 0.18);
+  /* shadow tint derives from the deep-pink token (single source of truth): recolouring
+     --color-brand-deep now updates both the accent AND the frosted-depth tint together. */
+  --glass-shadow: 0 10px 34px -12px color-mix(in srgb, var(--color-brand-deep) 18%, transparent);
 }
 
 html,
@@ -66,4 +71,34 @@ body {
   -webkit-backdrop-filter: blur(24px) saturate(160%);
   border: 1px solid var(--glass-border);
   box-shadow: var(--glass-shadow);
+}
+
+/*
+  Landing aurora motion (Phase 9). Additive + decorative only. The floating
+  gradient blobs behind the public hero/CTA give the marketing pages their
+  "dreamy" depth without any JS or animation library. All motion is disabled
+  under prefers-reduced-motion.
+*/
+@keyframes hs-float-a {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(28px, -24px) scale(1.06); }
+  66% { transform: translate(-20px, 16px) scale(0.96); }
+}
+@keyframes hs-float-b {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(-26px, 22px) scale(1.05); }
+}
+@keyframes hs-float-c {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(22px, 18px) scale(1.04); }
+}
+.hs-blob-a { animation: hs-float-a 18s ease-in-out infinite; }
+.hs-blob-b { animation: hs-float-b 22s ease-in-out infinite; }
+.hs-blob-c { animation: hs-float-c 20s ease-in-out infinite; }
+
+html { scroll-behavior: smooth; }
+
+@media (prefers-reduced-motion: reduce) {
+  .hs-blob-a, .hs-blob-b, .hs-blob-c { animation: none; }
+  html { scroll-behavior: auto; }
 }

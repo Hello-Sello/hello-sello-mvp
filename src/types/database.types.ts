@@ -432,6 +432,7 @@ export type Database = {
       company: {
         Row: {
           address: string | null
+          city: string | null
           country: string
           cover_path: string | null
           created_at: string
@@ -455,6 +456,7 @@ export type Database = {
         }
         Insert: {
           address?: string | null
+          city?: string | null
           country: string
           cover_path?: string | null
           created_at?: string
@@ -478,6 +480,7 @@ export type Database = {
         }
         Update: {
           address?: string | null
+          city?: string | null
           country?: string
           cover_path?: string | null
           created_at?: string
@@ -2649,6 +2652,7 @@ export type Database = {
           pack_size_grams: number | null
           packaging_material: string | null
           price_public: boolean
+          profile_visible: boolean
           region: string | null
           resealable: boolean | null
           rrp_per_gram: number | null
@@ -2684,6 +2688,7 @@ export type Database = {
           pack_size_grams?: number | null
           packaging_material?: string | null
           price_public?: boolean
+          profile_visible?: boolean
           region?: string | null
           resealable?: boolean | null
           rrp_per_gram?: number | null
@@ -2719,6 +2724,7 @@ export type Database = {
           pack_size_grams?: number | null
           packaging_material?: string | null
           price_public?: boolean
+          profile_visible?: boolean
           region?: string | null
           resealable?: boolean | null
           rrp_per_gram?: number | null

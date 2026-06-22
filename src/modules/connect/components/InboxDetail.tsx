@@ -1,5 +1,4 @@
 import {
-  BadgeCheck,
   Users,
   Check,
   X,
@@ -84,13 +83,6 @@ export function InboxDetail({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             <h2 className="truncate text-lg font-bold text-ink">{item.sender.companyName}</h2>
-            {item.sender.verified ? (
-              <BadgeCheck size={16} className="shrink-0 text-info" aria-label="Verified" />
-            ) : (
-              <span className="rounded-full bg-ink/8 px-1.5 py-0.5 text-[10px] font-medium text-ink/45">
-                Unverified
-              </span>
-            )}
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink/45">
             <span className={`inline-flex items-center gap-1 font-medium ${meta.accent}`}>

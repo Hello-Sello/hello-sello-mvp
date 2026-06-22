@@ -2,7 +2,7 @@
 
 **Status:** Locked. The June 11 build, split between the two of us.
 **Owners:** **Ayush** = the whole demo (Connect + Deal + Sella) · **Muskan** = Foundation → Onboarding/Home → the next surfaces (Present / Discover).
-**Created:** 2026-06-07 16:25 CEST · **Updated:** 2026-06-07 17:13 CEST (re-cut: Connect+Sella to one owner).
+**Created:** 2026-06-07 16:25 CEST · **Updated:** 2026-06-07 17:13 CEST (re-cut: Connect+Sella to one owner) · **2026-06-11 reshape (Ayush):** 3.5 closed; the UI work moved out to a new **Section 5 (5A)**; **4.0 Sella research (SHARED)** added as the first step of Section 4. Sella stays Section 4 (matches DECISIONS "4a-4d"). Section 4 (Sella) + Section 5 (UI) are **open / unassigned** - we pick them up ourselves; 4.0 research is shared first.
 **Demo:** 2026-06-11.
 
 > Who builds what for the Connect demo. Derived from the PRD ([connect-demo.md](connect-demo.md) §6 = the 9-step acceptance script) and the locked build strategy (foundation broad → surfaces vertical → Sella cross-cutting). The cut keeps the tightly-coupled connected experience under one owner so it has no internal seams, and lets the other owner build ahead on the next surfaces.
@@ -81,17 +81,29 @@ The 9 demo steps the "Walk" column points to:
 | 2b | Accept → relationship + C2C created | ★ | ✓ | S | ✅ done |
 | 2c | Chat - C2C + P2P threads, send/store, message types | ★ | ✓ | L | ✅ done |
 | 2d | Realtime (Supabase Realtime subscriptions) | ★ | ✓ | M | ✅ done |
-| 2e | Relationship page (notes / terms / artifacts) | ★ | ✓ | M | 🧪 review |
+| 2e | Relationship page (notes / terms / artifacts) | ★ | ✓ | M | ✅ done (merged; 3a-3d built on it) |
 
 ### Deal (Unit 3)
 
 | # | Item | Walk | MVP | Size | Status |
 |---|---|---|---|---|---|
-| 3a | Deal card - **READ side** (show card, PO/SO derived, role-private field, front + back w/ Signals/Logs tabs + flip, placed in chat) | ★ | ✓ | L | ✅ done (on branch; read side) |
-| 3b | Deal Workspace (born at draft, members, container) | ★ | ✓ | M | |
-| 3c | Stage pipeline (5-stage bar, manual advance) + Things checklist (by **stage**) | ★ | ✓ | M | |
-| 3d | Confirmation gate (two-sided confirm → Confirmed) | ★ | ✓ | M | |
-| **3.5** | **Deal creation & editing** (the card's WRITE side - was 3a Phase 6+7). **ONE `createDeal` core, THREE doors: shop · chat "+" · Sella.** Create a draft (card + lines + log + chat line; card-only) + edit → version bump. Form-first; products from catalog; both sides; margin/metric optional. **May fold into Unit 4 (Sella).** | ★ | ✓ | L | |
+| 3a | Deal card - **READ side** (show card, PO/SO derived, role-private field, front + back w/ Signals/Logs tabs + flip, placed in chat) | ★ | ✓ | L | ✅ done (merged; read side) |
+| 3b | Deal Workspace (born at draft, members, container) | ★ | ✓ | M | ✅ done (merged #93→dev, #94→main) |
+| 3c | Stage pipeline (5-stage bar, manual advance) + Things checklist (by **stage**) | ★ | ✓ | M | ✅ done (bar screen-only; Things tick + add, real DB) |
+| 3d | Confirmation gate (two-sided confirm → Confirmed) | ★ | ✓ | M | ✅ done (golden card + live pill + audit; both sides verified) |
+| **3.5a** | **Create a draft from chat** - `createDeal` → atomic `create_deal_draft` RPC (card+lines+private box+workspace+owner+thread+log+note+audit, one txn) + the shared `DealForm` + the chat entry. Recipient auto; prices optional; offer from own catalogue. | ★ | ✓ | M | ✅ done (built + verified live; my branch) |
+| **3.5b** | **Edit a draft** - `editDeal` → atomic `edit_deal_draft` RPC: version bump, immutable snapshot, carry private boxes, MANDATORY note, human Update. Same `DealForm`, prefilled. | ★ | ✓ | M | ✅ done (built + verified live; my branch) |
+| **3.5c** | **Re-confirm a change** - both sides re-confirm the new version (reuse 3d's `ConfirmBar`). | ★ | ✓ | S | ✅ done (free - the version bump resets 3d's gate; verified) |
+| **3.5d** | **Card v2 UI** - *PARKED.* The visual pass grew into the whole UI job (card + chat + nav + Sella chat) and moved to **Section 5 (5A)** below. Re-approach fresh after Sella research (4.0). | ★ | ✓ | M | 🅿️ parked → §5 |
+
+> **3.5 doors note:** the three create doors were *shop · chat "+" · Sella*. 3.5a built the **chat** door (manual). Shop + Sella doors come later (Sella = 4a-4d). The AI fence: Sella may FILL the form, only a human's button click writes (server action).
+
+> **Waypoint 4.5 supersedes part of 3.5 (Ayush, 2026-06-16).** Deal work continued past the June-11 demo into
+> **Waypoint 4.5** (birth + acceptance + the Sella strip + the deal-CHANGE flow): birth moved to **accept** (not
+> create), and an **edit is now a HELD two-sided proposal** held until both accept - **superseding 3.5b's instant
+> `edit_deal_draft` version bump.** Current source of truth: `_workshop/build-plans/6-pending-map.md` +
+> `4.5-deal-birth-acceptance.md`. Decisions: `DECISIONS.md` 2026-06-14 + 2026-06-16; `ADR-0001`. There:
+> 4.5.1-4.5.3 done, 4.5.4 next.
 
 > **3a scope note (Ayush, 2026-06-10):** 3a delivered the **read side** of the deal card (display + flip + in-chat
 > placement + role privacy, verified both sides). The **write side** (create a draft, edit/version-bump) was pulled
@@ -99,16 +111,31 @@ The 9 demo steps the "Walk" column points to:
 > from 3 places (shop · chat · Sella) and should share **one** creation core. Version **display** (Logs tab) is
 > already done in 3a; only the version **write** moved. Build 3b-3d on the seeded card `04695a2d`.
 
-### Sella (Unit 4) - leaf, built last; the demo works without it
+### Section 4 - Sella (leaf, built last; the demo works without it)
+
+**Owner:** OPEN / unassigned (Ayush or Muskan; Muskan = backstop). **4.0 research DONE + locked (2026-06-12).**
+**Build guide:** `_workshop/build-plans/4-sella-build.md` · **decisions/synthesis:** `_workshop/pov/sella.md`.
 
 | # | Item | Walk | MVP | Size | Status |
 |---|---|---|---|---|---|
-| 4a | Bedrock wrapper (provider interface, Sonnet/Haiku, EU) | ★ | ✓ | M | |
-| 4b | Detect (read chat via DB tools → spot deal → suggestion line) | ★ | ✓ | M | |
-| 4c | Draft (chat → deal-card draft) | ★ | ✓ | L | |
-| 4d | Summarize (version one-liners) + Sella right-panel UI | ★ | ✓ | M | |
+| **4.0** | **Sella research - SHARED** - both researched, compared, and locked the 4a-4d shape. Synthesis: `_workshop/pov/sella.md`. | ★ | ✓ | M | ✅ done |
+| **4·0** | **Make the chat real (Path A)** - wire chat send to INSERT a real `chat_message` row (table/RLS/realtime already exist). Prereq for auto-detection; keeps the Bedrock key in Supabase only. | ★ | ✓ | M | ✅ done |
+| 4a | **Provider layer** - wrapper exists (`_shared/sella/bedrock.ts`); add retries/timeout + **Bedrock structured-outputs** body shape; smoke-test Sonnet+Haiku ids in `eu-central-1`. | ★ | ✓ | S | ✅ done |
+| 4c | **Draft contract** - one structured-output schema (`verdict`/`confidence`/`deal` nullable + **evidence quotes**), maps 1:1 to `deal_line_item`/`deal_card`; zod-validate + fail-soft. Serves detection + the manual `+` door. | ★ | ✓ | M | ✅ done |
+| 4b | **Detect** - new `chat_message` → **pgmq + pg_cron** → Edge Function (Haiku, whole-thread + cachePoint), writes a `sella` `deal_detected` msg (draft+votes in `metadata`); dedup/supersession. **Both-confirm (Option B) → two-owner birth RPC** - the AI fence: only the human button writes. | ★ | ✓ | L | ✅ done |
+| 4d | **Summarize** - `deal_card_updated` "why it changed" as a `sella` chat line **and** `deal_card_log` (`changed_by=sella`); first-contact intro. (Sella right-panel/co-pilot UI = 5A / post-MVP.) | ★ | ✓ | M | ✅ done |
 
-**Audit** - each action emits an `audit_log` row using the helper from F5.
+**Audit** - every Sella action: `audit_log` with `actor: sella` + `on_behalf_of: person` (dual-identity), via the F5 helper.
+**Guardrails** - AI fence (L1 suggest, propose-only) · fail-soft · EU AI Act Art. 50 AI badge · cost guardrail (`max_tokens` + AWS budget alert). See `_workshop/pov/sella.md` §5.
+
+### Section 5 - UI pass (5A) - absorbs the old 3.5d
+
+**Owner:** OPEN / unassigned (Ayush or Muskan). **Runs in PARALLEL with Section 4, AFTER 4.0 research.**
+Plan: `_workshop/build-plans/5a-ui-pass.md`. *(Why Section 5: keeps the UI clear of Sella's 4a-4d numbering.)*
+
+| # | Item | Walk | MVP | Size | Status |
+|---|---|---|---|---|---|
+| 5A | **UI pass** - deal card (open mode + layout), chat heading, the message typing bar (expand / formatting / a `+` menu, first item "Create a deal"; uploads = later storage slice), left chat/relationship nav minimised to icon buttons, and the Sella chat UI. Step-by-step (one surface, review live, next). | ○ | ✓ | L | |
 
 ---
 

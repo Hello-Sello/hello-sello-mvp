@@ -3,45 +3,87 @@
 /**
  * Deal card (3a) - the card object with its FRONT and BACK.
  *
- * Phase 3 built the front; Phase 4 adds the flip + the back (Signals + Logs).
- * The flip is a CSS 3D rotate (inline styles - no Tailwind 3D plugin needed):
- * the front defines the box; the back fills it (absolute inset-0) rotated 180°,
- * both with backface hidden so only the facing side shows.
+ * Flip (Phase 4 S2): a REAL CSS-3D flip. The card physically rotates on the Y
+ * axis between the front (deal facts) and the back (Signals + Logs). The 3D is
+ * inline-styled - `perspective` on the outer box, `preserve-3d` + `rotateY` on
+ * the flipping layer, and `backface-visibility: hidden` on both faces so only
+ * the facing side shows. (An earlier V3 pass replaced this with a cross-fade to
+ * dodge a rotateY glitch, but the real flip is the intended feel, so it is
+ * restored - the perspective + preserve-3d + backface combo renders cleanly.)
  *
- * Kept as the single card entry point so the chat placement (Phase 5) mounts
- * one component.
+ * The FRONT is in normal flow and DEFINES the card box; the BACK fills it
+ * (`absolute inset-0`) pre-rotated 180deg so it faces forward once flipped.
+ *
+ * The two corner controls live in the maroon HEADER corners (V3) and sit
+ * OUTSIDE the flipping layer, so they stay upright on both faces: flip top-left,
+ * Edit top-right - ~30px round translucent-white buttons over the maroon band.
+ *
+ * PENCIL LOCK (DCHG-03): the Edit button renders only when `onEdit` is defined.
+ * DealPin passes `onEdit={data.pendingChange ? undefined : ...}`, so a held change
+ * hides the pencil. The Seal gate is NOT on the card - it moved to the Sella strip.
+ *
+ * Kept as the single card entry point so the chat placement mounts one component.
  */
 import { useState } from "react";
-import { FlipHorizontal2 } from "lucide-react";
+import { FlipHorizontal2, Pencil } from "lucide-react";
 import { CardFront } from "./CardFront";
 import { CardBack } from "./CardBack";
-import type { DealCardView } from "../types";
+import type { DealCardView, ThingView } from "../types";
 
-export function DealCard({ data }: { data: DealCardView }) {
+export function DealCard({
+  data,
+  onEdit,
+  things = [],
+}: {
+  data: DealCardView;
+  /** open the edit form (3.5b); omitted in read-only contexts (no Edit corner) */
+  onEdit?: () => void;
+  /** read-only assigned THINGS for the front (D-12); wired from the strip later (S1) */
+  things?: ThingView[];
+}) {
   const [flipped, setFlipped] = useState(false);
 
   return (
-    <div className="relative w-[340px]" style={{ perspective: "1600px" }}>
-      {/* flip control - top-left, stays upright above the flipping faces */}
+    <div className="relative w-full" style={{ perspective: "1600px" }}>
+      {/* ---- HEADER-CORNER CONTROLS (over the slim SHADED header, OUTSIDE the flipping
+           layer so they stay upright on both faces). Glassy ink buttons now, since the
+           header is light - white-on-maroon would be invisible on the new wash. ---- */}
+      {/* flip - top-left corner */}
       <button
         onClick={() => setFlipped((f) => !f)}
-        className="absolute left-2 top-2 z-20 flex h-6 w-6 items-center justify-center rounded-full bg-white/80 text-brand shadow-sm transition hover:bg-white"
-        title={flipped ? "Flip to facts" : "Flip to signals & logs"}
-        aria-label={flipped ? "Flip to facts" : "Flip to signals and logs"}
+        className="absolute left-2.5 top-2.5 z-30 flex h-[28px] w-[28px] items-center justify-center rounded-full border border-black/[0.07] bg-white/70 text-ink/55 transition hover:bg-brand-soft hover:text-brand-deep"
+        title={flipped ? "Flip to deal" : "Flip to signals & logs"}
+        aria-label={flipped ? "Flip to deal" : "Flip to signals and logs"}
       >
-        <FlipHorizontal2 className="h-3.5 w-3.5" />
+        <FlipHorizontal2 className="h-[14px] w-[14px]" />
       </button>
 
+      {/* edit - top-right corner; pencil-lock: only when an edit handler is given */}
+      {onEdit && (
+        <button
+          onClick={onEdit}
+          className="absolute right-2.5 top-2.5 z-30 flex h-[28px] w-[28px] items-center justify-center rounded-full border border-black/[0.07] bg-white/70 text-ink/55 transition hover:bg-brand-soft hover:text-brand-deep"
+          title="Edit deal"
+          aria-label="Edit deal"
+        >
+          <Pencil className="h-[14px] w-[14px]" />
+        </button>
+      )}
+
+      {/* ---- FLIPPING LAYER: rotates on Y between the two faces ---- */}
       <div
-        className="relative transition-transform duration-500"
+        className="relative transition-transform duration-500 ease-in-out"
         style={{
           transformStyle: "preserve-3d",
           transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)",
         }}
       >
+        {/* FRONT - in normal flow, defines the card box; hidden once rotated away */}
         <div style={{ backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden" }}>
-          <CardFront data={data} />
+          <CardFront data={data} things={things} />
         </div>
+
+        {/* BACK - fills the box, pre-rotated 180deg so it faces forward when flipped */}
         <div
           className="absolute inset-0"
           style={{

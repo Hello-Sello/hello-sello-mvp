@@ -1,0 +1,19 @@
+-- ============================================================================
+-- 20260612160000_seed_test_conversations.sql — INTENTIONALLY EMPTY (no-op)
+-- ----------------------------------------------------------------------------
+-- Removed 2026-06-16 (Option B). This was Muskan's rich test bed: 7 buyer
+-- companies + bare (login-less) users + relationships + p2p threads carrying 7
+-- graded conversations (firm / forming / chat / haggle / logistics / vague) for
+-- exercising Sella detection, all anchored on Alice/Aurora.
+--
+-- Why removed: (1) it inserted person.display_name, a column the person table
+-- no longer has (schema drift), and (2) it depended on Aurora (aaaa…) + Alice
+-- (1111…), which supabase/seed/seed.sql creates AFTER migrations — so it could
+-- not run at migration time on a fresh DB.
+--
+-- RESTORABLE: to bring this test bed back, move its content into
+-- supabase/seed/seed.sql (after the base accounts, section 5+), and drop the
+-- display_name column from the two person inserts. Worth doing when the Sella
+-- detection grading set is needed (and Bedrock is configured locally).
+-- File kept (not deleted) so migration history stays consistent.
+-- ============================================================================

@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>B2 · New chat picker — Option A (locked)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<!--
+  PROTOTYPE — throwaway. B2 "New chat" picker — OPTION A (LOCKED 2026-06-20).
+  Tap [+ New chat] on the Connect conversation list → an anchored dropdown sheet
+  drops INSIDE the list column (WhatsApp-style).
+
+  Pick who you chat with:
+    • Person | Company TOGGLE at the top — person (P2P) vs. whole company (C2C).
+    • Search filters people / companies.
+    • NEW CONNECTIONS section pops your freshest connections by date (Today, Nd ago).
+    • Companies carry an "N deal updates" badge so unread deal activity is visible.
+
+  Backend not built — the connected network is mocked. Selecting fires a toast
+  showing whether it opens a P2P or a company (C2C) chat.
+-->
+<style>
+  :root {
+    --maroon: #76002d;
+    --brand: #c4156b;
+    --brand-2: #e30b5d;
+    --brand-soft: #ffb7d5;
+    --brand-tint: #fde7f1;
+    --ink: #1f1430;
+    --ash: #6b6477;
+    --line: #ecdfe9;
+    --line-soft: #f3e8ef;
+    --bg: #fffafc;
+    --white: #ffffff;
+    --ok: #21c25e;
+    --gold: #b07a00;
+    --gold-bg: #fdf2dc;
+    --info: #6c7bd9;
+    --r-lg: 20px;
+    --r-md: 14px;
+    --r-sm: 10px;
+    --r-xs: 8px;
+    --glass: rgba(255,255,255,0.62);
+    --glass-strong: rgba(255,255,255,0.97);
+  }
+  * { box-sizing: border-box; }
+  a { text-decoration: none; color: inherit; }
+  body {
+    margin: 0; color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.5; -webkit-font-smoothing: antialiased;
+    background:
+      radial-gradient(60rem 60rem at 10% -12%, rgba(255,183,213,0.55), transparent 60%),
+      radial-gradient(46rem 46rem at 108% 6%, rgba(227,11,93,0.10), transparent 55%),
+      linear-gradient(160deg, #ffffff 0%, #fff1f7 100%);
+    background-attachment: fixed;
+    min-height: 100vh;
+  }
+  .display, .pname { font-family: "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  button { font-family: inherit; }
+  ::-webkit-scrollbar { width: 9px; height: 9px; }
+  ::-webkit-scrollbar-thumb { background: #e9d4e1; border-radius: 999px; border: 2px solid transparent; background-clip: padding-box; }
+  ::-webkit-scrollbar-thumb:hover { background: #e0bcd1; background-clip: padding-box; }
+  svg { display: block; }
+
+  /* ====================================================================
+     APP SHELL — so the picker is judged against real density, not a vacuum
+     ==================================================================== */
+  .frame { max-width: 1180px; margin: 0 auto; padding: 26px 22px 60px; }
+  .titlebar { display: flex; align-items: baseline; gap: 12px; margin: 2px 4px 16px; }
+  .titlebar h1 { font-size: 17px; margin: 0; font-weight: 700; letter-spacing: -0.01em; }
+  .titlebar .sub { font-size: 12.5px; color: var(--ash); }
+  .titlebar .vtag { margin-left: auto; font-size: 12px; color: #fff; font-weight: 700; background: var(--maroon); padding: 4px 12px; border-radius: 999px; letter-spacing: .02em; }
+
+  .shell {
+    position: relative; display: flex; gap: 12px; height: 700px;
+    border-radius: 26px; padding: 12px;
+    background: rgba(255,255,255,0.34);
+    border: 1px solid rgba(255,255,255,0.6);
+    box-shadow: 0 24px 70px -34px rgba(118,0,45,.4);
+  }
+
+  /* thin icon rail */
+  .rail { width: 58px; flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 10px 0;
+    background: var(--glass); border: 1px solid var(--glass-strong); border-radius: var(--r-lg); backdrop-filter: blur(20px); }
+  .rail .logo { font-family: "Space Grotesk"; font-weight: 700; color: var(--brand); font-size: 18px; margin-bottom: 8px; }
+  .rail .ric { width: 38px; height: 38px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; color: var(--ash); cursor: pointer; }
+  .rail .ric:hover { background: #fbeef5; color: var(--brand); }
+  .rail .ric.on { background: var(--brand); color: #fff; box-shadow: 0 8px 18px -8px rgba(196,21,107,.7); }
+  .rail .spacer { flex: 1; }
+
+  /* conversation-list column (panel 3) */
+  .panel { width: 300px; flex: 0 0 auto; display: flex; flex-direction: column; overflow: hidden;
+    background: var(--glass); border: 1px solid var(--glass-strong); border-radius: var(--r-lg); backdrop-filter: blur(20px); }
+  .panel-head { padding: 13px 13px 11px; border-bottom: 1px solid var(--line-soft); display: flex; flex-direction: column; gap: 9px; position: relative; }
+  .newchat {
+    display: flex; align-items: center; justify-content: center; gap: 7px; width: 100%;
+    padding: 10px 12px; border: 0; border-radius: var(--r-md); cursor: pointer;
+    background: var(--brand); color: #fff; font-size: 13.5px; font-weight: 600;
+    box-shadow: 0 10px 22px -10px rgba(196,21,107,.8); transition: filter .15s, transform .05s;
+  }
+  .newchat:hover { filter: brightness(1.05); }
+  .newchat:active { transform: translateY(1px); }
+  .newchat.armed { background: var(--maroon); }
+  .srch { display: flex; align-items: center; gap: 8px; border-radius: 999px; background: rgba(31,20,48,.05); padding: 8px 12px; font-size: 12.5px; color: var(--ash); }
+  .chips { display: flex; gap: 6px; }
+  .chip { font-size: 11.5px; padding: 4px 10px; border-radius: 999px; background: rgba(31,20,48,.05); color: var(--ash); cursor: pointer; }
+  .chip.on { background: var(--brand); color: #fff; font-weight: 600; }
+  .conv-list { flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 3px; }
+  .conv { display: flex; gap: 10px; padding: 9px 10px; border-radius: var(--r-md); cursor: pointer; }
+  .conv:hover { background: rgba(255,255,255,.6); }
+  .conv .av { width: 38px; height: 38px; flex: 0 0 auto; border-radius: 11px; background: #ded9e3; color: #574f63; font-weight: 700; font-size: 12.5px; display: inline-flex; align-items: center; justify-content: center; }
+  .conv .av.co { background: linear-gradient(135deg, var(--maroon), var(--brand)); color: #fff; }
+  .conv .col { min-width: 0; flex: 1; }
+  .conv .r1 { display: flex; justify-content: space-between; gap: 8px; }
+  .conv .nm { font-size: 13.5px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .conv .tm { font-size: 10.5px; color: var(--ash); flex: 0 0 auto; }
+  .conv .pv { font-size: 11.5px; color: var(--ash); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .conv .unread { background: var(--brand); color: #fff; font-size: 10px; font-weight: 700; border-radius: 999px; padding: 1px 6px; }
+
+  /* faded thread area */
+  .thread { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--ash);
+    background: var(--glass); border: 1px solid var(--glass-strong); border-radius: var(--r-lg); backdrop-filter: blur(20px); }
+  .thread .big { width: 54px; height: 54px; border-radius: 50%; background: #fbeef5; display: inline-flex; align-items: center; justify-content: center; color: var(--brand-soft); }
+  .thread p { font-size: 13px; margin: 0; }
+
+  /* shared avatar + presence */
+  .pres { position: relative; }
+  .pres::after { content: ""; position: absolute; right: -2px; bottom: -2px; width: 11px; height: 11px; border-radius: 50%; background: var(--ok); border: 2.5px solid var(--white); }
+  .pres.off::after { background: #c9c3cf; }
+
+  /* ====================================================================
+     OPTION A — anchored dropdown sheet (lives inside the panel)
+     ==================================================================== */
+  .sheetA {
+    position: absolute; left: 11px; right: 11px; top: 58px; z-index: 50;
+    background: var(--glass-strong); border: 1px solid var(--line); border-radius: var(--r-md);
+    box-shadow: 0 26px 60px -22px rgba(31,20,48,.5); overflow: hidden; display: none;
+    flex-direction: column; max-height: 600px;
+  }
+  .sheetA.show { display: flex; animation: drop .16s ease; }
+  @keyframes drop { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+  .sheetA .toggle { display: flex; padding: 10px; gap: 6px; border-bottom: 1px solid var(--line-soft); }
+  .sheetA .toggle button { flex: 1; border: 1px solid var(--line); background: var(--white); border-radius: var(--r-sm); padding: 8px; font-size: 12.5px; font-weight: 600; color: var(--ash); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+  .sheetA .toggle button.on { background: var(--brand); border-color: var(--brand); color: #fff; }
+  .sheetA .find { margin: 10px 10px 4px; display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: var(--r-sm); padding: 8px 11px; }
+  .sheetA .find input { border: 0; outline: 0; font-size: 13px; flex: 1; color: var(--ink); background: transparent; }
+  .sheetA .body { overflow-y: auto; padding: 4px 6px 8px; }
+
+  .grp-h { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--ash); padding: 9px 8px 5px; display: flex; align-items: center; gap: 7px; }
+  .grp-h.new { color: var(--gold); }
+  .grp-h .deal-b { margin-left: auto; background: var(--brand-tint); color: var(--brand); font-size: 9.5px; font-weight: 700; padding: 1px 7px; border-radius: 999px; text-transform: none; letter-spacing: 0; display: inline-flex; align-items: center; gap: 4px; }
+  .grp-h .spark { color: var(--gold); }
+
+  .prow { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: var(--r-sm); cursor: pointer; }
+  .prow:hover { background: #faf2f7; }
+  .prow.fresh { background: #fffaf0; }
+  .prow.fresh:hover { background: #fdf2dc; }
+  .prow .av { width: 34px; height: 34px; flex: 0 0 auto; border-radius: 10px; background: #ded9e3; color: #574f63; font-weight: 700; font-size: 12px; display: inline-flex; align-items: center; justify-content: center; }
+  .prow .av.co { background: linear-gradient(135deg, var(--maroon), var(--brand)); color: #fff; border-radius: 11px; }
+  .prow .col { min-width: 0; flex: 1; }
+  .prow .nm { font-size: 13px; font-weight: 600; color: var(--ink); }
+  .prow .sb { font-size: 11px; color: var(--ash); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .prow .when { font-size: 9.5px; font-weight: 700; color: var(--gold); background: var(--gold-bg); padding: 2px 7px; border-radius: 999px; flex: 0 0 auto; }
+  .prow .dealdot { font-size: 9.5px; font-weight: 700; color: var(--brand); background: var(--brand-tint); padding: 2px 7px; border-radius: 999px; flex: 0 0 auto; }
+  .prow .go { color: var(--brand); opacity: 0; flex: 0 0 auto; }
+  .prow:hover .go { opacity: 1; }
+  .pempty { padding: 22px; text-align: center; color: var(--ash); font-size: 12.5px; }
+  .divider { height: 1px; background: var(--line-soft); margin: 6px 8px; }
+
+  /* selection toast */
+  .toast { position: fixed; left: 50%; bottom: 30px; transform: translateX(-50%) translateY(20px);
+    background: var(--ink); color: #fff; font-size: 13px; padding: 11px 18px; border-radius: 999px; z-index: 90;
+    opacity: 0; pointer-events: none; transition: opacity .22s, transform .22s; box-shadow: 0 16px 40px -16px rgba(0,0,0,.5);
+    display: flex; align-items: center; gap: 9px; }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .toast b { color: var(--brand-soft); }
+</style>
+</head>
+<body>
+<div class="frame">
+  <div class="titlebar">
+    <h1 class="display">B2 · New chat picker</h1>
+    <span class="sub">Option A — anchored dropdown · tap <b>+ New chat</b> to open</span>
+    <span class="vtag">OPTION A · LOCKED</span>
+  </div>
+
+  <div class="shell" id="shell">
+    <!-- icon rail -->
+    <div class="rail">
+      <div class="logo">S</div>
+      <div class="ric on" title="Connect">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      </div>
+      <div class="ric" title="Discover">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      </div>
+      <div class="ric" title="Grow">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+      </div>
+      <div class="spacer"></div>
+      <div class="ric" title="You">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="8" r="4"/><path d="M6 21v-1a6 6 0 0 1 12 0v1"/></svg>
+      </div>
+    </div>
+
+    <!-- conversation list (panel 3) -->
+    <div class="panel">
+      <div class="panel-head">
+        <button class="newchat" id="newchatBtn">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
+          New chat
+        </button>
+        <div class="srch">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          Search conversations…
+        </div>
+        <div class="chips">
+          <span class="chip on">All</span>
+          <span class="chip">Unread</span>
+          <span class="chip">Companies</span>
+          <span class="chip">Deals</span>
+        </div>
+        <!-- the dropdown mounts here -->
+        <div class="sheetA" id="sheetA"></div>
+      </div>
+      <div class="conv-list" id="convList"></div>
+    </div>
+
+    <!-- thread placeholder -->
+    <div class="thread">
+      <span class="big"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+      <p>Select a conversation to start reading</p>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* =========================================================================
+   MOCK DATA — my connected network (no backend).
+   newSince = a recently-formed connection (drives the "New connections" pop).
+   unreadDeals = unread deal-card updates on that relationship.
+   ========================================================================= */
+const ME = { co: "Aurora Apotheke", city: "Köln" };
+
+const NETWORK = [
+  { id:"apoberlin", name:"Apo Berlin", city:"Berlin", init:"AB", unreadDeals:0, newSince:"Today",
+    people:[
+      { id:"thomas", name:"Thomas Weber", role:"Pharmacist", init:"TW", online:true },
+      { id:"nina",   name:"Nina Roth",    role:"Assistant",  init:"NR", online:false },
+    ] },
+  { id:"greenleaf", name:"GreenLeaf Co", city:"Berlin", init:"GL", unreadDeals:0, newSince:"2 days ago",
+    people:[
+      { id:"alice", name:"Alice Green", role:"Founder", init:"AG", online:true },
+    ] },
+  { id:"helvetia", name:"Helvetia Pharma AG", city:"Zürich", init:"HP", unreadDeals:2, newSince:null,
+    people:[
+      { id:"luca",  name:"Luca Brunner", role:"Head of Procurement", init:"LB", online:true },
+      { id:"sofia", name:"Sofia Meier",  role:"Buyer",               init:"SM", online:false },
+    ] },
+  { id:"canadian", name:"Canadian Craft Cannabis", city:"Toronto", init:"CC", unreadDeals:0, newSince:null,
+    people:[
+      { id:"kim",   name:"Kim Chen",   role:"Account Lead", init:"KC", online:true },
+      { id:"marco", name:"Marco Real", role:"Logistics",    init:"MR", online:false },
+    ] },
+  { id:"stonepharm", name:"StonePharm GmbH", city:"Hamburg", init:"SP", unreadDeals:1, newSince:null,
+    people:[
+      { id:"bob",   name:"Bob Stone",    role:"Owner",   init:"BS", online:false },
+      { id:"petra", name:"Petra Keller", role:"Quality", init:"PK", online:true },
+    ] },
+  { id:"medico", name:"MedicoPharma X", city:"München", init:"MX", unreadDeals:0, newSince:null,
+    people:[
+      { id:"anna", name:"Anna Müller", role:"Procurement", init:"AM", online:false },
+    ] },
+];
+
+// existing conversations behind the picker (real density)
+const CONVOS = [
+  { co:true,  nm:"Helvetia Pharma AG", pv:"Company chat (C2C)",         tm:"4m", unread:2, init:"HP" },
+  { co:false, nm:"Kim Chen",           pv:"Sounds good — I'll confirm",  tm:"1h", unread:0, init:"KC" },
+  { co:false, nm:"Bob Stone",          pv:"Can you send the cert?",      tm:"3h", unread:1, init:"BS" },
+  { co:true,  nm:"Canadian Craft",     pv:"Company chat (C2C)",          tm:"1d", unread:0, init:"CC" },
+  { co:false, nm:"Anna Müller",        pv:"Re: delivery schedule",       tm:"2d", unread:0, init:"AM" },
+];
+
+/* helpers */
+const buildingSvg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-3"/></svg>';
+const goSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>';
+const sparkSvg = '<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.6 5.4L19 9l-5.4 1.6L12 16l-1.6-5.4L5 9l5.4-1.6z"/></svg>';
+const matches = (q, ...f) => !q || f.some(x => (x||"").toLowerCase().includes(q.toLowerCase()));
+const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
+const freshRank = s => s === "Today" ? 0 : s === "Yesterday" ? 1 : (parseInt(s) || 9);
+
+// new connections, freshest first
+const newPeople = () => NETWORK.filter(c => c.newSince)
+  .flatMap(c => c.people.map(p => ({ ...p, coName:c.name, since:c.newSince })))
+  .sort((a,b) => freshRank(a.since) - freshRank(b.since));
+const newCompanies = () => NETWORK.filter(c => c.newSince).slice().sort((a,b) => freshRank(a.newSince) - freshRank(b.newSince));
+
+/* =========================================================================
+   RENDER: existing conversation list (the panel behind the dropdown)
+   ========================================================================= */
+function renderConvos() {
+  document.getElementById("convList").innerHTML = CONVOS.map(c => `
+    <div class="conv">
+      <span class="av ${c.co ? "co" : ""}">${c.co
+        ? '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-3"/></svg>'
+        : c.init}</span>
+      <div class="col">
+        <div class="r1"><span class="nm">${c.nm}</span><span class="tm">${c.tm}</span></div>
+        <div class="r1"><span class="pv">${c.pv}</span>${c.unread ? `<span class="unread">${c.unread}</span>` : ""}</div>
+      </div>
+    </div>`).join("");
+}
+
+function toast(kind, name, via) {
+  const t = document.getElementById("toast");
+  const icon = kind === "co"
+    ? buildingSvg.replace('stroke="currentColor"', 'stroke="#ffb7d5"')
+    : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ffb7d5" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>';
+  t.innerHTML = `${icon} Opening <b>${kind === "co" ? "company" : "P2P"} chat</b> with <b>${name}</b>${via ? ` · ${via}` : ""}`;
+  t.classList.add("show");
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => t.classList.remove("show"), 2400);
+}
+
+/* =========================================================================
+   OPTION A — anchored dropdown (Person|Company toggle + New connections + deals)
+   ========================================================================= */
+const stateA = { mode: "person", q: "" };
+
+function personRow(p, coName, opts = {}) {
+  return `
+    <div class="prow ${opts.fresh ? "fresh" : ""}" data-kind="person" data-name="${p.name}" data-via="${coName}">
+      <span class="av pres ${p.online ? "" : "off"}">${p.init}</span>
+      <div class="col"><div class="nm">${p.name}</div><div class="sb">${p.role}${opts.showCo ? " · " + coName : ""}</div></div>
+      ${opts.since ? `<span class="when">${opts.since}</span>` : ""}
+      <span class="go">${goSvg}</span>
+    </div>`;
+}
+function companyRow(c, opts = {}) {
+  return `
+    <div class="prow ${opts.fresh ? "fresh" : ""}" data-kind="co" data-name="${c.name}" data-via="company chat">
+      <span class="av co">${buildingSvg}</span>
+      <div class="col"><div class="nm">${c.name}</div><div class="sb">${plural(c.people.length, "contact")} · ${c.city}</div></div>
+      ${opts.since ? `<span class="when">${opts.since}</span>`
+        : c.unreadDeals ? `<span class="dealdot">${plural(c.unreadDeals, "deal")}</span>` : ""}
+      <span class="go">${goSvg}</span>
+    </div>`;
+}
+
+function renderA() {
+  const el = document.getElementById("sheetA");
+  const q = stateA.q;
+  const searching = !!q;
+  let body = "";
+
+  if (stateA.mode === "person") {
+    if (searching) {
+      const groups = NETWORK
+        .map(c => ({ c, people: c.people.filter(p => matches(q, p.name, p.role, c.name)) }))
+        .filter(g => g.people.length);
+      body = groups.length
+        ? groups.map(g => `
+            <div class="grp-h">${g.c.name}${g.c.unreadDeals ? `<span class="deal-b">${plural(g.c.unreadDeals, "deal update")}</span>` : ""}</div>
+            ${g.people.map(p => personRow(p, g.c.name)).join("")}`).join("")
+        : `<div class="pempty">No people match “${q}”.</div>`;
+    } else {
+      // NEW CONNECTIONS first, then everyone grouped by company
+      const fresh = newPeople();
+      const freshBlock = fresh.length ? `
+        <div class="grp-h new">${sparkSvg} New connections</div>
+        ${fresh.map(p => personRow(p, p.coName, { fresh:true, showCo:true, since:p.since })).join("")}
+        <div class="divider"></div>` : "";
+      const groups = NETWORK.map(c => `
+        <div class="grp-h">${c.name}${c.unreadDeals ? `<span class="deal-b">${plural(c.unreadDeals, "deal update")}</span>` : ""}</div>
+        ${c.people.map(p => personRow(p, c.name)).join("")}`).join("");
+      body = freshBlock + groups;
+    }
+  } else {
+    // COMPANY mode
+    if (searching) {
+      const cos = NETWORK.filter(c => matches(q, c.name, c.city));
+      body = cos.length ? cos.map(c => companyRow(c)).join("") : `<div class="pempty">No companies match “${q}”.</div>`;
+    } else {
+      const fresh = newCompanies();
+      const freshBlock = fresh.length ? `
+        <div class="grp-h new">${sparkSvg} New connections</div>
+        ${fresh.map(c => companyRow(c, { fresh:true, since:c.newSince })).join("")}
+        <div class="divider"></div>
+        <div class="grp-h">All companies</div>` : "";
+      body = freshBlock + NETWORK.map(c => companyRow(c)).join("");
+    }
+  }
+
+  el.innerHTML = `
+    <div class="toggle">
+      <button data-mode="person" class="${stateA.mode === "person" ? "on" : ""}">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M6 21v-1a6 6 0 0 1 12 0v1"/></svg> Person
+      </button>
+      <button data-mode="co" class="${stateA.mode === "co" ? "on" : ""}">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-3"/></svg> Company
+      </button>
+    </div>
+    <div class="find">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ash)" stroke-width="1.9"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <input id="findA" placeholder="${stateA.mode === "person" ? "Search people…" : "Search companies…"}" value="${stateA.q}" autocomplete="off" />
+    </div>
+    <div class="body">${body}</div>`;
+
+  el.querySelectorAll(".toggle button").forEach(b => b.onclick = () => { stateA.mode = b.dataset.mode; stateA.q = ""; renderA(); document.getElementById("findA")?.focus(); });
+  const find = document.getElementById("findA");
+  find.oninput = e => { stateA.q = e.target.value; const c = find.selectionStart; renderA(); const f = document.getElementById("findA"); f.focus(); f.setSelectionRange(c, c); };
+  el.querySelectorAll(".prow").forEach(r => r.onclick = () => { toast(r.dataset.kind, r.dataset.name, r.dataset.via); closeSheet(); });
+}
+
+/* open / close */
+let isOpen = false;
+function openSheet() { renderA(); document.getElementById("sheetA").classList.add("show"); document.getElementById("newchatBtn").classList.add("armed"); isOpen = true; setTimeout(() => document.getElementById("findA")?.focus(), 30); }
+function closeSheet() { isOpen = false; document.getElementById("sheetA").classList.remove("show"); document.getElementById("newchatBtn").classList.remove("armed"); }
+
+document.getElementById("newchatBtn").onclick = () => { isOpen ? closeSheet() : openSheet(); };
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeSheet(); });
+// clicks inside the sheet must not reach the outside-click handler — the sheet
+// re-renders its children on every click, so e.target detaches mid-dispatch.
+// #sheetA itself is stable, so stop propagation here (its child handlers already ran).
+document.getElementById("sheetA").addEventListener("click", e => e.stopPropagation());
+document.addEventListener("click", e => {
+  if (!isOpen) return;
+  if (!document.getElementById("newchatBtn").contains(e.target)) closeSheet();
+});
+
+/* boot — open immediately so the picker is the first thing you see */
+renderConvos();
+openSheet();
+</script>
+</body>
+</html>

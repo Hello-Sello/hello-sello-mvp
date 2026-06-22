@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Camera } from 'lucide-react'
+import { Camera, Check } from 'lucide-react'
 import { createClient } from '@/shared/db/client'
 import { Avatar } from './Avatar'
 
@@ -25,12 +25,20 @@ export function AvatarUpload({
   const [url, setUrl] = useState(initialUrl)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Avatar saves instantly on pick (client-direct upload). `saved` surfaces a
+  // visible "Photo updated" confirmation so the instant save isn't silent —
+  // matching the explicit Saved feedback the rest of the profile form gives.
+  const [saved, setSaved] = useState(false)
 
   async function pick(file: File) {
     setBusy(true)
     setError(null)
+    setSaved(false)
     const supabase = createClient()
-    const path = `${personId}/${crypto.randomUUID()}-${file.name}`
+    // Stable per-person path so `upsert` overwrites the one avatar file instead
+    // of orphaning the old one. (A random filename never collides, so the old
+    // upsert flag was dead and every change left an orphan behind.)
+    const path = `${personId}/avatar`
     const { error: upErr } = await supabase.storage
       .from('avatars')
       .upload(path, file, { upsert: true, contentType: file.type })
@@ -39,14 +47,17 @@ export function AvatarUpload({
       setBusy(false)
       return
     }
-    const publicUrl = supabase.storage.from('avatars').getPublicUrl(path).data.publicUrl
     const res = await onSaved(path)
     if (res.error) {
       setError(res.error)
       setBusy(false)
       return
     }
-    setUrl(publicUrl)
+    // The public URL is now stable, so the browser would show the cached old
+    // image. Preview the bytes we just uploaded directly; other viewers get the
+    // fresh image via the `?v=updated_at` nonce on read + Smart CDN invalidation.
+    setUrl(URL.createObjectURL(file))
+    setSaved(true)
     setBusy(false)
   }
 
@@ -69,6 +80,9 @@ export function AvatarUpload({
           />
         </label>
         {error && <span className="text-xs text-danger">{error}</span>}
+        {saved && !busy && !error && (
+          <span className="inline-flex items-center gap-1 text-xs text-success"><Check size={13} /> Photo updated</span>
+        )}
       </div>
     </div>
   )

@@ -5,6 +5,7 @@ import { Mail, Phone, Globe, Link2, Download, UserPlus, MapPin, Package } from '
 import { Avatar } from '@/shared/ui/Avatar'
 import { BackButton } from '@/shared/ui/BackButton'
 import { Wordmark } from '@/shared/ui/Wordmark'
+import { VerifiedBadge } from '@/shared/ui/VerifiedBadge'
 import { getPublicProfile } from '@/modules/profile'
 import { getCurrentUser } from '@/shared/auth'
 
@@ -39,12 +40,17 @@ export default async function PublicProfilePage({ params }: { params: Promise<{ 
         </span>
       </div>
 
-      <div className="relative h-44 w-full bg-gradient-to-br from-brand via-brand-deep to-[#3a0016] md:h-52">
+      <div className="relative h-44 w-full bg-gradient-to-br from-brand via-brand-deep to-brand-deep md:h-52">
         <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(white 1px, transparent 1px)', backgroundSize: '22px 22px' }} />
         {co && (
           <div className="absolute bottom-4 left-6 right-6 text-white md:bottom-5">
             {co.tagline && <p className="text-sm/none opacity-80">{co.tagline}</p>}
-            <h2 className="mt-1 text-xl font-bold md:text-2xl">{co.name}</h2>
+            {/* Unlike Discover (every row verified by RPC), this card is anon-readable and
+                shows ANY company — so the pill gates on the REAL status (component self-gates). */}
+            <div className="mt-1 flex flex-wrap items-center gap-2.5">
+              <h2 className="text-xl font-bold md:text-2xl">{co.name}</h2>
+              <VerifiedBadge status={co.verificationStatus} variant="pill" />
+            </div>
           </div>
         )}
       </div>

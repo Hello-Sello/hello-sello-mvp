@@ -1,0 +1,806 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Deal Room - Right Column - V1 (stage pills on top)</title>
+<style>
+  /* ─────────────────────────────────────────────────────────────
+     Damson tokens (mirrored from src/app/globals.css)
+     ───────────────────────────────────────────────────────────── */
+  :root {
+    --brand: #e30b5d;          /* raspberry  - primary accent */
+    --brand-soft: #ffb7d5;     /* cotton candy - light fills */
+    --brand-deep: #7a1638;     /* damson - deep accent / pressed */
+    --ink: #1f2020;            /* text + icons */
+    --ink-muted: #6b6470;      /* muted text */
+    --info: #6c7bd9;           /* periwinkle - secondary */
+    --info-soft: #8b8bdc;
+    --success: #34b233;
+    --surface: #ffffff;
+
+    --bg-from: #ffffff;
+    --bg-to: #fff1f7;
+    --glass-bg: rgba(255, 255, 255, 0.62);
+    --glass-bg-strong: rgba(255, 255, 255, 0.92);
+    --glass-border: rgba(255, 255, 255, 0.65);
+    --glass-shadow: 0 10px 34px -12px color-mix(in srgb, var(--brand-deep) 18%, transparent);
+    --radius: 18px;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    color: var(--ink);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    background:
+      radial-gradient(60rem 60rem at 10% -12%, rgba(255, 183, 213, 0.55), transparent 60%),
+      radial-gradient(46rem 46rem at 108% 6%, rgba(227, 11, 93, 0.10), transparent 55%),
+      radial-gradient(40rem 40rem at 92% 96%, rgba(108, 123, 217, 0.10), transparent 55%),
+      linear-gradient(160deg, var(--bg-from) 0%, var(--bg-to) 100%);
+    background-attachment: fixed;
+    padding: 22px;
+  }
+
+  /* glass surface - the core visual language */
+  .glass {
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px) saturate(140%);
+    -webkit-backdrop-filter: blur(20px) saturate(140%);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+  }
+  .glass-strong {
+    background: var(--glass-bg-strong);
+    backdrop-filter: blur(24px) saturate(160%);
+    -webkit-backdrop-filter: blur(24px) saturate(160%);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+  }
+
+  /* ── 3-column Deal Room shell ── */
+  .room {
+    display: grid;
+    grid-template-columns: 60px 1fr 410px;
+    gap: 14px;
+    height: calc(100vh - 44px);
+    max-width: 1320px;
+    margin: 0 auto;
+  }
+
+  /* LEFT + MIDDLE = faded context only */
+  .ghost {
+    border-radius: var(--radius);
+    background: rgba(255,255,255,0.34);
+    border: 1px solid rgba(255,255,255,0.5);
+    box-shadow: var(--glass-shadow);
+    opacity: 0.62;
+    filter: saturate(0.7);
+    overflow: hidden;
+  }
+  .ghost-bar {
+    height: 46px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 12px;
+    border-bottom: 1px solid rgba(31,32,32,0.07);
+    color: var(--ink-muted);
+    font-size: 12.5px;
+    font-weight: 600;
+  }
+  .ghost-bar .arrow { font-size: 18px; line-height: 1; opacity: 0.6; }
+  .col-left  { display: flex; flex-direction: column; }
+  .col-left .ghost-bar { padding: 0; justify-content: center; }
+  .ghost-stub {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    font-size: 10px;
+    color: var(--ink-muted);
+    opacity: 0.55;
+  }
+  .col-mid { display: flex; flex-direction: column; }
+  .chat-fill {
+    flex: 1;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    overflow: hidden;
+  }
+  .bubble {
+    max-width: 64%;
+    padding: 9px 13px;
+    border-radius: 16px;
+    font-size: 12px;
+    color: var(--ink-muted);
+    background: rgba(255,255,255,0.6);
+    border: 1px solid rgba(255,255,255,0.6);
+  }
+  .bubble.them { align-self: flex-start; border-bottom-left-radius: 5px; }
+  .bubble.me {
+    align-self: flex-end;
+    border-bottom-right-radius: 5px;
+    background: color-mix(in srgb, var(--brand-soft) 42%, white);
+  }
+
+  /* ─────────────────────────────────────────────────────────────
+     RIGHT COLUMN - full fidelity (the star)
+     ───────────────────────────────────────────────────────────── */
+  .col-right {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    border-radius: var(--radius);
+    padding: 12px;
+    overflow: hidden;
+  }
+
+  .right-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 2px 4px 0;
+  }
+  .right-head h2 {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    color: var(--brand-deep);
+  }
+  .deal-meter {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 11px;
+    color: var(--ink-muted);
+    font-weight: 600;
+  }
+  .deal-meter .ring {
+    --p: 40;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background:
+      conic-gradient(var(--brand) calc(var(--p) * 1%), rgba(31,32,32,0.12) 0);
+    display: grid; place-items: center;
+  }
+  .deal-meter .ring::after {
+    content: "";
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--glass-bg-strong);
+  }
+
+  /* ── STAGE PILLS (the filter) ── */
+  .pills {
+    display: flex;
+    gap: 6px;
+    border-radius: 16px;
+    padding: 6px;
+  }
+  .pill {
+    flex: 1;
+    border: 0;
+    cursor: pointer;
+    background: transparent;
+    border-radius: 12px;
+    padding: 8px 4px 9px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    font-family: inherit;
+    color: var(--ink-muted);
+    transition: background .18s, transform .12s, box-shadow .18s;
+    position: relative;
+  }
+  .pill:hover { background: rgba(31,32,32,0.05); }
+  .pill .num {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    display: grid; place-items: center;
+    font-size: 11px; font-weight: 700;
+    background: rgba(31,32,32,0.09);
+    color: rgba(31,32,32,0.55);
+    transition: background .18s, color .18s, transform .18s;
+  }
+  .pill .lbl {
+    font-size: 9.5px;
+    font-weight: 600;
+    line-height: 1.15;
+    text-align: center;
+    letter-spacing: 0.01em;
+    max-width: 64px;
+  }
+  /* ahead stages slightly muted */
+  .pill[data-ahead="1"]:not(.active):not(.done) { opacity: 0.55; }
+
+  /* DONE stage pill - check + soft success tint */
+  .pill.done .num {
+    background: var(--success);
+    color: #fff;
+  }
+  .pill.done .lbl { color: color-mix(in srgb, var(--success) 60%, var(--ink)); }
+  .pill .check { display: none; }
+  .pill.done .check {
+    display: grid;
+    place-items: center;
+    position: absolute;
+    top: 5px; right: 9px;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--success);
+    color: #fff;
+    font-size: 9px;
+    box-shadow: 0 1px 4px rgba(52,178,51,0.5);
+  }
+
+  /* ACTIVE stage pill - deep-pink highlight */
+  .pill.active {
+    background: linear-gradient(160deg, var(--brand) 0%, var(--brand-deep) 100%);
+    box-shadow: 0 8px 20px -8px color-mix(in srgb, var(--brand-deep) 70%, transparent);
+    transform: translateY(-1px);
+  }
+  .pill.active .num {
+    background: rgba(255,255,255,0.92);
+    color: var(--brand-deep);
+    transform: scale(1.04);
+  }
+  .pill.active .lbl { color: #fff; }
+  .pill.active.done .num { background: #fff; color: var(--success); }
+  .pill.active.done .lbl { color: #fff; }
+  .pill.active .check { background: #fff; color: var(--success); }
+
+  /* ── ACTIVE-STAGE HEADER ROW + the DONE BOX (the star) ── */
+  .stage-head {
+    border-radius: 16px;
+    padding: 12px 13px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .stage-head .title-wrap { min-width: 0; flex: 1; }
+  .stage-head .eyebrow {
+    font-size: 9.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--ink-muted);
+    font-weight: 700;
+  }
+  .stage-head .title {
+    margin-top: 2px;
+    font-size: 15.5px;
+    font-weight: 700;
+    color: var(--brand-deep);
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .stage-head .progress {
+    margin-top: 7px;
+    height: 5px;
+    border-radius: 99px;
+    background: rgba(31,32,32,0.09);
+    overflow: hidden;
+  }
+  .stage-head .progress > i {
+    display: block;
+    height: 100%;
+    border-radius: 99px;
+    background: linear-gradient(90deg, var(--brand-soft), var(--brand));
+    transition: width .35s ease;
+  }
+  .stage-head .count {
+    margin-top: 5px;
+    font-size: 10.5px;
+    color: var(--ink-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* THE DONE BOX - the explicit "mark stage done" control */
+  .donebox {
+    flex-shrink: 0;
+    cursor: pointer;
+    border: 1.5px dashed color-mix(in srgb, var(--brand-deep) 38%, transparent);
+    background: color-mix(in srgb, var(--brand-soft) 18%, rgba(255,255,255,0.5));
+    border-radius: 14px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    width: 96px;
+    font-family: inherit;
+    transition: all .2s ease;
+  }
+  .donebox:hover {
+    border-color: var(--brand);
+    background: color-mix(in srgb, var(--brand-soft) 32%, white);
+    transform: translateY(-1px);
+  }
+  .donebox .tick {
+    width: 30px; height: 30px;
+    border-radius: 9px;
+    display: grid; place-items: center;
+    background: rgba(255,255,255,0.85);
+    border: 1.5px solid color-mix(in srgb, var(--brand-deep) 32%, transparent);
+    color: var(--brand-deep);
+    transition: all .2s ease;
+  }
+  .donebox .tick svg { width: 17px; height: 17px; }
+  .donebox .tick .glyph-done { display: none; }
+  .donebox .tick .glyph-open { display: block; }
+  .donebox .word {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    line-height: 1.1;
+    text-align: center;
+    color: var(--brand-deep);
+  }
+  /* DONE state - solid, filled, settled */
+  .stage-head.is-done {
+    background: color-mix(in srgb, var(--success) 9%, var(--glass-bg));
+    border-color: color-mix(in srgb, var(--success) 22%, var(--glass-border));
+  }
+  .stage-head.is-done .donebox {
+    border-style: solid;
+    border-color: var(--success);
+    background: color-mix(in srgb, var(--success) 14%, white);
+  }
+  .stage-head.is-done .donebox .tick {
+    background: var(--success);
+    border-color: var(--success);
+    color: #fff;
+    transform: rotate(0);
+  }
+  .stage-head.is-done .donebox .tick .glyph-done { display: block; }
+  .stage-head.is-done .donebox .tick .glyph-open { display: none; }
+  .stage-head.is-done .donebox .word { color: color-mix(in srgb, var(--success) 65%, var(--ink)); }
+  .stage-head.is-done .title { color: color-mix(in srgb, var(--success) 55%, var(--ink)); }
+  .stage-head.is-done .progress > i { background: var(--success); }
+
+  /* ── SUB-TABS: Things / People / Documents ── */
+  .subtabs {
+    display: flex;
+    gap: 4px;
+    border-radius: 14px;
+    padding: 4px;
+  }
+  .subtab {
+    flex: 1;
+    border: 0;
+    cursor: pointer;
+    background: transparent;
+    border-radius: 10px;
+    padding: 7px 6px;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    transition: background .16s, color .16s;
+  }
+  .subtab:hover { background: rgba(31,32,32,0.05); }
+  .subtab.active {
+    background: color-mix(in srgb, var(--brand-soft) 42%, white);
+    color: var(--brand-deep);
+  }
+  .subtab .badge {
+    min-width: 16px; height: 16px;
+    padding: 0 4px;
+    border-radius: 99px;
+    background: rgba(31,32,32,0.1);
+    color: var(--ink-muted);
+    font-size: 9.5px;
+    font-weight: 700;
+    display: grid; place-items: center;
+  }
+  .subtab.active .badge { background: var(--brand); color: #fff; }
+
+  /* ── THE LIST ── */
+  .list {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    padding: 2px 2px 6px;
+  }
+  .list::-webkit-scrollbar { width: 7px; }
+  .list::-webkit-scrollbar-thumb {
+    background: rgba(122,22,56,0.18);
+    border-radius: 99px;
+  }
+
+  /* a thing row */
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    border-radius: 13px;
+    padding: 10px 12px;
+    transition: background .14s, transform .12s;
+  }
+  .row:hover { background: rgba(255,255,255,0.5); }
+
+  .row .box {
+    flex-shrink: 0;
+    width: 19px; height: 19px;
+    border-radius: 6px;
+    border: 1.5px solid rgba(31,32,32,0.25);
+    background: transparent;
+    cursor: pointer;
+    display: grid; place-items: center;
+    color: #fff;
+    transition: all .16s ease;
+  }
+  .row .box svg { width: 12px; height: 12px; opacity: 0; transform: scale(.5); transition: all .16s; }
+  .row.done .box { background: var(--brand); border-color: var(--brand); }
+  .row.done .box svg { opacity: 1; transform: scale(1); }
+
+  .row .body { min-width: 0; flex: 1; }
+  .row .ttl {
+    font-size: 13px;
+    font-weight: 500;
+    color: rgba(31,32,32,0.82);
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .row.done .ttl { color: rgba(31,32,32,0.4); text-decoration: line-through; }
+  .row .sub {
+    margin-top: 3px;
+    font-size: 10.5px;
+    color: var(--ink-muted);
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex-wrap: wrap;
+  }
+
+  /* type chip */
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border-radius: 99px;
+    background: color-mix(in srgb, var(--info) 14%, white);
+    color: color-mix(in srgb, var(--info) 70%, var(--ink));
+    padding: 2px 8px;
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+  }
+  .chip svg { width: 11px; height: 11px; }
+
+  /* lock pill - PRIVATE */
+  .lock {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border-radius: 99px;
+    background: color-mix(in srgb, var(--brand-deep) 12%, white);
+    color: var(--brand-deep);
+    padding: 2px 8px;
+    font-size: 9.5px;
+    font-weight: 700;
+  }
+  .lock svg { width: 11px; height: 11px; }
+
+  /* avatar */
+  .av {
+    flex-shrink: 0;
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    display: grid; place-items: center;
+    font-size: 10px;
+    font-weight: 700;
+    color: #fff;
+    box-shadow: inset 0 0 0 1.5px rgba(255,255,255,0.4);
+  }
+  .av.ab { background: linear-gradient(150deg, var(--brand), var(--brand-deep)); }
+  .av.cd { background: linear-gradient(150deg, #6c7bd9, #4a57a8); }
+  .av.mn { background: linear-gradient(150deg, #f0876a, #c9543a); }
+
+  /* document row */
+  .doc .ficon {
+    flex-shrink: 0;
+    width: 34px; height: 34px;
+    border-radius: 9px;
+    display: grid; place-items: center;
+    background: color-mix(in srgb, var(--brand-soft) 30%, white);
+    color: var(--brand-deep);
+  }
+  .doc .ficon svg { width: 17px; height: 17px; }
+  .doc .meta { font-size: 10px; color: var(--ink-muted); }
+
+  /* people row */
+  .person .role { font-size: 11px; color: var(--ink-muted); }
+
+  /* hide non-active sub-panels */
+  .panel { display: none; flex-direction: column; gap: 7px; }
+  .panel.active { display: flex; }
+
+  .legend {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 6px 6px 0;
+    font-size: 10px;
+    color: var(--ink-muted);
+  }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .legend .dot { width: 9px; height: 9px; border-radius: 3px; }
+</style>
+</head>
+<body>
+  <div class="room">
+
+    <!-- LEFT: thin deal card (faded context) -->
+    <aside class="col-left ghost">
+      <div class="ghost-bar"><span class="arrow">‹</span></div>
+      <div class="ghost-stub">Deal Card</div>
+    </aside>
+
+    <!-- MIDDLE: chat (faded context) -->
+    <section class="col-mid ghost">
+      <div class="ghost-bar">
+        <span class="arrow">‹</span>
+        GreenLeaf  ·  StonePharm  —  Deal #4172
+      </div>
+      <div class="chat-fill">
+        <div class="bubble them">Sounds good - I'll send the CoA shortly.</div>
+        <div class="bubble me">Perfect. Once lab review clears we move to agreement.</div>
+        <div class="bubble them">Volume still 120 kg at the agreed price?</div>
+        <div class="bubble me">Yes, locked. Let's mark the stage done.</div>
+        <div class="bubble them">On it.</div>
+      </div>
+    </section>
+
+    <!-- RIGHT: the work column (full fidelity - the star) -->
+    <aside class="col-right glass-strong" id="rightCol">
+
+      <div class="right-head">
+        <h2>Deal work</h2>
+        <div class="deal-meter">
+          <span id="dealPct">2 / 5 stages done</span>
+          <span class="ring" id="dealRing" style="--p:40"></span>
+        </div>
+      </div>
+
+      <!-- STAGE PILLS = the filter -->
+      <nav class="pills glass" id="pills"></nav>
+
+      <!-- ACTIVE-STAGE HEADER + the DONE BOX -->
+      <div class="stage-head glass" id="stageHead"></div>
+
+      <!-- SUB-TABS -->
+      <div class="subtabs glass" id="subtabs">
+        <button class="subtab active" data-tab="things">Things <span class="badge" id="cThings">0</span></button>
+        <button class="subtab" data-tab="people">People <span class="badge">3</span></button>
+        <button class="subtab" data-tab="documents">Docs <span class="badge">3</span></button>
+      </div>
+
+      <!-- LISTS -->
+      <div class="list">
+        <div class="panel active" id="panel-things"></div>
+        <div class="panel" id="panel-people"></div>
+        <div class="panel" id="panel-documents"></div>
+      </div>
+
+      <div class="legend">
+        <span><i class="dot" style="background:var(--brand)"></i> shared</span>
+        <span><i class="dot" style="background:var(--brand-deep)"></i> private (lock)</span>
+        <span><i class="dot" style="background:var(--success)"></i> stage done</span>
+      </div>
+
+    </aside>
+  </div>
+
+<script>
+  /* ── inline SVG icons (no libs) ── */
+  const I = {
+    check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
+    circle:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/></svg>',
+    lock:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>',
+    pen:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
+    clip:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.4 11.05 12.25 20.2a5 5 0 0 1-7.07-7.07l9.19-9.19a3 3 0 1 1 4.24 4.24l-9.2 9.19a1 1 0 0 1-1.41-1.42l8.49-8.48"/></svg>',
+    file:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/></svg>',
+  };
+
+  /* ── sample data: 5 stages, 2 things each ── */
+  const PEOPLE = [
+    { ini: "AB", cls: "ab", name: "Alice Brenner", role: "GreenLeaf · Seller lead" },
+    { ini: "CD", cls: "cd", name: "Carl Dietz",    role: "StonePharm · Buyer" },
+    { ini: "MN", cls: "mn", name: "Maya Nowak",    role: "GreenLeaf · Compliance" },
+  ];
+
+  const DOCS = [
+    { name: "Certificate of Analysis.pdf", meta: "PDF · 1.2 MB · uploaded by AB", priv: false },
+    { name: "Supply agreement (draft).pdf", meta: "PDF · 340 KB · e-sign pending", priv: false },
+    { name: "Internal lab notes.pdf",       meta: "PDF · 88 KB · GreenLeaf only", priv: true },
+  ];
+
+  const STAGES = [
+    { code:"neg", label:"Negotiation", done:true, things:[
+        { t:"Agree unit price", type:null, assignee:"AB", priv:false, done:true },
+        { t:"Confirm volume (120 kg)", type:null, assignee:null, priv:true, done:true },
+    ]},
+    { code:"cmp", label:"Compliance & Quality", done:true, things:[
+        { t:"Upload CoA", type:"upload", assignee:"AB", priv:false, done:true },
+        { t:"Lab result review", type:null, assignee:"MN", priv:true, done:true },
+    ]},
+    { code:"agr", label:"Agreement", done:false, things:[
+        { t:"Sign supply agreement", type:"esign", assignee:null, priv:false, done:false },
+        { t:"Internal legal sign-off", type:null, assignee:"CD", priv:true, done:true },
+    ]},
+    { code:"pay", label:"Payment", done:false, ahead:true, things:[
+        { t:"Issue proforma invoice", type:"upload", assignee:"AB", priv:false, done:false },
+        { t:"Confirm bank details", type:null, assignee:null, priv:true, done:false },
+    ]},
+    { code:"ful", label:"Fulfilment & Delivery", done:false, ahead:true, things:[
+        { t:"Book logistics", type:null, assignee:"CD", priv:false, done:false },
+        { t:"Delivery note + handover", type:"upload", assignee:null, priv:false, done:false },
+    ]},
+  ];
+
+  const TYPE_CHIP = {
+    esign:  { icon: I.pen,  label: "e-sign · both sides" },
+    upload: { icon: I.clip, label: "upload" },
+  };
+
+  let active = 2;       // start on "Agreement" (the live, not-done stage)
+  let tab = "things";
+
+  const $ = (s) => document.querySelector(s);
+
+  /* ── render the stage pills ── */
+  function renderPills() {
+    const el = $("#pills");
+    el.innerHTML = "";
+    STAGES.forEach((s, i) => {
+      const b = document.createElement("button");
+      b.className = "pill"
+        + (i === active ? " active" : "")
+        + (s.done ? " done" : "");
+      if (s.ahead) b.dataset.ahead = "1";
+      b.innerHTML = `
+        <span class="check">${I.check}</span>
+        <span class="num">${i + 1}</span>
+        <span class="lbl">${s.label}</span>`;
+      b.onclick = () => { active = i; tab = "things"; renderAll(); };
+      el.appendChild(b);
+    });
+  }
+
+  /* ── render the active-stage header + DONE BOX ── */
+  function renderStageHead() {
+    const s = STAGES[active];
+    const total = s.things.length;
+    const done = s.things.filter(t => t.done).length;
+    const pct = total ? Math.round(done / total * 100) : 0;
+    const head = $("#stageHead");
+    head.className = "stage-head glass" + (s.done ? " is-done" : "");
+    head.innerHTML = `
+      <div class="title-wrap">
+        <div class="eyebrow">Stage ${active + 1} of 5</div>
+        <div class="title">${s.label}</div>
+        <div class="progress"><i style="width:${pct}%"></i></div>
+        <div class="count">${done}/${total} things done${s.done ? " · stage complete" : ""}</div>
+      </div>
+      <button class="donebox" id="doneBox" title="${s.done ? "Mark stage not done" : "Mark this stage done"}">
+        <span class="tick">
+          <span class="glyph-open">${I.circle}</span>
+          <span class="glyph-done">${I.check}</span>
+        </span>
+        <span class="word">${s.done ? "Stage done" : "Mark stage done"}</span>
+      </button>`;
+    $("#doneBox").onclick = () => {
+      s.done = !s.done;
+      renderAll();
+    };
+  }
+
+  /* ── render the things / people / docs lists ── */
+  function avatar(ini) {
+    const p = PEOPLE.find(x => x.ini === ini);
+    const cls = p ? p.cls : "ab";
+    return `<span class="av ${cls}">${ini}</span>`;
+  }
+
+  function renderThings() {
+    const s = STAGES[active];
+    const el = $("#panel-things");
+    el.innerHTML = "";
+    s.things.forEach((t, idx) => {
+      const chip = t.type ? TYPE_CHIP[t.type] : null;
+      const row = document.createElement("div");
+      row.className = "row" + (t.done ? " done" : "");
+      row.innerHTML = `
+        <button class="box" aria-label="toggle">${I.check}</button>
+        <div class="body">
+          <div class="ttl">${t.t}</div>
+          <div class="sub">
+            ${chip ? `<span class="chip">${chip.icon}${chip.label}</span>` : ""}
+            ${t.priv ? `<span class="lock">${I.lock}private</span>` : ""}
+          </div>
+        </div>
+        ${t.assignee ? avatar(t.assignee) : ""}`;
+      row.querySelector(".box").onclick = () => { t.done = !t.done; renderAll(); };
+      el.appendChild(row);
+    });
+    $("#cThings").textContent = s.things.length;
+  }
+
+  function renderPeople() {
+    const el = $("#panel-people");
+    el.innerHTML = PEOPLE.map(p => `
+      <div class="row person">
+        <span class="av ${p.cls}">${p.ini}</span>
+        <div class="body">
+          <div class="ttl">${p.name}</div>
+          <div class="role">${p.role}</div>
+        </div>
+      </div>`).join("");
+  }
+
+  function renderDocs() {
+    const el = $("#panel-documents");
+    el.innerHTML = DOCS.map(d => `
+      <div class="row doc">
+        <span class="ficon">${I.file}</span>
+        <div class="body">
+          <div class="ttl">${d.name} ${d.priv ? `<span class="lock">${I.lock}private</span>` : ""}</div>
+          <div class="meta">${d.meta}</div>
+        </div>
+      </div>`).join("");
+  }
+
+  /* ── sub-tab switching ── */
+  function renderTabs() {
+    document.querySelectorAll(".subtab").forEach(b => {
+      b.classList.toggle("active", b.dataset.tab === tab);
+    });
+    document.querySelectorAll(".panel").forEach(p => {
+      p.classList.toggle("active", p.id === "panel-" + tab);
+    });
+  }
+  document.querySelectorAll(".subtab").forEach(b => {
+    b.onclick = () => { tab = b.dataset.tab; renderTabs(); };
+  });
+
+  /* ── deal-level meter ── */
+  function renderMeter() {
+    const doneCount = STAGES.filter(s => s.done).length;
+    const pct = Math.round(doneCount / STAGES.length * 100);
+    $("#dealPct").textContent = `${doneCount} / ${STAGES.length} stages done`;
+    $("#dealRing").style.setProperty("--p", pct);
+  }
+
+  function renderAll() {
+    renderPills();
+    renderStageHead();
+    renderThings();
+    renderPeople();
+    renderDocs();
+    renderTabs();
+    renderMeter();
+  }
+
+  renderAll();
+</script>
+</body>
+</html>

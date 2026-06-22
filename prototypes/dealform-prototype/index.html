@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>S3 The Form — product-list variations (2026-06-19)</title>
+<style>
+  /* ---- real pink palette (from globals.css) + build-plan tokens ---- */
+  :root {
+    --brand:        #e30b5d;  /* raspberry  - primary accent */
+    --brand-soft:   #ffb7d5;  /* cotton candy - light fills */
+    --brand-deep:   #76002d;  /* red pink   - deep accent / pressed */
+    --brand-tint:   #fde7f1;  /* very light pink wash */
+    --ink:          #1f2020;  /* grey 1 - text + icons */
+    --muted:        #6b6470;  /* muted text */
+    --line:         #efe2ec;  /* hairline */
+    --bg-from:      #ffffff;
+    --bg-to:        #fff1f7;
+    --surface:      #ffffff;
+    --success:      #34b233;
+    --info:         #6c7bd9;
+    --danger:       #dc2626;
+    --thc:          #b5179e;  /* potency: THC = magenta-violet */
+    --cbd:          #1b998b;  /* potency: CBD = teal (the calm one) */
+    --shadow:       0 10px 34px -12px rgba(118,0,45,0.18);
+    --shadow-sm:    0 1px 3px rgba(118,0,45,0.08);
+    /* type */
+    --display: "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --body:    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono:    "DM Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: var(--body);
+    color: var(--ink);
+    background:
+      radial-gradient(1200px 600px at 80% -10%, #ffe3ef 0%, transparent 60%),
+      linear-gradient(160deg, var(--bg-from) 0%, var(--bg-to) 100%);
+    background-attachment: fixed;
+    margin: 0;
+    padding: 40px 20px 120px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+
+  /* ---- page chrome ---- */
+  .page-head { margin-bottom: 8px; }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--brand); margin: 0 0 6px;
+  }
+  h1 { font-family: var(--display); font-size: 30px; font-weight: 700; margin: 0 0 6px; letter-spacing: -0.02em; }
+  .lede { color: var(--muted); font-size: 15px; max-width: 760px; margin: 0; }
+  .toc { display: flex; gap: 8px; flex-wrap: wrap; margin: 18px 0 6px; }
+  .toc a {
+    font-family: var(--mono); font-size: 12.5px; text-decoration: none;
+    color: var(--brand-deep); background: #fff; border: 1px solid var(--line);
+    padding: 6px 11px; border-radius: 999px; box-shadow: var(--shadow-sm);
+    transition: all .15s;
+  }
+  .toc a:hover { border-color: var(--brand); color: var(--brand); }
+
+  h2.var {
+    font-family: var(--display); font-size: 21px; font-weight: 700;
+    margin: 56px 0 4px; letter-spacing: -0.01em; scroll-margin-top: 20px;
+    display: flex; align-items: baseline; gap: 12px;
+  }
+  h2.var .tag {
+    font-family: var(--mono); font-size: 12px; color: #fff; background: var(--brand);
+    padding: 3px 9px; border-radius: 6px; letter-spacing: 0.04em; font-weight: 500;
+  }
+  .var-note { color: var(--muted); font-size: 13.5px; margin: 4px 0 18px; max-width: 820px; }
+  .var-note b { color: var(--ink); }
+
+  /* ---- the device frame each variation lives in ---- */
+  .frame {
+    background: rgba(255,255,255,0.72);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.65);
+    box-shadow: var(--shadow);
+    border-radius: 26px;
+    padding: 18px;
+  }
+  .modal {
+    background: #fff;
+    border-radius: 22px;
+    box-shadow: 0 24px 60px -24px rgba(118,0,45,0.28);
+    overflow: hidden;
+    max-width: 560px;
+    margin: 0 auto;
+    display: flex; flex-direction: column;
+    max-height: 78vh;
+  }
+  .modal.wide { max-width: 920px; }
+  .m-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 16px 20px; border-bottom: 1px solid var(--line);
+  }
+  .m-head .titles h3 { font-family: var(--display); font-size: 16px; font-weight: 700; margin: 0; }
+  .m-head .titles p { font-size: 12px; color: var(--muted); margin: 1px 0 0; }
+  .m-head .titles p b { color: var(--brand-deep); }
+  .x {
+    width: 30px; height: 30px; border-radius: 999px; border: 1px solid var(--line);
+    background: #fff; color: var(--muted); cursor: pointer; flex: 0 0 auto;
+    display: flex; align-items: center; justify-content: center; font-size: 15px;
+  }
+  .m-body { padding: 18px 20px; overflow-y: auto; }
+  .m-foot {
+    border-top: 1px solid var(--line); padding: 14px 20px;
+    display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  }
+
+  .seclabel {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--muted); margin: 0 0 9px;
+  }
+
+  /* ---- the "To" recipient chip (shared across variations) ---- */
+  .recipient {
+    display: flex; align-items: center; gap: 11px;
+    background: var(--brand-tint); border-radius: 14px; padding: 11px 13px;
+    margin-bottom: 18px;
+  }
+  .recipient .av {
+    width: 36px; height: 36px; border-radius: 999px; flex: 0 0 auto;
+    background: var(--brand); color: #fff; font-weight: 700; font-size: 13px;
+    display: flex; align-items: center; justify-content: center; font-family: var(--display);
+  }
+  .recipient .who { flex: 1; min-width: 0; }
+  .recipient .who .n { font-weight: 600; font-size: 14px; }
+  .recipient .who .c { font-size: 11.5px; color: var(--muted); }
+  .recipient .lock {
+    font-family: var(--mono); font-size: 10px; color: var(--muted);
+    background: #fff; border: 1px solid var(--line); border-radius: 999px;
+    padding: 3px 8px; display: inline-flex; gap: 4px; align-items: center;
+  }
+
+  /* ---- search bar ---- */
+  .searchbar { position: relative; margin-bottom: 14px; }
+  .searchbar input {
+    width: 100%; border: 1px solid var(--line); border-radius: 12px;
+    padding: 11px 14px 11px 38px; font-size: 14px; font-family: var(--body);
+    background: #fff; color: var(--ink);
+  }
+  .searchbar input:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px rgba(227,11,93,0.12); }
+  .searchbar .ico { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 15px; }
+
+  /* ---- potency / lab chips (the signature data treatment) ---- */
+  .lab { display: inline-flex; gap: 6px; align-items: center; }
+  .chip {
+    font-family: var(--mono); font-size: 11px; font-weight: 500;
+    padding: 2px 7px; border-radius: 6px; white-space: nowrap; letter-spacing: 0.01em;
+  }
+  .chip.thc { color: var(--thc); background: rgba(181,23,158,0.10); }
+  .chip.cbd { color: var(--cbd); background: rgba(27,153,139,0.12); }
+  .chip.batch { color: var(--brand-deep); background: var(--brand-tint); }
+  .chip.custom { color: var(--muted); background: #f1eef2; }
+
+  /* the slim dual potency bar (Variation C signature) */
+  .potbar { display: flex; height: 6px; border-radius: 999px; overflow: hidden; background: #f0ecf1; }
+  .potbar .t { background: var(--thc); }
+  .potbar .c { background: var(--cbd); }
+
+  /* ---- thumbnail (inline svg-ish placeholder via gradient) ---- */
+  .thumb {
+    border-radius: 12px; flex: 0 0 auto; position: relative; overflow: hidden;
+    display: flex; align-items: flex-end; justify-content: flex-start;
+  }
+  .thumb svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+  /* ---- stepper ---- */
+  .stepper { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: #fff; }
+  .stepper button {
+    width: 34px; height: 34px; border: none; background: #fff; color: var(--brand);
+    font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; line-height: 1;
+  }
+  .stepper button:hover { background: var(--brand-tint); }
+  .stepper .qty { min-width: 52px; text-align: center; font-family: var(--mono); font-size: 13px; border-left: 1px solid var(--line); border-right: 1px solid var(--line); padding: 6px 4px; }
+  .stepper .qty small { display: block; font-size: 9px; color: var(--muted); letter-spacing: 0.04em; }
+
+  /* ---- buttons ---- */
+  .btn { font-family: var(--body); font-size: 14px; font-weight: 600; border-radius: 11px; padding: 10px 18px; cursor: pointer; border: 1px solid transparent; }
+  .btn.primary { background: var(--brand); color: #fff; }
+  .btn.primary:hover { background: var(--brand-deep); }
+  .btn.ghost { background: #fff; color: var(--muted); border-color: var(--line); }
+  .total-pill { text-align: right; }
+  .total-pill .lab { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); display: block; }
+  .total-pill .amt { font-family: var(--display); font-size: 22px; font-weight: 700; color: var(--ink); }
+
+  /* margin / price-each helpers */
+  .each { font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+  .linetotal { font-family: var(--display); font-weight: 600; font-size: 15px; }
+  .margin-good { color: var(--success); font-family: var(--mono); font-size: 11px; }
+  .private-row {
+    margin-top: 8px; display: flex; align-items: center; gap: 8px;
+    font-size: 11.5px; color: var(--muted); background: #faf7fb; border: 1px dashed var(--line);
+    border-radius: 9px; padding: 7px 9px;
+  }
+  .private-row input { width: 90px; border: 1px solid var(--line); border-radius: 7px; padding: 4px 7px; font-family: var(--mono); font-size: 12px; }
+
+  /* =============================================================
+     VARIATION A — catalogue grid + slide-in basket
+     ============================================================= */
+  .a-split { display: grid; grid-template-columns: 1fr 280px; gap: 0; }
+  .a-cat { padding: 18px 20px; overflow-y: auto; max-height: 62vh; }
+  .a-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .pcard {
+    border: 1px solid var(--line); border-radius: 16px; background: #fff; overflow: hidden;
+    transition: box-shadow .15s, border-color .15s; cursor: pointer;
+  }
+  .pcard:hover { border-color: var(--brand); box-shadow: var(--shadow-sm); }
+  .pcard .ph { height: 92px; position: relative; }
+  .pcard .pb { padding: 10px 12px 12px; }
+  .pcard .nm { font-weight: 600; font-size: 13.5px; line-height: 1.25; }
+  .pcard .cv { font-size: 11px; color: var(--muted); margin-bottom: 7px; }
+  .pcard .row { display: flex; align-items: center; justify-content: space-between; margin-top: 9px; }
+  .pcard .pr { font-family: var(--mono); font-size: 13px; font-weight: 500; }
+  .addbtn {
+    border: none; background: var(--brand); color: #fff; border-radius: 9px;
+    width: 30px; height: 30px; font-size: 18px; cursor: pointer; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .addbtn:hover { background: var(--brand-deep); }
+  .a-basket { background: #fbf5f9; border-left: 1px solid var(--line); padding: 18px 16px; display: flex; flex-direction: column; }
+  .a-basket .bh { font-family: var(--display); font-weight: 700; font-size: 14px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .a-basket .bh .ct { font-family: var(--mono); font-size: 11px; color: #fff; background: var(--brand); padding: 1px 8px; border-radius: 999px; }
+  .bline { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 9px 10px; margin-bottom: 9px; }
+  .bline .t { display: flex; gap: 8px; align-items: flex-start; }
+  .bline .nm { font-weight: 600; font-size: 12.5px; line-height: 1.2; flex: 1; }
+  .bline .rm { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 13px; }
+  .bline .m { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
+
+  /* =============================================================
+     VARIATION B — searchable line list (ledger)
+     ============================================================= */
+  .ledger { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+  .ledger .lhead, .ledger .lrow { display: grid; grid-template-columns: 44px 2.2fr 1.3fr 1.4fr 1fr 30px; align-items: center; gap: 10px; }
+  .ledger .lhead {
+    background: #faf3f8; padding: 9px 14px; font-family: var(--mono);
+    font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
+  }
+  .ledger .lrow { padding: 11px 14px; border-top: 1px solid var(--line); }
+  .ledger .lrow:hover { background: #fffafc; }
+  .ledger .prod .nm { font-weight: 600; font-size: 13.5px; }
+  .ledger .prod .cv { font-size: 11px; color: var(--muted); }
+  .lselect {
+    border: 1px solid var(--line); border-radius: 9px; background: #fff;
+    padding: 6px 8px; font-family: var(--mono); font-size: 12px; color: var(--brand-deep);
+    width: 100%;
+  }
+  .ledger .rm { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 14px; }
+  .ledger .lt { text-align: right; }
+
+  /* =============================================================
+     VARIATION C — receipt / stepper tiles  (V2·3 target)
+     ============================================================= */
+  .tile {
+    display: flex; gap: 13px; background: #fff; border: 1px solid var(--line);
+    border-radius: 16px; padding: 13px; margin-bottom: 12px; align-items: stretch;
+  }
+  .tile .body { flex: 1; min-width: 0; }
+  .tile .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+  .tile .nm { font-weight: 600; font-size: 14.5px; line-height: 1.2; }
+  .tile .cv { font-size: 11.5px; color: var(--muted); }
+  .tile .rm { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 15px; }
+  .tile .labrow { display: flex; align-items: center; gap: 10px; margin: 9px 0; }
+  .tile .labrow .potbar { flex: 1; max-width: 130px; }
+  .tile .ctrl { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 4px; }
+  .sticky-total {
+    background: var(--brand-deep); color: #fff; border-radius: 16px; padding: 14px 18px;
+    display: flex; align-items: center; justify-content: space-between; margin-top: 4px;
+  }
+  .sticky-total .l { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.85; }
+  .sticky-total .v { font-family: var(--display); font-size: 24px; font-weight: 700; }
+  .sticky-total .sub { font-size: 11px; opacity: 0.8; font-family: var(--mono); }
+
+  .add-custom {
+    display: flex; align-items: center; gap: 8px; width: 100%; justify-content: center;
+    border: 1px dashed var(--brand-soft); border-radius: 12px; padding: 11px;
+    background: #fff; color: var(--brand); font-weight: 600; font-size: 13.5px; cursor: pointer; margin-top: 4px;
+  }
+  .add-custom:hover { background: var(--brand-tint); }
+
+  .legend-foot { margin-top: 64px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12.5px; font-family: var(--mono); }
+  @media (max-width: 720px) {
+    .a-split { grid-template-columns: 1fr; }
+    .a-basket { border-left: none; border-top: 1px solid var(--line); }
+    .ledger .lhead { display: none; }
+    .ledger .lrow { grid-template-columns: 44px 1fr 30px; grid-template-areas: "th prod rm" "th batch batch" "th ctrl lt"; gap: 8px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="page-head">
+    <p class="eyebrow">S3 · The Form · throwaway prototype</p>
+    <h1>Deal basket — product-list redesign</h1>
+    <p class="lede">Three genuinely different directions for the deal form's product list (V1·16/17/18, V2·3). Each shows a real product picker: thumbnail, batch, lab-measured THC/CBD, a +/− pack stepper, price per gram, line total, and a running basket total. Open in a browser, pick a direction. Nothing here touches real code.</p>
+    <nav class="toc">
+      <a href="#a">A — Catalogue grid + basket</a>
+      <a href="#b">B — Searchable line ledger</a>
+      <a href="#c">C — Stepper tiles + sticky total</a>
+    </nav>
+  </header>
+
+  <!-- ===================== VARIATION A ===================== -->
+  <h2 class="var" id="a"><span class="tag">A</span> Catalogue grid + slide-in basket</h2>
+  <p class="var-note"><b>Browsing-first.</b> Left = your catalogue as real product cards (image, potency, price-per-gram, one-tap add). Right = a live basket that fills as you add. Best when the seller scans a shelf and assembles a deal. Picking a card opens its batch chooser inline (shown on the first card).</p>
+
+  <div class="frame">
+    <div class="modal wide">
+      <div class="m-head">
+        <div class="titles">
+          <h3>New deal</h3>
+          <p>Offer to <b>Luca Brunner · Helvetia Pharma AG</b></p>
+        </div>
+        <button class="x" aria-label="Close">✕</button>
+      </div>
+
+      <div class="a-split">
+        <!-- catalogue -->
+        <div class="a-cat">
+          <div class="searchbar">
+            <span class="ico">⌕</span>
+            <input placeholder="Search your catalogue, or type a new product name…" />
+          </div>
+          <div class="a-grid">
+
+            <!-- card 1 — with batch chooser open -->
+            <div class="pcard" style="border-color:var(--brand);box-shadow:var(--shadow-sm)">
+              <div class="ph">
+                <svg viewBox="0 0 200 100" preserveAspectRatio="none"><defs><linearGradient id="ga1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7b2d8e"/><stop offset="1" stop-color="#3a1052"/></linearGradient></defs><rect width="200" height="100" fill="url(#ga1)"/><circle cx="150" cy="22" r="34" fill="#ffffff" opacity="0.08"/><circle cx="42" cy="78" r="26" fill="#ffffff" opacity="0.06"/></svg>
+              </div>
+              <div class="pb">
+                <div class="nm">Northern Lights</div>
+                <div class="cv">Indica · 1 kg pack</div>
+                <div class="lab"><span class="chip thc">THC 22.4%</span><span class="chip cbd">CBD 0.8%</span></div>
+                <div class="row"><span class="pr">€7.20 / g</span></div>
+                <!-- inline batch chooser -->
+                <div style="margin-top:10px;border-top:1px dashed var(--line);padding-top:9px">
+                  <p class="seclabel" style="margin-bottom:6px">Pick a batch</p>
+                  <select class="lselect">
+                    <option>B-2407 · THC 22.4% · CBD 0.8% · exp 04/2026</option>
+                    <option>B-2403 · THC 21.1% · CBD 0.9% · exp 12/2025</option>
+                  </select>
+                  <button class="btn primary" style="width:100%;margin-top:8px;padding:8px">Add batch B-2407</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- card 2 -->
+            <div class="pcard">
+              <div class="ph">
+                <svg viewBox="0 0 200 100" preserveAspectRatio="none"><defs><linearGradient id="ga2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1b998b"/><stop offset="1" stop-color="#0e5b54"/></linearGradient></defs><rect width="200" height="100" fill="url(#ga2)"/><circle cx="40" cy="26" r="30" fill="#ffffff" opacity="0.08"/></svg>
+              </div>
+              <div class="pb">
+                <div class="nm">Charlotte's Web</div>
+                <div class="cv">CBD strain · 1 kg pack</div>
+                <div class="lab"><span class="chip thc">THC 0.3%</span><span class="chip cbd">CBD 17.0%</span></div>
+                <div class="row"><span class="pr">€6.10 / g</span><button class="addbtn" aria-label="Add">+</button></div>
+              </div>
+            </div>
+
+            <!-- card 3 -->
+            <div class="pcard">
+              <div class="ph">
+                <svg viewBox="0 0 200 100" preserveAspectRatio="none"><defs><linearGradient id="ga3" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#c1432f"/><stop offset="1" stop-color="#6e1d12"/></linearGradient></defs><rect width="200" height="100" fill="url(#ga3)"/><circle cx="160" cy="70" r="32" fill="#ffffff" opacity="0.07"/></svg>
+              </div>
+              <div class="pb">
+                <div class="nm">Sour Diesel</div>
+                <div class="cv">Sativa · 500 g pack</div>
+                <div class="lab"><span class="chip thc">THC 19.8%</span><span class="chip cbd">CBD 0.5%</span></div>
+                <div class="row"><span class="pr">€8.40 / g</span><button class="addbtn" aria-label="Add">+</button></div>
+              </div>
+            </div>
+
+            <!-- card 4 -->
+            <div class="pcard">
+              <div class="ph">
+                <svg viewBox="0 0 200 100" preserveAspectRatio="none"><defs><linearGradient id="ga4" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2b6cb0"/><stop offset="1" stop-color="#15375e"/></linearGradient></defs><rect width="200" height="100" fill="url(#ga4)"/><circle cx="55" cy="74" r="28" fill="#ffffff" opacity="0.07"/></svg>
+              </div>
+              <div class="pb">
+                <div class="nm">Blue Dream</div>
+                <div class="cv">Hybrid · 1 kg pack</div>
+                <div class="lab"><span class="chip thc">THC 18.0%</span><span class="chip cbd">CBD 2.0%</span></div>
+                <div class="row"><span class="pr">€7.00 / g</span><button class="addbtn" aria-label="Add">+</button></div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- basket -->
+        <aside class="a-basket">
+          <div class="bh">Basket <span class="ct">2 lines</span></div>
+
+          <div class="bline">
+            <div class="t">
+              <div class="nm">Northern Lights</div>
+              <button class="rm" aria-label="Remove">✕</button>
+            </div>
+            <div class="lab" style="margin-top:5px"><span class="chip batch">B-2407</span><span class="chip thc">22.4%</span></div>
+            <div class="m">
+              <div class="stepper">
+                <button aria-label="One pack fewer">−</button>
+                <span class="qty">2<small>packs</small></span>
+                <button aria-label="One pack more">+</button>
+              </div>
+              <span class="linetotal">€14,400</span>
+            </div>
+            <div class="each" style="margin-top:4px">2 kg × €7.20/g</div>
+          </div>
+
+          <div class="bline">
+            <div class="t">
+              <div class="nm">Charlotte's Web</div>
+              <button class="rm" aria-label="Remove">✕</button>
+            </div>
+            <div class="lab" style="margin-top:5px"><span class="chip batch">B-2411</span><span class="chip cbd">17.0%</span></div>
+            <div class="m">
+              <div class="stepper">
+                <button aria-label="One pack fewer">−</button>
+                <span class="qty">1<small>pack</small></span>
+                <button aria-label="One pack more">+</button>
+              </div>
+              <span class="linetotal">€6,100</span>
+            </div>
+            <div class="each" style="margin-top:4px">1 kg × €6.10/g</div>
+          </div>
+
+          <div style="margin-top:auto;padding-top:12px;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:baseline">
+            <span class="each" style="text-transform:uppercase;letter-spacing:0.08em">Total</span>
+            <span class="total-pill"><span class="amt" style="font-size:19px">€20,500</span></span>
+          </div>
+        </aside>
+      </div>
+
+      <div class="m-foot">
+        <span class="each">3 packs · free delivery · Net 30</span>
+        <div style="display:flex;gap:10px">
+          <button class="btn ghost">Cancel</button>
+          <button class="btn primary">Send offer</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== VARIATION B ===================== -->
+  <h2 class="var" id="b"><span class="tag">B</span> Searchable line ledger</h2>
+  <p class="var-note"><b>Editing-first.</b> One dense, scannable column — like a clean order sheet. Every line shows thumbnail · product+cultivar · batch dropdown · potency · stepper+price · line total on one row. Best when you review or tune many lines fast and want everything aligned and comparable. Add row via the search box; the lab numbers ride along with the batch you pick.</p>
+
+  <div class="frame">
+    <div class="modal wide">
+      <div class="m-head">
+        <div class="titles">
+          <h3>Edit deal · DEAL-0481</h3>
+          <p>Order from <b>Greenleaf Growers GmbH</b> · v3</p>
+        </div>
+        <button class="x" aria-label="Close">✕</button>
+      </div>
+
+      <div class="m-body">
+        <div class="recipient">
+          <div class="av">GG</div>
+          <div class="who"><div class="n">Greenleaf Growers GmbH</div><div class="c">Supplier · this order</div></div>
+          <span class="lock">🔒 Assigned</span>
+        </div>
+
+        <div class="searchbar">
+          <span class="ico">⌕</span>
+          <input placeholder="Add a product — search catalogue or type a new name…" />
+        </div>
+
+        <p class="seclabel">Lines · 4 on this deal</p>
+        <div class="ledger">
+          <div class="lhead">
+            <span></span><span>Product</span><span>Batch / potency</span><span>Qty · price/g</span><span>Line total</span><span></span>
+          </div>
+
+          <!-- row 1 -->
+          <div class="lrow">
+            <div class="thumb" style="width:38px;height:38px;background:linear-gradient(135deg,#7b2d8e,#3a1052)"></div>
+            <div class="prod"><div class="nm">Northern Lights</div><div class="cv">Indica · 1 kg pack</div></div>
+            <div>
+              <select class="lselect"><option>B-2407 · 22.4 / 0.8</option><option>B-2403 · 21.1 / 0.9</option></select>
+              <div class="lab" style="margin-top:5px"><span class="chip thc">THC 22.4</span><span class="chip cbd">CBD 0.8</span></div>
+            </div>
+            <div>
+              <div class="stepper"><button>−</button><span class="qty">2<small>pk</small></span><button>+</button></div>
+              <div class="each" style="margin-top:4px">€7.20/g</div>
+            </div>
+            <div class="lt"><div class="linetotal">€14,400</div><div class="margin-good">+31% margin</div></div>
+            <button class="rm" aria-label="Remove">🗑</button>
+          </div>
+
+          <!-- row 2 -->
+          <div class="lrow">
+            <div class="thumb" style="width:38px;height:38px;background:linear-gradient(135deg,#1b998b,#0e5b54)"></div>
+            <div class="prod"><div class="nm">Charlotte's Web</div><div class="cv">CBD strain · 1 kg pack</div></div>
+            <div>
+              <select class="lselect"><option>B-2411 · 0.3 / 17.0</option><option>B-2409 · 0.4 / 16.2</option></select>
+              <div class="lab" style="margin-top:5px"><span class="chip thc">THC 0.3</span><span class="chip cbd">CBD 17.0</span></div>
+            </div>
+            <div>
+              <div class="stepper"><button>−</button><span class="qty">1<small>pk</small></span><button>+</button></div>
+              <div class="each" style="margin-top:4px">€6.10/g</div>
+            </div>
+            <div class="lt"><div class="linetotal">€6,100</div><div class="margin-good">+24% margin</div></div>
+            <button class="rm" aria-label="Remove">🗑</button>
+          </div>
+
+          <!-- row 3 -->
+          <div class="lrow">
+            <div class="thumb" style="width:38px;height:38px;background:linear-gradient(135deg,#c1432f,#6e1d12)"></div>
+            <div class="prod"><div class="nm">Sour Diesel</div><div class="cv">Sativa · 500 g pack</div></div>
+            <div>
+              <select class="lselect"><option>B-2502 · 19.8 / 0.5</option></select>
+              <div class="lab" style="margin-top:5px"><span class="chip thc">THC 19.8</span><span class="chip cbd">CBD 0.5</span></div>
+            </div>
+            <div>
+              <div class="stepper"><button>−</button><span class="qty">3<small>pk</small></span><button>+</button></div>
+              <div class="each" style="margin-top:4px">€8.40/g</div>
+            </div>
+            <div class="lt"><div class="linetotal">€12,600</div><div class="margin-good">+18% margin</div></div>
+            <button class="rm" aria-label="Remove">🗑</button>
+          </div>
+
+          <!-- row 4 — custom line (no batch) -->
+          <div class="lrow">
+            <div class="thumb" style="width:38px;height:38px;background:linear-gradient(135deg,#cbb8c6,#9a8a96)"></div>
+            <div class="prod"><div class="nm">House grinder card</div><div class="cv"><span class="chip custom">Custom · no batch</span></div></div>
+            <div><span class="each">— not a catalogue product —</span></div>
+            <div>
+              <div class="stepper"><button>−</button><span class="qty">10<small>u</small></span><button>+</button></div>
+              <div class="each" style="margin-top:4px">€2.00/u</div>
+            </div>
+            <div class="lt"><div class="linetotal">€20</div></div>
+            <button class="rm" aria-label="Remove">🗑</button>
+          </div>
+        </div>
+
+        <p class="each" style="margin-top:8px;display:flex;align-items:center;gap:6px"><span style="color:var(--muted)">🔒</span> Margin column is private to you — your buyer never sees it.</p>
+      </div>
+
+      <div class="m-foot">
+        <div class="total-pill" style="text-align:left">
+          <span class="lab">Deal total</span>
+          <span class="amt">€33,120</span>
+        </div>
+        <div style="display:flex;gap:10px">
+          <button class="btn ghost">Cancel</button>
+          <button class="btn primary">Save change</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== VARIATION C ===================== -->
+  <h2 class="var" id="c"><span class="tag">C</span> Stepper tiles + sticky total <span style="font:500 12px/1 var(--mono);color:var(--muted);align-self:center">← V2·3 research target</span></h2>
+  <p class="var-note"><b>Focused & mobile-friendly.</b> The basket is a short stack of rich product tiles: square thumbnail, name, a single dual-colour <b>potency bar</b> (THC vs CBD at a glance), batch chip, a big +/− pack stepper, price-each and line total. A dark sticky total bar anchors the bottom. This is the cleanest match to the "image thumbnail + plus/minus stepper" research note, and it scales straight down to phone width.</p>
+
+  <div class="frame">
+    <div class="modal">
+      <div class="m-head">
+        <div class="titles">
+          <h3>New deal</h3>
+          <p>Offer to <b>Luca Brunner · Helvetia Pharma AG</b></p>
+        </div>
+        <button class="x" aria-label="Close">✕</button>
+      </div>
+
+      <div class="m-body">
+        <div class="recipient">
+          <div class="av">LB</div>
+          <div class="who"><div class="n">Luca Brunner</div><div class="c">Helvetia Pharma AG</div></div>
+          <span class="lock">🔒 From chat</span>
+        </div>
+
+        <div class="searchbar">
+          <span class="ico">⌕</span>
+          <input placeholder="Add a product to the basket…" />
+        </div>
+
+        <!-- tile 1 -->
+        <div class="tile">
+          <div class="thumb" style="width:64px;background:linear-gradient(135deg,#7b2d8e,#3a1052)">
+            <svg viewBox="0 0 64 64"><circle cx="46" cy="16" r="22" fill="#fff" opacity="0.08"/><circle cx="14" cy="52" r="16" fill="#fff" opacity="0.06"/></svg>
+          </div>
+          <div class="body">
+            <div class="top">
+              <div><div class="nm">Northern Lights</div><div class="cv">Indica · <span class="chip batch" style="font-size:10px">batch B-2407</span></div></div>
+              <button class="rm" aria-label="Remove">✕</button>
+            </div>
+            <div class="labrow">
+              <span class="chip thc">THC 22.4%</span>
+              <span class="chip cbd">CBD 0.8%</span>
+              <div class="potbar" title="THC vs CBD"><span class="t" style="width:96%"></span><span class="c" style="width:4%"></span></div>
+            </div>
+            <div class="ctrl">
+              <div class="stepper">
+                <button aria-label="One pack fewer">−</button>
+                <span class="qty">2<small>packs · 2 kg</small></span>
+                <button aria-label="One pack more">+</button>
+              </div>
+              <div style="text-align:right">
+                <div class="linetotal">€14,400</div>
+                <div class="each">€7.20 / g</div>
+              </div>
+            </div>
+            <div class="private-row">
+              <span>🔒 Your cost (only you)</span>
+              <input value="5.50" /> <span>€/g</span>
+              <span class="margin-good" style="margin-left:auto">+31% margin</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- tile 2 -->
+        <div class="tile">
+          <div class="thumb" style="width:64px;background:linear-gradient(135deg,#1b998b,#0e5b54)">
+            <svg viewBox="0 0 64 64"><circle cx="18" cy="18" r="20" fill="#fff" opacity="0.08"/></svg>
+          </div>
+          <div class="body">
+            <div class="top">
+              <div><div class="nm">Charlotte's Web</div><div class="cv">CBD strain · <span class="chip batch" style="font-size:10px">batch B-2411</span></div></div>
+              <button class="rm" aria-label="Remove">✕</button>
+            </div>
+            <div class="labrow">
+              <span class="chip thc">THC 0.3%</span>
+              <span class="chip cbd">CBD 17.0%</span>
+              <div class="potbar" title="THC vs CBD"><span class="t" style="width:2%"></span><span class="c" style="width:98%"></span></div>
+            </div>
+            <div class="ctrl">
+              <div class="stepper">
+                <button aria-label="One pack fewer">−</button>
+                <span class="qty">1<small>pack · 1 kg</small></span>
+                <button aria-label="One pack more">+</button>
+              </div>
+              <div style="text-align:right">
+                <div class="linetotal">€6,100</div>
+                <div class="each">€6.10 / g</div>
+              </div>
+            </div>
+            <div class="private-row">
+              <span>🔒 Your cost (only you)</span>
+              <input value="4.90" /> <span>€/g</span>
+              <span class="margin-good" style="margin-left:auto">+24% margin</span>
+            </div>
+          </div>
+        </div>
+
+        <button class="add-custom">＋ Add a custom product</button>
+      </div>
+
+      <div class="m-foot" style="flex-direction:column;align-items:stretch;gap:12px">
+        <div class="sticky-total">
+          <div>
+            <div class="l">Basket total</div>
+            <div class="sub">3 packs · 2 lines · free delivery</div>
+          </div>
+          <div class="v">€20,500</div>
+        </div>
+        <div style="display:flex;gap:10px;justify-content:flex-end">
+          <button class="btn ghost">Cancel</button>
+          <button class="btn primary">Send offer</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="legend-foot">throwaway · _workshop/build-plans/proto/2026-06-19-form-variations.html · pink palette from globals.css · no real component touched</p>
+
+</div>
+</body>
+</html>

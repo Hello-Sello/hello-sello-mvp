@@ -1,0 +1,10 @@
+-- ============================================================================
+-- 20260611123000_seed_demo_deal_draft.sql — INTENTIONALLY EMPTY (no-op)
+-- ----------------------------------------------------------------------------
+-- Removed 2026-06-16 (Option B). This only flipped the hand-made demo card
+-- 04695a2d… to 'draft' and cleared its confirmations — a fixed UUID created
+-- ad-hoc on the cloud and not reproducible from files. Migrations are now
+-- schema-only; demo data lives in supabase/seed/seed.sql and test deals are
+-- created through the app's propose→accept→birth flow. File kept so migration
+-- history stays consistent with databases that recorded it as applied.
+-- ============================================================================

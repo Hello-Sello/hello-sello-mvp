@@ -3,7 +3,8 @@
 import { useActionState } from 'react'
 import Link from 'next/link'
 import { signUp, type AuthState } from '../actions'
-import { AuthCard, Field } from '../AuthCard'
+import { AuthCard, Field, OrDivider } from '../AuthCard'
+import { SocialButtons } from '../SocialButtons'
 
 const initial: AuthState = {}
 
@@ -26,11 +27,10 @@ export default function SignupPage() {
         </>
       }
     >
+      <SocialButtons />
+      <OrDivider label="or sign up with email" />
       <form action={action} className="flex flex-col gap-3">
-        <div className="flex gap-3">
-          <Field label="First name" name="first_name" autoComplete="given-name" />
-          <Field label="Last name" name="last_name" autoComplete="family-name" />
-        </div>
+        <Field label="Full name" name="full_name" autoComplete="name" />
         <Field label="Email" name="email" type="email" autoComplete="email" />
         <Field
           label="Password"

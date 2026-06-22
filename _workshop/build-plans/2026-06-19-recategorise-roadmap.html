@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hello Sello - Sprint 2 Roadmap</title>
+<style>
+:root{
+  --ink:#1f2020;--muted:#6b6477;--line:#ecdfe9;--bg:#faf7f9;--card:#fff;
+  --brand:#e30b5d;--deep:#76002d;--brand-soft:#fde7f1;
+  --done:#1a7f4b;--done-bg:#e6f6ee;--prog:#9a6a00;--prog-bg:#fdf2dc;
+  --todo:#3a4757;--todo-bg:#eef0f3;--decide:#1f5fbf;--decide-bg:#e7f0fd;--park:#6b6b76;--park-bg:#f0eef2;
+}
+*{box-sizing:border-box}
+body{font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg);margin:0;padding:28px 18px 90px}
+.wrap{max-width:1040px;margin:0 auto}
+h1{font-size:24px;margin:0 0 2px}.sub{color:var(--muted);font-size:13.5px;margin:0 0 16px}
+.dash{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin:0 0 14px;box-shadow:0 1px 3px rgba(120,0,60,.05)}
+.dash .top{display:flex;gap:22px;align-items:center;flex-wrap:wrap}
+.dash .pct{font-size:42px;font-weight:800;line-height:1;color:var(--deep);min-width:84px}
+.dash .grow{flex:1;min-width:240px}
+.track{display:flex;height:14px;border-radius:8px;overflow:hidden;background:#efe7ec;margin:4px 0 8px}
+.track .seg{height:100%;transition:width .4s ease}.s-d{background:var(--done)}.s-p{background:var(--prog)}.s-t{background:var(--todo)}
+.counts{font-size:12.5px;color:var(--muted)}
+.legend{display:flex;flex-wrap:wrap;gap:9px 16px;font-size:12px;color:var(--muted);margin-top:10px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:middle}
+.k-d{background:var(--done)}.k-p{background:var(--prog)}.k-t{background:var(--todo)}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px}
+.toolbar button{font:600 12.5px/1 inherit;color:var(--deep);background:#fff;border:1px solid var(--line);border-radius:999px;padding:8px 14px;cursor:pointer}
+.toolbar button:hover{background:var(--brand-soft)}.toolbar button.on{background:var(--deep);color:#fff;border-color:var(--deep)}
+details.sec{background:var(--card);border:1px solid var(--line);border-radius:12px;margin:0 0 10px;overflow:hidden}
+details.sec>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:10px;padding:13px 16px;font-weight:700;font-size:15px}
+details.sec>summary::-webkit-details-marker{display:none}
+details.sec>summary .chev{transition:transform .2s;color:var(--muted);font-size:13px;width:12px}
+details.sec[open]>summary .chev{transform:rotate(90deg)}
+details.sec>summary .ttl{flex:1}
+.banner{background:var(--done-bg);border:1px solid #bfe6cd;border-left:4px solid var(--done);border-radius:10px;padding:11px 15px;margin:0 0 14px;font-size:13.5px;color:#176b30}
+.body{padding:2px 16px 14px}
+.chip{display:inline-block;font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;white-space:nowrap}
+.c-done{color:var(--done);background:var(--done-bg)}.c-prog{color:var(--prog);background:var(--prog-bg)}
+.c-todo{color:var(--todo);background:var(--todo-bg)}.c-decide{color:var(--decide);background:var(--decide-bg)}.c-park{color:var(--park);background:var(--park-bg)}
+.row{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-top:1px solid var(--line)}
+.row:first-child{border-top:none}.row .rmain{flex:1;min-width:0}
+.row .rt{font-weight:600;font-size:13.5px}.row .rd{font-size:12.5px;color:var(--muted);margin-top:3px}
+.row .rf{font-size:11.5px;color:var(--muted);margin-top:3px}
+.mini{font-size:11.5px;color:var(--muted);font-weight:600}
+code{background:#f0ecef;padding:1px 5px;border-radius:5px;font-size:12.5px}
+.hide{display:none!important}
+footer{margin-top:34px;color:var(--muted);font-size:12px;border-top:1px solid var(--line);padding-top:14px}
+.note{background:var(--brand-soft);border:1px solid #f6c9dd;border-left:4px solid var(--brand);border-radius:10px;padding:11px 15px;margin:0 0 14px;font-size:13px;color:#7a1340}
+.goal{font-size:13px;color:var(--muted);padding:8px 0 2px;font-style:italic}
+.body a{color:var(--brand)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Hello Sello - Sprint 2 Roadmap</h1>
+  <p class="sub">Higher-level phase board &middot; rebuilt 2026-06-20 &middot; updated 2026-06-22 &middot; source of truth: <code>.planning/ROADMAP.md</code></p>
+
+  <div class="dash">
+    <div class="top">
+      <div class="pct">25%</div>
+      <div class="grow">
+        <div style="font-size:13px;margin:0 0 6px"><b>Phases 4 &amp; 5 are DONE; current = Phase 6 (Deal Basket / Deal Form).</b> Sprint 2 now has <b>8 build phases (4-11)</b>: Phase 4 (UI &amp; chat) and Phase 5 (Deal Room) are <b>built &amp; verified</b>. <b>2 new phases were added</b> after C2C - <b>Phase 9 (Documents)</b> and <b>Phase 10 (Final UI pass)</b> - and <b>Notification moved to LAST (Phase 11)</b>. So 2 of 8 build phases are complete = 25%.</div>
+        <div class="track">
+          <span class="seg s-d" style="width:25%"></span>
+          <span class="seg s-t" style="width:75%"></span>
+        </div>
+        <div class="counts"><b>Sprint 2 build phases:</b> 2 done (P4, P5) &middot; 1 active (P6) &middot; 5 queued (P7, P8, P9, P10, P11) = 8 total, 25% done. <b>Current phase = Phase 6.</b> The 9-slice Phase-4 detail is on the chat-ui board.</div>
+        <div class="legend">
+          <span><i class="k-d"></i>done</span>
+          <span><i class="k-t"></i>queued / active</span>
+          <span>big % = build phases complete (2 of 8); current = Phase 6</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="note">
+    <b>Current truth (2026-06-22):</b> <b>Phase 4 (UI &amp; chat)</b> and <b>Phase 5 (Deal Room)</b> are <b>DONE</b>. <b>Phase 6 (Deal Basket / Deal Form) is NEXT / active.</b> Then Phase 7 (Sella) and Phase 8 (C2C chat) are pending. Two NEW phases were added after C2C: <b>Phase 9 (Documents)</b> and <b>Phase 10 (Final UI pass)</b>. <b>Phase 11 (Notification)</b> is now LAST. Earlier locked decisions still hold: cross-deal notification is a <em>subset</em> of global notifications (build once); the unread dot must <em>persist</em> across refresh; the UI pass went first (done).
+  </div>
+
+  <div class="toolbar">
+    <button id="expand">Expand all</button>
+    <button id="collapse">Collapse all</button>
+    <button id="filter">Show only not-done</button>
+  </div>
+
+  <!-- ===== PHASE 4 (DONE) ===== -->
+  <details class="sec">
+    <summary>
+      <span class="chev">&#9656;</span>
+      <span class="ttl">Phase 4 - UI &amp; chat</span>
+      <span class="chip c-done" data-status="done">&#9989; done</span>
+      <span class="mini">all 9 slices built + UAT passed</span>
+    </summary>
+    <div class="body">
+      <div class="goal">&#9989; DONE &amp; CLOSED. Applied Marcel's Connect/chat review so the conversation surface feels like a familiar messaging app. Ran as GSD sub-phases (04, 04A, 04B, 04C - all done); gate-green (tsc + eslint 0 errors + 62/62 unit + next build ok); human UAT PASSED. Settled the deal-card LAYOUT early so Phase 6's content work is not redone.</div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Detailed slice board (9 slices)</div>
+          <div class="rf"><a href="2026-06-19-chat-ui-overhaul.html">open the Phase-4 chat-ui board</a></div>
+        </div>
+        <span class="chip c-decide">board</span>
+      </div>
+
+      <!-- BUILT items -->
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">04-01 - DEV-66 rename + DEV-72 copy</div>
+          <div class="rd">"Deal Workspace" &rarr; <b>Deal Room</b>; old "Deal Room" &rarr; <b>Presentation mode</b>. THINGS copy &rarr; "<b>Add something</b>". One name = one surface; CONTEXT.md term rows updated, code + text sweep done.</div>
+          <div class="rf">DEV-66 / DEV-72 &middot; CONTEXT.md</div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">04-02 - S2 V3 Deal Card (real 3D flip)</div>
+          <div class="rd">Maroon header, dense product rows, 3f batch/THC-CBD clip fix, <b>real 3D flip</b> (V3 cross-fade was overridden - the physical flip is the intended feel). Read-only THINGS section built behind an optional prop, <b>not yet wired</b> (see Deal Room follow-up).</div>
+          <div class="rf">06-20 &middot; dealcard-v3-prototype</div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">04-03 - S3 V2 Deal Form</div>
+          <div class="rd">Shopping-bag tiles, THC/CBD chips, deal-level "Avg. margin - only you" pill, maroon Proceed.</div>
+          <div class="rf">06-20 &middot; dealform-v2-prototype</div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">04-04 - B4 scroll arrow</div>
+          <div class="rd">Jump-to-bottom arrow + at-bottom gate + first-load scroll (ThreadView, DealChat). Auto scroll-to-newest via <code>scrollIntoView</code> already shipped.</div>
+          <div class="rf">DEV-75</div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Verified existing chrome - F1 / F2 / B1</div>
+          <div class="rd"><b>F1</b> solid glass &middot; <b>F2</b> one-rail accordion nav + full-width TopBar &middot; <b>B1</b> pink/ash bubbles (mine right/pink, theirs left/ash-gray; the <code>#76002d</code> maroon idea was dropped for pink).</div>
+          <div class="rf">DEV-73 / DEV-74 &middot; local on claude/ayush/work</div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+
+      <!-- BUILT 06-21 (04A + 04B) -->
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">S1 - the Strip <span class="mini">BUILT 06-21 = 04A (+ 3 polish rounds)</span></div>
+          <div class="rd"><code>DealPin.tsx</code> rebuilt as a two-tier strip (person name left; relationship + deal dropdown + &hellip; right; [Deal Room | Deal Card] toggle + the maroon <code>//</code> SellaMark + translate placeholder bottom). The <code>//</code> bars part like a curtain and re-home the held-change Accept/Decline/Reason/Withdraw flow. Deal Room + translate = placeholders.</div>
+          <div class="rf">DEV-73 &middot; built (04A)</div>
+        </div>
+        <span class="chip c-done">built</span>
+      </div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">B2 - Conversation list <span class="mini">BUILT 06-21 = 04B</span></div>
+          <div class="rd"><b>Option A picker built.</b> The <b>+ New chat</b> button opens a leaflet that <b>covers</b> the All/Unread/Companies/Deals tabs (Person | Company toggle, per-mode search, New-connections-by-date, real open-deal badges). Shows ONLY connected people/companies; the base list keeps its <b>4 tabs (no 5th)</b>. Backend = <code>getMyConnections</code> + open-or-create P2P / resolve C2C thread. Gate-green (62/62 unit + next build); awaits a human UAT.</div>
+          <div class="rf">DEV-67 / DEV-71 &middot; built (04B)</div>
+        </div>
+        <span class="chip c-done">built</span>
+      </div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">B3 - Sella <code>//</code> mark <span class="mini">BUILT 06-21 (folded into 04A)</span></div>
+          <div class="rd">One shared <code>SellaMark</code> component (CSS-drawn maroon parallel bars), used everywhere; the AI-sparkle pill is gone.</div>
+          <div class="rf">folded into S1 / 04A</div>
+        </div>
+        <span class="chip c-done">built</span>
+      </div>
+
+      <!-- 04C now done -->
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">04C - Card + Form UI touch <span class="mini">BUILT 06-21, UAT PASSED</span></div>
+          <div class="rd">Slim shaded DealCard header, the card opens as a leaflet over the conversation rail, a one-tap-batch Deal Form, and the Damson recolor (#76002d&rarr;#7a1638). Applied directly to the app, gate-green. Human visual UAT PASSED.</div>
+          <div class="rf">commits c29ea4c + 37ec4e8</div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+
+      <!-- Deal Room: promoted to Phase 5, now done -->
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Deal Room &rarr; promoted to Phase 5 (DONE)</div>
+          <div class="rd">The old "Deal Workspace" container moved OUT of Phase 4 into its own <b>Phase 5</b> and has since been built &amp; verified (where the card's read-only <b>THINGS</b> + the deferred <code>assigned_to</code> got wired). See the Phase 5 card below.</div>
+          <div class="rf">now Phase 5</div>
+        </div>
+        <span class="chip c-done">done (Phase 5)</span>
+      </div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">P1-P4 chrome polish</div>
+          <div class="rd">The concrete chrome fixes (logo colour tokens, "CONNECT" label restored, narrower rail, capsule mark-done button, "DEAL ROOM"+number top bar) <b>shipped inside Phase 5</b>. The broader Agentation-driven look-and-feel round is now its own <b>Phase 10 (Final UI pass)</b>, scheduled last-but-one.</div>
+          <div class="rf">P1-P3 in Phase 5 &middot; deep pass = Phase 10</div>
+        </div>
+        <span class="chip c-done">done / moved</span>
+      </div>
+    </div>
+  </details>
+
+  <!-- ===== PHASE 5 (DONE) - Deal Room ===== -->
+  <details class="sec">
+    <summary>
+      <span class="chev">&#9656;</span>
+      <span class="ttl">Phase 5 - Deal Room</span>
+      <span class="chip c-done" data-status="done">&#9989; done</span>
+      <span class="mini">built + code-reviewed + goal verified 31/31</span>
+    </summary>
+    <div class="body">
+      <div class="goal">&#9989; DONE. The 3-column Deal Room (promoted out of Phase 4). Goal verified 31/31.</div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">3-column room + open/close from chat</div>
+          <div class="rd">Thin <b>read-only card</b> | chat | <b>V7 work panel</b> (dropdown-only). Opens and closes from the chat as a <b>full-blurred overlay</b>. The card's read-only <b>THINGS</b> + the deferred <code>assigned_to</code> were wired here.</div>
+          <div class="rf">V7 panel &middot; finalizeDeal</div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Per-thing/per-doc visibility + stages + finalization</div>
+          <div class="rd">Per-thing/per-doc <b>private-or-shared</b> (lock; own-side defaults private, auto-shared when assigned to the other company; docs follow their thing). Each stage has a manual <b>"mark done"</b> that glows when all its things tick. Finalization on the <b>LifecyclePill</b> &rarr; "Is the deal done?" &rarr; <b>golden card</b> (via <code>finalizeDeal</code>, never <code>confirm_deal_change</code>).</div>
+          <div class="rf">stages &middot; LifecyclePill</div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">P1-P4 chrome polish + bug fixes</div>
+          <div class="rd">Folded-in chrome polish (logo tokens, CONNECT label restored, narrower rail, capsule mark-done button, "DEAL ROOM"+number top bar). All code-review bugs fixed (RLS write-ownership, finalize-requires-confirmed, seal-no-clobber) + a realtime channel fix.</div>
+          <div class="rf">code-review + verify</div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+    </div>
+  </details>
+
+  <!-- ===== PHASE 6 (ACTIVE) - Deal Basket / Deal Form ===== -->
+  <details class="sec" open>
+    <summary>
+      <span class="chev">&#9656;</span>
+      <span class="ttl">Phase 6 - Deal Basket / Deal Form</span>
+      <span class="chip c-prog" data-status="prog">&#9654; NEXT / active</span>
+      <span class="mini">current phase</span>
+    </summary>
+    <div class="body">
+      <div class="goal">Goal: finish the deal-side form + card content (mine; the Present "product card" is Muskan's). Reqs: (new - define on plan) + DEV-84 / DEV-37. <b>This is the current phase - not started yet.</b></div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">OBS-2 count-of-pack display</div>
+          <div class="rd">Drop the free g/kg unit; quantity = a COUNT of packs, weight = count &times; <code>product.pack_size_grams</code>, user picks counts &amp; sees grams (input already pack-based since 3e). Kills the &euro;/g-vs-kg mismatch by construction. Model decided 06-19; build here.</div>
+          <div class="rf">P2 verify &middot; pack_size_grams</div>
+        </div>
+        <span class="chip c-todo">queued</span>
+      </div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Card flexibility: text + link cards; non-catalogue</div>
+          <div class="rd">Plain text + link cards; pre-sell non-catalogue products.</div>
+          <div class="rf">DEV-84</div>
+        </div>
+        <span class="chip c-todo">queued</span>
+      </div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Clickable product detail</div>
+          <div class="rd">Terpenes, water activity, LOD, genetics, irradiation, origin - reads the deal-time snapshot, never live data.</div>
+        </div>
+        <span class="chip c-todo">queued</span>
+      </div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Configurable "what shows on the card" panel</div>
+        </div>
+        <span class="chip c-todo">queued</span>
+      </div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Shop + Sella deal origins</div>
+          <div class="rd">The Basket from 3b is already reusable for these, so building those Baskets delivers this for free.</div>
+          <div class="rf">DealSource &middot; 3b</div>
+        </div>
+        <span class="chip c-todo">queued</span>
+      </div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Persistent Basket (Option B)</div>
+          <div class="rd">Today transient/Option A - ADR-0003.</div>
+          <div class="rf">ADR-0003</div>
+        </div>
+        <span class="chip c-todo">queued</span>
+      </div>
+    </div>
+  </details>
+
+  <!-- ===== PHASE 7 - Sella ===== -->
+  <details class="sec">
+    <summary>
+      <span class="chev">&#9656;</span>
+      <span class="ttl">Phase 7 - Sella</span>
+      <span class="chip c-todo" data-status="todo">pending</span>
+    </summary>
+    <div class="body">
+      <div class="goal">Goal: Sella detects a CHANGE to an existing card and proposes it through the held Accept/Decline flow (not a new birth). Backend-heavy, reuses the held flow. Req: SELL-01.</div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Detect + diff + propose held change</div>
+          <div class="rd">Read the current card, diff it against the chat, propose a pending change; same gate + change reason.</div>
+          <div class="rf">old P5 / T6 / SELL-01</div>
+        </div>
+        <span class="chip c-todo">queued</span>
+      </div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Audit "born_now" fix</div>
+          <div class="rd"><code>actions.ts:381</code> - RPC-born (Sella-detected/proposed) deals miss their <code>deal.created</code> audit entry; fix when this phase reworks the detect/propose RPCs.</div>
+          <div class="rf">folded 06-19 &rarr; P7</div>
+        </div>
+        <span class="chip c-todo">queued</span>
+      </div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Message-voice rule (System vs Sella)</div>
+          <div class="rd">Which voice narrates a deal event in the deal/p2p thread - today "draft created" = System (grey pill) but accept/decline = Sella (sparkle card); that drift is the root of OBS-3. Decide one rule; resolves OBS-3. (OBS-3: first proposal should post a quiet notice - option 3 chosen; the voice is deferred to this discussion.)</div>
+          <div class="rf">OBS-3 root &middot; propose_deal_rpc.sql:69</div>
+        </div>
+        <span class="chip c-todo">queued</span>
+      </div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Sella panel + renderer + AI badge</div>
+          <div class="rd">"Suggested next steps" (stubs today) &middot; <code>deal_card_updated</code> / proposed-change message renderer &middot; EU AI Act Art. 50 "AI" badge (binding Aug 2026; shared with UI).</div>
+          <div class="rf">5A.5</div>
+        </div>
+        <span class="chip c-todo">queued</span>
+      </div>
+    </div>
+  </details>
+
+  <!-- ===== PHASE 8 - C2C chat ===== -->
+  <details class="sec">
+    <summary>
+      <span class="chev">&#9656;</span>
+      <span class="ttl">Phase 8 - C2C chat</span>
+      <span class="chip c-todo" data-status="todo">pending</span>
+    </summary>
+    <div class="body">
+      <div class="goal">Goal: company-to-company as a ticketing system + the connection-state differentiator. Reqs: C2C-01, C2C-02. Absorbs manual-create counterparty-person threading.</div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">T7 - ticketing</div>
+          <div class="rd">Send a deal to a person OR a company &rarr; it lands in the connected company's <b>inbox</b> &rarr; pick it up OR reassign (not a mandatory claim). Reuse the inbox assign/claim primitive (base already exists).</div>
+          <div class="rf">C2C-01</div>
+        </div>
+        <span class="chip c-todo">queued</span>
+      </div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">T8 - connected vs not-connected</div>
+          <div class="rd">Build connected companies first; connection status gates whether a deal lands in the inbox vs flows like p2p.</div>
+          <div class="rf">C2C-02</div>
+        </div>
+        <span class="chip c-todo">queued</span>
+      </div>
+    </div>
+  </details>
+
+  <!-- ===== PHASE 9 (NEW) - Documents ===== -->
+  <details class="sec">
+    <summary>
+      <span class="chev">&#9656;</span>
+      <span class="ttl">Phase 9 - Documents</span>
+      <span class="chip c-todo" data-status="todo">pending</span>
+      <span class="mini">&#10024; NEW phase (after C2C)</span>
+    </summary>
+    <div class="body">
+      <div class="goal">&#10024; <b>NEW phase, added by Ayush after C2C.</b> Goal: document upload / write + the "documents follow their thing" rule.</div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Document upload + write</div>
+          <div class="rd">Upload / write documents into the Deal Room (storage bucket + RLS).</div>
+        </div>
+        <span class="chip c-todo">pending</span>
+      </div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">"Documents follow their thing"</div>
+          <div class="rd">A document inherits its thing's visibility - a <b>private task's file auto-becomes private</b>. Includes the two document edge cases. Deferred to here (after C2C) on purpose.</div>
+        </div>
+        <span class="chip c-todo">pending</span>
+      </div>
+    </div>
+  </details>
+
+  <!-- ===== PHASE 10 (NEW) - Final UI pass ===== -->
+  <details class="sec">
+    <summary>
+      <span class="chev">&#9656;</span>
+      <span class="ttl">Phase 10 - Final UI pass</span>
+      <span class="chip c-todo" data-status="todo">pending</span>
+      <span class="mini">&#10024; NEW phase (after C2C)</span>
+    </summary>
+    <div class="body">
+      <div class="goal">&#10024; <b>NEW phase, added by Ayush.</b> Goal: the deep look-and-feel / <b>Agentation</b> polish round - deliberately scheduled after everything else is built so it polishes the finished product, not a moving target.</div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Deep Agentation look-and-feel pass</div>
+          <div class="rd">Ayush walks the finished app with <b>Agentation</b>, flags every component mistake, and we fix them in one dedicated pass. This is the broad visual round - the narrow P1-P3 chrome fixes already shipped inside Phase 5.</div>
+          <div class="rf">P4 backlog &middot; chat-ui board</div>
+        </div>
+        <span class="chip c-todo">pending</span>
+      </div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Lock the finalized deal</div>
+          <div class="rd">Also folds in: a <b>Done deal becomes read-only</b> with just an Archive dialog (no further edits once finalized).</div>
+        </div>
+        <span class="chip c-todo">pending</span>
+      </div>
+    </div>
+  </details>
+
+  <!-- ===== PHASE 11 (LAST) - Notification ===== -->
+  <details class="sec">
+    <summary>
+      <span class="chev">&#9656;</span>
+      <span class="ttl">Phase 11 - Notification</span>
+      <span class="chip c-todo" data-status="todo">pending</span>
+      <span class="mini">now LAST (was Phase 9/8)</span>
+    </summary>
+    <div class="body">
+      <div class="goal">Goal: the cross-deal "another of your deals changed" alert, built as a SUBSET of global notifications. The persistent dot is the design driver. Req: HEAD-01. <b>Now scheduled LAST.</b> (The chat-top "Deals pop-up" half, old CONN-05, was done in Phase 4.)</div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">One bell + PERSISTENT unread dot</div>
+          <div class="rd">Survives refresh until opened - in the chat AND the global header. Global app-wide notifications are the superset (scaffolding only today); the cross-deal alert is the first concrete subset.</div>
+          <div class="rf">old P4 / HEAD-01 &middot; writes.ts</div>
+        </div>
+        <span class="chip c-todo">pending</span>
+      </div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Reuse RLS realtime as re-check signal</div>
+          <div class="rd">Reuse the RLS-scoped realtime (<code>use-chat-realtime.ts</code>) as the live "re-check" signal; derive the actionable badge from the authoritative <code>deal_pending_change</code> row (don't store a second copy of the fact).</div>
+          <div class="rf">use-chat-realtime.ts</div>
+        </div>
+        <span class="chip c-todo">pending</span>
+      </div>
+    </div>
+  </details>
+
+  <!-- ===== SPRINT 1 (ARCHIVED) ===== -->
+  <details class="sec">
+    <summary>
+      <span class="chev">&#9656;</span>
+      <span class="ttl">Sprint 1 - done (archived)</span>
+      <span class="chip c-done">shipped</span>
+    </summary>
+    <div class="body">
+      <div class="goal">Held two-sided deal change + the Deal Card &amp; Form overhaul. Verified, on dev, PR #113. Old phases 1, 2, 3a-3f - numbers now RETIRED. 15 deal-domain migrations still await a deliberate cloud push (with Muskan; <code>avatars_*</code> reconcile first). Detail: DECISIONS.md (2026-06-16 &rarr; 2026-06-18) + per-phase SUMMARYs.</div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">S1-P1 - Held Two-Sided Deal Change</div>
+          <div class="rd">Backbone: a pending change, full lock, change reason.</div>
+          <div class="rf">2026-06-17</div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">S1-P2 - Announcements &amp; Gate Cleanup</div>
+          <div class="rd">Both chats, both outcomes; gate = Accept/Decline only.</div>
+          <div class="rf">2026-06-17</div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">S1-P3 (3a-3f) - Deal Card &amp; Form</div>
+          <div class="rd">Display correctness, Deal Basket, held Note, per-product margin, form UX, batches.</div>
+          <div class="rf">2026-06-18 &middot; PR #113</div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+    </div>
+  </details>
+
+  <!-- ===== PARKED - OTHER ===== -->
+  <details class="sec">
+    <summary>
+      <span class="chev">&#9656;</span>
+      <span class="ttl">Parked - Other</span>
+      <span class="chip c-park">parked</span>
+    </summary>
+    <div class="body">
+      <div class="goal">After Phases 4-11. Not counted in the bar.</div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Minor card extras</div>
+          <div class="rd">Incoterms on the card (dormant - ADR-0002), buyer patient-price box, HS deal short-code, multi-deal selector (<code>reads.ts:80</code>), the custom-line margin edit edge (<code>lineEditing.ts:82</code>, accepted limitation).</div>
+        </div>
+        <span class="chip c-park">parked</span>
+      </div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Per-side owner / side_lead DB enforcement</div>
+          <div class="rd">Until multi-person-per-company is real (harmless today; would be speculative now).</div>
+          <div class="rf">ARCH 06-12</div>
+        </div>
+        <span class="chip c-park">parked</span>
+      </div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Access-matrix encoding (16-combo)</div>
+          <div class="rd">Post-MVP; keep RLS + the app-layer policy module (B7), then revisit DSL vs policy engine.</div>
+          <div class="rf">DEV-51</div>
+        </div>
+        <span class="chip c-park">parked</span>
+      </div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Home / landing view</div>
+          <div class="rd">Revisit in UI/nav work, leaning chat-first (chat-first vs dashboard-first, adapts per role).</div>
+          <div class="rf">DEV-13</div>
+        </div>
+        <span class="chip c-park">parked</span>
+      </div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">File uploads in the <code>+</code> menu</div>
+          <div class="rd">A separate backend slice (storage bucket + RLS).</div>
+        </div>
+        <span class="chip c-park">parked</span>
+      </div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">"Aurora Deutschland" placeholder</div>
+          <div class="rd"><b>Muskan's</b> - wire to the real logged-in company.</div>
+        </div>
+        <span class="chip c-park">parked</span>
+      </div>
+    </div>
+  </details>
+
+  <!-- ===== WAS BIG PARKED - NOW SHIPPED AS PHASE 5 ===== -->
+  <details class="sec">
+    <summary>
+      <span class="chev">&#9656;</span>
+      <span class="ttl">Deal Room + Deal Stages + Deal Finalization</span>
+      <span class="chip c-done">&#9989; shipped as Phase 5</span>
+    </summary>
+    <div class="body">
+      <div class="goal">&#9989; DONE - this whole "big parked" block became <b>Phase 5</b> and shipped (goal verified 31/31). See the Phase 5 card above. Source: <code>_workshop/build-plans/6-pending-map.md</code> §5.</div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Deal Room build</div>
+          <div class="rd">Built as the 3-column Deal Room; the card's read-only THINGS + the deferred <code>assigned_to</code> were wired here. Per-thing/per-doc private-or-shared visibility.</div>
+          <div class="rf">Phase 5 &middot; CONTEXT.md</div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Deal Stages + Deal Finalization</div>
+          <div class="rd">Stages each with a manual "mark done" that glows when all its things tick. <b>Finalization</b> on the LifecyclePill &rarr; "Is the deal done?" &rarr; golden card via the new <code>finalizeDeal</code> (never <code>confirm_deal_change</code>).</div>
+          <div class="rf">Phase 5 &middot; finalizeDeal</div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+    </div>
+  </details>
+
+  <!-- ===== DEFERRED OPS ===== -->
+  <details class="sec">
+    <summary>
+      <span class="chev">&#9656;</span>
+      <span class="ttl">Deferred ops</span>
+      <span class="chip c-park">deliberate, not a phase</span>
+    </summary>
+    <div class="body">
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Cloud apply 15 migrations</div>
+          <div class="rd">The 15 pending deal-domain migrations via a human <code>supabase db push</code>, coordinated with Muskan (<code>avatars_*</code> policy reconcile first). 15 local-only migrations is a growing risk - do not push it far down.</div>
+          <div class="rf">cloud-migrations-pending.md</div>
+        </div>
+        <span class="chip c-park">pending</span>
+      </div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Push the local Phase 4 + Phase 5 commits</div>
+          <div class="rd">The Phase-04 (UI &amp; chat) commits plus the Phase-05 (Deal Room) commits are local on <code>claude/ayush/work</code> and not pushed yet (plan: one push together). PR #113 is the deal-domain work, already merged to dev.</div>
+          <div class="rf">claude/ayush/work</div>
+        </div>
+        <span class="chip c-park">unpushed</span>
+      </div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt"><code>.planning</code> untrack</div>
+          <div class="rd"><code>.planning/</code> was committed to dev by accident; run <code>git rm --cached -r .planning &amp;&amp; commit</code> to stop tracking it (flagged by Muskan).</div>
+        </div>
+        <span class="chip c-park">chore</span>
+      </div>
+    </div>
+  </details>
+
+  <footer>
+    Sprint-2 roadmap dashboard - 8 build phases (4-11): Phases 4 &amp; 5 DONE, Phase 6 current, 9 &amp; 10 are new, 11 Notification last. Source of truth is <code>.planning/ROADMAP.md</code>. Rebuilt 2026-06-20, updated 2026-06-22.
+  </footer>
+
+</div>
+<script>
+(function(){
+  function recount(){
+    var it=document.querySelectorAll('[data-status]');var d=0,p=0,t=0;
+    it.forEach(function(e){var s=e.getAttribute('data-status');if(s==='done')d++;else if(s==='prog')p++;else t++;});
+    var tot=d+p+t||1;var f=function(n){return Math.round(n/tot*100)};
+    var pe=document.getElementById('pct');if(pe)pe.textContent=f(d)+'%';
+    var bd=document.getElementById('bd'),bp=document.getElementById('bp'),bt=document.getElementById('bt');
+    if(bd)bd.style.width=f(d)+'%';if(bp)bp.style.width=f(p)+'%';if(bt)bt.style.width=f(t)+'%';
+    var c=document.getElementById('counts');if(c)c.textContent=d+' done · '+p+' in progress · '+t+' to do · '+tot+' tracked';
+  }
+  function setAll(o){document.querySelectorAll('details.sec').forEach(function(d){d.open=o});}
+  var e=document.getElementById('expand');if(e)e.onclick=function(){setAll(true)};
+  var c=document.getElementById('collapse');if(c)c.onclick=function(){setAll(false)};
+  var ft=document.getElementById('filter');var on=false;
+  if(ft)ft.onclick=function(){on=!on;ft.classList.toggle('on',on);if(on)setAll(true);
+    document.querySelectorAll('.row[data-status="done"]').forEach(function(el){el.classList.toggle('hide',on)});};
+  recount();
+})();
+</script>
+</body>
+</html>

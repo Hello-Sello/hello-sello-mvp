@@ -11,9 +11,12 @@ import { updateCompanyProfile } from '@/modules/companies'
 export type ActionResult = { ok: true } | { error: string }
 
 // Licence is REQUIRED in production (2026-05-25 lock) but optional in local /
-// preview so test signups don't fill the bucket. Single source: the env var
-// `NEXT_PUBLIC_REQUIRE_LICENSE` (set to 'true' in prod). Same read on the client.
-const LICENCE_REQUIRED = process.env.NEXT_PUBLIC_REQUIRE_LICENSE === 'true'
+// preview so test signups don't fill the bucket. Authoritative server-only read:
+// `REQUIRE_LICENSE` (no NEXT_PUBLIC_ prefix — must not be readable in the browser
+// bundle; a non-NEXT_PUBLIC var is undefined client-side, silently making the
+// licence optional). The client receives the flag as a prop from the parent Server
+// Component (onboarding/page.tsx), not by reading process.env directly (D-02).
+const LICENCE_REQUIRED = process.env.REQUIRE_LICENSE === 'true'
 
 // Onboarding completion flags live in person.preferences.onboarding so the Home
 // checklist has a single source for which skippable steps are done.
@@ -53,6 +56,14 @@ async function patchPreferences(
  * licence to the private bucket and records a row. Idempotent on retry: if a
  * prior run already created the company, the caller reuses it instead of hitting
  * the already_has_company guard, and just finishes the licence uploads.
+ *
+ * Rejected-resume resubmit path (AUTH-02 / D-08):
+ *   When the caller's company is currently 'rejected' and a successful re-upload
+ *   completes, the status is flipped back to 'pending' so it re-enters the review
+ *   queue. The UPDATE is guarded on current status = 'rejected' only → 'pending'
+ *   so it cannot un-revoke or self-verify a company (T-04-08).
+ *   duplicate_company rejections do NOT reach this path — the UI suppresses the
+ *   resubmit CTA (OnboardingStepper) and only calls this action from the fixable path.
  */
 export async function createCompany(formData: FormData): Promise<ActionResult> {
   const name = String(formData.get('name') ?? '').trim()
@@ -69,6 +80,26 @@ export async function createCompany(formData: FormData): Promise<ActionResult> {
   const supabase = await createClient()
 
   let companyId = await getCurrentCompanyId()
+
+  // Check current status before branching — needed for the resubmit transition below.
+  let currentStatus: string | null = null
+  if (companyId) {
+    const { data: co } = await supabase
+      .from('company')
+      .select('verification_status')
+      .eq('id', companyId)
+      .maybeSingle()
+    currentStatus = co?.verification_status ?? null
+  }
+
+  // Revocation guard (Bouncer 2 — WR-01 / AUTH-01): a revoked company must not be
+  // allowed to upload licence files or insert company_license_file rows even via a
+  // direct POST. Return an error before ANY write rather than redirect (redirect
+  // would not work from a Server Action that must return ActionResult to the client).
+  if (currentStatus === 'revoked') {
+    return { error: 'Your account access has been suspended.' }
+  }
+
   if (!companyId) {
     const { data, error } = await supabase.rpc('onboard_company', {
       p_name: name,
@@ -97,6 +128,18 @@ export async function createCompany(formData: FormData): Promise<ActionResult> {
       scan_status: 'pending',
     })
     if (rowError) return { error: `Could not record the licence: ${rowError.message}` }
+  }
+
+  // Resubmit transition: only when the company was rejected.
+  // Guard is strict: WHERE verification_status = 'rejected' → prevents clobbering
+  // verified or revoked status even if this action is somehow called in those states.
+  if (currentStatus === 'rejected') {
+    const { error: flipError } = await supabase
+      .from('company')
+      .update({ verification_status: 'pending' })
+      .eq('id', companyId)
+      .eq('verification_status', 'rejected')
+    if (flipError) return { error: `Could not resubmit for review: ${flipError.message}` }
   }
 
   return { ok: true }
@@ -139,4 +182,106 @@ export async function saveCompanyDetails(formData: FormData): Promise<ActionResu
 export async function markEmailConnected(): Promise<ActionResult> {
   const err = await patchPreferences({}, { email_connected: true })
   return err ?? { ok: true }
+}
+
+// ---------------------------------------------------------------------------
+// Path B — join an existing company (PATHB-01/02/03).
+//
+// Three thin wrappers over the 12-02 SECURITY DEFINER RPCs
+// (search_joinable_companies / request_to_join / withdraw_join_request). They own
+// input validation + the {ok}|{error} mapping; the RPCs are the real authz
+// boundary (verified-target + ownership re-asserted inside). Same "None redirect —
+// navigation lives in the client" contract as createCompany: the stepper drives
+// the S1→S2 transition. No service-role admin client (D-17 / A4) — these are
+// normal authenticated calls.
+//
+// database.types.ts is intentionally NOT regenerated mid-stream (codebase
+// pattern), so each .rpc() uses a localized cast. For requestToJoin the cast is
+// WIDENED to expose `code` so the duplicate-pending guard can branch on the raw
+// Postgres SQLSTATE instead of a brittle message-substring match.
+// ---------------------------------------------------------------------------
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+// Fail-closed generic copy — no internal leak (UI-SPEC Errors table).
+const GENERIC_ERROR = 'Something went wrong. Please try again.'
+
+export type JoinableCompany = { id: string; name: string; city: string | null; logo_path: string | null }
+export type SearchResult = { rows: JoinableCompany[] } | { error: string }
+
+/**
+ * S1 search — wraps search_joinable_companies. A READ (no revalidatePath). The RPC
+ * hard-filters verification_status='verified' and returns the curated projection
+ * (id/name/city/logo_path) for a company-less caller. An empty term is a valid
+ * "show nothing yet" state, never a throw. We short-circuit a blank term to an
+ * empty list here: the UI's "start typing" empty state renders nothing until the
+ * user types, so there is no reason to round-trip the DB — and it keeps the action
+ * a pure, no-throw "show nothing yet" for the empty case (UI-SPEC S1 empty state).
+ */
+export async function searchCompanies(term: string): Promise<SearchResult> {
+  if (term.trim() === '') return { rows: [] }
+  const supabase = await createClient()
+  const { data, error } = await (supabase as unknown as {
+    rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string } | null }>
+  }).rpc('search_joinable_companies', { p_term: term })
+
+  if (error) return { error: GENERIC_ERROR }
+  return { rows: (data as JoinableCompany[]) ?? [] }
+}
+
+/**
+ * S1 submit — wraps request_to_join. UUID-validate the target, then map errors in
+ * order (most specific first):
+ *   1. SQLSTATE 23505 (the partial-unique index uq_join_request_active_pending) →
+ *      the verbatim D-12 "already pending" copy. We detect the duplicate by the raw
+ *      Postgres `code`, NOT a message-substring: the index raises a bare
+ *      unique_violation (no custom RAISE string), so matching the constraint name
+ *      inside the message would be brittle. This deviates from the existing
+ *      friendly-mapping idiom (team/actions.ts:149 maps `change_member_role`'s
+ *      custom 'last Superadmin' RAISE via message.includes) precisely because this
+ *      is an index collision, not a RAISE — `error.code` is the reliable signal.
+ *   2. the verified-target RAISE ('already belongs to a company') → already-in-company copy.
+ *   3. anything else → the generic fail-closed copy.
+ * No revalidatePath — the client transitions to S2 on { ok }.
+ */
+export async function requestToJoin(companyId: string, note?: string): Promise<ActionResult> {
+  if (!UUID_RE.test(companyId)) return { error: GENERIC_ERROR }
+  const supabase = await createClient()
+
+  // WIDENED localized cast: expose `code` so the SQLSTATE check below is typed.
+  const { error } = await (supabase as unknown as {
+    rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string; code?: string } | null }>
+  }).rpc('request_to_join', { p_company_id: companyId, p_note: note ?? null })
+
+  if (error) {
+    // (1) Raw unique_violation from the one-active-pending index — detect by SQLSTATE.
+    if (error.code === '23505') {
+      return { error: 'You already have a pending request. Withdraw it before requesting another company.' }
+    }
+    // (2) Caller already has a company: request_to_join's company-less guard
+    //     (20260622100000) raises this, as does a raced Path-A self-onboard.
+    if (error.message.includes('already belongs to a company')) {
+      return { error: "You're already part of a company." }
+    }
+    // (3) Verified-target guard + anything else → fail closed, no internal leak.
+    return { error: GENERIC_ERROR }
+  }
+  return { ok: true }
+}
+
+/**
+ * S2 withdraw — wraps withdraw_join_request. UUID-validate, then fail closed on any
+ * RPC error (the only real failures here are "request not found" for a non-owner or
+ * already-terminal row, which the requester need not distinguish).
+ */
+export async function withdrawJoin(requestId: string): Promise<ActionResult> {
+  if (!UUID_RE.test(requestId)) return { error: GENERIC_ERROR }
+  const supabase = await createClient()
+
+  const { error } = await (supabase as unknown as {
+    rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string } | null }>
+  }).rpc('withdraw_join_request', { p_request_id: requestId })
+
+  if (error) return { error: GENERIC_ERROR }
+  return { ok: true }
 }
