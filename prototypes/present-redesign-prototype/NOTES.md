@@ -1,57 +1,64 @@
 # present-redesign-prototype
 
-**Throwaway prototype.** Phase 7 / plan 07-01 / Wave 0. Muskan's prototype-first
-rule; UI-SPEC skipped (D-15) — **this prototype IS the visual spec for the React
-build.** Open `index.html` directly in a browser (no build, no server).
+**Throwaway prototype — DESIGN LOCKED 2026-06-22.** Phase 7 (Present Catalogue UX).
+This prototype IS the visual + interaction spec for the React build. Open
+`index.html` directly in a browser (no build, no server). Theme tokens mirror
+`src/app/globals.css`.
 
-> **Status: design exploration — 3 variations, pick a direction.** Switch with the
-> dark bar at the very top: **A · Editorial** · **B · Wholesale Pro** · **C ·
-> Collectible** (default). Everything below re-renders. All three share the real
-> app theme (tokens copied from `src/app/globals.css`), the light-glass IconRail,
-> the banner, the basket, and the filter bar — they differ in card style + density.
+> Switch views with the dark bar at the very top: **Shop view** (seller's own shop) ·
+> **Manage shop** (price-list table + modals) · **Buyer view** (what a visiting buyer sees).
 
-## The three directions (from the web-inspiration brief)
+---
 
-| Variant | Feel | Grid | Card | Best for |
-|---|---|---|---|---|
-| **A · Editorial Boutique** | airy, brand-forward, image-led | 3-up | big image, hover-reveals qty/add, minimal spec | premium/curated lines, first impression |
-| **B · Wholesale Pro** | dense, solid, fast to scan | 5-up (+ List view) | compact, tabular specs, always-visible add | repeat buyers scanning many SKUs |
-| **C · Collectible Showcase** *(rec.)* | graded-card identity | 4-up | sheen + grade badge + tilt, flip→COA | differentiated storefront; quality is the pitch |
+## Locked design
 
-Recommended: a hybrid of **B + C** — dense & scannable, but each tile carries the
-graded-card identity (grade badge always on, subtle sheen, flip-to-COA on demand).
+### The product card (flip)
+- **FRONT = product label + price** (everything buyer-safe): photo carousel, grade badge,
+  ♥, name/cultivar/PZN, country flag, **label** THC/CBD/CBG/CBN quad, full spec list
+  (dominance · cultivator · origin · region · lineage · irradiation · format · packaging ·
+  resealable · supplier code), price (price/g + UVP strike-through + bundle tier) or
+  "Price on request".
+- **BACK = "Documents & lab reports"** — a **folder shelf** (click a folder to open all its files):
+  **COAs**, **Lab results**, **Certificates & specs**; plus a single **walkthrough video** link.
+  Photos are NOT here (they're on the front). Inert **Sella · Marktvergleich** stub (no figure, R1).
+- Collectible feel: subtle tilt + sheen on hover; click flips. "Documents" button flips to the back.
 
-## Muskan's 2026-06-21 feedback — incorporated
+### Add-to-basket — batch lives with the product (seller only)
+- The card footer has **two controls**: a **batch dropdown ("Select lots ▾")** + a separate **Add to basket** button.
+- Opening the dropdown lists **every lot** with measured THC/CBD · expiry · kg available, each with a **+/− quantity**.
+  A seller can **split one order across lots** (e.g. 30 of lot A + 20 of lot B). Add stays disabled until a lot has a qty.
+- Each (product + lot) becomes its **own basket line** (merge key = product + batch) — mirrors Ayush's BTCH-01 / D-06.
+- **Buyer view shows NO batch UI** — a plain qty stepper + Add. Buyers never pick or see lots.
 
-- **Compact search** — starts as a 42px icon, expands to ~280px on focus/hover (CSS `:focus-within`, no JS). No more giant search bar.
-- **Dropped** the "Present · your shop" title label.
-- **`Manage shop ▾`** moved into the top bar; **Add products lives inside it** (with Edit products/media, Import CSV, Edit branding, Manage locations, Share link). Banner is now clean.
-- **Animated basket** — count badge **bumps** on add, a product **flies to the cart**, slide-over eases in (`cubic-bezier(.67,.17,.32,.95)`). All gated by `prefers-reduced-motion`.
-- **Info chips** — compact glass chips that **expand to the bottom** (`grid-template-rows 0fr→1fr`, staggered row reveal), **transient**: collapse on click-away or ✕ — exactly Marcel's PRESENT-INFOS note.
-- **Filters = location AND products** — Location (All/DE/UK) + Category (Flowers/Extracts) + Strain (Indica/Sativa/Hybrid/CBD). ⚠️ **open to discuss** (see below).
-- **"Fancy shop, all info"** — drives the whole visual pass.
+### Basket + send
+- Basket is **per-company, transient**. A line = product+batch (seller) or product (buyer).
+- **Seller send = a deal `offer`** (`source: "shop"`): the batches are already on the lines, so the send step
+  just picks the **connected customer** (recipient). Hands off to Ayush's **Deal Basket + `createDeal`**.
+- **Buyer send = a deal `order`** (`source: "shop"`), addressed to the shop's company, **batch-less**
+  (buyer can't pick) — the **seller assigns the lot when they respond**. Gated: a not-connected buyer must connect first.
 
-## Marcel's "PRESENT INFOS" screenshot — decoded
+### Chrome (premium pass)
+Layered low-opacity shadows · light heading weights · hairline borders · restrained accent (one brand pink) ·
+generous whitespace · compact search · `Manage shop ▾` menu · animated basket (count-bump + fly-to-cart + slide-over).
 
-- Both info fields need **more background space for more data**.
-- Make them **expand to the bottom** to show more video links, more pages, **3 different warehouse addresses**.
-- A **temporary** open link that **collapses on click-away or X**.
-→ Implemented as the compact-chip → expand-to-bottom interaction above (3 warehouses, socials, catalogue PDF, etc.).
+---
 
-## What every variant proves
+## Decisions captured here (need to land in docs/decisions later)
+- **D — batch chosen at add-time** (product + batch = one line), **split across lots** supported.
+- **D — public card carries NO batch number/identity.** The binding lot + its COA surface on the **deal**, not the listing.
+- **D — COAs / lab results are per-batch.** The per-batch *numbers* exist (`product_batch`, `batch_terpene`);
+  storing per-lot COA/lab **PDF files** needs a **new `batch_document` table** (file + `batch_id` + type) on the
+  `shop-media` bucket — a Phase 7 build item, not yet in schema.
+- **D — quick-view drawer dropped** (the flip card is the detail view).
+- **Sella Marktvergleich stays inert** (no figure) — Flowzz pull is **legally gated** (German competition/data law)
+  and **co-owned with Ayush**; real design parked for a joint Sella session.
 
-- **Square 4-up grid (UX-02):** `aspect-ratio:1/1` tiles (16:10 in Pro for density).
-- **Location + product filters (D-06):** client-side, location × category × strain.
-- **Flip card (D-03/04/05):** CSS 3D `rotateY(180deg)` + `backface-visibility`. Front = image + qty stepper + Add + specs; **back (buyer's study view)** = COA/Images/Videos/Other-docs dropdown + **inert R1 Sella "Marktvergleich" (NO number)** + "View full Present page".
-- **Per-company basket (UX-03 / D-12):** top-right slide-over, grouped per company, transient, est. total. Store keyed by company so multi-company carts stay separate.
-- **Presentation mode (DEV-79 / D-09):** Fullscreen button (`requestFullscreen()`) → hides the left rail.
+## Reuse (verified in code)
+- `DealSource = "p2p" | "sella" | "shop"` — **"shop" already supported**.
+- Ayush's **DealForm** has the mandatory batch picker; **DealBasket** carries recipient + lines; `createDeal` mints it.
+- Buyer vs seller = `deal_type` **`order`** vs **`offer`**.
 
-## What it does NOT prove
-- Real data / RLS / Supabase (all fake seed); cross-tenant buyer read (`get_discoverable_shop`, R3); the deal hand-off (`createDeal`, connected-only, D-02/13) + the gated buyer door; media upload UX (R2); download-all; live fullscreen-in-Teams feel.
-
-## Open questions for review
-1. **Pick a direction** (A / B / C, or a blend) — the biggest decision.
-2. **Filters:** is location + category + strain right, or too many chips? Left filter rail vs top bar?
-3. Fidelity to Marcel's DEV-81 mockup + the CARDS board + the ~28-May Drive design (agents can't see these).
-4. Should Fullscreen sit in the top bar (current) or back on the banner top-right (Marcel's DEV-54 wording)?
-5. Card-back doc buckets (COA/Images/Videos/Other) — right grouping?
+## Open / not proven here
+- Buyer **order view** (the buyer's send/confirm + "Request pricing") — next.
+- **Ayush sync:** batch-less buyer order; seller assigns the lot on response.
+- Real data / RLS / cross-tenant buyer read; the `batch_document` storage; live deal hand-off.
