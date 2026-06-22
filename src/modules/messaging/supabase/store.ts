@@ -19,6 +19,7 @@
  */
 import { createClient } from "@/shared/db/client";
 import { previewOf } from "../lib/chat-display";
+import { canonicalPair } from "../lib/connections-shape";
 import { planRollout } from "../lib/rollout";
 import type {
   AcceptInput,
@@ -252,6 +253,70 @@ export async function getDealThread(
     .single();
   if (error) throw error;
   return { threadId: data.id, relationshipId: data.relationship_id };
+}
+
+/* -------------------------------------------------------------------------- */
+/* New-chat picker (04B) - resolve / create the thread on selection           */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Resolve the C2C thread for a relationship (company-mode selection, D-05).
+ * The C2C is minted on EVERY accept (`planRollout`), so it always exists - this
+ * is resolve-only. RLS (`thread_all`) scopes the row to the viewer; a guard
+ * throws if the (shouldn't-happen) missing case is hit.
+ */
+export async function resolveC2cThread(relationshipId: string): Promise<string> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("chat_thread")
+    .select("id")
+    .eq("type", "c2c")
+    .eq("relationship_id", relationshipId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) {
+    throw new Error(`messaging: no c2c thread for relationship ${relationshipId}`);
+  }
+  return data.id;
+}
+
+/**
+ * Open the P2P thread between the viewer and another person, creating it if
+ * missing (person-mode selection, D-05). `planRollout` only mints a P2P for the
+ * accepting/sender pair, so most connected people have NO P2P thread yet
+ * (Pitfall 2) - hence resolve-or-create. The pair is stored in canonical order
+ * (`person_a_id < person_b_id`, DB CHECK), and the `thread_all` WITH CHECK
+ * (`auth.uid() IN (person_a_id, person_b_id)`) allows the INSERT because the
+ * viewer is always one side. Returns the thread id either way.
+ */
+export async function openOrCreateP2pThread(
+  relationshipId: string,
+  otherPersonId: string,
+): Promise<string> {
+  const supabase = createClient();
+  const viewer = await getViewer(supabase);
+  const [a, b] = canonicalPair(viewer.personId, otherPersonId);
+
+  const { data: existing, error: selErr } = await supabase
+    .from("chat_thread")
+    .select("id")
+    .eq("relationship_id", relationshipId)
+    .eq("type", "p2p")
+    .eq("person_a_id", a)
+    .eq("person_b_id", b)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (selErr) throw selErr;
+  if (existing) return existing.id;
+
+  const { data: created, error: insErr } = await supabase
+    .from("chat_thread")
+    .insert({ relationship_id: relationshipId, type: "p2p", person_a_id: a, person_b_id: b })
+    .select("id")
+    .single();
+  if (insErr) throw insErr;
+  return created.id;
 }
 
 /* -------------------------------------------------------------------------- */

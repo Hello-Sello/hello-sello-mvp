@@ -1,0 +1,1282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Deal Form (S3) — v2 prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+/* =========================================================
+   A. SHARED DESIGN SYSTEM  (identical to dealcard-v3)
+   ========================================================= */
+:root{
+  --maroon:#76002d;      /* FORM dark total bar bg + Proceed pill */
+  --brand:#c4156b;       /* primary raspberry */
+  --brand-2:#e30b5d;     /* hotter raspberry: form primary buttons / focus rings */
+  --brand-soft:#ffb7d5;  /* cotton-candy fill, dashed borders */
+  --brand-tint:#fde7f1;  /* very light pink wash */
+  --ink:#1f1430;         /* primary text */
+  --ash:#6b6477;         /* ash-gray muted text + secondary icons */
+  --line:#ecdfe9;        /* hairline borders + dividers */
+  --bg:#fffafc;          /* page wash */
+  --white:#ffffff;       /* surfaces, inputs */
+  --ok:#16924a;          /* good margin green */
+  --warn:#b45309;
+  --danger:#b3203f;
+  --thc:#b5179e;         /* THC potency = magenta-violet */
+  --cbd:#1b998b;         /* CBD potency = teal */
+
+  --r-lg:20px;
+  --r-md:14px;
+  --r-sm:10px;
+  --r-xs:8px;
+
+  --shadow-modal:0 24px 60px -24px rgba(118,0,45,0.28);
+}
+
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  background:var(--bg);
+  color:var(--ink);
+  -webkit-font-smoothing:antialiased;
+  line-height:1.5;
+  padding:64px 16px 60px;
+}
+.display{font-family:"Space Grotesk",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+.mono{font-variant-numeric:tabular-nums;}
+.dmmono{font-family:"DM Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums;}
+
+/* cultivar thumbnail gradients */
+.grad-indica{background:linear-gradient(135deg,#8b5cf6,#6d28d9);}
+.grad-sativa{background:linear-gradient(135deg,#f59e0b,#d97706);}
+.grad-hybrid{background:linear-gradient(135deg,#10b981,#047857);}
+.grad-custom{background:linear-gradient(135deg,#cbb8c6,#9a8a96);}
+
+/* shared chips */
+.chip{
+  display:inline-flex;align-items:center;gap:3px;
+  font-size:11px;font-weight:600;line-height:1;
+  padding:3px 6px;border-radius:6px;
+  font-variant-numeric:tabular-nums;
+}
+.chip.thc{color:var(--thc);background:rgba(181,23,158,0.10);}
+.chip.cbd{color:var(--cbd);background:rgba(27,153,139,0.12);}
+.chip.batch{color:var(--maroon);background:var(--brand-tint);}
+.chip.custom{color:var(--ash);background:#f1eef2;}
+
+/* potency split bar (V2) */
+.potbar{display:flex;height:6px;border-radius:999px;overflow:hidden;background:#f1eef2;margin-top:6px;}
+.potbar .seg-thc{background:var(--thc);}
+.potbar .seg-cbd{background:var(--cbd);}
+
+/* =========================================================
+   A.4 VARIATION SWITCHER
+   ========================================================= */
+.switcher{
+  position:fixed;top:12px;left:50%;transform:translateX(-50%);
+  z-index:50;display:flex;gap:6px;
+  background:var(--white);padding:6px;border-radius:999px;
+  border:1px solid var(--line);box-shadow:0 8px 24px -14px rgba(118,0,45,0.3);
+}
+.switcher button{
+  font-family:inherit;font-size:12px;font-weight:700;
+  padding:7px 16px;border-radius:999px;cursor:pointer;
+  background:var(--white);color:var(--ink);border:1px solid var(--line);
+}
+.switcher button.active{background:var(--maroon);color:#fff;border-color:var(--maroon);}
+.caption{
+  position:fixed;top:54px;left:50%;transform:translateX(-50%);
+  z-index:49;font-size:11.5px;color:var(--ash);
+  background:rgba(255,250,252,0.9);padding:2px 10px;border-radius:999px;
+}
+
+/* show only active variant */
+.variant{display:none;}
+body[data-variant="v1"] .variant.v1,
+body[data-variant="v2"] .variant.v2,
+body[data-variant="v3"] .variant.v3{display:block;}
+
+/* =========================================================
+   C. DEAL FORM MODAL  — three-band layout
+   TOP (.m-head + recipient + search) pinned · MIDDLE (.m-scroll) scrolls · BOTTOM (.m-foot) pinned
+   ========================================================= */
+.modal{
+  width:920px;max-width:100%;margin:0 auto;
+  background:var(--white);border-radius:22px;
+  box-shadow:var(--shadow-modal);
+  max-height:82vh;
+  border:1px solid var(--line);
+  display:flex;flex-direction:column;     /* band stack: header / scroll / footer */
+  overflow:hidden;                         /* clip to rounded corners; middle band owns the scroll */
+}
+
+/* MIDDLE band — the only scrolling region */
+.m-scroll{
+  flex:1;min-height:0;overflow-y:auto;     /* flex:1 + min-height:0 = scroll, not push */
+  -webkit-overflow-scrolling:touch;
+}
+/* TOP band wrapper — header + recipient + search stay pinned above the scroll */
+.m-top{flex:none;}
+
+/* C.2 header */
+.m-head{
+  display:flex;align-items:flex-start;justify-content:space-between;
+  padding:16px 20px;border-bottom:1px solid var(--line);
+  background:var(--white);z-index:5;border-radius:22px 22px 0 0;
+}
+.m-head .ttl{font-size:16px;font-weight:700;color:var(--ink);}
+.m-head .sub{font-size:12px;color:var(--ash);margin-top:3px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.m-head .sub b{color:var(--maroon);font-weight:700;}
+.bag-chip{
+  display:inline-flex;align-items:center;gap:4px;
+  font-size:11px;padding:3px 8px;border-radius:999px;
+  background:var(--brand-tint);color:var(--maroon);font-weight:600;
+}
+.x{
+  width:30px;height:30px;border-radius:999px;flex:none;
+  border:1px solid var(--line);background:var(--white);color:var(--ash);
+  display:flex;align-items:center;justify-content:center;cursor:pointer;
+}
+.x:hover{background:#faf3f8;}
+
+/* C.2 recipient chip */
+.recipient{
+  background:var(--brand-tint);border-radius:14px;
+  padding:11px 13px;margin:16px 20px 18px;
+  display:flex;align-items:center;gap:10px;
+}
+.recipient .av{
+  width:36px;height:36px;border-radius:999px;flex:none;
+  background:var(--brand);color:#fff;
+  display:flex;align-items:center;justify-content:center;
+  font-family:"Space Grotesk",sans-serif;font-weight:700;font-size:13px;
+}
+.recipient .who{flex:1;min-width:0;}
+.recipient .who .n{font-size:14px;font-weight:600;color:var(--ink);}
+.recipient .who .c{font-size:11.5px;color:var(--ash);}
+.recipient .lock{
+  display:inline-flex;align-items:center;gap:4px;
+  font-size:10px;color:var(--ash);background:var(--white);
+  border:1px solid var(--line);border-radius:999px;padding:4px 9px;
+  font-family:"DM Mono",monospace;
+}
+
+/* C.2 search — last element of the pinned top band, so give it a bottom rule */
+.searchwrap{position:relative;margin:0 20px 14px;padding-bottom:14px;border-bottom:1px solid var(--line);}
+.searchbar{
+  width:100%;border:1px solid var(--line);border-radius:12px;
+  padding:11px 14px 11px 38px;font-size:14px;font-family:inherit;
+  color:var(--ink);background:var(--white);
+}
+.searchbar::placeholder{color:var(--ash);}
+.searchbar:focus{
+  outline:none;border-color:var(--brand-2);
+  box-shadow:0 0 0 3px rgba(227,11,93,0.12);
+}
+.searchwrap .ico{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--ash);pointer-events:none;display:flex;align-items:center;}
+.picker{
+  display:none;                    /* hidden until the search input is focused/typed */
+  position:absolute;left:0;right:0;top:46px;z-index:8;   /* anchor under the input, not the padded wrap */
+  margin:6px 0 0;border:1px solid var(--line);border-radius:12px;
+  background:var(--white);overflow:hidden;
+  box-shadow:0 10px 30px -18px rgba(118,0,45,0.35);
+}
+.searchwrap.open .picker{display:block;}
+.picker .opt{
+  display:flex;align-items:center;gap:10px;
+  padding:9px 14px;font-size:13px;color:var(--ink);cursor:pointer;
+  border-bottom:1px solid var(--line);
+}
+.picker .opt:last-child{border-bottom:none;}
+.picker .opt:hover{background:#faf3f8;}
+.picker .opt .dot{width:22px;height:22px;border-radius:7px;flex:none;}
+.picker .opt .meta{font-size:11px;color:var(--ash);margin-left:auto;font-family:"DM Mono",monospace;}
+.picker .opt.custom{color:var(--brand);font-weight:600;}
+
+/* =========================================================
+   C.3 LEDGER  (V1 default)
+   ========================================================= */
+.ledger{border:1px solid var(--line);border-radius:14px;overflow:hidden;margin:0 20px;}
+.lhead,.lrow{
+  display:grid;
+  grid-template-columns:44px 2fr 1.5fr 1.3fr 1.7fr 1fr 30px;
+  align-items:center;gap:10px;
+}
+.lhead{
+  background:#faf3f8;padding:9px 14px;
+  font-family:"DM Mono",monospace;font-size:10px;text-transform:uppercase;
+  letter-spacing:0.08em;color:var(--ash);
+}
+.lhead .r{text-align:right;}
+.lrow{padding:11px 14px;border-top:1px solid var(--line);}
+.lrow:hover{background:#fffafc;}
+
+.thumb{width:38px;height:38px;border-radius:12px;flex:none;display:flex;align-items:center;justify-content:center;}
+.thumb svg{opacity:0.95;}
+
+.prod .nm{font-size:13.5px;font-weight:600;color:var(--ink);}
+.prod .cv{font-size:11px;color:var(--ash);margin-top:1px;}
+
+/* batch col */
+.lselect{
+  width:100%;border:1px solid var(--line);border-radius:9px;
+  background:var(--white);padding:6px 8px;
+  font-family:"DM Mono",monospace;font-size:12px;color:var(--maroon);
+  cursor:pointer;
+}
+.lselect:focus{outline:none;border-color:var(--brand-2);box-shadow:0 0 0 3px rgba(227,11,93,0.12);}
+.lab{display:flex;gap:4px;margin-top:5px;flex-wrap:wrap;}
+.batch-hint{font-size:11px;color:var(--brand);margin-top:5px;font-style:italic;}
+
+/* qty stepper + grams */
+.qty{display:flex;flex-direction:column;gap:5px;}
+.stepper{display:inline-flex;align-items:center;gap:2px;border:1px solid var(--line);border-radius:9px;width:max-content;overflow:hidden;}
+.stepper button{
+  width:30px;height:30px;min-width:30px;border:none;background:var(--white);
+  color:var(--ink);font-size:17px;cursor:pointer;display:flex;align-items:center;justify-content:center;
+}
+.stepper button:hover{background:var(--brand-tint);}
+.stepper button:disabled{color:var(--line);cursor:not-allowed;background:var(--white);}
+.stepper .val{min-width:30px;text-align:center;font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;}
+.packs{font-size:11.5px;color:var(--ash);font-family:"DM Mono",monospace;}
+
+/* C.3 pricing group: private capsule + sell */
+.priceGroup{display:flex;flex-direction:column;gap:4px;}
+.private-cap{
+  background:#faf7fb;border:1px dashed var(--line);border-radius:9px;
+  padding:7px 9px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  font-size:11.5px;color:var(--ash);
+}
+.private-cap .lk{display:inline-flex;align-items:center;gap:3px;font-size:10px;color:var(--ash);}
+.private-cap input.cost{
+  width:60px;border:1px solid var(--line);border-radius:7px;
+  padding:4px 6px;font-family:"DM Mono",monospace;font-size:12px;color:var(--ink);
+  font-variant-numeric:tabular-nums;
+}
+.private-cap input.cost:focus{outline:none;border-color:var(--brand-2);box-shadow:0 0 0 2px rgba(227,11,93,0.12);}
+.private-cap .unit{font-size:10px;color:var(--ash);}
+.margin-good,.margin-warn,.margin-bad{font-family:"DM Mono",monospace;font-size:11px;font-weight:500;}
+.margin-good{color:var(--ok);}      /* healthy margin */
+.margin-warn{color:var(--warn);}    /* thin margin */
+.margin-bad{color:var(--danger);}   /* zero or loss */
+.sell{
+  display:inline-flex;align-items:center;gap:5px;width:max-content;
+  background:var(--brand-tint);color:var(--maroon);
+  border-radius:8px;padding:5px 9px;font-size:12px;font-weight:600;
+}
+.sell label{font-size:10px;opacity:0.85;}
+.sell input{
+  width:54px;border:none;background:transparent;color:var(--maroon);
+  font-family:"DM Mono",monospace;font-size:12.5px;font-weight:600;
+  font-variant-numeric:tabular-nums;text-align:right;
+}
+.sell input:focus{outline:none;}
+.sell .u{font-size:10px;opacity:0.8;}
+
+/* line total */
+.lt{text-align:right;}
+.linetotal{font-family:"Space Grotesk",sans-serif;font-weight:600;font-size:15px;color:var(--ink);font-variant-numeric:tabular-nums;}
+
+/* remove */
+.rm{background:none;border:none;color:var(--ash);cursor:pointer;padding:4px;justify-self:center;display:inline-flex;align-items:center;justify-content:center;}
+.rm svg{display:block;}
+.rm:hover{color:var(--danger);}
+
+/* unbatched / disabled row state */
+.lrow[data-batched="false"] .stepper,
+.lrow[data-batched="false"] .priceGroup,
+.lrow[data-batched="false"] .lt{opacity:0.4;pointer-events:none;filter:grayscale(0.4);}
+.lrow[data-batched="false"] .lselect{border-color:var(--brand-soft);}
+
+/* add custom + terms + summary */
+.add-custom{
+  display:block;width:calc(100% - 40px);margin:14px 20px;
+  border:1px dashed var(--brand-soft);border-radius:12px;
+  padding:11px;background:var(--white);color:var(--brand);
+  font-weight:600;font-size:13.5px;font-family:inherit;cursor:pointer;text-align:center;
+}
+.add-custom:hover{background:var(--brand-tint);}
+
+.terms-block{border:1px solid var(--line);border-radius:14px;padding:14px;margin:0 20px 16px;}
+.terms-block .tb-title{font-family:"DM Mono",monospace;font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--ash);margin-bottom:10px;}
+.terms-grid{display:flex;flex-wrap:wrap;gap:14px;}
+.field{display:flex;flex-direction:column;gap:4px;}
+.field label{font-size:10.5px;color:var(--ash);text-transform:uppercase;letter-spacing:0.04em;}
+.field input,.field select{
+  border:1px solid var(--line);border-radius:9px;padding:7px 10px;
+  font-family:inherit;font-size:13px;color:var(--ink);background:var(--white);
+}
+.field input:focus,.field select:focus{outline:none;border-color:var(--brand-2);box-shadow:0 0 0 3px rgba(227,11,93,0.12);}
+.field[hidden]{display:none;}
+.fee-wrap{
+  display:inline-flex;align-items:center;gap:4px;
+  border:1px solid var(--line);border-radius:9px;padding:5px 10px;
+  font-size:13px;color:var(--ash);background:var(--white);
+}
+.fee-wrap input.ship-fee{
+  border:none;outline:none;background:transparent;width:64px;
+  font-family:"DM Mono",monospace;font-size:13px;color:var(--ink);
+  font-variant-numeric:tabular-nums;
+}
+.toggle{
+  display:inline-flex;align-items:center;gap:8px;cursor:pointer;
+  border:1px solid var(--line);border-radius:9px;padding:7px 10px;font-size:13px;color:var(--ink);
+}
+.toggle .box{
+  width:18px;height:18px;border-radius:5px;border:1.5px solid var(--line);
+  display:flex;align-items:center;justify-content:center;
+}
+.toggle.on .box{background:var(--ok);border-color:var(--ok);}
+.toggle.on .box svg{display:block;}
+.toggle .box svg{display:none;}
+
+.summary{border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin:0 20px 16px;}
+.srow{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;color:var(--ash);padding:5px 0;}
+.srow .sv{color:var(--ink);font-variant-numeric:tabular-nums;}
+.srow.div{border-top:1px solid var(--line);margin-top:6px;padding-top:12px;}
+.srow.grand .sl{color:var(--ink);font-weight:600;}
+.srow.grand .sv{font-family:"Space Grotesk",sans-serif;font-size:22px;font-weight:700;color:var(--ink);}
+
+/* C.5 footer — pinned BOTTOM band (totals + avg margin + Proceed always visible) */
+.m-foot{
+  flex:none;
+  display:flex;align-items:center;justify-content:space-between;gap:14px;
+  padding:14px 20px;border-top:1px solid var(--line);
+  background:var(--white);border-radius:0 0 22px 22px;
+}
+/* left cluster of the footer: totals line + private avg-margin line stacked */
+.foot-figures{display:flex;flex-direction:column;gap:6px;min-width:0;}
+.foot-totals{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;}
+.foot-totals .ft-mini{font-size:11px;color:var(--ash);font-variant-numeric:tabular-nums;}
+.foot-totals .ft-mini b{color:var(--ink);font-weight:600;}
+.total-pill{display:flex;flex-direction:column;}
+.total-pill .tl{font-family:"DM Mono",monospace;font-size:10.5px;text-transform:uppercase;letter-spacing:0.06em;color:var(--ash);}
+.total-pill .tv{font-family:"Space Grotesk",sans-serif;font-size:22px;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums;}
+/* deal-level AVERAGE margin — the ONLY margin shown anywhere, private to the owner */
+.avg-margin{
+  display:inline-flex;align-items:center;gap:7px;
+  font-size:11.5px;color:var(--ash);
+  background:#faf7fb;border:1px dashed var(--line);border-radius:999px;
+  padding:4px 11px;width:max-content;
+}
+.avg-margin .am-lbl{font-family:"DM Mono",monospace;text-transform:uppercase;letter-spacing:0.05em;font-size:10px;}
+.avg-margin .am-val{font-family:"DM Mono",monospace;font-size:13px;font-weight:600;}
+.avg-margin .am-val.margin-good{color:var(--ok);}
+.avg-margin .am-val.margin-warn{color:var(--warn);}
+.avg-margin .am-val.margin-bad{color:var(--danger);}
+.avg-margin .am-lock{display:inline-flex;align-items:center;gap:3px;font-size:10px;color:var(--ash);}
+.foot-actions{display:flex;gap:10px;flex:none;}
+.btn{font-family:inherit;font-size:13px;font-weight:650;border-radius:11px;padding:11px 20px;cursor:pointer;border:1px solid var(--line);}
+.btn.ghost{background:var(--white);color:var(--ash);}
+.btn.ghost:hover{background:#faf3f8;}
+.btn.proceed{background:var(--maroon);color:#fff;border-color:var(--maroon);display:inline-flex;align-items:center;gap:7px;}
+.btn.proceed:hover{background:#8c0036;}
+
+/* =========================================================
+   V2 — Shopping-bag tiles
+   ========================================================= */
+.tiles{margin:0 20px;display:flex;flex-direction:column;gap:12px;}
+.tile{
+  border:1px solid var(--line);border-radius:16px;padding:14px;
+  display:flex;gap:14px;background:var(--white);
+}
+.tile .t-thumb{width:64px;height:64px;border-radius:16px;flex:none;display:flex;align-items:center;justify-content:center;}
+.tile .t-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:9px;}
+.tile .t-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;}
+.tile .t-nm{font-family:"Space Grotesk",sans-serif;font-size:15px;font-weight:600;color:var(--ink);}
+.tile .t-cv{font-size:11.5px;color:var(--ash);}
+.tile .t-total{font-family:"Space Grotesk",sans-serif;font-size:16px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums;white-space:nowrap;}
+.tile .t-top-right{display:flex;align-items:center;gap:8px;flex:none;}
+.tile .lselect{max-width:100%;}
+.tile .t-controls{display:flex;align-items:center;gap:16px;flex-wrap:wrap;}
+.tile .stepper small{font-size:10px;color:var(--ash);font-family:"DM Mono",monospace;margin-left:6px;}
+/* V2 tile: SELL is the prominent number — bigger pill, bolder figure */
+.tile .t-controls .sell{padding:7px 12px;font-size:13px;}
+.tile .t-controls .sell input{width:62px;font-size:14px;font-weight:700;}
+.tile .t-controls .sell label{font-size:11px;}
+/* V2 tile: cost is tucked + quiet (de-emphasised, smaller, muted) */
+.private-row{
+  background:#faf7fb;border:1px dashed var(--line);border-radius:11px;
+  padding:6px 10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  font-size:11px;color:var(--ash);width:max-content;max-width:100%;
+}
+.tile[data-batched="false"] .t-controls,
+.tile[data-batched="false"] .private-row,
+.tile[data-batched="false"] .t-total{opacity:0.4;pointer-events:none;filter:grayscale(0.4);}
+.sticky-total{
+  background:var(--maroon);color:#fff;border-radius:14px;
+  margin:16px 20px;padding:14px 18px;
+  display:flex;align-items:center;justify-content:space-between;
+}
+.sticky-total .sl{font-family:"DM Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;opacity:0.85;}
+.sticky-total .sv{font-family:"Space Grotesk",sans-serif;font-size:24px;font-weight:700;font-variant-numeric:tabular-nums;}
+
+/* =========================================================
+   DEAL-LEVEL SECTIONS (shared, in the scrolling middle)
+   note  +  things-to-do  — appear in ALL variants
+   ========================================================= */
+.deal-section{margin:16px 20px 0;}
+.deal-section .ds-title{
+  font-family:"DM Mono",monospace;font-size:10px;text-transform:uppercase;
+  letter-spacing:0.08em;color:var(--ash);margin-bottom:9px;
+  display:flex;align-items:center;gap:6px;
+}
+.deal-section .ds-title .opt{color:var(--brand-soft);text-transform:none;letter-spacing:0;font-size:10px;}
+
+/* NOTE — editable textarea in the deal's voice (deal_change.change_note) */
+.note-area{
+  width:100%;min-height:64px;resize:vertical;
+  border:1px solid var(--line);border-radius:13px;
+  padding:11px 13px;font-family:inherit;font-size:13.5px;line-height:1.5;
+  color:var(--ink);background:var(--white);
+}
+.note-area::placeholder{color:var(--ash);}
+.note-area:focus{outline:none;border-color:var(--brand-2);box-shadow:0 0 0 3px rgba(227,11,93,0.12);}
+
+/* THINGS-TO-DO — editable task list (matches the card's THINGS styling) */
+.todo-list{display:flex;flex-direction:column;gap:8px;}
+.todo{
+  display:flex;align-items:center;gap:11px;
+  border:1px solid var(--line);border-radius:12px;padding:9px 12px;background:var(--white);
+}
+.todo .tcheck{
+  width:20px;height:20px;border-radius:6px;flex:none;cursor:pointer;
+  border:1.5px solid var(--line);background:var(--white);
+  display:flex;align-items:center;justify-content:center;color:#fff;
+}
+.todo .tcheck svg{display:none;}
+.todo.done .tcheck{background:var(--ok);border-color:var(--ok);}
+.todo.done .tcheck svg{display:block;}
+.todo.done .ttitle{color:var(--ash);text-decoration:line-through;}
+.todo .ttitle{flex:1;min-width:0;font-size:13.5px;color:var(--ink);}
+.todo .assignee{
+  display:inline-flex;align-items:center;gap:6px;flex:none;
+  background:var(--brand-tint);border-radius:999px;padding:3px 9px 3px 3px;
+  font-size:11.5px;color:var(--maroon);font-weight:600;
+}
+.todo .assignee .ini{
+  width:20px;height:20px;border-radius:999px;flex:none;
+  background:var(--brand);color:#fff;font-size:9.5px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;
+  font-family:"Space Grotesk",sans-serif;
+}
+/* add-a-task composer */
+.todo-add{
+  display:flex;align-items:center;gap:9px;margin-top:9px;
+  border:1px dashed var(--brand-soft);border-radius:12px;padding:8px 10px;background:var(--white);
+}
+.todo-add .add-ico{
+  width:22px;height:22px;border-radius:999px;flex:none;color:var(--brand);
+  display:flex;align-items:center;justify-content:center;
+}
+.todo-add input.new-task{
+  flex:1;min-width:0;border:none;background:transparent;outline:none;
+  font-family:inherit;font-size:13.5px;color:var(--ink);
+}
+.todo-add input.new-task::placeholder{color:var(--ash);}
+.todo-add select.new-assignee{
+  flex:none;border:1px solid var(--line);border-radius:9px;background:var(--white);
+  padding:6px 8px;font-family:inherit;font-size:12px;color:var(--maroon);cursor:pointer;
+}
+.todo-add select.new-assignee:focus{outline:none;border-color:var(--brand-2);box-shadow:0 0 0 2px rgba(227,11,93,0.12);}
+.todo-add button.add-task-btn{
+  flex:none;border:none;cursor:pointer;border-radius:9px;
+  background:var(--brand-2);color:#fff;font-family:inherit;font-size:12px;font-weight:650;
+  padding:7px 12px;
+}
+.todo-add button.add-task-btn:hover{background:var(--brand);}
+
+/* =========================================================
+   V3 — Dense order-sheet
+   ========================================================= */
+body[data-variant="v3"] .ledger .lrow{padding:7px 12px;}
+body[data-variant="v3"] .ledger .lhead{padding:7px 12px;}
+body[data-variant="v3"] .ledger .prod .nm{font-size:12.5px;}
+body[data-variant="v3"] .ledger .private-cap{padding:5px 7px;gap:6px;font-size:10.5px;}
+body[data-variant="v3"] .ledger .private-cap input.cost{width:50px;}
+body[data-variant="v3"] .ledger .sell{padding:4px 7px;font-size:11px;}
+body[data-variant="v3"] .summary{padding:10px 14px;}
+
+/* responsive: ~390px */
+@media (max-width:760px){
+  body{padding:54px 8px 14px;}
+  .modal{border-radius:18px;max-height:90vh;}
+  .lhead{display:none;}
+  .lrow{grid-template-columns:44px 1fr;gap:8px 10px;row-gap:10px;}
+  .lrow .prod{grid-column:2;}
+  .lrow .batchcell{grid-column:1 / -1;}
+  .lrow .qty{grid-column:1 / -1;}
+  .lrow .priceGroup{grid-column:1 / -1;}
+  .lrow .lt{grid-column:1 / -1;text-align:left;}
+  .lrow .lt::before{content:"Line total  ";font-size:10px;color:var(--ash);text-transform:uppercase;}
+  .lrow .rm{grid-column:1 / -1;justify-self:start;}
+  .tile{flex-direction:column;}
+  .tile .t-thumb{width:48px;height:48px;}
+  .terms-grid{flex-direction:column;}
+  .field input,.field select{width:100%;}
+  /* footer stacks: figures over actions so Proceed never gets clipped */
+  .m-foot{flex-direction:column;align-items:stretch;gap:10px;}
+  .foot-actions{justify-content:flex-end;}
+  .todo-add{flex-wrap:wrap;}
+  .todo-add input.new-task{flex:1 1 100%;order:-1;}
+}
+</style>
+</head>
+<body data-variant="v2">
+
+  <!-- A.4 VARIATION SWITCHER -->
+  <div class="switcher" role="tablist">
+    <button data-v="v1">V1</button>
+    <button data-v="v2" class="active">V2</button>
+    <button data-v="v3">V3</button>
+  </div>
+  <div class="caption" id="caption">Shopping-bag tiles</div>
+
+  <!-- =================================================================
+       Field map → DealForm.tsx
+       order.dealNo       → deal.deal_number (HS-PO id)
+       order.version      → deal.version
+       order.side         → viewer party (seller|buyer)
+       order.recipient    → counterparty (deal.seller_org / deal.buyer_org)
+       line.name          → deal_line_item.product_name / catalog_product.name
+       line.cultivar      → catalog_product.cultivar_type
+       line.packGrams     → catalog_product.pack_size_grams
+       line.batches[]     → batch[] (code=batch.batch_code, stock=batch.available_packs,
+                             thc=batch.thc_pct, cbd=batch.cbd_pct, exp=batch.expiry)
+       line.chosen        → deal_line_item.batch_id (REQUIRED)
+       line.packs         → deal_line_item.quantity_packs
+       line.cost          → deal_line_item.unit_cost   (PRIVATE / owner-only) — kept as a quiet
+                             per-line capsule; it FEEDS the deal-level Avg. margin, never shown per line
+       line.sell          → deal_line_item.unit_price  (buyer-visible) — the prominent number per line
+       (avg margin)       → derived deal-level = Σ(sellTotal−costTotal) / Σ(sellTotal) over priced lines
+                             (PRIVATE / owner-only) — the ONLY margin shown anywhere, in the pinned footer
+       order.freeDelivery → deal.free_delivery (bool)
+       order.shippingFee  → deal.shipping_fee (0 when free, else € amount)
+       order.dueDate      → deal.due_date
+       order.payment      → deal.payment_terms
+       order.note         → deal.note / deal_change.change_note  (deal-level note, all variants)
+       order.todos[]      → deal_task[] (title=deal_task.title, assignee=deal_task.assigned_to,
+                             done=deal_task.completed) — editable; the form is the compose surface
+  ================================================================= -->
+
+  <!-- ===================== V1 — LEDGER ===================== -->
+  <div class="variant v1">
+    <div class="modal">
+      <!-- TOP band (pinned): title + bag + recipient + product search -->
+      <div class="m-top">
+        <div class="m-head">
+          <div>
+            <div class="ttl display">Edit deal · <span class="mono" id="dealno-1">DEAL-0481</span></div>
+            <div class="sub">Order from <b>Greenleaf Growers GmbH</b> · v3
+              <span class="bag-chip dmmono"><span class="bag-ico" aria-hidden="true"></span> <span id="bag-1">3</span> items</span>
+            </div>
+          </div>
+          <button class="x" title="Close">✕</button>
+        </div>
+
+        <!-- recipient (deal.seller_org) -->
+        <div class="recipient">
+          <div class="av display">GG</div>
+          <div class="who">
+            <div class="n">Greenleaf Growers GmbH</div>
+            <div class="c">Supplier · this order</div>
+          </div>
+          <div class="lock"><span class="lock-ico" aria-hidden="true"></span> Assigned</div>
+        </div>
+
+        <!-- search / add product (catalog_product lookup) -->
+        <div class="searchwrap" data-picker>
+          <span class="ico" aria-hidden="true"></span>
+          <input class="searchbar" placeholder="Add a product — search catalogue or type a new name…" />
+          <div class="picker"><!-- options injected + filtered by JS --></div>
+        </div>
+      </div>
+
+      <!-- MIDDLE band (scrolls): lines + terms + note + things -->
+      <div class="m-scroll">
+        <!-- LEDGER -->
+        <div class="ledger" id="ledger-1" style="margin-top:14px">
+          <div class="lhead">
+            <div></div><div>Product</div><div>Batch (required)</div>
+            <div>Qty · packs</div><div>Pricing (private)</div><div class="r">Line total</div><div></div>
+          </div>
+          <!-- rows injected by JS -->
+        </div>
+
+        <button class="add-custom">＋ Add a custom product</button>
+
+        <!-- deal terms -->
+        <div class="terms-block">
+          <div class="tb-title">Deal terms</div>
+          <div class="terms-grid">
+            <div class="field">
+              <label>Free delivery</label>
+              <div class="toggle on" data-toggle><span class="box"><svg width="11" height="11" viewBox="0 0 12 12"><path d="M2 6l3 3 5-6" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span> Yes</div>
+            </div>
+            <div class="field ship-fee-field" hidden>
+              <label>Shipping fee</label>
+              <div class="fee-wrap">€<input class="ship-fee" type="number" min="0" step="1" value="0" /></div>
+            </div>
+            <div class="field"><label>Due date</label><input value="02 Jul 2026" /></div>
+            <div class="field"><label>Payment terms</label>
+              <select><option>Net 30</option><option>Net 14</option><option>Net 60</option><option>On delivery</option></select>
+            </div>
+          </div>
+        </div>
+
+        <!-- deal-level note + things-to-do (JS-injected, shared across variants) -->
+        <div data-deal-sections></div>
+      </div>
+
+      <!-- BOTTOM band (pinned): totals + avg margin + Proceed -->
+      <div class="m-foot">
+        <div class="foot-figures">
+          <div class="foot-totals">
+            <div class="total-pill">
+              <span class="tl">Deal total</span>
+              <span class="tv" data-foottotal>—</span>
+            </div>
+            <span class="ft-mini">Subtotal <b data-sub>—</b> · Shipping <b data-ship>Free</b></span>
+          </div>
+          <span class="avg-margin">
+            <span class="am-lbl">Avg. margin</span>
+            <span class="am-val" data-avgmargin>—</span>
+            <span class="am-lock"><span class="lock-ico" aria-hidden="true"></span> only you</span>
+          </span>
+        </div>
+        <div class="foot-actions">
+          <button class="btn ghost">Cancel</button>
+          <button class="btn proceed">Proceed <span>→</span></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== V2 — SHOPPING-BAG TILES (THE PICK) ===================== -->
+  <div class="variant v2">
+    <div class="modal">
+      <!-- TOP band (pinned): title + bag + recipient + product search -->
+      <div class="m-top">
+        <div class="m-head">
+          <div>
+            <div class="ttl display">Edit deal · <span class="mono">DEAL-0481</span></div>
+            <div class="sub">Order from <b>Greenleaf Growers GmbH</b> · v3
+              <span class="bag-chip dmmono"><span class="bag-ico" aria-hidden="true"></span> <span id="bag-2">3</span> items</span>
+            </div>
+          </div>
+          <button class="x" title="Close">✕</button>
+        </div>
+
+        <div class="recipient">
+          <div class="av display">GG</div>
+          <div class="who"><div class="n">Greenleaf Growers GmbH</div><div class="c">Supplier · this order</div></div>
+          <div class="lock"><span class="lock-ico" aria-hidden="true"></span> Assigned</div>
+        </div>
+
+        <div class="searchwrap" data-picker>
+          <span class="ico" aria-hidden="true"></span>
+          <input class="searchbar" placeholder="Add a product — search catalogue or type a new name…" />
+          <div class="picker"><!-- options injected + filtered by JS --></div>
+        </div>
+      </div>
+
+      <!-- MIDDLE band (scrolls): tiles + terms + note + things -->
+      <div class="m-scroll">
+        <div class="tiles" id="tiles-2" style="margin-top:14px"><!-- tiles injected by JS --></div>
+
+        <button class="add-custom">＋ Add a custom product</button>
+
+        <div class="terms-block">
+          <div class="tb-title">Deal terms</div>
+          <div class="terms-grid">
+            <div class="field"><label>Free delivery</label>
+              <div class="toggle on" data-toggle><span class="box"><svg width="11" height="11" viewBox="0 0 12 12"><path d="M2 6l3 3 5-6" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span> Yes</div>
+            </div>
+            <div class="field ship-fee-field" hidden>
+              <label>Shipping fee</label>
+              <div class="fee-wrap">€<input class="ship-fee" type="number" min="0" step="1" value="0" /></div>
+            </div>
+            <div class="field"><label>Due date</label><input value="02 Jul 2026" /></div>
+            <div class="field"><label>Payment terms</label>
+              <select><option>Net 30</option><option>Net 14</option><option>Net 60</option><option>On delivery</option></select>
+            </div>
+          </div>
+        </div>
+
+        <!-- deal-level note + things-to-do (JS-injected, shared across variants) -->
+        <div data-deal-sections></div>
+      </div>
+
+      <!-- BOTTOM band (pinned, Shopping-Bag style): totals + avg margin + Proceed -->
+      <div class="m-foot">
+        <div class="foot-figures">
+          <div class="foot-totals">
+            <div class="total-pill"><span class="tl">Deal total</span><span class="tv" data-foottotal>—</span></div>
+            <span class="ft-mini">Subtotal <b data-sub>—</b> · Shipping <b data-ship>Free</b></span>
+          </div>
+          <span class="avg-margin">
+            <span class="am-lbl">Avg. margin</span>
+            <span class="am-val" data-avgmargin>—</span>
+            <span class="am-lock"><span class="lock-ico" aria-hidden="true"></span> only you</span>
+          </span>
+        </div>
+        <div class="foot-actions">
+          <button class="btn ghost">Cancel</button>
+          <button class="btn proceed">Proceed <span>→</span></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== V3 — DENSE ORDER-SHEET ===================== -->
+  <div class="variant v3">
+    <div class="modal">
+      <!-- TOP band (pinned) -->
+      <div class="m-top">
+        <div class="m-head">
+          <div>
+            <div class="ttl display">Edit deal · <span class="mono">DEAL-0481</span></div>
+            <div class="sub">Order from <b>Greenleaf Growers GmbH</b> · v3
+              <span class="bag-chip dmmono"><span class="bag-ico" aria-hidden="true"></span> <span id="bag-3">3</span> items</span>
+            </div>
+          </div>
+          <button class="x" title="Close">✕</button>
+        </div>
+
+        <div class="recipient">
+          <div class="av display">GG</div>
+          <div class="who"><div class="n">Greenleaf Growers GmbH</div><div class="c">Supplier · this order</div></div>
+          <div class="lock"><span class="lock-ico" aria-hidden="true"></span> Assigned</div>
+        </div>
+
+        <div class="searchwrap" data-picker>
+          <span class="ico" aria-hidden="true"></span>
+          <input class="searchbar" placeholder="Add a product — search catalogue or type a new name…" />
+          <div class="picker"><!-- options injected + filtered by JS --></div>
+        </div>
+      </div>
+
+      <!-- MIDDLE band (scrolls) -->
+      <div class="m-scroll">
+        <div class="ledger" id="ledger-3" style="margin-top:14px">
+          <div class="lhead">
+            <div></div><div>Product</div><div>Batch (req.)</div>
+            <div>Qty</div><div>Pricing (private)</div><div class="r">Total</div><div></div>
+          </div>
+        </div>
+
+        <button class="add-custom">＋ Add a custom product</button>
+
+        <div class="terms-block">
+          <div class="tb-title">Deal terms</div>
+          <div class="terms-grid">
+            <div class="field"><label>Free delivery</label>
+              <div class="toggle on" data-toggle><span class="box"><svg width="11" height="11" viewBox="0 0 12 12"><path d="M2 6l3 3 5-6" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span> Yes</div>
+            </div>
+            <div class="field ship-fee-field" hidden>
+              <label>Shipping fee</label>
+              <div class="fee-wrap">€<input class="ship-fee" type="number" min="0" step="1" value="0" /></div>
+            </div>
+            <div class="field"><label>Due date</label><input value="02 Jul 2026" /></div>
+            <div class="field"><label>Payment</label>
+              <select><option>Net 30</option><option>Net 14</option><option>Net 60</option><option>On delivery</option></select>
+            </div>
+          </div>
+        </div>
+
+        <!-- deal-level note + things-to-do (JS-injected, shared across variants) -->
+        <div data-deal-sections></div>
+      </div>
+
+      <!-- BOTTOM band (pinned) -->
+      <div class="m-foot">
+        <div class="foot-figures">
+          <div class="foot-totals">
+            <div class="total-pill"><span class="tl">Deal total</span><span class="tv" data-foottotal>—</span></div>
+            <span class="ft-mini">Subtotal <b data-sub>—</b> · Shipping <b data-ship>Free</b></span>
+          </div>
+          <span class="avg-margin">
+            <span class="am-lbl">Avg. margin</span>
+            <span class="am-val" data-avgmargin>—</span>
+            <span class="am-lock"><span class="lock-ico" aria-hidden="true"></span> only you</span>
+          </span>
+        </div>
+        <div class="foot-actions">
+          <button class="btn ghost">Cancel</button>
+          <button class="btn proceed">Proceed <span>→</span></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* =========================================================
+   C.7  FORM DUMMY DATA  (3 products, 2-3 batches each)
+   ========================================================= */
+const order = {
+  dealNo:"DEAL-0481", version:"v3", side:"seller",
+  recipient:{ name:"Greenleaf Growers GmbH", initials:"GG", role:"Supplier · this order" },
+  freeDelivery:true, shippingFee:0, dueDate:"02 Jul 2026", payment:"Net 30",
+  /* deal-level note → deal.note / deal_change.change_note (pre-filled in the deal's voice) */
+  note:"Certs attached, all batches lab-verified — happy to adjust counts if you need more.",
+  /* deal-level things-to-do → deal_task[] (editable; the form is the compose surface) */
+  todos:[
+    { title:"Send updated COA pack to Stonebridge", who:"You",        ini:"YOU", done:true  },
+    { title:"Confirm pallet count with logistics",  who:"Mara Voss",  ini:"MV",  done:false },
+    { title:"Lock pickup window for 02 Jul",         who:"Tom Reuter", ini:"TR",  done:false },
+  ],
+  lines:[
+    { name:"Northern Lights", cultivar:"Indica", tint:"indica", packGrams:1000,
+      packs:2, sell:"7.20", cost:"5.50",
+      batches:[
+        {code:"LOT-0425", stock:380, thc:22.4, cbd:0.8, exp:"03/26"},
+        {code:"LOT-0419", stock:120, thc:21.1, cbd:0.9, exp:"01/26"},
+        {code:"LOT-0402", stock:60,  thc:23.0, cbd:0.7, exp:"11/25"},
+      ], chosen:"LOT-0425" },
+    { name:"Sour Diesel", cultivar:"Sativa", tint:"sativa", packGrams:1000,
+      packs:3, sell:"8.10", cost:"5.60",
+      batches:[
+        {code:"LOT-0231", stock:210, thc:24.1, cbd:0.3, exp:"05/26"},
+        {code:"LOT-0228", stock:95,  thc:23.4, cbd:0.4, exp:"02/26"},
+      ], chosen:"LOT-0231" },
+    { name:"Wedding Cake", cultivar:"Hybrid", tint:"hybrid", packGrams:1000,
+      packs:0, sell:"6.40", cost:"4.30",
+      batches:[
+        {code:"LOT-0188", stock:140, thc:20.6, cbd:1.1, exp:"04/26"},
+        {code:"LOT-0177", stock:50,  thc:19.9, cbd:1.3, exp:"12/25"},
+      ], chosen:null },
+  ],
+};
+
+/* catalogue the search picker offers (catalog_product lookup) */
+const catalog = [
+  { name:"Northern Lights", tint:"indica", cultivar:"Indica", batches:3 },
+  { name:"Sour Diesel",     tint:"sativa", cultivar:"Sativa", batches:2 },
+  { name:"Wedding Cake",    tint:"hybrid", cultivar:"Hybrid", batches:2 },
+];
+
+/* assignee roster for the things-to-do picker (deal_task.assigned_to) */
+const team = [
+  { who:"You",        ini:"YOU" },
+  { who:"Mara Voss",  ini:"MV"  },
+  { who:"Tom Reuter", ini:"TR"  },
+  { who:"Ines Bauer", ini:"IB"  },
+];
+const iniFor = name => (team.find(t=>t.who===name)||{}).ini
+  || name.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();
+
+/* ---------- helpers ---------- */
+const tintClass = t => "grad-"+t;
+const leafSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="#fff"><path d="M12 2c4 4 8 6 8 11a8 8 0 11-16 0c0-5 4-7 8-11z" opacity=".95"/></svg>';
+/* shared currentColor icon set — same style as lockSvg, inherits --ash */
+const lockSvg   = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></svg>';
+const searchSvg = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>';
+const bagSvg    = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8h12l-1 12H7L6 8z"/><path d="M9 8V6a3 3 0 016 0v2"/></svg>';
+const trashSvg  = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2"/><path d="M6 7l1 13h10l1-13"/><path d="M10 11v6M14 11v6"/></svg>';
+const chevronSvg= '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>';
+const addSvg    = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
+const checkSvg  = '<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-6" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+function eur(n){ return "€"+n.toLocaleString("en-US",{maximumFractionDigits:0}); }
+function batchByCode(line, code){ return line.batches.find(b=>b.code===code); }
+function lineGrams(line){ return line.packs * line.packGrams; }       // grams
+function lineKg(line){ return (lineGrams(line)/1000); }
+function lineTotal(line){                                              // sell total, priced lines only
+  if(!line.chosen || line.packs<=0) return null;
+  return lineKg(line) * 1000 * parseFloat(line.sell);                 // kg→g × €/g (buyer-visible)
+}
+function lineCostTotal(line){                                          // cost total, priced lines only (PRIVATE)
+  if(!line.chosen || line.packs<=0) return null;
+  return lineKg(line) * 1000 * parseFloat(line.cost);                 // feeds the deal-level avg margin only
+}
+/* colour by margin health — shared by the deal-level Avg. margin (the ONLY margin shown).
+   green healthy (>=25%), amber thin (<25%), red zero/loss (<=0). */
+function marginClass(pct){ return pct<=0 ? "margin-bad" : (pct<25 ? "margin-warn" : "margin-good"); }
+
+/* DEAL-LEVEL average margin: Σ(sellTotal − costTotal) / Σ(sellTotal) over priced lines.
+   Returns null when no line is priced (footer shows "—"). */
+function dealAvgMargin(){
+  const priced = order.lines.filter(l=>l.chosen && l.packs>0);
+  const sell = priced.reduce((s,l)=> s + lineTotal(l), 0);
+  if(sell<=0) return null;
+  const cost = priced.reduce((s,l)=> s + lineCostTotal(l), 0);
+  return Math.round(((sell - cost) / sell) * 100);
+}
+function batchOptionLabel(b){
+  return `${b.code} · ${b.stock} packs · THC ${b.thc} / CBD ${b.cbd} · exp ${b.exp}`;
+}
+
+/* ---------- LEDGER row builder (V1 + V3) ---------- */
+function buildLedgerRow(line, idx){
+  const row=document.createElement("div");
+  row.className="lrow";
+  const batched = !!line.chosen;
+  row.dataset.batched = batched;
+  const b = batched ? batchByCode(line,line.chosen) : line.batches[0];
+
+  const batchOptions = line.batches.map(bt=>
+    `<option value="${bt.code}" ${bt.code===line.chosen?"selected":""}>${batchOptionLabel(bt)}</option>`).join("");
+
+  row.innerHTML = `
+    <div class="thumb ${tintClass(line.tint)}">${leafSvg}</div>
+
+    <div class="prod">
+      <div class="nm">${line.name}</div>
+      <div class="cv">${line.cultivar} · ${line.packGrams/1000} kg pack</div>
+    </div>
+
+    <div class="batchcell">
+      <select class="lselect" required>
+        <option value="" disabled ${batched?"":"selected"}>Pick a batch…</option>
+        ${batchOptions}
+      </select>
+      <div class="lab" ${batched?"":'style="display:none"'}>
+        <span class="chip thc">THC ${b.thc}</span><span class="chip cbd">CBD ${b.cbd}</span>
+      </div>
+      ${batched?"":'<div class="batch-hint">pick a batch to price this line</div>'}
+    </div>
+
+    <div class="qty">
+      <div class="stepper">
+        <button class="dec" ${line.packs<=1?"disabled":""}>−</button>
+        <span class="val">${line.packs}</span>
+        <button class="inc">+</button>
+      </div>
+      <div class="packs">${line.packs} packs · ${lineKg(line)} kg</div>
+    </div>
+
+    <div class="priceGroup">
+      <span class="sell"><label>Sell</label> €<input class="sellin" value="${line.sell}" /> <span class="u">/g</span></span>
+      <div class="private-cap">
+        <span class="lk">${lockSvg} only you</span>
+        cost <input class="cost" value="${line.cost}" /> <span class="unit">€/g</span>
+      </div>
+    </div>
+
+    <div class="lt"><div class="linetotal">${lineTotal(line)!=null?eur(lineTotal(line)):"—"}</div></div>
+
+    <button class="rm" title="Remove line">${trashSvg}</button>
+  `;
+  wireRow(row, line, idx, "ledger");
+  return row;
+}
+
+/* ---------- TILE builder (V2) ---------- */
+function buildTile(line, idx){
+  const tile=document.createElement("div");
+  tile.className="tile";
+  const batched = !!line.chosen;
+  tile.dataset.batched = batched;
+  const b = batched ? batchByCode(line,line.chosen) : line.batches[0];
+
+  // potency split widths
+  const tot = b.thc + b.cbd;
+  const thcW = Math.round((b.thc/tot)*100), cbdW = 100-thcW;
+
+  const batchOptions = line.batches.map(bt=>
+    `<option value="${bt.code}" ${bt.code===line.chosen?"selected":""}>${batchOptionLabel(bt)}</option>`).join("");
+
+  tile.innerHTML = `
+    <div class="t-thumb ${tintClass(line.tint)}">${leafSvg}</div>
+    <div class="t-body">
+      <div class="t-top">
+        <div>
+          <div class="t-nm">${line.name}</div>
+          <div class="t-cv">${line.cultivar} · ${line.packGrams/1000} kg pack</div>
+        </div>
+        <div class="t-top-right">
+          <div class="t-total linetotal">${lineTotal(line)!=null?eur(lineTotal(line)):"—"}</div>
+          <button class="rm" title="Remove line">${trashSvg}</button>
+        </div>
+      </div>
+
+      <select class="lselect" required>
+        <option value="" disabled ${batched?"":"selected"}>Pick a batch…</option>
+        ${batchOptions}
+      </select>
+      <div class="lab" ${batched?"":'style="display:none"'}>
+        <span class="chip thc">THC ${b.thc}</span><span class="chip cbd">CBD ${b.cbd}</span>
+      </div>
+      <div class="potbar" ${batched?"":'style="display:none"'}>
+        <div class="seg-thc" style="width:${thcW}%"></div><div class="seg-cbd" style="width:${cbdW}%"></div>
+      </div>
+      ${batched?"":'<div class="batch-hint">pick a batch to price this line</div>'}
+
+      <div class="t-controls">
+        <div class="stepper">
+          <button class="dec" ${line.packs<=1?"disabled":""}>−</button>
+          <span class="val">${line.packs}</span>
+          <button class="inc">+</button>
+          <small>${line.packs} packs · ${lineKg(line)} kg</small>
+        </div>
+        <span class="sell" style="margin-left:auto"><label>Sell</label> €<input class="sellin" value="${line.sell}" /> <span class="u">/g</span></span>
+      </div>
+
+      <div class="private-row">
+        <span class="lk" style="display:inline-flex;align-items:center;gap:3px;font-size:10px">${lockSvg} only you</span>
+        your cost <input class="cost" value="${line.cost}" style="width:58px;border:1px solid var(--line);border-radius:7px;padding:4px 6px;font-family:'DM Mono',monospace;font-size:12px" /> €/g
+      </div>
+    </div>
+  `;
+  wireRow(tile, line, idx, "tile");
+  return tile;
+}
+
+/* ---------- wire interactions for one row/tile ---------- */
+function wireRow(el, line, idx, kind){
+  const sel = el.querySelector(".lselect");
+  const dec = el.querySelector(".dec");
+  const inc = el.querySelector(".inc");
+  const rm  = el.querySelector(".rm");
+  const costIn = el.querySelector(".cost");
+  const sellIn = el.querySelector(".sellin");
+
+  // batch select → must pick a batch
+  sel.addEventListener("change", e=>{
+    line.chosen = e.target.value;
+    refreshAll();
+  });
+  // stepper — '−' is disabled at qty 1; never let packs drop to 0
+  inc.addEventListener("click", ()=>{ line.packs++; refreshAll(); });
+  dec.addEventListener("click", ()=>{
+    if(line.packs<=1) return;          // disabled at 1; min qty stays 1
+    line.packs--;
+    refreshAll();
+  });
+  // remove — the ONE delete control: drop the line entirely
+  if(rm) rm.addEventListener("click", ()=>{ order.lines.splice(idx,1); refreshAll(); });
+  // cost edit → recompute margin + totals
+  costIn.addEventListener("input", e=>{ line.cost=e.target.value||"0"; refreshAll(); });
+  // sell edit → back-solve margin + totals
+  sellIn.addEventListener("input", e=>{ line.sell=e.target.value||"0"; refreshAll(); });
+}
+
+/* ---------- totals ---------- */
+function recomputeSummary(){
+  const priced = order.lines.filter(l=>l.chosen && l.packs>0);
+  const sub = priced.reduce((s,l)=> s + lineTotal(l), 0);
+  const hasAny = priced.length>0;
+
+  // shipping fee: 0 when free delivery is on
+  const shippingFee = order.freeDelivery ? 0 : (parseFloat(order.shippingFee)||0);
+
+  const subTxt   = hasAny ? eur(sub) : "—";
+  const totalTxt = hasAny ? eur(sub + shippingFee) : "—";
+
+  // three honest shipping states: — (no priced line) / Free / €amount
+  let shipTxt;
+  if(!hasAny)               shipTxt = "—";
+  else if(order.freeDelivery) shipTxt = "Free";
+  else                      shipTxt = eur(shippingFee);
+
+  document.querySelectorAll("[data-sub]").forEach(n=> n.textContent=subTxt);
+  document.querySelectorAll("[data-ship]").forEach(n=> n.textContent=shipTxt);
+  document.querySelectorAll("[data-total]").forEach(n=> n.textContent=totalTxt);
+  document.querySelectorAll("[data-foottotal]").forEach(n=> n.textContent=totalTxt);
+
+  // deal-level Avg. margin — the ONLY margin shown; "—" until a line is priced, coloured by health
+  const avg = dealAvgMargin();
+  document.querySelectorAll("[data-avgmargin]").forEach(n=>{
+    n.classList.remove("margin-good","margin-warn","margin-bad");
+    if(avg===null){ n.textContent="—"; return; }
+    n.textContent = (avg>0?"+":"") + avg + "%";
+    n.classList.add(marginClass(avg));
+  });
+
+  const itemCount = order.lines.filter(l=>l.chosen && l.packs>0).length;
+  ["bag-1","bag-2","bag-3"].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=itemCount; });
+}
+
+/* ---------- full render ---------- */
+function renderLedger(containerId){
+  const c=document.getElementById(containerId);
+  if(!c) return;
+  c.querySelectorAll(".lrow").forEach(r=>r.remove());
+  order.lines.forEach((line,i)=> c.appendChild(buildLedgerRow(line,i)));
+}
+function renderTiles(){
+  const c=document.getElementById("tiles-2");
+  if(!c) return;
+  c.innerHTML="";
+  order.lines.forEach((line,i)=> c.appendChild(buildTile(line,i)));
+}
+/* ---------- deal-level note + things-to-do (shared across all variants) ---------- */
+/* one assignee-chip block */
+function assigneeChip(t){
+  return `<span class="assignee"><span class="ini">${t.ini}</span>${t.who}</span>`;
+}
+/* the things-to-do list markup (built from order.todos) */
+function todoListHTML(){
+  const rows = order.todos.map((t,i)=>
+    `<div class="todo ${t.done?"done":""}" data-todo="${i}">
+       <span class="tcheck" data-toggle-todo="${i}">${checkSvg}</span>
+       <span class="ttitle">${t.title}</span>
+       ${assigneeChip(t)}
+     </div>`).join("");
+  const options = team.map(m=>`<option value="${m.who}">${m.who}</option>`).join("");
+  return `
+    <div class="todo-list">${rows}</div>
+    <div class="todo-add">
+      <span class="add-ico" aria-hidden="true">${addSvg}</span>
+      <input class="new-task" placeholder="Add a task…" />
+      <select class="new-assignee" title="Assign to">${options}</select>
+      <button class="add-task-btn" type="button">Add</button>
+    </div>`;
+}
+/* render note + things into every [data-deal-sections] placeholder, then wire them */
+function renderDealSections(){
+  document.querySelectorAll("[data-deal-sections]").forEach(host=>{
+    host.innerHTML = `
+      <div class="deal-section note-section">
+        <div class="ds-title">Note to Stonebridge <span class="opt">(optional)</span></div>
+        <textarea class="note-area" placeholder="Add a note for Stonebridge — context, certs, flexibility on counts…"></textarea>
+      </div>
+      <div class="deal-section things-section">
+        <div class="ds-title">Things to do</div>
+        ${todoListHTML()}
+      </div>`;
+
+    // note textarea ↔ order.note
+    const ta = host.querySelector(".note-area");
+    ta.value = order.note;
+    ta.addEventListener("input", e=>{
+      order.note = e.target.value;
+      // mirror to the other variants' note fields (don't steal focus from this one)
+      document.querySelectorAll(".note-area").forEach(n=>{ if(n!==e.target) n.value=order.note; });
+    });
+
+    // checkbox toggle ↔ order.todos[i].done
+    host.querySelectorAll("[data-toggle-todo]").forEach(box=>{
+      box.addEventListener("click", ()=>{
+        const i = +box.dataset.toggleTodo;
+        order.todos[i].done = !order.todos[i].done;
+        renderDealSections();      // re-render keeps all variants in sync
+      });
+    });
+
+    // add-a-task composer
+    const newTask = host.querySelector(".new-task");
+    const newWho  = host.querySelector(".new-assignee");
+    const addBtn  = host.querySelector(".add-task-btn");
+    const addTask = ()=>{
+      const title = newTask.value.trim();
+      if(!title) return;
+      const who = newWho.value;
+      order.todos.push({ title, who, ini:iniFor(who), done:false });
+      renderDealSections();
+    };
+    addBtn.addEventListener("click", addTask);
+    newTask.addEventListener("keydown", e=>{ if(e.key==="Enter") addTask(); });
+  });
+}
+
+function refreshAll(){
+  renderLedger("ledger-1");
+  renderLedger("ledger-3");
+  renderTiles();
+  renderDealSections();
+  recomputeSummary();
+}
+
+/* ---------- variation switcher ---------- */
+const captions = { v1:"Searchable line ledger", v2:"Shopping-bag tiles", v3:"Dense order-sheet" };
+document.querySelectorAll(".switcher button").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    const v=btn.dataset.v;
+    document.body.dataset.variant=v;
+    document.querySelectorAll(".switcher button").forEach(b=>b.classList.toggle("active", b===btn));
+    document.getElementById("caption").textContent=captions[v];
+  });
+});
+
+/* ---------- deal-terms: Free-delivery toggle + reactive shipping fee ---------- */
+/* push order.freeDelivery / order.shippingFee onto every variant's controls,
+   reveal the fee input only when delivery is NOT free, then recompute. */
+function syncShipping(){
+  document.querySelectorAll("[data-toggle]").forEach(t=>{
+    t.classList.toggle("on", order.freeDelivery);
+    t.lastChild.textContent = order.freeDelivery ? " Yes" : " No";
+  });
+  document.querySelectorAll(".ship-fee-field").forEach(f=>{ f.hidden = order.freeDelivery; });
+  document.querySelectorAll(".ship-fee").forEach(i=>{ i.value = order.shippingFee; });
+  recomputeSummary();
+}
+
+document.querySelectorAll("[data-toggle]").forEach(t=>{
+  t.addEventListener("click", ()=>{
+    order.freeDelivery = !order.freeDelivery;   // flip the shared state
+    syncShipping();
+  });
+});
+document.querySelectorAll(".ship-fee").forEach(input=>{
+  input.addEventListener("input", e=>{
+    order.shippingFee = parseFloat(e.target.value)||0;
+    // mirror to the other variants' fee inputs without losing focus on this one
+    document.querySelectorAll(".ship-fee").forEach(i=>{ if(i!==e.target) i.value=order.shippingFee; });
+    recomputeSummary();
+  });
+});
+
+/* ---------- search picker (shared across V1/V2/V3) ---------- */
+/* build the option rows for a given query; empty query shows all. */
+function pickerOptionsHTML(q){
+  const query = (q||"").trim().toLowerCase();
+  const matches = catalog.filter(p=> p.name.toLowerCase().includes(query));
+  const rows = matches.map(p=>
+    `<div class="opt" data-name="${p.name}">
+       <span class="dot ${tintClass(p.tint)}"></span> ${p.name}
+       <span class="meta">${p.cultivar} · ${p.batches} batches</span>
+     </div>`).join("");
+  const empty = matches.length ? "" :
+    `<div class="opt" data-empty>No catalogue match — add it as a custom product</div>`;
+  const customLabel = query ? `＋ Add “${q.trim()}” — custom product` : "＋ Type a new name — custom product";
+  return rows + empty +
+    `<div class="opt custom" data-custom><span class="dot grad-custom"></span> ${customLabel}</div>`;
+}
+
+function initPickers(){
+  document.querySelectorAll(".searchwrap[data-picker]").forEach(wrap=>{
+    const input  = wrap.querySelector(".searchbar");
+    const picker = wrap.querySelector(".picker");
+
+    const render = ()=> picker.innerHTML = pickerOptionsHTML(input.value);
+    const open   = ()=>{ render(); wrap.classList.add("open"); };
+    const close  = ()=> wrap.classList.remove("open");
+
+    input.addEventListener("focus", open);
+    input.addEventListener("input", open);   // re-render + filter as the user types
+    // pick an option — demo only: clear the box and close (no add-line wiring in prototype)
+    picker.addEventListener("mousedown", e=>{
+      const opt = e.target.closest(".opt");
+      if(!opt) return;
+      e.preventDefault();
+      input.value = "";
+      close();
+    });
+    // click outside closes
+    document.addEventListener("click", e=>{ if(!wrap.contains(e.target)) close(); });
+  });
+}
+
+/* ---------- inject static-markup icons (replaces former emoji) ---------- */
+function injectStaticIcons(){
+  document.querySelectorAll(".ico").forEach(n=> n.innerHTML=searchSvg);       // search ⌕
+  document.querySelectorAll(".bag-ico").forEach(n=> n.innerHTML=bagSvg);      // bag 🛍
+  document.querySelectorAll(".lock-ico").forEach(n=> n.innerHTML=lockSvg);    // lock 🔒
+}
+
+/* boot — V2 (Shopping-bag tiles) is THE default direction */
+document.body.dataset.variant = "v2";
+document.getElementById("caption").textContent = captions.v2;
+document.querySelectorAll(".switcher button").forEach(b=> b.classList.toggle("active", b.dataset.v==="v2"));
+injectStaticIcons();
+initPickers();
+syncShipping();
+refreshAll();
+</script>
+</body>
+</html>

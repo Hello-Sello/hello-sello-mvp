@@ -40,7 +40,7 @@ export default async function CompanyProfilePage({
 
       <div className="glass overflow-hidden rounded-3xl">
         {/* hero — cover image if any, else brand gradient */}
-        <div className="relative h-32 bg-gradient-to-br from-brand via-brand-deep to-[#3a0016]">
+        <div className="relative h-32 bg-gradient-to-br from-brand via-brand-deep to-brand-deep">
           {company.coverUrl && (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={company.coverUrl} alt="" className="h-full w-full object-cover" />

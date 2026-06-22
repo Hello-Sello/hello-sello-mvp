@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { DealPin } from "@/modules/deals";
 import type { ChatMessageView } from "../types";
 import { getDealThread, getMessages, postMessage } from "../supabase/store";
@@ -17,11 +18,43 @@ import { Composer } from "./Composer";
  * realtime). No ThreadView header here - the workspace header band plays that
  * role; the DealPin "Talking about" bar tops the stream with the card pill.
  */
-export function DealChat({ dealCardId }: { dealCardId: string }) {
+export function DealChat({
+  dealCardId,
+  inRoom = false,
+}: {
+  dealCardId: string;
+  /** true when this chat is rendered INSIDE the Deal Room overlay - the strip
+   *  then drops the [Deal Card]/[Deal Room] toggle + dropdown, keeping only
+   *  Sella + Translator (D-05). */
+  inRoom?: boolean;
+}) {
   const [thread, setThread] = useState<{ threadId: string; relationshipId: string } | null>(null);
   const [messages, setMessages] = useState<ChatMessageView[]>([]);
   const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  // at-bottom detection: a realtime message must NOT yank a reader who has
+  // scrolled up; the jump-to-bottom arrow shows only when scrolled up. The ref
+  // mirrors the state so the auto-scroll effect reads the latest value without
+  // re-running on every scroll (and without an exhaustive-deps warning).
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  const isAtBottomRef = useRef(true);
+  const NEAR_BOTTOM_PX = 80; // "near the bottom" still counts as at-bottom
+
+  function handleScroll() {
+    const el = scrollRef.current;
+    if (!el) return;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight <= NEAR_BOTTOM_PX;
+    isAtBottomRef.current = atBottom;
+    setIsAtBottom(atBottom);
+  }
+
+  function jumpToBottom() {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    isAtBottomRef.current = true;
+    setIsAtBottom(true);
+  }
 
   // resolve the deal thread, then its stream (remounts per card via key upstream)
   useEffect(() => {
@@ -41,10 +74,25 @@ export function DealChat({ dealCardId }: { dealCardId: string }) {
     };
   }, [dealCardId]);
 
-  // keep the latest message in view as the stream grows
+  // keep the latest message in view as the stream grows - but ONLY when the
+  // reader is already at the bottom, so a realtime message never interrupts a
+  // reader who has scrolled up the thread.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ block: "end" });
+    if (isAtBottomRef.current) {
+      bottomRef.current?.scrollIntoView({ block: "end" });
+    }
   }, [messages.length]);
+
+  // one-time initial scroll: opening a deal chat ALWAYS lands at the newest
+  // message once the thread resolves, regardless of isAtBottom (the at-bottom
+  // gate only governs messages that arrive AFTER open). Keyed on the resolved
+  // thread id. Only the ref is reset here; onScroll stays the single owner of
+  // isAtBottom state (avoids a cascading render).
+  useEffect(() => {
+    if (!thread) return;
+    bottomRef.current?.scrollIntoView({ block: "end" });
+    isAtBottomRef.current = true;
+  }, [thread?.threadId, thread]);
 
   // live updates - only this deal thread matters here
   useChatRealtime({
@@ -84,14 +132,31 @@ export function DealChat({ dealCardId }: { dealCardId: string }) {
         key={thread.relationshipId}
         relationshipId={thread.relationshipId}
         variant="workspace"
+        inRoom={inRoom}
       >
-        <div className="h-full overflow-y-auto p-4">
-          <div className="mx-auto flex max-w-2xl flex-col gap-2">
-            {messages.map((m) => (
-              <MessageBubble key={m.id} message={m} />
-            ))}
-            <div ref={bottomRef} />
+        {/* stream - relative so the floating jump-to-bottom arrow anchors here */}
+        <div className="relative h-full">
+          <div ref={scrollRef} onScroll={handleScroll} className="h-full overflow-y-auto p-4">
+            <div className="mx-auto flex max-w-2xl flex-col gap-2">
+              {messages.map((m) => (
+                <MessageBubble key={m.id} message={m} />
+              ))}
+              <div ref={bottomRef} />
+            </div>
           </div>
+          {/* jump-to-bottom arrow - shown ONLY when scrolled up; glass surface
+              with a raspberry-accent icon, matching the app's button vocabulary */}
+          {!isAtBottom && (
+            <button
+              type="button"
+              onClick={jumpToBottom}
+              aria-label="Jump to latest message"
+              title="Jump to latest message"
+              className="glass-strong absolute bottom-4 right-4 z-10 flex h-10 w-10 items-center justify-center rounded-full text-brand ring-1 ring-black/5 transition hover:text-brand-deep hover:ring-brand/20"
+            >
+              <ChevronDown size={20} strokeWidth={2} />
+            </button>
+          )}
         </div>
       </DealPin>
       <Composer onSend={handleSend} placeholder="Message in the deal chat…" />

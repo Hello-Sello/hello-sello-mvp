@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Deal Card - S2 redesign variations (2026-06-19)</title>
+<style>
+  /* ---- Real Hello Sello pink palette (from globals.css + build-plan) ---- */
+  :root {
+    --brand: #c4156b;          /* raspberry primary accent */
+    --brand-soft: #fde7f1;     /* light fill */
+    --brand-deep: #76002d;     /* pressed / deep */
+    --ink: #1f1430;            /* text */
+    --muted: #6b6477;          /* muted text */
+    --line: #ecdfe9;           /* hairline */
+    --bg: #fffafc;             /* page wash */
+    --white: #ffffff;
+    --ok: #16924a;             /* accept green - meaningful only */
+    --warn: #b45309;
+    --danger: #b3203f;
+
+    --r-lg: 20px;
+    --r-md: 14px;
+    --r-sm: 10px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--ink);
+    /* echo the app's faint pink glows behind glass, so we judge the card on a real busy-ish bg */
+    background:
+      radial-gradient(50rem 50rem at 8% -10%, rgba(196,21,107,0.10), transparent 60%),
+      radial-gradient(40rem 40rem at 105% 5%, rgba(196,21,107,0.07), transparent 55%),
+      linear-gradient(160deg, #ffffff 0%, #fff1f7 100%);
+    background-attachment: fixed;
+    padding: 40px 20px 100px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 1240px; margin: 0 auto; }
+  .page > h1 { font-size: 24px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .page > p.lede { color: var(--muted); margin: 0 0 6px; font-size: 14px; max-width: 760px; }
+  .page > p.lede code { background: var(--brand-soft); color: var(--brand-deep); padding: 1px 6px; border-radius: 5px; font-size: 12.5px; }
+
+  h2 {
+    font-size: 17px; margin: 44px 0 4px; letter-spacing: -0.01em;
+    padding-bottom: 7px; border-bottom: 2px solid var(--brand-soft);
+  }
+  h2 .vk { color: var(--brand); font-weight: 800; }
+  .idea { color: var(--muted); font-size: 13.5px; margin: 6px 0 22px; max-width: 820px; }
+  .idea b { color: var(--ink); }
+
+  .stage {
+    display: flex; flex-wrap: wrap; gap: 36px; align-items: flex-start;
+  }
+  .stage-note {
+    flex: 1 1 240px; min-width: 220px; max-width: 320px;
+    font-size: 13px; color: var(--muted);
+    background: rgba(255,255,255,0.6);
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    padding: 16px 18px;
+  }
+  .stage-note h4 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--brand); }
+  .stage-note ul { margin: 0; padding-left: 16px; }
+  .stage-note li { margin: 5px 0; }
+
+  /* ============================================================= */
+  /* Shared card primitives                                        */
+  /* ============================================================= */
+  .card {
+    width: 360px;
+    background: var(--white);
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+    box-shadow: 0 18px 50px -20px rgba(118,0,45,0.28);
+    overflow: hidden;
+    position: relative;
+  }
+  /* tiny round corner controls (flip + edit) - shared idiom, top corners */
+  .corner {
+    position: absolute; top: 12px; z-index: 5;
+    height: 30px; width: 30px; border-radius: 999px;
+    border: 1px solid var(--line);
+    background: rgba(255,255,255,0.92);
+    color: var(--brand);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: background .15s, transform .15s;
+    backdrop-filter: blur(4px);
+  }
+  .corner:hover { background: #fff; transform: translateY(-1px); }
+  .corner svg { width: 15px; height: 15px; }
+  .corner.flip { left: 12px; }
+  .corner.edit { right: 12px; }
+
+  /* product thumbnail - simple coloured placeholder (per-cultivar tint) */
+  .thumb {
+    flex: none; border-radius: 9px;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-weight: 700;
+  }
+  .thumb svg { width: 16px; height: 16px; opacity: 0.95; }
+  .t-indica { background: linear-gradient(135deg,#8b5cf6,#6d28d9); }
+  .t-sativa { background: linear-gradient(135deg,#f59e0b,#d97706); }
+  .t-hybrid { background: linear-gradient(135deg,#10b981,#047857); }
+
+  .mono { font-variant-numeric: tabular-nums; }
+  .lock { display: inline-flex; align-items: center; gap: 3px; color: var(--muted); font-size: 10.5px; font-weight: 500; }
+  .lock svg { width: 11px; height: 11px; }
+
+  /* status pills */
+  .pill { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; letter-spacing: .02em; }
+  .pill.open { background: var(--brand-soft); color: var(--brand-deep); }
+  .pill.confirmed { background: #fef3c7; color: #92400e; }
+
+  /* action buttons - shared */
+  .actions { display: flex; gap: 8px; }
+  .btn {
+    flex: 1; border: 1px solid var(--line); background: #fff; color: var(--ink);
+    font-size: 13px; font-weight: 650; padding: 10px 8px; border-radius: var(--r-sm);
+    cursor: pointer; transition: all .15s; display: flex; align-items: center; justify-content: center; gap: 6px;
+    font-family: inherit;
+  }
+  .btn svg { width: 15px; height: 15px; }
+  .btn:hover { border-color: var(--muted); }
+  .btn.decline { color: var(--danger); }
+  .btn.decline:hover { background: #fff1f3; border-color: #f3c6cf; }
+  .btn.change { color: var(--brand); }
+  .btn.change:hover { background: var(--brand-soft); border-color: #f6c4dd; }
+  .btn.accept { background: var(--ok); color: #fff; border-color: var(--ok); flex: 1.3; }
+  .btn.accept:hover { background: #137a3e; }
+
+  /* message affordance row */
+  .msg {
+    display: flex; align-items: center; gap: 9px;
+    border: 1px solid var(--line); border-radius: var(--r-sm);
+    padding: 9px 12px; color: var(--muted); font-size: 12.5px; cursor: text; background: #fff;
+  }
+  .msg svg { width: 15px; height: 15px; flex: none; color: var(--brand); }
+
+  /* things checklist */
+  .things-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+  .things-row .box { width: 15px; height: 15px; border-radius: 4px; border: 1.5px solid var(--line); flex: none; display: flex; align-items: center; justify-content: center; }
+  .things-row .box.done { background: var(--ok); border-color: var(--ok); }
+  .things-row .box.done svg { width: 10px; height: 10px; color: #fff; }
+  .things-row.done span { color: var(--muted); text-decoration: line-through; }
+
+  /* ============================================================= */
+  /* VARIATION A - Compact ledger card                              */
+  /* clean invoice feel: header band, parties inline, dense rows    */
+  /* ============================================================= */
+  .a-head {
+    padding: 16px 16px 14px; border-bottom: 1px solid var(--line);
+    background: linear-gradient(180deg, #fff 0%, #fff8fb 100%);
+  }
+  .a-eyebrow { display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .a-eyebrow .deal { font-size: 12px; font-weight: 800; letter-spacing: 0.14em; color: var(--brand); }
+  .a-eyebrow .num { font-size: 12px; font-weight: 700; color: var(--ink); letter-spacing: 0.04em; }
+  .a-story { text-align: center; font-size: 12.5px; color: var(--muted); margin-top: 8px; }
+  .a-story b { color: var(--ink); font-weight: 650; }
+  .a-parties { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 12px; }
+  .a-party { text-align: center; }
+  .a-party .role { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+  .a-party .co { font-size: 13px; font-weight: 750; color: var(--ink); }
+  .a-party .you { color: var(--brand); font-size: 10px; font-weight: 700; }
+  .a-arrow { color: var(--brand); flex: none; }
+  .a-arrow svg { width: 18px; height: 18px; }
+
+  .a-body { padding: 14px 16px; }
+  .a-prods { display: flex; flex-direction: column; gap: 2px; }
+  .a-prod { display: flex; align-items: center; gap: 11px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .a-prod:last-child { border-bottom: 0; }
+  .a-prod .thumb { width: 34px; height: 34px; font-size: 12px; }
+  .a-prod .pmid { flex: 1; min-width: 0; }
+  .a-prod .pname { font-size: 13px; font-weight: 650; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .a-prod .pmeta { font-size: 11px; color: var(--muted); }
+  .a-prod .pright { text-align: right; flex: none; }
+  .a-prod .pprice { font-size: 13px; font-weight: 700; color: var(--ink); }
+  .a-prod .pqty { font-size: 11px; color: var(--muted); }
+
+  .a-terms { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); border-radius: var(--r-sm); overflow: hidden; margin-top: 14px; }
+  .a-term { background: #fff; padding: 9px 12px; }
+  .a-term .tl { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+  .a-term .tv { font-size: 13px; font-weight: 650; color: var(--ink); }
+  .a-total {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin-top: 14px; padding: 12px 14px; border-radius: var(--r-sm);
+    background: var(--brand-soft);
+  }
+  .a-total .tl { font-size: 12px; color: var(--brand-deep); font-weight: 650; }
+  .a-total .tv { font-size: 20px; font-weight: 800; color: var(--brand-deep); letter-spacing: -0.01em; }
+  .a-margin { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; font-size: 12px; }
+  .a-margin .ml { color: var(--muted); }
+  .a-margin .mv { font-weight: 750; color: var(--ink); display: inline-flex; align-items: center; gap: 6px; }
+
+  .a-foot { padding: 0 16px 16px; display: flex; flex-direction: column; gap: 10px; }
+  .a-things { display: flex; flex-direction: column; gap: 7px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r-sm); }
+  .a-things .th-head { display: flex; align-items: center; justify-content: space-between; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+  .a-things .th-head .count { color: var(--brand); }
+
+  /* ============================================================= */
+  /* VARIATION B - Thumbnail-led, expandable                        */
+  /* products are the hero; terms collapse behind a summary line    */
+  /* ============================================================= */
+  .b-head { padding: 18px 18px 0; }
+  .b-top { display: flex; align-items: center; justify-content: center; gap: 10px; }
+  .b-deal { font-size: 11.5px; font-weight: 800; letter-spacing: 0.16em; color: var(--brand); }
+  .b-num { font-size: 11.5px; color: var(--muted); font-weight: 600; }
+  .b-story { text-align: center; font-size: 13px; color: var(--ink); margin: 12px 0 2px; line-height: 1.45; }
+  .b-story .co-from { font-weight: 750; }
+  .b-story .co-to { font-weight: 750; color: var(--brand); }
+  .b-story .date { color: var(--muted); }
+
+  .b-prodwrap { padding: 16px 18px 4px; }
+  .b-prod {
+    display: flex; align-items: center; gap: 13px; padding: 11px 12px;
+    border: 1px solid var(--line); border-radius: var(--r-md); margin-bottom: 8px; background: #fff;
+  }
+  .b-prod .thumb { width: 46px; height: 46px; font-size: 11px; flex-direction: column; gap: 1px; }
+  .b-prod .thumb small { font-size: 8px; font-weight: 600; opacity: .85; }
+  .b-prod .bmid { flex: 1; min-width: 0; }
+  .b-prod .bname { font-size: 14px; font-weight: 700; color: var(--ink); }
+  .b-prod .btags { display: flex; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
+  .b-prod .tag { font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 999px; background: #f4eef2; color: var(--muted); }
+  .b-prod .tag.thc { background: #ede9fe; color: #6d28d9; }
+  .b-prod .tag.cbd { background: #d1fae5; color: #047857; }
+  .b-prod .bright { text-align: right; flex: none; }
+  .b-prod .bprice { font-size: 14px; font-weight: 750; color: var(--ink); }
+  .b-prod .bqty { font-size: 11px; color: var(--muted); }
+
+  .b-summary { padding: 4px 18px 0; }
+  .b-disclosure { width: 100%; border: 0; background: transparent; padding: 10px 0; cursor: pointer; font-family: inherit;
+    display: flex; align-items: center; justify-content: space-between; color: var(--muted); font-size: 12.5px; border-top: 1px solid var(--line); }
+  .b-disclosure:hover { color: var(--ink); }
+  .b-disclosure .chev { transition: transform .2s; }
+  .b-details[hidden] { display: none; }
+  .b-details { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; padding: 4px 0 14px; }
+  .b-det .dl { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+  .b-det .dv { font-size: 13px; font-weight: 650; color: var(--ink); display: inline-flex; align-items: center; gap: 6px; }
+
+  .b-totalbar { display: flex; align-items: baseline; justify-content: space-between; padding: 14px 18px; background: var(--brand); color: #fff; }
+  .b-totalbar .tl { font-size: 12px; opacity: 0.85; font-weight: 600; }
+  .b-totalbar .tv { font-size: 21px; font-weight: 800; letter-spacing: -0.01em; }
+
+  .b-foot { padding: 14px 18px 18px; display: flex; flex-direction: column; gap: 11px; }
+  .b-things { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; }
+
+  /* ============================================================= */
+  /* VARIATION C - Sectioned tabbed card                            */
+  /* terms / products / things split into segments; one open at a   */
+  /* time. Most info hidden by default, summary always visible.     */
+  /* ============================================================= */
+  .c-head { padding: 17px 18px 15px; background: var(--brand-deep); color: #fff; position: relative; }
+  .c-head .corner { background: rgba(255,255,255,0.16); border-color: rgba(255,255,255,0.25); color: #fff; }
+  .c-head .corner:hover { background: rgba(255,255,255,0.28); }
+  .c-deal { font-size: 11px; font-weight: 800; letter-spacing: 0.16em; opacity: 0.85; text-align: center; }
+  .c-num { text-align: center; font-size: 16px; font-weight: 800; letter-spacing: 0.04em; margin-top: 2px; }
+  .c-story { text-align: center; font-size: 12px; opacity: 0.9; margin-top: 8px; }
+  .c-story b { font-weight: 700; }
+  .c-headline {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-top: 14px; padding-top: 13px; border-top: 1px solid rgba(255,255,255,0.18);
+  }
+  .c-headline .hl { font-size: 11px; opacity: 0.8; }
+  .c-headline .hv { font-size: 19px; font-weight: 800; }
+  .c-headline .hp { text-align: right; }
+  .c-headline .hp .pill { background: rgba(255,255,255,0.18); color: #fff; }
+
+  .c-tabs { display: flex; border-bottom: 1px solid var(--line); }
+  .c-tab {
+    flex: 1; border: 0; background: transparent; font-family: inherit; cursor: pointer;
+    padding: 12px 6px; font-size: 12.5px; font-weight: 650; color: var(--muted);
+    border-bottom: 2px solid transparent; transition: all .15s; display: flex; align-items: center; justify-content: center; gap: 6px;
+  }
+  .c-tab .badge { font-size: 10px; font-weight: 700; background: var(--brand-soft); color: var(--brand-deep); border-radius: 999px; padding: 1px 6px; }
+  .c-tab[aria-selected="true"] { color: var(--brand); border-bottom-color: var(--brand); }
+  .c-tab:hover:not([aria-selected="true"]) { color: var(--ink); }
+
+  .c-panel { padding: 16px 18px; min-height: 170px; }
+  .c-panel[hidden] { display: none; }
+
+  .c-prod { display: flex; align-items: center; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+  .c-prod:last-child { border-bottom: 0; }
+  .c-prod .thumb { width: 38px; height: 38px; font-size: 11px; }
+  .c-prod .cmid { flex: 1; min-width: 0; }
+  .c-prod .cname { font-size: 13px; font-weight: 650; }
+  .c-prod .cmeta { font-size: 11px; color: var(--muted); }
+  .c-prod .cprice { font-size: 13px; font-weight: 700; }
+  .c-prod .cqty { font-size: 11px; color: var(--muted); text-align: right; }
+
+  .c-terms { display: flex; flex-direction: column; gap: 0; }
+  .c-trow { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+  .c-trow:last-child { border-bottom: 0; }
+  .c-trow .cl { color: var(--muted); }
+  .c-trow .cv { font-weight: 650; display: inline-flex; align-items: center; gap: 6px; }
+
+  .c-foot { padding: 0 18px 18px; display: flex; flex-direction: column; gap: 11px; }
+
+  /* footnote */
+  .foot { margin-top: 60px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 18px; }
+  .foot b { color: var(--ink); }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <h1>Deal Card - S2 redesign</h1>
+  <p class="lede">Throwaway prototype for slice <code>S2 "The Card"</code>. Three different directions for the same deal, all on the real pink palette. Target from screenshot SS-3: clean, professional, compact - "DEAL - id" header, the "On DATE X offered Y this deal" line, product lines with tiny thumbnails, <b>Decline / Change / Accept</b>, a Message box, a small "Things" checklist. Open the file, scan all three, pick one (or mix).</p>
+
+  <!-- ===================================================================== -->
+  <!-- VARIATION A -->
+  <!-- ===================================================================== -->
+  <h2><span class="vk">Variation A</span> &mdash; Compact ledger</h2>
+  <p class="idea">Reads like a clean invoice. <b>Everything shows at once</b> - parties, every product line, terms grid, total, your margin, the Things checklist. No tabs, no expand. Best when the buyer wants the whole deal on one calm surface and the product count is small (2-4 lines).</p>
+  <div class="stage">
+    <div class="card" id="cardA">
+      <button class="corner flip" title="Flip to signals &amp; logs" aria-label="Flip card">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/></svg>
+      </button>
+      <button class="corner edit" title="Edit deal" aria-label="Edit deal">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+      </button>
+
+      <div class="a-head">
+        <div class="a-eyebrow">
+          <span class="deal">DEAL</span>
+          <span class="num mono">HS-PO-2041</span>
+          <span class="pill open">Open</span>
+        </div>
+        <div class="a-story">On <b>18 Jun 2026</b>, <b>Greenleaf Botanics</b> offered <b>Stonebridge Pharma</b> this deal.</div>
+        <div class="a-parties">
+          <div class="a-party">
+            <div class="role">Seller</div>
+            <div class="co">Greenleaf Botanics</div>
+          </div>
+          <span class="a-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg></span>
+          <div class="a-party">
+            <div class="role">Buyer <span class="you">&middot; you</span></div>
+            <div class="co">Stonebridge Pharma</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="a-body">
+        <div class="a-prods">
+          <div class="a-prod">
+            <div class="thumb t-indica">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6"/></svg>
+            </div>
+            <div class="pmid">
+              <div class="pname">Northern Lights</div>
+              <div class="pmeta mono">Indica &middot; Batch GL-24-0118 &middot; THC 19.2% / CBD 0.4%</div>
+            </div>
+            <div class="pright">
+              <div class="pprice mono">&euro;7.20<span style="font-size:10px;color:var(--muted)">/g</span></div>
+              <div class="pqty mono">2.0 kg</div>
+            </div>
+          </div>
+          <div class="a-prod">
+            <div class="thumb t-sativa">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6"/></svg>
+            </div>
+            <div class="pmid">
+              <div class="pname">Sour Diesel</div>
+              <div class="pmeta mono">Sativa &middot; Batch GL-24-0204 &middot; THC 22.1% / CBD 0.2%</div>
+            </div>
+            <div class="pright">
+              <div class="pprice mono">&euro;8.10<span style="font-size:10px;color:var(--muted)">/g</span></div>
+              <div class="pqty mono">1.0 kg</div>
+            </div>
+          </div>
+          <div class="a-prod">
+            <div class="thumb t-hybrid">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6"/></svg>
+            </div>
+            <div class="pmid">
+              <div class="pname">Gelato 33</div>
+              <div class="pmeta mono">Hybrid &middot; Batch GL-24-0311 &middot; THC 24.0% / CBD 0.1%</div>
+            </div>
+            <div class="pright">
+              <div class="pprice mono">&euro;9.40<span style="font-size:10px;color:var(--muted)">/g</span></div>
+              <div class="pqty mono">500 g</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="a-terms">
+          <div class="a-term"><div class="tl">Delivery</div><div class="tv">02 Jul 2026</div></div>
+          <div class="a-term"><div class="tl">Payment</div><div class="tv">Net 30</div></div>
+          <div class="a-term"><div class="tl">Free delivery</div><div class="tv">Yes</div></div>
+          <div class="a-term"><div class="tl">Products</div><div class="tv">3 lines</div></div>
+        </div>
+
+        <div class="a-total">
+          <span class="tl">Value net</span>
+          <span class="tv mono">&euro;27.10k</span>
+        </div>
+        <div class="a-margin">
+          <span class="ml">Your avg. margin</span>
+          <span class="mv mono">31.4%
+            <span class="lock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> only you</span>
+          </span>
+        </div>
+      </div>
+
+      <div class="a-foot">
+        <div class="a-things">
+          <div class="th-head"><span>Things</span><span class="count">1 / 3 done</span></div>
+          <div class="things-row done">
+            <span class="box done"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg></span>
+            <span>Confirm batch certificates</span>
+          </div>
+          <div class="things-row">
+            <span class="box"></span><span>Agree delivery window</span>
+          </div>
+          <div class="things-row">
+            <span class="box"></span><span>Sign supply agreement</span>
+          </div>
+        </div>
+
+        <div class="msg">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          Message Greenleaf about this deal&hellip;
+        </div>
+
+        <div class="actions">
+          <button class="btn decline">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg> Decline
+          </button>
+          <button class="btn change">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg> Change
+          </button>
+          <button class="btn accept">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg> Accept
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="stage-note">
+      <h4>A &mdash; what shows</h4>
+      <ul>
+        <li><b>Default:</b> everything. Parties, all product lines, terms grid, total, margin, Things.</li>
+        <li><b>Hidden:</b> nothing - flip side (Signals / Logs) holds the advisory + history.</li>
+        <li><b>Edit + flip:</b> top corners, same idiom as today.</li>
+        <li>Best for short deals. Gets tall with many lines.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- VARIATION B -->
+  <!-- ===================================================================== -->
+  <h2><span class="vk">Variation B</span> &mdash; Thumbnail-led, terms collapse</h2>
+  <p class="idea">Products are the <b>hero</b>: bigger thumbnails, THC/CBD as coloured tags, the thing a procurement buyer scans first. The dry terms (delivery, payment, margin) <b>collapse behind a "Deal terms" line</b> so the card stays short by default. The total sits in a bold pink bar. Best when "what am I buying" matters more than the fine print.</p>
+  <div class="stage">
+    <div class="card" id="cardB">
+      <button class="corner flip" title="Flip to signals &amp; logs" aria-label="Flip card">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/></svg>
+      </button>
+      <button class="corner edit" title="Edit deal" aria-label="Edit deal">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+      </button>
+
+      <div class="b-head">
+        <div class="b-top">
+          <span class="b-deal">DEAL</span>
+          <span class="b-num mono">HS-PO-2041</span>
+        </div>
+        <div class="b-story">
+          On <span class="date">18 Jun</span>, <span class="co-from">Greenleaf Botanics</span> offered<br>
+          <span class="co-to">Stonebridge Pharma</span> &middot; you &middot; this deal.
+        </div>
+      </div>
+
+      <div class="b-prodwrap">
+        <div class="b-prod">
+          <div class="thumb t-indica"><span>NL</span><small>INDICA</small></div>
+          <div class="bmid">
+            <div class="bname">Northern Lights</div>
+            <div class="btags">
+              <span class="tag thc">THC 19.2%</span>
+              <span class="tag cbd">CBD 0.4%</span>
+              <span class="tag mono">GL-24-0118</span>
+            </div>
+          </div>
+          <div class="bright">
+            <div class="bprice mono">&euro;7.20</div>
+            <div class="bqty mono">2.0 kg</div>
+          </div>
+        </div>
+        <div class="b-prod">
+          <div class="thumb t-sativa"><span>SD</span><small>SATIVA</small></div>
+          <div class="bmid">
+            <div class="bname">Sour Diesel</div>
+            <div class="btags">
+              <span class="tag thc">THC 22.1%</span>
+              <span class="tag cbd">CBD 0.2%</span>
+              <span class="tag mono">GL-24-0204</span>
+            </div>
+          </div>
+          <div class="bright">
+            <div class="bprice mono">&euro;8.10</div>
+            <div class="bqty mono">1.0 kg</div>
+          </div>
+        </div>
+        <div class="b-prod">
+          <div class="thumb t-hybrid"><span>G33</span><small>HYBRID</small></div>
+          <div class="bmid">
+            <div class="bname">Gelato 33</div>
+            <div class="btags">
+              <span class="tag thc">THC 24.0%</span>
+              <span class="tag cbd">CBD 0.1%</span>
+              <span class="tag mono">GL-24-0311</span>
+            </div>
+          </div>
+          <div class="bright">
+            <div class="bprice mono">&euro;9.40</div>
+            <div class="bqty mono">500 g</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="b-summary">
+        <button class="b-disclosure" onclick="toggleB(this)" aria-expanded="false">
+          <span>Deal terms &amp; your margin</span>
+          <span class="chev"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></span>
+        </button>
+        <div class="b-details" hidden>
+          <div class="b-det"><div class="dl">Delivery</div><div class="dv">02 Jul 2026</div></div>
+          <div class="b-det"><div class="dl">Payment</div><div class="dv">Net 30</div></div>
+          <div class="b-det"><div class="dl">Free delivery</div><div class="dv">Yes</div></div>
+          <div class="b-det"><div class="dl">Products</div><div class="dv">3 lines</div></div>
+          <div class="b-det" style="grid-column:1/-1">
+            <div class="dl">Your avg. margin</div>
+            <div class="dv mono">31.4%
+              <span class="lock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> only you</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="b-totalbar">
+        <span class="tl">Value net</span>
+        <span class="tv mono">&euro;27.10k</span>
+      </div>
+
+      <div class="b-foot">
+        <div class="b-things">
+          <div class="things-row done">
+            <span class="box done"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg></span>
+            <span>Certificates</span>
+          </div>
+          <div class="things-row"><span class="box"></span><span>Delivery window</span></div>
+          <div class="things-row"><span class="box"></span><span>Supply agreement</span></div>
+        </div>
+
+        <div class="msg">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          Message Greenleaf&hellip;
+        </div>
+
+        <div class="actions">
+          <button class="btn decline">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg> Decline
+          </button>
+          <button class="btn change">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg> Change
+          </button>
+          <button class="btn accept">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg> Accept
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="stage-note">
+      <h4>B &mdash; what shows</h4>
+      <ul>
+        <li><b>Default:</b> the story line, all products (hero), total bar, Things chips, actions.</li>
+        <li><b>Hidden (tap to open):</b> dry terms + your margin behind "Deal terms".</li>
+        <li><b>Edit + flip:</b> top corners.</li>
+        <li>Stays short even with many lines; the buyer scans products fast.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- VARIATION C -->
+  <!-- ===================================================================== -->
+  <h2><span class="vk">Variation C</span> &mdash; Sectioned / tabbed</h2>
+  <p class="idea">A deep-pink header carries identity + the headline number, then <b>three segments - Products / Terms / Things - with one open at a time</b>. The shortest card: only one section's detail is on screen, the rest is one tap away. Best when deals are large (many lines, many checklist items) and the card must not dominate the chat strip.</p>
+  <div class="stage">
+    <div class="card" id="cardC">
+      <div class="c-head">
+        <button class="corner flip" title="Flip to signals &amp; logs" aria-label="Flip card">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/></svg>
+        </button>
+        <button class="corner edit" title="Edit deal" aria-label="Edit deal">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+        </button>
+
+        <div class="c-deal">DEAL</div>
+        <div class="c-num mono">HS-PO-2041</div>
+        <div class="c-story">On <b>18 Jun 2026</b>, <b>Greenleaf</b> offered <b>Stonebridge</b> &middot; you</div>
+        <div class="c-headline">
+          <div>
+            <div class="hl">Value net &middot; 3 products</div>
+            <div class="hv mono">&euro;27.10k</div>
+          </div>
+          <div class="hp">
+            <span class="pill open">Open &middot; v1</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="c-tabs" role="tablist">
+        <button class="c-tab" role="tab" aria-selected="true" onclick="tabC(this,'cp')">Products <span class="badge">3</span></button>
+        <button class="c-tab" role="tab" aria-selected="false" onclick="tabC(this,'ct')">Terms</button>
+        <button class="c-tab" role="tab" aria-selected="false" onclick="tabC(this,'ch')">Things <span class="badge">1/3</span></button>
+      </div>
+
+      <div class="c-panel" id="cp">
+        <div class="c-prod">
+          <div class="thumb t-indica"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/></svg></div>
+          <div class="cmid"><div class="cname">Northern Lights</div><div class="cmeta mono">Indica &middot; THC 19.2% &middot; GL-24-0118</div></div>
+          <div><div class="cprice mono">&euro;7.20/g</div><div class="cqty mono">2.0 kg</div></div>
+        </div>
+        <div class="c-prod">
+          <div class="thumb t-sativa"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/></svg></div>
+          <div class="cmid"><div class="cname">Sour Diesel</div><div class="cmeta mono">Sativa &middot; THC 22.1% &middot; GL-24-0204</div></div>
+          <div><div class="cprice mono">&euro;8.10/g</div><div class="cqty mono">1.0 kg</div></div>
+        </div>
+        <div class="c-prod">
+          <div class="thumb t-hybrid"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/></svg></div>
+          <div class="cmid"><div class="cname">Gelato 33</div><div class="cmeta mono">Hybrid &middot; THC 24.0% &middot; GL-24-0311</div></div>
+          <div><div class="cprice mono">&euro;9.40/g</div><div class="cqty mono">500 g</div></div>
+        </div>
+      </div>
+
+      <div class="c-panel" id="ct" hidden>
+        <div class="c-terms">
+          <div class="c-trow"><span class="cl">Delivery</span><span class="cv">02 Jul 2026</span></div>
+          <div class="c-trow"><span class="cl">Payment terms</span><span class="cv">Net 30</span></div>
+          <div class="c-trow"><span class="cl">Free delivery</span><span class="cv">Yes</span></div>
+          <div class="c-trow"><span class="cl">Value gross</span><span class="cv mono">&euro;28.99k</span></div>
+          <div class="c-trow"><span class="cl">Your avg. margin</span>
+            <span class="cv mono">31.4%
+              <span class="lock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> only you</span>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div class="c-panel" id="ch" hidden>
+        <div class="things-row done" style="padding:9px 0">
+          <span class="box done"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg></span>
+          <span>Confirm batch certificates</span>
+        </div>
+        <div class="things-row" style="padding:9px 0"><span class="box"></span><span>Agree delivery window</span></div>
+        <div class="things-row" style="padding:9px 0"><span class="box"></span><span>Sign supply agreement</span></div>
+      </div>
+
+      <div class="c-foot">
+        <div class="msg">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          Message Greenleaf about this deal&hellip;
+        </div>
+        <div class="actions">
+          <button class="btn decline">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg> Decline
+          </button>
+          <button class="btn change">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg> Change
+          </button>
+          <button class="btn accept">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg> Accept
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="stage-note">
+      <h4>C &mdash; what shows</h4>
+      <ul>
+        <li><b>Always visible:</b> id, story, headline value + status, Message, actions.</li>
+        <li><b>One tap each:</b> Products / Terms / Things tabs - only one detail block on screen.</li>
+        <li><b>Edit + flip:</b> in the deep-pink header (white corners).</li>
+        <li>Shortest card; scales to big deals without growing tall.</li>
+      </ul>
+    </div>
+  </div>
+
+  <p class="foot">
+    <b>Confirmed-state note:</b> all three keep today's golden/amber "Confirmed" treatment for when both sides seal - swap the <code>Open</code> pill + accent to amber and the corner controls stay. <b>Data is dummy</b> but every field maps to a real one: <code>hs_deal_number</code>, <code>deal_type</code> (offer&rarr;PO), seller/buyer names, <code>delivery_date_target</code>, <code>payment_terms_code</code>, <code>free_delivery</code>, line <code>productName / cultivar / batchNumber / thcPercent / cbdPercent / quantity / unitPrice</code>, the owner-only <code>marginPercent</code> ("only you"), and the Things checklist (<code>thing</code> rows).
+  </p>
+
+</div>
+
+<script>
+  // Variation B - terms disclosure
+  function toggleB(btn) {
+    var details = btn.parentElement.querySelector('.b-details');
+    var open = details.hasAttribute('hidden') ? false : true;
+    if (open) { details.setAttribute('hidden',''); btn.setAttribute('aria-expanded','false'); btn.querySelector('.chev').style.transform=''; }
+    else { details.removeAttribute('hidden'); btn.setAttribute('aria-expanded','true'); btn.querySelector('.chev').style.transform='rotate(180deg)'; }
+  }
+  // Variation C - tab switch (one panel open at a time)
+  function tabC(tab, panelId) {
+    var card = tab.closest('.card');
+    card.querySelectorAll('.c-tab').forEach(function(t){ t.setAttribute('aria-selected','false'); });
+    card.querySelectorAll('.c-panel').forEach(function(p){ p.setAttribute('hidden',''); });
+    tab.setAttribute('aria-selected','true');
+    card.querySelector('#'+panelId).removeAttribute('hidden');
+  }
+</script>
+</body>
+</html>

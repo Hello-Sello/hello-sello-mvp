@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Hello Sello - Rail Prototype - Model 2 (Accordion)</title>
+<!--
+  Hello Sello global LEFT NAVIGATION RAIL - Model 2: Accordion (tree).
+
+  Brand tokens copied verbatim from src/app/globals.css (read-only).
+  This is a throwaway prototype: inline CSS + JS, no build, opens in a browser.
+
+  MODEL 2 behaviour:
+   - Click "Connect" -> the row's chevron rotates and Inbox / Chat / Relationships
+     slide open INDENTED just below it, joined by a thin vertical connector line.
+     All OTHER surfaces stay visible. Click Connect again -> the tree collapses.
+   - When the rail is COLLAPSED (icon rail), hovering OR clicking the Connect
+     icon opens a small strong-glass FLYOUT POPOVER to the right with the same
+     three sub-items.
+
+  The sub-nav machinery is GENERIC (data-driven): any surface could declare
+  children and reuse the same accordion + flyout code.
+
+  NOTE: the search field is placed in the rail to match the two references Ayush
+  gave. In the real app, global search may instead live in the top bar - this is
+  a prototype choice, not a final placement decision.
+-->
+<style>
+  :root {
+    /* ---- copied from globals.css ---- */
+    --bg-from: #ffffff;
+    --bg-to: #fff1f7;
+    --glass-bg: rgba(255, 255, 255, 0.62);
+    --glass-bg-strong: rgba(255, 255, 255, 1);
+    --glass-border: rgba(255, 255, 255, 0.65);
+    --glass-shadow: 0 10px 34px -12px rgba(118, 0, 45, 0.18);
+
+    --brand: #e30b5d;        /* raspberry  - primary accent */
+    --brand-soft: #ffb7d5;   /* cotton candy - light fills */
+    --brand-deep: #76002d;   /* red pink   - deep accent / pressed */
+    --ink: #1f2020;
+    --muted: #6b6470;
+    --line: #ecdfe9;
+    --success: #34b233;
+    --danger: #dc2626;
+
+    /* ---- rail geometry (spacing is the priority) ---- */
+    --rail-w: 288px;
+    --rail-w-collapsed: 64px;
+    --row-h: 44px;
+    --rail-pad: 16px;
+    --radius: 14px;
+    --radius-sm: 10px;
+
+    --brand-soft-fill: rgba(255, 183, 213, 0.30);
+
+    --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+    --dur: 260ms;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body { height: 100%; margin: 0; }
+
+  body {
+    color: var(--ink);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background:
+      radial-gradient(60rem 60rem at 10% -12%, rgba(255, 183, 213, 0.55), transparent 60%),
+      radial-gradient(46rem 46rem at 108% 6%, rgba(227, 11, 93, 0.10), transparent 55%),
+      linear-gradient(160deg, var(--bg-from) 0%, var(--bg-to) 100%);
+    background-attachment: fixed;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .app {
+    display: flex;
+    height: 100vh;
+    gap: 22px;
+    padding: 22px;
+  }
+
+  /* ============ THE RAIL ============ */
+  .rail {
+    position: relative;
+    flex: 0 0 var(--rail-w);
+    width: var(--rail-w);
+    display: flex;
+    flex-direction: column;
+    border-radius: 22px;
+    padding: 18px var(--rail-pad);
+    background: var(--glass-bg);
+    -webkit-backdrop-filter: blur(20px) saturate(140%);
+    backdrop-filter: blur(20px) saturate(140%);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+    transition: width var(--dur) var(--ease), flex-basis var(--dur) var(--ease), padding var(--dur) var(--ease);
+    overflow: visible;        /* let flyout escape when collapsed */
+  }
+  .rail.collapsed {
+    flex-basis: var(--rail-w-collapsed);
+    width: var(--rail-w-collapsed);
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+
+  /* ---- top: wordmark + single collapse control ---- */
+  .rail-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    height: var(--row-h);
+    margin-bottom: 14px;
+  }
+  .wordmark {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .logo-dot {
+    flex: 0 0 32px;
+    width: 32px; height: 32px;
+    border-radius: 10px;
+    background: linear-gradient(150deg, var(--brand) 0%, var(--brand-deep) 100%);
+    display: grid;
+    place-items: center;
+    color: #fff;
+    font-weight: 800;
+    font-size: 16px;
+    box-shadow: 0 6px 14px -6px rgba(227, 11, 93, 0.6);
+  }
+  .wordmark-text {
+    font-weight: 750;
+    font-size: 16.5px;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+    color: var(--ink);
+  }
+
+  /* single, state-aware collapse glyph (chevron flips) */
+  .collapse-btn {
+    flex: 0 0 auto;
+    width: 34px; height: 34px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: rgba(255,255,255,0.55);
+    color: var(--muted);
+    cursor: pointer;
+    display: grid; place-items: center;
+    transition: background var(--dur) var(--ease), color var(--dur) var(--ease), border-color var(--dur) var(--ease);
+  }
+  .collapse-btn:hover { background: #fff; color: var(--brand); border-color: var(--brand-soft); }
+  .collapse-btn svg { transition: transform var(--dur) var(--ease); }
+  .rail.collapsed .collapse-btn svg { transform: rotate(180deg); }
+  /* when collapsed, the top row centres the lone control */
+  .rail.collapsed .rail-top { justify-content: center; }
+  .rail.collapsed .wordmark { display: none; }
+
+  /* ---- search ---- */
+  .search {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    height: 40px;
+    padding: 0 12px;
+    margin-bottom: 18px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--line);
+    background: rgba(255,255,255,0.5);
+    color: var(--muted);
+    transition: padding var(--dur) var(--ease), background var(--dur) var(--ease);
+  }
+  .search:focus-within { background: #fff; border-color: var(--brand-soft); }
+  .search input {
+    flex: 1; min-width: 0;
+    border: 0; outline: 0; background: transparent;
+    font: inherit; font-size: 14px;
+    color: var(--ink);
+  }
+  .search input::placeholder { color: var(--muted); }
+  .kbd {
+    flex: 0 0 auto;
+    font-size: 11px;
+    font-weight: 650;
+    color: var(--muted);
+    padding: 2px 7px;
+    border-radius: 6px;
+    border: 1px solid var(--line);
+    background: rgba(255,255,255,0.7);
+    white-space: nowrap;
+  }
+  /* collapsed search collapses to an icon-only square */
+  .rail.collapsed .search { padding: 0; justify-content: center; }
+  .rail.collapsed .search input,
+  .rail.collapsed .search .kbd { display: none; }
+
+  .ico { flex: 0 0 20px; width: 20px; height: 20px; color: inherit; }
+
+  /* ---- section label ---- */
+  .section-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 0 8px;
+    margin: 4px 0 8px;
+    transition: opacity 160ms var(--ease);
+  }
+  .rail.collapsed .section-label { opacity: 0; height: 6px; margin: 0; pointer-events: none; }
+
+  /* ---- nav list ---- */
+  .nav { flex: 1 1 auto; overflow-y: auto; overflow-x: visible; padding-right: 2px; }
+  .nav::-webkit-scrollbar { width: 6px; }
+  .nav::-webkit-scrollbar-thumb { background: var(--line); border-radius: 6px; }
+
+  .surface { position: relative; }
+
+  .row {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    height: var(--row-h);
+    padding: 0 10px;
+    border: 0;
+    background: transparent;
+    border-radius: var(--radius-sm);
+    color: var(--ink);
+    font: inherit;
+    font-size: 14.5px;
+    font-weight: 550;
+    text-align: left;
+    cursor: pointer;
+    transition: background 160ms var(--ease), color 160ms var(--ease);
+  }
+  .row:hover:not(.is-disabled) { background: rgba(255,255,255,0.6); }
+  .row .label { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; }
+
+  .row.is-active {
+    background: var(--brand-soft-fill);
+    color: var(--brand-deep);
+    font-weight: 650;
+  }
+  .row.is-active .ico { color: var(--brand); }
+
+  .row.is-disabled {
+    color: var(--muted);
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .row .lock {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.04em;
+    color: var(--muted);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 1px 7px;
+  }
+
+  /* parent chevron */
+  .chev {
+    flex: 0 0 16px; width: 16px; height: 16px;
+    color: var(--muted);
+    transition: transform var(--dur) var(--ease);
+  }
+  .surface.open > .row .chev { transform: rotate(90deg); color: var(--brand); }
+  .surface.open > .row { color: var(--brand-deep); }
+  .surface.open > .row .ico { color: var(--brand); }
+
+  /* ---- the accordion sub-tree (SIGNATURE) ---- */
+  .subtree {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows var(--dur) var(--ease);
+  }
+  .surface.open > .subtree { grid-template-rows: 1fr; }
+  .subtree-inner { overflow: hidden; }
+
+  .tree {
+    position: relative;
+    margin: 2px 0 6px 23px;   /* indent under the parent icon */
+    padding-left: 16px;
+  }
+  /* the thin vertical connector line */
+  .tree::before {
+    content: "";
+    position: absolute;
+    left: 0; top: 4px; bottom: 12px;
+    width: 1.5px;
+    background: linear-gradient(var(--brand-soft), rgba(255,183,213,0.25));
+    border-radius: 2px;
+  }
+
+  .child {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 38px;
+    padding: 0 10px;
+    border: 0; background: transparent;
+    border-radius: 9px;
+    color: var(--muted);
+    font: inherit; font-size: 13.5px; font-weight: 550;
+    text-align: left; width: 100%;
+    cursor: pointer;
+    transition: background 150ms var(--ease), color 150ms var(--ease);
+  }
+  /* little tick joining child to the connector line */
+  .child::before {
+    content: "";
+    position: absolute;
+    left: -16px; top: 50%;
+    width: 12px; height: 1.5px;
+    background: var(--brand-soft);
+    border-radius: 2px;
+  }
+  .child:hover { background: rgba(255,255,255,0.6); color: var(--ink); }
+  .child.is-active {
+    background: var(--brand-soft-fill);
+    color: var(--brand-deep);
+    font-weight: 650;
+  }
+  .child .dot {
+    flex: 0 0 6px; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--muted);
+  }
+  .child.is-active .dot { background: var(--brand); }
+  .child .count {
+    margin-left: auto;
+    font-size: 11px; font-weight: 700;
+    color: #fff; background: var(--brand);
+    border-radius: 999px;
+    padding: 1px 7px;
+  }
+
+  /* hide labels / tree in collapsed mode; show only icons */
+  .rail.collapsed .row .label,
+  .rail.collapsed .row .chev,
+  .rail.collapsed .row .lock { display: none; }
+  .rail.collapsed .row { justify-content: center; padding: 0; }
+  .rail.collapsed .subtree { grid-template-rows: 0fr !important; }  /* no inline tree when collapsed */
+
+  /* ============ TOOLTIP (collapsed, simple rows) ============ */
+  .tip {
+    position: absolute;
+    left: calc(100% + 14px);
+    top: 50%;
+    transform: translateY(-50%) translateX(-6px);
+    background: var(--ink);
+    color: #fff;
+    font-size: 12.5px; font-weight: 600;
+    padding: 6px 10px;
+    border-radius: 8px;
+    white-space: nowrap;
+    opacity: 0; pointer-events: none;
+    transition: opacity 140ms var(--ease), transform 140ms var(--ease);
+    z-index: 40;
+    box-shadow: 0 8px 20px -8px rgba(0,0,0,0.4);
+  }
+  .tip::before {
+    content: "";
+    position: absolute;
+    left: -5px; top: 50%; transform: translateY(-50%);
+    border: 5px solid transparent;
+    border-right-color: var(--ink);
+  }
+  /* only show tooltips when collapsed, and not for the Connect parent (it gets a flyout) */
+  .rail.collapsed .surface:not(.has-children) .row:hover + .tip,
+  .rail.collapsed .surface:not(.has-children) .row:focus-visible + .tip {
+    opacity: 1; transform: translateY(-50%) translateX(0);
+  }
+
+  /* ============ FLYOUT POPOVER (collapsed Connect) ============ */
+  .flyout {
+    position: absolute;
+    left: calc(100% + 14px);
+    top: -4px;
+    min-width: 196px;
+    background: var(--glass-bg-strong);
+    -webkit-backdrop-filter: blur(24px) saturate(160%);
+    backdrop-filter: blur(24px) saturate(160%);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+    border-radius: var(--radius);
+    padding: 8px;
+    opacity: 0;
+    transform: translateX(-8px) scale(0.98);
+    transform-origin: left center;
+    pointer-events: none;
+    transition: opacity 160ms var(--ease), transform 160ms var(--ease);
+    z-index: 50;
+  }
+  .flyout.show { opacity: 1; transform: translateX(0) scale(1); pointer-events: auto; }
+  .flyout-title {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--muted);
+    padding: 4px 10px 8px;
+  }
+  .flyout .child { color: var(--ink); }
+  .flyout .child::before { display: none; }
+  .flyout .child .dot { background: var(--muted); }
+  .flyout .child.is-active .dot { background: var(--brand); }
+
+  /* arrow on the flyout */
+  .flyout::before {
+    content: "";
+    position: absolute;
+    left: -6px; top: 22px;
+    width: 12px; height: 12px;
+    background: var(--glass-bg-strong);
+    border-left: 1px solid var(--glass-border);
+    border-bottom: 1px solid var(--glass-border);
+    transform: rotate(45deg);
+  }
+
+  /* ---- bottom profile card ---- */
+  .rail-bottom { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+  .profile {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: rgba(255,255,255,0.5);
+    cursor: pointer;
+    transition: background 160ms var(--ease), border-color 160ms var(--ease), padding var(--dur) var(--ease);
+  }
+  .profile:hover { background: #fff; border-color: var(--brand-soft); }
+  .avatar {
+    flex: 0 0 38px; width: 38px; height: 38px;
+    border-radius: 11px;
+    background: linear-gradient(150deg, var(--brand-soft), var(--brand));
+    display: grid; place-items: center;
+    color: #fff; font-weight: 750; font-size: 14px;
+    box-shadow: 0 4px 12px -5px rgba(227,11,93,0.5);
+  }
+  .profile-meta { flex: 1; min-width: 0; line-height: 1.25; }
+  .profile-name { font-size: 13.5px; font-weight: 700; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .profile-org { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .profile-chev { flex: 0 0 16px; color: var(--muted); }
+  .rail.collapsed .profile { justify-content: center; padding: 6px; border: 0; background: transparent; }
+  .rail.collapsed .profile-meta, .rail.collapsed .profile-chev { display: none; }
+
+  /* ============ faux chat content (context) ============ */
+  .content {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    border-radius: 22px;
+    background: var(--glass-bg);
+    -webkit-backdrop-filter: blur(20px) saturate(140%);
+    backdrop-filter: blur(20px) saturate(140%);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+    overflow: hidden;
+  }
+  .content-top {
+    display: flex; align-items: center; gap: 12px;
+    padding: 16px 22px;
+    border-bottom: 1px solid var(--line);
+  }
+  .content-top .avatar { width: 40px; height: 40px; flex-basis: 40px; }
+  .content-top h2 { margin: 0; font-size: 15.5px; font-weight: 700; }
+  .content-top p { margin: 1px 0 0; font-size: 12.5px; color: var(--muted); }
+  .breadcrumb {
+    margin-left: auto;
+    font-size: 12px; color: var(--muted);
+    display: flex; align-items: center; gap: 7px;
+  }
+  .breadcrumb b { color: var(--brand-deep); }
+
+  .chat-body { flex: 1; overflow-y: auto; padding: 26px 22px; display: flex; flex-direction: column; gap: 16px; }
+  .bubble { max-width: 64%; padding: 11px 15px; border-radius: 16px; font-size: 14px; line-height: 1.45; }
+  .bubble.them {
+    align-self: flex-start;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-bottom-left-radius: 5px;
+    color: var(--ink);
+  }
+  .bubble.me {
+    align-self: flex-end;
+    background: linear-gradient(160deg, var(--brand) 0%, var(--brand-deep) 120%);
+    color: #fff;
+    border-bottom-right-radius: 5px;
+  }
+  .bubble .t { font-size: 10.5px; opacity: 0.7; margin-top: 5px; }
+  .composer {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 18px; border-top: 1px solid var(--line);
+  }
+  .composer .field {
+    flex: 1; height: 44px; border-radius: 14px;
+    border: 1px solid var(--line); background: rgba(255,255,255,0.6);
+    display: flex; align-items: center; padding: 0 16px; color: var(--muted); font-size: 14px;
+  }
+  .composer .send {
+    width: 44px; height: 44px; border-radius: 14px; border: 0;
+    background: linear-gradient(160deg, var(--brand), var(--brand-deep));
+    color: #fff; cursor: pointer; display: grid; place-items: center;
+  }
+
+  /* ---- hint banner ---- */
+  .hint {
+    margin: 0; padding: 9px 14px;
+    font-size: 12px; color: var(--brand-deep);
+    background: var(--brand-soft-fill);
+    border-bottom: 1px solid var(--line);
+    text-align: center;
+  }
+  .hint b { font-weight: 700; }
+
+  /* visible keyboard focus everywhere */
+  a:focus-visible, button:focus-visible, input:focus-visible, [tabindex]:focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 2px;
+    border-radius: 8px;
+  }
+
+  /* respect reduced motion */
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+  }
+
+  @media (max-width: 720px) {
+    .app { padding: 12px; gap: 12px; }
+    :root { --rail-w: 260px; }
+  }
+</style>
+</head>
+<body>
+  <div class="app">
+    <!-- ===================== RAIL ===================== -->
+    <nav class="rail" id="rail" aria-label="Primary">
+      <!-- top: wordmark + single collapse control -->
+      <div class="rail-top">
+        <div class="wordmark">
+          <div class="logo-dot">H</div>
+          <span class="wordmark-text">Hello&nbsp;Sello</span>
+        </div>
+        <button class="collapse-btn" id="collapseBtn" aria-label="Collapse navigation" aria-expanded="true">
+          <!-- panel-collapse glyph: a chevron that flips on collapse -->
+          <svg class="ico" viewBox="0 0 24 24" fill="none" width="18" height="18">
+            <path d="M14.5 6.5 9 12l5.5 5.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- search (rail placement matches the references; real app may move this to the top bar) -->
+      <div class="search">
+        <svg class="ico" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="m20 20-3.2-3.2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <input type="text" placeholder="Search" aria-label="Search" />
+        <span class="kbd">⌘ S</span>
+      </div>
+
+      <div class="section-label">Main</div>
+
+      <div class="nav" id="nav"><!-- surfaces injected by JS --></div>
+
+      <!-- bottom profile card -->
+      <div class="rail-bottom">
+        <button class="profile" aria-label="Bina Sharma, Greenleaf - account menu">
+          <div class="avatar">BS</div>
+          <div class="profile-meta">
+            <div class="profile-name">Bina Sharma</div>
+            <div class="profile-org">Greenleaf</div>
+          </div>
+          <svg class="ico profile-chev" viewBox="0 0 24 24" fill="none"><path d="m8 10 4 4 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+    </nav>
+
+    <!-- ===================== CONTENT (context) ===================== -->
+    <section class="content">
+      <p class="hint">Model 2 - Accordion. Click <b>Connect</b> to open the tree in place. Use the <b>collapse</b> control (top of the rail) to switch to the icon rail, then hover or click the Connect icon for its <b>flyout</b>.</p>
+      <div class="content-top">
+        <div class="avatar">RK</div>
+        <div>
+          <h2>Ravi Kumar</h2>
+          <p>Stone Pharmacy - online</p>
+        </div>
+        <div class="breadcrumb">Connect&nbsp;/&nbsp;<b>Chat</b></div>
+      </div>
+      <div class="chat-body">
+        <div class="bubble them">Hi Bina, got your proposal for the GreenLeaf batch. Looks good.<div class="t">10:24</div></div>
+        <div class="bubble me">Glad to hear it. Want me to open a deal card so we lock the terms?<div class="t">10:25</div></div>
+        <div class="bubble them">Yes please. Same margin we discussed last week?<div class="t">10:26</div></div>
+        <div class="bubble me">Same margin. Sending it over now.<div class="t">10:26</div></div>
+      </div>
+      <div class="composer">
+        <div class="field">Write a message</div>
+        <button class="send" aria-label="Send">
+          <svg class="ico" viewBox="0 0 24 24" fill="none"><path d="M5 12 19 5l-4 14-3-6-7-1Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+    </section>
+  </div>
+
+<script>
+/* ---------------------------------------------------------------
+   GENERIC, data-driven nav. Any surface may declare `children`
+   and the SAME accordion (expanded) + flyout (collapsed) code runs.
+----------------------------------------------------------------- */
+const ICONS = {
+  home:   '<path d="M4 11 12 4l8 7v8a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1v-8Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>',
+  connect:'<path d="M7 8h10M7 12h7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M5 4h14a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9l-4 4V5a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>',
+  discover:'<circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="2"/><path d="m15 9-2 4-4 2 2-4 4-2Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>',
+  present:'<rect x="3" y="5" width="18" height="12" rx="1.5" stroke="currentColor" stroke-width="2"/><path d="M8 20h8M12 17v3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
+  buy:    '<path d="M6 7h12l-1 11a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1L6 7Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M9 7a3 3 0 0 1 6 0" stroke="currentColor" stroke-width="2"/>',
+  sell:   '<path d="M4 13 11 6h7v7l-7 7-7-7Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="14.5" cy="9.5" r="1.3" fill="currentColor"/>',
+  trade:  '<path d="M5 8h11l-3-3M19 16H8l3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
+};
+
+const SURFACES = [
+  { id:'home',    label:'Home',    icon:'home' },
+  { id:'connect', label:'Connect', icon:'connect', open:true, children:[
+      { id:'inbox',         label:'Inbox',         count:3 },
+      { id:'chat',          label:'Chat',          active:true },
+      { id:'relationships', label:'Relationships' },
+  ]},
+  { id:'discover', label:'Discover', icon:'discover' },
+  { id:'present',  label:'Present',  icon:'present' },
+  { id:'buy',   label:'Buy',   icon:'buy',   disabled:true },
+  { id:'sell',  label:'Sell',  icon:'sell',  disabled:true },
+  { id:'trade', label:'Trade', icon:'trade', disabled:true },
+];
+
+const svg = (path) => `<svg class="ico" viewBox="0 0 24 24" fill="none">${path}</svg>`;
+
+function childMarkup(c){
+  const cls = 'child' + (c.active ? ' is-active' : '');
+  const tail = c.count ? `<span class="count">${c.count}</span>` : '';
+  return `<button class="${cls}" data-child="${c.id}"><span class="dot"></span><span>${c.label}</span>${tail}</button>`;
+}
+
+function surfaceMarkup(s){
+  const hasKids = !!s.children;
+  const activeClass = s.children?.some(c=>c.active) && !s.open ? '' : (s.active ? ' is-active' : '');
+  const rowCls = 'row' + (s.disabled ? ' is-disabled' : '') + activeClass;
+  const chev = hasKids ? svg('<path d="m9 6 6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>').replace('class="ico"','class="ico chev"') : '';
+  const lock = s.disabled ? '<span class="lock">Soon</span>' : '';
+
+  const flyout = hasKids ? `
+    <div class="flyout" data-flyout="${s.id}">
+      <div class="flyout-title">${s.label}</div>
+      ${s.children.map(childMarkup).join('')}
+    </div>` : '';
+
+  const subtree = hasKids ? `
+    <div class="subtree">
+      <div class="subtree-inner">
+        <div class="tree">${s.children.map(childMarkup).join('')}</div>
+      </div>
+    </div>` : '';
+
+  return `
+    <div class="surface ${hasKids ? 'has-children' : ''} ${s.open ? 'open' : ''}" data-surface="${s.id}">
+      <button class="${rowCls}" data-row="${s.id}" ${s.disabled?'aria-disabled="true"':''} ${hasKids?'aria-expanded="'+(!!s.open)+'"':''}>
+        ${svg(ICONS[s.icon])}
+        <span class="label">${s.label}</span>
+        ${lock}${chev}
+      </button>
+      <span class="tip" role="tooltip">${s.label}</span>
+      ${subtree}
+      ${flyout}
+    </div>`;
+}
+
+const nav = document.getElementById('nav');
+nav.innerHTML = SURFACES.map(surfaceMarkup).join('');
+
+const rail = document.getElementById('rail');
+
+/* ---- collapse / expand the whole rail ---- */
+const collapseBtn = document.getElementById('collapseBtn');
+collapseBtn.addEventListener('click', () => {
+  const collapsing = !rail.classList.contains('collapsed');
+  rail.classList.toggle('collapsed', collapsing);
+  collapseBtn.setAttribute('aria-expanded', String(!collapsing));
+  collapseBtn.setAttribute('aria-label', collapsing ? 'Expand navigation' : 'Collapse navigation');
+  closeAllFlyouts();
+});
+
+/* ---- row clicks: accordion toggle (expanded) OR flyout pin (collapsed) ---- */
+nav.addEventListener('click', (e) => {
+  const rowBtn = e.target.closest('[data-row]');
+  const childBtn = e.target.closest('[data-child]');
+
+  if (childBtn) { selectChild(childBtn); return; }
+  if (!rowBtn) return;
+
+  const surface = rowBtn.closest('.surface');
+  if (surface.querySelector('.row').classList.contains('is-disabled')) return;
+
+  const hasKids = surface.classList.contains('has-children');
+
+  if (rail.classList.contains('collapsed') && hasKids) {
+    // collapsed: clicking the Connect icon pins its flyout open
+    const fly = surface.querySelector('.flyout');
+    const isOpen = fly.classList.contains('show');
+    closeAllFlyouts();
+    if (!isOpen) fly.classList.add('show');
+    return;
+  }
+
+  if (hasKids) {
+    // expanded: accordion open/close in place
+    const open = surface.classList.toggle('open');
+    rowBtn.setAttribute('aria-expanded', String(open));
+  } else {
+    // a flat surface: mark it active (demo)
+    setActiveSurface(surface);
+  }
+});
+
+/* ---- collapsed flyout on hover ---- */
+nav.querySelectorAll('.surface.has-children').forEach(surface => {
+  const fly = surface.querySelector('.flyout');
+  let hideTimer;
+  const show = () => { if (rail.classList.contains('collapsed')) { clearTimeout(hideTimer); closeAllFlyouts(); fly.classList.add('show'); } };
+  const hide = () => { hideTimer = setTimeout(() => fly.classList.remove('show'), 160); };
+  surface.addEventListener('mouseenter', show);
+  surface.addEventListener('mouseleave', hide);
+  fly.addEventListener('mouseenter', () => clearTimeout(hideTimer));
+  fly.addEventListener('mouseleave', hide);
+});
+
+function closeAllFlyouts(){ rail.querySelectorAll('.flyout.show').forEach(f => f.classList.remove('show')); }
+
+/* close flyout on outside click / Escape */
+document.addEventListener('click', (e) => { if (!e.target.closest('.surface.has-children')) closeAllFlyouts(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeAllFlyouts(); });
+
+/* ---- child selection: highlight active child everywhere ---- */
+function selectChild(btn){
+  const id = btn.getAttribute('data-child');
+  // every copy of this child (inline tree + flyout) shares the id
+  rail.querySelectorAll('[data-child]').forEach(b => {
+    b.classList.toggle('is-active', b.getAttribute('data-child') === id);
+  });
+  // update breadcrumb in the faux content
+  const label = btn.querySelector('span:nth-child(2)').textContent;
+  document.querySelector('.breadcrumb').innerHTML = 'Connect&nbsp;/&nbsp;<b>' + label + '</b>';
+  closeAllFlyouts();
+}
+
+function setActiveSurface(surface){
+  rail.querySelectorAll('.surface > .row').forEach(r => r.classList.remove('is-active'));
+  // also clear child-active so the rail shows a single source of truth
+  surface.querySelector('.row').classList.add('is-active');
+}
+</script>
+</body>
+</html>

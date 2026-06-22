@@ -134,6 +134,68 @@ export interface ChatMessageView extends ChatMessage {
 }
 
 /* -------------------------------------------------------------------------- */
+/* New-chat picker (04B) - the "my connections -> their people/companies" view */
+/* The connections read (supabase/connections.ts) returns these; the FE        */
+/* new-chat dropdown consumes them via @/modules/messaging.                     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * One person of a connected company, for a person-mode row in the picker.
+ * There is NO `person.role` column in the schema, so `role` is derived from
+ * `person.metadata.role` and is `null` for almost everyone (the picker simply
+ * renders nothing under the name when it is null). There is deliberately NO
+ * presence/last-seen field - no presence backend exists, so the picker does not
+ * fake one.
+ */
+export interface ConnectedPerson {
+  /** person.id - the P2P "other person" handed to openOrCreateP2pThread */
+  personId: string;
+  /** display_name ?? (first_name + " " + last_name) */
+  name: string;
+  /** computed avatar initials */
+  initials: string;
+  /** person.metadata.role if a non-empty string, else null (no role column) */
+  role: string | null;
+}
+
+/**
+ * One connected company, for a company-mode row in the picker. `connectedAt`
+ * (= relationship.created_at) drives the "New connections by date" section, and
+ * `openDealCount` is the truthful open-deal badge (D-06). `people` are this
+ * company's people the viewer is allowed to see (RLS counterparty visibility).
+ */
+export interface ConnectedCompany {
+  /** company.id (the OTHER company in the relationship) */
+  companyId: string;
+  /** relationship.id - the key for resolving/creating the C2C or P2P thread */
+  relationshipId: string;
+  /** company.name */
+  name: string;
+  /** company.city - a real column; powers "N contacts · City" (may be null) */
+  city: string | null;
+  /** computed avatar initials */
+  initials: string;
+  /** count of this company's visible people */
+  contactsCount: number;
+  /** relationship.created_at (ISO) - the connected-since date */
+  connectedAt: string;
+  /** count of OPEN deal_card rows for this relationship (D-06; no faked unread) */
+  openDealCount: number;
+  /** this company's visible people */
+  people: ConnectedPerson[];
+}
+
+/**
+ * The whole picker directory: every company the viewer is connected to, with
+ * its people. The FE derives person-mode (flatten people) and the
+ * "New connections" section (filter by `connectedAt` within the recency window)
+ * from this single shape.
+ */
+export interface MyConnectionsView {
+  companies: ConnectedCompany[];
+}
+
+/* -------------------------------------------------------------------------- */
 /* The accept contract - the published language between connect and messaging */
 /* -------------------------------------------------------------------------- */
 
