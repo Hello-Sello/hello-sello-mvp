@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Deal Card (S2) — v3 prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<!-- Space Grotesk tops out at 700; card display weights are capped at 700 so no faux-bold synthesis -->
+<style>
+  /* ============================================================
+     SECTION A — SHARED DESIGN SYSTEM (identical to dealform-v2)
+     ============================================================ */
+  :root {
+    /* A.1 palette */
+    --maroon: #76002d;
+    --brand: #c4156b;
+    --brand-2: #e30b5d;
+    --brand-soft: #ffb7d5;
+    --brand-tint: #fde7f1;
+    --ink: #1f1430;
+    --ash: #6b6477;
+    --line: #ecdfe9;
+    --bg: #fffafc;
+    --white: #ffffff;
+    --ok: #16924a;
+    --warn: #b45309;
+    --danger: #b3203f;
+    --thc: #b5179e;
+    --cbd: #1b998b;
+
+    /* A.3 radii */
+    --r-lg: 20px;
+    --r-md: 14px;
+    --r-sm: 10px;
+    --r-xs: 8px;
+
+    /* A.5 spacing tokens (single horizontal inset + consistent vertical rhythm) */
+    --s-2: 8px;
+    --s-3: 12px;
+    --s-4: 16px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    padding: 86px 16px 60px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  /* A.2 mono utility — EVERY number wears this */
+  .mono { font-variant-numeric: tabular-nums; }
+
+  /* display font — applied to the card's headings / names / totals below */
+  .display,
+  .card-head .num,
+  .headline .hv,
+  .party .co,
+  .pname,
+  .card-back h3 {
+    font-family: "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+
+  /* shared chips */
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 6px;
+    line-height: 1.5;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .chip.thc { color: var(--thc); background: rgba(181,23,158,0.10); }
+  .chip.cbd { color: var(--cbd); background: rgba(27,153,139,0.12); }
+  .chip.batch { color: var(--maroon); background: var(--brand-tint); }
+  .chip.custom { color: var(--ash); background: #f1eef2; }
+
+  /* cultivar thumbnail gradients */
+  .tint-indica { background: linear-gradient(135deg, #8b5cf6, #6d28d9); }
+  .tint-sativa { background: linear-gradient(135deg, #f59e0b, #d97706); }
+  .tint-hybrid { background: linear-gradient(135deg, #10b981, #047857); }
+  .tint-custom { background: linear-gradient(135deg, #cbb8c6, #9a8a96); }
+
+  /* ---------- A.4 variation switcher (fixed top bar) ---------- */
+  .switch {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 50;
+    background: rgba(255,250,252,0.92);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--line);
+    padding: 10px 14px 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+  .switch-row { display: flex; gap: 8px; align-items: center; }
+  .vbtn {
+    font-size: 12px;
+    font-weight: 700;
+    padding: 6px 14px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: var(--white);
+    color: var(--ink);
+    cursor: pointer;
+    letter-spacing: 0.02em;
+  }
+  .vbtn.active { background: var(--maroon); color: #fff; border-color: var(--maroon); }
+  .toggle-prop {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 6px 12px;
+    border-radius: 999px;
+    border: 1px dashed var(--brand-soft);
+    background: var(--white);
+    color: var(--brand);
+    cursor: pointer;
+    margin-left: 6px;
+  }
+  .toggle-prop.on { background: var(--brand-tint); border-style: solid; }
+  .vcaption { font-size: 11.5px; color: var(--ash); }
+  .vcaption b { color: var(--maroon); }
+
+  /* ============================================================
+     SECTION B — DEAL CARD
+     ============================================================ */
+  .card {
+    width: 390px;
+    max-width: 100%;
+    background: var(--white);
+    border-radius: var(--r-lg);
+    box-shadow: 0 18px 50px -20px rgba(118,0,45,0.28);
+    overflow: hidden;
+    position: relative;
+    /* both faces are position:absolute, so the card needs an explicit height
+       to keep from collapsing. The front face is the tall one. */
+    min-height: 640px;
+  }
+
+  /* Clean cross-fade flip (no fake-3D rotateY — never glitches in Chrome/Safari). */
+  .card-front, .card-back {
+    position: absolute;
+    inset: 0;
+    background: var(--white);
+    transition: opacity 0.32s ease, visibility 0.32s ease;
+  }
+  /* front: shown by default, hidden when flipped */
+  .card-front { opacity: 1; visibility: visible; }
+  .card.flipped .card-front { opacity: 0; visibility: hidden; }
+  /* back: hidden by default, shown when flipped */
+  .card-back {
+    opacity: 0;
+    visibility: hidden;
+    border-radius: var(--r-lg);
+    display: flex;
+    flex-direction: column;
+    padding: 18px;
+  }
+  .card.flipped .card-back { opacity: 1; visibility: visible; }
+
+  /* ---- B.2 header (maroon band) ---- */
+  .card-head {
+    background: var(--maroon);
+    color: #fff;
+    padding: 17px 18px 15px;
+    position: relative;
+    text-align: center;
+  }
+  .card-head .eyebrow {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.16em;
+    opacity: 0.85;
+  }
+  .card-head .num {
+    font-size: 16px;
+    font-weight: 700; /* Space Grotesk display max */
+    letter-spacing: 0.04em;
+    margin-top: 2px;
+  }
+  .card-head .story {
+    font-size: 12px;
+    opacity: 0.9;
+    margin-top: 6px;
+  }
+  .card-head .story b { font-weight: 700; opacity: 1; }
+  .headline {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 14px;
+    padding-top: 13px;
+    border-top: 1px solid rgba(255,255,255,0.18);
+    text-align: left;
+  }
+  .headline .hl { font-size: 11px; opacity: 0.8; }
+  .headline .hv { font-size: 19px; font-weight: 700; /* Space Grotesk display max */ }
+  .headline .pill {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.18);
+    color: #fff;
+  }
+
+  /* corner buttons */
+  .corner {
+    position: absolute;
+    top: 12px;
+    height: 30px; width: 30px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.16);
+    border: 1px solid rgba(255,255,255,0.25);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 0;
+  }
+  .corner:hover { background: rgba(255,255,255,0.28); }
+  .corner.flip { left: 12px; }
+  .corner.edit { right: 12px; }
+  .corner svg { width: 15px; height: 15px; }
+
+  /* ---- B.3 body: party row ---- */
+  .parties {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: var(--s-3) var(--s-4);
+    border-bottom: 1px solid var(--line);
+  }
+  .party { text-align: center; }
+  .party .role {
+    font-size: 9.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ash);
+  }
+  .party .co { font-size: 13px; font-weight: 700; color: var(--ink); }
+  .party .you { color: var(--brand); font-size: 10px; font-weight: 700; }
+  .arrow { color: var(--brand); display: flex; align-items: center; }
+
+  /* product lines */
+  .prods { display: flex; flex-direction: column; gap: 2px; padding: var(--s-2) var(--s-4) 0; }
+  .prod {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .prod:last-child { border-bottom: none; }
+  .thumb {
+    width: 34px; height: 34px;
+    border-radius: 9px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  /* cultivar code baked into thumb (IND / SAT / HYB) — makes the three thumbs intentionally distinct */
+  .thumb-code {
+    font-family: "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: #fff;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.22);
+  }
+  .pmid { flex: 1; min-width: 0; }
+  .pname {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .pmeta {
+    font-size: 11px;
+    color: var(--ash);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex-wrap: wrap;
+    margin-top: 1px;
+  }
+  .pright { text-align: right; flex-shrink: 0; }
+  .pprice { font-size: 13px; font-weight: 700; color: var(--ink); }
+  .pprice .unit { font-size: 10px; color: var(--ash); font-weight: 400; }
+  .pqty { font-size: 11px; color: var(--ash); }
+
+  /* ----------------------------------------------------------------
+     ONE SECTION PRIMITIVE — calm ledger: hairline divider, no boxes.
+     Every section shares one horizontal inset + one vertical rhythm,
+     and is separated from the one above by a single 1px divider.
+     ---------------------------------------------------------------- */
+  .sec {
+    margin-inline: var(--s-4);
+    padding-block: var(--s-3);
+    border-top: 1px solid var(--line);
+  }
+
+  /* terms — 3-up row, no boxes (just a plain grid inside a divider section) */
+  .terms {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: var(--s-2);
+  }
+  .term .tl {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--ash);
+  }
+  .term .tv { font-size: 13px; font-weight: 600; color: var(--ink); }
+
+  /* owner margin */
+  .margin {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+  }
+  .margin .ml { color: var(--ash); }
+  .margin .mr { display: flex; align-items: center; gap: 7px; }
+  .margin .mv { font-weight: 700; color: var(--ink); }
+  .margin .lock {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    color: var(--ash);
+    font-size: 10.5px;
+  }
+  .margin .lock svg { width: 11px; height: 11px; }
+
+  /* B.4 notes (conditional) — no fill, no left accent bar; rows stacked */
+  .note { padding-block: var(--s-2); }
+  .note + .note { border-top: 1px solid var(--line); }
+  .note .attrib {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 3px;
+  }
+  .note .avatar {
+    width: 18px; height: 18px;
+    border-radius: 999px;
+    background: var(--brand);
+    color: #fff;
+    font-size: 9px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .note .who { font-size: 11px; font-weight: 600; color: var(--ink); }
+  .note .body { font-size: 12px; color: var(--ash); padding-left: 24px; }
+
+  /* B.5 THINGS — no box, hairline section like everything else */
+  .th-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  .th-head .tt {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ash);
+  }
+  .th-head .count { font-size: 11px; font-weight: 600; color: var(--brand); }
+  .things-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12.5px;
+    padding: 4px 0;
+  }
+  .box {
+    width: 15px; height: 15px;
+    border-radius: 4px;
+    border: 1.5px solid var(--line);
+    flex-shrink: 0;
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .box.done { background: var(--ok); border-color: var(--ok); }
+  .box.done svg { width: 10px; height: 10px; }
+  .things-row .title { flex: 1; color: var(--ink); }
+  .things-row.done .title { color: var(--ash); text-decoration: line-through; }
+  .assignee { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
+  .assignee .ai {
+    width: 20px; height: 20px;
+    border-radius: 999px;
+    background: var(--brand-tint);
+    color: var(--maroon);
+    font-size: 10px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .assignee .an { font-size: 11px; color: var(--ash); }
+  .things-cap {
+    margin-top: 8px;
+    font-size: 10.5px;
+    color: var(--ash);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-style: italic;
+  }
+  .things-cap svg { width: 11px; height: 11px; flex-shrink: 0; }
+
+  /* message affordance — plain hairline row, no box */
+  .msg {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    color: var(--ash);
+    font-size: 12.5px;
+    cursor: text;
+  }
+  .msg svg { width: 15px; height: 15px; color: var(--brand); flex-shrink: 0; }
+
+  /* open deal room link — hairline section, centred link (no box) */
+  .deal-room {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    color: var(--brand);
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .deal-room:hover { color: var(--maroon); }
+  .deal-room svg { width: 15px; height: 15px; }
+
+  /* back face */
+  .card-back h3 {
+    font-size: 13px;
+    margin: 0 0 4px;
+    color: var(--maroon);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .card-back .back-sub { font-size: 11.5px; color: var(--ash); margin-bottom: 14px; }
+  .hist-item {
+    display: flex;
+    gap: 10px;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--line);
+    font-size: 12px;
+  }
+  .hist-item .hdot {
+    width: 8px; height: 8px;
+    border-radius: 999px;
+    background: var(--brand);
+    margin-top: 5px;
+    flex-shrink: 0;
+  }
+  .hist-item .hv { font-weight: 600; color: var(--ink); }
+  .hist-item .hd { font-size: 10.5px; color: var(--ash); }
+  .back-return {
+    margin-top: auto;
+    text-align: center;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--brand);
+    cursor: pointer;
+    padding: 10px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+  }
+
+  /* hidden helper */
+  [hidden] { display: none !important; }
+
+  /* ============================================================
+     B.6 — VARIATION DENSITY OVERRIDES
+     ============================================================ */
+
+  /* V2 — Thumbnail-led */
+  body[data-variant="v2"] .headline .hv { font-size: 22px; }
+  body[data-variant="v2"] .thumb { width: 44px; height: 44px; }
+  body[data-variant="v2"] .thumb-code { font-size: 13px; }
+  body[data-variant="v2"] .pname { font-size: 14px; }
+  body[data-variant="v2"] .prod { padding: 10px 0; }
+
+  /* V3 — Ultra-compact */
+  /* keep the headline: it is now the ONLY place value-net is shown (the pink total is gone) */
+  body[data-variant="v3"] .headline { margin-top: 10px; padding-top: 9px; }
+  body[data-variant="v3"] .headline .hv { font-size: 17px; }
+  body[data-variant="v3"] .thumb { width: 28px; height: 28px; }
+  body[data-variant="v3"] .thumb-code { font-size: 9px; }
+  body[data-variant="v3"] .prod { padding: 5px 0; }
+  body[data-variant="v3"] .prod .batch-meta { display: none; } /* hide batch inline */
+  body[data-variant="v3"] .term { padding-top: var(--s-2); padding-bottom: var(--s-2); }
+  body[data-variant="v3"] .term .tl { font-size: 9px; }
+  body[data-variant="v3"] .term .tv { font-size: 11.5px; }
+  body[data-variant="v3"] .note .body {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  body[data-variant="v3"] .assignee .an { display: none; } /* initials only */
+  body[data-variant="v3"] .things-row { padding: 2px 0; }
+  body[data-variant="v3"] .sec { padding-block: var(--s-2); } /* tighter rhythm in dense mode */
+  body[data-variant="v3"] .card { min-height: 560px; }
+</style>
+</head>
+<body data-variant="v3">
+
+  <!-- A.4 variation switcher -->
+  <div class="switch">
+    <div class="switch-row">
+      <button class="vbtn" data-v="v1">V1</button>
+      <button class="vbtn" data-v="v2">V2</button>
+      <button class="vbtn active" data-v="v3">V3</button>
+    </div>
+    <div class="vcaption" id="vcaption"><b>V3</b> — Dense glance card</div>
+  </div>
+
+  <!-- card mounts here -->
+  <div id="cardMount"></div>
+
+<script>
+/* ============================================================
+   B.7 — CARD DUMMY DATA  (HTML comments map each field to CardFront.tsx)
+   ============================================================ */
+// deal.hsNumber    -> CardFront: deal.hs_number / dealNumber
+// deal.version     -> CardFront: deal.current_version_no  (rendered "v1")
+// deal.status      -> CardFront: deal.status              ("Open")
+// deal.proposing   -> CardFront: EDIT pencil shows on BOTH sides — either party can propose a change (no gating)
+// deal.date        -> CardFront: deal.proposed_at (formatted)
+// deal.seller      -> CardFront: deal.seller_company.name
+// deal.buyer       -> CardFront: deal.buyer_company.name
+// deal.viewerSide  -> CardFront: viewer.side ("buyer"|"seller")
+// deal.valueNet    -> CardFront: deal.value_net (formatted "€27.10k")
+// deal.avgMargin   -> CardFront: deal.owner_avg_margin (OWNER-ONLY)
+// deal.terms.*     -> CardFront: deal.terms.{delivery_date,payment_terms,free_delivery,product_count}
+// deal.lines[]     -> CardFront: deal.line_items[]
+//   line.name      -> line_item.product.name
+//   line.cultivar  -> line_item.product.cultivar
+//   line.batch     -> line_item.batch.code
+//   line.thc/cbd   -> line_item.batch.thc_pct / cbd_pct
+//   line.price     -> line_item.unit_price (per gram)
+//   line.qty       -> line_item.quantity (formatted)
+// deal.myNote      -> CardFront: deal.viewer_note    (render ONLY if non-empty)
+// deal.theirNote   -> CardFront: deal.counterpart_note (render ONLY if non-empty)
+// deal.things[]    -> CardFront: deal.things[] (READ-ONLY; assignee from thing.assignee)
+
+const deal = {
+  hsNumber: "HS-PO-2041", version: "v1", status: "Open", proposing: true,
+  date: "18 Jun 2026", seller: "Greenleaf Botanics", buyer: "Stonebridge Pharma",
+  viewerSide: "buyer", valueNet: "€27.10k", avgMargin: "31.4%",
+  terms: { delivery: "02 Jul 2026", payment: "Net 30", freeDelivery: "Yes", products: "3 lines" },
+  lines: [
+    { name:"Northern Lights", cultivar:"Indica", tint:"indica", batch:"GL-24-0118", thc:22.4, cbd:0.8, price:"€7.20", unit:"g", qty:"2.0 kg" },
+    { name:"Sour Diesel",     cultivar:"Sativa", tint:"sativa", batch:"GL-24-0231", thc:24.1, cbd:0.3, price:"€8.10", unit:"g", qty:"1.5 kg" },
+    { name:"Wedding Cake",    cultivar:"Hybrid", tint:"hybrid", batch:"GL-24-0188", thc:20.6, cbd:1.1, price:"€6.40", unit:"g", qty:"3.0 kg" },
+  ],
+  // The PRESENT note belongs to Greenleaf (the counterparty / seller).
+  myNote:    null,  // Stonebridge (viewer = buyer) left no note -> renders NOTHING
+  theirNote: "Certs attached, all batches lab-verified this week.", // Greenleaf -> renders
+  myCompany: "Stonebridge Pharma", theirCompany: "Greenleaf Botanics",
+  things: [
+    { title:"Confirm batch certificates",   done:true,  who:"G. Bauer", initials:"GB" },
+    { title:"Sign quality agreement",        done:false, who:"S. Patel", initials:"SP" },
+    { title:"Arrange cold-chain transport",  done:false, who:"G. Bauer", initials:"GB" },
+  ],
+};
+
+/* ---------- inline SVG icons ---------- */
+const SVG = {
+  back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>',
+  pencil: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
+  arrow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
+  lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>',
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>',
+  info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>',
+  chat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>',
+  link: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg>',
+};
+
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+/* ---------- cultivar -> 3-letter thumb code (makes each thumb intentionally distinct) ---------- */
+const CULTIVAR_CODE = { indica: "IND", sativa: "SAT", hybrid: "HYB", custom: "CST" };
+
+/* ---------- render product line ---------- */
+function renderLine(l) {
+  const code = CULTIVAR_CODE[l.tint] || l.cultivar.slice(0,3).toUpperCase();
+  return `
+    <div class="prod">
+      <div class="thumb tint-${l.tint}"><span class="thumb-code">${esc(code)}</span></div>
+      <div class="pmid">
+        <div class="pname">${esc(l.name)}</div>
+        <div class="pmeta">
+          <span class="batch-meta mono">${esc(l.cultivar)} · Batch ${esc(l.batch)}</span>
+          <span class="chip thc mono">THC ${l.thc.toFixed(1)}</span>
+          <span class="chip cbd mono">CBD ${l.cbd.toFixed(1)}</span>
+        </div>
+      </div>
+      <div class="pright">
+        <div class="pprice mono">${esc(l.price)}<span class="unit">/${esc(l.unit)}</span></div>
+        <div class="pqty mono">${esc(l.qty)}</div>
+      </div>
+    </div>`;
+}
+
+/* ---------- render ONE note (conditional). Returns "" when empty. ---------- */
+function renderNote(company, text) {
+  if (!text || !text.trim()) return "";        // empty -> render NOTHING (no dash, no box)
+  const initials = company.split(/\s+/).map(w => w[0]).slice(0,2).join("").toUpperCase();
+  return `
+    <div class="note">
+      <div class="attrib">
+        <span class="avatar">${esc(initials)}</span>
+        <span class="who">${esc(company)}</span>
+      </div>
+      <div class="body">${esc(text)}</div>
+    </div>`;
+}
+
+/* ---------- render THINGS (read-only) ---------- */
+function renderThing(t) {
+  return `
+    <div class="things-row ${t.done ? 'done' : ''}">
+      <div class="box ${t.done ? 'done' : ''}">${t.done ? SVG.check : ''}</div>
+      <div class="title">${esc(t.title)}</div>
+      <div class="assignee">
+        <span class="ai">${esc(t.initials)}</span>
+        <span class="an">${esc(t.who)}</span>
+      </div>
+    </div>`;
+}
+
+/* ---------- render the whole card ---------- */
+function renderCard() {
+  const doneCount = deal.things.filter(t => t.done).length;
+
+  // notes region — only non-empty notes appear; both empty -> region collapses
+  const notesHtml = renderNote(deal.theirCompany, deal.theirNote) + renderNote(deal.myCompany, deal.myNote);
+
+  const html = `
+  <div class="card" id="theCard">
+    <div class="card-front">
+
+      <!-- HEADER (maroon) -->
+      <div class="card-head">
+        <!-- AFFORDANCE 1: flip-to-history (always shown) -->
+        <button class="corner flip" id="flipBtn" title="Flip to history">${SVG.back}</button>
+        <!-- AFFORDANCE 3: edit pencil — present on BOTH sides (either party can propose a change) -->
+        <button class="corner edit" title="Edit deal">${SVG.pencil}</button>
+
+        <div class="eyebrow">DEAL</div>
+        <div class="num mono">${esc(deal.hsNumber)}</div>
+        <div class="story">On <b>${esc(deal.date)}</b>, <b>${esc(deal.seller)}</b> offered <b>${esc(deal.buyer)}</b> · you</div>
+
+        <div class="headline">
+          <div>
+            <div class="hl">Value net · 3 products</div>
+            <div class="hv mono">${esc(deal.valueNet)}</div>
+          </div>
+          <div class="pill">${esc(deal.status)} · ${esc(deal.version)}</div>
+        </div>
+      </div>
+
+      <!-- PARTY ROW -->
+      <div class="parties">
+        <div class="party">
+          <div class="role">Seller</div>
+          <div class="co">${esc(deal.seller)}</div>
+        </div>
+        <div class="arrow">${SVG.arrow}</div>
+        <div class="party">
+          <div class="role">Buyer</div>
+          <div class="co">${esc(deal.buyer)} <span class="you">· you</span></div>
+        </div>
+      </div>
+
+      <!-- PRODUCT LINES -->
+      <div class="prods">
+        ${deal.lines.map(renderLine).join("")}
+      </div>
+
+      <!-- TERMS — 3-up (Delivery / Payment / Free delivery), hairline section -->
+      <div class="sec terms">
+        <div class="term"><div class="tl">Delivery</div><div class="tv mono">${esc(deal.terms.delivery)}</div></div>
+        <div class="term"><div class="tl">Payment</div><div class="tv">${esc(deal.terms.payment)}</div></div>
+        <div class="term"><div class="tl">Free delivery</div><div class="tv">${esc(deal.terms.freeDelivery)}</div></div>
+      </div>
+
+      <!-- OWNER MARGIN (private) -->
+      <div class="sec margin">
+        <div class="ml">Your avg. margin</div>
+        <div class="mr">
+          <span class="mv mono">${esc(deal.avgMargin)}</span>
+          <span class="lock">${SVG.lock} only you</span>
+        </div>
+      </div>
+
+      <!-- NOTES (conditional) -->
+      ${notesHtml ? `<div class="sec notes">${notesHtml}</div>` : ``}
+
+      <!-- THINGS (read-only) -->
+      <div class="sec things">
+        <div class="th-head">
+          <span class="tt">Things</span>
+          <span class="count mono">${doneCount} / ${deal.things.length} done</span>
+        </div>
+        ${deal.things.map(renderThing).join("")}
+        <div class="things-cap">${SVG.info} Things are managed from the Deal Room.</div>
+      </div>
+
+      <!-- MESSAGE affordance -->
+      <div class="sec msg">${SVG.chat} Message ${esc(deal.theirCompany.split(" ")[0])} about this deal…</div>
+
+      <!-- AFFORDANCE 2: Open Deal Room link -->
+      <div class="sec deal-room" id="dealRoomBtn">${SVG.link} Open Deal Room ${SVG.arrow}</div>
+    </div>
+
+    <!-- BACK FACE: history placeholder -->
+    <div class="card-back">
+      <h3>Version history</h3>
+      <div class="back-sub">${esc(deal.hsNumber)} · ${esc(deal.status)} · ${esc(deal.version)}</div>
+      <div class="hist-item"><div class="hdot"></div><div><div class="hv">v1 — Greenleaf proposed</div><div class="hd mono">18 Jun 2026 · 3 lines · €27.10k</div></div></div>
+      <div class="hist-item"><div class="hdot"></div><div><div class="hv">Draft opened</div><div class="hd mono">17 Jun 2026 · Greenleaf Botanics</div></div></div>
+      <div class="back-return" id="backReturn">← Back to deal</div>
+    </div>
+  </div>`;
+
+  document.getElementById("cardMount").innerHTML = html;
+
+  // wire affordances
+  const card = document.getElementById("theCard");
+  document.getElementById("flipBtn").onclick = () => card.classList.add("flipped");
+  document.getElementById("backReturn").onclick = () => card.classList.remove("flipped");
+  document.getElementById("dealRoomBtn").onclick = () => alert("Open Deal Room → (navigates to the Deal Room route)");
+}
+
+/* ---------- variation switcher wiring ---------- */
+const captions = {
+  v1: "<b>V1</b> — Calm invoice ledger",
+  v2: "<b>V2</b> — Thumbnail-led under maroon",
+  v3: "<b>V3</b> — Dense glance card",
+};
+document.querySelectorAll(".vbtn").forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll(".vbtn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    const v = btn.dataset.v;
+    document.body.dataset.variant = v;
+    document.getElementById("vcaption").innerHTML = captions[v];
+  };
+});
+
+/* first paint */
+renderCard();
+</script>
+</body>
+</html>

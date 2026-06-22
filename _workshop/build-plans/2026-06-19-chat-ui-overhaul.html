@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Phase 4 - UI &amp; chat</title>
+<style>
+:root{
+  --ink:#1f2020;--muted:#6b6477;--line:#ecdfe9;--bg:#faf7f9;--card:#fff;
+  --brand:#e30b5d;--deep:#76002d;--brand-soft:#fde7f1;
+  --done:#1a7f4b;--done-bg:#e6f6ee;--prog:#9a6a00;--prog-bg:#fdf2dc;
+  --todo:#3a4757;--todo-bg:#eef0f3;--decide:#1f5fbf;--decide-bg:#e7f0fd;--park:#6b6b76;--park-bg:#f0eef2;
+}
+*{box-sizing:border-box}
+body{font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg);margin:0;padding:28px 18px 90px}
+.wrap{max-width:1040px;margin:0 auto}
+h1{font-size:24px;margin:0 0 2px}.sub{color:var(--muted);font-size:13.5px;margin:0 0 16px}
+.dash{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin:0 0 14px;box-shadow:0 1px 3px rgba(120,0,60,.05)}
+.dash .top{display:flex;gap:22px;align-items:center;flex-wrap:wrap}
+.dash .pct{font-size:42px;font-weight:800;line-height:1;color:var(--deep);min-width:84px}
+.dash .grow{flex:1;min-width:240px}
+.track{display:flex;height:14px;border-radius:8px;overflow:hidden;background:#efe7ec;margin:4px 0 8px}
+.track .seg{height:100%;transition:width .4s ease}.s-d{background:var(--done)}.s-p{background:var(--prog)}.s-t{background:var(--todo)}
+.counts{font-size:12.5px;color:var(--muted)}
+.legend{display:flex;flex-wrap:wrap;gap:9px 16px;font-size:12px;color:var(--muted);margin-top:10px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:middle}
+.k-d{background:var(--done)}.k-p{background:var(--prog)}.k-t{background:var(--todo)}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px}
+.toolbar button{font:600 12.5px/1 inherit;color:var(--deep);background:#fff;border:1px solid var(--line);border-radius:999px;padding:8px 14px;cursor:pointer}
+.toolbar button:hover{background:var(--brand-soft)}.toolbar button.on{background:var(--deep);color:#fff;border-color:var(--deep)}
+details.sec{background:var(--card);border:1px solid var(--line);border-radius:12px;margin:0 0 10px;overflow:hidden}
+details.sec>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:10px;padding:13px 16px;font-weight:700;font-size:15px}
+details.sec>summary::-webkit-details-marker{display:none}
+details.sec>summary .chev{transition:transform .2s;color:var(--muted);font-size:13px;width:12px}
+details.sec[open]>summary .chev{transform:rotate(90deg)}
+details.sec>summary .ttl{flex:1}
+.banner{background:var(--done-bg);border:1px solid #bfe6cd;border-left:4px solid var(--done);border-radius:10px;padding:11px 15px;margin:0 0 14px;font-size:13.5px;color:#176b30}
+.body{padding:2px 16px 14px}
+.chip{display:inline-block;font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;white-space:nowrap}
+.c-done{color:var(--done);background:var(--done-bg)}.c-prog{color:var(--prog);background:var(--prog-bg)}
+.c-todo{color:var(--todo);background:var(--todo-bg)}.c-decide{color:var(--decide);background:var(--decide-bg)}.c-park{color:var(--park);background:var(--park-bg)}
+.row{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-top:1px solid var(--line)}
+.row:first-child{border-top:none}.row .rmain{flex:1;min-width:0}
+.row .rt{font-weight:600;font-size:13.5px}.row .rd{font-size:12.5px;color:var(--muted);margin-top:3px}
+.row .rf{font-size:11.5px;color:var(--muted);margin-top:3px}
+.mini{font-size:11.5px;color:var(--muted);font-weight:600}
+code{background:#f0ecef;padding:1px 5px;border-radius:5px;font-size:12.5px}
+.hide{display:none!important}
+footer{margin-top:34px;color:var(--muted);font-size:12px;border-top:1px solid var(--line);padding-top:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Phase 4 - UI &amp; chat <span class="chip c-done" style="font-size:13px;vertical-align:middle">&#9989; DONE - closed</span></h1>
+  <p class="sub">2026-06-19 &middot; the Connect/chat overhaul slice board &middot; surface <code>/connect/chat</code> &middot; <b>phase complete &amp; closed</b></p>
+
+  <div class="banner">
+    <b>&#9989; PHASE 4 IS DONE - CLOSED.</b> ALL 9 slices <b>built, gate-green, and human-UAT PASSED</b>: <b>F1/F2/B1/B4</b>, <b>S2</b> V3 Card, <b>S3</b> V2 Form, the DEV-66/72 rename, <b>04A the Deal Strip</b> (S1 + B3 + 3 polish rounds), <b>04B the Conversation list</b> (new-chat picker Option A + backend), and <b>04C the Card + Form UI touch</b> - card <b>slim shaded header</b> + card opens as a <b>leaflet over the conversation rail</b> + a <b>one-tap-batch</b> Deal Form + the <b>Damson</b> deep-pink recolor (#76002d&rarr;#7a1638). Nothing in this phase is pending anymore.
+    <br><br><b>Deal Room became its own Phase 5 - and that is ALSO now DONE.</b> The work this plan originally lumped in / pushed forward (the 3-column Deal Room, stages, finalization, the P1-P4 chrome polish) was promoted to <b>Phase 5</b> and has since been built, code-reviewed, and goal-verified (31/31). The chrome polish P1-P4 below shipped inside Phase 5.
+    <br><br><b>NEXT (whole project): Phase 6 - Deal Basket / Deal Form.</b> See the Sprint-2 roadmap board for the live 11-phase plan (4 &amp; 5 done; 6 next; 7-8 pending; 9 Documents + 10 Final UI pass are new; 11 Notification is last).
+  </div>
+
+  <div class="dash">
+    <div class="top">
+      <div class="pct" id="pct">--</div>
+      <div class="grow">
+        <div class="track">
+          <span class="seg s-d" id="bd" style="width:0"></span>
+          <span class="seg s-p" id="bp" style="width:0"></span>
+          <span class="seg s-t" id="bt" style="width:0"></span>
+        </div>
+        <div class="counts" id="counts">counting...</div>
+        <div class="legend">
+          <span><i class="k-d"></i>done</span>
+          <span><i class="k-p"></i>in progress (prototype / next)</span>
+          <span><i class="k-t"></i>to do / to design</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <button id="expand">Expand all</button>
+    <button id="collapse">Collapse all</button>
+    <button id="filter">Show only not-done</button>
+  </div>
+
+  <!-- ============ SLICE BOARD (open, the active section) ============ -->
+  <details class="sec" open>
+    <summary><span class="chev">&#9656;</span><span class="ttl">Slice board (9)</span><span class="chip c-done">9 done / 0 prog / 0 to do</span><span class="mini">100%</span></summary>
+    <div class="body">
+
+      <div class="row" data-status="done">
+        <div class="rmain">
+          <div class="rt">F1 &middot; Glass opacity</div>
+          <div class="rf"><code>globals.css</code> &middot; <code>glass-strong</code></div>
+          <div class="rd">Floating popups now solid pure white (100%), no busy-background bleed - account menu, PlusMenu, change popover, card. Done.</div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+
+      <div class="row" data-status="done">
+        <div class="rmain">
+          <div class="rt">F2 &middot; Global chrome (one-rail accordion nav)</div>
+          <div class="rf">AppShell, IconRail, TopBar, connect layout</div>
+          <div class="rd">2 nav bars merged into one accordion rail: Connect opens in place, Inbox renamed &rarr; Connection Request, full-width TopBar, default tab Chat. Solo global frame. Verified.</div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+
+      <div class="row" data-status="done">
+        <div class="rmain">
+          <div class="rt">B1 &middot; Chat bubbles</div>
+          <div class="rf"><code>MessageBubble.tsx</code></div>
+          <div class="rd">Pink right (me), ash-gray left (them) on white. Done.</div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+
+      <div class="row" data-status="done">
+        <div class="rmain">
+          <div class="rt">B4 &middot; Scroll behaviour</div>
+          <div class="rf">ThreadView, DealChat</div>
+          <div class="rd">Auto-scroll to latest + jump-to-bottom arrow + at-bottom gate + first-load scroll (WhatsApp/Slack feel). Built 06-20, gate-green.</div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+
+      <div class="row" data-status="done">
+        <div class="rmain">
+          <div class="rt">S2 &middot; The Card</div>
+          <div class="rf">CardFront, CardBack, DealCard, ProductList</div>
+          <div class="rd">V3 ported: maroon header, dense rows, 3f clip fix, <b>real 3D flip</b> (rotateY + preserve-3d; cross-fade overridden); read-only THINGS built behind an optional prop, wired later in the Deal Room. Built 06-20.</div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+
+      <div class="row" data-status="done">
+        <div class="rmain">
+          <div class="rt">S3 &middot; The Form</div>
+          <div class="rf"><code>DealForm.tsx</code></div>
+          <div class="rd">V2 ported: shopping-bag tiles, THC/CBD chips, deal-level "Avg. margin - only you" pill, maroon Proceed. Built 06-20.</div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+
+      <div class="row" data-status="done">
+        <div class="rmain">
+          <div class="rt">S1 &middot; The Strip <span class="mini">(BUILT 06-21 as 04A + 3 polish rounds)</span></div>
+          <div class="rf"><code>DealPin.tsx</code> &middot; <code>ThreadView.tsx</code> &middot; new <code>SellaMark / SellaCurtain / TranslateButton</code></div>
+          <div class="rd"><b>BUILT 06-21 (GSD phase 04A).</b> A <b>two-tier strip</b> modeled on the C2C: TOP a circle avatar + the <b>person's name</b> (left), the company <b>relationship</b> button + <b>deal</b> dropdown + &hellip; menu (right, by the three dots); a thin divider; BOTTOM the <b>[Deal Room | Deal Card]</b> toggle (left), the maroon <b>// Sella mark</b> (centered) with "Review" <b>between the bars</b> + an animated dot, and a <b>translate</b> placeholder (right). The <code>//</code> bars <b>part like a curtain</b> on click and the held-change Accept/Decline/Reason/Withdraw flow drops down (re-homed, no new action). Deal Room + translate = placeholders; deeper visual polish parked for the Agentation round.</div>
+        </div>
+        <span class="chip c-done">built</span>
+      </div>
+
+      <div class="row" data-status="done">
+        <div class="rmain">
+          <div class="rt">B3 &middot; Sella logo <span class="mini">(BUILT 06-21 - folded into S1/04A)</span></div>
+          <div class="rf">shared <code>SellaMark.tsx</code> + <code>SellaCurtain.tsx</code></div>
+          <div class="rd"><b>BUILT 06-21 (inside 04A).</b> The "//" is CSS-drawn <b>parallel bars</b> in maroon <code>--color-brand-deep</code> (replaces the AI-sparkle pill), one shared <code>SellaMark</code> used everywhere. The bars <b>part like a curtain</b> on click; the <code>SellaCurtain</code> drawer re-homes the held-change flow. Earlier <code>prototypes/sella-mark-prototype/</code> superseded - only the parallel-bars idea carried over.</div>
+        </div>
+        <span class="chip c-done">built</span>
+      </div>
+
+      <div class="row" data-status="done">
+        <div class="rmain">
+          <div class="rt">B2 &middot; Conversation list <span class="mini">(BUILT 06-21 as 04B)</span></div>
+          <div class="rf"><code>NewChatDropdown.tsx</code> (new) &middot; <code>ConversationList.tsx</code> &middot; <code>ChatView.tsx</code> &middot; backend <code>messaging/supabase/connections.ts</code> + thread helpers</div>
+          <div class="rd"><b>BUILT 06-21 (GSD phase 04B).</b> The <b>+ New chat</b> button is live and opens the <b>Option A</b> picker as a <b>leaflet that COVERS</b> the search box + the All/Unread/Companies/Deals tabs + the rows (no more stacked double-filter - fixed after the first build). It has a <b>Person | Company toggle</b>, per-mode search, a <b>New connections</b> section (30-day, relative-day labels), and a real <b>open-deal badge</b> (no faked unread). Backend = <code>getMyConnections</code> (RLS-scoped my-connections &rarr; their people/companies) + <code>openOrCreateP2pThread</code> / <code>resolveC2cThread</code>. Shows ONLY connected people/companies; base list keeps its 4 tabs (no 5th). Gate-green: tsc + eslint 0 + 62/62 unit + next build ok; verified live (screenshot). <b>Awaits a human click-through UAT.</b></div>
+        </div>
+        <span class="chip c-done">built</span>
+      </div>
+
+    </div>
+  </details>
+
+  <!-- ============ WHAT WAS LEFT - NOW ALL DONE ============ -->
+  <details class="sec" open>
+    <summary><span class="chev">&#9656;</span><span class="ttl">What was left (now all done)</span><span class="chip c-done">all done</span></summary>
+    <div class="body">
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">04C &middot; Card + Form UI touch <span class="mini">(BUILT 06-21, UAT PASSED)</span></div>
+          <div class="rf">S2 Card + S3 Form &middot; applied directly to the app (no GSD), gate-green</div>
+          <div class="rd"><b>BUILT 06-21.</b> See-first prototype (<code>prototypes/04c-touch-prototype/</code>, approved) &rarr; ported direct. (1) DealCard <b>slim SHADED header</b> (deep-pink glass wash, not the old #76002d band) + ink value + dashed-lock margin + fluid width; (2) <b>card opens as a LEAFLET over the conversation rail</b> (DealPin portals into a <code>hs-deal-card-slot</code>; rail w-72), no longer floats in the thread; (3) DealForm <b>one-tap batch rail</b> (no modal); (4) <b>Damson recolor</b> --color-brand-deep #76002d&rarr;#7a1638 (token-derived glass shadow; THC=deep-pink/CBD=periwinkle). Commits c29ea4c + 37ec4e8. Human visual UAT PASSED.</div>
+        </div>
+        <span class="chip c-done">built</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Deal Room &rarr; promoted to Phase 5 <span class="mini">(BUILT - goal verified 31/31)</span></div>
+          <div class="rf">old "Deal Workspace" container &middot; now its own phase</div>
+          <div class="rd"><b>DONE.</b> Promoted out of Phase 4 into its own <b>Phase 5</b> and since BUILT: a 3-column Deal Room (thin read-only card | chat | V7 work panel), full-blurred-overlay open/close from chat, per-thing/per-doc private-or-shared visibility (lock), manual stage "mark done" (glows when all its things tick), finalization on the LifecyclePill &rarr; "Is the deal done?" &rarr; <b>golden card</b> (via <code>finalizeDeal</code>, never <code>confirm_deal_change</code>). The card's read-only THINGS + the deferred <code>assigned_to</code> were wired here. Right column = <b>V7</b> (dropdown-only). Code-review bugs fixed (RLS write-ownership, finalize-requires-confirmed, seal-no-clobber) + a realtime channel fix. Goal verified 31/31.</div>
+        </div>
+        <span class="chip c-done">done (Phase 5)</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">P1-P4 chrome polish <span class="mini">(shipped inside Phase 5)</span></div>
+          <div class="rf">whole Connect/Chat surface</div>
+          <div class="rd"><b>DONE - shipped inside Phase 5.</b> The P1-P4 chrome polish landed: logo colour tokens made consistent, the "CONNECT" label restored, the left rail narrowed, a capsule "mark done" button, and a "DEAL ROOM" + number top bar. The deeper Agentation look-and-feel pass is NOT this - that is the separate new <b>Phase 10 (Final UI pass)</b>, deliberately scheduled after everything else is built. See the Sprint-2 roadmap board.</div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+
+    </div>
+  </details>
+
+  <!-- ============ LOCKED DECISIONS (collapsed) ============ -->
+  <details class="sec">
+    <summary><span class="chev">&#9656;</span><span class="ttl">Locked decisions</span><span class="chip c-decide">decided</span></summary>
+    <div class="body">
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Default tab</div>
+          <div class="rd">Opening Connect lands on <b>Chat</b>, not Inbox (<code>/connect</code> &rarr; <code>/connect/chat</code>).</div>
+        </div>
+        <span class="chip c-decide">locked</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Empty chat state</div>
+          <div class="rd">Chat opens with <b>no conversation selected</b> - just a blank pink background. The thread opens only when you tap a conversation (WhatsApp-style). No thread auto-loads.</div>
+        </div>
+        <span class="chip c-decide">locked</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Rename: "Workspace" &rarr; "Deal Room"</div>
+          <div class="rd">"Workspace" becomes <b>"Deal Room"</b>.</div>
+        </div>
+        <span class="chip c-decide">locked</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">The "AI" pill is fake</div>
+          <div class="rd">Cosmetic only, no engine behind it. So a fixed Sella tile that holds the notification + Review-change feed is the clean path; nothing real breaks.</div>
+        </div>
+        <span class="chip c-decide">locked</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Inbox rename</div>
+          <div class="rd">Parked on purpose - we name it once the Sella-tile design lands (same idea at two scales). (Interim: "Inbox" is shown as "Connection Request" in F2.)</div>
+        </div>
+        <span class="chip c-park">parked</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Card flip (decided 2026-06-20)</div>
+          <div class="rd">A <b>real 3D flip</b> (rotateY + preserve-3d + backface-hidden). The V3 cross-fade was tried then <b>overridden</b> - the physical flip is the intended feel.</div>
+        </div>
+        <span class="chip c-decide">locked</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Rename DONE</div>
+          <div class="rd">"Deal Workspace" &rarr; <b>"Deal Room"</b> shipped. The "old Deal Room &rarr; Presentation mode" half is Muskan's <code>Present</code> surface - out of scope here.</div>
+        </div>
+        <span class="chip c-done">shipped</span>
+      </div>
+
+    </div>
+  </details>
+
+  <!-- ============ ORDER OF WORK / WAVES (collapsed) ============ -->
+  <details class="sec">
+    <summary><span class="chev">&#9656;</span><span class="ttl">Order of work (waves)</span><span class="chip c-decide">plan</span></summary>
+    <div class="body">
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Wave 0 &middot; F1 (glass) + F2 (global chrome)</div>
+          <div class="rd">Everything else sits inside the shell and the glass. Do them first. <span class="mini">(both done)</span></div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Proto &middot; S1 strip, S2 card, S3 form</div>
+          <div class="rd">The three Ayush was unsure about. Throwaway variations, picked, then built. <span class="mini">(all picked &amp; built - S2/S3 06-20, S1 06-21 as 04A)</span></div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Wave 1 &middot; parallel build</div>
+          <div class="rd"><b>All built.</b> S2 card, S3 form, B1 bubbles, B4 scroll (06-20); S1 strip + B3 mark = <b>04A</b> (06-21); B2 conversation list = <b>04B</b> (06-21, BE+FE waves). Each ran as its own GSD sub-phase on separate files, gate-green.</div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Done &middot; Phase 5 (Deal Room) built &rarr; chrome polish shipped</div>
+          <div class="rd">04A/04B/04C all built - <b>Phase 04 (UI &amp; chat) is DONE &amp; CLOSED</b>. The <b>Deal Room shipped as Phase 5</b> (built, code-reviewed, goal verified 31/31); it wired the card's THINGS + <code>assigned_to</code>, and the <b>P1-P4 chrome polish shipped inside it</b>. Whole-project NEXT = <b>Phase 6 (Deal Basket / Deal Form)</b>; see the Sprint-2 roadmap board.</div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Close &middot; update STATE + decisions</div>
+          <div class="rd">Updated <code>.planning/STATE.md</code> + decisions + these boards. The one GSD step we keep, at the end of each sub-phase. Phase 4 is closed.</div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+
+    </div>
+  </details>
+
+  <!-- ============ POLISH BACKLOG (collapsed) ============ -->
+  <details class="sec">
+    <summary><span class="chev">&#9656;</span><span class="ttl">Polish backlog - P1-P3 chrome SHIPPED (in Phase 5); deep pass = Phase 10</span><span class="chip c-done">P1-P3 done</span></summary>
+    <div class="body">
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">P1-P3 chrome polish shipped inside Phase 5; the deep look-and-feel pass = new Phase 10</div>
+          <div class="rd">All four trace back to <b>F2</b> (the one-rail accordion merge). The concrete chrome fixes (P1-P3 below) <b>shipped inside Phase 5</b>. The broader Agentation-driven look-and-feel round (the old P4) became its own <b>Phase 10 (Final UI pass)</b>, deliberately scheduled after everything else is built - see the Sprint-2 roadmap board.</div>
+        </div>
+        <span class="chip c-done">done / moved</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">P1 &middot; Logo colour consistency</div>
+          <div class="rd"><b>DONE (Phase 5).</b> Logo colour made consistent via shared tokens across the shells (old shell dark-ink vs new-shell pink mismatch resolved).</div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">P2 &middot; Bring back the "CONNECT" label <span class="mini">(the main one)</span></div>
+          <div class="rd"><b>DONE (Phase 5).</b> The "CONNECT" label was restored above the sub-items.</div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">P3 &middot; Narrow the left rail</div>
+          <div class="rd"><b>DONE (Phase 5).</b> The extreme-left nav rail was narrowed back toward the old icon-rail width.</div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">P4 &middot; Overall look-and-feel pass <span class="mini">(became Phase 10)</span></div>
+          <div class="rd"><b>Moved out to its own phase.</b> The whole-surface Agentation-driven look-and-feel round is now <b>Phase 10 (Final UI pass)</b>, scheduled after everything else is built (it also folds in "lock the finalized deal" - a Done deal becomes read-only with just an Archive dialog). Not part of Phase 4.</div>
+        </div>
+        <span class="chip c-decide">Phase 10</span>
+      </div>
+
+    </div>
+  </details>
+
+  <!-- ============ MASTER NOTES (collapsed) ============ -->
+  <details class="sec">
+    <summary><span class="chev">&#9656;</span><span class="ttl">Everything Ayush said (master notes)</span><span class="chip c-decide">24 notes</span></summary>
+    <div class="body">
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">&#9989; All slices these notes map to are now BUILT (2026-06-21)</div>
+          <div class="rd">F1/F2/B1/B4/S2/S3 built 06-20; <b>S1 + B3 = 04A</b> and <b>B2 = 04B</b> built 06-21. The per-note chips below are the <b>original triage status</b> (kept as a historical record), not the current state - see the Slice board at the top for live status.</div>
+        </div>
+        <span class="chip c-done">all built</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">V1&middot;1 &rarr; F2 &middot; Global chrome <span class="mini">(Wave 0)</span></div>
+          <div class="rd">Two navigation bars exist. Use just <b>one</b>. <span class="mini">- done</span></div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">V1&middot;2 &rarr; F2 &middot; Global chrome <span class="mini">(Wave 0)</span></div>
+          <div class="rd">The second nav bar wastes space and confuses - <b>merge</b> it into the first. <span class="mini">- done</span></div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">V1&middot;3 &rarr; F2 + Inbox-name <span class="mini">(Wave 0 / Parked)</span></div>
+          <div class="rd">On open, show <b>Connect/Chat first</b> (not Inbox). "Inbox" is a confusing name - rename it. ("Inbox" now renamed to "Connection Request".) <span class="mini">- done</span></div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">V1&middot;4 &rarr; F2 &middot; Global chrome <span class="mini">(Wave 0)</span></div>
+          <div class="rd">Top bar too big. Make it <b>thinner</b>, search in the <b>center</b>, push the <b>notification</b> and the <b>company name</b> out of the bar. <span class="mini">- done</span></div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">V1&middot;5 &rarr; B2 &middot; Conversation list <span class="mini">(Wave 1)</span></div>
+          <div class="rd">New chat like WhatsApp: pick a person from connections with search; search past conversations; show unread company deals; a "new connection" section that pops names by date. <span class="mini">- discuss</span></div>
+        </div>
+        <span class="chip c-todo">discuss</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">V1&middot;6 &rarr; S1 &middot; The Strip <span class="mini">(Proto)</span></div>
+          <div class="rd">The main strip should be the person's name + the deal workspace entry (screenshot to follow). <span class="mini">- prototype</span></div>
+        </div>
+        <span class="chip c-prog">prototype</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">V1&middot;7 &rarr; S1 &middot; The Strip <span class="mini">(Proto)</span></div>
+          <div class="rd">The strip looks clumsy now (DealCard / open card / Sella / workspace all crammed). Make it cleaner. <span class="mini">- prototype</span></div>
+        </div>
+        <span class="chip c-prog">prototype</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">V1&middot;8 &rarr; B1 &middot; Bubbles <span class="mini">(Wave 1)</span></div>
+          <div class="rd">Chat bubbles: <b>my</b> messages on the <b>right</b> in <b>pink</b>; the other person on the <b>left</b> in <b>ash-gray</b> bubble on white. <span class="mini">- done</span></div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">V1&middot;9 &rarr; S1 &middot; The Strip <span class="mini">(Proto, name locked)</span></div>
+          <div class="rd">Rename "Workspace" &rarr; <b>"Deal Room"</b>. Maybe open it from the card too (still a thought). <span class="mini">- prototype</span></div>
+        </div>
+        <span class="chip c-prog">prototype</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">V1&middot;10 &rarr; B4 &middot; Scroll <span class="mini">(Wave 1)</span></div>
+          <div class="rd">Chat must be scrollable and open at the <b>bottom</b> (latest message), like WhatsApp/Slack. <span class="mini">- done (verify)</span></div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">V1&middot;11 &rarr; B3 &middot; Sella logo <span class="mini">(Proto)</span></div>
+          <div class="rd">Change the AI logo to a <b>"//" double-slash</b> with a bubbly AI feel. Applies to every Sella mark. <span class="mini">- prototype</span></div>
+        </div>
+        <span class="chip c-prog">prototype</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">V1&middot;12 &rarr; S1 &middot; The Strip <span class="mini">(Proto)</span></div>
+          <div class="rd">Move the DealCard + dropdown <b>up</b> in the strip. Keep only "open card" - and show it as a <b>card icon</b>, not the words "open card". <span class="mini">- prototype</span></div>
+        </div>
+        <span class="chip c-prog">prototype</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">V1&middot;13 &rarr; F1 &middot; Glass opacity <span class="mini">(Wave 0)</span></div>
+          <div class="rd">The PlusMenu popup is too transparent - busy background bleeds through. Make it more <b>opaque/clear</b>. <span class="mini">- done</span></div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">V1&middot;14 &rarr; B3 &middot; Sella logo <span class="mini">(Proto)</span></div>
+          <div class="rd">The Sella logo in the right panel also changes. <span class="mini">- prototype</span></div>
+        </div>
+        <span class="chip c-prog">prototype</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">V1&middot;15 &rarr; S2 &middot; The Card <span class="mini">(Proto)</span></div>
+          <div class="rd">Card style changes <b>completely</b> - looks unprofessional, boxes too big, too much info. Screenshot 3 is the target. Decide how it opens, how much shows, where edit + flip buttons go; later fold Deal Room into it. <span class="mini">- prototype (now built as V3)</span></div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">V1&middot;16 &rarr; S3 &middot; The Form <span class="mini">(Proto)</span></div>
+          <div class="rd">The deal basket / deal form changes completely too. <span class="mini">- prototype (now built as V2)</span></div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">V1&middot;17 &rarr; S3 &middot; The Form <span class="mini">(Proto)</span></div>
+          <div class="rd">The product list is a bad, unclear representation. Make it <b>user-friendly and easy to read</b>. <span class="mini">- prototype (now built as V2)</span></div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">V1&middot;18 &rarr; S3 &middot; The Form <span class="mini">(Proto)</span></div>
+          <div class="rd">Brainstorm what information the form/card should actually carry. <span class="mini">- discuss (folded into V2 build)</span></div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">V1&middot;19 &rarr; S1 &middot; The Strip <span class="mini">(Proto)</span></div>
+          <div class="rd">When a change is sent, the AI mark shifts aside - you don't want that. Idea: a <b>fixed tile</b> that always is the AI ("//"); notifications open and close from it as a Sella <b>feed</b>; call it <b>Sella</b>, not "AI"; put withdraw / review in a dropdown. <span class="mini">- prototype</span></div>
+        </div>
+        <span class="chip c-prog">prototype</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">V2&middot;1 &rarr; S1 + B3 <span class="mini">(Proto)</span></div>
+          <div class="rd">"Review change" is shown separately from the AI - <b>fold it into the Sella tile</b>. Does the "AI" label even do anything? &rarr; Checked: <b>no, it is cosmetic</b>. <span class="mini">- prototype</span></div>
+        </div>
+        <span class="chip c-prog">prototype</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">V2&middot;2 &rarr; F1 &middot; Glass opacity <span class="mini">(Wave 0)</span></div>
+          <div class="rd">When the card opens it is very blurry - transparency problem, make it <b>clear</b>. <span class="mini">- done</span></div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">V2&middot;3 &rarr; S3 &middot; The Form <span class="mini">(Proto)</span></div>
+          <div class="rd">On the seller's side the product display is bad. <b>Research</b> how a proper product should look (image thumbnail + plus/minus stepper). <span class="mini">- research (folded into V2 build)</span></div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">SS&middot;1 &rarr; F2 &middot; Global chrome <span class="mini">(Wave 0)</span></div>
+          <div class="rd"><b>Layout screenshot:</b> one left rail; contacts column collapses behind a "&lt;" back arrow; search center-top; company name + notifications outside the bar top-right; 3-panel body. <span class="mini">- done</span></div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">SS&middot;2 &rarr; S1 &middot; The Strip <span class="mini">(Proto)</span></div>
+          <div class="rd"><b>Person row screenshot:</b> "LB Luca Brunner &middot; [Helvetia Pharma AG] &middot; [Deals]". Company pill &rarr; relationship page. Selected deal moves from the dropdown into the strip. Show first 3 deals by time + a "see all". <span class="mini">- prototype</span></div>
+        </div>
+        <span class="chip c-prog">prototype</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">SS&middot;3 &rarr; S2 &middot; The Card <span class="mini">(Proto)</span></div>
+          <div class="rd"><b>Card screenshot:</b> clean card - "DEAL - id" header, "On DATE X offered to Y this deal", product lines, Decline / Change / Accept, a Message, a "Things" checklist, tiny product thumbnails on the left. <span class="mini">- prototype (now built as V3)</span></div>
+        </div>
+        <span class="chip c-done">done</span>
+      </div>
+
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">Source &amp; raw notes</div>
+          <div class="rd">Ayush walked the live app with Agentation across two viewports (24 notes) plus three reference screenshots. Raw notes live in <code>build-plans/notes/2026-06-19-connect-chat-ui-overhaul.md</code>.</div>
+        </div>
+        <span class="chip c-decide">info</span>
+      </div>
+
+    </div>
+  </details>
+
+  <footer>
+    Detailed Phase-4 board - <b>Phase 4 is DONE &amp; CLOSED</b> (Deal Room shipped as Phase 5; whole-project next = Phase 6). Source of truth is <code>.planning/ROADMAP.md</code> + <code>04-CONTEXT.md</code>. Rebuilt 2026-06-20, closed-out 2026-06-22.
+  </footer>
+
+</div>
+<script>
+(function(){
+  function recount(){
+    var it=document.querySelectorAll('[data-status]');var d=0,p=0,t=0;
+    it.forEach(function(e){var s=e.getAttribute('data-status');if(s==='done')d++;else if(s==='prog')p++;else t++;});
+    var tot=d+p+t||1;var f=function(n){return Math.round(n/tot*100)};
+    var pe=document.getElementById('pct');if(pe)pe.textContent=f(d)+'%';
+    var bd=document.getElementById('bd'),bp=document.getElementById('bp'),bt=document.getElementById('bt');
+    if(bd)bd.style.width=f(d)+'%';if(bp)bp.style.width=f(p)+'%';if(bt)bt.style.width=f(t)+'%';
+    var c=document.getElementById('counts');if(c)c.textContent=d+' done · '+p+' in progress · '+t+' to do · '+tot+' tracked';
+  }
+  function setAll(o){document.querySelectorAll('details.sec').forEach(function(d){d.open=o});}
+  var e=document.getElementById('expand');if(e)e.onclick=function(){setAll(true)};
+  var c=document.getElementById('collapse');if(c)c.onclick=function(){setAll(false)};
+  var ft=document.getElementById('filter');var on=false;
+  if(ft)ft.onclick=function(){on=!on;ft.classList.toggle('on',on);if(on)setAll(true);
+    document.querySelectorAll('.row[data-status="done"]').forEach(function(el){el.classList.toggle('hide',on)});};
+  recount();
+})();
+</script>
+</body>
+</html>

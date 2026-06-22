@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>04C · UI touch — card-as-leaflet · slim header · form pick · maroon recolor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<!--
+  PROTOTYPE — THROWAWAY. 04C UI touch (Ayush).
+  Question: how should the 4 quick UI changes LOOK, on the REAL app theme (light pink / dark pink / glass)?
+    1. Maroon recolor  — #76002d is too bright. Live-switch the deep-pink swatch (top bar) to compare.
+    2. Card-as-leaflet — the deal card opens OVER the conversation rail (same place/shape as New chat),
+                         no longer floating inside the chat thread.
+    3. Slim header     — the old ~118px maroon band is replaced by a calm ~64px header (see Before/After).
+    4. Form product pick — pick product + batch in ONE inline tap, no modal popup.
+  Colours/design are matched to src/app/globals.css (NOT the old newchat-prototype palette).
+  Synthesised from a parallel design workflow: Card = "Floating glass" header/shell + "Ledger" lines +
+  dashed-lock margin; Form = "One-tap batch rail". All deep-pink uses var(--color-brand-deep)/color-mix so
+  the maroon switch recolours everything (incl. the glass shadow) live.
+-->
+<style>
+  /* ============================================================
+     REAL HELLO SELLO THEME (from src/app/globals.css)
+     ============================================================ */
+  :root{
+    --color-brand:#e30b5d;        /* raspberry  — DARK PINK, primary accent */
+    --color-brand-soft:#ffb7d5;   /* cotton candy — LIGHT PINK, soft fills */
+    --color-brand-deep:#7a1638;   /* DEEP PINK — recoloured from #76002d (Damson). Live-switchable. */
+    --color-surface:#ffffff;
+    --color-ink:#1f2020;
+    --color-ink-muted:#6b6470;
+    --color-success:#34b233;
+    --color-info:#6c7bd9;         /* periwinkle — the ONLY non-pink accent. Reserved for CBD / data. */
+    --color-danger:#dc2626;
+    --bg-from:#ffffff;
+    --bg-to:#fff1f7;
+    /* SINGLE SOURCE OF TRUTH: shadow tint derives from the deep-pink token, so the
+       maroon switch updates accent AND frosted-depth in one place. */
+    --glass-shadow:0 10px 34px -12px color-mix(in srgb, var(--color-brand-deep) 18%, transparent);
+
+    /* cultivar coding (thumbnails + dots) — deliberately NOT periwinkle, so CBD periwinkle stays unique */
+    --cult-sativa-a:#b6e05a; --cult-sativa-b:#6fb83a;
+    --cult-indica-a:#c3a8f5; --cult-indica-b:#7a4fd0;
+    --cult-hybrid-a:#9fe0d6; --cult-hybrid-b:#3fa4b8;
+
+    --sans:"Geist", system-ui, -apple-system, sans-serif;
+    --mono:"Geist Mono", ui-monospace, "SF Mono", monospace;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ height:100%; }
+  body{
+    margin:0; color:var(--color-ink); font-family:var(--sans);
+    -webkit-font-smoothing:antialiased; line-height:1.5;
+    background:
+      radial-gradient(60rem 60rem at 10% -12%, rgba(255,183,213,0.55), transparent 60%),
+      radial-gradient(46rem 46rem at 108% 6%, rgba(227,11,93,0.10), transparent 55%),
+      linear-gradient(160deg, var(--bg-from) 0%, var(--bg-to) 100%);
+    background-attachment:fixed;
+  }
+  button{ font-family:inherit; }
+  svg{ display:block; }
+  ::-webkit-scrollbar{ width:8px; height:8px; }
+  ::-webkit-scrollbar-thumb{ background:rgba(31,32,32,0.14); border-radius:999px; }
+
+  /* glass language (real .glass / .glass-strong, shadow via token) */
+  .glass{
+    background:rgba(255,255,255,0.62);
+    backdrop-filter:blur(20px) saturate(140%); -webkit-backdrop-filter:blur(20px) saturate(140%);
+    border:1px solid rgba(255,255,255,0.65); box-shadow:var(--glass-shadow);
+  }
+  .glass-strong{
+    background:rgba(255,255,255,1);
+    backdrop-filter:blur(24px) saturate(160%); -webkit-backdrop-filter:blur(24px) saturate(160%);
+    border:1px solid rgba(255,255,255,0.65); box-shadow:var(--glass-shadow);
+  }
+
+  /* ============================================================
+     CONTROL BAR (prototype chrome — obviously not the design)
+     ============================================================ */
+  .pc{
+    position:sticky; top:0; z-index:80;
+    display:flex; align-items:center; gap:18px; flex-wrap:wrap;
+    padding:11px 18px; margin-bottom:6px;
+    background:rgba(31,20,32,0.92); color:#fff;
+    box-shadow:0 8px 24px -14px rgba(0,0,0,.5);
+  }
+  .pc-title{ font-weight:700; font-size:13px; letter-spacing:-0.01em; }
+  .pc-title span{ color:var(--color-brand-soft); font-weight:500; }
+  .pc-group{ display:flex; align-items:center; gap:8px; }
+  .pc-lab{ font-size:10px; text-transform:uppercase; letter-spacing:.08em; color:rgba(255,255,255,.55); font-family:var(--mono); }
+  .pc-sw{ display:flex; gap:7px; }
+  .pc-swatch{ cursor:pointer; border:0; background:transparent; display:flex; flex-direction:column; align-items:center; gap:4px; color:rgba(255,255,255,.6); }
+  .pc-swatch .dot{ width:22px; height:22px; border-radius:50%; border:2px solid transparent; box-shadow:0 0 0 1px rgba(255,255,255,.25); transition:transform .12s, border-color .12s; }
+  .pc-swatch .nm{ font-size:9px; font-family:var(--mono); letter-spacing:.02em; white-space:nowrap; }
+  .pc-swatch:hover .dot{ transform:scale(1.1); }
+  .pc-swatch.on{ color:#fff; }
+  .pc-swatch.on .dot{ border-color:#fff; transform:scale(1.1); }
+  .pc-seg{ display:flex; background:rgba(255,255,255,.1); border-radius:10px; padding:3px; }
+  .pc-seg button{ border:0; background:transparent; color:rgba(255,255,255,.7); cursor:pointer; font-size:12px; font-weight:600; padding:6px 14px; border-radius:8px; transition:background .14s, color .14s; }
+  .pc-seg button.on{ background:#fff; color:var(--color-ink); }
+
+  .stage{ max-width:1180px; margin:0 auto; padding:14px 20px 70px; }
+  .view{ display:none; }
+  .view.on{ display:block; }
+  .caption{ font-size:12.5px; color:var(--color-ink-muted); margin:0 4px 12px; }
+  .caption b{ color:var(--color-ink); font-weight:600; }
+
+  /* ============================================================
+     APP SHELL (recreated so the card is judged in real density)
+     ============================================================ */
+  .shell{
+    position:relative; display:flex; gap:12px; height:660px;
+    border-radius:26px; padding:12px;
+    background:rgba(255,255,255,0.34);
+    border:1px solid rgba(255,255,255,0.6);
+    box-shadow:0 24px 70px -34px color-mix(in srgb, var(--color-brand-deep) 40%, transparent);
+  }
+  .rail{ width:56px; flex:0 0 auto; display:flex; flex-direction:column; align-items:center; gap:8px; padding:10px 0; border-radius:20px; }
+  .rail .logo{ font-family:var(--sans); font-weight:800; color:var(--color-brand); font-size:18px; margin-bottom:6px; }
+  .ric{ width:38px; height:38px; border-radius:12px; display:grid; place-items:center; color:var(--color-ink-muted); cursor:pointer; }
+  .ric:hover{ background:rgba(255,255,255,.6); color:var(--color-brand); }
+  .ric.on{ background:var(--color-brand); color:#fff; box-shadow:0 8px 18px -8px color-mix(in srgb, var(--color-brand) 70%, transparent); }
+  .rail .spacer{ flex:1; }
+
+  /* conversation rail (panel that the card leaflet takes over) */
+  .convrail{ width:288px; flex:0 0 auto; display:flex; flex-direction:column; overflow:hidden; border-radius:20px; }
+  .convrail .newchat{
+    margin:11px 11px 9px; display:flex; align-items:center; justify-content:center; gap:7px;
+    padding:10px 12px; border:0; border-radius:13px; cursor:pointer;
+    background:var(--color-brand); color:#fff; font-size:13px; font-weight:600;
+    box-shadow:0 10px 22px -10px color-mix(in srgb, var(--color-brand) 75%, transparent);
+  }
+  .convbody{ position:relative; flex:1; min-height:0; display:flex; flex-direction:column; }
+  .convbody .tools{ padding:0 11px 9px; display:flex; flex-direction:column; gap:8px; }
+  .srch{ display:flex; align-items:center; gap:8px; border-radius:999px; background:rgba(31,32,32,.05); padding:8px 12px; font-size:12px; color:var(--color-ink-muted); }
+  .chips{ display:flex; gap:6px; }
+  .chip{ font-size:11px; padding:4px 10px; border-radius:999px; background:rgba(31,32,32,.05); color:var(--color-ink-muted); cursor:pointer; }
+  .chip.on{ background:var(--color-brand); color:#fff; font-weight:600; }
+  .convlist{ flex:1; overflow-y:auto; padding:4px 8px; display:flex; flex-direction:column; gap:2px; }
+  .conv{ display:flex; gap:10px; padding:8px 9px; border-radius:12px; cursor:pointer; }
+  .conv:hover{ background:rgba(255,255,255,.6); }
+  .conv .av{ width:34px; height:34px; flex:0 0 auto; border-radius:10px; background:#ded9e3; color:#574f63; font-weight:700; font-size:12px; display:grid; place-items:center; }
+  .conv .av.co{ background:linear-gradient(135deg, var(--color-brand-deep), var(--color-brand)); color:#fff; }
+  .conv .col{ min-width:0; flex:1; }
+  .conv .r1{ display:flex; justify-content:space-between; gap:8px; }
+  .conv .nm{ font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .conv .tm{ font-size:10px; color:var(--color-ink-muted); flex:0 0 auto; }
+  .conv .pv{ font-size:11px; color:var(--color-ink-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .conv .unread{ background:var(--color-brand); color:#fff; font-size:10px; font-weight:700; border-radius:999px; padding:1px 6px; }
+
+  /* thread (faded — shows the card is no longer floating here) */
+  .thread{ flex:1; display:flex; flex-direction:column; border-radius:20px; overflow:hidden; }
+  .thread-top{ padding:11px 14px; border-bottom:1px solid rgba(31,32,32,.06); display:flex; align-items:center; gap:10px; }
+  .thread-top .ta{ width:32px; height:32px; border-radius:10px; background:linear-gradient(135deg, var(--color-brand-deep), var(--color-brand)); color:#fff; display:grid; place-items:center; font-weight:700; font-size:12px; }
+  .thread-top .tn{ font-weight:600; font-size:13px; }
+  .thread-top .ts{ font-size:11px; color:var(--color-ink-muted); }
+  .dealpin{ margin-left:auto; display:flex; align-items:center; gap:7px; padding:7px 11px; border-radius:11px; cursor:pointer; border:1px solid color-mix(in srgb, var(--color-brand-deep) 22%, transparent); background:color-mix(in srgb, var(--color-brand-deep) 7%, transparent); color:var(--color-brand-deep); font-size:11.5px; font-weight:600; font-family:var(--mono); }
+  .dealpin:hover{ background:color-mix(in srgb, var(--color-brand-deep) 12%, transparent); }
+  .dealpin .pdot{ width:6px; height:6px; border-radius:50%; background:var(--color-success); }
+  .stream{ flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:10px; }
+  .bub{ max-width:74%; padding:9px 13px; font-size:13px; border-radius:16px; }
+  .bub.them{ align-self:flex-start; background:rgba(255,255,255,.7); border:1px solid rgba(31,32,32,.05); }
+  .bub.me{ align-self:flex-end; background:var(--color-brand-soft); }
+  .bub .who{ font-size:9.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--color-ink-muted); margin-bottom:2px; }
+
+  /* sella rail (right) */
+  .sella{ width:60px; flex:0 0 auto; border-radius:20px; display:flex; flex-direction:column; align-items:center; gap:10px; padding:14px 0; color:var(--color-ink-muted); }
+  .sella .mk{ font-family:var(--mono); font-weight:700; color:var(--color-brand-deep); font-size:17px; transform:skewX(-12deg); letter-spacing:-1px; }
+
+  /* ============================================================
+     CARD LEAFLET — takes over the conversation rail (the move)
+     ============================================================ */
+  .leaflet{
+    position:absolute; inset:4px 8px 8px; z-index:40;
+    border-radius:16px; overflow:hidden; display:flex; flex-direction:column;
+    animation:leaf .18s ease;
+  }
+  @keyframes leaf{ from{ opacity:0; transform:translateY(-6px) scale(.99);} to{ opacity:1; transform:none;} }
+  .leaflet.hidden{ display:none; }
+  .leaflet-scroll{ overflow-y:auto; padding:12px 12px 14px; display:flex; flex-direction:column; gap:11px; }
+
+  /* card (synthesised: floating-glass header + ledger lines + dashed-lock margin) */
+  .dc-card{ width:100%; display:flex; flex-direction:column; gap:11px; }
+
+  /* slim header (~64px) */
+  .dc-head{ position:relative; padding:2px 28px 8px; min-height:62px; display:flex; flex-direction:column; gap:2px; }
+  .dc-corner{ position:absolute; top:0; width:24px; height:24px; display:grid; place-items:center; border-radius:8px; border:1px solid rgba(31,32,32,0.08); background:rgba(255,255,255,0.6); color:var(--color-ink-muted); cursor:pointer; transition:.15s; }
+  .dc-corner.l{ left:0; } .dc-corner.r{ right:0; }
+  .dc-corner:hover{ color:var(--color-brand-deep); border-color:color-mix(in srgb, var(--color-brand-deep) 30%, transparent); background:var(--color-brand-soft); }
+  .dc-eyebrow{ display:flex; align-items:center; gap:7px; font-family:var(--mono); line-height:1; }
+  .dc-kicker{ font-size:8.5px; letter-spacing:.18em; font-weight:600; color:var(--color-brand-deep); }
+  .dc-hsno{ font-size:9.5px; letter-spacing:.04em; color:var(--color-ink-muted); }
+  .dc-value{ position:relative; margin-top:2px; padding-bottom:6px; }
+  .dc-value-num{ font-size:25px; font-weight:600; letter-spacing:-0.02em; font-variant-numeric:tabular-nums; line-height:1.05; }
+  .dc-value-c{ font-size:14px; color:var(--color-ink-muted); font-weight:500; }
+  .dc-value-rule{ position:absolute; left:0; bottom:0; width:34px; height:2px; border-radius:2px; background:var(--color-brand-deep); }
+  .dc-head-foot{ display:flex; align-items:center; justify-content:space-between; margin-top:3px; }
+  .dc-count{ font-size:10px; color:var(--color-ink-muted); font-family:var(--mono); }
+  .dc-pill{ display:inline-flex; align-items:center; gap:4px; font-size:9.5px; font-weight:600; letter-spacing:.02em; padding:3px 8px; border-radius:999px; font-family:var(--mono); color:var(--color-brand-deep); background:color-mix(in srgb, var(--color-brand-deep) 8%, transparent); }
+  .dc-pill .pdot{ width:5px; height:5px; border-radius:50%; background:var(--color-success); }
+  .dc-pill .sep{ opacity:.5; }
+
+  .dc-story{ margin:0; font-size:10.5px; line-height:1.45; color:var(--color-ink-muted); padding:0 2px; }
+  .dc-story b{ color:var(--color-ink); font-weight:600; }
+
+  .dc-parties{ display:flex; align-items:center; gap:6px; border-radius:12px; padding:8px 9px; }
+  .dc-party{ display:flex; flex-direction:column; gap:2px; min-width:0; flex:1; }
+  .dc-party.r{ text-align:right; align-items:flex-end; }
+  .dc-prole{ font-size:7.5px; letter-spacing:.16em; font-weight:700; color:var(--color-ink-muted); }
+  .dc-you{ color:var(--color-brand-deep); font-weight:600; letter-spacing:.04em; }
+  .dc-pname{ font-size:11px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
+  .dc-arrow{ flex:0 0 auto; display:grid; place-items:center; width:22px; height:22px; border-radius:50%; background:rgba(255,255,255,.7); color:var(--color-brand-deep); }
+
+  /* ledger lines (cc-style: swatch · main · right qty/value, single-gradient split bar) */
+  .dc-ledger{ list-style:none; margin:0; padding:0; }
+  .dc-line{ display:flex; gap:9px; align-items:flex-start; padding:9px 0; border-top:1px solid rgba(31,32,32,.06); }
+  .dc-line:first-child{ border-top:none; padding-top:2px; }
+  .dc-swatch{ flex:0 0 auto; width:26px; height:26px; border-radius:7px; box-shadow:inset 0 0 0 1px rgba(255,255,255,.5); }
+  .dc-sw-sativa{ background:linear-gradient(140deg, var(--cult-sativa-a), var(--cult-sativa-b)); }
+  .dc-sw-indica{ background:linear-gradient(140deg, var(--cult-indica-a), var(--cult-indica-b)); }
+  .dc-sw-hybrid{ background:linear-gradient(140deg, var(--cult-hybrid-a), var(--cult-hybrid-b)); }
+  .dc-lmain{ flex:1; min-width:0; }
+  .dc-lname{ font-size:12px; font-weight:600; line-height:1.2; }
+  .dc-lsub{ font-size:10px; color:var(--color-ink-muted); margin-top:1px; }
+  .dc-lbatch{ font-family:var(--mono); font-size:9px; letter-spacing:.02em; color:var(--color-ink-muted); margin-top:3px; }
+  .dc-pot{ display:flex; align-items:center; gap:6px; margin-top:5px; }
+  .dc-thc, .dc-cbd{ font-family:var(--mono); font-size:9px; font-weight:600; font-variant-numeric:tabular-nums; }
+  .dc-thc{ color:var(--color-brand-deep); }
+  .dc-cbd{ color:var(--color-info); }
+  .dc-bar{ flex:1; height:3px; border-radius:3px; min-width:30px; opacity:.9;
+    background:linear-gradient(90deg, var(--color-brand-deep) 0, var(--color-brand-deep) var(--thc), var(--color-info) var(--thc), var(--color-info) 100%); }
+  .dc-lright{ display:flex; flex-direction:column; align-items:flex-end; gap:2px; flex:0 0 auto; }
+  .dc-lqty{ font-size:9px; color:var(--color-ink-muted); font-family:var(--mono); }
+  .dc-lval{ font-family:var(--mono); font-size:11px; font-weight:600; font-variant-numeric:tabular-nums; white-space:nowrap; }
+
+  /* terms 3-up */
+  .dc-terms{ display:grid; grid-template-columns:repeat(3,1fr); gap:6px; padding:9px; border-radius:12px; background:rgba(255,255,255,.5); border:1px solid rgba(31,32,32,.05); }
+  .dc-term{ display:flex; flex-direction:column; gap:3px; min-width:0; }
+  .dc-tk{ font-size:7.5px; letter-spacing:.08em; font-weight:600; text-transform:uppercase; color:var(--color-ink-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .dc-tv{ font-size:9.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .dc-tv.yes{ color:var(--color-success); }
+
+  /* owner margin — dashed lock strip (Card 1 treatment, on deep-pink token, NOT periwinkle) */
+  .dc-margin{ display:flex; align-items:center; gap:7px; padding:8px 10px; border-radius:12px;
+    background:color-mix(in srgb, var(--color-brand-deep) 5%, transparent);
+    border:1px dashed color-mix(in srgb, var(--color-brand-deep) 32%, transparent); }
+  .dc-margin svg{ color:var(--color-brand-deep); }
+  .dc-mk{ font-size:9.5px; font-weight:600; color:var(--color-ink-muted); }
+  .dc-mv{ margin-left:auto; font-family:var(--mono); font-size:12px; font-weight:700; font-variant-numeric:tabular-nums; color:var(--color-brand-deep); }
+  .dc-monly{ font-size:7.5px; letter-spacing:.08em; font-weight:600; text-transform:uppercase; color:var(--color-brand-deep); opacity:.7; }
+
+  /* note */
+  .dc-note{ padding:8px 10px; border-radius:12px; background:rgba(255,255,255,.45); border-left:2px solid var(--color-brand-soft); }
+  .dc-nwho{ font-size:8.5px; letter-spacing:.06em; font-weight:700; text-transform:uppercase; color:var(--color-ink-muted); }
+  .dc-ntext{ margin:3px 0 0; font-size:10.5px; line-height:1.4; font-style:italic; }
+
+  /* ============================================================
+     BEFORE / AFTER header strip
+     ============================================================ */
+  .ba{ display:flex; gap:18px; margin-top:18px; flex-wrap:wrap; }
+  .ba-col{ flex:1; min-width:230px; }
+  .ba-lab{ font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--color-ink-muted); margin-bottom:7px; display:flex; align-items:center; gap:8px; }
+  .ba-lab .h{ font-family:var(--mono); font-weight:600; text-transform:none; letter-spacing:0; padding:2px 7px; border-radius:999px; font-size:10px; }
+  .ba-lab .h.bad{ color:var(--color-danger); background:color-mix(in srgb, var(--color-danger) 10%, transparent); }
+  .ba-lab .h.good{ color:var(--color-success); background:color-mix(in srgb, var(--color-success) 12%, transparent); }
+  .ba-card{ width:264px; border-radius:16px; overflow:hidden; }
+  /* OLD header — the tall maroon band (what we are replacing) */
+  .old-head{ background:#76002d; color:#fff; padding:16px 48px; text-align:center; }
+  .old-eye{ font-size:11px; font-weight:800; letter-spacing:.16em; color:rgba(255,255,255,.85); }
+  .old-no{ margin-top:2px; font-size:16px; font-weight:700; font-family:var(--mono); }
+  .old-story{ margin-top:6px; font-size:11px; color:rgba(255,255,255,.9); line-height:1.4; }
+  .old-row{ margin-top:11px; padding-top:11px; border-top:1px solid rgba(255,255,255,.2); display:flex; align-items:center; justify-content:space-between; text-align:left; }
+  .old-row .vl{ font-size:10px; color:rgba(255,255,255,.8); } .old-row .vv{ font-size:18px; font-weight:700; font-family:var(--mono); }
+  .old-row .st{ font-size:10px; font-weight:600; background:rgba(255,255,255,.2); padding:4px 9px; border-radius:999px; }
+  .old-body, .new-body{ background:#fff; padding:11px; font-size:11px; color:var(--color-ink-muted); }
+
+  /* ============================================================
+     DEAL FORM (Form 2 "one-tap batch rail", token-fixed)
+     ============================================================ */
+  .formwrap{ display:flex; justify-content:center; padding:8px 0; }
+  .df-modal{ width:600px; max-width:100%; border-radius:22px; overflow:hidden; display:flex; flex-direction:column; }
+  .df-top{ padding:15px 18px 12px; border-bottom:1px solid rgba(31,32,32,.06); display:flex; align-items:center; gap:10px; }
+  .df-top h3{ margin:0; font-size:16px; font-weight:700; letter-spacing:-0.01em; }
+  .df-top .bag{ display:inline-flex; align-items:center; gap:5px; font-family:var(--mono); font-size:11px; color:var(--color-brand-deep); background:color-mix(in srgb, var(--color-brand-deep) 8%, transparent); padding:3px 9px; border-radius:999px; }
+  .df-to{ margin-left:auto; font-size:11px; color:var(--color-ink-muted); }
+  .df-to b{ color:var(--color-ink); }
+  .df-body{ padding:14px; display:flex; flex-direction:column; gap:14px; max-height:560px; overflow-y:auto; }
+
+  .df-search{ position:relative; display:flex; align-items:center; gap:10px; border-radius:14px; padding:11px 13px; background:rgba(255,255,255,.7); border:1px solid rgba(31,32,32,.08); box-shadow:inset 0 1px 2px rgba(31,32,32,.03); }
+  .df-search svg{ width:18px; height:18px; color:var(--color-ink-muted); flex:0 0 auto; }
+  .df-search input{ flex:1; border:0; background:transparent; outline:none; font-size:15px; color:var(--color-ink); font-family:inherit; }
+  .df-search input::placeholder{ color:var(--color-ink-muted); }
+  .df-search .hint{ font-family:var(--mono); font-size:10px; letter-spacing:.04em; text-transform:uppercase; color:var(--color-ink-muted); white-space:nowrap; }
+
+  .df-results{ display:flex; flex-direction:column; gap:8px; }
+  .df-row{ border-radius:16px; padding:11px 12px; background:rgba(255,255,255,.55); border:1px solid rgba(255,255,255,.7); box-shadow:0 6px 20px -14px color-mix(in srgb, var(--color-brand-deep) 28%, transparent); transition:box-shadow .18s; }
+  .df-row:hover{ box-shadow:0 10px 26px -14px color-mix(in srgb, var(--color-brand-deep) 38%, transparent); }
+  .df-row-head{ display:flex; align-items:center; gap:9px; margin-bottom:9px; }
+  .df-dot{ width:9px; height:9px; border-radius:50%; flex:0 0 auto; box-shadow:0 0 0 3px rgba(255,255,255,.6); }
+  .df-dot.sativa{ background:var(--cult-sativa-b); }
+  .df-dot.indica{ background:var(--cult-indica-b); }
+  .df-dot.hybrid{ background:var(--cult-hybrid-b); }
+  .df-name{ font-size:15px; font-weight:600; letter-spacing:-0.01em; }
+  .df-type{ font-size:11px; color:var(--color-ink-muted); background:rgba(31,32,32,.05); padding:2px 8px; border-radius:20px; }
+  .df-cnt{ margin-left:auto; font-family:var(--mono); font-size:10px; letter-spacing:.03em; color:var(--color-ink-muted); text-transform:uppercase; }
+  .df-rail{ display:flex; gap:8px; flex-wrap:wrap; }
+  .df-chip{ position:relative; flex:1 1 0; min-width:0; cursor:pointer; text-align:left; display:flex; align-items:center; gap:10px; padding:9px 11px; border-radius:13px; background:rgba(255,255,255,.78); border:1px solid rgba(31,32,32,.08); color:var(--color-ink); transition:.16s; }
+  .df-chip:hover{ border-color:var(--color-brand); background:#fff; box-shadow:0 8px 20px -12px color-mix(in srgb, var(--color-brand) 45%, transparent); transform:translateY(-1px); }
+  .df-chip:active{ transform:translateY(0) scale(.99); }
+  .df-chip-batch{ font-family:var(--mono); font-size:11px; letter-spacing:.02em; font-weight:500; white-space:nowrap; }
+  .df-reads{ display:flex; gap:6px; margin-left:auto; }
+  .df-read{ display:inline-flex; align-items:baseline; gap:3px; font-family:var(--mono); font-size:12px; font-weight:600; font-variant-numeric:tabular-nums; padding:2px 7px; border-radius:8px; }
+  .df-read i{ font-style:normal; font-size:8.5px; letter-spacing:.05em; font-weight:700; opacity:.8; }
+  .df-read.thc{ color:var(--color-brand-deep); background:color-mix(in srgb, var(--color-brand-deep) 10%, transparent); }
+  .df-read.cbd{ color:var(--color-info); background:color-mix(in srgb, var(--color-info) 12%, transparent); }
+  .df-chip-add{ width:20px; height:20px; border-radius:7px; flex:0 0 auto; display:grid; place-items:center; color:var(--color-ink-muted); background:rgba(31,32,32,.05); transition:.16s; }
+  .df-chip-add svg{ width:13px; height:13px; }
+  .df-chip:hover .df-chip-add{ background:var(--color-brand); color:#fff; }
+  .df-chip.added{ border-color:var(--color-brand) !important; background:#fff !important; animation:df-pulse .9s ease; }
+  .df-chip.added .df-chip-add{ background:var(--color-success) !important; color:#fff !important; }
+  @keyframes df-pulse{ 0%{ box-shadow:0 0 0 0 color-mix(in srgb, var(--color-brand) 40%, transparent);} 100%{ box-shadow:0 0 0 12px color-mix(in srgb, var(--color-brand) 0%, transparent);} }
+
+  .df-custom{ display:flex; align-items:center; gap:11px; cursor:pointer; width:100%; padding:11px 12px; border-radius:14px; color:var(--color-ink); background:color-mix(in srgb, var(--color-brand-soft) 28%, transparent); border:1px dashed color-mix(in srgb, var(--color-brand) 40%, transparent); transition:.16s; }
+  .df-custom:hover{ background:color-mix(in srgb, var(--color-brand-soft) 48%, transparent); border-color:var(--color-brand); }
+  .df-custom .ic{ width:24px; height:24px; border-radius:8px; display:grid; place-items:center; background:var(--color-brand); color:#fff; flex:0 0 auto; }
+  .df-custom .ic svg{ width:14px; height:14px; }
+  .df-custom .tx{ font-size:13.5px; } .df-custom .tx b{ font-weight:600; color:var(--color-brand-deep); }
+  .df-custom .h{ margin-left:auto; font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:.04em; color:var(--color-ink-muted); }
+
+  .df-basket{ border-radius:16px; padding:12px; background:rgba(255,255,255,.45); border:1px solid rgba(255,255,255,.7); display:flex; flex-direction:column; gap:8px; }
+  .df-bhead{ display:flex; align-items:baseline; gap:8px; padding:0 2px 2px; }
+  .df-btitle{ font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--color-ink-muted); }
+  .df-bn{ margin-left:auto; font-family:var(--mono); font-size:10px; color:var(--color-ink-muted); text-transform:uppercase; }
+  .df-line{ display:flex; align-items:center; gap:11px; padding:10px 11px; border-radius:13px; background:#fff; border:1px solid rgba(31,32,32,.06); box-shadow:0 4px 14px -12px color-mix(in srgb, var(--color-brand-deep) 25%, transparent); }
+  .df-lid{ display:flex; flex-direction:column; gap:3px; min-width:0; flex:1; }
+  .df-lname{ font-size:13.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .df-lname em{ font-style:normal; font-weight:400; color:var(--color-ink-muted); font-size:12px; }
+  .df-lbatch{ display:flex; align-items:center; gap:6px; font-family:var(--mono); font-size:10.5px; color:var(--color-ink-muted); }
+  .df-lbatch .df-read{ font-size:10px; padding:1px 5px; }
+  .df-step{ display:flex; align-items:center; gap:2px; flex:0 0 auto; background:rgba(31,32,32,.04); border-radius:10px; padding:2px; }
+  .df-step button{ width:24px; height:24px; border:0; border-radius:8px; cursor:pointer; background:transparent; color:var(--color-ink-muted); font-size:15px; transition:.14s; }
+  .df-step button:hover{ background:#fff; color:var(--color-brand); }
+  .df-step .n{ min-width:22px; text-align:center; font-family:var(--mono); font-size:13px; font-variant-numeric:tabular-nums; font-weight:600; }
+  .df-price{ display:flex; align-items:center; flex:0 0 auto; border-radius:10px; padding:5px 9px; background:rgba(31,32,32,.04); border:1px solid transparent; transition:.14s; }
+  .df-price:focus-within{ background:#fff; border-color:var(--color-brand); }
+  .df-price .cur{ font-family:var(--mono); font-size:12px; color:var(--color-ink-muted); margin-right:2px; }
+  .df-price input{ width:42px; border:0; background:transparent; outline:none; font-family:var(--mono); font-size:13px; font-variant-numeric:tabular-nums; font-weight:600; text-align:right; color:var(--color-ink); }
+
+  .df-foot{ padding:13px 18px; border-top:1px solid rgba(31,32,32,.06); display:flex; align-items:center; gap:12px; }
+  .df-total{ display:flex; flex-direction:column; }
+  .df-total .k{ font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:.04em; color:var(--color-ink-muted); }
+  .df-total .v{ font-size:20px; font-weight:700; font-variant-numeric:tabular-nums; }
+  .df-mpill{ display:inline-flex; align-items:center; gap:7px; border-radius:999px; border:1px dashed color-mix(in srgb, var(--color-brand-deep) 30%, transparent); background:color-mix(in srgb, var(--color-brand-deep) 4%, transparent); padding:5px 11px; font-size:11px; color:var(--color-ink-muted); }
+  .df-mpill .mk{ font-family:var(--mono); font-size:9px; text-transform:uppercase; letter-spacing:.04em; }
+  .df-mpill .mv{ font-family:var(--mono); font-weight:700; color:var(--color-success); }
+  .df-mpill .lk{ display:inline-flex; gap:3px; align-items:center; font-size:9px; color:var(--color-ink-muted); }
+  .df-proceed{ margin-left:auto; display:inline-flex; align-items:center; gap:7px; border:0; border-radius:13px; cursor:pointer; padding:11px 20px; font-size:14px; font-weight:600; color:#fff; background:var(--color-brand-deep); transition:.15s; }
+  .df-proceed:hover{ filter:brightness(1.08); }
+</style>
+</head>
+<body>
+
+<!-- ===================== PROTOTYPE CONTROL BAR ===================== -->
+<div class="pc">
+  <div class="pc-title">04C UI touch <span>· premium · glassy · real theme</span></div>
+
+  <div class="pc-group">
+    <span class="pc-lab">Deep-pink (maroon)</span>
+    <div class="pc-sw" id="swatches">
+      <button class="pc-swatch" data-hex="#76002d"><span class="dot" style="background:#76002d"></span><span class="nm">Current</span></button>
+      <button class="pc-swatch on" data-hex="#7a1638"><span class="dot" style="background:#7a1638"></span><span class="nm">Damson ✓</span></button>
+      <button class="pc-swatch" data-hex="#631029"><span class="dot" style="background:#631029"></span><span class="nm">Black Cherry</span></button>
+      <button class="pc-swatch" data-hex="#8a1742"><span class="dot" style="background:#8a1742"></span><span class="nm">Mulberry</span></button>
+    </div>
+  </div>
+
+  <div class="pc-group" style="margin-left:auto">
+    <div class="pc-seg" id="viewseg">
+      <button class="on" data-view="card">Card in rail</button>
+      <button data-view="form">Deal form</button>
+    </div>
+  </div>
+</div>
+
+<div class="stage">
+
+  <!-- ===================== VIEW 1: CARD IN RAIL ===================== -->
+  <div class="view on" id="view-card">
+    <p class="caption">The deal card opens as a <b>leaflet over the conversation rail</b> — the same place &amp; shape as the New chat picker, not floating inside the chat. Click the <b>HS-2026-0042</b> pin in the thread to toggle it. Header is the slim ~64px version (see Before/After below).</p>
+
+    <div class="shell">
+      <!-- icon rail -->
+      <div class="rail glass">
+        <div class="logo">S</div>
+        <div class="ric on" title="Connect"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
+        <div class="ric" title="Discover"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></div>
+        <div class="ric" title="Grow"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg></div>
+        <div class="spacer"></div>
+        <div class="ric" title="You"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="8" r="4"/><path d="M6 21v-1a6 6 0 0 1 12 0v1"/></svg></div>
+      </div>
+
+      <!-- conversation rail (the card takes this over) -->
+      <div class="convrail glass">
+        <button class="newchat"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg> New chat</button>
+        <div class="convbody">
+          <div class="tools">
+            <div class="srch"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg> Search conversations…</div>
+            <div class="chips"><span class="chip on">All</span><span class="chip">Unread</span><span class="chip">Companies</span><span class="chip">Deals</span></div>
+          </div>
+          <div class="convlist">
+            <div class="conv"><span class="av co"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-3"/></svg></span><div class="col"><div class="r1"><span class="nm">StonePharm GmbH</span><span class="tm">4m</span></div><div class="r1"><span class="pv">Can you confirm the COA?</span><span class="unread">2</span></div></div></div>
+            <div class="conv"><span class="av">AG</span><div class="col"><div class="r1"><span class="nm">Alice Green</span><span class="tm">1h</span></div><div class="r1"><span class="pv">Sounds good — I'll confirm</span></div></div></div>
+            <div class="conv"><span class="av">BS</span><div class="col"><div class="r1"><span class="nm">Bob Stone</span><span class="tm">3h</span></div><div class="r1"><span class="pv">Send the cert please</span><span class="unread">1</span></div></div></div>
+            <div class="conv"><span class="av co"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-3"/></svg></span><div class="col"><div class="r1"><span class="nm">Helvetia Pharma</span><span class="tm">1d</span></div><div class="r1"><span class="pv">Company chat (C2C)</span></div></div></div>
+          </div>
+
+          <!-- THE CARD LEAFLET -->
+          <div class="leaflet glass-strong" id="leaflet">
+            <div class="leaflet-scroll">
+              <div class="dc-card">
+                <header class="dc-head">
+                  <button class="dc-corner l" title="Flip"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg></button>
+                  <button class="dc-corner r" title="Edit"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
+                  <div class="dc-eyebrow"><span class="dc-kicker">DEAL</span><span class="dc-hsno">HS-2026-0042</span></div>
+                  <div class="dc-value"><span class="dc-value-num">€12,480<span class="dc-value-c">.00</span></span><span class="dc-value-rule"></span></div>
+                  <div class="dc-head-foot"><span class="dc-count">3 products</span><span class="dc-pill"><span class="pdot"></span>Open<span class="sep">·</span>v2</span></div>
+                </header>
+
+                <p class="dc-story">On <b>14 Jun 2026</b>, <b>GreenLeaf Co</b> offered StonePharm GmbH</p>
+
+                <div class="dc-parties glass">
+                  <div class="dc-party"><span class="dc-prole">SELLER <span class="dc-you">· you</span></span><span class="dc-pname">GreenLeaf Co</span></div>
+                  <span class="dc-arrow"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13"/><path d="M13 6l6 6-6 6"/></svg></span>
+                  <div class="dc-party r"><span class="dc-prole">BUYER</span><span class="dc-pname">StonePharm GmbH</span></div>
+                </div>
+
+                <ol class="dc-ledger">
+                  <li class="dc-line">
+                    <span class="dc-swatch dc-sw-sativa"></span>
+                    <div class="dc-lmain">
+                      <div class="dc-lname">Lemon Haze</div><div class="dc-lsub">sativa · 1 kg pack</div>
+                      <div class="dc-lbatch">GL-24-0007</div>
+                      <div class="dc-pot"><span class="dc-thc">THC 22</span><span class="dc-cbd">CBD 1</span><span class="dc-bar" style="--thc:96%"></span></div>
+                    </div>
+                    <div class="dc-lright"><span class="dc-lqty">2 packs</span><span class="dc-lval">€5,400.00</span></div>
+                  </li>
+                  <li class="dc-line">
+                    <span class="dc-swatch dc-sw-indica"></span>
+                    <div class="dc-lmain">
+                      <div class="dc-lname">Northern Lights</div><div class="dc-lsub">indica · 1 kg pack</div>
+                      <div class="dc-lbatch">GL-24-0011</div>
+                      <div class="dc-pot"><span class="dc-thc">THC 18</span><span class="dc-cbd">CBD 3</span><span class="dc-bar" style="--thc:86%"></span></div>
+                    </div>
+                    <div class="dc-lright"><span class="dc-lqty">1 pack</span><span class="dc-lval">€4,200.00</span></div>
+                  </li>
+                  <li class="dc-line">
+                    <span class="dc-swatch dc-sw-hybrid"></span>
+                    <div class="dc-lmain">
+                      <div class="dc-lname">CBD Express</div><div class="dc-lsub">hybrid · 500 g pack</div>
+                      <div class="dc-lbatch">GL-24-0003</div>
+                      <div class="dc-pot"><span class="dc-thc">THC 8</span><span class="dc-cbd">CBD 12</span><span class="dc-bar" style="--thc:40%"></span></div>
+                    </div>
+                    <div class="dc-lright"><span class="dc-lqty">1 pack</span><span class="dc-lval">€2,880.00</span></div>
+                  </li>
+                </ol>
+
+                <div class="dc-terms">
+                  <div class="dc-term"><span class="dc-tk">Delivery</span><span class="dc-tv">30 Jun 2026</span></div>
+                  <div class="dc-term"><span class="dc-tk">Payment</span><span class="dc-tv">Net 30</span></div>
+                  <div class="dc-term"><span class="dc-tk">Free deliv.</span><span class="dc-tv yes">Yes</span></div>
+                </div>
+
+                <div class="dc-margin">
+                  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+                  <span class="dc-mk">Your avg. margin</span><span class="dc-mv">+28.4%</span><span class="dc-monly">only you</span>
+                </div>
+
+                <div class="dc-note"><span class="dc-nwho">StonePharm GmbH</span><p class="dc-ntext">"Can you confirm the COA before delivery?"</p></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- thread (faded — card no longer lives here) -->
+      <div class="thread glass">
+        <div class="thread-top">
+          <span class="ta">SP</span>
+          <div><div class="tn">StonePharm GmbH</div><div class="ts">Bob Stone · online</div></div>
+          <button class="dealpin" id="dealpin"><span class="pdot"></span>HS-2026-0042 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m6 9 6 6 6-6"/></svg></button>
+        </div>
+        <div class="stream">
+          <div class="bub them"><div class="who">Bob Stone</div>Hi! Did you get a chance to look at the new batch numbers?</div>
+          <div class="bub me"><div class="who">You · GreenLeaf</div>Yes — just sent over the deal, HS-2026-0042. Tap the pin to open it.</div>
+          <div class="bub them"><div class="who">Bob Stone</div>Can you confirm the COA before delivery?</div>
+        </div>
+      </div>
+
+      <!-- sella rail -->
+      <div class="sella glass">
+        <div class="mk">//</div>
+        <div class="ric" title="Sella"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2v20M2 12h20"/></svg></div>
+      </div>
+    </div>
+
+    <!-- BEFORE / AFTER -->
+    <div class="ba">
+      <div class="ba-col">
+        <div class="ba-lab">Before <span class="h bad">~118px header</span></div>
+        <div class="ba-card glass-strong">
+          <div class="old-head">
+            <div class="old-eye">DEAL</div>
+            <div class="old-no">HS-2026-0042</div>
+            <div class="old-story">On 14 Jun 2026, GreenLeaf Co offered StonePharm GmbH · you</div>
+            <div class="old-row"><div><div class="vl">Value net · 3 products</div><div class="vv">€12,480.00</div></div><span class="st">Open · v2</span></div>
+          </div>
+          <div class="old-body">Heavy saturated band — dominates the card, too tall for a narrow rail.</div>
+        </div>
+      </div>
+      <div class="ba-col">
+        <div class="ba-lab">After <span class="h good">~64px header</span></div>
+        <div class="ba-card glass-strong" style="padding:12px">
+          <div class="dc-card">
+            <header class="dc-head" style="min-height:auto">
+              <div class="dc-eyebrow"><span class="dc-kicker">DEAL</span><span class="dc-hsno">HS-2026-0042</span></div>
+              <div class="dc-value"><span class="dc-value-num">€12,480<span class="dc-value-c">.00</span></span><span class="dc-value-rule"></span></div>
+              <div class="dc-head-foot"><span class="dc-count">3 products</span><span class="dc-pill"><span class="pdot"></span>Open<span class="sep">·</span>v2</span></div>
+            </header>
+          </div>
+          <div class="new-body" style="padding:8px 0 0">Calm ink value hero, deep-pink only as a hairline underline + tiny pill. White/glass leads.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== VIEW 2: DEAL FORM ===================== -->
+  <div class="view" id="view-form">
+    <p class="caption">Picking a product is now <b>one inline tap</b> — every result shows its batches as tap-to-add chips (with that batch's THC/CBD). <b>No modal popup.</b> Tap a chip → it pulses and drops into the basket below.</p>
+
+    <div class="formwrap">
+      <div class="df-modal glass-strong">
+        <div class="df-top">
+          <h3>New deal</h3>
+          <span class="bag"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg> 2</span>
+          <span class="df-to">To <b>StonePharm GmbH</b></span>
+        </div>
+
+        <div class="df-body">
+          <div class="df-search">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg>
+            <input type="text" value="haze" />
+            <span class="hint">tap a batch to add</span>
+          </div>
+
+          <div class="df-results">
+            <div class="df-row">
+              <div class="df-row-head"><span class="df-dot sativa"></span><span class="df-name">Lemon Haze</span><span class="df-type">sativa</span><span class="df-cnt">2 batches</span></div>
+              <div class="df-rail">
+                <button class="df-chip"><span class="df-chip-batch">GL-24-0007</span><span class="df-reads"><span class="df-read thc"><i>THC</i>22</span><span class="df-read cbd"><i>CBD</i>1</span></span><span class="df-chip-add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="12" y1="6" x2="12" y2="18"/><line x1="6" y1="12" x2="18" y2="12"/></svg></span></button>
+                <button class="df-chip"><span class="df-chip-batch">GL-24-0019</span><span class="df-reads"><span class="df-read thc"><i>THC</i>24</span><span class="df-read cbd"><i>CBD</i>1</span></span><span class="df-chip-add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="12" y1="6" x2="12" y2="18"/><line x1="6" y1="12" x2="18" y2="12"/></svg></span></button>
+              </div>
+            </div>
+
+            <div class="df-row">
+              <div class="df-row-head"><span class="df-dot indica"></span><span class="df-name">Northern Lights</span><span class="df-type">indica</span><span class="df-cnt">1 batch</span></div>
+              <div class="df-rail">
+                <button class="df-chip"><span class="df-chip-batch">GL-24-0011</span><span class="df-reads"><span class="df-read thc"><i>THC</i>18</span><span class="df-read cbd"><i>CBD</i>3</span></span><span class="df-chip-add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="12" y1="6" x2="12" y2="18"/><line x1="6" y1="12" x2="18" y2="12"/></svg></span></button>
+              </div>
+            </div>
+
+            <div class="df-row">
+              <div class="df-row-head"><span class="df-dot hybrid"></span><span class="df-name">CBD Express</span><span class="df-type">hybrid</span><span class="df-cnt">2 batches</span></div>
+              <div class="df-rail">
+                <button class="df-chip"><span class="df-chip-batch">GL-24-0003</span><span class="df-reads"><span class="df-read thc"><i>THC</i>8</span><span class="df-read cbd"><i>CBD</i>12</span></span><span class="df-chip-add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="12" y1="6" x2="12" y2="18"/><line x1="6" y1="12" x2="18" y2="12"/></svg></span></button>
+                <button class="df-chip"><span class="df-chip-batch">GL-24-0022</span><span class="df-reads"><span class="df-read thc"><i>THC</i>7</span><span class="df-read cbd"><i>CBD</i>14</span></span><span class="df-chip-add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="12" y1="6" x2="12" y2="18"/><line x1="6" y1="12" x2="18" y2="12"/></svg></span></button>
+              </div>
+            </div>
+
+            <button class="df-custom"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span><span class="tx">Add <b>"haze"</b> as a custom product</span><span class="h">no catalogue batch</span></button>
+          </div>
+
+          <div class="df-basket">
+            <div class="df-bhead"><span class="df-btitle">In this deal</span><span class="df-bn">2 lines</span></div>
+            <div class="df-line">
+              <div class="df-lid"><span class="df-lname">Lemon Haze <em>· sativa</em></span><span class="df-lbatch">GL-24-0007 <span class="df-read thc"><i>THC</i>22</span><span class="df-read cbd"><i>CBD</i>1</span></span></div>
+              <div class="df-step"><button>–</button><span class="n">12</span><button>+</button></div>
+              <div class="df-price"><span class="cur">€</span><input value="4.20" /></div>
+            </div>
+            <div class="df-line">
+              <div class="df-lid"><span class="df-lname">CBD Express <em>· hybrid</em></span><span class="df-lbatch">GL-24-0022 <span class="df-read thc"><i>THC</i>7</span><span class="df-read cbd"><i>CBD</i>14</span></span></div>
+              <div class="df-step"><button>–</button><span class="n">6</span><button>+</button></div>
+              <div class="df-price"><span class="cur">€</span><input value="5.80" /></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="df-foot">
+          <div class="df-total"><span class="k">Deal total</span><span class="v">€8,280.00</span></div>
+          <span class="df-mpill"><span class="mk">Avg. margin</span><span class="mv">+28.4%</span><span class="lk"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg> only you</span></span>
+          <button class="df-proceed">Proceed <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  /* maroon live switch — sets the single token; shadow + every deep-pink follows */
+  const swWrap = document.getElementById('swatches');
+  swWrap.addEventListener('click', e => {
+    const b = e.target.closest('.pc-swatch'); if (!b) return;
+    document.documentElement.style.setProperty('--color-brand-deep', b.dataset.hex);
+    swWrap.querySelectorAll('.pc-swatch').forEach(x => x.classList.toggle('on', x === b));
+  });
+
+  /* view toggle */
+  const seg = document.getElementById('viewseg');
+  seg.addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    seg.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+    document.getElementById('view-card').classList.toggle('on', b.dataset.view === 'card');
+    document.getElementById('view-form').classList.toggle('on', b.dataset.view === 'form');
+  });
+
+  /* deal pin toggles the card leaflet */
+  const leaf = document.getElementById('leaflet');
+  document.getElementById('dealpin').addEventListener('click', () => leaf.classList.toggle('hidden'));
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') leaf.classList.add('hidden'); });
+
+  /* form: one-tap chip → pulse (added confirm) */
+  document.querySelectorAll('.df-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      chip.classList.add('added');
+      setTimeout(() => chip.classList.remove('added'), 900);
+    });
+  });
+</script>
+</body>
+</html>

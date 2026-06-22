@@ -322,27 +322,26 @@ export async function createDraftDealAsAlice(
   //    also contains the words "Start a deal" (strict-mode would match both).
   await alicePage.getByRole('button', { name: 'Start a deal', exact: true }).click()
 
-  // 3. add a product, pick its batch, set quantity + unit price, send.
-  //    The catalogue grid loads async under the "Add products" search (3e); wait
-  //    for the search input, then click the first enabled product card. Resilient
-  //    to the seeded product names (we never match a specific name).
-  await alicePage.getByPlaceholder(/search your catalogue/i).waitFor()
-  await alicePage
-    .getByRole('button')
-    .filter({ hasText: /\/g|no price/ })
-    .first()
-    .click()
-  // 3f (BTCH-01 / D-06): product + batch is ONE entity. Clicking a catalogue
-  // product no longer adds a line directly - it opens the MANDATORY inline batch
-  // dropdown (DealForm.pickProduct), and the line is created only once a batch is
-  // chosen. So every create/proposal flow MUST now pick a batch, or canSubmit's
-  // allBatched backstop blocks "Send proposal". The batch options are <button>s
-  // reading "Batch GL-24-…" (NOT <option> elements); pick the first seeded lot.
-  // This re-anchors the shared add-flow the same way the 3e build re-anchored the
-  // search input - centrally here, so every test inherits it.
-  await alicePage.getByRole('button', { name: /^Batch GL-24-/ }).first().click()
-  await alicePage.getByLabel(/quantity in grams/i).first().fill('100')
-  await alicePage.getByPlaceholder(/g \(optional\)/i).first().fill('5.00')
+  // 3. add a product + batch (ONE tap), set the sell price, send.
+  //    The catalogue grid (04C rework) is GATED on a non-empty search query: the
+  //    product results only render once something is typed into the search box. So
+  //    we FIRST type a product name, THEN act on the result. We search "Pedanios"
+  //    (every seeded GreenLeaf product is "Pedanios …", so this always matches).
+  await alicePage.getByPlaceholder(/search your catalogue/i).fill('Pedanios')
+
+  // 3f / 04C (BTCH-01 / D-06): product + batch is ONE entity, now ONE TAP. Each
+  // search result shows its batches inline as tap-to-add chips; ONE tap on a batch
+  // chip ADDS the product + that exact batch AND sets the quantity (one pack) in a
+  // single action — there is no longer a separate product card, a "pick a batch"
+  // popup, or a "quantity in grams" field. The chip is a <button> whose VISIBLE
+  // label (its accessible name) is just the batch number "GL-24-####" + its THC/CBD
+  // sub-chips — NOT the word "Batch" — so we match the seeded GreenLeaf lot number.
+  await alicePage.getByRole('button', { name: /GL-24-/i }).first().click()
+
+  // 3f: set the buyer-visible unit price. The field is the labelled "Sell price
+  // per gram" number input (aria-label="Sell price per gram"); the old "g
+  // (optional)" placeholder is gone. A price is needed so the proposal is priced.
+  await alicePage.getByLabel(/sell price per gram/i).first().fill('5.00')
   // 3c (NOTE-01 D-08): optionally seed the create-time note — CreateDealForm's
   // note textarea is optional at draft (noteRequired=false), placeholder "Add a
   // note for your contact…" (DealForm.tsx:330-332).
@@ -370,13 +369,22 @@ export async function acceptBirthAsBob(bobPage: Page): Promise<void> {
 
 /**
  * Open the deal in `who`'s counterparty chat and open the card overlay so the
- * Edit pencil + card content are visible. Waiting for the "Open card" affordance
+ * Edit pencil + card content are visible. Waiting for the card-open affordance
  * doubles as the "card has been born" sync point.
+ *
+ * 04C / Phase 5: the old standalone "Open card" button is GONE. The card now
+ * opens from the strip's [Deal Room | Deal Card] segmented toggle (DealPin.tsx) -
+ * a single button that reads "Deal Card" when the card is closed and "Close card"
+ * once it is open. So we wait for the "Deal Card" segment (the born-sync point),
+ * then click it to open the card leaflet. We re-query for "Close card" only to
+ * confirm the open (idempotent: if it is already open we leave it open).
  */
 export async function openDealInChat(page: Page, who: Who): Promise<void> {
   await page.goto('/connect/chat')
   await page.getByText(COUNTERPARTY_NAME[who], { exact: false }).first().click()
-  const openCard = page.getByRole('button', { name: /open card/i })
+  // exact match so "Deal Card" never collides with "Deal Room" (the sibling
+  // segment) — both contain the word "Deal".
+  const openCard = page.getByRole('button', { name: 'Deal Card', exact: true })
   await openCard.first().waitFor({ timeout: 15000 })
   await openCard.first().click()
 }

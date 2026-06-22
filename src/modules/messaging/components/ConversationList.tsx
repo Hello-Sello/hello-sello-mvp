@@ -1,6 +1,7 @@
 import { Search, Plus } from "lucide-react";
-import type { ConversationListItem } from "../types";
+import type { ConversationListItem, MyConnectionsView } from "@/modules/messaging";
 import { ConversationRow } from "./ConversationRow";
+import { NewChatDropdown, type NewChatSelection } from "./NewChatDropdown";
 
 /**
  * The panel-3 filter chips. `companies` regroups the same rows by company.
@@ -32,6 +33,17 @@ export interface ConversationListProps {
   onFilterChange: (filter: ChatFilter) => void;
   selectedThreadId: string | null;
   onSelect: (threadId: string) => void;
+  /** the connected companies/people directory the picker shows (D-01) */
+  connections: MyConnectionsView;
+  /** the live conversation-search value (D-09 - filters the base list rows) */
+  search: string;
+  onSearchChange: (q: string) => void;
+  /** the new-chat picker open/closed flag (owned by ChatView, no global store) */
+  pickerOpen: boolean;
+  onTogglePicker: () => void;
+  onClosePicker: () => void;
+  /** routed up to ChatView to open/create the right thread on a pick (D-05) */
+  onNewChatSelect: (sel: NewChatSelection) => void;
 }
 
 export function ConversationList({
@@ -40,65 +52,111 @@ export function ConversationList({
   onFilterChange,
   selectedThreadId,
   onSelect,
+  connections,
+  search,
+  onSearchChange,
+  pickerOpen,
+  onTogglePicker,
+  onClosePicker,
+  onNewChatSelect,
 }: ConversationListProps) {
   return (
     <div className="flex h-full flex-col">
-      {/* header: new chat + search + filter chips (search/new are stubs) */}
-      <div className="space-y-2 border-b border-black/5 p-3">
+      {/* The New chat trigger stays on top. The picker leaflet drops out of it and
+          COVERS everything below (search + filter tabs + rows) so only ONE list
+          shows at a time - never the base filters AND the picker stacked (D-04). */}
+      <div className="p-3 pb-2">
         <button
           type="button"
-          disabled
-          title="Coming soon"
-          className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-brand/90 px-3 py-2 text-sm font-medium text-white opacity-60"
+          onClick={onTogglePicker}
+          aria-expanded={pickerOpen}
+          className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-brand/90 px-3 py-2 text-sm font-medium text-white"
         >
           <Plus size={15} strokeWidth={2.25} />
           New chat
         </button>
-        <div className="flex items-center gap-2 rounded-full bg-ink/5 px-3 py-1.5 text-xs text-ink/40">
-          <Search size={13} strokeWidth={1.75} />
-          Search conversations…
-        </div>
-        <div className="flex gap-1.5">
-          {FILTERS.map((f) => {
-            const isActive = f.key === filter;
-            return (
-              <button
-                key={f.key}
-                type="button"
-                onClick={() => onFilterChange(f.key)}
-                aria-current={isActive ? "true" : undefined}
-                className={`rounded-full px-2.5 py-1 text-xs transition-colors ${
-                  isActive
-                    ? "bg-brand font-medium text-white"
-                    : "bg-ink/5 text-ink/50 hover:bg-ink/10"
-                }`}
-              >
-                {f.label}
-              </button>
-            );
-          })}
-        </div>
       </div>
 
-      {/* body */}
-      <div className="min-h-0 flex-1 overflow-y-auto p-2">
-        <ListBody
-          conversations={conversations}
-          filter={filter}
-          selectedThreadId={selectedThreadId}
-          onSelect={onSelect}
-        />
+      {/* Everything below the button. `relative` so the new-chat picker can cover
+          this WHOLE region (search + filter tabs + conversation rows) as one clean
+          leaflet; picking someone (or esc / click-away) closes it and the normal
+          list returns. */}
+      <div className="relative min-h-0 flex-1">
+        <div className="flex h-full flex-col">
+          <div className="space-y-2 border-b border-black/5 px-3 pb-3">
+            <div className="flex items-center gap-2 rounded-full bg-ink/5 px-3 py-1.5">
+              <Search size={13} strokeWidth={1.75} className="text-ink/40" />
+              <input
+                value={search}
+                onChange={(e) => onSearchChange(e.target.value)}
+                placeholder="Search conversations…"
+                className="flex-1 bg-transparent text-xs text-ink outline-none placeholder:text-ink/40"
+              />
+            </div>
+            <div className="flex gap-1.5">
+              {FILTERS.map((f) => {
+                const isActive = f.key === filter;
+                return (
+                  <button
+                    key={f.key}
+                    type="button"
+                    onClick={() => onFilterChange(f.key)}
+                    aria-current={isActive ? "true" : undefined}
+                    className={`rounded-full px-2.5 py-1 text-xs transition-colors ${
+                      isActive
+                        ? "bg-brand font-medium text-white"
+                        : "bg-ink/5 text-ink/50 hover:bg-ink/10"
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* body */}
+          <div className="min-h-0 flex-1 overflow-y-auto p-2">
+            <ListBody
+              conversations={conversations}
+              filter={filter}
+              selectedThreadId={selectedThreadId}
+              onSelect={onSelect}
+              search={search}
+            />
+          </div>
+        </div>
+
+        {pickerOpen && (
+          <NewChatDropdown
+            connections={connections}
+            onSelect={onNewChatSelect}
+            onClose={onClosePicker}
+          />
+        )}
+
+        {/* 04C portal target: the Deal Card opens here as a leaflet over the rail
+            (DealPin portals into this slot for the chat variant) - the same place and
+            shape as the New chat picker. pointer-events-none so it never blocks the
+            rail when empty; the portaled leaflet re-enables pointer events on itself. */}
+        <div id="hs-deal-card-slot" className="pointer-events-none absolute inset-0 z-40" />
       </div>
     </div>
   );
 }
+
+type ListBodyProps = Pick<
+  ConversationListProps,
+  "conversations" | "filter" | "selectedThreadId" | "onSelect" | "search"
+>;
 
 function ListBody({
   conversations,
   filter,
   selectedThreadId,
   onSelect,
-}: Omit<ConversationListProps, "onFilterChange">) {
+  search,
+}: ListBodyProps) {
   const row = (item: ConversationListItem) => (
     <ConversationRow
       key={item.threadId}
@@ -108,9 +166,22 @@ function ListBody({
     />
   );
 
+  // D-09: the top search input filters the base list by name / last-message
+  // preview (case-insensitive). Applied BEFORE the tab split so it does not
+  // touch groupByCompany's contract.
+  const needle = search.trim().toLowerCase();
+  const searched =
+    needle === ""
+      ? conversations
+      : conversations.filter(
+          (c) =>
+            c.name.toLowerCase().includes(needle) ||
+            (c.lastMessagePreview ?? "").toLowerCase().includes(needle),
+        );
+
   // the deal chats live ONLY under the Deals tab; every other view excludes them
-  const deals = conversations.filter((c) => c.threadType === "deal");
-  const chats = conversations.filter((c) => c.threadType !== "deal");
+  const deals = searched.filter((c) => c.threadType === "deal");
+  const chats = searched.filter((c) => c.threadType !== "deal");
 
   if (filter === "deals") {
     const groups = groupByCompany(deals);

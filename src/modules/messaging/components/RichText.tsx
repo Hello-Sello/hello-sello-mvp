@@ -27,11 +27,13 @@ export function RichText({ body }: { body: string }) {
   const nodes: ReactNode[] = [];
   let last = 0;
   let key = 0;
-  let m: RegExpExecArray | null;
-  TOKEN.lastIndex = 0;
 
-  while ((m = TOKEN.exec(body)) !== null) {
-    if (m.index > last) nodes.push(body.slice(last, m.index));
+  // matchAll clones the regex internally, so it never mutates TOKEN.lastIndex -
+  // no shared module state to reset (react-hooks/immutability), and concurrent
+  // renders cannot corrupt each other's iteration.
+  for (const m of body.matchAll(TOKEN)) {
+    const index = m.index ?? 0;
+    if (index > last) nodes.push(body.slice(last, index));
 
     if (m[1] !== undefined) {
       const href = safeUrl(m[2]);
@@ -60,7 +62,7 @@ export function RichText({ body }: { body: string }) {
       nodes.push(<em key={key++}>{m[6]}</em>);
     }
 
-    last = m.index + m[0].length;
+    last = index + m[0].length;
   }
   if (last < body.length) nodes.push(body.slice(last));
 
