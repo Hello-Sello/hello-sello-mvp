@@ -36,8 +36,11 @@ export function WorkspaceHeader({
 
   // the deal's human reference - the SAME source the strip's deal dropdown uses
   // (DealPin reads `hs_deal_number` as `hsNumber`), so the number is consistent
-  // across the app. Null on a brand-new draft before a number is minted.
-  const dealNumber = card.hs_deal_number;
+  // across the app. A brand-new draft has no minted number yet, so derive a short
+  // stable ref from the card id (HS- + last 4, uppercased) - the center always
+  // shows a number, and it flips to the real HS-#### once the deal is confirmed.
+  const dealNumber =
+    card.hs_deal_number ?? `HS-${card.id.replace(/-/g, "").slice(-4).toUpperCase()}`;
   const price =
     card.value_net != null ? formatMoney(Number(card.value_net), card.currency) : null;
 
@@ -78,7 +81,7 @@ export function WorkspaceHeader({
           Deal Room
         </span>
         <span className="mt-1 text-sm font-bold tracking-wide text-ink tabular-nums">
-          {dealNumber ?? "Draft deal"}
+          {dealNumber}
         </span>
       </div>
 
