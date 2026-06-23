@@ -8,17 +8,31 @@ browser (no build, no server). Theme tokens mirror `src/app/globals.css`.
 
 ---
 
-## ▶ NEXT SESSION — start here (one open decision)
+## ✅ RESOLVED (2026-06-23) — price-list home + scope
 
-**Open decision: where do custom (per-customer) price lists live?** Right now it's inconsistent:
-- The **seller send step** (basket → Send as deal card) lets the seller **edit a price per line**, which saves a per-customer list (`customLists`) — but the UI made it *look like editing the Standard list* (it doesn't — Standard is untouched).
-- The older **"Send price list to a customer"** modal (Manage shop) still marks **"custom price list (future)"**. → inconsistent.
+Decided with Muskan (full rationale → `docs/decisions/DECISIONS.md`):
 
-**Proposed fix (await Muskan's go):** make the custom price list **first-class with one home** — a **"Price lists" area in Manage shop**: the **Standard** (public) list + **custom lists** (one per customer, each = *"based on Standard, with a few overrides"*, clearly separate). Then BOTH sends just *pick a list*; the "Send price list" custom option becomes **real**.
+- **Standard (public) list lives in the shop** — born on first CSV import; managed / edited /
+  sent from Manage shop. One company-wide list. **This is all Phase 7 builds.**
+- **Custom per-customer lists = their OWN future phase** (Phase 15 — not Phase 7). Model:
+  **born in the shop** (seller overrides prices on an offer) → **persist on the Relationship
+  page** (DEV-41 Proposed→Approved→Applied) → **DEV-1 cascade** picks the right list per
+  recipient on an outgoing offer. Needs new schema (`pricelist.relationship_id`, NULL =
+  standard / set = customer) + the approval primitive — spans Present + Relationship + deal
+  lanes (coordinate w/ Ayush).
+- **Send step (Phase 7):** picks the **Standard** list; a per-line edit is a **one-off
+  override that snapshots onto the deal** (`deal_line_item.unit_price`), **NOT** a saved list.
+  → **Drop the `customLists` persistence + relabel** — it was half-building the custom phase.
+- **"Send price list → custom" stays (future)** — it's Phase 15.
+- **Folds into Phase 7 (no migration — schema already stores it):** batch-detail CSV columns
+  (`shelf_life_months`, `loss_on_drying_percent`, `water_activity`, batch `cbg/cbn_percent`,
+  `description`, `bundle_description`) + **CSV upsert by Supplier Product Code** + an
+  **export-catalog** button. Industry-standard (Shopify / WooCommerce / Magento: one combined
+  product+price CSV, re-import-with-overwrite keyed on SKU); the unique key
+  `uq_product_supplier_code_active` already exists.
 
-**Two distinct "sends" to keep separate:** **Send price list** = "here are our prices" (catalogue, no order) vs **Send deal/offer** = a concrete order (products + qty). Both *use* a price list.
-
-**Pricing rollout decided:** **B now, A later.** B = custom list is seller-pushed (born at send / attached). A = shop auto-shows a customer their prices on login (industry standard; same data, later trigger). Research + reasoning in session history.
+**Two distinct "sends" to keep separate:** **Send price list** = "here are our prices"
+(catalogue, no order) vs **Send deal/offer** = a concrete order (products + qty). Both *pick* a list.
 
 ---
 
