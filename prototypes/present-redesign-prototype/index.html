@@ -370,6 +370,16 @@
   .sd-to .sd-conn{margin-left:auto;font-size:10px;font-weight:700;color:#1f7a1e;background:rgba(52,178,51,.13);border-radius:999px;padding:3px 9px}
   .pc-reqbtn{width:100%;margin-top:10px;border-radius:999px;background:rgba(227,11,93,.1);color:var(--brand-deep);font-weight:700;font-size:12px;padding:9px;display:flex;align-items:center;justify-content:center;gap:6px}
   .pc-reqbtn:hover{background:rgba(227,11,93,.16)}
+  /* per-customer editable price (custom price list, born at send) */
+  .sd-price{display:flex;align-items:center;gap:8px;margin-top:9px;padding-top:9px;border-top:1px dashed var(--line)}
+  .sd-plabel{font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint)}
+  .sd-pin{display:inline-flex;align-items:center;gap:3px;margin-left:auto;border:1.5px solid var(--line-strong);border-radius:9px;padding:4px 9px;background:#fff}
+  .sd-pin input{width:54px;border:none;outline:none;font-size:13px;font-weight:700;text-align:right;font-variant-numeric:tabular-nums;color:var(--ink)}
+  .sd-pin:focus-within{border-color:var(--brand)}
+  .sd-custom{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--brand-deep);background:rgba(227,11,93,.1);border-radius:999px;padding:3px 8px}
+  .sd-std{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-faint);background:rgba(20,10,16,.05);border-radius:999px;padding:3px 8px}
+  .sd-ordertotal{display:flex;justify-content:flex-end;gap:6px;align-items:baseline;font-size:12px;font-weight:600;color:var(--ink-muted);margin:12px 0 0}
+  .sd-ordertotal b{color:var(--brand-deep);font-size:15px}
   .ab-batch{display:flex;align-items:center;gap:10px;border:1.5px solid var(--line);border-radius:11px;padding:9px 11px;transition:all .15s var(--ease-out)}
   .ab-batch.active{border-color:var(--brand);background:rgba(227,11,93,.05)}
   .ab-binfo{flex:1;min-width:0}
@@ -725,22 +735,33 @@ function openAddBatch(idx,qty,card){
   };
   render();$('mscrim').classList.add('show');mMenu.classList.remove('show');acctPop.classList.remove('show');
 }
-/* seller send → batch already chosen per line; just pick the recipient */
+/* seller send → batch already chosen per line; pick the customer + (optionally) set custom prices for them.
+   Custom prices are "born at send" and saved per-customer (customLists) — reusable next offer (B; A = auto-show on login later). */
+const customLists={}; // customLists[customer] = { [productIdx]: price/g }
 function openSendDeal(){
   const lines=Object.entries(basket[COMPANY]||{});
   if(!lines.length){toast('Basket is empty');return;}
   const contacts=['Apotheke Nord (Berlin)','MediCanna GmbH','GrünPharm AG','Cologne Health Pharmacy'];
-  const lineHTML=lines.map(([k,L])=>{const p=PRODUCTS[L.idx];
-    return `<div class="sd-line"><div class="sd-prod"><div class="sd-th" style="background:${p.grad}"></div><div><b>${p.n}</b><small>${L.qty} × ${p.pack} · ${p.cult}</small></div></div><div class="sd-chosen"><svg class="ic xs" viewBox="0 0 24 24"><path d="m5 12 5 5 9-11"/></svg> Lot <b>${L.batch||'—'}</b> · measured values freeze onto the deal</div></div>`;}).join('');
-  $('modal').innerHTML=`<div class="mtop"><h3>Send deal card</h3><button class="mclose" data-mclose><svg class="ic sm" viewBox="0 0 24 24"><path d="M6 6 18 18M18 6 6 18"/></svg></button></div>
-    <div class="msub">A seller <b>offer</b> from your shop — the batch for each product was chosen when you added it. Pick the customer to send to.</div>
-    <div class="field"><label>Send to — connected customer</label><select id="sdContact">${contacts.map(c=>`<option>${c}</option>`).join('')}</select></div>
-    <div class="sd-lines">${lineHTML}</div>
-    <div class="field"><label>Message (optional)</label><textarea rows="2" placeholder="Hi — here's an offer for you…"></textarea></div>
-    <div class="infonote">Becomes a deal <b>offer</b> (source: shop), handing off to Ayush's deal basket + <code>createDeal</code> with each line's chosen batch.</div>
-    <div class="mactions"><button class="cta" id="sdSend"><svg class="ic sm" viewBox="0 0 24 24"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></svg> Send offer</button><button class="ghost" data-mclose>Cancel</button></div>`;
-  $('mscrim').classList.add('show');mMenu.classList.remove('show');acctPop.classList.remove('show');
-  $('sdSend').onclick=()=>{const to=$('sdContact').value;closeModal();closeDrawers();basket[COMPANY]={};renderBasket();toast('→ Offer sent to '+to+' (mock)');};
+  let customer=contacts[0];const work={};
+  const seed=()=>lines.forEach(([k,L])=>{const sv=(customLists[customer]||{})[L.idx];work[k]=sv!=null?sv:(PRODUCTS[L.idx].perG||0);});
+  seed();
+  const render=()=>{
+    let custom=0,total=0;
+    const lineHTML=lines.map(([k,L])=>{const p=PRODUCTS[L.idx],std=p.perG||0,price=work[k]||0,isC=Math.abs(price-std)>0.001;if(isC)custom++;total+=price*L.qty*packG(p);
+      return `<div class="sd-line"><div class="sd-prod"><div class="sd-th" style="background:${p.grad}"></div><div><b>${p.n}</b><small>${L.qty} × ${p.pack} · Lot ${L.batch||'—'}</small></div></div><div class="sd-price"><span class="sd-plabel">Price /g</span><div class="sd-pin"><input data-pk="${k}" value="${price.toFixed(2).replace('.',',')}" inputmode="decimal"/><span>€</span></div>${isC?'<span class="sd-custom">custom</span>':'<span class="sd-std">standard</span>'}</div></div>`;}).join('');
+    $('modal').innerHTML=`<div class="mtop"><h3>Send deal card</h3><button class="mclose" data-mclose><svg class="ic sm" viewBox="0 0 24 24"><path d="M6 6 18 18M18 6 6 18"/></svg></button></div>
+      <div class="msub">A seller <b>offer</b> from your shop. Prices start from your <b>Standard</b> list — change any to make a <b>custom price list</b> for this customer.</div>
+      <div class="field"><label>Send to — connected customer</label><select id="sdContact">${contacts.map(c=>`<option ${c===customer?'selected':''}>${c}</option>`).join('')}</select></div>
+      <div class="sd-lines">${lineHTML}</div>
+      <div class="sd-ordertotal">Order total <b>${eur(total)}</b>${custom?` · <span class="sd-custom">${custom} custom</span>`:''}</div>
+      <div class="field"><label>Message (optional)</label><textarea rows="2" placeholder="Hi — here's an offer for you…"></textarea></div>
+      <div class="infonote">Becomes a deal <b>offer</b> (source: shop). ${custom?`The changed prices <b>save as ${customer}'s custom price list</b> — reusable next time you offer them.`:'Uses your Standard prices.'} Hands off to Ayush's deal basket + <code>createDeal</code>.</div>
+      <div class="mactions"><button class="cta" id="sdSend"><svg class="ic sm" viewBox="0 0 24 24"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></svg> Send offer</button><button class="ghost" data-mclose>Cancel</button></div>`;
+    $('sdContact').onchange=e=>{customer=e.target.value;seed();render();};
+    $('modal').querySelectorAll('[data-pk]').forEach(inp=>{inp.oninput=()=>{const v=parseFloat(inp.value.replace(',','.'));work[inp.dataset.pk]=isNaN(v)?0:v;};inp.onchange=()=>render();});
+    $('sdSend').onclick=()=>{const ov={};lines.forEach(([k,L])=>{const std=PRODUCTS[L.idx].perG||0;if(Math.abs((work[k]||0)-std)>0.001)ov[L.idx]=work[k];});if(Object.keys(ov).length)customLists[customer]={...(customLists[customer]||{}),...ov};closeModal();closeDrawers();basket[COMPANY]={};renderBasket();toast(`→ Offer sent to ${customer} (mock)${Object.keys(ov).length?' · custom list saved':''}`);};
+  };
+  render();$('mscrim').classList.add('show');mMenu.classList.remove('show');acctPop.classList.remove('show');
 }
 /* buyer: request pricing for an unpriced product (lands in the seller's Connect inbox) */
 function openReqPricing(idx){const p=PRODUCTS[idx];

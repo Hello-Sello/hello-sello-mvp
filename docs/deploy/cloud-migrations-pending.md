@@ -252,6 +252,21 @@ Cautions for the cloud apply:
 
 ## APPLIED TO CLOUD
 
+### 2026-06-23 — Phase 10 + 11 + 12 + Deal-Room batch (13 migrations)
+Clean sequential `supabase db push` against `byipusuthdlskdxoexkt` — **no reconciliation
+needed** (history aligned since the 06-20 reconcile). 13 applied, 0 errors:
+- Phase 10: `get_public_profile_verification`
+- Phase 11 (6): `rbac_activation`, `onboard_superadmin`, `backfill_superadmin`, `team_rpcs`,
+  `invite_accept_link`, `lockout_race_fix`
+- Deal Room (Ayush, 3): `thing_artifact_visibility`, `stage_done_and_finalize`,
+  `thing_artifact_withcheck_ownership`
+- Phase 12 (3): `join_request_rpcs`, `join_request_fixes`, `pathb_followups`
+
+Backfill: 6 real companies seeded Superadmin, 10 headless demo skipped (NULL `created_by`).
+Security advisor: **0 errors** (94 WARN, all pre-existing/by-design SECURITY DEFINER RPCs).
+Cloud config set same day: `SUPABASE_SECRET_KEY` in Vercel + 3 email templates in dashboard.
+Cloud history: 75 → 88.
+
 ### 2026-06-20 — combined batch (Muskan + Ayush), reconciled + pushed
 Ran the "⚠️ READ FIRST" reconciliation against `byipusuthdlskdxoexkt`:
 1. `migration repair --status reverted` × 47 (cleared wrong-timestamp records)

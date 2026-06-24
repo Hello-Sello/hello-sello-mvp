@@ -20,17 +20,15 @@ export function Hero() {
       <div className="mx-auto max-w-6xl px-6 pb-16 pt-20 text-center sm:pt-28">
         <Reveal>
           <p className="inline-block rounded-full border border-brand/15 bg-surface/60 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-brand backdrop-blur">
-            B2B marketplace · verified companies only
+            Chat. Deal. Done.
           </p>
         </Reveal>
 
         <Reveal delayMs={60}>
           <h1 className="mx-auto mt-6 max-w-4xl text-4xl font-bold leading-[1.05] tracking-tight text-ink sm:text-6xl">
-            From conversation to{" "}
             <span className="bg-gradient-to-r from-brand to-brand-deep bg-clip-text text-transparent">
-              confirmed deal
-            </span>{" "}
-            — between verified companies.
+              AI FOR DEALMAKERS
+            </span>
           </h1>
         </Reveal>
 
