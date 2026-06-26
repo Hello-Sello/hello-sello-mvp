@@ -1249,3 +1249,19 @@ The **Standard** company-wide price list lives in the **shop**: born on first CS
 **Folds into Phase 7 (no migration — schema already stores it):** the dropped **batch-detail CSV columns** (`shelf_life_months`, `loss_on_drying_percent`, `water_activity`, batch `cbg/cbn_percent`, `description`, `bundle_description`) go back into the template + parser + import RPC fan-out; **CSV upsert by Supplier Product Code** + an **export-catalog** button become the no-ERP update path. The unique key `uq_product_supplier_code_active` already exists, so upsert needs no migration.
 
 *Why:* custom pricing is cross-cutting — 4 surfaces (Present + Relationship + deal + a new approval primitive), both engineers' lanes, schema change + a state machine — so sequencing it as its own slice (Phase 15) keeps the Standard path a clean tracer bullet and removes the prototype's half-built `customLists` inconsistency. Batch detail and the update path are pure Present-lane and storage already exists, so they belong in Phase 7. **Industry-confirmed** (Shopify / WooCommerce / Magento: one combined product+price CSV; bulk update = re-import-with-overwrite keyed on SKU; per-customer/tiered prices = a separate price-list import). (Sources: 2026-06-23 design session with Muskan; Marcel's Product-list + Pricelist CSVs in `docs/CSV's/`; web research on B2B catalog/price CSV practice.)
+
+---
+
+## 2026-06-26 — Location/warehouse model: structured addresses are their own phase (Phase 16), not Phase 7
+
+Marcel confirmed (DEV-80 thread) the warehouse model: **(1)** each location has its **own** warehouse address(es) buyers see (Germany view → German address); **(2)** a location can hold **more than one** address; **(3)** location naming is **free-form** (e.g. "Germany North", "Germany South"); **(4)** addresses must be entered correctly because they **populate the Sales Order / Purchase Order documents** (Ayush's deal docs, `src/modules/deals/lib/derive.ts`) — structured order data, not display text.
+
+**Decision: the structured location→multi-address registry is its own future phase (Phase 16 — Locations & Warehouses), NOT Phase 7 and NOT Phase 15 (pricing).**
+- **Phase 7 keeps location as a free-text label only** (`product.location varchar(80)`, D-07): it drives the grid tabs + the existing **single** `company.warehouse_location` line. Delivers Marcel's "different products/packaging per location" (each product sits in one location) — the part the shop needs. No registry, no multi-address, no structured fields.
+- **Phase 16 owns** the location entity (name + structured address fields), multiple addresses per location, a "Manage locations" in-platform form, and wiring addresses into the Sales/Purchase Order docs.
+
+**Input model (researched — hybrid, industry-standard):** warehouse **addresses are entered in-platform** via a structured, validated form (set up once); **products reference a location by name** via a CSV column + an in-app dropdown (name-matched like terpenes, warn on unknowns). Rationale: addresses feed order documents → they need validated structured fields a spreadsheet cell can't enforce; locations are few + stable (form), products are many + churny (CSV). (Source: Shopify "set up locations before assigning inventory" — Locations in Settings + a separate location-referencing inventory CSV; B2B platforms add address validation because the address drives shipping/order docs.)
+
+**Cross-lane + sequencing:** Phase 16 **depends on Phase 7** (the shop must exist) and **touches Ayush's deal/order-doc lane** — design the address fields *with* him against what the Sales/Purchase Order docs need; do not design the schema before that.
+
+*Refines the 2026-06-22 "location entity + `product.location_id` = Phase-7 build" note:* the **entity/registry moves to Phase 16**; Phase 7 ships the lighter free-text label (D-07). (Sources: 2026-06-26 session with Muskan; Marcel's DEV-80 answers; web research on B2B multi-warehouse data entry.)
