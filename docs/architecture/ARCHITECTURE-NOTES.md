@@ -101,6 +101,7 @@ When the formal Architecture doc is written (post Layer 4 + 5), these become its
 
 - Outbound offer pricelist cascade resolves **per recipient**: customer-specific → STANDARD CSV → manual prompt. *(DEV-1.)*
 - Shop price visibility is **per-viewer and company-configurable** (show all / hide all / show one default; connected buyers get a custom pricelist on top). *(DEV-12 + 2026-05-14 lock.)*
+- A **per-customer custom pricelist** = a `pricelist` row scoped by a **new nullable `pricelist.relationship_id`** (NULL = Standard company-wide / set = customer-specific), gated by the **DEV-41 approval primitive** (Proposed→Approved→Applied). It is **born in the shop** (seller overrides Standard prices on an offer), **persists on the Relationship page**, and is resolved **per-recipient by the DEV-1 cascade**. Deferred to **Phase 15** — neither the column nor the approval primitive exists yet; Present (Phase 7) ships **Standard-list-only** (a send-step per-line edit snapshots onto the deal, not a saved list). *(2026-06-23.)*
 
 ## State machines
 
