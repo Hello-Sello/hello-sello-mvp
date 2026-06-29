@@ -1265,3 +1265,19 @@ Marcel confirmed (DEV-80 thread) the warehouse model: **(1)** each location has 
 **Cross-lane + sequencing:** Phase 16 **depends on Phase 7** (the shop must exist) and **touches Ayush's deal/order-doc lane** — design the address fields *with* him against what the Sales/Purchase Order docs need; do not design the schema before that.
 
 *Refines the 2026-06-22 "location entity + `product.location_id` = Phase-7 build" note:* the **entity/registry moves to Phase 16**; Phase 7 ships the lighter free-text label (D-07). (Sources: 2026-06-26 session with Muskan; Marcel's DEV-80 answers; web research on B2B multi-warehouse data entry.)
+
+---
+
+## 2026-06-29 — Persistent shared basket + seller-owned deal pricing (Phase 7 absorbs Phase 6 Deal Basket)
+
+**Basket is now persistent and app-wide (reverses ADR-0003 "Option A / transient" and Phase 7 D-12).** A user's basket survives across sessions (saved, not in-memory). It is the shared **Product Basket** layer of the locked 4-layer model (Product Card → Product Basket → Deal Basket → Deal Card), built **once** and reused by both the shop and the deal flow.
+
+**Both sides build baskets (symmetric):** a **buyer** fills a basket from *other* companies' shops; a **seller** fills a basket from *their own* shop to send to buyers. Same component, two entry points.
+
+**Cross-company basket, per-seller offer:** one basket may hold products from several companies, **grouped by seller**; turning it into a deal produces **one deal card per seller** (two shops in-basket → two offers).
+
+**Deal pricing is seller-owned ("Model B" — answers the open Phase-6A question):** the buyer offers a card with products + quantities (+ delivery) but **no price** — "I want these, send me your price." The **seller fills unit prices**, sends back; **both confirm** to close. Each side keeps its own private number (seller cost / buyer resale → own margin %), never shared.
+
+**Phase 6 (Deal Basket) folds into Muskan's expanded Phase 7.** Ayush handed Phase 6 over (2026-06-23, `_workshop/handoff/phase-6-context.md`) as "almost the same work as the Product Basket Muskan already owns"; no Phase 6 code existed. The Deal Card terminus (`src/modules/deals/`: DealCard, DealForm, held two-sided change, `buildCreateBasket`, recipient resolution) already exists and is reused as-is.
+
+*Why:* the locked 4-layer model already intends one shared Product Basket; making it persistent + symmetric removes the "build throwaway, rebuild later" risk and merges Phase 7's cart with Phase 6's deal basket into one piece. Persistence (Option B) was deferred "until after Notifications" — reopened deliberately as the core buyer experience (DEV-95). *Open:* whether a seller's self-shop basket also persists across sessions. *Schema:* a persisted basket + basket-line store (new), keyed by owner + seller company — not built today. **Supersedes** ADR-0003's Option-A clause + Phase 7 D-12. (Sources: 2026-06-29 session with Muskan; `_workshop/handoff/phase-6-context.md`; Linear DEV-95/DEV-81.)
