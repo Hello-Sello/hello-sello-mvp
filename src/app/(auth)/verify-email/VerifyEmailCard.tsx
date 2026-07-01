@@ -9,9 +9,11 @@ const COOLDOWN_SECONDS = 45
 /**
  * The honest "check your inbox" waiting state (CONTEXT: replaces the old fake
  * "I've verified my email" button). Email confirmation is ON, so there is no
- * session here and nothing to auto-advance — the user finishes by clicking the
- * link in their inbox, which lands on /auth/confirm. This screen only shows the
- * pending state and lets the user re-request the email on a cooldown.
+ * session here and nothing to auto-advance in THIS tab — clicking the inbox link
+ * opens /auth/confirm in a new tab, which sets the session and lands on
+ * onboarding there (onAuthStateChange does not fire across tabs, so the original
+ * tab cannot self-advance; the copy tells the user to close it). This screen only
+ * shows the pending state and lets the user re-request the email on a cooldown.
  *
  * Resend note: no resend server action is wired yet, so the control visibly cools
  * down (disabled + countdown) without re-triggering Supabase's send. The cooldown
@@ -47,7 +49,7 @@ export function VerifyEmailCard({ email }: { email: string }) {
 
         <div className="mt-5 flex items-center justify-center gap-2 text-xs text-ink-muted">
           <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-brand-soft border-t-brand" />
-          Waiting for you to confirm…
+          Waiting for confirmation…
         </div>
 
         <p className="mt-6 text-xs text-ink-muted">
@@ -68,7 +70,7 @@ export function VerifyEmailCard({ email }: { email: string }) {
         </p>
 
         <p className="mt-4 text-[11px] text-ink-muted/80">
-          This page continues automatically once you click the link.
+          Opening the link continues in a new tab — this tab can be closed.
         </p>
       </div>
     </div>
