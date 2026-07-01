@@ -106,7 +106,17 @@ export async function signInWithProvider(
     (await headers()).get('origin') ?? process.env.NEXT_PUBLIC_SITE_URL!
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider,
-    options: { redirectTo: `${origin}/auth/callback?next=/onboarding` },
+    options: {
+      redirectTo: `${origin}/auth/callback?next=/onboarding`,
+      // Azure/Outlook returns NO email claim under the default `openid` scope, so
+      // exchangeCodeForSession fails with "Error getting user email from external
+      // provider" and /auth/callback bounces the user back to /login. Explicitly
+      // request email (+ profile for the display name). Google returns email under
+      // its default scope, so it needs nothing extra. NOTE: personal Microsoft
+      // accounts may still need the `email` optional claim added to the ID token in
+      // the Azure app registration — the scope alone isn't always enough there.
+      ...(provider === 'azure' ? { scopes: 'email profile' } : {}),
+    },
   })
   if (error) redirect('/login?error=oauth')
   if (data.url) redirect(data.url)
