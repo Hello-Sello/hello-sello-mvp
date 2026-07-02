@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { MailCheck } from 'lucide-react'
 import { Wordmark } from '@/shared/ui/Wordmark'
+import { resendConfirmation } from '../actions'
 
 const COOLDOWN_SECONDS = 45
 
@@ -15,12 +16,29 @@ const COOLDOWN_SECONDS = 45
  * tab cannot self-advance; the copy tells the user to close it). This screen only
  * shows the pending state and lets the user re-request the email on a cooldown.
  *
- * Resend note: no resend server action is wired yet, so the control visibly cools
- * down (disabled + countdown) without re-triggering Supabase's send. The cooldown
- * is the honest, testable behaviour; the actual re-send hook is a later task.
+ * Resend: the control calls the resendConfirmation server action (supabase.auth
+ * .resend, type 'signup'), then cools down (disabled + countdown) so it can't be
+ * spammed. A send error is shown inline.
  */
 export function VerifyEmailCard({ email }: { email: string }) {
   const [remaining, setRemaining] = useState(0)
+  const [sending, setSending] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleResend() {
+    // Direct-visit fallback: the page passes 'your email' when no address is in
+    // the URL — nothing real to send to, so no-op.
+    if (!email.includes('@')) return
+    setSending(true)
+    setError(null)
+    const res = await resendConfirmation(email)
+    setSending(false)
+    if (res.error) {
+      setError(res.error)
+      return
+    }
+    setRemaining(COOLDOWN_SECONDS)
+  }
 
   useEffect(() => {
     if (remaining <= 0) return
@@ -61,13 +79,16 @@ export function VerifyEmailCard({ email }: { email: string }) {
           ) : (
             <button
               type="button"
-              onClick={() => setRemaining(COOLDOWN_SECONDS)}
-              className="font-semibold text-ink underline transition hover:text-brand"
+              onClick={handleResend}
+              disabled={sending}
+              className="font-semibold text-ink underline transition hover:text-brand disabled:opacity-60"
             >
-              Resend email
+              {sending ? 'Sending…' : 'Resend email'}
             </button>
           )}
         </p>
+
+        {error && <p className="mt-2 text-xs text-danger">{error}</p>}
 
         <p className="mt-4 text-[11px] text-ink-muted/80">
           Opening the link continues in a new tab — this tab can be closed.

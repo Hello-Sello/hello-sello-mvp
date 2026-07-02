@@ -57,6 +57,22 @@ export async function signUp(
   redirect(`/verify-email?email=${encodeURIComponent(email)}`)
 }
 
+// Re-send the signup confirmation email (DEV-129). Mirrors signUp's emailRedirectTo
+// exactly so the resent link lands on the same /auth/confirm → onboarding flow. The
+// card's cooldown + GoTrue's send rate limits guard against spamming; on failure the
+// message is returned for inline display.
+export async function resendConfirmation(email: string): Promise<AuthState> {
+  const supabase = await createClient()
+  const origin =
+    (await headers()).get('origin') ?? process.env.NEXT_PUBLIC_SITE_URL!
+  const { error } = await supabase.auth.resend({
+    type: 'signup',
+    email,
+    options: { emailRedirectTo: `${origin}/auth/confirm?next=/onboarding` },
+  })
+  return error ? { error: error.message } : {}
+}
+
 // Forgot-password result. `sent` flips true once the request completes so the page
 // can swap in the neutral confirmation — it is true on EVERY outcome (anti-enumeration),
 // so it never signals whether the address is registered.
