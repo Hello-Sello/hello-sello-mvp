@@ -58,10 +58,14 @@ export async function signUp(
 }
 
 // Re-send the signup confirmation email (DEV-129). Mirrors signUp's emailRedirectTo
-// exactly so the resent link lands on the same /auth/confirm → onboarding flow. The
-// card's cooldown + GoTrue's send rate limits guard against spamming; on failure the
-// message is returned for inline display.
-export async function resendConfirmation(email: string): Promise<AuthState> {
+// exactly so the resent link lands on the same /auth/confirm → onboarding flow.
+//
+// ANTI-ENUMERATION (mirrors requestPasswordReset): the address is client-supplied
+// (?email=) and there is NO session on the verify screen, so surfacing GoTrue's
+// per-address outcomes would leak which addresses have a pending signup. Returns
+// nothing, logs any error server-side only; the card shows a neutral state and cools
+// down regardless. GoTrue's per-address rate limit bounds resend abuse.
+export async function resendConfirmation(email: string): Promise<void> {
   const supabase = await createClient()
   const origin =
     (await headers()).get('origin') ?? process.env.NEXT_PUBLIC_SITE_URL!
@@ -70,7 +74,7 @@ export async function resendConfirmation(email: string): Promise<AuthState> {
     email,
     options: { emailRedirectTo: `${origin}/auth/confirm?next=/onboarding` },
   })
-  return error ? { error: error.message } : {}
+  if (error) console.error('[resendConfirmation]', error.message)
 }
 
 // Forgot-password result. `sent` flips true once the request completes so the page

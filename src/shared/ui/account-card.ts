@@ -1,7 +1,7 @@
 'use server'
 
 import QRCode from 'qrcode'
-import { getMyProfile, getPublicProfile, buildVCard } from '@/modules/profile'
+import { getMyProfile, buildVCard } from '@/modules/profile'
 import { getCompanyProfile } from '@/modules/companies'
 
 export type AccountCard = {
@@ -21,14 +21,19 @@ export async function getAccountCard(): Promise<AccountCard> {
   const c = await getCompanyProfile()
 
   // QR encodes the vCard itself so scanning opens "Add Contact" directly (same
-  // fields as the public card's "Save contact"). Needs the PublicProfile shape,
-  // so fetch it via the public handle rather than reusing getMyProfile's row.
+  // fields as the public card's "Save contact"). Built in-memory from the profile
+  // + company already fetched — no extra RPC, and the QR always renders.
   let qrSvg: string | null = null
   if (p.publicHandle) {
-    const pub = await getPublicProfile(p.publicHandle)
-    if (pub) {
-      qrSvg = await QRCode.toString(buildVCard(pub), { type: 'svg', margin: 1, color: { dark: '#0a0a0a', light: '#ffffff' } })
-    }
+    const vcard = buildVCard({
+      displayName: p.displayName,
+      title: p.title,
+      email: p.email,
+      phone: p.phone,
+      linkedin: p.linkedin,
+      company: c ? { name: c.name, website: c.website } : null,
+    })
+    qrSvg = await QRCode.toString(vcard, { type: 'svg', margin: 1, color: { dark: '#0a0a0a', light: '#ffffff' } })
   }
 
   return {

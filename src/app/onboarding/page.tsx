@@ -167,10 +167,17 @@ export default async function OnboardingPage({
     rejectionPreset = presetCode as RejectPreset | null
   }
 
+  // Prefill the (optional) profile photo when resuming onboarding so an already
+  // uploaded avatar shows instead of a blank slate (?v nonce busts a stale cache).
+  const initialAvatarUrl = person.avatar_path
+    ? `${supabase.storage.from('avatars').getPublicUrl(person.avatar_path).data.publicUrl}?v=${new Date(person.updated_at).getTime()}`
+    : null
+
   return (
     <OnboardingStepper
       firstName={person.first_name ?? null}
       personId={person.id}
+      initialAvatarUrl={initialAvatarUrl}
       companyTypes={companyTypes ?? []}
       resumeStep={resumeStep}
       prefill={prefill}

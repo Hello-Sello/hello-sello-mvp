@@ -17,26 +17,23 @@ const COOLDOWN_SECONDS = 45
  * shows the pending state and lets the user re-request the email on a cooldown.
  *
  * Resend: the control calls the resendConfirmation server action (supabase.auth
- * .resend, type 'signup'), then cools down (disabled + countdown) so it can't be
- * spammed. A send error is shown inline.
+ * .resend, type 'signup'), then cools down so it can't be spammed. The action is
+ * anti-enumeration (neutral, logs errors server-side), so nothing is surfaced; the
+ * button only renders when a real address is present (?email=).
  */
 export function VerifyEmailCard({ email }: { email: string }) {
   const [remaining, setRemaining] = useState(0)
   const [sending, setSending] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  // Only offer resend when the page actually has an address (it passes 'your email'
+  // as a fallback). A dead, always-enabled button would look broken.
+  const canResend = email.includes('@')
 
   async function handleResend() {
-    // Direct-visit fallback: the page passes 'your email' when no address is in
-    // the URL — nothing real to send to, so no-op.
-    if (!email.includes('@')) return
     setSending(true)
-    setError(null)
-    const res = await resendConfirmation(email)
+    await resendConfirmation(email)
     setSending(false)
-    if (res.error) {
-      setError(res.error)
-      return
-    }
+    // Always cool down — even on a server-side error we deliberately don't surface
+    // (anti-enumeration) — so the control can never be spammed.
     setRemaining(COOLDOWN_SECONDS)
   }
 
@@ -76,7 +73,7 @@ export function VerifyEmailCard({ email }: { email: string }) {
             <span className="font-normal text-ink-muted/70">
               Sent — you can resend in {remaining}s
             </span>
-          ) : (
+          ) : canResend ? (
             <button
               type="button"
               onClick={handleResend}
@@ -85,10 +82,12 @@ export function VerifyEmailCard({ email }: { email: string }) {
             >
               {sending ? 'Sending…' : 'Resend email'}
             </button>
+          ) : (
+            <span className="font-normal text-ink-muted/70">
+              Return to sign-up to resend.
+            </span>
           )}
         </p>
-
-        {error && <p className="mt-2 text-xs text-danger">{error}</p>}
 
         <p className="mt-4 text-[11px] text-ink-muted/80">
           Opening the link continues in a new tab — this tab can be closed.

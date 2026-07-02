@@ -98,6 +98,7 @@ const JOIN_STEPS: Step[] = ['join_search', 'join_pending']
 export function OnboardingStepper({
   firstName,
   personId,
+  initialAvatarUrl = null,
   companyTypes,
   resumeStep = null,
   prefill = {},
@@ -110,6 +111,7 @@ export function OnboardingStepper({
 }: {
   firstName: string | null
   personId: string
+  initialAvatarUrl?: string | null
   companyTypes: CompanyType[]
   resumeStep?: ResumeStep | null
   prefill?: Prefill
@@ -298,6 +300,7 @@ export function OnboardingStepper({
         {step === 'profile' && (
           <ProfileStep
             personId={personId}
+            initialAvatarUrl={initialAvatarUrl}
             displayName={displayName}
             setDisplayName={setDisplayName}
             title={title}
@@ -1074,6 +1077,7 @@ function Field({
 
 function ProfileStep({
   personId,
+  initialAvatarUrl,
   displayName,
   setDisplayName,
   title,
@@ -1086,6 +1090,7 @@ function ProfileStep({
   setLinkedin,
 }: {
   personId: string
+  initialAvatarUrl: string | null
   displayName: string
   setDisplayName: (v: string) => void
   title: string
@@ -1105,7 +1110,7 @@ function ProfileStep({
         <AvatarUpload
           personId={personId}
           name={displayName || 'You'}
-          initialUrl={null}
+          initialUrl={initialAvatarUrl}
           onSaved={saveOnboardingAvatar}
         />
       </div>
