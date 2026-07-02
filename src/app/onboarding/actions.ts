@@ -2,7 +2,7 @@
 
 import { createClient } from '@/shared/db/server'
 import { getCurrentCompanyId, getCurrentPerson } from '@/shared/auth'
-import { updateMyProfile } from '@/modules/profile'
+import { updateMyProfile, setMyAvatarPath } from '@/modules/profile'
 import { updateCompanyProfile } from '@/modules/companies'
 
 // Each action returns a result the client stepper acts on (advance or show
@@ -159,6 +159,13 @@ export async function saveProfile(formData: FormData): Promise<ActionResult> {
 
   const flagErr = await patchPreferences({}, { profile: true })
   return flagErr ?? { ok: true }
+}
+
+/** Persist the OPTIONAL onboarding profile photo (DEV-99 #4). AvatarUpload uploads
+ *  the file client-direct, then calls this with the stored path to point the person
+ *  row at it. The photo does not gate the profile checklist, so no revalidate needed. */
+export async function saveOnboardingAvatar(path: string): Promise<{ error?: string }> {
+  return setMyAvatarPath(path)
 }
 
 /** Company-details step — written via the company module (one writer); flag in preferences. */

@@ -170,6 +170,7 @@ export default async function OnboardingPage({
   return (
     <OnboardingStepper
       firstName={person.first_name ?? null}
+      personId={person.id}
       companyTypes={companyTypes ?? []}
       resumeStep={resumeStep}
       prefill={prefill}
