@@ -1,12 +1,11 @@
 import { notFound } from 'next/navigation'
-import { headers } from 'next/headers'
 import QRCode from 'qrcode'
 import { Mail, Phone, Globe, Link2, Download, UserPlus, MapPin, Package } from 'lucide-react'
 import { Avatar } from '@/shared/ui/Avatar'
 import { BackButton } from '@/shared/ui/BackButton'
 import { Wordmark } from '@/shared/ui/Wordmark'
 import { VerifiedBadge } from '@/shared/ui/VerifiedBadge'
-import { getPublicProfile } from '@/modules/profile'
+import { getPublicProfile, buildVCard } from '@/modules/profile'
 import { getCurrentUser } from '@/shared/auth'
 
 // The public profile page opened by scanning the QR. Chrome-free (AppShell skips
@@ -19,12 +18,11 @@ export default async function PublicProfilePage({ params }: { params: Promise<{ 
 
   const insider = !!(await getCurrentUser())
 
-  // The QR must encode an absolute, scannable URL — build it from the request.
-  const h = await headers()
-  const host = h.get('host') ?? 'hello-sello.com'
-  const proto = h.get('x-forwarded-proto') ?? (host.startsWith('localhost') ? 'http' : 'https')
-  const url = `${proto}://${host}/c/${handle}`
-  const qrSvg = await QRCode.toString(url, { type: 'svg', margin: 1, color: { dark: '#0a0a0a', light: '#ffffff' } })
+  // The QR encodes the vCard itself, so scanning it opens "Add Contact" directly
+  // (the card IS the contact) rather than a web page — same fields as the on-page
+  // "Save contact" button. Digital-only use (no printing), so the live QR always
+  // reflects current profile data.
+  const qrSvg = await QRCode.toString(buildVCard(profile), { type: 'svg', margin: 1, color: { dark: '#0a0a0a', light: '#ffffff' } })
 
   const co = profile.company
   const firstName = profile.displayName.split(' ')[0] || 'them'

@@ -1,8 +1,7 @@
 'use server'
 
-import { headers } from 'next/headers'
 import QRCode from 'qrcode'
-import { getMyProfile } from '@/modules/profile'
+import { getMyProfile, getPublicProfile, buildVCard } from '@/modules/profile'
 import { getCompanyProfile } from '@/modules/companies'
 
 export type AccountCard = {
@@ -21,12 +20,15 @@ export async function getAccountCard(): Promise<AccountCard> {
   if (!p) return null
   const c = await getCompanyProfile()
 
+  // QR encodes the vCard itself so scanning opens "Add Contact" directly (same
+  // fields as the public card's "Save contact"). Needs the PublicProfile shape,
+  // so fetch it via the public handle rather than reusing getMyProfile's row.
   let qrSvg: string | null = null
   if (p.publicHandle) {
-    const h = await headers()
-    const host = h.get('host') ?? 'hello-sello.com'
-    const proto = h.get('x-forwarded-proto') ?? (host.startsWith('localhost') ? 'http' : 'https')
-    qrSvg = await QRCode.toString(`${proto}://${host}/c/${p.publicHandle}`, { type: 'svg', margin: 1, color: { dark: '#0a0a0a', light: '#ffffff' } })
+    const pub = await getPublicProfile(p.publicHandle)
+    if (pub) {
+      qrSvg = await QRCode.toString(buildVCard(pub), { type: 'svg', margin: 1, color: { dark: '#0a0a0a', light: '#ffffff' } })
+    }
   }
 
   return {
