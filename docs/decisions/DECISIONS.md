@@ -1297,3 +1297,27 @@ Marcel confirmed (DEV-80 thread) the warehouse model: **(1)** each location has 
 **The post-signup "check your inbox" screen does not promise the original tab will auto-advance.** The inbox confirmation link opens `/auth/confirm` in a **new tab**, which sets the session and lands the user on onboarding *there*. The original `/verify-email` tab cannot self-advance because Supabase `onAuthStateChange` **does not fire across browser tabs** — so the screen keeps its spinner but reworded to tell the user the link continues in a new tab and this one can be closed. This matches the Clerk/Okta industry standard (auto-advancing the original tab is the pattern most auth providers dropped; the alternative is to poll `getSession()`, which we chose not to do).
 
 *Why:* the old copy ("This page continues automatically once you click the link") was a promise the code never implemented — pure UX debt, not a logic bug. *Follow-up:* the `Resend email` control still only runs a cooldown countdown — no server re-send is wired yet ([DEV-129](https://linear.app/hellosello/issue/DEV-129)). (Sources: 2026-07-01 session with Muskan; `src/app/(auth)/verify-email/VerifyEmailCard.tsx` @165f8f1; see ARCHITECTURE-NOTES cross-tab auth note.)
+
+---
+
+## 2026-07-02 — Shop ≡ Location is one entity; unlimited named shops + a GLOBAL default
+
+A per-country/per-region **"shop"** (storefront: description + links, rendered on its Present page) and a **"location"** (warehouse address) are the **same entity** — reaffirming + extending the 2026-06-22 lock. A company creates **unlimited free-form named shops** — **not** strictly per-country (sub-country is fine, e.g. "North Germany", "South Germany") — with exactly one flagged **GLOBAL** (the default). Each shop carries **storefront presentation** (a description + a structured **links table**: shop × platform × name → rendered "**LinkedIn** name") **on the same object** as its warehouse address. Model: **Company → many Shops/Locations → each one's own products + address + storefront** — no parallel storefront entity.
+
+*Why:* per-shop links/descriptions and the warehouse address describe the same real thing (a company's presence in a region), so a second storefront concept would duplicate knowledge and split the schema change. Keeps the location model in one place. **Cross-lane** — this is the Phase 16 data model, feeds Ayush's Sales/Purchase-Order docs; design the fields with him before schema. (Source: 2026-07-02 design session with Muskan; Marcel's Present-page batch DEV-111/112.)
+
+---
+
+## 2026-07-02 — Auth + onboarding quick wins (Outlook OAuth fixed; QR = vCard; photo optional; resend; 2FA deferred)
+
+Batch of Marcel's auth/onboarding tickets (DEV-99, DEV-102, DEV-129), built + merged (PR #133 → dev; Outlook fix PR #130 → #131 → main).
+
+- **Outlook/Azure OAuth fixed (DEV-99 #2).** `signInWithOAuth('azure')` sent no scopes → the default `openid` returns no email → GoTrue's code-exchange fails "Error getting user email from external provider" → the callback bounced to /login (Google worked because its default scope includes email). Fix = request `scopes: 'email profile'` for azure + the callback now logs the real exchange/provider error. **Azure app-registration config (done in the portal):** Supported accounts = "Any Entra tenant + personal"; Graph delegated `email`/`openid`/`profile` + admin consent; **`email` optional claim on the ID token**; redirect URI type = Web. Both personal + org accounts need this. Verified via the cloud auth log (successful `provider:"azure"` login).
+- **Same-email identities auto-link.** Google then Outlook on the same verified email collapse into ONE Supabase user (providers "Azure, Google") — no duplicate accounts (a duplicate-account worry was raised, then retracted after checking the users table).
+- **QR encodes the vCard directly (DEV-99 #5).** Scanning the profile/account QR now yields "Add Contact" (encodes `buildVCard`), not the web profile page — per Marcel. Digital-only use (no printing), so the live server-rendered QR always reflects current data; no frozen-data concern. `buildVCard` extracted to a pure `src/modules/profile/vcard.ts` with RFC-2426 escaping (`; , \` + CR/CRLF/LF) and omits an empty ORG.
+- **Profile photo optional (DEV-99 #4).** `isProfileComplete()` no longer requires a photo (display name + title only); `AvatarUpload` added to the onboarding profile step as optional/skippable.
+- **Resend confirmation = anti-enumeration (DEV-129, Done).** The wired resend returns a neutral result (errors logged server-side only) and always cools down — mirroring `requestPasswordReset` so it can't probe which addresses have pending signups.
+- **2FA deferred (DEV-102 #1).** No login 2FA today; Supabase MFA (TOTP) can be added later — not MVP.
+- **Approval sends no email (DEV-102 #2).** Company verification is a manual admin action in `/admin/verifications` (`approve_company` flips `verification_status`); no email to the user or the team. An "approved" email / "needs approval" alert would be a new feature.
+
+*Still open in the batch:* DEV-99 #1 (Google consent shows the raw Supabase URL — needs a **paid Supabase custom domain**; Marcel/infra, not code) and DEV-99 #3 (business-category taxonomy → two levels, **both multiple-choice**; a DB-lookup migration, cross-lane with Ayush; prototype the onboarding UI first). (Source: 2026-07-02 auth/onboarding session with Muskan; Marcel's DEV-99/102/129.)
