@@ -19,11 +19,13 @@ import {
 } from 'lucide-react'
 import { Wordmark } from '@/shared/ui/Wordmark'
 import { Avatar } from '@/shared/ui/Avatar'
+import { AvatarUpload } from '@/shared/ui/AvatarUpload'
 import {
   createCompany,
   markEmailConnected,
   requestToJoin,
   saveCompanyDetails,
+  saveOnboardingAvatar,
   saveProfile,
   searchCompanies,
   withdrawJoin,
@@ -95,6 +97,8 @@ const JOIN_STEPS: Step[] = ['join_search', 'join_pending']
 
 export function OnboardingStepper({
   firstName,
+  personId,
+  initialAvatarUrl = null,
   companyTypes,
   resumeStep = null,
   prefill = {},
@@ -106,6 +110,8 @@ export function OnboardingStepper({
   pendingJoin = null,
 }: {
   firstName: string | null
+  personId: string
+  initialAvatarUrl?: string | null
   companyTypes: CompanyType[]
   resumeStep?: ResumeStep | null
   prefill?: Prefill
@@ -293,6 +299,8 @@ export function OnboardingStepper({
 
         {step === 'profile' && (
           <ProfileStep
+            personId={personId}
+            initialAvatarUrl={initialAvatarUrl}
             displayName={displayName}
             setDisplayName={setDisplayName}
             title={title}
@@ -1068,6 +1076,8 @@ function Field({
 }
 
 function ProfileStep({
+  personId,
+  initialAvatarUrl,
   displayName,
   setDisplayName,
   title,
@@ -1079,6 +1089,8 @@ function ProfileStep({
   linkedin,
   setLinkedin,
 }: {
+  personId: string
+  initialAvatarUrl: string | null
   displayName: string
   setDisplayName: (v: string) => void
   title: string
@@ -1093,6 +1105,15 @@ function ProfileStep({
   return (
     <div className="flex flex-col gap-4">
       <h2 className="text-base font-semibold text-ink">Complete your profile</h2>
+      <div className="flex flex-col gap-1.5">
+        <span className="text-xs font-medium text-ink-muted">Profile photo (optional)</span>
+        <AvatarUpload
+          personId={personId}
+          name={displayName || 'You'}
+          initialUrl={initialAvatarUrl}
+          onSaved={saveOnboardingAvatar}
+        />
+      </div>
       <Field label="Display name" value={displayName} onChange={setDisplayName} />
       <Field label="Title / role" value={title} onChange={setTitle} placeholder="Head of Procurement" />
       <Field label="Phone" value={phone} onChange={setPhone} type="tel" />

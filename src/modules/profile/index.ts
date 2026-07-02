@@ -7,6 +7,7 @@ import { createClient } from '@/shared/db/server'
 // The onboarding-completeness rule lives in its own pure (DB-free) file so it stays
 // unit-testable and can't drift from the check the checklist renders.
 export { isProfileComplete, type ProfileCompletenessInput } from './completeness'
+export { buildVCard, type VCardInput } from './vcard'
 
 export type MyProfile = {
   id: string
@@ -233,22 +234,4 @@ export async function getPublicProfile(handle: string): Promise<PublicProfile | 
   }
 }
 
-/** Build a vCard 3.0 (the format iOS + Android both read) for "Save contact". */
-export function buildVCard(p: PublicProfile): string {
-  const [first, ...rest] = p.displayName.split(' ')
-  const last = rest.join(' ')
-  const lines = [
-    'BEGIN:VCARD',
-    'VERSION:3.0',
-    `N:${last};${first};;;`,
-    `FN:${p.displayName}`,
-    p.title && `TITLE:${p.title}`,
-    p.company && `ORG:${p.company.name}`,
-    p.email && `EMAIL;TYPE=WORK:${p.email}`,
-    p.phone && `TEL;TYPE=WORK,VOICE:${p.phone}`,
-    p.company?.website && `URL:${p.company.website}`,
-    p.linkedin && `X-SOCIALPROFILE;TYPE=linkedin:${p.linkedin}`,
-    'END:VCARD',
-  ].filter(Boolean)
-  return lines.join('\r\n')
-}
+// buildVCard now lives in ./vcard (pure + escaped) and is re-exported above.
