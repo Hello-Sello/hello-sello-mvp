@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/shared/db/server'
 import { getCurrentPerson } from '@/shared/auth'
+import { getMyProfile } from '@/modules/profile'
 import { OnboardingStepper } from './OnboardingStepper'
 import type { RejectPreset } from '@/app/admin/verifications/reject-presets'
 
@@ -167,9 +168,16 @@ export default async function OnboardingPage({
     rejectionPreset = presetCode as RejectPreset | null
   }
 
+  // Prefill the (optional) profile photo when resuming onboarding so an already
+  // uploaded avatar shows instead of a blank slate. Reuse the profile module's
+  // avatar-URL logic (public URL + cache nonce) rather than rebuilding it here.
+  const initialAvatarUrl = (await getMyProfile())?.avatarUrl ?? null
+
   return (
     <OnboardingStepper
       firstName={person.first_name ?? null}
+      personId={person.id}
+      initialAvatarUrl={initialAvatarUrl}
       companyTypes={companyTypes ?? []}
       resumeStep={resumeStep}
       prefill={prefill}

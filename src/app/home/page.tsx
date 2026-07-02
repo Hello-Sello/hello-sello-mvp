@@ -77,9 +77,9 @@ export default async function HomePage() {
    *   person.preferences flag/placeholder until that capability lands.
    *
    * Block 2 — profile: completeness rule lives in profile.isProfileComplete() —
-   *   the canonical display_name is non-empty AND title (role) is set AND avatar_path
-   *   (photo) is uploaded. display_name (not first/last) so single-name / social-login
-   *   identities can complete it. (Name is captured at sign-up; title + photo in /account.)
+   *   the canonical display_name is non-empty AND title (role) is set. display_name
+   *   (not first/last) so single-name / social-login identities can complete it. The
+   *   photo is OPTIONAL (DEV-99 #4). (Name is captured at sign-up; title in onboarding.)
    *
    * Block 3 — company_details: company is considered "set up" when logo_path (brand
    *   image) + description (what the company does) + website are all non-empty.
@@ -99,7 +99,6 @@ export default async function HomePage() {
       done: isProfileComplete({
         displayName: person.display_name,
         title: person.title,
-        avatarPath: person.avatar_path,
       }),
     },
     {
