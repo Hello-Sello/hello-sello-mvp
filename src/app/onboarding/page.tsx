@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/shared/db/server'
 import { getCurrentPerson } from '@/shared/auth'
+import { getMyProfile } from '@/modules/profile'
 import { OnboardingStepper } from './OnboardingStepper'
 import type { RejectPreset } from '@/app/admin/verifications/reject-presets'
 
@@ -168,10 +169,9 @@ export default async function OnboardingPage({
   }
 
   // Prefill the (optional) profile photo when resuming onboarding so an already
-  // uploaded avatar shows instead of a blank slate (?v nonce busts a stale cache).
-  const initialAvatarUrl = person.avatar_path
-    ? `${supabase.storage.from('avatars').getPublicUrl(person.avatar_path).data.publicUrl}?v=${new Date(person.updated_at).getTime()}`
-    : null
+  // uploaded avatar shows instead of a blank slate. Reuse the profile module's
+  // avatar-URL logic (public URL + cache nonce) rather than rebuilding it here.
+  const initialAvatarUrl = (await getMyProfile())?.avatarUrl ?? null
 
   return (
     <OnboardingStepper

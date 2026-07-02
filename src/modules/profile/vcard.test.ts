@@ -50,4 +50,14 @@ describe('buildVCard', () => {
     expect(v.startsWith('BEGIN:VCARD')).toBe(true)
     expect(v.endsWith('END:VCARD')).toBe(true)
   })
+
+  it('collapses CR / CRLF line breaks in a value to a single escaped newline', () => {
+    const v = buildVCard({ displayName: 'Ann', title: 'a\r\nb\rc' })
+    expect(v).toContain('TITLE:a\\nb\\nc')
+  })
+
+  it('omits ORG when the company name is empty', () => {
+    const v = buildVCard({ displayName: 'Ann', company: { name: '' } })
+    expect(v).not.toContain('ORG:')
+  })
 })

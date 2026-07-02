@@ -21,7 +21,9 @@ export type VCardInput = {
 function esc(s: string): string {
   return s
     .replace(/\\/g, '\\\\')
-    .replace(/\n/g, '\\n')
+    // Collapse every line-break form (CRLF, lone CR, lone LF) to an escaped \n so
+    // a Windows-pasted value never leaves a raw CR sitting inside a CRLF-delimited line.
+    .replace(/\r\n|\r|\n/g, '\\n')
     .replace(/,/g, '\\,')
     .replace(/;/g, '\\;')
 }
@@ -40,7 +42,7 @@ export function buildVCard(p: VCardInput): string {
     `N:${esc(last)};${esc(first)};;;`,
     `FN:${esc(p.displayName)}`,
     p.title && `TITLE:${esc(p.title)}`,
-    p.company && `ORG:${esc(p.company.name)}`,
+    p.company?.name && `ORG:${esc(p.company.name)}`,
     p.email && `EMAIL;TYPE=WORK:${esc(p.email)}`,
     p.phone && `TEL;TYPE=WORK,VOICE:${esc(p.phone)}`,
     p.company?.website && `URL:${esc(p.company.website)}`,
