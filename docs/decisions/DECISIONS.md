@@ -1321,3 +1321,21 @@ Batch of Marcel's auth/onboarding tickets (DEV-99, DEV-102, DEV-129), built + me
 - **Approval sends no email (DEV-102 #2).** Company verification is a manual admin action in `/admin/verifications` (`approve_company` flips `verification_status`); no email to the user or the team. An "approved" email / "needs approval" alert would be a new feature.
 
 *Still open in the batch:* DEV-99 #1 (Google consent shows the raw Supabase URL — needs a **paid Supabase custom domain**; Marcel/infra, not code) and DEV-99 #3 (business-category taxonomy → two levels, **both multiple-choice**; a DB-lookup migration, cross-lane with Ayush; prototype the onboarding UI first). (Source: 2026-07-02 auth/onboarding session with Muskan; Marcel's DEV-99/102/129.)
+
+---
+
+## 2026-07-03 — Catalogue ingestion architecture: DESIGNED + PARKED for post-demo (shared-Sheet pull + system-of-record reconciliation)
+
+Deep design session (Muskan + two deep-research passes) on how sellers get products/batches/prices into their shop and keep it current. **Decision: the full ingestion system is DESIGNED but PARKED — not built for the 8 Jul demo.** For the demo, Present ships as a **visual redesign** (the existing Phase-7 six criteria) and Marcel populates his shop **manually** (manual-add already exists). Ingestion becomes its own phase built right after the visual lands. **Full design:** `docs/architecture/catalogue-ingestion-DESIGN.md`.
+
+Locked design (to build later):
+- **Four objects, kept separate, linked by keys** — Product · Batch · Standard price · Per-customer price. They change at different speeds → separate tables/uploads, not one glued sheet (also matches Marcel's 3 spreadsheet tabs; ERP feeds batches independently — SAP B1 `Items` vs `BatchNumbers`).
+- **Keys:** the seller's **`supplier_product_code`** is the match key — **NOT an industry standard**, unique only within one company's own catalogue. A **hidden system UUID** is the real permanent link (survives renames). **PZN + GTIN** stored alongside as the real external standards (optional). Each table carries its own key (batch = `supplier_code + batch_number`).
+- **3 fixed seller templates** mirroring Marcel's tabs: **A Products** (incl. standard price) · **B Batches** · **C Per-customer prices** (Phase 15). Buyer Product Code dropped. Research: template-first beats accept-messy-formats (the latter refuted for a lean startup).
+- **Bud-size grades priced separately** — Tinies/Smalls/Mids/Larges are categories, each with its own quantity + price → a `batch_grade` sub-table under batch (new from Marcel's 07-03 sheet, with `harvest_date`).
+- **Delivery = shared Google Sheet pull** (primary — Marcel already lives in a logistics-fed Sheet); file upload as fallback; both feed the SAME validation + upsert engine; ERP delta-API is the end-state on the SAME tables.
+- **Reconciliation over a system-of-record:** Hello Sello keeps its own durable master of every product ever seen. Each pull DIFFs the Sheet vs the master → new / matched / **missing → auto-unavailable (soft)** / **returned → auto-restore**. Availability is DERIVED from presence-in-the-Sheet → **zero seller discipline** needed. Explicit `Status` column (Active/Discontinued/Coming soon/Hidden) is an optional override.
+- **Safe reversible deletion:** soft-archive never hard-delete; snapshot every sync; **big-change guard** (a pull removing >~25% pauses + alerts = "wiped the Sheet" accident); import ledger + undo + notify. Products persist forever; a deleted row = hidden, returns when the row returns.
+- **Availability status ≠ marketing badge** (New/Launch) — separate fields. Pre-selling unavailable/coming-soon items = Phase 17.
+
+*Why parked:* demo is 8 Jul (5 days); a beautiful shop Marcel can populate by hand is the lean demo win, and the pipeline is invisible to the demo. Build the visual **on this model** (cards already show availability badges + grade pricing) so the ingestion phase later just adds an input pipe — no repaint. (Source: 2026-07-03 design session with Muskan; deep-research on 3PL/ERP feeds + B2B catalogue onboarding; Marcel's shared-Sheet idea + his updated Product-list sheet.)
