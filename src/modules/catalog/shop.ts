@@ -7,11 +7,32 @@
  * the public-read RLS from the foundation migration already supports it.)
  */
 import { createClient } from "@/shared/db/server";
+import { pickRepresentativeBatch, deriveTerpPercent } from "./shopMap";
 
 /** One image in a product's gallery, ordered by the seller. The first entry
  *  (lowest position) is the cover / thumbnail. `path` is a `shop-media` storage
  *  path; the UI builds the public URL from it. */
 export type ProductImage = { id: string; path: string };
+
+/** One "Documents & Media" item on the card back (D-11). A `video_link` carries
+ *  an external `url` (no file); a `coa`/`doc` carries a `shop-media` `path`. */
+export type ProductMedia = {
+  id: string;
+  kind: "video_link" | "coa" | "doc";
+  path: string | null;
+  url: string | null;
+  label: string | null;
+};
+
+/** A lot on the product, surfaced for the optional batch affordance (DEV-108).
+ *  Measured CoA values only; seller cost is never surfaced on the card. */
+export type ProductBatchLite = {
+  id: string;
+  batch_number: string;
+  thc_percent: number | null;
+  cbd_percent: number | null;
+  expiry_date: string | null;
+};
 
 export type ShopProduct = {
   id: string;
@@ -19,6 +40,16 @@ export type ShopProduct = {
   cultivar: string | null;
   thc_percent: number | null;
   cbd_percent: number | null;
+  cbg_percent: number | null;
+  cbn_percent: number | null;
+  cultivator: string | null;
+  lineage_parent_a: string | null;
+  lineage_parent_b: string | null;
+  irradiation_code: string | null;
+  supplier_product_code: string | null;
+  packaging_material: string | null;
+  resealable: boolean | null;
+  location: string | null;
   pack_size_grams: number | null;
   unit_code: string | null;
   local_code_pzn: string | null;
@@ -26,6 +57,10 @@ export type ShopProduct = {
   country_of_origin: string | null;
   region: string | null;
   images: ProductImage[];
+  media: ProductMedia[];
+  batches: ProductBatchLite[];
+  /** Sum of the representative batch's terpene rows (D-01) — derived, not a column. */
+  terpPercent: number | null;
   profile_visible: boolean;
   price_public: boolean;
   price_per_gram: number | null;
@@ -99,7 +134,7 @@ export async function getMyShop(): Promise<Shop | null> {
   const { data: rows } = await supabase
     .from("product")
     .select(
-      "id, name, cultivar, thc_percent, cbd_percent, pack_size_grams, unit_code, local_code_pzn, dominance_code, country_of_origin, region, profile_visible, price_public, product_image(id, image_path, position), pricelist_item(price_per_gram, bundle_threshold_grams, bundle_price_per_gram)",
+      "id, name, cultivar, thc_percent, cbd_percent, cbg_percent, cbn_percent, cultivator, lineage_parent_a, lineage_parent_b, irradiation_code, supplier_product_code, packaging_material, resealable, location, pack_size_grams, unit_code, local_code_pzn, dominance_code, country_of_origin, region, profile_visible, price_public, product_image(id, image_path, position), product_media(id, kind, path, url, label, position), product_batch(id, batch_number, ready_for_sale_date, expiry_date, thc_percent, cbd_percent, created_at, deleted_at, batch_terpene(percent)), pricelist_item(price_per_gram, bundle_threshold_grams, bundle_price_per_gram)",
     )
     .eq("company_id", companyId)
     .is("deleted_at", null)
@@ -111,12 +146,42 @@ export async function getMyShop(): Promise<Shop | null> {
       .slice()
       .sort((a, b) => a.position - b.position)
       .map((im) => ({ id: im.id, path: im.image_path }));
+    const media: ProductMedia[] = (r.product_media ?? [])
+      .slice()
+      .sort((a, b) => a.position - b.position)
+      .map((m) => ({
+        id: m.id,
+        kind: m.kind as ProductMedia["kind"],
+        path: m.path,
+        url: m.url,
+        label: m.label,
+      }));
+    // Soft-deleted lots are excluded from both the batch list and the Terp% pick.
+    const liveBatches = (r.product_batch ?? []).filter((b) => b.deleted_at === null);
+    const repBatch = pickRepresentativeBatch(liveBatches);
+    const batches: ProductBatchLite[] = liveBatches.map((b) => ({
+      id: b.id,
+      batch_number: b.batch_number,
+      thc_percent: b.thc_percent,
+      cbd_percent: b.cbd_percent,
+      expiry_date: b.expiry_date,
+    }));
     return {
       id: r.id,
       name: r.name,
       cultivar: r.cultivar,
       thc_percent: r.thc_percent,
       cbd_percent: r.cbd_percent,
+      cbg_percent: r.cbg_percent,
+      cbn_percent: r.cbn_percent,
+      cultivator: r.cultivator,
+      lineage_parent_a: r.lineage_parent_a,
+      lineage_parent_b: r.lineage_parent_b,
+      irradiation_code: r.irradiation_code,
+      supplier_product_code: r.supplier_product_code,
+      packaging_material: r.packaging_material,
+      resealable: r.resealable,
+      location: r.location,
       pack_size_grams: r.pack_size_grams,
       unit_code: r.unit_code,
       local_code_pzn: r.local_code_pzn,
@@ -124,6 +189,9 @@ export async function getMyShop(): Promise<Shop | null> {
       country_of_origin: r.country_of_origin,
       region: r.region,
       images,
+      media,
+      batches,
+      terpPercent: deriveTerpPercent(repBatch),
       profile_visible: r.profile_visible,
       price_public: r.price_public,
       price_per_gram: price?.price_per_gram ?? null,
