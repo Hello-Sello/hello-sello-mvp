@@ -431,6 +431,10 @@ export async function getDealCard(cardId: string): Promise<DealCardView> {
 
   const card: DealCard = {
     ...cardRow,
+    // noteRow carries note_company_a/b, which the select-string cast omits from
+    // cardRow's type (DO NOT regenerate database.types) — spread it back in so
+    // the object satisfies DealCard (which does include the note columns).
+    ...noteRow,
     deal_type: cardRow.deal_type as DealType,
     status: cardRow.status as DealCardStatus,
   };
