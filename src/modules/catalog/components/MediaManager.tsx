@@ -429,10 +429,12 @@ export function MediaManager({
         </div>
       </div>
 
-      {/* hidden inputs for the client-direct uploads */}
+      {/* hidden inputs for the client-direct uploads (aria-labelled so tests and
+          assistive tech can reach them) */}
       <input
         ref={imageInput}
         type="file"
+        aria-label="Product image file"
         accept="image/jpeg,image/png,image/webp"
         multiple
         hidden
@@ -444,6 +446,7 @@ export function MediaManager({
       <input
         ref={coaInput}
         type="file"
+        aria-label="COA PDF file"
         accept="application/pdf"
         hidden
         onChange={(e) => {
@@ -454,6 +457,7 @@ export function MediaManager({
       <input
         ref={docInput}
         type="file"
+        aria-label="Document PDF file"
         accept="application/pdf"
         hidden
         onChange={(e) => {
