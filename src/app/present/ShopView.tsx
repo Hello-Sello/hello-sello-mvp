@@ -7,18 +7,29 @@
  * square 4-up grid, grouped under a per-location divider header, with a location
  * dropdown that re-contexts the grid to one location. The card itself is the
  * reusable ProductCard from the catalog module.
+ *
+ * The shop CHROME (07-05) is now in-place editable: PresentBanner (4:1 MVP banner)
+ * + an InfoBox row + a sticky pulsing SaveBar. "Manage shop" turns on edit mode;
+ * any banner/info field change marks the shop dirty (pulsing the Save); Save
+ * commits every chrome field through the existing updateShopProfile writer (no new
+ * manage.ts action). Logo/branding stays behind the shared BrandingEditForm — the
+ * one logo writer (D-07). Links are DISPLAY-only here (management is Phase 16); the
+ * Save round-trips the existing links/address/website untouched so they are never
+ * wiped by the full-replace updateShopProfile action.
  */
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Link2, UploadCloud, Plus, FileSpreadsheet, Pencil, Check,
-  ImagePlus, Loader2, Globe, Trash2, ArrowLeft, MapPin, ChevronDown,
+  Link2, UploadCloud, Plus, FileSpreadsheet, Globe, MapPin, ChevronDown,
 } from "lucide-react";
 import { ProductCard, LocationGroup } from "@/modules/catalog";
 import type { Shop, ShopLink } from "@/modules/catalog";
 import { updateShopProfile } from "@/modules/catalog/manage";
 import { createClient } from "@/shared/db/client";
 import { AddProductsDrawer } from "./AddProductsDrawer";
+import { PresentBanner } from "./PresentBanner";
+import { SaveBar } from "./SaveBar";
+import { InfoBox, DescriptionEditor } from "./InfoBox";
 import { filterByLocation, groupByLocation, UNASSIGNED } from "./locationFilter";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
@@ -64,11 +75,41 @@ function BrandGlyph({ name, size = 15 }: { name: keyof typeof BRAND_PATH; size?:
 import type { CompanyProfile } from "@/modules/companies";
 import { BrandingEditForm } from "./BrandingEditForm";
 
+// The chrome fields the owner edits in place. These are exactly the text fields
+// updateShopProfile persists as the shop banner + info; links/address/website are
+// NOT edited here (display-only / BrandingEditForm) but are round-tripped on Save
+// so the full-replace action never wipes them.
+type ChromeEdits = {
+  name: string;
+  tagline: string;
+  description: string;
+  warehouse_location: string;
+};
+
+function initEdits(c: Shop["company"]): ChromeEdits {
+  return {
+    name: c.name ?? "",
+    tagline: c.tagline ?? "",
+    description: c.description ?? "",
+    warehouse_location: c.warehouse_location ?? "",
+  };
+}
+
 export function ShopView({ shop, company: companyProfile }: { shop: Shop; company: CompanyProfile | null }) {
   const { company, products } = shop;
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [brandingOpen, setBrandingOpen] = useState(false);
+
+  // In-place edit state (D-03). `edits` holds the live field values; `dirty` drives
+  // the SaveBar pulse; `coverFile` is a picked-but-not-yet-uploaded banner image.
+  const [edits, setEdits] = useState<ChromeEdits>(() => initEdits(company));
+  const [dirty, setDirty] = useState(false);
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
   // Active location tab. "All" shows every location group; a named location
   // re-contexts the grid to that one group.
   const [loc, setLoc] = useState("All");
@@ -76,6 +117,82 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
   // to reorder). Persisting a bespoke group order is Phase 16 (structured
   // locations own ordering), so this stays ephemeral.
   const [groupOrder, setGroupOrder] = useState<string[]>([]);
+
+  const updateEdit = <K extends keyof ChromeEdits>(k: K, v: ChromeEdits[K]) => {
+    setEdits((e) => ({ ...e, [k]: v }));
+    setDirty(true);
+  };
+
+  function enterEdit() {
+    setEdits(initEdits(company));
+    setCoverFile(null);
+    setDirty(false);
+    setError(null);
+    setEditing(true);
+  }
+
+  function discard() {
+    if (dirty && !window.confirm("Discard unsaved changes?")) return;
+    setEditing(false);
+    setBrandingOpen(false);
+    setDirty(false);
+    setCoverFile(null);
+    setError(null);
+  }
+
+  // Client-direct cover upload to a STABLE path (upsert → no orphan); the action
+  // records only the path string. Mirrors the retired ProfileEditor.uploadCover.
+  async function uploadCover(file: File): Promise<{ path?: string; error?: string }> {
+    if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) return { error: "Use a JPG, PNG or WebP image." };
+    if (file.size > MAX_IMAGE_BYTES) return { error: "Image must be under 10 MB." };
+    const path = `${company.id}/cover`;
+    const { error } = await createClient().storage
+      .from("shop-media")
+      .upload(path, file, { upsert: true, contentType: file.type });
+    return error ? { error: `cover upload failed: ${error.message}` } : { path };
+  }
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+
+    let coverPath: string | undefined;
+    if (coverFile) {
+      const c = await uploadCover(coverFile);
+      if (c.error) { setError(c.error); setBusy(false); return; }
+      coverPath = c.path;
+    }
+
+    // updateShopProfile is a full-replace writer: any field it reads and we omit is
+    // nulled, and its links come solely from the form. So we send the edited chrome
+    // fields PLUS the current address/website/links unchanged — links are display-
+    // only in Phase 7 (Rule 1: omitting them would silently wipe the seller's links).
+    const fd = new FormData();
+    fd.set("name", edits.name);
+    fd.set("tagline", edits.tagline);
+    fd.set("description", edits.description);
+    fd.set("warehouse_location", edits.warehouse_location);
+    fd.set("address", company.address ?? "");
+    fd.set("website", company.website ?? "");
+    fd.set("links", JSON.stringify(company.links ?? []));
+    if (coverPath) fd.set("cover_path", coverPath);
+
+    const res = await updateShopProfile(fd);
+    setBusy(false);
+    if ("error" in res) { setError(res.error); return; }
+    setEditing(false);
+    setBrandingOpen(false);
+    setDirty(false);
+    setCoverFile(null);
+    router.refresh();
+  }
+
+  const coverUrl = coverFile
+    ? URL.createObjectURL(coverFile)
+    : company.cover_path
+    ? mediaUrl(company.cover_path, company.updated_at)
+    : null;
+  const logoUrl = company.logo_path ? mediaUrl(company.logo_path, company.updated_at) : null;
 
   // The location groups to render for the active tab (already square + 4-up
   // inside each LocationGroup). Grouping is pure — see ./locationFilter.
@@ -100,34 +217,45 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
 
   return (
     <div className="flex h-full flex-col gap-3 overflow-auto pb-6">
-      {/* Owner action bar. While editing, the editor owns Save/Cancel — a single
-          explicit save path, so leaving edit mode can never silently drop changes. */}
-      <div className="flex justify-end gap-2">
-        <button
-          onClick={() => setDrawerOpen(true)}
-          className="flex items-center gap-1.5 rounded-full bg-brand px-4 py-2 text-sm font-bold text-white hover:bg-brand-deep"
-        >
-          <Plus size={16} /> Add products
-        </button>
-        {!editing && (
-          <button
-            onClick={() => setEditing(true)}
-            className="flex items-center gap-1.5 rounded-full bg-white/70 px-4 py-2 text-sm font-bold text-ink/75 hover:bg-white"
-          >
-            <Pencil size={16} /> Manage shop
-          </button>
-        )}
-      </div>
+      {/* Sticky pulsing Save appears only while editing; "Manage shop" / "+Add
+          products" live in the banner below. */}
+      {editing && (
+        <SaveBar dirty={dirty} busy={busy} error={error} onSave={save} onDiscard={discard} />
+      )}
 
-      {editing ? (
-        <ProfileEditor
-          company={company}
-          companyProfile={companyProfile}
-          onSaved={() => { setEditing(false); router.refresh(); }}
-          onCancel={() => setEditing(false)}
-        />
-      ) : (
-        <ProfileHero company={company} />
+      <PresentBanner
+        companyName={company.name}
+        coverUrl={coverUrl}
+        logoUrl={logoUrl}
+        editing={editing}
+        name={editing ? edits.name : company.name}
+        tagline={editing ? edits.tagline : company.tagline ?? ""}
+        onNameChange={(v) => updateEdit("name", v)}
+        onTaglineChange={(v) => updateEdit("tagline", v)}
+        onPickCover={(f) => { setCoverFile(f); setDirty(true); }}
+        onAddProducts={() => setDrawerOpen(true)}
+        onManage={enterEdit}
+        onEditBranding={() => setBrandingOpen((v) => !v)}
+      />
+
+      <ShopInfoRow
+        company={company}
+        editing={editing}
+        edits={edits}
+        onEdit={updateEdit}
+      />
+
+      {/* Logo & branding — the shared one-writer form (D-07), opened from the
+          banner's "Edit logo & branding" in edit mode. */}
+      {editing && brandingOpen && companyProfile && (
+        <div className="glass rounded-3xl p-5">
+          <h3 className="mb-4 text-sm font-bold text-ink">Logo &amp; branding</h3>
+          <BrandingEditForm
+            company={companyProfile}
+            onDirty={() => {/* branding form owns its own dirty state + Save */}}
+            onSaved={() => { setBrandingOpen(false); router.refresh(); }}
+          />
+        </div>
       )}
 
       {products.length === 0 ? (
@@ -163,6 +291,100 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         onImported={() => { setDrawerOpen(false); router.refresh(); }}
+      />
+    </div>
+  );
+}
+
+// ---------- info boxes ----------
+// The equal-height storefront info row: About (description, 2600-cap edit),
+// Location (HQ + single warehouse line, editable), Links (display only — Phase 16
+// owns per-shop link management). Each box expands over the grid (InfoBox owns the
+// stacking-context + click-away bug fixes).
+function ShopInfoRow({
+  company, editing, edits, onEdit,
+}: {
+  company: Shop["company"];
+  editing: boolean;
+  edits: ChromeEdits;
+  onEdit: <K extends keyof ChromeEdits>(k: K, v: ChromeEdits[K]) => void;
+}) {
+  const hq = company.address || company.country || "—";
+  const tagRows =
+    company.tags.length > 0
+      ? company.tags.map((t) => (
+          <span key={t} className="font-bold text-ink">#{TAG_LABEL[t] ?? titleCase(t)}</span>
+        ))
+      : <span className="text-sm text-ink/40">No tags yet</span>;
+
+  const links = (
+    <div className="flex flex-col gap-2">
+      {company.website && <LinkRow icon={<Globe size={16} />} label="Website" url={company.website} />}
+      {company.links.map((l, i) => (
+        <LinkRow key={i} icon={linkIcon(l.platform)} label={linkLabel(l)} url={linkHref(l)} />
+      ))}
+    </div>
+  );
+  const hasAnyLink = Boolean(company.website) || company.links.length > 0;
+
+  return (
+    <div className="grid grid-cols-1 items-stretch gap-3 lg:grid-cols-[1.4fr_1fr_1fr]">
+      {/* About + description */}
+      <InfoBox
+        testId="info-card-about"
+        title={editing ? edits.name : company.name}
+        preview={
+          editing ? (
+            <DescriptionEditor value={edits.description} onChange={(v) => onEdit("description", v)} />
+          ) : company.description ? (
+            <p className="line-clamp-4 text-sm leading-relaxed text-ink/70">“{company.description}”</p>
+          ) : (
+            <span className="text-sm text-ink/40">No description yet</span>
+          )
+        }
+        more={
+          !editing && company.description ? (
+            <p className="text-sm leading-relaxed text-ink/75">“{company.description}”</p>
+          ) : undefined
+        }
+      />
+
+      {/* Location: HQ + single warehouse line (D-05 — one line; multi-warehouse is Phase 16) */}
+      <InfoBox
+        testId="info-card-warehouse"
+        title="Location"
+        preview={
+          <div className="space-y-2 text-sm">
+            <div className="flex flex-col gap-0.5">{tagRows}</div>
+            <div>
+              <div className="font-bold text-ink">Headquarter:</div>
+              <div className="text-ink/70">{hq}</div>
+            </div>
+          </div>
+        }
+        more={
+          <div className="text-sm">
+            <div className="font-bold text-ink">Warehouse:</div>
+            {editing ? (
+              <input
+                aria-label="Warehouse location"
+                value={edits.warehouse_location}
+                onChange={(e) => onEdit("warehouse_location", e.target.value)}
+                placeholder="e.g. Berlin"
+                className="mt-1 w-full rounded-lg border border-ink/15 bg-white px-3 py-1.5 text-sm outline-none focus:border-brand"
+              />
+            ) : (
+              <div className="text-ink/70">{company.warehouse_location || "Not set"}</div>
+            )}
+          </div>
+        }
+      />
+
+      {/* Links — display only (Phase 16 owns management) */}
+      <InfoBox
+        testId="info-card-links"
+        title="Links"
+        preview={hasAnyLink ? links : <span className="text-sm text-ink/40">No links yet</span>}
       />
     </div>
   );
@@ -232,79 +454,7 @@ function LocationTabs({
   );
 }
 
-// ---------- profile: read ----------
-function ProfileHero({ company }: { company: Shop["company"] }) {
-  const cover = company.cover_path ? mediaUrl(company.cover_path, company.updated_at) : null;
-  const logo = company.logo_path ? mediaUrl(company.logo_path, company.updated_at) : null;
-  const hq = company.address || company.country || "—";
-
-  return (
-    <>
-      <div className="relative">
-        <div
-          className="h-44 w-full overflow-hidden rounded-3xl bg-gradient-to-r from-emerald-900 via-green-700 to-lime-600 bg-cover bg-center"
-          style={cover ? { backgroundImage: `url(${cover})` } : undefined}
-        />
-        <div className="absolute -bottom-6 left-6 flex h-28 w-28 items-center justify-center overflow-hidden rounded-2xl bg-ink text-white shadow-lg">
-          {logo ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={logo} alt={company.name} className="h-full w-full object-cover" />
-          ) : (
-            <span className="text-4xl">❀</span>
-          )}
-        </div>
-      </div>
-
-      <div className="mt-6 grid grid-cols-1 gap-3 lg:grid-cols-[1.6fr_1fr_1fr]">
-        <div className="glass rounded-3xl p-5">
-          <h1 className="text-2xl font-bold text-ink">{company.name}</h1>
-          {company.tagline && <p className="mt-1 font-semibold text-ink/80">{company.tagline}</p>}
-          {company.description && (
-            <p className="mt-3 text-sm leading-relaxed text-ink/60">“{company.description}”</p>
-          )}
-        </div>
-        <div className="glass rounded-3xl p-5">
-          <div className="flex flex-col gap-0.5">
-            {company.tags.length > 0 ? (
-              company.tags.map((t) => (
-                <span key={t} className="font-bold text-ink">#{TAG_LABEL[t] ?? titleCase(t)}</span>
-              ))
-            ) : (
-              <span className="text-sm text-ink/40">No tags yet</span>
-            )}
-          </div>
-          <div className="mt-4 space-y-2 text-sm">
-            <div>
-              <div className="font-bold text-ink">Headquarter:</div>
-              <div className="text-ink/70">{hq}</div>
-            </div>
-            {company.warehouse_location && (
-              <div>
-                <div className="font-bold text-ink">Warehouse:</div>
-                <div className="text-ink/70">{company.warehouse_location}</div>
-              </div>
-            )}
-          </div>
-        </div>
-        <div className="glass rounded-3xl p-5">
-          {company.website || company.links.length > 0 ? (
-            <div className="flex flex-col gap-2">
-              {company.website && (
-                <LinkRow icon={<Globe size={16} />} label="Website" url={company.website} />
-              )}
-              {company.links.map((l, i) => (
-                <LinkRow key={i} icon={linkIcon(l.platform)} label={linkLabel(l)} url={linkHref(l)} />
-              ))}
-            </div>
-          ) : (
-            <span className="text-sm text-ink/40">No links yet</span>
-          )}
-        </div>
-      </div>
-    </>
-  );
-}
-
+// ---------- link display helpers (shared by the Links InfoBox) ----------
 const PLATFORM_LABEL: Record<ShopLink["platform"], string> = {
   linkedin: "LinkedIn",
   instagram: "Instagram",
@@ -333,227 +483,6 @@ function LinkRow({ icon, label, url }: { icon: React.ReactNode; label: string; u
        className="flex items-center gap-2 font-bold text-ink hover:text-brand">
       {icon} {label}
     </a>
-  );
-}
-
-// ---------- profile: edit ----------
-// ProfileEditor is split into two sections:
-//   1. Cover banner (updateShopProfile — ShopView's own writer for cover_path + links)
-//   2. BrandingEditForm (saveCompanyProfile — the one writer for logo + city + text fields)
-function ProfileEditor({
-  company, companyProfile, onSaved, onCancel,
-}: {
-  company: Shop["company"];
-  companyProfile: CompanyProfile | null;
-  onSaved: () => void;
-  onCancel: () => void;
-}) {
-  const [cover, setCover] = useState<File | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [dirty, setDirty] = useState(false);
-
-  const linkVal = (p: ShopLink["platform"]) =>
-    company.links.find((l) => l.platform === p)?.value ?? "";
-  const [website, setWebsite] = useState(company.website ?? "");
-  const [linkedin, setLinkedin] = useState(linkVal("linkedin"));
-  const [instagram, setInstagram] = useState(linkVal("instagram"));
-  const [x, setX] = useState(linkVal("x"));
-  const [custom, setCustom] = useState<{ label: string; url: string }[]>(
-    company.links.filter((l) => l.platform === "custom").map((l) => ({ label: l.label ?? "", url: l.value })),
-  );
-
-  const coverUrl = cover ? URL.createObjectURL(cover) : company.cover_path ? mediaUrl(company.cover_path, company.updated_at) : null;
-
-  const touch = () => setDirty(true);
-  const pickCover = (f: File) => { setCover(f); touch(); };
-
-  function cancel() {
-    if (dirty && !window.confirm("Discard unsaved changes?")) return;
-    onCancel();
-  }
-
-  // Upload cover straight to storage (client-direct). Stable filename
-  // (${id}/cover) + upsert — overwrites in place, no orphans.
-  async function uploadCover(file: File | null): Promise<{ path?: string; error?: string }> {
-    if (!file) return {};
-    if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) return { error: "Use a JPG, PNG or WebP image." };
-    if (file.size > MAX_IMAGE_BYTES) return { error: "Image must be under 10 MB." };
-    const path = `${company.id}/cover`;
-    const { error } = await createClient().storage
-      .from("shop-media")
-      .upload(path, file, { upsert: true, contentType: file.type });
-    return error ? { error: `cover upload failed: ${error.message}` } : { path };
-  }
-
-  async function save(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const form = e.currentTarget;
-    setBusy(true);
-    setError(null);
-
-    const c = await uploadCover(cover);
-    if (c.error) { setError(c.error); setBusy(false); return; }
-
-    const fd = new FormData(form);
-    if (c.path) fd.set("cover_path", c.path);
-    const links = [
-      ...(linkedin.trim() ? [{ platform: "linkedin", value: linkedin.trim() }] : []),
-      ...(instagram.trim() ? [{ platform: "instagram", value: instagram.trim() }] : []),
-      ...(x.trim() ? [{ platform: "x", value: x.trim() }] : []),
-      ...custom
-        .filter((c) => c.url.trim())
-        .map((c) => ({ platform: "custom", value: c.url.trim(), label: c.label.trim() || c.url.trim() })),
-    ];
-    fd.set("links", JSON.stringify(links));
-    const res = await updateShopProfile(fd);
-    setBusy(false);
-    if ("error" in res) { setError(res.error); return; }
-    onSaved();
-  }
-
-  const input = "w-full rounded-lg border border-ink/15 bg-white px-3 py-2 text-sm focus:border-brand focus:outline-none";
-
-  return (
-    <div className="space-y-6">
-      {/* -- Cover banner (ShopView's writer: cover_path + company name + links) -- */}
-      <form onSubmit={save} onChange={touch} className="space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={cancel}
-              className="flex items-center gap-1 rounded-full bg-white/70 px-3 py-2 text-sm font-bold text-ink/75 hover:bg-white"
-            >
-              <ArrowLeft size={16} /> Back to shop
-            </button>
-            <h2 className="text-lg font-bold text-ink">Edit shop</h2>
-          </div>
-          <button
-            type="submit"
-            disabled={busy}
-            className="flex items-center gap-1.5 rounded-full bg-brand px-5 py-2 text-sm font-bold text-white hover:bg-brand-deep disabled:opacity-40"
-          >
-            {busy ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />} Save cover &amp; links
-          </button>
-        </div>
-
-        {error && <p className="text-sm text-rose-600">{error}</p>}
-
-        <div className="relative">
-          <div
-            className="h-44 w-full overflow-hidden rounded-3xl bg-gradient-to-r from-emerald-900 via-green-700 to-lime-600 bg-cover bg-center"
-            style={coverUrl ? { backgroundImage: `url(${coverUrl})` } : undefined}
-          />
-          <ImagePicker label="Change cover" onPick={pickCover} className="absolute right-3 top-3" />
-        </div>
-
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-          <label className="block">
-            <span className="text-xs font-semibold text-ink/70">Company name *</span>
-            <input name="name" required defaultValue={company.name} className={input} />
-          </label>
-          <label className="block">
-            <span className="text-xs font-semibold text-ink/70">Warehouse location</span>
-            <input name="warehouse_location" defaultValue={company.warehouse_location ?? ""} className={input} />
-          </label>
-        </div>
-
-        {/* Links — website keeps its column; the rest live in metadata.links */}
-        <div className="space-y-2 pt-1">
-          <span className="text-xs font-semibold text-ink/70">Links</span>
-          <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
-            <LinkField icon={<Globe size={15} />} placeholder="https://yoursite.com"
-                       value={website} onChange={setWebsite} type="url" />
-            <LinkField icon={<BrandGlyph name="linkedin" />} placeholder="linkedin.com/company/…"
-                       value={linkedin} onChange={setLinkedin} type="url" />
-            <LinkField icon={<BrandGlyph name="instagram" />} placeholder="username" prefix="@"
-                       value={instagram} onChange={setInstagram} />
-            <LinkField icon={<BrandGlyph name="x" />} placeholder="username" prefix="@"
-                       value={x} onChange={setX} />
-          </div>
-
-          {custom.map((c, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <input
-                placeholder="Label" value={c.label} className={`${input} lg:w-40`}
-                onChange={(e) => { const v = e.target.value; setCustom((cs) => cs.map((row, j) => j === i ? { ...row, label: v } : row)); }}
-              />
-              <input
-                placeholder="https://…" type="url" value={c.url} className={input}
-                onChange={(e) => { const v = e.target.value; setCustom((cs) => cs.map((row, j) => j === i ? { ...row, url: v } : row)); }}
-              />
-              <button
-                type="button" aria-label="Remove link"
-                onClick={() => { setCustom((cs) => cs.filter((_, j) => j !== i)); touch(); }}
-                className="rounded-lg p-2 text-ink/40 hover:bg-rose-50 hover:text-rose-600"
-              >
-                <Trash2 size={15} />
-              </button>
-            </div>
-          ))}
-          <button
-            type="button"
-            onClick={() => { setCustom((cs) => [...cs, { label: "", url: "" }]); touch(); }}
-            className="flex items-center gap-1 text-sm font-semibold text-brand hover:text-brand-deep"
-          >
-            <Plus size={14} /> Add custom link
-          </button>
-        </div>
-      </form>
-
-      {/* -- Branding (logo + city + text) — shared form, writes via saveCompanyProfile -- */}
-      {companyProfile && (
-        <div className="glass rounded-3xl p-5">
-          <h3 className="mb-4 text-sm font-bold text-ink">Logo &amp; branding</h3>
-          <BrandingEditForm
-            company={companyProfile}
-            onDirty={() => {/* branding form manages its own dirty state */}}
-            onSaved={onSaved}
-          />
-        </div>
-      )}
-    </div>
-  );
-}
-
-function LinkField({
-  icon, value, onChange, placeholder, type, prefix,
-}: {
-  icon: React.ReactNode; value: string; onChange: (v: string) => void;
-  placeholder?: string; type?: string; prefix?: string;
-}) {
-  return (
-    <div className="flex items-center gap-1.5 rounded-lg border border-ink/15 bg-white px-3 focus-within:border-brand">
-      <span className="text-ink/40">{icon}</span>
-      {prefix && <span className="text-sm font-semibold text-ink/40">{prefix}</span>}
-      <input
-        type={type ?? "text"} value={value} placeholder={placeholder}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full bg-transparent py-2 text-sm focus:outline-none"
-      />
-    </div>
-  );
-}
-
-function ImagePicker({
-  label, onPick, className,
-}: { label: string; onPick: (f: File) => void; className?: string }) {
-  const ref = useRef<HTMLInputElement>(null);
-  return (
-    <>
-      <button
-        type="button"
-        onClick={() => ref.current?.click()}
-        className={`flex items-center gap-1.5 rounded-full bg-ink/70 px-3 py-1.5 text-xs font-semibold text-white hover:bg-ink ${className ?? ""}`}
-      >
-        <ImagePlus size={14} /> {label}
-      </button>
-      <input
-        ref={ref} type="file" accept="image/jpeg,image/png,image/webp" hidden
-        onChange={(e) => { const f = e.target.files?.[0]; if (f) onPick(f); }}
-      />
-    </>
   );
 }
 
