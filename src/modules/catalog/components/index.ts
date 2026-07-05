@@ -4,3 +4,4 @@
 export { ProductCard } from "./ProductCard";
 export { PackSizeSelector } from "./PackSizeSelector";
 export { LocationGroup } from "./LocationGroup";
+export { MediaManager } from "./MediaManager";
