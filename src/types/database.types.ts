@@ -2869,6 +2869,7 @@ export type Database = {
           lineage_parent_a: string | null
           lineage_parent_b: string | null
           local_code_pzn: string | null
+          location: string | null
           metadata: Json
           name: string
           pack_size_grams: number | null
@@ -2905,6 +2906,7 @@ export type Database = {
           lineage_parent_a?: string | null
           lineage_parent_b?: string | null
           local_code_pzn?: string | null
+          location?: string | null
           metadata?: Json
           name: string
           pack_size_grams?: number | null
@@ -2941,6 +2943,7 @@ export type Database = {
           lineage_parent_a?: string | null
           lineage_parent_b?: string | null
           local_code_pzn?: string | null
+          location?: string | null
           metadata?: Json
           name?: string
           pack_size_grams?: number | null
@@ -3277,6 +3280,57 @@ export type Database = {
           },
           {
             foreignKeyName: "product_image_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "product"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_media: {
+        Row: {
+          company_id: string
+          created_at: string
+          id: string
+          kind: string
+          label: string | null
+          path: string | null
+          position: number
+          product_id: string
+          url: string | null
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          id?: string
+          kind: string
+          label?: string | null
+          path?: string | null
+          position?: number
+          product_id: string
+          url?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          id?: string
+          kind?: string
+          label?: string | null
+          path?: string | null
+          position?: number
+          product_id?: string
+          url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_media_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "company"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_media_product_id_fkey"
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "product"
