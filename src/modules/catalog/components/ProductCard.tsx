@@ -106,7 +106,10 @@ export function ProductCard({
           style={{ backfaceVisibility: "hidden", pointerEvents: flipped ? "none" : undefined }}
         >
           {/* square photo — object-cover keeps it square at any column width */}
-          <div className="relative aspect-square w-full shrink-0 overflow-hidden bg-brand-soft/40">
+          <div
+            data-testid="card-photo"
+            className="relative aspect-square w-full shrink-0 overflow-hidden bg-brand-soft/40"
+          >
             {cover ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={cover} alt={p.cultivar ?? p.name} className="h-full w-full object-cover" />

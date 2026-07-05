@@ -3,6 +3,10 @@
 // Present components through here — never a deep path into the module internals.
 // import.ts / parse.ts / template.ts (CSV) are intentionally NOT exported — CSV
 // ingestion is parked this phase (07-CONTEXT deferred).
-export * from "./shop";
+// shop.ts re-exported as TYPES only: its runtime read (getMyShop) pulls
+// next/headers, so a value re-export would drag server-only code into any client
+// component that imports a UI component from this barrel. The server page imports
+// getMyShop directly from "./shop"; client surfaces get the types + actions + UI.
+export type * from "./shop";
 export * from "./manage";
 export * from "./components";
