@@ -47,6 +47,14 @@ test("UX-06 · Manage shop shows a sticky Save that pulses only when dirty", asy
   await expect(save).toHaveAttribute("data-dirty", "true");
 });
 
-// The present-mode / chrome-hide button is 07-06 (present mode = in-app view, not
-// the OS Fullscreen API). Its assertion lives with that plan.
-test.fixme("UX-06 · a present-mode button is present in the banner (moved to 07-06)", async () => {});
+// The present-mode / chrome-hide button is delivered in 07-06 (present mode =
+// in-app view, not the OS Fullscreen API). The full chrome-hide + Exit/ESC +
+// company-chip behaviour is asserted in present-mode.spec.ts; here we just confirm
+// the entry control now lives in the banner (the 07-05 fixme, now enabled).
+test("UX-06 · a present-mode button is present in the banner", async ({ page }) => {
+  await signIn(page);
+  await page.goto("/present");
+  await expect(
+    page.getByTestId("present-banner").getByRole("button", { name: /present mode/i }),
+  ).toBeVisible();
+});
