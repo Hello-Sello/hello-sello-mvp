@@ -93,12 +93,21 @@ UPDATE person SET company_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
   WHERE id = '22222222-2222-2222-2222-222222222222';
 
 -- ----------------------------------------------------------------------------
--- 4. Business categories (cultivator sells, pharmacy buys)
+-- 4. Business taxonomy (DEV-99 #3): Activities = role (cultivator sells, pharmacy
+--    buys); Category = sector. The legacy 'cultivator' Activity was remapped to
+--    'eu_gmp_cultivator' by 20260704090000; migrations run before this seed, so it
+--    no longer exists as a code. Both demo companies are cannabis-medical → pharma.
 -- ----------------------------------------------------------------------------
 INSERT INTO company_type_assignment (company_id, company_type_code, created_by) VALUES
-  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'cultivator',
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'eu_gmp_cultivator',
    '11111111-1111-1111-1111-111111111111'),
   ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'pharmacy',
+   '22222222-2222-2222-2222-222222222222');
+
+INSERT INTO company_business_category (company_id, business_category_code, created_by) VALUES
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'pharma',
+   '11111111-1111-1111-1111-111111111111'),
+  ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'pharma',
    '22222222-2222-2222-2222-222222222222');
 
 -- ----------------------------------------------------------------------------
@@ -213,13 +222,22 @@ WHERE NOT EXISTS (
   SELECT 1 FROM company WHERE id = 'cccccccc-cccc-cccc-cccc-cccccccccccc'
 );
 
--- 4b-v) Company type for PendingCo (cultivator)
+-- 4b-v) Business taxonomy for PendingCo (Activity = eu_gmp_cultivator; Category = pharma)
 INSERT INTO company_type_assignment (company_id, company_type_code, created_by)
-SELECT 'cccccccc-cccc-cccc-cccc-cccccccccccc', 'cultivator', '99999999-9999-9999-9999-999999999999'
+SELECT 'cccccccc-cccc-cccc-cccc-cccccccccccc', 'eu_gmp_cultivator', '99999999-9999-9999-9999-999999999999'
 WHERE NOT EXISTS (
   SELECT 1 FROM company_type_assignment
   WHERE company_id = 'cccccccc-cccc-cccc-cccc-cccccccccccc'
-    AND company_type_code = 'cultivator'
+    AND company_type_code = 'eu_gmp_cultivator'
+    AND deleted_at IS NULL
+);
+
+INSERT INTO company_business_category (company_id, business_category_code, created_by)
+SELECT 'cccccccc-cccc-cccc-cccc-cccccccccccc', 'pharma', '99999999-9999-9999-9999-999999999999'
+WHERE NOT EXISTS (
+  SELECT 1 FROM company_business_category
+  WHERE company_id = 'cccccccc-cccc-cccc-cccc-cccccccccccc'
+    AND business_category_code = 'pharma'
     AND deleted_at IS NULL
 );
 

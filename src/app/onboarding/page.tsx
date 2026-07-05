@@ -88,10 +88,16 @@ export default async function OnboardingPage({
     }
   }
 
-  // Business-category options come straight from the lookup so the codes stay
-  // owned by the DB.
+  // The two taxonomy levels come straight from their lookups so the codes stay
+  // owned by the DB (DEV-99 #3): company_type = Business Activities (role),
+  // business_category = Business Category (sector, incl. the 'custom' escape hatch).
   const { data: companyTypes } = await supabase
     .from('company_type')
+    .select('code, description')
+    .order('sort_order')
+
+  const { data: businessCategories } = await supabase
+    .from('business_category')
     .select('code, description')
     .order('sort_order')
 
@@ -179,6 +185,7 @@ export default async function OnboardingPage({
       personId={person.id}
       initialAvatarUrl={initialAvatarUrl}
       companyTypes={companyTypes ?? []}
+      businessCategories={businessCategories ?? []}
       resumeStep={resumeStep}
       prefill={prefill}
       licenceRequired={licenceRequired}
