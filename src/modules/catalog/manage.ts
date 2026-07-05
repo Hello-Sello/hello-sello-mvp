@@ -18,6 +18,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/shared/db/server";
 import { getCurrentCompanyId } from "@/shared/auth";
 import type { TablesUpdate } from "@/types/database.types";
+import { isAllowedVideoUrl } from "./mediaLinks";
 
 export type ManageResult = { ok: true } | { error: string };
 
@@ -215,6 +216,169 @@ export async function setProductProfileVisible(
     .update({ profile_visible: isVisible })
     .eq("id", productId);
   if (error) return { error: error.message };
+  revalidatePath("/present");
+  return { ok: true };
+}
+
+// ── Owner product + media edit (Phase 7, D-04/D-11) ─────────────────────────
+// Rename / soft-delete / set-location plus the back-of-card media (video link +
+// COA/doc). Each resolves the company from the session and relies on the
+// company-scoped product / product_media RLS, so a caller only ever touches
+// their OWN rows — no companyId parameter is accepted (T-07-06/T-07-08). Media
+// bytes are uploaded client-direct to `shop-media` (mirroring the gallery); these
+// actions record the resulting path/url only, never the file.
+
+/** Rename a product. RLS (`company_id = current_company_id()`) enforces ownership. */
+export async function renameProduct(productId: string, name: string): Promise<ManageResult> {
+  const supabase = await createClient();
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) return { error: "No company in session." };
+
+  const trimmed = name.trim();
+  if (!trimmed) return { error: "Product name is required." };
+
+  const { error } = await supabase.from("product").update({ name: trimmed }).eq("id", productId);
+  if (error) return { error: error.message };
+  revalidatePath("/present");
+  return { ok: true };
+}
+
+/** Soft-delete a product: stamp `deleted_at`. getMyShop filters `is deleted_at
+ *  null`, so the product drops out of both owner and public reads while the row
+ *  (and its media/images) stays for recovery/audit. Never a hard delete. */
+export async function softDeleteProduct(productId: string): Promise<ManageResult> {
+  const supabase = await createClient();
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) return { error: "No company in session." };
+
+  const { error } = await supabase
+    .from("product")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", productId);
+  if (error) return { error: error.message };
+  revalidatePath("/present");
+  return { ok: true };
+}
+
+/** Set (or clear) a product's free-text location group (D-04). */
+export async function setProductLocation(
+  productId: string,
+  location: string | null,
+): Promise<ManageResult> {
+  const supabase = await createClient();
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) return { error: "No company in session." };
+
+  const value = location?.trim() || null;
+  const { error } = await supabase.from("product").update({ location: value }).eq("id", productId);
+  if (error) return { error: error.message };
+  revalidatePath("/present");
+  return { ok: true };
+}
+
+/** One back-of-card media asset to attach. A `video_link` carries an external
+ *  `url` (host-validated, no file); a `coa`/`doc` carries a `shop-media` `path`
+ *  the browser already uploaded. */
+export type ProductMediaInput =
+  | { kind: "video_link"; url: string; label?: string | null }
+  | { kind: "coa" | "doc"; path: string; label?: string | null };
+
+/** Attach a video link or a COA/doc PDF to a product (D-11), appending after the
+ *  current last position. Mirrors addProductImageRecords: company_id is
+ *  denormalized for direct-column RLS and the browser uploads any bytes itself.
+ *  A video_link's url is host-allowlisted (`isAllowedVideoUrl`, T-07-07) before it
+ *  is persisted — the 07-04 card renders it into an `<iframe src>`, so an
+ *  arbitrary or `javascript:` host would be an XSS vector. */
+export async function addProductMediaRecord(
+  productId: string,
+  media: ProductMediaInput,
+): Promise<ManageResult> {
+  const supabase = await createClient();
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) return { error: "No company in session." };
+
+  let url: string | null = null;
+  let path: string | null = null;
+  if (media.kind === "video_link") {
+    const raw = (media.url ?? "").trim();
+    if (!isAllowedVideoUrl(raw)) {
+      return { error: "Video links must be a YouTube, Vimeo, or Loom URL." };
+    }
+    url = raw;
+  } else {
+    path = media.path?.trim() || null;
+    if (!path) return { error: "No file provided." };
+  }
+
+  const { data: last } = await supabase
+    .from("product_media")
+    .select("position")
+    .eq("product_id", productId)
+    .order("position", { ascending: false })
+    .limit(1);
+  const position = (last?.[0]?.position ?? -1) + 1;
+
+  const label = media.label?.trim() || null;
+  const { error } = await supabase.from("product_media").insert({
+    product_id: productId,
+    company_id: companyId,
+    kind: media.kind,
+    url,
+    path,
+    label,
+    position,
+  });
+  if (error) return { error: error.message };
+  revalidatePath("/present");
+  return { ok: true };
+}
+
+/** A video_link has no file, so its removal reports `path: null`; a coa/doc
+ *  reports its `shop-media` path so the caller deletes the bucket object. */
+export type MediaRemoveResult = { ok: true; path: string | null } | { error: string };
+
+/** Remove one media row and return its storage `path` (null for a video_link) so
+ *  the browser deletes the file — storage I/O stays client-side on both add and
+ *  remove, mirroring removeProductImage. Row first, then file (an orphaned file is
+ *  harmless; a row pointing at a deleted file is a broken link). */
+export async function removeProductMedia(mediaId: string): Promise<MediaRemoveResult> {
+  const supabase = await createClient();
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) return { error: "No company in session." };
+
+  const { data: row } = await supabase
+    .from("product_media")
+    .select("path")
+    .eq("id", mediaId)
+    .single();
+  if (!row) return { error: "Media not found." };
+
+  const { error } = await supabase.from("product_media").delete().eq("id", mediaId);
+  if (error) return { error: error.message };
+
+  revalidatePath("/present");
+  return { ok: true, path: row.path };
+}
+
+/** Set the display order of a product's back-of-card media. `orderedIds` is the
+ *  full media id list in the desired order; the single authoritative writer of
+ *  `position`, mirroring setProductImageOrder. */
+export async function setProductMediaOrder(
+  productId: string,
+  orderedIds: string[],
+): Promise<ManageResult> {
+  const supabase = await createClient();
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) return { error: "No company in session." };
+
+  for (let i = 0; i < orderedIds.length; i++) {
+    const { error } = await supabase
+      .from("product_media")
+      .update({ position: i })
+      .eq("id", orderedIds[i])
+      .eq("product_id", productId);
+    if (error) return { error: error.message };
+  }
   revalidatePath("/present");
   return { ok: true };
 }
