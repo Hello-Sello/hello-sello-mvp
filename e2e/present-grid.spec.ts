@@ -1,16 +1,16 @@
 /**
- * Phase 7 — Present grid E2E spec (07-01 Wave-0 RED scaffold). UX-02.
+ * Present grid E2E — the redesigned seller storefront.
  *
- * Behavior: /present renders products 4-up with SQUARE images; clicking a
- * location tab (Germany | UK | All) filters the grid.
+ * Behavior under test: /present renders the seller's products as a 4-up grid of
+ * square-image cards, grouped under a per-location divider header, with a location
+ * dropdown that re-contexts the grid.
  *
- * RED until 07-03 (square 4-up grid + location tabs). The Present rebuild does
- * not exist yet — the current ShopView grid is 1/2/3/4-col and not square, and
- * there are no location tabs. Every assertion below targets the REBUILT surface,
- * so each case is wrapped in test.fixme(): it registers (visible to
- * `playwright test --list`) but is NOT executed, keeping the suite runnable
- * (no timeout/throw against an unbuilt UI). Drop the `.fixme` per case as 07-03
- * turns it GREEN.
+ * Data note: the seeded GreenLeaf catalogue (alice@greenleaf.test) has no
+ * per-product location set, so every product lands in one "Unassigned" group and
+ * the dropdown lists only "All locations". These cases therefore assert the grid /
+ * grouping / dropdown wiring against that real data; the strict multi-location
+ * subset behavior is proven exhaustively by the pure unit test
+ * (src/app/present/locationFilter.test.ts).
  *
  * Sign-in mirrors public-profile.spec.ts (seeded alice@greenleaf.test).
  */
@@ -27,30 +27,36 @@ async function signIn(page: Page) {
   await page.waitForURL((url) => !url.pathname.startsWith("/login"));
 }
 
-// RED until 07-03 — the square 4-up grid does not exist yet.
-test.fixme("UX-02 · /present renders products 4-up with square images", async ({ page }) => {
+test("/present renders products in a 4-up grid with square images", async ({ page }) => {
   await signIn(page);
   await page.goto("/present");
-  // Square treatment: the product tile image is aspect-square (object-cover).
-  const firstTile = page.getByTestId("product-card").first();
-  await expect(firstTile).toBeVisible();
-  const box = await firstTile.locator("img").first().boundingBox();
+
+  const cards = page.getByTestId("product-card");
+  await expect(cards.first()).toBeVisible();
+  expect(await cards.count()).toBeGreaterThan(0);
+
+  // Square treatment: the photo region is aspect-square, so its rendered box is
+  // square within a small rounding tolerance — whether or not a cover image is
+  // present (the seeded catalogue has no product images).
+  const box = await cards.first().getByTestId("card-photo").boundingBox();
   expect(box).not.toBeNull();
-  // square-ish within a 2px tolerance (the aspect-square + object-cover contract).
   expect(Math.abs(box!.width - box!.height)).toBeLessThanOrEqual(2);
 });
 
-// RED until 07-03 — location tabs do not exist yet.
-test.fixme("UX-02 · clicking a location tab filters the grid", async ({ page }) => {
+test("products render under a location divider and the location dropdown re-contexts the grid", async ({ page }) => {
   await signIn(page);
   await page.goto("/present");
+
   const all = await page.getByTestId("product-card").count();
-  await page.getByRole("tab", { name: /germany/i }).click();
-  const germanyOnly = await page.getByTestId("product-card").count();
-  // The Germany tab shows a strict subset (fewer than All, at least one).
-  expect(germanyOnly).toBeGreaterThan(0);
-  expect(germanyOnly).toBeLessThanOrEqual(all);
-  // "All" restores the full set.
-  await page.getByRole("tab", { name: /^all$/i }).click();
+  expect(all).toBeGreaterThan(0);
+
+  // The location dropdown opens and offers "All locations".
+  await page.getByTestId("location-menu-btn").click();
+  const allOption = page.getByTestId("location-option").filter({ hasText: /all locations/i });
+  await expect(allOption).toBeVisible();
+
+  // Selecting "All" keeps the full set (and closes the menu).
+  await allOption.click();
+  await expect(page.getByTestId("location-option")).toHaveCount(0);
   expect(await page.getByTestId("product-card").count()).toBe(all);
 });

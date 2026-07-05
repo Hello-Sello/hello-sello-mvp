@@ -1,5 +1,6 @@
-// Public barrel for the catalog module's reusable Present components (D-REUSE-2/3).
-// Empty for now — 07-02+ populate it with ProductCard, LocationGroup, MediaManager,
-// InfoBox, PresentBanner, SaveBar, PackSizeSelector so other surfaces (buyer view,
-// present mode, the Phase-17 deal basket) import them through this boundary only.
-export {};
+// Public barrel for the catalog module's reusable Present components. Other
+// surfaces (buyer view, present mode, the deal basket) import these through this
+// boundary only — never a deep path into the module internals.
+export { ProductCard } from "./ProductCard";
+export { PackSizeSelector } from "./PackSizeSelector";
+export { LocationGroup } from "./LocationGroup";
