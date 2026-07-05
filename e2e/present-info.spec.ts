@@ -1,14 +1,13 @@
 /**
- * Phase 7 — Present info-card E2E spec (07-01 Wave-0 RED scaffold). UX-05.
+ * Phase 7 — Present info-card E2E spec (07-05, UX-05).
  *
- * Behavior: an info card (HQ/warehouse, links) expands on click to show more
- * rows (multiple warehouse addresses, more links) and collapses on click-away
- * or an X.
+ * Behavior: equal-height info boxes clamp overflow and reveal it on click; the
+ * expanded panel is solid-white and sits ABOVE the flip-card grid (own stacking
+ * context); it collapses on the ✕ or a click-away. The company description is
+ * hard-capped at 2600 characters in edit mode.
  *
- * RED until 07-05 (expandable info cards, D-10). The expand/collapse interaction
- * does not exist yet — today the info fields are static single rows. Each case is
- * test.fixme() so it registers without executing. Drop the `.fixme` per case as
- * 07-05 lands the expand UI.
+ * RE-SCOPE (07-01→07-05): from "multiple warehouse addresses" to the single-line
+ * warehouse + reveal-more model (multi-warehouse management is Phase 16).
  */
 import { test, expect, type Page } from "@playwright/test";
 
@@ -23,8 +22,7 @@ async function signIn(page: Page) {
   await page.waitForURL((url) => !url.pathname.startsWith("/login"));
 }
 
-// RED until 07-05 — info card expand-on-click does not exist yet.
-test.fixme("UX-05 · an info card expands on click", async ({ page }) => {
+test("UX-05 · an info card expands on click to reveal more", async ({ page }) => {
   await signIn(page);
   await page.goto("/present");
   const card = page.getByTestId("info-card-warehouse");
@@ -33,25 +31,42 @@ test.fixme("UX-05 · an info card expands on click", async ({ page }) => {
   await expect(card.getByTestId("info-more")).toBeVisible();
 });
 
-// RED until 07-05 — collapse on the X.
-test.fixme("UX-05 · the info card collapses on the X", async ({ page }) => {
+test("UX-05 · the info card collapses on the ✕", async ({ page }) => {
   await signIn(page);
   await page.goto("/present");
   const card = page.getByTestId("info-card-warehouse");
   await card.click();
   await expect(card.getByTestId("info-more")).toBeVisible();
-  await card.getByRole("button", { name: /close|collapse|×/i }).click();
+  await card.getByRole("button", { name: /close/i }).click();
   await expect(card.getByTestId("info-more")).toBeHidden();
 });
 
-// RED until 07-05 — collapse on click-away.
-test.fixme("UX-05 · the info card collapses on click-away", async ({ page }) => {
+test("UX-05 · the info card collapses on click-away", async ({ page }) => {
   await signIn(page);
   await page.goto("/present");
   const card = page.getByTestId("info-card-warehouse");
   await card.click();
   await expect(card.getByTestId("info-more")).toBeVisible();
   // click outside the card (the banner) collapses it.
-  await page.getByRole("heading", { level: 1 }).click();
+  await page.getByTestId("present-banner").click();
   await expect(card.getByTestId("info-more")).toBeHidden();
+});
+
+test("UX-05 · the expanded info panel sits above the product grid", async ({ page }) => {
+  await signIn(page);
+  await page.goto("/present");
+  const card = page.getByTestId("info-card-warehouse");
+  await card.click();
+  await expect(card.getByTestId("info-more")).toBeVisible();
+  // its own stacking context is elevated above the flip-card grid (bug-2 fix).
+  const z = await card.evaluate((el) => getComputedStyle(el).zIndex);
+  expect(Number(z)).toBeGreaterThanOrEqual(10);
+});
+
+test("UX-05 · the description field is capped at 2600 characters", async ({ page }) => {
+  await signIn(page);
+  await page.goto("/present");
+  await page.getByRole("button", { name: /manage shop/i }).click();
+  const desc = page.getByRole("textbox", { name: /company description/i });
+  await expect(desc).toHaveAttribute("maxlength", "2600");
 });

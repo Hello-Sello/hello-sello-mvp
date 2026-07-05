@@ -1,16 +1,13 @@
 /**
- * Phase 7 — Present banner E2E spec (07-01 Wave-0 RED scaffold). UX-06.
+ * Phase 7 — Present banner E2E spec (07-05, UX-06).
  *
- * Behavior: "+Add products" and "Manage shop" live in the banner (top-right); a
- * "Fullscreen" button is present (enters Presentation mode, no left sidebar).
+ * Behavior: the "+Add products" and "Manage shop" controls live in the banner;
+ * "Manage shop" turns on in-place edit and reveals a sticky Save that pulses only
+ * when there are unsaved changes (data-dirty flips true on the first field edit).
  *
- * RED until 07-04 (banner-mounted controls + Fullscreen button, D-09). The
- * controls are not in the banner yet and there is no Fullscreen button. The
- * fullscreen TRANSITION itself is human-UAT (the browser Fullscreen API is hard
- * to drive reliably in headless Chromium — the requestFullscreen permission +
- * the no-sidebar paint), so we assert only that the BUTTON exists; the live
- * transition is a manual step. Each case is test.fixme() so it registers without
- * executing. Drop the `.fixme` per case as 07-04 lands the banner.
+ * RE-SCOPE (07-01→07-05): the old scaffold asserted a "Fullscreen"/present-mode
+ * button — that control is 07-06's concern (present mode = in-app chrome-hide),
+ * so its assertion moves there and is kept here only as a fixme pointer.
  */
 import { test, expect, type Page } from "@playwright/test";
 
@@ -25,8 +22,7 @@ async function signIn(page: Page) {
   await page.waitForURL((url) => !url.pathname.startsWith("/login"));
 }
 
-// RED until 07-04 — banner-mounted controls do not exist yet.
-test.fixme('UX-06 · "+Add products" and "Manage shop" live in the banner', async ({ page }) => {
+test('UX-06 · "+Add products" and "Manage shop" live in the banner', async ({ page }) => {
   await signIn(page);
   await page.goto("/present");
   const banner = page.getByTestId("present-banner");
@@ -34,15 +30,23 @@ test.fixme('UX-06 · "+Add products" and "Manage shop" live in the banner', asyn
   await expect(banner.getByRole("button", { name: /manage shop/i })).toBeVisible();
 });
 
-// RED until 07-04 — the Fullscreen button does not exist yet. (Button PRESENCE
-// only; the fullscreen transition is human-UAT — see header.)
-test.fixme('UX-06 · a "Fullscreen" button is present in the banner', async ({ page }) => {
+test("UX-06 · Manage shop shows a sticky Save that pulses only when dirty", async ({ page }) => {
   await signIn(page);
   await page.goto("/present");
-  const banner = page.getByTestId("present-banner");
-  await expect(banner.getByRole("button", { name: /fullscreen/i })).toBeVisible();
-  // NOTE (human-UAT, NOT asserted): clicking it must enter Presentation mode
-  // (no left sidebar, basket live) for Teams/Zoom presenting. The browser
-  // Fullscreen API requires a real user gesture + paint that headless Chromium
-  // does not honor reliably — verified manually in the phase human-UAT checklist.
+  await page.getByTestId("present-banner").getByRole("button", { name: /manage shop/i }).click();
+
+  const save = page.getByTestId("save-changes-btn");
+  await expect(save).toBeVisible();
+  // Clean on entry — no unsaved changes, so no pulse.
+  await expect(save).toHaveAttribute("data-dirty", "false");
+
+  // Edit the company name in place → the shop is dirty and the Save pulses.
+  const name = page.getByRole("textbox", { name: /company name/i });
+  await name.click();
+  await name.type(" Updated");
+  await expect(save).toHaveAttribute("data-dirty", "true");
 });
+
+// The present-mode / chrome-hide button is 07-06 (present mode = in-app view, not
+// the OS Fullscreen API). Its assertion lives with that plan.
+test.fixme("UX-06 · a present-mode button is present in the banner (moved to 07-06)", async () => {});
