@@ -1,10 +1,10 @@
 "use client";
 
 /**
- * Selectable pack-size bubbles that sit beside the price on the ProductCard front
- * (D-01, DEV-107 #3). v0 renders one bubble per available pack size; selection is
- * local presentation state only. Multi-pack PRICING is out of scope this phase
- * (one price/g + one bundle tier) — this just lets a buyer pick the size they mean.
+ * Selectable pack-size bubbles that sit beside the price on the ProductCard front.
+ * v0 renders one bubble per available pack size; selection is local presentation
+ * state only. Multi-pack PRICING is out of scope this phase (one price/g + one
+ * bundle tier) — this just lets a buyer pick the size they mean.
  */
 
 export function PackSizeSelector({

@@ -1,7 +1,7 @@
 /**
- * Pure location grouping/filtering behind the Present shop's location dropdown
- * (UX-02, D-04). No React, no Supabase — just the "Germany | UK | All" logic so
- * it stays unit-testable (locationFilter.test.ts is the RED contract this satisfies).
+ * Pure location grouping/filtering behind the Present shop's location dropdown.
+ * No React, no Supabase — just the "Germany | UK | All" logic so it stays
+ * unit-testable (locationFilter.test.ts is the contract this satisfies).
  *
  * The rule: "All" returns everything (including null-location products); a named
  * location returns only its own products; a null-location product surfaces ONLY

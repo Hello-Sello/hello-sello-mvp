@@ -1,17 +1,16 @@
 "use client";
 
 /**
- * The redesigned Present flip card (D-01, DEV-107) — the vertical spine of the
- * Phase-7 redesign. FRONT (built here): a square cover photo, a 5-value
- * THC/CBD/CBG/CBN/Terp% strip, a scrollable spec-row list, pack-size bubbles
- * beside the price, and a qty stepper + Add-to-basket CONTROL. BACK: a placeholder
- * face so the flip mechanic exists now; its "Documents & Media" content lands in
- * 07-04. The away-facing face is pointer-events:none so it never intercepts clicks
- * on the visible face (the prototype's "back-to-front" bug).
+ * The redesigned Present flip card. FRONT (built here): a square cover photo, a
+ * 5-value THC/CBD/CBG/CBN/Terp% strip, a scrollable spec-row list, pack-size
+ * bubbles beside the price, and a qty stepper + Add-to-basket CONTROL. BACK: a
+ * placeholder face so the flip mechanic exists now; its "Documents & Media"
+ * content lands in a later plan. The away-facing face is pointer-events:none so it
+ * never intercepts clicks on the visible face (the prototype's "back-to-front" bug).
  *
- * Reusable by design (D-REUSE-2): exported through the catalog barrel so the buyer
- * view, present mode, and the Phase-17 deal basket import the same card. This plan
- * ships the Add CONTROL only — there is NO basket store, drawer, or send flow here.
+ * Reusable by design: exported through the catalog barrel so the buyer view,
+ * present mode, and the deal basket import the same card. This plan ships the Add
+ * CONTROL only — there is NO basket store, drawer, or send flow here.
  */
 import { useState } from "react";
 import { Heart, RotateCw, Minus, Plus, ShoppingCart, EyeOff } from "lucide-react";
@@ -66,7 +65,7 @@ export function ProductCard({
   product: ShopProduct;
   companyId?: string;
   editing?: boolean;
-  /** Fires on Add — the store/send flow is Phase 17; defaults to a no-op here. */
+  /** Fires on Add — the store/send flow is a later phase; defaults to a no-op here. */
   onAddToBasket?: (productId: string, qty: number, packIndex: number) => void;
   onChanged?: () => void;
 }) {
@@ -106,7 +105,7 @@ export function ProductCard({
           className="absolute inset-0 flex flex-col overflow-hidden rounded-3xl bg-white shadow-lg ring-1 ring-white/60"
           style={{ backfaceVisibility: "hidden", pointerEvents: flipped ? "none" : undefined }}
         >
-          {/* square photo (DEV-81) — object-cover keeps it square at any column width */}
+          {/* square photo — object-cover keeps it square at any column width */}
           <div className="relative aspect-square w-full shrink-0 overflow-hidden bg-brand-soft/40">
             {cover ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -116,7 +115,7 @@ export function ProductCard({
                 {p.cultivar ?? p.name}
               </div>
             )}
-            {/* only status/visibility badges sit on the image (DEV-107 #4) */}
+            {/* only status/visibility badges sit on the image */}
             {!p.profile_visible && (
               <div className="absolute left-2.5 top-2.5 flex items-center gap-1 rounded-full bg-ink/80 px-2.5 py-1 text-[10px] font-bold text-white">
                 <EyeOff size={11} /> Hidden
@@ -151,7 +150,7 @@ export function ProductCard({
               {flag && <span className="ml-auto text-lg leading-none">{flag}</span>}
             </div>
 
-            {/* 5-value strip: THC / CBD / CBG / CBN / Terp% (DEV-107 #2) */}
+            {/* 5-value strip: THC / CBD / CBG / CBN / Terp% */}
             <div className="grid grid-cols-5 gap-1 px-3.5 pt-2">
               {(
                 [
@@ -169,7 +168,7 @@ export function ProductCard({
               ))}
             </div>
 
-            {/* scrollable full product-info list; lineage clamped to 2 lines (DEV-107 #1) */}
+            {/* scrollable full product-info list; lineage clamped to 2 lines */}
             <div className="mt-1.5 flex min-h-0 flex-1 flex-col overflow-y-auto px-3.5">
               {specRows.map(([k, v]) => (
                 <div key={k} className="flex items-start gap-2 border-b border-ink/10 py-1.5 text-xs">
@@ -179,7 +178,7 @@ export function ProductCard({
               ))}
             </div>
 
-            {/* footer: pack bubbles + price, then availability + stepper + Add (DEV-107 #3) */}
+            {/* footer: pack bubbles + price, then availability + stepper + Add */}
             <div className="relative z-[5] shrink-0 border-t border-ink/10 bg-white px-3.5 pb-3 pt-2.5">
               <div className="mb-2 flex items-end justify-between gap-2.5">
                 <PackSizeSelector sizes={packs} selected={pack} onSelect={setPack} />
