@@ -13,9 +13,14 @@
  * CONTROL only — there is NO basket store, drawer, or send flow here.
  */
 import { useState } from "react";
-import { Heart, RotateCw, Minus, Plus, ShoppingCart, EyeOff } from "lucide-react";
+import {
+  Heart, RotateCw, Minus, Plus, ShoppingCart, EyeOff, Eye,
+  GripVertical, Trash2, Check,
+} from "lucide-react";
 import type { ShopProduct } from "../shop";
 import { PackSizeSelector } from "./PackSizeSelector";
+import { MediaManager } from "./MediaManager";
+import { renameProduct, softDeleteProduct, setProductProfileVisible } from "../manage";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 /** Build a public shop-media URL from a stored path (mirrors ShopView's builder). */
@@ -59,8 +64,10 @@ function packLabels(p: ShopProduct): string[] {
 
 export function ProductCard({
   product: p,
+  companyId,
   onAddToBasket,
   editing = false,
+  onChanged,
 }: {
   product: ShopProduct;
   companyId?: string;
@@ -73,6 +80,34 @@ export function ProductCard({
   const [pack, setPack] = useState(0);
   const [qty, setQty] = useState(1);
   const [liked, setLiked] = useState(false);
+  // Owner edit state (only meaningful when `editing`): the in-place rename draft
+  // and a busy flag guarding the rename / visibility / delete actions.
+  const [nameDraft, setNameDraft] = useState(p.name);
+  const [busy, setBusy] = useState(false);
+
+  async function saveName() {
+    const name = nameDraft.trim();
+    if (!name || name === p.name) return;
+    setBusy(true);
+    const res = await renameProduct(p.id, name);
+    setBusy(false);
+    if (!("error" in res)) onChanged?.();
+  }
+
+  async function toggleVisible() {
+    setBusy(true);
+    const res = await setProductProfileVisible(p.id, !p.profile_visible);
+    setBusy(false);
+    if (!("error" in res)) onChanged?.();
+  }
+
+  async function deleteProduct() {
+    if (!window.confirm(`Delete "${p.name}"? It is removed from your shop (recoverable).`)) return;
+    setBusy(true);
+    const res = await softDeleteProduct(p.id);
+    setBusy(false);
+    if (!("error" in res)) onChanged?.();
+  }
 
   const cover = p.images[0] ? mediaUrl(p.images[0].path) : null;
   const packs = packLabels(p);
@@ -118,22 +153,63 @@ export function ProductCard({
                 {p.cultivar ?? p.name}
               </div>
             )}
-            {/* only status/visibility badges sit on the image */}
-            {!p.profile_visible && (
-              <div className="absolute left-2.5 top-2.5 flex items-center gap-1 rounded-full bg-ink/80 px-2.5 py-1 text-[10px] font-bold text-white">
-                <EyeOff size={11} /> Hidden
+            {/* Edit tools (owner, edit mode): drag grip to move location · show/hide ·
+                delete. The grip is the only draggable handle — the card→group move
+                is handled by LocationGroup's drop target. */}
+            {editing ? (
+              <div className="absolute inset-x-2 top-2 z-[9] flex items-center gap-1.5">
+                <span
+                  aria-label="Drag to move to another location"
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData("application/product-id", p.id);
+                    e.dataTransfer.setData("application/product-loc", p.location ?? "");
+                    e.dataTransfer.effectAllowed = "move";
+                  }}
+                  className="grid h-7 w-7 shrink-0 cursor-grab place-items-center rounded-lg bg-ink/60 text-white active:cursor-grabbing"
+                >
+                  <GripVertical size={14} />
+                </span>
+                <button
+                  type="button"
+                  aria-label={p.profile_visible ? "Hide product" : "Show product"}
+                  disabled={busy}
+                  onClick={toggleVisible}
+                  className="inline-flex items-center gap-1 rounded-lg bg-white/95 px-2 py-1 text-[10px] font-bold text-ink shadow-sm disabled:opacity-40"
+                >
+                  {p.profile_visible ? <Eye size={12} /> : <EyeOff size={12} />}
+                  {p.profile_visible ? "Visible" : "Hidden"}
+                </button>
+                <button
+                  type="button"
+                  aria-label="Delete product"
+                  disabled={busy}
+                  onClick={deleteProduct}
+                  className="ml-auto grid h-7 w-7 place-items-center rounded-lg bg-white/95 text-rose-600 shadow-sm disabled:opacity-40"
+                >
+                  <Trash2 size={14} />
+                </button>
               </div>
+            ) : (
+              <>
+                {/* only status/visibility badges sit on the image */}
+                {!p.profile_visible && (
+                  <div className="absolute left-2.5 top-2.5 flex items-center gap-1 rounded-full bg-ink/80 px-2.5 py-1 text-[10px] font-bold text-white">
+                    <EyeOff size={11} /> Hidden
+                  </div>
+                )}
+                <button
+                  type="button"
+                  aria-label={liked ? "Unlike" : "Like"}
+                  onClick={() => setLiked((v) => !v)}
+                  className={`absolute right-2.5 top-2.5 grid h-8 w-8 place-items-center rounded-full ${
+                    liked ? "bg-brand text-white" : "bg-white/90 text-brand"
+                  }`}
+                >
+                  <Heart size={15} fill={liked ? "currentColor" : "none"} />
+                </button>
+              </>
             )}
-            <button
-              type="button"
-              aria-label={liked ? "Unlike" : "Like"}
-              onClick={() => setLiked((v) => !v)}
-              className={`absolute right-2.5 top-2.5 grid h-8 w-8 place-items-center rounded-full ${
-                liked ? "bg-brand text-white" : "bg-white/90 text-brand"
-              }`}
-            >
-              <Heart size={15} fill={liked ? "currentColor" : "none"} />
-            </button>
             <button
               type="button"
               onClick={() => setFlipped(true)}
@@ -145,8 +221,28 @@ export function ProductCard({
 
           <div className="flex min-h-0 flex-1 flex-col">
             <div className="flex items-start gap-2 px-3.5 pt-2.5">
-              <div className="min-w-0">
-                <div className="truncate text-[16px] font-extrabold leading-tight text-brand-deep">{p.name}</div>
+              <div className="min-w-0 flex-1">
+                {editing ? (
+                  <div className="flex items-center gap-1">
+                    <input
+                      aria-label="Product name"
+                      value={nameDraft}
+                      onChange={(e) => setNameDraft(e.target.value)}
+                      className="min-w-0 flex-1 rounded-md border border-ink/20 bg-white px-1.5 py-0.5 text-[15px] font-extrabold leading-tight text-brand-deep focus:border-brand focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      aria-label="Save name"
+                      disabled={busy || !nameDraft.trim() || nameDraft.trim() === p.name}
+                      onClick={saveName}
+                      className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-brand text-white disabled:opacity-30"
+                    >
+                      <Check size={13} />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="truncate text-[16px] font-extrabold leading-tight text-brand-deep">{p.name}</div>
+                )}
                 {p.cultivar && <div className="mt-0.5 truncate text-xs text-ink-muted">{p.cultivar}</div>}
                 {p.local_code_pzn && <div className="mt-0.5 text-[11px] text-ink/45">PZN{p.local_code_pzn}</div>}
               </div>
@@ -232,21 +328,13 @@ export function ProductCard({
           </div>
         </div>
 
-        {/* ---------- BACK (placeholder — Documents & Media is 07-04) ---------- */}
+        {/* ---------- BACK — Documents & Media (reusable MediaManager) ---------- */}
         <div
           className="absolute inset-0 flex flex-col overflow-hidden rounded-3xl bg-white shadow-lg ring-1 ring-white/60"
           style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)", pointerEvents: flipped ? undefined : "none" }}
         >
-          <div className="flex items-center gap-2 bg-gradient-to-br from-brand-deep to-brand px-3.5 py-3 text-white">
-            <div className="min-w-0">
-              <b className="block text-sm font-bold">Documents &amp; media</b>
-              <small className="block truncate text-[11px] opacity-85">{p.name}</small>
-            </div>
-          </div>
-          <div className="flex flex-1 items-center justify-center px-6 text-center text-xs text-ink-muted">
-            Media &amp; COA management arrives with the card back (07-04).
-          </div>
-          <div className="border-t border-ink/10 p-3">
+          <MediaManager product={p} companyId={companyId} editing={editing} onChanged={onChanged} />
+          <div className="shrink-0 border-t border-ink/10 p-3">
             <button
               type="button"
               onClick={() => setFlipped(false)}

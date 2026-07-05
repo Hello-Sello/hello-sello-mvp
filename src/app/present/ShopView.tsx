@@ -19,7 +19,7 @@ import type { Shop, ShopLink } from "@/modules/catalog";
 import { updateShopProfile } from "@/modules/catalog/manage";
 import { createClient } from "@/shared/db/client";
 import { AddProductsDrawer } from "./AddProductsDrawer";
-import { filterByLocation, groupByLocation } from "./locationFilter";
+import { filterByLocation, groupByLocation, UNASSIGNED } from "./locationFilter";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 // Cover/logo now live at a STABLE path (overwritten in place, never orphaned), so
@@ -72,10 +72,31 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
   // Active location tab. "All" shows every location group; a named location
   // re-contexts the grid to that one group.
   const [loc, setLoc] = useState("All");
+  // Client-only custom order of the location sections in edit mode (drag a header
+  // to reorder). Persisting a bespoke group order is Phase 16 (structured
+  // locations own ordering), so this stays ephemeral.
+  const [groupOrder, setGroupOrder] = useState<string[]>([]);
 
   // The location groups to render for the active tab (already square + 4-up
   // inside each LocationGroup). Grouping is pure — see ./locationFilter.
   const visibleGroups = groupByLocation(filterByLocation(products, loc));
+  const orderedGroups =
+    groupOrder.length === 0
+      ? visibleGroups
+      : [...visibleGroups].sort(
+          (a, b) =>
+            (groupOrder.indexOf(a.location) + 1 || 999) -
+            (groupOrder.indexOf(b.location) + 1 || 999),
+        );
+
+  function reorderGroups(from: string, to: string) {
+    const current = orderedGroups.map((g) => g.location);
+    const fromIdx = current.indexOf(from);
+    const toIdx = current.indexOf(to);
+    if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return;
+    current.splice(toIdx, 0, current.splice(fromIdx, 1)[0]);
+    setGroupOrder(current);
+  }
 
   return (
     <div className="flex h-full flex-col gap-3 overflow-auto pb-6">
@@ -114,8 +135,16 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
       ) : (
         <>
           <LocationTabs products={products} active={loc} onSelect={setLoc} />
-          {visibleGroups.map((g) => (
-            <LocationGroup key={g.location} location={g.location} count={g.products.length} editing={editing}>
+          {orderedGroups.map((g) => (
+            <LocationGroup
+              key={g.location}
+              location={g.location}
+              targetLocation={g.location === UNASSIGNED ? null : g.location}
+              count={g.products.length}
+              editing={editing}
+              onChanged={() => router.refresh()}
+              onReorder={reorderGroups}
+            >
               {g.products.map((p) => (
                 <ProductCard
                   key={p.id}
