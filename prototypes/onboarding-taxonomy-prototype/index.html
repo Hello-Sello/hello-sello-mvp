@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Onboarding taxonomy — prototype (DEV-99 #3)</title>
+<style>
+  /* ---- Hello Sello design tokens (src/app/globals.css, locked 2026-06-07) ---- */
+  :root {
+    --color-brand: #e30b5d;       /* raspberry */
+    --color-brand-soft: #ffb7d5;  /* cotton candy */
+    --color-brand-deep: #7a1638;  /* damson */
+    --color-ink: #1f2020;
+    --color-ink-muted: #6b6470;
+    --color-danger: #dc2626;
+    --bg-from: #ffffff;
+    --bg-to: #fff1f7;
+    --glass-bg: rgba(255,255,255,0.62);
+    --glass-border: rgba(255,255,255,0.65);
+    --glass-shadow: 0 10px 34px -12px color-mix(in srgb, var(--color-brand-deep) 18%, transparent);
+    --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    color: var(--color-ink); font-family: var(--font-sans);
+    background:
+      radial-gradient(60rem 60rem at 10% -12%, rgba(255,183,213,0.55), transparent 60%),
+      radial-gradient(46rem 46rem at 108% 6%, rgba(227,11,93,0.10), transparent 55%),
+      linear-gradient(160deg, var(--bg-from) 0%, var(--bg-to) 100%);
+    background-attachment: fixed; min-height: 100%; padding: 32px 16px 80px;
+  }
+  .wrap { max-width: 560px; margin: 0 auto; }
+  .proto-tag { text-align:center; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--color-ink-muted); margin-bottom:18px; }
+  .glass {
+    background: var(--glass-bg); -webkit-backdrop-filter: blur(20px) saturate(140%); backdrop-filter: blur(20px) saturate(140%);
+    border: 1px solid var(--glass-border); box-shadow: var(--glass-shadow); border-radius: 22px; padding: 26px 24px; margin-bottom: 22px;
+  }
+  h1 { font-size: 20px; margin: 0 0 2px; }
+  .sub { color: var(--color-ink-muted); font-size: 13px; margin: 0 0 20px; }
+  .step-dots { display:flex; gap:6px; justify-content:center; margin-bottom:20px; }
+  .step-dots i { width:7px; height:7px; border-radius:50%; background:var(--color-brand-soft); display:block; }
+  .step-dots i.on { background:var(--color-brand); }
+
+  label.block { display:flex; flex-direction:column; gap:6px; font-size:14px; margin-bottom:18px; }
+  .lab { color: var(--color-ink-muted); font-size:13px; }
+  .req { color: var(--color-brand); font-weight:700; }
+
+  /* ===== EXACT MVP `Field` input styling (AuthCard.tsx:74-100) ===== */
+  .mvp-input {
+    width:100%; border-radius:12px; border:1px solid rgba(31,32,32,.30); background:rgba(255,255,255,.90);
+    padding:8px 12px; font-size:14px; line-height:20px; color:var(--color-ink); outline:none; font-family:inherit;
+    transition:border-color .15s, box-shadow .15s;
+  }
+  .mvp-input:hover { border-color:rgba(31,32,32,.45); }
+  .mvp-input:focus, .mvp-input:focus-within { border-color:var(--color-brand); box-shadow:0 0 0 2px var(--color-brand-soft); }
+  select.mvp-input { appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236b6470' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 12px center; padding-right:36px; }
+
+  /* ===== dropdown multiselect (built on <details>) ===== */
+  .ms { position:relative; }
+  .ms > summary { list-style:none; cursor:pointer; display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .ms > summary::-webkit-details-marker { display:none; }
+  .ms-summary-text { color:var(--color-ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .ms-summary-text.placeholder { color:var(--color-ink-muted); }
+  .ms-caret { color:var(--color-ink-muted); transition:transform .15s; flex:0 0 auto; }
+  .ms[open] .ms-caret { transform:rotate(180deg); }
+  .ms[open] > summary { border-color:var(--color-brand); box-shadow:0 0 0 2px var(--color-brand-soft); }
+  .ms-panel {
+    position:absolute; z-index:20; left:0; right:0; top:calc(100% + 6px);
+    background:#fff; border:1px solid rgba(31,32,32,.14); border-radius:12px;
+    box-shadow:0 14px 30px -12px rgba(122,22,56,.28); padding:6px; max-height:360px; overflow-y:auto;
+  }
+  .ms-opt { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:9px; font-size:13.5px; cursor:pointer; }
+  .ms-opt:hover { background:color-mix(in srgb, var(--color-brand-soft) 30%, #fff); }
+  .ms-opt input { accent-color:var(--color-brand); width:16px; height:16px; }
+  .ms-opt.is-custom { border-top:1px dashed rgba(31,32,32,.16); margin-top:4px; padding-top:11px; }
+  .ms-opt.is-custom span { font-style:italic; color:var(--color-ink-muted); }
+  /* inline custom text row — lives INSIDE the panel, right under Custom */
+  .ms-custom-row { padding:2px 10px 8px 40px; }
+  .ms-custom-row[hidden] { display:none; }
+  .ms-custom-row input { padding:7px 11px; font-size:13.5px; }
+  /* form card must paint ABOVE the card below it (backdrop-filter stacking) */
+  #companyStep { position:relative; z-index:3; }
+  #pwdCard { position:relative; z-index:1; }
+
+  .field { margin-bottom:18px; }
+  .field.invalid summary { border-color:var(--color-danger); box-shadow:0 0 0 2px color-mix(in srgb,var(--color-danger) 30%,transparent); }
+  .err { color:var(--color-danger); font-size:12px; margin-top:6px; display:none; }
+  .field.invalid .err { display:block; }
+
+  .actions { display:flex; gap:10px; margin-top:8px; }
+  button.primary { flex:1; background:var(--color-brand); color:#fff; border:none; border-radius:12px; padding:11px 16px; font-size:14px; font-weight:600; cursor:pointer; font-family:inherit; transition:background .15s; }
+  button.primary:hover { background:var(--color-brand-deep); }
+  button.ghost { background:rgba(255,255,255,.70); border:1px solid rgba(31,32,32,.18); border-radius:12px; padding:11px 16px; font-size:14px; cursor:pointer; font-family:inherit; color:var(--color-ink); }
+  .ok-banner { display:none; align-items:center; gap:8px; background:color-mix(in srgb,#34b233 12%,#fff); border:1px solid color-mix(in srgb,#34b233 40%,transparent); color:#166534; border-radius:12px; padding:11px 14px; font-size:13px; margin-top:14px; }
+
+  /* ===== password field: MVP input + eye INSIDE the box ===== */
+  .pwd-wrap { position:relative; }
+  .pwd-wrap .mvp-input { padding-right:42px; }
+  .eye {
+    position:absolute; right:6px; top:50%; transform:translateY(-50%);
+    width:30px; height:30px; display:flex; align-items:center; justify-content:center;
+    border:none; background:transparent; cursor:pointer; border-radius:8px; color:var(--color-ink-muted); padding:0;
+  }
+  .eye:hover { background:rgba(227,11,93,.08); color:var(--color-brand); }
+  .eye:focus-visible { outline:2px solid var(--color-brand); outline-offset:1px; }
+  .eye svg { width:18px; height:18px; }
+  .caption { font-size:11.5px; color:var(--color-ink-muted); margin-top:6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="proto-tag">Prototype · DEV-99 #3 · throwaway · matches live theme</div>
+
+  <!-- ============ COMPANY STEP ============ -->
+  <form class="glass" id="companyStep" novalidate>
+    <div class="step-dots"><i></i><i class="on"></i><i></i><i></i></div>
+    <h1>Tell us about your company</h1>
+    <p class="sub">Step 2 of 4 · Company details</p>
+
+    <label class="block">
+      <span class="lab">Company name <span class="req">*</span></span>
+      <input type="text" class="mvp-input" value="Aurora Inc" />
+    </label>
+
+    <label class="block">
+      <span class="lab">Country <span class="req">*</span></span>
+      <select class="mvp-input"><option>Germany</option><option>Canada</option><option>Australia</option></select>
+    </label>
+
+    <!-- Level 1 : dropdown multiselect + inline Custom -->
+    <div class="field" data-group="category">
+      <span class="lab" style="display:block; margin-bottom:6px;">Business Category <span class="req">*</span></span>
+      <details class="ms" data-ms="category">
+        <summary class="mvp-input"><span class="ms-summary-text placeholder">Select business categories…</span><span class="ms-caret">▾</span></summary>
+        <div class="ms-panel" id="catPanel"></div>
+      </details>
+      <div class="err">Pick at least one Business Category (and name your custom one).</div>
+    </div>
+
+    <!-- Level 2 : dropdown multiselect -->
+    <div class="field" data-group="activity">
+      <span class="lab" style="display:block; margin-bottom:6px;">Business Activities <span class="req">*</span></span>
+      <details class="ms" data-ms="activity">
+        <summary class="mvp-input"><span class="ms-summary-text placeholder">Select business activities…</span><span class="ms-caret">▾</span></summary>
+        <div class="ms-panel" id="actPanel"></div>
+      </details>
+      <div class="err">Pick at least one Business Activity.</div>
+    </div>
+
+    <div class="actions">
+      <button type="button" class="ghost">Back</button>
+      <button type="submit" class="primary">Continue</button>
+    </div>
+    <div class="ok-banner" id="okBanner">✓ Valid — would save these tags and continue to licence upload.</div>
+  </form>
+
+  <!-- ============ PASSWORD FIELD (eye inside, MVP box) ============ -->
+  <div class="glass" id="pwdCard">
+    <h1 style="font-size:16px;">Show-password eye</h1>
+    <p class="sub" style="margin-bottom:16px;">Same MVP <code>Field</code> box — eye sits inside. Powers login / signup / reset.</p>
+    <label class="block" style="margin-bottom:4px;">
+      <span class="lab">Password</span>
+      <div class="pwd-wrap">
+        <input type="password" class="mvp-input" id="pwd" value="raspberry123" autocomplete="current-password" />
+        <button type="button" class="eye" id="eyeBtn" aria-label="Show password" aria-pressed="false" title="Show password"></button>
+      </div>
+    </label>
+    <div class="caption">Semantic <code>&lt;button&gt;</code> inside the field · stable <code>aria-label</code> + <code>aria-pressed</code> · keyboard operable.</div>
+  </div>
+</div>
+
+<script>
+  // 'Custom' is the last option in Business Category — code 'custom' + free-text label on the assignment row.
+  const CATEGORIES = ['Pharma','Food','FMCG / CPG','Automotive','Services','Custom'];
+  const ACTIVITIES = ['Pharmacy','Wholesaler','Importer','GACP Cultivator','EU-GMP Cultivator','TGA-GMP Cultivator','Manufacturer Pharma','Other'];
+  const selected = { category: new Set(), activity: new Set() };
+  const PLACEHOLDER = { category: 'Select business categories…', activity: 'Select business activities…' };
+  let customInput = null;     // the inline text box (built inside the category panel)
+  let customRow = null;       // its wrapper (hidden until Custom is ticked)
+
+  function buildPanel(panelId, items, kind) {
+    const panel = document.getElementById(panelId);
+    panel.innerHTML = '';
+    items.forEach(label => {
+      const row = document.createElement('label');
+      row.className = 'ms-opt' + (label === 'Custom' ? ' is-custom' : '');
+      const cb = document.createElement('input');
+      cb.type = 'checkbox'; cb.value = label;
+      const span = document.createElement('span');
+      span.textContent = label === 'Custom' ? 'Custom — add your own…' : label;
+      row.appendChild(cb); row.appendChild(span);
+      panel.appendChild(row);
+
+      // inline text box lives right under the Custom option, INSIDE the panel
+      if (kind === 'category' && label === 'Custom') {
+        customRow = document.createElement('div');
+        customRow.className = 'ms-custom-row';
+        customRow.hidden = true;
+        customInput = document.createElement('input');
+        customInput.type = 'text'; customInput.className = 'mvp-input';
+        customInput.placeholder = 'e.g. Cosmetics';
+        // clicks/typing here stay inside <details>, so the dropdown stays open
+        customInput.addEventListener('click', (e) => e.stopPropagation());
+        customInput.addEventListener('input', () => {
+          document.querySelector('[data-group="category"]').classList.remove('invalid');
+          updateSummary('category');
+        });
+        customRow.appendChild(customInput);
+        panel.appendChild(customRow);
+      }
+
+      cb.addEventListener('change', () => {
+        if (cb.checked) selected[kind].add(label); else selected[kind].delete(label);
+        document.querySelector(`[data-group="${kind}"]`).classList.remove('invalid');
+        if (kind === 'category' && label === 'Custom') {
+          customRow.hidden = !cb.checked;
+          if (cb.checked) setTimeout(() => customInput.focus(), 0);
+        }
+        updateSummary(kind);
+      });
+    });
+  }
+  function updateSummary(kind) {
+    const el = document.querySelector(`[data-ms="${kind}"] .ms-summary-text`);
+    const arr = [...selected[kind]].map(v => {
+      if (kind === 'category' && v === 'Custom') {
+        const t = (customInput && customInput.value.trim()) || '';
+        return t ? `“${t}”` : 'Custom…';
+      }
+      return v;
+    });
+    if (arr.length) { el.textContent = arr.join(', '); el.classList.remove('placeholder'); }
+    else { el.textContent = PLACEHOLDER[kind]; el.classList.add('placeholder'); }
+  }
+  buildPanel('catPanel', CATEGORIES, 'category');
+  buildPanel('actPanel', ACTIVITIES, 'activity');
+
+  document.addEventListener('click', (e) => {
+    document.querySelectorAll('details.ms[open]').forEach(d => { if (!d.contains(e.target)) d.removeAttribute('open'); });
+  });
+
+  document.getElementById('companyStep').addEventListener('submit', (e) => {
+    e.preventDefault();
+    let ok = true;
+    const catBad = selected.category.size === 0 ||
+                   (selected.category.has('Custom') && (!customInput || customInput.value.trim() === ''));
+    document.querySelector('[data-group="category"]').classList.toggle('invalid', catBad);
+    if (catBad) ok = false;
+    const actBad = selected.activity.size === 0;
+    document.querySelector('[data-group="activity"]').classList.toggle('invalid', actBad);
+    if (actBad) ok = false;
+    document.getElementById('okBanner').style.display = ok ? 'flex' : 'none';
+  });
+
+  // show-password eye (inside the box)
+  const EYE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>';
+  const EYE_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.9 4.24A9.1 9.1 0 0 1 12 4c6.5 0 10 7 10 7a13.2 13.2 0 0 1-1.67 2.68"/><path d="M6.6 6.6C3.6 8.3 2 12 2 12s3.5 7 10 7a9.1 9.1 0 0 0 3.4-.66"/><path d="m2 2 20 20"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>';
+  const pwd = document.getElementById('pwd'), eye = document.getElementById('eyeBtn');
+  eye.innerHTML = EYE;
+  eye.addEventListener('click', () => {
+    const show = pwd.type === 'password';
+    pwd.type = show ? 'text' : 'password';
+    eye.setAttribute('aria-pressed', String(show));
+    eye.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+    eye.setAttribute('title', show ? 'Hide password' : 'Show password');
+    eye.innerHTML = show ? EYE_OFF : EYE;
+  });
+</script>
+</body>
+</html>

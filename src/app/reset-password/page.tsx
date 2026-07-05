@@ -3,7 +3,8 @@
 import { useActionState } from 'react'
 import { setNewPassword } from './actions'
 import type { AuthState } from '@/app/(auth)/actions'
-import { AuthCard, Field } from '@/app/(auth)/AuthCard'
+import { AuthCard } from '@/app/(auth)/AuthCard'
+import { PasswordField } from '@/app/(auth)/PasswordField'
 
 const initial: AuthState = {}
 
@@ -16,10 +17,9 @@ export default function ResetPasswordPage() {
   return (
     <AuthCard title="Set a new password" subtitle="Choose a new password for your account">
       <form action={action} className="flex flex-col gap-3">
-        <Field
+        <PasswordField
           label="New password"
           name="password"
-          type="password"
           autoComplete="new-password"
         />
         {state.error && <p className="text-sm text-danger">{state.error}</p>}

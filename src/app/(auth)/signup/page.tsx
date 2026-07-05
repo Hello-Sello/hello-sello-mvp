@@ -4,6 +4,7 @@ import { useActionState } from 'react'
 import Link from 'next/link'
 import { signUp, type AuthState } from '../actions'
 import { AuthCard, Field, OrDivider } from '../AuthCard'
+import { PasswordField } from '../PasswordField'
 import { SocialButtons } from '../SocialButtons'
 
 const initial: AuthState = {}
@@ -32,10 +33,9 @@ export default function SignupPage() {
       <form action={action} className="flex flex-col gap-3">
         <Field label="Full name" name="full_name" autoComplete="name" />
         <Field label="Email" name="email" type="email" autoComplete="email" />
-        <Field
+        <PasswordField
           label="Password"
           name="password"
-          type="password"
           autoComplete="new-password"
         />
         {state.error && <p className="text-sm text-danger">{state.error}</p>}
