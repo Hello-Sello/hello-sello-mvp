@@ -56,3 +56,63 @@ is a real build but not on the June-11 demo path.
 ## Known follow-ups (additive, out of v0 scope)
 - **Audit gap:** onboarding writes (company/group create) are NOT audited — foundation seeds no `company.created`/`group.created` action code, and no content-type for license/type-assignment rows. Add seeds + `writeAudit` (or a DB trigger on `company` INSERT) later.
 - **Cut from scope (per lock):** split-gate enforcement across surfaces · `/admin/verifications` · Path B.
+
+---
+
+## DEV-99 #3 — Two-level business taxonomy (design 2026-07-03)
+**Status:** 📐 designed (brainstormed w/ Muskan) · replaces flat `company_type` single-level select
+
+### Decision summary
+- Two **independent**, both-multi-select levels: **Business Category** (sector) + **Business Activities** (supply-chain role). Independent (not nested) so the platform can expand past cannabis to Food/Automotive/etc. without re-modelling.
+- **Both required** at onboarding (≥1 each). "Other" activity is the escape hatch.
+- Schema shape = **two separate lookup tables** (research-backed — avoids the OTLT/"one true lookup table" anti-pattern; each level gets DB-enforced domain integrity). Sources: ITPro Today + TDAN lookup-table articles.
+- **Custom category** (prototype iteration 2026-07-03): Business Category includes a `custom` option → user types a free-text label stored **on the assignment row** (`custom_label`), required when `custom` is picked. Lookup stays clean; the text is private per-company (no shared-table pollution / dedup / moderation). ⚠️ **Extends beyond Marcel's fixed 5 categories — flag to Marcel on DEV-99.**
+- **UI decided via prototype** (`prototypes/onboarding-taxonomy-prototype/`): **dropdown multiselects** (not chips), MVP `Field` styling, Custom reveals an **inline** free-text box *inside* the panel (no closing to type). Validate **on submit**.
+
+### Taxonomy (Marcel, DEV-99 #3 — source of truth)
+- **Category (5):** Pharma · Food · FMCG/CPG · Automotive · Services
+- **Activity (8):** Pharmacy · Wholesaler · Importer · GACP Cultivator · EU-GMP Cultivator · TGA-GMP Cultivator · Manufacturer Pharma · Other
+
+### Schema
+- **Reuse** `company_type` (= Activity) + `company_type_assignment` — grow rows 4→8. No rename.
+- **NEW** `business_category` lookup + `company_business_category` junction — mirror the existing pair exactly (soft-delete, unique-active index, same RLS: public lookup read via the lookup-read loop; assignment insert requires `company_id = current_company_id()` → copy the `cta_all` policy verbatim as `cbc_all`).
+- `business_category` seeds **6 rows**: pharma, food, fmcg_cpg, automotive, services, **custom**.
+- `company_business_category` adds a nullable `custom_label TEXT` column — free-text for the `custom` code. **CHECK**: `custom_label` non-null/non-empty **iff** `business_category_code = 'custom'` (define the invalid state out of existence).
+
+### Data migration (rule-based, idempotent) — new stamp `20260703…` (avoid Ayush collision)
+1. Add 5 new activity codes; keep wholesaler/importer/pharmacy.
+2. Re-point `cultivator` assignments → `eu_gmp_cultivator`, then drop `cultivator` lookup row.
+3. Insert 6 category rows (incl. `custom`).
+4. Backfill every company that has an activity with a **Pharma** category.
+5. Update `seed.sql` to new codes.
+
+### RPC
+- `onboard_company` gains `p_category_codes text[]` (looped like `p_type_codes`, same tx + ordering trap) **and** `p_custom_category text default null` (the `custom` row's label). Guards ≥1 of each; if `'custom'` in categories, require non-empty `p_custom_category`. Re-emit the **full latest body** (`create or replace`; latest lives in `…phase12_pathb_followups.sql`).
+
+### UI (`OnboardingStepper.tsx`) — decided in prototype
+- Company step gains **two dropdown-multiselects** (built on `<details>` + checkboxes, MVP `Field` styling): Business Category + Business Activities. Both required, validate **on submit**.
+- **Custom** is the last Category option; ticking it reveals an **inline** free-text input *inside the panel* (typing keeps the dropdown open). Its value → `custom_label`.
+- Two state sets + custom-label state. Server `page.tsx` fetches both lookups (`.from('business_category')…`) and passes them. `actions.ts`: `formData.getAll('category_codes')` + `custom_category` → RPC args. New small reusable **`MultiSelect`** control.
+
+### Testing (TDD)
+- Migration probe: cultivator remapped, no orphan FK, category backfill, `custom_label` CHECK rejects bad states.
+- RPC test: categories + custom_label persist; ≥1-each + custom-needs-label guards fire.
+- UI test (`renderToStaticMarkup`): both dropdowns render; submit validation blocks empties.
+
+### Task checklist
+- [x] Ayush sync check — idle, no locks (2026-07-03). Persist-time lock still TODO (worktree/parallel-session; do from the branch that owns `claude/muskan/work`).
+- [x] Prototype the onboarding UI (`prototypes/onboarding-taxonomy-prototype/`) — dropdowns + inline custom + eye-in-box
+- [x] Migration `20260704090000_business_category_taxonomy.sql` — TDD red→green, **verified in a rolled-back txn** (non-destructive). Bug caught by test: untyped `NULL::uuid`.
+- [x] Extend `onboard_company` RPC (categories + custom_label) — dropped old 3-arg, added 5-arg; TDD red→green (rolled back).
+- [ ] Regenerate `database.types.ts` (after persistent apply)
+- [ ] `MultiSelect` control + rework `OnboardingStepper.tsx` company step — Vitest (no Docker)
+- [ ] `page.tsx` fetch `business_category` + `actions.ts` pass category_codes/custom_category
+- [x] `PasswordField` (eye) → login/signup/reset — TDD green (2/2), typecheck + lint clean. Stable `aria-label` + `aria-pressed` (a11y).
+- [ ] Update `seed.sql` to new codes (required for `db reset` to stay green)
+- [ ] Persistent apply (`supabase migration up`) + cloud ledger — deferred, coordinate sessions
+- [ ] Flag "added Custom beyond Marcel's 5" on DEV-99
+
+**Verified SQL tests:** `supabase/tests/business_category_taxonomy_test.sql` + `onboard_company_categories_test.sql` (+ runners). Green when run over the applied migration; today proven via `BEGIN … ROLLBACK`.
+
+### Separate (belongs to 1b-auth-screens): show-password eye
+- Reusable client `PasswordField` = MVP `Field` box + eye **inside** on the right. Semantic `<button>`, stable `aria-label` (Show/Hide) + `aria-pressed`, keyboard-operable. `Field` (`AuthCard.tsx`) is currently stateless/server-safe → extract a client variant. Icons from `lucide-react` (already a dep). Drop into login / signup / reset-password.
