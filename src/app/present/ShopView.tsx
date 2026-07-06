@@ -274,7 +274,7 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
         onPickCover={(f) => { setCoverFile(f); setDirty(true); }}
         onAddProducts={() => setDrawerOpen(true)}
         onManage={enterEdit}
-        onEditBranding={() => setBrandingOpen((v) => !v)}
+        onEditLogo={() => setBrandingOpen((v) => !v)}
         onPresent={enterPresent}
       />
 
@@ -285,8 +285,8 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
         onEdit={updateEdit}
       />
 
-      {/* Logo & branding — the shared one-writer form (D-07), opened from the
-          banner's "Edit logo & branding" in edit mode. */}
+      {/* Logo & branding — the shared one-writer form (D-07), opened by clicking
+          the inline logo tile in edit mode (F-01; no separate branding button). */}
       {editing && brandingOpen && companyProfile && (
         <div className="glass rounded-3xl p-5">
           <h3 className="mb-4 text-sm font-bold text-ink">Logo &amp; branding</h3>
@@ -375,8 +375,18 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
     );
   }
 
+  // The whole-page edit context (F-01): `data-edit` drives a calm grey wash over
+  // the entire surface while editing — a background tint only (no image filters),
+  // so scroll stays smooth. `dirty`/`save()`/`discard()` remain the single spine
+  // F-02 extends its inline field edits into.
   return (
-    <div className="flex h-full flex-col gap-3 overflow-auto pb-6">
+    <div
+      data-testid="shop-surface"
+      data-edit={editing ? "on" : "off"}
+      className={`flex h-full flex-col gap-2.5 overflow-auto pb-6 transition-colors ${
+        editing ? "rounded-2xl bg-ink/[0.045]" : ""
+      }`}
+    >
       {surface}
     </div>
   );

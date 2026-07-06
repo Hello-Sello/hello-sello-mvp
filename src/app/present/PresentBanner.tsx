@@ -2,21 +2,25 @@
 
 /**
  * The MVP shop banner (D-05). A LinkedIn-proportion 4:1 cover carrying the logo
- * tile + enlarged company name (h1) and sub-headline (tagline), with the two
- * banner-mounted owner controls "+Add products" and "Manage shop".
+ * tile + enlarged company name (h1) and sub-headline (tagline), with the
+ * banner-mounted owner controls "+Add products", "Manage shop" and "Present mode"
+ * shown ONLY when not editing.
  *
- * In edit mode the name/tagline become in-place editable (calm grey ring + wash,
- * no image filters), "Change banner" uploads a new cover (client-direct →
- * cover_path), and "Edit logo & branding" opens the shared BrandingEditForm —
- * the ONE writer for the company logo (D-07 / D-REUSE-4). This component never
- * writes the logo itself.
+ * Unified edit model (F-01): "Manage shop" is the single edit entry — pink stays
+ * reserved for the Save bar, so this is a calm white system button. In edit mode
+ * the whole page enters a grey wash (owned by ShopView), the banner controls row
+ * collapses, the name/tagline become in-place editable, "Change banner" uploads a
+ * new cover (client-direct → cover_path), and the LOGO TILE ITSELF becomes the
+ * inline edit affordance — clicking it opens the shared BrandingEditForm, the ONE
+ * writer for the company logo (D-07 / D-REUSE-4). There is no longer a separate
+ * "Edit logo & branding" button, and this component never writes the logo itself.
  *
  * DEV-117: the prototype's old full-width location strip element is intentionally
  * dropped here (not carried over).
  */
 import { useRef } from "react";
 import Link from "next/link";
-import { Plus, Pencil, ImagePlus, Sparkles, ScreenShare } from "lucide-react";
+import { Plus, Pencil, ImagePlus, ScreenShare } from "lucide-react";
 
 export function PresentBanner({
   companyName,
@@ -31,7 +35,7 @@ export function PresentBanner({
   onPickCover,
   onAddProducts,
   onManage,
-  onEditBranding,
+  onEditLogo,
   onPresent,
 }: {
   companyName: string;
@@ -46,16 +50,18 @@ export function PresentBanner({
   onPickCover: (f: File) => void;
   onAddProducts: () => void;
   onManage: () => void;
-  onEditBranding: () => void;
+  onEditLogo: () => void;
   onPresent: () => void;
 }) {
   return (
-    <section data-testid="present-banner" className="flex flex-col gap-3">
-      {/* Banner-mounted owner controls. "+Add products" always; "Manage shop"
-          enters edit mode (the sticky SaveBar then owns Save/Exit); "Present mode"
-          hides the app chrome (07-06 — an in-app view, not the OS Fullscreen API).
-          The whole row is hidden WHILE presenting so the shared window stays clean. */}
-      {!presenting && (
+    <section data-testid="present-banner" className="flex flex-col gap-2">
+      {/* Banner-mounted owner controls, shown ONLY when not editing/presenting.
+          "+Add products" opens the manual-add drawer; "Manage shop" is the single
+          edit entry (the sticky SaveBar then owns Save/Exit); "Present mode" hides
+          the app chrome (07-06 — an in-app view, not the OS Fullscreen API). In
+          edit mode the row collapses: Save/Exit live in the pink SaveBar, the logo
+          is edited inline, and products are added via the in-grid "+ Add product". */}
+      {!presenting && !editing && (
         <div className="flex items-center justify-end gap-2">
           <button
             type="button"
@@ -64,33 +70,21 @@ export function PresentBanner({
           >
             <Plus size={16} /> Add products
           </button>
-          {editing ? (
-            <button
-              type="button"
-              onClick={onEditBranding}
-              className="flex items-center gap-1.5 rounded-full bg-white/70 px-4 py-2 text-sm font-bold text-ink/75 shadow-sm hover:bg-white"
-            >
-              <Sparkles size={16} /> Edit logo &amp; branding
-            </button>
-          ) : (
-            <>
-              <button
-                type="button"
-                onClick={onManage}
-                className="flex items-center gap-1.5 rounded-full bg-white/70 px-4 py-2 text-sm font-bold text-ink/75 shadow-sm hover:bg-white"
-              >
-                <Pencil size={16} /> Manage shop
-              </button>
-              <button
-                type="button"
-                onClick={onPresent}
-                title="Present mode — hides the app chrome so you can share this window in a meeting"
-                className="flex items-center gap-1.5 rounded-full bg-white/70 px-4 py-2 text-sm font-bold text-ink/75 shadow-sm hover:bg-white"
-              >
-                <ScreenShare size={16} /> Present mode
-              </button>
-            </>
-          )}
+          <button
+            type="button"
+            onClick={onManage}
+            className="flex items-center gap-1.5 rounded-full bg-white/70 px-4 py-2 text-sm font-bold text-ink/75 shadow-sm hover:bg-white"
+          >
+            <Pencil size={16} /> Manage shop
+          </button>
+          <button
+            type="button"
+            onClick={onPresent}
+            title="Present mode — hides the app chrome so you can share this window in a meeting"
+            className="flex items-center gap-1.5 rounded-full bg-white/70 px-4 py-2 text-sm font-bold text-ink/75 shadow-sm hover:bg-white"
+          >
+            <ScreenShare size={16} /> Present mode
+          </button>
         </div>
       )}
 
@@ -112,7 +106,11 @@ export function PresentBanner({
               Present page (DEV-127 / UX-06). */}
           {editing ? (
             <>
-              <LogoTile logoUrl={logoUrl} companyName={companyName} />
+              <EditableLogoTile
+                logoUrl={logoUrl}
+                companyName={companyName}
+                onEditLogo={onEditLogo}
+              />
               <div className="min-w-0 flex-1">
                 <input
                   aria-label="Company name"
@@ -146,6 +144,36 @@ export function PresentBanner({
         </div>
       </div>
     </section>
+  );
+}
+
+/** Edit-mode wrapper turning the logo tile itself into the inline edit affordance
+ *  (F-01, replaces the retired "Edit logo & branding" button). Clicking it opens
+ *  the shared BrandingEditForm — the ONE logo writer (D-07); this never writes the
+ *  logo. A hover cue signals it is editable. */
+function EditableLogoTile({
+  logoUrl,
+  companyName,
+  onEditLogo,
+}: {
+  logoUrl: string | null;
+  companyName: string;
+  onEditLogo: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      data-testid="edit-logo-btn"
+      onClick={onEditLogo}
+      title="Edit logo & branding"
+      className="group relative flex-none rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+    >
+      <LogoTile logoUrl={logoUrl} companyName={companyName} />
+      {/* subtle hover cue that the tile is the inline edit control */}
+      <span className="absolute inset-0 flex flex-col items-center justify-center gap-0.5 rounded-2xl bg-ink/50 text-[10px] font-bold text-white opacity-0 transition group-hover:opacity-100">
+        <ImagePlus size={16} /> Edit
+      </span>
+    </button>
   );
 }
 
