@@ -609,9 +609,8 @@ const initialState = () => ({
     { id: 3, name: 'Aurora 20/1 · Pink Kush',          batch: '25-034', size: 250,  units: 4, price: 3.50 },
   ],
   /* extra conditions — SELLER-only edit; blank ones never render for the buyer */
+  /* extra conditions = ONLY: payment terms, deal expiry, delivery, discounts, bundle deals */
   cond: {
-    quality: 'GMP · CoA per batch',
-    logistics: 'DDP · 2–8°C temp-controlled',
     payment: '14 days net · 2% Skonto 7d',
     expiry: '',
     freeDelivery: false,
@@ -1006,7 +1005,7 @@ function renderConds() {
   const c = S.cond;
   const E = S.edit && role === 'seller';
   const card = (label, val) => `<div class="condcard"><div class="plabel">${label}</div><div class="tval">${val}</div></div>`;
-  const cards = [card('Quality', esc(c.quality)), card('Logistics', esc(c.logistics))];
+  const cards = [];
   cards.push(card('Payment', E
     ? `<select onchange="condSet('payment', this.value)">${PAY_OPTS.map(o => `<option ${o === c.payment ? 'selected' : ''}>${o}</option>`).join('')}</select>`
     : esc(c.payment)));
