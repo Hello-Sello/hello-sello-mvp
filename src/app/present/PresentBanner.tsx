@@ -15,13 +15,15 @@
  * dropped here (not carried over).
  */
 import { useRef } from "react";
-import { Plus, Pencil, ImagePlus, Sparkles } from "lucide-react";
+import Link from "next/link";
+import { Plus, Pencil, ImagePlus, Sparkles, ScreenShare } from "lucide-react";
 
 export function PresentBanner({
   companyName,
   coverUrl,
   logoUrl,
   editing,
+  presenting,
   name,
   tagline,
   onNameChange,
@@ -30,11 +32,13 @@ export function PresentBanner({
   onAddProducts,
   onManage,
   onEditBranding,
+  onPresent,
 }: {
   companyName: string;
   coverUrl: string | null;
   logoUrl: string | null;
   editing: boolean;
+  presenting: boolean;
   name: string;
   tagline: string;
   onNameChange: (v: string) => void;
@@ -43,37 +47,52 @@ export function PresentBanner({
   onAddProducts: () => void;
   onManage: () => void;
   onEditBranding: () => void;
+  onPresent: () => void;
 }) {
   return (
     <section data-testid="present-banner" className="flex flex-col gap-3">
       {/* Banner-mounted owner controls. "+Add products" always; "Manage shop"
-          enters edit mode (the sticky SaveBar then owns Save/Exit). */}
-      <div className="flex items-center justify-end gap-2">
-        <button
-          type="button"
-          onClick={onAddProducts}
-          className="flex items-center gap-1.5 rounded-full bg-brand px-4 py-2 text-sm font-bold text-white hover:bg-brand-deep"
-        >
-          <Plus size={16} /> Add products
-        </button>
-        {editing ? (
+          enters edit mode (the sticky SaveBar then owns Save/Exit); "Present mode"
+          hides the app chrome (07-06 — an in-app view, not the OS Fullscreen API).
+          The whole row is hidden WHILE presenting so the shared window stays clean. */}
+      {!presenting && (
+        <div className="flex items-center justify-end gap-2">
           <button
             type="button"
-            onClick={onEditBranding}
-            className="flex items-center gap-1.5 rounded-full bg-white/70 px-4 py-2 text-sm font-bold text-ink/75 shadow-sm hover:bg-white"
+            onClick={onAddProducts}
+            className="flex items-center gap-1.5 rounded-full bg-brand px-4 py-2 text-sm font-bold text-white hover:bg-brand-deep"
           >
-            <Sparkles size={16} /> Edit logo &amp; branding
+            <Plus size={16} /> Add products
           </button>
-        ) : (
-          <button
-            type="button"
-            onClick={onManage}
-            className="flex items-center gap-1.5 rounded-full bg-white/70 px-4 py-2 text-sm font-bold text-ink/75 shadow-sm hover:bg-white"
-          >
-            <Pencil size={16} /> Manage shop
-          </button>
-        )}
-      </div>
+          {editing ? (
+            <button
+              type="button"
+              onClick={onEditBranding}
+              className="flex items-center gap-1.5 rounded-full bg-white/70 px-4 py-2 text-sm font-bold text-ink/75 shadow-sm hover:bg-white"
+            >
+              <Sparkles size={16} /> Edit logo &amp; branding
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={onManage}
+                className="flex items-center gap-1.5 rounded-full bg-white/70 px-4 py-2 text-sm font-bold text-ink/75 shadow-sm hover:bg-white"
+              >
+                <Pencil size={16} /> Manage shop
+              </button>
+              <button
+                type="button"
+                onClick={onPresent}
+                title="Present mode — hides the app chrome so you can share this window in a meeting"
+                className="flex items-center gap-1.5 rounded-full bg-white/70 px-4 py-2 text-sm font-bold text-ink/75 shadow-sm hover:bg-white"
+              >
+                <ScreenShare size={16} /> Present mode
+              </button>
+            </>
+          )}
+        </div>
+      )}
 
       {/* LinkedIn 4:1 cover (DEV-118). aspect-[4/1] holds the ratio at any width. */}
       <div className="relative aspect-[4/1] w-full overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-950 via-green-800 to-lime-700 shadow-lg">
@@ -87,42 +106,61 @@ export function PresentBanner({
         {editing && <ChangeBanner onPick={onPickCover} />}
 
         <div className="absolute inset-x-6 bottom-5 z-10 flex items-end gap-4 text-white">
-          <div className="grid h-[70px] w-[70px] flex-none place-items-center rounded-2xl border border-white/35 bg-white/15 text-3xl backdrop-blur-sm">
-            {logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={logoUrl} alt={companyName} className="h-full w-full rounded-2xl object-cover" />
-            ) : (
-              <span>❀</span>
-            )}
-          </div>
-          <div className="min-w-0 flex-1">
-            {/* Enlarged company name + sub-headline (DEV-115). In edit mode both
-                are in-place editable inputs with a calm ring + wash. */}
-            {editing ? (
-              <input
-                aria-label="Company name"
-                value={name}
-                onChange={(e) => onNameChange(e.target.value)}
-                className="w-full rounded-lg bg-white/15 px-2 py-0.5 text-3xl font-bold tracking-tight text-white shadow-[inset_0_0_0_1.5px_rgba(255,255,255,0.5)] outline-none focus:bg-white/25"
-              />
-            ) : (
-              <h1 className="truncate text-3xl font-bold tracking-tight drop-shadow-lg">{name}</h1>
-            )}
-            {editing ? (
-              <input
-                aria-label="Sub-headline"
-                value={tagline}
-                placeholder="Add a sub-headline…"
-                onChange={(e) => onTaglineChange(e.target.value)}
-                className="mt-1.5 w-full rounded-lg bg-white/15 px-2 py-0.5 text-base font-medium text-white shadow-[inset_0_0_0_1.5px_rgba(255,255,255,0.5)] outline-none placeholder:text-white/50 focus:bg-white/25"
-              />
-            ) : (
-              tagline && <p className="mt-1 truncate text-base font-medium opacity-95">{tagline}</p>
-            )}
-          </div>
+          {/* Enlarged company name + sub-headline (DEV-115). In edit mode both
+              are in-place editable inputs with a calm ring + wash. Otherwise the
+              logo + name form a clickable "company chip" that opens your own
+              Present page (DEV-127 / UX-06). */}
+          {editing ? (
+            <>
+              <LogoTile logoUrl={logoUrl} companyName={companyName} />
+              <div className="min-w-0 flex-1">
+                <input
+                  aria-label="Company name"
+                  value={name}
+                  onChange={(e) => onNameChange(e.target.value)}
+                  className="w-full rounded-lg bg-white/15 px-2 py-0.5 text-3xl font-bold tracking-tight text-white shadow-[inset_0_0_0_1.5px_rgba(255,255,255,0.5)] outline-none focus:bg-white/25"
+                />
+                <input
+                  aria-label="Sub-headline"
+                  value={tagline}
+                  placeholder="Add a sub-headline…"
+                  onChange={(e) => onTaglineChange(e.target.value)}
+                  className="mt-1.5 w-full rounded-lg bg-white/15 px-2 py-0.5 text-base font-medium text-white shadow-[inset_0_0_0_1.5px_rgba(255,255,255,0.5)] outline-none placeholder:text-white/50 focus:bg-white/25"
+                />
+              </div>
+            </>
+          ) : (
+            <Link
+              href="/present"
+              data-testid="company-chip"
+              title="Your company → your Present shop"
+              className="flex min-w-0 flex-1 items-end gap-4 rounded-2xl outline-none transition hover:opacity-95 focus-visible:ring-2 focus-visible:ring-white/70"
+            >
+              <LogoTile logoUrl={logoUrl} companyName={companyName} />
+              <div className="min-w-0">
+                <h1 className="truncate text-3xl font-bold tracking-tight drop-shadow-lg">{name}</h1>
+                {tagline && <p className="mt-1 truncate text-base font-medium opacity-95">{tagline}</p>}
+              </div>
+            </Link>
+          )}
         </div>
       </div>
     </section>
+  );
+}
+
+/** The square logo tile shown at the banner's lower-left. Reused by the editable
+ *  and the chip (link) variants so the two stay pixel-identical. */
+function LogoTile({ logoUrl, companyName }: { logoUrl: string | null; companyName: string }) {
+  return (
+    <div className="grid h-[70px] w-[70px] flex-none place-items-center rounded-2xl border border-white/35 bg-white/15 text-3xl backdrop-blur-sm">
+      {logoUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={logoUrl} alt={companyName} className="h-full w-full rounded-2xl object-cover" />
+      ) : (
+        <span>❀</span>
+      )}
+    </div>
   );
 }
 

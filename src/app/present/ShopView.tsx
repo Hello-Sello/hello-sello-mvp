@@ -17,10 +17,10 @@
  * Save round-trips the existing links/address/website untouched so they are never
  * wiped by the full-replace updateShopProfile action.
  */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Link2, UploadCloud, Plus, FileSpreadsheet, Globe, MapPin, ChevronDown,
+  Link2, UploadCloud, Plus, FileSpreadsheet, Globe, MapPin, ChevronDown, X,
 } from "lucide-react";
 import { ProductCard, LocationGroup } from "@/modules/catalog";
 import type { Shop, ShopLink } from "@/modules/catalog";
@@ -46,6 +46,17 @@ const mediaUrl = (path: string, version?: string | null) =>
 // checks here just give a friendly message before we attempt the upload.
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10 MB — matches the bucket limit
 const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
+
+// Present mode (D-07) renders the shop inside a self-contained full-window layer
+// that COVERS the app chrome (IconRail + TopBar) — an in-app view that stays
+// Zoom/Teams-shareable, NOT the OS Fullscreen API (which cuts off). Because the
+// layer is opaque it must paint the same background as <body> to hide the chrome
+// behind it; this mirrors the body rule in globals.css so no shared-file edit is
+// needed (the plan's preferred self-contained approach).
+const PAGE_BG =
+  "radial-gradient(60rem 60rem at 10% -12%, rgba(255,183,213,0.55), transparent 60%)," +
+  "radial-gradient(46rem 46rem at 108% 6%, rgba(227,11,93,0.10), transparent 55%)," +
+  "linear-gradient(160deg, var(--bg-from) 0%, var(--bg-to) 100%)";
 
 const TAG_LABEL: Record<string, string> = {
   wholesaler: "Wholesaler",
@@ -101,6 +112,9 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
   const [editing, setEditing] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [brandingOpen, setBrandingOpen] = useState(false);
+  // Present mode (D-07): an in-app UI state that hides the app chrome. NEVER the
+  // OS Fullscreen API (no requestFullscreen anywhere in this surface).
+  const [presenting, setPresenting] = useState(false);
 
   // In-place edit state (D-03). `edits` holds the live field values; `dirty` drives
   // the SaveBar pulse; `coverFile` is a picked-but-not-yet-uploaded banner image.
@@ -139,6 +153,29 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
     setCoverFile(null);
     setError(null);
   }
+
+  // Present mode never carries edit mode (prototype: setPresent → setEdit(false)),
+  // so entering it drops any in-progress edit without prompting — it is a view
+  // toggle, not a destructive action, and the SaveBar only renders while editing.
+  function enterPresent() {
+    setEditing(false);
+    setBrandingOpen(false);
+    setDirty(false);
+    setCoverFile(null);
+    setError(null);
+    setPresenting(true);
+  }
+
+  // ESC leaves present mode (matches the prototype + the Exit control). The
+  // listener is attached only while presenting so it never shadows other ESC use.
+  useEffect(() => {
+    if (!presenting) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPresenting(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [presenting]);
 
   // Client-direct cover upload to a STABLE path (upsert → no orphan); the action
   // records only the path string. Mirrors the retired ProfileEditor.uploadCover.
@@ -215,10 +252,11 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
     setGroupOrder(current);
   }
 
-  return (
-    <div className="flex h-full flex-col gap-3 overflow-auto pb-6">
+  const surface = (
+    <>
       {/* Sticky pulsing Save appears only while editing; "Manage shop" / "+Add
-          products" live in the banner below. */}
+          products" / "Present mode" live in the banner below. (Never both edit
+          and present at once — enterPresent() clears edit mode.) */}
       {editing && (
         <SaveBar dirty={dirty} busy={busy} error={error} onSave={save} onDiscard={discard} />
       )}
@@ -228,6 +266,7 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
         coverUrl={coverUrl}
         logoUrl={logoUrl}
         editing={editing}
+        presenting={presenting}
         name={editing ? edits.name : company.name}
         tagline={editing ? edits.tagline : company.tagline ?? ""}
         onNameChange={(v) => updateEdit("name", v)}
@@ -236,6 +275,7 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
         onAddProducts={() => setDrawerOpen(true)}
         onManage={enterEdit}
         onEditBranding={() => setBrandingOpen((v) => !v)}
+        onPresent={enterPresent}
       />
 
       <ShopInfoRow
@@ -292,6 +332,52 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
         onClose={() => setDrawerOpen(false)}
         onImported={() => { setDrawerOpen(false); router.refresh(); }}
       />
+    </>
+  );
+
+  // Present mode wraps the same surface in a fixed full-window layer that covers
+  // the app chrome (below drawers/modals at z-50). An Exit control + ESC restore
+  // normal chrome. The fade-in is gated behind prefers-reduced-motion.
+  if (presenting) {
+    return (
+      <div
+        data-testid="present-layer"
+        className="present-layer fixed inset-0 z-40 overflow-auto"
+        style={{ background: PAGE_BG }}
+      >
+        <style jsx>{`
+          @media (prefers-reduced-motion: no-preference) {
+            .present-layer {
+              animation: presentIn 0.18s ease-out both;
+            }
+          }
+          @keyframes presentIn {
+            from {
+              opacity: 0;
+            }
+            to {
+              opacity: 1;
+            }
+          }
+        `}</style>
+        <button
+          type="button"
+          data-testid="exit-present"
+          onClick={() => setPresenting(false)}
+          className="fixed right-4 top-4 z-50 flex items-center gap-1.5 rounded-full bg-brand px-4 py-2 text-sm font-bold text-white shadow-lg hover:bg-brand-deep"
+        >
+          <X size={16} /> Exit present
+        </button>
+        <div className="mx-auto flex max-w-[1400px] flex-col gap-3 px-6 py-6 sm:px-8">
+          {surface}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-full flex-col gap-3 overflow-auto pb-6">
+      {surface}
     </div>
   );
 }
