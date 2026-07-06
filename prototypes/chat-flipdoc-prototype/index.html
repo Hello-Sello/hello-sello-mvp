@@ -246,11 +246,6 @@
   .tbtn svg { width: 15px; height: 15px; display: block; }
   .tbtn.on { background: var(--maroon); color: #fff; }
   .tbtn.on:hover { background: var(--maroon); filter: brightness(1.2); }
-  .rolechip {
-    background: rgba(255, 255, 255, .5); border: 1.5px dashed rgba(118, 0, 45, .45);
-    color: var(--maroon); border-radius: 999px; padding: 6px 14px;
-    font-size: 10.5px; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase;
-  }
   .docscroll { flex: 1; min-height: 0; overflow-y: auto; padding: 14px 26px 30px; }
 
   /* the receipt: real paper floating on the mat, scalloped torn edges top + bottom */
@@ -978,7 +973,7 @@ function renderLinesTable() {
         <td class="num"><button class="icobtn" title="Done with this row" onclick="setEditRow(null)">${ICONS.check}</button></td>
       </tr>`);
     } else {
-      rows.push(`<tr><td>${esc(l.name)}</td>${lineCells(l)}${E ? `<td class="num" style="white-space:nowrap"><button class="icobtn" title="Edit this line" onclick="setEditRow(${l.id})">${ICONS.pencil}</button>${role === 'seller' ? ` <button class="icobtn" title="Remove this product" onclick="delLine(${l.id})">${ICONS.trash}</button>` : ''}</td>` : ''}</tr>`);
+      rows.push(`<tr><td>${esc(l.name)}</td>${lineCells(l)}${E ? `<td class="num" style="white-space:nowrap"><button class="icobtn" title="Edit this line" onclick="setEditRow(${l.id})">${ICONS.pencil}</button> <button class="icobtn" title="Remove this product" onclick="delLine(${l.id})">${ICONS.trash}</button></td>` : ''}</tr>`);
     }
   }
   const addRow = E ? `<div class="addwrap" style="margin-top:10px">
@@ -1559,7 +1554,6 @@ function render() {
         <button class="tbtn" onclick="openGroupModal('deal')">${ICONS.chat} Talk about this deal</button>
         <button class="tbtn" onclick="flipTo('${S.face === 'card' ? 'back' : 'card'}')">${S.face === 'card' ? ICONS.clock + ' Activity' : ICONS.flip + ' Deal Card'}</button>
         <div class="tspace"></div>
-        <span class="rolechip">${role} view</span>
         ${S.signed
           ? `<span class="tbtn icon" title="Signed — re-open a ticket to change the deal" style="opacity:.55; cursor:default">${ICONS.lock}</span>`
           : `<button class="tbtn icon ${S.edit ? 'on' : ''}" title="${S.edit ? 'Done editing' : 'Edit the deal'}" onclick="toggleEdit()">${S.edit ? ICONS.check : ICONS.pencil}</button>`}
