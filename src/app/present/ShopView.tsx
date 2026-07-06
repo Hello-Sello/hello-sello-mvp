@@ -130,6 +130,15 @@ const NUM_FIELD_KEYS = [
   "thc_percent", "cbd_percent", "cbg_percent", "cbn_percent", "terpene_percent", "price_per_gram",
 ] as const;
 
+// F-05: the other spec-row fields (Cluster F), extending the SAME pending-edit
+// tree — free text (trim → null when cleared) + the two enum codes (raw code
+// string; "" means the seller picked "n.a." → null). Dominance/Irradiation are
+// selects on the card (not free text), but the wire value is still a string.
+const TEXT_FIELD_KEYS = [
+  "cultivator", "country_of_origin", "region", "lineage_parent_a", "lineage_parent_b",
+  "dominance_code", "irradiation_code", "packaging_material", "supplier_product_code",
+] as const;
+
 function toFieldPatch(f: ProductFieldDraft): ProductFieldPatch {
   const patch: ProductFieldPatch = {};
   if (f.name !== undefined) patch.name = f.name;
@@ -138,6 +147,11 @@ function toFieldPatch(f: ProductFieldDraft): ProductFieldPatch {
     if (v !== undefined) patch[k] = parseNum(v);
   }
   if (f.price_public !== undefined) patch.price_public = f.price_public;
+  for (const k of TEXT_FIELD_KEYS) {
+    const v = f[k];
+    if (v !== undefined) patch[k] = v.trim() === "" ? null : v.trim();
+  }
+  if (f.resealable !== undefined) patch.resealable = f.resealable;
   return patch;
 }
 

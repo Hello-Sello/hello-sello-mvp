@@ -96,3 +96,61 @@ test("F-02 · ✕ discard clears the pending edit", async ({ page }) => {
   // Nothing was saved and the draft was cleared → the discarded value is not shown.
   await expect(page.getByTestId("product-card").first().getByText("29,4")).toHaveCount(0);
 });
+
+// ── F-05 — spec-row inline editing (Cultivator, Origin) ──────────────────────
+// Extends the SAME pending-edit tree (onEditField → pendingProductEdits → Save
+// flush → updateProductFields) to the card's other spec rows, not just the
+// numeric strip. The seeded first card (AUR-1A) carries cultivator="Aurora Inc"
+// so the discard case has a real original value to revert to.
+
+test("F-05 · a Cultivator (text spec-row) edit is batched — nothing persists until Save", async ({ page }) => {
+  await manageShop(page);
+  const card = page.getByTestId("product-card").first();
+  const cultivator = card.getByLabel("Cultivator");
+  await expect(cultivator).toBeVisible();
+
+  await cultivator.fill("Northern Grow Co");
+  await expect(page.getByTestId("save-changes-btn")).toHaveAttribute("data-dirty", "true");
+
+  // Reload WITHOUT saving → the pending edit is discarded (never persisted).
+  await page.reload();
+  await expect(page.getByTestId("product-card").first()).toBeVisible();
+  await expect(page.getByTestId("product-card").first().getByText("Northern Grow Co")).toHaveCount(0);
+});
+
+test("F-05 · Save flushes the Cultivator + Origin spec-row edits (persists across reload)", async ({ page }) => {
+  await manageShop(page);
+  const card = page.getByTestId("product-card").first();
+  await card.getByLabel("Cultivator").fill("Northern Grow Co");
+  await card.getByLabel("Origin").fill("Netherlands");
+
+  await page.getByTestId("save-changes-btn").click();
+  await expect(page.getByTestId("shop-surface")).toHaveAttribute("data-edit", "off");
+
+  await page.reload();
+  const savedCard = page.getByTestId("product-card").first();
+  await expect(savedCard.getByText("Northern Grow Co")).toBeVisible();
+  await expect(savedCard.getByText("Netherlands")).toBeVisible();
+});
+
+test("F-05 · ✕ discard reverts the Cultivator spec-row edit to its original value", async ({ page }) => {
+  page.on("dialog", (d) => d.accept()); // accept "Discard unsaved changes?"
+  await manageShop(page);
+  const card = page.getByTestId("product-card").first();
+  await card.getByLabel("Cultivator").fill("Someone Else Farms");
+  await expect(page.getByTestId("save-changes-btn")).toHaveAttribute("data-dirty", "true");
+
+  await page.getByRole("button", { name: /exit/i }).click();
+  await expect(page.getByTestId("shop-surface")).toHaveAttribute("data-edit", "off");
+  // Discarded → the card shows its persisted value again (Save flushed
+  // "Northern Grow Co" in the previous test), never the just-typed one.
+  await expect(page.getByTestId("product-card").first().getByText("Someone Else Farms")).toHaveCount(0);
+  await expect(page.getByTestId("product-card").first().getByText("Northern Grow Co")).toBeVisible();
+});
+
+test("F-05 · Dominance and Irradiation spec rows render as selects, not free text", async ({ page }) => {
+  await manageShop(page);
+  const card = page.getByTestId("product-card").first();
+  await expect(card.getByLabel("Dominance")).toHaveJSProperty("tagName", "SELECT");
+  await expect(card.getByLabel("Irradiation")).toHaveJSProperty("tagName", "SELECT");
+});
