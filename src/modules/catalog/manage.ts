@@ -20,6 +20,7 @@ import { getCurrentCompanyId } from "@/shared/auth";
 import type { TablesUpdate } from "@/types/database.types";
 import { isAllowedVideoUrl } from "./mediaLinks";
 import { DOMINANCE_CODES, IRRADIATION_CODES } from "./template";
+import { validateLocations } from "./locations";
 
 export type ManageResult = { ok: true } | { error: string };
 
@@ -73,6 +74,19 @@ function parseLinks(raw: FormDataEntryValue | null): Array<{ platform: string; l
   });
 }
 
+/** Validate the client-supplied warehouse/location list JSON before it lands in
+ *  metadata (F-07 / Cluster H) — mirrors parseLinks exactly (JSON.parse, then drop
+ *  anything malformed via the shared validateLocations shape-check). */
+function parseLocations(raw: FormDataEntryValue | null): Array<{ label: string; value: string }> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(String(raw ?? "[]"));
+  } catch {
+    return [];
+  }
+  return validateLocations(parsed);
+}
+
 /** Update the shop profile (text) plus optional cover/logo replacement. */
 export async function updateShopProfile(formData: FormData): Promise<ManageResult> {
   const supabase = await createClient();
@@ -91,8 +105,9 @@ export async function updateShopProfile(formData: FormData): Promise<ManageResul
     website: orNull(formData, "website"),
   };
 
-  // Links live in metadata.links (one column per link would not scale). Merge so
-  // any other metadata keys survive; the client sends the full links array.
+  // Links (and now the warehouse/location list, F-07) live in metadata — one
+  // column per value would not scale. Merge so any other metadata keys survive;
+  // the client sends the full links array AND the full locations array each Save.
   const { data: existing } = await supabase
     .from("company")
     .select("metadata")
@@ -102,7 +117,11 @@ export async function updateShopProfile(formData: FormData): Promise<ManageResul
     existing?.metadata && typeof existing.metadata === "object" && !Array.isArray(existing.metadata)
       ? (existing.metadata as Record<string, unknown>)
       : {};
-  patch.metadata = { ...baseMeta, links: parseLinks(formData.get("links")) };
+  patch.metadata = {
+    ...baseMeta,
+    links: parseLinks(formData.get("links")),
+    locations: parseLocations(formData.get("locations")),
+  };
 
   // Cover bytes are uploaded client-direct (ShopView) to a stable path; we
   // persist only the path string. An empty value means "unchanged this save".

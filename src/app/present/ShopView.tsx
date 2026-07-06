@@ -23,9 +23,9 @@ import { useRouter } from "next/navigation";
 import {
   Link2, UploadCloud, Plus, FileSpreadsheet, Globe, MapPin, ChevronDown, ChevronUp, X,
 } from "lucide-react";
-import { ProductCard, LocationGroup } from "@/modules/catalog";
+import { ProductCard, LocationGroup, renumberLocations } from "@/modules/catalog";
 import type {
-  Shop, ShopLink, ProductDraft, ProductFieldDraft, PendingBatchEdit, BatchRef,
+  Shop, ShopLink, WarehouseLocation, ProductDraft, ProductFieldDraft, PendingBatchEdit, BatchRef,
 } from "@/modules/catalog";
 import {
   updateShopProfile, updateProductFields, addProductBatch, updateProductBatch,
@@ -94,16 +94,19 @@ import type { CompanyProfile } from "@/modules/companies";
 import { BrandingEditForm } from "./BrandingEditForm";
 
 // The chrome fields the owner edits in place. These are exactly the text fields
-// updateShopProfile persists as the shop banner + info. `links` is now editable
-// here too (F-01): the edited array is sent on Save through the SAME
-// updateShopProfile links write (no second writer). address/website are still
-// round-tripped unchanged so the full-replace action never wipes them.
+// updateShopProfile persists as the shop banner + info. `links` is editable here
+// (F-01); `locations` (F-07 / Cluster H) is the small named warehouse list, same
+// contract — the edited array is sent on Save through the SAME updateShopProfile
+// metadata write (no second writer). `warehouse_location` (the legacy single-line
+// column) is round-tripped unchanged, like address/website, so the full-replace
+// action never wipes it — it is no longer edited directly once the list exists.
 type ChromeEdits = {
   name: string;
   tagline: string;
   description: string;
   warehouse_location: string;
   links: ShopLink[];
+  locations: WarehouseLocation[];
 };
 
 function initEdits(c: Shop["company"]): ChromeEdits {
@@ -113,6 +116,7 @@ function initEdits(c: Shop["company"]): ChromeEdits {
     description: c.description ?? "",
     warehouse_location: c.warehouse_location ?? "",
     links: c.links ?? [],
+    locations: c.locations ?? [],
   };
 }
 
@@ -325,10 +329,11 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
     }
 
     // updateShopProfile is a full-replace writer: any field it reads and we omit is
-    // nulled, and its links come solely from the form. We send the edited chrome
-    // fields + the edited links array (F-01: links are now editable, committed
-    // through this ONE links write / parseLinks). address/website are round-tripped
-    // unchanged so the full-replace never wipes them.
+    // nulled, and its metadata (links + locations) comes solely from the form. We
+    // send the edited chrome fields + the edited links array (F-01) + the edited
+    // warehouse list (F-07), each committed through this ONE metadata write
+    // (parseLinks / parseLocations). address/website/warehouse_location are
+    // round-tripped unchanged so the full-replace never wipes them.
     const fd = new FormData();
     fd.set("name", edits.name);
     fd.set("tagline", edits.tagline);
@@ -337,6 +342,7 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
     fd.set("address", company.address ?? "");
     fd.set("website", company.website ?? "");
     fd.set("links", JSON.stringify(edits.links));
+    fd.set("locations", JSON.stringify(edits.locations));
     if (coverPath) fd.set("cover_path", coverPath);
 
     const res = await updateShopProfile(fd);
@@ -631,7 +637,9 @@ function ShopInfoRow({
         }
       />
 
-      {/* Location: HQ + single warehouse line (D-05 — one line; multi-warehouse is Phase 16) */}
+      {/* Location: Headquarter (unchanged, read-only) + a small named Warehouse
+          1/2/3 list (F-07 / Cluster H — a lightweight partial pull-forward of
+          D-05; NOT the full Phase-16 shop≡location model). */}
       <InfoBox
         testId="info-card-warehouse"
         title="Location"
@@ -646,17 +654,22 @@ function ShopInfoRow({
         }
         more={
           <div className="text-sm">
-            <div className="font-bold text-ink">Warehouse:</div>
+            <div className="mb-1 font-bold text-ink">Warehouses:</div>
             {editing ? (
-              <input
-                aria-label="Warehouse location"
-                value={edits.warehouse_location}
-                onChange={(e) => onEdit("warehouse_location", e.target.value)}
-                placeholder="e.g. Berlin"
-                className="mt-1 w-full rounded-lg border border-ink/15 bg-white px-3 py-1.5 text-sm outline-none focus:border-brand"
+              <LocationsEditor
+                locations={edits.locations}
+                onChange={(next) => onEdit("locations", next)}
               />
+            ) : company.locations.length > 0 ? (
+              <div className="flex flex-col gap-1">
+                {company.locations.map((l, i) => (
+                  <div key={i} className="text-ink/70">
+                    <span className="font-semibold text-ink">{l.label}:</span> {l.value}
+                  </div>
+                ))}
+              </div>
             ) : (
-              <div className="text-ink/70">{company.warehouse_location || "Not set"}</div>
+              <div className="text-ink/70">Not set</div>
             )}
           </div>
         }
@@ -891,6 +904,74 @@ function LinksEditor({
           className="flex items-center gap-1 rounded-lg bg-brand px-2.5 py-1.5 text-xs font-bold text-white hover:bg-brand-deep"
         >
           <Plus size={13} /> Add
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---------- warehouse/location list editor (edit mode, F-07 / Cluster H) ----------
+// Add / remove over a local edits.locations array — the SAME batched-under-Save
+// contract as LinksEditor above. Every added/removed row is renumbered ("Warehouse
+// 1..N" by position) so a stored label never drifts out of sync with its row
+// index. Rows are display-only + a remove (X) button (no in-place rename) — the
+// bottom input + Add button is the one entry point for a new value, mirroring
+// LinksEditor's own add row. Headquarter is a SEPARATE, always-on display above
+// this box and is never touched here.
+function LocationsEditor({
+  locations,
+  onChange,
+}: {
+  locations: WarehouseLocation[];
+  onChange: (next: WarehouseLocation[]) => void;
+}) {
+  const [value, setValue] = useState("");
+
+  function add() {
+    const v = value.trim();
+    if (!v) return; // empty rows are dropped (parseLocations would drop them anyway)
+    onChange(renumberLocations([...locations, { label: "", value: v }]));
+    setValue("");
+  }
+  function remove(i: number) {
+    onChange(renumberLocations(locations.filter((_, idx) => idx !== i)));
+  }
+
+  const field =
+    "rounded-lg border border-ink/15 bg-white px-2 py-1.5 text-xs outline-none focus:border-brand";
+
+  return (
+    <div className="flex flex-col gap-2">
+      {locations.length === 0 && <span className="text-sm text-ink/40">No warehouses yet</span>}
+      {locations.map((l, i) => (
+        <div key={i} className="flex items-center gap-1.5 rounded-lg bg-white/60 px-2.5 py-1.5">
+          <span className="min-w-[86px] text-xs font-bold text-ink/60">{l.label}:</span>
+          <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{l.value}</span>
+          <button
+            type="button" aria-label="Remove warehouse" onClick={() => remove(i)}
+            className="rounded p-1 text-rose-500 hover:bg-rose-50"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      ))}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <input
+          aria-label="New warehouse location"
+          value={value}
+          placeholder="e.g. Berlin"
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }}
+          className={`${field} min-w-0 flex-1`}
+        />
+        <button
+          type="button"
+          data-testid="add-warehouse-btn"
+          aria-label="Add warehouse"
+          onClick={add}
+          className="flex items-center gap-1 rounded-lg bg-brand px-2.5 py-1.5 text-xs font-bold text-white hover:bg-brand-deep"
+        >
+          <Plus size={13} /> Add warehouse
         </button>
       </div>
     </div>

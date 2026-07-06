@@ -8,6 +8,9 @@
  */
 import { createClient } from "@/shared/db/server";
 import { pickRepresentativeBatch, deriveTerpPercent } from "./shopMap";
+import { deriveInitialLocations, type WarehouseLocation } from "./locations";
+
+export type { WarehouseLocation };
 
 /** One image in a product's gallery, ordered by the seller. The first entry
  *  (lowest position) is the cover / thumbnail. `path` is a `shop-media` storage
@@ -94,6 +97,10 @@ export type Shop = {
     address: string | null;
     website: string | null;
     links: ShopLink[];
+    /** The small named warehouse list (F-07 / Cluster H): Headquarter stays the
+     *  separate `address`/`country` display above — this is Warehouse 1/2/3, free
+     *  text, seeded from the legacy `warehouse_location` column on first read. */
+    locations: WarehouseLocation[];
     tags: string[];
   };
   products: ShopProduct[];
@@ -217,6 +224,7 @@ export async function getMyShop(): Promise<Shop | null> {
       address: company.address,
       website: company.website,
       links: parseLinks(company.metadata),
+      locations: deriveInitialLocations(company.metadata, company.warehouse_location),
       tags: (company.company_type_assignment ?? []).map((t) => t.company_type_code),
     },
     products,
