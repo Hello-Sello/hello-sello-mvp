@@ -475,6 +475,7 @@ export type Database = {
           cover_path: string | null
           created_at: string
           created_by: string | null
+          deactivated_at: string | null
           deleted_at: string | null
           deleted_by: string | null
           description: string | null
@@ -499,6 +500,7 @@ export type Database = {
           cover_path?: string | null
           created_at?: string
           created_by?: string | null
+          deactivated_at?: string | null
           deleted_at?: string | null
           deleted_by?: string | null
           description?: string | null
@@ -523,6 +525,7 @@ export type Database = {
           cover_path?: string | null
           created_at?: string
           created_by?: string | null
+          deactivated_at?: string | null
           deleted_at?: string | null
           deleted_by?: string | null
           description?: string | null
@@ -2334,6 +2337,91 @@ export type Database = {
         }
         Relationships: []
       }
+      notification_category: {
+        Row: {
+          code: string
+          description: string
+          is_transactional: boolean
+        }
+        Insert: {
+          code: string
+          description: string
+          is_transactional?: boolean
+        }
+        Update: {
+          code?: string
+          description?: string
+          is_transactional?: boolean
+        }
+        Relationships: []
+      }
+      notification_channel: {
+        Row: {
+          code: string
+          description: string
+        }
+        Insert: {
+          code: string
+          description: string
+        }
+        Update: {
+          code?: string
+          description?: string
+        }
+        Relationships: []
+      }
+      notification_preference: {
+        Row: {
+          category_code: string
+          channel_code: string
+          created_at: string
+          enabled: boolean
+          id: string
+          person_id: string
+          updated_at: string
+        }
+        Insert: {
+          category_code: string
+          channel_code: string
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          person_id: string
+          updated_at?: string
+        }
+        Update: {
+          category_code?: string
+          channel_code?: string
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          person_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_preference_category_code_fkey"
+            columns: ["category_code"]
+            isOneToOne: false
+            referencedRelation: "notification_category"
+            referencedColumns: ["code"]
+          },
+          {
+            foreignKeyName: "notification_preference_channel_code_fkey"
+            columns: ["channel_code"]
+            isOneToOne: false
+            referencedRelation: "notification_channel"
+            referencedColumns: ["code"]
+          },
+          {
+            foreignKeyName: "notification_preference_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "person"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payment_terms: {
         Row: {
           code: string
@@ -2555,10 +2643,13 @@ export type Database = {
       }
       person: {
         Row: {
+          anonymized_at: string | null
           avatar_path: string | null
           company_id: string | null
           created_at: string
+          deactivated_at: string | null
           deleted_at: string | null
+          deletion_scheduled_for: string | null
           display_name: string | null
           first_name: string
           id: string
@@ -2573,10 +2664,13 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          anonymized_at?: string | null
           avatar_path?: string | null
           company_id?: string | null
           created_at?: string
+          deactivated_at?: string | null
           deleted_at?: string | null
+          deletion_scheduled_for?: string | null
           display_name?: string | null
           first_name: string
           id: string
@@ -2591,10 +2685,13 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          anonymized_at?: string | null
           avatar_path?: string | null
           company_id?: string | null
           created_at?: string
+          deactivated_at?: string | null
           deleted_at?: string | null
+          deletion_scheduled_for?: string | null
           display_name?: string | null
           first_name?: string
           id?: string
@@ -4117,12 +4214,14 @@ export type Database = {
         Args: { p_request_id: string; p_role?: string }
         Returns: undefined
       }
+      audit_person_scrub: { Args: { p_person_id: string }; Returns: undefined }
       can_access_thread: { Args: { p_thread_id: string }; Returns: boolean }
       can_access_workspace: { Args: { p_ws_id: string }; Returns: boolean }
       can_see_person: {
         Args: { p_company_id: string; p_person_id: string }
         Returns: boolean
       }
+      cancel_account_deletion: { Args: never; Returns: undefined }
       card_relationship_member: {
         Args: { p_card_id: string }
         Returns: boolean
@@ -4157,6 +4256,8 @@ export type Database = {
       }
       current_company_id: { Args: never; Returns: string }
       current_superadmin_group_id: { Args: never; Returns: string }
+      deactivate_account: { Args: never; Returns: undefined }
+      deactivate_company: { Args: never; Returns: undefined }
       edit_deal_draft: {
         Args: {
           p_currency: string
@@ -4339,6 +4440,8 @@ export type Database = {
         Args: { p_deal_card_id: string; p_draft: Json; p_reason: string }
         Returns: string
       }
+      reactivate_account: { Args: never; Returns: undefined }
+      reactivate_company: { Args: never; Returns: undefined }
       record_invite_sent: {
         Args: { p_email: string; p_role: string }
         Returns: undefined
@@ -4352,10 +4455,13 @@ export type Database = {
         Returns: undefined
       }
       remove_member: { Args: { p_person_id: string }; Returns: undefined }
+      request_account_deletion: { Args: never; Returns: undefined }
       request_to_join: {
         Args: { p_company_id: string; p_note: string }
         Returns: string
       }
+      run_scheduled_erasures: { Args: never; Returns: undefined }
+      scrub_person_pii: { Args: { p_id: string }; Returns: undefined }
       search_joinable_companies: {
         Args: { p_term: string }
         Returns: {
