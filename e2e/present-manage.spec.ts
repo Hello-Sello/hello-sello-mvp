@@ -105,6 +105,30 @@ test("UX-04 · seller pastes a video link", async ({ page }) => {
   await expect(card.getByRole("link", { name: /open video/i })).toBeVisible();
 });
 
+test("UX-04 · Documents folders stay hidden until they hold a file (Cluster G)", async ({ page }) => {
+  await manageShop(page);
+  const card = page.getByTestId("product-card").first();
+  await flipToBack(card);
+  // At this point in the shared-seed run order this product has 0 COAs and 0
+  // custom docs — neither folder shell (nor its "No files yet." placeholder)
+  // should render below the [Upload document] / [Download all] header.
+  await expect(card.getByRole("button", { name: /certificates of analysis/i })).toHaveCount(0);
+  await expect(card.getByRole("button", { name: /custom uploads/i })).toHaveCount(0);
+  await expect(card.getByText("No files yet.")).toHaveCount(0);
+
+  // Upload one COA — only the COA folder should appear; Documents (custom) stays hidden.
+  await card.getByRole("button", { name: /upload document/i }).click();
+  const modal = page.getByRole("dialog", { name: /upload document/i });
+  await modal.getByLabel(/document file/i).setInputFiles({
+    name: "empty-state-test.pdf",
+    mimeType: "application/pdf",
+    buffer: PDF_MIN,
+  });
+  await modal.getByRole("button", { name: "Upload", exact: true }).click();
+  await expect(card.getByRole("button", { name: /certificates of analysis/i })).toBeVisible();
+  await expect(card.getByRole("button", { name: /custom uploads/i })).toHaveCount(0);
+});
+
 test("UX-04 · seller uploads a COA via the Upload-document popup", async ({ page }) => {
   await manageShop(page);
   const card = page.getByTestId("product-card").first();
