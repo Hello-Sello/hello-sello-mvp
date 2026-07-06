@@ -83,6 +83,23 @@ export async function verifyPassword(password: string): Promise<ActionResult> {
 }
 
 /**
+ * changePassword — set/replace the caller's sign-in password (D-05). A thin wrapper
+ * over the auth client's updateUser so a signed-in user is NOT bounced to /login (unlike
+ * reset-password's setNewPassword, which redirects). No current password is required —
+ * the live session authorizes the change — which also lets an OAuth-only user ADD
+ * email + password as a backup way in (matches the surface's hint copy).
+ */
+export async function changePassword(newPassword: string): Promise<ActionResult> {
+  if (newPassword.length < 8) return { error: 'Password must be at least 8 characters' }
+
+  const supabase = await createClient()
+  const { error } = await supabase.auth.updateUser({ password: newPassword })
+  if (error) return { error: error.message }
+
+  return { ok: true }
+}
+
+/**
  * requestAccountDeletion — GDPR erasure request (SET-02, D-10). Verify the password
  * first, then schedule via the definer RPC (deactivate now + open a 30-day runway),
  * then revoke the caller's sessions. The sole-Superadmin lockout is enforced INSIDE
