@@ -10,3 +10,7 @@
 export type * from "./shop";
 export * from "./manage";
 export * from "./components";
+// locations.ts is pure (no next/headers, no server-only import) — safe to
+// re-export its value helper (used by the client-side warehouse editor) through
+// this barrel, unlike shop.ts's runtime read.
+export { renumberLocations } from "./locations";
