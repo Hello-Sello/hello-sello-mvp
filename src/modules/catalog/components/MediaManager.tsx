@@ -373,9 +373,11 @@ export function MediaManager({
           </div>
         )}
 
+        {/* Cluster G: trimmed — "shows on the front" duplicated the section
+            header's own "· shows on the front" label. Kept the details the
+            header doesn't carry (size limit, reorder, remove). */}
         <p className="mt-2 text-[10px] leading-relaxed text-ink/45">
-          Upload images &amp; videos here (≤10 MB each) — they appear on the product&apos;s front.
-          Drag to re-sort · ✕ to remove.
+          ≤10 MB each · Drag to re-sort · ✕ to remove.
         </p>
 
         {/* ---------- Documents (COA / custom) ---------- */}
@@ -406,8 +408,15 @@ export function MediaManager({
         </div>
 
         <div className="flex flex-col gap-2">
-          <DocFolder title="COAs" subtitle="Certificates of Analysis" items={coas} canEdit={canEdit} onDelete={deleteMedia} />
-          <DocFolder title="Documents" subtitle="Custom uploads" items={docs} canEdit={canEdit} onDelete={deleteMedia} />
+          {/* Cluster G: a folder shell (title/subtitle/count/chevron) only ever
+              renders once it has ≥1 file — an empty folder is hidden entirely,
+              not shown with a "No files yet." placeholder. */}
+          {coas.length > 0 && (
+            <DocFolder title="COAs" subtitle="Certificates of Analysis" items={coas} canEdit={canEdit} onDelete={deleteMedia} />
+          )}
+          {docs.length > 0 && (
+            <DocFolder title="Documents" subtitle="Custom uploads" items={docs} canEdit={canEdit} onDelete={deleteMedia} />
+          )}
         </div>
 
         {/* ---------- inert Sella slot (legal-gated, no figure) ---------- */}
