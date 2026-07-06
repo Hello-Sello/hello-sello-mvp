@@ -108,3 +108,69 @@ test("F-01 · ✕ discard leaves edit mode and reverts links", async ({ page }) 
   await page.getByRole("button", { name: /exit/i }).click();
   await expect(page.getByTestId("shop-surface")).toHaveAttribute("data-edit", "off");
 });
+
+/**
+ * F-07 — Warehouse/location list (Cluster H, a lightweight partial pull-forward
+ * of D-05). Mirrors the F-01 Links tests above exactly: the Location info box's
+ * "Warehouses" section is add/remove over a local edits.locations array, batched
+ * under the ONE pink Save; Headquarter (a separate, always-on display in the same
+ * box) is never editable and carries no remove control.
+ *
+ * ⚠️ The "Save persists it" case MUTATES the local seed (mirrors the note atop
+ * this file — `supabase db reset` between runs is expected).
+ */
+test("F-07 · the Warehouses section shows add/remove rows; Headquarter stays read-only", async ({ page }) => {
+  await manageShop(page);
+  const box = page.getByTestId("info-card-warehouse");
+  await box.click(); // expand "more" to reveal the warehouse editor
+  await expect(box.getByTestId("info-more")).toBeVisible();
+
+  // Headquarter renders (unchanged) with no remove control anywhere yet.
+  await expect(box.getByText(/headquarter/i)).toBeVisible();
+  await expect(box.getByRole("button", { name: /remove warehouse/i })).toHaveCount(0);
+
+  // Add a warehouse — it appears as "Warehouse 1" with a remove control.
+  await box.getByLabel(/new warehouse location/i).fill("Berlin");
+  await box.getByTestId("add-warehouse-btn").click();
+  await expect(box.getByText("Berlin")).toBeVisible();
+  await expect(box.getByText(/warehouse 1/i)).toBeVisible();
+  await expect(box.getByRole("button", { name: /remove warehouse/i })).toHaveCount(1);
+
+  // Remove it again.
+  await box.getByRole("button", { name: /remove warehouse/i }).click();
+  await expect(box.getByText("Berlin")).toHaveCount(0);
+});
+
+test("F-07 · adding a warehouse + Save persists it", async ({ page }) => {
+  await manageShop(page);
+  const box = page.getByTestId("info-card-warehouse");
+  await box.click();
+  await box.getByLabel(/new warehouse location/i).fill("Rotterdam");
+  await box.getByTestId("add-warehouse-btn").click();
+
+  await page.getByTestId("save-changes-btn").click();
+  await expect(page.getByTestId("shop-surface")).toHaveAttribute("data-edit", "off");
+
+  // Reload — the saved warehouse survives (read from company.metadata.locations).
+  await page.reload();
+  await page.getByTestId("info-card-warehouse").click();
+  await expect(page.getByTestId("info-card-warehouse").getByText("Rotterdam")).toBeVisible();
+});
+
+test("F-07 · ✕ discard before Save reverts the whole warehouse list", async ({ page }) => {
+  page.on("dialog", (d) => d.accept());
+  await manageShop(page);
+  const box = page.getByTestId("info-card-warehouse");
+  await box.click();
+  await box.getByLabel(/new warehouse location/i).fill("Discard Me");
+  await box.getByTestId("add-warehouse-btn").click();
+  await expect(page.getByTestId("save-changes-btn")).toHaveAttribute("data-dirty", "true");
+
+  // ✕ discard → edit mode off, the added warehouse reverted (never saved).
+  await page.getByRole("button", { name: /exit/i }).click();
+  await expect(page.getByTestId("shop-surface")).toHaveAttribute("data-edit", "off");
+
+  await page.getByTestId("present-banner").getByRole("button", { name: /manage shop/i }).click();
+  await page.getByTestId("info-card-warehouse").click();
+  await expect(page.getByTestId("info-card-warehouse").getByText("Discard Me")).toHaveCount(0);
+});
