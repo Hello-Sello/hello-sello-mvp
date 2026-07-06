@@ -22,6 +22,17 @@ import { isAllowedVideoUrl } from "./mediaLinks";
 
 export type ManageResult = { ok: true } | { error: string };
 
+/** The Supabase server client type — passed to the price helper so it shares the
+ *  request's authenticated (RLS-scoped) session. */
+type Db = Awaited<ReturnType<typeof createClient>>;
+
+/** A cannabinoid/terpene percent: absent (undefined) means "leave unchanged",
+ *  null clears it, a finite ≥0 number sets it. Rejects NaN/Infinity/negative so a
+ *  malformed field never reaches the DB (T-07-17). */
+function validNumeric(v: number | null): boolean {
+  return v === null || (typeof v === "number" && Number.isFinite(v) && v >= 0);
+}
+
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
 const orNull = (fd: FormData, k: string) => str(fd, k) || null;
 
@@ -271,6 +282,226 @@ export async function setProductLocation(
 
   const value = location?.trim() || null;
   const { error } = await supabase.from("product").update({ location: value }).eq("id", productId);
+  if (error) return { error: error.message };
+  revalidatePath("/present");
+  return { ok: true };
+}
+
+// ── Batched card-front field + batch writes (Phase 7 F-02) ──────────────────
+// The card front stages every field + lot edit in a client-side draft and flushes
+// it here on the ONE pink Save. Each action is session-scoped (RLS on product /
+// product_batch / pricelist_item), takes no companyId param, and never touches
+// cost/COGS. Numerics are validated before persist (T-07-17); price is routed to
+// the product's standard pricelist_item (the row getMyShop reads).
+
+/** The product fields the card edits inline. `price_per_gram` is routed to the
+ *  pricelist_item (not the product); the rest land on the product row. Omitted
+ *  keys are left unchanged; cost/COGS is deliberately not representable here. */
+export type ProductFieldPatch = {
+  name?: string;
+  thc_percent?: number | null;
+  cbd_percent?: number | null;
+  cbg_percent?: number | null;
+  cbn_percent?: number | null;
+  terpene_percent?: number | null;
+  location?: string | null;
+  price_public?: boolean;
+  price_per_gram?: number | null;
+};
+
+const NUMERIC_PRODUCT_FIELDS = [
+  "thc_percent", "cbd_percent", "cbg_percent", "cbn_percent", "terpene_percent",
+] as const;
+
+/** Apply a validated product-field patch (Save flush target). Product-table fields
+ *  update `product`; `price_per_gram` routes to the standard pricelist_item. */
+export async function updateProductFields(
+  productId: string,
+  patch: ProductFieldPatch,
+): Promise<ManageResult> {
+  const supabase = await createClient();
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) return { error: "No company in session." };
+
+  const productPatch: TablesUpdate<"product"> = {};
+  if (patch.name !== undefined) {
+    const name = patch.name.trim();
+    if (!name) return { error: "Product name is required." };
+    productPatch.name = name;
+  }
+  for (const key of NUMERIC_PRODUCT_FIELDS) {
+    const v = patch[key];
+    if (v === undefined) continue;
+    if (!validNumeric(v)) return { error: `Invalid value for ${key}.` };
+    productPatch[key] = v;
+  }
+  if (patch.location !== undefined) productPatch.location = patch.location?.trim() || null;
+  if (patch.price_public !== undefined) productPatch.price_public = patch.price_public;
+
+  if (Object.keys(productPatch).length > 0) {
+    const { error } = await supabase.from("product").update(productPatch).eq("id", productId);
+    if (error) return { error: error.message };
+  }
+
+  if (patch.price_per_gram !== undefined) {
+    const priced = await writeStandardPrice(supabase, companyId, productId, patch.price_per_gram);
+    if ("error" in priced) return priced;
+  }
+
+  revalidatePath("/present");
+  return { ok: true };
+}
+
+/** Route a public price to the product's standard pricelist_item.price_per_gram —
+ *  the row getMyShop reads. Update the existing (oldest live) item, else create one
+ *  under the company's standard pricelist, mirroring the import_products RPC
+ *  (reuse the oldest live pricelist, else insert a fresh 'Standard'). price_per_gram
+ *  is NOT NULL, so a null price is a no-op — hide a price via price_public=false. */
+async function writeStandardPrice(
+  supabase: Db,
+  companyId: string,
+  productId: string,
+  price: number | null,
+): Promise<ManageResult> {
+  if (price === null) return { ok: true };
+  if (!Number.isFinite(price) || price < 0) return { error: "Invalid price." };
+
+  const { data: existing } = await supabase
+    .from("pricelist_item")
+    .select("id")
+    .eq("product_id", productId)
+    .is("deleted_at", null)
+    .order("created_at", { ascending: true })
+    .limit(1);
+  const itemId = existing?.[0]?.id;
+  if (itemId) {
+    const { error } = await supabase
+      .from("pricelist_item")
+      .update({ price_per_gram: price })
+      .eq("id", itemId);
+    return error ? { error: error.message } : { ok: true };
+  }
+
+  const { data: lists } = await supabase
+    .from("pricelist")
+    .select("id")
+    .eq("company_id", companyId)
+    .is("deleted_at", null)
+    .order("created_at", { ascending: true })
+    .limit(1);
+  let pricelistId = lists?.[0]?.id;
+  if (!pricelistId) {
+    const { data: created, error: plErr } = await supabase
+      .from("pricelist")
+      .insert({
+        company_id: companyId,
+        name: "Standard",
+        status_code: "published",
+        currency: "EUR",
+        published_at: new Date().toISOString(),
+      })
+      .select("id")
+      .single();
+    if (plErr || !created) return { error: plErr?.message ?? "Could not create a pricelist." };
+    pricelistId = created.id;
+  }
+
+  const { error } = await supabase.from("pricelist_item").insert({
+    pricelist_id: pricelistId,
+    product_id: productId,
+    price_per_gram: price,
+    currency: "EUR",
+  });
+  return error ? { error: error.message } : { ok: true };
+}
+
+/** A new lot to add to a product (measured CoA values only — no cost). */
+export type ProductBatchInput = {
+  batch_number: string;
+  thc_percent?: number | null;
+  cbd_percent?: number | null;
+  expiry_date?: string | null;
+};
+
+/** Add a lot inline (Save flush target). company_id is denormalized for the
+ *  direct-column RLS check, mirroring the other product-child writes. */
+export async function addProductBatch(
+  productId: string,
+  input: ProductBatchInput,
+): Promise<ManageResult> {
+  const supabase = await createClient();
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) return { error: "No company in session." };
+
+  const batchNumber = input.batch_number.trim();
+  if (!batchNumber) return { error: "Lot number is required." };
+  if (!validNumeric(input.thc_percent ?? null)) return { error: "Invalid THC %." };
+  if (!validNumeric(input.cbd_percent ?? null)) return { error: "Invalid CBD %." };
+
+  const { error } = await supabase.from("product_batch").insert({
+    product_id: productId,
+    company_id: companyId,
+    batch_number: batchNumber,
+    thc_percent: input.thc_percent ?? null,
+    cbd_percent: input.cbd_percent ?? null,
+    expiry_date: input.expiry_date?.trim() || null,
+  });
+  if (error) return { error: error.message };
+  revalidatePath("/present");
+  return { ok: true };
+}
+
+/** A patch to an existing lot; omitted keys are left unchanged. */
+export type ProductBatchPatch = {
+  batch_number?: string;
+  thc_percent?: number | null;
+  cbd_percent?: number | null;
+  expiry_date?: string | null;
+};
+
+/** Edit an existing lot inline (Save flush target). RLS scopes it to the caller. */
+export async function updateProductBatch(
+  batchId: string,
+  patch: ProductBatchPatch,
+): Promise<ManageResult> {
+  const supabase = await createClient();
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) return { error: "No company in session." };
+
+  const update: TablesUpdate<"product_batch"> = {};
+  if (patch.batch_number !== undefined) {
+    const bn = patch.batch_number.trim();
+    if (!bn) return { error: "Lot number is required." };
+    update.batch_number = bn;
+  }
+  if (patch.thc_percent !== undefined) {
+    if (!validNumeric(patch.thc_percent)) return { error: "Invalid THC %." };
+    update.thc_percent = patch.thc_percent;
+  }
+  if (patch.cbd_percent !== undefined) {
+    if (!validNumeric(patch.cbd_percent)) return { error: "Invalid CBD %." };
+    update.cbd_percent = patch.cbd_percent;
+  }
+  if (patch.expiry_date !== undefined) update.expiry_date = patch.expiry_date?.trim() || null;
+
+  if (Object.keys(update).length === 0) return { ok: true };
+  const { error } = await supabase.from("product_batch").update(update).eq("id", batchId);
+  if (error) return { error: error.message };
+  revalidatePath("/present");
+  return { ok: true };
+}
+
+/** Soft-delete a lot: stamp `deleted_at`. getMyShop filters deleted lots out of
+ *  both the batch list and the Terp% pick, so the row stays for recovery/audit. */
+export async function softDeleteProductBatch(batchId: string): Promise<ManageResult> {
+  const supabase = await createClient();
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) return { error: "No company in session." };
+
+  const { error } = await supabase
+    .from("product_batch")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", batchId);
   if (error) return { error: error.message };
   revalidatePath("/present");
   return { ok: true };

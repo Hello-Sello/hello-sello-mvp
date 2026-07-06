@@ -59,7 +59,9 @@ export type ShopProduct = {
   images: ProductImage[];
   media: ProductMedia[];
   batches: ProductBatchLite[];
-  /** Sum of the representative batch's terpene rows (D-01) — derived, not a column. */
+  /** Headline total-terpenes %: the manual `product.terpene_percent` column when
+   *  set (D-01, F-02), otherwise the derived sum of the representative batch's
+   *  terpene rows. Cost/COGS is never surfaced. */
   terpPercent: number | null;
   profile_visible: boolean;
   price_public: boolean;
@@ -134,7 +136,7 @@ export async function getMyShop(): Promise<Shop | null> {
   const { data: rows } = await supabase
     .from("product")
     .select(
-      "id, name, cultivar, thc_percent, cbd_percent, cbg_percent, cbn_percent, cultivator, lineage_parent_a, lineage_parent_b, irradiation_code, supplier_product_code, packaging_material, resealable, location, pack_size_grams, unit_code, local_code_pzn, dominance_code, country_of_origin, region, profile_visible, price_public, product_image(id, image_path, position), product_media(id, kind, path, url, label, position), product_batch(id, batch_number, ready_for_sale_date, expiry_date, thc_percent, cbd_percent, created_at, deleted_at, batch_terpene(percent)), pricelist_item(price_per_gram, bundle_threshold_grams, bundle_price_per_gram)",
+      "id, name, cultivar, thc_percent, cbd_percent, cbg_percent, cbn_percent, terpene_percent, cultivator, lineage_parent_a, lineage_parent_b, irradiation_code, supplier_product_code, packaging_material, resealable, location, pack_size_grams, unit_code, local_code_pzn, dominance_code, country_of_origin, region, profile_visible, price_public, product_image(id, image_path, position), product_media(id, kind, path, url, label, position), product_batch(id, batch_number, ready_for_sale_date, expiry_date, thc_percent, cbd_percent, created_at, deleted_at, batch_terpene(percent)), pricelist_item(price_per_gram, bundle_threshold_grams, bundle_price_per_gram)",
     )
     .eq("company_id", companyId)
     .is("deleted_at", null)
@@ -191,7 +193,8 @@ export async function getMyShop(): Promise<Shop | null> {
       images,
       media,
       batches,
-      terpPercent: deriveTerpPercent(repBatch),
+      // Manual column wins; the derived batch-terpene sum is the fallback (F-02).
+      terpPercent: r.terpene_percent ?? deriveTerpPercent(repBatch),
       profile_visible: r.profile_visible,
       price_public: r.price_public,
       price_per_gram: price?.price_per_gram ?? null,
