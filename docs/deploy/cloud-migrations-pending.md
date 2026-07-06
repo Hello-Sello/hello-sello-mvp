@@ -90,6 +90,17 @@ in the correct final state; the intermediate version is never used mid-push.
 
 ## PENDING (local only — NOT on cloud yet)
 
+### 2026-07-06 (Muskan) — Phase 7 Present fidelity + card-front batch schema — NOT on cloud
+
+| # | Migration | What it does |
+|---|-----------|--------------|
+| 1 | `20260706120000_product_terpene_percent.sql` | **F-02.** `alter table public.product add column if not exists terpene_percent numeric;` — one headline total-terpenes value, editable inline on the card. Additive, nullable, **no backfill** (existing rows read NULL and fall back to the derived batch-terpene sum). The ONLY schema change of the whole fidelity pass. |
+
+- **Status:** local-first; applied via `supabase db reset` (GREEN) + `database.types.ts` regenerated from local. **Not pushed to cloud.**
+- **Sibling Phase-7 migrations also still local-only** (from 07-03/04/05, appear to predate this ledger's PENDING list): `20260705120000_product_location.sql`, `20260705120100_product_media.sql`, `20260705120200_shop_media_allow_pdf.sql`. Push the whole Phase-7 set together, in timestamp order, when the human deploys.
+- **Migration before code** — `shop.ts` reads `product.terpene_percent`; shipping the app without this column errors the Present read on cloud.
+- **Push:** a clean single `supabase db push` from a LINKED machine, in timestamp order (`20260706120000` sorts last). Coordinate with Ayush if his lane added migrations in the meantime.
+
 ### 2026-07-05 (Muskan) — DEV-99 #3 business-category taxonomy — NOT on cloud
 
 | # | Migration | What it does |
