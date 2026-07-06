@@ -195,6 +195,28 @@ export async function deactivateCompany(): Promise<ActionResult> {
 }
 
 /**
+ * reactivateCompany — a Superadmin un-pauses the company (the D-12 reverse of
+ * deactivateCompany; the company must be reversible). The reactivate_company RPC
+ * re-asserts has_permission('team.manage') internally (the real boundary); we map its
+ * forbidden RAISE to friendly copy. Imported by the 13-10 org security page for the
+ * reactivate control shown while the company is deactivated.
+ */
+export async function reactivateCompany(): Promise<ActionResult> {
+  const supabase = await createClient()
+  const { error } = await (supabase as unknown as RpcClient).rpc('reactivate_company', {})
+  if (error) {
+    if (error.message.includes('forbidden')) {
+      return { error: 'Only a company Superadmin can reactivate the company' }
+    }
+    return { error: error.message }
+  }
+
+  revalidatePath('/settings/security')
+  revalidatePath('/settings/organization/security')
+  return { ok: true }
+}
+
+/**
  * unlinkIdentity — remove a linked OAuth sign-in (Google/Outlook), guarded so it can
  * NEVER remove the caller's only identity (T-13-08-D: that would lock them out). Reads
  * the live identity set from GoTrue; unlink needs the full UserIdentity object, so we
