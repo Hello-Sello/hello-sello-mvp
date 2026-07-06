@@ -55,15 +55,14 @@ const PDF_MIN = Buffer.from(
   "utf8",
 );
 
-test("UX-04 · seller renames a product (persists)", async ({ page }) => {
+test("UX-04 · seller renames a product (persists under the one Save)", async ({ page }) => {
   await manageShop(page);
   const card = page.getByTestId("product-card").first();
   await card.getByLabel(/product name/i).fill("Renamed by E2E");
-  const saveBtn = card.getByRole("button", { name: /save name/i });
-  await saveBtn.click();
-  // The save button disables once the rename persists + the shop re-pulls
-  // (draft === product name again) — wait for that before reloading.
-  await expect(saveBtn).toBeDisabled();
+  // Rename is now BATCHED under the one pink Save (F-02) — there is no per-card
+  // "Save name" button; the name flushes with every other pending edit on Save.
+  await page.getByTestId("save-changes-btn").click();
+  await expect(page.getByTestId("shop-surface")).toHaveAttribute("data-edit", "off");
   await page.reload();
   await expect(page.getByText("Renamed by E2E").first()).toBeVisible();
 });

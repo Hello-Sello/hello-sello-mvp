@@ -24,8 +24,14 @@ import {
   Link2, UploadCloud, Plus, FileSpreadsheet, Globe, MapPin, ChevronDown, ChevronUp, X,
 } from "lucide-react";
 import { ProductCard, LocationGroup } from "@/modules/catalog";
-import type { Shop, ShopLink } from "@/modules/catalog";
-import { updateShopProfile } from "@/modules/catalog/manage";
+import type {
+  Shop, ShopLink, ProductDraft, ProductFieldDraft, PendingBatchEdit, BatchRef,
+} from "@/modules/catalog";
+import {
+  updateShopProfile, updateProductFields, addProductBatch, updateProductBatch,
+  softDeleteProductBatch,
+} from "@/modules/catalog/manage";
+import type { ProductFieldPatch, ProductBatchPatch } from "@/modules/catalog/manage";
 import { createClient } from "@/shared/db/client";
 import { AddProductsDrawer } from "./AddProductsDrawer";
 import { PresentBanner } from "./PresentBanner";
@@ -110,6 +116,44 @@ function initEdits(c: Shop["company"]): ChromeEdits {
   };
 }
 
+// The card holds its inline fields as RAW input strings (smooth decimal typing);
+// these convert the pending overlay into the typed server patches at Save flush.
+// The server re-validates numerics (T-07-17), so parse failures degrade to null.
+function parseNum(s: string): number | null {
+  const t = s.trim().replace(",", ".");
+  if (t === "") return null;
+  const n = Number(t);
+  return Number.isFinite(n) ? n : null;
+}
+
+const NUM_FIELD_KEYS = [
+  "thc_percent", "cbd_percent", "cbg_percent", "cbn_percent", "terpene_percent", "price_per_gram",
+] as const;
+
+function toFieldPatch(f: ProductFieldDraft): ProductFieldPatch {
+  const patch: ProductFieldPatch = {};
+  if (f.name !== undefined) patch.name = f.name;
+  for (const k of NUM_FIELD_KEYS) {
+    const v = f[k];
+    if (v !== undefined) patch[k] = parseNum(v);
+  }
+  if (f.price_public !== undefined) patch.price_public = f.price_public;
+  return patch;
+}
+
+function toBatchPatch(p: PendingBatchEdit): ProductBatchPatch {
+  const patch: ProductBatchPatch = {};
+  if (p.batch_number !== undefined) patch.batch_number = p.batch_number;
+  if (p.thc_percent !== undefined) patch.thc_percent = parseNum(p.thc_percent);
+  if (p.cbd_percent !== undefined) patch.cbd_percent = parseNum(p.cbd_percent);
+  if (p.expiry_date !== undefined) patch.expiry_date = p.expiry_date.trim() || null;
+  return patch;
+}
+
+const emptyDraft = (): ProductDraft => ({
+  fields: {}, batchInserts: [], batchEdits: {}, batchDeletes: [],
+});
+
 export function ShopView({ shop, company: companyProfile }: { shop: Shop; company: CompanyProfile | null }) {
   const { company, products } = shop;
   const router = useRouter();
@@ -141,6 +185,49 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
   // resets on reload / leaving edit mode, so unfilled labels simply disappear.
   const [pendingLocations, setPendingLocations] = useState<string[]>([]);
 
+  // Per-product pending-edit tree (F-02): each card reports its inline field + lot
+  // changes here (marking the shop dirty); Save flushes it, ✕ discard clears it. The
+  // card writes NOTHING itself — it is a controlled view of its entry in this map.
+  const [pendingProductEdits, setPendingProductEdits] = useState<Record<string, ProductDraft>>({});
+
+  function mutateDraft(productId: string, fn: (d: ProductDraft) => ProductDraft) {
+    setPendingProductEdits((prev) => ({ ...prev, [productId]: fn(prev[productId] ?? emptyDraft()) }));
+    setDirty(true);
+  }
+  function editProductField(productId: string, patch: Partial<ProductFieldDraft>) {
+    mutateDraft(productId, (d) => ({ ...d, fields: { ...d.fields, ...patch } }));
+  }
+  function insertBatch(productId: string) {
+    mutateDraft(productId, (d) => ({
+      ...d,
+      batchInserts: [
+        ...d.batchInserts,
+        { tempId: crypto.randomUUID(), batch_number: "", thc_percent: "", cbd_percent: "", expiry_date: "" },
+      ],
+    }));
+  }
+  function changeBatch(productId: string, ref: BatchRef, patch: PendingBatchEdit) {
+    mutateDraft(productId, (d) =>
+      ref.kind === "new"
+        ? { ...d, batchInserts: d.batchInserts.map((b) => (b.tempId === ref.tempId ? { ...b, ...patch } : b)) }
+        : { ...d, batchEdits: { ...d.batchEdits, [ref.batchId]: { ...d.batchEdits[ref.batchId], ...patch } } },
+    );
+  }
+  function removeBatch(productId: string, ref: BatchRef) {
+    mutateDraft(productId, (d) => {
+      if (ref.kind === "new") {
+        return { ...d, batchInserts: d.batchInserts.filter((b) => b.tempId !== ref.tempId) };
+      }
+      const nextEdits = { ...d.batchEdits };
+      delete nextEdits[ref.batchId];
+      return {
+        ...d,
+        batchEdits: nextEdits,
+        batchDeletes: d.batchDeletes.includes(ref.batchId) ? d.batchDeletes : [...d.batchDeletes, ref.batchId],
+      };
+    });
+  }
+
   function addLocation(label: string) {
     const value = label.trim();
     if (!value) return; // empty labels do not persist (D-05 / Cluster D)
@@ -160,6 +247,7 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
     setDirty(false);
     setError(null);
     setPendingLocations([]);
+    setPendingProductEdits({});
     setEditing(true);
   }
 
@@ -171,6 +259,7 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
     setCoverFile(null);
     setError(null);
     setPendingLocations([]);
+    setPendingProductEdits({});
   }
 
   // Present mode never carries edit mode (prototype: setPresent → setEdit(false)),
@@ -183,6 +272,7 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
     setCoverFile(null);
     setError(null);
     setPendingLocations([]);
+    setPendingProductEdits({});
     setPresenting(true);
   }
 
@@ -236,13 +326,45 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
     if (coverPath) fd.set("cover_path", coverPath);
 
     const res = await updateShopProfile(fd);
+    if ("error" in res) { setError(res.error); setBusy(false); return; }
+
+    // Flush the per-product pending tree (F-02) AFTER the chrome commit — the field
+    // patch, then batch inserts / edits / soft-deletes, all under this one Save.
+    for (const [productId, d] of Object.entries(pendingProductEdits)) {
+      const fieldPatch = toFieldPatch(d.fields);
+      if (Object.keys(fieldPatch).length > 0) {
+        const r = await updateProductFields(productId, fieldPatch);
+        if ("error" in r) { setError(r.error); setBusy(false); return; }
+      }
+      for (const nb of d.batchInserts) {
+        if (!nb.batch_number.trim()) continue; // skip blank rows the seller never filled
+        const r = await addProductBatch(productId, {
+          batch_number: nb.batch_number,
+          thc_percent: parseNum(nb.thc_percent),
+          cbd_percent: parseNum(nb.cbd_percent),
+          expiry_date: nb.expiry_date.trim() || null,
+        });
+        if ("error" in r) { setError(r.error); setBusy(false); return; }
+      }
+      for (const [batchId, patch] of Object.entries(d.batchEdits)) {
+        const bp = toBatchPatch(patch);
+        if (Object.keys(bp).length === 0) continue;
+        const r = await updateProductBatch(batchId, bp);
+        if ("error" in r) { setError(r.error); setBusy(false); return; }
+      }
+      for (const batchId of d.batchDeletes) {
+        const r = await softDeleteProductBatch(batchId);
+        if ("error" in r) { setError(r.error); setBusy(false); return; }
+      }
+    }
+
     setBusy(false);
-    if ("error" in res) { setError(res.error); return; }
     setEditing(false);
     setBrandingOpen(false);
     setDirty(false);
     setCoverFile(null);
     setPendingLocations([]);
+    setPendingProductEdits({});
     router.refresh();
   }
 
@@ -355,6 +477,11 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
                   companyId={company.id}
                   editing={editing}
                   onChanged={() => router.refresh()}
+                  draft={pendingProductEdits[p.id]}
+                  onEditField={editProductField}
+                  onBatchInsert={insertBatch}
+                  onBatchChange={changeBatch}
+                  onBatchRemove={removeBatch}
                 />
               ))}
               {/* "+ Add product" tile — edit mode only. Opens the EXISTING manual-add
