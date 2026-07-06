@@ -261,6 +261,37 @@ Cautions for the cloud apply:
 
 ---
 
+### 2026-07-06 (Muskan) — Phase 13 Settings + Lifecycle Emails (SET-02/03/04) — NOT on cloud
+
+Local-first: a clean `supabase db reset` replays all three in order and stays green; the three SQL
+invariants pass (`account_lifecycle`, `erasure_chain`, `notification_pref_rls`); `database.types.ts`
+regenerated (additive — person/company lifecycle columns + `notification_*` tables). Three additive
+migrations + two edge functions + one net-new edge secret. **Cloud push DEFERRED — this is a ledger
+entry only; nothing below has been run against cloud.**
+
+**Migrations (push in timestamp order, together):**
+
+| # | Migration file | What it does |
+|---|----------------|--------------|
+| 1 | `20260706090000_account_lifecycle.sql` | SET-02 sync half. Adds nullable lifecycle timestamps `person.deactivated_at` / `person.deletion_scheduled_for` / `person.anonymized_at` + `company.deactivated_at`; 6 `lifecycle` audit codes (`account.deactivated`/`reactivated`/`deletion_requested`/`deletion_cancelled`, `company.deactivated`/`reactivated`; `on conflict (code) do nothing`); 6 SECURITY DEFINER own-row/own-company RPCs (`deactivate_account`, `reactivate_account`, `request_account_deletion` [sole-Superadmin lockout], `cancel_account_deletion`, `deactivate_company` / `reactivate_company` [gated `has_permission('team.manage')`]). Additive only; **no base `person`/`company` grant or RLS widened** (DEV-88 discipline). |
+| 2 | `20260706090100_notification_preference.sql` | SET-04 stub. 3 tables — `notification_category` (4 transactional rows) + `notification_channel` (`email` wired, `in_app` reserved) + `notification_preference` (per-person category×channel, empty in v1). RLS: lookup `_read` to authenticated; preference SELECT-only own-row (`person_id = auth.uid()`), **no** write policy → the Notifications settings section is read-only. Additive. |
+| 3 | `20260706090200_erasure_cron.sql` | SET-02 async half. `scrub_person_pii(uuid)` + `audit_person_scrub(uuid)` (SECURITY DEFINER, **service_role ONLY** — explicitly revoked from anon/authenticated) + `run_scheduled_erasures()` (pg_cron entry: reads Vault `project_url`/`edge_anon_key`, `net.http_post` → `/functions/v1/erase-expired-accounts`). Daily `cron.schedule('erase-expired-accounts','0 3 * * *', …)`, idempotent unschedule-then-schedule. Reuses the `sella-detect` pg_cron/pg_net/Vault chain — extensions + Vault secrets already present, NOT re-created (`create extension if not exists`). |
+
+**Non-migration cloud steps — REQUIRED for lifecycle emails + the erasure sweep (do WITH the push):**
+- `supabase functions deploy send-lifecycle-email` — SET-03 sender (Deno `fetch` → Resend; resolves the recipient from `auth.users` via a service-role client; invoked fire-and-forget via Next 16 `after()` from each event's server action).
+- `supabase functions deploy erase-expired-accounts` — SET-02 day-30 sweep worker (performs the `auth.admin` email-tombstone + soft-delete that Postgres itself can't; called by the pg_cron `net.http_post` above).
+- `supabase secrets set RESEND_API_KEY=…` — **net-new edge secret**. The Resend sending domain is already verified for auth SMTP; confirm the same domain works for API `from: Hello Sello <noreply@hello-sello.com>` sends before relying on it (**Assumption A1** — silent rejection if the from-address isn't on a verified domain). Reused / already set: `SUPABASE_SERVICE_ROLE_KEY` (edge, auto-injected), Vault `project_url` / `edge_anon_key`.
+
+**⚠️ Cloud UAT required — two admin-API paths that 403 on the LOCAL GoTrue (RESEARCH A3):**
+- **Erasure auth-scrub** — `erase-expired-accounts` calls `auth.admin.updateUserById` (email tombstone) + `deleteUser({ shouldSoftDelete: true })`. Only the DB-side `scrub_person_pii` half is proven locally (invariant test); the GoTrue admin half must be UAT'd on cloud.
+- **Session-revoke** — the same `sb_secret_`-vs-local-GoTrue caveat as the Phase 11 token-revoke; exercise once on cloud to confirm the sign-out/revoke path.
+
+**Ordering dependency:**
+- Push **AFTER** the still-pending Phase 10 + 6×Phase 11 + 3×Phase 12 batches (CLAUDE.md #0). SET-02's RPCs reference `person_group` / `has_permission` / `current_superadmin_group_id` (Phase 11) and the lifecycle emails fire off the Phase 11/12 RPCs — those must be live first. The three `20260706090xxx` stamps sort last, so a single sequential `supabase db push` runs them in order after any earlier pending batch (no reconcile needed if cloud history is contiguous).
+- ⚠️ **Verify current cloud state first:** the "APPLIED TO CLOUD → 2026-06-23" entry below records a P10/11/12 push (cloud history 75→88). If that record is authoritative, the P10/11/12 dependency is already satisfied and only this Phase-13 batch remains pending — reconcile the pending list against a live `list_migrations` before pushing.
+
+---
+
 ## APPLIED TO CLOUD
 
 ### 2026-06-23 — Phase 10 + 11 + 12 + Deal-Room batch (13 migrations)
