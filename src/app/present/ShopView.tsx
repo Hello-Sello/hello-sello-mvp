@@ -8,19 +8,20 @@
  * dropdown that re-contexts the grid to one location. The card itself is the
  * reusable ProductCard from the catalog module.
  *
- * The shop CHROME (07-05) is now in-place editable: PresentBanner (4:1 MVP banner)
- * + an InfoBox row + a sticky pulsing SaveBar. "Manage shop" turns on edit mode;
- * any banner/info field change marks the shop dirty (pulsing the Save); Save
- * commits every chrome field through the existing updateShopProfile writer (no new
- * manage.ts action). Logo/branding stays behind the shared BrandingEditForm — the
- * one logo writer (D-07). Links are DISPLAY-only here (management is Phase 16); the
- * Save round-trips the existing links/address/website untouched so they are never
- * wiped by the full-replace updateShopProfile action.
+ * The shop CHROME (07-05 + F-01) is fully in-place editable behind ONE "Manage
+ * shop" entry: the whole surface takes a calm grey wash (data-edit), PresentBanner
+ * (4:1 MVP banner, inline logo), an InfoBox row, and a sticky pulsing SaveBar. Any
+ * banner/info/links change marks the shop dirty (pulsing the Save); Save commits
+ * every chrome field — including the edited links — through the existing
+ * updateShopProfile writer (no new manage.ts action, one links write). Logo/branding
+ * stays behind the shared BrandingEditForm — the one logo writer (D-07). Editing
+ * also exposes a "+ Add product" tile (opens the manual-add drawer) and a free-text
+ * add-location that stages a group; empty location labels never persist.
  */
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Link2, UploadCloud, Plus, FileSpreadsheet, Globe, MapPin, ChevronDown, X,
+  Link2, UploadCloud, Plus, FileSpreadsheet, Globe, MapPin, ChevronDown, ChevronUp, X,
 } from "lucide-react";
 import { ProductCard, LocationGroup } from "@/modules/catalog";
 import type { Shop, ShopLink } from "@/modules/catalog";
@@ -87,14 +88,16 @@ import type { CompanyProfile } from "@/modules/companies";
 import { BrandingEditForm } from "./BrandingEditForm";
 
 // The chrome fields the owner edits in place. These are exactly the text fields
-// updateShopProfile persists as the shop banner + info; links/address/website are
-// NOT edited here (display-only / BrandingEditForm) but are round-tripped on Save
-// so the full-replace action never wipes them.
+// updateShopProfile persists as the shop banner + info. `links` is now editable
+// here too (F-01): the edited array is sent on Save through the SAME
+// updateShopProfile links write (no second writer). address/website are still
+// round-tripped unchanged so the full-replace action never wipes them.
 type ChromeEdits = {
   name: string;
   tagline: string;
   description: string;
   warehouse_location: string;
+  links: ShopLink[];
 };
 
 function initEdits(c: Shop["company"]): ChromeEdits {
@@ -103,6 +106,7 @@ function initEdits(c: Shop["company"]): ChromeEdits {
     tagline: c.tagline ?? "",
     description: c.description ?? "",
     warehouse_location: c.warehouse_location ?? "",
+    links: c.links ?? [],
   };
 }
 
@@ -131,6 +135,19 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
   // to reorder). Persisting a bespoke group order is Phase 16 (structured
   // locations own ordering), so this stays ephemeral.
   const [groupOrder, setGroupOrder] = useState<string[]>([]);
+  // Free-text locations staged in edit mode (F-01). A staged label renders an
+  // empty drop-target group; it only PERSISTS once a product is dragged into it
+  // (setProductLocation). Empty groups never persist — this stays client-only and
+  // resets on reload / leaving edit mode, so unfilled labels simply disappear.
+  const [pendingLocations, setPendingLocations] = useState<string[]>([]);
+
+  function addLocation(label: string) {
+    const value = label.trim();
+    if (!value) return; // empty labels do not persist (D-05 / Cluster D)
+    // Skip if a real group or a staged label already carries it.
+    if (products.some((p) => p.location === value)) return;
+    setPendingLocations((prev) => (prev.includes(value) ? prev : [...prev, value]));
+  }
 
   const updateEdit = <K extends keyof ChromeEdits>(k: K, v: ChromeEdits[K]) => {
     setEdits((e) => ({ ...e, [k]: v }));
@@ -142,6 +159,7 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
     setCoverFile(null);
     setDirty(false);
     setError(null);
+    setPendingLocations([]);
     setEditing(true);
   }
 
@@ -152,6 +170,7 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
     setDirty(false);
     setCoverFile(null);
     setError(null);
+    setPendingLocations([]);
   }
 
   // Present mode never carries edit mode (prototype: setPresent → setEdit(false)),
@@ -163,6 +182,7 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
     setDirty(false);
     setCoverFile(null);
     setError(null);
+    setPendingLocations([]);
     setPresenting(true);
   }
 
@@ -201,9 +221,10 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
     }
 
     // updateShopProfile is a full-replace writer: any field it reads and we omit is
-    // nulled, and its links come solely from the form. So we send the edited chrome
-    // fields PLUS the current address/website/links unchanged — links are display-
-    // only in Phase 7 (Rule 1: omitting them would silently wipe the seller's links).
+    // nulled, and its links come solely from the form. We send the edited chrome
+    // fields + the edited links array (F-01: links are now editable, committed
+    // through this ONE links write / parseLinks). address/website are round-tripped
+    // unchanged so the full-replace never wipes them.
     const fd = new FormData();
     fd.set("name", edits.name);
     fd.set("tagline", edits.tagline);
@@ -211,7 +232,7 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
     fd.set("warehouse_location", edits.warehouse_location);
     fd.set("address", company.address ?? "");
     fd.set("website", company.website ?? "");
-    fd.set("links", JSON.stringify(company.links ?? []));
+    fd.set("links", JSON.stringify(edits.links));
     if (coverPath) fd.set("cover_path", coverPath);
 
     const res = await updateShopProfile(fd);
@@ -221,6 +242,7 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
     setBrandingOpen(false);
     setDirty(false);
     setCoverFile(null);
+    setPendingLocations([]);
     router.refresh();
   }
 
@@ -242,6 +264,19 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
             (groupOrder.indexOf(a.location) + 1 || 999) -
             (groupOrder.indexOf(b.location) + 1 || 999),
         );
+
+  // Staged (empty) location groups render as drop targets while editing so the
+  // seller can drag products into a freshly-typed location. They carry no products
+  // yet, so they never persist — a group becomes real only once a product is
+  // assigned (setProductLocation on drop). Hidden under a specific location tab
+  // that isn't the staged label.
+  const pendingGroups = editing
+    ? pendingLocations
+        .filter((l) => loc === "All" || loc === l)
+        .filter((l) => !orderedGroups.some((g) => g.location === l))
+        .map((l) => ({ location: l, products: [] as Shop["products"] }))
+    : [];
+  const renderGroups = [...orderedGroups, ...pendingGroups];
 
   function reorderGroups(from: string, to: string) {
     const current = orderedGroups.map((g) => g.location);
@@ -303,7 +338,7 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
       ) : (
         <>
           <LocationTabs products={products} active={loc} onSelect={setLoc} />
-          {orderedGroups.map((g) => (
+          {renderGroups.map((g) => (
             <LocationGroup
               key={g.location}
               location={g.location}
@@ -322,8 +357,18 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
                   onChanged={() => router.refresh()}
                 />
               ))}
+              {/* "+ Add product" tile — edit mode only. Opens the EXISTING manual-add
+                  drawer (one validation authority); it does not create a product
+                  itself. New products land unassigned + draggable into this group. */}
+              {editing && (
+                <AddProductTile
+                  location={g.location === UNASSIGNED ? null : g.location}
+                  onClick={() => setDrawerOpen(true)}
+                />
+              )}
             </LocationGroup>
           ))}
+          {editing && <AddLocationInput onAdd={addLocation} />}
         </>
       )}
 
@@ -476,11 +521,21 @@ function ShopInfoRow({
         }
       />
 
-      {/* Links — display only (Phase 16 owns management) */}
+      {/* Links — editable in edit mode (F-01: add / remove / reorder custom links,
+          committed via the ONE updateShopProfile links write). Display-only when
+          not editing. Per-country-shop link scoping is Phase 16 / DEV-112. */}
       <InfoBox
         testId="info-card-links"
         title="Links"
-        preview={hasAnyLink ? links : <span className="text-sm text-ink/40">No links yet</span>}
+        preview={
+          editing ? (
+            <LinksEditor links={edits.links} onChange={(next) => onEdit("links", next)} />
+          ) : hasAnyLink ? (
+            links
+          ) : (
+            <span className="text-sm text-ink/40">No links yet</span>
+          )
+        }
       />
     </div>
   );
@@ -579,6 +634,180 @@ function LinkRow({ icon, label, url }: { icon: React.ReactNode; label: string; u
        className="flex items-center gap-2 font-bold text-ink hover:text-brand">
       {icon} {label}
     </a>
+  );
+}
+
+// ---------- links editor (edit mode) ----------
+// Add / remove / reorder custom links over a local edits.links array. Every change
+// flows back through onChange → edits.links, marking the shop dirty; Save sends the
+// whole array through the ONE updateShopProfile links write (parseLinks validates +
+// normalizes handles). No second links writer.
+const LINK_TYPE_OPTIONS: { value: ShopLink["platform"]; label: string }[] = [
+  { value: "linkedin", label: "LinkedIn" },
+  { value: "instagram", label: "Instagram" },
+  { value: "x", label: "X" },
+  { value: "custom", label: "Custom" },
+];
+
+function LinksEditor({
+  links,
+  onChange,
+}: {
+  links: ShopLink[];
+  onChange: (next: ShopLink[]) => void;
+}) {
+  const [platform, setPlatform] = useState<ShopLink["platform"]>("linkedin");
+  const [value, setValue] = useState("");
+  const [customLabel, setCustomLabel] = useState("");
+
+  function add() {
+    const v = value.trim();
+    if (!v) return; // empty links are dropped (parseLinks would drop them anyway)
+    const link: ShopLink = {
+      platform,
+      value: v,
+      ...(platform === "custom" && customLabel.trim() ? { label: customLabel.trim() } : {}),
+    };
+    onChange([...links, link]);
+    setValue("");
+    setCustomLabel("");
+  }
+  function remove(i: number) {
+    onChange(links.filter((_, idx) => idx !== i));
+  }
+  function move(i: number, dir: -1 | 1) {
+    const j = i + dir;
+    if (j < 0 || j >= links.length) return;
+    const next = [...links];
+    [next[i], next[j]] = [next[j], next[i]];
+    onChange(next);
+  }
+
+  const field =
+    "rounded-lg border border-ink/15 bg-white px-2 py-1.5 text-xs outline-none focus:border-brand";
+
+  return (
+    <div className="flex flex-col gap-2">
+      {links.length === 0 && <span className="text-sm text-ink/40">No links yet</span>}
+      {links.map((l, i) => (
+        <div key={i} className="flex items-center gap-1.5 rounded-lg bg-white/60 px-2.5 py-1.5">
+          <span className="text-ink">{linkIcon(l.platform)}</span>
+          <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{linkLabel(l)}</span>
+          <button
+            type="button" aria-label="Move link up" onClick={() => move(i, -1)} disabled={i === 0}
+            className="rounded p-1 text-ink/50 hover:bg-ink/5 disabled:opacity-30"
+          >
+            <ChevronUp size={14} />
+          </button>
+          <button
+            type="button" aria-label="Move link down" onClick={() => move(i, 1)}
+            disabled={i === links.length - 1}
+            className="rounded p-1 text-ink/50 hover:bg-ink/5 disabled:opacity-30"
+          >
+            <ChevronDown size={14} />
+          </button>
+          <button
+            type="button" aria-label="Remove link" onClick={() => remove(i)}
+            className="rounded p-1 text-rose-500 hover:bg-rose-50"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      ))}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <select
+          aria-label="Link type"
+          value={platform}
+          onChange={(e) => setPlatform(e.target.value as ShopLink["platform"])}
+          className={`${field} font-semibold`}
+        >
+          {LINK_TYPE_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+        {platform === "custom" && (
+          <input
+            aria-label="Custom link name"
+            value={customLabel}
+            placeholder="Name"
+            onChange={(e) => setCustomLabel(e.target.value)}
+            className={`${field} w-24`}
+          />
+        )}
+        <input
+          aria-label="Link URL or handle"
+          value={value}
+          placeholder="handle or URL"
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }}
+          className={`${field} min-w-0 flex-1`}
+        />
+        <button
+          type="button"
+          data-testid="add-link-btn"
+          aria-label="Add link"
+          onClick={add}
+          className="flex items-center gap-1 rounded-lg bg-brand px-2.5 py-1.5 text-xs font-bold text-white hover:bg-brand-deep"
+        >
+          <Plus size={13} /> Add
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---------- add-product tile (edit mode) ----------
+// A grid cell that opens the EXISTING manual-add drawer (one validation authority);
+// it never creates a product itself. Shown per location group while editing.
+function AddProductTile({ location, onClick }: { location: string | null; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      data-testid="add-product-tile"
+      onClick={onClick}
+      className="flex min-h-[220px] flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-ink/20 bg-brand/[0.03] p-6 text-sm font-bold text-brand-deep transition hover:border-brand hover:bg-brand/[0.06]"
+    >
+      <span className="grid h-11 w-11 place-items-center rounded-full bg-brand text-white">
+        <Plus size={22} />
+      </span>
+      Add product
+      {location && <span className="text-xs font-medium text-ink/50">to {location}</span>}
+    </button>
+  );
+}
+
+// ---------- add-location input (edit mode) ----------
+// Type a free-text location label to STAGE a group. The staged group persists only
+// once a product is dragged into it (setProductLocation); empty labels never persist.
+function AddLocationInput({ onAdd }: { onAdd: (label: string) => void }) {
+  const [value, setValue] = useState("");
+  function submit() {
+    const v = value.trim();
+    if (!v) return;
+    onAdd(v);
+    setValue("");
+  }
+  return (
+    <div className="flex items-center gap-2 rounded-2xl border border-dashed border-ink/20 bg-white/50 px-3.5 py-2.5">
+      <MapPin size={16} className="text-brand" />
+      <input
+        data-testid="add-location-input"
+        aria-label="Add a location"
+        value={value}
+        placeholder="Add a location / shop (e.g. Vienna, AT)"
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); submit(); } }}
+        className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-ink/40"
+      />
+      <button
+        type="button"
+        data-testid="add-location-btn"
+        onClick={submit}
+        className="rounded-full bg-brand px-4 py-1.5 text-sm font-bold text-white hover:bg-brand-deep"
+      >
+        Add
+      </button>
+    </div>
   );
 }
 
