@@ -165,7 +165,7 @@ function EditableLogoTile({
       type="button"
       data-testid="edit-logo-btn"
       onClick={onEditLogo}
-      title="Edit logo & branding"
+      title="Edit logo"
       className="group relative flex-none rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-white/70"
     >
       <LogoTile logoUrl={logoUrl} companyName={companyName} />
