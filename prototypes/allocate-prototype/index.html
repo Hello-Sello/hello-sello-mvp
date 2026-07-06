@@ -11,8 +11,12 @@
    • Variant A — Sales Calendar first (deal tracking as the landing visual)
    • Variant B — Orders & Offers first (order inbox as the landing visual)
   Shared deal receipt rail (the red ticket) slides in from Calendar pills + Order rows.
-  Batches tab = the allocator: product → batch → Supply / Substitute / Decline → Confirm Supply.
+  Batches tab = the allocator: product → batch → Decline / Substitute / Supply → Confirm Supply.
   Buttons (not swipe) chosen for desktop; open question for Marcel noted in NOTES.md.
+  Sales Calendar section DEFERRED (2026-07-06) — see NOTES.md; page ships as Orders + Batches only.
+  Folds in Marcel's DEV-157 feedback (2026-07-06): grams-only, one-step substitute→Supply,
+  Decline/Substitute/Supply button order, Product + Units-ordered filters, default sort = highest
+  volume total, big section titles / no AI-subtitle copy.
   Seeded with the real Canadian Craft CSV products (docs/CSV's/). No build, no persistence.
 -->
 <style>
@@ -103,7 +107,8 @@
 
   /* ── shared section toolbar ── */
   .secbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-  .secbar h2{margin:0;font-size:15.5px;font-weight:700;letter-spacing:-.01em}
+  .secbar h2{margin:0;font-size:22px;font-weight:800;letter-spacing:-.02em}
+.subx{border:none;background:none;color:#9c5f00;font-weight:800;font-size:13px;cursor:pointer;padding:0 0 0 4px;line-height:1}
   .secbar .spacer{flex:1}
   .chip{border-radius:999px;padding:8px 14px;font-size:12.5px;font-weight:600;background:rgba(255,255,255,.75);border:1px solid var(--line);color:var(--ink);display:inline-flex;align-items:center;gap:7px;transition:all .15s var(--ease-out)}
   .chip:hover{background:#fff;box-shadow:var(--shadow-sm)}
@@ -372,7 +377,6 @@
       <section class="screen" id="scr-batches">
         <div class="secbar">
           <h2>Batches</h2>
-          <small style="color:var(--ink-muted);font-size:12.5px">your allocation work surface — click a jar to filter by product · batches default to oldest first (FIFO)</small>
         </div>
         <div class="prodstrip" id="shelf"></div>
         <div class="alloc" id="alloc"></div>
@@ -708,25 +712,22 @@ function selOrder(tr,cust,id){
 
 /* ════════ BATCHES / ALLOCATOR ════════ */
 /* Table = permanent work surface; jar strip filters by product (click again → all).
-   Batches oldest-first; default = batches[0] (FIFO — implicit, not labelled).
-   dispUnit keeps volumes consistent everywhere (vol total, batch stock, splits, bars).
+   Batches oldest-first; default = batches[0] (FIFO — implicit, not labelled). Grams only (Marcel, DEV-157 #4).
    splits: null | [{code,g},…]. Partial confirm locks decided rows only. Decline = whole row. */
-let selProd = null, allocSort='margin', dispUnit='kg';
-const aFilter = {type:new Set(), uvol:new Set()}; // empty = all
+let selProd = null, allocSort='voltotal';
+const aFilter = {type:new Set(), uvol:new Set(), pid:new Set(), units:new Set()}; // empty = all
 const prod = id => PRODUCTS.find(x=>x.id===id);
 const WORKLIST = Object.entries(DEMAND).flatMap(([pid,rows])=>rows.map(r=>({...r,pid})));
-/* mode = the DECISION (supply/decline); substitution is a separate two-step row attribute:
-   subPick (dropdown open, nothing cut yet) → Apply → subApplied (old product cut, new shown) */
+/* mode = the DECISION (supply/decline). subPick = replacement picker open; subApplied = substitute
+   chosen — this ALSO sets mode='supply' in one go (Marcel, DEV-157 #1); ✕ (cancelSub) undoes it. */
 const rowState = WORKLIST.map(r=>({mode:null, subPick:false, subTo:null, subApplied:false, batch:prod(r.pid).batches[0].code, splits:null, locked:false}));
 const effProd = (r,s) => s.subApplied && s.subTo ? prod(s.subTo) : prod(r.pid);
 const TYPES = [...new Set(WORKLIST.map(r=>r.type))];
 const UVOLS = [...new Set(WORKLIST.map(r=>r.unit))].sort((a,b)=>a-b);
+const PRODIDS = [...new Set(WORKLIST.map(r=>r.pid))];
+const UNITVALS = [...new Set(WORKLIST.map(r=>r.units))].sort((a,b)=>a-b);
 
-function fmtVol(g){
-  if(dispUnit==='g') return g.toLocaleString('de-DE')+' g';
-  return parseFloat((g/1000).toFixed(2)).toLocaleString('de-DE')+' kg';
-}
-function setDispUnit(u){ dispUnit=u; renderAlloc(); }
+function fmtVol(g){ return g.toLocaleString('de-DE')+' g'; } // grams only (Marcel, DEV-157 #4)
 
 function renderShelf(){
   document.getElementById('shelf').innerHTML = PRODUCTS.map((p,idx)=>{
@@ -749,7 +750,10 @@ function setAllocSort(s){ allocSort=s; closeDots(); renderAlloc(); }
 function workRows(){
   let d = WORKLIST.map((row,i)=>({...row,i}))
     .filter(r=>{ const s=rowState[r.i]; const ep = s.subApplied? s.subTo : r.pid; return !selProd || ep===selProd; })
-    .filter(r=>(!aFilter.type.size || aFilter.type.has(r.type)) && (!aFilter.uvol.size || aFilter.uvol.has(String(r.unit))));
+    .filter(r=>(!aFilter.type.size || aFilter.type.has(r.type)) && (!aFilter.uvol.size || aFilter.uvol.has(String(r.unit)))
+             && (!aFilter.pid.size  || aFilter.pid.has(r.pid))  && (!aFilter.units.size || aFilter.units.has(String(r.units))));
+  /* default = highest vol total first, tiebreak by highest unit vol (Marcel, DEV-157 #8) */
+  if(allocSort==='voltotal') d.sort((a,b)=>(b.units*b.unit - a.units*a.unit) || (b.unit-a.unit));
   if(allocSort==='margin') d.sort((a,b)=>b.price-a.price);
   if(allocSort==='first')  d.sort((a,b)=>dateKey(a.recv+'-26').localeCompare(dateKey(b.recv+'-26')));
   if(allocSort==='key')    d.sort((a,b)=>(b.type==='Key Account')-(a.type==='Key Account'));
@@ -769,9 +773,8 @@ function batchOpts(p, sel){
 function renderAlloc(){
   document.getElementById('alloc').innerHTML = `
     <div class="sortstrip"><span class="sl">Sort by</span>
-      ${[['margin','Highest Margin'],['first','First Order'],['key','Key Accounts']].map(([k,l])=>`<button class="schip${allocSort===k?' on':''}" onclick="setAllocSort('${k}')">${l}</button>`).join('')}
+      ${[['voltotal','Highest Volume'],['margin','Highest Margin'],['first','First Order'],['key','Key Accounts']].map(([k,l])=>`<button class="schip${allocSort===k?' on':''}" onclick="setAllocSort('${k}')">${l}</button>`).join('')}
       <span style="flex:1"></span>
-      <div class="seg">${['g','kg'].map(u=>`<button class="${dispUnit===u?'on':''}" onclick="setDispUnit('${u}')">${u}</button>`).join('')}</div>
       <span style="font-size:11px;color:var(--ink-faint);font-weight:600">${selProd? prod(selProd).name+' only':'all products'}</span>
     </div>
     <div class="batchbars" id="allocBars"></div>
@@ -783,7 +786,8 @@ function renderAllocHead(){
   const ACOLS = [
     {key:'cust', label:'Customer', custsort:true},
     {key:'type', label:'Type', filter:TYPES, lbl:v=>v},
-    {label:'Product'},{label:'Units ordered'},
+    {key:'pid', label:'Product', filter:PRODIDS, lbl:v=>prod(v).name},
+    {key:'units', label:'Units ordered', filter:UNITVALS.map(String), lbl:v=>v},
     {key:'uvol', label:'Unit vol', filter:UVOLS.map(String), lbl:v=>v+'g'},
     {label:'Vol total'},{label:'Price / g'},{label:'Price total'},{label:'Batch'},{label:'Status'},
     {label:'Decline / Substitute / Supply'},
@@ -797,7 +801,7 @@ function renderAllocHead(){
       menu = `<button onclick="setAllocSort('custAZ')">Sort A → Z</button>
               <button onclick="setAllocSort('custZA')">Sort Z → A</button>
               <button onclick="setAllocSort('key')">Top accounts first</button>
-              ${active? `<button onclick="setAllocSort('margin')">Clear sort</button>`:''}`;
+              ${active? `<button onclick="setAllocSort('voltotal')">Clear sort</button>`:''}`;
     } else {
       active = aFilter[c.key].size>0;
       icon = 'i-filter';
@@ -814,14 +818,13 @@ function renderAllocBody(){
     const s = rowState[r.i], p = prod(r.pid), eP = effProd(r,s);
     const vol=r.units*r.unit, total=vol*r.price;
     const others = PRODUCTS.filter(x=>x.id!==r.pid);
-    /* product cell — two-step substitution: pick first (nothing cut), Apply → old cut, new shown */
+    /* product cell — substitute in one go: picking a replacement immediately applies it + supplies the row (Marcel, DEV-157 #1/#2) */
     let prodCell = p.name;
     if(s.subPick){
       prodCell = `${p.name}<br/>
-        <select class="rowsel" onchange="setSub(${r.i},this.value)">${others.map(o=>`<option value="${o.id}"${s.subTo===o.id?' selected':''}>→ ${o.name}</option>`).join('')}</select><br/>
-        <span style="font-size:10px;color:#9c5f00;font-weight:700">pick a replacement, then ✓ Apply</span>`;
+        <select class="rowsel" onchange="setSub(${r.i},this.value)"><option value="" selected disabled>→ pick a replacement</option>${others.map(o=>`<option value="${o.id}">→ ${o.name}</option>`).join('')}</select>`;
     } else if(s.subApplied){
-      prodCell = `<s>${p.name}</s><br/><span class="subnew">→ ${prod(s.subTo).name}</span>`;
+      prodCell = `<s>${p.name}</s><br/><span class="subnew">→ ${prod(s.subTo).name}<button class="subx" onclick="cancelSub(${r.i})" title="stop replacing">✕</button></span>`;
     }
     /* batch cell — oldest preselected by default; split on demand */
     let batchCell;
@@ -833,7 +836,7 @@ function renderAllocBody(){
       batchCell = s.splits.map((sp,j)=>`
         <span class="splitline">
           <select class="rowsel" style="max-width:120px" ${s.locked?'disabled':''} onchange="setSplitBatch(${r.i},${j},this.value)">${batchOpts(eP, sp.code)}</select>
-          <input type="number" min="0" step="any" value="${dispUnit==='kg'? parseFloat((sp.g/1000).toFixed(3)) : sp.g}" ${s.locked?'disabled':''} onchange="setSplitG(${r.i},${j},this.value)"/>${dispUnit}
+          <input type="number" min="0" step="1" value="${sp.g}" ${s.locked?'disabled':''} onchange="setSplitG(${r.i},${j},this.value)"/>g
           ${!s.locked && s.splits.length>2 ? `<button class="splitx" onclick="rmSplit(${r.i},${j})">×</button>`:''}
         </span>`).join('')
         + (!s.locked ? `<span class="splitline">
@@ -844,12 +847,11 @@ function renderAllocBody(){
     }
     /* status = clear next step at every stage */
     let statusCell = '<span style="color:var(--ink-faint)">pending</span>';
-    if(s.subPick)              statusCell = '<span style="color:#9c5f00;font-weight:700">picking substitute…</span>';
-    if(s.subApplied && !s.mode) statusCell = '<span style="color:#9c5f00;font-weight:700">Substituted<br/><span style="font-size:10px">→ now Supply or Decline</span></span>';
+    if(s.subPick)          statusCell = '<span style="color:#9c5f00;font-weight:700">picking replacement…</span>';
     if(s.mode==='supply')  statusCell = '<span style="color:#1e7a1e;font-weight:700">Supply</span>' + (s.subApplied?'<br/><span style="font-size:10px;color:#9c5f00;font-weight:600">with substitute</span>':'');
     if(s.mode==='decline') statusCell = '<span style="color:#b91c1c;font-weight:700">Declined</span>';
     if(s.locked) statusCell += '<span class="senttag">✓ SENT</span>';
-    const subLbl = s.subPick? '✓ Apply' : s.subApplied? 'Substituted ✓' : 'Substitute';
+    const subLbl = s.subPick? 'Cancel' : s.subApplied? 'Substituted ✓' : 'Substitute';
     return `<tr class="${s.mode?'st-'+s.mode:''}${s.locked?' lockedrow':''}">
       <td><b>${r.cust}</b></td>
       <td><span class="ct${r.type==='Key Account'?' key':''}">${r.type}</span></td>
@@ -859,15 +861,15 @@ function renderAllocBody(){
       <td>${batchCell}</td>
       <td>${statusCell}</td>
       <td><div class="aacts">
-        <button class="ab supply"  onclick="setMode(${r.i},'supply')">Supply</button>
-        <button class="ab sub${s.subPick||s.subApplied?' on':''}" onclick="subAction(${r.i})">${subLbl}</button>
         <button class="ab decline" onclick="setMode(${r.i},'decline')">Decline</button>
+        <button class="ab sub${s.subPick||s.subApplied?' on':''}" ${s.subApplied?'disabled':''} onclick="subAction(${r.i})">${subLbl}</button>
+        <button class="ab supply"  onclick="setMode(${r.i},'supply')">Supply</button>
       </div></td>
     </tr>`;
   }).join('');
 }
 function renderAllocFoot(){
-  /* live per-batch stock bars — above the table, next to the g/kg toggle */
+  /* live per-batch stock bars — above the table */
   const perBatch = {};
   WORKLIST.forEach((r,i)=>{
     const s=rowState[i]; if(s.mode!=='supply') return; // only supplied volume commits stock
@@ -894,26 +896,26 @@ function setMode(i,m){ // decision: supply or decline (substitution is separate 
   s.mode = s.mode===m? null : m;
   renderAllocBody(); renderAllocFoot();
 }
-function subAction(i){
-  const s = rowState[i], r = WORKLIST[i]; if(s.locked) return;
-  if(s.subPick){ // step 2: Apply — cut old, show new, jump to the substitute product
-    s.subPick=false; s.subApplied=true;
-    s.batch = prod(s.subTo).batches[0].code; s.splits=null;
-    selProd = s.subTo;
-    renderShelf(); renderAlloc();
-    toast(`Substituted → ${prod(s.subTo).name}. Now Supply or Decline the row.`);
-    return;
-  }
-  if(s.subApplied){ // undo substitution
-    s.subApplied=false; s.subTo=null;
-    s.batch = prod(r.pid).batches[0].code; s.splits=null;
-    renderAllocBody(); renderAllocFoot(); return;
-  }
-  // step 1: open the picker — nothing gets cut yet
-  s.subPick=true; s.subTo = PRODUCTS.find(x=>x.id!==r.pid).id;
+function subAction(i){ // opens the replacement picker; substitute→Supply happens in one go in setSub (Marcel, DEV-157 #1)
+  const s = rowState[i]; if(s.locked || s.subApplied) return;
+  if(s.subPick){ s.subPick=false; s.subTo=null; renderAllocBody(); return; } // cancel picking
+  s.subPick=true; s.subTo=null;
   renderAllocBody();
 }
-function setSub(i,pid){ rowState[i].subTo=pid; renderAllocBody(); }
+function setSub(i,pid){ // picking a replacement immediately substitutes AND marks the row Supply — no separate Apply step
+  const s = rowState[i];
+  s.subPick=false; s.subApplied=true; s.subTo=pid; s.mode='supply';
+  s.batch = prod(pid).batches[0].code; s.splits=null;
+  selProd = pid;
+  renderShelf(); renderAlloc();
+  toast(`Substituted → ${prod(pid).name} and marked Supply.`);
+}
+function cancelSub(i){ // the ✕ next to the substitute — stop replacing, back to undecided (Marcel, DEV-157 #5)
+  const s = rowState[i], r = WORKLIST[i]; if(s.locked) return;
+  s.subApplied=false; s.subTo=null; s.mode=null;
+  s.batch = prod(r.pid).batches[0].code; s.splits=null;
+  renderAllocBody(); renderAllocFoot();
+}
 function setBatch(i,code){ rowState[i].batch=code; renderAllocFoot(); }
 function toggleSplit(i){
   const s=rowState[i], r=WORKLIST[i], eP=effProd(r,s), vol=r.units*r.unit;
@@ -929,8 +931,7 @@ function addSplit(i){
 function rmSplit(i,j){ rowState[i].splits.splice(j,1); renderAllocBody(); renderAllocFoot(); }
 function setSplitBatch(i,j,code){ rowState[i].splits[j].code=code; renderAllocFoot(); }
 function setSplitG(i,j,v){
-  const n = Math.max(0, parseFloat(v)||0);
-  rowState[i].splits[j].g = Math.round(dispUnit==='kg'? n*1000 : n);
+  rowState[i].splits[j].g = Math.round(Math.max(0, parseFloat(v)||0));
   renderAllocBody(); renderAllocFoot();
 }
 function confirmSupply(){

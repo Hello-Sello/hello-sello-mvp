@@ -8,10 +8,10 @@ Seller-side operations surface where a producer **allocates their batches across
 
 ## Status
 
-- Depth: **prototype** (design contract = `prototypes/allocate-prototype/`, built 2026-07-05)
-- Last updated: 2026-07-05
-- Build status: **DEV-76 / batch allocation is post-MVP** (LAYER-2 §3 lock). This prototype is a **design exploration to confirm with Marcel, then build** — not yet scheduled. Keep this file as the single home for Allocate context; update it as decisions firm up.
-- Related: Ayush is building the **same Sales-calendar component** for the **Buy** surface — Sell adopts his design (one shared calendar, both surfaces).
+- Depth: **prototype finalized** (design contract = `prototypes/allocate-prototype/`, built 2026-07-05, finalized 2026-07-06)
+- Last updated: 2026-07-06
+- Build status: **BUILDING NOW.** Post-MVP lock un-parked (LAYER-2 §3, 2026-07-06) — goal is Sell/Allocate live in-product for the **8 July demo** (seed data OK). Marcel confirmed direction + filed line-item feedback same-day (DEV-157), folded into the prototype. Building via `/gsd:quick` — Orders & Offers + Batches first.
+- **Sales calendar section is DEFERRED** from this build — Ayush is building the Buy-side calendar (Marcel's DEV-154 feedback, 2026-07-06); Allocate ships with the calendar section as a stub/placeholder and adopts the shared component once it exists.
 
 ## Who uses this surface and why
 

@@ -1,6 +1,6 @@
 # Allocate prototype — notes
 
-**Status:** first pass 2026-07-05, for Marcel to confirm. Throwaway — build later in `src/`.
+**Status:** FINALIZED 2026-07-06 — Marcel reviewed + filed line-item feedback (DEV-157), folded in below. Throwaway — building now in `src/`.
 
 ## The question this prototype answers
 
@@ -87,12 +87,40 @@ with their real RRP / standard / bundle prices. Margin % shown per allocation ro
 - **Light theme** for the allocator table (matches system theme, not the dark wireframe).
 - **Margin badge removed** from customer cell (sort-by-margin remains).
 
-### Sales calendar (2026-07-05)
+### Sales calendar (2026-07-05 → DEFERRED 2026-07-06)
 
 - **Light theme** now (was dark) — whole page matches the system theme.
-- **⚠️ Design placeholder:** Ayush is building the same sales calendar for the **Buy**
-  section — this section will adopt his design/component when ready (one shared
-  calendar, both surfaces). Muskan to sync with him. Don't invest further here.
+- **⚠️ DEFERRED from the real build (2026-07-06 decision):** Ayush is actively building
+  the Buy-side sales calendar (Marcel gave him line-item feedback today, DEV-154 — separated
+  month bands, Y-axis steps, weighted-avg-price line, analytic-card headers). Rather than
+  design a second calendar here, **Allocate ships first as Orders & Offers + Batches only**;
+  the Sales calendar section stays a stub/placeholder in `src/app/` until the shared
+  calendar component exists, then Allocate adopts it. Don't invest further in this
+  section's design.
+
+### DEV-157 "ALLOCATE" — Marcel's line-item feedback (2026-07-06), folded into the prototype
+
+All 8 points applied directly to `index.html` (Batches/allocator section):
+
+1. **Substitute → Supply in one go** — picking a replacement in the dropdown now
+   immediately substitutes AND marks the row Supply (`setSub`); no separate "✓ Apply" click.
+2. **Bubble copy = "pick a replacement"** — the picker's placeholder option, not a caption line.
+3. **Button order = Decline / Substitute / Supply** (was Supply/Substitute/Decline) —
+   now matches the column header label, which already said this order.
+4. **Grams only** — removed the g/kg toggle entirely; `fmtVol` always renders grams.
+5. **✕ to stop replacing** — once substituted, a small ✕ next to the replacement name
+   (`cancelSub`) reverts the row to the original product, undecided.
+6. **Big titles, no subtitles** — `.secbar h2` bumped 15.5px/700 → 22px/800; removed the
+   small italic helper line under "Batches" (Choco-style: bold section titles, no
+   AI-caption text under them).
+7. **Filters added** on the **Product** and **Units ordered** columns (same header-dots
+   pattern as Type/Unit vol already had).
+8. **Default sort = highest volume total first**, tiebreak by highest unit volume
+   (`allocSort` default `'voltotal'`); the old "Highest Margin" default is now just
+   another sort chip.
+
+Verified: inline JS re-parses clean (`node -e "new Function(...)"`) after every edit —
+no live Chrome session to screenshot against this pass.
 
 ## Verdict
 
@@ -100,18 +128,29 @@ with their real RRP / standard / bundle prices. Margin % shown per allocation ro
   Orders & offers → Batches → Sales calendar.** Tabs A/B deleted; the strip chips are
   now jump-links that smooth-scroll to each section. Section-wise refinement next.
 - **Margin badge: REMOVED** from the customer cell (sort-by-margin kept).
-- **Substitution redesigned** into a 2-step attribute (pick → ✓ Apply → old struck through,
-  view jumps to substitute) separate from the Supply/Decline decision — the fix that made
-  the flow legible. Decline = whole row (no qty input).
+- **Substitution (2026-07-06, superseded by DEV-157 #1):** collapsed from the 2-step
+  pick→Apply into **one step** — picking a replacement immediately substitutes AND
+  marks the row Supply; a ✕ next to the replacement undoes it. Decline = whole row
+  (no qty input), unchanged.
 - **Product strip** = small square photo tiles (first Present shop photo), hover-zoom,
   select = slightly bigger + highlighted (name + cultivar only).
-- **Calendar** = light theme, but a PLACEHOLDER → adopt Ayush's Buy-section calendar.
+- **Calendar** = DEFERRED from the real build (see DEV-157/154 note above) — Orders +
+  Batches ship first.
 
-### Still open for Marcel
-- Swipe vs buttons for Supply/Substitute/Decline (prototype = buttons).
-- Order-# format `HS-CCC-AUR-260512-001` vs DEV-26 pattern (+ dashes vs fused initials).
-- `DD-Mon-YY` date convention platform-wide.
-- "Deal update" status colour (prototype = orange).
+### Resolved by Marcel (DEV-157, 2026-07-06)
+- Buttons (not swipe) for Decline/Substitute/Supply — confirmed, order is now
+  Decline/Substitute/Supply (see feedback list above).
+- Order-# format `HS-CCC-AUR-260512-001` and `DD-Mon-YY` dates — no objection raised;
+  treating both as confirmed as-is.
+
+### Still open (low priority — doesn't block building)
+- "Deal update" status colour (prototype = orange) — DEV-151 confirms the 8-state
+  vocabulary and colours (pink/pink/yellow/green/orange-ish/blue/dark-green) but doesn't
+  pin an exact hex; keep prototype's orange until flagged otherwise.
 - Deal receipt rail — still wireframe content, not iterated.
+- ⚠️ **Scope note:** `docs/product/surfaces/SELL.md` still marks batch allocation as
+  **post-MVP (LAYER-2 §3 lock)**. Marcel's DEV-157/151/152 activity (2026-07-05/06)
+  reads as an implicit un-park, but the lock doc itself needs an explicit update before/while
+  building — see SELL.md + LAYER-2-SURFACES.md §3.
 
 Full context now lives in `docs/product/surfaces/SELL.md` (canonical Allocate home).
