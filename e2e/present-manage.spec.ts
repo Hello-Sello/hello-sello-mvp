@@ -97,16 +97,39 @@ test("UX-04 · seller pastes a video link", async ({ page }) => {
   await expect(card.getByRole("link", { name: /open video/i })).toBeVisible();
 });
 
-test("UX-04 · seller uploads a COA PDF (MIME widened in 07-01)", async ({ page }) => {
+test("UX-04 · seller uploads a COA via the Upload-document popup", async ({ page }) => {
   await manageShop(page);
   const card = page.getByTestId("product-card").first();
   await flipToBack(card);
-  await card.getByLabel(/coa pdf file/i).setInputFiles({
+  // F-03: ONE [Upload document] button opens the type-first popup; COA is the
+  // default type and shows only a file drop (no name field).
+  await card.getByRole("button", { name: /upload document/i }).click();
+  await card.getByLabel(/document file/i).setInputFiles({
     name: "coa-test.pdf",
     mimeType: "application/pdf",
     buffer: PDF_MIN,
   });
+  await card.getByRole("button", { name: /^upload$/i }).click();
+  // The COA folder row is labelled with the filename (minus .pdf).
   await expect(card.getByText("coa-test", { exact: false }).first()).toBeVisible();
+});
+
+test("UX-04 · seller uploads a custom document with a name", async ({ page }) => {
+  await manageShop(page);
+  const card = page.getByTestId("product-card").first();
+  await flipToBack(card);
+  await card.getByRole("button", { name: /upload document/i }).click();
+  // Switching the type to "Custom document" reveals the Name field (F-03).
+  await card.getByLabel(/document type/i).selectOption({ label: "Custom document" });
+  await card.getByLabel(/document name/i).fill("Price sheet 2026");
+  await card.getByLabel(/document file/i).setInputFiles({
+    name: "sheet.pdf",
+    mimeType: "application/pdf",
+    buffer: PDF_MIN,
+  });
+  await card.getByRole("button", { name: /^upload$/i }).click();
+  // The custom name persists (reuses product_media.label) and shows in the row.
+  await expect(card.getByText("Price sheet 2026", { exact: false }).first()).toBeVisible();
 });
 
 test("UX-04 · seller downloads a single media file", async ({ page }) => {
