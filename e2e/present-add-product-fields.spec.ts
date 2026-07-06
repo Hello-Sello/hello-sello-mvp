@@ -27,6 +27,7 @@ async function signIn(page: Page) {
 }
 
 test("F-04 · manual Add-product form collects CBG/CBN/Region/Lineage/Packaging/Resealable and the card shows them", async ({ page }) => {
+  page.on("dialog", (d) => d.accept()); // accept the "Discard unsaved changes?" confirm on Exit
   await signIn(page);
   await page.goto("/present");
   await expect(page.getByTestId("product-card").first()).toBeVisible();
@@ -68,11 +69,17 @@ test("F-04 · manual Add-product form collects CBG/CBN/Region/Lineage/Packaging/
   await form.getByLabel(/^Resealable$/i).check();
 
   await form.getByRole("button", { name: /add product/i }).click();
-  await expect(page.getByText(/imported 1 product/i)).toBeVisible();
+  // The drawer's onImported callback closes it immediately + refreshes the shop
+  // (ShopView.tsx) — there is no window to assert the transient "Imported…"
+  // banner; the closed drawer + the new card rendering IS the success signal.
+  await expect(page.getByRole("heading", { name: /add products/i })).toHaveCount(0);
 
-  // Close the drawer and reload so the new card renders from a fresh fetch.
-  await page.keyboard.press("Escape");
-  await page.reload();
+  // Exit edit mode to view the card's DISPLAY rendering — its own strip inputs
+  // stay in edit mode until Save/discard, so the spec-row + strip TEXT assertions
+  // below need the non-edit view (the import itself is an immediate RPC write,
+  // not part of the batched pending-edit tree, so discarding here is safe).
+  await page.getByRole("button", { name: /exit/i }).click();
+  await expect(page.getByTestId("shop-surface")).toHaveAttribute("data-edit", "off");
 
   const card = page.getByTestId("product-card").filter({ hasText: productName });
   await expect(card).toBeVisible();
