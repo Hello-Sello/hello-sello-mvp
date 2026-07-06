@@ -1,7 +1,9 @@
 'use server'
 
+import { after } from 'next/server'
 import { createClient } from '@/shared/db/server'
 import { revalidatePath } from 'next/cache'
+import { shouldDispatch } from '@/shared/email/dispatch'
 import { REJECT_PRESETS } from './reject-presets'
 
 export type ActionResult = { ok: true } | { error: string }
@@ -22,11 +24,29 @@ export async function approveCompany(companyId: string): Promise<ActionResult> {
   if (!UUID_RE.test(companyId)) return { error: 'Invalid company ID' }
   const supabase = await createClient()
 
-  const { error } = await (supabase as unknown as {
+  const result = await (supabase as unknown as {
     rpc: (fn: string, args: Record<string, unknown>) => Promise<{ error: { message: string } | null }>
   }).rpc('approve_company', { p_company_id: companyId })
 
-  if (error) return { error: error.message }
+  if (result.error) return { error: result.error.message }
+
+  // SET-03: fire the verification.approved email fire-and-forget, ONLY after the
+  // RPC returned ok (shouldDispatch — the shared post-ok rule). after() defers it
+  // past the response so the ~300ms send never stalls the admin; the try/catch
+  // swallows any Resend/edge outage so a send failure is invisible and can never
+  // fail or roll back the approval (T-13-11-D). Recipient is resolved server-side
+  // in the edge fn — the action passes only the company id (T-13-11-I).
+  if (shouldDispatch(result)) {
+    after(async () => {
+      try {
+        await supabase.functions.invoke('send-lifecycle-email', {
+          body: { event: 'verification.approved', company_id: companyId },
+        })
+      } catch {
+        /* email transport down MUST NOT surface as an action failure */
+      }
+    })
+  }
 
   // D-10: revalidate so the queue re-renders without the just-approved company.
   // Revalidate the whole /admin subtree so detail pages also get fresh data.
@@ -56,7 +76,7 @@ export async function rejectCompany(
 
   const supabase = await createClient()
 
-  const { error } = await (supabase as unknown as {
+  const result = await (supabase as unknown as {
     rpc: (fn: string, args: Record<string, unknown>) => Promise<{ error: { message: string } | null }>
   }).rpc('reject_company', {
     p_company_id:  companyId,
@@ -64,7 +84,21 @@ export async function rejectCompany(
     p_preset_code: presetCode, // audit_log.metadata.preset (D-06)
   })
 
-  if (error) return { error: error.message }
+  if (result.error) return { error: result.error.message }
+
+  // SET-03: verification.rejected email, post-ok + fail-soft (see approveCompany).
+  // Carries the free-text note as `reason` so the email can echo why (D-06).
+  if (shouldDispatch(result)) {
+    after(async () => {
+      try {
+        await supabase.functions.invoke('send-lifecycle-email', {
+          body: { event: 'verification.rejected', company_id: companyId, reason: note },
+        })
+      } catch {
+        /* email transport down MUST NOT surface as an action failure */
+      }
+    })
+  }
 
   // D-10: revalidate so the queue re-renders without the just-rejected company.
   // Revalidate the whole /admin subtree so detail pages also get fresh data.

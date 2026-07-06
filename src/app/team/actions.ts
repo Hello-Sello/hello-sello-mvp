@@ -1,10 +1,12 @@
 'use server'
 
+import { after } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
 import { createClient } from '@/shared/db/server'
 import { createAdminClient } from '@/shared/db/admin'
 import { getCurrentCompanyId } from '@/shared/auth'
+import { shouldDispatch } from '@/shared/email/dispatch'
 
 /**
  * Revoke ALL of a user's refresh tokens by user id (the D-11 token-revoke step).
@@ -183,6 +185,23 @@ export async function removeMember(personId: string): Promise<ActionResult> {
     return { error: rpcError.message }
   }
 
+  // SET-03: membership.removed email — dispatched on the remove_member RPC ok (the
+  // removal itself, which already closed the cross-company data window), NOT gated
+  // on the best-effort token-revoke below: the member WAS removed even when the
+  // session-kill needs a retry (it 403s on the local stack), so the notification
+  // must not hinge on it. Fire-and-forget via after(), fail-soft.
+  if (shouldDispatch({ error: rpcError })) {
+    after(async () => {
+      try {
+        await supabase.functions.invoke('send-lifecycle-email', {
+          body: { event: 'membership.removed', person_id: personId },
+        })
+      } catch {
+        /* email transport down MUST NOT surface as an action failure */
+      }
+    })
+  }
+
   // Data is closed; now revoke ALL the removed user's refresh tokens (service-role;
   // server-only) so the still-valid ≤1h access JWT can never refresh → permanent lockout.
   const revoked = await revokeUserSessions(personId)
@@ -348,11 +367,36 @@ export async function approveJoin(requestId: string, role: Role): Promise<Action
   }
 
   const supabase = await createClient()
-  const { error } = await (supabase as unknown as RpcClient).rpc('approve_join_request', {
+
+  // Resolve the requester BEFORE the decision so the post-ok email has a recipient.
+  // jr_select (rls_policies.sql:239) lets this company's Superadmin read a row whose
+  // target_company_id is their own company — a scoped single-row lookup, not a guess.
+  const { data: jr } = await supabase
+    .from('join_request')
+    .select('requester_person_id')
+    .eq('id', requestId)
+    .maybeSingle()
+  const requesterPersonId = jr?.requester_person_id ?? null
+
+  const result = await (supabase as unknown as RpcClient).rpc('approve_join_request', {
     p_request_id: requestId,
     p_role: role,
   })
-  if (error) return { error: joinDecisionError(error.message) }
+  if (result.error) return { error: joinDecisionError(result.error.message) }
+
+  // SET-03: join.approved email to the requester, post-ok + fail-soft. Skip if the
+  // recipient id could not be resolved — never dispatch to a guessed person.
+  if (shouldDispatch(result) && requesterPersonId) {
+    after(async () => {
+      try {
+        await supabase.functions.invoke('send-lifecycle-email', {
+          body: { event: 'join.approved', person_id: requesterPersonId },
+        })
+      } catch {
+        /* email transport down MUST NOT surface as an action failure */
+      }
+    })
+  }
 
   revalidatePath('/team')
   return { ok: true }
@@ -367,11 +411,35 @@ export async function rejectJoin(requestId: string, reason?: string): Promise<Ac
   if (!UUID_RE.test(requestId)) return { error: 'Something went wrong. Please try again.' }
 
   const supabase = await createClient()
-  const { error } = await (supabase as unknown as RpcClient).rpc('reject_join_request', {
+
+  // Resolve the requester BEFORE the decision (see approveJoin) so join.rejected has
+  // a recipient — jr_select is RLS-scoped to this Superadmin's company.
+  const { data: jr } = await supabase
+    .from('join_request')
+    .select('requester_person_id')
+    .eq('id', requestId)
+    .maybeSingle()
+  const requesterPersonId = jr?.requester_person_id ?? null
+
+  const result = await (supabase as unknown as RpcClient).rpc('reject_join_request', {
     p_request_id: requestId,
     p_reason: reason ?? null,
   })
-  if (error) return { error: joinDecisionError(error.message) }
+  if (result.error) return { error: joinDecisionError(result.error.message) }
+
+  // SET-03: join.rejected email to the requester, post-ok + fail-soft. Carries the
+  // optional reason so the email can explain; skip if no recipient resolved.
+  if (shouldDispatch(result) && requesterPersonId) {
+    after(async () => {
+      try {
+        await supabase.functions.invoke('send-lifecycle-email', {
+          body: { event: 'join.rejected', person_id: requesterPersonId, reason: reason ?? null },
+        })
+      } catch {
+        /* email transport down MUST NOT surface as an action failure */
+      }
+    })
+  }
 
   revalidatePath('/team')
   return { ok: true }
