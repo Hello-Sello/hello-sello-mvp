@@ -21,6 +21,14 @@
  */
 import { test, expect, type Page, type Locator } from "@playwright/test";
 
+// Every case here signs in as the SAME alice@greenleaf.test shop and MUTATES the
+// shared seed (rename / soft-delete / upload persist). Under the config's
+// `fullyParallel`, the soft-delete case races the media-write cases — deleting a
+// product out from under another test's `.first()` card. Pin the file to serial
+// so the whole spec is deterministic (each case runs start-to-finish before the
+// next); re-run `supabase db reset` to restore the seed between full runs.
+test.describe.configure({ mode: "serial" });
+
 const EMAIL = "alice@greenleaf.test";
 const PASSWORD = "password123";
 
@@ -102,14 +110,16 @@ test("UX-04 · seller uploads a COA via the Upload-document popup", async ({ pag
   const card = page.getByTestId("product-card").first();
   await flipToBack(card);
   // F-03: ONE [Upload document] button opens the type-first popup; COA is the
-  // default type and shows only a file drop (no name field).
+  // default type and shows only a file drop (no name field). Scope to the dialog
+  // so the modal's "Upload" isn't confused with the Media area's "Upload" pill.
   await card.getByRole("button", { name: /upload document/i }).click();
-  await card.getByLabel(/document file/i).setInputFiles({
+  const modal = page.getByRole("dialog", { name: /upload document/i });
+  await modal.getByLabel(/document file/i).setInputFiles({
     name: "coa-test.pdf",
     mimeType: "application/pdf",
     buffer: PDF_MIN,
   });
-  await card.getByRole("button", { name: /^upload$/i }).click();
+  await modal.getByRole("button", { name: "Upload", exact: true }).click();
   // The COA folder row is labelled with the filename (minus .pdf).
   await expect(card.getByText("coa-test", { exact: false }).first()).toBeVisible();
 });
@@ -119,15 +129,16 @@ test("UX-04 · seller uploads a custom document with a name", async ({ page }) =
   const card = page.getByTestId("product-card").first();
   await flipToBack(card);
   await card.getByRole("button", { name: /upload document/i }).click();
+  const modal = page.getByRole("dialog", { name: /upload document/i });
   // Switching the type to "Custom document" reveals the Name field (F-03).
-  await card.getByLabel(/document type/i).selectOption({ label: "Custom document" });
-  await card.getByLabel(/document name/i).fill("Price sheet 2026");
-  await card.getByLabel(/document file/i).setInputFiles({
+  await modal.getByLabel(/document type/i).selectOption({ label: "Custom document" });
+  await modal.getByLabel(/document name/i).fill("Price sheet 2026");
+  await modal.getByLabel(/document file/i).setInputFiles({
     name: "sheet.pdf",
     mimeType: "application/pdf",
     buffer: PDF_MIN,
   });
-  await card.getByRole("button", { name: /^upload$/i }).click();
+  await modal.getByRole("button", { name: "Upload", exact: true }).click();
   // The custom name persists (reuses product_media.label) and shows in the row.
   await expect(card.getByText("Price sheet 2026", { exact: false }).first()).toBeVisible();
 });

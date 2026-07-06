@@ -35,6 +35,7 @@ import {
   addProductMediaRecord,
   removeProductMedia,
 } from "../manage";
+import { DocUploadModal } from "./DocUploadModal";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 /** Public URL for a `shop-media` storage path (same builder as ShopView). */
@@ -88,10 +89,9 @@ export function MediaManager({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState("");
+  const [docModalOpen, setDocModalOpen] = useState(false);
   const dragImageId = useRef<string | null>(null);
   const imageInput = useRef<HTMLInputElement>(null);
-  const coaInput = useRef<HTMLInputElement>(null);
-  const docInput = useRef<HTMLInputElement>(null);
 
   const images = p.images;
   const videos = p.media.filter((m) => m.kind === "video_link");
@@ -133,7 +133,8 @@ export function MediaManager({
   }
 
   // ── client-direct upload of a PDF → product_media (coa|doc) ───────────────
-  async function uploadDoc(file: File | undefined, kind: "coa" | "doc") {
+  // `name` is the custom-doc label from the popup; COA keeps the filename (minus .pdf).
+  async function uploadDoc(file: File | undefined, kind: "coa" | "doc", name?: string) {
     if (!file || !companyId) return;
     if (file.type !== PDF_TYPE) return setError("Upload a PDF file.");
     if (file.size > MAX_BYTES) return setError("File must be under 10 MB.");
@@ -148,7 +149,7 @@ export function MediaManager({
         .upload(candidate, file, { contentType: PDF_TYPE });
       if (upErr) throw new Error(upErr.message);
       path = candidate;
-      const label = kind === "coa" ? file.name.replace(/\.pdf$/i, "") : file.name;
+      const label = kind === "coa" ? file.name.replace(/\.pdf$/i, "") : name?.trim() || file.name;
       const res = await addProductMediaRecord(p.id, { kind, path, label });
       if ("error" in res) throw new Error(res.error);
       onChanged?.();
@@ -382,24 +383,14 @@ export function MediaManager({
           <span>Documents</span>
           <span className="ml-auto flex items-center gap-1.5">
             {canEdit && (
-              <>
-                <button
-                  type="button"
-                  className={pillBtn}
-                  disabled={busy}
-                  onClick={() => coaInput.current?.click()}
-                >
-                  <Plus size={11} /> Upload COA
-                </button>
-                <button
-                  type="button"
-                  className={pillBtn}
-                  disabled={busy}
-                  onClick={() => docInput.current?.click()}
-                >
-                  <Plus size={11} /> Upload document
-                </button>
-              </>
+              <button
+                type="button"
+                className={pillBtn}
+                disabled={busy}
+                onClick={() => setDocModalOpen(true)}
+              >
+                <Plus size={11} /> Upload document
+              </button>
             )}
             {hasDocFiles && (
               <button
@@ -443,28 +434,20 @@ export function MediaManager({
           e.target.value = "";
         }}
       />
-      <input
-        ref={coaInput}
-        type="file"
-        aria-label="COA PDF file"
-        accept="application/pdf"
-        hidden
-        onChange={(e) => {
-          void uploadDoc(e.target.files?.[0], "coa");
-          e.target.value = "";
-        }}
-      />
-      <input
-        ref={docInput}
-        type="file"
-        aria-label="Document PDF file"
-        accept="application/pdf"
-        hidden
-        onChange={(e) => {
-          void uploadDoc(e.target.files?.[0], "doc");
-          e.target.value = "";
-        }}
-      />
+
+      {/* Type-first document upload — one [Upload document] entry (F-03). The
+          modal collects { kind, file, name? }; the existing uploadDoc path then
+          uploads client-direct and records the label (custom name or filename). */}
+      {docModalOpen && (
+        <DocUploadModal
+          productName={p.name}
+          onClose={() => setDocModalOpen(false)}
+          onSubmit={({ kind, file, name }) => {
+            setDocModalOpen(false);
+            void uploadDoc(file, kind, name);
+          }}
+        />
+      )}
     </div>
   );
 }
