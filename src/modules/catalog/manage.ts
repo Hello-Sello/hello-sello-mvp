@@ -19,6 +19,7 @@ import { createClient } from "@/shared/db/server";
 import { getCurrentCompanyId } from "@/shared/auth";
 import type { TablesUpdate } from "@/types/database.types";
 import { isAllowedVideoUrl } from "./mediaLinks";
+import { DOMINANCE_CODES, IRRADIATION_CODES } from "./template";
 
 export type ManageResult = { ok: true } | { error: string };
 
@@ -296,7 +297,11 @@ export async function setProductLocation(
 
 /** The product fields the card edits inline. `price_per_gram` is routed to the
  *  pricelist_item (not the product); the rest land on the product row. Omitted
- *  keys are left unchanged; cost/COGS is deliberately not representable here. */
+ *  keys are left unchanged; cost/COGS is deliberately not representable here.
+ *  F-05 adds the other spec-row fields (Cluster F): free text (cultivator,
+ *  origin, region, lineage, packaging, supplier code), enum codes (dominance,
+ *  irradiation — validated against the template's canonical code lists), and
+ *  a boolean (resealable). */
 export type ProductFieldPatch = {
   name?: string;
   thc_percent?: number | null;
@@ -307,10 +312,26 @@ export type ProductFieldPatch = {
   location?: string | null;
   price_public?: boolean;
   price_per_gram?: number | null;
+  cultivator?: string | null;
+  country_of_origin?: string | null;
+  region?: string | null;
+  lineage_parent_a?: string | null;
+  lineage_parent_b?: string | null;
+  dominance_code?: string | null;
+  irradiation_code?: string | null;
+  packaging_material?: string | null;
+  resealable?: boolean | null;
+  supplier_product_code?: string | null;
 };
 
 const NUMERIC_PRODUCT_FIELDS = [
   "thc_percent", "cbd_percent", "cbg_percent", "cbn_percent", "terpene_percent",
+] as const;
+
+/** F-05 free-text spec-row fields: trimmed, empty → null (clears the field). */
+const TEXT_PRODUCT_FIELDS = [
+  "cultivator", "country_of_origin", "region", "lineage_parent_a", "lineage_parent_b",
+  "packaging_material", "supplier_product_code",
 ] as const;
 
 /** Apply a validated product-field patch (Save flush target). Product-table fields
@@ -337,6 +358,24 @@ export async function updateProductFields(
   }
   if (patch.location !== undefined) productPatch.location = patch.location?.trim() || null;
   if (patch.price_public !== undefined) productPatch.price_public = patch.price_public;
+  for (const key of TEXT_PRODUCT_FIELDS) {
+    const v = patch[key];
+    if (v === undefined) continue;
+    productPatch[key] = v?.trim() || null;
+  }
+  if (patch.dominance_code !== undefined) {
+    if (patch.dominance_code !== null && !DOMINANCE_CODES.includes(patch.dominance_code as (typeof DOMINANCE_CODES)[number])) {
+      return { error: "Invalid dominance." };
+    }
+    productPatch.dominance_code = patch.dominance_code;
+  }
+  if (patch.irradiation_code !== undefined) {
+    if (patch.irradiation_code !== null && !IRRADIATION_CODES.includes(patch.irradiation_code as (typeof IRRADIATION_CODES)[number])) {
+      return { error: "Invalid irradiation." };
+    }
+    productPatch.irradiation_code = patch.irradiation_code;
+  }
+  if (patch.resealable !== undefined) productPatch.resealable = patch.resealable;
 
   if (Object.keys(productPatch).length > 0) {
     const { error } = await supabase.from("product").update(productPatch).eq("id", productId);

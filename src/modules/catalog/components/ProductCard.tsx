@@ -28,6 +28,7 @@ import type { ShopProduct } from "../shop";
 import { PackSizeSelector } from "./PackSizeSelector";
 import { MediaManager } from "./MediaManager";
 import { softDeleteProduct, setProductProfileVisible } from "../manage";
+import { DOMINANCE_CODES, IRRADIATION_CODES } from "../template";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 /** Build a public shop-media URL from a stored path (mirrors ShopView's builder). */
@@ -54,7 +55,10 @@ export type PendingBatchEdit = {
   cbd_percent?: string;
   expiry_date?: string;
 };
-/** Raw-string overlays for the card's inline product fields. */
+/** Raw-string overlays for the card's inline product fields. F-05 adds the
+ *  other spec-row fields (Cluster F) alongside the F-02 numeric strip + name:
+ *  free text, enum codes (dominance/irradiation — raw code string, "" = n.a.),
+ *  and a boolean (resealable). Same contract — absent means "unchanged". */
 export type ProductFieldDraft = {
   name?: string;
   thc_percent?: string;
@@ -64,6 +68,16 @@ export type ProductFieldDraft = {
   terpene_percent?: string;
   price_per_gram?: string;
   price_public?: boolean;
+  cultivator?: string;
+  country_of_origin?: string;
+  region?: string;
+  lineage_parent_a?: string;
+  lineage_parent_b?: string;
+  dominance_code?: string;
+  irradiation_code?: string;
+  packaging_material?: string;
+  resealable?: boolean;
+  supplier_product_code?: string;
 };
 /** The per-product pending overlay ShopView flushes on Save. */
 export type ProductDraft = {
@@ -80,12 +94,36 @@ type NumFieldKey =
   | "thc_percent" | "cbd_percent" | "cbg_percent" | "cbn_percent"
   | "terpene_percent" | "price_per_gram";
 
+// ── Spec-row inline editing (F-05 / Cluster F) ────────────────────────────────
+// The scrollable spec-row list below the strip: free text, enum-code selects
+// (Dominance/Irradiation — NOT free text, per the locked spec), and one
+// boolean (Resealable). Same controlled-by-draft contract as the strip; the
+// row descriptor carries its own display string so the read path stays a
+// single mapped array (no duplicate "how do I show this" logic).
+type TextFieldKey =
+  | "cultivator" | "country_of_origin" | "region"
+  | "packaging_material" | "supplier_product_code";
+type EnumFieldKey = "dominance_code" | "irradiation_code";
+type SpecRowDef =
+  | { kind: "text"; key: TextFieldKey; label: string; display: string }
+  | { kind: "enum"; key: EnumFieldKey; label: string; display: string; codes: readonly string[]; labelMap: Record<string, string> }
+  | { kind: "bool"; key: "resealable"; label: string; display: string }
+  | { kind: "lineage"; label: "Lineage"; display: string };
+
+const specField =
+  "w-full min-w-0 rounded border border-ink/15 bg-white px-1.5 py-0.5 text-xs font-semibold text-brand-deep focus:border-brand focus:outline-none";
+
 const DOMINANCE_LABEL: Record<string, string> = {
   indica: "Indica",
   sativa: "Sativa",
   hybrid: "Hybrid",
   indica_dominant: "Indica-Dominant",
   sativa_dominant: "Sativa-Dominant",
+};
+const IRRADIATION_LABEL: Record<string, string> = {
+  beta: "Beta",
+  gamma: "Gamma",
+  un_irradiated: "Un-irradiated",
 };
 
 /** Price as "8,00€" (comma decimal, EU convention) — matches ShopView's `eur`. */
@@ -183,16 +221,28 @@ export function ProductCard({
   const cover = hasImages ? mediaUrl(images[idx].path) : null;
 
   const packs = packLabels(p);
-  const specRows: [string, string][] = [
-    ["Dominance", p.dominance_code ? DOMINANCE_LABEL[p.dominance_code] ?? p.dominance_code : "n.a."],
-    ["Cultivator", p.cultivator ?? "n.a."],
-    ["Origin", p.country_of_origin ?? "n.a."],
-    ["Region", p.region ?? "n.a."],
-    ["Lineage", p.lineage_parent_a || p.lineage_parent_b ? `${p.lineage_parent_a ?? "?"} × ${p.lineage_parent_b ?? "?"}` : "n.a."],
-    ["Irradiation", p.irradiation_code ?? "n.a."],
-    ["Packaging", p.packaging_material ?? "n.a."],
-    ["Resealable", p.resealable == null ? "n.a." : p.resealable ? "Yes" : "No"],
-    ["Supplier code", p.supplier_product_code ?? "n.a."],
+  const specRows: SpecRowDef[] = [
+    {
+      kind: "enum", key: "dominance_code", label: "Dominance", codes: DOMINANCE_CODES, labelMap: DOMINANCE_LABEL,
+      display: p.dominance_code ? DOMINANCE_LABEL[p.dominance_code] ?? p.dominance_code : "n.a.",
+    },
+    { kind: "text", key: "cultivator", label: "Cultivator", display: p.cultivator ?? "n.a." },
+    { kind: "text", key: "country_of_origin", label: "Origin", display: p.country_of_origin ?? "n.a." },
+    { kind: "text", key: "region", label: "Region", display: p.region ?? "n.a." },
+    {
+      kind: "lineage", label: "Lineage",
+      display: p.lineage_parent_a || p.lineage_parent_b ? `${p.lineage_parent_a ?? "?"} × ${p.lineage_parent_b ?? "?"}` : "n.a.",
+    },
+    {
+      kind: "enum", key: "irradiation_code", label: "Irradiation", codes: IRRADIATION_CODES, labelMap: IRRADIATION_LABEL,
+      display: p.irradiation_code ? IRRADIATION_LABEL[p.irradiation_code] ?? p.irradiation_code : "n.a.",
+    },
+    { kind: "text", key: "packaging_material", label: "Packaging", display: p.packaging_material ?? "n.a." },
+    {
+      kind: "bool", key: "resealable", label: "Resealable",
+      display: p.resealable == null ? "n.a." : p.resealable ? "Yes" : "No",
+    },
+    { kind: "text", key: "supplier_product_code", label: "Supplier code", display: p.supplier_product_code ?? "n.a." },
   ];
   // The strip: label · display value · the draft key + fallback its input edits.
   const strip: [string, NumFieldKey, number | null][] = [
@@ -367,14 +417,27 @@ export function ProductCard({
               ))}
             </div>
 
-            {/* scrollable full product-info list; lineage clamped to 2 lines; the
-                batch editor (edit) / picker (view) live here so the card keeps its
-                fixed height. */}
+            {/* scrollable full product-info list — a form in edit mode (F-05): every
+                row becomes a controlled input/select, batched the same way as the
+                strip above; lineage clamped to 2 lines in the read view. The batch
+                editor (edit) / picker (view) live here so the card keeps its fixed
+                height. */}
             <div className="mt-1.5 flex min-h-0 flex-1 flex-col overflow-y-auto px-3.5">
-              {specRows.map(([k, v]) => (
-                <div key={k} className="flex items-start gap-2 border-b border-ink/10 py-1.5 text-xs">
-                  <span className="w-[78px] shrink-0 font-medium text-ink-muted">{k}</span>
-                  <span className={`font-semibold leading-snug ${k === "Lineage" ? "line-clamp-2" : ""}`}>{v}</span>
+              {specRows.map((row) => (
+                <div key={row.label} className="flex items-start gap-2 border-b border-ink/10 py-1.5 text-xs">
+                  <span className="w-[78px] shrink-0 font-medium text-ink-muted">{row.label}</span>
+                  {editing ? (
+                    <SpecFieldEditor
+                      row={row}
+                      fields={fields}
+                      product={p}
+                      onChange={(patch) => onEditField?.(p.id, patch)}
+                    />
+                  ) : (
+                    <span className={`font-semibold leading-snug ${row.label === "Lineage" ? "line-clamp-2" : ""}`}>
+                      {row.display}
+                    </span>
+                  )}
                 </div>
               ))}
               {editing ? (
@@ -480,6 +543,81 @@ export function ProductCard({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── Spec-row field editor (edit mode, F-05) ───────────────────────────────────
+// One row of the spec-row form: text / enum-select / boolean-checkbox / the
+// two-input Lineage pair. Controlled by the draft overlay (falls back to the
+// product's own value); every change reports UP via onChange — this component
+// never writes anything itself, matching the strip's contract exactly.
+function SpecFieldEditor({
+  row, fields, product: p, onChange,
+}: {
+  row: SpecRowDef;
+  fields: ProductFieldDraft;
+  product: ShopProduct;
+  onChange: (patch: Partial<ProductFieldDraft>) => void;
+}) {
+  if (row.kind === "text") {
+    const val = fields[row.key] ?? (p[row.key] ?? "");
+    return (
+      <input
+        aria-label={row.label}
+        value={val}
+        onChange={(e) => onChange({ [row.key]: e.target.value })}
+        className={specField}
+      />
+    );
+  }
+  if (row.kind === "enum") {
+    const val = fields[row.key] ?? (p[row.key] ?? "");
+    return (
+      <select
+        aria-label={row.label}
+        value={val}
+        onChange={(e) => onChange({ [row.key]: e.target.value })}
+        className={specField}
+      >
+        <option value="">n.a.</option>
+        {row.codes.map((c) => (
+          <option key={c} value={c}>{row.labelMap[c] ?? c}</option>
+        ))}
+      </select>
+    );
+  }
+  if (row.kind === "bool") {
+    const val = fields.resealable ?? (p.resealable ?? false);
+    return (
+      <label className="flex items-center gap-1.5 text-xs font-semibold text-ink-muted">
+        <input
+          type="checkbox"
+          aria-label={row.label}
+          checked={val}
+          onChange={(e) => onChange({ resealable: e.target.checked })}
+        />
+        {val ? "Yes" : "No"}
+      </label>
+    );
+  }
+  // Lineage — two independent parent fields side by side, one row.
+  return (
+    <div className="flex flex-1 gap-1">
+      <input
+        aria-label="Lineage A"
+        placeholder="Lineage A"
+        value={fields.lineage_parent_a ?? (p.lineage_parent_a ?? "")}
+        onChange={(e) => onChange({ lineage_parent_a: e.target.value })}
+        className={`${specField} w-1/2`}
+      />
+      <input
+        aria-label="Lineage B"
+        placeholder="Lineage B"
+        value={fields.lineage_parent_b ?? (p.lineage_parent_b ?? "")}
+        onChange={(e) => onChange({ lineage_parent_b: e.target.value })}
+        className={`${specField} w-1/2`}
+      />
     </div>
   );
 }
