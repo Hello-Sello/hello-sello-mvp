@@ -609,9 +609,9 @@ const initialState = () => ({
   term: '6 months',
   /* totals are never stored — computed as size(g) × units × price(€/g) */
   lines: [
-    { id: 1, name: 'Pedanios 22/1 · Mandarin Cookies', size: 1000, units: 3, price: 3.80 },
-    { id: 2, name: 'Bedrocan · Afina 22/1',            size: 500,  units: 2, price: 4.20 },
-    { id: 3, name: 'Aurora 20/1 · Pink Kush',          size: 250,  units: 4, price: 3.50 },
+    { id: 1, name: 'Pedanios 22/1 · Mandarin Cookies', batch: '24-117', size: 1000, units: 3, price: 3.80 },
+    { id: 2, name: 'Bedrocan · Afina 22/1',            batch: '24-098', size: 500,  units: 2, price: 4.20 },
+    { id: 3, name: 'Aurora 20/1 · Pink Kush',          batch: '25-034', size: 250,  units: 4, price: 3.50 },
   ],
   /* extra conditions — SELLER-only edit; blank ones never render for the buyer */
   cond: {
@@ -660,11 +660,13 @@ function setRole(r) { role = r; S.editRow = null; S.shopOpen = false; render(); 
 
 /* the seller's shop — products you can pull into the deal in edit mode */
 const SHOP = [
-  { name: 'Pedanios 20/1 · Gorilla Glue',   size: 1000, price: 3.40 },
-  { name: 'Tilray THC25 · Sour Jack',       size: 500,  price: 4.60 },
-  { name: 'Cantourage 22/1 · Wedding Cake', size: 250,  price: 4.10 },
-  { name: 'Demecan 18/1 · Orange Velvet',   size: 500,  price: 3.20 },
+  { name: 'Pedanios 20/1 · Gorilla Glue',   batch: '24-201', size: 1000, price: 3.40 },
+  { name: 'Tilray THC25 · Sour Jack',       batch: '25-112', size: 500,  price: 4.60 },
+  { name: 'Cantourage 22/1 · Wedding Cake', batch: '25-034', size: 250,  price: 4.10 },
+  { name: 'Demecan 18/1 · Orange Velvet',   batch: '24-098', size: 500,  price: 3.20 },
 ];
+/* batches the supplier can pick from — supplier-only, like the price */
+const BATCHES = ['24-098', '24-117', '24-201', '25-034', '25-112'];
 let lineSeq = 4, discSeq = 1, bundSeq = 2;
 
 const lineTotal = l => l.size * l.units * l.price;
@@ -836,7 +838,7 @@ function proposeChange() {
   if (S.pending || S.signed) return;   // no new diffs once the signing chain started
   S.pending = {
     removesLineId: 1,
-    newLine: { id: 1, name: 'Pedanios 22/1 · Mandarin Cookies', size: 1000, units: 3, price: 3.60 },
+    newLine: { id: 1, name: 'Pedanios 22/1 · Mandarin Cookies', batch: '24-117', size: 1000, units: 3, price: 3.60 },
     termFrom: '6 months', termTo: '9 months',
     by: 'Alice Green',
     note: 'Extend commitment to 9 months in exchange for 3.60 €/g on the Pedanios.',
@@ -897,7 +899,13 @@ function toggleEdit() {
   S.edit = !S.edit; S.editRow = null; S.shopOpen = false; S.face = 'card'; render();
 }
 function setEditRow(id) { S.editRow = id; render(); }
-function rowSet(id, k, v) { const l = S.lines.find(x => x.id === id); if (l && v > 0) l[k] = v; render(); }
+function rowSet(id, k, v) {
+  const l = S.lines.find(x => x.id === id);
+  if (!l) return;
+  if (typeof v === 'number' && !(v > 0)) return;   // numbers must stay positive; batch is a string
+  l[k] = v;
+  render();
+}
 function rowBump(id, d) { const l = S.lines.find(x => x.id === id); l.units = Math.max(1, l.units + d); render(); }
 function delLine(id) {
   S.lines = S.lines.filter(l => l.id !== id);
@@ -908,7 +916,7 @@ function delLine(id) {
 }
 function addProduct(i) {
   const s = SHOP[i], id = lineSeq++;
-  S.lines.push({ id, name: s.name, size: s.size, units: 1, price: s.price });
+  S.lines.push({ id, name: s.name, batch: s.batch, size: s.size, units: 1, price: s.price });
   S.shopOpen = false;
   S.editRow = id;   // a fresh product lands straight in row-edit
   render();
@@ -945,7 +953,7 @@ const escAttr = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g
 
 /* product rules: name never editable; the buyer may change size/units but NEVER price */
 const SIZES = [100, 250, 500, 1000];
-const lineCells = l => `<td class="num mono">${l.size} g</td><td class="num mono">${l.units}</td><td class="num mono">${perg(l.price)}</td><td class="num mono">${eur(lineTotal(l))}</td>`;
+const lineCells = l => `<td class="num mono">${l.batch}</td><td class="num mono">${l.size} g</td><td class="num mono">${l.units}</td><td class="num mono">${perg(l.price)}</td><td class="num mono">${eur(lineTotal(l))}</td>`;
 
 function renderLinesTable() {
   const E = S.edit, p = S.pending;
@@ -958,6 +966,9 @@ function renderLinesTable() {
     } else if (E && S.editRow === l.id) {
       rows.push(`<tr>
         <td>${esc(l.name)}</td>
+        <td class="num">${role === 'seller'
+          ? `<select onchange="rowSet(${l.id}, 'batch', this.value)">${BATCHES.map(b => `<option ${b === l.batch ? 'selected' : ''}>${b}</option>`).join('')}</select>`
+          : `<span class="mono">${l.batch}</span> <span class="locksm" title="Only the supplier can change the batch">${ICONS.lock}</span>`}</td>
         <td class="num"><select onchange="rowSet(${l.id}, 'size', +this.value)">${SIZES.map(s => `<option value="${s}" ${s === l.size ? 'selected' : ''}>${s} g</option>`).join('')}</select></td>
         <td class="num"><span class="stepper"><button onclick="rowBump(${l.id}, -1)">−</button><b class="mono">${l.units}</b><button onclick="rowBump(${l.id}, 1)">+</button></span></td>
         <td class="num">${role === 'seller'
@@ -976,7 +987,7 @@ function renderLinesTable() {
         `<button onclick="addProduct(${i})">${esc(s.name)} <span class="mut">${s.size} g · ${perg(s.price)}</span></button>`).join('')}</div>` : ''}
     </div>` : '';
   return `<table class="lines">
-    <thead><tr><th>Product</th><th style="text-align:right">Unit size</th><th style="text-align:right">Units</th><th style="text-align:right">Price</th><th style="text-align:right">Total</th>${E ? '<th></th>' : ''}</tr></thead>
+    <thead><tr><th>Product</th><th style="text-align:right">Batch</th><th style="text-align:right">Unit size</th><th style="text-align:right">Units</th><th style="text-align:right">Price</th><th style="text-align:right">Total</th>${E ? '<th></th>' : ''}</tr></thead>
     <tbody>${rows.join('')}</tbody>
   </table>${addRow}`;
 }
