@@ -18,6 +18,12 @@ import {
   DOMINANCE_CODES,
   IRRADIATION_CODES,
 } from "@/modules/catalog/template";
+import { COUNTRIES } from "@/shared/geo/countries";
+
+// Country names A→Z for the origin dropdown. `country_of_origin` is a free-text
+// template column, so we submit the display NAME (what the card shows), not the
+// ISO code — no import-side validation to satisfy.
+const COUNTRY_NAMES = Object.values(COUNTRIES).sort((a, b) => a.localeCompare(b));
 
 const titleCase = (s: string) =>
   s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -145,18 +151,31 @@ function CsvTab({ busy, onImport }: { busy: boolean; onImport: (csv: string) => 
   );
 }
 
-// Minimal manual add: the template's required columns + the common optionals.
+// Minimal manual add: the template's required columns + the common optionals,
+// plus the curated Cluster-E subset (07-FIDELITY-CONTEXT.md "Add-product field
+// parity") — the spec-row fields already shown on the card front that were
+// previously CSV-only. NOT full ~30-column parity: batch/terpene/COGS/RRP/
+// image-filename/visibility-date/bundle fields stay out (card's inline batch
+// editor or later CSV covers those).
 // Field key = exact template header so buildCsv can map it straight through.
+// `Country` is rendered separately as a dropdown (below); the rest stay free text.
+// `Packaging` = the packaging TYPE (glass jar / bag), distinct from the numeric
+// "Pack size (g)" — the placeholder makes that difference obvious in the form.
 const TEXT_FIELDS = [
   { header: "Product name", required: true },
   { header: "Cultivar", required: false },
   { header: "Supplier code", required: true },
   { header: "PZN", required: false },
-  { header: "Country", required: false },
+  { header: "Region", required: false },
+  { header: "Lineage A", required: false },
+  { header: "Lineage B", required: false },
+  { header: "Packaging", required: false, placeholder: "e.g. glass jar, bag" },
 ] as const;
 const NUM_FIELDS = [
   { header: "THC %", required: true },
   { header: "CBD %", required: true },
+  { header: "CBG %", required: false },
+  { header: "CBN %", required: false },
   { header: "Pack size (g)", required: true },
   { header: "Basic price per g", required: true },
 ] as const;
@@ -174,7 +193,9 @@ function ManualTab({ busy, onImport }: { busy: boolean; onImport: (csv: string) 
     e.preventDefault();
     const row: Record<string, string> = { ...vals };
     row["Show price publicly"] = vals["__pricePublic"] === "on" ? "yes" : "no";
+    row["Resealable"] = vals["__resealable"] === "on" ? "yes" : "no";
     delete row["__pricePublic"];
+    delete row["__resealable"];
     onImport(buildCsv([row]));
   }
 
@@ -188,11 +209,24 @@ function ManualTab({ busy, onImport }: { busy: boolean; onImport: (csv: string) 
           <input
             className={input}
             required={f.required}
+            placeholder={"placeholder" in f ? f.placeholder : undefined}
             value={vals[f.header] ?? ""}
             onChange={(e) => set(f.header, e.target.value)}
           />
         </label>
       ))}
+      {/* Country of origin — a dropdown (free-text column, so the value is the name). */}
+      <label className="block">
+        <span className="text-xs font-semibold text-ink/70">Country</span>
+        <select
+          className={input}
+          value={vals["Country"] ?? ""}
+          onChange={(e) => set("Country", e.target.value)}
+        >
+          <option value="">Choose…</option>
+          {COUNTRY_NAMES.map((n) => <option key={n} value={n}>{n}</option>)}
+        </select>
+      </label>
       <div className="grid grid-cols-2 gap-3">
         {NUM_FIELDS.map((f) => (
           <label key={f.header} className="block">
@@ -232,6 +266,14 @@ function ManualTab({ busy, onImport }: { busy: boolean; onImport: (csv: string) 
           onChange={(e) => set("__pricePublic", e.target.checked ? "on" : "")}
         />
         <span className="text-sm text-ink/70">Show price publicly (otherwise buyers see “Request pricing”)</span>
+      </label>
+      <label className="flex items-center gap-2">
+        <input
+          type="checkbox"
+          checked={vals["__resealable"] === "on"}
+          onChange={(e) => set("__resealable", e.target.checked ? "on" : "")}
+        />
+        <span className="text-sm text-ink/70">Resealable</span>
       </label>
       <button
         type="submit"

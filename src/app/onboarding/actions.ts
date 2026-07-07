@@ -69,12 +69,26 @@ export async function createCompany(formData: FormData): Promise<ActionResult> {
   const name = String(formData.get('name') ?? '').trim()
   const country = String(formData.get('country') ?? '').trim()
   const typeCodes = formData.getAll('type_codes').map(String)
+  // Two-level taxonomy (DEV-99 #3): Business Categories (sector) alongside the
+  // Business Activities above. A 'custom' category carries its free-text label in
+  // custom_category; the DB CHECK enforces "label present iff custom".
+  const categoryCodes = formData.getAll('category_codes').map(String)
+  const customCategory = String(formData.get('custom_category') ?? '').trim()
   const files = formData
     .getAll('files')
     .filter((f): f is File => f instanceof File && f.size > 0)
 
   if (!name) return { error: 'Company name is required.' }
   if (country.length !== 2) return { error: 'Please pick a country.' }
+  // Both taxonomy levels are required in the UI; re-assert server-side so a crafted
+  // POST can't create a taxonomy-less company. Naming the 'custom' category here also
+  // yields a friendly message instead of leaking the raw company_business_category
+  // custom_label CHECK violation back to the client.
+  if (typeCodes.length === 0) return { error: 'Please pick at least one business activity.' }
+  if (categoryCodes.length === 0) return { error: 'Please pick at least one business category.' }
+  if (categoryCodes.includes('custom') && customCategory === '') {
+    return { error: 'Please name your custom business category.' }
+  }
   if (LICENCE_REQUIRED && files.length === 0) return { error: 'A licence file is required.' }
 
   const supabase = await createClient()
@@ -105,6 +119,8 @@ export async function createCompany(formData: FormData): Promise<ActionResult> {
       p_name: name,
       p_country: country,
       p_type_codes: typeCodes,
+      p_category_codes: categoryCodes,
+      p_custom_category: customCategory || undefined,
     })
     if (error || !data) {
       return { error: error?.message ?? 'Could not create the company.' }

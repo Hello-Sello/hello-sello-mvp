@@ -90,6 +90,28 @@ in the correct final state; the intermediate version is never used mid-push.
 
 ## PENDING (local only — NOT on cloud yet)
 
+### 2026-07-06 (Muskan) — Phase 7 Present fidelity + card-front batch schema — NOT on cloud
+
+| # | Migration | What it does |
+|---|-----------|--------------|
+| 1 | `20260706120000_product_terpene_percent.sql` | **F-02.** `alter table public.product add column if not exists terpene_percent numeric;` — one headline total-terpenes value, editable inline on the card. Additive, nullable, **no backfill** (existing rows read NULL and fall back to the derived batch-terpene sum). The ONLY schema change of the whole fidelity pass. |
+
+- **Status:** local-first; applied via `supabase db reset` (GREEN) + `database.types.ts` regenerated from local. **Not pushed to cloud.**
+- **Sibling Phase-7 migrations also still local-only** (from 07-03/04/05, appear to predate this ledger's PENDING list): `20260705120000_product_location.sql`, `20260705120100_product_media.sql`, `20260705120200_shop_media_allow_pdf.sql`. Push the whole Phase-7 set together, in timestamp order, when the human deploys.
+- **Migration before code** — `shop.ts` reads `product.terpene_percent`; shipping the app without this column errors the Present read on cloud.
+- **Push:** a clean single `supabase db push` from a LINKED machine, in timestamp order (`20260706120000` sorts last). Coordinate with Ayush if his lane added migrations in the meantime.
+
+### 2026-07-05 (Muskan) — DEV-99 #3 business-category taxonomy — NOT on cloud
+
+| # | Migration | What it does |
+|---|-----------|--------------|
+| 1 | `20260704090000_business_category_taxonomy.sql` | NEW `business_category` lookup (6 rows incl. `custom`) + `company_business_category` junction (nullable `custom_label`; CHECK = label present **iff** `code='custom'`; RLS `business_category_read` + `cbc_all` scoped to `current_company_id()`). Grows `company_type` (Activity) 4→8 to Marcel's list; **remaps** legacy `cultivator`→`eu_gmp_cultivator` then drops it; **backfills** the `pharma` category onto every company that has an activity. `CREATE OR REPLACE onboard_company` — **drops the old 3-arg**, adds a 5-arg (`+p_category_codes text[]`, `+p_custom_category text`) with a parallel category loop. Additive + idempotent. |
+
+- **Status:** local-first; **rollback-verified** (`BEGIN…ROLLBACK`, non-destructive) — **not yet `migration up`'d even to local** (89 files on disk vs 88 rows in local `schema_migrations`; this is the 1 gap). Next session: `migration up` + update `seed.sql` to the new codes + `supabase db reset` to prove a clean replay + regen `database.types.ts`.
+- **Migration before code** — the OnboardingStepper reads `business_category` and calls the 5-arg `onboard_company`; shipping app code without this migration errors onboarding.
+- **⚠️ Drops the old 3-arg `onboard_company`** (the current cloud body). The `DROP FUNCTION public.onboard_company(text,text,text[])` + the new 5-arg must land as **one unit** — no window where only the old signature exists beside new app code.
+- **Push:** a clean single `supabase db push` from a LINKED machine, in timestamp order (`20260704090000` sorts last, after any earlier pending batch). Coordinate with Ayush if his lane added migrations in the meantime.
+
 ### ⚠️ 2026-06-21 (Muskan) — verified against live cloud: the batch below is DONE; only Phase 10 remains
 
 A live `list_migrations` on 2026-06-21 shows cloud's tip = `20260620120000_canonical_display_name`.

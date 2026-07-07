@@ -1,0 +1,976 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Allocate — Sell surface prototype</title>
+<!--
+  THROWAWAY PROTOTYPE — Allocate page (Sell surface), first pass 2026-07-05.
+  Question: how do the 3 Allocate sections (Sales Calendar / Orders & Offers / Batches)
+  live on ONE tabbed page, and which tab lands first?
+   • Variant A — Sales Calendar first (deal tracking as the landing visual)
+   • Variant B — Orders & Offers first (order inbox as the landing visual)
+  Shared deal receipt rail (the red ticket) slides in from Calendar pills + Order rows.
+  Batches tab = the allocator: product → batch → Decline / Substitute / Supply → Confirm Supply.
+  Buttons (not swipe) chosen for desktop; open question for Marcel noted in NOTES.md.
+  Sales Calendar section DEFERRED (2026-07-06) — see NOTES.md; page ships as Orders + Batches only.
+  Folds in Marcel's DEV-157 feedback (2026-07-06): grams-only, one-step substitute→Supply,
+  Decline/Substitute/Supply button order, Product + Units-ordered filters, default sort = highest
+  volume total, big section titles / no AI-subtitle copy.
+  Seeded with the real Canadian Craft CSV products (docs/CSV's/). No build, no persistence.
+-->
+<style>
+  :root{
+    --brand:#e30b5d; --brand-soft:#ffb7d5; --brand-deep:#76002d;
+    --ink:rgba(20,10,16,.92); --ink-muted:rgba(20,10,16,.55); --ink-faint:rgba(20,10,16,.40);
+    --line:rgba(20,10,16,.07); --line-strong:rgba(20,10,16,.11);
+    --success:#34b233; --info:#6c7bd9; --danger:#dc2626; --warn:#e8930c;
+    --glass-bg:rgba(255,255,255,.64); --glass-bg-strong:rgba(255,255,255,.84);
+    --glass-border:rgba(255,255,255,.7);
+    --shadow-sm:0 1px 2px rgba(20,10,16,.04),0 2px 6px -1px rgba(118,0,45,.06);
+    --shadow-md:0 1px 2px rgba(20,10,16,.04),0 5px 12px -3px rgba(118,0,45,.07),0 12px 26px -8px rgba(118,0,45,.08);
+    --shadow-lg:0 1px 2px rgba(20,10,16,.05),0 8px 18px -6px rgba(118,0,45,.09),0 18px 40px -12px rgba(118,0,45,.11),0 30px 64px -20px rgba(118,0,45,.10);
+    --ease:cubic-bezier(.4,.15,.2,1); --ease-out:cubic-bezier(0,0,.2,1);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{height:100vh;display:flex;flex-direction:column;overflow:hidden;color:var(--ink);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased;
+    background:radial-gradient(60rem 60rem at 10% -12%,rgba(255,183,213,.5),transparent 60%),radial-gradient(46rem 46rem at 108% 6%,rgba(227,11,93,.08),transparent 55%),linear-gradient(160deg,#fff,#fff1f7);
+    background-attachment:fixed;}
+  .glass{background:var(--glass-bg);backdrop-filter:blur(20px) saturate(180%);-webkit-backdrop-filter:blur(20px) saturate(180%);border:1px solid var(--glass-border);box-shadow:var(--shadow-md)}
+  svg{display:block}
+  .ic{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+  .ic.sm{width:15px;height:15px}.ic.xs{width:13px;height:13px}
+  button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+  .ulabel{font-size:10.5px;font-weight:600;letter-spacing:.11em;text-transform:uppercase;color:var(--ink-faint)}
+
+  /* ── prototype switch strip ── */
+  .switch{flex:0 0 auto;display:flex;align-items:center;gap:10px;padding:8px 14px;background:rgba(20,10,16,.92);color:#fff;font-size:12.5px;z-index:80}
+  .switch b{color:#ffb7d5;font-weight:600}
+  .switch .seg2{display:flex;gap:4px;margin-left:auto}
+  .switch .seg2 button{border-radius:999px;padding:6px 14px;font-size:12px;font-weight:600;color:rgba(255,255,255,.7);background:rgba(255,255,255,.08)}
+  .switch .seg2 button.on{background:var(--brand);color:#fff}
+
+  .app{flex:1;min-height:0;display:flex;overflow:hidden}
+
+  /* ── left rail ── */
+  .rail{margin:14px 0 14px 14px;width:76px;flex:0 0 76px;display:flex;flex-direction:column;gap:4px;border-radius:24px;padding:10px}
+  .wordmark{display:flex;flex-direction:column;align-items:center;gap:3px;margin:4px 0 14px}
+  .wordmark .badge{width:34px;height:34px;border-radius:11px;background:var(--brand);color:#fff;display:grid;place-items:center;font-weight:700;font-size:13px;box-shadow:var(--shadow-sm)}
+  .wordmark small{font-size:8.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint)}
+  .nav{display:flex;flex-direction:column;gap:4px}
+  .navitem{position:relative;display:flex;flex-direction:column;align-items:center;gap:5px;border-radius:16px;padding:10px 4px;font-size:10px;font-weight:600;line-height:1;color:var(--ink-muted);transition:all .2s var(--ease-out);cursor:pointer}
+  .navitem:hover{background:rgba(255,255,255,.6);color:var(--brand)}
+  .navitem.active{background:rgba(227,11,93,.09);color:var(--brand)}
+  .navitem.active .edge{position:absolute;left:0;top:50%;transform:translateY(-50%);height:28px;width:3px;border-radius:0 4px 4px 0;background:var(--brand)}
+  .rail .acct{margin-top:auto;display:flex;justify-content:center;padding-top:12px}
+  .avatar{width:40px;height:40px;border-radius:999px;background:linear-gradient(135deg,#ffb7d5,#e30b5d);color:#fff;display:grid;place-items:center;font-weight:700;font-size:14px;box-shadow:0 0 0 2px #fff,var(--shadow-sm)}
+
+  .col{display:flex;min-width:0;flex:1;flex-direction:column}
+
+  /* ── topbar ── */
+  .topbar{margin:14px 14px 0;display:flex;align-items:center;gap:10px;border-radius:18px;padding:9px 14px;position:relative;z-index:30}
+  .srch{display:flex;align-items:center;border-radius:999px;background:rgba(255,255,255,.55);flex:1;max-width:420px}
+  .srch button{width:40px;height:40px;border-radius:999px;display:grid;place-items:center;color:var(--ink-muted);flex:0 0 40px}
+  .srch input{width:100%;border:none;background:transparent;font-size:13.5px;outline:none;padding-right:10px}
+  .tbspace{flex:1}
+  .tbicon{position:relative;width:40px;height:40px;border-radius:999px;background:rgba(255,255,255,.6);display:grid;place-items:center;transition:all .18s var(--ease-out)}
+  .tbicon:hover{background:#fff;box-shadow:var(--shadow-sm)}
+  .cochip{display:inline-flex;align-items:center;gap:9px;border-radius:999px;background:rgba(255,255,255,.6);padding:5px 13px 5px 6px;font-weight:700;font-size:13px}
+  .cochip .colg{width:30px;height:30px;border-radius:9px;background:#0f4c81;color:#fff;display:grid;place-items:center;font-size:10px;font-weight:800}
+
+  /* ── page head + tabs ── */
+  .pagehead{margin:16px 18px 0;display:flex;align-items:baseline;gap:12px}
+  .pagehead h1{margin:0;font-size:22px;font-weight:700;letter-spacing:-.02em}
+  .pagehead small{font-size:12.5px;color:var(--ink-muted);font-weight:500}
+  .tabstrip{margin:12px 18px 0;display:flex;gap:6px}
+  .tab{display:inline-flex;align-items:center;gap:8px;border-radius:14px 14px 0 0;padding:11px 20px 12px;font-size:13.5px;font-weight:600;color:var(--ink-muted);background:rgba(255,255,255,.45);border:1px solid var(--glass-border);border-bottom:none;transition:all .15s var(--ease-out)}
+  .tab:hover{background:rgba(255,255,255,.75);color:var(--ink)}
+  .tab.on{background:var(--glass-bg-strong);color:var(--brand);box-shadow:var(--shadow-sm)}
+  .tab .num{width:18px;height:18px;border-radius:999px;background:rgba(227,11,93,.1);color:var(--brand);font-size:10.5px;font-weight:800;display:grid;place-items:center}
+  .tab.on .num{background:var(--brand);color:#fff}
+
+  main{min-height:0;flex:1;overflow:auto;margin:0 18px 16px;border-radius:0 18px 18px 18px;background:var(--glass-bg-strong);backdrop-filter:blur(24px) saturate(180%);border:1px solid var(--glass-border);box-shadow:var(--shadow-md);padding:18px;position:relative}
+  .screen{display:none;flex-direction:column;gap:14px;min-height:100%}
+  body[data-tab="calendar"] #scr-calendar{display:flex}
+  body[data-tab="orders"]   #scr-orders{display:flex}
+  body[data-tab="batches"]  #scr-batches{display:flex}
+  /* Variant C — one scrollable page: all sections stacked */
+  body[data-variant="C"] .screen{display:flex !important;min-height:0;scroll-margin-top:12px}
+  body[data-variant="C"] main{scroll-behavior:smooth}
+  body[data-variant="C"] .screen + .screen{margin-top:26px;padding-top:26px;border-top:1.5px dashed var(--line-strong)}
+  body[data-variant="C"] .tab{border-radius:999px;padding:8px 16px;border:1px solid var(--line);background:rgba(255,255,255,.6)}
+  body[data-variant="C"] .tab.on{background:var(--brand);color:#fff}
+  body[data-variant="C"] .tab.on .num{background:rgba(255,255,255,.25);color:#fff}
+  body[data-variant="C"] .tabstrip{margin-bottom:10px}
+
+  /* ── shared section toolbar ── */
+  .secbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .secbar h2{margin:0;font-size:22px;font-weight:800;letter-spacing:-.02em}
+.subx{border:none;background:none;color:#9c5f00;font-weight:800;font-size:13px;cursor:pointer;padding:0 0 0 4px;line-height:1}
+  .secbar .spacer{flex:1}
+  .chip{border-radius:999px;padding:8px 14px;font-size:12.5px;font-weight:600;background:rgba(255,255,255,.75);border:1px solid var(--line);color:var(--ink);display:inline-flex;align-items:center;gap:7px;transition:all .15s var(--ease-out)}
+  .chip:hover{background:#fff;box-shadow:var(--shadow-sm)}
+  .seg{display:inline-flex;gap:2px;border-radius:999px;padding:3px;background:rgba(20,10,16,.05)}
+  .seg button{border-radius:999px;padding:6px 13px;font-size:12px;font-weight:600;color:var(--ink-muted)}
+  .seg button.on{background:#fff;color:var(--brand);box-shadow:var(--shadow-sm)}
+
+  /* ══ CALENDAR (light — matches system theme) ══
+     NOTE: layout/design is a PLACEHOLDER — to be replaced with Ayush's Buy-section
+     sales calendar (same component both surfaces). */
+  .calwrap{border-radius:16px;background:#fff;border:1px solid var(--line);box-shadow:var(--shadow-sm);padding:14px 16px;color:var(--ink);overflow:auto}
+  .caltotals{display:grid;gap:0;align-items:stretch;margin-bottom:4px}
+  .caltotals .tl{font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-faint);display:flex;align-items:center;padding:6px 8px}
+  .caltotals .tc{padding:8px 6px;text-align:center;font-size:13.5px;font-weight:700;color:var(--ink);border-left:1px solid var(--line)}
+  .caltotals .tc small{display:block;font-size:9.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint);margin-top:2px}
+  .calhead{display:grid;gap:0;border-bottom:1px solid var(--line-strong)}
+  .calhead .wk{grid-row:1;text-align:center;font-size:10px;font-weight:700;letter-spacing:.14em;color:var(--ink-faint);padding:7px 0 3px;border-left:1px solid var(--line)}
+  .calhead .dy{grid-row:2;text-align:center;font-size:11px;font-weight:600;color:var(--ink-muted);padding:4px 0 8px}
+  .calhead .dy.today{color:var(--brand);font-weight:800}
+  .calrow{display:grid;gap:0;border-bottom:1px solid var(--line);position:relative;min-height:56px;align-items:center}
+  .calrow:hover{background:rgba(227,11,93,.02)}
+  .calrow .who{display:flex;align-items:center;gap:10px;padding:8px 8px 8px 2px;position:sticky;left:0;background:inherit}
+  .calrow .mono{width:32px;height:32px;border-radius:9px;background:rgba(227,11,93,.08);display:grid;place-items:center;font-size:10.5px;font-weight:800;letter-spacing:.03em;color:var(--brand-deep);flex:0 0 32px}
+  .calrow .who b{font-size:13.5px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pillbtn{grid-row:1;height:30px;border-radius:999px;background:linear-gradient(135deg,var(--brand-soft),var(--brand));box-shadow:0 4px 14px -4px rgba(227,11,93,.45);display:flex;align-items:center;justify-content:center;transition:transform .15s var(--ease-out)}
+  .pillbtn:hover{transform:translateY(-1px) scale(1.04)}
+  .pillbtn .dot{width:7px;height:7px;border-radius:999px;background:#fff;opacity:.95}
+  .pillbtn .amt{display:none;font-size:10.5px;font-weight:700;color:#fff;padding:0 8px;white-space:nowrap}
+  .calwrap[data-view="month"] .pillbtn .amt,.calwrap[data-view="year"] .pillbtn .amt{display:block}
+  .calwrap[data-view="month"] .pillbtn .dot,.calwrap[data-view="year"] .pillbtn .dot{display:none}
+  .todayline{position:absolute;top:0;bottom:0;width:1.5px;background:linear-gradient(180deg,rgba(227,11,93,0),rgba(227,11,93,.4) 12%,rgba(227,11,93,.4) 88%,rgba(227,11,93,0));pointer-events:none;z-index:2}
+  .callegend{display:flex;align-items:center;gap:14px;margin-top:12px;font-size:11px;color:var(--ink-faint)}
+  .callegend .k{display:inline-flex;align-items:center;gap:6px}
+  .callegend .swatch{width:16px;height:9px;border-radius:999px;background:linear-gradient(135deg,var(--brand-soft),var(--brand))}
+
+  /* ══ ORDERS table ══ */
+  .otable{border-radius:16px;background:#fff;box-shadow:var(--shadow-sm);border:1px solid var(--line);overflow:visible}
+  .otable thead th:first-child{border-top-left-radius:16px}
+  .otable thead th:last-child{border-top-right-radius:16px}
+  .hwrap{display:inline-flex;align-items:center;gap:5px}
+  .hbtn{width:20px;height:20px;border-radius:6px;display:grid;place-items:center;color:var(--ink-faint);transition:all .12s}
+  .hbtn:hover{background:rgba(20,10,16,.07);color:var(--ink)}
+  .hbtn.on{color:var(--brand);background:rgba(227,11,93,.09)}
+  .hmenu{left:0;right:auto;text-transform:none;letter-spacing:0}
+  .fitem{display:flex;align-items:center;gap:8px;border-radius:8px;padding:7px 10px;font-size:12.5px;font-weight:600;color:var(--ink);cursor:pointer}
+  .fitem:hover{background:rgba(227,11,93,.06)}
+  .fitem input{accent-color:var(--brand);margin:0}
+  .otable table{width:100%;border-collapse:collapse;font-size:12.5px}
+  .otable th{text-align:left;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-faint);padding:9px 10px;border-bottom:1px solid var(--line-strong);background:rgba(255,241,247,.5);white-space:nowrap}
+  .otable td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:middle;white-space:nowrap}
+  .otable tr:last-child td{border-bottom:none}
+  .otable tbody tr{cursor:pointer;transition:background .12s}
+  .otable tbody tr:hover{background:rgba(227,11,93,.03)}
+  .otable tbody tr.sel{background:rgba(227,11,93,.06)}
+  .ordid{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;font-weight:600;color:var(--brand-deep);white-space:nowrap}
+  .cust{display:flex;align-items:center;gap:9px;font-weight:600;white-space:nowrap}
+  .cust .mono{width:28px;height:28px;border-radius:8px;background:rgba(227,11,93,.08);color:var(--brand-deep);display:grid;place-items:center;font-size:10px;font-weight:800;flex:0 0 28px}
+  .insight{color:var(--ink-muted);max-width:230px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .stchip{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:4px 11px;font-size:11.5px;font-weight:700;white-space:nowrap}
+  .stchip .sd{width:6px;height:6px;border-radius:999px;background:currentColor;flex:0 0 6px}
+  .stchip.st-sales_offer,.stchip.st-purchase_order{background:rgba(227,11,93,.10);color:var(--brand-deep)}
+  .stchip.st-accepted{background:rgba(233,178,15,.16);color:#8a6a00}
+  .stchip.st-executed{background:rgba(52,178,51,.13);color:#1e7a1e}
+  .stchip.st-update{background:rgba(232,147,12,.14);color:#9c5f00}
+  .stchip.st-ticket{background:rgba(108,123,217,.14);color:#4353b8}
+  .stchip.st-ticket_closed{background:rgba(11,77,39,.16);color:#0b4d27}
+  .rowacts{display:flex;gap:5px}
+  .ra{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;transition:all .12s}
+  .ra.sub{color:var(--warn);background:rgba(232,147,12,.09)}
+  .ra.ok{color:var(--success);background:rgba(52,178,51,.1)}
+  .ra.more{color:var(--ink-muted);background:rgba(20,10,16,.05)}
+  .ra:hover{transform:scale(1.1)}
+  .actcell{position:relative}
+  .dots{position:relative;display:inline-flex}
+  .dmenu{position:absolute;right:0;top:calc(100% + 5px);z-index:40;display:none;flex-direction:column;min-width:132px;background:#fff;border:1px solid var(--line-strong);border-radius:12px;box-shadow:var(--shadow-lg);padding:5px}
+  .dots.open .dmenu{display:flex}
+  .dmenu button{display:flex;align-items:center;gap:9px;border-radius:8px;padding:8px 10px;font-size:12.5px;font-weight:600;color:var(--ink);text-align:left}
+  .dmenu button:hover{background:rgba(227,11,93,.06);color:var(--brand-deep)}
+
+  /* ══ BATCHES ══ */
+  /* horizontal product strip — small photo squares by default;
+     expand to the full Present-style card (image + label + info) on hover / selection */
+  .prodstrip{display:flex;gap:12px;overflow-x:auto;padding:12px 8px 10px;align-items:flex-start}
+  .jar{flex:0 0 72px;width:72px;border-radius:14px;background:#fff;border:1.5px solid var(--line);box-shadow:var(--shadow-sm);display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;transition:all .22s var(--ease);position:relative;z-index:1;overflow:hidden}
+  .jar:hover{transform:translateY(-3px) scale(1.08);box-shadow:var(--shadow-lg);z-index:3} /* zoom effect only */
+  .jar.sel{flex-basis:104px;width:104px;padding-bottom:8px;border-color:var(--brand);box-shadow:0 0 0 3px rgba(227,11,93,.16),var(--shadow-lg);z-index:2;transform:none}
+  /* square image tile — first photo from the shop (Present); gradient fallback */
+  .jar .ph{width:100%;aspect-ratio:1/1;display:grid;place-items:center;position:relative;overflow:hidden}
+  .jar .ph img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  .jar .ph .lblcard{display:none} /* label lives on the shop card, not here */
+  .jar .ph .init{font-size:15px;font-weight:800;letter-spacing:.04em;color:rgba(255,255,255,.92);text-shadow:0 1px 4px rgba(0,0,0,.18)} /* placeholder until the shop photo loads (photo paints over it) */
+  .jar > b,.jar > small,.jar .hov{display:none}
+  .jar.sel > b{display:block;font-size:10.5px;font-weight:700;text-align:center;line-height:1.2;padding:0 6px}
+  .jar.sel > small{display:block;font-size:9px;color:var(--ink-muted);font-weight:600;text-align:center;line-height:1.3;padding:0 6px}
+  /* in-table row controls (light — matches system theme) */
+  .alloc select.rowsel{background:#fff;color:var(--ink);border:1px solid var(--line-strong);border-radius:8px;font-size:11px;font-weight:600;padding:5px 6px;outline:none;max-width:165px}
+  .alloc select.rowsel:focus{border-color:var(--brand)}
+  .alloc select.rowsel:disabled{opacity:.5}
+  .alloc td s{opacity:.5}
+  .alloc .subnew{color:#1e7a1e;font-weight:700}
+  tr.lockedrow td{opacity:.55}
+  .senttag{font-size:9.5px;font-weight:800;letter-spacing:.04em;color:#1e7a1e;border:1px solid rgba(52,178,51,.45);border-radius:999px;padding:2px 8px;margin-left:6px;white-space:nowrap}
+  /* live per-batch stock bars — fills as volume is allocated */
+  .batchbars{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;flex:1}
+  .bbar{min-width:160px}
+  .bbar .bt{display:flex;justify-content:space-between;gap:10px;font-size:10.5px;font-weight:600;color:var(--ink-muted);margin-bottom:4px}
+  .bbar .bt b{color:var(--ink);font-family:ui-monospace,Menlo,monospace;font-size:10.5px}
+  .bbar .track{height:7px;border-radius:999px;background:rgba(20,10,16,.07);overflow:hidden}
+  .bbar .fill{height:100%;border-radius:999px;background:linear-gradient(90deg,var(--brand-soft),var(--brand));transition:width .3s var(--ease)}
+  .bbar.over .fill{background:var(--danger)}
+  /* batch split lines */
+  .splitline{display:flex;align-items:center;gap:5px;margin-top:4px}
+  .splitline input{width:64px;background:#fff;color:var(--ink);border:1px solid var(--line-strong);border-radius:7px;padding:4px 6px;font-size:11px;font-weight:600;outline:none}
+  .splitline input:focus{border-color:var(--brand)}
+  .splitbtn{font-size:10.5px;font-weight:700;color:var(--brand-deep);background:rgba(227,11,93,.07);border-radius:999px;padding:4px 10px;margin-top:4px}
+  .splitbtn:hover{background:rgba(227,11,93,.13)}
+  .splitx{width:18px;height:18px;border-radius:999px;background:rgba(20,10,16,.06);color:var(--danger);display:grid;place-items:center;font-size:12px;font-weight:700;line-height:1;flex:0 0 18px}
+  .splitsum{font-size:10px;font-weight:700;margin-top:3px}
+  .splitsum.ok{color:#1e7a1e}.splitsum.warn{color:#b91c1c}
+
+  /* allocator (light — matches system theme) */
+  .alloc{border-radius:16px;background:#fff;border:1px solid var(--line);box-shadow:var(--shadow-sm);padding:14px 16px;color:var(--ink);display:flex;flex-direction:column;gap:12px}
+  .alloc .sortstrip{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .alloc .sortstrip .sl{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint);margin-right:2px}
+  .schip{border-radius:999px;padding:6px 13px;font-size:11.5px;font-weight:700;color:var(--ink-muted);background:rgba(20,10,16,.05);transition:all .15s}
+  .schip:hover{background:rgba(20,10,16,.09)}
+  .schip.on{background:var(--brand);color:#fff;box-shadow:0 4px 12px -4px rgba(227,11,93,.5)}
+  .alloc table{width:100%;border-collapse:collapse;font-size:12.5px}
+  .alloc thead th{text-align:left;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-faint);padding:9px 8px;border-bottom:1px solid var(--line-strong);background:rgba(255,241,247,.5);white-space:nowrap}
+  .alloc tbody td{padding:10px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+  .alloc tbody tr:last-child td{border-bottom:none}
+  .alloc .ct{font-size:10.5px;font-weight:700;border-radius:999px;padding:3px 9px;background:rgba(20,10,16,.06);color:var(--ink-muted);white-space:nowrap}
+  .alloc .ct.key{background:rgba(227,11,93,.09);color:var(--brand-deep)}
+  .aacts{display:flex;gap:5px}
+  .ab{border-radius:9px;padding:7px 12px;font-size:11px;font-weight:800;letter-spacing:.02em;transition:all .13s;white-space:nowrap}
+  .ab:hover{transform:translateY(-1px)}
+  .ab.supply{background:rgba(52,178,51,.1);color:#1e7a1e;box-shadow:inset 0 0 0 1.5px rgba(52,178,51,.35)}
+  .ab.sub{background:rgba(232,147,12,.1);color:#9c5f00;box-shadow:inset 0 0 0 1.5px rgba(232,147,12,.35)}
+  .ab.decline{background:rgba(220,38,38,.07);color:#b91c1c;box-shadow:inset 0 0 0 1.5px rgba(220,38,38,.3)}
+  tr.st-supply .ab.supply{background:var(--success);color:#fff;box-shadow:none}
+  .ab.sub.on{background:var(--warn);color:#fff;box-shadow:none}
+  tr.st-decline .ab.decline{background:var(--danger);color:#fff;box-shadow:none}
+  tr.lockedrow .ab{opacity:.35;pointer-events:none}
+  .allocfoot{display:flex;align-items:center;gap:14px;margin-top:2px;padding-top:4px;flex-wrap:wrap}
+  .confirmbtn{border-radius:999px;padding:12px 24px;font-size:13px;font-weight:800;letter-spacing:.04em;background:var(--brand);color:#fff;box-shadow:0 8px 22px -6px rgba(227,11,93,.6);transition:all .15s}
+  .confirmbtn:hover{transform:translateY(-1px);background:var(--brand-deep)}
+  .confirmbtn:disabled{opacity:.35;cursor:not-allowed;transform:none}
+
+  /* ══ DEAL RECEIPT RAIL ══ */
+  .dealrail{position:fixed;top:0;right:0;bottom:0;width:392px;z-index:70;display:flex;flex-direction:column;background:linear-gradient(160deg,#c40b52,#8f0339);box-shadow:-18px 0 50px -18px rgba(118,0,45,.5);transform:translateX(105%);transition:transform .32s var(--ease);padding:18px 16px}
+  body[data-rail="open"] .dealrail{transform:none}
+  .dealrail .drhead{display:flex;align-items:center;color:#fff;margin-bottom:12px}
+  .dealrail .drhead b{font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;opacity:.9}
+  .dealrail .drclose{margin-left:auto;width:32px;height:32px;border-radius:999px;background:rgba(255,255,255,.15);color:#fff;display:grid;place-items:center}
+  .ticket{flex:1;min-height:0;overflow:auto;background:#fdfbf7;border-radius:4px;padding:22px 18px 26px;color:var(--ink);
+    background-image:radial-gradient(circle at 9px -5px,transparent 9px,#fdfbf7 10px);background-size:18px 100%;
+    box-shadow:0 10px 34px -12px rgba(0,0,0,.45)}
+  .ticket .dealtag{display:flex;align-items:center;justify-content:center;gap:8px;background:var(--brand);color:#fff;border-radius:8px;font-size:12px;font-weight:800;letter-spacing:.04em;padding:8px 12px;font-family:ui-monospace,Menlo,monospace}
+  .ticket .offer{line-height:1.5;text-align:center;font-size:13px;margin:14px 0}
+  .ticket .offer a{color:#3b5bd9;font-weight:700;text-decoration:none}
+  .ticket table{width:100%;border-collapse:collapse;font-size:11.5px;margin:6px 0 14px}
+  .ticket th{text-align:left;font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint);padding:6px 6px;border-bottom:1.5px solid var(--line-strong)}
+  .ticket td{padding:7px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+  .ticket tr.strike td{text-decoration:line-through;color:var(--ink-faint)}
+  .ticket tr.swap td{color:#1e7a1e;font-weight:700}
+  .ticket .things{font-size:12.5px;line-height:1.7;margin:0 0 12px}
+  .ticket .things b{font-size:12px}
+  .ticket .things label{display:flex;gap:8px;align-items:flex-start;cursor:pointer}
+  .ticket .things input{margin-top:3px;accent-color:var(--brand)}
+  .ticket .things .who{color:#3b5bd9;font-weight:700}
+  .ticket .msg{font-size:12.5px;line-height:1.55;background:rgba(227,11,93,.05);border-left:3px solid var(--brand-soft);border-radius:0 8px 8px 0;padding:9px 11px;margin-bottom:16px}
+  .ticket .msg .who{color:#3b5bd9;font-weight:700}
+  .tbtns{display:flex;flex-direction:column;gap:7px}
+  .tbtns .row2{display:flex;gap:7px}
+  .tbtn{flex:1;border-radius:10px;padding:11px 10px;font-size:12.5px;font-weight:800;letter-spacing:.02em;color:#fff;transition:transform .13s}
+  .tbtn:hover{transform:translateY(-1px)}
+  .tbtn.change{background:var(--warn)}
+  .tbtn.approve{background:var(--success)}
+  .tbtn.ghost{background:rgba(20,10,16,.42);font-weight:700}
+  .ticket .statusline{display:none;margin-top:12px;font-size:11.5px;font-weight:600;color:#1e7a1e;background:rgba(52,178,51,.09);border-radius:8px;padding:8px 10px;text-align:center}
+  .ticket.approved .statusline{display:block}
+
+  /* ── floating CSV chip + Sella sliver + toast ── */
+  .csvchip{position:fixed;right:64px;bottom:18px;z-index:60;display:flex;align-items:center;gap:8px;border-radius:14px;background:#fff;border:1.5px solid var(--line-strong);box-shadow:var(--shadow-lg);padding:11px 16px;font-size:12.5px;font-weight:700}
+  .csvchip:hover{border-color:var(--brand)}
+  .sella{position:fixed;top:110px;right:0;bottom:110px;width:26px;z-index:65;border-radius:14px 0 0 14px;background:linear-gradient(180deg,var(--brand-soft),var(--brand));box-shadow:-4px 0 16px -6px rgba(227,11,93,.5);display:flex;align-items:center;justify-content:center;cursor:pointer}
+  .sella span{writing-mode:vertical-rl;font-size:10px;font-weight:800;letter-spacing:.22em;color:#fff;text-transform:uppercase}
+  .sellatip{position:fixed;right:36px;top:50%;transform:translateY(-50%) translateX(8px);z-index:66;background:rgba(20,10,16,.92);color:#fff;font-size:12px;font-weight:600;border-radius:10px;padding:10px 14px;opacity:0;pointer-events:none;transition:all .2s var(--ease)}
+  .sellatip.show{opacity:1;transform:translateY(-50%)}
+  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(70px);z-index:90;background:rgba(20,10,16,.94);color:#fff;font-size:13px;font-weight:600;border-radius:12px;padding:12px 18px;box-shadow:var(--shadow-lg);transition:transform .3s var(--ease);display:flex;gap:9px;align-items:center}
+  .toast.show{transform:translateX(-50%)}
+  .toast .ic{color:#8ee08d}
+</style>
+</head>
+<body data-variant="C" data-tab="orders" data-rail="closed">
+
+<!-- prototype strip — variant LOCKED 2026-07-05: one scroll page, Orders → Batches → Calendar -->
+<div class="switch">
+  <b>ALLOCATE — throwaway prototype</b>
+  <span>one scroll page · Orders → Batches → Sales calendar · click rows / products / pills</span>
+</div>
+
+<div class="app">
+  <!-- left rail -->
+  <aside class="rail glass">
+    <div class="wordmark"><div class="badge">HS</div><small>hello sello</small></div>
+    <nav class="nav">
+      <div class="navitem"><svg class="ic"><use href="#i-home"/></svg>Home</div>
+      <div class="navitem"><svg class="ic"><use href="#i-chat"/></svg>Connect</div>
+      <div class="navitem active"><span class="edge"></span><svg class="ic"><use href="#i-target"/></svg>Allocate</div>
+      <div class="navitem"><svg class="ic"><use href="#i-shop"/></svg>Present</div>
+      <div class="navitem"><svg class="ic"><use href="#i-cart"/></svg>Buy</div>
+      <div class="navitem"><svg class="ic"><use href="#i-tag"/></svg>Deals</div>
+    </nav>
+    <div class="acct"><div class="avatar">MW</div></div>
+  </aside>
+
+  <div class="col">
+    <!-- topbar -->
+    <header class="topbar glass">
+      <div class="srch"><button><svg class="ic sm"><use href="#i-search"/></svg></button><div style="flex:1"><input placeholder="Search for company, product or service…"/></div></div>
+      <div class="tbspace"></div>
+      <button class="tbicon"><svg class="ic sm"><use href="#i-bell"/></svg></button>
+      <div class="cochip"><div class="colg">CCC</div>Canadian Craft Cannabis GmbH</div>
+    </header>
+
+    <div class="pagehead">
+      <h1>Allocate</h1>
+      <small>your batches, with margin control — seller-side ops</small>
+    </div>
+
+    <div class="tabstrip" id="tabstrip"><!-- tabs injected per variant --></div>
+
+    <main>
+      <!-- ══ SCREEN: SALES CALENDAR ══ -->
+      <section class="screen" id="scr-calendar">
+        <div class="secbar">
+          <h2>Sales calendar</h2>
+          <button class="chip" id="sortChip" onclick="cycleCalSort()"><svg class="ic xs"><use href="#i-sort"/></svg><span id="sortLbl">Sorted by revenue</span></button>
+          <div class="spacer"></div>
+          <div class="seg" id="viewSeg">
+            <button class="on" data-v="week"  onclick="setCalView('week')">Week</button>
+            <button data-v="month" onclick="setCalView('month')">Month</button>
+            <button data-v="year"  onclick="setCalView('year')">Year</button>
+          </div>
+        </div>
+        <div class="calwrap" id="calwrap" data-view="week"><!-- grid injected --></div>
+      </section>
+
+      <!-- ══ SCREEN: ORDERS & OFFERS ══ -->
+      <section class="screen" id="scr-orders">
+        <div class="secbar">
+          <h2>Orders &amp; offers</h2>
+          <div class="spacer"></div>
+          <button class="chip"><svg class="ic xs"><use href="#i-filter"/></svg>Status: All</button>
+        </div>
+        <div class="otable">
+          <table>
+            <thead><tr id="orderHead"></tr></thead>
+            <tbody id="orderRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ══ SCREEN: BATCHES ══ -->
+      <section class="screen" id="scr-batches">
+        <div class="secbar">
+          <h2>Batches</h2>
+        </div>
+        <div class="prodstrip" id="shelf"></div>
+        <div class="alloc" id="alloc"></div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<!-- deal receipt rail -->
+<aside class="dealrail" id="dealrail">
+  <div class="drhead"><b>Deal</b><button class="drclose" onclick="closeRail()"><svg class="ic sm"><use href="#i-x"/></svg></button></div>
+  <div class="ticket" id="ticket">
+    <div class="dealtag" id="tkId">DEAL — HS-CCC-AUR-260512-001</div>
+    <p class="offer">On <b id="tkDate">12-Jun-26</b><br/><a id="tkFrom">Canadian Craft Cannabis GmbH</a><br/>offered to<br/><a id="tkTo">Lux 99 Pharmacy</a><br/>this deal:</p>
+    <table>
+      <thead><tr><th>Product</th><th>Unit</th><th>Units</th><th>Price</th><th>Total</th></tr></thead>
+      <tbody>
+        <tr><td>Spirit Bear STR 28/1</td><td>50g</td><td>3</td><td>8,00€/g</td><td>1.200€</td></tr>
+        <tr><td>Superseed GRP 27/1</td><td>1000g</td><td>2</td><td>6,00€/g</td><td>12.000€</td></tr>
+        <tr class="strike"><td>Tofino Ripper ELC 20/1</td><td>1000g</td><td>2</td><td>4,00€/g</td><td>8.000€</td></tr>
+        <tr class="swap"><td>Mystery Mountain TBM 8/10</td><td>1000g</td><td>2</td><td>5,00€/g</td><td>10.000€</td></tr>
+        <tr><td>Discount for broken glass, Invoice 29374</td><td></td><td>1</td><td>−1.000€</td><td>−1.000€</td></tr>
+      </tbody>
+    </table>
+    <div class="things">
+      <b>Things:</b>
+      <label><input type="checkbox"/> CNL needs to be uploaded by <span class="who">Jan</span></label>
+      <label><input type="checkbox"/> PO needs to be uploaded by <span class="who">Jan</span></label>
+    </div>
+    <div class="msg"><span class="who">Message from Jan:</span><br/>Please deliver temperature controlled and send me the logger data.</div>
+    <div class="tbtns">
+      <div class="row2">
+        <button class="tbtn change">Change</button>
+        <button class="tbtn approve" onclick="approveDeal()">Approve</button>
+      </div>
+      <button class="tbtn ghost">Finalize by uploading invoice</button>
+      <button class="tbtn ghost">Create ticket for clarification</button>
+    </div>
+    <div class="statusline">✓ Approved by Muskan W. · 05-Jul-26 10:12 — signature captured</div>
+  </div>
+</aside>
+
+<button class="csvchip"><svg class="ic sm"><use href="#i-upload"/></svg>Upload CSV to see your sales &amp; purchases</button>
+<div class="sella" onclick="sellaTip()"><span>Sella</span></div>
+<div class="sellatip" id="sellatip">Sella — AI functions coming soon ✨</div>
+<div class="toast" id="toast"><svg class="ic sm"><use href="#i-check"/></svg><span id="toastMsg"></span></div>
+
+<!-- icon defs -->
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <g id="i-home"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></g>
+    <g id="i-chat"><path d="M21 12a8 8 0 0 1-8 8H4l1.5-3A8 8 0 1 1 21 12z"/></g>
+    <g id="i-target"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r=".8"/></g>
+    <g id="i-shop"><path d="M4 8h16l-1 12H5L4 8z"/><path d="M8 8a4 4 0 0 1 8 0"/></g>
+    <g id="i-cart"><circle cx="9" cy="20" r="1.4"/><circle cx="17" cy="20" r="1.4"/><path d="M3 4h2l2.5 12h10L20 8H6"/></g>
+    <g id="i-tag"><path d="M3 3h8l10 10-8 8L3 11V3z"/><circle cx="8" cy="8" r="1.4"/></g>
+    <g id="i-search"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></g>
+    <g id="i-bell"><path d="M6 9a6 6 0 1 1 12 0c0 5 2 6 2 6H4s2-1 2-6"/><path d="M10 19a2 2 0 0 0 4 0"/></g>
+    <g id="i-sort"><path d="M4 7h12M4 12h8M4 17h5"/><path d="m17 14 3 3 3-3M20 8v9"/></g>
+    <g id="i-filter"><path d="M4 5h16l-6 7v6l-4 2v-8L4 5z"/></g>
+    <g id="i-x"><path d="m6 6 12 12M18 6 6 18"/></g>
+    <g id="i-check"><path d="m4 12.5 5 5L20 6.5"/></g>
+    <g id="i-upload"><path d="M12 16V4m0 0 4 4m-4-4-4 4"/><path d="M4 16v3a1.5 1.5 0 0 0 1.5 1.5h13A1.5 1.5 0 0 0 20 19.5V16"/></g>
+    <g id="i-dots"><circle cx="12" cy="5" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="12" cy="19" r="1.2"/></g>
+    <g id="i-eye"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></g>
+    <g id="i-send"><path d="M21 3 10.5 13.5"/><path d="M21 3l-6.5 18-4-7.5L3 9.5 21 3z"/></g>
+    <g id="i-print"><path d="M7 8V3h10v5"/><path d="M5 8h14a2 2 0 0 1 2 2v6h-4v5H7v-5H3v-6a2 2 0 0 1 2-2z"/><path d="M7 16h10"/></g>
+    <g id="i-box"><path d="M3 8l9-5 9 5v8l-9 5-9-5V8z"/><path d="M3 8l9 5 9-5M12 13v8"/></g>
+  </defs>
+</svg>
+
+<script>
+/* ════════ DATA — seeded from docs/CSV's/ (Canadian Craft product list) ════════ */
+const PRODUCTS = [
+  /* batches listed oldest-first → FIFO default = index 0 */
+  {id:'CC_001', name:'Spirit Bear STR 28/1',      thc:'28%', cbd:'<1%', cultivar:'Strawberry Meltshake', rrp:13, basic:8, bundle:6.5, hue:'#e30b5d', top:true,
+   batches:[{code:'SB-273',kg:112,mfg:'Feb-26'},{code:'SB-275',kg:82,mfg:'Apr-26'},{code:'SB-279',kg:117,mfg:'Jun-26'}]},
+  {id:'CC_002', name:'Superseed GRP 27/1',        thc:'27%', cbd:'1%',  cultivar:'Grape Cookies',        rrp:11, basic:6, bundle:5,   hue:'#7a5cf0', top:false,
+   batches:[{code:'GC-114',kg:64,mfg:'Mar-26'},{code:'GC-118',kg:95,mfg:'May-26'}]},
+  {id:'CC_003', name:'Mystery Mountain TBM 8/10', thc:'8%',  cbd:'10%', cultivar:'The Big Mango',        rrp:9,  basic:5, bundle:4,   hue:'#0fa36b', top:false,
+   batches:[{code:'MM-071',kg:48,mfg:'Apr-26'}]},
+  {id:'CC_004', name:'Tofino Ripper ELC 20/1',    thc:'20%', cbd:'1%',  cultivar:'Electric Lemon',       rrp:7,  basic:4, bundle:3,   hue:'#e8930c', top:false,
+   batches:[{code:'TR-402',kg:73,mfg:'Jan-26'},{code:'TR-407',kg:51,mfg:'May-26'}]},
+];
+const COGS = 2.5; // €/g assumption for margin display only
+
+const PARTNERS = [
+  {code:'AU', name:'Auromed',           rev:290000},
+  {code:'CA', name:'Cantouring',        rev:120000},
+  {code:'DE', name:'Demecore',          rev: 96000},
+  {code:'RE', name:'Remedysan',         rev: 74000},
+  {code:'FO', name:'FourTen Pharma',    rev: 52000},
+  {code:'BI', name:'BioMed Solutions',  rev: 41000},
+  {code:'PH', name:'PharmaCore Int',    rev: 29000},
+  {code:'ME', name:'MedLink Systems',   rev: 18000},
+  {code:'VI', name:'VitalPharma AG',    rev:  9000},
+];
+/* calendar deals: day 1..28 (weeks 27-30), span in days */
+const CAL_DEALS = [
+  {p:'AU', d:4,  span:2, amt:'38.000€'}, {p:'AU', d:12, span:2, amt:'52.000€'}, {p:'AU', d:23, span:2, amt:'44.000€'},
+  {p:'CA', d:4,  span:2, amt:'21.000€'}, {p:'CA', d:10, span:2, amt:'33.000€'}, {p:'CA', d:18, span:2, amt:'27.000€'},
+  {p:'DE', d:2,  span:2, amt:'18.500€'}, {p:'DE', d:9,  span:2, amt:'24.000€'}, {p:'DE', d:15, span:2, amt:'19.000€'},
+  {p:'RE', d:3,  span:2, amt:'16.000€'}, {p:'RE', d:18, span:2, amt:'22.500€'},
+  {p:'FO', d:5,  span:2, amt:'14.000€'}, {p:'FO', d:15, span:2, amt:'17.500€'},
+  {p:'BI', d:8,  span:2, amt:'12.000€'}, {p:'BI', d:15, span:2, amt:'15.500€'},
+  {p:'PH', d:2,  span:2, amt:'9.500€'},  {p:'PH', d:10, span:2, amt:'11.000€'}, {p:'PH', d:21, span:2, amt:'8.500€'},
+  {p:'ME', d:5,  span:2, amt:'7.000€'},  {p:'ME', d:12, span:2, amt:'6.500€'},
+  {p:'VI', d:8,  span:2, amt:'4.500€'},
+];
+const MONTH_TOTALS = [['JUL','290.000€'],['AUG','120.000€'],['SEP','29.000€'],['OCT','0€'],['NOV','0€'],['DEZ','0€'],['JAN','0€']];
+const YEAR_TOTALS  = [['2024','1,2 M€'],['2025','2,8 M€'],['2026','1,9 M€ YTD']];
+
+/* order nr = HS-<seller initials>-<buyer initials>-<YYMMDD>-<seq> (Marcel 2026-07-05 — deviates from DEV-26 lock, see NOTES)
+   date format = DD-Mon-YY, platform-wide standard (Muskan 2026-07-05) */
+/* order-status vocabulary (Marcel 2026-07-05) — maps to the locked deal lifecycle:
+   sales offer / purchase order = DEV-26 birth modes · deal executed = DEV-25 invoice+delivery-note trigger ·
+   deal update = DEV-23/36 amendment (invoice differs / split / cancelled products) */
+const STATUSES = {
+  sales_offer:    'Sales offer',
+  purchase_order: 'Purchase order',
+  accepted:       'Deal accepted',
+  executed:       'Deal executed',
+  update:         'Deal update',
+  ticket:         'Ticket created',
+  ticket_closed:  'Ticket closed',
+};
+const ORDERS = [
+  {id:'HS-CCC-AUR-260512-001', cust:'Auromed',          insight:'Key Account · launch products, repeat buyer', recv:'12-May-26', del:'13-May-26', n:3, via:'Hello Sello', st:'purchase_order'},
+  {id:'HS-CCC-CAN-260512-002', cust:'Cantouring',       insight:'Key Account · bundle candidate (2.000g+)',   recv:'12-May-26', del:'13-May-26', n:3, via:'Hello Sello', st:'sales_offer'},
+  {id:'HS-CCC-DEM-260512-003', cust:'Demecore',         insight:'Growing account · +32% vs last quarter',     recv:'12-May-26', del:'14-May-26', n:2, via:'E-mail', st:'accepted'},
+  {id:'HS-CCC-REM-260511-004', cust:'Remedysan',        insight:'First order · from Discover',                recv:'11-May-26', del:'13-May-26', n:3, via:'Hello Sello', st:'executed'},
+  {id:'HS-CCC-PHC-260510-005', cust:'PharmaCore Int',   insight:'Slow payer · Net 60 agreed',                 recv:'10-May-26', del:'12-May-26', n:1, via:'Fax',  st:'ticket'},
+  {id:'HS-CCC-BIO-260509-006', cust:'BioMed Solutions', insight:'Invoice differs from deal · split proposed', recv:'09-May-26', del:'11-May-26', n:2, via:'Hello Sello', st:'update'},
+  {id:'HS-CCC-MED-260508-007', cust:'MedLink Systems',  insight:'Damage ticket resolved · credit note sent',  recv:'08-May-26', del:'10-May-26', n:1, via:'E-mail', st:'ticket_closed'},
+];
+
+/* allocation demand per product: units × unit size (g); price the customer pays */
+const DEMAND = {
+  CC_001:[
+    {cust:'Auromed',          code:'AU', type:'Key Account',units:200, unit:10,   price:8,   recv:'12-May'},
+    {cust:'Cantouring',       code:'CA', type:'Key Account',units:40,  unit:50,   price:8,   recv:'12-May'},
+    {cust:'MedLink Systems',  code:'ME', type:'Category 3', units:5,   unit:1000, price:6.5, recv:'11-May'},
+    {cust:'VitalPharma AG',   code:'VI', type:'Category 3', units:2,   unit:1000, price:6.5, recv:'09-May'},
+  ],
+  CC_002:[
+    {cust:'Demecore',         code:'DE', type:'Category 2', units:60,  unit:50,   price:6,   recv:'12-May'},
+    {cust:'Auromed',          code:'AU', type:'Key Account',units:100, unit:10,   price:6,   recv:'12-May'},
+    {cust:'PharmaCore Int',   code:'PH', type:'Category 3', units:3,   unit:1000, price:5,   recv:'10-May'},
+  ],
+  CC_003:[
+    {cust:'Remedysan',        code:'RE', type:'Category 2', units:30,  unit:50,   price:5,   recv:'11-May'},
+    {cust:'BioMed Solutions', code:'BI', type:'Category 3', units:4,   unit:1000, price:4,   recv:'12-May'},
+  ],
+  CC_004:[
+    {cust:'FourTen Pharma',   code:'FO', type:'Category 2', units:50,  unit:50,   price:4,   recv:'12-May'},
+    {cust:'Cantouring',       code:'CA', type:'Key Account',units:80,  unit:10,   price:4,   recv:'12-May'},
+    {cust:'MedLink Systems',  code:'ME', type:'Category 3', units:2,   unit:1000, price:3,   recv:'08-May'},
+  ],
+};
+
+/* ════════ VARIANT / TABS ════════ */
+/* variant LOCKED 2026-07-05: one scroll page — Orders → Batches → Sales calendar */
+const SECTIONS = [['orders','Orders & offers'],['batches','Batches'],['calendar','Sales calendar']];
+function renderTabs(){
+  const strip = document.getElementById('tabstrip');
+  strip.innerHTML = SECTIONS.map(([key,label],i)=>
+    `<button class="tab" data-tab="${key}" onclick="setTab('${key}')"><span class="num">${i+1}</span>${label}</button>`).join('');
+  markTab();
+}
+function setTab(key){ // jump-chips: smooth-scroll to the section
+  document.body.dataset.tab = key;
+  markTab(); closeRail();
+  const el = document.getElementById('scr-'+key);
+  if(el) el.scrollIntoView({behavior:'smooth', block:'start'});
+}
+function markTab(){ document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on', t.dataset.tab===document.body.dataset.tab)); }
+
+/* ════════ CALENDAR ════════ */
+const SORTS = [['rev','Sorted by revenue'],['top','Top accounts first'],['az','Alphabetical']];
+let calSort = 0, calView = 'week';
+function cycleCalSort(){ calSort = (calSort+1)%SORTS.length; document.getElementById('sortLbl').textContent = SORTS[calSort][1]; renderCalendar(); }
+function setCalView(v){
+  calView = v;
+  document.querySelectorAll('#viewSeg button').forEach(b=>b.classList.toggle('on', b.dataset.v===v));
+  document.getElementById('calwrap').dataset.view = v;
+  renderCalendar();
+}
+function sortedPartners(){
+  const p=[...PARTNERS];
+  if(SORTS[calSort][0]==='az') p.sort((a,b)=>a.name.localeCompare(b.name));
+  else p.sort((a,b)=>b.rev-a.rev); // rev + top accounts both by revenue in the mock
+  return p;
+}
+function renderCalendar(){
+  const wrap = document.getElementById('calwrap');
+  const parts = sortedPartners();
+  if(calView==='week'){
+    const DAYS=28, TODAY=7, colW='minmax(30px,1fr)';
+    const grid = `200px repeat(${DAYS},${colW})`;
+    let h = `<div class="caltotals" style="grid-template-columns:200px repeat(7,minmax(60px,1fr))">
+      <div class="tl">Purchases / month</div>${MONTH_TOTALS.map(([m,v])=>`<div class="tc">${v}<small>${m}</small></div>`).join('')}</div>`;
+    h += `<div class="calhead" style="grid-template-columns:${grid}"><div></div>`;
+    for(let w=0;w<4;w++) h+=`<div class="wk" style="grid-column:${2+w*7} / span 7">WEEK ${27+w}</div>`;
+    for(let d=1;d<=DAYS;d++) h+=`<div class="dy${d===TODAY?' today':''}" style="grid-column:${d+1}">${d}</div>`;
+    h += `</div>`;
+    parts.forEach(p=>{
+      h += `<div class="calrow" style="grid-template-columns:${grid}"><div class="who" style="grid-column:1"><div class="mono">${p.code}</div><b>${p.name}</b></div>`;
+      CAL_DEALS.filter(d=>d.p===p.code).forEach(d=>{
+        h += `<button class="pillbtn" style="grid-column:${d.d+1} / span ${d.span}" onclick="openRail('${p.name}','${d.amt}')" title="${p.name} · ${d.amt}"><span class="dot"></span><span class="amt">${d.amt}</span></button>`;
+      });
+      h += `</div>`;
+    });
+    wrap.innerHTML = h + `<div class="callegend"><span class="k"><span class="swatch"></span>confirmed purchase</span><span class="k">click a pill → deal receipt</span></div>`;
+    // today line — position over day column TODAY
+    const row0 = wrap.querySelector('.calrow');
+    if(row0){
+      const line = document.createElement('div'); line.className='todayline';
+      const first = wrap.querySelector('.calhead');
+      line.style.left = `calc(200px + (100% - 200px) / ${DAYS} * ${TODAY - .5})`;
+      wrap.querySelectorAll('.calrow').forEach(r=>{ const l=line.cloneNode(); r.appendChild(l); });
+    }
+  } else {
+    const cols = calView==='month' ? MONTH_TOTALS : YEAR_TOTALS;
+    const grid = `200px repeat(${cols.length},minmax(84px,1fr))`;
+    let h = `<div class="caltotals" style="grid-template-columns:${grid}">
+      <div class="tl">Purchases / ${calView==='month'?'month':'year'}</div>${cols.map(([m,v])=>`<div class="tc">${v}<small>${m}</small></div>`).join('')}</div>`;
+    h += `<div class="calhead" style="grid-template-columns:${grid}"><div></div>${cols.map(([m])=>`<div class="wk" style="grid-row:1">${m}</div>`).join('')}</div>`;
+    parts.forEach((p,pi)=>{
+      h += `<div class="calrow" style="grid-template-columns:${grid}"><div class="who" style="grid-column:1"><div class="mono">${p.code}</div><b>${p.name}</b></div>`;
+      const buys = calView==='month' ? [[2,fmtK(p.rev)],[3,fmtK(Math.round(p.rev*.4))]] : [[2,fmtK(p.rev*4)],[3,fmtK(p.rev*7)],[4,fmtK(p.rev*5)]];
+      buys.forEach(([c,amt])=>{ if((pi+c)%3!==0) h+=`<button class="pillbtn" style="grid-column:${c};margin:0 8px" onclick="openRail('${p.name}','${amt}')"><span class="dot"></span><span class="amt">${amt}</span></button>`; });
+      h += `</div>`;
+    });
+    wrap.innerHTML = h + `<div class="callegend"><span class="k"><span class="swatch"></span>aggregated purchases</span><span class="k">toggle Week for day-level pills</span></div>`;
+  }
+}
+function fmtK(n){ return (n>=1000000? (n/1000000).toFixed(1)+' M€' : Math.round(n/1000)+'.000€'); }
+
+/* ════════ ORDERS ════════ */
+/* ── Excel/Power-BI-style header sort + filter ── */
+const OCOLS = [
+  {key:'id',   label:'Order Nr.'},
+  {key:'cust', label:'Customer',     sort:true, topsort:true},
+  {key:'insight', label:'Insight'},
+  {key:'recv', label:'Received',     sort:true, date:true},
+  {key:'del',  label:'Delivery',     sort:true, date:true},
+  {key:'n',    label:'SKU',          sort:true, num:true},
+  {key:'via',  label:'Ordered via',  filter:['Hello Sello','E-mail','Fax']},
+  {key:'st',   label:'Order status', filter:Object.keys(STATUSES)},
+  {key:'',     label:''},
+];
+let oSort = {key:null, dir:1};
+const oFilter = {via:new Set(), st:new Set()}; // empty = show all
+const MONNUM = {Jan:'01',Feb:'02',Mar:'03',Apr:'04',May:'05',Jun:'06',Jul:'07',Aug:'08',Sep:'09',Oct:'10',Nov:'11',Dec:'12'};
+function dateKey(s){ const [d,m,y]=s.split('-'); return y+MONNUM[m]+d; } // '12-May-26' → '260512'
+function stLbl(v){ return STATUSES[v] || v; }
+function renderOrderHead(){
+  document.getElementById('orderHead').innerHTML = OCOLS.map(c=>{
+    if(!c.sort && !c.filter) return `<th>${c.label}</th>`;
+    let menu, icon, active;
+    if(c.sort){
+      const [up,down] = c.date? ['Oldest first','Newest first'] : c.num? ['Low → High','High → Low'] : ['Sort A → Z','Sort Z → A'];
+      active = oSort.key===c.key || (c.topsort && oSort.key==='custTop');
+      icon = 'i-sort';
+      menu = `<button onclick="setOSort('${c.key}',1)">${up}</button>
+              <button onclick="setOSort('${c.key}',-1)">${down}</button>
+              ${c.topsort? `<button onclick="setOSort('custTop',1)">Top accounts first</button>`:''}
+              ${active? `<button onclick="setOSort(null,1)">Clear sort</button>`:''}`;
+    } else {
+      active = oFilter[c.key].size>0;
+      icon = 'i-filter';
+      menu = c.filter.map(v=>`<label class="fitem"><input type="checkbox" ${oFilter[c.key].has(v)?'checked':''} onchange="toggleOFilter('${c.key}','${v}',this)"/>${c.key==='st'?stLbl(v):v}</label>`).join('')
+           + `<button onclick="clearOFilter('${c.key}')">Clear filter</button>`;
+    }
+    return `<th><span class="hwrap">${c.label}<span class="dots" onclick="event.stopPropagation()">
+      <button class="hbtn${active?' on':''}" onclick="toggleDots(this)"><svg class="ic xs"><use href="#${icon}"/></svg></button>
+      <span class="dmenu hmenu">${menu}</span></span></span></th>`;
+  }).join('');
+}
+function setOSort(key,dir){ oSort = {key, dir}; closeDots(); renderOrderHead(); renderOrders(); }
+function toggleOFilter(key,val,input){
+  input.checked ? oFilter[key].add(val) : oFilter[key].delete(val);
+  input.closest('.dots').querySelector('.hbtn').classList.toggle('on', oFilter[key].size>0);
+  renderOrders(); // menu stays open for multi-pick
+}
+function clearOFilter(key){ oFilter[key].clear(); closeDots(); renderOrderHead(); renderOrders(); }
+function renderOrders(){
+  let rows = ORDERS.filter(o=>
+    (!oFilter.via.size || oFilter.via.has(o.via)) &&
+    (!oFilter.st.size  || oFilter.st.has(o.st)));
+  if(oSort.key==='custTop'){
+    const revOf = c => (PARTNERS.find(p=>p.name===c)||{rev:0}).rev;
+    rows = [...rows].sort((a,b)=>revOf(b.cust)-revOf(a.cust));
+  } else if(oSort.key){
+    const c = OCOLS.find(x=>x.key===oSort.key);
+    rows = [...rows].sort((a,b)=>{
+      let va=a[oSort.key], vb=b[oSort.key];
+      if(c.date){ va=dateKey(va); vb=dateKey(vb); }
+      return (typeof va==='number'? va-vb : String(va).localeCompare(String(vb))) * oSort.dir;
+    });
+  }
+  document.getElementById('orderRows').innerHTML = rows.map((o,i)=>`
+    <tr onclick="selOrder(this,'${o.cust}','${o.id}')">
+      <td class="ordid">${o.id}</td>
+      <td style="font-weight:600;white-space:nowrap">${o.cust}</td>
+      <td class="insight" title="${o.insight}">${o.insight}</td>
+      <td>${o.recv}</td><td>${o.del}</td>
+      <td style="text-align:center">${o.n}</td><td>${o.via}</td>
+      <td><span class="stchip st-${o.st}"><span class="sd"></span>${stLbl(o.st)}</span></td>
+      <td class="actcell"><span class="rowacts">
+        <span class="dots" onclick="event.stopPropagation()">
+          <button class="ra more" title="More" onclick="toggleDots(this)"><svg class="ic xs"><use href="#i-dots"/></svg></button>
+          <span class="dmenu">
+            <button onclick="closeDots();openRail('${o.cust}',null,'${o.id}')"><svg class="ic xs"><use href="#i-eye"/></svg>View</button>
+            <button onclick="closeDots();toast('Sent to colleague (mock)')"><svg class="ic xs"><use href="#i-send"/></svg>Send</button>
+            <button onclick="closeDots();toast('Deal order sent to printer (mock)')"><svg class="ic xs"><use href="#i-print"/></svg>Print</button>
+          </span>
+        </span>
+      </span></td>
+    </tr>`).join('');
+}
+function toggleDots(btn){
+  const d = btn.parentElement, wasOpen = d.classList.contains('open');
+  closeDots(); if(!wasOpen) d.classList.add('open');
+}
+function closeDots(){ document.querySelectorAll('.dots.open').forEach(d=>d.classList.remove('open')); }
+document.addEventListener('click', closeDots);
+function selOrder(tr,cust,id){
+  document.querySelectorAll('#orderRows tr').forEach(r=>r.classList.remove('sel'));
+  tr.classList.add('sel');
+  openRail(cust,null,id);
+}
+
+/* ════════ BATCHES / ALLOCATOR ════════ */
+/* Table = permanent work surface; jar strip filters by product (click again → all).
+   Batches oldest-first; default = batches[0] (FIFO — implicit, not labelled). Grams only (Marcel, DEV-157 #4).
+   splits: null | [{code,g},…]. Partial confirm locks decided rows only. Decline = whole row. */
+let selProd = null, allocSort='voltotal';
+const aFilter = {type:new Set(), uvol:new Set(), pid:new Set(), units:new Set()}; // empty = all
+const prod = id => PRODUCTS.find(x=>x.id===id);
+const WORKLIST = Object.entries(DEMAND).flatMap(([pid,rows])=>rows.map(r=>({...r,pid})));
+/* mode = the DECISION (supply/decline). subPick = replacement picker open; subApplied = substitute
+   chosen — this ALSO sets mode='supply' in one go (Marcel, DEV-157 #1); ✕ (cancelSub) undoes it. */
+const rowState = WORKLIST.map(r=>({mode:null, subPick:false, subTo:null, subApplied:false, batch:prod(r.pid).batches[0].code, splits:null, locked:false}));
+const effProd = (r,s) => s.subApplied && s.subTo ? prod(s.subTo) : prod(r.pid);
+const TYPES = [...new Set(WORKLIST.map(r=>r.type))];
+const UVOLS = [...new Set(WORKLIST.map(r=>r.unit))].sort((a,b)=>a-b);
+const PRODIDS = [...new Set(WORKLIST.map(r=>r.pid))];
+const UNITVALS = [...new Set(WORKLIST.map(r=>r.units))].sort((a,b)=>a-b);
+
+function fmtVol(g){ return g.toLocaleString('de-DE')+' g'; } // grams only (Marcel, DEV-157 #4)
+
+function renderShelf(){
+  document.getElementById('shelf').innerHTML = PRODUCTS.map((p,idx)=>{
+    const stock = p.batches.reduce((a,b)=>a+b.kg,0);
+    return `
+    <div class="jar${selProd===p.id?' sel':''}" onclick="pickProduct('${p.id}')" title="Click to filter the table — click again for all products">
+      <div class="ph" style="background:linear-gradient(135deg,${p.hue}59,${p.hue}96)">
+        <span class="init">${p.name.split(' ').slice(0,2).map(w=>w[0]).join('')}</span>
+        <img src="../present-redesign-prototype/img/p${(idx%3)+1}.jpg" onerror="this.remove()" alt=""/>
+      </div>
+      <b>${p.name}</b>
+      <small>${p.cultivar}</small>
+    </div>`;}).join('');
+}
+function pickProduct(id){
+  selProd = (selProd===id)? null : id;
+  renderShelf(); renderAlloc();
+}
+function setAllocSort(s){ allocSort=s; closeDots(); renderAlloc(); }
+function workRows(){
+  let d = WORKLIST.map((row,i)=>({...row,i}))
+    .filter(r=>{ const s=rowState[r.i]; const ep = s.subApplied? s.subTo : r.pid; return !selProd || ep===selProd; })
+    .filter(r=>(!aFilter.type.size || aFilter.type.has(r.type)) && (!aFilter.uvol.size || aFilter.uvol.has(String(r.unit)))
+             && (!aFilter.pid.size  || aFilter.pid.has(r.pid))  && (!aFilter.units.size || aFilter.units.has(String(r.units))));
+  /* default = highest vol total first, tiebreak by highest unit vol (Marcel, DEV-157 #8) */
+  if(allocSort==='voltotal') d.sort((a,b)=>(b.units*b.unit - a.units*a.unit) || (b.unit-a.unit));
+  if(allocSort==='margin') d.sort((a,b)=>b.price-a.price);
+  if(allocSort==='first')  d.sort((a,b)=>dateKey(a.recv+'-26').localeCompare(dateKey(b.recv+'-26')));
+  if(allocSort==='key')    d.sort((a,b)=>(b.type==='Key Account')-(a.type==='Key Account'));
+  if(allocSort==='custAZ') d.sort((a,b)=>a.cust.localeCompare(b.cust));
+  if(allocSort==='custZA') d.sort((a,b)=>b.cust.localeCompare(a.cust));
+  return d;
+}
+function toggleAFilter(key,val,input){
+  input.checked ? aFilter[key].add(val) : aFilter[key].delete(val);
+  input.closest('.dots').querySelector('.hbtn').classList.toggle('on', aFilter[key].size>0);
+  renderAllocBody(); renderAllocFoot(); // menu stays open for multi-pick
+}
+function clearAFilter(key){ aFilter[key].clear(); closeDots(); renderAlloc(); }
+function batchOpts(p, sel){
+  return p.batches.map(b=>`<option value="${b.code}"${sel===b.code?' selected':''}>${b.code} · ${fmtVol(b.kg*1000)} · ${b.mfg}</option>`).join('');
+}
+function renderAlloc(){
+  document.getElementById('alloc').innerHTML = `
+    <div class="sortstrip"><span class="sl">Sort by</span>
+      ${[['voltotal','Highest Volume'],['margin','Highest Margin'],['first','First Order'],['key','Key Accounts']].map(([k,l])=>`<button class="schip${allocSort===k?' on':''}" onclick="setAllocSort('${k}')">${l}</button>`).join('')}
+      <span style="flex:1"></span>
+      <span style="font-size:11px;color:var(--ink-faint);font-weight:600">${selProd? prod(selProd).name+' only':'all products'}</span>
+    </div>
+    <div class="batchbars" id="allocBars"></div>
+    <table><thead><tr id="allocHead"></tr></thead><tbody id="allocBody"></tbody></table>
+    <div class="allocfoot" id="allocFoot"></div>`;
+  renderAllocHead(); renderAllocBody(); renderAllocFoot();
+}
+function renderAllocHead(){
+  const ACOLS = [
+    {key:'cust', label:'Customer', custsort:true},
+    {key:'type', label:'Type', filter:TYPES, lbl:v=>v},
+    {key:'pid', label:'Product', filter:PRODIDS, lbl:v=>prod(v).name},
+    {key:'units', label:'Units ordered', filter:UNITVALS.map(String), lbl:v=>v},
+    {key:'uvol', label:'Unit vol', filter:UVOLS.map(String), lbl:v=>v+'g'},
+    {label:'Vol total'},{label:'Price / g'},{label:'Price total'},{label:'Batch'},{label:'Status'},
+    {label:'Decline / Substitute / Supply'},
+  ];
+  document.getElementById('allocHead').innerHTML = ACOLS.map(c=>{
+    if(!c.custsort && !c.filter) return `<th>${c.label}</th>`;
+    let menu, icon, active;
+    if(c.custsort){
+      active = ['custAZ','custZA','key'].includes(allocSort);
+      icon = 'i-sort';
+      menu = `<button onclick="setAllocSort('custAZ')">Sort A → Z</button>
+              <button onclick="setAllocSort('custZA')">Sort Z → A</button>
+              <button onclick="setAllocSort('key')">Top accounts first</button>
+              ${active? `<button onclick="setAllocSort('voltotal')">Clear sort</button>`:''}`;
+    } else {
+      active = aFilter[c.key].size>0;
+      icon = 'i-filter';
+      menu = c.filter.map(v=>`<label class="fitem"><input type="checkbox" ${aFilter[c.key].has(v)?'checked':''} onchange="toggleAFilter('${c.key}','${v}',this)"/>${c.lbl(v)}</label>`).join('')
+           + `<button onclick="clearAFilter('${c.key}')">Clear filter</button>`;
+    }
+    return `<th><span class="hwrap">${c.label}<span class="dots" onclick="event.stopPropagation()">
+      <button class="hbtn${active?' on':''}" onclick="toggleDots(this)"><svg class="ic xs"><use href="#${icon}"/></svg></button>
+      <span class="dmenu hmenu">${menu}</span></span></span></th>`;
+  }).join('');
+}
+function renderAllocBody(){
+  document.getElementById('allocBody').innerHTML = workRows().map(r=>{
+    const s = rowState[r.i], p = prod(r.pid), eP = effProd(r,s);
+    const vol=r.units*r.unit, total=vol*r.price;
+    const others = PRODUCTS.filter(x=>x.id!==r.pid);
+    /* product cell — substitute in one go: picking a replacement immediately applies it + supplies the row (Marcel, DEV-157 #1/#2) */
+    let prodCell = p.name;
+    if(s.subPick){
+      prodCell = `${p.name}<br/>
+        <select class="rowsel" onchange="setSub(${r.i},this.value)"><option value="" selected disabled>→ pick a replacement</option>${others.map(o=>`<option value="${o.id}">→ ${o.name}</option>`).join('')}</select>`;
+    } else if(s.subApplied){
+      prodCell = `<s>${p.name}</s><br/><span class="subnew">→ ${prod(s.subTo).name}<button class="subx" onclick="cancelSub(${r.i})" title="stop replacing">✕</button></span>`;
+    }
+    /* batch cell — oldest preselected by default; split on demand */
+    let batchCell;
+    if(!s.splits){
+      batchCell = `<select class="rowsel" ${s.locked?'disabled':''} onchange="setBatch(${r.i},this.value)">${batchOpts(eP, s.batch)}</select>
+        ${!s.locked && eP.batches.length>1 ? `<br/><button class="splitbtn" onclick="toggleSplit(${r.i})">⑂ split batches</button>`:''}`;
+    } else {
+      const sum = s.splits.reduce((a,x)=>a+x.g,0), diff = vol - sum;
+      batchCell = s.splits.map((sp,j)=>`
+        <span class="splitline">
+          <select class="rowsel" style="max-width:120px" ${s.locked?'disabled':''} onchange="setSplitBatch(${r.i},${j},this.value)">${batchOpts(eP, sp.code)}</select>
+          <input type="number" min="0" step="1" value="${sp.g}" ${s.locked?'disabled':''} onchange="setSplitG(${r.i},${j},this.value)"/>g
+          ${!s.locked && s.splits.length>2 ? `<button class="splitx" onclick="rmSplit(${r.i},${j})">×</button>`:''}
+        </span>`).join('')
+        + (!s.locked ? `<span class="splitline">
+            ${s.splits.length<eP.batches.length?`<button class="splitbtn" style="margin-top:2px" onclick="addSplit(${r.i})">＋ batch</button>`:''}
+            <button class="splitbtn" style="margin-top:2px" onclick="toggleSplit(${r.i})">undo split</button>
+          </span>`:'')
+        + `<span class="splitsum ${diff===0?'ok':'warn'}">${diff===0?'✓ fully allocated':(diff>0? fmtVol(diff)+' unallocated' : fmtVol(-diff)+' over')}</span>`;
+    }
+    /* status = clear next step at every stage */
+    let statusCell = '<span style="color:var(--ink-faint)">pending</span>';
+    if(s.subPick)          statusCell = '<span style="color:#9c5f00;font-weight:700">picking replacement…</span>';
+    if(s.mode==='supply')  statusCell = '<span style="color:#1e7a1e;font-weight:700">Supply</span>' + (s.subApplied?'<br/><span style="font-size:10px;color:#9c5f00;font-weight:600">with substitute</span>':'');
+    if(s.mode==='decline') statusCell = '<span style="color:#b91c1c;font-weight:700">Declined</span>';
+    if(s.locked) statusCell += '<span class="senttag">✓ SENT</span>';
+    const subLbl = s.subPick? 'Cancel' : s.subApplied? 'Substituted ✓' : 'Substitute';
+    return `<tr class="${s.mode?'st-'+s.mode:''}${s.locked?' lockedrow':''}">
+      <td><b>${r.cust}</b></td>
+      <td><span class="ct${r.type==='Key Account'?' key':''}">${r.type}</span></td>
+      <td>${prodCell}</td>
+      <td>${r.units}</td><td>${r.unit}g</td><td><b>${fmtVol(vol)}</b></td>
+      <td>${r.price.toFixed(2)}€/g</td><td><b>${fmtEur(total)}</b></td>
+      <td>${batchCell}</td>
+      <td>${statusCell}</td>
+      <td><div class="aacts">
+        <button class="ab decline" onclick="setMode(${r.i},'decline')">Decline</button>
+        <button class="ab sub${s.subPick||s.subApplied?' on':''}" ${s.subApplied?'disabled':''} onclick="subAction(${r.i})">${subLbl}</button>
+        <button class="ab supply"  onclick="setMode(${r.i},'supply')">Supply</button>
+      </div></td>
+    </tr>`;
+  }).join('');
+}
+function renderAllocFoot(){
+  /* live per-batch stock bars — above the table */
+  const perBatch = {};
+  WORKLIST.forEach((r,i)=>{
+    const s=rowState[i]; if(s.mode!=='supply') return; // only supplied volume commits stock
+    if(s.splits) s.splits.forEach(sp=>{ if(sp.g>0) perBatch[sp.code]=(perBatch[sp.code]||0)+sp.g; });
+    else perBatch[s.batch]=(perBatch[s.batch]||0)+r.units*r.unit;
+  });
+  const shown = selProd
+    ? prod(selProd).batches
+    : PRODUCTS.flatMap(p=>p.batches).filter(b=>perBatch[b.code]>0);
+  const bars = shown.map(b=>{
+    const alloc = perBatch[b.code]||0, stock = b.kg*1000, pct = Math.min(100, alloc/stock*100);
+    return `<div class="bbar${alloc>stock?' over':''}">
+      <div class="bt"><b>${b.code}</b><span>${fmtVol(alloc)} / ${fmtVol(stock)}</span></div>
+      <div class="track"><div class="fill" style="width:${pct}%"></div></div></div>`;
+  }).join('') || `<span style="color:var(--ink-faint);font-size:11px">select a product to see its batch stock — bars fill as you allocate</span>`;
+  document.getElementById('allocBars').innerHTML = bars;
+  const decided = rowState.filter(s=>s.mode && !s.locked).length;
+  document.getElementById('allocFoot').innerHTML = `
+    <span style="flex:1"></span>
+    <button class="confirmbtn" ${decided===0?'disabled':''} onclick="confirmSupply()">CONFIRM &amp; SEND${decided? ` (${decided})`:''}</button>`;
+}
+function setMode(i,m){ // decision: supply or decline (substitution is separate — subAction)
+  const s = rowState[i]; if(s.locked || s.subPick) return;
+  s.mode = s.mode===m? null : m;
+  renderAllocBody(); renderAllocFoot();
+}
+function subAction(i){ // opens the replacement picker; substitute→Supply happens in one go in setSub (Marcel, DEV-157 #1)
+  const s = rowState[i]; if(s.locked || s.subApplied) return;
+  if(s.subPick){ s.subPick=false; s.subTo=null; renderAllocBody(); return; } // cancel picking
+  s.subPick=true; s.subTo=null;
+  renderAllocBody();
+}
+function setSub(i,pid){ // picking a replacement immediately substitutes AND marks the row Supply — no separate Apply step
+  const s = rowState[i];
+  s.subPick=false; s.subApplied=true; s.subTo=pid; s.mode='supply';
+  s.batch = prod(pid).batches[0].code; s.splits=null;
+  selProd = pid;
+  renderShelf(); renderAlloc();
+  toast(`Substituted → ${prod(pid).name} and marked Supply.`);
+}
+function cancelSub(i){ // the ✕ next to the substitute — stop replacing, back to undecided (Marcel, DEV-157 #5)
+  const s = rowState[i], r = WORKLIST[i]; if(s.locked) return;
+  s.subApplied=false; s.subTo=null; s.mode=null;
+  s.batch = prod(r.pid).batches[0].code; s.splits=null;
+  renderAllocBody(); renderAllocFoot();
+}
+function setBatch(i,code){ rowState[i].batch=code; renderAllocFoot(); }
+function toggleSplit(i){
+  const s=rowState[i], r=WORKLIST[i], eP=effProd(r,s), vol=r.units*r.unit;
+  s.splits = s.splits? null : [{code:eP.batches[0].code, g:vol},{code:(eP.batches[1]||eP.batches[0]).code, g:0}];
+  renderAllocBody(); renderAllocFoot();
+}
+function addSplit(i){
+  const s=rowState[i], eP=effProd(WORKLIST[i],s);
+  const used = s.splits.map(x=>x.code);
+  const next = eP.batches.find(b=>!used.includes(b.code)) || eP.batches[0];
+  s.splits.push({code:next.code, g:0}); renderAllocBody(); renderAllocFoot();
+}
+function rmSplit(i,j){ rowState[i].splits.splice(j,1); renderAllocBody(); renderAllocFoot(); }
+function setSplitBatch(i,j,code){ rowState[i].splits[j].code=code; renderAllocFoot(); }
+function setSplitG(i,j,v){
+  rowState[i].splits[j].g = Math.round(Math.max(0, parseFloat(v)||0));
+  renderAllocBody(); renderAllocFoot();
+}
+function confirmSupply(){
+  const c={supply:0,decline:0}; let subs=0;
+  rowState.forEach(s=>{ if(s.mode && !s.locked){ s.locked=true; c[s.mode]++; if(s.subApplied) subs++; } });
+  const n=c.supply+c.decline;
+  if(!n) return;
+  toast(`Sent ${n} allocation${n>1?'s':''} — ${c.supply} supplied${subs?` (${subs} with substitute)`:''} · ${c.decline} declined. Rest stays pending.`);
+  renderAllocBody(); renderAllocFoot();
+}
+function fmtG(g){ return g>=1000? (g/1000).toLocaleString('de-DE')+' kg' : g+' g'; }
+function fmtEur(n){ return n.toLocaleString('de-DE')+'€'; }
+
+/* ════════ DEAL RAIL ════════ */
+function openRail(partner, amt, id){
+  document.getElementById('tkTo').textContent = partner || 'Lux 99 Pharmacy';
+  if(id) document.getElementById('tkId').textContent = 'DEAL — '+id;
+  document.getElementById('ticket').classList.remove('approved');
+  document.body.dataset.rail='open';
+}
+function closeRail(){ document.body.dataset.rail='closed'; }
+function approveDeal(){ document.getElementById('ticket').classList.add('approved'); toast('Deal approved — signature captured'); }
+
+/* ════════ MISC ════════ */
+let toastT;
+function toast(msg){
+  const t=document.getElementById('toast');
+  document.getElementById('toastMsg').textContent=msg;
+  t.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'), 2800);
+}
+function sellaTip(){
+  const t=document.getElementById('sellatip');
+  t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 2400);
+}
+
+/* init — move calendar section to the end so scroll order = Orders → Batches → Calendar */
+document.querySelector('main').appendChild(document.getElementById('scr-calendar'));
+renderTabs();
+renderCalendar(); renderOrderHead(); renderOrders(); renderShelf(); renderAlloc();
+</script>
+</body>
+</html>

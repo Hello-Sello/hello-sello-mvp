@@ -20,6 +20,7 @@ import {
 import { Wordmark } from '@/shared/ui/Wordmark'
 import { Avatar } from '@/shared/ui/Avatar'
 import { AvatarUpload } from '@/shared/ui/AvatarUpload'
+import { MultiSelect, type MultiSelectOption } from './MultiSelect'
 import {
   createCompany,
   markEmailConnected,
@@ -35,6 +36,18 @@ import {
 import type { RejectPreset } from '@/app/admin/verifications/reject-presets'
 
 type CompanyType = { code: string; description: string }
+// The 'custom' Business Category reveals an inline free-text box; its typed value
+// rides on the assignment row as custom_label (DB CHECK: label present iff custom).
+const CUSTOM_CATEGORY_CODE = 'custom'
+
+// Return a new Set with `code` added or removed — for a Set-valued state setter.
+function toggledSet(prev: Set<string>, code: string): Set<string> {
+  const next = new Set(prev)
+  if (next.has(code)) next.delete(code)
+  else next.add(code)
+  return next
+}
+
 type ResumeStep = 'connect_email' | 'profile' | 'company_details'
 type Prefill = {
   displayName?: string
@@ -100,6 +113,7 @@ export function OnboardingStepper({
   personId,
   initialAvatarUrl = null,
   companyTypes,
+  businessCategories,
   resumeStep = null,
   prefill = {},
   licenceRequired = false,
@@ -112,7 +126,10 @@ export function OnboardingStepper({
   firstName: string | null
   personId: string
   initialAvatarUrl?: string | null
+  // company_type lookup = Business Activities (the role: Wholesaler, Cultivator…).
   companyTypes: CompanyType[]
+  // business_category lookup = Business Category (the sector: Pharma, Food… + Custom).
+  businessCategories: MultiSelectOption[]
   resumeStep?: ResumeStep | null
   prefill?: Prefill
   // Read server-side from REQUIRE_LICENSE (no NEXT_PUBLIC_ prefix) and passed as
@@ -146,7 +163,12 @@ export function OnboardingStepper({
   // Company-setup fields — pre-filled for rejected-resume mode.
   const [name, setName] = useState(prefill.companyName ?? '')
   const [country, setCountry] = useState('')
+  // Two independent taxonomy levels (DEV-99 #3): categories = sector, types = role.
+  const [categories, setCategories] = useState<Set<string>>(new Set())
+  const [customCategory, setCustomCategory] = useState('')
   const [types, setTypes] = useState<Set<string>>(new Set())
+  const [categoryInvalid, setCategoryInvalid] = useState(false)
+  const [activityInvalid, setActivityInvalid] = useState(false)
   const [files, setFiles] = useState<File[]>([])
 
   // Profile fields.
@@ -194,23 +216,36 @@ export function OnboardingStepper({
     }
   }
 
+  function toggleCategory(code: string) {
+    setCategoryInvalid(false)
+    setCategories((prev) => toggledSet(prev, code))
+  }
+
   function toggleType(code: string) {
-    setTypes((prev) => {
-      const next = new Set(prev)
-      if (next.has(code)) next.delete(code)
-      else next.add(code)
-      return next
-    })
+    setActivityInvalid(false)
+    setTypes((prev) => toggledSet(prev, code))
   }
 
   function submitCompany() {
+    setError(null)
     if (!name.trim()) return setError('Enter your company name.')
     if (country.length !== 2) return setError('Pick your country.')
-    if (types.size === 0) return setError('Pick at least one business category.')
+
+    // Both taxonomy levels are required; a picked "Custom" also needs its name.
+    const categoryBad =
+      categories.size === 0 ||
+      (categories.has(CUSTOM_CATEGORY_CODE) && customCategory.trim() === '')
+    const activityBad = types.size === 0
+    setCategoryInvalid(categoryBad)
+    setActivityInvalid(activityBad)
+    if (categoryBad || activityBad) return
+
     if (licenceRequired && files.length === 0) return setError('Add at least one licence file.')
     const fd = new FormData()
     fd.set('name', name.trim())
     fd.set('country', country)
+    categories.forEach((c) => fd.append('category_codes', c))
+    if (categories.has(CUSTOM_CATEGORY_CODE)) fd.set('custom_category', customCategory.trim())
     types.forEach((t) => fd.append('type_codes', t))
     files.forEach((f) => fd.append('files', f))
     submit(() => createCompany(fd))
@@ -282,9 +317,19 @@ export function OnboardingStepper({
               setName={setName}
               country={country}
               setCountry={setCountry}
+              businessCategories={businessCategories}
+              categories={categories}
+              onToggleCategory={toggleCategory}
+              customCategory={customCategory}
+              onCustomCategoryChange={(v) => {
+                setCategoryInvalid(false)
+                setCustomCategory(v)
+              }}
+              categoryInvalid={categoryInvalid}
               types={types}
               companyTypes={companyTypes}
               onToggleType={toggleType}
+              activityInvalid={activityInvalid}
               files={files}
               onAddFiles={(fl) => setFiles((cur) => [...cur, ...fl])}
               onRemoveFile={(i) => setFiles((cur) => cur.filter((_, idx) => idx !== i))}
@@ -892,9 +937,16 @@ function CompanyStep({
   setName,
   country,
   setCountry,
+  businessCategories,
+  categories,
+  onToggleCategory,
+  customCategory,
+  onCustomCategoryChange,
+  categoryInvalid,
   types,
   companyTypes,
   onToggleType,
+  activityInvalid,
   files,
   onAddFiles,
   onRemoveFile,
@@ -904,9 +956,16 @@ function CompanyStep({
   setName: (v: string) => void
   country: string
   setCountry: (v: string) => void
+  businessCategories: MultiSelectOption[]
+  categories: Set<string>
+  onToggleCategory: (code: string) => void
+  customCategory: string
+  onCustomCategoryChange: (v: string) => void
+  categoryInvalid: boolean
   types: Set<string>
   companyTypes: CompanyType[]
   onToggleType: (code: string) => void
+  activityInvalid: boolean
   files: File[]
   onAddFiles: (files: File[]) => void
   onRemoveFile: (index: number) => void
@@ -939,29 +998,30 @@ function CompanyStep({
           ))}
         </select>
       </label>
-      <div className="flex flex-col gap-1.5 text-sm">
-        <span className="text-ink-muted">Business categories</span>
-        <div className="flex flex-wrap gap-2">
-          {companyTypes.map((t) => {
-            const on = types.has(t.code)
-            return (
-              <button
-                key={t.code}
-                type="button"
-                onClick={() => onToggleType(t.code)}
-                title={t.description}
-                className={`rounded-full border px-3 py-1.5 text-xs font-medium capitalize transition ${
-                  on
-                    ? 'border-brand bg-brand text-white'
-                    : 'border-white/70 bg-white/70 text-ink hover:border-brand'
-                }`}
-              >
-                {t.code}
-              </button>
-            )
-          })}
-        </div>
-      </div>
+      <MultiSelect
+        label="Business Category"
+        required
+        options={businessCategories}
+        selected={categories}
+        onToggle={onToggleCategory}
+        placeholder="Select business categories…"
+        invalid={categoryInvalid}
+        errorText="Pick at least one category (and name your custom one)."
+        customCode={CUSTOM_CATEGORY_CODE}
+        customLabel={customCategory}
+        onCustomLabelChange={onCustomCategoryChange}
+        customPlaceholder="e.g. Cosmetics"
+      />
+      <MultiSelect
+        label="Business Activities"
+        required
+        options={companyTypes}
+        selected={types}
+        onToggle={onToggleType}
+        placeholder="Select business activities…"
+        invalid={activityInvalid}
+        errorText="Pick at least one activity."
+      />
       <div className="flex flex-col gap-1.5 text-sm">
         <span className="text-ink-muted">
           Licence or certificate{licenceRequired ? '' : ' (optional while testing)'}

@@ -18,8 +18,22 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/shared/db/server";
 import { getCurrentCompanyId } from "@/shared/auth";
 import type { TablesUpdate } from "@/types/database.types";
+import { isAllowedVideoUrl } from "./mediaLinks";
+import { DOMINANCE_CODES, IRRADIATION_CODES } from "./template";
+import { validateLocations } from "./locations";
 
 export type ManageResult = { ok: true } | { error: string };
+
+/** The Supabase server client type — passed to the price helper so it shares the
+ *  request's authenticated (RLS-scoped) session. */
+type Db = Awaited<ReturnType<typeof createClient>>;
+
+/** A cannabinoid/terpene percent: absent (undefined) means "leave unchanged",
+ *  null clears it, a finite ≥0 number sets it. Rejects NaN/Infinity/negative so a
+ *  malformed field never reaches the DB (T-07-17). */
+function validNumeric(v: number | null): boolean {
+  return v === null || (typeof v === "number" && Number.isFinite(v) && v >= 0);
+}
 
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
 const orNull = (fd: FormData, k: string) => str(fd, k) || null;
@@ -60,6 +74,19 @@ function parseLinks(raw: FormDataEntryValue | null): Array<{ platform: string; l
   });
 }
 
+/** Validate the client-supplied warehouse/location list JSON before it lands in
+ *  metadata (F-07 / Cluster H) — mirrors parseLinks exactly (JSON.parse, then drop
+ *  anything malformed via the shared validateLocations shape-check). */
+function parseLocations(raw: FormDataEntryValue | null): Array<{ label: string; value: string }> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(String(raw ?? "[]"));
+  } catch {
+    return [];
+  }
+  return validateLocations(parsed);
+}
+
 /** Update the shop profile (text) plus optional cover/logo replacement. */
 export async function updateShopProfile(formData: FormData): Promise<ManageResult> {
   const supabase = await createClient();
@@ -78,8 +105,9 @@ export async function updateShopProfile(formData: FormData): Promise<ManageResul
     website: orNull(formData, "website"),
   };
 
-  // Links live in metadata.links (one column per link would not scale). Merge so
-  // any other metadata keys survive; the client sends the full links array.
+  // Links (and now the warehouse/location list, F-07) live in metadata — one
+  // column per value would not scale. Merge so any other metadata keys survive;
+  // the client sends the full links array AND the full locations array each Save.
   const { data: existing } = await supabase
     .from("company")
     .select("metadata")
@@ -89,7 +117,11 @@ export async function updateShopProfile(formData: FormData): Promise<ManageResul
     existing?.metadata && typeof existing.metadata === "object" && !Array.isArray(existing.metadata)
       ? (existing.metadata as Record<string, unknown>)
       : {};
-  patch.metadata = { ...baseMeta, links: parseLinks(formData.get("links")) };
+  patch.metadata = {
+    ...baseMeta,
+    links: parseLinks(formData.get("links")),
+    locations: parseLocations(formData.get("locations")),
+  };
 
   // Cover bytes are uploaded client-direct (ShopView) to a stable path; we
   // persist only the path string. An empty value means "unchanged this save".
@@ -215,6 +247,427 @@ export async function setProductProfileVisible(
     .update({ profile_visible: isVisible })
     .eq("id", productId);
   if (error) return { error: error.message };
+  revalidatePath("/present");
+  return { ok: true };
+}
+
+// ── Owner product + media edit (Phase 7, D-04/D-11) ─────────────────────────
+// Rename / soft-delete / set-location plus the back-of-card media (video link +
+// COA/doc). Each resolves the company from the session and relies on the
+// company-scoped product / product_media RLS, so a caller only ever touches
+// their OWN rows — no companyId parameter is accepted (T-07-06/T-07-08). Media
+// bytes are uploaded client-direct to `shop-media` (mirroring the gallery); these
+// actions record the resulting path/url only, never the file.
+
+/** Rename a product. RLS (`company_id = current_company_id()`) enforces ownership. */
+export async function renameProduct(productId: string, name: string): Promise<ManageResult> {
+  const supabase = await createClient();
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) return { error: "No company in session." };
+
+  const trimmed = name.trim();
+  if (!trimmed) return { error: "Product name is required." };
+
+  const { error } = await supabase.from("product").update({ name: trimmed }).eq("id", productId);
+  if (error) return { error: error.message };
+  revalidatePath("/present");
+  return { ok: true };
+}
+
+/** Soft-delete a product: stamp `deleted_at`. getMyShop filters `is deleted_at
+ *  null`, so the product drops out of both owner and public reads while the row
+ *  (and its media/images) stays for recovery/audit. Never a hard delete. */
+export async function softDeleteProduct(productId: string): Promise<ManageResult> {
+  const supabase = await createClient();
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) return { error: "No company in session." };
+
+  const { error } = await supabase
+    .from("product")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", productId);
+  if (error) return { error: error.message };
+  revalidatePath("/present");
+  return { ok: true };
+}
+
+/** Set (or clear) a product's free-text location group (D-04). */
+export async function setProductLocation(
+  productId: string,
+  location: string | null,
+): Promise<ManageResult> {
+  const supabase = await createClient();
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) return { error: "No company in session." };
+
+  const value = location?.trim() || null;
+  const { error } = await supabase.from("product").update({ location: value }).eq("id", productId);
+  if (error) return { error: error.message };
+  revalidatePath("/present");
+  return { ok: true };
+}
+
+// ── Batched card-front field + batch writes (Phase 7 F-02) ──────────────────
+// The card front stages every field + lot edit in a client-side draft and flushes
+// it here on the ONE pink Save. Each action is session-scoped (RLS on product /
+// product_batch / pricelist_item), takes no companyId param, and never touches
+// cost/COGS. Numerics are validated before persist (T-07-17); price is routed to
+// the product's standard pricelist_item (the row getMyShop reads).
+
+/** The product fields the card edits inline. `price_per_gram` is routed to the
+ *  pricelist_item (not the product); the rest land on the product row. Omitted
+ *  keys are left unchanged; cost/COGS is deliberately not representable here.
+ *  F-05 adds the other spec-row fields (Cluster F): free text (cultivator,
+ *  origin, region, lineage, packaging, supplier code), enum codes (dominance,
+ *  irradiation — validated against the template's canonical code lists), and
+ *  a boolean (resealable). */
+export type ProductFieldPatch = {
+  name?: string;
+  thc_percent?: number | null;
+  cbd_percent?: number | null;
+  cbg_percent?: number | null;
+  cbn_percent?: number | null;
+  terpene_percent?: number | null;
+  location?: string | null;
+  price_public?: boolean;
+  price_per_gram?: number | null;
+  cultivator?: string | null;
+  country_of_origin?: string | null;
+  region?: string | null;
+  lineage_parent_a?: string | null;
+  lineage_parent_b?: string | null;
+  dominance_code?: string | null;
+  irradiation_code?: string | null;
+  packaging_material?: string | null;
+  resealable?: boolean | null;
+  supplier_product_code?: string | null;
+};
+
+const NUMERIC_PRODUCT_FIELDS = [
+  "thc_percent", "cbd_percent", "cbg_percent", "cbn_percent", "terpene_percent",
+] as const;
+
+/** F-05 free-text spec-row fields: trimmed, empty → null (clears the field). */
+const TEXT_PRODUCT_FIELDS = [
+  "cultivator", "country_of_origin", "region", "lineage_parent_a", "lineage_parent_b",
+  "packaging_material", "supplier_product_code",
+] as const;
+
+/** Apply a validated product-field patch (Save flush target). Product-table fields
+ *  update `product`; `price_per_gram` routes to the standard pricelist_item. */
+export async function updateProductFields(
+  productId: string,
+  patch: ProductFieldPatch,
+): Promise<ManageResult> {
+  const supabase = await createClient();
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) return { error: "No company in session." };
+
+  const productPatch: TablesUpdate<"product"> = {};
+  if (patch.name !== undefined) {
+    const name = patch.name.trim();
+    if (!name) return { error: "Product name is required." };
+    productPatch.name = name;
+  }
+  for (const key of NUMERIC_PRODUCT_FIELDS) {
+    const v = patch[key];
+    if (v === undefined) continue;
+    if (!validNumeric(v)) return { error: `Invalid value for ${key}.` };
+    productPatch[key] = v;
+  }
+  if (patch.location !== undefined) productPatch.location = patch.location?.trim() || null;
+  if (patch.price_public !== undefined) productPatch.price_public = patch.price_public;
+  for (const key of TEXT_PRODUCT_FIELDS) {
+    const v = patch[key];
+    if (v === undefined) continue;
+    productPatch[key] = v?.trim() || null;
+  }
+  if (patch.dominance_code !== undefined) {
+    if (patch.dominance_code !== null && !DOMINANCE_CODES.includes(patch.dominance_code as (typeof DOMINANCE_CODES)[number])) {
+      return { error: "Invalid dominance." };
+    }
+    productPatch.dominance_code = patch.dominance_code;
+  }
+  if (patch.irradiation_code !== undefined) {
+    if (patch.irradiation_code !== null && !IRRADIATION_CODES.includes(patch.irradiation_code as (typeof IRRADIATION_CODES)[number])) {
+      return { error: "Invalid irradiation." };
+    }
+    productPatch.irradiation_code = patch.irradiation_code;
+  }
+  if (patch.resealable !== undefined) productPatch.resealable = patch.resealable;
+
+  if (Object.keys(productPatch).length > 0) {
+    const { error } = await supabase.from("product").update(productPatch).eq("id", productId);
+    if (error) return { error: error.message };
+  }
+
+  if (patch.price_per_gram !== undefined) {
+    const priced = await writeStandardPrice(supabase, companyId, productId, patch.price_per_gram);
+    if ("error" in priced) return priced;
+  }
+
+  revalidatePath("/present");
+  return { ok: true };
+}
+
+/** Route a public price to the product's standard pricelist_item.price_per_gram —
+ *  the row getMyShop reads. Update the existing (oldest live) item, else create one
+ *  under the company's standard pricelist, mirroring the import_products RPC
+ *  (reuse the oldest live pricelist, else insert a fresh 'Standard'). price_per_gram
+ *  is NOT NULL, so a null price is a no-op — hide a price via price_public=false. */
+async function writeStandardPrice(
+  supabase: Db,
+  companyId: string,
+  productId: string,
+  price: number | null,
+): Promise<ManageResult> {
+  if (price === null) return { ok: true };
+  if (!Number.isFinite(price) || price < 0) return { error: "Invalid price." };
+
+  const { data: existing } = await supabase
+    .from("pricelist_item")
+    .select("id")
+    .eq("product_id", productId)
+    .is("deleted_at", null)
+    .order("created_at", { ascending: true })
+    .limit(1);
+  const itemId = existing?.[0]?.id;
+  if (itemId) {
+    const { error } = await supabase
+      .from("pricelist_item")
+      .update({ price_per_gram: price })
+      .eq("id", itemId);
+    return error ? { error: error.message } : { ok: true };
+  }
+
+  const { data: lists } = await supabase
+    .from("pricelist")
+    .select("id")
+    .eq("company_id", companyId)
+    .is("deleted_at", null)
+    .order("created_at", { ascending: true })
+    .limit(1);
+  let pricelistId = lists?.[0]?.id;
+  if (!pricelistId) {
+    const { data: created, error: plErr } = await supabase
+      .from("pricelist")
+      .insert({
+        company_id: companyId,
+        name: "Standard",
+        status_code: "published",
+        currency: "EUR",
+        published_at: new Date().toISOString(),
+      })
+      .select("id")
+      .single();
+    if (plErr || !created) return { error: plErr?.message ?? "Could not create a pricelist." };
+    pricelistId = created.id;
+  }
+
+  const { error } = await supabase.from("pricelist_item").insert({
+    pricelist_id: pricelistId,
+    product_id: productId,
+    price_per_gram: price,
+    currency: "EUR",
+  });
+  return error ? { error: error.message } : { ok: true };
+}
+
+/** A new lot to add to a product (measured CoA values only — no cost). */
+export type ProductBatchInput = {
+  batch_number: string;
+  thc_percent?: number | null;
+  cbd_percent?: number | null;
+  expiry_date?: string | null;
+};
+
+/** Add a lot inline (Save flush target). company_id is denormalized for the
+ *  direct-column RLS check, mirroring the other product-child writes. */
+export async function addProductBatch(
+  productId: string,
+  input: ProductBatchInput,
+): Promise<ManageResult> {
+  const supabase = await createClient();
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) return { error: "No company in session." };
+
+  const batchNumber = input.batch_number.trim();
+  if (!batchNumber) return { error: "Lot number is required." };
+  if (!validNumeric(input.thc_percent ?? null)) return { error: "Invalid THC %." };
+  if (!validNumeric(input.cbd_percent ?? null)) return { error: "Invalid CBD %." };
+
+  const { error } = await supabase.from("product_batch").insert({
+    product_id: productId,
+    company_id: companyId,
+    batch_number: batchNumber,
+    thc_percent: input.thc_percent ?? null,
+    cbd_percent: input.cbd_percent ?? null,
+    expiry_date: input.expiry_date?.trim() || null,
+  });
+  if (error) return { error: error.message };
+  revalidatePath("/present");
+  return { ok: true };
+}
+
+/** A patch to an existing lot; omitted keys are left unchanged. */
+export type ProductBatchPatch = {
+  batch_number?: string;
+  thc_percent?: number | null;
+  cbd_percent?: number | null;
+  expiry_date?: string | null;
+};
+
+/** Edit an existing lot inline (Save flush target). RLS scopes it to the caller. */
+export async function updateProductBatch(
+  batchId: string,
+  patch: ProductBatchPatch,
+): Promise<ManageResult> {
+  const supabase = await createClient();
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) return { error: "No company in session." };
+
+  const update: TablesUpdate<"product_batch"> = {};
+  if (patch.batch_number !== undefined) {
+    const bn = patch.batch_number.trim();
+    if (!bn) return { error: "Lot number is required." };
+    update.batch_number = bn;
+  }
+  if (patch.thc_percent !== undefined) {
+    if (!validNumeric(patch.thc_percent)) return { error: "Invalid THC %." };
+    update.thc_percent = patch.thc_percent;
+  }
+  if (patch.cbd_percent !== undefined) {
+    if (!validNumeric(patch.cbd_percent)) return { error: "Invalid CBD %." };
+    update.cbd_percent = patch.cbd_percent;
+  }
+  if (patch.expiry_date !== undefined) update.expiry_date = patch.expiry_date?.trim() || null;
+
+  if (Object.keys(update).length === 0) return { ok: true };
+  const { error } = await supabase.from("product_batch").update(update).eq("id", batchId);
+  if (error) return { error: error.message };
+  revalidatePath("/present");
+  return { ok: true };
+}
+
+/** Soft-delete a lot: stamp `deleted_at`. getMyShop filters deleted lots out of
+ *  both the batch list and the Terp% pick, so the row stays for recovery/audit. */
+export async function softDeleteProductBatch(batchId: string): Promise<ManageResult> {
+  const supabase = await createClient();
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) return { error: "No company in session." };
+
+  const { error } = await supabase
+    .from("product_batch")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", batchId);
+  if (error) return { error: error.message };
+  revalidatePath("/present");
+  return { ok: true };
+}
+
+/** One back-of-card media asset to attach. A `video_link` carries an external
+ *  `url` (host-validated, no file); a `coa`/`doc` carries a `shop-media` `path`
+ *  the browser already uploaded. */
+export type ProductMediaInput =
+  | { kind: "video_link"; url: string; label?: string | null }
+  | { kind: "coa" | "doc"; path: string; label?: string | null };
+
+/** Attach a video link or a COA/doc PDF to a product (D-11), appending after the
+ *  current last position. Mirrors addProductImageRecords: company_id is
+ *  denormalized for direct-column RLS and the browser uploads any bytes itself.
+ *  A video_link's url is host-allowlisted (`isAllowedVideoUrl`, T-07-07) before it
+ *  is persisted — the 07-04 card renders it into an `<iframe src>`, so an
+ *  arbitrary or `javascript:` host would be an XSS vector. */
+export async function addProductMediaRecord(
+  productId: string,
+  media: ProductMediaInput,
+): Promise<ManageResult> {
+  const supabase = await createClient();
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) return { error: "No company in session." };
+
+  let url: string | null = null;
+  let path: string | null = null;
+  if (media.kind === "video_link") {
+    const raw = (media.url ?? "").trim();
+    if (!isAllowedVideoUrl(raw)) {
+      return { error: "Video links must be a YouTube, Vimeo, or Loom URL." };
+    }
+    url = raw;
+  } else {
+    path = media.path?.trim() || null;
+    if (!path) return { error: "No file provided." };
+  }
+
+  const { data: last } = await supabase
+    .from("product_media")
+    .select("position")
+    .eq("product_id", productId)
+    .order("position", { ascending: false })
+    .limit(1);
+  const position = (last?.[0]?.position ?? -1) + 1;
+
+  const label = media.label?.trim() || null;
+  const { error } = await supabase.from("product_media").insert({
+    product_id: productId,
+    company_id: companyId,
+    kind: media.kind,
+    url,
+    path,
+    label,
+    position,
+  });
+  if (error) return { error: error.message };
+  revalidatePath("/present");
+  return { ok: true };
+}
+
+/** A video_link has no file, so its removal reports `path: null`; a coa/doc
+ *  reports its `shop-media` path so the caller deletes the bucket object. */
+export type MediaRemoveResult = { ok: true; path: string | null } | { error: string };
+
+/** Remove one media row and return its storage `path` (null for a video_link) so
+ *  the browser deletes the file — storage I/O stays client-side on both add and
+ *  remove, mirroring removeProductImage. Row first, then file (an orphaned file is
+ *  harmless; a row pointing at a deleted file is a broken link). */
+export async function removeProductMedia(mediaId: string): Promise<MediaRemoveResult> {
+  const supabase = await createClient();
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) return { error: "No company in session." };
+
+  const { data: row } = await supabase
+    .from("product_media")
+    .select("path")
+    .eq("id", mediaId)
+    .single();
+  if (!row) return { error: "Media not found." };
+
+  const { error } = await supabase.from("product_media").delete().eq("id", mediaId);
+  if (error) return { error: error.message };
+
+  revalidatePath("/present");
+  return { ok: true, path: row.path };
+}
+
+/** Set the display order of a product's back-of-card media. `orderedIds` is the
+ *  full media id list in the desired order; the single authoritative writer of
+ *  `position`, mirroring setProductImageOrder. */
+export async function setProductMediaOrder(
+  productId: string,
+  orderedIds: string[],
+): Promise<ManageResult> {
+  const supabase = await createClient();
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) return { error: "No company in session." };
+
+  for (let i = 0; i < orderedIds.length; i++) {
+    const { error } = await supabase
+      .from("product_media")
+      .update({ position: i })
+      .eq("id", orderedIds[i])
+      .eq("product_id", productId);
+    if (error) return { error: error.message };
+  }
   revalidatePath("/present");
   return { ok: true };
 }
