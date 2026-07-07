@@ -25,7 +25,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { isKeyAccount } from "@/modules/allocate/status";
-import { computeBatchStock, type AllocationRow } from "@/modules/allocate/batches";
+import { computeBatchStock, type AllocationRow } from "@/modules/allocate/lib/batchStock";
 import {
   setLineAllocation,
   substituteLine,
