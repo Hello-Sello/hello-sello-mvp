@@ -13,14 +13,21 @@ import type { BasketLine, BasketView } from "../types";
 
 export async function getMyBasket(): Promise<BasketView> {
   const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  if (userError) throw userError;
   if (!user) return { groups: [], totalLineCount: 0 };
 
-  const { data: viewerPerson } = await supabase
+  const { data: viewerPerson, error: personError } = await supabase
     .from("person").select("company_id").eq("id", user.id).single();
+  if (personError) throw personError;
   const viewerCompanyId = viewerPerson?.company_id ?? "";
 
   // RLS-scoped: only my lines. Join the product + its owning company + list price.
+  // pricelist_item is a many-to-one embed (a product can have more than one
+  // pricelist row); order most-recently-updated first so repeated reads are
+  // deterministic, with id as a final tie-break for equal timestamps. This is
+  // a pragmatic choice, not full price-list resolution (no is_active/is_default
+  // flag exists on pricelist_item to prefer instead).
   const { data: rows, error } = await supabase
     .from("product_basket_line")
     .select(
@@ -28,7 +35,9 @@ export async function getMyBasket(): Promise<BasketView> {
       "product:product_id(id, name, cultivar, unit_code, local_code_pzn, company_id, " +
       "company:company_id(id, name), pricelist_item(price_per_gram))",
     )
-    .order("created_at", { ascending: true });
+    .order("created_at", { ascending: true })
+    .order("updated_at", { referencedTable: "product.pricelist_item", ascending: false })
+    .order("id", { referencedTable: "product.pricelist_item", ascending: false });
   if (error) throw error;
 
   const typedRows = rows as unknown as Array<{
@@ -73,10 +82,11 @@ export async function getMyBasket(): Promise<BasketView> {
     .filter((id) => id !== viewerCompanyId);
   const relByCompany = new Map<string, string>();
   if (otherCompanyIds.length) {
-    const { data: rels } = await supabase
+    const { data: rels, error: relError } = await supabase
       .from("relationship")
       .select("id, company_a_id, company_b_id")
       .is("deleted_at", null);
+    if (relError) throw relError;
     for (const rel of rels ?? []) {
       const other = rel.company_a_id === viewerCompanyId ? rel.company_b_id : rel.company_a_id;
       if (otherCompanyIds.includes(other)) relByCompany.set(other, rel.id);

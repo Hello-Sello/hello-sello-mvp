@@ -10,7 +10,8 @@ import { createClient } from "@/shared/db/client";
 
 async function ownerId(): Promise<string> {
   const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { user }, error } = await supabase.auth.getUser();
+  if (error) throw error;
   if (!user) throw new Error("basket: no authenticated user");
   return user.id;
 }
