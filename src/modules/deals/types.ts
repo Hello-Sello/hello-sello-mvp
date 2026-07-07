@@ -41,7 +41,10 @@ export type DealType = "offer" | "order";
 /**
  * deal_card_status.code - the deal's life (`deal_card.status`).
  * 3a only writes `draft`; the rest are reached by later units (3d confirm,
- * fulfilment) and the 2e seeded history.
+ * fulfilment) and the 2e seeded history. `ticket_created`/`ticket_closed` are the
+ * post-close reopen-ticket states (07-06, D-29/D-30): after `done`, either party
+ * may reopen (`ticket_created` blue) and close (`ticket_closed` dark-green) the
+ * ticket - the sealed deal terms never change.
  */
 export type DealCardStatus =
   | "draft"
@@ -49,7 +52,9 @@ export type DealCardStatus =
   | "confirmed"
   | "amended"
   | "done"
-  | "cancelled";
+  | "cancelled"
+  | "ticket_created"
+  | "ticket_closed";
 
 /**
  * content_author.code - who produced a log entry (`deal_card_log.changed_by`).
@@ -344,23 +349,11 @@ export interface DealWorkspaceView {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Stages + Things - the per-stage checklist (screen ④, 3c)                   */
+/* Things - the flat checklist (Stages retired, D-15)                         */
 /* -------------------------------------------------------------------------- */
 
 /** The thing row, verbatim. */
 export type ThingRow = Tables["thing"]["Row"];
-
-/**
- * deal_stage.code - the 5 fixed pipeline stages (`thing.stage_code`).
- * Seeded in 20260607090001 (sort_order 1-5). For 3c the bar that shows these
- * is screen-only; the stage list itself is read from `deal_stage`.
- */
-export type StageCode =
-  | "negotiation"
-  | "compliance_quality"
-  | "agreement"
-  | "payment"
-  | "fulfilment_delivery";
 
 /**
  * thing_type.code - what kind of work a Thing is (`thing.type`).
@@ -375,6 +368,7 @@ export type ThingStatus = "open" | "done";
 /**
  * One checklist row in the Things tab. Bound from `thing`, lookup columns
  * narrowed. Ticking it flips `status` open<->done (a real DB write, 3c D3).
+ * Things are FLAT/stageless now (D-15) - there is no stage grouping.
  */
 export interface ThingView {
   /** thing.id */
@@ -382,8 +376,7 @@ export interface ThingView {
   title: string;
   type: ThingType;
   status: ThingStatus;
-  stageCode: StageCode;
-  /** order within its stage */
+  /** order within the flat list */
   sortOrder: number;
   /** thing.assignee_person_id - the person this Thing is assigned to (D-09); null when unassigned. */
   assigneePersonId: string | null;
@@ -411,36 +404,6 @@ export interface ArtifactView {
   isPrivate: boolean;
   /** the thing.id whose linked_artifact_id points at this document, or null (a standalone document). */
   linkedThingId: string | null;
-}
-
-/**
- * One stage's STORED done state (D-14). Stage-done is a manual user action,
- * never auto-flipped, so it lives in a `deal_stage_completion` row. A stage with
- * NO row reads as not-done (markedDoneAt/By null).
- */
-export interface StageCompletionView {
-  stageCode: StageCode;
-  /** ISO timestamp the stage was marked done; null when no completion row exists. */
-  markedDoneAt: string | null;
-  /** the person who marked the stage done; null when no completion row exists. */
-  markedDoneByPersonId: string | null;
-}
-
-/**
- * One stage with its Things, ready to render. The 5 stages come from
- * `deal_stage` (so order + labels stay schema-driven); each carries the Things
- * whose `stage_code` matches. `thingsDone`/`thingsTotal` drive the progress
- * count. The "current" highlight is NOT here - it's screen-only local state (D2).
- */
-export interface StageView {
-  code: StageCode;
-  /** display label, e.g. "Compliance & Quality" (from deal_stage.description, titled) */
-  label: string;
-  /** deal_stage.sort_order (1-5) */
-  sortOrder: number;
-  things: ThingView[];
-  thingsTotal: number;
-  thingsDone: number;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -668,6 +631,14 @@ export type ProposalVote = "accept" | "reject" | null;
 
 /** One proposed line, shaped for the strip's accept popover (from `metadata.draft`). */
 export interface ProposalLineView {
+  /**
+   * The catalogue product id this line refers to, or null for a free-typed /
+   * custom line (SELL-01/D-18). The held change draft persists it (actions.ts
+   * `proposeDealChange`); carrying it here lets the on-card diff (07-07) PAIR
+   * current-vs-proposed lines BY id instead of by name/index, which mis-targets
+   * duplicate or renamed lines. Birth proposals carry no product link -> null.
+   */
+  productId: string | null;
   name: string;
   quantity: number;
   unit: string;
@@ -822,4 +793,91 @@ export interface ConfirmDealChangeInput {
  */
 export interface ConfirmDealChangeResult {
   version: number | null;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Promotion (07-06, PROMO-01) - the INDEPENDENT yellow track.                 */
+/*                                                                            */
+/* D-21: a seller promotion is a SEPARATE decision from the negotiation diff,  */
+/* its own `deal_promotion` row (no shared lock, so a live promotion and a live */
+/* negotiation never block each other). D-21: product rewards are REAL line     */
+/* deltas; D-22: non-product rewards (free delivery) live in condition_deltas   */
+/* and render in Extra Conditions, never as a product line. D-26: resolving the */
+/* promotion NEVER touches deal_confirmation or the Sign gate.                  */
+/* -------------------------------------------------------------------------- */
+
+/** `deal_promotion.state` - a promotion's life. `pending` until the buyer acts. */
+export type PromotionState = "pending" | "accepted" | "declined";
+
+/**
+ * One REAL product-table reward line in a promotion (D-21) - e.g. "2 more units
+ * of product X". Applied to `deal_line_item` INDEPENDENTLY at accept time (Open
+ * Question 2). `unitPrice` is what the buyer PAYS for the reward (0 for a free
+ * reward); `referencePrice` is the normal/struck per-unit price it is measured
+ * against for the saving (D-25) - null when unknown (then it contributes no
+ * saving). Prices are per-gram canonical, kg<->g normalized by `lineValueOf`.
+ */
+export interface PromotionLineDelta {
+  /** the catalogue product this reward line points at; null for a free-typed reward */
+  productId: string | null;
+  productName: string;
+  quantity: number;
+  /** 'g' | 'kg' | 'unit' - the same per-gram canonical unit the card uses */
+  unit: string;
+  /** what the buyer PAYS for this reward line (0 = free) */
+  unitPrice: number;
+  currency: string;
+  /** the normal/struck price the saving is measured against (D-25); null = unknown */
+  referencePrice: number | null;
+}
+
+/**
+ * One NON-product reward in a promotion (D-22) - e.g. free delivery. Rendered in
+ * the card's Extra Conditions section by 07-07, NEVER as a product-table line.
+ */
+export interface PromotionConditionDelta {
+  /** a stable reward key, e.g. 'free_delivery' */
+  kind: string;
+  /** the human label shown in Extra Conditions */
+  label: string;
+}
+
+/**
+ * A promotion resolved for the viewer (07-06). `getPromotion` returns the card's
+ * current promotion (or null when none). The saving is pre-computed on the
+ * canonical money (D-25) so the yellow track (07-07) only RENDERS "You saved X".
+ */
+export interface PromotionView {
+  /** the deal card this promotion hangs off */
+  dealCardId: string;
+  state: PromotionState;
+  /** the live version the offer was made against */
+  baseVersion: number;
+  /** REAL product-table reward lines (D-21) */
+  lineDeltas: PromotionLineDelta[];
+  /** non-product rewards for Extra Conditions (D-22) */
+  conditionDeltas: PromotionConditionDelta[];
+  /** the buyer's saving in currency units (D-25), computed via `promotionSavings`; 0 when nothing is saved */
+  savings: number;
+  currency: string;
+  /** true when the viewer's company offered it (the seller); the buyer resolves accept/decline */
+  iOffered: boolean;
+}
+
+/**
+ * The offer-a-promotion payload handed to `offerPromotion` (seller-only). The
+ * action derives the seller from the SESSION (never a client-claimed side) and
+ * inserts a `deal_promotion` row - NO reason gate, NO version bump (D-26).
+ */
+export interface OfferPromotionInput {
+  dealCardId: string;
+  /** REAL product-table reward lines (D-21) */
+  lineDeltas: PromotionLineDelta[];
+  /** non-product rewards -> Extra Conditions (D-22); optional */
+  conditionDeltas?: PromotionConditionDelta[];
+}
+
+/** Result of `offerPromotion` - the new `deal_promotion` id. */
+export interface OfferPromotionResult {
+  promotionId: string;
 }

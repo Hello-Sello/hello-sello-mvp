@@ -1,40 +1,34 @@
 /**
- * The finalization GATE decision (Phase 5, D-15).
+ * The finalization GATE decision (Phase 7, D-27/D-28).
  *
- * Pure logic, extracted from `finalizeDeal` so the load-bearing rule -
- * "finalization is available ONLY when every stage is marked done" - is
- * unit-testable without the DB. `finalizeDeal` reads the deal's stage codes and
- * its `deal_stage_completion` rows, then calls this to decide whether to flip
- * the card to 'done'.
+ * Pure logic, extracted from `finalizeDeal` so the load-bearing close rule is
+ * unit-testable without the DB. The Stages gate (allStagesDone /
+ * canFinalizeFromStatus) is RETIRED with Stages (D-15); D-27 replaces it: the
+ * SELLER uploading a real invoice PDF is the ONE trigger that closes the deal
+ * (there is no buyer confirm-receipt gate).
  */
 import type { DealCardStatus } from "../types";
 
 /**
- * True when EVERY stage in `stageCodes` has a matching completion code in
- * `completedStageCodes`. A deal with no stages is never "all done" (an empty
- * stage set would otherwise be vacuously true, which must not unlock finalize).
- */
-export function allStagesDone(
-  stageCodes: readonly string[],
-  completedStageCodes: readonly string[],
-): boolean {
-  if (stageCodes.length === 0) return false;
-  const done = new Set(completedStageCodes);
-  return stageCodes.every((code) => done.has(code));
-}
-
-/**
- * The STATUS precondition for finalization (HI-02). `done` is a terminal status
- * that must only be reachable from an AGREED deal, so finalize is allowed ONLY
- * from a live agreed state: `confirmed` (both sides sealed the current version)
- * or `amended` (a committed two-sided change). Every other status - `draft`,
- * `withdrawn`, `cancelled` (and `done`, which the idempotency guard handles
- * earlier) - must NOT be finalizable, or a never-confirmed deal could be driven
- * straight to `done`, bypassing the two-sided confirm gate.
+ * True when the deal may close on the invoice trigger (D-27):
+ *   1. STATUS precondition - the deal must be in a live AGREED state, `confirmed`
+ *      (both sides sealed the current version) or `amended` (a committed two-sided
+ *      change). Every other status - `draft` (never agreed), `withdrawn`,
+ *      `cancelled` (dead), and `done` (already terminal; the idempotency
+ *      early-return in finalizeDeal handles it) - must NOT close, or a
+ *      never-agreed deal could be driven straight to `done`.
+ *   2. TRIGGER - a SELLER-uploaded invoice PDF exists (`hasSellerInvoice`). The
+ *      caller resolves this from a `deal_artifact(category='invoice')` whose
+ *      `uploaded_by_company_id` is the seller company (ASVS V4); a buyer-uploaded
+ *      or absent invoice makes it false.
  *
  * Pure (no DB) so the rule is unit-testable; `finalizeDeal` calls it after the
  * idempotency early-return and throws when it is false.
  */
-export function canFinalizeFromStatus(status: DealCardStatus): boolean {
-  return status === "confirmed" || status === "amended";
+export function canFinalizeByInvoice(
+  status: DealCardStatus,
+  hasSellerInvoice: boolean,
+): boolean {
+  if (status !== "confirmed" && status !== "amended") return false;
+  return hasSellerInvoice;
 }

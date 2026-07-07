@@ -386,9 +386,10 @@ export type Database = {
           deal_card_id: string | null
           deleted_at: string | null
           id: string
+          name: string | null
           person_a_id: string | null
           person_b_id: string | null
-          relationship_id: string
+          relationship_id: string | null
           type: string
         }
         Insert: {
@@ -396,9 +397,10 @@ export type Database = {
           deal_card_id?: string | null
           deleted_at?: string | null
           id?: string
+          name?: string | null
           person_a_id?: string | null
           person_b_id?: string | null
-          relationship_id: string
+          relationship_id?: string | null
           type: string
         }
         Update: {
@@ -406,9 +408,10 @@ export type Database = {
           deal_card_id?: string | null
           deleted_at?: string | null
           id?: string
+          name?: string | null
           person_a_id?: string | null
           person_b_id?: string | null
-          relationship_id?: string
+          relationship_id?: string | null
           type?: string
         }
         Relationships: [
@@ -446,6 +449,58 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "chat_thread_type"
             referencedColumns: ["code"]
+          },
+        ]
+      }
+      chat_thread_member: {
+        Row: {
+          added_at: string
+          added_by: string | null
+          approvals: Json
+          id: string
+          person_id: string
+          state: string
+          thread_id: string
+        }
+        Insert: {
+          added_at?: string
+          added_by?: string | null
+          approvals?: Json
+          id?: string
+          person_id: string
+          state?: string
+          thread_id: string
+        }
+        Update: {
+          added_at?: string
+          added_by?: string | null
+          approvals?: Json
+          id?: string
+          person_id?: string
+          state?: string
+          thread_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_thread_member_added_by_fkey"
+            columns: ["added_by"]
+            isOneToOne: false
+            referencedRelation: "person"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_thread_member_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "person"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_thread_member_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "chat_thread"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -1918,6 +1973,77 @@ export type Database = {
           {
             foreignKeyName: "deal_pending_change_proposed_by_person_fkey"
             columns: ["proposed_by_person"]
+            isOneToOne: false
+            referencedRelation: "person"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      deal_promotion: {
+        Row: {
+          base_version: number
+          condition_deltas: Json
+          created_at: string
+          deal_card_id: string
+          id: string
+          line_deltas: Json
+          offered_by_company: string
+          offered_by_person: string
+          resolved_at: string | null
+          resolved_by_person: string | null
+          state: string
+        }
+        Insert: {
+          base_version: number
+          condition_deltas?: Json
+          created_at?: string
+          deal_card_id: string
+          id?: string
+          line_deltas?: Json
+          offered_by_company: string
+          offered_by_person: string
+          resolved_at?: string | null
+          resolved_by_person?: string | null
+          state?: string
+        }
+        Update: {
+          base_version?: number
+          condition_deltas?: Json
+          created_at?: string
+          deal_card_id?: string
+          id?: string
+          line_deltas?: Json
+          offered_by_company?: string
+          offered_by_person?: string
+          resolved_at?: string | null
+          resolved_by_person?: string | null
+          state?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deal_promotion_deal_card_id_fkey"
+            columns: ["deal_card_id"]
+            isOneToOne: false
+            referencedRelation: "deal_card"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deal_promotion_offered_by_company_fkey"
+            columns: ["offered_by_company"]
+            isOneToOne: false
+            referencedRelation: "company"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deal_promotion_offered_by_person_fkey"
+            columns: ["offered_by_person"]
+            isOneToOne: false
+            referencedRelation: "person"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deal_promotion_resolved_by_person_fkey"
+            columns: ["resolved_by_person"]
             isOneToOne: false
             referencedRelation: "person"
             referencedColumns: ["id"]
@@ -4112,7 +4238,7 @@ export type Database = {
           metadata: Json
           owner_company_id: string | null
           sort_order: number
-          stage_code: string
+          stage_code: string | null
           status: string
           title: string
           type: string
@@ -4136,7 +4262,7 @@ export type Database = {
           metadata?: Json
           owner_company_id?: string | null
           sort_order?: number
-          stage_code: string
+          stage_code?: string | null
           status?: string
           title: string
           type?: string
@@ -4160,7 +4286,7 @@ export type Database = {
           metadata?: Json
           owner_company_id?: string | null
           sort_order?: number
-          stage_code?: string
+          stage_code?: string | null
           status?: string
           title?: string
           type?: string
@@ -4316,6 +4442,10 @@ export type Database = {
     }
     Functions: {
       approve_company: { Args: { p_company_id: string }; Returns: undefined }
+      approve_group_member: {
+        Args: { p_person_id: string; p_thread_id: string }
+        Returns: string
+      }
       approve_join_request: {
         Args: { p_request_id: string; p_role?: string }
         Returns: undefined
@@ -4346,7 +4476,7 @@ export type Database = {
       }
       confirm_detected_deal: {
         Args: { p_decision: string; p_message_id: string }
-        Returns: string
+        Returns: Record<string, unknown>
       }
       confirm_line_allocations: {
         Args: { p_line_item_ids: string[] }
@@ -4365,6 +4495,14 @@ export type Database = {
           p_private_value: string
           p_relationship_id: string
           p_value_net: number
+        }
+        Returns: string
+      }
+      create_group_thread: {
+        Args: {
+          p_deal_card_id?: string
+          p_member_person_ids: string[]
+          p_name: string
         }
         Returns: string
       }
@@ -4471,6 +4609,7 @@ export type Database = {
         Returns: undefined
       }
       is_caller_verified: { Args: never; Returns: boolean }
+      is_group_member: { Args: { p_thread_id: string }; Returns: boolean }
       is_hs_team: { Args: never; Returns: boolean }
       is_relationship_member: { Args: { p_rel_id: string }; Returns: boolean }
       is_workspace_member: { Args: { p_ws_id: string }; Returns: boolean }

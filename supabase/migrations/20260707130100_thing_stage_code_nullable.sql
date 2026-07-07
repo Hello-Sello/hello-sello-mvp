@@ -1,0 +1,24 @@
+-- ============================================================================
+-- Migration — Thing.stage_code nullable (Phase 7, D-15: retire Stages)
+-- ----------------------------------------------------------------------------
+-- Phase 7 kills the Stages pipeline (D-15). The stage backend (getStagesAndThings
+-- / getStageCompletions / markStageDone + the StageView/StageCode/
+-- StageCompletionView types) is removed from the app, and Things become a FLAT,
+-- stageless list (07-07 renders them without stage grouping).
+--
+-- `thing.stage_code` was a NOT NULL FK to `deal_stage(code)` (phase2_deal.sql:370),
+-- so a stageless Thing could not be inserted. This drops the NOT NULL so a Thing
+-- may carry `stage_code = NULL`. The FK is KEPT (a non-null value must still be a
+-- real stage code) and the `deal_stage` / `deal_stage_completion` tables are LEFT
+-- DORMANT — retiring the CODE paths is enough; dropping the tables (and the
+-- reopen/lifecycle rework) is out of scope for this plan.
+--
+-- Safe change: relaxing NOT NULL never violates existing data. No cloud push here
+-- (07-08 owns the single local `supabase db reset` after all Phase-7 migrations
+-- merge, and regenerates database.types.ts).
+--
+-- NOTE for Muskan (schema owner): this only relaxes a constraint on the deal-
+-- domain `thing` table; no catalogue/product schema or RLS is touched.
+-- ============================================================================
+
+ALTER TABLE public.thing ALTER COLUMN stage_code DROP NOT NULL;

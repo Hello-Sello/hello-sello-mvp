@@ -24,6 +24,7 @@ import type {
   ConnectedCompany,
   ConnectedPerson,
   MyConnectionsView,
+  PeopleSearchResult,
 } from "../types";
 
 type SupabaseBrowserClient = ReturnType<typeof createClient>;
@@ -151,4 +152,60 @@ export async function getMyConnections(): Promise<MyConnectionsView> {
   // Newest connection first (drives the "New connections by date" section).
   companies.sort((a, b) => (b.connectedAt ?? "").localeCompare(a.connectedAt ?? ""));
   return { companies };
+}
+
+/**
+ * Widened people search for the New-Group picker (D-04). The default group
+ * source is the connected directory (`getMyConnections`), but a group may
+ * reach ANY HelloSello user by name - this searches `person` by name and
+ * returns the matches the viewer is allowed to see.
+ *
+ * Still RLS-scoped: `can_see_person` / `shares_connection_with_company`
+ * (migration 20260609183000) decides which people are visible, so this NEVER
+ * leaks a tenant - it only reaches as wide as the viewer's own policy allows.
+ * Uses ONLY the authenticated `createClient()` (never the service role).
+ *
+ * The raw query is sanitized (PostgREST filter metacharacters stripped) before
+ * it is interpolated into the `.or(...)` ilike filter, so a crafted name can
+ * never break out of the pattern into the filter grammar (Rule 2, input safety).
+ */
+export async function searchPeople(query: string): Promise<PeopleSearchResult[]> {
+  // strip PostgREST filter metacharacters + ilike wildcards so user input can
+  // only ever be a plain substring, never filter syntax or an injected wildcard
+  const safe = query.replace(/[,()%*\\]/g, " ").trim();
+  if (safe.length < 2) return [];
+
+  const supabase = createClient();
+  const viewer = await getViewer(supabase);
+
+  const { data: people, error } = await supabase
+    .from("person")
+    .select("id, company_id, display_name, first_name, last_name")
+    .is("deleted_at", null)
+    .neq("id", viewer.personId)
+    .or(
+      `display_name.ilike.%${safe}%,first_name.ilike.%${safe}%,last_name.ilike.%${safe}%`,
+    )
+    .limit(20);
+  if (error) throw error;
+
+  const rows = people ?? [];
+  const companyIds = [...new Set(rows.map((p) => p.company_id).filter((id): id is string => !!id))];
+  const nameByCompany = new Map<string, string>();
+  if (companyIds.length) {
+    const { data: cos, error: coErr } = await supabase
+      .from("company")
+      .select("id, name")
+      .in("id", companyIds);
+    if (coErr) throw coErr;
+    for (const c of cos ?? []) nameByCompany.set(c.id, c.name);
+  }
+
+  return rows.map((p) => ({
+    personId: p.id,
+    name: (p.display_name ?? `${p.first_name} ${p.last_name}`).trim() || "Unknown",
+    initials: personInitials(p.first_name, p.last_name),
+    companyId: p.company_id ?? null,
+    companyName: p.company_id ? nameByCompany.get(p.company_id) ?? null : null,
+  }));
 }

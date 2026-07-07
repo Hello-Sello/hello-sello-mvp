@@ -22,10 +22,9 @@ import {
 } from "lucide-react";
 
 /**
- * The P2P message-entry area (panel 4 footer). Three stacked parts:
- *   1. Two pre-written quick replies - clicking one drops its text into the box.
- *   2. The textarea - Enter sends; Shift+Enter = newline; expand grows it.
- *   3. A toolbar:
+ * The P2P message-entry area (panel 4 footer). Two stacked parts:
+ *   1. The textarea - Enter sends; Shift+Enter = newline; expand grows it.
+ *   2. A toolbar:
  *      - the `+` menu (Create a deal = real; uploads = "soon" placeholders).
  *      - WORKING formatting (5A.3): bold/italic/underline/strike wrap the
  *        selection in marks (**b** _i_ ++u++ ~~s~~), link inserts [text](url),
@@ -40,18 +39,6 @@ export interface ComposerProps {
   /** "Message to {name} from {company}…" - whom this draft is addressed to. */
   placeholder: string;
 }
-
-/** Pre-written seller replies. `fill` is the draft each chip drops into the box. */
-const SUGGESTIONS: ReadonlyArray<{ label: string; fill: string }> = [
-  {
-    label: "Share current stock",
-    fill: ["Hi! Here's what we currently have available:", "- "].join("\n"),
-  },
-  {
-    label: "Send a quick offer",
-    fill: "Happy to put an offer together for you - which products and quantities are you after?",
-  },
-];
 
 /** A small, B2B-friendly emoji set for the picker. */
 const EMOJIS = [
@@ -118,24 +105,7 @@ export function Composer({ onSend, placeholder }: ComposerProps) {
 
   return (
     <div className="border-t border-black/5 p-3">
-      {/* 1. pre-written quick replies (two) */}
-      <div className="mb-2 flex flex-wrap gap-2">
-        {SUGGESTIONS.map((s) => (
-          <button
-            key={s.label}
-            type="button"
-            onClick={() => {
-              setText(s.fill);
-              if (s.fill.includes("\n")) setExpanded(true);
-            }}
-            className="rounded-lg bg-brand-soft/60 px-3 py-1.5 text-xs text-brand-deep ring-1 ring-brand/15 transition-colors hover:bg-brand-soft"
-          >
-            {s.label}
-          </button>
-        ))}
-      </div>
-
-      {/* 2 + 3. Composer box: textarea + expand, then the toolbar */}
+      {/* Composer box: textarea + expand, then the toolbar */}
       <form
         onSubmit={(e) => {
           e.preventDefault();
