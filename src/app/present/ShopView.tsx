@@ -21,7 +21,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Link2, UploadCloud, Plus, FileSpreadsheet, Globe, MapPin, ChevronDown, ChevronUp, X,
+  Link2, UploadCloud, Plus, FileSpreadsheet, Globe, MapPin, ChevronDown, ChevronUp, X, PackageOpen,
 } from "lucide-react";
 import { ProductCard, LocationGroup, renumberLocations } from "@/modules/catalog";
 import type {
@@ -34,10 +34,11 @@ import {
 import type { ProductFieldPatch, ProductBatchPatch } from "@/modules/catalog/manage";
 import { createClient } from "@/shared/db/client";
 import { AddProductsDrawer } from "./AddProductsDrawer";
+import { AssignProductsDialog } from "./AssignProductsDialog";
 import { PresentBanner } from "./PresentBanner";
 import { SaveBar } from "./SaveBar";
 import { InfoBox, DescriptionEditor } from "./InfoBox";
-import { filterByLocation, groupByLocation, UNASSIGNED } from "./locationFilter";
+import { filterByLocation, groupByLocation, applyProductOrder, moveBefore, UNASSIGNED } from "./locationFilter";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 // Cover/logo now live at a STABLE path (overwritten in place, never orphaned), so
@@ -208,6 +209,13 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
   // to reorder). Persisting a bespoke group order is Phase 16 (structured
   // locations own ordering), so this stays ephemeral.
   const [groupOrder, setGroupOrder] = useState<string[]>([]);
+  // Client-only product order WITHIN each shop, keyed by group label (drag a card
+  // onto a sibling in the same shop to reorder). Same ephemeral rationale as
+  // groupOrder — a persisted per-product position is a later phase — so it resets
+  // to the default name order on reload.
+  const [productOrder, setProductOrder] = useState<Record<string, string[]>>({});
+  // "Assign products to shop" dialog (edit mode) — the fast two-pane drag surface.
+  const [assignOpen, setAssignOpen] = useState(false);
   // Free-text locations staged in edit mode (F-01). A staged label renders an
   // empty drop-target group; it only PERSISTS once a product is dragged into it
   // (setProductLocation). Empty groups never persist — this stays client-only and
@@ -277,6 +285,7 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
     setError(null);
     setPendingLocations([]);
     setPendingProductEdits({});
+    setProductOrder({});
     setEditing(true);
   }
 
@@ -289,6 +298,8 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
     setError(null);
     setPendingLocations([]);
     setPendingProductEdits({});
+    setProductOrder({});
+    setAssignOpen(false);
   }
 
   // Present mode never carries edit mode (prototype: setPresent → setEdit(false)),
@@ -302,6 +313,8 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
     setError(null);
     setPendingLocations([]);
     setPendingProductEdits({});
+    setProductOrder({});
+    setAssignOpen(false);
     setPresenting(true);
   }
 
@@ -410,7 +423,7 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
   // The location groups to render for the active tab (already square + 4-up
   // inside each LocationGroup). Grouping is pure — see ./locationFilter.
   const visibleGroups = groupByLocation(filterByLocation(products, loc));
-  const orderedGroups =
+  const groupOrdered =
     groupOrder.length === 0
       ? visibleGroups
       : [...visibleGroups].sort(
@@ -418,6 +431,9 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
             (groupOrder.indexOf(a.location) + 1 || 999) -
             (groupOrder.indexOf(b.location) + 1 || 999),
         );
+  // Then apply the in-shop card order (client-only reorder). Groups with no saved
+  // order keep the default name order from the query.
+  const orderedGroups = applyProductOrder(groupOrdered, productOrder);
 
   // Staged (empty) location groups render as drop targets while editing so the
   // seller can drag products into a freshly-typed location. They carry no products
@@ -439,6 +455,16 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
     if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return;
     current.splice(toIdx, 0, current.splice(fromIdx, 1)[0]);
     setGroupOrder(current);
+  }
+
+  // Reorder a card within its shop: place `draggedId` just before `targetId` in
+  // this location's client-only order. Keyed by the group LABEL (so the Unassigned
+  // bucket keys under its sentinel, matching applyProductOrder above).
+  function reorderProduct(location: string, draggedId: string, targetId: string) {
+    const group = orderedGroups.find((g) => g.location === location);
+    if (!group) return;
+    const next = moveBefore(group.products.map((p) => p.id), draggedId, targetId);
+    setProductOrder((prev) => ({ ...prev, [location]: next }));
   }
 
   const surface = (
@@ -491,7 +517,25 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
         <EmptyShop onAdd={() => setDrawerOpen(true)} />
       ) : (
         <>
-          <LocationTabs products={products} active={loc} onSelect={setLoc} />
+          {/* Location filter + the two edit-mode shop controls. "+ Add shop" stages
+              a new shop label; "Assign products to shop" opens the two-pane drag
+              dialog (fast placement without scrolling the live grid). */}
+          <div className="flex flex-wrap items-center gap-2">
+            <LocationTabs products={products} active={loc} onSelect={setLoc} />
+            {editing && (
+              <>
+                <AddShopButton onAdd={addLocation} />
+                <button
+                  type="button"
+                  data-testid="assign-products-btn"
+                  onClick={() => setAssignOpen(true)}
+                  className="flex items-center gap-1.5 rounded-full bg-white/70 px-4 py-2 text-sm font-semibold text-ink/80 hover:bg-white"
+                >
+                  <PackageOpen size={15} className="text-brand" /> Assign products to shop
+                </button>
+              </>
+            )}
+          </div>
           {renderGroups.map((g) => (
             <LocationGroup
               key={g.location}
@@ -514,6 +558,7 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
                   onBatchInsert={insertBatch}
                   onBatchChange={changeBatch}
                   onBatchRemove={removeBatch}
+                  onReorder={(draggedId, targetId) => reorderProduct(g.location, draggedId, targetId)}
                 />
               ))}
               {/* "+ Add product" tile — edit mode only. Opens the EXISTING manual-add
@@ -527,7 +572,6 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
               )}
             </LocationGroup>
           ))}
-          {editing && <AddLocationInput onAdd={addLocation} />}
         </>
       )}
 
@@ -535,6 +579,15 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         onImported={() => { setDrawerOpen(false); router.refresh(); }}
+      />
+
+      <AssignProductsDialog
+        open={assignOpen}
+        onClose={() => setAssignOpen(false)}
+        products={products}
+        stagedLocations={pendingLocations}
+        onAddLocation={addLocation}
+        onChanged={() => router.refresh()}
       />
     </>
   );
@@ -1010,34 +1063,56 @@ function AddProductTile({ location, onClick }: { location: string | null; onClic
   );
 }
 
-// ---------- add-location input (edit mode) ----------
-// Type a free-text location label to STAGE a group. The staged group persists only
-// once a product is dragged into it (setProductLocation); empty labels never persist.
-function AddLocationInput({ onAdd }: { onAdd: (label: string) => void }) {
+// ---------- add-shop button (edit mode) ----------
+// A pill that expands into an inline name field. Confirming STAGES a new shop
+// label (D-05 mechanics: an empty staged group persists only once a product is
+// assigned to it — setProductLocation — so unfilled labels never hit the DB).
+// Sits beside the location filter, replacing the old full-width bottom bar.
+function AddShopButton({ onAdd }: { onAdd: (label: string) => void }) {
+  const [open, setOpen] = useState(false);
   const [value, setValue] = useState("");
+
   function submit() {
     const v = value.trim();
-    if (!v) return;
-    onAdd(v);
+    if (v) onAdd(v);
     setValue("");
+    setOpen(false);
   }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        data-testid="add-shop-btn"
+        onClick={() => setOpen(true)}
+        className="flex items-center gap-1.5 rounded-full bg-white/70 px-4 py-2 text-sm font-semibold text-ink/80 hover:bg-white"
+      >
+        <Plus size={15} className="text-brand" /> Add shop
+      </button>
+    );
+  }
+
   return (
-    <div className="flex items-center gap-2 rounded-2xl border border-dashed border-ink/20 bg-white/50 px-3.5 py-2.5">
-      <MapPin size={16} className="text-brand" />
+    <div className="flex items-center gap-1.5 rounded-full bg-white px-2.5 py-1 shadow-sm ring-1 ring-ink/10">
+      <MapPin size={15} className="text-brand" />
       <input
-        data-testid="add-location-input"
-        aria-label="Add a location"
+        autoFocus
+        data-testid="add-shop-input"
+        aria-label="New shop name"
         value={value}
-        placeholder="Add a location / shop (e.g. Vienna, AT)"
+        placeholder="e.g. Berlin"
         onChange={(e) => setValue(e.target.value)}
-        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); submit(); } }}
-        className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-ink/40"
+        onKeyDown={(e) => {
+          if (e.key === "Enter") { e.preventDefault(); submit(); }
+          if (e.key === "Escape") { setValue(""); setOpen(false); }
+        }}
+        className="w-32 bg-transparent text-sm outline-none placeholder:text-ink/40"
       />
       <button
         type="button"
-        data-testid="add-location-btn"
+        data-testid="add-shop-confirm"
         onClick={submit}
-        className="rounded-full bg-brand px-4 py-1.5 text-sm font-bold text-white hover:bg-brand-deep"
+        className="rounded-full bg-brand px-3 py-1 text-xs font-bold text-white hover:bg-brand-deep"
       >
         Add
       </button>

@@ -173,6 +173,7 @@ export function ProductCard({
   onBatchInsert,
   onBatchChange,
   onBatchRemove,
+  onReorder,
 }: {
   product: ShopProduct;
   companyId?: string;
@@ -191,8 +192,15 @@ export function ProductCard({
   onBatchChange?: (productId: string, ref: BatchRef, patch: PendingBatchEdit) => void;
   /** Drop a pending insert, or mark a live lot for soft-delete. */
   onBatchRemove?: (productId: string, ref: BatchRef) => void;
+  /** Reorder within the SAME shop: a card was dropped onto this one (dragged id,
+   *  this card's id). Only same-location drops reach here — a cross-shop drop
+   *  bubbles to the LocationGroup, which moves the location instead. Client-only. */
+  onReorder?: (draggedId: string, targetId: string) => void;
 }) {
   const [flipped, setFlipped] = useState(false);
+  // Highlights this card as the drop target while a sibling from the same shop is
+  // dragged over it (the insert-before hint for the reorder).
+  const [reorderOver, setReorderOver] = useState(false);
   const [pack, setPack] = useState(0);
   const [qty, setQty] = useState(1);
   const [liked, setLiked] = useState(false);
@@ -217,6 +225,21 @@ export function ProductCard({
     const res = await softDeleteProduct(p.id);
     setBusy(false);
     if (!("error" in res)) onChanged?.();
+  }
+
+  // Reorder-within-shop drop. Only same-location drops reorder; a drop from
+  // another shop falls through (no stopPropagation) to LocationGroup, which
+  // persists the location move instead. dataTransfer payloads are unreadable
+  // during dragOver, so we always allow the drop and decide here on drop.
+  function handleReorderDrop(e: React.DragEvent) {
+    setReorderOver(false);
+    const draggedId = e.dataTransfer.getData("application/product-id");
+    if (!draggedId || draggedId === p.id) return;
+    const from = e.dataTransfer.getData("application/product-loc"); // "" for null
+    if (from !== (p.location ?? "")) return; // cross-shop → let LocationGroup handle it
+    e.preventDefault();
+    e.stopPropagation();
+    onReorder?.(draggedId, p.id);
   }
 
   // Field draft accessors (controlled by the overlay, falling back to the product).
@@ -270,8 +293,13 @@ export function ProductCard({
     <>
     <div
       data-testid="product-card"
-      className="relative h-[640px]"
+      className={`relative h-[640px] rounded-3xl transition ${
+        reorderOver ? "ring-2 ring-brand ring-offset-2" : ""
+      }`}
       style={{ perspective: "1900px" }}
+      onDragOver={editing && onReorder ? (e) => { e.preventDefault(); setReorderOver(true); } : undefined}
+      onDragLeave={editing && onReorder ? () => setReorderOver(false) : undefined}
+      onDrop={editing && onReorder ? handleReorderDrop : undefined}
     >
       <div
         className="relative h-full w-full transition-transform duration-500"

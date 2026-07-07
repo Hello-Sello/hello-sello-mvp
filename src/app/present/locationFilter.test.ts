@@ -12,7 +12,7 @@
  */
 import { describe, it, expect } from "vitest";
 // RED until 07-03 — locationFilter.ts is created by the grid + tabs plan.
-import { filterByLocation } from "./locationFilter";
+import { filterByLocation, moveBefore, applyProductOrder } from "./locationFilter";
 
 const products = [
   { id: "p1", name: "Aurora Haze 24", location: "Germany" },
@@ -47,5 +47,61 @@ describe("filterByLocation (UX-02 location tabs, D-06)", () => {
 
   it("returns an empty array when no product matches a named location", () => {
     expect(filterByLocation(products, "France")).toEqual([]);
+  });
+});
+
+describe("moveBefore (in-shop reorder, client-only)", () => {
+  it("moves a later card to sit just before an earlier one", () => {
+    expect(moveBefore(["a", "b", "c", "d"], "d", "b")).toEqual(["a", "d", "b", "c"]);
+  });
+
+  it("moves an earlier card to sit just before a later one", () => {
+    expect(moveBefore(["a", "b", "c", "d"], "a", "c")).toEqual(["b", "a", "c", "d"]);
+  });
+
+  it("dragging onto the very first card moves it to the front", () => {
+    expect(moveBefore(["a", "b", "c"], "c", "a")).toEqual(["c", "a", "b"]);
+  });
+
+  it("is a no-op when dragged and target are the same, or either is missing", () => {
+    expect(moveBefore(["a", "b", "c"], "b", "b")).toEqual(["a", "b", "c"]);
+    expect(moveBefore(["a", "b", "c"], "z", "a")).toEqual(["a", "b", "c"]);
+    expect(moveBefore(["a", "b", "c"], "a", "z")).toEqual(["a", "b", "c"]);
+  });
+});
+
+describe("applyProductOrder (in-shop reorder, client-only)", () => {
+  const groups = [
+    {
+      location: "Germany",
+      products: [
+        { id: "p1", location: "Germany" },
+        { id: "p2", location: "Germany" },
+        { id: "p3", location: "Germany" },
+      ],
+    },
+    {
+      location: "UK",
+      products: [
+        { id: "p4", location: "UK" },
+        { id: "p5", location: "UK" },
+      ],
+    },
+  ];
+
+  it("re-sorts only the groups named in the order map", () => {
+    const out = applyProductOrder(groups, { Germany: ["p3", "p1", "p2"] });
+    expect(out[0].products.map((p) => p.id)).toEqual(["p3", "p1", "p2"]);
+    expect(out[1].products.map((p) => p.id)).toEqual(["p4", "p5"]); // untouched
+  });
+
+  it("leaves groups with no saved order untouched", () => {
+    const out = applyProductOrder(groups, {});
+    expect(out[0].products.map((p) => p.id)).toEqual(["p1", "p2", "p3"]);
+  });
+
+  it("keeps products not named in the order after the ranked ones (stable)", () => {
+    const out = applyProductOrder(groups, { Germany: ["p3"] });
+    expect(out[0].products.map((p) => p.id)).toEqual(["p3", "p1", "p2"]);
   });
 });
