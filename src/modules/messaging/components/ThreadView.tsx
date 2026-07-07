@@ -74,7 +74,9 @@ export function ThreadView({ conversation, messages, onSend, onGroupRenamed }: T
   const stream = (
     <div className="relative h-full">
       <div ref={scrollRef} onScroll={handleScroll} className="h-full overflow-y-auto p-4">
-        <div className="mx-auto flex max-w-2xl flex-col gap-2">
+        {/* full width (no centered max-w column) so bubbles sit at the extreme
+            ends of the panel - mine hard right, theirs hard left. */}
+        <div className="flex flex-col gap-2">
           {messages.map((m) => (
             <MessageBubble key={m.id} message={m} />
           ))}

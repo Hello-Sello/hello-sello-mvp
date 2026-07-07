@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  useEffect,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import {
@@ -22,6 +17,7 @@ import { SURFACES, type Surface, type SurfaceChild } from "./surfaces";
 import { Wordmark } from "./Wordmark";
 import { Avatar } from "./Avatar";
 import { getAccountCard, type AccountCard } from "./account-card";
+import { usePersistedCollapse } from "./use-persisted-collapse";
 
 /**
  * The single global navigation rail (F2). A light glass capsule that holds, top
@@ -33,42 +29,17 @@ import { getAccountCard, type AccountCard } from "./account-card";
  * every other surface stays visible. When the rail is collapsed to an icon strip
  * the children move into a glass FLYOUT popover to the right of the Connect icon.
  *
- * Collapse is persisted in localStorage via the SSR-safe useSyncExternalStore
- * pattern (no setState-in-effect, no hydration mismatch). Search is NOT here -
- * it lives in the top bar.
+ * Collapse is persisted in localStorage via usePersistedCollapse (the shared
+ * SSR-safe useSyncExternalStore hook - no setState-in-effect, no hydration
+ * mismatch), the same hook the Connect chat list uses. Search is NOT here - it
+ * lives in the top bar.
  */
-
-const COLLAPSE_KEY = "hs:rail-collapsed";
-const COLLAPSE_EVENT = "hs:rail-collapse";
-
-// Read the collapsed flag from localStorage as external state - SSR-safe and
-// without setState-in-effect. Server snapshot = false (expanded default), so the
-// server HTML and the first client paint agree. Same-tab toggles fire a custom
-// event so every subscriber re-reads; cross-tab changes arrive via "storage".
-function subscribe(callback: () => void) {
-  window.addEventListener(COLLAPSE_EVENT, callback);
-  window.addEventListener("storage", callback);
-  return () => {
-    window.removeEventListener(COLLAPSE_EVENT, callback);
-    window.removeEventListener("storage", callback);
-  };
-}
 
 export function IconRail() {
   const pathname = usePathname();
 
-  // SSR-safe collapsed read (server snapshot = false → expanded).
-  const collapsed = useSyncExternalStore(
-    subscribe,
-    () => window.localStorage.getItem(COLLAPSE_KEY) === "1",
-    () => false,
-  );
-
-  function toggleCollapsed() {
-    const next = !collapsed;
-    window.localStorage.setItem(COLLAPSE_KEY, next ? "1" : "0");
-    window.dispatchEvent(new Event(COLLAPSE_EVENT));
-  }
+  // SSR-safe, remembered collapse (server snapshot = false → expanded).
+  const [collapsed, toggleCollapsed] = usePersistedCollapse("hs:rail-collapsed");
 
   return (
     <aside

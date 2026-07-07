@@ -1,5 +1,14 @@
 import { useState } from "react";
-import { Search, Plus, ChevronDown, MessageSquarePlus, Users } from "lucide-react";
+import {
+  Search,
+  Plus,
+  ChevronDown,
+  MessageSquarePlus,
+  Users,
+  PanelLeft,
+  Building2,
+  FileText,
+} from "lucide-react";
 import type {
   ConversationListItem,
   GroupCreationResult,
@@ -59,6 +68,10 @@ export interface ConversationListProps {
   onFilterChange: (filter: ChatFilter) => void;
   selectedThreadId: string | null;
   onSelect: (threadId: string) => void;
+  /** panel-3 collapse (mirrors the IconRail): true = render the narrow avatar
+      strip; the parent owns the flag + the wrapper width. */
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
   /** the connected companies/people directory the picker shows (D-01) */
   connections: MyConnectionsView;
   /** the live conversation-search value (D-09 - filters the base list rows) */
@@ -91,6 +104,8 @@ export function ConversationList({
   onFilterChange,
   selectedThreadId,
   onSelect,
+  collapsed,
+  onToggleCollapsed,
   connections,
   search,
   onSearchChange,
@@ -103,13 +118,54 @@ export function ConversationList({
   onApproveMember,
   onGroupDone,
 }: ConversationListProps) {
+  // Collapsed: a narrow strip - the expand toggle on top, then one avatar per
+  // conversation (selected ringed, unread dotted, name as a native tooltip).
+  // Clicking an avatar selects the same as a full row (deal rows still route).
+  if (collapsed) {
+    return (
+      <div className="flex h-full flex-col items-center gap-2 py-3">
+        <button
+          type="button"
+          onClick={onToggleCollapsed}
+          aria-label="Expand conversations"
+          aria-expanded={false}
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-ink/45 ring-1 ring-black/5 transition hover:bg-white/70 hover:text-brand motion-reduce:transition-none"
+        >
+          <PanelLeft size={18} strokeWidth={1.75} className="rotate-180" />
+        </button>
+        <div className="flex min-h-0 flex-1 flex-col items-center gap-2 overflow-y-auto pt-1">
+          {conversations.map((c) => (
+            <CollapsedAvatar
+              key={c.threadId}
+              item={c}
+              isSelected={c.threadId === selectedThreadId}
+              onSelect={onSelect}
+            />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-full flex-col">
-      {/* The +New trigger stays on top; its 2-item menu (D-02) chooses which
-          picker leaflet drops out and COVERS everything below (search + filter
-          tabs + rows) so only ONE list shows at a time (D-04). */}
-      <div className="p-3 pb-2">
-        <NewMenu onOpenPicker={onOpenPicker} disabled={pickerMode !== null} />
+      {/* The +New trigger stays on top (with the collapse toggle beside it, like
+          the IconRail); its 2-item menu (D-02) chooses which picker leaflet drops
+          out and COVERS everything below (search + filter tabs + rows) so only
+          ONE list shows at a time (D-04). */}
+      <div className="flex items-center gap-2 p-3 pb-2">
+        <div className="min-w-0 flex-1">
+          <NewMenu onOpenPicker={onOpenPicker} disabled={pickerMode !== null} />
+        </div>
+        <button
+          type="button"
+          onClick={onToggleCollapsed}
+          aria-label="Collapse conversations"
+          aria-expanded={true}
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-ink/45 ring-1 ring-black/5 transition hover:bg-white/70 hover:text-brand motion-reduce:transition-none"
+        >
+          <PanelLeft size={18} strokeWidth={1.75} />
+        </button>
       </div>
 
       {/* Everything below the button. `relative` so the new-chat picker can cover
@@ -183,6 +239,48 @@ export function ConversationList({
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * One conversation as a bare avatar (collapsed strip). Mirrors ConversationRow's
+ * avatar branch - deal -> FileText, c2c -> Building2, else initials - plus a pink
+ * ring when selected and a corner dot when unread. The name rides as a native
+ * `title` tooltip since there is no room for text.
+ */
+function CollapsedAvatar({
+  item,
+  isSelected,
+  onSelect,
+}: {
+  item: ConversationListItem;
+  isSelected: boolean;
+  onSelect: (threadId: string) => void;
+}) {
+  const isC2C = item.threadType === "c2c";
+  const isDeal = item.threadType === "deal";
+
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(item.threadId)}
+      aria-current={isSelected ? "true" : undefined}
+      title={item.name}
+      className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-[11px] font-semibold text-ink/70 ring-1 transition ${
+        isSelected ? "ring-2 ring-brand" : "ring-black/5 hover:ring-brand/30"
+      }`}
+    >
+      {isDeal ? (
+        <FileText size={16} strokeWidth={1.75} className="text-brand-deep/70" />
+      ) : isC2C ? (
+        <Building2 size={16} strokeWidth={1.75} className="text-ink/55" />
+      ) : (
+        item.initials
+      )}
+      {item.unreadCount > 0 && (
+        <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-brand ring-2 ring-white" />
+      )}
+    </button>
   );
 }
 

@@ -22,9 +22,9 @@ import {
   type NewGroupEventDetail,
 } from "@/modules/messaging";
 import { useChatRealtime } from "../lib/use-chat-realtime";
+import { usePersistedCollapse } from "@/shared/ui/use-persisted-collapse";
 import { ConversationList } from "./ConversationList";
 import { ThreadView } from "./ThreadView";
-import { SellaPanel } from "./SellaPanel";
 
 /**
  * Chat orchestrator (panels 3 + 4). The ONLY stateful piece of the chat: holds
@@ -39,6 +39,14 @@ export function ChatView() {
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessageView[]>([]);
   const [loading, setLoading] = useState(true);
+  // panel-3 collapse (mirrors the global IconRail, same shared hook so it is
+  // REMEMBERED across reloads): shrink the conversation list to a narrow avatar
+  // strip so the thread + deal card get more room. The width lives on the
+  // wrapper here (only the parent can shrink the rail); the list renders the
+  // strip when collapsed.
+  const [railCollapsed, toggleRailCollapsed] = usePersistedCollapse(
+    "hs:chat-list-collapsed",
+  );
   // live unread counts per thread, cleared on open - in-memory for the demo
   const [unread, setUnread] = useState<Record<string, number>>({});
   // the new-chat picker: the connected directory + its open/closed flag + the
@@ -208,10 +216,17 @@ export function ChatView() {
 
   return (
     <div className="flex h-full gap-3">
-      {/* panel 3 - conversation list (w-72: a touch wider so the Deal Card leaflet
-          that now opens over this rail has room to breathe, 04C) */}
-      <div className="glass flex w-72 shrink-0 flex-col overflow-hidden rounded-3xl">
-        {loading ? (
+      {/* panel 3 - conversation list. Collapses to a narrow avatar strip via a
+          toggle (mirrors the global IconRail's collapse) so the thread + deal
+          card get more room. Width lives here on the wrapper so the rail can
+          actually shrink; the list renders the strip when collapsed. w-72
+          expanded keeps the Deal Card leaflet room to breathe (04C). */}
+      <div
+        className={`glass flex shrink-0 flex-col overflow-hidden rounded-3xl transition-[width] duration-200 ease-out motion-reduce:transition-none ${
+          railCollapsed ? "w-[68px]" : "w-72"
+        }`}
+      >
+        {loading && !railCollapsed ? (
           <p className="flex-1 p-6 text-center text-sm text-ink/40">Loading conversations…</p>
         ) : (
           <ConversationList
@@ -220,6 +235,8 @@ export function ChatView() {
             onFilterChange={setFilter}
             selectedThreadId={selectedThreadId}
             onSelect={handleSelect}
+            collapsed={railCollapsed}
+            onToggleCollapsed={toggleRailCollapsed}
             connections={connections}
             search={search}
             onSearchChange={setSearch}
@@ -252,8 +269,9 @@ export function ChatView() {
         )}
       </div>
 
-      {/* panel 5 - Sella rail */}
-      <SellaPanel conversation={selectedConversation} />
+      {/* Sella panel (old panel 5) removed - the thread now expands to fill.
+          Sella's only presence is the route-level ping bubble (SellaPlaceholderBar,
+          right edge); the real Sella opens from there in Phase 8. */}
     </div>
   );
 }
