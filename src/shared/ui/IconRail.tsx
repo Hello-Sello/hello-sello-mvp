@@ -520,9 +520,11 @@ function AccountCardSlot({ collapsed }: { collapsed: boolean }) {
 
       {menuOpen && (
         <>
-          {/* click-away backdrop */}
-          <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-          <div className="glass-strong absolute bottom-0 left-full z-20 ml-2 w-72 rounded-3xl p-5 text-center">
+          {/* click-away backdrop + card sit ABOVE any in-page stacking context
+              (the Present About InfoBox is relative z-30 and would otherwise paint
+              over this popup). Matches the collapsed-rail nav flyout at z-50. */}
+          <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
+          <div className="glass-strong absolute bottom-0 left-full z-50 ml-2 w-72 rounded-3xl p-5 text-center">
             {card && (
               <>
                 <div className="flex justify-center">
