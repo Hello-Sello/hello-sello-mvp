@@ -11,8 +11,8 @@
 import { createClient } from "@/shared/db/server";
 import { getCurrentCompanyId } from "@/shared/auth";
 import { writeAudit } from "@/shared/audit";
-import { viewerSide } from "./lib/derive";
-import { allStagesDone, canFinalizeFromStatus } from "./lib/finalize";
+import { sellerCompanyId, viewerSide } from "./lib/derive";
+import { canFinalizeByInvoice } from "./lib/finalize";
 import type {
   ConfirmDealChangeInput,
   ConfirmDealChangeResult,
@@ -187,21 +187,27 @@ export async function confirmDeal(args: {
 }
 
 /**
- * Finalize a deal (Phase 5, D-15/D-16/D-17) - the LAST-stage commit that moves
- * the card to Done and writes the single golden seal.
+ * Finalize a deal (Phase 7, D-27/D-28) - the invoice close that moves the card to
+ * Done (Deal Executed).
  *
- * Gate (D-15): finalization is available ONLY when every one of the deal's
- * stages has a deal_stage_completion row (the stored, manual stage-done state).
- * The gate decision is `allStagesDone` (pure, unit-tested) over the stage codes
- * vs the workspace's completion rows; if any stage is missing, this throws and
- * never flips the status.
+ * D-27 makes ONE thing the close trigger: the SELLER uploading a real invoice PDF.
+ * There is no buyer confirm-receipt gate, and the Stages finalize gate (D-15) is
+ * retired. DocumentsTab calls this right after the seller's upload, so the upload
+ * itself closes the deal.
  *
- * The seal (D-17): the deal_confirmation seal is written ONLY here, NEVER via
- * confirm_deal_change (the seal-deferred-to-final-stage rule). An idempotency
- * guard - if the card is already 'done', return WITHOUT a second write - plus
- * the onConflict upsert key prevent a double-write race with the draft gate
- * (T-05-04). The company is resolved from the SESSION (never input), so only a
- * relationship member acting as their own side can finalize (T-05-03).
+ * Guardrails:
+ *   - SELLER-ONLY (ASVS V4): the caller's company is derived from the SESSION and
+ *     must BE the seller (derived from the card + relationship). A buyer-session
+ *     finalize call is rejected before the gate.
+ *   - INVOICE TRIGGER: the gate (`canFinalizeByInvoice`, pure/unit-tested) requires
+ *     an AGREED status (`confirmed`/`amended`) AND a `deal_artifact(category=
+ *     'invoice')` whose `uploaded_by_company_id` is the SELLER company. The
+ *     uploader identity is stamped from the session at upload time
+ *     (uploadDealInvoice), so a buyer-uploaded or forged invoice cannot satisfy it.
+ *   - IDEMPOTENCY: an already-`done` card returns WITHOUT a second write.
+ *
+ * On pass: flip status -> done, log the invoice-close event to `deal_card_log`
+ * (D-28 version history), and `writeAudit('deal.finalized')`.
  */
 export async function finalizeDeal(args: {
   dealCardId: string;
@@ -215,33 +221,43 @@ export async function finalizeDeal(args: {
   const companyId = await getCurrentCompanyId();
   if (!companyId) throw new Error("finalizeDeal: no company in session");
 
-  // the card (status + version drive the idempotency guard, the status
-  // precondition, and the seal key)
+  // the card: status drives the idempotency guard + the gate; deal_type +
+  // initiating_company_id + relationship_id derive the seller.
   const { data: card, error: cardErr } = await supabase
     .from("deal_card")
-    .select("id, status, version")
+    .select("id, status, version, deal_type, initiating_company_id, relationship_id")
     .eq("id", args.dealCardId)
     .single();
   if (cardErr) throw cardErr;
 
-  // idempotency guard (D-17): if already done, do NOT write a second seal.
+  // idempotency guard: if already done, do NOT write again.
   if (card.status === "done") {
     return { cardStatus: "done" };
   }
 
-  // STATUS PRECONDITION (HI-02): `done` is a terminal status that must only be
-  // reachable from an AGREED deal. Stage-done rows can be marked from a deal's
-  // birth (the workspace exists while the card is still `draft`), so without this
-  // guard a never-confirmed `draft` (or a `withdrawn`/`cancelled`) deal could be
-  // finalized straight to `done`, bypassing the two-sided confirm gate (D-15).
-  // The live agreed states are `confirmed` (both sides sealed) and `amended` (a
-  // committed change) per the deal_card_status lookup; nothing else may finalize.
-  // The decision is the pure, unit-tested `canFinalizeFromStatus`.
-  if (!canFinalizeFromStatus(card.status as DealCardStatus)) {
-    throw new Error("Only a confirmed deal can be finalized.");
+  // derive the SELLER company from the card's issuer facts + the relationship pair.
+  const { data: rel, error: relErr } = await supabase
+    .from("relationship")
+    .select("company_a_id, company_b_id")
+    .eq("id", card.relationship_id)
+    .single();
+  if (relErr) throw relErr;
+  const seller = sellerCompanyId(
+    {
+      deal_type: card.deal_type as "offer" | "order",
+      initiating_company_id: card.initiating_company_id,
+    },
+    rel.company_a_id,
+    rel.company_b_id,
+  );
+
+  // SELLER-ONLY guard (ASVS V4): only the seller side may close the deal. A
+  // buyer-session finalize call is rejected here, before the gate.
+  if (companyId !== seller) {
+    throw new Error("Only the seller can finalize this deal.");
   }
 
-  // the workspace this card belongs to (the stage-completion rows hang off it)
+  // the workspace this card belongs to (the invoice artifact hangs off it).
   const { data: ws, error: wsErr } = await supabase
     .from("deal_workspace")
     .select("id")
@@ -250,65 +266,36 @@ export async function finalizeDeal(args: {
     .single();
   if (wsErr) throw wsErr;
 
-  // GATE (D-15): every stage must have a completion row. deal_stage_completion is
-  // not in the generated types, so the table name is cast (as-never discipline).
-  const [stagesRes, doneRes] = await Promise.all([
-    supabase.from("deal_stage").select("code"),
-    supabase
-      .from("deal_stage_completion" as never)
-      .select("stage_code")
-      .eq("deal_workspace_id", ws.id),
-  ]);
-  if (stagesRes.error) throw stagesRes.error;
-  if (doneRes.error) throw doneRes.error;
+  // TRIGGER: a SELLER-uploaded invoice must exist. Requiring
+  // uploaded_by_company_id = the seller company rejects a buyer-uploaded or forged
+  // invoice (ASVS V4). deal_artifact + its columns ARE in the generated types.
+  const { data: invoices, error: invErr } = await supabase
+    .from("deal_artifact")
+    .select("id")
+    .eq("deal_workspace_id", ws.id)
+    .eq("category", "invoice")
+    .eq("uploaded_by_company_id", seller)
+    .is("deleted_at", null)
+    .limit(1);
+  if (invErr) throw invErr;
+  const hasSellerInvoice = (invoices?.length ?? 0) > 0;
 
-  const stageCodes = (stagesRes.data ?? []).map((s) => s.code);
-  const doneCodes = (
-    (doneRes.data ?? []) as unknown as { stage_code: string }[]
-  ).map((r) => r.stage_code);
-  if (!allStagesDone(stageCodes, doneCodes)) {
-    throw new Error("All stages must be marked done before finalizing.");
+  // GATE (D-27): agreed status + a seller invoice. Pure, unit-tested.
+  if (!canFinalizeByInvoice(card.status as DealCardStatus, hasSellerInvoice)) {
+    throw new Error(
+      "A confirmed deal with the seller's invoice is required to finalize.",
+    );
   }
 
-  // flip status -> done (reuse the existing helper)
+  // flip status -> done (Deal Executed) and record the close in the card's version
+  // history (D-28) + the audit chain.
   await updateStatus(supabase, card.id, "done");
-
-  // write the SINGLE finalize seal (D-17): the viewer's company, current version,
-  // status 'confirmed'. This is the ONLY place a finalize-seal is written - it
-  // MUST NOT route through confirm_deal_change.
-  //
-  // INSERT-ONLY (HI-03): the seal is written at card.version (finalize does NOT
-  // bump the version). At a confirmed deal, `confirmDeal` already wrote this
-  // company's deal_confirmation row at (card, version) with the REAL "who sealed
-  // the deal" provenance (responding_person_id + responded_at + note). An
-  // ON CONFLICT ... DO UPDATE would overwrite that legal seal with the finalizer's
-  // identity + the finalize note, destroying the original audit. So we use
-  // ignoreDuplicates (INSERT ... ON CONFLICT DO NOTHING): an existing confirm seal
-  // is PRESERVED untouched, and a fresh finalize seal is inserted only when none
-  // exists. This also keeps a re-call idempotent (no duplicate seat row). The
-  // deal.finalized event itself is recorded separately in deal_card_log +
-  // audit_log below, so finalize provenance is never lost.
-  const now = new Date().toISOString();
-  const { error: sealErr } = await supabase.from("deal_confirmation").upsert(
-    {
-      deal_card_id: card.id,
-      version: card.version,
-      company_id: companyId,
-      status: "confirmed",
-      responding_person_id: user.id,
-      responded_at: now,
-      note: "Deal finalized - all stages done.",
-    },
-    { onConflict: "deal_card_id,version,company_id", ignoreDuplicates: true },
-  );
-  if (sealErr) throw sealErr;
-
   await logLine(
     supabase,
     card.id,
     card.version,
     user.id,
-    "Deal finalized - all stages done.",
+    "Deal Executed - the seller uploaded the invoice.",
   );
   await writeAudit({
     actorType: "user",
