@@ -42,20 +42,14 @@ import {
   type RelationshipDealRow,
 } from "../supabase/reads";
 import {
-  confirmDealChange,
   confirmDetectedDeal,
   proposeDealChange,
-  withdrawDealChange,
 } from "../actions";
 import { formatMoney } from "../lib/derive";
 import { DealCard } from "./DealCard";
 import { CreateDealForm } from "./CreateDealForm";
 import { EditDealForm, type ProposeChangePayload } from "./EditDealForm";
-import { SellaMark } from "./SellaMark";
-import { SellaCurtain } from "./SellaCurtain";
-import { TranslateButton } from "./TranslateButton";
 import type {
-  ConfirmSeat,
   DealCardStatus,
   DealCardView,
   PendingProposalView,
@@ -118,17 +112,15 @@ export function DealPin({
   counterpartyName,
   counterpartyPersonName,
   counterpartyInitials,
-  inRoom = false,
   children,
 }: {
   relationshipId: string;
   variant?: "chat" | "workspace";
   /**
-   * true when this strip is rendered INSIDE the Deal Room overlay (D-05). The
-   * card + chat are both permanently visible there, so the strip drops the
-   * [Deal Card]/[Deal Room] segmented toggle (and any picker dropdown) and keeps
-   * ONLY Sella (the // mark/curtain) + the Translator. Sella STAYS on the strip -
-   * it is NOT moved into the room.
+   * Vestigial (Phase 7): the Deal Room is retired (D-15), so this flag no longer
+   * changes the strip. Kept on the prop contract only so the orphaned `DealChat`
+   * (which still passes it) keeps compiling until the messaging rail rework
+   * (07-05) removes that caller.
    */
   inRoom?: boolean;
   /**
@@ -264,38 +256,11 @@ export function DealPin({
     }
   }
 
-  // 4.5.4 - the RESPONDER's Accept/Decline (mirror runProposal): record this
-  // side's vote with the required reason; on both-accept the RPC commits to
-  // base+1, on a decline it discards. Either way we re-read + dispatch so the
-  // lock clears live on both screens.
-  async function runChangeDecision(decision: "accept" | "decline", reason?: string) {
-    if (!data || changeBusy || !reason?.trim()) return;
-    setChangeBusy(true);
-    try {
-      await confirmDealChange({ dealCardId: data.card.id, decision, reason: reason.trim() });
-      setChangeOpen(false);
-      await refreshAfterChange(data.card.id);
-    } catch (e) {
-      console.error("change decision failed", e);
-    } finally {
-      setChangeBusy(false);
-    }
-  }
-
-  // 4.5.4 - the PROPOSER's Withdraw (DCHG-06): take back the held change with NO
-  // reason. Discards the held row and unlocks the pencil; re-read + dispatch.
-  async function runWithdrawChange() {
-    if (!data || changeBusy) return;
-    setChangeBusy(true);
-    try {
-      await withdrawDealChange({ dealCardId: data.card.id });
-      await refreshAfterChange(data.card.id);
-    } catch (e) {
-      console.error("withdraw change failed", e);
-    } finally {
-      setChangeBusy(false);
-    }
-  }
+  // NOTE (07-01 teardown): the responder Accept/Decline + proposer Withdraw
+  // handlers lived here to drive the now-removed inline review popup (D-10). The
+  // backend change engine is untouched; the on-card red/green diff + decision bar
+  // that replace this review UI are rebuilt on the card in plan 07-07 (D-18/D-19/
+  // D-20). The proposer's Send flow (runSendChange) stays - it still holds a change.
 
   // list the relationship's deals + pick a default (prefer the most recent LIVE
   // one, matching the old getCurrentDealCardId behaviour the workspace relies on).
@@ -461,110 +426,34 @@ export function DealPin({
   const mustAct = showProposal && proposal!.myVote == null; // my turn to accept/decline
   const waiting = showProposal && proposal!.myVote === "accept" && proposal!.otherVote !== "accept";
 
-  // 4.5.4 - the held CHANGE state, derived from the loaded card. `pendingChange`
-  // present = a change is held (the pencil locks on BOTH screens). The responder
-  // (the side that did NOT propose, with no vote yet) gets the reason gate; the
-  // proposer sees a "waiting" chip with a no-reason Withdraw.
-  const pendingChange = data?.pendingChange ?? null;
-  const changeMustAct = !!pendingChange && !pendingChange.iProposed && pendingChange.myVote == null;
-  const changeWaiting = !!pendingChange && pendingChange.iProposed;
-
-  // 4.5.4 - feed the dumb ConfirmBar the CHANGE's votes (not the seal's): reuse
-  // the two seats' side/company, but set each status from the change vote ('accept'
-  // → confirmed, else pending). The responder's own seat stays pending, so the
-  // bar shows its action buttons (the requireReason reason gate); the proposer's
-  // shows confirmed. "Same face, different engine" - exactly what the bar is for.
-  const changeSeats: ConfirmSeat[] = data
-    ? data.confirmations.map((seat) => {
-        const isViewer = seat.side === data.viewerSide;
-        const vote = isViewer ? pendingChange?.myVote : pendingChange?.otherVote;
-        return { ...seat, status: vote === "accept" ? "confirmed" : "pending", byName: null };
-      })
-    : [];
-
-  // Phase 5 / D-01 - open the Deal Room as a full blurred overlay. The strip only
-  // DISPATCHES a window event; the route-level DealRoomOverlayHost (in the Connect
-  // layout) listens and mounts the overlay. This keeps deals <-> messaging acyclic
-  // (no back-import), mirroring the app's existing hs:deal-updated / hs:create-deal
-  // contract. Carries the selected card id so the host knows which deal to open.
-  function openDealRoom() {
+  // Phase 7 / D-08/D-32 - open the deal CARD as a right-side panel. The strip only
+  // DISPATCHES a window event; the route-level DealCardPanelHost (in the Connect
+  // layout) listens, fetches the card, and mounts it as the right panel. This keeps
+  // deals <-> messaging acyclic (no back-import), mirroring the app's existing
+  // hs:deal-updated / hs:create-deal contract. Carries the selected card id so the
+  // host knows which deal to open.
+  function openDealCard() {
     if (!selectedId) return;
     window.dispatchEvent(
-      new CustomEvent("hs:open-deal-room", { detail: { dealCardId: selectedId } }),
+      new CustomEvent("hs:open-deal-card", { detail: { dealCardId: selectedId } }),
     );
   }
 
-  // D-04 - the bottom-tier left [Deal Room | Deal Card] segmented toggle. Deal
-  // Card is the REAL control (it toggles the card overlay - today's "Open card");
-  // when the card is open it reads as the active segment. Deal Room (Phase 5)
-  // OPENS the full blurred overlay (D-01) via openDealRoom. Inside the Room this
-  // whole toggle is hidden (D-05) - the card + chat are both permanently visible.
-  const dealRoomCardToggle = (
-    <div className="inline-flex shrink-0 items-center rounded-lg bg-black/[0.04] p-0.5 ring-1 ring-black/5">
-      <button
-        type="button"
-        title="Open the Deal Room"
-        aria-label="Open the Deal Room"
-        onClick={openDealRoom}
-        className="rounded-md px-3 py-1 text-xs font-semibold text-brand-deep transition hover:bg-white/70"
-      >
-        Deal Room
-      </button>
-      <button
-        type="button"
-        aria-pressed={open}
-        onClick={() => setOpen((o) => !o)}
-        className={`rounded-md px-3 py-1 text-xs font-semibold transition ${
-          open
-            ? "bg-brand text-white shadow-sm"
-            : "text-brand-deep hover:bg-white/70"
-        }`}
-      >
-        {open ? "Close card" : "Deal Card"}
-      </button>
-    </div>
-  );
-
-  // 4.5.4 / D-09 hybrid cue on the SINGLE `//` Sella mark. The mark is now the
-  // one entry point (D-08): loud "review" dot + label when it is my turn, a quiet
-  // "Awaiting reply" chip (no company name) while I wait, a clean mark otherwise.
-  const changeCue: "review" | "awaiting" | null = changeMustAct
-    ? "review"
-    : changeWaiting
-      ? "awaiting"
-      : null;
-
-  // 4.5.4 / D-06/D-07/D-08/D-09 - the held-CHANGE control: the shared SellaMark is
-  // the single entry point and the SellaCurtain drops from it. The mark toggles
-  // the existing `changeOpen` flag; the curtain re-homes the wired held-change
-  // flow (Accept/Decline/Reason via the reused ConfirmBar inside it, + Withdraw),
-  // calling the EXISTING runChangeDecision/runWithdrawChange handlers (which call
-  // confirmDealChange/withdrawDealChange from ../actions). No new flow, no new
-  // action - just a new VIEW over the proven wiring. The Withdraw lives ONLY
-  // inside the curtain now (D-09). When there is no held change the mark is clean.
-  const changeControl = (
-    <span className="relative inline-flex shrink-0 items-center">
-      <SellaMark
-        thinking={changeBusy}
-        open={changeOpen && !!pendingChange}
-        onClick={pendingChange ? () => setChangeOpen((o) => !o) : undefined}
-        cue={changeCue}
-      />
-      {data && pendingChange && (
-        <SellaCurtain
-          open={changeOpen && !!pendingChange}
-          pendingChange={pendingChange}
-          seats={changeSeats}
-          viewerSide={data.viewerSide}
-          busy={changeBusy}
-          counterpartyName={counterpartyName}
-          onConfirm={(reason) => void runChangeDecision("accept", reason)}
-          onDecline={(reason) => void runChangeDecision("decline", reason)}
-          onWithdraw={() => void runWithdrawChange()}
-          onClose={() => setChangeOpen(false)}
-        />
-      )}
-    </span>
+  // D-08 - the single "Deal [code]" chip (replaces the retired [Deal Room | Deal
+  // Card] segmented toggle). Shown only when the chat is tied to a deal; clicking
+  // it opens the card as a RIGHT-SIDE panel via openDealCard (dispatches
+  // hs:open-deal-card, which the layout-level DealCardPanelHost mounts, D-32).
+  const dealCardChip = (
+    <button
+      type="button"
+      onClick={openDealCard}
+      title="Open the deal card"
+      aria-label="Open the deal card"
+      className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-brand/15 bg-white px-3 py-1.5 text-xs font-semibold text-brand-deep transition hover:bg-brand-soft/30"
+    >
+      <FileText size={14} strokeWidth={2} className="text-brand" />
+      Deal {selectedDeal?.hsNumber ?? "card"}
+    </button>
   );
 
   // the strip's row shell - same border + padding across all three states
@@ -691,7 +580,6 @@ export function DealPin({
       {/* State B - a proposal is pending (the pre-card object, the new heart) */}
       {variant === "chat" && showProposal && (
         <div className={rowCls}>
-          <SellaMark thinking={acting} />
           <span className="min-w-0 flex-1 truncate text-xs text-ink/70">
             <span className="font-semibold text-ink/85">
               {proposal!.iProposed
@@ -811,13 +699,12 @@ export function DealPin({
       )}
 
       {/* State C - a live deal is selected. Identity is in the P2P top bar above;
-          this row is the controls: the [Deal Room | Deal Card] toggle (left), the
-          centered // Sella mark/curtain, and the translate glyph (right). */}
+          this row is now just the single "Deal [code]" chip (D-08) that opens the
+          card as a right-side panel. The retired [Deal Room | Deal Card] toggle,
+          the // Sella mark/curtain (D-10), and the translate glyph (D-09) are gone. */}
       {variant === "chat" && !showProposal && hasDeal && (
         <div className="flex items-center gap-3 border-b border-black/[0.06] px-4 py-3">
-          {dealRoomCardToggle}
-          <div className="mx-auto">{changeControl}</div>
-          <TranslateButton />
+          {dealCardChip}
         </div>
       )}
 
@@ -839,27 +726,16 @@ export function DealPin({
         </div>
       )}
 
-      {/* workspace variant, OUTSIDE the Room - the deal is fixed; NO top-tier
-          identity (no source in the host, D-02): the chip + the [Deal Room | Deal
-          Card] toggle + the // Sella mark/curtain. */}
-      {variant === "workspace" && !inRoom && hasDeal && (
+      {/* workspace variant - the deal is fixed; NO top-tier identity (no source in
+          the host, D-02): the status chip + the single "Deal [code]" chip that
+          opens the card as a right-side panel. The retired toggle + // Sella mark
+          (D-10) are gone. (The Deal Room is retired, so `inRoom` no longer splits
+          this row; the whole workspace path is dead until 07-07 revisits it.) */}
+      {variant === "workspace" && hasDeal && (
         <div className={rowCls}>
           <span className="shrink-0 text-[11px] text-ink/45">Deal:</span>
           <DealChip status={chipStatus} selectable={false} />
-          {dealRoomCardToggle}
-          {changeControl}
-        </div>
-      )}
-
-      {/* workspace variant, INSIDE the Room (D-05) - the card + chat are both
-          permanently visible, so the [Deal Room | Deal Card] toggle + the chip
-          are redundant and dropped. The strip keeps ONLY Sella (the // mark/
-          curtain, which STAYS on the strip - not moved into the room) + the
-          Translator. */}
-      {variant === "workspace" && inRoom && hasDeal && (
-        <div className="flex items-center gap-3 border-b border-black/[0.06] px-4 py-3">
-          <div className="mx-auto">{changeControl}</div>
-          <TranslateButton />
+          {dealCardChip}
         </div>
       )}
 

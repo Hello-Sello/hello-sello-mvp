@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { requireVerified } from "@/shared/auth";
-import { DealRoomOverlayHost } from "./DealRoomOverlayHost";
+import { DealCardPanelHost } from "./DealCardPanelHost";
+import { SellaPlaceholderBar } from "./SellaPlaceholderBar";
 
 /**
  * Connect surface layout. After F2 there is only ONE global nav rail (IconRail),
@@ -36,11 +37,16 @@ export default async function ConnectLayout({
   return (
     <section className="flex h-full min-w-0 flex-1 flex-col">
       {children}
-      {/* the Deal Room overlay host (D-01) - mounted once at the Connect root so
-          the strip's "Deal Room" button can open the Room over any Connect page;
-          it is the acyclic composition point for deals' container + messaging's
-          chat (it listens for the strip's window event and mounts the overlay). */}
-      <DealRoomOverlayHost />
+      {/* the deal card panel host (D-31/D-32) - mounted once at the Connect root
+          so any page's "Deal [code]" chip / "Open Deal Card" button can open the
+          card as a right-side panel; it listens for the `hs:open-deal-card`
+          window event and mounts the flip DealCard (the acyclic seam - no module
+          back-imports another). Replaces the retired Deal Room overlay host. */}
+      <DealCardPanelHost />
+      {/* the Sella placeholder bar (D-10) - the retired inline // mark + curtain
+          are gone; Sella is now one minimal thin bar on the right edge that
+          opens/closes on click with no function yet (real Sella is Phase 8). */}
+      <SellaPlaceholderBar />
     </section>
   );
 }
