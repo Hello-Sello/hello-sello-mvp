@@ -112,6 +112,17 @@ export function ThreadView({ conversation, messages, onSend, onGroupRenamed }: T
     );
   }
 
+  // non-group threads (c2c/p2p/deal) are always anchored to a relationship -
+  // only a group carries a null relationship_id (07-02), and groups render
+  // above. Pin the id into a local so the relationship link + DealPin get a
+  // concrete value.
+  const relationshipId = conversation.relationshipId;
+  if (!relationshipId) {
+    // a non-group thread with no relationship is a data fault; show just the
+    // message stream rather than a broken relationship pin.
+    return <div className="flex h-full flex-col">{stream}</div>;
+  }
+
   return (
     <div className="flex h-full flex-col">
       {/* C2C company channels keep their identity header here. A P2P deal thread
@@ -136,7 +147,7 @@ export function ThreadView({ conversation, messages, onSend, onGroupRenamed }: T
           {/* actions - the relationship door + an overflow (⋯) menu */}
           <div className="ml-auto flex shrink-0 items-center gap-1.5">
             <Link
-              href={`/connect/relationship/${conversation.relationshipId}`}
+              href={`/connect/relationship/${relationshipId}`}
               aria-label={`Relationship with ${conversation.companyName}`}
               title={`Relationship with ${conversation.companyName}`}
               className="flex h-9 w-9 items-center justify-center rounded-xl text-ink/55 ring-1 ring-black/5 transition hover:bg-white/70 hover:text-brand hover:ring-brand/20"
@@ -160,7 +171,7 @@ export function ThreadView({ conversation, messages, onSend, onGroupRenamed }: T
                   <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
                   <div className="glass-strong absolute right-0 top-full z-20 mt-1.5 w-56 rounded-2xl p-1.5">
                     <Link
-                      href={`/connect/relationship/${conversation.relationshipId}`}
+                      href={`/connect/relationship/${relationshipId}`}
                       onClick={() => setMenuOpen(false)}
                       className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-ink transition hover:bg-black/[0.04]"
                     >
@@ -183,8 +194,8 @@ export function ThreadView({ conversation, messages, onSend, onGroupRenamed }: T
           the Connect layout's DealCardPanelHost listens for - so no open-handler
           prop is threaded here, and messaging stays acyclic with deals. */}
       <DealPin
-        key={conversation.relationshipId}
-        relationshipId={conversation.relationshipId}
+        key={relationshipId}
+        relationshipId={relationshipId}
         // propose + the pending-proposal strip are connected-P2P only (D13):
         // pass the thread for a P2P, omit it for a C2C company channel.
         threadId={isC2C ? undefined : conversation.threadId}

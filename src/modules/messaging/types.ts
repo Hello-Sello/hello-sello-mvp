@@ -97,8 +97,13 @@ export interface ConversationListItem {
   /** chat_thread.id */
   threadId: string;
   threadType: ThreadType;
-  /** chat_thread.relationship_id - the deep-link target for the relationship page (2e) */
-  relationshipId: string;
+  /**
+   * chat_thread.relationship_id - the deep-link target for the relationship page
+   * (2e). A `group` thread carries NO relationship anchor (07-02 dropped the
+   * NOT NULL: group access is by membership), so this is `null` for groups;
+   * p2p/c2c/deal rows always fill it.
+   */
+  relationshipId: string | null;
   /** display name: the company name for a c2c, the other person's name for a p2p */
   name: string;
   /** subtitle under the name: "Company chat (C2C)" for c2c, the company name for a p2p */

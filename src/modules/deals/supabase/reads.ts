@@ -522,20 +522,20 @@ export async function getDealCard(cardId: string): Promise<DealCardView> {
   if (vpErr) throw vpErr;
   const viewerCompanyId: string | null = viewerPerson?.company_id ?? null;
 
-  // the card row (RLS: viewer must be a relationship member)
-  // note_company_a/b (NOTE-01) are not in the generated DealCardRow type yet -
-  // the select-string column list is cast to bypass the generated literal-union
-  // check (the same as-never discipline used for deal_pending_change below).
-  // DO NOT regenerate database.types.
+  // the card row (RLS: viewer must be a relationship member). note_company_a/b
+  // (NOTE-01) are now real generated columns on DealCardRow (07-08 type regen),
+  // so the select needs no cast and cardRow carries the note slots directly.
   const { data: cardRow, error: cardErr } = await supabase
     .from("deal_card")
     .select(
-      "id, relationship_id, thread_id, version, status, deal_type, initiating_company_id, value_net, currency, delivery_date_target, buyer_po_number, seller_so_number, hs_deal_number, metadata, created_at, updated_at, deleted_at, created_by, updated_by, incoterms_code, offer_expires_at, payment_terms_code, note_company_a, note_company_b" as "id, relationship_id, thread_id, version, status, deal_type, initiating_company_id, value_net, currency, delivery_date_target, buyer_po_number, seller_so_number, hs_deal_number, metadata, created_at, updated_at, deleted_at, created_by, updated_by, incoterms_code, offer_expires_at, payment_terms_code",
+      "id, relationship_id, thread_id, version, status, deal_type, initiating_company_id, value_net, currency, delivery_date_target, buyer_po_number, seller_so_number, hs_deal_number, metadata, created_at, updated_at, deleted_at, created_by, updated_by, incoterms_code, offer_expires_at, payment_terms_code, note_company_a, note_company_b",
     )
     .eq("id", cardId)
     .single();
   if (cardErr) throw cardErr;
-  const noteRow = cardRow as unknown as { note_company_a: string | null; note_company_b: string | null };
+  // NOTE-01: the note slots live on cardRow now; keep the noteRow alias so the
+  // myNote/theirNote resolution below reads unchanged.
+  const noteRow = cardRow;
 
   const card: DealCard = {
     ...cardRow,

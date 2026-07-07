@@ -152,7 +152,9 @@ export async function getConversations(): Promise<ConversationListItem[]> {
   }
 
   const items: ConversationListItem[] = (threadsRes.data ?? []).map((t) => {
-    const rel = relById.get(t.relationship_id);
+    // a group thread carries a null relationship_id (07-02) - it has no
+    // relationship pair to resolve, so its counterparty comes from members.
+    const rel = t.relationship_id ? relById.get(t.relationship_id) : undefined;
     const otherCompanyId =
       rel?.company_a_id === viewer.companyId ? rel?.company_b_id : rel?.company_a_id;
     const otherCompanyName = (otherCompanyId && coNameById.get(otherCompanyId)) || "Unknown company";
@@ -321,6 +323,11 @@ export async function getDealThread(
     .is("deleted_at", null)
     .single();
   if (error) throw error;
+  // a deal thread is always anchored to a relationship (only groups carry a
+  // null relationship_id since 07-02); a null here is a data-integrity fault.
+  if (data.relationship_id == null) {
+    throw new Error(`messaging: deal thread ${data.id} has no relationship`);
+  }
   return { threadId: data.id, relationshipId: data.relationship_id };
 }
 
