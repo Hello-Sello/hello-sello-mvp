@@ -25,8 +25,10 @@ import type {
   AcceptInput,
   ChatMessageView,
   ConversationListItem,
+  GroupCreationResult,
   MessageSender,
   MessageType,
+  PendingExternalMember,
   ThreadType,
 } from "../types";
 
@@ -82,27 +84,53 @@ export async function getConversations(): Promise<ConversationListItem[]> {
   const viewer = await getViewer(supabase);
 
   // Flat, RLS-scoped fetches; stitched in JS (mirrors the mock's directories).
-  const [threadsRes, relsRes, cosRes, pplRes, msgsRes] = await Promise.all([
+  // `chat_thread.name` is a new group column (07-02) not in the generated types
+  // yet, so the select-string is cast (the same discipline as the deal note/batch
+  // columns) - DO NOT regenerate database.types.
+  const [threadsRes, relsRes, cosRes, pplRes, msgsRes, membersRes] = await Promise.all([
     supabase
       .from("chat_thread")
-      .select("id, type, relationship_id, person_a_id, person_b_id, deal_card_id, created_at")
+      .select(
+        "id, type, relationship_id, person_a_id, person_b_id, deal_card_id, created_at, name" as "id, type, relationship_id, person_a_id, person_b_id, deal_card_id, created_at",
+      )
       .is("deleted_at", null),
     supabase.from("relationship").select("id, company_a_id, company_b_id"),
     supabase.from("company").select("id, name"),
-    supabase.from("person").select("id, first_name, last_name"),
+    supabase.from("person").select("id, first_name, last_name, company_id"),
     supabase
       .from("chat_message")
       .select("thread_id, body, created_at")
       .is("deleted_at", null)
       .order("created_at", { ascending: true }),
+    // group membership (07-02) - RLS (is_group_member) scopes this to the
+    // groups the viewer is an active member of. The table is not in the
+    // generated types yet, so it is read via the `as never` cast.
+    supabase
+      .from("chat_thread_member" as never)
+      .select("thread_id, person_id, state"),
   ]);
-  for (const r of [threadsRes, relsRes, cosRes, pplRes, msgsRes]) {
+  for (const r of [threadsRes, relsRes, cosRes, pplRes, msgsRes, membersRes]) {
     if (r.error) throw r.error;
   }
 
   const relById = new Map((relsRes.data ?? []).map((r) => [r.id, r] as const));
   const coNameById = new Map((cosRes.data ?? []).map((c) => [c.id, c.name] as const));
   const personById = new Map((pplRes.data ?? []).map((p) => [p.id, p] as const));
+
+  // active group members grouped by thread (Pitfall 1: a group row's
+  // participants come from membership, never the person_a/b slots).
+  const memberRows = (membersRes.data ?? []) as unknown as {
+    thread_id: string;
+    person_id: string;
+    state: string;
+  }[];
+  const activeMembersByThread = new Map<string, string[]>();
+  for (const m of memberRows) {
+    if (m.state !== "active") continue;
+    const list = activeMembersByThread.get(m.thread_id);
+    if (list) list.push(m.person_id);
+    else activeMembersByThread.set(m.thread_id, [m.person_id]);
+  }
 
   // deal rows show their deal NUMBER (3b) - resolve the hs numbers in one batch
   const dealCardIds = (threadsRes.data ?? [])
@@ -139,7 +167,48 @@ export async function getConversations(): Promise<ConversationListItem[]> {
       unreadCount: 0, // client-tracked unread lands in Phase 6
       companyId: otherCompanyId ?? "",
       companyName: otherCompanyName,
+      // p2p/c2c/deal all hang off a cross-company relationship, so they are
+      // external by definition; a group overrides this from its members below.
+      isExternal: true,
     };
+
+    // group (07-02) - participants + display come from chat_thread_member, NOT
+    // the person_a/b slots (Pitfall 1). A deal-born group (deal_card_id set)
+    // files under the Deals filter (D-07); a plain group under Groups.
+    if (t.type === "group") {
+      const groupName = (t as { name?: string | null }).name;
+      const memberIds = activeMembersByThread.get(t.id) ?? [];
+      const otherNames = memberIds
+        .filter((id) => id !== viewer.personId)
+        .map((id) => {
+          const p = personById.get(id);
+          return p ? `${p.first_name} ${p.last_name}`.trim() : null;
+        })
+        .filter((n): n is string => !!n);
+      const dealNo = t.deal_card_id ? dealNoById.get(t.deal_card_id) ?? null : null;
+      // D-06: the stored name is the subject; fall back to the deal code, then
+      // to the members' first names, then a plain label.
+      const displayName =
+        (groupName && groupName.trim()) || dealNo || otherNames.join(", ") || "Group";
+      // internal vs external: any active member from another company => external
+      const isExternal = memberIds.some((id) => {
+        const cid = personById.get(id)?.company_id ?? null;
+        return !!cid && cid !== viewer.companyId;
+      });
+      return {
+        ...base,
+        threadType: "group" as ThreadType,
+        name: displayName,
+        subtitle: otherNames.length ? otherNames.join(", ") : "Group chat",
+        initials: companyInitials(displayName),
+        dealCardId: t.deal_card_id ?? undefined,
+        isExternal,
+        // deal-born groups bucket under a "Deal groups" heading in the Deals
+        // filter; plain groups don't group by company (Groups filter is flat).
+        companyId: t.deal_card_id ? "deal-groups" : "",
+        companyName: t.deal_card_id ? "Deal groups" : otherCompanyName,
+      };
+    }
 
     // deal - the chat born with a deal; the row carries the deal number and
     // NAVIGATES to the workspace (it never selects in place)
@@ -317,6 +386,107 @@ export async function openOrCreateP2pThread(
     .single();
   if (insErr) throw insErr;
   return created.id;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Group chat (07-02 backend) - create / approve / rename                     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Create a group thread (D-04 new-chat groups + D-05 deal-card groups) via the
+ * atomic `create_group_thread` RPC. The RPC derives the creator from
+ * `auth.uid()` (never a client company id), adds the creator as active, and -
+ * for a deal-card group - resolves the 2 deal parties and gates any external
+ * company member to `pending_external`. The RPC + `chat_thread_member` table
+ * are new (07-02), not in the generated types yet, so the RPC name + params +
+ * table read are cast (the documented `as never` discipline).
+ *
+ * Returns the new thread id plus any members the server put behind the external
+ * gate (D-05), so the picker can drive the two-approver flow. The UI can NEVER
+ * activate an external party - only `approve_group_member` transitions it.
+ */
+export async function createGroupThread(input: {
+  name: string;
+  memberPersonIds: string[];
+  dealCardId?: string;
+}): Promise<GroupCreationResult> {
+  const supabase = createClient();
+
+  const { data: newId, error } = await supabase.rpc("create_group_thread" as never, {
+    // blank name => the RPC applies the D-06 default (first names / deal code)
+    p_name: input.name.trim(),
+    p_member_person_ids: input.memberPersonIds,
+    p_deal_card_id: input.dealCardId ?? null,
+  } as never);
+  if (error) throw error;
+  const threadId = newId as unknown as string;
+
+  // D-05: read back the members the server placed behind the external gate.
+  // RLS (is_group_member) scopes this to the thread the creator just joined.
+  const { data: gated, error: mErr } = await supabase
+    .from("chat_thread_member" as never)
+    .select("person_id, state")
+    .eq("thread_id", threadId)
+    .eq("state", "pending_external");
+  if (mErr) throw mErr;
+  const gatedRows = (gated ?? []) as unknown as { person_id: string }[];
+
+  const pendingExternal: PendingExternalMember[] = [];
+  if (gatedRows.length) {
+    const ids = gatedRows.map((r) => r.person_id);
+    const { data: people, error: pErr } = await supabase
+      .from("person")
+      .select("id, first_name, last_name")
+      .in("id", ids);
+    if (pErr) throw pErr;
+    const byId = new Map((people ?? []).map((p) => [p.id, p] as const));
+    for (const r of gatedRows) {
+      const p = byId.get(r.person_id);
+      pendingExternal.push({
+        personId: r.person_id,
+        name: p ? `${p.first_name} ${p.last_name}`.trim() : "External member",
+      });
+    }
+  }
+
+  return { threadId, pendingExternal };
+}
+
+/**
+ * Record the viewer's approval of one external group member (D-05). The
+ * `approve_group_member` RPC enforces the gate server-side: only an ACTIVE
+ * member may approve, an approver cannot approve themselves, and only TWO
+ * DISTINCT approvers flip `pending_external → active`. This UI call is a single
+ * approver's click; the second comes from another member's own session.
+ */
+export async function approveGroupMember(input: {
+  threadId: string;
+  personId: string;
+}): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase.rpc("approve_group_member" as never, {
+    p_thread_id: input.threadId,
+    p_person_id: input.personId,
+  } as never);
+  if (error) throw error;
+}
+
+/**
+ * Rename a group thread (D-06 - anyone in the thread may rename, anytime, from
+ * the chat window). Updates `chat_thread.name`; RLS (`thread_all` group branch,
+ * `is_group_member`) authorizes the write. `name` is a new column not in the
+ * generated types yet, so the update payload is cast (`as never` discipline).
+ */
+export async function renameGroupThread(input: {
+  threadId: string;
+  name: string;
+}): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("chat_thread")
+    .update({ name: input.name.trim() } as never)
+    .eq("id", input.threadId);
+  if (error) throw error;
 }
 
 /* -------------------------------------------------------------------------- */
