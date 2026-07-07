@@ -7,9 +7,9 @@ import { getDealCard, DealCard, type DealCardView } from "@/modules/deals";
  * Deal card panel host (Phase 7, D-31/D-32) - the ROUTE-LEVEL composition root
  * that opens a deal card as a RIGHT-SIDE panel, wherever the card is opened from
  * (a chat chip, the Relationship page, or any future page). It replaces the old
- * Phase-5 `DealRoomOverlayHost` (which mounted the now-retired `DealWorkspace` in
- * a full blurred overlay). The Deal Room + Stages are gone (D-15/D-17); this host
- * mounts ONLY the flip `DealCard`, never `DealWorkspace` and never `DealChat`.
+ * Phase-5 Deal Room overlay host (which mounted the now-retired Deal Room
+ * container in a full blurred overlay). The Deal Room + Stages are gone
+ * (D-15/D-17); this host mounts ONLY the flip `DealCard`, never a container.
  *
  * ACYCLIC by design: the emitter (DealPin's chip, RecordTabs' button) only
  * DISPATCHES a window event (`hs:open-deal-card` with `{ dealCardId }`) and this
