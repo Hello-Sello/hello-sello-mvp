@@ -129,11 +129,11 @@ export function ThreadView({ conversation, messages, onSend }: ThreadViewProps) 
         </div>
       )}
 
-      {/* the deal "Talking about" bar + the card floated on the right (3a);
+      {/* the deal "Talking about" bar + the card opened on the right (3a);
           P2P + C2C both hang off a relationship, so the pin works in either.
-          Phase 5 (D-01): the strip's "Deal Room" button opens the full blurred
-          Room overlay by DISPATCHING a window event (hs:open-deal-room) that the
-          Connect layout's DealRoomOverlayHost listens for - so no open-handler
+          Phase 7 (D-32): the strip's "Deal [code]" chip opens the card as a
+          right-side panel by DISPATCHING a window event (hs:open-deal-card) that
+          the Connect layout's DealCardPanelHost listens for - so no open-handler
           prop is threaded here, and messaging stays acyclic with deals. */}
       <DealPin
         key={conversation.relationshipId}

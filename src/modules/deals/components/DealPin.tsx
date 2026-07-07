@@ -482,15 +482,16 @@ export function DealPin({
       })
     : [];
 
-  // Phase 5 / D-01 - open the Deal Room as a full blurred overlay. The strip only
-  // DISPATCHES a window event; the route-level DealRoomOverlayHost (in the Connect
-  // layout) listens and mounts the overlay. This keeps deals <-> messaging acyclic
-  // (no back-import), mirroring the app's existing hs:deal-updated / hs:create-deal
-  // contract. Carries the selected card id so the host knows which deal to open.
-  function openDealRoom() {
+  // Phase 7 / D-08/D-32 - open the deal CARD as a right-side panel. The strip only
+  // DISPATCHES a window event; the route-level DealCardPanelHost (in the Connect
+  // layout) listens, fetches the card, and mounts it as the right panel. This keeps
+  // deals <-> messaging acyclic (no back-import), mirroring the app's existing
+  // hs:deal-updated / hs:create-deal contract. Carries the selected card id so the
+  // host knows which deal to open.
+  function openDealCard() {
     if (!selectedId) return;
     window.dispatchEvent(
-      new CustomEvent("hs:open-deal-room", { detail: { dealCardId: selectedId } }),
+      new CustomEvent("hs:open-deal-card", { detail: { dealCardId: selectedId } }),
     );
   }
 
@@ -503,9 +504,9 @@ export function DealPin({
     <div className="inline-flex shrink-0 items-center rounded-lg bg-black/[0.04] p-0.5 ring-1 ring-black/5">
       <button
         type="button"
-        title="Open the Deal Room"
-        aria-label="Open the Deal Room"
-        onClick={openDealRoom}
+        title="Open the deal card"
+        aria-label="Open the deal card"
+        onClick={openDealCard}
         className="rounded-md px-3 py-1 text-xs font-semibold text-brand-deep transition hover:bg-white/70"
       >
         Deal Room
