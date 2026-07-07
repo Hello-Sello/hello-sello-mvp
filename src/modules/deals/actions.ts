@@ -11,7 +11,7 @@
 import { createClient } from "@/shared/db/server";
 import { getCurrentCompanyId } from "@/shared/auth";
 import { writeAudit } from "@/shared/audit";
-import { sellerCompanyId, viewerSide } from "./lib/derive";
+import { buyerCompanyId, sellerCompanyId, viewerSide } from "./lib/derive";
 import { canFinalizeByInvoice } from "./lib/finalize";
 import type {
   ConfirmDealChangeInput,
@@ -25,6 +25,8 @@ import type {
   EditDealInput,
   EditDealResult,
   FinalizeDealResult,
+  OfferPromotionInput,
+  OfferPromotionResult,
   ProposeDealChangeInput,
   ProposeDealChangeResult,
   ProposeDealInput,
@@ -846,9 +848,374 @@ export async function withdrawDealChange({
   });
 }
 
+/* -------------------------------------------------------------------------- */
+/* Promotion (07-06, PROMO-01) - the INDEPENDENT yellow track.                 */
+/*                                                                            */
+/* D-21: a seller promotion is a SEPARATE decision from the negotiation diff - */
+/* its own `deal_promotion` row, NO shared lock (a live promotion and a live   */
+/* negotiation never block each other). D-26 (load-bearing): NONE of these     */
+/* touch `deal_confirmation` or the Sign gate, and offer does NOT bump the      */
+/* version - Sign stays callable throughout. The savings math lives in          */
+/* `lib/promotion.ts` (pure, canonical per-gram money, D-25).                  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Offer a promotion (07-06, seller-only). Inserts one pending `deal_promotion`
+ * row with the seller's REAL product-table reward lines (D-21) + any non-product
+ * rewards (D-22). Unlike `proposeDealChange` there is NO reason gate and NO
+ * version bump (D-26). The seller side is re-derived from the SESSION + the card
+ * (T-07-06-01) - never trusted from the caller.
+ */
+export async function offerPromotion(
+  input: OfferPromotionInput,
+): Promise<OfferPromotionResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("offerPromotion: no authenticated user");
+
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) throw new Error("offerPromotion: no company in session");
+
+  const { version, sellerId } = await dealSides(supabase, input.dealCardId);
+  if (companyId !== sellerId) {
+    throw new Error("Only the seller can offer a promotion.");
+  }
+
+  // deal_promotion is not in the generated types -> the localized `as never` cast
+  // (Muskan's documented pattern; no full regen this phase).
+  const { data, error } = await supabase
+    .from("deal_promotion" as never)
+    .insert({
+      deal_card_id: input.dealCardId,
+      base_version: version,
+      offered_by_company: companyId,
+      offered_by_person: user.id,
+      line_deltas: input.lineDeltas,
+      condition_deltas: input.conditionDeltas ?? [],
+      state: "pending",
+    } as never)
+    .select("id")
+    .single();
+  if (error) throw new Error((error as { message: string }).message);
+  const promotionId = (data as { id: string } | null)?.id;
+  if (!promotionId) throw new Error("offerPromotion: no promotion id returned");
+
+  await writeAudit({
+    actorType: "user",
+    action: "promotion.offered",
+    contentType: "deal_card",
+    contentId: input.dealCardId,
+    actorPersonId: user.id,
+  });
+
+  return { promotionId };
+}
+
+/**
+ * Accept a promotion (07-06, buyer-only). Applies the reward's line deltas
+ * INDEPENDENTLY at accept time (Open Question 2): each reward becomes a REAL
+ * `deal_line_item` row at the CURRENT version (D-21). CRITICAL (D-26): this never
+ * touches `deal_confirmation` and never bumps the version - Sign stays callable.
+ * Non-product rewards (`condition_deltas`) are NOT applied as lines (D-22); they
+ * stay on the promotion row and render in Extra Conditions. The buyer side is
+ * re-derived from the SESSION (T-07-06-01).
+ */
+export async function acceptPromotion({
+  dealCardId,
+}: {
+  dealCardId: string;
+}): Promise<void> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("acceptPromotion: no authenticated user");
+
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) throw new Error("acceptPromotion: no company in session");
+
+  const { version, buyerId } = await dealSides(supabase, dealCardId);
+  if (companyId !== buyerId) {
+    throw new Error("Only the buyer can accept a promotion.");
+  }
+
+  // the card's current pending promotion (newest first; there is no active-row lock).
+  const { data: promoData, error: promoErr } = await supabase
+    .from("deal_promotion" as never)
+    .select("id, line_deltas")
+    .eq("deal_card_id", dealCardId)
+    .eq("state", "pending")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (promoErr) throw new Error((promoErr as { message: string }).message);
+  const promo = promoData as { id: string; line_deltas: unknown } | null;
+  if (!promo) throw new Error("acceptPromotion: no pending promotion to accept.");
+
+  // apply the REAL line deltas onto the current version (D-21). unit_price is NOT
+  // NULL, so a free reward carries 0 explicitly. sort_order must be distinct
+  // (the (card, version, sort_order) unique key), so continue after the last line.
+  const deltas = Array.isArray(promo.line_deltas)
+    ? (promo.line_deltas as Array<Record<string, unknown>>)
+    : [];
+  if (deltas.length) {
+    const { data: lastLine } = await supabase
+      .from("deal_line_item")
+      .select("sort_order")
+      .eq("deal_card_id", dealCardId)
+      .eq("version", version)
+      .order("sort_order", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    let nextSort = (lastLine?.sort_order ?? -1) + 1;
+    for (const d of deltas) {
+      const { error: lineErr } = await supabase.from("deal_line_item").insert({
+        deal_card_id: dealCardId,
+        version,
+        product_id: typeof d["productId"] === "string" ? (d["productId"] as string) : null,
+        product_name:
+          typeof d["productName"] === "string" && (d["productName"] as string).trim()
+            ? (d["productName"] as string)
+            : "Promotion reward",
+        quantity: Number(d["quantity"] ?? 0),
+        unit: typeof d["unit"] === "string" ? (d["unit"] as string) : "g",
+        unit_price: Number(d["unitPrice"] ?? 0),
+        currency: typeof d["currency"] === "string" ? (d["currency"] as string) : "EUR",
+        sort_order: nextSort,
+      });
+      if (lineErr) throw lineErr;
+      nextSort += 1;
+    }
+  }
+
+  const { error: updErr } = await supabase
+    .from("deal_promotion" as never)
+    .update({
+      state: "accepted",
+      resolved_by_person: user.id,
+      resolved_at: new Date().toISOString(),
+    } as never)
+    .eq("id", promo.id);
+  if (updErr) throw new Error((updErr as { message: string }).message);
+
+  await logLine(
+    supabase,
+    dealCardId,
+    version,
+    user.id,
+    "Promotion accepted - the reward was added to the deal.",
+  );
+  await writeAudit({
+    actorType: "user",
+    action: "promotion.accepted",
+    contentType: "deal_card",
+    contentId: dealCardId,
+    actorPersonId: user.id,
+  });
+}
+
+/**
+ * Decline a promotion (07-06, buyer-only). Records `state='declined'`; the base
+ * deal is left UNCHANGED (no line writes) and Sign is untouched (D-26). The buyer
+ * side is re-derived from the SESSION (T-07-06-01).
+ */
+export async function declinePromotion({
+  dealCardId,
+}: {
+  dealCardId: string;
+}): Promise<void> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("declinePromotion: no authenticated user");
+
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) throw new Error("declinePromotion: no company in session");
+
+  const { buyerId } = await dealSides(supabase, dealCardId);
+  if (companyId !== buyerId) {
+    throw new Error("Only the buyer can decline a promotion.");
+  }
+
+  const { data: promoData, error: promoErr } = await supabase
+    .from("deal_promotion" as never)
+    .select("id")
+    .eq("deal_card_id", dealCardId)
+    .eq("state", "pending")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (promoErr) throw new Error((promoErr as { message: string }).message);
+  const promo = promoData as { id: string } | null;
+  if (!promo) throw new Error("declinePromotion: no pending promotion to decline.");
+
+  const { error: updErr } = await supabase
+    .from("deal_promotion" as never)
+    .update({
+      state: "declined",
+      resolved_by_person: user.id,
+      resolved_at: new Date().toISOString(),
+    } as never)
+    .eq("id", promo.id);
+  if (updErr) throw new Error((updErr as { message: string }).message);
+
+  await writeAudit({
+    actorType: "user",
+    action: "promotion.declined",
+    contentType: "deal_card",
+    contentId: dealCardId,
+    actorPersonId: user.id,
+  });
+}
+
+/* -------------------------------------------------------------------------- */
+/* Reopen ticket (07-06, RTKT-01) - the post-close path back in (D-29/D-30).   */
+/*                                                                            */
+/* After a deal closes (`done`, set by the invoice trigger), the ONLY path     */
+/* back is a reopen ticket - and EITHER party may open it (D-29). CRITICAL      */
+/* (D-29): these move the lifecycle STATUS + append a log note ONLY; they NEVER */
+/* mutate the sealed deal terms (line items / conditions). This is DISTINCT     */
+/* from the parked C2C ticketing - the inbox primitives are untouched.         */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Reopen a closed deal into a ticket (07-06). Allowed for EITHER deal party (the
+ * session company must be a member), and only from a closed deal (`done`). Moves
+ * the status to `ticket_created` and appends the reopen (+ optional note) to the
+ * card log. NEVER changes the sealed terms (T-07-06-03).
+ */
+export async function reopenTicket({
+  dealCardId,
+  note,
+}: {
+  dealCardId: string;
+  note?: string;
+}): Promise<void> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("reopenTicket: no authenticated user");
+
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) throw new Error("reopenTicket: no company in session");
+
+  const { version, status, sellerId, buyerId } = await dealSides(supabase, dealCardId);
+  // EITHER party may reopen - the session company must be one of the two sides.
+  if (companyId !== sellerId && companyId !== buyerId) {
+    throw new Error("Only a deal party can reopen this deal.");
+  }
+  // D-29: the ONLY path back is from a closed deal.
+  if (status !== "done") {
+    throw new Error("Only a closed (executed) deal can be reopened.");
+  }
+
+  await updateStatus(supabase, dealCardId, "ticket_created");
+  const trimmed = note?.trim();
+  await logLine(
+    supabase,
+    dealCardId,
+    version,
+    user.id,
+    trimmed
+      ? `Reopen ticket opened - ${trimmed}`
+      : "Reopen ticket opened.",
+  );
+  await writeAudit({
+    actorType: "user",
+    action: "deal.reopened",
+    contentType: "deal_card",
+    contentId: dealCardId,
+    actorPersonId: user.id,
+  });
+}
+
+/**
+ * Close a reopen ticket (07-06). Allowed for EITHER deal party, only from
+ * `ticket_created`; moves the status to `ticket_closed` and logs it. Like
+ * `reopenTicket`, it never touches the sealed terms (T-07-06-03).
+ */
+export async function closeTicket({
+  dealCardId,
+}: {
+  dealCardId: string;
+}): Promise<void> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("closeTicket: no authenticated user");
+
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) throw new Error("closeTicket: no company in session");
+
+  const { version, status, sellerId, buyerId } = await dealSides(supabase, dealCardId);
+  if (companyId !== sellerId && companyId !== buyerId) {
+    throw new Error("Only a deal party can close this ticket.");
+  }
+  if (status !== "ticket_created") {
+    throw new Error("Only an open reopen ticket can be closed.");
+  }
+
+  await updateStatus(supabase, dealCardId, "ticket_closed");
+  await logLine(supabase, dealCardId, version, user.id, "Reopen ticket closed.");
+  await writeAudit({
+    actorType: "user",
+    action: "deal.ticket_closed",
+    contentType: "deal_card",
+    contentId: dealCardId,
+    actorPersonId: user.id,
+  });
+}
+
 /* ---- small server-only helpers (not exported) ---- */
 
 type ServerClient = Awaited<ReturnType<typeof createClient>>;
+
+/**
+ * Resolve a card's live version, status, and derived seller/buyer company ids -
+ * the shared load for the promotion + reopen actions (07-06). One card read + one
+ * relationship read; the sides come from the pure `sellerCompanyId`/
+ * `buyerCompanyId` derivation, so a caller only compares its session company
+ * against these (never trusting a client-claimed side, T-07-06-01/03).
+ */
+async function dealSides(
+  supabase: ServerClient,
+  dealCardId: string,
+): Promise<{
+  version: number;
+  status: DealCardStatus;
+  sellerId: string;
+  buyerId: string;
+}> {
+  const { data: card, error: cardErr } = await supabase
+    .from("deal_card")
+    .select("deal_type, initiating_company_id, relationship_id, version, status")
+    .eq("id", dealCardId)
+    .single();
+  if (cardErr) throw cardErr;
+
+  const { data: rel, error: relErr } = await supabase
+    .from("relationship")
+    .select("company_a_id, company_b_id")
+    .eq("id", card.relationship_id)
+    .single();
+  if (relErr) throw relErr;
+
+  const facts = {
+    deal_type: card.deal_type as "offer" | "order",
+    initiating_company_id: card.initiating_company_id,
+  };
+  return {
+    version: card.version,
+    status: card.status as DealCardStatus,
+    sellerId: sellerCompanyId(facts, rel.company_a_id, rel.company_b_id),
+    buyerId: buyerCompanyId(facts, rel.company_a_id, rel.company_b_id),
+  };
+}
 
 async function updateStatus(supabase: ServerClient, cardId: string, status: DealCardStatus) {
   const { error } = await supabase

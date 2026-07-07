@@ -16,6 +16,7 @@
  */
 import { createClient } from "@/shared/db/client";
 import { sellerCompanyId, viewerSide, lineTotalOf, lineMarginOf } from "../lib/derive";
+import { promotionSavings } from "../lib/promotion";
 import { otherOf } from "../lib/recipient";
 import { seededSignals } from "../lib/signals";
 import type {
@@ -40,6 +41,10 @@ import type {
   ProductBatchView,
   PendingChangeView,
   PendingProposalView,
+  PromotionConditionDelta,
+  PromotionLineDelta,
+  PromotionState,
+  PromotionView,
   ProposalLineView,
   ProposalSource,
   ProposalVote,
@@ -299,6 +304,121 @@ export async function getPendingChange(
     iProposed: row.proposed_by_company === viewerCompanyId,
     baseVersion: row.base_version,
     proposerReason: row.proposer_reason,
+  };
+}
+
+/** The `deal_promotion` row shape we read (the table is not in the generated
+ * types yet, so we narrow the casted `select` result here). */
+type PromotionRow = {
+  deal_card_id: string;
+  base_version: number;
+  offered_by_company: string;
+  line_deltas: Meta[];
+  condition_deltas: Meta[];
+  state: string;
+};
+
+/** Coerce one stored jsonb line-delta into a typed PromotionLineDelta. */
+const toLineDelta = (m: Meta): PromotionLineDelta => ({
+  productId: typeof m["productId"] === "string" ? (m["productId"] as string) : null,
+  productName:
+    typeof m["productName"] === "string" && m["productName"].trim()
+      ? (m["productName"] as string)
+      : "Reward",
+  quantity: Number(m["quantity"] ?? 0),
+  unit: typeof m["unit"] === "string" ? (m["unit"] as string) : "g",
+  unitPrice: Number(m["unitPrice"] ?? 0),
+  currency: typeof m["currency"] === "string" ? (m["currency"] as string) : "EUR",
+  referencePrice: m["referencePrice"] == null ? null : Number(m["referencePrice"]),
+});
+
+/** A reward delta valued at a given price, as a minimal LineItemView for the
+ * canonical `promotionSavings` money (only the money-bearing fields matter). */
+const rewardLineAt = (d: PromotionLineDelta, price: number): LineItemView => ({
+  id: "reward",
+  productId: d.productId,
+  productName: d.productName,
+  thumbnailTint: null,
+  cultivar: null,
+  quantity: d.quantity,
+  unit: d.unit,
+  unitPrice: price,
+  currency: d.currency,
+  lineTotal: 0,
+  pzn: null,
+  batchId: null,
+  batchNumber: null,
+  thcPercent: null,
+  cbdPercent: null,
+});
+
+/**
+ * The card's current promotion, resolved for the viewer (07-06) - or null when
+ * the card has no promotion. Reads the newest `deal_promotion` row for the card
+ * (RLS = relationship member, so it returns for BOTH sides). The saving is
+ * pre-computed on the CANONICAL per-gram money (D-25): each reward line is valued
+ * twice - at its struck `referencePrice` (worth) and at its `unitPrice` (paid) -
+ * and `promotionSavings` returns worth minus paid. Resolving `iOffered` HERE keeps
+ * the yellow track (07-07) a pure renderer.
+ *
+ * `deal_promotion` is not in the generated types, so the table read uses the
+ * localized `as never` cast (the same discipline as `getPendingChange`).
+ */
+export async function getPromotion(dealCardId: string): Promise<PromotionView | null> {
+  const supabase = createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data: viewerPerson } = await supabase
+    .from("person")
+    .select("company_id")
+    .eq("id", user.id)
+    .single();
+  const viewerCompanyId: string | null = viewerPerson?.company_id ?? null;
+
+  // the card's current promotion (newest first). There is no one-active-row lock,
+  // so a card could carry more than one over its life; the yellow track shows the
+  // latest. The table is not in the generated types -> the table name is cast.
+  const { data, error } = await supabase
+    .from("deal_promotion" as never)
+    .select("deal_card_id, base_version, offered_by_company, line_deltas, condition_deltas, state")
+    .eq("deal_card_id", dealCardId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  const row = data as PromotionRow;
+
+  const lineDeltas: PromotionLineDelta[] = (
+    Array.isArray(row.line_deltas) ? row.line_deltas : []
+  ).map(toLineDelta);
+  const rawConditions = Array.isArray(row.condition_deltas) ? row.condition_deltas : [];
+  const conditionDeltas: PromotionConditionDelta[] = rawConditions.map((m) => ({
+    kind: typeof m["kind"] === "string" ? (m["kind"] as string) : "reward",
+    label: typeof m["label"] === "string" ? (m["label"] as string) : "Reward",
+  }));
+
+  const currency = lineDeltas[0]?.currency ?? "EUR";
+
+  // D-25: worth (each reward at its struck referencePrice) minus paid (at its
+  // actual unitPrice), on the canonical per-gram money. A reward with no known
+  // referencePrice contributes nothing to "worth", so it yields no phantom saving.
+  const worthLines = lineDeltas.map((d) => rewardLineAt(d, d.referencePrice ?? d.unitPrice));
+  const paidLines = lineDeltas.map((d) => rewardLineAt(d, d.unitPrice));
+  const savings = promotionSavings(worthLines, paidLines);
+
+  return {
+    dealCardId: row.deal_card_id,
+    state: row.state as PromotionState,
+    baseVersion: row.base_version,
+    lineDeltas,
+    conditionDeltas,
+    savings,
+    currency,
+    iOffered: viewerCompanyId != null && row.offered_by_company === viewerCompanyId,
   };
 }
 

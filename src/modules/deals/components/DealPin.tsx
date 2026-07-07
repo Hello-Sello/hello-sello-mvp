@@ -66,6 +66,10 @@ const STATUS_BADGE: Record<DealCardStatus, { label: string; cls: string }> = {
   done: { label: "Done", cls: "bg-success/15 text-success" },
   withdrawn: { label: "Withdrawn", cls: "bg-ink/10 text-ink/50" },
   cancelled: { label: "Cancelled", cls: "bg-ink/10 text-ink/50" },
+  // 07-06 reopen-ticket states (D-30 colours: blue / dark-green). The badge UI
+  // itself is deferred (D-17); these keep the exhaustive record complete.
+  ticket_created: { label: "Ticket opened", cls: "bg-blue-100 text-blue-700" },
+  ticket_closed: { label: "Ticket closed", cls: "bg-emerald-900/10 text-emerald-800" },
 };
 
 function StatusBadge({ status }: { status: DealCardStatus }) {
