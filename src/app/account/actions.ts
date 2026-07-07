@@ -22,6 +22,16 @@ async function hasPermission(action: string): Promise<boolean> {
   return data === true
 }
 
+/**
+ * Server-readable form of the branding gate: may the caller edit company
+ * branding (logo / profile)? A server component calls this to decide whether to
+ * OFFER the in-place logo edit, so a non-Superadmin never sees a control whose
+ * Save would be denied by `saveCompanyProfile`. Fail-closed (mirrors hasPermission).
+ */
+export async function canEditCompanyProfile(): Promise<boolean> {
+  return hasPermission('company.edit_profile')
+}
+
 // Thin server actions over the modules — the account UI calls these; the modules
 // own the rules and storage shape.
 

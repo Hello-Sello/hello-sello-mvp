@@ -10,10 +10,11 @@
  * reserved for the Save bar, so this is a calm white system button. In edit mode
  * the whole page enters a grey wash (owned by ShopView), the banner controls row
  * collapses, the name/tagline become in-place editable, "Change banner" uploads a
- * new cover (client-direct → cover_path), and the LOGO TILE ITSELF becomes the
- * inline edit affordance — clicking it opens the shared BrandingEditForm, the ONE
- * writer for the company logo (D-07 / D-REUSE-4). There is no longer a separate
- * "Edit logo & branding" button, and this component never writes the logo itself.
+ * new cover (client-direct → cover_path), and the LOGO TILE ITSELF is the inline
+ * edit affordance — clicking it picks a new logo image right there (onPickLogo),
+ * exactly like "Change banner". This component only stages the pick; ShopView's
+ * Save uploads it and persists logo_path through the ONE company-profile writer
+ * (D-07), so there is still no second logo writer and no separate branding box.
  *
  * DEV-117: the prototype's old full-width location strip element is intentionally
  * dropped here (not carried over).
@@ -34,7 +35,8 @@ export function PresentBanner({
   onTaglineChange,
   onPickCover,
   onManage,
-  onEditLogo,
+  canEditLogo = false,
+  onPickLogo,
   onPresent,
 }: {
   companyName: string;
@@ -48,7 +50,10 @@ export function PresentBanner({
   onTaglineChange: (v: string) => void;
   onPickCover: (f: File) => void;
   onManage: () => void;
-  onEditLogo: () => void;
+  /** Whether the caller may edit branding (Superadmin, D-04). Gates the in-place
+   *  logo picker — a non-Superadmin sees the logo but no edit affordance. */
+  canEditLogo?: boolean;
+  onPickLogo: (f: File) => void;
   onPresent: () => void;
 }) {
   return (
@@ -98,11 +103,15 @@ export function PresentBanner({
               Present page (DEV-127 / UX-06). */}
           {editing ? (
             <>
-              <EditableLogoTile
-                logoUrl={logoUrl}
-                companyName={companyName}
-                onEditLogo={onEditLogo}
-              />
+              {canEditLogo ? (
+                <EditableLogoTile
+                  logoUrl={logoUrl}
+                  companyName={companyName}
+                  onPickLogo={onPickLogo}
+                />
+              ) : (
+                <LogoTile logoUrl={logoUrl} companyName={companyName} />
+              )}
               <div className="min-w-0 flex-1">
                 <input
                   aria-label="Company name"
@@ -139,33 +148,48 @@ export function PresentBanner({
   );
 }
 
-/** Edit-mode wrapper turning the logo tile itself into the inline edit affordance
- *  (F-01, replaces the retired "Edit logo & branding" button). Clicking it opens
- *  the shared BrandingEditForm — the ONE logo writer (D-07); this never writes the
- *  logo. A hover cue signals it is editable. */
+/** Edit-mode wrapper turning the logo tile into the inline edit affordance (F-01).
+ *  Clicking it picks a new logo image right there — same client-direct pattern as
+ *  "Change banner" (onPickLogo → staged, ShopView's Save persists it via the one
+ *  logo writer, D-07). No branding box, no second writer. A hover cue signals it
+ *  is editable. */
 function EditableLogoTile({
   logoUrl,
   companyName,
-  onEditLogo,
+  onPickLogo,
 }: {
   logoUrl: string | null;
   companyName: string;
-  onEditLogo: () => void;
+  onPickLogo: (f: File) => void;
 }) {
+  const ref = useRef<HTMLInputElement>(null);
   return (
-    <button
-      type="button"
-      data-testid="edit-logo-btn"
-      onClick={onEditLogo}
-      title="Edit logo"
-      className="group relative flex-none rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-white/70"
-    >
-      <LogoTile logoUrl={logoUrl} companyName={companyName} />
-      {/* subtle hover cue that the tile is the inline edit control */}
-      <span className="absolute inset-0 flex flex-col items-center justify-center gap-0.5 rounded-2xl bg-ink/50 text-[10px] font-bold text-white opacity-0 transition group-hover:opacity-100">
-        <ImagePlus size={16} /> Edit
-      </span>
-    </button>
+    <>
+      <button
+        type="button"
+        data-testid="edit-logo-btn"
+        onClick={() => ref.current?.click()}
+        title="Change logo"
+        className="group relative flex-none rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+      >
+        <LogoTile logoUrl={logoUrl} companyName={companyName} />
+        {/* subtle hover cue that the tile is the inline edit control */}
+        <span className="absolute inset-0 flex flex-col items-center justify-center gap-0.5 rounded-2xl bg-ink/50 text-[10px] font-bold text-white opacity-0 transition group-hover:opacity-100">
+          <ImagePlus size={16} /> Edit
+        </span>
+      </button>
+      <input
+        ref={ref}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        hidden
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) onPickLogo(f);
+          e.target.value = "";
+        }}
+      />
+    </>
   );
 }
 

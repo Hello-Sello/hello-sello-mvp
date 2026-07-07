@@ -13,10 +13,12 @@
  * (4:1 MVP banner, inline logo), an InfoBox row, and a sticky pulsing SaveBar. Any
  * banner/info/links change marks the shop dirty (pulsing the Save); Save commits
  * every chrome field — including the edited links — through the existing
- * updateShopProfile writer (no new manage.ts action, one links write). Logo/branding
- * stays behind the shared BrandingEditForm — the one logo writer (D-07). Editing
- * also exposes a "+ Add product" tile (opens the manual-add drawer) and a free-text
- * add-location that stages a group; empty location labels never persist.
+ * updateShopProfile writer (no new manage.ts action, one links write). The LOGO is
+ * edited in place — clicking the banner logo picks a new image; Save uploads it and
+ * persists logo_path through saveCompanyProfile, the ONE company-profile writer
+ * (D-07), so there is still no second logo writer. Editing also exposes a "+ Add
+ * product" tile (opens the manual-add drawer) and a free-text add-location that
+ * stages a group; empty location labels never persist.
  */
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -32,6 +34,7 @@ import {
   softDeleteProductBatch,
 } from "@/modules/catalog/manage";
 import type { ProductFieldPatch, ProductBatchPatch } from "@/modules/catalog/manage";
+import { saveCompanyProfile } from "@/app/account/actions";
 import { createClient } from "@/shared/db/client";
 import { AddProductsDrawer } from "./AddProductsDrawer";
 import { AssignProductsDialog } from "./AssignProductsDialog";
@@ -91,8 +94,6 @@ function BrandGlyph({ name, size = 15 }: { name: keyof typeof BRAND_PATH; size?:
   );
 }
 
-import type { CompanyProfile } from "@/modules/companies";
-import { BrandingEditForm } from "./BrandingEditForm";
 
 // The chrome fields the owner edits in place. These are exactly the text fields
 // updateShopProfile persists as the shop banner + info. `links` is editable here
@@ -179,12 +180,11 @@ const emptyDraft = (): ProductDraft => ({
   fields: {}, batchInserts: [], batchEdits: {}, batchDeletes: [],
 });
 
-export function ShopView({ shop, company: companyProfile }: { shop: Shop; company: CompanyProfile | null }) {
+export function ShopView({ shop, canEditBranding = false }: { shop: Shop; canEditBranding?: boolean }) {
   const { company, products } = shop;
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [brandingOpen, setBrandingOpen] = useState(false);
   // Present mode (D-07): an in-app UI state that hides the app chrome. NEVER the
   // OS Fullscreen API (no requestFullscreen anywhere in this surface).
   const [presenting, setPresenting] = useState(false);
@@ -194,6 +194,9 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
   const [edits, setEdits] = useState<ChromeEdits>(() => initEdits(company));
   const [dirty, setDirty] = useState(false);
   const [coverFile, setCoverFile] = useState<File | null>(null);
+  // A picked-but-not-yet-uploaded logo image (in-place edit); staged like the cover
+  // and committed on Save through the one company-profile writer (D-07).
+  const [logoFile, setLogoFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Bumped on every successful save and folded into each ProductCard's key below —
@@ -281,6 +284,7 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
   function enterEdit() {
     setEdits(initEdits(company));
     setCoverFile(null);
+    setLogoFile(null);
     setDirty(false);
     setError(null);
     setPendingLocations([]);
@@ -292,9 +296,9 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
   function discard() {
     if (dirty && !window.confirm("Discard unsaved changes?")) return;
     setEditing(false);
-    setBrandingOpen(false);
     setDirty(false);
     setCoverFile(null);
+    setLogoFile(null);
     setError(null);
     setPendingLocations([]);
     setPendingProductEdits({});
@@ -307,9 +311,9 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
   // toggle, not a destructive action, and the SaveBar only renders while editing.
   function enterPresent() {
     setEditing(false);
-    setBrandingOpen(false);
     setDirty(false);
     setCoverFile(null);
+    setLogoFile(null);
     setError(null);
     setPendingLocations([]);
     setPendingProductEdits({});
@@ -339,6 +343,19 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
       .from("shop-media")
       .upload(path, file, { upsert: true, contentType: file.type });
     return error ? { error: `cover upload failed: ${error.message}` } : { path };
+  }
+
+  // Logo upload — same stable-path client-direct pattern as the cover (upsert → no
+  // orphan). Only the path string is persisted, and only through saveCompanyProfile
+  // (the one logo writer, D-07), never updateShopProfile.
+  async function uploadLogo(file: File): Promise<{ path?: string; error?: string }> {
+    if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) return { error: "Use a JPG, PNG or WebP image." };
+    if (file.size > MAX_IMAGE_BYTES) return { error: "Image must be under 10 MB." };
+    const path = `${company.id}/logo`;
+    const { error } = await createClient().storage
+      .from("shop-media")
+      .upload(path, file, { upsert: true, contentType: file.type });
+    return error ? { error: `logo upload failed: ${error.message}` } : { path };
   }
 
   async function save() {
@@ -372,6 +389,16 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
     const res = await updateShopProfile(fd);
     if ("error" in res) { setError(res.error); setBusy(false); return; }
 
+    // Logo (D-07): upload the picked bytes, then persist logo_path through the ONE
+    // company-profile writer (saveCompanyProfile updates only the keys given, so
+    // this touches logo_path alone — updateShopProfile never writes the logo).
+    if (logoFile) {
+      const up = await uploadLogo(logoFile);
+      if (up.error) { setError(up.error); setBusy(false); return; }
+      const r = await saveCompanyProfile({ logoPath: up.path });
+      if (r.error) { setError(r.error); setBusy(false); return; }
+    }
+
     // Flush the per-product pending tree (F-02) AFTER the chrome commit — the field
     // patch, then batch inserts / edits / soft-deletes, all under this one Save.
     for (const [productId, d] of Object.entries(pendingProductEdits)) {
@@ -404,9 +431,9 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
 
     setBusy(false);
     setEditing(false);
-    setBrandingOpen(false);
     setDirty(false);
     setCoverFile(null);
+    setLogoFile(null);
     setPendingLocations([]);
     setPendingProductEdits({});
     setSaveVersion((v) => v + 1);
@@ -418,7 +445,11 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
     : company.cover_path
     ? mediaUrl(company.cover_path, company.updated_at)
     : null;
-  const logoUrl = company.logo_path ? mediaUrl(company.logo_path, company.updated_at) : null;
+  const logoUrl = logoFile
+    ? URL.createObjectURL(logoFile)
+    : company.logo_path
+    ? mediaUrl(company.logo_path, company.updated_at)
+    : null;
 
   // The location groups to render for the active tab (already square + 4-up
   // inside each LocationGroup). Grouping is pure — see ./locationFilter.
@@ -489,7 +520,8 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
         onTaglineChange={(v) => updateEdit("tagline", v)}
         onPickCover={(f) => { setCoverFile(f); setDirty(true); }}
         onManage={enterEdit}
-        onEditLogo={() => setBrandingOpen((v) => !v)}
+        canEditLogo={canEditBranding}
+        onPickLogo={(f) => { setLogoFile(f); setDirty(true); }}
         onPresent={enterPresent}
       />
 
@@ -499,19 +531,6 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
         edits={edits}
         onEdit={updateEdit}
       />
-
-      {/* Logo & branding — the shared one-writer form (D-07), opened by clicking
-          the inline logo tile in edit mode (F-01; no separate branding button). */}
-      {editing && brandingOpen && companyProfile && (
-        <div className="glass rounded-3xl p-5">
-          <h3 className="mb-4 text-sm font-bold text-ink">Logo &amp; branding</h3>
-          <BrandingEditForm
-            company={companyProfile}
-            onDirty={() => {/* branding form owns its own dirty state + Save */}}
-            onSaved={() => { setBrandingOpen(false); router.refresh(); }}
-          />
-        </div>
-      )}
 
       {products.length === 0 ? (
         <EmptyShop onAdd={() => setDrawerOpen(true)} />
