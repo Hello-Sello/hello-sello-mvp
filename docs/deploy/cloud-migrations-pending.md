@@ -90,6 +90,17 @@ in the correct final state; the intermediate version is never used mid-push.
 
 ## PENDING (local only — NOT on cloud yet)
 
+### 2026-07-07 (Muskan) — Allocate/Sell schema (DEV-76) — NOT on cloud
+
+| # | Migration | What it does |
+|---|-----------|---------------|
+| 1 | `20260707090000_allocate_schema.sql` | 3 lookup tables + 6 columns + 4 seller-gated `SECURITY DEFINER` RPCs backing the Allocate page (Orders & Offers + Batches allocator). Additive only — no existing catalogue/deal schema altered, only referenced (`deal_card`, `deal_line_item`, `product_batch`). |
+
+- **Status:** local-first; applied via `supabase db reset` (GREEN) + `database.types.ts` regenerated. Gate green (tsc + eslint + 21/21 unit) + browser + DB-probe verified (session 53, 2026-07-07). **Not pushed to cloud.**
+- **Migration before code** — Allocate's server actions call the 4 RPCs directly; shipping the app without this migration 404s every Allocate read/write.
+- **⚠️ Known residual after push:** [DEV-159](https://linear.app/hellosello/issue/DEV-159) (High) — a buyer can forge allocation state via a direct table write (symmetric base RLS gap, same family as DEV-88). Non-blocking for a no-real-users demo; fix is Ayush's base-RLS lane.
+- **Push:** sorts last in the current pending set (`20260707090000` — after Phase 13's `20260706090xxx` and Phase 7's `20260706120000`); a single sequential `supabase db push` handles it with everything else, in timestamp order.
+
 ### 2026-07-06 (Muskan) — Phase 7 Present fidelity + card-front batch schema — NOT on cloud
 
 | # | Migration | What it does |
