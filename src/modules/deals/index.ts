@@ -37,6 +37,12 @@ export type {
   CreateDealResult,
   EditDealInput,
   EditDealResult,
+  PromotionState,
+  PromotionLineDelta,
+  PromotionConditionDelta,
+  PromotionView,
+  OfferPromotionInput,
+  OfferPromotionResult,
 } from "./types";
 
 export {
@@ -51,12 +57,15 @@ export {
   DEMO_VAT_RATE,
 } from "./lib/derive";
 
+export { promotionSavings } from "./lib/promotion";
+
 export {
   getDealCard,
   getCurrentDealCardId,
   getOwnCatalog,
   getWorkspace,
   getDealArtifacts,
+  getPromotion,
   resolveP2pRecipient,
 } from "./supabase/reads";
 export {
@@ -66,6 +75,14 @@ export {
   assignThing,
   uploadDealInvoice,
 } from "./supabase/writes";
-export { confirmDeal, createDeal, editDeal, finalizeDeal } from "./actions";
+export {
+  confirmDeal,
+  createDeal,
+  editDeal,
+  finalizeDeal,
+  offerPromotion,
+  acceptPromotion,
+  declinePromotion,
+} from "./actions";
 export { DealCard } from "./components/DealCard";
 export { DealPin } from "./components/DealPin";
