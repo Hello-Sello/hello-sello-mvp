@@ -194,6 +194,10 @@ export async function getPendingProposal(
   const currency = typeof draft["currency"] === "string" ? (draft["currency"] as string) : "EUR";
   const rawLines = Array.isArray(draft["line_items"]) ? (draft["line_items"] as Meta[]) : [];
   const lines: ProposalLineView[] = rawLines.map((l) => ({
+    // A birth PROPOSAL draft carries no product link (proposeDeal omits it), so
+    // this is null here - there is no existing card to diff against yet. The
+    // field exists so the held-CHANGE path (getPendingChange) can populate it.
+    productId: typeof l["productId"] === "string" ? (l["productId"] as string) : null,
     name: typeof l["name"] === "string" && l["name"].trim() ? (l["name"] as string) : "Item",
     quantity: Number(l["quantity"] ?? 0),
     unit: typeof l["unit"] === "string" ? (l["unit"] as string) : "g",
@@ -288,6 +292,10 @@ export async function getPendingChange(
   const currency = typeof draft["currency"] === "string" ? (draft["currency"] as string) : "EUR";
   const rawLines = Array.isArray(draft["line_items"]) ? (draft["line_items"] as Meta[]) : [];
   const lines: ProposalLineView[] = rawLines.map((l) => ({
+    // SELL-01/D-18: the held draft line already persists `productId` (camelCase,
+    // written by actions.ts `proposeDealChange`); carry it so the on-card diff
+    // (07-07) can pair current-vs-proposed lines BY id. Free-typed lines -> null.
+    productId: typeof l["productId"] === "string" ? (l["productId"] as string) : null,
     name: typeof l["name"] === "string" && l["name"].trim() ? (l["name"] as string) : "Item",
     quantity: Number(l["quantity"] ?? 0),
     unit: typeof l["unit"] === "string" ? (l["unit"] as string) : "g",

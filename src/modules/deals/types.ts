@@ -668,6 +668,14 @@ export type ProposalVote = "accept" | "reject" | null;
 
 /** One proposed line, shaped for the strip's accept popover (from `metadata.draft`). */
 export interface ProposalLineView {
+  /**
+   * The catalogue product id this line refers to, or null for a free-typed /
+   * custom line (SELL-01/D-18). The held change draft persists it (actions.ts
+   * `proposeDealChange`); carrying it here lets the on-card diff (07-07) PAIR
+   * current-vs-proposed lines BY id instead of by name/index, which mis-targets
+   * duplicate or renamed lines. Birth proposals carry no product link -> null.
+   */
+  productId: string | null;
   name: string;
   quantity: number;
   unit: string;
