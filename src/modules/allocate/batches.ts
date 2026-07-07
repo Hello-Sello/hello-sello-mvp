@@ -28,6 +28,9 @@ export type AllocationRow = {
   productId: string;
   productName: string;
   substitutedFromProductId: string | null;
+  /** The ORIGINAL product's name, when substituted — Rule 2 addition (not in
+   *  the plan's original type sketch): the struck-through display needs it. */
+  substitutedFromProductName: string | null;
   /** Display-only decomposition of volTotalGrams via the product's pack size - see module doc. */
   unitsOrdered: number;
   unitVolGrams: number;
@@ -40,6 +43,10 @@ export type AllocationRow = {
   allocationStatus: "pending" | "supply" | "decline";
   locked: boolean;
   availableBatches: { id: string; batchNumber: string; quantityGrams: number }[];
+  /** The parent deal_card's created_at (Rule 2 addition, not in the plan's
+   *  original type sketch): AllocationTable's "First Order" sort chip needs a
+   *  real chronological signal — mirrors Plan 2's SellerOrderRow.receivedAt. */
+  receivedAt: string;
 };
 
 /** Statuses whose lines can still need an allocation decision - mirrors deals'
@@ -94,7 +101,7 @@ export async function getAllocationWorklist(): Promise<AllocationRow[]> {
   // via RLS) - narrowed to the caller's own SELLER-side cards below.
   const { data: cardRows, error: cardErr } = await supabase
     .from("deal_card")
-    .select("id, version, relationship_id, deal_type, initiating_company_id, status")
+    .select("id, version, relationship_id, deal_type, initiating_company_id, status, created_at")
     .is("deleted_at", null)
     .in("status", Array.from(LIVE_CARD_STATUSES));
   if (cardErr) throw cardErr;
@@ -118,6 +125,7 @@ export async function getAllocationWorklist(): Promise<AllocationRow[]> {
     deal_type: DealType;
     initiating_company_id: string;
     buyerCompanyId: string;
+    createdAt: string;
   };
   const sellerCards: LiveCard[] = [];
   for (const c of cards) {
@@ -131,12 +139,14 @@ export async function getAllocationWorklist(): Promise<AllocationRow[]> {
       deal_type: card.deal_type,
       initiating_company_id: card.initiating_company_id,
       buyerCompanyId: buyerCompanyId(card, rel.company_a_id, rel.company_b_id),
+      createdAt: c.created_at,
     });
   }
   if (sellerCards.length === 0) return [];
 
   const versionByCard = new Map(sellerCards.map((c) => [c.id, c.version] as const));
   const buyerByCard = new Map(sellerCards.map((c) => [c.id, c.buyerCompanyId] as const));
+  const receivedAtByCard = new Map(sellerCards.map((c) => [c.id, c.createdAt] as const));
   const cardIds = sellerCards.map((c) => c.id);
 
   // 4. The line items across those cards, grams-only (DEV-157 #4) - then keep
@@ -164,12 +174,19 @@ export async function getAllocationWorklist(): Promise<AllocationRow[]> {
   if (coErr) throw coErr;
   const companyNameById = new Map((companyRows ?? []).map((c) => [c.id, c.name] as const));
 
-  // 6. The CURRENT (post-substitution) product for every line, real name + pack size.
-  const productIds = Array.from(new Set(lines.map((l) => l.product_id as string)));
+  // 6. The CURRENT (post-substitution) product for every line, real name + pack
+  // size, PLUS the ORIGINAL product's name for any substituted line (so the
+  // UI can render "struck-through original -> replacement" — the batch
+  // picker below stays scoped to the CURRENT product only, never the original).
+  const currentProductIds = Array.from(new Set(lines.map((l) => l.product_id as string)));
+  const originalProductIds = lines
+    .map((l) => l.substituted_from_product_id)
+    .filter((id): id is string => id != null);
+  const nameLookupIds = Array.from(new Set([...currentProductIds, ...originalProductIds]));
   const { data: productRows, error: prodErr } = await supabase
     .from("product")
     .select("id, name, pack_size_grams")
-    .in("id", productIds);
+    .in("id", nameLookupIds);
   if (prodErr) throw prodErr;
   const productById = new Map((productRows ?? []).map((p) => [p.id, p] as const));
 
@@ -179,7 +196,7 @@ export async function getAllocationWorklist(): Promise<AllocationRow[]> {
   const { data: batchRows, error: batchErr } = await supabase
     .from("product_batch")
     .select("id, batch_number, product_id, quantity_grams")
-    .in("product_id", productIds)
+    .in("product_id", currentProductIds)
     .is("deleted_at", null)
     .order("ready_for_sale_date", { ascending: true, nullsFirst: false })
     .order("created_at", { ascending: true });
@@ -212,6 +229,9 @@ export async function getAllocationWorklist(): Promise<AllocationRow[]> {
       productId: product.id,
       productName: product.name,
       substitutedFromProductId: l.substituted_from_product_id,
+      substitutedFromProductName: l.substituted_from_product_id
+        ? productById.get(l.substituted_from_product_id)?.name ?? null
+        : null,
       unitsOrdered,
       unitVolGrams,
       volTotalGrams,
@@ -223,6 +243,10 @@ export async function getAllocationWorklist(): Promise<AllocationRow[]> {
       allocationStatus: l.allocation_status as "pending" | "supply" | "decline",
       locked: l.allocation_locked_at != null,
       availableBatches: batchesByProduct.get(product.id) ?? [],
+      // Always resolves — every line here belongs to a sellerCards entry by
+      // construction (its deal_card_id came from cardIds); the fallback only
+      // guards TS's Map.get() optionality, not a real missing-data path.
+      receivedAt: receivedAtByCard.get(l.deal_card_id) ?? new Date(0).toISOString(),
     });
   }
   return rows;
