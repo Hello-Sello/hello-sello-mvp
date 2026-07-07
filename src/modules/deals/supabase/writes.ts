@@ -8,7 +8,7 @@
  * note (no `thing.*` action code exists yet, and writeAudit is server-only).
  */
 import { createClient } from "@/shared/db/client";
-import type { StageCode, ThingStatus, ThingType, ThingView } from "../types";
+import type { ThingStatus, ThingType, ThingView } from "../types";
 
 /**
  * Flip one Thing between open and done. When marking done we stamp
@@ -43,15 +43,16 @@ export async function toggleThingStatus(
 }
 
 /**
- * Create a new Thing in a stage (3c, user-added). Defaults to a `task` (the
- * common case; the special `approval`/`document_upload` kinds are wired by 3d /
- * the upload task). The caller passes `sortOrder` (it knows the stage's current
- * count) so the new row lands at the end. RLS `thing_all` lets a member insert.
- * Returns the created row as a ThingView so the caller can append it in place.
+ * Create a new Thing (user-added). Things are now FLAT/stageless (D-15: Stages
+ * retired), so no stage is passed - the row inserts with `stage_code` NULL (the
+ * column was made nullable in 20260707130100). Defaults to a `task` (the common
+ * case; the special `approval`/`document_upload` kinds stay available). The caller
+ * passes `sortOrder` (it knows the list's current count) so the new row lands at
+ * the end. RLS `thing_all` lets a member insert. Returns the created row as a
+ * ThingView so the caller can append it in place.
  */
 export async function createThing(args: {
   workspaceId: string;
-  stageCode: StageCode;
   title: string;
   sortOrder: number;
   type?: ThingType;
@@ -73,6 +74,7 @@ export async function createThing(args: {
   const isPrivate = args.isPrivate ?? false;
   // is_private / owner_company_id are not in the generated insert type yet, so the
   // insert object is cast (same as-never discipline as the reads). DO NOT regen.
+  // stage_code is omitted (nullable now) - Things are flat/stageless (D-15).
   const { data, error } = await supabase
     .from("thing")
     .insert({
@@ -80,7 +82,6 @@ export async function createThing(args: {
       title: args.title.trim(),
       type,
       status: "open",
-      stage_code: args.stageCode,
       sort_order: args.sortOrder,
       assignee_person_id: args.assigneePersonId ?? null,
       is_private: isPrivate,
@@ -88,7 +89,7 @@ export async function createThing(args: {
       created_by: user.id,
     } as never)
     .select(
-      "id, title, type, status, stage_code, sort_order, assignee_person_id, is_private, owner_company_id" as "id, title, type, status, stage_code, sort_order",
+      "id, title, type, status, sort_order, assignee_person_id, is_private, owner_company_id" as "id, title, type, status, sort_order",
     )
     .single();
   if (error) throw error;
@@ -103,7 +104,6 @@ export async function createThing(args: {
     title: data.title,
     type: data.type as ThingType,
     status: data.status as ThingStatus,
-    stageCode: data.stage_code as StageCode,
     sortOrder: data.sort_order,
     assigneePersonId: v.assignee_person_id ?? null,
     isPrivate: v.is_private ?? false,
@@ -181,39 +181,6 @@ export async function assignThing(
     .from("thing")
     .update(patch as never)
     .eq("id", thingId);
-  if (error) throw error;
-}
-
-/**
- * Mark a stage done (Phase 5, D-14) - a MANUAL user action, STORED, never
- * auto-flipped. Upserts one `deal_stage_completion` row per (workspace, stage),
- * stamping who marked it (T-05-05). A re-mark of the same stage updates the
- * existing row (the unique key), never inserts a second. SHARED - both sides see
- * the progress. The table is not in the generated types, so the table name +
- * row are cast (Muskan's documented pattern; no full regen this phase).
- */
-export async function markStageDone(
-  workspaceId: string,
-  stageCode: StageCode,
-): Promise<void> {
-  const supabase = createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("markStageDone: no authenticated user");
-
-  const { error } = await supabase
-    .from("deal_stage_completion" as never)
-    .upsert(
-      {
-        deal_workspace_id: workspaceId,
-        stage_code: stageCode,
-        marked_done_by_person_id: user.id,
-        marked_done_at: new Date().toISOString(),
-      } as never,
-      { onConflict: "deal_workspace_id,stage_code" } as never,
-    );
   if (error) throw error;
 }
 
