@@ -93,12 +93,21 @@ UPDATE person SET company_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
   WHERE id = '22222222-2222-2222-2222-222222222222';
 
 -- ----------------------------------------------------------------------------
--- 4. Business categories (cultivator sells, pharmacy buys)
+-- 4. Business taxonomy (DEV-99 #3): Activities = role (cultivator sells, pharmacy
+--    buys); Category = sector. The legacy 'cultivator' Activity was remapped to
+--    'eu_gmp_cultivator' by 20260704090000; migrations run before this seed, so it
+--    no longer exists as a code. Both demo companies are cannabis-medical → pharma.
 -- ----------------------------------------------------------------------------
 INSERT INTO company_type_assignment (company_id, company_type_code, created_by) VALUES
-  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'cultivator',
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'eu_gmp_cultivator',
    '11111111-1111-1111-1111-111111111111'),
   ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'pharmacy',
+   '22222222-2222-2222-2222-222222222222');
+
+INSERT INTO company_business_category (company_id, business_category_code, created_by) VALUES
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'pharma',
+   '11111111-1111-1111-1111-111111111111'),
+  ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'pharma',
    '22222222-2222-2222-2222-222222222222');
 
 -- ----------------------------------------------------------------------------
@@ -213,13 +222,22 @@ WHERE NOT EXISTS (
   SELECT 1 FROM company WHERE id = 'cccccccc-cccc-cccc-cccc-cccccccccccc'
 );
 
--- 4b-v) Company type for PendingCo (cultivator)
+-- 4b-v) Business taxonomy for PendingCo (Activity = eu_gmp_cultivator; Category = pharma)
 INSERT INTO company_type_assignment (company_id, company_type_code, created_by)
-SELECT 'cccccccc-cccc-cccc-cccc-cccccccccccc', 'cultivator', '99999999-9999-9999-9999-999999999999'
+SELECT 'cccccccc-cccc-cccc-cccc-cccccccccccc', 'eu_gmp_cultivator', '99999999-9999-9999-9999-999999999999'
 WHERE NOT EXISTS (
   SELECT 1 FROM company_type_assignment
   WHERE company_id = 'cccccccc-cccc-cccc-cccc-cccccccccccc'
-    AND company_type_code = 'cultivator'
+    AND company_type_code = 'eu_gmp_cultivator'
+    AND deleted_at IS NULL
+);
+
+INSERT INTO company_business_category (company_id, business_category_code, created_by)
+SELECT 'cccccccc-cccc-cccc-cccc-cccccccccccc', 'pharma', '99999999-9999-9999-9999-999999999999'
+WHERE NOT EXISTS (
+  SELECT 1 FROM company_business_category
+  WHERE company_id = 'cccccccc-cccc-cccc-cccc-cccccccccccc'
+    AND business_category_code = 'pharma'
     AND deleted_at IS NULL
 );
 
@@ -439,6 +457,511 @@ where not exists (
   where pb.company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid
     and pb.batch_number = v.batch_number and pb.deleted_at is null
 );
+
+-- ----------------------------------------------------------------------------
+-- 8. ALLOC-SEED — Allocate demo data (DEV-76/157/151, 260707-0ob plan 1).
+--    (a) backfill real stock (grams) onto the 8 GreenLeaf batches above, so the
+--        Batches allocator's live stock bars have something real to divide
+--        against. Plain idempotent UPDATE (re-running just re-sets the same
+--        values). Each pair's OLDER batch gets a smaller remaining figure than
+--        its NEWER batch, for a real FIFO story.
+-- ----------------------------------------------------------------------------
+update public.product_batch
+set quantity_grams = v.grams
+from (values
+  ('GL-24-0001', 15000::numeric(12,2)),  -- AUR-1A older
+  ('GL-24-0002', 42000::numeric(12,2)),  -- AUR-1A newer
+  ('GL-24-0003', 18000::numeric(12,2)),  -- AUR-1B older
+  ('GL-24-0004', 38000::numeric(12,2)),  -- AUR-1B newer
+  ('GL-24-0005', 20000::numeric(12,2)),  -- AUR-1C older
+  ('GL-24-0006', 45000::numeric(12,2)),  -- AUR-1C newer
+  ('GL-24-0007', 13000::numeric(12,2)),  -- AUR-1D older
+  ('GL-24-0008', 33000::numeric(12,2))   -- AUR-1D newer
+) as v(batch_number, grams)
+where product_batch.company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid
+  and product_batch.batch_number = v.batch_number;
+
+-- ----------------------------------------------------------------------------
+-- 8b. Seven demo orders spanning the full 7-state status vocabulary, on the two
+--     existing demo-2d relationships (GreenLeaf<->StonePharm,
+--     GreenLeaf<->Rheinland). Each order = deal_card + 1-3 deal_line_item rows
+--     (real product + real batch, batch's measured thc/cbd copied onto the
+--     line) + deal_workspace + 2 deal_member (both founders, owner) + one deal
+--     chat_thread. Idempotent per order via seller_so_number = 'ALLOC-SEED-0N',
+--     guarding the deal_card insert; every downstream insert is chained off
+--     that CTE so the whole order no-ops on a re-run once it exists (mirrors
+--     the demo-2d relationship/chat pattern in section 5 above).
+--
+--     Variety matrix (see 260707-0ob-PLAN-1.md):
+--       01 GL<->StonePharm  offer  draft     hello_sello  --      all pending
+--       02 GL<->Rheinland   order  draft     hello_sello  --      all pending
+--       03 GL<->StonePharm  order  confirmed email        --      1 supply(locked) + 1 pending
+--       04 GL<->Rheinland   offer  done      hello_sello  --      all supply (locked)
+--       05 GL<->StonePharm  offer  amended   hello_sello  --      1 decline(locked) + 1 pending
+--       06 GL<->Rheinland   order  confirmed fax          open    all pending
+--       07 GL<->StonePharm  offer  done      email        closed  all supply (locked)
+-- ----------------------------------------------------------------------------
+
+-- ALLOC-SEED-01 — GreenLeaf <-> StonePharm, offer, draft, hello_sello, all pending
+with ids as (
+  select
+    (select r.id from public.relationship r
+       where r.metadata->>'seed' = 'demo-2d'
+         and r.company_a_id = least('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid, 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'::uuid)
+         and r.company_b_id = greatest('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid, 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'::uuid)
+    ) as rel_id
+),
+card as (
+  insert into public.deal_card (
+    relationship_id, version, status, deal_type, initiating_company_id,
+    currency, ordered_via, ticket_status, seller_so_number, created_by, updated_by, metadata)
+  select ids.rel_id, 1, 'draft', 'offer', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid,
+    'EUR', 'hello_sello', null, 'ALLOC-SEED-01',
+    '11111111-1111-1111-1111-111111111111'::uuid, '11111111-1111-1111-1111-111111111111'::uuid,
+    jsonb_build_object('seed', 'allocate-seed')
+  from ids
+  where not exists (select 1 from public.deal_card where seller_so_number = 'ALLOC-SEED-01')
+  returning id
+),
+ws as (
+  insert into public.deal_workspace (deal_card_id, visibility, created_by)
+  select card.id, 'company_wide', '11111111-1111-1111-1111-111111111111'::uuid
+  from card
+  returning id
+),
+member_gl as (
+  insert into public.deal_member (deal_workspace_id, person_id, role, added_by_person_id)
+  select ws.id, '11111111-1111-1111-1111-111111111111'::uuid, 'owner', '11111111-1111-1111-1111-111111111111'::uuid
+  from ws
+  returning id
+),
+member_cp as (
+  insert into public.deal_member (deal_workspace_id, person_id, role, added_by_person_id)
+  select ws.id, '22222222-2222-2222-2222-222222222222'::uuid, 'owner', '11111111-1111-1111-1111-111111111111'::uuid
+  from ws
+  returning id
+),
+thread as (
+  insert into public.chat_thread (relationship_id, type, deal_card_id)
+  select ids.rel_id, 'deal', card.id
+  from ids, card
+  returning id
+)
+insert into public.deal_line_item (
+  deal_card_id, version, product_id, product_name, quantity, unit, unit_price,
+  currency, sort_order, batch_id, batch_number, thc_percent, cbd_percent,
+  allocation_status, allocation_locked_at)
+select card.id, 1, p.id, p.name, v.qty, 'g', v.price, 'EUR', v.sort_order,
+       pb.id, pb.batch_number, pb.thc_percent, pb.cbd_percent, v.alloc,
+       case when v.locked_days is null then null else now() - (v.locked_days || ' days')::interval end
+from card, ws, member_gl, member_cp, thread
+cross join (values
+  ('AUR-1A'::text, 'GL-24-0001'::varchar(60), 1200::numeric, 7.50::numeric, 0::smallint, 'pending'::text, null::int),
+  ('AUR-1B'::text, 'GL-24-0003'::varchar(60),  800::numeric, 6.50::numeric, 1::smallint, 'pending'::text, null::int)
+) as v(code, batch_number, qty, price, sort_order, alloc, locked_days)
+join public.product p
+  on p.company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid
+ and p.supplier_product_code = v.code and p.deleted_at is null
+join public.product_batch pb
+  on pb.company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid
+ and pb.batch_number = v.batch_number and pb.deleted_at is null;
+
+-- ALLOC-SEED-02 — GreenLeaf <-> Rheinland, order, draft, hello_sello, all pending
+with ids as (
+  select
+    (select id from public.company where name = 'Rheinland Apotheke GmbH') as cp,
+    (select id from auth.users where email = 'clara@rheinland.test') as cp_founder,
+    (select r.id from public.relationship r
+       where r.metadata->>'seed' = 'demo-2d'
+         and r.company_a_id = least('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid,
+                                     (select id from public.company where name = 'Rheinland Apotheke GmbH'))
+         and r.company_b_id = greatest('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid,
+                                        (select id from public.company where name = 'Rheinland Apotheke GmbH'))
+    ) as rel_id
+),
+card as (
+  insert into public.deal_card (
+    relationship_id, version, status, deal_type, initiating_company_id,
+    currency, ordered_via, ticket_status, seller_so_number, created_by, updated_by, metadata)
+  select ids.rel_id, 1, 'draft', 'order', ids.cp,
+    'EUR', 'hello_sello', null, 'ALLOC-SEED-02',
+    ids.cp_founder, ids.cp_founder,
+    jsonb_build_object('seed', 'allocate-seed')
+  from ids
+  where not exists (select 1 from public.deal_card where seller_so_number = 'ALLOC-SEED-02')
+  returning id
+),
+ws as (
+  insert into public.deal_workspace (deal_card_id, visibility, created_by)
+  select card.id, 'company_wide', ids.cp_founder
+  from card, ids
+  returning id
+),
+member_gl as (
+  insert into public.deal_member (deal_workspace_id, person_id, role, added_by_person_id)
+  select ws.id, '11111111-1111-1111-1111-111111111111'::uuid, 'owner', ids.cp_founder
+  from ws, ids
+  returning id
+),
+member_cp as (
+  insert into public.deal_member (deal_workspace_id, person_id, role, added_by_person_id)
+  select ws.id, ids.cp_founder, 'owner', ids.cp_founder
+  from ws, ids
+  returning id
+),
+thread as (
+  insert into public.chat_thread (relationship_id, type, deal_card_id)
+  select ids.rel_id, 'deal', card.id
+  from ids, card
+  returning id
+)
+insert into public.deal_line_item (
+  deal_card_id, version, product_id, product_name, quantity, unit, unit_price,
+  currency, sort_order, batch_id, batch_number, thc_percent, cbd_percent,
+  allocation_status, allocation_locked_at)
+select card.id, 1, p.id, p.name, v.qty, 'g', v.price, 'EUR', v.sort_order,
+       pb.id, pb.batch_number, pb.thc_percent, pb.cbd_percent, v.alloc,
+       case when v.locked_days is null then null else now() - (v.locked_days || ' days')::interval end
+from card, ws, member_gl, member_cp, thread
+cross join (values
+  ('AUR-1C'::text, 'GL-24-0005'::varchar(60), 2500::numeric, 4.50::numeric, 0::smallint, 'pending'::text, null::int),
+  ('AUR-1D'::text, 'GL-24-0007'::varchar(60),  500::numeric, 5.50::numeric, 1::smallint, 'pending'::text, null::int)
+) as v(code, batch_number, qty, price, sort_order, alloc, locked_days)
+join public.product p
+  on p.company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid
+ and p.supplier_product_code = v.code and p.deleted_at is null
+join public.product_batch pb
+  on pb.company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid
+ and pb.batch_number = v.batch_number and pb.deleted_at is null;
+
+-- ALLOC-SEED-03 — GreenLeaf <-> StonePharm, order, confirmed, email, 1 supply(locked) + 1 pending
+with ids as (
+  select
+    (select r.id from public.relationship r
+       where r.metadata->>'seed' = 'demo-2d'
+         and r.company_a_id = least('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid, 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'::uuid)
+         and r.company_b_id = greatest('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid, 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'::uuid)
+    ) as rel_id
+),
+card as (
+  insert into public.deal_card (
+    relationship_id, version, status, deal_type, initiating_company_id,
+    currency, ordered_via, ticket_status, seller_so_number, created_by, updated_by, metadata)
+  select ids.rel_id, 1, 'confirmed', 'order', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'::uuid,
+    'EUR', 'email', null, 'ALLOC-SEED-03',
+    '22222222-2222-2222-2222-222222222222'::uuid, '22222222-2222-2222-2222-222222222222'::uuid,
+    jsonb_build_object('seed', 'allocate-seed')
+  from ids
+  where not exists (select 1 from public.deal_card where seller_so_number = 'ALLOC-SEED-03')
+  returning id
+),
+ws as (
+  insert into public.deal_workspace (deal_card_id, visibility, created_by)
+  select card.id, 'company_wide', '22222222-2222-2222-2222-222222222222'::uuid
+  from card
+  returning id
+),
+member_gl as (
+  insert into public.deal_member (deal_workspace_id, person_id, role, added_by_person_id)
+  select ws.id, '11111111-1111-1111-1111-111111111111'::uuid, 'owner', '22222222-2222-2222-2222-222222222222'::uuid
+  from ws
+  returning id
+),
+member_cp as (
+  insert into public.deal_member (deal_workspace_id, person_id, role, added_by_person_id)
+  select ws.id, '22222222-2222-2222-2222-222222222222'::uuid, 'owner', '22222222-2222-2222-2222-222222222222'::uuid
+  from ws
+  returning id
+),
+thread as (
+  insert into public.chat_thread (relationship_id, type, deal_card_id)
+  select ids.rel_id, 'deal', card.id
+  from ids, card
+  returning id
+)
+insert into public.deal_line_item (
+  deal_card_id, version, product_id, product_name, quantity, unit, unit_price,
+  currency, sort_order, batch_id, batch_number, thc_percent, cbd_percent,
+  allocation_status, allocation_locked_at)
+select card.id, 1, p.id, p.name, v.qty, 'g', v.price, 'EUR', v.sort_order,
+       pb.id, pb.batch_number, pb.thc_percent, pb.cbd_percent, v.alloc,
+       case when v.locked_days is null then null else now() - (v.locked_days || ' days')::interval end
+from card, ws, member_gl, member_cp, thread
+cross join (values
+  ('AUR-1A'::text, 'GL-24-0002'::varchar(60), 3000::numeric, 7.80::numeric, 0::smallint, 'supply'::text,  3::int),
+  ('AUR-1B'::text, 'GL-24-0004'::varchar(60), 1500::numeric, 5.80::numeric, 1::smallint, 'pending'::text, null::int)
+) as v(code, batch_number, qty, price, sort_order, alloc, locked_days)
+join public.product p
+  on p.company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid
+ and p.supplier_product_code = v.code and p.deleted_at is null
+join public.product_batch pb
+  on pb.company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid
+ and pb.batch_number = v.batch_number and pb.deleted_at is null;
+
+-- ALLOC-SEED-04 — GreenLeaf <-> Rheinland, offer, done, hello_sello, all supply (locked)
+with ids as (
+  select
+    (select id from public.company where name = 'Rheinland Apotheke GmbH') as cp,
+    (select r.id from public.relationship r
+       where r.metadata->>'seed' = 'demo-2d'
+         and r.company_a_id = least('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid,
+                                     (select id from public.company where name = 'Rheinland Apotheke GmbH'))
+         and r.company_b_id = greatest('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid,
+                                        (select id from public.company where name = 'Rheinland Apotheke GmbH'))
+    ) as rel_id
+),
+card as (
+  insert into public.deal_card (
+    relationship_id, version, status, deal_type, initiating_company_id,
+    currency, ordered_via, ticket_status, seller_so_number, created_by, updated_by, metadata)
+  select ids.rel_id, 1, 'done', 'offer', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid,
+    'EUR', 'hello_sello', null, 'ALLOC-SEED-04',
+    '11111111-1111-1111-1111-111111111111'::uuid, '11111111-1111-1111-1111-111111111111'::uuid,
+    jsonb_build_object('seed', 'allocate-seed')
+  from ids
+  where not exists (select 1 from public.deal_card where seller_so_number = 'ALLOC-SEED-04')
+  returning id
+),
+ws as (
+  insert into public.deal_workspace (deal_card_id, visibility, created_by)
+  select card.id, 'company_wide', '11111111-1111-1111-1111-111111111111'::uuid
+  from card
+  returning id
+),
+member_gl as (
+  insert into public.deal_member (deal_workspace_id, person_id, role, added_by_person_id)
+  select ws.id, '11111111-1111-1111-1111-111111111111'::uuid, 'owner', '11111111-1111-1111-1111-111111111111'::uuid
+  from ws
+  returning id
+),
+member_cp as (
+  insert into public.deal_member (deal_workspace_id, person_id, role, added_by_person_id)
+  select ws.id, (select id from auth.users where email = 'clara@rheinland.test'), 'owner',
+         '11111111-1111-1111-1111-111111111111'::uuid
+  from ws
+  returning id
+),
+thread as (
+  insert into public.chat_thread (relationship_id, type, deal_card_id)
+  select ids.rel_id, 'deal', card.id
+  from ids, card
+  returning id
+)
+insert into public.deal_line_item (
+  deal_card_id, version, product_id, product_name, quantity, unit, unit_price,
+  currency, sort_order, batch_id, batch_number, thc_percent, cbd_percent,
+  allocation_status, allocation_locked_at)
+select card.id, 1, p.id, p.name, v.qty, 'g', v.price, 'EUR', v.sort_order,
+       pb.id, pb.batch_number, pb.thc_percent, pb.cbd_percent, v.alloc,
+       case when v.locked_days is null then null else now() - (v.locked_days || ' days')::interval end
+from card, ws, member_gl, member_cp, thread
+cross join (values
+  ('AUR-1A'::text, 'GL-24-0001'::varchar(60), 4000::numeric, 7.20::numeric, 0::smallint, 'supply'::text, 5::int),
+  ('AUR-1C'::text, 'GL-24-0006'::varchar(60), 2000::numeric, 3.80::numeric, 1::smallint, 'supply'::text, 5::int),
+  ('AUR-1D'::text, 'GL-24-0008'::varchar(60),  900::numeric, 5.20::numeric, 2::smallint, 'supply'::text, 5::int)
+) as v(code, batch_number, qty, price, sort_order, alloc, locked_days)
+join public.product p
+  on p.company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid
+ and p.supplier_product_code = v.code and p.deleted_at is null
+join public.product_batch pb
+  on pb.company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid
+ and pb.batch_number = v.batch_number and pb.deleted_at is null;
+
+-- ALLOC-SEED-05 — GreenLeaf <-> StonePharm, offer, amended, hello_sello, 1 decline(locked) + 1 pending
+with ids as (
+  select
+    (select r.id from public.relationship r
+       where r.metadata->>'seed' = 'demo-2d'
+         and r.company_a_id = least('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid, 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'::uuid)
+         and r.company_b_id = greatest('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid, 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'::uuid)
+    ) as rel_id
+),
+card as (
+  insert into public.deal_card (
+    relationship_id, version, status, deal_type, initiating_company_id,
+    currency, ordered_via, ticket_status, seller_so_number, created_by, updated_by, metadata)
+  select ids.rel_id, 1, 'amended', 'offer', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid,
+    'EUR', 'hello_sello', null, 'ALLOC-SEED-05',
+    '11111111-1111-1111-1111-111111111111'::uuid, '11111111-1111-1111-1111-111111111111'::uuid,
+    jsonb_build_object('seed', 'allocate-seed')
+  from ids
+  where not exists (select 1 from public.deal_card where seller_so_number = 'ALLOC-SEED-05')
+  returning id
+),
+ws as (
+  insert into public.deal_workspace (deal_card_id, visibility, created_by)
+  select card.id, 'company_wide', '11111111-1111-1111-1111-111111111111'::uuid
+  from card
+  returning id
+),
+member_gl as (
+  insert into public.deal_member (deal_workspace_id, person_id, role, added_by_person_id)
+  select ws.id, '11111111-1111-1111-1111-111111111111'::uuid, 'owner', '11111111-1111-1111-1111-111111111111'::uuid
+  from ws
+  returning id
+),
+member_cp as (
+  insert into public.deal_member (deal_workspace_id, person_id, role, added_by_person_id)
+  select ws.id, '22222222-2222-2222-2222-222222222222'::uuid, 'owner', '11111111-1111-1111-1111-111111111111'::uuid
+  from ws
+  returning id
+),
+thread as (
+  insert into public.chat_thread (relationship_id, type, deal_card_id)
+  select ids.rel_id, 'deal', card.id
+  from ids, card
+  returning id
+)
+insert into public.deal_line_item (
+  deal_card_id, version, product_id, product_name, quantity, unit, unit_price,
+  currency, sort_order, batch_id, batch_number, thc_percent, cbd_percent,
+  allocation_status, allocation_locked_at)
+select card.id, 1, p.id, p.name, v.qty, 'g', v.price, 'EUR', v.sort_order,
+       pb.id, pb.batch_number, pb.thc_percent, pb.cbd_percent, v.alloc,
+       case when v.locked_days is null then null else now() - (v.locked_days || ' days')::interval end
+from card, ws, member_gl, member_cp, thread
+cross join (values
+  ('AUR-1B'::text, 'GL-24-0003'::varchar(60), 1000::numeric, 6.90::numeric, 0::smallint, 'decline'::text, 1::int),
+  ('AUR-1C'::text, 'GL-24-0005'::varchar(60), 1800::numeric, 4.20::numeric, 1::smallint, 'pending'::text, null::int)
+) as v(code, batch_number, qty, price, sort_order, alloc, locked_days)
+join public.product p
+  on p.company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid
+ and p.supplier_product_code = v.code and p.deleted_at is null
+join public.product_batch pb
+  on pb.company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid
+ and pb.batch_number = v.batch_number and pb.deleted_at is null;
+
+-- ALLOC-SEED-06 — GreenLeaf <-> Rheinland, order, confirmed, fax, ticket open, all pending
+with ids as (
+  select
+    (select id from public.company where name = 'Rheinland Apotheke GmbH') as cp,
+    (select id from auth.users where email = 'clara@rheinland.test') as cp_founder,
+    (select r.id from public.relationship r
+       where r.metadata->>'seed' = 'demo-2d'
+         and r.company_a_id = least('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid,
+                                     (select id from public.company where name = 'Rheinland Apotheke GmbH'))
+         and r.company_b_id = greatest('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid,
+                                        (select id from public.company where name = 'Rheinland Apotheke GmbH'))
+    ) as rel_id
+),
+card as (
+  insert into public.deal_card (
+    relationship_id, version, status, deal_type, initiating_company_id,
+    currency, ordered_via, ticket_status, seller_so_number, created_by, updated_by, metadata)
+  select ids.rel_id, 1, 'confirmed', 'order', ids.cp,
+    'EUR', 'fax', 'open', 'ALLOC-SEED-06',
+    ids.cp_founder, ids.cp_founder,
+    jsonb_build_object('seed', 'allocate-seed')
+  from ids
+  where not exists (select 1 from public.deal_card where seller_so_number = 'ALLOC-SEED-06')
+  returning id
+),
+ws as (
+  insert into public.deal_workspace (deal_card_id, visibility, created_by)
+  select card.id, 'company_wide', ids.cp_founder
+  from card, ids
+  returning id
+),
+member_gl as (
+  insert into public.deal_member (deal_workspace_id, person_id, role, added_by_person_id)
+  select ws.id, '11111111-1111-1111-1111-111111111111'::uuid, 'owner', ids.cp_founder
+  from ws, ids
+  returning id
+),
+member_cp as (
+  insert into public.deal_member (deal_workspace_id, person_id, role, added_by_person_id)
+  select ws.id, ids.cp_founder, 'owner', ids.cp_founder
+  from ws, ids
+  returning id
+),
+thread as (
+  insert into public.chat_thread (relationship_id, type, deal_card_id)
+  select ids.rel_id, 'deal', card.id
+  from ids, card
+  returning id
+)
+insert into public.deal_line_item (
+  deal_card_id, version, product_id, product_name, quantity, unit, unit_price,
+  currency, sort_order, batch_id, batch_number, thc_percent, cbd_percent,
+  allocation_status, allocation_locked_at)
+select card.id, 1, p.id, p.name, v.qty, 'g', v.price, 'EUR', v.sort_order,
+       pb.id, pb.batch_number, pb.thc_percent, pb.cbd_percent, v.alloc,
+       case when v.locked_days is null then null else now() - (v.locked_days || ' days')::interval end
+from card, ws, member_gl, member_cp, thread
+cross join (values
+  ('AUR-1D'::text, 'GL-24-0007'::varchar(60),  700::numeric, 5.40::numeric, 0::smallint, 'pending'::text, null::int),
+  ('AUR-1A'::text, 'GL-24-0002'::varchar(60), 1600::numeric, 7.60::numeric, 1::smallint, 'pending'::text, null::int)
+) as v(code, batch_number, qty, price, sort_order, alloc, locked_days)
+join public.product p
+  on p.company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid
+ and p.supplier_product_code = v.code and p.deleted_at is null
+join public.product_batch pb
+  on pb.company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid
+ and pb.batch_number = v.batch_number and pb.deleted_at is null;
+
+-- ALLOC-SEED-07 — GreenLeaf <-> StonePharm, offer, done, email, ticket closed, all supply (locked)
+with ids as (
+  select
+    (select r.id from public.relationship r
+       where r.metadata->>'seed' = 'demo-2d'
+         and r.company_a_id = least('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid, 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'::uuid)
+         and r.company_b_id = greatest('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid, 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'::uuid)
+    ) as rel_id
+),
+card as (
+  insert into public.deal_card (
+    relationship_id, version, status, deal_type, initiating_company_id,
+    currency, ordered_via, ticket_status, seller_so_number, created_by, updated_by, metadata)
+  select ids.rel_id, 1, 'done', 'offer', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid,
+    'EUR', 'email', 'closed', 'ALLOC-SEED-07',
+    '11111111-1111-1111-1111-111111111111'::uuid, '11111111-1111-1111-1111-111111111111'::uuid,
+    jsonb_build_object('seed', 'allocate-seed')
+  from ids
+  where not exists (select 1 from public.deal_card where seller_so_number = 'ALLOC-SEED-07')
+  returning id
+),
+ws as (
+  insert into public.deal_workspace (deal_card_id, visibility, created_by)
+  select card.id, 'company_wide', '11111111-1111-1111-1111-111111111111'::uuid
+  from card
+  returning id
+),
+member_gl as (
+  insert into public.deal_member (deal_workspace_id, person_id, role, added_by_person_id)
+  select ws.id, '11111111-1111-1111-1111-111111111111'::uuid, 'owner', '11111111-1111-1111-1111-111111111111'::uuid
+  from ws
+  returning id
+),
+member_cp as (
+  insert into public.deal_member (deal_workspace_id, person_id, role, added_by_person_id)
+  select ws.id, '22222222-2222-2222-2222-222222222222'::uuid, 'owner', '11111111-1111-1111-1111-111111111111'::uuid
+  from ws
+  returning id
+),
+thread as (
+  insert into public.chat_thread (relationship_id, type, deal_card_id)
+  select ids.rel_id, 'deal', card.id
+  from ids, card
+  returning id
+)
+insert into public.deal_line_item (
+  deal_card_id, version, product_id, product_name, quantity, unit, unit_price,
+  currency, sort_order, batch_id, batch_number, thc_percent, cbd_percent,
+  allocation_status, allocation_locked_at)
+select card.id, 1, p.id, p.name, v.qty, 'g', v.price, 'EUR', v.sort_order,
+       pb.id, pb.batch_number, pb.thc_percent, pb.cbd_percent, v.alloc,
+       case when v.locked_days is null then null else now() - (v.locked_days || ' days')::interval end
+from card, ws, member_gl, member_cp, thread
+cross join (values
+  ('AUR-1B'::text, 'GL-24-0004'::varchar(60), 2200::numeric, 6.20::numeric, 0::smallint, 'supply'::text, 2::int),
+  ('AUR-1C'::text, 'GL-24-0006'::varchar(60), 1300::numeric, 3.90::numeric, 1::smallint, 'supply'::text, 2::int)
+) as v(code, batch_number, qty, price, sort_order, alloc, locked_days)
+join public.product p
+  on p.company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid
+ and p.supplier_product_code = v.code and p.deleted_at is null
+join public.product_batch pb
+  on pb.company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid
+ and pb.batch_number = v.batch_number and pb.deleted_at is null;
 
 -- ----------------------------------------------------------------------------
 -- 6. RBAC (Phase 11): seed each company's founder as its Superadmin.

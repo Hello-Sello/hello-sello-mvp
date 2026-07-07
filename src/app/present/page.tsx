@@ -1,5 +1,5 @@
 import { getMyShop } from "@/modules/catalog/shop";
-import { getCompanyProfile } from "@/modules/companies";
+import { canEditCompanyProfile } from "@/app/account/actions";
 import { SurfacePlaceholder } from "@/shared/ui/SurfacePlaceholder";
 import { ShopView } from "./ShopView";
 
@@ -9,7 +9,7 @@ import { ShopView } from "./ShopView";
  * for now an empty shop shows the first-run upload prompt.
  */
 export default async function PresentPage() {
-  const [shop, company] = await Promise.all([getMyShop(), getCompanyProfile()]);
+  const shop = await getMyShop();
   if (!shop) {
     return (
       <SurfacePlaceholder
@@ -18,5 +18,9 @@ export default async function PresentPage() {
       />
     );
   }
-  return <ShopView shop={shop} company={company} />;
+  // Only a company Superadmin may edit branding (D-04) — the logo save writer is
+  // Superadmin-gated, so gate the affordance too (a Member manages the shop chrome
+  // but never sees a logo control whose Save would deny).
+  const canEditBranding = await canEditCompanyProfile();
+  return <ShopView shop={shop} canEditBranding={canEditBranding} />;
 }

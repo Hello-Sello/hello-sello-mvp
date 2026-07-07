@@ -1,18 +1,33 @@
 /**
- * Phase 7 — Present manage E2E spec (07-01 Wave-0 RED scaffold). UX-04.
+ * Phase 7 — Present manage E2E (UX-04). The seller fully edits a product from the
+ * card: rename, soft-delete, manage back-of-card media (upload image, paste a
+ * video link, upload a COA PDF), and download a single file.
  *
- * Behavior: the seller fully edits a product — rename, delete, reorder/delete/
- * upload images, paste a video link, download a single image. Download-ALL is a
- * human-UAT item (sequential/zip download is hard to assert headless) — noted
- * below, NOT asserted.
+ * Aligned to the built DOM (07-04): edit mode is entered via the top "Manage
+ * shop" button (edit is a shop-wide state, not a per-card toggle); the card BACK
+ * ("Docs & media") is the MediaManager. The seeded GreenLeaf catalogue
+ * (alice@greenleaf.test) has products but NO product images, so the upload cases
+ * start from an empty media grid.
  *
- * RED until 07-04/05 (full product edit + media). The rename/delete/video-link
- * actions and the COA/doc/video UI do not exist yet (image add/remove/reorder
- * exist in manage.ts but not the rebuilt card edit UI). Each case is
- * test.fixme() so it registers without executing. Drop the `.fixme` per case as
- * the edit plan lands it.
+ * ⚠️ These cases MUTATE the local seed (rename/delete/upload persist). Re-run
+ * `supabase db reset` to restore the seed if needed.
+ *
+ * NOT asserted here (human-UAT, per the phase checklist): "Download all"
+ * (multi-file timing is unreliable headless) and the two native HTML5
+ * drag-and-drop flows — media tile drag-reorder and dragging a card into another
+ * location group — because Playwright cannot faithfully drive native DnD
+ * (dataTransfer) events. The move persists via `setProductLocation` and reorder
+ * via `setProductImageOrder`; both are exercised by the UI + verified manually.
  */
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Page, type Locator } from "@playwright/test";
+
+// Every case here signs in as the SAME alice@greenleaf.test shop and MUTATES the
+// shared seed (rename / soft-delete / upload persist). Under the config's
+// `fullyParallel`, the soft-delete case races the media-write cases — deleting a
+// product out from under another test's `.first()` card. Pin the file to serial
+// so the whole spec is deterministic (each case runs start-to-finish before the
+// next); re-run `supabase db reset` to restore the seed between full runs.
+test.describe.configure({ mode: "serial" });
 
 const EMAIL = "alice@greenleaf.test";
 const PASSWORD = "password123";
@@ -25,72 +40,148 @@ async function signIn(page: Page) {
   await page.waitForURL((url) => !url.pathname.startsWith("/login"));
 }
 
-// RED until 07-04 — product rename does not exist yet.
-test.fixme("UX-04 · seller renames a product", async ({ page }) => {
+/** Enter shop-wide edit mode (the top "Manage shop" button). */
+async function manageShop(page: Page) {
   await signIn(page);
   await page.goto("/present");
+  await expect(page.getByTestId("product-card").first()).toBeVisible();
+  await page.getByRole("button", { name: /manage shop/i }).click();
+}
+
+/** Flip a card to its "Docs & media" back face. */
+async function flipToBack(card: Locator) {
+  await card.getByRole("button", { name: /docs.*media/i }).click();
+}
+
+// A tiny valid 1×1 PNG / minimal PDF in-memory, so uploads don't touch disk.
+const PNG_1x1 = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+  "base64",
+);
+const PDF_MIN = Buffer.from(
+  "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[]/Count 0>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF",
+  "utf8",
+);
+
+test("UX-04 · seller renames a product (persists under the one Save)", async ({ page }) => {
+  await manageShop(page);
   const card = page.getByTestId("product-card").first();
-  await card.getByRole("button", { name: /edit/i }).click();
-  await card.getByLabel(/name/i).fill("Renamed by E2E");
-  await card.getByRole("button", { name: /save/i }).click();
-  await expect(card.getByText("Renamed by E2E")).toBeVisible();
+  await card.getByLabel(/product name/i).fill("Renamed by E2E");
+  // Rename is now BATCHED under the one pink Save (F-02) — there is no per-card
+  // "Save name" button; the name flushes with every other pending edit on Save.
+  await page.getByTestId("save-changes-btn").click();
+  await expect(page.getByTestId("shop-surface")).toHaveAttribute("data-edit", "off");
+  await page.reload();
+  await expect(page.getByText("Renamed by E2E").first()).toBeVisible();
 });
 
-// RED until 07-04 — product delete (soft delete) does not exist yet.
-test.fixme("UX-04 · seller deletes a product", async ({ page }) => {
-  await signIn(page);
-  await page.goto("/present");
+test("UX-04 · seller soft-deletes a product", async ({ page }) => {
+  page.on("dialog", (d) => d.accept()); // accept the delete confirm
+  await manageShop(page);
   const before = await page.getByTestId("product-card").count();
-  const card = page.getByTestId("product-card").first();
-  await card.getByRole("button", { name: /edit/i }).click();
-  await card.getByRole("button", { name: /delete/i }).click();
-  await page.getByRole("button", { name: /confirm|delete/i }).last().click();
+  await page.getByTestId("product-card").first().getByRole("button", { name: /delete product/i }).click();
   await expect(page.getByTestId("product-card")).toHaveCount(before - 1);
 });
 
-// RED until 07-04 — image reorder/delete/upload on the rebuilt card.
-test.fixme("UX-04 · seller reorders / deletes / uploads images", async ({ page }) => {
-  await signIn(page);
-  await page.goto("/present");
+test("UX-04 · seller uploads an image to the card back", async ({ page }) => {
+  await manageShop(page);
   const card = page.getByTestId("product-card").first();
-  await card.getByRole("button", { name: /edit/i }).click();
-  // upload a tiny in-memory image, then it appears as a new gallery slide.
-  await card.getByLabel(/upload image/i).setInputFiles({
-    name: "test.png",
+  await flipToBack(card);
+  await card.getByLabel(/product image file/i).setInputFiles({
+    name: "shot.png",
     mimeType: "image/png",
-    buffer: Buffer.from(
-      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
-      "base64",
-    ),
+    buffer: PNG_1x1,
   });
-  await expect(card.getByTestId("gallery-thumb")).toHaveCount(2);
+  // The uploaded photo appears as a tile with its own download control.
+  await expect(card.getByRole("button", { name: /download image/i }).first()).toBeVisible();
 });
 
-// RED until 07-04/05 — pasting an external video link (D-08).
-test.fixme("UX-04 · seller pastes a video link", async ({ page }) => {
-  await signIn(page);
-  await page.goto("/present");
+test("UX-04 · seller pastes a video link", async ({ page }) => {
+  await manageShop(page);
   const card = page.getByTestId("product-card").first();
-  await card.getByRole("button", { name: /edit/i }).click();
-  await card.getByLabel(/video link/i).fill("https://www.loom.com/share/abc123");
-  await card.getByRole("button", { name: /save/i }).click();
-  await card.getByRole("button", { name: /flip/i }).click();
-  await expect(card.getByRole("link", { name: /video/i })).toBeVisible();
+  await flipToBack(card);
+  await card.getByRole("textbox", { name: "Video link" }).fill("https://www.loom.com/share/abc123");
+  await card.getByRole("button", { name: "Add video link" }).click();
+  await expect(card.getByRole("link", { name: /open video/i })).toBeVisible();
 });
 
-// RED until 07-04 — single-image download.
-test.fixme("UX-04 · seller downloads a single image", async ({ page }) => {
-  await signIn(page);
-  await page.goto("/present");
+test("UX-04 · Documents folders stay hidden until they hold a file (Cluster G)", async ({ page }) => {
+  await manageShop(page);
   const card = page.getByTestId("product-card").first();
-  await card.getByRole("button", { name: /edit/i }).click();
+  await flipToBack(card);
+  // At this point in the shared-seed run order this product has 0 COAs and 0
+  // custom docs — neither folder shell (nor its "No files yet." placeholder)
+  // should render below the [Upload document] / [Download all] header.
+  await expect(card.getByRole("button", { name: /certificates of analysis/i })).toHaveCount(0);
+  await expect(card.getByRole("button", { name: /custom uploads/i })).toHaveCount(0);
+  await expect(card.getByText("No files yet.")).toHaveCount(0);
+
+  // Upload one COA — only the COA folder should appear; Documents (custom) stays hidden.
+  await card.getByRole("button", { name: /upload document/i }).click();
+  const modal = page.getByRole("dialog", { name: /upload document/i });
+  await modal.getByLabel(/document file/i).setInputFiles({
+    name: "empty-state-test.pdf",
+    mimeType: "application/pdf",
+    buffer: PDF_MIN,
+  });
+  await modal.getByRole("button", { name: "Upload", exact: true }).click();
+  await expect(card.getByRole("button", { name: /certificates of analysis/i })).toBeVisible();
+  await expect(card.getByRole("button", { name: /custom uploads/i })).toHaveCount(0);
+});
+
+test("UX-04 · seller uploads a COA via the Upload-document popup", async ({ page }) => {
+  await manageShop(page);
+  const card = page.getByTestId("product-card").first();
+  await flipToBack(card);
+  // F-03: ONE [Upload document] button opens the type-first popup; COA is the
+  // default type and shows only a file drop (no name field). Scope to the dialog
+  // so the modal's "Upload" isn't confused with the Media area's "Upload" pill.
+  await card.getByRole("button", { name: /upload document/i }).click();
+  const modal = page.getByRole("dialog", { name: /upload document/i });
+  await modal.getByLabel(/document file/i).setInputFiles({
+    name: "coa-test.pdf",
+    mimeType: "application/pdf",
+    buffer: PDF_MIN,
+  });
+  await modal.getByRole("button", { name: "Upload", exact: true }).click();
+  // The COA folder row is labelled with the filename (minus .pdf).
+  await expect(card.getByText("coa-test", { exact: false }).first()).toBeVisible();
+});
+
+test("UX-04 · seller uploads a custom document with a name", async ({ page }) => {
+  await manageShop(page);
+  const card = page.getByTestId("product-card").first();
+  await flipToBack(card);
+  await card.getByRole("button", { name: /upload document/i }).click();
+  const modal = page.getByRole("dialog", { name: /upload document/i });
+  // Switching the type to "Custom document" reveals the Name field (F-03).
+  await modal.getByLabel(/document type/i).selectOption({ label: "Custom document" });
+  await modal.getByLabel(/document name/i).fill("Price sheet 2026");
+  await modal.getByLabel(/document file/i).setInputFiles({
+    name: "sheet.pdf",
+    mimeType: "application/pdf",
+    buffer: PDF_MIN,
+  });
+  await modal.getByRole("button", { name: "Upload", exact: true }).click();
+  // The custom name persists (reuses product_media.label) and shows in the row.
+  await expect(card.getByText("Price sheet 2026", { exact: false }).first()).toBeVisible();
+});
+
+test("UX-04 · seller downloads a single media file", async ({ page }) => {
+  await manageShop(page);
+  const card = page.getByTestId("product-card").first();
+  await flipToBack(card);
+  // Upload one image, then download it (the seed has no images to start from).
+  await card.getByLabel(/product image file/i).setInputFiles({
+    name: "shot.png",
+    mimeType: "image/png",
+    buffer: PNG_1x1,
+  });
+  const dlBtn = card.getByRole("button", { name: /download image/i }).first();
+  await expect(dlBtn).toBeVisible();
   const [download] = await Promise.all([
     page.waitForEvent("download"),
-    card.getByRole("button", { name: /download image/i }).first().click(),
+    dlBtn.click(),
   ]);
   expect(download.suggestedFilename()).toBeTruthy();
 });
-
-// NOTE (human-UAT, NOT asserted headless): "Download all" (sequential or zip per
-// D-11, Claude's discretion) is verified manually — multi-file download timing is
-// unreliable in headless Chromium. Tracked in the phase human-UAT checklist.

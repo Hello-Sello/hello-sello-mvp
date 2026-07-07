@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Deal Basket — slide-over drawer (prototype)</title>
+<!--
+  THROWAWAY PROTOTYPE — expanded Phase 7 (Deal Basket). Variant A only (chosen).
+  Compact slide-over drawer: basket icon (top-right) → right drawer. Sellers are
+  COLLAPSIBLE accordions (click the seller name to open/close its products). One
+  slim per-seller note. Real round +/- steppers (mirror .pc-stepper from the app).
+  Shows: grouped-by-seller · public price vs "seller to price" · no-batch line ·
+  "Coming soon" pre-sell · per-seller "Offer deal card". Tokens mirror globals.css.
+-->
+<style>
+  :root{
+    --brand:#e30b5d; --brand-soft:#ffb7d5; --brand-deep:#7a1638;
+    --ink:rgba(20,10,16,.92); --ink-muted:rgba(20,10,16,.55); --ink-faint:rgba(20,10,16,.40);
+    --line:rgba(20,10,16,.08); --line-strong:rgba(20,10,16,.13);
+    --success:#34b233; --info:#6c7bd9; --amber:#c77700;
+    --bg-from:#fff; --bg-to:#fff1f7;
+    --glass-bg:rgba(255,255,255,.64); --glass-bg-strong:rgba(255,255,255,.93);
+    --glass-border:rgba(255,255,255,.7);
+    --shadow-sm:0 1px 2px rgba(20,10,16,.04),0 2px 6px -1px rgba(118,0,45,.06);
+    --shadow-md:0 1px 2px rgba(20,10,16,.04),0 5px 12px -3px rgba(118,0,45,.07),0 12px 26px -8px rgba(118,0,45,.08);
+    --shadow-lg:0 1px 2px rgba(20,10,16,.05),0 8px 18px -6px rgba(118,0,45,.09),0 18px 40px -12px rgba(118,0,45,.11),0 30px 64px -20px rgba(118,0,45,.10);
+    --ease:cubic-bezier(.4,.15,.2,1); --ease-out:cubic-bezier(0,0,.2,1);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{height:100vh;display:flex;flex-direction:column;overflow:hidden;color:var(--ink);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased;
+    background:radial-gradient(60rem 60rem at 10% -12%,rgba(255,183,213,.5),transparent 60%),radial-gradient(46rem 46rem at 108% 6%,rgba(227,11,93,.08),transparent 55%),linear-gradient(160deg,var(--bg-from),var(--bg-to));
+    background-attachment:fixed;}
+  .glass{background:var(--glass-bg);backdrop-filter:blur(20px) saturate(180%);-webkit-backdrop-filter:blur(20px) saturate(180%);border:1px solid var(--glass-border);box-shadow:var(--shadow-md)}
+  svg{display:block}
+  .ic{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+  .ic.sm{width:15px;height:15px}.ic.xs{width:13px;height:13px}
+  button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+  textarea,input{font-family:inherit}
+
+  /* shell */
+  .app{flex:1;min-height:0;display:flex;overflow:hidden}
+  .rail{margin:14px 0 14px 14px;width:72px;flex:0 0 72px;display:flex;flex-direction:column;gap:4px;border-radius:22px;padding:10px}
+  .wordmark{display:flex;flex-direction:column;align-items:center;gap:3px;margin:4px 0 14px}
+  .wordmark .badge{width:32px;height:32px;border-radius:10px;background:var(--brand);color:#fff;display:grid;place-items:center;font-weight:700;font-size:12px}
+  .wordmark small{font-size:8px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint)}
+  .navitem{position:relative;display:flex;flex-direction:column;align-items:center;gap:5px;border-radius:15px;padding:10px 4px;font-size:9.5px;font-weight:600;color:var(--ink-muted)}
+  .navitem.active{background:rgba(227,11,93,.09);color:var(--brand)}
+  .navitem.active .edge{position:absolute;left:0;top:50%;transform:translateY(-50%);height:26px;width:3px;border-radius:0 4px 4px 0;background:var(--brand)}
+  .rail .acct{margin-top:auto;display:flex;justify-content:center;padding-top:12px}
+  .avatar{width:38px;height:38px;border-radius:999px;background:linear-gradient(135deg,#ffb7d5,#e30b5d);color:#fff;display:grid;place-items:center;font-weight:700;font-size:13px;box-shadow:0 0 0 2px #fff,var(--shadow-sm)}
+
+  .col{display:flex;min-width:0;flex:1;flex-direction:column}
+  .topbar{margin:14px 14px 0;display:flex;align-items:center;gap:10px;border-radius:16px;padding:9px 14px;position:relative;z-index:30}
+  .brandname{display:flex;align-items:center;gap:9px;font-weight:600;font-size:13.5px}
+  .brandname .lg{width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#13241c,#1d3c2b);color:#fff;display:grid;place-items:center;font-size:13px}
+  .tbspace{flex:1}
+  .tbicon{position:relative;width:38px;height:38px;border-radius:999px;background:rgba(255,255,255,.6);display:grid;place-items:center;transition:all .18s var(--ease-out)}
+  .tbicon:hover{background:#fff;box-shadow:var(--shadow-sm)}
+  .tbicon.on{background:var(--brand);color:#fff}
+  .badge-dot{position:absolute;top:-3px;right:-3px;min-width:17px;height:17px;border-radius:999px;background:var(--brand);color:#fff;font-size:9.5px;font-weight:700;display:grid;place-items:center;padding:0 4px;box-shadow:0 0 0 2px #fff}
+  .tbicon.on .badge-dot{background:#fff;color:var(--brand)}
+  main{min-height:0;flex:1;overflow:auto;padding:16px;position:relative}
+
+  /* faint shop behind, for context */
+  .shopfaux{display:grid;gap:13px;grid-template-columns:repeat(4,1fr);opacity:.42;filter:saturate(.8)}
+  @media(max-width:1100px){.shopfaux{grid-template-columns:repeat(3,1fr)}}
+  .fcard{border-radius:16px;overflow:hidden;background:#fff;box-shadow:var(--shadow-sm);height:210px;display:flex;flex-direction:column}
+  .fcard .ph{height:120px;background:linear-gradient(135deg,#1d3c2b,#13241c)}
+  .fcard .bd{padding:10px 12px}.fcard h4{margin:0;font-size:13px;font-weight:600}.fcard p{margin:3px 0 0;font-size:11px;color:var(--ink-muted)}
+
+  /* ---- drawer ---- */
+  .scrim{position:absolute;inset:0;background:rgba(20,10,16,.22);backdrop-filter:blur(1.5px);z-index:40;opacity:0;pointer-events:none;transition:opacity .25s}
+  .scrim.show{opacity:1;pointer-events:auto}
+  .drawer{position:absolute;top:0;right:0;bottom:0;width:392px;max-width:92vw;z-index:50;display:flex;flex-direction:column;
+    border-radius:20px 0 0 20px;transform:translateX(103%);transition:transform .3s var(--ease);
+    background:var(--glass-bg-strong);backdrop-filter:blur(26px) saturate(180%);-webkit-backdrop-filter:blur(26px) saturate(180%);box-shadow:var(--shadow-lg)}
+  .drawer.show{transform:none}
+  .dhd{display:flex;align-items:center;gap:9px;padding:16px 18px 13px;border-bottom:1px solid var(--line)}
+  .dhd h3{margin:0;font-size:15px;font-weight:600}
+  .dhd .meta{font-size:11.5px;color:var(--ink-muted);font-weight:500}
+  .dhd .x{margin-left:auto;width:30px;height:30px;border-radius:999px;display:grid;place-items:center;color:var(--ink-muted)}
+  .dhd .x:hover{background:rgba(20,10,16,.05)}
+  .dbody{flex:1;overflow:auto;padding:0 18px}
+
+  /* seller accordion */
+  .seller{border-bottom:1px solid var(--line)}
+  .shead{display:flex;align-items:center;gap:10px;width:100%;padding:13px 0;text-align:left}
+  .slogo{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;font-size:15px;flex:0 0 30px;background:rgba(227,11,93,.08)}
+  .sname{font-size:13.5px;font-weight:600;line-height:1.2}
+  .sloc{font-size:11px;color:var(--ink-muted);display:flex;align-items:center;gap:4px;margin-top:1px}
+  .scount{font-size:11px;font-weight:700;color:var(--ink-muted);background:rgba(20,10,16,.06);border-radius:999px;min-width:19px;height:19px;display:grid;place-items:center;padding:0 6px}
+  .chev{color:var(--ink-faint);transition:transform .22s var(--ease)}
+  .seller.open .chev{transform:rotate(180deg)}
+  .sbody{overflow:hidden;max-height:0;transition:max-height .28s var(--ease)}
+  .seller.open .sbody{max-height:680px}
+  .sinner{padding:0 0 14px}
+
+  /* product line — tight, hairline-separated, no boxes */
+  .line{display:flex;align-items:center;gap:11px;padding:9px 0;border-top:1px solid var(--line)}
+  .line .thumb{width:34px;height:34px;border-radius:8px;flex:0 0 34px;background:linear-gradient(135deg,#1d3c2b,#13241c)}
+  .line .info{flex:1;min-width:0}
+  .line .nm{font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px}
+  .line .sub{font-size:10.5px;color:var(--ink-muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .badge{display:inline-flex;align-items:center;gap:3px;border-radius:999px;font-size:9px;font-weight:700;letter-spacing:.02em;padding:2px 6px;text-transform:uppercase;white-space:nowrap}
+  .badge.soon{background:rgba(199,119,0,.13);color:var(--amber)}
+  .badge.nobatch{background:rgba(108,123,217,.14);color:var(--info)}
+
+  /* real round stepper (mirrors .pc-stepper) */
+  .pc-stepper{display:flex;align-items:center;border-radius:999px;background:#fff;box-shadow:inset 0 0 0 1px var(--line-strong);flex:0 0 auto}
+  .pc-stepper button{width:26px;height:26px;border-radius:999px;color:var(--brand-deep);display:grid;place-items:center}
+  .pc-stepper button:hover{background:rgba(227,11,93,.08)}
+  .pc-stepper .pc-q{min-width:46px;text-align:center;font-weight:700;font-size:12px;font-variant-numeric:tabular-nums}
+  .price{font-size:12.5px;font-weight:700;text-align:right;min-width:58px;line-height:1.15}
+  .price small{display:block;font-weight:500;font-size:9.5px;color:var(--ink-faint);margin-top:1px}
+  .price .req{font-weight:600;color:var(--ink-muted);font-size:11px}
+
+  /* one slim note line */
+  .noteline{margin-top:11px}
+  .theirnote{font-size:11px;color:var(--ink-muted);font-style:italic;margin-bottom:6px;display:flex;gap:5px}
+  .theirnote b{font-style:normal;font-weight:600;color:var(--ink-faint)}
+  .ninput{display:flex;align-items:center;gap:8px;border-radius:9px;background:rgba(255,255,255,.7);box-shadow:inset 0 0 0 1px var(--line-strong);padding:0 10px;height:34px}
+  .ninput svg{color:var(--brand-deep);flex:0 0 auto}
+  .ninput input{flex:1;border:none;background:transparent;font-size:12px;outline:none;color:var(--ink)}
+  .ninput input::placeholder{color:var(--ink-faint)}
+
+  .sfoot{display:flex;align-items:center;gap:10px;margin-top:12px}
+  .sfoot .sub2{font-size:11px;color:var(--ink-muted)}
+  .sfoot .sub2 b{color:var(--ink);font-size:13px;font-weight:700}
+  .sfoot .grow{flex:1}
+  .btn{display:inline-flex;align-items:center;gap:7px;border-radius:10px;padding:9px 14px;font-size:12.5px;font-weight:700;transition:all .16s var(--ease-out)}
+  .btn.brand{background:var(--brand);color:#fff;box-shadow:var(--shadow-sm)}
+  .btn.brand:hover{background:var(--brand-deep)}
+  .sent{display:inline-flex;align-items:center;gap:6px;color:var(--success);font-size:12px;font-weight:700}
+
+  .dfoot{padding:13px 18px;border-top:1px solid var(--line);display:flex;align-items:center;gap:10px}
+  .dfoot .lbl{font-size:11px;color:var(--ink-muted)}.dfoot .lbl b{color:var(--ink);font-weight:700}
+  .hint{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:200;background:rgba(20,10,16,.9);color:#fff;font-size:11.5px;font-weight:500;padding:7px 14px;border-radius:999px;box-shadow:0 8px 30px -6px rgba(0,0,0,.5)}
+  .hint b{color:var(--brand-soft)}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <aside class="rail glass">
+    <div class="wordmark"><div class="badge">HS</div><small>Sello</small></div>
+    <div class="navitem"><svg class="ic"><use href="#i-home"/></svg>Home</div>
+    <div class="navitem"><svg class="ic"><use href="#i-disc"/></svg>Discover</div>
+    <div class="navitem active"><span class="edge"></span><svg class="ic"><use href="#i-shop"/></svg>Present</div>
+    <div class="navitem"><svg class="ic"><use href="#i-chat"/></svg>Connect</div>
+    <div class="acct"><div class="avatar">M</div></div>
+  </aside>
+
+  <div class="col">
+    <header class="topbar glass">
+      <div class="brandname"><span class="lg">🌿</span> StonePharm GmbH</div>
+      <div class="tbspace"></div>
+      <button class="tbicon" title="Notifications"><svg class="ic"><use href="#i-bell"/></svg><span class="badge-dot">3</span></button>
+      <button class="tbicon on" id="basketBtn" title="Basket"><svg class="ic"><use href="#i-bag"/></svg><span class="badge-dot" id="basketCount">4</span></button>
+    </header>
+    <main>
+      <div id="shop"></div>
+      <div class="scrim" id="scrim"></div>
+      <aside class="drawer" id="drawer">
+        <div class="dhd"><svg class="ic sm"><use href="#i-bag"/></svg>
+          <h3>Your basket</h3><span class="meta" id="dmeta"></span>
+          <button class="x" id="closeBtn"><svg class="ic sm"><use href="#i-x"/></svg></button></div>
+        <div class="dbody" id="dbody"></div>
+        <div class="dfoot"><span class="lbl">One offer is sent <b>per shop</b></span></div>
+      </aside>
+    </main>
+  </div>
+</div>
+
+<div class="hint">Click a <b>shop name</b> to expand · click the <b>basket icon</b> to toggle the drawer</div>
+
+<svg width="0" height="0" style="position:absolute"><defs>
+  <g id="i-home"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></g>
+  <g id="i-disc"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></g>
+  <g id="i-shop"><path d="M4 9h16l-1 11H5z"/><path d="M9 9V6a3 3 0 016 0v3"/></g>
+  <g id="i-chat"><path d="M4 5h16v11H8l-4 4z"/></g>
+  <g id="i-bell"><path d="M6 9a6 6 0 1112 0c0 6 2 7 2 7H4s2-1 2-7"/><path d="M10 20a2 2 0 004 0"/></g>
+  <g id="i-bag"><path d="M6 8h12l-1 12H7z"/><path d="M9 8V6a3 3 0 016 0v2"/></g>
+  <g id="i-x"><path d="M6 6l12 12M18 6L6 18"/></g>
+  <g id="i-plus"><path d="M12 5v14M5 12h14"/></g>
+  <g id="i-minus"><path d="M5 12h14"/></g>
+  <g id="i-check"><path d="M5 12l5 5L20 6"/></g>
+  <g id="i-pin"><path d="M12 21s-7-6-7-11a7 7 0 0114 0c0 5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></g>
+  <g id="i-chev"><path d="M6 9l6 6 6-6"/></g>
+  <g id="i-edit"><path d="M4 20h4L19 9l-4-4L4 16z"/></g>
+  <g id="i-send"><path d="M4 12l16-7-7 16-2-7z"/></g>
+</defs></svg>
+
+<script>
+const sellers = [
+  { id:'gl', name:'GreenLeaf Cultivation', loc:'Germany', logo:'🌿', open:true,
+    myNote:'', theirNote:'Happy to discuss volume pricing on the Amnesia.',
+    items:[
+      {nm:'Amnesia Haze', cv:'Sativa', qty:500, unit:'g', step:50, price:4.50, batch:'GL-24-0001', meas:'22% THC', status:'live'},
+      {nm:'White Widow',  cv:'Hybrid', qty:200, unit:'g', step:50, price:null, batch:null,          meas:null,      status:'live'},
+      {nm:'Pink Kush',    cv:'Indica', qty:300, unit:'g', step:50, price:null, batch:null,          meas:null,      status:'soon'},
+    ]},
+  { id:'sp', name:'StonePharm UK', loc:'United Kingdom', logo:'⚗️', open:false,
+    myNote:'Need delivery before end of Q3.', theirNote:'',
+    items:[
+      {nm:'CBD Oil 10%', cv:'Extract', qty:100, unit:'mL', step:10, price:12.00, batch:'SP-24-0007', meas:'10% CBD', status:'live'},
+    ]},
+];
+const fmt = n => '€'+n.toFixed(2);
+const totalCount = () => sellers.reduce((a,s)=>a+s.items.length,0);
+const known = s => s.items.filter(i=>i.price!=null).reduce((a,i)=>a+i.price*i.qty,0);
+
+function lineRow(s,i,idx){
+  const badge = i.status==='soon' ? '<span class="badge soon">● Coming soon</span>'
+             : (i.batch==null ? '<span class="badge nobatch">No batch</span>' : '');
+  const meta = [i.cv, i.meas, i.batch].filter(Boolean).join(' · ');
+  const price = i.price!=null
+    ? `<div class="price">${fmt(i.price)}<small>/${i.unit} · public</small></div>`
+    : `<div class="price"><span class="req">Seller to price</span><small>request</small></div>`;
+  return `<div class="line">
+    <div class="thumb"></div>
+    <div class="info"><div class="nm">${i.nm} ${badge}</div><div class="sub">${meta}</div></div>
+    <div class="pc-stepper" data-s="${s.id}" data-i="${idx}">
+      <button data-d="-1"><svg class="ic xs"><use href="#i-minus"/></svg></button>
+      <span class="pc-q">${i.qty} ${i.unit}</span>
+      <button data-d="1"><svg class="ic xs"><use href="#i-plus"/></svg></button>
+    </div>${price}</div>`;
+}
+
+function render(){
+  document.getElementById('dmeta').textContent = `· ${sellers.length} shops`;
+  document.getElementById('basketCount').textContent = totalCount();
+  document.getElementById('dbody').innerHTML = sellers.map(s=>`
+    <div class="seller ${s.open?'open':''}" data-s="${s.id}">
+      <button class="shead" data-toggle="${s.id}">
+        <div class="slogo">${s.logo}</div>
+        <div style="flex:1"><div class="sname">${s.name}</div>
+          <div class="sloc"><svg class="ic xs"><use href="#i-pin"/></svg>${s.loc}</div></div>
+        <span class="scount">${s.items.length}</span>
+        <svg class="ic sm chev"><use href="#i-chev"/></svg>
+      </button>
+      <div class="sbody"><div class="sinner">
+        ${s.items.map((i,idx)=>lineRow(s,i,idx)).join('')}
+        <div class="noteline">
+          ${s.theirNote?`<div class="theirnote"><b>${s.name.split(' ')[0]}:</b> "${s.theirNote}"</div>`:''}
+          <div class="ninput"><svg class="ic xs"><use href="#i-edit"/></svg>
+            <input data-note="${s.id}" value="${s.myNote}" placeholder="Add your note (only you can edit)…"/></div>
+        </div>
+        <div class="sfoot">
+          <span class="sub2">Known subtotal <b>${fmt(known(s))}</b></span>
+          <span class="grow"></span>
+          <button class="btn brand send" data-send="${s.id}"><svg class="ic sm"><use href="#i-send"/></svg> Offer deal card</button>
+        </div>
+      </div></div>
+    </div>`).join('');
+  wire();
+}
+
+function wire(){
+  document.querySelectorAll('[data-toggle]').forEach(b=>b.onclick=()=>{
+    const s=sellers.find(x=>x.id===b.dataset.toggle); s.open=!s.open;
+    b.closest('.seller').classList.toggle('open',s.open);
+  });
+  document.querySelectorAll('.pc-stepper').forEach(st=>st.querySelectorAll('button').forEach(btn=>btn.onclick=()=>{
+    const s=sellers.find(x=>x.id===st.dataset.s); const it=s.items[+st.dataset.i];
+    it.qty=Math.max(0,it.qty+(+btn.dataset.d)*it.step);
+    st.querySelector('.pc-q').textContent=it.qty+' '+it.unit;
+  }));
+  document.querySelectorAll('input[data-note]').forEach(inp=>inp.oninput=()=>{
+    sellers.find(x=>x.id===inp.dataset.note).myNote=inp.value;
+  });
+  document.querySelectorAll('.send').forEach(b=>b.onclick=()=>{
+    b.outerHTML=`<span class="sent"><svg class="ic sm"><use href="#i-check"/></svg> Offer sent (prototype)</span>`;
+  });
+}
+
+// faint shop behind
+let fc=''; for(let k=0;k<8;k++) fc+=`<div class="fcard"><div class="ph"></div><div class="bd"><h4>Product ${k+1}</h4><p>Sativa · in stock</p></div></div>`;
+document.getElementById('shop').innerHTML=`<div class="shopfaux">${fc}</div>`;
+
+// drawer open/close
+const drawer=document.getElementById('drawer'), scrim=document.getElementById('scrim'), btn=document.getElementById('basketBtn');
+function open(){drawer.classList.add('show');scrim.classList.add('show');btn.classList.add('on');}
+function close(){drawer.classList.remove('show');scrim.classList.remove('show');btn.classList.remove('on');}
+btn.onclick=()=>drawer.classList.contains('show')?close():open();
+document.getElementById('closeBtn').onclick=close;
+scrim.onclick=close;
+
+render();
+open();
+</script>
+</body>
+</html>

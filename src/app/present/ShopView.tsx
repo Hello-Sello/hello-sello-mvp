@@ -3,32 +3,50 @@
 /**
  * The seller storefront, with an owner edit mode. /present is always the caller's
  * OWN shop (getMyShop), so "Manage shop" is always available here; the visitor
- * view (/present/[companyId]) comes later. Read layout = the locked prototype
- * (cover + 3 profile cards + dominance filters + product grid). Edit mode swaps
- * the profile cards for a form and reveals per-product controls (photo, price
- * visibility); products are added through the drawer.
+ * view (/present/[companyId]) comes later. Products render as the redesigned
+ * square 4-up grid, grouped under a per-location divider header, with a location
+ * dropdown that re-contexts the grid to one location. The card itself is the
+ * reusable ProductCard from the catalog module.
+ *
+ * The shop CHROME (07-05 + F-01) is fully in-place editable behind ONE "Manage
+ * shop" entry: the whole surface takes a calm grey wash (data-edit), PresentBanner
+ * (4:1 MVP banner, inline logo), an InfoBox row, and a sticky pulsing SaveBar. Any
+ * banner/info/links change marks the shop dirty (pulsing the Save); Save commits
+ * every chrome field — including the edited links — through the existing
+ * updateShopProfile writer (no new manage.ts action, one links write). The LOGO is
+ * edited in place — clicking the banner logo picks a new image; Save uploads it and
+ * persists logo_path through saveCompanyProfile, the ONE company-profile writer
+ * (D-07), so there is still no second logo writer. Editing also exposes a "+ Add
+ * product" tile (opens the manual-add drawer) and a free-text add-location that
+ * stages a group; empty location labels never persist.
  */
-import { useEffect, useRef, useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import useEmblaCarousel from "embla-carousel-react";
 import {
-  Heart, ShoppingCart, Link2, UploadCloud, Plus, FileSpreadsheet,
-  Pencil, Check, ImagePlus, Loader2, Eye, EyeOff,
-  Globe, Store, Trash2, ArrowLeft, ChevronLeft, ChevronRight, Star, X,
+  Link2, UploadCloud, Plus, FileSpreadsheet, Globe, MapPin, ChevronDown, ChevronUp, X, PackageOpen,
 } from "lucide-react";
-import type { Shop, ShopLink, ShopProduct, ProductImage } from "@/modules/catalog/shop";
+import { ProductCard, LocationGroup, renumberLocations } from "@/modules/catalog";
+import type {
+  Shop, ShopLink, WarehouseLocation, ProductDraft, ProductFieldDraft, PendingBatchEdit, BatchRef,
+} from "@/modules/catalog";
 import {
-  updateShopProfile, addProductImageRecords, removeProductImage,
-  setProductImageOrder, setProductPricePublic, setProductProfileVisible,
+  updateShopProfile, updateProductFields, addProductBatch, updateProductBatch,
+  softDeleteProductBatch,
 } from "@/modules/catalog/manage";
+import type { ProductFieldPatch, ProductBatchPatch } from "@/modules/catalog/manage";
+import { saveCompanyProfile } from "@/app/account/actions";
 import { createClient } from "@/shared/db/client";
 import { AddProductsDrawer } from "./AddProductsDrawer";
+import { AssignProductsDialog } from "./AssignProductsDialog";
+import { PresentBanner } from "./PresentBanner";
+import { SaveBar } from "./SaveBar";
+import { InfoBox, DescriptionEditor } from "./InfoBox";
+import { filterByLocation, groupByLocation, applyProductOrder, moveBefore, UNASSIGNED } from "./locationFilter";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 // Cover/logo now live at a STABLE path (overwritten in place, never orphaned), so
 // their URL no longer changes on edit. Pass the company's `updated_at` as a `?v=`
-// nonce to bust the browser cache after a swap. Gallery photos keep unique
-// filenames, so they call this without a version.
+// nonce to bust the browser cache after a swap.
 const mediaUrl = (path: string, version?: string | null) =>
   `${SUPABASE_URL}/storage/v1/object/public/shop-media/${path}${
     version ? `?v=${new Date(version).getTime()}` : ""
@@ -39,16 +57,18 @@ const mediaUrl = (path: string, version?: string | null) =>
 // checks here just give a friendly message before we attempt the upload.
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10 MB — matches the bucket limit
 const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
-const imageExt = (file: File) =>
-  file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
 
-const DOMINANCE_LABEL: Record<string, string> = {
-  indica: "Indica",
-  sativa: "Sativa",
-  hybrid: "Hybrid",
-  indica_dominant: "Indica-Dominant",
-  sativa_dominant: "Sativa-Dominant",
-};
+// Present mode (D-07) renders the shop inside a self-contained full-window layer
+// that COVERS the app chrome (IconRail + TopBar) — an in-app view that stays
+// Zoom/Teams-shareable, NOT the OS Fullscreen API (which cuts off). Because the
+// layer is opaque it must paint the same background as <body> to hide the chrome
+// behind it; this mirrors the body rule in globals.css so no shared-file edit is
+// needed (the plan's preferred self-contained approach).
+const PAGE_BG =
+  "radial-gradient(60rem 60rem at 10% -12%, rgba(255,183,213,0.55), transparent 60%)," +
+  "radial-gradient(46rem 46rem at 108% 6%, rgba(227,11,93,0.10), transparent 55%)," +
+  "linear-gradient(160deg, var(--bg-from) 0%, var(--bg-to) 100%)";
+
 const TAG_LABEL: Record<string, string> = {
   wholesaler: "Wholesaler",
   distributor: "Distributor",
@@ -56,11 +76,8 @@ const TAG_LABEL: Record<string, string> = {
   cultivator: "Cultivator",
   pharmacy: "Pharmacy",
 };
-const eur = (n: number) => `${n.toFixed(2).replace(".", ",")}€`;
 const titleCase = (s: string) =>
   s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-
-const FILTERS = ["All", "indica", "indica_dominant", "hybrid", "sativa_dominant", "sativa"];
 
 // Brand glyphs (lucide dropped its deprecated brand icons). Single-path marks
 // from simple-icons, tinted via currentColor so they inherit the link colour.
@@ -77,72 +94,503 @@ function BrandGlyph({ name, size = 15 }: { name: keyof typeof BRAND_PATH; size?:
   );
 }
 
-import type { CompanyProfile } from "@/modules/companies";
-import { BrandingEditForm } from "./BrandingEditForm";
 
-export function ShopView({ shop, company: companyProfile }: { shop: Shop; company: CompanyProfile | null }) {
+// The chrome fields the owner edits in place. These are exactly the text fields
+// updateShopProfile persists as the shop banner + info. `links` is editable here
+// (F-01); `locations` (F-07 / Cluster H) is the small named warehouse list, same
+// contract — the edited array is sent on Save through the SAME updateShopProfile
+// metadata write (no second writer). `warehouse_location` (the legacy single-line
+// column) is round-tripped unchanged, like address/website, so the full-replace
+// action never wipes it — it is no longer edited directly once the list exists.
+type ChromeEdits = {
+  name: string;
+  tagline: string;
+  description: string;
+  warehouse_location: string;
+  links: ShopLink[];
+  locations: WarehouseLocation[];
+};
+
+function initEdits(c: Shop["company"]): ChromeEdits {
+  return {
+    name: c.name ?? "",
+    tagline: c.tagline ?? "",
+    description: c.description ?? "",
+    warehouse_location: c.warehouse_location ?? "",
+    links: c.links ?? [],
+    locations: c.locations ?? [],
+  };
+}
+
+// The card holds its inline fields as RAW input strings (smooth decimal typing);
+// these convert the pending overlay into the typed server patches at Save flush.
+// The server re-validates numerics (T-07-17), so parse failures degrade to null.
+function parseNum(s: string): number | null {
+  const t = s.trim().replace(",", ".");
+  if (t === "") return null;
+  const n = Number(t);
+  return Number.isFinite(n) ? n : null;
+}
+
+const NUM_FIELD_KEYS = [
+  "thc_percent", "cbd_percent", "cbg_percent", "cbn_percent", "terpene_percent", "price_per_gram",
+] as const;
+
+// F-05: the other spec-row fields (Cluster F), extending the SAME pending-edit
+// tree — free text (trim → null when cleared) + the two enum codes (raw code
+// string; "" means the seller picked "n.a." → null). Dominance/Irradiation are
+// selects on the card (not free text), but the wire value is still a string.
+const TEXT_FIELD_KEYS = [
+  "cultivator", "country_of_origin", "region", "lineage_parent_a", "lineage_parent_b",
+  "dominance_code", "irradiation_code", "packaging_material", "supplier_product_code",
+] as const;
+
+function toFieldPatch(f: ProductFieldDraft): ProductFieldPatch {
+  const patch: ProductFieldPatch = {};
+  if (f.name !== undefined) patch.name = f.name;
+  for (const k of NUM_FIELD_KEYS) {
+    const v = f[k];
+    if (v !== undefined) patch[k] = parseNum(v);
+  }
+  if (f.price_public !== undefined) patch.price_public = f.price_public;
+  for (const k of TEXT_FIELD_KEYS) {
+    const v = f[k];
+    if (v !== undefined) patch[k] = v.trim() === "" ? null : v.trim();
+  }
+  if (f.resealable !== undefined) patch.resealable = f.resealable;
+  if (f.pack_sizes !== undefined) {
+    patch.pack_sizes = f.pack_sizes
+      .split(",")
+      .map((s) => parseNum(s))
+      .filter((n): n is number => n != null && n > 0);
+  }
+  return patch;
+}
+
+function toBatchPatch(p: PendingBatchEdit): ProductBatchPatch {
+  const patch: ProductBatchPatch = {};
+  if (p.batch_number !== undefined) patch.batch_number = p.batch_number;
+  if (p.thc_percent !== undefined) patch.thc_percent = parseNum(p.thc_percent);
+  if (p.cbd_percent !== undefined) patch.cbd_percent = parseNum(p.cbd_percent);
+  if (p.expiry_date !== undefined) patch.expiry_date = p.expiry_date.trim() || null;
+  return patch;
+}
+
+const emptyDraft = (): ProductDraft => ({
+  fields: {}, batchInserts: [], batchEdits: {}, batchDeletes: [],
+});
+
+export function ShopView({ shop, canEditBranding = false }: { shop: Shop; canEditBranding?: boolean }) {
   const { company, products } = shop;
   const router = useRouter();
-  const [dom, setDom] = useState("All");
   const [editing, setEditing] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // Present mode (D-07): an in-app UI state that hides the app chrome. NEVER the
+  // OS Fullscreen API (no requestFullscreen anywhere in this surface).
+  const [presenting, setPresenting] = useState(false);
 
-  return (
-    <div className="flex h-full flex-col gap-3 overflow-auto pb-6">
-      {/* Owner action bar. While editing, the editor owns Save/Cancel — a single
-          explicit save path, so leaving edit mode can never silently drop changes. */}
-      <div className="flex justify-end gap-2">
-        <button
-          onClick={() => setDrawerOpen(true)}
-          className="flex items-center gap-1.5 rounded-full bg-brand px-4 py-2 text-sm font-bold text-white hover:bg-brand-deep"
-        >
-          <Plus size={16} /> Add products
-        </button>
-        {!editing && (
-          <button
-            onClick={() => setEditing(true)}
-            className="flex items-center gap-1.5 rounded-full bg-white/70 px-4 py-2 text-sm font-bold text-ink/75 hover:bg-white"
-          >
-            <Pencil size={16} /> Manage shop
-          </button>
-        )}
-      </div>
+  // In-place edit state (D-03). `edits` holds the live field values; `dirty` drives
+  // the SaveBar pulse; `coverFile` is a picked-but-not-yet-uploaded banner image.
+  const [edits, setEdits] = useState<ChromeEdits>(() => initEdits(company));
+  const [dirty, setDirty] = useState(false);
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  // A picked-but-not-yet-uploaded logo image (in-place edit); staged like the cover
+  // and committed on Save through the one company-profile writer (D-07).
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // Bumped on every successful save and folded into each ProductCard's key below —
+  // forces a remount so a card left showing its back (Docs & media) resets to the
+  // front instead of staying flipped after Save (ProductCard's `flipped` is local
+  // state Save has no other way to reach).
+  const [saveVersion, setSaveVersion] = useState(0);
 
-      {editing ? (
-        <ProfileEditor
-          company={company}
-          companyProfile={companyProfile}
-          onSaved={() => { setEditing(false); router.refresh(); }}
-          onCancel={() => setEditing(false)}
-        />
-      ) : (
-        <ProfileHero company={company} />
+  // Active location tab. "All" shows every location group; a named location
+  // re-contexts the grid to that one group.
+  const [loc, setLoc] = useState("All");
+  // Client-only custom order of the location sections in edit mode (drag a header
+  // to reorder). Persisting a bespoke group order is Phase 16 (structured
+  // locations own ordering), so this stays ephemeral.
+  const [groupOrder, setGroupOrder] = useState<string[]>([]);
+  // Client-only product order WITHIN each shop, keyed by group label (drag a card
+  // onto a sibling in the same shop to reorder). Same ephemeral rationale as
+  // groupOrder — a persisted per-product position is a later phase — so it resets
+  // to the default name order on reload.
+  const [productOrder, setProductOrder] = useState<Record<string, string[]>>({});
+  // "Assign products to shop" dialog (edit mode) — the fast two-pane drag surface.
+  const [assignOpen, setAssignOpen] = useState(false);
+  // Free-text locations staged in edit mode (F-01). A staged label renders an
+  // empty drop-target group; it only PERSISTS once a product is dragged into it
+  // (setProductLocation). Empty groups never persist — this stays client-only and
+  // resets on reload / leaving edit mode, so unfilled labels simply disappear.
+  const [pendingLocations, setPendingLocations] = useState<string[]>([]);
+
+  // Per-product pending-edit tree (F-02): each card reports its inline field + lot
+  // changes here (marking the shop dirty); Save flushes it, ✕ discard clears it. The
+  // card writes NOTHING itself — it is a controlled view of its entry in this map.
+  const [pendingProductEdits, setPendingProductEdits] = useState<Record<string, ProductDraft>>({});
+
+  function mutateDraft(productId: string, fn: (d: ProductDraft) => ProductDraft) {
+    setPendingProductEdits((prev) => ({ ...prev, [productId]: fn(prev[productId] ?? emptyDraft()) }));
+    setDirty(true);
+  }
+  function editProductField(productId: string, patch: Partial<ProductFieldDraft>) {
+    mutateDraft(productId, (d) => ({ ...d, fields: { ...d.fields, ...patch } }));
+  }
+  function insertBatch(productId: string) {
+    mutateDraft(productId, (d) => ({
+      ...d,
+      batchInserts: [
+        ...d.batchInserts,
+        { tempId: crypto.randomUUID(), batch_number: "", thc_percent: "", cbd_percent: "", expiry_date: "" },
+      ],
+    }));
+  }
+  function changeBatch(productId: string, ref: BatchRef, patch: PendingBatchEdit) {
+    mutateDraft(productId, (d) =>
+      ref.kind === "new"
+        ? { ...d, batchInserts: d.batchInserts.map((b) => (b.tempId === ref.tempId ? { ...b, ...patch } : b)) }
+        : { ...d, batchEdits: { ...d.batchEdits, [ref.batchId]: { ...d.batchEdits[ref.batchId], ...patch } } },
+    );
+  }
+  function removeBatch(productId: string, ref: BatchRef) {
+    mutateDraft(productId, (d) => {
+      if (ref.kind === "new") {
+        return { ...d, batchInserts: d.batchInserts.filter((b) => b.tempId !== ref.tempId) };
+      }
+      const nextEdits = { ...d.batchEdits };
+      delete nextEdits[ref.batchId];
+      return {
+        ...d,
+        batchEdits: nextEdits,
+        batchDeletes: d.batchDeletes.includes(ref.batchId) ? d.batchDeletes : [...d.batchDeletes, ref.batchId],
+      };
+    });
+  }
+
+  function addLocation(label: string) {
+    const value = label.trim();
+    if (!value) return; // empty labels do not persist (D-05 / Cluster D)
+    // Skip if a real group or a staged label already carries it.
+    if (products.some((p) => p.location === value)) return;
+    setPendingLocations((prev) => (prev.includes(value) ? prev : [...prev, value]));
+  }
+
+  const updateEdit = <K extends keyof ChromeEdits>(k: K, v: ChromeEdits[K]) => {
+    setEdits((e) => ({ ...e, [k]: v }));
+    setDirty(true);
+  };
+
+  function enterEdit() {
+    setEdits(initEdits(company));
+    setCoverFile(null);
+    setLogoFile(null);
+    setDirty(false);
+    setError(null);
+    setPendingLocations([]);
+    setPendingProductEdits({});
+    setProductOrder({});
+    setEditing(true);
+  }
+
+  function discard() {
+    if (dirty && !window.confirm("Discard unsaved changes?")) return;
+    setEditing(false);
+    setDirty(false);
+    setCoverFile(null);
+    setLogoFile(null);
+    setError(null);
+    setPendingLocations([]);
+    setPendingProductEdits({});
+    setProductOrder({});
+    setAssignOpen(false);
+  }
+
+  // Present mode never carries edit mode (prototype: setPresent → setEdit(false)),
+  // so entering it drops any in-progress edit without prompting — it is a view
+  // toggle, not a destructive action, and the SaveBar only renders while editing.
+  function enterPresent() {
+    setEditing(false);
+    setDirty(false);
+    setCoverFile(null);
+    setLogoFile(null);
+    setError(null);
+    setPendingLocations([]);
+    setPendingProductEdits({});
+    setProductOrder({});
+    setAssignOpen(false);
+    setPresenting(true);
+  }
+
+  // ESC leaves present mode (matches the prototype + the Exit control). The
+  // listener is attached only while presenting so it never shadows other ESC use.
+  useEffect(() => {
+    if (!presenting) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPresenting(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [presenting]);
+
+  // Client-direct cover upload to a STABLE path (upsert → no orphan); the action
+  // records only the path string. Mirrors the retired ProfileEditor.uploadCover.
+  async function uploadCover(file: File): Promise<{ path?: string; error?: string }> {
+    if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) return { error: "Use a JPG, PNG or WebP image." };
+    if (file.size > MAX_IMAGE_BYTES) return { error: "Image must be under 10 MB." };
+    const path = `${company.id}/cover`;
+    const { error } = await createClient().storage
+      .from("shop-media")
+      .upload(path, file, { upsert: true, contentType: file.type });
+    return error ? { error: `cover upload failed: ${error.message}` } : { path };
+  }
+
+  // Logo upload — same stable-path client-direct pattern as the cover (upsert → no
+  // orphan). Only the path string is persisted, and only through saveCompanyProfile
+  // (the one logo writer, D-07), never updateShopProfile.
+  async function uploadLogo(file: File): Promise<{ path?: string; error?: string }> {
+    if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) return { error: "Use a JPG, PNG or WebP image." };
+    if (file.size > MAX_IMAGE_BYTES) return { error: "Image must be under 10 MB." };
+    const path = `${company.id}/logo`;
+    const { error } = await createClient().storage
+      .from("shop-media")
+      .upload(path, file, { upsert: true, contentType: file.type });
+    return error ? { error: `logo upload failed: ${error.message}` } : { path };
+  }
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+
+    let coverPath: string | undefined;
+    if (coverFile) {
+      const c = await uploadCover(coverFile);
+      if (c.error) { setError(c.error); setBusy(false); return; }
+      coverPath = c.path;
+    }
+
+    // updateShopProfile is a full-replace writer: any field it reads and we omit is
+    // nulled, and its metadata (links + locations) comes solely from the form. We
+    // send the edited chrome fields + the edited links array (F-01) + the edited
+    // warehouse list (F-07), each committed through this ONE metadata write
+    // (parseLinks / parseLocations). address/website/warehouse_location are
+    // round-tripped unchanged so the full-replace never wipes them.
+    const fd = new FormData();
+    fd.set("name", edits.name);
+    fd.set("tagline", edits.tagline);
+    fd.set("description", edits.description);
+    fd.set("warehouse_location", edits.warehouse_location);
+    fd.set("address", company.address ?? "");
+    fd.set("website", company.website ?? "");
+    fd.set("links", JSON.stringify(edits.links));
+    fd.set("locations", JSON.stringify(edits.locations));
+    if (coverPath) fd.set("cover_path", coverPath);
+
+    const res = await updateShopProfile(fd);
+    if ("error" in res) { setError(res.error); setBusy(false); return; }
+
+    // Logo (D-07): upload the picked bytes, then persist logo_path through the ONE
+    // company-profile writer (saveCompanyProfile updates only the keys given, so
+    // this touches logo_path alone — updateShopProfile never writes the logo).
+    if (logoFile) {
+      const up = await uploadLogo(logoFile);
+      if (up.error) { setError(up.error); setBusy(false); return; }
+      const r = await saveCompanyProfile({ logoPath: up.path });
+      if (r.error) { setError(r.error); setBusy(false); return; }
+    }
+
+    // Flush the per-product pending tree (F-02) AFTER the chrome commit — the field
+    // patch, then batch inserts / edits / soft-deletes, all under this one Save.
+    for (const [productId, d] of Object.entries(pendingProductEdits)) {
+      const fieldPatch = toFieldPatch(d.fields);
+      if (Object.keys(fieldPatch).length > 0) {
+        const r = await updateProductFields(productId, fieldPatch);
+        if ("error" in r) { setError(r.error); setBusy(false); return; }
+      }
+      for (const nb of d.batchInserts) {
+        if (!nb.batch_number.trim()) continue; // skip blank rows the seller never filled
+        const r = await addProductBatch(productId, {
+          batch_number: nb.batch_number,
+          thc_percent: parseNum(nb.thc_percent),
+          cbd_percent: parseNum(nb.cbd_percent),
+          expiry_date: nb.expiry_date.trim() || null,
+        });
+        if ("error" in r) { setError(r.error); setBusy(false); return; }
+      }
+      for (const [batchId, patch] of Object.entries(d.batchEdits)) {
+        const bp = toBatchPatch(patch);
+        if (Object.keys(bp).length === 0) continue;
+        const r = await updateProductBatch(batchId, bp);
+        if ("error" in r) { setError(r.error); setBusy(false); return; }
+      }
+      for (const batchId of d.batchDeletes) {
+        const r = await softDeleteProductBatch(batchId);
+        if ("error" in r) { setError(r.error); setBusy(false); return; }
+      }
+    }
+
+    setBusy(false);
+    setEditing(false);
+    setDirty(false);
+    setCoverFile(null);
+    setLogoFile(null);
+    setPendingLocations([]);
+    setPendingProductEdits({});
+    setSaveVersion((v) => v + 1);
+    router.refresh();
+  }
+
+  const coverUrl = coverFile
+    ? URL.createObjectURL(coverFile)
+    : company.cover_path
+    ? mediaUrl(company.cover_path, company.updated_at)
+    : null;
+  const logoUrl = logoFile
+    ? URL.createObjectURL(logoFile)
+    : company.logo_path
+    ? mediaUrl(company.logo_path, company.updated_at)
+    : null;
+
+  // The location groups to render for the active tab (already square + 4-up
+  // inside each LocationGroup). Grouping is pure — see ./locationFilter.
+  const visibleGroups = groupByLocation(filterByLocation(products, loc));
+  const groupOrdered =
+    groupOrder.length === 0
+      ? visibleGroups
+      : [...visibleGroups].sort(
+          (a, b) =>
+            (groupOrder.indexOf(a.location) + 1 || 999) -
+            (groupOrder.indexOf(b.location) + 1 || 999),
+        );
+  // Then apply the in-shop card order (client-only reorder). Groups with no saved
+  // order keep the default name order from the query.
+  const orderedGroups = applyProductOrder(groupOrdered, productOrder);
+
+  // Staged (empty) location groups render as drop targets while editing so the
+  // seller can drag products into a freshly-typed location. They carry no products
+  // yet, so they never persist — a group becomes real only once a product is
+  // assigned (setProductLocation on drop). Hidden under a specific location tab
+  // that isn't the staged label.
+  const pendingGroups = editing
+    ? pendingLocations
+        .filter((l) => loc === "All" || loc === l)
+        .filter((l) => !orderedGroups.some((g) => g.location === l))
+        .map((l) => ({ location: l, products: [] as Shop["products"] }))
+    : [];
+  const renderGroups = [...orderedGroups, ...pendingGroups];
+
+  function reorderGroups(from: string, to: string) {
+    const current = orderedGroups.map((g) => g.location);
+    const fromIdx = current.indexOf(from);
+    const toIdx = current.indexOf(to);
+    if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return;
+    current.splice(toIdx, 0, current.splice(fromIdx, 1)[0]);
+    setGroupOrder(current);
+  }
+
+  // Reorder a card within its shop: place `draggedId` just before `targetId` in
+  // this location's client-only order. Keyed by the group LABEL (so the Unassigned
+  // bucket keys under its sentinel, matching applyProductOrder above).
+  function reorderProduct(location: string, draggedId: string, targetId: string) {
+    const group = orderedGroups.find((g) => g.location === location);
+    if (!group) return;
+    const next = moveBefore(group.products.map((p) => p.id), draggedId, targetId);
+    setProductOrder((prev) => ({ ...prev, [location]: next }));
+  }
+
+  const surface = (
+    <>
+      {/* Sticky pulsing Save appears only while editing; it also carries "+ Add
+          products" (a manage-shop action). "Manage shop" / "Present mode" live in
+          the banner below. (Never both edit and present at once — enterPresent()
+          clears edit mode.) */}
+      {editing && (
+        <SaveBar dirty={dirty} busy={busy} error={error} onSave={save} onDiscard={discard} onAddProducts={() => setDrawerOpen(true)} />
       )}
+
+      <PresentBanner
+        companyName={company.name}
+        coverUrl={coverUrl}
+        logoUrl={logoUrl}
+        editing={editing}
+        presenting={presenting}
+        name={editing ? edits.name : company.name}
+        tagline={editing ? edits.tagline : company.tagline ?? ""}
+        onNameChange={(v) => updateEdit("name", v)}
+        onTaglineChange={(v) => updateEdit("tagline", v)}
+        onPickCover={(f) => { setCoverFile(f); setDirty(true); }}
+        onManage={enterEdit}
+        canEditLogo={canEditBranding}
+        onPickLogo={(f) => { setLogoFile(f); setDirty(true); }}
+        onPresent={enterPresent}
+      />
+
+      <ShopInfoRow
+        company={company}
+        editing={editing}
+        edits={edits}
+        onEdit={updateEdit}
+      />
 
       {products.length === 0 ? (
         <EmptyShop onAdd={() => setDrawerOpen(true)} />
       ) : (
         <>
+          {/* Location filter + the two edit-mode shop controls. "+ Add shop" stages
+              a new shop label; "Assign products to shop" opens the two-pane drag
+              dialog (fast placement without scrolling the live grid). */}
           <div className="flex flex-wrap items-center gap-2">
-            {FILTERS.map((f) => (
-              <button
-                key={f}
-                onClick={() => setDom(f)}
-                className={`rounded-full px-4 py-1.5 text-sm font-semibold transition ${
-                  dom === f ? "bg-brand text-white shadow-sm" : "bg-white/60 text-ink/70 hover:bg-white/90"
-                }`}
-              >
-                {f === "All" ? "All" : DOMINANCE_LABEL[f]}
-              </button>
-            ))}
+            <LocationTabs products={products} active={loc} onSelect={setLoc} />
+            {editing && (
+              <>
+                <AddShopButton onAdd={addLocation} />
+                <button
+                  type="button"
+                  data-testid="assign-products-btn"
+                  onClick={() => setAssignOpen(true)}
+                  className="flex items-center gap-1.5 rounded-full bg-white/70 px-4 py-2 text-sm font-semibold text-ink/80 hover:bg-white"
+                >
+                  <PackageOpen size={15} className="text-brand" /> Assign products to shop
+                </button>
+              </>
+            )}
           </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-            {products
-              .filter((p) => dom === "All" || p.dominance_code === dom)
-              .map((p) => (
-                <ProductCard key={p.id} p={p} companyId={company.id} editing={editing} onChanged={() => router.refresh()} />
+          {renderGroups.map((g) => (
+            <LocationGroup
+              key={g.location}
+              location={g.location}
+              targetLocation={g.location === UNASSIGNED ? null : g.location}
+              count={g.products.length}
+              editing={editing}
+              onChanged={() => router.refresh()}
+              onReorder={reorderGroups}
+            >
+              {g.products.map((p) => (
+                <ProductCard
+                  key={`${p.id}:${saveVersion}`}
+                  product={p}
+                  companyId={company.id}
+                  editing={editing}
+                  onChanged={() => router.refresh()}
+                  draft={pendingProductEdits[p.id]}
+                  onEditField={editProductField}
+                  onBatchInsert={insertBatch}
+                  onBatchChange={changeBatch}
+                  onBatchRemove={removeBatch}
+                  onReorder={(draggedId, targetId) => reorderProduct(g.location, draggedId, targetId)}
+                />
               ))}
-          </div>
+              {/* "+ Add product" tile — edit mode only. Opens the EXISTING manual-add
+                  drawer (one validation authority); it does not create a product
+                  itself. New products land unassigned + draggable into this group. */}
+              {editing && (
+                <AddProductTile
+                  location={g.location === UNASSIGNED ? null : g.location}
+                  onClick={() => setDrawerOpen(true)}
+                />
+              )}
+            </LocationGroup>
+          ))}
         </>
       )}
 
@@ -151,83 +599,251 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
         onClose={() => setDrawerOpen(false)}
         onImported={() => { setDrawerOpen(false); router.refresh(); }}
       />
+
+      <AssignProductsDialog
+        open={assignOpen}
+        onClose={() => setAssignOpen(false)}
+        products={products}
+        stagedLocations={pendingLocations}
+        onAddLocation={addLocation}
+        onChanged={() => router.refresh()}
+      />
+    </>
+  );
+
+  // Present mode wraps the same surface in a fixed full-window layer that covers
+  // the app chrome (below drawers/modals at z-50). An Exit control + ESC restore
+  // normal chrome. The fade-in is gated behind prefers-reduced-motion.
+  if (presenting) {
+    return (
+      <div
+        data-testid="present-layer"
+        className="present-layer fixed inset-0 z-40 overflow-auto"
+        style={{ background: PAGE_BG }}
+      >
+        <style jsx>{`
+          @media (prefers-reduced-motion: no-preference) {
+            .present-layer {
+              animation: presentIn 0.18s ease-out both;
+            }
+          }
+          @keyframes presentIn {
+            from {
+              opacity: 0;
+            }
+            to {
+              opacity: 1;
+            }
+          }
+        `}</style>
+        <button
+          type="button"
+          data-testid="exit-present"
+          onClick={() => setPresenting(false)}
+          className="fixed right-4 top-4 z-50 flex items-center gap-1.5 rounded-full bg-brand px-4 py-2 text-sm font-bold text-white shadow-lg hover:bg-brand-deep"
+        >
+          <X size={16} /> Exit present
+        </button>
+        <div className="mx-auto flex max-w-[1400px] flex-col gap-3 px-6 py-6 sm:px-8">
+          {surface}
+        </div>
+      </div>
+    );
+  }
+
+  // The whole-page edit context (F-01): `data-edit` drives a calm grey wash over
+  // the entire surface while editing — a background tint only (no image filters),
+  // so scroll stays smooth. `dirty`/`save()`/`discard()` remain the single spine
+  // F-02 extends its inline field edits into.
+  return (
+    <div
+      data-testid="shop-surface"
+      data-edit={editing ? "on" : "off"}
+      className={`flex h-full flex-col gap-2.5 overflow-auto pb-6 transition-colors ${
+        editing ? "rounded-2xl bg-ink/[0.045]" : ""
+      }`}
+    >
+      {surface}
     </div>
   );
 }
 
-// ---------- profile: read ----------
-function ProfileHero({ company }: { company: Shop["company"] }) {
-  const cover = company.cover_path ? mediaUrl(company.cover_path, company.updated_at) : null;
-  const logo = company.logo_path ? mediaUrl(company.logo_path, company.updated_at) : null;
+// ---------- info boxes ----------
+// The equal-height storefront info row: About (description, 2600-cap edit),
+// Location (HQ + single warehouse line, editable), Links (display only — Phase 16
+// owns per-shop link management). Each box expands over the grid (InfoBox owns the
+// stacking-context + click-away bug fixes).
+function ShopInfoRow({
+  company, editing, edits, onEdit,
+}: {
+  company: Shop["company"];
+  editing: boolean;
+  edits: ChromeEdits;
+  onEdit: <K extends keyof ChromeEdits>(k: K, v: ChromeEdits[K]) => void;
+}) {
   const hq = company.address || company.country || "—";
+  const tagRows =
+    company.tags.length > 0
+      ? company.tags.map((t) => (
+          <span key={t} className="font-bold text-ink">#{TAG_LABEL[t] ?? titleCase(t)}</span>
+        ))
+      : <span className="text-sm text-ink/40">No tags yet</span>;
+
+  const links = (
+    <div className="flex flex-col gap-2">
+      {company.website && <LinkRow icon={<Globe size={16} />} label="Website" url={company.website} />}
+      {company.links.map((l, i) => (
+        <LinkRow key={i} icon={linkIcon(l.platform)} label={linkLabel(l)} url={linkHref(l)} />
+      ))}
+    </div>
+  );
+  const hasAnyLink = Boolean(company.website) || company.links.length > 0;
 
   return (
-    <>
-      <div className="relative">
-        <div
-          className="h-44 w-full overflow-hidden rounded-3xl bg-gradient-to-r from-emerald-900 via-green-700 to-lime-600 bg-cover bg-center"
-          style={cover ? { backgroundImage: `url(${cover})` } : undefined}
-        />
-        <div className="absolute -bottom-6 left-6 flex h-28 w-28 items-center justify-center overflow-hidden rounded-2xl bg-ink text-white shadow-lg">
-          {logo ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={logo} alt={company.name} className="h-full w-full object-cover" />
+    <div className="grid grid-cols-1 items-stretch gap-3 lg:grid-cols-[1.4fr_1fr_1fr]">
+      {/* About + description */}
+      <InfoBox
+        testId="info-card-about"
+        title={editing ? edits.name : company.name}
+        preview={
+          editing ? (
+            <DescriptionEditor value={edits.description} onChange={(v) => onEdit("description", v)} />
+          ) : company.description ? (
+            <p className="line-clamp-4 text-sm leading-relaxed text-ink/70">“{company.description}”</p>
           ) : (
-            <span className="text-4xl">❀</span>
-          )}
-        </div>
-      </div>
+            <span className="text-sm text-ink/40">No description yet</span>
+          )
+        }
+        more={
+          !editing && company.description ? (
+            <p className="text-sm leading-relaxed text-ink/75">“{company.description}”</p>
+          ) : undefined
+        }
+      />
 
-      <div className="mt-6 grid grid-cols-1 gap-3 lg:grid-cols-[1.6fr_1fr_1fr]">
-        <div className="glass rounded-3xl p-5">
-          <h1 className="text-2xl font-bold text-ink">{company.name}</h1>
-          {company.tagline && <p className="mt-1 font-semibold text-ink/80">{company.tagline}</p>}
-          {company.description && (
-            <p className="mt-3 text-sm leading-relaxed text-ink/60">“{company.description}”</p>
-          )}
-        </div>
-        <div className="glass rounded-3xl p-5">
-          <div className="flex flex-col gap-0.5">
-            {company.tags.length > 0 ? (
-              company.tags.map((t) => (
-                <span key={t} className="font-bold text-ink">#{TAG_LABEL[t] ?? titleCase(t)}</span>
-              ))
-            ) : (
-              <span className="text-sm text-ink/40">No tags yet</span>
-            )}
-          </div>
-          <div className="mt-4 space-y-2 text-sm">
+      {/* Location: Headquarter (unchanged, read-only) + a small named Warehouse
+          1/2/3 list (F-07 / Cluster H — a lightweight partial pull-forward of
+          D-05; NOT the full Phase-16 shop≡location model). */}
+      <InfoBox
+        testId="info-card-warehouse"
+        title="Location"
+        preview={
+          <div className="space-y-2 text-sm">
+            <div className="flex flex-col gap-0.5">{tagRows}</div>
             <div>
               <div className="font-bold text-ink">Headquarter:</div>
               <div className="text-ink/70">{hq}</div>
             </div>
-            {company.warehouse_location && (
-              <div>
-                <div className="font-bold text-ink">Warehouse:</div>
-                <div className="text-ink/70">{company.warehouse_location}</div>
+          </div>
+        }
+        more={
+          <div className="text-sm">
+            <div className="mb-1 font-bold text-ink">Warehouses:</div>
+            {editing ? (
+              <LocationsEditor
+                locations={edits.locations}
+                onChange={(next) => onEdit("locations", next)}
+              />
+            ) : company.locations.length > 0 ? (
+              <div className="flex flex-col gap-1">
+                {company.locations.map((l, i) => (
+                  <div key={i} className="text-ink/70">
+                    <span className="font-semibold text-ink">{l.label}:</span> {l.value}
+                  </div>
+                ))}
               </div>
+            ) : (
+              <div className="text-ink/70">Not set</div>
             )}
           </div>
-        </div>
-        <div className="glass rounded-3xl p-5">
-          {company.website || company.links.length > 0 ? (
-            <div className="flex flex-col gap-2">
-              {company.website && (
-                <LinkRow icon={<Globe size={16} />} label="Website" url={company.website} />
-              )}
-              {company.links.map((l, i) => (
-                <LinkRow key={i} icon={linkIcon(l.platform)} label={linkLabel(l)} url={linkHref(l)} />
-              ))}
-            </div>
+        }
+      />
+
+      {/* Links — editable in edit mode (F-01: add / remove / reorder custom links,
+          committed via the ONE updateShopProfile links write). Display-only when
+          not editing. Per-country-shop link scoping is Phase 16 / DEV-112. */}
+      <InfoBox
+        testId="info-card-links"
+        title="Links"
+        preview={
+          editing ? (
+            <LinksEditor links={edits.links} onChange={(next) => onEdit("links", next)} />
+          ) : hasAnyLink ? (
+            links
           ) : (
             <span className="text-sm text-ink/40">No links yet</span>
-          )}
-        </div>
-      </div>
-    </>
+          )
+        }
+      />
+    </div>
   );
 }
 
+// ---------- location dropdown ----------
+// Re-contexts the grid to one location. "All" shows every group; a named location
+// shows only its own. Counts come from the pure filterByLocation helper.
+function LocationTabs({
+  products, active, onSelect,
+}: {
+  products: Shop["products"];
+  active: string;
+  onSelect: (loc: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  // Distinct named locations, first-seen order; "All" always leads.
+  const named = products.reduce<string[]>((acc, p) => {
+    if (p.location && !acc.includes(p.location)) acc.push(p.location);
+    return acc;
+  }, []);
+  const options = ["All", ...named];
+  const count = (loc: string) => filterByLocation(products, loc).length;
+
+  return (
+    <div className="relative w-fit">
+      <button
+        type="button"
+        data-testid="location-menu-btn"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-2 rounded-full bg-white/70 px-4 py-2 text-sm font-semibold text-ink/80 hover:bg-white"
+      >
+        <MapPin size={15} className="text-brand" />
+        {active === "All" ? "All locations" : active}
+        <ChevronDown size={15} className={`transition ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div
+          role="listbox"
+          className="absolute left-0 z-20 mt-1.5 min-w-[220px] rounded-2xl bg-white p-1.5 shadow-lg ring-1 ring-ink/5"
+        >
+          <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-ink/40">
+            Shop location
+          </div>
+          {options.map((o) => (
+            <button
+              key={o}
+              type="button"
+              role="option"
+              aria-selected={active === o}
+              data-testid="location-option"
+              data-loc={o}
+              onClick={() => { onSelect(o); setOpen(false); }}
+              className={`flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm font-medium ${
+                active === o ? "bg-brand/5 text-brand-deep" : "text-ink hover:bg-brand/[0.04]"
+              }`}
+            >
+              <span className="flex-1 text-left">{o === "All" ? "All locations" : o}</span>
+              <span className="text-xs text-ink-muted">{count(o)}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------- link display helpers (shared by the Links InfoBox) ----------
 const PLATFORM_LABEL: Record<ShopLink["platform"], string> = {
   linkedin: "LinkedIn",
   instagram: "Instagram",
@@ -259,535 +875,266 @@ function LinkRow({ icon, label, url }: { icon: React.ReactNode; label: string; u
   );
 }
 
-// ---------- profile: edit ----------
-// ProfileEditor is split into two sections:
-//   1. Cover banner (updateShopProfile — ShopView's own writer for cover_path + links)
-//   2. BrandingEditForm (saveCompanyProfile — the one writer for logo + city + text fields)
-// This matches D-07: one writer for branding, cover stays in ShopView.
-function ProfileEditor({
-  company, companyProfile, onSaved, onCancel,
+// ---------- links editor (edit mode) ----------
+// Add / remove / reorder custom links over a local edits.links array. Every change
+// flows back through onChange → edits.links, marking the shop dirty; Save sends the
+// whole array through the ONE updateShopProfile links write (parseLinks validates +
+// normalizes handles). No second links writer.
+const LINK_TYPE_OPTIONS: { value: ShopLink["platform"]; label: string }[] = [
+  { value: "linkedin", label: "LinkedIn" },
+  { value: "instagram", label: "Instagram" },
+  { value: "x", label: "X" },
+  { value: "custom", label: "Custom" },
+];
+
+function LinksEditor({
+  links,
+  onChange,
 }: {
-  company: Shop["company"];
-  companyProfile: CompanyProfile | null;
-  onSaved: () => void;
-  onCancel: () => void;
+  links: ShopLink[];
+  onChange: (next: ShopLink[]) => void;
 }) {
-  const [cover, setCover] = useState<File | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [dirty, setDirty] = useState(false);
+  const [platform, setPlatform] = useState<ShopLink["platform"]>("linkedin");
+  const [value, setValue] = useState("");
+  const [customLabel, setCustomLabel] = useState("");
 
-  const linkVal = (p: ShopLink["platform"]) =>
-    company.links.find((l) => l.platform === p)?.value ?? "";
-  const [website, setWebsite] = useState(company.website ?? "");
-  const [linkedin, setLinkedin] = useState(linkVal("linkedin"));
-  const [instagram, setInstagram] = useState(linkVal("instagram"));
-  const [x, setX] = useState(linkVal("x"));
-  const [custom, setCustom] = useState<{ label: string; url: string }[]>(
-    company.links.filter((l) => l.platform === "custom").map((l) => ({ label: l.label ?? "", url: l.value })),
-  );
-
-  const coverUrl = cover ? URL.createObjectURL(cover) : company.cover_path ? mediaUrl(company.cover_path, company.updated_at) : null;
-
-  const touch = () => setDirty(true);
-  const pickCover = (f: File) => { setCover(f); touch(); };
-
-  function cancel() {
-    if (dirty && !window.confirm("Discard unsaved changes?")) return;
-    onCancel();
+  function add() {
+    const v = value.trim();
+    if (!v) return; // empty links are dropped (parseLinks would drop them anyway)
+    const link: ShopLink = {
+      platform,
+      value: v,
+      ...(platform === "custom" && customLabel.trim() ? { label: customLabel.trim() } : {}),
+    };
+    onChange([...links, link]);
+    setValue("");
+    setCustomLabel("");
+  }
+  function remove(i: number) {
+    onChange(links.filter((_, idx) => idx !== i));
+  }
+  function move(i: number, dir: -1 | 1) {
+    const j = i + dir;
+    if (j < 0 || j >= links.length) return;
+    const next = [...links];
+    [next[i], next[j]] = [next[j], next[i]];
+    onChange(next);
   }
 
-  // Upload cover straight to storage (client-direct). Stable filename
-  // (${id}/cover) + upsert — overwrites in place, no orphans.
-  // Logo is handled separately by BrandingEditForm (D-07 one-writer).
-  async function uploadCover(file: File | null): Promise<{ path?: string; error?: string }> {
-    if (!file) return {};
-    if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) return { error: "Use a JPG, PNG or WebP image." };
-    if (file.size > MAX_IMAGE_BYTES) return { error: "Image must be under 10 MB." };
-    const path = `${company.id}/cover`;
-    const { error } = await createClient().storage
-      .from("shop-media")
-      .upload(path, file, { upsert: true, contentType: file.type });
-    return error ? { error: `cover upload failed: ${error.message}` } : { path };
-  }
-
-  async function save(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const form = e.currentTarget;
-    setBusy(true);
-    setError(null);
-
-    const c = await uploadCover(cover);
-    if (c.error) { setError(c.error); setBusy(false); return; }
-
-    const fd = new FormData(form);
-    if (c.path) fd.set("cover_path", c.path);
-    const links = [
-      ...(linkedin.trim() ? [{ platform: "linkedin", value: linkedin.trim() }] : []),
-      ...(instagram.trim() ? [{ platform: "instagram", value: instagram.trim() }] : []),
-      ...(x.trim() ? [{ platform: "x", value: x.trim() }] : []),
-      ...custom
-        .filter((c) => c.url.trim())
-        .map((c) => ({ platform: "custom", value: c.url.trim(), label: c.label.trim() || c.url.trim() })),
-    ];
-    fd.set("links", JSON.stringify(links));
-    const res = await updateShopProfile(fd);
-    setBusy(false);
-    if ("error" in res) { setError(res.error); return; }
-    onSaved();
-  }
-
-  const input = "w-full rounded-lg border border-ink/15 bg-white px-3 py-2 text-sm focus:border-brand focus:outline-none";
+  const field =
+    "rounded-lg border border-ink/15 bg-white px-2 py-1.5 text-xs outline-none focus:border-brand";
 
   return (
-    <div className="space-y-6">
-      {/* -- Cover banner (ShopView's writer: cover_path + company name + links) -- */}
-      <form onSubmit={save} onChange={touch} className="space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={cancel}
-              className="flex items-center gap-1 rounded-full bg-white/70 px-3 py-2 text-sm font-bold text-ink/75 hover:bg-white"
-            >
-              <ArrowLeft size={16} /> Back to shop
-            </button>
-            <h2 className="text-lg font-bold text-ink">Edit shop</h2>
-          </div>
+    <div className="flex flex-col gap-2">
+      {links.length === 0 && <span className="text-sm text-ink/40">No links yet</span>}
+      {links.map((l, i) => (
+        <div key={i} className="flex items-center gap-1.5 rounded-lg bg-white/60 px-2.5 py-1.5">
+          <span className="text-ink">{linkIcon(l.platform)}</span>
+          <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{linkLabel(l)}</span>
           <button
-            type="submit"
-            disabled={busy}
-            className="flex items-center gap-1.5 rounded-full bg-brand px-5 py-2 text-sm font-bold text-white hover:bg-brand-deep disabled:opacity-40"
+            type="button" aria-label="Move link up" onClick={() => move(i, -1)} disabled={i === 0}
+            className="rounded p-1 text-ink/50 hover:bg-ink/5 disabled:opacity-30"
           >
-            {busy ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />} Save cover &amp; links
+            <ChevronUp size={14} />
+          </button>
+          <button
+            type="button" aria-label="Move link down" onClick={() => move(i, 1)}
+            disabled={i === links.length - 1}
+            className="rounded p-1 text-ink/50 hover:bg-ink/5 disabled:opacity-30"
+          >
+            <ChevronDown size={14} />
+          </button>
+          <button
+            type="button" aria-label="Remove link" onClick={() => remove(i)}
+            className="rounded p-1 text-rose-500 hover:bg-rose-50"
+          >
+            <X size={14} />
           </button>
         </div>
-
-        {error && <p className="text-sm text-rose-600">{error}</p>}
-
-        <div className="relative">
-          <div
-            className="h-44 w-full overflow-hidden rounded-3xl bg-gradient-to-r from-emerald-900 via-green-700 to-lime-600 bg-cover bg-center"
-            style={coverUrl ? { backgroundImage: `url(${coverUrl})` } : undefined}
-          />
-          <ImagePicker label="Change cover" onPick={pickCover} className="absolute right-3 top-3" />
-        </div>
-
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-          <label className="block">
-            <span className="text-xs font-semibold text-ink/70">Company name *</span>
-            <input name="name" required defaultValue={company.name} className={input} />
-          </label>
-          <label className="block">
-            <span className="text-xs font-semibold text-ink/70">Warehouse location</span>
-            <input name="warehouse_location" defaultValue={company.warehouse_location ?? ""} className={input} />
-          </label>
-        </div>
-
-        {/* Links — website keeps its column; the rest live in metadata.links */}
-        <div className="space-y-2 pt-1">
-          <span className="text-xs font-semibold text-ink/70">Links</span>
-          <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
-            <LinkField icon={<Globe size={15} />} placeholder="https://yoursite.com"
-                       value={website} onChange={setWebsite} type="url" />
-            <LinkField icon={<BrandGlyph name="linkedin" />} placeholder="linkedin.com/company/…"
-                       value={linkedin} onChange={setLinkedin} type="url" />
-            <LinkField icon={<BrandGlyph name="instagram" />} placeholder="username" prefix="@"
-                       value={instagram} onChange={setInstagram} />
-            <LinkField icon={<BrandGlyph name="x" />} placeholder="username" prefix="@"
-                       value={x} onChange={setX} />
-          </div>
-
-          {custom.map((c, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <input
-                placeholder="Label" value={c.label} className={`${input} lg:w-40`}
-                onChange={(e) => { const v = e.target.value; setCustom((cs) => cs.map((row, j) => j === i ? { ...row, label: v } : row)); }}
-              />
-              <input
-                placeholder="https://…" type="url" value={c.url} className={input}
-                onChange={(e) => { const v = e.target.value; setCustom((cs) => cs.map((row, j) => j === i ? { ...row, url: v } : row)); }}
-              />
-              <button
-                type="button" aria-label="Remove link"
-                onClick={() => { setCustom((cs) => cs.filter((_, j) => j !== i)); touch(); }}
-                className="rounded-lg p-2 text-ink/40 hover:bg-rose-50 hover:text-rose-600"
-              >
-                <Trash2 size={15} />
-              </button>
-            </div>
+      ))}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <select
+          aria-label="Link type"
+          value={platform}
+          onChange={(e) => setPlatform(e.target.value as ShopLink["platform"])}
+          className={`${field} font-semibold`}
+        >
+          {LINK_TYPE_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
           ))}
+        </select>
+        {platform === "custom" && (
+          <input
+            aria-label="Custom link name"
+            value={customLabel}
+            placeholder="Name"
+            onChange={(e) => setCustomLabel(e.target.value)}
+            className={`${field} w-24`}
+          />
+        )}
+        <input
+          aria-label="Link URL or handle"
+          value={value}
+          placeholder="handle or URL"
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }}
+          className={`${field} min-w-0 flex-1`}
+        />
+        <button
+          type="button"
+          data-testid="add-link-btn"
+          aria-label="Add link"
+          onClick={add}
+          className="flex items-center gap-1 rounded-lg bg-brand px-2.5 py-1.5 text-xs font-bold text-white hover:bg-brand-deep"
+        >
+          <Plus size={13} /> Add
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---------- warehouse/location list editor (edit mode, F-07 / Cluster H) ----------
+// Add / remove over a local edits.locations array — the SAME batched-under-Save
+// contract as LinksEditor above. Every added/removed row is renumbered ("Warehouse
+// 1..N" by position) so a stored label never drifts out of sync with its row
+// index. Rows are display-only + a remove (X) button (no in-place rename) — the
+// bottom input + Add button is the one entry point for a new value, mirroring
+// LinksEditor's own add row. Headquarter is a SEPARATE, always-on display above
+// this box and is never touched here.
+function LocationsEditor({
+  locations,
+  onChange,
+}: {
+  locations: WarehouseLocation[];
+  onChange: (next: WarehouseLocation[]) => void;
+}) {
+  const [value, setValue] = useState("");
+
+  function add() {
+    const v = value.trim();
+    if (!v) return; // empty rows are dropped (parseLocations would drop them anyway)
+    onChange(renumberLocations([...locations, { label: "", value: v }]));
+    setValue("");
+  }
+  function remove(i: number) {
+    onChange(renumberLocations(locations.filter((_, idx) => idx !== i)));
+  }
+
+  const field =
+    "rounded-lg border border-ink/15 bg-white px-2 py-1.5 text-xs outline-none focus:border-brand";
+
+  return (
+    <div className="flex flex-col gap-2">
+      {locations.length === 0 && <span className="text-sm text-ink/40">No warehouses yet</span>}
+      {locations.map((l, i) => (
+        <div key={i} className="flex items-center gap-1.5 rounded-lg bg-white/60 px-2.5 py-1.5">
+          <span className="min-w-[86px] text-xs font-bold text-ink/60">{l.label}:</span>
+          <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{l.value}</span>
           <button
-            type="button"
-            onClick={() => { setCustom((cs) => [...cs, { label: "", url: "" }]); touch(); }}
-            className="flex items-center gap-1 text-sm font-semibold text-brand hover:text-brand-deep"
+            type="button" aria-label="Remove warehouse" onClick={() => remove(i)}
+            className="rounded p-1 text-rose-500 hover:bg-rose-50"
           >
-            <Plus size={14} /> Add custom link
+            <X size={14} />
           </button>
         </div>
-      </form>
-
-      {/* -- Branding (logo + city + text) — shared form, writes via saveCompanyProfile (D-09) -- */}
-      {companyProfile && (
-        <div className="glass rounded-3xl p-5">
-          <h3 className="mb-4 text-sm font-bold text-ink">Logo &amp; branding</h3>
-          <BrandingEditForm
-            company={companyProfile}
-            onDirty={() => {/* branding form manages its own dirty state */}}
-            onSaved={onSaved}
-          />
-        </div>
-      )}
+      ))}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <input
+          aria-label="New warehouse location"
+          value={value}
+          placeholder="e.g. Berlin"
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }}
+          className={`${field} min-w-0 flex-1`}
+        />
+        <button
+          type="button"
+          data-testid="add-warehouse-btn"
+          aria-label="Add warehouse"
+          onClick={add}
+          className="flex items-center gap-1 rounded-lg bg-brand px-2.5 py-1.5 text-xs font-bold text-white hover:bg-brand-deep"
+        >
+          <Plus size={13} /> Add warehouse
+        </button>
+      </div>
     </div>
   );
 }
 
-function LinkField({
-  icon, value, onChange, placeholder, type, prefix,
-}: {
-  icon: React.ReactNode; value: string; onChange: (v: string) => void;
-  placeholder?: string; type?: string; prefix?: string;
-}) {
+// ---------- add-product tile (edit mode) ----------
+// A grid cell that opens the EXISTING manual-add drawer (one validation authority);
+// it never creates a product itself. Shown per location group while editing.
+function AddProductTile({ location, onClick }: { location: string | null; onClick: () => void }) {
   return (
-    <div className="flex items-center gap-1.5 rounded-lg border border-ink/15 bg-white px-3 focus-within:border-brand">
-      <span className="text-ink/40">{icon}</span>
-      {prefix && <span className="text-sm font-semibold text-ink/40">{prefix}</span>}
-      <input
-        type={type ?? "text"} value={value} placeholder={placeholder}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full bg-transparent py-2 text-sm focus:outline-none"
-      />
-    </div>
+    <button
+      type="button"
+      data-testid="add-product-tile"
+      onClick={onClick}
+      className="flex min-h-[220px] flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-ink/20 bg-brand/[0.03] p-6 text-sm font-bold text-brand-deep transition hover:border-brand hover:bg-brand/[0.06]"
+    >
+      <span className="grid h-11 w-11 place-items-center rounded-full bg-brand text-white">
+        <Plus size={22} />
+      </span>
+      Add product
+      {location && <span className="text-xs font-medium text-ink/50">to {location}</span>}
+    </button>
   );
 }
 
-function ImagePicker({
-  label, onPick, className,
-}: { label: string; onPick: (f: File) => void; className?: string }) {
-  const ref = useRef<HTMLInputElement>(null);
-  return (
-    <>
+// ---------- add-shop button (edit mode) ----------
+// A pill that expands into an inline name field. Confirming STAGES a new shop
+// label (D-05 mechanics: an empty staged group persists only once a product is
+// assigned to it — setProductLocation — so unfilled labels never hit the DB).
+// Sits beside the location filter, replacing the old full-width bottom bar.
+function AddShopButton({ onAdd }: { onAdd: (label: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState("");
+
+  function submit() {
+    const v = value.trim();
+    if (v) onAdd(v);
+    setValue("");
+    setOpen(false);
+  }
+
+  if (!open) {
+    return (
       <button
         type="button"
-        onClick={() => ref.current?.click()}
-        className={`flex items-center gap-1.5 rounded-full bg-ink/70 px-3 py-1.5 text-xs font-semibold text-white hover:bg-ink ${className ?? ""}`}
+        data-testid="add-shop-btn"
+        onClick={() => setOpen(true)}
+        className="flex items-center gap-1.5 rounded-full bg-white/70 px-4 py-2 text-sm font-semibold text-ink/80 hover:bg-white"
       >
-        <ImagePlus size={14} /> {label}
+        <Plus size={15} className="text-brand" /> Add shop
       </button>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-1.5 rounded-full bg-white px-2.5 py-1 shadow-sm ring-1 ring-ink/10">
+      <MapPin size={15} className="text-brand" />
       <input
-        ref={ref} type="file" accept="image/jpeg,image/png,image/webp" hidden
-        onChange={(e) => { const f = e.target.files?.[0]; if (f) onPick(f); }}
+        autoFocus
+        data-testid="add-shop-input"
+        aria-label="New shop name"
+        value={value}
+        placeholder="e.g. Berlin"
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") { e.preventDefault(); submit(); }
+          if (e.key === "Escape") { setValue(""); setOpen(false); }
+        }}
+        className="w-32 bg-transparent text-sm outline-none placeholder:text-ink/40"
       />
-    </>
-  );
-}
-
-// ---------- product image gallery (carousel + owner edit controls) ----------
-// A product has many photos; the one at index 0 is the cover. Read mode is an
-// Embla carousel (swipe + arrows + dots). Edit mode adds a multi-upload button
-// and a thumbnail strip whose move / make-cover / remove actions all resolve to
-// one ordered id list written through setProductImageOrder.
-function ProductGallery({
-  productId, companyId, label, images, editing, onChanged,
-}: {
-  productId: string;
-  companyId: string;
-  label: string;
-  images: ProductImage[];
-  editing: boolean;
-  onChanged: () => void;
-}) {
-  const [emblaRef, emblaApi] = useEmblaCarousel({ loop: false });
-  const [selected, setSelected] = useState(0);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const addRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (!emblaApi) return;
-    const onSelect = () => setSelected(emblaApi.selectedScrollSnap());
-    emblaApi.on("select", onSelect);
-    onSelect();
-    return () => { emblaApi.off("select", onSelect); };
-  }, [emblaApi]);
-  // Re-measure when photos are added / removed / reordered.
-  useEffect(() => { emblaApi?.reInit(); }, [emblaApi, images.length]);
-
-  async function run(fn: () => Promise<unknown>) {
-    setBusy(true);
-    await fn();
-    setBusy(false);
-    onChanged();
-  }
-  // Upload each file straight from the browser to the shop-media bucket (Storage
-  // RLS scopes writes to this company's folder), then record only the paths via
-  // a server action. The bytes never touch the server, so no body-size limit
-  // applies. If recording the metadata fails, delete the just-uploaded objects
-  // so we don't leave orphaned files behind.
-  async function add(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files ?? []);
-    e.target.value = ""; // allow re-selecting the same file
-    if (files.length === 0) return;
-
-    const tooBig = files.find((f) => f.size > MAX_IMAGE_BYTES);
-    if (tooBig) { setError(`"${tooBig.name}" is over 10 MB.`); return; }
-    const wrongType = files.find((f) => !ACCEPTED_IMAGE_TYPES.includes(f.type));
-    if (wrongType) { setError(`"${wrongType.name}" must be JPG, PNG, or WebP.`); return; }
-
-    setError(null);
-    setBusy(true);
-    const supabase = createClient();
-    const uploaded: string[] = [];
-    try {
-      for (const file of files) {
-        const path = `${companyId}/products/${productId}-${crypto.randomUUID()}.${imageExt(file)}`;
-        const { error: upErr } = await supabase.storage
-          .from("shop-media")
-          .upload(path, file, { contentType: file.type });
-        if (upErr) throw new Error(upErr.message);
-        uploaded.push(path);
-      }
-      const res = await addProductImageRecords(productId, uploaded);
-      if ("error" in res) throw new Error(res.error);
-    } catch (err) {
-      if (uploaded.length > 0) await supabase.storage.from("shop-media").remove(uploaded);
-      setError(err instanceof Error ? err.message : "Upload failed.");
-      setBusy(false);
-      return;
-    }
-    setBusy(false);
-    onChanged();
-  }
-  // Delete the metadata row (server), then the file straight from the browser
-  // (same client that uploaded it). Best-effort on the file — an orphan is
-  // harmless; what we must avoid is a row pointing at a deleted file.
-  async function remove(imageId: string) {
-    setError(null);
-    setBusy(true);
-    const res = await removeProductImage(imageId);
-    if ("error" in res) { setError(res.error); setBusy(false); return; }
-    await createClient().storage.from("shop-media").remove([res.path]);
-    setBusy(false);
-    onChanged();
-  }
-  function move(idx: number, dir: -1 | 1) {
-    const ids = images.map((im) => im.id);
-    const j = idx + dir;
-    if (j < 0 || j >= ids.length) return;
-    [ids[idx], ids[j]] = [ids[j], ids[idx]];
-    run(() => setProductImageOrder(productId, ids));
-  }
-  function makeCover(idx: number) {
-    const ids = images.map((im) => im.id);
-    const [picked] = ids.splice(idx, 1);
-    ids.unshift(picked);
-    run(() => setProductImageOrder(productId, ids));
-  }
-
-  const hasImages = images.length > 0;
-
-  return (
-    <div className="relative mt-2 p-1.5">
-      {hasImages ? (
-        <div className="relative">
-          <div className="overflow-hidden rounded-xl" ref={emblaRef}>
-            <div className="flex">
-              {images.map((im) => (
-                <div key={im.id} className="min-w-0 flex-[0_0_100%]">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={mediaUrl(im.path)} alt={label} className="aspect-[4/3] w-full object-cover" />
-                </div>
-              ))}
-            </div>
-          </div>
-          {images.length > 1 && (
-            <>
-              <button
-                type="button" aria-label="Previous photo" onClick={() => emblaApi?.scrollPrev()}
-                className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-ink/55 p-1 text-white hover:bg-ink"
-              >
-                <ChevronLeft size={16} />
-              </button>
-              <button
-                type="button" aria-label="Next photo" onClick={() => emblaApi?.scrollNext()}
-                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-ink/55 p-1 text-white hover:bg-ink"
-              >
-                <ChevronRight size={16} />
-              </button>
-              <div className="absolute bottom-2 left-1/2 flex -translate-x-1/2 gap-1.5">
-                {images.map((im, i) => (
-                  <button
-                    key={im.id} type="button" aria-label={`Go to photo ${i + 1}`}
-                    onClick={() => emblaApi?.scrollTo(i)}
-                    className={`h-1.5 rounded-full transition-all ${i === selected ? "w-4 bg-white" : "w-1.5 bg-white/60"}`}
-                  />
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-      ) : (
-        <div className="flex aspect-[4/3] w-full items-center justify-center rounded-xl bg-gradient-to-br from-rose-200 to-pink-400 text-xs font-semibold text-white/80">
-          {label}
-        </div>
-      )}
-
-      {editing && (
-        <>
-          <button
-            type="button" onClick={() => addRef.current?.click()} disabled={busy}
-            className="absolute right-3 top-3 flex items-center gap-1 rounded-full bg-ink/70 px-3 py-1.5 text-xs font-semibold text-white hover:bg-ink disabled:opacity-50"
-          >
-            {busy ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />}
-            Add photos
-          </button>
-          <input
-            ref={addRef} type="file" accept="image/jpeg,image/png,image/webp" multiple hidden onChange={add}
-          />
-          {error && (
-            <p className="mt-1.5 rounded-lg bg-rose-50 px-2 py-1 text-[11px] font-medium text-rose-600">{error}</p>
-          )}
-          {hasImages && (
-            <div className="mt-1.5 flex gap-2 overflow-x-auto pb-1">
-              {images.map((im, i) => (
-                <div key={im.id} className="relative shrink-0">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={mediaUrl(im.path)} alt=""
-                    className={`h-14 w-14 rounded-lg object-cover ring-2 ${i === 0 ? "ring-brand" : "ring-white/60"}`}
-                  />
-                  {i === 0 && (
-                    <span className="absolute left-0 top-0 rounded-br-lg rounded-tl-lg bg-brand px-1 py-0.5 text-[8px] font-bold text-white">
-                      Cover
-                    </span>
-                  )}
-                  <div className="mt-0.5 flex items-center justify-center gap-0.5">
-                    <button
-                      type="button" aria-label="Move left" disabled={busy || i === 0} onClick={() => move(i, -1)}
-                      className="rounded p-0.5 text-ink/60 hover:bg-white disabled:opacity-30"
-                    >
-                      <ChevronLeft size={12} />
-                    </button>
-                    {i !== 0 && (
-                      <button
-                        type="button" aria-label="Make cover" disabled={busy} onClick={() => makeCover(i)}
-                        className="rounded p-0.5 text-ink/60 hover:bg-white"
-                      >
-                        <Star size={12} />
-                      </button>
-                    )}
-                    <button
-                      type="button" aria-label="Remove photo" disabled={busy}
-                      onClick={() => remove(im.id)}
-                      className="rounded p-0.5 text-rose-500 hover:bg-white disabled:opacity-30"
-                    >
-                      <X size={12} />
-                    </button>
-                    <button
-                      type="button" aria-label="Move right" disabled={busy || i === images.length - 1} onClick={() => move(i, 1)}
-                      className="rounded p-0.5 text-ink/60 hover:bg-white disabled:opacity-30"
-                    >
-                      <ChevronRight size={12} />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
-
-// ---------- product card (read + owner controls) ----------
-function ProductCard({ p, companyId, editing, onChanged }: { p: ShopProduct; companyId: string; editing: boolean; onChanged: () => void }) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function togglePrice() {
-    setError(null);
-    setBusy(true);
-    const res = await setProductPricePublic(p.id, !p.price_public);
-    setBusy(false);
-    if ("error" in res) { setError(res.error); return; }
-    onChanged();
-  }
-
-  async function toggleVisible() {
-    setError(null);
-    setBusy(true);
-    const res = await setProductProfileVisible(p.id, !p.profile_visible);
-    setBusy(false);
-    if ("error" in res) { setError(res.error); return; }
-    onChanged();
-  }
-
-  return (
-    <div className="overflow-hidden rounded-2xl bg-brand-soft/40 ring-1 ring-white/60">
-      <div className="px-3 pt-3">
-        <div className="font-bold text-brand-deep">{p.name}</div>
-        {p.cultivar && <div className="text-sm text-ink/70">{p.cultivar}</div>}
-        {p.local_code_pzn && <div className="text-[11px] text-ink/50">Code: PZN{p.local_code_pzn}</div>}
-      </div>
-      <div className="mt-2 flex justify-end gap-1.5 px-3">
-        <button className="rounded-full bg-brand p-1.5 text-white"><Heart size={14} /></button>
-        <button className="rounded-full bg-brand p-1.5 text-white"><ShoppingCart size={14} /></button>
-      </div>
-      <ProductGallery
-        productId={p.id}
-        companyId={companyId}
-        label={p.cultivar ?? p.name}
-        images={p.images}
-        editing={editing}
-        onChanged={onChanged}
-      />
-      <div className="flex items-center justify-between px-3 pb-3 text-sm">
-        <span className="font-semibold text-ink">
-          THC {p.thc_percent ?? "—"}% · CBD {p.cbd_percent ?? "—"}%
-        </span>
-        {editing ? (
-          <div className="flex flex-wrap items-center justify-end gap-1.5">
-            <button
-              type="button"
-              onClick={toggleVisible}
-              disabled={busy}
-              title="Show this product on your public Discover profile"
-              className={`flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold disabled:opacity-50 ${
-                p.profile_visible
-                  ? "bg-brand text-white hover:bg-brand-deep"
-                  : "bg-white/70 text-ink/60 hover:bg-white"
-              }`}
-            >
-              <Store size={13} />
-              {p.profile_visible ? "On profile" : "Off profile"}
-            </button>
-            <button
-              type="button"
-              onClick={togglePrice}
-              disabled={busy || !p.profile_visible}
-              title={
-                p.profile_visible
-                  ? 'Show the price (vs "Request pricing")'
-                  : "Put the product on your profile first"
-              }
-              className="flex items-center gap-1 rounded-full bg-white/70 px-3 py-1 text-xs font-bold text-brand-deep hover:bg-white disabled:opacity-40"
-            >
-              {p.price_public ? <Eye size={13} /> : <EyeOff size={13} />}
-              {p.price_public ? "Price public" : "Price hidden"}
-            </button>
-          </div>
-        ) : p.price_public && p.price_per_gram != null ? (
-          <span className="font-bold text-brand-deep">{eur(p.price_per_gram)}/g</span>
-        ) : (
-          <button className="rounded-full bg-white/70 px-3 py-1 text-xs font-bold text-brand-deep hover:bg-white">
-            Request pricing
-          </button>
-        )}
-      </div>
-      {error && (
-        <p className="mt-1.5 rounded-lg bg-rose-50 px-2 py-1 text-[11px] font-medium text-rose-600 mx-3 mb-3">{error}</p>
-      )}
+      <button
+        type="button"
+        data-testid="add-shop-confirm"
+        onClick={submit}
+        className="rounded-full bg-brand px-3 py-1 text-xs font-bold text-white hover:bg-brand-deep"
+      >
+        Add
+      </button>
     </div>
   );
 }

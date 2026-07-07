@@ -1,9 +1,11 @@
 'use server'
 
+import { after } from 'next/server'
 import { createClient } from '@/shared/db/server'
 import { getCurrentCompanyId, getCurrentPerson } from '@/shared/auth'
-import { updateMyProfile } from '@/modules/profile'
+import { updateMyProfile, setMyAvatarPath } from '@/modules/profile'
 import { updateCompanyProfile } from '@/modules/companies'
+import { shouldDispatch } from '@/shared/email/dispatch'
 
 // Each action returns a result the client stepper acts on (advance or show
 // error). None redirect — navigation lives in the client so the modal sequence
@@ -69,12 +71,26 @@ export async function createCompany(formData: FormData): Promise<ActionResult> {
   const name = String(formData.get('name') ?? '').trim()
   const country = String(formData.get('country') ?? '').trim()
   const typeCodes = formData.getAll('type_codes').map(String)
+  // Two-level taxonomy (DEV-99 #3): Business Categories (sector) alongside the
+  // Business Activities above. A 'custom' category carries its free-text label in
+  // custom_category; the DB CHECK enforces "label present iff custom".
+  const categoryCodes = formData.getAll('category_codes').map(String)
+  const customCategory = String(formData.get('custom_category') ?? '').trim()
   const files = formData
     .getAll('files')
     .filter((f): f is File => f instanceof File && f.size > 0)
 
   if (!name) return { error: 'Company name is required.' }
   if (country.length !== 2) return { error: 'Please pick a country.' }
+  // Both taxonomy levels are required in the UI; re-assert server-side so a crafted
+  // POST can't create a taxonomy-less company. Naming the 'custom' category here also
+  // yields a friendly message instead of leaking the raw company_business_category
+  // custom_label CHECK violation back to the client.
+  if (typeCodes.length === 0) return { error: 'Please pick at least one business activity.' }
+  if (categoryCodes.length === 0) return { error: 'Please pick at least one business category.' }
+  if (categoryCodes.includes('custom') && customCategory === '') {
+    return { error: 'Please name your custom business category.' }
+  }
   if (LICENCE_REQUIRED && files.length === 0) return { error: 'A licence file is required.' }
 
   const supabase = await createClient()
@@ -105,11 +121,37 @@ export async function createCompany(formData: FormData): Promise<ActionResult> {
       p_name: name,
       p_country: country,
       p_type_codes: typeCodes,
+      p_category_codes: categoryCodes,
+      p_custom_category: customCategory || undefined,
     })
     if (error || !data) {
       return { error: error?.message ?? 'Could not create the company.' }
     }
     companyId = data
+
+    // SET-03 (welcome, Open-Q #1): fire the ONE-SHOT welcome email HERE, on the
+    // null→set company transition. This branch is only entered when the caller had
+    // no company; on any createCompany retry getCurrentCompanyId() returns the
+    // just-created company and short-circuits it, so the welcome fires exactly once
+    // per person WITHOUT a welcome_sent_at column. Fire-and-forget via after() +
+    // fail-soft: a send failure can never fail company creation. person.id ===
+    // auth.uid(), so the caller is the welcome recipient.
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (shouldDispatch({ error }) && user) {
+      const welcomePersonId = user.id
+      const welcomeCompanyId = companyId
+      after(async () => {
+        try {
+          await supabase.functions.invoke('send-lifecycle-email', {
+            body: { event: 'welcome', person_id: welcomePersonId, company_id: welcomeCompanyId },
+          })
+        } catch {
+          /* email transport down MUST NOT surface as an action failure */
+        }
+      })
+    }
   }
 
   for (const file of files) {
@@ -159,6 +201,13 @@ export async function saveProfile(formData: FormData): Promise<ActionResult> {
 
   const flagErr = await patchPreferences({}, { profile: true })
   return flagErr ?? { ok: true }
+}
+
+/** Persist the OPTIONAL onboarding profile photo (DEV-99 #4). AvatarUpload uploads
+ *  the file client-direct, then calls this with the stored path to point the person
+ *  row at it. The photo does not gate the profile checklist, so no revalidate needed. */
+export async function saveOnboardingAvatar(path: string): Promise<{ error?: string }> {
+  return setMyAvatarPath(path)
 }
 
 /** Company-details step — written via the company module (one writer); flag in preferences. */
@@ -249,22 +298,37 @@ export async function requestToJoin(companyId: string, note?: string): Promise<A
   const supabase = await createClient()
 
   // WIDENED localized cast: expose `code` so the SQLSTATE check below is typed.
-  const { error } = await (supabase as unknown as {
+  const result = await (supabase as unknown as {
     rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string; code?: string } | null }>
   }).rpc('request_to_join', { p_company_id: companyId, p_note: note ?? null })
 
-  if (error) {
+  if (result.error) {
     // (1) Raw unique_violation from the one-active-pending index — detect by SQLSTATE.
-    if (error.code === '23505') {
+    if (result.error.code === '23505') {
       return { error: 'You already have a pending request. Withdraw it before requesting another company.' }
     }
     // (2) Caller already has a company: request_to_join's company-less guard
     //     (20260622100000) raises this, as does a raced Path-A self-onboard.
-    if (error.message.includes('already belongs to a company')) {
+    if (result.error.message.includes('already belongs to a company')) {
       return { error: "You're already part of a company." }
     }
     // (3) Verified-target guard + anything else → fail closed, no internal leak.
     return { error: GENERIC_ERROR }
+  }
+
+  // SET-03: join.requested — the edge fn fans out to the TARGET company's
+  // Superadmins (recipient resolution is server-side in 13-05; the action passes
+  // only the company id). Post-ok + fail-soft via after().
+  if (shouldDispatch(result)) {
+    after(async () => {
+      try {
+        await supabase.functions.invoke('send-lifecycle-email', {
+          body: { event: 'join.requested', company_id: companyId },
+        })
+      } catch {
+        /* email transport down MUST NOT surface as an action failure */
+      }
+    })
   }
   return { ok: true }
 }

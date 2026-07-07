@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/shared/db/server'
 import { getCurrentPerson } from '@/shared/auth'
+import { getMyProfile } from '@/modules/profile'
 import { OnboardingStepper } from './OnboardingStepper'
 import type { RejectPreset } from '@/app/admin/verifications/reject-presets'
 
@@ -87,10 +88,16 @@ export default async function OnboardingPage({
     }
   }
 
-  // Business-category options come straight from the lookup so the codes stay
-  // owned by the DB.
+  // The two taxonomy levels come straight from their lookups so the codes stay
+  // owned by the DB (DEV-99 #3): company_type = Business Activities (role),
+  // business_category = Business Category (sector, incl. the 'custom' escape hatch).
   const { data: companyTypes } = await supabase
     .from('company_type')
+    .select('code, description')
+    .order('sort_order')
+
+  const { data: businessCategories } = await supabase
+    .from('business_category')
     .select('code, description')
     .order('sort_order')
 
@@ -167,10 +174,18 @@ export default async function OnboardingPage({
     rejectionPreset = presetCode as RejectPreset | null
   }
 
+  // Prefill the (optional) profile photo when resuming onboarding so an already
+  // uploaded avatar shows instead of a blank slate. Reuse the profile module's
+  // avatar-URL logic (public URL + cache nonce) rather than rebuilding it here.
+  const initialAvatarUrl = (await getMyProfile())?.avatarUrl ?? null
+
   return (
     <OnboardingStepper
       firstName={person.first_name ?? null}
+      personId={person.id}
+      initialAvatarUrl={initialAvatarUrl}
       companyTypes={companyTypes ?? []}
+      businessCategories={businessCategories ?? []}
       resumeStep={resumeStep}
       prefill={prefill}
       licenceRequired={licenceRequired}
