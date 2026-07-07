@@ -216,3 +216,99 @@ export async function markStageDone(
     );
   if (error) throw error;
 }
+
+/**
+ * Upload the seller's invoice PDF (Phase 7, D-27/D-28) - the ONE close artifact.
+ *
+ * The client-side write that lands the invoice in the private `deal-artifacts`
+ * bucket and records it as a `deal_artifact(category='invoice')`. Mirrors the
+ * createThing discipline: browser client, getUser() guard, throw on error, and an
+ * `as never` cast for the not-yet-typed `is_private` column.
+ *
+ * TWO steps:
+ *   1. Storage: upload the file to `<deal_workspace_id>/<uuid>-<name>`. The bucket
+ *      is PDF-only (D-28 / ASVS V5) and RLS-scoped by `can_access_workspace` on
+ *      the first path segment, so only a deal-workspace member can write here.
+ *   2. Row: insert the deal_artifact pointer. `uploaded_by_company_id` is the
+ *      SESSION company - resolved from the authenticated user's own person row,
+ *      NEVER a value passed in by the caller. The finalize gate later requires
+ *      this to equal the SELLER company, so an honest uploader identity is
+ *      load-bearing (ASVS V4).
+ *
+ * D-28 ONE-SHOT: the invoice is final. If an invoice artifact already exists for
+ * this deal, the upload is rejected HERE (rather than in finalizeDeal) so the
+ * seller gets the "already uploaded" rejection at the point of the second attempt;
+ * a correction goes via the reopen ticket, not a re-upload.
+ */
+export async function uploadDealInvoice(args: {
+  /** the deal_workspace_id - the storage folder AND the artifact's workspace. */
+  workspaceId: string;
+  /** the deal_card this invoice closes - the caller chains finalizeDeal with it. */
+  dealCardId: string;
+  file: File;
+}): Promise<void> {
+  const supabase = createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("uploadDealInvoice: no authenticated user");
+
+  // PDF-only, defence in depth (the bucket allowed_mime_types is the real guard).
+  if (args.file.type && args.file.type !== "application/pdf") {
+    throw new Error("uploadDealInvoice: the invoice must be a PDF.");
+  }
+
+  // SESSION company - the authenticated user's person row (RLS lets a user read
+  // their OWN row), NEVER trusted from input. This is the uploader identity the
+  // finalize gate checks against the seller company (ASVS V4).
+  const { data: person, error: personErr } = await supabase
+    .from("person")
+    .select("company_id")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (personErr) throw personErr;
+  const companyId = person?.company_id ?? null;
+  if (!companyId) throw new Error("uploadDealInvoice: no company in session");
+
+  // D-28 ONE-SHOT: reject a second invoice for this deal (category='invoice', not
+  // soft-deleted). RLS (dealart_all) scopes the read to workspace members.
+  const { data: existing, error: existErr } = await supabase
+    .from("deal_artifact")
+    .select("id")
+    .eq("deal_workspace_id", args.workspaceId)
+    .eq("category", "invoice")
+    .is("deleted_at", null)
+    .limit(1);
+  if (existErr) throw existErr;
+  if (existing && existing.length > 0) {
+    throw new Error("An invoice has already been uploaded for this deal.");
+  }
+
+  // 1. STORAGE - namespaced by workspace so the bucket RLS (first path segment =
+  // workspace id) scopes access. A uuid prefix avoids a name collision on re-use.
+  const objectName = `${crypto.randomUUID()}-${args.file.name}`;
+  const storagePath = `${args.workspaceId}/${objectName}`;
+  const { error: upErr } = await supabase.storage
+    .from("deal-artifacts")
+    .upload(storagePath, args.file, { contentType: "application/pdf" });
+  if (upErr) throw upErr;
+
+  // 2. ROW - the deal_artifact pointer. is_private is not in the generated insert
+  // type yet (getDealArtifacts reads it via a select cast), so the object is cast
+  // `as never` (same discipline as createThing). The invoice is SHARED
+  // (is_private=false) so the buyer sees Deal Executed + the document.
+  const { error: rowErr } = await supabase.from("deal_artifact").insert({
+    deal_workspace_id: args.workspaceId,
+    uploaded_by_company_id: companyId,
+    title: args.file.name,
+    category: "invoice",
+    storage_path: storagePath,
+    original_filename: args.file.name,
+    mime_type: "application/pdf",
+    file_size_bytes: args.file.size,
+    is_private: false,
+    created_by: user.id,
+  } as never);
+  if (rowErr) throw rowErr;
+}

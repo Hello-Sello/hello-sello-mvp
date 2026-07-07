@@ -70,6 +70,7 @@ export {
   setThingVisibility,
   assignThing,
   markStageDone,
+  uploadDealInvoice,
 } from "./supabase/writes";
 export { confirmDeal, createDeal, editDeal, finalizeDeal } from "./actions";
 export { DealCard } from "./components/DealCard";
