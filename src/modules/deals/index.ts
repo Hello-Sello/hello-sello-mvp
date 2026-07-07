@@ -17,13 +17,10 @@ export type {
   MemberRole,
   MemberView,
   WorkspaceVisibility,
-  StageCode,
   ThingType,
   ThingStatus,
   ThingView,
   ArtifactView,
-  StageCompletionView,
-  StageView,
   ConfirmationStatus,
   ConfirmSeat,
   ConfirmDecision,
@@ -59,8 +56,6 @@ export {
   getCurrentDealCardId,
   getOwnCatalog,
   getWorkspace,
-  getStagesAndThings,
-  getStageCompletions,
   getDealArtifacts,
   resolveP2pRecipient,
 } from "./supabase/reads";
@@ -69,7 +64,7 @@ export {
   createThing,
   setThingVisibility,
   assignThing,
-  markStageDone,
+  uploadDealInvoice,
 } from "./supabase/writes";
 export { confirmDeal, createDeal, editDeal, finalizeDeal } from "./actions";
 export { DealCard } from "./components/DealCard";

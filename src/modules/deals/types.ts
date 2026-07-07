@@ -344,23 +344,11 @@ export interface DealWorkspaceView {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Stages + Things - the per-stage checklist (screen ④, 3c)                   */
+/* Things - the flat checklist (Stages retired, D-15)                         */
 /* -------------------------------------------------------------------------- */
 
 /** The thing row, verbatim. */
 export type ThingRow = Tables["thing"]["Row"];
-
-/**
- * deal_stage.code - the 5 fixed pipeline stages (`thing.stage_code`).
- * Seeded in 20260607090001 (sort_order 1-5). For 3c the bar that shows these
- * is screen-only; the stage list itself is read from `deal_stage`.
- */
-export type StageCode =
-  | "negotiation"
-  | "compliance_quality"
-  | "agreement"
-  | "payment"
-  | "fulfilment_delivery";
 
 /**
  * thing_type.code - what kind of work a Thing is (`thing.type`).
@@ -375,6 +363,7 @@ export type ThingStatus = "open" | "done";
 /**
  * One checklist row in the Things tab. Bound from `thing`, lookup columns
  * narrowed. Ticking it flips `status` open<->done (a real DB write, 3c D3).
+ * Things are FLAT/stageless now (D-15) - there is no stage grouping.
  */
 export interface ThingView {
   /** thing.id */
@@ -382,8 +371,7 @@ export interface ThingView {
   title: string;
   type: ThingType;
   status: ThingStatus;
-  stageCode: StageCode;
-  /** order within its stage */
+  /** order within the flat list */
   sortOrder: number;
   /** thing.assignee_person_id - the person this Thing is assigned to (D-09); null when unassigned. */
   assigneePersonId: string | null;
@@ -411,36 +399,6 @@ export interface ArtifactView {
   isPrivate: boolean;
   /** the thing.id whose linked_artifact_id points at this document, or null (a standalone document). */
   linkedThingId: string | null;
-}
-
-/**
- * One stage's STORED done state (D-14). Stage-done is a manual user action,
- * never auto-flipped, so it lives in a `deal_stage_completion` row. A stage with
- * NO row reads as not-done (markedDoneAt/By null).
- */
-export interface StageCompletionView {
-  stageCode: StageCode;
-  /** ISO timestamp the stage was marked done; null when no completion row exists. */
-  markedDoneAt: string | null;
-  /** the person who marked the stage done; null when no completion row exists. */
-  markedDoneByPersonId: string | null;
-}
-
-/**
- * One stage with its Things, ready to render. The 5 stages come from
- * `deal_stage` (so order + labels stay schema-driven); each carries the Things
- * whose `stage_code` matches. `thingsDone`/`thingsTotal` drive the progress
- * count. The "current" highlight is NOT here - it's screen-only local state (D2).
- */
-export interface StageView {
-  code: StageCode;
-  /** display label, e.g. "Compliance & Quality" (from deal_stage.description, titled) */
-  label: string;
-  /** deal_stage.sort_order (1-5) */
-  sortOrder: number;
-  things: ThingView[];
-  thingsTotal: number;
-  thingsDone: number;
 }
 
 /* -------------------------------------------------------------------------- */

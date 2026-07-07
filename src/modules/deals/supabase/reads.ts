@@ -43,30 +43,10 @@ import type {
   ProposalLineView,
   ProposalSource,
   ProposalVote,
-  StageCode,
-  StageCompletionView,
-  StageView,
-  ThingStatus,
-  ThingType,
-  ThingView,
   WorkspaceVisibility,
 } from "../types";
 
 type Meta = Record<string, unknown>;
-
-/**
- * Clean display labels for the 5 stages, keyed by `deal_stage.code`. The
- * `deal_stage.description` column reads like a sentence ("Negotiating terms");
- * the pipeline bar + Things headings want a short title, so we map here. The
- * stage order still comes from `deal_stage.sort_order`, never this map.
- */
-const STAGE_LABELS: Record<StageCode, string> = {
-  negotiation: "Negotiation",
-  compliance_quality: "Compliance & Quality",
-  agreement: "Agreement",
-  payment: "Payment",
-  fulfilment_delivery: "Fulfilment & Delivery",
-};
 
 const str = (m: Meta, k: string): string | null => {
   const v = m[k];
@@ -744,112 +724,6 @@ export async function getWorkspace(dealCardId: string): Promise<DealWorkspaceVie
     dealThreadId: threadRes.data.id,
     viewerCompanyId: viewerPerson?.company_id ?? null,
   };
-}
-
-/**
- * Load the 5 stages + their Things for the workspace (3c). The stage list and
- * its order come from `deal_stage` (schema-driven, never hardcoded); each
- * stage carries the Things whose `stage_code` matches, ordered by `sort_order`.
- * RLS (`thing_all`) scopes Things to deal members - both relationship companies
- * see the company_wide workspace's Things. A stage with no Things returns empty.
- *
- * The "current stage" highlight is NOT computed here: the 3c bar is screen-only
- * (D2), so the highlight lives as local React state, not in this read.
- */
-export async function getStagesAndThings(workspaceId: string): Promise<StageView[]> {
-  const supabase = createClient();
-
-  const [stagesRes, thingsRes] = await Promise.all([
-    supabase
-      .from("deal_stage")
-      .select("code, sort_order")
-      .order("sort_order", { ascending: true }),
-    supabase
-      .from("thing")
-      // assignee_person_id (D-09, column exists) + is_private/owner_company_id
-      // (D-10, new columns) are not in the generated row type yet, so the
-      // select-string is cast to its narrower literal and the extras are read off
-      // a locally-cast view below (same as-never discipline as getDealCard's
-      // batch/note columns). DO NOT regenerate database.types.
-      .select(
-        "id, title, type, status, stage_code, sort_order, assignee_person_id, is_private, owner_company_id" as "id, title, type, status, stage_code, sort_order",
-      )
-      .eq("deal_workspace_id", workspaceId)
-      .is("deleted_at", null)
-      .order("sort_order", { ascending: true }),
-  ]);
-  if (stagesRes.error) throw stagesRes.error;
-  if (thingsRes.error) throw thingsRes.error;
-
-  // group Things under their stage code
-  const byStage = new Map<string, ThingView[]>();
-  for (const r of thingsRes.data ?? []) {
-    // the new columns are not on the generated row type (the select cast above);
-    // read them off a locally-cast view (same as the batch/note discipline).
-    const v = r as unknown as {
-      assignee_person_id: string | null;
-      is_private: boolean;
-      owner_company_id: string | null;
-    };
-    const view: ThingView = {
-      id: r.id,
-      title: r.title,
-      type: r.type as ThingType,
-      status: r.status as ThingStatus,
-      stageCode: r.stage_code as StageCode,
-      sortOrder: r.sort_order,
-      assigneePersonId: v.assignee_person_id ?? null,
-      isPrivate: v.is_private ?? false,
-      ownerCompanyId: v.owner_company_id ?? null,
-    };
-    const list = byStage.get(r.stage_code) ?? [];
-    list.push(view);
-    byStage.set(r.stage_code, list);
-  }
-
-  return (stagesRes.data ?? []).map((s) => {
-    const code = s.code as StageCode;
-    const things = byStage.get(code) ?? [];
-    return {
-      code,
-      label: STAGE_LABELS[code] ?? code,
-      sortOrder: s.sort_order,
-      things,
-      thingsTotal: things.length,
-      thingsDone: things.filter((t) => t.status === "done").length,
-    };
-  });
-}
-
-/**
- * Read a workspace's STORED stage-done state (Phase 5, D-14). Each row is a
- * deliberate "Mark stage done" click; a stage with NO row reads as not-done.
- * `deal_stage_completion` is SHARED (both sides see progress), so RLS already
- * returns every member's view - no manual filter. The table is not in the
- * generated types yet, so the table name uses the `as never` cast (Muskan's
- * documented pattern; no full regen this phase).
- */
-export async function getStageCompletions(
-  workspaceId: string,
-): Promise<StageCompletionView[]> {
-  const supabase = createClient();
-
-  const { data, error } = await supabase
-    .from("deal_stage_completion" as never)
-    .select("stage_code, marked_done_at, marked_done_by_person_id")
-    .eq("deal_workspace_id", workspaceId);
-  if (error) throw error;
-
-  const rows = (data ?? []) as unknown as {
-    stage_code: string;
-    marked_done_at: string | null;
-    marked_done_by_person_id: string | null;
-  }[];
-  return rows.map((r) => ({
-    stageCode: r.stage_code as StageCode,
-    markedDoneAt: r.marked_done_at ?? null,
-    markedDoneByPersonId: r.marked_done_by_person_id ?? null,
-  }));
 }
 
 /**
