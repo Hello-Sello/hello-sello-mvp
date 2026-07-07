@@ -1,8 +1,13 @@
 import { useState } from "react";
-import { Search, Plus, ChevronDown } from "lucide-react";
-import type { ConversationListItem, MyConnectionsView } from "@/modules/messaging";
+import { Search, Plus, ChevronDown, MessageSquarePlus, Users } from "lucide-react";
+import type {
+  ConversationListItem,
+  GroupCreationResult,
+  MyConnectionsView,
+} from "@/modules/messaging";
 import { ConversationRow } from "./ConversationRow";
 import { NewChatDropdown, type NewChatSelection } from "./NewChatDropdown";
+import { GroupPicker } from "./GroupPicker";
 
 /**
  * The panel-3 filters (D-01). Exactly THREE chips stay always-visible -
@@ -59,12 +64,25 @@ export interface ConversationListProps {
   /** the live conversation-search value (D-09 - filters the base list rows) */
   search: string;
   onSearchChange: (q: string) => void;
-  /** the new-chat picker open/closed flag (owned by ChatView, no global store) */
-  pickerOpen: boolean;
-  onTogglePicker: () => void;
+  /** which picker is open (owned by ChatView, no global store): the New-Chat
+      picker, the New-Group picker, or none - the +New menu is 2-item (D-02) */
+  pickerMode: "newchat" | "group" | null;
+  onOpenPicker: (mode: "newchat" | "group") => void;
   onClosePicker: () => void;
   /** routed up to ChatView to open/create the right thread on a pick (D-05) */
   onNewChatSelect: (sel: NewChatSelection) => void;
+  /** the deal a New-Group is spawned from (deal mode, D-05); null = new-chat group */
+  groupDealCardId: string | null;
+  /** create the group (store) - resolves to the new thread + any gated externals */
+  onCreateGroup: (input: {
+    name: string;
+    memberPersonIds: string[];
+    dealCardId?: string;
+  }) => Promise<GroupCreationResult>;
+  /** approve one pending external member (D-05 two-approver gate) */
+  onApproveMember: (threadId: string, personId: string) => Promise<void>;
+  /** finished creating: open the new group thread + close the picker */
+  onGroupDone: (threadId: string) => void;
 }
 
 export function ConversationList({
@@ -76,26 +94,22 @@ export function ConversationList({
   connections,
   search,
   onSearchChange,
-  pickerOpen,
-  onTogglePicker,
+  pickerMode,
+  onOpenPicker,
   onClosePicker,
   onNewChatSelect,
+  groupDealCardId,
+  onCreateGroup,
+  onApproveMember,
+  onGroupDone,
 }: ConversationListProps) {
   return (
     <div className="flex h-full flex-col">
-      {/* The New chat trigger stays on top. The picker leaflet drops out of it and
-          COVERS everything below (search + filter tabs + rows) so only ONE list
-          shows at a time - never the base filters AND the picker stacked (D-04). */}
+      {/* The +New trigger stays on top; its 2-item menu (D-02) chooses which
+          picker leaflet drops out and COVERS everything below (search + filter
+          tabs + rows) so only ONE list shows at a time (D-04). */}
       <div className="p-3 pb-2">
-        <button
-          type="button"
-          onClick={onTogglePicker}
-          aria-expanded={pickerOpen}
-          className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-brand/90 px-3 py-2 text-sm font-medium text-white"
-        >
-          <Plus size={15} strokeWidth={2.25} />
-          New chat
-        </button>
+        <NewMenu onOpenPicker={onOpenPicker} disabled={pickerMode !== null} />
       </div>
 
       {/* Everything below the button. `relative` so the new-chat picker can cover
@@ -149,14 +163,83 @@ export function ConversationList({
           </div>
         </div>
 
-        {pickerOpen && (
+        {pickerMode === "newchat" && (
           <NewChatDropdown
             connections={connections}
             onSelect={onNewChatSelect}
             onClose={onClosePicker}
           />
         )}
+        {pickerMode === "group" && (
+          <GroupPicker
+            connections={connections}
+            mode={groupDealCardId ? "deal" : "newchat"}
+            dealCardId={groupDealCardId ?? undefined}
+            onCreate={onCreateGroup}
+            onApproveMember={onApproveMember}
+            onDone={onGroupDone}
+            onClose={onClosePicker}
+          />
+        )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * The `+ New` trigger + its 2-item menu (D-02): "New chat" opens the existing
+ * connected-contacts picker unchanged; "New group" opens the GroupPicker. A
+ * local open flag + a click-catcher backdrop close it (no global state).
+ */
+function NewMenu({
+  onOpenPicker,
+  disabled,
+}: {
+  onOpenPicker: (mode: "newchat" | "group") => void;
+  disabled: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+
+  function choose(mode: "newchat" | "group") {
+    setOpen(false);
+    onOpenPicker(mode);
+  }
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        disabled={disabled}
+        className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-brand/90 px-3 py-2 text-sm font-medium text-white transition hover:bg-brand disabled:opacity-50"
+      >
+        <Plus size={15} strokeWidth={2.25} />
+        New
+        <ChevronDown size={13} strokeWidth={2.25} />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="glass-strong absolute inset-x-0 top-full z-50 mt-1.5 rounded-2xl p-1.5">
+            <button
+              type="button"
+              onClick={() => choose("newchat")}
+              className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm font-medium text-ink transition hover:bg-black/[0.04]"
+            >
+              <MessageSquarePlus size={15} strokeWidth={1.9} /> New chat
+            </button>
+            <button
+              type="button"
+              onClick={() => choose("group")}
+              className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm font-medium text-ink transition hover:bg-black/[0.04]"
+            >
+              <Users size={15} strokeWidth={1.9} /> New group
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

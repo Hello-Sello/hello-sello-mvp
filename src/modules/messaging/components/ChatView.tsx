@@ -11,11 +11,15 @@ import {
   getMessages,
   markRead,
   postMessage,
+  createGroupThread,
+  approveGroupMember,
 } from "../supabase/store";
 import {
   getMyConnections,
   openOrCreateP2pThread,
   resolveC2cThread,
+  NEW_GROUP_EVENT,
+  type NewGroupEventDetail,
 } from "@/modules/messaging";
 import { useChatRealtime } from "../lib/use-chat-realtime";
 import { ConversationList } from "./ConversationList";
@@ -40,7 +44,10 @@ export function ChatView() {
   // the new-chat picker: the connected directory + its open/closed flag + the
   // live conversation-search value (local useState only - no global store)
   const [connections, setConnections] = useState<MyConnectionsView>({ companies: [] });
-  const [pickerOpen, setPickerOpen] = useState(false);
+  // which picker is open (D-02): the New-Chat picker, the New-Group picker, or
+  // none. A New-Group opened from a deal card carries that deal's id (deal mode).
+  const [pickerMode, setPickerMode] = useState<"newchat" | "group" | null>(null);
+  const [groupDealCardId, setGroupDealCardId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
 
   // initial load - auto-select the first conversation
@@ -107,8 +114,55 @@ export function ChatView() {
     // resolves the brand-new thread - else the panel shows the empty state (Pitfall 5).
     await getConversations().then(setConversations);
     setSelectedThreadId(threadId);
-    setPickerOpen(false);
+    setPickerMode(null);
   }
+
+  function handleOpenPicker(mode: "newchat" | "group") {
+    // opening from the +New menu is always a plain (non-deal) picker; deal mode
+    // is entered only via the hs:new-group event below.
+    setGroupDealCardId(null);
+    setPickerMode(mode);
+  }
+
+  function handleClosePicker() {
+    setPickerMode(null);
+    setGroupDealCardId(null);
+  }
+
+  // create a group (D-04 new-chat / D-05 deal). Returns the new thread + any
+  // server-gated externals so the picker can drive the two-approver flow.
+  async function handleCreateGroup(input: {
+    name: string;
+    memberPersonIds: string[];
+    dealCardId?: string;
+  }) {
+    const result = await createGroupThread(input);
+    // refresh so the new group row appears in the rail (and resolves on select)
+    await getConversations().then(setConversations);
+    return result;
+  }
+
+  async function handleApproveGroupMember(threadId: string, personId: string) {
+    await approveGroupMember({ threadId, personId });
+  }
+
+  // finished creating a group: open it + close the picker (mirrors new-chat).
+  function handleGroupDone(threadId: string) {
+    setSelectedThreadId(threadId);
+    handleClosePicker();
+  }
+
+  // the deal card (07-07) dispatches hs:new-group to open the picker in deal
+  // mode; messaging listens here, keeping the two modules acyclic (D-05).
+  useEffect(() => {
+    function onNewGroup(e: Event) {
+      const detail = (e as CustomEvent<NewGroupEventDetail>).detail;
+      setGroupDealCardId(detail?.dealCardId ?? null);
+      setPickerMode("group");
+    }
+    window.addEventListener(NEW_GROUP_EVENT, onNewGroup);
+    return () => window.removeEventListener(NEW_GROUP_EVENT, onNewGroup);
+  }, []);
 
   async function handleSend(body: string) {
     const text = body.trim();
@@ -169,10 +223,14 @@ export function ChatView() {
             connections={connections}
             search={search}
             onSearchChange={setSearch}
-            pickerOpen={pickerOpen}
-            onTogglePicker={() => setPickerOpen((v) => !v)}
-            onClosePicker={() => setPickerOpen(false)}
+            pickerMode={pickerMode}
+            onOpenPicker={handleOpenPicker}
+            onClosePicker={handleClosePicker}
             onNewChatSelect={handleNewChatSelect}
+            groupDealCardId={groupDealCardId}
+            onCreateGroup={handleCreateGroup}
+            onApproveMember={handleApproveGroupMember}
+            onGroupDone={handleGroupDone}
           />
         )}
       </div>
@@ -184,6 +242,7 @@ export function ChatView() {
             conversation={selectedConversation}
             messages={messages}
             onSend={handleSend}
+            onGroupRenamed={() => void getConversations().then(setConversations)}
           />
         ) : (
           <div className="flex flex-1 flex-col items-center justify-center p-10 text-center text-ink/40">

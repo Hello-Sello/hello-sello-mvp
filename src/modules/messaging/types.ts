@@ -231,6 +231,23 @@ export interface MyConnectionsView {
   companies: ConnectedCompany[];
 }
 
+/**
+ * One person row from the widened name search (D-04). The New-Group picker
+ * defaults to the connected directory but searches beyond it to ANY HelloSello
+ * user the viewer's RLS allows to see - this is that search's result shape.
+ */
+export interface PeopleSearchResult {
+  /** person.id - handed to createGroupThread as a member */
+  personId: string;
+  /** display_name ?? (first_name + " " + last_name) */
+  name: string;
+  /** computed avatar initials */
+  initials: string;
+  /** the person's company (for the subtitle line); null if RLS hid it */
+  companyId: string | null;
+  companyName: string | null;
+}
+
 /* -------------------------------------------------------------------------- */
 /* The accept contract - the published language between connect and messaging */
 /* -------------------------------------------------------------------------- */
