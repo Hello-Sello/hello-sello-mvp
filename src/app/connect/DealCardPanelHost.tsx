@@ -1,7 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getDealCard, DealCard, type DealCardView } from "@/modules/deals";
+import {
+  getDealCard,
+  getWorkspace,
+  getThings,
+  DealCard,
+  type DealCardView,
+  type ThingView,
+} from "@/modules/deals";
 
 /**
  * Deal card panel host (Phase 7, D-31/D-32) - the ROUTE-LEVEL composition root
@@ -29,6 +36,11 @@ import { getDealCard, DealCard, type DealCardView } from "@/modules/deals";
 export function DealCardPanelHost() {
   const [openCardId, setOpenCardId] = useState<string | null>(null);
   const [data, setData] = useState<DealCardView | null>(null);
+  // the Open Items source (07-07): the card's flat Things list + the workspace id
+  // that lets Open Items inline-add. Default empty so the section renders even
+  // before (or when) the extra reads resolve.
+  const [things, setThings] = useState<ThingView[]>([]);
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
 
   // listen for the open-card event (fired by DealPin's chip + RecordTabs' button)
   useEffect(() => {
@@ -40,12 +52,28 @@ export function DealCardPanelHost() {
     return () => window.removeEventListener("hs:open-deal-card", onOpen);
   }, []);
 
-  // fetch the card view when a deal is opened (RLS-scoped; same fetch DealPin uses)
+  // fetch the card view when a deal is opened (RLS-scoped; same fetch DealPin uses).
+  // ALSO load the workspace + its Things so Open Items renders the real list
+  // (07-07). Both extra reads are wrapped so a failure only leaves Open Items
+  // empty - it never blanks the card. Reset to defaults up front so the previous
+  // card's Things never flash on the next one; the `alive` guard drops stale
+  // results on a fast close/reopen.
   useEffect(() => {
     let alive = true;
+    setThings([]);
+    setWorkspaceId(null);
     void (async () => {
       const d = openCardId ? await getDealCard(openCardId).catch(() => null) : null;
       if (alive) setData(d);
+      if (!openCardId) return;
+
+      const ws = await getWorkspace(openCardId).catch(() => null);
+      const wsId = ws?.workspaceId ?? null;
+      const list = wsId ? await getThings(wsId).catch(() => []) : [];
+      if (alive) {
+        setWorkspaceId(wsId);
+        setThings(list);
+      }
     })();
     return () => {
       alive = false;
@@ -88,7 +116,12 @@ export function DealCardPanelHost() {
       <div className="glass-strong absolute inset-y-2 right-2 flex w-[420px] max-w-[calc(100vw-1rem)] flex-col overflow-hidden rounded-3xl">
         <div className="min-h-0 flex-1 overflow-y-auto p-3">
           {data ? (
-            <DealCard key={openCardId} data={data} />
+            <DealCard
+              key={openCardId}
+              data={data}
+              things={things}
+              workspaceId={workspaceId}
+            />
           ) : (
             <div className="flex h-full items-center justify-center text-sm text-ink/40">
               Loading deal card…

@@ -147,7 +147,7 @@ export function OpenItems({
     <div>
       <div className="mb-2 flex items-center gap-2">
         <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--dc-ink-38)]">
-          Open items
+          Things to do
         </span>
         <span className="grid h-[18px] min-w-[18px] place-items-center rounded-full bg-brand/12 px-1.5 font-mono text-[10px] font-bold tabular-nums text-[color:var(--dc-pink-deep)]">
           {visible.length - doneCount}

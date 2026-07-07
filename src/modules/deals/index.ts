@@ -64,6 +64,7 @@ export {
   getCurrentDealCardId,
   getOwnCatalog,
   getWorkspace,
+  getThings,
   getDealArtifacts,
   getPromotion,
   resolveP2pRecipient,

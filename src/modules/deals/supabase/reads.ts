@@ -48,6 +48,9 @@ import type {
   ProposalLineView,
   ProposalSource,
   ProposalVote,
+  ThingStatus,
+  ThingType,
+  ThingView,
   WorkspaceVisibility,
 } from "../types";
 
@@ -844,6 +847,38 @@ export async function getWorkspace(dealCardId: string): Promise<DealWorkspaceVie
     dealThreadId: threadRes.data.id,
     viewerCompanyId: viewerPerson?.company_id ?? null,
   };
+}
+
+/**
+ * The card's Open Items - the flat, stageless Things checklist (D-15). RLS on
+ * `thing` already scopes to workspace membership (the same guarantee
+ * getDealArtifacts relies on), so this is a flat workspace-scoped fetch with NO
+ * manual company filter: the other side's private rows never return here. All
+ * selected columns are on the generated `thing` Row type, so no select-string
+ * cast is needed; `type` and `status` are stored as codes and narrowed to their
+ * literal unions on map (the same discipline as `deal_type as DealType`).
+ */
+export async function getThings(workspaceId: string): Promise<ThingView[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("thing")
+    .select(
+      "id, title, type, status, sort_order, assignee_person_id, is_private, owner_company_id",
+    )
+    .eq("deal_workspace_id", workspaceId)
+    .is("deleted_at", null)
+    .order("sort_order", { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map((r) => ({
+    id: r.id,
+    title: r.title,
+    type: r.type as ThingType,
+    status: r.status as ThingStatus,
+    sortOrder: r.sort_order,
+    assigneePersonId: r.assignee_person_id,
+    isPrivate: r.is_private,
+    ownerCompanyId: r.owner_company_id,
+  }));
 }
 
 /**
