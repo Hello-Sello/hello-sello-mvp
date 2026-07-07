@@ -1071,6 +1071,106 @@ export async function declinePromotion({
   });
 }
 
+/* -------------------------------------------------------------------------- */
+/* Reopen ticket (07-06, RTKT-01) - the post-close path back in (D-29/D-30).   */
+/*                                                                            */
+/* After a deal closes (`done`, set by the invoice trigger), the ONLY path     */
+/* back is a reopen ticket - and EITHER party may open it (D-29). CRITICAL      */
+/* (D-29): these move the lifecycle STATUS + append a log note ONLY; they NEVER */
+/* mutate the sealed deal terms (line items / conditions). This is DISTINCT     */
+/* from the parked C2C ticketing - the inbox primitives are untouched.         */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Reopen a closed deal into a ticket (07-06). Allowed for EITHER deal party (the
+ * session company must be a member), and only from a closed deal (`done`). Moves
+ * the status to `ticket_created` and appends the reopen (+ optional note) to the
+ * card log. NEVER changes the sealed terms (T-07-06-03).
+ */
+export async function reopenTicket({
+  dealCardId,
+  note,
+}: {
+  dealCardId: string;
+  note?: string;
+}): Promise<void> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("reopenTicket: no authenticated user");
+
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) throw new Error("reopenTicket: no company in session");
+
+  const { version, status, sellerId, buyerId } = await dealSides(supabase, dealCardId);
+  // EITHER party may reopen - the session company must be one of the two sides.
+  if (companyId !== sellerId && companyId !== buyerId) {
+    throw new Error("Only a deal party can reopen this deal.");
+  }
+  // D-29: the ONLY path back is from a closed deal.
+  if (status !== "done") {
+    throw new Error("Only a closed (executed) deal can be reopened.");
+  }
+
+  await updateStatus(supabase, dealCardId, "ticket_created");
+  const trimmed = note?.trim();
+  await logLine(
+    supabase,
+    dealCardId,
+    version,
+    user.id,
+    trimmed
+      ? `Reopen ticket opened - ${trimmed}`
+      : "Reopen ticket opened.",
+  );
+  await writeAudit({
+    actorType: "user",
+    action: "deal.reopened",
+    contentType: "deal_card",
+    contentId: dealCardId,
+    actorPersonId: user.id,
+  });
+}
+
+/**
+ * Close a reopen ticket (07-06). Allowed for EITHER deal party, only from
+ * `ticket_created`; moves the status to `ticket_closed` and logs it. Like
+ * `reopenTicket`, it never touches the sealed terms (T-07-06-03).
+ */
+export async function closeTicket({
+  dealCardId,
+}: {
+  dealCardId: string;
+}): Promise<void> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("closeTicket: no authenticated user");
+
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) throw new Error("closeTicket: no company in session");
+
+  const { version, status, sellerId, buyerId } = await dealSides(supabase, dealCardId);
+  if (companyId !== sellerId && companyId !== buyerId) {
+    throw new Error("Only a deal party can close this ticket.");
+  }
+  if (status !== "ticket_created") {
+    throw new Error("Only an open reopen ticket can be closed.");
+  }
+
+  await updateStatus(supabase, dealCardId, "ticket_closed");
+  await logLine(supabase, dealCardId, version, user.id, "Reopen ticket closed.");
+  await writeAudit({
+    actorType: "user",
+    action: "deal.ticket_closed",
+    contentType: "deal_card",
+    contentId: dealCardId,
+    actorPersonId: user.id,
+  });
+}
+
 /* ---- small server-only helpers (not exported) ---- */
 
 type ServerClient = Awaited<ReturnType<typeof createClient>>;

@@ -41,7 +41,10 @@ export type DealType = "offer" | "order";
 /**
  * deal_card_status.code - the deal's life (`deal_card.status`).
  * 3a only writes `draft`; the rest are reached by later units (3d confirm,
- * fulfilment) and the 2e seeded history.
+ * fulfilment) and the 2e seeded history. `ticket_created`/`ticket_closed` are the
+ * post-close reopen-ticket states (07-06, D-29/D-30): after `done`, either party
+ * may reopen (`ticket_created` blue) and close (`ticket_closed` dark-green) the
+ * ticket - the sealed deal terms never change.
  */
 export type DealCardStatus =
   | "draft"
@@ -49,7 +52,9 @@ export type DealCardStatus =
   | "confirmed"
   | "amended"
   | "done"
-  | "cancelled";
+  | "cancelled"
+  | "ticket_created"
+  | "ticket_closed";
 
 /**
  * content_author.code - who produced a log entry (`deal_card_log.changed_by`).

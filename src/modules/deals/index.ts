@@ -83,6 +83,8 @@ export {
   offerPromotion,
   acceptPromotion,
   declinePromotion,
+  reopenTicket,
+  closeTicket,
 } from "./actions";
 export { DealCard } from "./components/DealCard";
 export { DealPin } from "./components/DealPin";
