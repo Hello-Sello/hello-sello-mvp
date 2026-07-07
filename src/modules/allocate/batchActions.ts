@@ -138,17 +138,22 @@ export async function confirmAllocations(lineItemIds: string[]): Promise<number>
   // passes ids that were NOT YET locked before this call (see AllocationTable's
   // "n = decided AND not locked" count), so re-reading which of THOSE ids are
   // now locked is an honest "what really changed" signal - the RPC's own
-  // count has no per-id breakdown to audit against directly.
+  // count has no per-id breakdown to audit against directly. Audit each line
+  // by its FINAL status so a sent decline is logged as a decline, not as an
+  // allocation confirmation (confirm & send locks both supply and decline).
   if (lineItemIds.length > 0) {
     const { data: lockedRows } = await supabase
       .from("deal_line_item")
-      .select("id")
+      .select("id, allocation_status")
       .in("id", lineItemIds)
       .not("allocation_locked_at", "is", null);
     for (const row of lockedRows ?? []) {
       await writeAudit({
         actorType: "user",
-        action: "deal_line_item.allocation_confirmed",
+        action:
+          row.allocation_status === "decline"
+            ? "deal_line_item.declined"
+            : "deal_line_item.allocation_confirmed",
         contentType: "deal_line_item",
         contentId: row.id,
         actorPersonId: user.id,

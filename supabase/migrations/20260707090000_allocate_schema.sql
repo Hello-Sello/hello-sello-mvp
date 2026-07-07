@@ -13,10 +13,19 @@
 --      substituted_from_product_id; product_batch.quantity_grams.
 --      Batch splitting reuses deal_line_item.metadata->'batchSplits'
 --      (no new column/table).
---   3. Four SECURITY DEFINER RPCs, all seller-only (a buyer relationship
---      member must NOT be able to flip allocation state, even though the
---      existing `line_all` RLS policy would otherwise let them write the
---      row directly — T-260707-01).
+--   3. Four SECURITY DEFINER RPCs, all seller-only. These gate the APP's own
+--      write path (the Allocate UI only ever calls the RPCs, never a direct
+--      table write). ⚠️ KNOWN RESIDUAL (T-260707-01): the RPC guard is NOT a
+--      complete control. deal_line_item.line_all / deal_card.card_all are
+--      symmetric `FOR ALL` RLS policies (either relationship side may write
+--      the row), so a malicious BUYER could bypass the RPCs and flip
+--      allocation state with a raw PostgREST UPDATE. A column-level REVOKE
+--      does NOT close this (Supabase grants `authenticated` table-level
+--      UPDATE, which a column REVOKE cannot override); the real fix is
+--      base-grant/RLS surgery on Ayush's deal-domain tables — SAME root cause
+--      and lane as the tracked-Urgent DEV-88 hole, to be fixed together with
+--      him, not unilaterally here. For the seed-data demo this is not
+--      demo-blocking; it is documented + flagged, not silently shipped.
 --   4. Additive audit-lookup rows consumed by Plan 3's `writeAudit` calls
 --      (JS-side, mirrors the confirmDeal/createDeal convention — never
 --      written to from inside these RPCs).
@@ -139,6 +148,22 @@ create index if not exists idx_deal_line_item_substituted_from
   on public.deal_line_item(substituted_from_product_id);
 
 -- ----------------------------------------------------------------------------
+-- 2b. Direct-write hardening — DEFERRED to a cross-lane fix (see header §3)
+-- ----------------------------------------------------------------------------
+-- A column-level `REVOKE UPDATE (...) ON deal_line_item FROM authenticated`
+-- was evaluated here and does NOT work: Supabase grants `authenticated`
+-- TABLE-level UPDATE, and a column-level REVOKE cannot override a table-level
+-- grant (verified — the buyer's direct update still succeeded). Making it
+-- actually deny the write requires table-level REVOKE + re-GRANT of every
+-- OTHER column (fragile — silently breaks Ayush's writes when he adds a
+-- column), a trigger on his hot deal_line_item write path, or fixing the
+-- symmetric base RLS itself. All three are base-grant/RLS surgery on the
+-- shared deal-domain tables (Ayush's lane) and belong with the DEV-88
+-- coordination, so NOTHING is applied here — the residual is documented in
+-- §3, flagged to Ayush in docs/team/sync/muskan.md, and tracked for a joint
+-- fix. The RPCs remain the app's own seller-gate.
+
+-- ----------------------------------------------------------------------------
 -- 3. Seller-only RPCs (T-260707-01/02/03 mitigations)
 -- ----------------------------------------------------------------------------
 
@@ -205,14 +230,17 @@ begin
   end if;
 
   if p_batch_id is not null then
-    select batch_number into v_batch_no
-    from public.product_batch
-    where id = p_batch_id
-      and company_id = public.current_company_id()
-      and product_id = v_product_id;
-    if v_batch_no is null then
+    -- Existence-based ownership check (not `v_batch_no is null`, which would
+    -- also reject a validly-owned batch that happened to have a null number).
+    if not exists (
+      select 1 from public.product_batch
+      where id = p_batch_id
+        and company_id = public.current_company_id()
+        and product_id = v_product_id
+    ) then
       raise exception 'set_line_allocation: batch does not belong to the caller or this line''s product';
     end if;
+    select batch_number into v_batch_no from public.product_batch where id = p_batch_id;
     update public.deal_line_item
       set batch_id = p_batch_id, batch_number = v_batch_no
     where id = p_line_item_id;
@@ -234,6 +262,12 @@ begin
         ) then
           raise exception 'set_line_allocation: split batch % does not belong to the caller or this line''s product',
             v_split->>'batchId';
+        end if;
+        -- The RPC, not the client, is the trust boundary: reject a crafted
+        -- negative split (would produce nonsensical negative allocated totals
+        -- in computeBatchStock). The client already clamps at >= 0.
+        if coalesce((v_split->>'grams')::numeric, 0) < 0 then
+          raise exception 'set_line_allocation: split grams must be non-negative';
         end if;
       end loop;
       update public.deal_line_item
@@ -371,10 +405,13 @@ $$;
 grant execute on function public.cancel_line_substitution(uuid) to authenticated;
 
 -- confirm_line_allocations — partial CONFIRM & SEND: locks every id that (a)
--- passes the seller-authorization rule, (b) is decided (not 'pending'), and
--- (c) is not already locked; silently skips everything else (declined/
--- pending/foreign rows are never touched — mirrors the prototype's "decided
--- rows only" partial confirm). Returns the count actually locked.
+-- passes the seller-authorization rule, (b) is DECIDED — either 'supply' or
+-- 'decline' (a decline is a decision the seller sends to the buyer, so it is
+-- locked/sent too, matching SELL.md's "locks the currently-decided rows
+-- (supply/decline)"), and (c) is not already locked; silently skips only
+-- still-'pending' or foreign rows. Returns the count actually locked. The JS
+-- caller (batchActions.confirmAllocations) audits each locked line by its own
+-- final status, so a locked decline is audited as a decline, not a confirm.
 create or replace function public.confirm_line_allocations(
   p_line_item_ids uuid[]
 ) returns int
