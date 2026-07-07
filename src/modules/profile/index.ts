@@ -7,6 +7,7 @@ import { createClient } from '@/shared/db/server'
 // The onboarding-completeness rule lives in its own pure (DB-free) file so it stays
 // unit-testable and can't drift from the check the checklist renders.
 export { isProfileComplete, type ProfileCompletenessInput } from './completeness'
+export { buildVCard, type VCardInput } from './vcard'
 
 export type MyProfile = {
   id: string
@@ -44,16 +45,36 @@ async function ensureHandle(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
   displayName: string,
-): Promise<void> {
+): Promise<string | null> {
   const { data } = await supabase.from('person').select('public_handle').eq('id', userId).maybeSingle()
-  if (data?.public_handle) return
+  if (data?.public_handle) return data.public_handle
   const base = slugify(displayName) || 'user'
   for (let i = 0; i < 6; i++) {
     const candidate = i === 0 ? base : `${base}-${i + 1}`
     const { error } = await supabase.from('person').update({ public_handle: candidate }).eq('id', userId)
-    if (!error) return // success
-    if (error.code !== '23505') return // not a uniqueness clash — give up quietly
+    if (!error) return candidate // success — return the handle we just assigned
+    if (error.code !== '23505') return null // not a uniqueness clash — give up quietly
   }
+  return null
+}
+
+/**
+ * Ensure the signed-in person has a `public_handle`, assigning one lazily if the
+ * backfill hasn't reached them yet (new signups only get a handle on their first
+ * profile save). Returns the handle, or null when signed out / no person row.
+ *
+ * The public door onto the private `ensureHandle` helper — it resolves the auth
+ * user itself so callers (e.g. the account-card popover) never touch a Supabase
+ * client. Server-only. Lets the scan-to-connect QR render for EVERY account, not
+ * only those who have already edited their profile.
+ */
+export async function ensurePublicHandle(displayName?: string): Promise<string | null> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return null
+  return ensureHandle(supabase, user.id, displayName ?? '')
 }
 
 // `links` is a small open jsonb bag; today it only carries LinkedIn.
@@ -233,22 +254,4 @@ export async function getPublicProfile(handle: string): Promise<PublicProfile | 
   }
 }
 
-/** Build a vCard 3.0 (the format iOS + Android both read) for "Save contact". */
-export function buildVCard(p: PublicProfile): string {
-  const [first, ...rest] = p.displayName.split(' ')
-  const last = rest.join(' ')
-  const lines = [
-    'BEGIN:VCARD',
-    'VERSION:3.0',
-    `N:${last};${first};;;`,
-    `FN:${p.displayName}`,
-    p.title && `TITLE:${p.title}`,
-    p.company && `ORG:${p.company.name}`,
-    p.email && `EMAIL;TYPE=WORK:${p.email}`,
-    p.phone && `TEL;TYPE=WORK,VOICE:${p.phone}`,
-    p.company?.website && `URL:${p.company.website}`,
-    p.linkedin && `X-SOCIALPROFILE;TYPE=linkedin:${p.linkedin}`,
-    'END:VCARD',
-  ].filter(Boolean)
-  return lines.join('\r\n')
-}
+// buildVCard now lives in ./vcard (pure + escaped) and is re-exported above.

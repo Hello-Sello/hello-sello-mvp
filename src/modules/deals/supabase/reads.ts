@@ -525,23 +525,33 @@ export async function getDealCard(cardId: string): Promise<DealCardView> {
   if (vpErr) throw vpErr;
   const viewerCompanyId: string | null = viewerPerson?.company_id ?? null;
 
-  // the card row (RLS: viewer must be a relationship member). note_company_a/b
-  // (NOTE-01) are now real generated columns on DealCardRow (07-08 type regen),
-  // so the select needs no cast and cardRow carries the note slots directly.
+  // the card row (RLS: viewer must be a relationship member)
+  // note_company_a/b (NOTE-01) plus ordered_via/ticket_status (260707 Allocate
+  // schema) are fetched at runtime but the select-string column list is cast to
+  // a shorter TS-literal so the generated-type overload keeps matching (the same
+  // as-never discipline used for deal_pending_change below) — widened back onto
+  // the row via `noteRow` just below.
   const { data: cardRow, error: cardErr } = await supabase
     .from("deal_card")
     .select(
-      "id, relationship_id, thread_id, version, status, deal_type, initiating_company_id, value_net, currency, delivery_date_target, buyer_po_number, seller_so_number, hs_deal_number, metadata, created_at, updated_at, deleted_at, created_by, updated_by, incoterms_code, offer_expires_at, payment_terms_code, note_company_a, note_company_b",
+      "id, relationship_id, thread_id, version, status, deal_type, initiating_company_id, value_net, currency, delivery_date_target, buyer_po_number, seller_so_number, hs_deal_number, metadata, created_at, updated_at, deleted_at, created_by, updated_by, incoterms_code, offer_expires_at, payment_terms_code, note_company_a, note_company_b, ordered_via, ticket_status" as "id, relationship_id, thread_id, version, status, deal_type, initiating_company_id, value_net, currency, delivery_date_target, buyer_po_number, seller_so_number, hs_deal_number, metadata, created_at, updated_at, deleted_at, created_by, updated_by, incoterms_code, offer_expires_at, payment_terms_code",
     )
     .eq("id", cardId)
     .single();
   if (cardErr) throw cardErr;
-  // NOTE-01: the note slots live on cardRow now; keep the noteRow alias so the
-  // myNote/theirNote resolution below reads unchanged.
-  const noteRow = cardRow;
+  const noteRow = cardRow as unknown as {
+    note_company_a: string | null;
+    note_company_b: string | null;
+    ordered_via: string;
+    ticket_status: string | null;
+  };
 
   const card: DealCard = {
     ...cardRow,
+    // noteRow carries the columns the select-string cast omits from cardRow's
+    // narrowed type (see comment above) — spread back in so the object
+    // satisfies DealCard, which includes all of them.
+    ...noteRow,
     deal_type: cardRow.deal_type as DealType,
     status: cardRow.status as DealCardStatus,
   };

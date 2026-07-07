@@ -57,6 +57,26 @@ export async function signUp(
   redirect(`/verify-email?email=${encodeURIComponent(email)}`)
 }
 
+// Re-send the signup confirmation email (DEV-129). Mirrors signUp's emailRedirectTo
+// exactly so the resent link lands on the same /auth/confirm → onboarding flow.
+//
+// ANTI-ENUMERATION (mirrors requestPasswordReset): the address is client-supplied
+// (?email=) and there is NO session on the verify screen, so surfacing GoTrue's
+// per-address outcomes would leak which addresses have a pending signup. Returns
+// nothing, logs any error server-side only; the card shows a neutral state and cools
+// down regardless. GoTrue's per-address rate limit bounds resend abuse.
+export async function resendConfirmation(email: string): Promise<void> {
+  const supabase = await createClient()
+  const origin =
+    (await headers()).get('origin') ?? process.env.NEXT_PUBLIC_SITE_URL!
+  const { error } = await supabase.auth.resend({
+    type: 'signup',
+    email,
+    options: { emailRedirectTo: `${origin}/auth/confirm?next=/onboarding` },
+  })
+  if (error) console.error('[resendConfirmation]', error.message)
+}
+
 // Forgot-password result. `sent` flips true once the request completes so the page
 // can swap in the neutral confirmation — it is true on EVERY outcome (anti-enumeration),
 // so it never signals whether the address is registered.
@@ -106,7 +126,17 @@ export async function signInWithProvider(
     (await headers()).get('origin') ?? process.env.NEXT_PUBLIC_SITE_URL!
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider,
-    options: { redirectTo: `${origin}/auth/callback?next=/onboarding` },
+    options: {
+      redirectTo: `${origin}/auth/callback?next=/onboarding`,
+      // Azure/Outlook returns NO email claim under the default `openid` scope, so
+      // exchangeCodeForSession fails with "Error getting user email from external
+      // provider" and /auth/callback bounces the user back to /login. Explicitly
+      // request email (+ profile for the display name). Google returns email under
+      // its default scope, so it needs nothing extra. NOTE: personal Microsoft
+      // accounts may still need the `email` optional claim added to the ID token in
+      // the Azure app registration — the scope alone isn't always enough there.
+      ...(provider === 'azure' ? { scopes: 'email profile' } : {}),
+    },
   })
   if (error) redirect('/login?error=oauth')
   if (data.url) redirect(data.url)

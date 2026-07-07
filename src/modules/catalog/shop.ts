@@ -7,11 +7,36 @@
  * the public-read RLS from the foundation migration already supports it.)
  */
 import { createClient } from "@/shared/db/server";
+import { getCurrentUser } from "@/shared/auth";
+import { pickRepresentativeBatch, deriveTerpPercent } from "./shopMap";
+import { deriveInitialLocations, type WarehouseLocation } from "./locations";
+
+export type { WarehouseLocation };
 
 /** One image in a product's gallery, ordered by the seller. The first entry
  *  (lowest position) is the cover / thumbnail. `path` is a `shop-media` storage
  *  path; the UI builds the public URL from it. */
 export type ProductImage = { id: string; path: string };
+
+/** One "Documents & Media" item on the card back (D-11). A `video_link` carries
+ *  an external `url` (no file); a `coa`/`doc` carries a `shop-media` `path`. */
+export type ProductMedia = {
+  id: string;
+  kind: "video_link" | "coa" | "doc";
+  path: string | null;
+  url: string | null;
+  label: string | null;
+};
+
+/** A lot on the product, surfaced for the optional batch affordance (DEV-108).
+ *  Measured CoA values only; seller cost is never surfaced on the card. */
+export type ProductBatchLite = {
+  id: string;
+  batch_number: string;
+  thc_percent: number | null;
+  cbd_percent: number | null;
+  expiry_date: string | null;
+};
 
 export type ShopProduct = {
   id: string;
@@ -19,6 +44,16 @@ export type ShopProduct = {
   cultivar: string | null;
   thc_percent: number | null;
   cbd_percent: number | null;
+  cbg_percent: number | null;
+  cbn_percent: number | null;
+  cultivator: string | null;
+  lineage_parent_a: string | null;
+  lineage_parent_b: string | null;
+  irradiation_code: string | null;
+  supplier_product_code: string | null;
+  packaging_material: string | null;
+  resealable: boolean | null;
+  location: string | null;
   pack_size_grams: number | null;
   unit_code: string | null;
   local_code_pzn: string | null;
@@ -26,11 +61,21 @@ export type ShopProduct = {
   country_of_origin: string | null;
   region: string | null;
   images: ProductImage[];
+  media: ProductMedia[];
+  batches: ProductBatchLite[];
+  /** Headline total-terpenes %: the manual `product.terpene_percent` column when
+   *  set (D-01, F-02), otherwise the derived sum of the representative batch's
+   *  terpene rows. Cost/COGS is never surfaced. */
+  terpPercent: number | null;
   profile_visible: boolean;
   price_public: boolean;
   price_per_gram: number | null;
   bundle_threshold_grams: number | null;
   bundle_price_per_gram: number | null;
+  /** Extra sellable pack sizes beyond the product's own `pack_size_grams` — a
+   *  lightweight v0 (stored in `product.metadata.pack_sizes`, no schema change)
+   *  ahead of a proper `product_pack_size` table in a later phase. */
+  packSizes: number[];
 };
 
 /** A profile link, stored in `company.metadata.links` (no column per link).
@@ -57,6 +102,10 @@ export type Shop = {
     address: string | null;
     website: string | null;
     links: ShopLink[];
+    /** The small named warehouse list (F-07 / Cluster H): Headquarter stays the
+     *  separate `address`/`country` display above — this is Warehouse 1/2/3, free
+     *  text, seeded from the legacy `warehouse_location` column on first read. */
+    locations: WarehouseLocation[];
     tags: string[];
   };
   products: ShopProduct[];
@@ -72,12 +121,25 @@ function parseLinks(metadata: unknown): ShopLink[] {
   );
 }
 
-export async function getMyShop(): Promise<Shop | null> {
-  const supabase = await createClient();
+/** Extra pack sizes stashed in `product.metadata.pack_sizes` (v0, no schema
+ *  change). Tolerant of any legacy/foreign shape — returns [] rather than
+ *  throwing on unexpected data. */
+function parsePackSizes(metadata: unknown): number[] {
+  const raw = (metadata as { pack_sizes?: unknown } | null)?.pack_sizes;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((n): n is number => typeof n === "number" && Number.isFinite(n) && n > 0);
+}
 
-  const { data: claims } = await supabase.auth.getClaims();
-  const uid = claims?.claims?.sub;
-  if (!uid) return null;
+export async function getMyShop(): Promise<Shop | null> {
+  // Shares the request-memoized auth check with every other accessor (see
+  // shared/auth) instead of calling supabase.auth.getClaims() on its own fresh
+  // client — that redundant concurrent read (racing getCompanyProfile() in the
+  // same Promise.all) was the root cause of a transient logout-on-save bug.
+  const user = await getCurrentUser();
+  if (!user) return null;
+  const uid = user.id;
+
+  const supabase = await createClient();
 
   const { data: person } = await supabase
     .from("person")
@@ -99,7 +161,7 @@ export async function getMyShop(): Promise<Shop | null> {
   const { data: rows } = await supabase
     .from("product")
     .select(
-      "id, name, cultivar, thc_percent, cbd_percent, pack_size_grams, unit_code, local_code_pzn, dominance_code, country_of_origin, region, profile_visible, price_public, product_image(id, image_path, position), pricelist_item(price_per_gram, bundle_threshold_grams, bundle_price_per_gram)",
+      "id, name, cultivar, thc_percent, cbd_percent, cbg_percent, cbn_percent, terpene_percent, cultivator, lineage_parent_a, lineage_parent_b, irradiation_code, supplier_product_code, packaging_material, resealable, location, pack_size_grams, unit_code, local_code_pzn, dominance_code, country_of_origin, region, profile_visible, price_public, metadata, product_image(id, image_path, position), product_media(id, kind, path, url, label, position), product_batch(id, batch_number, ready_for_sale_date, expiry_date, thc_percent, cbd_percent, created_at, deleted_at, batch_terpene(percent)), pricelist_item(price_per_gram, bundle_threshold_grams, bundle_price_per_gram)",
     )
     .eq("company_id", companyId)
     .is("deleted_at", null)
@@ -111,12 +173,42 @@ export async function getMyShop(): Promise<Shop | null> {
       .slice()
       .sort((a, b) => a.position - b.position)
       .map((im) => ({ id: im.id, path: im.image_path }));
+    const media: ProductMedia[] = (r.product_media ?? [])
+      .slice()
+      .sort((a, b) => a.position - b.position)
+      .map((m) => ({
+        id: m.id,
+        kind: m.kind as ProductMedia["kind"],
+        path: m.path,
+        url: m.url,
+        label: m.label,
+      }));
+    // Soft-deleted lots are excluded from both the batch list and the Terp% pick.
+    const liveBatches = (r.product_batch ?? []).filter((b) => b.deleted_at === null);
+    const repBatch = pickRepresentativeBatch(liveBatches);
+    const batches: ProductBatchLite[] = liveBatches.map((b) => ({
+      id: b.id,
+      batch_number: b.batch_number,
+      thc_percent: b.thc_percent,
+      cbd_percent: b.cbd_percent,
+      expiry_date: b.expiry_date,
+    }));
     return {
       id: r.id,
       name: r.name,
       cultivar: r.cultivar,
       thc_percent: r.thc_percent,
       cbd_percent: r.cbd_percent,
+      cbg_percent: r.cbg_percent,
+      cbn_percent: r.cbn_percent,
+      cultivator: r.cultivator,
+      lineage_parent_a: r.lineage_parent_a,
+      lineage_parent_b: r.lineage_parent_b,
+      irradiation_code: r.irradiation_code,
+      supplier_product_code: r.supplier_product_code,
+      packaging_material: r.packaging_material,
+      resealable: r.resealable,
+      location: r.location,
       pack_size_grams: r.pack_size_grams,
       unit_code: r.unit_code,
       local_code_pzn: r.local_code_pzn,
@@ -124,11 +216,16 @@ export async function getMyShop(): Promise<Shop | null> {
       country_of_origin: r.country_of_origin,
       region: r.region,
       images,
+      media,
+      batches,
+      // Manual column wins; the derived batch-terpene sum is the fallback (F-02).
+      terpPercent: r.terpene_percent ?? deriveTerpPercent(repBatch),
       profile_visible: r.profile_visible,
       price_public: r.price_public,
       price_per_gram: price?.price_per_gram ?? null,
       bundle_threshold_grams: price?.bundle_threshold_grams ?? null,
       bundle_price_per_gram: price?.bundle_price_per_gram ?? null,
+      packSizes: parsePackSizes(r.metadata),
     };
   });
 
@@ -146,6 +243,7 @@ export async function getMyShop(): Promise<Shop | null> {
       address: company.address,
       website: company.website,
       links: parseLinks(company.metadata),
+      locations: deriveInitialLocations(company.metadata, company.warehouse_location),
       tags: (company.company_type_assignment ?? []).map((t) => t.company_type_code),
     },
     products,

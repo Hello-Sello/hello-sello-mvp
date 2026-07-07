@@ -1223,3 +1223,147 @@ The light "UI touch" on the deal card + deal form, so the final Agentation polis
 - **D-18 - the Deal Form picks product + batch in ONE tap (a batch rail), no modal popup.** Each search result shows its batches as tap-to-add chips carrying that batch's measured THC/CBD; batches are preloaded. *Why:* the old click-product → modal-batch-picker → add was a two-step interruption; one inline tap preserves the batch-level truth (BTCH-01 / D-06) while removing the popup.
 
 *Why record:* these are the visual-language + card-placement decisions the Deal Room build (next) and the final Agentation polish will sit on top of. **Status: built + gate-green 2026-06-21 (tsc 0 + eslint 0 + 62/62 unit + next build ok); COMPILE/BUILD verified only - the card was not seen live (needs a minted deal), so a human visual UAT is owed. LOCAL only (branch `claude/ayush/work`, commits `c29ea4c` + `37ec4e8`, not pushed).** (Sources: this session; `prototypes/04c-touch-prototype/NOTES.md`.)
+
+---
+
+## RBAC / permissions
+
+- **Configurable RBAC matrix approved as Phase 14 (post-v1.0), reversing the v1 two-role-only scope (2026-06-21).** Phase 11 shipped two fixed company roles (Superadmin / Member) on top of the flexible `permission_matrix_entry` tables — only two actions (`team.manage`, `company.edit_profile`) seeded + enforced. Product now wants the full configurable matrix: a Superadmin defines custom roles, grants/revokes individual actions per role through a matrix UI, and assigns people to roles. **Scoped as its own Phase 14 (NOT folded into Phase 13)** because the real cost is enumerating a gated-action catalogue across the app + wiring `has_permission()` enforcement at each call site — the UI is the small part. **Post-v1.0:** does not gate the Phase 8 capstone (the live walk runs on the two-role model); the two-role default stays until Phase 14 lands. *Why:* makes the dormant matrix a real product surface, but honestly sized — the value is in enforced-action coverage, not the screen; deferring keeps the onboarding-ready milestone shippable. (Req IDs RBAC-05–08; ROADMAP Phase 14.)
+
+---
+
+## 2026-06-22 — Products are location-scoped (one product = one location)
+
+A product belongs to **exactly one shop location**; there are **no multi-location products**. A company has many locations (e.g. Berlin DE, Manchester UK); each location has its own product list. Same-named products across locations are **separate** entries because they genuinely differ — German vs UK **packaging, labelling, regulatory** (Marcel). Model: **Company → many Locations → each Location's own Products → each Product's Batches**.
+
+*Why:* matches reality (a German product carries German packaging and differs from its UK equivalent) and keeps the model simple — no product↔location many-to-many. *Schema implication:* a `location` entity per company + `product.location_id` — a **Phase-7 build, not yet in the schema** (verified: `product` has no location column today). (Source: 2026-06-22 Present / Manage-shop design session with Muskan; Marcel's packaging rationale.)
+
+---
+
+## 2026-06-23 — Price-list home + custom-pricing phasing (Present / DEV-1 / DEV-41)
+
+The **Standard** company-wide price list lives in the **shop**: born on first CSV import, managed / edited / sent from Manage shop. This is **Phase 7's** scope — one list per company.
+
+**Per-customer custom lists are a dedicated future phase (Phase 15), not Phase 7.** Model: **born in the shop** (seller overrides prices while building an offer) → **persist on the Relationship page** (DEV-41 Proposed→Approved→Applied) → resolve **per-recipient via the DEV-1 cascade** on outgoing offers. Requires new schema (`pricelist.relationship_id`, NULL = standard / set = customer-specific) + the DEV-41 approval primitive — **neither built today** (verified: `pricelist` is company-scoped only; no approval state machine in code). In **Phase 7** the seller send step **picks the Standard list**, and any per-line edit is a **one-off snapshot onto the deal** (`deal_line_item.unit_price`), never a saved list — so the prototype's `customLists` persistence is dropped.
+
+**Folds into Phase 7 (no migration — schema already stores it):** the dropped **batch-detail CSV columns** (`shelf_life_months`, `loss_on_drying_percent`, `water_activity`, batch `cbg/cbn_percent`, `description`, `bundle_description`) go back into the template + parser + import RPC fan-out; **CSV upsert by Supplier Product Code** + an **export-catalog** button become the no-ERP update path. The unique key `uq_product_supplier_code_active` already exists, so upsert needs no migration.
+
+*Why:* custom pricing is cross-cutting — 4 surfaces (Present + Relationship + deal + a new approval primitive), both engineers' lanes, schema change + a state machine — so sequencing it as its own slice (Phase 15) keeps the Standard path a clean tracer bullet and removes the prototype's half-built `customLists` inconsistency. Batch detail and the update path are pure Present-lane and storage already exists, so they belong in Phase 7. **Industry-confirmed** (Shopify / WooCommerce / Magento: one combined product+price CSV; bulk update = re-import-with-overwrite keyed on SKU; per-customer/tiered prices = a separate price-list import). (Sources: 2026-06-23 design session with Muskan; Marcel's Product-list + Pricelist CSVs in `docs/CSV's/`; web research on B2B catalog/price CSV practice.)
+
+---
+
+## 2026-06-26 — Location/warehouse model: structured addresses are their own phase (Phase 16), not Phase 7
+
+Marcel confirmed (DEV-80 thread) the warehouse model: **(1)** each location has its **own** warehouse address(es) buyers see (Germany view → German address); **(2)** a location can hold **more than one** address; **(3)** location naming is **free-form** (e.g. "Germany North", "Germany South"); **(4)** addresses must be entered correctly because they **populate the Sales Order / Purchase Order documents** (Ayush's deal docs, `src/modules/deals/lib/derive.ts`) — structured order data, not display text.
+
+**Decision: the structured location→multi-address registry is its own future phase (Phase 16 — Locations & Warehouses), NOT Phase 7 and NOT Phase 15 (pricing).**
+- **Phase 7 keeps location as a free-text label only** (`product.location varchar(80)`, D-07): it drives the grid tabs + the existing **single** `company.warehouse_location` line. Delivers Marcel's "different products/packaging per location" (each product sits in one location) — the part the shop needs. No registry, no multi-address, no structured fields.
+- **Phase 16 owns** the location entity (name + structured address fields), multiple addresses per location, a "Manage locations" in-platform form, and wiring addresses into the Sales/Purchase Order docs.
+
+**Input model (researched — hybrid, industry-standard):** warehouse **addresses are entered in-platform** via a structured, validated form (set up once); **products reference a location by name** via a CSV column + an in-app dropdown (name-matched like terpenes, warn on unknowns). Rationale: addresses feed order documents → they need validated structured fields a spreadsheet cell can't enforce; locations are few + stable (form), products are many + churny (CSV). (Source: Shopify "set up locations before assigning inventory" — Locations in Settings + a separate location-referencing inventory CSV; B2B platforms add address validation because the address drives shipping/order docs.)
+
+**Cross-lane + sequencing:** Phase 16 **depends on Phase 7** (the shop must exist) and **touches Ayush's deal/order-doc lane** — design the address fields *with* him against what the Sales/Purchase Order docs need; do not design the schema before that.
+
+*Refines the 2026-06-22 "location entity + `product.location_id` = Phase-7 build" note:* the **entity/registry moves to Phase 16**; Phase 7 ships the lighter free-text label (D-07). (Sources: 2026-06-26 session with Muskan; Marcel's DEV-80 answers; web research on B2B multi-warehouse data entry.)
+
+---
+
+## 2026-06-29 — Persistent shared basket + seller-owned deal pricing (Phase 7 absorbs Phase 6 Deal Basket)
+
+**Basket is now persistent and app-wide (reverses ADR-0003 "Option A / transient" and Phase 7 D-12).** A user's basket survives across sessions (saved, not in-memory). It is the shared **Product Basket** layer of the locked 4-layer model (Product Card → Product Basket → Deal Basket → Deal Card), built **once** and reused by both the shop and the deal flow.
+
+**Both sides build baskets (symmetric):** a **buyer** fills a basket from *other* companies' shops; a **seller** fills a basket from *their own* shop to send to buyers. Same component, two entry points.
+
+**Cross-company basket, per-seller offer:** one basket may hold products from several companies, **grouped by seller**; turning it into a deal produces **one deal card per seller** (two shops in-basket → two offers).
+
+**Deal pricing is seller-owned ("Model B" — answers the open Phase-6A question):** the buyer offers a card with products + quantities (+ delivery) but **no price** — "I want these, send me your price." The **seller fills unit prices**, sends back; **both confirm** to close. Each side keeps its own private number (seller cost / buyer resale → own margin %), never shared.
+
+**Phase 6 (Deal Basket) folds into Muskan's expanded Phase 7.** Ayush handed Phase 6 over (2026-06-23, `_workshop/handoff/phase-6-context.md`) as "almost the same work as the Product Basket Muskan already owns"; no Phase 6 code existed. The Deal Card terminus (`src/modules/deals/`: DealCard, DealForm, held two-sided change, `buildCreateBasket`, recipient resolution) already exists and is reused as-is.
+
+*Why:* the locked 4-layer model already intends one shared Product Basket; making it persistent + symmetric removes the "build throwaway, rebuild later" risk and merges Phase 7's cart with Phase 6's deal basket into one piece. Persistence (Option B) was deferred "until after Notifications" — reopened deliberately as the core buyer experience (DEV-95). *Open:* whether a seller's self-shop basket also persists across sessions. *Schema:* a persisted basket + basket-line store (new), keyed by owner + seller company — not built today. **Supersedes** ADR-0003's Option-A clause + Phase 7 D-12. (Sources: 2026-06-29 session with Muskan; `_workshop/handoff/phase-6-context.md`; Linear DEV-95/DEV-81.)
+
+**Refinements (same session):**
+
+- **Buyer's offer is a normal deal card; price follows the seller's *public* price** — if the seller published that product's price, the offer carries it; if not, the offer is sent **price-less** and the seller fills it. The **buyer can add a free note**.
+- **Missing/unavailable batches never block a deal card** — a product can be added and a card **sent + received with no batch**; the batch is attached later. Relaxes the current batch-coupled flow. **Resolves Linear HEL-20 + HEL-17.**
+- **Pre-sell = a real "Coming soon" shop product, not a throwaway line (DEV-84, in expanded Phase 7).** Seller creates a not-yet-stocked product with only the basics (name, optional price; **no batch / COA / lab values required**), status **"Coming soon"**, **visible in the public shop with a badge**. It behaves like any product (basket, deal card) and **graduates to live** when it arrives (seller fills batch/COA; existing deal references stay intact). Industry-standard: status-flag not a separate placeholder, "TBD" price allowed (Salesforce / Magento / BigCommerce / Shopify).
+- **Seller's basket persists too — it is the *same* app-level basket** (one reusable component), filled from the seller's own shop instead of another's; it feeds the deal card. Persistence + symmetry apply to both roles.
+- **Deal notes are per-side:** deal-level, **visible to both** parties, **editable only by their owner**, and they **save immediately** — no two-sided held-change accept (each edits only its own, so there is no conflict). A third field category beyond *shared+held* and *private+immediate*: **visible-to-both, owned-by-one, instant**.
+
+---
+
+## 2026-07-01 — Verify-email waiting screen: no cross-tab auto-advance
+
+**The post-signup "check your inbox" screen does not promise the original tab will auto-advance.** The inbox confirmation link opens `/auth/confirm` in a **new tab**, which sets the session and lands the user on onboarding *there*. The original `/verify-email` tab cannot self-advance because Supabase `onAuthStateChange` **does not fire across browser tabs** — so the screen keeps its spinner but reworded to tell the user the link continues in a new tab and this one can be closed. This matches the Clerk/Okta industry standard (auto-advancing the original tab is the pattern most auth providers dropped; the alternative is to poll `getSession()`, which we chose not to do).
+
+*Why:* the old copy ("This page continues automatically once you click the link") was a promise the code never implemented — pure UX debt, not a logic bug. *Follow-up:* the `Resend email` control still only runs a cooldown countdown — no server re-send is wired yet ([DEV-129](https://linear.app/hellosello/issue/DEV-129)). (Sources: 2026-07-01 session with Muskan; `src/app/(auth)/verify-email/VerifyEmailCard.tsx` @165f8f1; see ARCHITECTURE-NOTES cross-tab auth note.)
+
+---
+
+## 2026-07-02 — Shop ≡ Location is one entity; unlimited named shops + a GLOBAL default
+
+A per-country/per-region **"shop"** (storefront: description + links, rendered on its Present page) and a **"location"** (warehouse address) are the **same entity** — reaffirming + extending the 2026-06-22 lock. A company creates **unlimited free-form named shops** — **not** strictly per-country (sub-country is fine, e.g. "North Germany", "South Germany") — with exactly one flagged **GLOBAL** (the default). Each shop carries **storefront presentation** (a description + a structured **links table**: shop × platform × name → rendered "**LinkedIn** name") **on the same object** as its warehouse address. Model: **Company → many Shops/Locations → each one's own products + address + storefront** — no parallel storefront entity.
+
+*Why:* per-shop links/descriptions and the warehouse address describe the same real thing (a company's presence in a region), so a second storefront concept would duplicate knowledge and split the schema change. Keeps the location model in one place. **Cross-lane** — this is the Phase 16 data model, feeds Ayush's Sales/Purchase-Order docs; design the fields with him before schema. (Source: 2026-07-02 design session with Muskan; Marcel's Present-page batch DEV-111/112.)
+
+---
+
+## 2026-07-02 — Auth + onboarding quick wins (Outlook OAuth fixed; QR = vCard; photo optional; resend; 2FA deferred)
+
+Batch of Marcel's auth/onboarding tickets (DEV-99, DEV-102, DEV-129), built + merged (PR #133 → dev; Outlook fix PR #130 → #131 → main).
+
+- **Outlook/Azure OAuth fixed (DEV-99 #2).** `signInWithOAuth('azure')` sent no scopes → the default `openid` returns no email → GoTrue's code-exchange fails "Error getting user email from external provider" → the callback bounced to /login (Google worked because its default scope includes email). Fix = request `scopes: 'email profile'` for azure + the callback now logs the real exchange/provider error. **Azure app-registration config (done in the portal):** Supported accounts = "Any Entra tenant + personal"; Graph delegated `email`/`openid`/`profile` + admin consent; **`email` optional claim on the ID token**; redirect URI type = Web. Both personal + org accounts need this. Verified via the cloud auth log (successful `provider:"azure"` login).
+- **Same-email identities auto-link.** Google then Outlook on the same verified email collapse into ONE Supabase user (providers "Azure, Google") — no duplicate accounts (a duplicate-account worry was raised, then retracted after checking the users table).
+- **QR encodes the vCard directly (DEV-99 #5).** Scanning the profile/account QR now yields "Add Contact" (encodes `buildVCard`), not the web profile page — per Marcel. Digital-only use (no printing), so the live server-rendered QR always reflects current data; no frozen-data concern. `buildVCard` extracted to a pure `src/modules/profile/vcard.ts` with RFC-2426 escaping (`; , \` + CR/CRLF/LF) and omits an empty ORG.
+- **Profile photo optional (DEV-99 #4).** `isProfileComplete()` no longer requires a photo (display name + title only); `AvatarUpload` added to the onboarding profile step as optional/skippable.
+- **Resend confirmation = anti-enumeration (DEV-129, Done).** The wired resend returns a neutral result (errors logged server-side only) and always cools down — mirroring `requestPasswordReset` so it can't probe which addresses have pending signups.
+- **2FA deferred (DEV-102 #1).** No login 2FA today; Supabase MFA (TOTP) can be added later — not MVP.
+- **Approval sends no email (DEV-102 #2).** Company verification is a manual admin action in `/admin/verifications` (`approve_company` flips `verification_status`); no email to the user or the team. An "approved" email / "needs approval" alert would be a new feature.
+
+*Still open in the batch:* DEV-99 #1 (Google consent shows the raw Supabase URL — needs a **paid Supabase custom domain**; Marcel/infra, not code) and DEV-99 #3 (business-category taxonomy → two levels, **both multiple-choice**; a DB-lookup migration, cross-lane with Ayush; prototype the onboarding UI first). (Source: 2026-07-02 auth/onboarding session with Muskan; Marcel's DEV-99/102/129.)
+
+---
+
+## 2026-07-03 — Catalogue ingestion architecture: DESIGNED + PARKED for post-demo (shared-Sheet pull + system-of-record reconciliation)
+
+Deep design session (Muskan + two deep-research passes) on how sellers get products/batches/prices into their shop and keep it current. **Decision: the full ingestion system is DESIGNED but PARKED — not built for the 8 Jul demo.** For the demo, Present ships as a **visual redesign** (the existing Phase-7 six criteria) and Marcel populates his shop **manually** (manual-add already exists). Ingestion becomes its own phase built right after the visual lands. **Full design:** `docs/architecture/catalogue-ingestion-DESIGN.md`.
+
+Locked design (to build later):
+- **Four objects, kept separate, linked by keys** — Product · Batch · Standard price · Per-customer price. They change at different speeds → separate tables/uploads, not one glued sheet (also matches Marcel's 3 spreadsheet tabs; ERP feeds batches independently — SAP B1 `Items` vs `BatchNumbers`).
+- **Keys:** the seller's **`supplier_product_code`** is the match key — **NOT an industry standard**, unique only within one company's own catalogue. A **hidden system UUID** is the real permanent link (survives renames). **PZN + GTIN** stored alongside as the real external standards (optional). Each table carries its own key (batch = `supplier_code + batch_number`).
+- **3 fixed seller templates** mirroring Marcel's tabs: **A Products** (incl. standard price) · **B Batches** · **C Per-customer prices** (Phase 15). Buyer Product Code dropped. Research: template-first beats accept-messy-formats (the latter refuted for a lean startup).
+- **Bud-size grades priced separately** — Tinies/Smalls/Mids/Larges are categories, each with its own quantity + price → a `batch_grade` sub-table under batch (new from Marcel's 07-03 sheet, with `harvest_date`).
+- **Delivery = shared Google Sheet pull** (primary — Marcel already lives in a logistics-fed Sheet); file upload as fallback; both feed the SAME validation + upsert engine; ERP delta-API is the end-state on the SAME tables.
+- **Reconciliation over a system-of-record:** Hello Sello keeps its own durable master of every product ever seen. Each pull DIFFs the Sheet vs the master → new / matched / **missing → auto-unavailable (soft)** / **returned → auto-restore**. Availability is DERIVED from presence-in-the-Sheet → **zero seller discipline** needed. Explicit `Status` column (Active/Discontinued/Coming soon/Hidden) is an optional override.
+- **Safe reversible deletion:** soft-archive never hard-delete; snapshot every sync; **big-change guard** (a pull removing >~25% pauses + alerts = "wiped the Sheet" accident); import ledger + undo + notify. Products persist forever; a deleted row = hidden, returns when the row returns.
+- **Availability status ≠ marketing badge** (New/Launch) — separate fields. Pre-selling unavailable/coming-soon items = Phase 17.
+
+*Why parked:* demo is 8 Jul (5 days); a beautiful shop Marcel can populate by hand is the lean demo win, and the pipeline is invisible to the demo. Build the visual **on this model** (cards already show availability badges + grade pricing) so the ingestion phase later just adds an input pipe — no repaint. (Source: 2026-07-03 design session with Muskan; deep-research on 3PL/ERP feeds + B2B catalogue onboarding; Marcel's shared-Sheet idea + his updated Product-list sheet.)
+---
+
+## 2026-07-05 — Two-level business taxonomy: independent Category + Activity, two lookup tables, Custom free-text (DEV-99 #3)
+
+A company is classified on **two INDEPENDENT, both-multi-select** axes — **Business Category** (sector: Pharma / Food / FMCG-CPG / Automotive / Services **+ Custom**) and **Business Activity** (supply-chain role: Marcel's 8 — Pharmacy / Wholesaler / Importer / GACP- · EU-GMP- · TGA-GMP-Cultivator / Manufacturer-Pharma / Other). Independent, **not nested**; **both required** at onboarding. *Why:* the two axes are orthogonal (a wholesaler can be Food or Pharma) and independence lets the platform expand past cannabis to other sectors without re-modelling — nesting would hard-code cannabis-era parent→child assumptions.
+
+- **Schema = two separate lookup tables** (`business_category` + `company_business_category`), reusing existing `company_type`(+assignment) for Activity — *not* one table with a discriminator column. *Why:* web research on lookup-table design — dumping all codes into one table is the OTLT / "MUCK" anti-pattern; separate tables give normalization + DB-enforced domain integrity (an activity code can't masquerade as a category) + cleaner extension. (Reversed the initial single-table instinct after research.) Sources: ITPro Today + TDAN lookup-table articles.
+- **Custom category = one `custom` lookup code + free-text `custom_label` on the assignment row** (CHECK: label present iff code = 'custom'), NOT user-inserted lookup rows. *Why:* keeps the shared lookup clean (no dedup / moderation / RLS-on-shared-writes); each company's custom text is private to it. ⚠️ Extends beyond Marcel's fixed 5 categories — **flag to Marcel (DEV-99).**
+- **Legacy data:** the generic `cultivator` activity code → remapped to `eu_gmp_cultivator` (EU/German medical-cannabis default) then dropped; every existing (cannabis-medical) company backfilled with the **Pharma** category. Migration is additive + idempotent.
+- **UI (prototype-decided):** two **dropdown multiselects** (not always-visible chips), MVP `Field` styling; **Custom reveals an inline free-text box inside the dropdown panel** (no closing to type); validate on submit.
+- **Show-password eye:** reusable client `PasswordField` (eye inside the box) with a **stable `aria-label` + `aria-pressed`** for state (a11y best practice — don't swap the accessible name on toggle).
+
+## 2026-07-06 — Present (Phase 7) fidelity re-plan after a post-build sync
+
+The Phase-7 execution shipped a working structural redesign (grid, cards, media manager, banner, present mode) but **under-delivered vs the prototype** (`prototypes/present-redesign-prototype/index.html`). A reconciliation sync with Muskan (15-item feedback batch) locked a **fidelity re-plan** (plans F-01/F-02/F-03; full detail in the gitignored `.planning/phases/07-present-catalogue-ux/07-FIDELITY-CONTEXT.md`). *Why re-plan not patch:* most feedback was "the prototype has X, the build doesn't" — a scope-reconciliation, not bugs.
+
+- **Unified edit mode** (adopt the prototype contract, supersedes the built separate-buttons approach): ONE small "Manage shop" button → the **whole** Present page enters edit mode (calm grey wash) + a floating pink Save bar (✕ discards); logo / banner / name / info boxes / links / cards all edit **inline**; **"Add product" lives inside edit mode**. *Why:* the prototype's iPhone-widget edit model is one coherent mode; the build's three separate buttons (Add products / Manage shop / Edit logo & branding) fragmented it.
+- **Manual product + batch input** writes to the **existing** `product` / `product_batch` columns (~24 already exist) — **the same tables the parked CSV ingestion targets**, so manual entry = a subset of the CSV target (no divergent schema). Field set = core. *Why:* the schema was already built anticipating ingestion; manual entry now pressure-tests the CSV target.
+- **Terp% = one headline "total terpenes" value** → new additive `product.terpene_percent` column (the **only** migration in the whole fidelity pass), editable inline like THC/CBD/CBG/CBN. *Why:* a COA "total terpenes" is a single aggregate (the sum of many individual terpenes, each ~0.2–0.5%); the rich per-terpene/aroma profile stays a later batch pass (`batch_terpene`/`terpene`). (Web-researched terpene reporting practice.)
+- **Media persistence:** media (images/videos/COA/docs) uploads **immediately** to the `shop-media` bucket + creates its DB row; the Save bar governs only text fields; ✕ discards text, not media. *Why:* heavy files upload once; every file always has a row → orphan-safe (delete removes the object; insert-failure removes the upload).
+- **Documents popup (prototype-locked):** the card back consolidates to **[Upload document] + [Download all]**; Upload opens a modal with a **Document type** select {COA, Custom document}; Custom reveals a **Name** field. Replaces the separate Upload-COA / Upload-document buttons.
+- **Shop ≡ location — two-speed:** free-text "add location" **now** (a label on `product.location`; exists once ≥1 product carries it — empty locations don't persist); the **structured location+address module = Phase 16**, co-designed with Ayush. *Why:* his order docs carry **no address today** (confirmed in `src/modules/deals/types.ts`) — nothing to integrate yet; solo-building the shared schema risks rework. (Reaffirms the 2026-06-26 + 2026-07-02 location decisions.)
+- **Deal basket → create → send, and the buyer offer card = Phase 17, OUT of demo scope.** The card's "Add to basket" is only the Present entry point. *Why:* reaffirms the session-48 demo-scope decision; the deal flow is the next phase.
+- **Present mode (07-06) shipped as-is and is KEPT** — an in-app `presenting` chrome-hide UI state (NOT the OS Fullscreen API, so it's Zoom-window-shareable) + company chip → own shop. Not part of the re-plan.
+
+## 2026-07-07 — Multi pack-size: v0 stopgap in `product.metadata`, proper table deferred
+
+Buyer feedback: a product needs several discrete pack sizes (10g/20g/50g), picked like a T-shirt size before Add-to-basket. Decision (Muskan, for the imminent demo): ship lightweight now — extra sizes as a number array in `product.metadata.pack_sizes`, no migration — treat a real `product_pack_size` table (own pricing, CSV template, Deal Basket/Phase 17 integration) as its own planned phase. The required "Pack size (g)" field in the add-product form stays single-value/unchanged; extras are added via the card's "Edit details" dialog. *Why defer:* likely intersects Ayush's Deal Basket + per-customer pricing work — designing solo now risks rework.

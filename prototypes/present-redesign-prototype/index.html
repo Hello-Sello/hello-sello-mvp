@@ -1,0 +1,983 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Present — shop redesign (Phase 7)</title>
+<!--
+  THROWAWAY PROTOTYPE — Phase 7 (Present Catalogue UX), redesign pass 2026-07-03.
+  Locked with Muskan for the 8 Jul demo. Real app theme (tokens mirror src/app/globals.css).
+  What this pass proves:
+   • MVP-style banner + 3 aligned info boxes (equal height, down-arrow to expand), 2600-char description.
+   • DEV-107 trimmed product card: 5-value cannabinoid+terpene strip, pack-size bubbles, 5 spec rows,
+     lineage clamped to signal scroll, availability badge, price on the right (lowest €/g), flip.
+   • iPhone-widget EDIT MODE: click "Manage shop" → the whole shop becomes editable in place; a floating
+     PINK "Save changes" bar appears only when something changed. ✕ discards.
+   • Products grouped by location (free-text) with a thin divider; drag a card into another group in edit mode.
+   • Media manager on the card BACK (upload images / videos / COAs in one go; drag-sort, delete, download-all).
+   • Company chip (top-right) → your own shop. Buyer view = the read-only shop (no edit affordances).
+  No build, no React, no persistence.
+-->
+<style>
+  :root{
+    --brand:#e30b5d; --brand-soft:#ffb7d5; --brand-deep:#76002d;
+    --surface:#fff;
+    --ink:rgba(20,10,16,.92); --ink-muted:rgba(20,10,16,.55); --ink-faint:rgba(20,10,16,.40);
+    --line:rgba(20,10,16,.07); --line-strong:rgba(20,10,16,.11);
+    --success:#34b233; --info:#6c7bd9; --danger:#dc2626; --warn:#c98a12;
+    --bg-from:#fff; --bg-to:#fff1f7;
+    --glass-bg:rgba(255,255,255,.64); --glass-bg-strong:rgba(255,255,255,.84);
+    --glass-border:rgba(255,255,255,.7);
+    --shadow-sm:0 1px 2px rgba(20,10,16,.04),0 2px 6px -1px rgba(118,0,45,.06);
+    --shadow-md:0 1px 2px rgba(20,10,16,.04),0 5px 12px -3px rgba(118,0,45,.07),0 12px 26px -8px rgba(118,0,45,.08);
+    --shadow-lg:0 1px 2px rgba(20,10,16,.05),0 8px 18px -6px rgba(118,0,45,.09),0 18px 40px -12px rgba(118,0,45,.11),0 30px 64px -20px rgba(118,0,45,.10);
+    --glass-shadow:var(--shadow-md);
+    --ease:cubic-bezier(.4,.15,.2,1); --ease-over:cubic-bezier(.67,.17,.32,.95); --ease-out:cubic-bezier(0,0,.2,1);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{height:100vh;display:flex;flex-direction:column;overflow:hidden;color:var(--ink);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased;
+    background:radial-gradient(60rem 60rem at 10% -12%,rgba(255,183,213,.5),transparent 60%),radial-gradient(46rem 46rem at 108% 6%,rgba(227,11,93,.08),transparent 55%),linear-gradient(160deg,var(--bg-from),var(--bg-to));
+    background-attachment:fixed;}
+  .glass{background:var(--glass-bg);backdrop-filter:blur(20px) saturate(180%);-webkit-backdrop-filter:blur(20px) saturate(180%);border:1px solid var(--glass-border);box-shadow:var(--glass-shadow)}
+  .glass-strong{background:var(--glass-bg-strong);backdrop-filter:blur(24px) saturate(180%);-webkit-backdrop-filter:blur(24px) saturate(180%);border:1px solid var(--glass-border);box-shadow:var(--shadow-lg)}
+  svg{display:block}
+  .ic{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+  .ic.sm{width:15px;height:15px}.ic.xs{width:13px;height:13px}
+  button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+  a{color:inherit;text-decoration:none}
+  input,select,textarea{font-family:inherit}
+  .ulabel{font-size:10.5px;font-weight:600;letter-spacing:.11em;text-transform:uppercase;color:var(--ink-faint)}
+
+  .switch{flex:0 0 auto;display:flex;align-items:center;gap:10px;padding:8px 14px;background:rgba(20,10,16,.92);color:#fff;font-size:12.5px;z-index:80}
+  .switch b{color:#ffb7d5;font-weight:600;letter-spacing:.01em}
+  .switch .seg2{display:flex;gap:4px;margin-left:auto}
+  .switch .seg2 button{border-radius:999px;padding:6px 14px;font-size:12px;font-weight:600;color:rgba(255,255,255,.7);background:rgba(255,255,255,.08)}
+  .switch .seg2 button.on{background:var(--brand);color:#fff}
+
+  .app{flex:1;min-height:0;display:flex;overflow:hidden}
+  .rail{margin:14px 0 14px 14px;width:76px;flex:0 0 76px;display:flex;flex-direction:column;gap:4px;border-radius:24px;padding:10px}
+  .wordmark{display:flex;flex-direction:column;align-items:center;gap:3px;margin:4px 0 14px}
+  .wordmark .badge{width:34px;height:34px;border-radius:11px;background:var(--brand);color:#fff;display:grid;place-items:center;font-weight:700;font-size:13px;box-shadow:var(--shadow-sm)}
+  .wordmark small{font-size:8.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint)}
+  .nav{display:flex;flex-direction:column;gap:4px}
+  .navitem{position:relative;display:flex;flex-direction:column;align-items:center;gap:5px;border-radius:16px;padding:10px 4px;font-size:10px;font-weight:600;line-height:1;color:var(--ink-muted);transition:all .2s var(--ease-out);cursor:pointer}
+  .navitem:hover{background:rgba(255,255,255,.6);color:var(--brand)}
+  .navitem.active{background:rgba(227,11,93,.09);color:var(--brand)}
+  .navitem.active .edge{position:absolute;left:0;top:50%;transform:translateY(-50%);height:28px;width:3px;border-radius:0 4px 4px 0;background:var(--brand)}
+  .navitem.soon{color:var(--ink-faint);cursor:not-allowed}.navitem.soon .ic{opacity:.4}
+  .rail .acct{margin-top:auto;display:flex;justify-content:center;padding-top:12px;position:relative}
+  .avatar{width:40px;height:40px;border-radius:999px;background:linear-gradient(135deg,#ffb7d5,#e30b5d);color:#fff;display:grid;place-items:center;font-weight:700;font-size:14px;box-shadow:0 0 0 2px #fff,var(--shadow-sm);cursor:pointer}
+
+  .col{display:flex;min-width:0;flex:1;flex-direction:column}
+  .screen{display:none;min-width:0;flex:1;flex-direction:column;min-height:0}
+  body[data-screen="shop"] #shopScreen{display:flex}
+  body[data-screen="manage"] #manageScreen{display:flex}
+
+  .topbar{margin:14px 14px 0;display:flex;align-items:center;gap:10px;border-radius:18px;padding:9px 14px;position:relative;z-index:30}
+  .srch{display:flex;align-items:center;border-radius:999px;background:rgba(255,255,255,.55);flex:1;max-width:420px}
+  .srch button{width:40px;height:40px;border-radius:999px;display:grid;place-items:center;color:var(--ink-muted);flex:0 0 40px}
+  .srch .inp{flex:1;overflow:hidden}
+  .srch input{width:100%;border:none;background:transparent;font-size:13.5px;outline:none;padding-right:10px}
+  .tbspace{flex:1}
+  .tbbtn{display:inline-flex;align-items:center;gap:7px;border-radius:999px;padding:9px 15px;font-size:13px;font-weight:600;background:rgba(255,255,255,.6);transition:all .18s var(--ease-out)}
+  .tbbtn:hover{background:#fff;box-shadow:var(--shadow-sm)}.tbbtn.brand{background:var(--brand);color:#fff}.tbbtn.brand:hover{background:var(--brand-deep)}
+  .tbbtn.pink{background:var(--brand);color:#fff;box-shadow:0 4px 14px -4px rgba(227,11,93,.6)}
+  .tbicon{position:relative;width:40px;height:40px;border-radius:999px;background:rgba(255,255,255,.6);display:grid;place-items:center;transition:all .18s var(--ease-out)}
+  .tbicon:hover{background:#fff;box-shadow:var(--shadow-sm)}
+  .badge-dot{position:absolute;top:-3px;right:-3px;min-width:18px;height:18px;border-radius:999px;background:var(--brand);color:#fff;font-size:10px;font-weight:700;display:grid;place-items:center;padding:0 4px;box-shadow:0 0 0 2px #fff}
+  .badge-dot.bump{animation:bump .4s var(--ease-over)}
+  @keyframes bump{0%{transform:scale(1)}30%{transform:scale(1.55)}60%{transform:scale(.9)}100%{transform:scale(1)}}
+  /* company chip (global top-bar) → own shop */
+  .cochip{display:inline-flex;align-items:center;gap:9px;border-radius:999px;background:rgba(255,255,255,.6);padding:5px 13px 5px 6px;font-weight:700;font-size:13px;transition:all .18s var(--ease-out)}
+  .cochip:hover{background:#fff;box-shadow:var(--shadow-sm)}
+  .cochip .colg{width:30px;height:30px;border-radius:9px;background:var(--brand);color:#fff;display:grid;place-items:center;font-size:11px;font-weight:800;letter-spacing:.02em}
+
+  main{min-height:0;flex:1;overflow:auto;padding:16px;position:relative}
+  .wrap{display:flex;flex-direction:column;gap:18px;padding-bottom:56px}
+
+  /* COVER — MVP-style banner, LinkedIn 4:1 proportion */
+  .cover{position:relative;aspect-ratio:4/1;width:100%;border-radius:22px;overflow:hidden;
+    background:radial-gradient(120% 150% at 10% -10%,rgba(227,11,93,.20),transparent 52%),linear-gradient(135deg,#13241c 0%,#1d3c2b 46%,#14211b 100%);
+    box-shadow:var(--shadow-md)}
+  .cover img.cov{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.9}
+  .cover::after{content:"";position:absolute;inset:0;background:linear-gradient(to top,rgba(8,12,10,.55),transparent 62%)}
+  .cover .id{position:absolute;left:26px;bottom:20px;right:26px;z-index:2;display:flex;align-items:flex-end;gap:16px;color:#fff}
+  .logo-tile{width:70px;height:70px;border-radius:16px;background:rgba(255,255,255,.14);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.35);display:grid;place-items:center;font-size:28px;flex:0 0 70px}
+  .cover h1{margin:0;font-size:29px;font-weight:700;letter-spacing:-.02em;text-shadow:0 2px 14px rgba(0,0,0,.4)}
+  .cover .tag{margin:5px 0 0;font-size:15.5px;font-weight:500;opacity:.92}
+  .cover .cov-edit{position:absolute;top:14px;right:14px;z-index:3;display:none;align-items:center;gap:6px;border-radius:999px;background:rgba(255,255,255,.94);color:var(--ink);font-size:11.5px;font-weight:700;padding:7px 13px;box-shadow:var(--shadow-sm)}
+  body[data-edit="on"] .cover .cov-edit{display:inline-flex}
+
+  /* INFO BOXES — MVP: equal-height aligned boxes, expand via down-arrow when content overflows */
+  .infoboxes{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:14px;align-items:stretch}
+  @media(max-width:900px){.infoboxes{grid-template-columns:1fr}}
+  .ibox{position:relative;border-radius:18px;background:rgba(255,255,255,.72);border:1px solid var(--glass-border);box-shadow:var(--shadow-sm);padding:18px 18px 16px;min-height:150px;display:flex;flex-direction:column}
+  .ibox h3{margin:0 0 3px;font-size:19px;font-weight:700;letter-spacing:-.01em}
+  .ibox .hash{font-size:12.5px;font-weight:700;color:var(--brand-deep);margin-bottom:10px}
+  .ibox .krow{margin-bottom:9px}
+  .ibox .k{font-size:12px;font-weight:700}
+  .ibox .v{font-size:13px;color:var(--ink-muted);margin-top:1px}
+  .ibox .desc{font-size:13px;line-height:1.55;color:var(--ink)/.8;color:rgba(20,10,16,.75)}
+  .ibox .lnk{display:flex;align-items:center;gap:9px;font-size:13.5px;font-weight:600;padding:6px 0}
+  .ibox .lnk svg{flex:0 0 auto;color:var(--ink)}
+  .ibox .lnk .site{color:var(--ink-muted);font-weight:500}
+  /* clamp overflow + reveal with down-arrow */
+  .ibox .clip{overflow:hidden;transition:max-height .3s var(--ease)}
+  .ibox:not(.open) .clip{max-height:96px}
+  .ibox.open .clip{max-height:800px}
+  body[data-edit="on"] .ibox .clip{max-height:none}
+  .ibox .expand{margin-top:auto;align-self:center;display:none;align-items:center;gap:5px;font-size:11px;font-weight:700;color:var(--brand-deep);background:rgba(227,11,93,.07);border-radius:999px;padding:5px 12px;margin-top:10px}
+  .ibox.has-more .expand{display:inline-flex}
+  .ibox.open .expand svg{transform:rotate(180deg)}
+  .ibox .expand svg{transition:transform .2s}
+  .ibox .charcount{align-self:flex-end;font-size:10px;font-weight:600;color:var(--ink-faint);margin-top:6px;display:none}
+  body[data-edit="on"] .ibox .charcount{display:block}
+  .ibox .drag-links{cursor:default}
+  body[data-edit="on"] .ibox .lnk{cursor:grab}
+  body[data-edit="on"] .ibox .lnk .grip{display:inline-flex}
+  .ibox .lnk .grip{display:none;color:var(--ink-faint);margin-left:auto}
+  /* edit-mode Add / remove controls in the info boxes */
+  .ibadd{align-items:center;gap:5px;margin-top:9px;font-size:12px;font-weight:700;color:var(--brand-deep);background:rgba(227,11,93,.07);border-radius:9px;padding:7px 11px}
+  .ibrm{margin-left:auto;width:20px;height:20px;border-radius:999px;background:rgba(20,10,16,.06);color:var(--danger);display:none;align-items:center;justify-content:center;font-size:15px;font-weight:700;line-height:1;flex:0 0 auto}
+  body[data-edit="on"] .ibrm{display:inline-flex}
+  .addlink{display:none;align-items:center;gap:6px;margin-top:11px;flex-wrap:wrap}
+  body[data-edit="on"] .addlink{display:flex}
+  .addlink select{flex:0 0 auto;border:1px solid var(--line-strong);border-radius:8px;padding:6px 7px;font-size:12px;font-weight:600;outline:none;background:#fff}
+  .addlink input{flex:1;min-width:0;border:1px solid var(--line-strong);border-radius:8px;padding:6px 8px;font-size:12px;outline:none;background:#fff}
+  .addlink input:focus,.addlink select:focus{border-color:var(--brand)}
+  .ibaddbtn{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:700;color:#fff;background:var(--brand);border-radius:8px;padding:7px 10px;flex:0 0 auto}
+
+  /* location banner / filter row */
+  .toolrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .chip{border-radius:999px;padding:9px 15px;font-size:12.5px;font-weight:600;background:rgba(255,255,255,.6);color:var(--ink);display:inline-flex;align-items:center;gap:7px;transition:all .15s var(--ease-out)}
+  .chip:hover{background:#fff;box-shadow:var(--shadow-sm)}
+  .fdrop{position:relative}
+  .chip .cnt{background:var(--brand);color:#fff;border-radius:999px;font-size:10px;font-weight:700;min-width:16px;height:16px;display:grid;place-items:center;padding:0 4px}
+  .fmenu{position:absolute;top:calc(100% + 8px);left:0;width:236px;border-radius:16px;padding:8px;opacity:0;transform:scale(.97);transform-origin:top left;pointer-events:none;transition:all .15s var(--ease);z-index:25;max-height:320px;overflow:auto}
+  .fmenu.show{opacity:1;transform:none;pointer-events:auto}
+  .fmenu .grp{font-size:10px;font-weight:600;letter-spacing:.11em;text-transform:uppercase;color:var(--ink-faint);padding:8px 8px 4px}
+  .opt{display:flex;align-items:center;gap:9px;border-radius:10px;padding:8px;font-size:13px;font-weight:500;cursor:pointer}
+  .opt:hover{background:rgba(227,11,93,.06)}
+  .opt .box{width:18px;height:18px;border-radius:6px;border:1.5px solid var(--line-strong);display:grid;place-items:center;color:#fff;flex:0 0 18px}
+  .opt.sel .box{background:var(--brand);border-color:var(--brand)}
+  .opt .radio{width:16px;height:16px;border-radius:999px;border:1.5px solid var(--line-strong);flex:0 0 16px}
+  .opt.sel .radio{border:5px solid var(--brand)}
+  .toolrow .spacer{flex:1}.count{font-size:12px;color:var(--ink-muted);font-weight:500}
+
+  /* LOCATION GROUP — thin divider header; drag target in edit mode */
+  .locgroup{display:flex;flex-direction:column;gap:12px}
+  .lg-head{display:flex;align-items:center;gap:10px;padding:9px 14px;border-radius:11px;background:linear-gradient(90deg,rgba(227,11,93,.13),rgba(227,11,93,.02) 62%);box-shadow:inset 4px 0 0 var(--brand),var(--shadow-sm)}
+  .lg-head .pin{width:26px;height:26px;border-radius:8px;background:rgba(227,11,93,.08);color:var(--brand-deep);display:grid;place-items:center;flex:0 0 26px}
+  .lg-head b{font-size:15px;font-weight:700;letter-spacing:-.01em}
+  .lg-head small{font-size:12px;color:var(--ink-muted)}
+  .lg-head .lg-count{font-size:11px;font-weight:700;color:var(--brand-deep);background:rgba(227,11,93,.08);border-radius:999px;min-width:20px;height:20px;display:grid;place-items:center;padding:0 6px}
+  .lg-head .lg-hint{margin-left:auto;font-size:10.5px;font-weight:700;color:var(--ink-faint);display:none}
+  body[data-edit="on"] .lg-head .lg-hint{display:inline}
+  .locgroup.drop-hi .lg-head{border-color:var(--brand)}
+  .locgroup.drop-hi{outline:2px dashed rgba(227,11,93,.4);outline-offset:8px;border-radius:16px}
+  .addloc{display:none;align-items:center;gap:8px;border:1.5px dashed var(--line-strong);border-radius:14px;padding:12px 14px;font-size:13px;font-weight:700;color:var(--brand-deep);background:rgba(227,11,93,.03)}
+  body[data-edit="on"] .addloc{display:flex}
+  .addloc input{flex:1;border:none;background:transparent;outline:none;font-size:13px;font-weight:600}
+
+  /* PRODUCT GRID — trimmed flip card (DEV-107), 4-up */
+  .grid{display:grid;gap:16px;grid-template-columns:repeat(4,minmax(0,1fr))}
+  @media(max-width:820px){.grid{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:520px){.grid{grid-template-columns:1fr}}
+  .pc-card{perspective:1900px;height:544px}
+  /* away-facing side must not intercept clicks (fixes "Back to front") */
+  .pc-card:not(.flip) .pc-back{pointer-events:none}
+  .pc-card.flip .pc-front{pointer-events:none}
+  body[data-edit="on"] .pc-card{cursor:default}
+  .pc-tilt{height:100%;transition:transform .12s var(--ease);transform-style:preserve-3d}
+  .pc-inner{position:relative;width:100%;height:100%;transform-style:preserve-3d;transition:transform .6s var(--ease)}
+  .pc-card.flip .pc-inner{transform:rotateY(180deg)}
+  .pc-face{position:absolute;inset:0;border-radius:20px;overflow:hidden;backface-visibility:hidden;-webkit-backface-visibility:hidden;display:flex;flex-direction:column;background:#fff;box-shadow:var(--shadow-lg),inset 0 0 0 1px rgba(255,255,255,.6)}
+  .pc-back{transform:rotateY(180deg)}
+  /* square image (DEV-81) — capped so it never eats the card / clips the footer */
+  .pc-photo{position:relative;width:100%;aspect-ratio:1/1;max-height:250px;flex:0 0 auto;overflow:hidden;cursor:pointer}
+  .pc-photo img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  .pc-sheen{position:absolute;inset:0;background:radial-gradient(circle at var(--px,50%) var(--py,50%),rgba(255,255,255,.5),transparent 42%);mix-blend-mode:overlay;opacity:0;transition:opacity .2s;pointer-events:none}
+  .pc-card:hover .pc-sheen{opacity:1}
+  /* only status/promo badges on the image (DEV-107 #4) */
+  .pc-badges{position:absolute;top:10px;left:10px;display:flex;gap:6px;flex-wrap:wrap;max-width:80%}
+  .pc-badge{border-radius:999px;font-size:10px;font-weight:700;padding:3px 9px;backdrop-filter:blur(4px);color:#fff}
+  .pc-badge.new{background:var(--brand)}
+  .pc-badge.launch{background:#4854a8}
+  .pc-badge.relaunch{background:#2b7a78}
+  .pc-badge.soon{background:var(--warn)}
+  .pc-badge.off{background:rgba(20,10,16,.62)}
+  .pc-badge.hidden{background:rgba(20,10,16,.82)}
+  .pc-grade{position:absolute;top:10px;right:46px;display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,.94);color:var(--brand-deep);border-radius:999px;font-size:10px;font-weight:700;padding:3px 9px}
+  .pc-heart{position:absolute;top:9px;right:10px;width:30px;height:30px;border-radius:999px;background:rgba(255,255,255,.92);color:var(--brand);display:grid;place-items:center}
+  .pc-heart.on{background:var(--brand);color:#fff}
+  .pc-flipbtn{position:absolute;bottom:9px;right:10px;display:inline-flex;align-items:center;gap:6px;background:rgba(20,10,16,.55);color:#fff;border-radius:999px;font-size:11px;font-weight:600;padding:6px 11px;backdrop-filter:blur(4px)}
+  .pc-flipbtn:hover{background:rgba(20,10,16,.8)}
+  .pc-body{flex:1;display:flex;flex-direction:column;min-height:0}
+  .pc-fhead{padding:11px 13px 0;display:flex;align-items:flex-start;gap:8px}
+  .pc-name{font-weight:800;font-size:16.5px;color:var(--brand-deep);line-height:1.15;letter-spacing:-.01em}
+  .pc-cult{font-size:12.5px;color:var(--ink-muted);margin-top:1px}.pc-code{font-size:11px;color:var(--ink-faint);font-weight:500;margin-top:2px}
+  .pc-fhead .pc-flag{font-size:18px;margin-left:auto}
+  /* 5-value strip: THC/CBD/CBG/CBN + Terp% (DEV-107 #2) */
+  .pc-quad{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;padding:8px 13px 0}
+  .pc-quad .c{border:1px solid var(--line);border-radius:7px;padding:3px 1px;text-align:center;background:rgba(227,11,93,.025)}
+  .pc-quad .c b{display:block;font-size:12.5px;color:var(--brand-deep);font-variant-numeric:tabular-nums;line-height:1.05;font-weight:800}
+  .pc-quad .c small{font-size:7px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.02em;font-weight:700}
+  /* pack-size bubbles = size selector, sits beside the price (DEV-107 #3) — selectable */
+  .pc-packs{display:flex;flex-wrap:wrap;gap:5px}
+  .pc-pack{border-radius:999px;font-size:11px;font-weight:700;padding:4px 10px;background:rgba(20,10,16,.05);color:var(--ink);cursor:pointer;transition:all .12s}
+  .pc-pack.on{background:var(--brand);color:#fff}
+  /* 5 spec rows; lineage clamped to 2 lines to signal scroll (DEV-107 #1) */
+  /* natural full-width scroll region — the whole product-info list scrolls here (like the original card) */
+  .pc-specs{flex:1;min-height:0;overflow-y:auto;padding:6px 13px 4px;display:flex;flex-direction:column;gap:0}
+  .pc-dots{position:absolute;bottom:12px;left:13px;display:flex;gap:5px}
+  .pc-dots span{height:5px;width:5px;border-radius:999px;background:rgba(255,255,255,.6)}.pc-dots span.on{width:14px;background:#fff}
+  body[data-edit="on"] .pc-card:focus-within .pc-inner{animation:none}
+  .pc-srow{display:flex;align-items:flex-start;gap:8px;font-size:12px;border-bottom:1px solid var(--line);padding:5px 0}
+  .pc-srow .k{flex:0 0 78px;color:var(--ink-muted);font-weight:500}
+  .pc-srow .v{font-weight:600;line-height:1.25}
+  .pc-srow.lineage .v{position:relative;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;padding-right:2px}
+  .pc-ffoot{flex:0 0 auto;padding:10px 13px 12px;border-top:1px solid var(--line);position:relative;z-index:5;background:#fff}
+  .pc-priceline{display:flex;align-items:center;justify-content:space-between;gap:8px}
+  /* size-selector bubbles on the left, availability + price on the right */
+  .pc-selprice{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;margin-bottom:9px}
+  .pc-priceblock{display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex:0 0 auto}
+  .editonly{display:none!important}
+  body[data-edit="on"] .editonly{display:inline-flex!important}
+  .pc-avail{font-size:11px;font-weight:700;display:inline-flex;align-items:center;gap:5px}
+  .pc-avail.ok{color:#1f7a1e}.pc-avail.soon{color:var(--warn)}.pc-avail.off{color:var(--ink-muted)}
+  .pc-avail .dot{width:7px;height:7px;border-radius:999px;background:currentColor}
+  .pc-price{font-weight:800;color:var(--brand-deep);font-size:17px;font-variant-numeric:tabular-nums;text-align:right}
+  .pc-price small{font-size:10.5px;font-weight:600;color:var(--ink-muted);display:block;margin-bottom:-1px}
+  .pc-reqprice{font-size:12px;font-weight:700;color:var(--brand-deep);background:rgba(227,11,93,.08);border-radius:999px;padding:6px 12px}
+  .pc-addrow{margin-top:9px;display:flex;gap:8px}
+  .pc-stepper{display:flex;align-items:center;border-radius:999px;background:#fff;box-shadow:inset 0 0 0 1px var(--line-strong)}
+  .pc-stepper button{width:30px;height:30px;border-radius:999px;color:var(--brand-deep);display:grid;place-items:center}
+  .pc-stepper button:hover{background:rgba(227,11,93,.08)}
+  .pc-stepper .pc-q{min-width:30px;text-align:center;font-weight:700;font-size:13px;font-variant-numeric:tabular-nums}
+  .pc-add{flex:1;border-radius:999px;background:var(--brand);color:#fff;font-weight:700;font-size:12.5px;display:flex;align-items:center;justify-content:center;gap:6px}
+  .pc-add:hover{background:var(--brand-deep)}
+  .pc-add.dim{opacity:.4;pointer-events:none}
+  .pc-bopen{flex:1;border-radius:999px;background:rgba(20,10,16,.05);color:var(--ink);font-weight:700;font-size:12px;padding:8px 10px;display:flex;align-items:center;justify-content:center;gap:5px}
+  .pc-bopen.pc-batchopt{flex:none;width:100%;margin-top:8px;font-weight:600;color:var(--ink-muted)}
+  .pc-bopen:hover{background:rgba(20,10,16,.09)}
+  .pc-bpanel{position:absolute;left:0;right:0;top:0;bottom:0;z-index:6;background:#fff;display:flex;flex-direction:column;opacity:0;transform:translateY(8px);pointer-events:none;transition:opacity .2s var(--ease-out),transform .2s var(--ease-out)}
+  .pc-bpanel.show{opacity:1;transform:none;pointer-events:auto}
+  .pc-bphead{display:flex;align-items:center;gap:8px;padding:11px 13px 9px;border-bottom:1px solid var(--line);font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint)}
+  .pc-bphead .pc-bptotal{margin-left:auto}
+  .pc-bphead button{width:24px;height:24px;border-radius:999px;background:rgba(20,10,16,.05);display:grid;place-items:center;color:var(--ink-muted)}
+  .pc-bptotal{font-size:11px;font-weight:600;color:var(--ink-muted);text-transform:none;letter-spacing:0}
+  .pc-bptotal b{color:var(--brand-deep);font-size:13px}
+  .pc-bplist{flex:1;overflow:auto;padding:10px 13px 20px;display:flex;flex-direction:column;gap:7px}
+  .pc-bprow{display:flex;align-items:center;gap:8px;border:1.5px solid var(--line);border-radius:11px;padding:8px 9px;transition:all .15s var(--ease-out)}
+  .pc-bprow.on{border-color:var(--brand);background:rgba(227,11,93,.05)}
+  .pc-bpinfo{flex:1;min-width:0}
+  .sd-bno{font-size:12.5px;font-weight:700;color:var(--brand-deep);display:flex;align-items:center;gap:7px}
+  .sd-cur{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#1f7a1e;background:rgba(52,178,51,.13);border-radius:999px;padding:2px 7px}
+  .sd-bmeta{font-size:10.5px;color:var(--ink-muted);margin-top:2px;font-variant-numeric:tabular-nums}
+  .ab-step{display:flex;align-items:center;gap:4px;border-radius:999px;background:#fff;box-shadow:inset 0 0 0 1px var(--line-strong);padding:2px}
+  .ab-step button{width:28px;height:28px;border-radius:999px;color:var(--brand-deep);display:grid;place-items:center}
+  .ab-step button:hover{background:rgba(227,11,93,.08)}
+  .ab-step span{min-width:26px;text-align:center;font-weight:700;font-size:13px;font-variant-numeric:tabular-nums}
+
+  /* CARD BACK — documents + media manager */
+  .pc-bhead{padding:12px 14px;background:linear-gradient(120deg,var(--brand-deep),var(--brand));color:#fff;display:flex;align-items:center;gap:8px}
+  .pc-bhead b{font-size:14px;font-weight:700;display:block}
+  .pc-bhead small{display:block;font-size:11px;font-weight:500;opacity:.85}
+  .pc-bscroll{flex:1;overflow:auto;padding:13px 14px}
+  .pc-sec{display:flex;align-items:center;gap:8px;font-size:10px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:var(--ink-faint);margin:0 0 9px}.pc-sec.mt{margin-top:16px}
+  .pc-sec .dlall{margin-left:auto;display:inline-flex;align-items:center;gap:4px;font-size:9.5px;font-weight:700;letter-spacing:.04em;color:var(--brand-deep);background:rgba(227,11,93,.08);border-radius:999px;padding:3px 9px;text-transform:none}
+  /* media manager grid */
+  .pc-media{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+  .pc-fileitem.pc-upl{display:none;color:var(--brand-deep);font-weight:700}
+  body[data-edit="on"] .pc-fileitem.pc-upl{display:flex}
+  .pc-mtile{position:relative;aspect-ratio:1/1;border-radius:11px;overflow:hidden;background:rgba(20,10,16,.05);cursor:grab}
+  .pc-mtile img{width:100%;height:100%;object-fit:cover}
+  .pc-mtile .vplay{position:absolute;inset:0;display:grid;place-items:center;color:#fff;background:rgba(0,0,0,.25)}
+  .pc-mtile .mkind{position:absolute;left:5px;top:5px;font-size:8px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;background:rgba(0,0,0,.55);color:#fff;border-radius:5px;padding:2px 5px}
+  .pc-mtile .mdel{position:absolute;right:4px;top:4px;width:20px;height:20px;border-radius:999px;background:rgba(255,255,255,.92);color:var(--danger);display:none;place-items:center}
+  body[data-edit="on"] .pc-mtile .mdel{display:grid}
+  .pc-mtile.dragging{opacity:.4}
+  .pc-madd{aspect-ratio:1/1;border-radius:11px;border:1.5px dashed var(--line-strong);display:none;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:10px;font-weight:700;color:var(--brand-deep);background:rgba(227,11,93,.03);text-align:center;padding:4px}
+  body[data-edit="on"] .pc-madd{display:flex}
+  .pc-mnote{font-size:10px;color:var(--ink-faint);margin-top:8px;line-height:1.45}
+  .pc-folders{display:flex;flex-direction:column;gap:8px}
+  .pc-folder{border:1px solid var(--line);border-radius:11px;overflow:hidden;background:rgba(20,10,16,.02)}
+  .pc-folderhd{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:10px 11px;cursor:pointer}
+  .pc-folderhd:hover{background:rgba(227,11,93,.04)}
+  .pc-folderhd .di-ic{width:30px;height:30px;border-radius:8px;background:#fff;border:1px solid var(--line);display:grid;place-items:center;color:var(--brand-deep);flex:0 0 30px}
+  .pc-folderhd .di-tx{flex:1;min-width:0}
+  .pc-folderhd .di-tx b{display:block;font-size:12px;font-weight:600}
+  .pc-folderhd .di-tx small{font-size:9.5px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.07em}
+  .pc-folderhd .fcount{font-size:10px;font-weight:700;color:var(--brand-deep);background:rgba(227,11,93,.08);border-radius:999px;min-width:18px;height:18px;display:grid;place-items:center;padding:0 5px}
+  .pc-folderhd .fchev{color:var(--ink-faint);transition:transform .2s}
+  .pc-folder.open .pc-folderhd .fchev{transform:rotate(90deg)}
+  .pc-files{max-height:0;overflow:hidden;transition:max-height .28s var(--ease)}
+  .pc-folder.open .pc-files{max-height:360px}
+  .pc-fileitem{display:flex;align-items:center;gap:8px;width:100%;text-align:left;border-top:1px solid var(--line);padding:8px 11px 8px 14px;color:var(--ink);transition:background .15s}
+  .pc-fileitem:hover{background:rgba(227,11,93,.05)}
+  .pc-fileitem svg:first-child{color:var(--brand-deep);flex:0 0 auto}
+  .pc-fileitem .ff{flex:1;min-width:0;font-size:11.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pc-fileitem small{font-size:9px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.06em;flex:0 0 auto}
+  .pc-fileitem .di-go{color:var(--ink-faint);flex:0 0 auto}
+  .pc-bfoot{padding:11px 14px;border-top:1px solid var(--line);display:flex;gap:8px}
+  .pc-flipback{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;border-radius:999px;background:rgba(20,10,16,.05);color:var(--brand-deep);font-weight:700;font-size:12px;padding:9px}
+  .pc-flipback:hover{background:rgba(20,10,16,.09)}
+
+  /* EDIT MODE — calm grey ring + wash only (no image filters → smooth scroll) */
+  body[data-edit="on"] main{background:rgba(20,10,16,.045)}
+  body[data-edit="on"] .pc-face{box-shadow:var(--shadow-md),inset 0 0 0 1.5px rgba(20,10,16,.18)}
+  body[data-edit="on"] .pc-photo::after{content:"";position:absolute;inset:0;background:rgba(20,10,16,.14);z-index:1;pointer-events:none}
+  body[data-edit="on"] .pc-edittools .grip{cursor:grab}
+  .pc-card.dragging{opacity:.45}
+  .pc-edittools{position:absolute;top:8px;left:8px;right:8px;z-index:8;display:none;align-items:center;gap:6px}
+  body[data-edit="on"] .pc-front .pc-edittools{display:flex}
+  .pc-edittools .grip{width:26px;height:26px;border-radius:8px;background:rgba(20,10,16,.6);color:#fff;display:grid;place-items:center;cursor:grab}
+  .pc-avsel{border-radius:8px;border:none;background:rgba(255,255,255,.95);font-size:10.5px;font-weight:700;padding:5px 7px;color:var(--ink);box-shadow:var(--shadow-sm);outline:none}
+  .pc-edittools .del{margin-left:auto;width:26px;height:26px;border-radius:8px;background:rgba(255,255,255,.95);color:var(--danger);display:grid;place-items:center;box-shadow:var(--shadow-sm)}
+  /* inline-editable fields */
+  [data-ed]{border-radius:6px;transition:box-shadow .15s,background .15s}
+  body[data-edit="on"] [data-ed]{box-shadow:inset 0 0 0 1.5px rgba(20,10,16,.14);background:rgba(20,10,16,.02);cursor:text;padding:1px 5px}
+  body[data-edit="on"] [data-ed]:focus{box-shadow:inset 0 0 0 1.5px var(--brand);background:#fff;outline:none}
+  body[data-edit="on"] .cover [data-ed]{box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.5);background:rgba(255,255,255,.12)}
+  /* add-product placeholder card */
+  .pc-addcard{display:none;height:512px;border-radius:20px;border:2px dashed var(--line-strong);flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--brand-deep);background:rgba(227,11,93,.03);font-weight:700;font-size:13px;cursor:pointer}
+  body[data-edit="on"] .pc-addcard{display:flex}
+  .pc-addcard:hover{background:rgba(227,11,93,.06);border-color:var(--brand)}
+  .pc-addcard .plus{width:44px;height:44px;border-radius:999px;background:var(--brand);color:#fff;display:grid;place-items:center}
+
+  /* top-right SAVE button pulses when there are unsaved changes */
+  @keyframes savepulse{0%,100%{box-shadow:0 4px 14px -4px rgba(227,11,93,.6)}50%{box-shadow:0 0 0 5px rgba(227,11,93,.22)}}
+  body.dirty #manageBtn.pink{animation:savepulse 1.3s var(--ease) infinite}
+  /* present mode — in-app: hide app chrome, content fills the app window (Zoom-shareable, not OS fullscreen) */
+  #exitPresent{position:fixed;top:16px;right:16px;z-index:130;display:none;align-items:center;gap:7px;border-radius:999px;padding:10px 18px;font-size:13px;font-weight:700;color:#fff;background:var(--brand);box-shadow:var(--shadow-lg)}
+  #exitPresent:hover{background:var(--brand-deep)}
+  body.presenting-mode .switch,body.presenting-mode .rail,body.presenting-mode .topbar{display:none}
+  body.presenting-mode #exitPresent{display:inline-flex}
+  body.presenting-mode main{padding:22px 30px}
+
+  /* drawers (basket) */
+  .scrim{position:fixed;inset:0;background:rgba(20,10,16,.22);backdrop-filter:blur(2px);opacity:0;pointer-events:none;transition:opacity .25s;z-index:40}
+  .scrim.show{opacity:1;pointer-events:auto}
+  .drawer{position:fixed;top:0;right:0;height:100%;width:400px;max-width:94vw;transform:translateX(105%);transition:transform .34s var(--ease-over);z-index:50;display:flex;flex-direction:column;border-radius:24px 0 0 24px;padding:18px;overflow:auto}
+  .drawer.show{transform:translateX(0)}
+  .drawer h3{margin:0;font-size:17px;font-weight:700;letter-spacing:-.01em;display:flex;align-items:center;gap:8px}
+  .drawer .close,.dhead .close{margin-left:auto;width:32px;height:32px;border-radius:999px;background:rgba(20,10,16,.05);display:grid;place-items:center}
+  .dhead{display:flex;align-items:center;gap:8px}
+  .grp{margin-top:14px}
+  .grp .gh{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--brand-deep)}
+  .grp .gh .av{width:22px;height:22px;border-radius:7px;background:var(--ink);color:#fff;display:grid;place-items:center;font-size:10px;font-weight:700}
+  .line{margin-top:8px;display:flex;align-items:center;gap:10px;border-radius:12px;background:rgba(255,255,255,.6);padding:9px 10px;animation:slidein .25s var(--ease);box-shadow:var(--shadow-sm)}
+  @keyframes slidein{from{opacity:0;transform:translateX(12px)}to{opacity:1;transform:none}}
+  .line .nm{flex:1;min-width:0}.line .nm b{display:block;font-size:12.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.line .nm small{font-size:11px;color:var(--ink-muted)}
+  .line .q{display:flex;align-items:center;gap:4px;font-size:11px;font-weight:700}
+  .line .q button{width:22px;height:22px;border-radius:999px;background:#fff;color:var(--brand-deep);display:grid;place-items:center;box-shadow:inset 0 0 0 1px var(--line-strong)}
+  .line .x{color:rgba(220,38,38,.8)}
+  .empty{margin-top:46px;text-align:center;color:var(--ink-muted);font-size:13px}
+  .dfoot{margin-top:auto;padding-top:14px;border-top:1px solid var(--line)}
+  .total{display:flex;justify-content:space-between;font-size:13px;font-weight:700;margin-bottom:10px}
+  .transient{font-size:11px;color:var(--ink-muted);display:flex;gap:6px;margin-bottom:10px}
+  .cta{width:100%;border-radius:999px;background:var(--brand);color:#fff;font-weight:700;font-size:14px;padding:12px;display:flex;align-items:center;justify-content:center;gap:8px}
+  .cta:hover{background:var(--brand-deep)}
+  .fly{position:fixed;z-index:70;border-radius:12px;pointer-events:none;box-shadow:0 10px 24px -8px rgba(0,0,0,.4);transition:all .65s cubic-bezier(.45,-.2,.3,1);opacity:.95}
+
+  /* account popover */
+  .pop{position:absolute;bottom:0;left:calc(100% + 10px);width:230px;border-radius:18px;padding:10px;opacity:0;transform:scale(.95);transform-origin:bottom left;pointer-events:none;transition:all .15s var(--ease);z-index:75}
+  .pop.show{opacity:1;transform:none;pointer-events:auto}
+  .pop a{display:flex;align-items:center;gap:10px;border-radius:11px;padding:9px 11px;font-size:13px;font-weight:500;cursor:pointer}
+  .pop a:hover{background:rgba(227,11,93,.07);color:var(--brand-deep)}
+
+  /* MANAGE (price table) screen — kept as a secondary bulk view */
+  .mhead{margin:14px 14px 0;display:flex;align-items:center;gap:10px;border-radius:18px;padding:11px 15px;flex-wrap:wrap}
+  .mhead h2{margin:0;font-size:17px;font-weight:700;letter-spacing:-.01em}.mhead .sub{font-size:12px;color:var(--ink-muted);font-weight:500}
+  .mtable{width:100%;border-collapse:separate;border-spacing:0 8px;font-size:12.5px}
+  .mtable th{text-align:left;font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint);padding:0 12px 4px}
+  .mtable td{background:rgba(255,255,255,.7);padding:11px 12px;vertical-align:middle}
+  .mtable tr td:first-child{border-radius:12px 0 0 12px}.mtable tr td:last-child{border-radius:0 12px 12px 0}
+  .mprod{display:flex;align-items:center;gap:11px}.mthumb{width:40px;height:40px;border-radius:10px;flex:0 0 40px}.mprod b{font-weight:700}.mprod small{display:block;color:var(--ink-muted);font-size:11px}
+  .toggle{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer}
+  .toggle.on{background:var(--brand);color:#fff}.toggle.off{background:rgba(255,255,255,.7);color:var(--ink-muted);box-shadow:inset 0 0 0 1px var(--line-strong)}
+  .micon{width:30px;height:30px;border-radius:9px;background:rgba(255,255,255,.7);display:grid;place-items:center;color:var(--ink-muted)}
+  .micon:hover{color:var(--brand);background:#fff}
+  .pmode{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:4px 10px;font-size:11px;font-weight:700}
+  .pmode.pub{background:rgba(52,178,51,.13);color:#1f7a1e}
+
+  /* MODAL */
+  .mscrim{position:fixed;inset:0;background:rgba(20,10,16,.38);backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:opacity .2s;z-index:100;display:grid;place-items:center;padding:20px}
+  .mscrim.show{opacity:1;pointer-events:auto}
+  .modal{width:520px;max-width:100%;max-height:88vh;overflow:auto;border-radius:22px;padding:22px;transform:scale(.96);transition:transform .2s var(--ease)}
+  .mscrim.show .modal{transform:scale(1)}
+  .modal .mtop{display:flex;align-items:center;gap:10px;margin-bottom:4px}
+  .modal h3{margin:0;font-size:18px;font-weight:700;letter-spacing:-.01em}
+  .modal .mclose{margin-left:auto;width:32px;height:32px;border-radius:999px;background:rgba(20,10,16,.05);display:grid;place-items:center}
+  .modal .msub{font-size:12px;color:var(--ink-muted);margin-bottom:14px}
+  .field{margin-top:13px}.field>label{display:block;font-size:10.5px;font-weight:600;color:var(--ink-faint);margin-bottom:6px;text-transform:uppercase;letter-spacing:.1em}
+  .field input,.field select,.field textarea{width:100%;border-radius:11px;border:1px solid var(--line-strong);background:#fff;padding:10px 12px;font-size:13.5px;outline:none}
+  .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--brand)}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .drop{border:1.5px dashed var(--line-strong);border-radius:14px;padding:20px;text-align:center;color:var(--ink-muted);font-size:13px;background:rgba(227,11,93,.04)}
+  .drop:hover{background:rgba(227,11,93,.07)}
+  .mactions{display:flex;gap:10px;margin-top:18px}
+  .mactions .cta{flex:1}.mactions .ghost{background:rgba(20,10,16,.05);color:var(--ink);flex:0 0 auto;padding:12px 20px;border-radius:999px;font-weight:700}
+  .infonote{border-radius:12px;background:rgba(108,123,217,.08);border:1px solid rgba(108,123,217,.25);padding:10px 12px;font-size:11.5px;color:#3f4a96;margin-top:14px;line-height:1.5}
+
+  /* seller/buyer role bits */
+  .buyerbar{display:none;align-items:center;gap:8px}
+  body[data-role="buyer"] .buyerbar{display:inline-flex}
+  body[data-role="buyer"] #manageBtn,body[data-role="buyer"] #coShare{display:none}
+  .bview{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--ink-muted);background:rgba(255,255,255,.6);border-radius:999px;padding:8px 13px}
+  .connchip{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:8px 13px;font-size:12px;font-weight:700;cursor:pointer}
+  .connchip.on{background:rgba(52,178,51,.13);color:#1f7a1e}
+  .connchip.off{background:rgba(20,10,16,.06);color:var(--ink-muted)}
+  .buyer-note{display:none;align-items:center;gap:9px;font-size:12.5px;color:var(--brand-deep);background:rgba(227,11,93,.06);border:1px solid var(--line);border-radius:14px;padding:11px 14px}
+  body[data-role="buyer"] .buyer-note{display:flex}
+  .buyer-note svg{flex:0 0 auto;color:var(--brand)}
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;font-weight:600;font-size:13px;padding:11px 18px;border-radius:999px;opacity:0;pointer-events:none;transition:all .25s;z-index:120;box-shadow:var(--shadow-lg)}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body data-screen="shop" data-role="seller">
+
+<div class="switch">
+  <b>✦ Present redesign</b>
+  <span style="color:rgba(255,255,255,.5);font-size:11px">MVP banner · trimmed cards · edit-in-place · location groups · media manager</span>
+  <div class="seg2" id="screenSeg"><button data-s="shop" class="on">Shop view</button><button data-s="manage">Price table</button><button data-s="buyer">Buyer view</button></div>
+</div>
+
+<div class="app" id="app">
+  <aside class="rail glass">
+    <div class="wordmark"><div class="badge">hs</div><small>hello sello</small></div>
+    <nav class="nav" id="nav"></nav>
+    <div class="acct">
+      <div class="avatar" id="acctBtn">CW</div>
+      <div class="pop glass-strong" id="acctPop">
+        <div style="text-align:center;padding:8px 0 10px"><div class="avatar" style="margin:0 auto 6px;width:52px;height:52px;font-size:18px">CW</div><div style="font-weight:700;font-size:14px">Carla Weber</div><div style="font-size:11px;color:var(--ink-muted)">GreenLeaf Pharma</div></div>
+        <div style="height:1px;background:var(--line);margin:4px"></div>
+        <a data-modal="profile"><svg class="ic sm" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M5 21a7 7 0 0 1 14 0"/></svg> My profile</a>
+        <a data-goShop><svg class="ic sm" viewBox="0 0 24 24"><path d="M4 9h16v11H4z"/><path d="M3 9 5 4h14l2 5"/></svg> My shop (Present)</a>
+        <a data-modal="settings"><svg class="ic sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.3 1a7 7 0 0 0-1.7-1l-.3-2.6h-4l-.3 2.6a7 7 0 0 0-1.7 1l-2.3-1-2 3.4 2 1.5a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 1.7 1l.3 2.6h4l.3-2.6a7 7 0 0 0 1.7-1l2.3 1 2-3.4-2-1.5a7 7 0 0 0 .1-1z"/></svg> Settings</a>
+        <a data-modal="signout"><svg class="ic sm" viewBox="0 0 24 24"><path d="M9 21H5V3h4M16 17l5-5-5-5M21 12H9"/></svg> Sign out</a>
+      </div>
+    </div>
+  </aside>
+
+  <div class="col">
+    <!-- ===== SHOP ===== -->
+    <div class="screen" id="shopScreen">
+      <header class="topbar glass">
+        <div class="srch" id="srch"><button id="srchBtn"><svg class="ic sm" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg></button><div class="inp"><input placeholder="Search for company, product or service…" /></div></div>
+        <div class="tbspace"></div>
+        <div class="buyerbar" id="buyerBar"><span class="bview"><svg class="ic sm" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M5 21a7 7 0 0 1 14 0"/></svg> Viewing as buyer</span><button class="connchip on" id="connBtn">● Connected</button></div>
+        <button class="tbbtn" id="fsBtn" title="Present mode — hides the app chrome so you can share it in a meeting"><svg class="ic sm" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg> Present mode</button>
+        <button class="tbicon" id="basketBtn" title="Basket"><svg class="ic" viewBox="0 0 24 24"><circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/><path d="M2 3h3l2.5 12h11"/><path d="M6 6h15l-2 7H7.5"/></svg><span class="badge-dot" id="basketCount" style="display:none">0</span></button>
+        <button class="tbbtn" id="exitEdit" style="display:none"><svg class="ic sm" viewBox="0 0 24 24"><path d="M6 6 18 18M18 6 6 18"/></svg> Exit</button>
+        <button class="tbbtn brand" id="manageBtn"><svg class="ic sm" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg> <span id="manageLbl">Manage shop</span></button>
+        <button class="cochip" id="coChip" title="Your company → your shop"><span class="colg">GL</span> GreenLeaf Pharma</button>
+      </header>
+      <main>
+        <div class="wrap">
+          <section class="cover" id="cover">
+            <img class="cov" src="img/cover.jpg" onerror="this.style.display='none'" alt="">
+            <span class="cov-edit" data-editcover><svg class="ic xs" viewBox="0 0 24 24"><path d="M12 16V4m-5 5 5-5 5 5"/><path d="M4 16v3h16v-3"/></svg> Change banner</span>
+            <div class="id"><div class="logo-tile">❀</div><div><h1 data-ed data-k="name">GreenLeaf Pharma GmbH</h1><p class="tag" data-ed data-k="tag">EU-GMP medical cannabis · cultivator &amp; wholesaler</p></div></div>
+          </section>
+
+          <div class="infoboxes" id="infoboxes"></div>
+
+          <div class="toolrow">
+            <div class="fdrop"><button class="chip" id="locBtn"><svg class="ic sm" viewBox="0 0 24 24"><path d="M12 21s-7-5-7-11a7 7 0 0 1 14 0c0 6-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg> <span id="locLabel">All locations</span> <svg class="ic xs" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button><div class="fmenu glass-strong" id="locMenu"></div></div>
+            <div class="fdrop"><button class="chip" id="filterBtn"><svg class="ic sm" viewBox="0 0 24 24"><path d="M3 5h18M6 12h12M10 19h4"/></svg> Filter <span class="cnt" id="filterCnt" style="display:none">0</span></button><div class="fmenu glass-strong" id="filterMenu"></div></div>
+            <span class="count" id="count"></span>
+            <div class="spacer"></div>
+            <span class="chip">Sort ▾</span>
+          </div>
+
+          <div class="buyer-note"><svg class="ic sm" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg> <span>You're browsing <b>GreenLeaf Pharma</b> as a buyer — add items and send a <b>deal card</b>. Seller-only details and hidden products aren't shown.</span></div>
+
+          <div id="groups"></div>
+        </div>
+      </main>
+    </div>
+
+    <!-- ===== PRICE TABLE (secondary bulk view) ===== -->
+    <div class="screen" id="manageScreen">
+      <header class="mhead glass">
+        <button class="tbbtn" data-goShop><svg class="ic sm" viewBox="0 0 24 24"><path d="m14 6-6 6 6 6"/></svg> Back to shop</button>
+        <div><h2>Price table</h2><div class="sub" id="mSub">GreenLeaf Pharma · Standard price list</div></div>
+        <div style="flex:1"></div>
+        <button class="tbbtn" data-modal="import"><svg class="ic sm" viewBox="0 0 24 24"><path d="M4 9h16M4 15h16M9 4 7 20M17 4l-2 16"/></svg> Import CSV</button>
+        <button class="tbbtn brand" data-modal="addproduct"><svg class="ic sm" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> Add product</button>
+      </header>
+      <main>
+        <div class="wrap">
+          <div class="glass" style="border-radius:18px;padding:14px 16px;display:flex;align-items:center;gap:14px">
+            <span style="width:42px;height:42px;border-radius:12px;background:rgba(227,11,93,.08);color:var(--brand-deep);display:grid;place-items:center"><svg class="ic" viewBox="0 0 24 24"><path d="M4 7h16M7 4h10M6 7l1 13h10l1-13"/></svg></span>
+            <div style="flex:1"><div style="font-size:15px;font-weight:700">Standard price list <span class="pmode pub" style="vertical-align:middle">Published</span></div><div style="font-size:12px;color:var(--ink-muted)">Company-wide · EUR · prices live here, not on the product. Bulk view — the shop page is where you edit visually.</div></div>
+          </div>
+          <table class="mtable"><thead><tr><th>Product</th><th>Location</th><th>Pack</th><th>Price /g</th><th>Availability</th><th>Media</th><th></th></tr></thead><tbody id="mbody"></tbody></table>
+        </div>
+      </main>
+    </div>
+  </div>
+</div>
+
+<!-- present mode = in-app view (hides app chrome for Zoom sharing); NOT OS fullscreen -->
+<button id="exitPresent"><svg class="ic sm" viewBox="0 0 24 24"><path d="M6 6 18 18M18 6 6 18"/></svg> Exit present</button>
+
+<!-- basket drawer -->
+<div class="scrim" id="scrim"></div>
+<aside class="drawer glass-strong" id="basket">
+  <div class="dhead"><h3><svg class="ic" viewBox="0 0 24 24"><circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/><path d="M2 3h3l2.5 12h11"/><path d="M6 6h15l-2 7H7.5"/></svg> Basket</h3><button class="close" data-closeDrawer><svg class="ic sm" viewBox="0 0 24 24"><path d="M6 6 18 18M18 6 6 18"/></svg></button></div>
+  <div id="basketBody" style="flex:1"></div>
+  <div class="dfoot"><div class="total"><span>Est. total</span><span id="basketTotal">—</span></div><div class="transient"><svg class="ic xs" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg> Transient — becomes a deal card on send.</div><button class="cta" id="sendBtn"><svg class="ic sm" viewBox="0 0 24 24"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></svg> Send as deal card</button></div>
+</aside>
+
+<!-- modal -->
+<div class="mscrim" id="mscrim"><div class="modal glass-strong" id="modal"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const $=id=>document.getElementById(id);
+const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+const P={home:'<path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/>',connect:'<path d="M4 5h16v11H9l-5 4z"/>',discover:'<circle cx="12" cy="12" r="9"/><path d="m15 9-2 5-5 2 2-5z"/>',present:'<path d="M4 9h16v11H4z"/><path d="M3 9 5 4h14l2 5"/><path d="M9 20v-6h6v6"/>',buy:'<circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/><path d="M2 3h3l2.5 12h11"/><path d="M6 6h15l-2 7H7.5"/>',sell:'<path d="M3 3h8l9 9-8 8-9-9z"/><circle cx="7.5" cy="7.5" r="1.2"/>',trade:'<path d="M7 4 3 8l4 4"/><path d="M3 8h13"/><path d="m17 20 4-4-4-4"/><path d="M21 16H8"/>'};
+const SURF=[['home','Home',0],['connect','Connect',0],['discover','Discover',0],['present','Present',1],['buy','Buy',2],['sell','Sell',2],['trade','Trade',2]];
+$('nav').innerHTML=SURF.map(([k,l,s])=>`<div class="navitem ${s===1?'active':s===2?'soon':''}" data-surf="${l}" data-st="${s}">${s===1?'<span class="edge"></span>':''}<svg class="ic" viewBox="0 0 24 24">${P[k]}</svg>${l}</div>`).join('');
+$('nav').addEventListener('click',e=>{const n=e.target.closest('.navitem');if(!n)return;const st=n.dataset.st;if(st==='2'){toast(`${n.dataset.surf} — coming soon`);return;}if(n.dataset.surf!=='Present'){toast(`${n.dataset.surf} — only Present is in this prototype`);return;}goShop();});
+
+/* ===== catalogue ===== */
+const G=['linear-gradient(135deg,#6a3,#284)','linear-gradient(135deg,#caa64a,#7a5a12)','linear-gradient(135deg,#7a6cd9,#3a2f8f)','linear-gradient(135deg,#4aa,#077)','linear-gradient(135deg,#b56,#723)','linear-gradient(135deg,#8a6,#365)','linear-gradient(135deg,#c47,#812)','linear-gradient(135deg,#e0a,#812)'];
+let LOCATIONS=['Berlin, DE','Frankfurt, DE','Manchester, UK','Amsterdam, NL','Barcelona, ES'];
+// packSizes = bubbles; avail = 'ok'|'soon'|'off'; badge = ''|'new'|'launch'|'relaunch'
+const PRODUCTS=[
+ {n:'GL Indica 22/1',cult:'Northern Lights',code:'PZN 17542830',flag:'🇨🇦',loc:'Berlin, DE',cat:'Flowers',dom:'Indica',grade:'AAA',img:'cannabis,bud',
+  thc:22,cbd:1,cbg:0.8,cbn:0.3,terp:3.40,cultivator:'Aurora Farms',origin:'Canada',city:'Toronto',parentA:'Afghani',parentB:'Thai',
+  irr:'Beta',pack:'10 g',packSizes:['5g','10g','100g','1000g'],supplierCode:'GL-NL-22',avail:'ok',badge:'new',
+  perG:7.40,rrp:9.50,priceShown:true,batch:'GL-24-0001',mThc:21.6,mCbd:0.9,expiry:'2026-12',imgs:4,vids:1,coas:2},
+ {n:'GL Sativa 18/1',cult:'Sour Diesel',code:'PZN 17542847',flag:'🇵🇹',loc:'Berlin, DE',cat:'Flowers',dom:'Sativa',grade:'AA',img:'cannabis,flower',
+  thc:18,cbd:1,cbg:0.6,cbn:0.2,terp:2.85,cultivator:'Iberia Bloom',origin:'Portugal',city:'Lisbon',parentA:'Chemdawg',parentB:'Skunk',
+  irr:'Not irradiated',pack:'10 g',packSizes:['10g','100g','1000g'],supplierCode:'GL-SD-18',avail:'ok',badge:'',
+  perG:6.90,rrp:8.20,priceShown:true,batch:'GL-24-0002',mThc:17.8,mCbd:1.1,expiry:'2027-01',imgs:5,vids:1,coas:2},
+ {n:'GL Hybrid 20/4',cult:'Gelato 41',code:'PZN 17542854',flag:'🇩🇪',loc:'Frankfurt, DE',cat:'Flowers',dom:'Indica-Dominant',grade:'AAA',img:'cannabis,jar',
+  thc:20,cbd:4,cbg:1.0,cbn:0.4,terp:4.10,cultivator:'GreenLeaf In-house',origin:'Germany',city:'Brandenburg',parentA:'Sunset Sherbet',parentB:'Thin Mint GSC',
+  irr:'Beta',pack:'5 g',packSizes:['5g','10g','50g'],supplierCode:'GL-G41-20',avail:'soon',badge:'launch',
+  perG:null,rrp:11.0,priceShown:false,batch:'GL-24-0003',mThc:19.4,mCbd:4.2,expiry:'2027-02',imgs:3,vids:0,coas:1},
+ {n:'GL CBD 1/12',cult:'Harlequin',code:'PZN 17542861',flag:'🇪🇸',loc:'Frankfurt, DE',cat:'Flowers',dom:'Sativa',grade:'AA',img:'cannabis,plant',
+  thc:1,cbd:12,cbg:0.5,cbn:0.1,terp:1.95,cultivator:'Andalucía Greens',origin:'Spain',city:'Andalusia',parentA:'Colombian Gold',parentB:'Swiss Sativa',
+  irr:'Not irradiated',pack:'10 g',packSizes:['10g','100g'],supplierCode:'GL-HQ-12',avail:'ok',badge:'',
+  perG:5.20,rrp:6.40,priceShown:true,batch:'GL-24-0004',mThc:0.9,mCbd:11.6,expiry:'2027-01',imgs:3,vids:0,coas:2},
+ {n:'GL Live Resin',cult:'Gelato 41',code:'PZN 17542878',flag:'🇩🇪',loc:'Berlin, DE',cat:'Extracts',dom:'Hybrid',grade:'AAA',img:'cannabis,extract',
+  thc:78,cbd:2,cbg:2.0,cbn:0.5,terp:6.20,cultivator:'GreenLeaf In-house',origin:'Germany',city:'Brandenburg',parentA:'Sunset Sherbet',parentB:'Thin Mint GSC',
+  irr:'n/a',pack:'1 g',packSizes:['1g','5g','50g'],supplierCode:'GL-LR-78',avail:'ok',badge:'relaunch',
+  perG:32.0,rrp:38.0,priceShown:true,batch:'GL-24-0005',mThc:76.4,mCbd:1.8,expiry:'2027-03',imgs:4,vids:1,coas:2},
+ {n:'GL Hybrid 21/2',cult:'Wedding Cake',code:'PZN 17542885',flag:'🇬🇧',loc:'Manchester, UK',cat:'Flowers',dom:'Indica-Dominant',grade:'AAA',img:'cannabis,bud',
+  thc:21,cbd:2,cbg:0.9,cbn:0.3,terp:3.75,cultivator:'Pennine Cultivation',origin:'UK',city:'Kent',parentA:'Triangle Kush',parentB:'Animal Mints',
+  irr:'Not irradiated',pack:'10 g',packSizes:['10g','100g','1000g'],supplierCode:'GL-WC-21',avail:'ok',badge:'',
+  perG:8.10,rrp:9.80,priceShown:true,batch:'GL-24-0006',mThc:20.6,mCbd:2.1,expiry:'2027-02',imgs:5,vids:0,coas:2},
+ {n:'GL Sativa 19/1',cult:'Jack Herer',code:'PZN 17542892',flag:'🇳🇱',loc:'Amsterdam, NL',cat:'Flowers',dom:'Sativa',grade:'AA',img:'cannabis,flower',
+  thc:19,cbd:1,cbg:0.7,cbn:0.2,terp:2.60,cultivator:'Lowlands Botanics',origin:'Netherlands',city:'Utrecht',parentA:'Haze',parentB:'Northern Lights #5',
+  irr:'Beta',pack:'10 g',packSizes:['10g','100g'],supplierCode:'GL-JH-19',avail:'off',badge:'',
+  perG:null,rrp:8.60,priceShown:false,batch:'GL-24-0007',mThc:18.6,mCbd:1.0,expiry:'2027-01',imgs:3,vids:0,coas:1},
+ {n:'GL CBD Oil 2/20',cult:'Cannatonic',code:'PZN 17542908',flag:'🇪🇸',loc:'Barcelona, ES',cat:'Extracts',dom:'Hybrid',grade:'AA',img:'cannabis,oil',
+  thc:2,cbd:20,cbg:1.2,cbn:0.2,terp:2.20,cultivator:'Catalonia Labs',origin:'Spain',city:'Catalonia',parentA:'MK Ultra',parentB:'G13 Haze',
+  irr:'n/a',pack:'10 ml',packSizes:['10ml','30ml'],supplierCode:'GL-CT-20',avail:'ok',badge:'',
+  perG:5.80,rrp:7.20,priceShown:true,batch:'GL-24-0008',mThc:1.9,mCbd:19.4,expiry:'2027-03',imgs:2,vids:0,coas:2},
+];
+PRODUCTS.forEach((p,i)=>{p.grad=G[i%G.length];if(p.profile===undefined)p.profile=true;p.selPack=0;p.media=buildMedia(p,i);
+  // fields for the original full spec list (derived so we don't rewrite all 8 rows)
+  p.region=p.city;p.packaging=p.cat==='Extracts'?'Glass concentrate jar':(i%2?'Resealable pouch':'Glass jar');p.resealable=true;p.format=`${p.pack} ${p.cat==='Extracts'?'jar':(p.packaging.indexOf('pouch')>-1?'pouch':'jar')}`;p.customDocs=[];});
+PRODUCTS[6].profile=false; // Jack Herer — off the public profile (sellers see "Hidden", buyers don't)
+function buildMedia(p,i){const m=[];for(let k=0;k<p.imgs;k++)m.push({kind:'img',i:((i+k)%3)+1});for(let k=0;k<p.vids;k++)m.push({kind:'vid',i:((i+k)%3)+1});return m;}
+const COMPANY='GreenLeaf Pharma GmbH';
+const eur=n=>n.toFixed(2).replace('.',',')+'€';
+const C=v=>v==null?'n.a.':String(v).replace('.',',');
+const packG=p=>parseInt(p.pack)||1;
+const photo=(p,i)=>`<img src="img/p${(i%3)+1}.jpg" data-fb="https://loremflickr.com/640/640/${p.img}?lock=${i+5}" onerror="if(this.dataset.fb){this.src=this.dataset.fb;this.dataset.fb='';}else{this.style.display='none';}" alt="">`;
+const AVAIL={ok:['ok','Available'],soon:['soon','Coming soon'],off:['off','Not available']};
+
+/* ===== edit mode + dirty tracking ===== */
+let editMode=false, dirty=false;
+function setEdit(on){editMode=on;document.body.dataset.edit=on?'on':'off';
+  $('manageLbl').textContent=on?'Save changes':'Manage shop';
+  $('manageBtn').classList.toggle('brand',!on);$('manageBtn').classList.toggle('pink',on);
+  $('exitEdit').style.display=on?'inline-flex':'none';
+  document.querySelectorAll('[data-ed]').forEach(el=>el.contentEditable=on);
+  if(!on){dirty=false;document.body.classList.remove('dirty');}
+  renderInfoBoxes();renderGroups();}
+function markDirty(){if(!editMode)return;dirty=true;document.body.classList.add('dirty');}
+$('manageBtn').addEventListener('click',()=>{
+  if(editMode){const wasDirty=dirty;setEdit(false);toast(wasDirty?'✓ Shop saved (mock)':'Left edit mode');}
+  else{setEdit(true);toast('Edit mode — click any field to edit; drag the ⠿ handle to move a card');}
+});
+$('exitEdit').addEventListener('click',()=>{dirty=false;document.body.classList.remove('dirty');setEdit(false);toast('Changes discarded (mock)');});
+// capture text edits on any [data-ed]
+document.addEventListener('input',e=>{if(e.target.closest&&e.target.closest('[data-ed]'))markDirty();});
+
+/* ===== info boxes (MVP style) ===== */
+const SHOP={hash:'Cultivator',hq:'DE',warehouses:['Berlin','Frankfurt'],
+  desc:'GreenLeaf Pharma is an EU-GMP certified cultivator and wholesaler of pharmaceutical-grade cannabis flower and extracts. We supply pharmacies and distributors across the EU with consistent, lab-verified batches — full COA and specification documents travel with every product. Family-run since 2019, vertically integrated from cultivation to packaging.',
+  links:[['LinkedIn','/greenleaf','in'],['Instagram','@greenleaf_cannabis','ig'],['X','@greenleafcb','x']]};
+const LINKIC={in:'<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M7 10v7M7 7v.01M11 17v-4a2 2 0 0 1 4 0v4"/>',ig:'<rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><path d="M17 7v.01"/>',x:'<path d="M4 4l16 16M20 4 4 20"/>',web:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/>'};
+const LINKTYPES=[['LinkedIn','in'],['Instagram','ig'],['X','x'],['Website','web'],['Custom','web']];
+const PLUSIC='<path d="M12 5v14M5 12h14"/>';
+function renderInfoBoxes(){
+  const wh=SHOP.warehouses.map((w,i)=>`<div class="krow"><div class="k">Warehouse${SHOP.warehouses.length>1?' '+(i+1):''}:</div><div class="v" data-ed data-k="wh${i}">${w}</div><button class="ibrm editonly" data-rmwh="${i}">×</button></div>`).join('');
+  $('infoboxes').innerHTML=`
+  <div class="ibox" id="ib0">
+    <div class="clip"><h3 data-ed data-k="name2">${COMPANY}</h3><p class="desc" data-ed data-k="desc">${SHOP.desc}</p></div>
+    <span class="charcount"><span id="descCount">0</span>/2600</span>
+    <button class="expand" data-expand="ib0">More <svg class="ic xs" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button></div>
+  <div class="ibox" id="ib1">
+    <div class="clip"><div class="hash">#<span data-ed data-k="hash">${SHOP.hash}</span></div>
+      <div class="krow"><div class="k">Headquarter:</div><div class="v" data-ed data-k="hq">${SHOP.hq}</div></div>${wh}
+      <button class="ibadd editonly" data-addwh><svg class="ic xs" viewBox="0 0 24 24">${PLUSIC}</svg> Add warehouse / location</button></div>
+    <button class="expand" data-expand="ib1">More <svg class="ic xs" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button></div>
+  <div class="ibox" id="ib2"><div class="clip drag-links" id="linkbox">
+    ${SHOP.links.map((l,i)=>`<div class="lnk" data-li="${i}"><svg class="ic sm" viewBox="0 0 24 24">${LINKIC[l[2]]||LINKIC.web}</svg><span data-ed data-k="ln${i}">${l[0]}</span>&nbsp;<span class="site" data-ed data-k="ls${i}">${l[1]}</span><button class="ibrm editonly" data-rmlink="${i}">×</button></div>`).join('')}
+    <div class="addlink"><select id="newLinkType">${LINKTYPES.map(t=>`<option>${t[0]}</option>`).join('')}</select><input id="newLinkName" class="linkname" placeholder="Custom name" style="display:none"/><input id="newLinkVal" placeholder="handle or URL"/><button class="ibaddbtn" data-addlink><svg class="ic xs" viewBox="0 0 24 24">${PLUSIC}</svg> Add</button></div>
+  </div></div>`;
+  document.querySelectorAll('[data-ed]').forEach(el=>el.contentEditable=editMode);
+  ['ib0','ib1','ib2'].forEach(id=>{const b=$(id),clip=b.querySelector('.clip');if(clip.scrollHeight>clip.clientHeight+4)b.classList.add('has-more');});
+  const dc=$('descCount');if(dc)dc.textContent=SHOP.desc.length;
+}
+$('infoboxes').addEventListener('click',e=>{
+  const ex=e.target.closest('[data-expand]');if(ex){$(ex.dataset.expand).classList.toggle('open');return;}
+  if(e.target.closest('[data-addwh]')){SHOP.warehouses.push('New location');markDirty();renderInfoBoxes();return;}
+  const rmw=e.target.closest('[data-rmwh]');if(rmw){SHOP.warehouses.splice(+rmw.dataset.rmwh,1);markDirty();renderInfoBoxes();return;}
+  const rml=e.target.closest('[data-rmlink]');if(rml){SHOP.links.splice(+rml.dataset.rmlink,1);markDirty();renderInfoBoxes();return;}
+  if(e.target.closest('[data-addlink]')){const t=$('newLinkType').value,v=($('newLinkVal').value||'').trim()||'—';const label=t==='Custom'?(($('newLinkName').value||'').trim()||'Custom link'):t;const key=(LINKTYPES.find(x=>x[0]===t)||['','web'])[1];SHOP.links.push([label,v,key]);markDirty();renderInfoBoxes();toast('Link added');return;}
+});
+$('infoboxes').addEventListener('change',e=>{if(e.target.id==='newLinkType'){const nm=$('newLinkName');if(nm)nm.style.display=e.target.value==='Custom'?'block':'none';}});
+
+/* location dropdown */
+let loc='All';
+function locCount(id){return PRODUCTS.filter(p=>id==='All'||p.loc===id).length;}
+function renderLocMenu(){const opts=[['All','All locations'],...LOCATIONS.map(l=>[l,l])];
+  $('locMenu').innerHTML=`<div class="grp">Shop location</div>`+opts.map(([id,lab])=>`<div class="opt ${loc===id?'sel':''}" data-loc="${id}"><span class="radio"></span><span style="flex:1">${lab}</span><span style="color:var(--ink-muted);font-size:11px">${locCount(id)}</span></div>`).join('');}
+$('locBtn').addEventListener('click',e=>{e.stopPropagation();$('filterMenu').classList.remove('show');$('locMenu').classList.toggle('show');});
+$('locMenu').addEventListener('click',e=>{e.stopPropagation();const o=e.target.closest('[data-loc]');if(!o)return;loc=o.dataset.loc;$('locLabel').textContent=loc==='All'?'All locations':loc;$('locMenu').classList.remove('show');renderLocMenu();renderGroups();});
+
+/* filters */
+const CATS=['Flowers','Extracts'],STRAINS=['Indica','Sativa','Hybrid','CBD'];
+const sel={cat:new Set(),strain:new Set()};
+function renderFilterMenu(){const m=$('filterMenu');const o=(g,v)=>`<div class="opt ${sel[g].has(v)?'sel':''}" data-g="${g}" data-v="${v}"><span class="box"><svg class="ic xs" viewBox="0 0 24 24"><path d="m5 12 5 5 9-11"/></svg></span>${v}</div>`;m.innerHTML=`<div class="grp">Category</div>${CATS.map(v=>o('cat',v)).join('')}<div class="grp">Strain</div>${STRAINS.map(v=>o('strain',v)).join('')}`;const n=sel.cat.size+sel.strain.size,c=$('filterCnt');c.style.display=n?'grid':'none';c.textContent=n;}
+$('filterBtn').addEventListener('click',e=>{e.stopPropagation();$('locMenu').classList.remove('show');$('filterMenu').classList.toggle('show');});
+$('filterMenu').addEventListener('click',e=>{e.stopPropagation();const o=e.target.closest('[data-g]');if(!o)return;const g=o.dataset.g,v=o.dataset.v;sel[g].has(v)?sel[g].delete(v):sel[g].add(v);renderFilterMenu();renderGroups();});
+document.addEventListener('click',()=>{$('filterMenu').classList.remove('show');$('locMenu').classList.remove('show');});
+function matchStrain(p){if(!sel.strain.size)return true;for(const s of sel.strain){if(s==='CBD'&&p.cbd>=10)return true;if(p.dom.includes(s))return true;}return false;}
+function visible(){return PRODUCTS.map((p,i)=>({p,i})).filter(({p})=>(role!=='buyer'||p.profile!==false)&&(loc==='All'||p.loc===loc)&&(!sel.cat.size||sel.cat.has(p.cat))&&matchStrain(p));}
+
+/* ===== product card ===== */
+function front(p,i){
+  const av=AVAIL[p.avail];
+  const badges=[];
+  if(p.badge==='new')badges.push('<span class="pc-badge new">New</span>');
+  if(p.badge==='launch')badges.push('<span class="pc-badge launch">Launch</span>');
+  if(p.badge==='relaunch')badges.push('<span class="pc-badge relaunch">Re-Launch</span>');
+  if(p.avail==='soon')badges.push('<span class="pc-badge soon">Coming soon</span>');
+  if(p.avail==='off')badges.push('<span class="pc-badge off">Not available</span>');
+  if(p.profile===false&&role!=='buyer')badges.push('<span class="pc-badge hidden">Hidden</span>');
+  const packs=p.packSizes.map((s,k)=>`<button class="pc-pack ${k===p.selPack?'on':''}" data-pack="${k}">${s}</button>`).join('');
+  const imgN=Math.max(1,p.media.filter(m=>m.kind==='img').length);
+  const dots=Array.from({length:Math.min(imgN,5)},(_,k)=>`<span class="${k===0?'on':''}"></span>`).join('');
+  const rows=[
+    ['Dominance',p.dom],['Cultivator',p.cultivator],['Origin',`${p.flag} ${p.origin}`],['Region',p.region],
+    ['Lineage',`${p.parentA} × ${p.parentB}`],['Irradiation',p.irr],['Format',p.format],
+    ['Packaging',p.packaging],['Resealable',p.resealable?'Yes':'No'],['Supplier code',p.supplierCode],
+  ];
+  const priceRight=p.priceShown
+    ? `<span class="pc-price"><small>Approx.</small><span data-ed data-k="pr${i}">${eur(p.perG)}</span>/g</span>`
+    : `<span class="pc-reqprice">Price on request</span>`;
+  const CART='<circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/><path d="M2 3h3l2.5 12h11"/><path d="M6 6h15l-2 7H7.5"/>';
+  const stepperAdd=`<div class="pc-addrow"><div class="pc-stepper"><button data-step="-1"><svg class="ic xs" viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button><span class="pc-q">1</span><button data-step="1"><svg class="ic xs" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></div><button class="pc-add" data-add><svg class="ic xs" viewBox="0 0 24 24">${CART}</svg> Add to basket</button></div>`;
+  const foot = role==='buyer'
+    ? ((p.priceShown && p.avail!=='off') ? stepperAdd : `<button class="pc-add" data-reqprice style="margin-top:9px;width:100%">${p.avail==='soon'?'Notify / pre-order':'Request pricing'}</button>`)
+    : `${stepperAdd}<button class="pc-bopen pc-batchopt" data-bopen><span class="bopen-lbl">Select batch</span> (optional) ▾</button>`;
+  const editTools=`<div class="pc-edittools"><span class="grip" data-grip draggable="true" title="Drag to move to another location"><svg class="ic xs" viewBox="0 0 24 24"><circle cx="9" cy="6" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="18" r="1"/></svg></span><select class="pc-avsel" data-avail><option value="ok"${p.avail==='ok'?' selected':''}>Available</option><option value="soon"${p.avail==='soon'?' selected':''}>Coming soon</option><option value="off"${p.avail==='off'?' selected':''}>Not available</option></select><button class="del" data-delcard><svg class="ic xs" viewBox="0 0 24 24"><path d="M5 7h14M9 7V5h6v2M7 7l1 13h8l1-13"/></svg></button></div>`;
+  return `<div class="pc-face pc-front">
+    ${editTools}
+    <div class="pc-photo" style="background:${p.grad}">${photo(p,i)}<div class="pc-sheen"></div>
+      <div class="pc-badges">${badges.join('')}</div>
+      <button class="pc-heart" data-heart><svg class="ic xs" viewBox="0 0 24 24"><path d="M12 20s-7-4.5-7-10a4 4 0 0 1 7-2 4 4 0 0 1 7 2c0 5.5-7 10-7 10z"/></svg></button>
+      <div class="pc-dots">${dots}</div>
+      <button class="pc-flipbtn" data-flip><svg class="ic xs" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 7"/><path d="M3 4v3h3"/></svg> Docs &amp; media</button>
+    </div>
+    <div class="pc-body">
+      <div class="pc-fhead"><div><div class="pc-name" data-ed data-k="pn${i}">${p.n}</div><div class="pc-cult" data-ed data-k="pc${i}">${p.cult}</div><div class="pc-code">${p.code}</div></div><span class="pc-flag">${p.flag}</span></div>
+      <div class="pc-quad"><div class="c"><b data-ed data-k="thc${i}">${C(p.thc)}</b><small>THC%</small></div><div class="c"><b data-ed data-k="cbd${i}">${C(p.cbd)}</b><small>CBD%</small></div><div class="c"><b data-ed data-k="cbg${i}">${C(p.cbg)}</b><small>CBG%</small></div><div class="c"><b data-ed data-k="cbn${i}">${C(p.cbn)}</b><small>CBN%</small></div><div class="c terp"><b data-ed data-k="tp${i}">${C(p.terp)}</b><small>Terp%</small></div></div>
+      <div class="pc-specs">${rows.map(([k,v],ri)=>`<div class="pc-srow"><span class="k">${k}</span><span class="v" data-ed data-k="sv${i}_${ri}">${v}</span></div>`).join('')}</div>
+      <div class="pc-ffoot">
+        <div class="pc-selprice"><div class="pc-packs">${packs}</div><div class="pc-priceblock">${priceRight}</div></div>
+        ${foot}
+      </div>
+    </div>
+    ${role!=='buyer'?`<div class="pc-bpanel" data-bpanel><div class="pc-bphead"><span>Choose lots &amp; quantities</span><span class="pc-bptotal"><b>0</b> packs</span><button data-bclose><svg class="ic xs" viewBox="0 0 24 24"><path d="M6 6 18 18M18 6 6 18"/></svg></button></div><div class="pc-bplist">${batchesFor(p).map(b=>`<div class="pc-bprow" data-lot="${b.no}"><div class="pc-bpinfo"><div class="sd-bno">${b.no}${b.current?' <span class="sd-cur">current</span>':''}</div><div class="sd-bmeta">THC ${C(b.thc)}% · CBD ${C(b.cbd)}% · exp ${b.expiry} · ${b.kg} kg</div></div><div class="ab-step"><button data-bdec><svg class="ic xs" viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button><span class="pc-bpq">0</span><button data-binc><svg class="ic xs" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></div></div>`).join('')}</div></div>`:''}
+  </div>`;
+}
+function back(p){
+  const coaFiles=Array.from({length:Math.max(1,p.coas)},(_,i)=>[i===0?'COA — current batch':`COA — batch ${String(p.coas-i).padStart(4,'0')}`,'PDF']);
+  const folders=[
+    ['COAs','Certificates of Analysis',coaFiles],
+    ['Certificates & specs','GMP & product spec',[['EU-GMP certificate','PDF'],['Product specification sheet','PDF']]],
+  ];
+  if(p.customDocs.length)folders.push(['Documents','Custom uploads',p.customDocs.map(n=>[n,'FILE'])]);
+  const FOLD='<path d="M3 7a2 2 0 0 1 2-2h3.9l1.6 2H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>';
+  const FILEIC='<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/>';
+  const DL='<path d="M12 4v9m-4-4 4 4 4-4"/><path d="M5 20h14"/>';
+  const PLUS='<path d="M12 5v14M5 12h14"/>';
+  const foldersHTML=folders.map(([name,meta,files])=>`<div class="pc-folder" data-folder><button class="pc-folderhd"><span class="di-ic"><svg class="ic sm" viewBox="0 0 24 24">${FOLD}</svg></span><span class="di-tx"><b>${name}</b><small>${meta}</small></span><span class="fcount">${files.length}</span><svg class="ic xs fchev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></button><div class="pc-files">${files.map(([fn,ft])=>`<button class="pc-fileitem" data-doc><svg class="ic xs" viewBox="0 0 24 24">${FILEIC}</svg><span class="ff">${fn}</span><small>${ft}</small><svg class="ic xs di-go" viewBox="0 0 24 24">${DL}</svg></button>`).join('')}</div></div>`).join('');
+  const tiles=p.media.map((m,k)=>`<div class="pc-mtile" draggable="true" data-mtile="${k}">${m.kind==='vid'?`<img src="img/p${m.i}.jpg" onerror="this.style.display='none'"><span class="vplay"><svg class="ic sm" viewBox="0 0 24 24"><path d="m6 4 14 8-14 8z"/></svg></span><span class="mkind">Video</span>`:`<img src="img/p${m.i}.jpg" onerror="this.style.display='none'"><span class="mkind">Photo</span>`}<button class="mdel" data-mdel="${k}"><svg class="ic xs" viewBox="0 0 24 24"><path d="M6 6 18 18M18 6 6 18"/></svg></button></div>`).join('');
+  return `<div class="pc-face pc-back">
+    <div class="pc-bhead"><svg class="ic sm" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M9 13h6M9 17h4"/></svg><div><b>Documents &amp; media</b><small>${p.n}</small></div></div>
+    <div class="pc-bscroll">
+      <div class="pc-sec">Media <span style="text-transform:none;letter-spacing:0;font-weight:600;color:var(--ink-faint)">· shows on the front</span><span class="dlall editonly" data-madd><svg class="ic xs" viewBox="0 0 24 24">${PLUS}</svg> Upload</span><span class="dlall" data-dlall><svg class="ic xs" viewBox="0 0 24 24">${DL}</svg> Download all</span></div>
+      <div class="pc-media" data-media>${tiles}<div class="pc-madd" data-madd><svg class="ic sm" viewBox="0 0 24 24">${PLUS}</svg>Upload</div></div>
+      <div class="pc-mnote">Upload images &amp; videos here (≤10 MB each) — they appear on the product's front. Drag to re-sort · ✕ to delete.</div>
+      <div class="pc-sec mt">Documents <span class="dlall editonly" data-upladd><svg class="ic xs" viewBox="0 0 24 24">${PLUS}</svg> Upload document</span><span class="dlall" data-dlall><svg class="ic xs" viewBox="0 0 24 24">${DL}</svg> Download all</span></div>
+      <div class="pc-folders">${foldersHTML}</div>
+    </div>
+    <div class="pc-bfoot"><button class="pc-flipback" data-flip><svg class="ic xs" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 1 3 6.7L3 17"/><path d="M3 20v-3h3"/></svg> Back to front</button></div>
+  </div>`;
+}
+function cardHTML(p,idx){return `<div class="pc-card" data-idx="${idx}" draggable="false"><div class="pc-tilt"><div class="pc-inner">${front(p,idx)}${back(p)}</div></div></div>`;}
+
+/* ===== grouped grid (by location) ===== */
+const groupsEl=$('groups');
+function renderGroups(){
+  const v=visible();
+  const byLoc={};v.forEach(o=>{(byLoc[o.p.loc]=byLoc[o.p.loc]||[]).push(o);});
+  const order=LOCATIONS.filter(l=>byLoc[l]);
+  const PIN='<path d="M12 21s-7-5-7-11a7 7 0 0 1 14 0c0 6-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/>';
+  groupsEl.innerHTML=order.map(l=>`<section class="locgroup" data-loc="${l}" style="margin-bottom:22px">
+    <div class="lg-head"><span class="pin"><svg class="ic xs" viewBox="0 0 24 24">${PIN}</svg></span><b>${l.split(',')[0]}</b><small>${l}</small><span class="lg-count">${byLoc[l].length}</span><span class="lg-hint">drop products here to move them</span></div>
+    <div class="grid">${byLoc[l].map(({p,i})=>cardHTML(p,i)).join('')}<div class="pc-addcard" data-addto="${l}"><span class="plus"><svg class="ic" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span>Add product<br><span style="font-weight:500;font-size:11px;color:var(--ink-muted)">to ${l.split(',')[0]}</span></div></div>
+  </section>`).join('') + (editMode?`<div class="addloc"><svg class="ic sm" viewBox="0 0 24 24"><path d="M12 21s-7-5-7-11a7 7 0 0 1 14 0c0 6-7 11-7 11z"/></svg><input id="addLocInput" placeholder="Add a location / shop (e.g. Vienna, AT)"/><button class="chip" style="background:var(--brand);color:#fff" id="addLocBtn">Add</button></div>`:'');
+  $('count').textContent=`${v.length} product${v.length===1?'':'s'} · ${order.length} location${order.length===1?'':'s'}`;
+  document.querySelectorAll('[data-ed]').forEach(el=>el.contentEditable=editMode);
+  const ali=$('addLocInput');if(ali){$('addLocBtn').onclick=()=>{const val=ali.value.trim();if(!val)return;if(!LOCATIONS.includes(val))LOCATIONS.push(val);markDirty();renderLocMenu();renderGroups();toast('Added location '+val);};}
+}
+
+/* card interactions */
+groupsEl.addEventListener('click',e=>{
+  const addto=e.target.closest('[data-addto]');if(addto){openModal('addproduct');return;}
+  const card=e.target.closest('.pc-card');if(!card)return;const idx=+card.dataset.idx;const p=PRODUCTS[idx];
+  if(editMode){
+    if(e.target.closest('[data-delcard]')){if(confirmMock()){p._deleted=true;PRODUCTS.splice(idx,1);markDirty();renderGroups();renderLocMenu();toast('Product deleted (mock)');}return;}
+    if(e.target.closest('[data-mdel]')){const k=+e.target.closest('[data-mdel]').dataset.mdel;p.media.splice(k,1);p.imgs=p.media.filter(m=>m.kind==='img').length;p.vids=p.media.filter(m=>m.kind==='vid').length;markDirty();rerenderCard(card,idx);return;}
+    if(e.target.closest('[data-madd]')){p.media.push({kind:'img',i:(p.media.length%3)+1});p.imgs++;markDirty();rerenderCard(card,idx);toast('Uploaded photo (mock)');return;}
+    if(e.target.closest('[data-upladd]')){openUploadDoc(idx,card);return;}
+    if(e.target.closest('[data-dlall]')){toast('Downloading all (mock)');return;}
+    if(e.target.closest('[data-flip]')){card.classList.toggle('flip');return;}
+    if(e.target.closest('.pc-avsel'))return; // handled on change
+    if(e.target.closest('[data-folder]')){e.target.closest('[data-folder]').classList.toggle('open');return;}
+    return; // in edit mode, other clicks do nothing (fields editable inline)
+  }
+  if(e.target.closest('[data-pack]')){p.selPack=+e.target.closest('[data-pack]').dataset.pack;card.querySelectorAll('[data-pack]').forEach(b=>b.classList.toggle('on',+b.dataset.pack===p.selPack));return;}
+  if(e.target.closest('[data-step]')){const q=card.querySelector('.pc-q');q.textContent=Math.max(1,+q.textContent+(+e.target.closest('[data-step]').dataset.step));return;}
+  if(e.target.closest('[data-add]')){addToBasket(idx,+card.querySelector('.pc-q').textContent,card,null);return;}
+  if(e.target.closest('[data-reqprice]')){openReqPricing(idx);return;}
+  if(e.target.closest('[data-bopen]')){card.querySelector('[data-bpanel]').classList.toggle('show');return;}
+  if(e.target.closest('[data-bclose]')){card.querySelector('[data-bpanel]').classList.remove('show');return;}
+  if(e.target.closest('[data-binc]')||e.target.closest('[data-bdec]')){const row=e.target.closest('.pc-bprow'),sp=row.querySelector('.pc-bpq'),d=e.target.closest('[data-binc]')?1:-1;sp.textContent=Math.max(0,+sp.textContent+d);bpRefresh(card);return;}
+  if(e.target.closest('[data-badd]')){const pn=card.querySelector('[data-bpanel]'),picks=[];pn.querySelectorAll('.pc-bprow').forEach(r=>{const q=+r.querySelector('.pc-bpq').textContent;if(q>0)picks.push([r.dataset.lot,q]);});if(!picks.length)return;picks.forEach(([no,q],i)=>addToBasket(idx,q,i===0?card:null,no));pn.classList.remove('show');pn.querySelectorAll('.pc-bpq').forEach(s=>s.textContent='0');bpRefresh(card);return;}
+  if(e.target.closest('[data-heart]')){e.target.closest('[data-heart]').classList.toggle('on');return;}
+  if(e.target.closest('[data-doc]')){toast('Opens document (mock)');return;}
+  if(e.target.closest('[data-dlall]')){toast('Downloading all (mock)');return;}
+  if(e.target.closest('[data-folder]')){e.target.closest('[data-folder]').classList.toggle('open');return;}
+  if(e.target.closest('[data-flip]')){card.classList.toggle('flip');return;}
+  if(e.target.closest('[data-bpanel]'))return;
+});
+// availability select
+groupsEl.addEventListener('change',e=>{const s=e.target.closest('[data-avail]');if(!s)return;const card=e.target.closest('.pc-card');const idx=+card.dataset.idx;PRODUCTS[idx].avail=s.value;markDirty();rerenderCard(card,idx);});
+function rerenderCard(card,idx){const flipped=card.classList.contains('flip');card.querySelector('.pc-inner').innerHTML=front(PRODUCTS[idx],idx)+back(PRODUCTS[idx]);card.classList.toggle('flip',flipped);document.querySelectorAll('[data-ed]').forEach(el=>el.contentEditable=editMode);}
+function confirmMock(){return true;} // prototype: skip the browser confirm dialog
+function openUploadDoc(idx,card){
+  let type='COA';
+  const render=()=>{const p=PRODUCTS[idx];
+    $('modal').innerHTML=`<div class="mtop"><h3>Upload document</h3><button class="mclose" data-mclose><svg class="ic sm" viewBox="0 0 24 24"><path d="M6 6 18 18M18 6 6 18"/></svg></button></div>
+      <div class="msub">Add any document to <b>${p.n}</b> — it shows on the back of the card.</div>
+      <div class="field"><label>Document type</label><select id="udType"><option value="COA">COA (Certificate of Analysis)</option><option value="Custom">Custom document</option></select></div>
+      <div class="field" id="udNameF" style="display:${type==='Custom'?'block':'none'}"><label>Name</label><input id="udName" placeholder="e.g. Product catalogue, price sheet, brochure…"/></div>
+      <div class="field"><label>File</label><div class="drop"><svg class="ic" viewBox="0 0 24 24" style="margin:0 auto 6px"><path d="M12 16V4m-5 5 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>Drop a PDF or file (≤10 MB)</div></div>
+      <div class="mactions"><button class="cta" id="udDo"><svg class="ic sm" viewBox="0 0 24 24"><path d="M12 16V4m-5 5 5-5 5 5"/><path d="M4 16v3h16v-3"/></svg> Upload</button><button class="ghost" data-mclose>Cancel</button></div>`;
+    $('udType').onchange=e=>{type=e.target.value;$('udNameF').style.display=type==='Custom'?'block':'none';};
+    $('udDo').onclick=()=>{if(type==='COA'){PRODUCTS[idx].coas++;}else{const nm=($('udName').value||'').trim()||'Custom document';PRODUCTS[idx].customDocs.push(nm);}markDirty();closeModal();rerenderCard(card,idx);toast('Document uploaded (mock)');};
+  };
+  render();$('mscrim').classList.add('show');acctPop.classList.remove('show');
+}
+function bpRefresh(card){const panel=card.querySelector('[data-bpanel]');let total=0,lots=0;panel.querySelectorAll('.pc-bprow').forEach(r=>{const q=+r.querySelector('.pc-bpq').textContent;r.classList.toggle('on',q>0);if(q>0)lots++;total+=q;});panel.querySelector('.pc-bptotal b').textContent=total;card.querySelector('[data-badd]').classList.toggle('dim',total===0);const lbl=card.querySelector('.bopen-lbl');if(lbl)lbl.textContent=total?`${lots} lot${lots>1?'s':''} · ${total}`:'Select batch';}
+
+/* ===== drag: cards → location groups (edit mode) & media tiles ===== */
+let dragCard=null, dragMedia=null, lastHi=null;
+groupsEl.addEventListener('dragstart',e=>{
+  const tile=e.target.closest('[data-mtile]');if(tile){dragMedia={card:e.target.closest('.pc-card'),k:+tile.dataset.mtile};tile.classList.add('dragging');return;}
+  const grip=e.target.closest('[data-grip]');
+  if(grip&&editMode){dragCard=grip.closest('.pc-card');dragCard.classList.add('dragging');return;}
+  e.preventDefault(); // only the grip handle (or a media tile) can start a drag
+});
+groupsEl.addEventListener('dragend',e=>{document.querySelectorAll('.dragging').forEach(x=>x.classList.remove('dragging'));if(lastHi){lastHi.classList.remove('drop-hi');lastHi=null;}dragCard=null;dragMedia=null;});
+groupsEl.addEventListener('dragover',e=>{
+  if(dragCard){e.preventDefault();const g=e.target.closest('.locgroup');if(g!==lastHi){if(lastHi)lastHi.classList.remove('drop-hi');if(g)g.classList.add('drop-hi');lastHi=g;}}
+  else if(dragMedia){e.preventDefault();}
+});
+groupsEl.addEventListener('drop',e=>{
+  if(dragCard){
+    const moved=PRODUCTS[+dragCard.dataset.idx];
+    const targetCard=e.target.closest('.pc-card');
+    if(targetCard&&targetCard!==dragCard){ // dropped on another card → reorder (and adopt its location)
+      const target=PRODUCTS[+targetCard.dataset.idx];
+      moved.loc=target.loc;
+      PRODUCTS.splice(PRODUCTS.indexOf(moved),1);
+      PRODUCTS.splice(PRODUCTS.indexOf(target),0,moved);
+      markDirty();renderLocMenu();renderGroups();toast('Reordered');
+    }else{ // dropped on empty group area → move to that location
+      const g=e.target.closest('.locgroup');
+      if(g&&moved.loc!==g.dataset.loc){moved.loc=g.dataset.loc;markDirty();renderLocMenu();renderGroups();toast(`Moved to ${g.dataset.loc.split(',')[0]}`);}
+    }
+    return;
+  }
+  if(dragMedia){const tile=e.target.closest('[data-mtile]');const card=e.target.closest('.pc-card');if(tile&&card===dragMedia.card){const p=PRODUCTS[+card.dataset.idx];const to=+tile.dataset.mtile,from=dragMedia.k;const [m]=p.media.splice(from,1);p.media.splice(to,0,m);markDirty();rerenderCard(card,+card.dataset.idx);card.classList.add('flip');}}
+});
+
+/* collectible tilt (skipped in edit mode / reduced-motion) */
+if(!reduce){
+  groupsEl.addEventListener('mousemove',e=>{if(editMode)return;const c=e.target.closest('.pc-card');if(!c)return;const t=c.querySelector('.pc-tilt'),r=c.getBoundingClientRect();const px=(e.clientX-r.left)/r.width,py=(e.clientY-r.top)/r.height;if(!c.classList.contains('flip'))t.style.transform=`rotateY(${(px-.5)*5}deg) rotateX(${(.5-py)*5}deg)`;c.querySelectorAll('.pc-sheen').forEach(s=>{s.style.setProperty('--px',px*100+'%');s.style.setProperty('--py',py*100+'%');});});
+  groupsEl.addEventListener('mouseout',e=>{const c=e.target.closest('.pc-card');if(c&&!c.contains(e.relatedTarget))c.querySelector('.pc-tilt').style.transform='';});
+}
+
+/* ===== basket ===== */
+const basket={};
+function lineKey(idx,batch){return batch?`${idx}@${batch}`:`${idx}`;}
+function addToBasket(idx,qty,card,batch){basket[COMPANY]=basket[COMPANY]||{};const k=lineKey(idx,batch||null);const ex=basket[COMPANY][k];basket[COMPANY][k]={idx,batch:batch||null,qty:(ex?ex.qty:0)+qty};renderBasket();bumpBadge();if(card)flyToCart(card);toast(`Added ${qty} × ${PRODUCTS[idx].n}${batch?' · '+batch:''}`);}
+function count(){let c=0;for(const co in basket)for(const k in basket[co])c+=basket[co][k].qty;return c;}
+function bumpBadge(){const b=$('basketCount');b.classList.remove('bump');void b.offsetWidth;b.classList.add('bump');}
+function flyToCart(card){if(reduce)return;const img=card.querySelector('.pc-photo'),cart=$('basketBtn');if(!img)return;const a=img.getBoundingClientRect(),b=cart.getBoundingClientRect();const g=document.createElement('div');g.className='fly';g.style.cssText+=`left:${a.left}px;top:${a.top}px;width:${a.width}px;height:${a.height}px;background:${PRODUCTS[+card.dataset.idx].grad}`;document.body.appendChild(g);requestAnimationFrame(()=>{g.style.left=b.left+'px';g.style.top=b.top+'px';g.style.width='28px';g.style.height='28px';g.style.opacity='0';});setTimeout(()=>g.remove(),700);}
+function renderBasket(){const body=$('basketBody'),cnt=count(),badge=$('basketCount');badge.style.display=cnt?'grid':'none';badge.textContent=cnt;let total=0;const cos=Object.keys(basket).filter(co=>Object.keys(basket[co]).length);if(!cos.length){body.innerHTML='<div class="empty">Your basket is empty.<br>Add products to build a deal card.</div>';$('basketTotal').textContent='—';return;}body.innerHTML=cos.map(co=>{const lines=Object.entries(basket[co]).map(([k,L])=>{const p=PRODUCTS[L.idx];if(p.priceShown)total+=L.qty*packG(p)*p.perG;return `<div class="line" data-key="${k}"><div class="nm"><b>${p.n}</b><small>${p.cult} · ${L.qty}×${(p.packSizes&&p.packSizes[p.selPack])||p.pack}${L.batch?` · <span style="color:var(--brand-deep);font-weight:700">Lot ${L.batch}</span>`:''}</small></div><div class="q"><button data-bstep="-1"><svg class="ic xs" viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button>${L.qty}<button data-bstep="1"><svg class="ic xs" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></div><button class="x" data-brm><svg class="ic xs" viewBox="0 0 24 24"><path d="M6 6 18 18M18 6 6 18"/></svg></button></div>`;}).join('');return `<div class="grp"><div class="gh"><span class="av">GL</span> ${co}</div>${lines}</div>`;}).join('');$('basketTotal').textContent=total?eur(total):'on request';}
+$('basketBody').addEventListener('click',e=>{const line=e.target.closest('.line');if(!line)return;const k=line.dataset.key;if(e.target.closest('[data-brm]'))delete basket[COMPANY][k];const s=e.target.closest('[data-bstep]');if(s&&basket[COMPANY][k])basket[COMPANY][k].qty=Math.max(1,basket[COMPANY][k].qty+(+s.dataset.bstep));renderBasket();});
+const scrim=$('scrim');
+function openDrawer(d){d.classList.add('show');scrim.classList.add('show');}
+function closeDrawers(){document.querySelectorAll('.drawer').forEach(x=>x.classList.remove('show'));scrim.classList.remove('show');}
+scrim.addEventListener('click',closeDrawers);
+document.querySelectorAll('[data-closeDrawer]').forEach(b=>b.onclick=closeDrawers);
+$('basketBtn').addEventListener('click',()=>openDrawer($('basket')));
+function batchesFor(p){const stem=p.batch.slice(0,-2);return [
+  {no:p.batch,thc:p.mThc,cbd:p.mCbd,expiry:p.expiry,kg:42,current:true},
+  {no:stem+'07',thc:+(p.mThc-0.9).toFixed(1),cbd:p.mCbd,expiry:'2026-11',kg:18},
+  {no:stem+'05',thc:+(p.mThc+0.6).toFixed(1),cbd:p.mCbd,expiry:'2026-09',kg:6},
+];}
+
+/* ===== send flows ===== */
+function openSendDeal(){
+  const lines=Object.entries(basket[COMPANY]||{});
+  if(!lines.length){toast('Basket is empty');return;}
+  const contacts=['Apotheke Nord (Berlin)','MediCanna GmbH','GrünPharm AG'];
+  let customer=contacts[0];const work={};
+  lines.forEach(([k,L])=>work[k]=PRODUCTS[L.idx].perG||0);
+  const render=()=>{let total=0;const lineHTML=lines.map(([k,L])=>{const p=PRODUCTS[L.idx];total+=(work[k]||0)*L.qty*packG(p);return `<div style="display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:12px;padding:10px"><div style="width:34px;height:34px;border-radius:9px;background:${p.grad};flex:0 0 34px"></div><div style="flex:1"><b style="font-size:13px">${p.n}</b><div style="font-size:11px;color:var(--ink-muted)">${L.qty} × ${p.pack} · Lot ${L.batch||'—'}</div></div></div>`;}).join('');
+    $('modal').innerHTML=`<div class="mtop"><h3>Send deal card</h3><button class="mclose" data-mclose><svg class="ic sm" viewBox="0 0 24 24"><path d="M6 6 18 18M18 6 6 18"/></svg></button></div>
+      <div class="msub">A seller <b>offer</b> from your shop — batches already on the lines.</div>
+      <div class="field"><label>Send to — connected customer</label><select id="sdContact">${contacts.map(c=>`<option>${c}</option>`).join('')}</select></div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">${lineHTML}</div>
+      <div style="text-align:right;margin-top:12px;font-size:13px;font-weight:700">Order total ${eur(total)}</div>
+      <div class="infonote">Becomes a deal <b>offer</b> (source: shop). Per-customer pricing lands in Phase 15. Hands off to the Deal Basket + <code>createDeal</code>.</div>
+      <div class="mactions"><button class="cta" id="sdSend"><svg class="ic sm" viewBox="0 0 24 24"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></svg> Send offer</button><button class="ghost" data-mclose>Cancel</button></div>`;
+    $('sdContact').onchange=e=>customer=e.target.value;
+    $('sdSend').onclick=()=>{closeModal();closeDrawers();basket[COMPANY]={};renderBasket();toast('→ Offer sent (mock)');};};
+  render();$('mscrim').classList.add('show');acctPop.classList.remove('show');
+}
+function openReqPricing(idx){const p=PRODUCTS[idx];
+  $('modal').innerHTML=`<div class="mtop"><h3>${p.avail==='soon'?'Pre-order / notify':'Request pricing'}</h3><button class="mclose" data-mclose><svg class="ic sm" viewBox="0 0 24 24"><path d="M6 6 18 18M18 6 6 18"/></svg></button></div>
+    <div class="msub"><b>${p.n}</b> · ${p.cult} — ${p.avail==='soon'?'this product is coming soon; register interest to pre-order.':'ask '+COMPANY+' for a price.'}</div>
+    <div class="field"><label>Message (optional)</label><textarea rows="3" placeholder="Hi — could you send pricing for ${p.n}? Expected volume…"></textarea></div>
+    <div class="infonote">Lands in ${COMPANY}'s Connect inbox.</div>
+    <div class="mactions"><button class="cta" id="rpSend"><svg class="ic sm" viewBox="0 0 24 24"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></svg> Send</button><button class="ghost" data-mclose>Cancel</button></div>`;
+  $('mscrim').classList.add('show');acctPop.classList.remove('show');
+  $('rpSend').onclick=()=>{closeModal();toast('→ Sent to '+COMPANY+' (mock)');};
+}
+function openSendOrder(){
+  const lines=Object.entries(basket[COMPANY]||{});
+  if(!lines.length){toast('Basket is empty');return;}
+  const lineHTML=lines.map(([k,L])=>{const p=PRODUCTS[L.idx];return `<div style="display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:12px;padding:10px"><div style="width:34px;height:34px;border-radius:9px;background:${p.grad};flex:0 0 34px"></div><div style="flex:1"><b style="font-size:13px">${p.n}</b><div style="font-size:11px;color:var(--ink-muted)">${L.qty} × ${p.pack} · ${p.cult}</div></div></div>`;}).join('');
+  $('modal').innerHTML=`<div class="mtop"><h3>Send order</h3><button class="mclose" data-mclose><svg class="ic sm" viewBox="0 0 24 24"><path d="M6 6 18 18M18 6 6 18"/></svg></button></div>
+    <div class="msub">An <b>order</b> to ${COMPANY} — they confirm availability and assign the batch.</div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:6px">${lineHTML}</div>
+    <div class="infonote">Becomes a deal <b>order</b> (source: shop), <b>no batch</b> — seller picks the lot on response.</div>
+    <div class="mactions"><button class="cta" id="soSend"><svg class="ic sm" viewBox="0 0 24 24"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></svg> Send order</button><button class="ghost" data-mclose>Cancel</button></div>`;
+  $('mscrim').classList.add('show');acctPop.classList.remove('show');
+  $('soSend').onclick=()=>{closeModal();closeDrawers();basket[COMPANY]={};renderBasket();toast('→ Order sent (mock)');};
+}
+$('sendBtn').addEventListener('click',()=>{
+  if(role==='buyer'){if(!connected){toast('🔒 Connect with GreenLeaf Pharma first');return;}if(!count()){toast('Basket is empty');return;}openSendOrder();return;}
+  if(!count()){toast('Basket is empty');return;}
+  openSendDeal();
+});
+
+/* search + account + company chip */
+const srch=$('srch');$('srchBtn').addEventListener('click',e=>{e.stopPropagation();srch.querySelector('input').focus();});
+const acctBtn=$('acctBtn'),acctPop=$('acctPop');acctBtn.addEventListener('click',e=>{e.stopPropagation();acctPop.classList.toggle('show');});
+document.addEventListener('click',e=>{if(!e.target.closest('.acct'))acctPop.classList.remove('show');});
+$('coChip').addEventListener('click',()=>{goShop();toast('Your company → your Present shop');window.scrollTo?.(0,0);});
+
+/* screen toggle + role */
+let role='seller',connected=true;
+function setSeg(s){document.querySelectorAll('#screenSeg button').forEach(x=>x.classList.toggle('on',x.dataset.s===s));}
+function applyRole(){document.body.dataset.role=role;updateSendBtn();}
+function goManage(){role='seller';setEdit(false);document.body.dataset.screen='manage';setSeg('manage');applyRole();acctPop.classList.remove('show');renderManage();}
+function goShop(){role='seller';document.body.dataset.screen='shop';setSeg('shop');applyRole();renderGroups();}
+function goBuyer(){role='buyer';setEdit(false);document.body.dataset.screen='shop';setSeg('buyer');applyRole();renderGroups();renderBasket();}
+$('screenSeg').addEventListener('click',e=>{const b=e.target.closest('[data-s]');if(!b)return;const s=b.dataset.s;s==='manage'?goManage():s==='buyer'?goBuyer():goShop();});
+$('connBtn').addEventListener('click',()=>{connected=!connected;const b=$('connBtn');b.classList.toggle('on',connected);b.classList.toggle('off',!connected);b.textContent=connected?'● Connected':'○ Not connected';updateSendBtn();});
+function updateSendBtn(){const btn=$('sendBtn');if(!btn)return;if(role==='buyer'&&!connected){btn.innerHTML='<svg class="ic sm" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg> Connect to start a deal';}else{btn.innerHTML='<svg class="ic sm" viewBox="0 0 24 24"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></svg> '+(role==='buyer'?'Send deal card':'Send as deal card');}}
+
+/* price table */
+function renderManage(){const body=$('mbody');body.innerHTML=PRODUCTS.map((p,i)=>{const av=AVAIL[p.avail];
+  return `<tr data-idx="${i}"><td><div class="mprod"><div class="mthumb" style="background:${p.grad}"></div><div><b>${p.n}</b><small>${p.cult}</small></div></div></td><td>${p.loc}</td><td>${p.pack}</td><td>${p.priceShown?`<b>${eur(p.perG)}</b>/g`:'<span style="color:var(--ink-muted)">on request</span>'}</td><td><span class="pc-avail ${av[0]}"><span class="dot"></span>${av[1]}</span></td><td><span style="font-size:11px;color:var(--ink-muted)">${p.imgs} 📷 · ${p.vids} 🎬 · ${p.coas} 📄</span></td><td><div style="display:flex;gap:6px;justify-content:flex-end"><button class="micon" title="Edit" data-modal="addproduct"><svg class="ic sm" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg></button><button class="micon" title="Delete" data-del><svg class="ic sm" viewBox="0 0 24 24"><path d="M5 7h14M9 7V5h6v2M7 7l1 13h8l1-13"/></svg></button></div></td></tr>`;}).join('');
+  $('mSub').textContent=`GreenLeaf Pharma · ${PRODUCTS.length} products · Standard price list`;}
+$('mbody').addEventListener('click',e=>{const tr=e.target.closest('tr[data-idx]');if(!tr)return;if(e.target.closest('[data-modal]')){openModal(e.target.closest('[data-modal]').dataset.modal);return;}if(e.target.closest('[data-del]'))toast('Delete (mock)');});
+
+/* modals */
+const F=(label,inner)=>`<div class="field"><label>${label}</label>${inner}</div>`;
+const inp=(v='',ph='')=>`<input value="${v}" placeholder="${ph}" />`;
+const optList=arr=>arr.map(o=>`<option>${o}</option>`).join('');
+function modalContent(kind){
+  if(kind==='addproduct')return{t:'Add / edit product',s:'Writes to the catalog + Standard price list. (Manual for the demo — CSV import later.)',body:
+    F('Product name',inp('','GL Indica 22/1'))+`<div class="row2">${F('Category',`<select>${optList(CATS)}</select>`)}${F('Strain',`<select>${optList(STRAINS)}</select>`)}</div>`+
+    `<div class="row2">${F('Location / shop',`<select>${optList(LOCATIONS)}</select>`)}${F('Availability',`<select>${optList(['Available','Coming soon','Not available'])}</select>`)}</div>`+
+    `<div class="row2">${F('THC %',inp('','22'))}${F('CBD %',inp('','1'))}</div>`+`<div class="row2">${F('Terpene %',inp('','3,40'))}${F('Pack sizes',inp('','5g, 10g, 100g'))}</div>`+
+    `<div class="row2">${F('Price /g (Standard)',inp('','7,40'))}${F('Grade',inp('','AAA'))}</div>`+
+    F('Media (images / video / COA)',`<div class="drop"><svg class="ic" viewBox="0 0 24 24" style="margin:0 auto 6px"><path d="M12 16V4m-5 5 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>Drop images, videos or COA PDFs (≤10 MB each)</div>`),
+    save:'Save product'};
+  if(kind==='import')return{t:'Import products (CSV)',s:'Bulk-create products + price rows. (Parked — post-demo per the ingestion design.)',body:
+    `<div class="drop"><svg class="ic" viewBox="0 0 24 24" style="margin:0 auto 6px"><path d="M12 16V4m-5 5 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>Drop your CSV here, or click to browse</div>`+
+    `<div class="infonote">The DB is the system of record; CSV re-imports reconcile by <b>Supplier Product Code</b>. Manual edits persist.</div>`,save:'Upload & map'};
+  if(kind==='share')return{t:'Share your Present link',s:'A public storefront link buyers can open.',body:
+    F('Public link',`<div style="display:flex;gap:8px"><input value="hello-sello.com/c/greenleaf-pharma" style="flex:1" readonly/><button class="cta" style="width:auto;padding:10px 18px" id="copyLink">Copy</button></div>`)+
+    `<div style="display:flex;gap:14px;align-items:center;margin-top:14px"><div style="width:96px;height:96px;border-radius:12px;background:#fff;display:grid;place-items:center;box-shadow:inset 0 0 0 1px var(--line-strong);font-size:10px;color:var(--ink-muted)">QR</div><div style="font-size:12px;color:var(--ink-muted)">Buyers scan or open → your public shop. Only on-profile products show.</div></div>`,save:null};
+  if(kind==='profile')return{t:'My profile',s:'Your personal card.',body:F('Display name',inp('Carla Weber'))+F('Title',inp('Head of Procurement'))+F('Email',inp('carla@greenleaf-pharma.de')),save:'Save'};
+  if(kind==='settings')return{t:'Settings',s:'User + company settings.',body:`<div class="infonote">Full settings land in Phase 13.</div>`,save:null};
+  if(kind==='signout')return{t:'Sign out?',s:'',body:`<div style="font-size:14px;padding:6px 0">You'll be returned to the login screen.</div>`,save:'Sign out'};
+  return{t:kind,s:'',body:'',save:null};
+}
+function openModal(kind){const c=modalContent(kind);$('modal').innerHTML=`<div class="mtop"><h3>${c.t}</h3><button class="mclose" data-mclose><svg class="ic sm" viewBox="0 0 24 24"><path d="M6 6 18 18M18 6 6 18"/></svg></button></div>${c.s?`<div class="msub">${c.s}</div>`:''}${c.body}${c.save?`<div class="mactions"><button class="cta" data-msave>${c.save}</button><button class="ghost" data-mclose>Cancel</button></div>`:''}`;
+  $('mscrim').classList.add('show');acctPop.classList.remove('show');
+  const cp=$('copyLink');if(cp)cp.onclick=()=>toast('Link copied');}
+function closeModal(){$('mscrim').classList.remove('show');}
+$('mscrim').addEventListener('click',e=>{if(e.target===$('mscrim'))closeModal();if(e.target.closest('[data-mclose]'))closeModal();if(e.target.closest('[data-msave]')){closeModal();toast('Saved (mock)');}});
+document.body.addEventListener('click',e=>{const t=e.target.closest('[data-modal]');if(t){e.preventDefault();openModal(t.dataset.modal);}const gs=e.target.closest('[data-goShop]');if(gs){e.preventDefault();goShop();}const ec=e.target.closest('[data-editcover]');if(ec){toast('Change banner (mock) — upload a LinkedIn-size image');markDirty();}});
+
+/* present mode — in-app view (hides rail/topbar/switch so the app window shares cleanly in Zoom).
+   NOT the OS fullscreen API, so it never covers the whole Mac screen. */
+function setPresent(on){if(on)setEdit(false);document.body.classList.toggle('presenting-mode',on);if(on)toast('Present mode — now share this window in your meeting');}
+$('fsBtn').addEventListener('click',()=>setPresent(true));
+$('exitPresent').addEventListener('click',()=>setPresent(false));
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.body.classList.contains('presenting-mode'))setPresent(false);});
+
+/* toast */
+let tt;function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('show'),1900);}
+
+/* init */
+renderInfoBoxes();renderLocMenu();renderFilterMenu();renderGroups();renderBasket();updateSendBtn();
+</script>
+</body>
+</html>

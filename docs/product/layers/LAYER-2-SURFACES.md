@@ -103,7 +103,7 @@ The product is organized as **6 navigable surfaces + Sella (always-available AI 
 
 **Locked:**
 - Sell is **strictly seller-side ops** for the sales team. No cross-side analytics — those belong in Grow.
-- Batch allocation flow is **post-MVP**.
+- **(2026-07-06, superseded) ~~Batch allocation flow is post-MVP~~ — UN-PARKED.** Goal: Sell/Allocate live in-product (seed data OK) for the **8 July demo**. Marcel actively shaping it same-day via DEV-76/151/152/157 (order-status vocabulary, deal-update handling, allocator UI feedback). Prototype `prototypes/allocate-prototype/` finalized 2026-07-06 → building now.
 - **(2026-05-16, DEV-1)** Outbound offer pricelist cascade — per recipient: customer-specific (Relationship page) → STANDARD (seller's uploaded default) → manual prompt. See DECISIONS.md.
 
 *(Detailed sub-area discussion: TBD.)*

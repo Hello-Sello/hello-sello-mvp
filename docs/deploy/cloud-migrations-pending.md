@@ -90,6 +90,39 @@ in the correct final state; the intermediate version is never used mid-push.
 
 ## PENDING (local only — NOT on cloud yet)
 
+### 2026-07-07 (Muskan) — Allocate/Sell schema (DEV-76) — NOT on cloud
+
+| # | Migration | What it does |
+|---|-----------|---------------|
+| 1 | `20260707090000_allocate_schema.sql` | 3 lookup tables + 6 columns + 4 seller-gated `SECURITY DEFINER` RPCs backing the Allocate page (Orders & Offers + Batches allocator). Additive only — no existing catalogue/deal schema altered, only referenced (`deal_card`, `deal_line_item`, `product_batch`). |
+
+- **Status:** local-first; applied via `supabase db reset` (GREEN) + `database.types.ts` regenerated. Gate green (tsc + eslint + 21/21 unit) + browser + DB-probe verified (session 53, 2026-07-07). **Not pushed to cloud.**
+- **Migration before code** — Allocate's server actions call the 4 RPCs directly; shipping the app without this migration 404s every Allocate read/write.
+- **⚠️ Known residual after push:** [DEV-159](https://linear.app/hellosello/issue/DEV-159) (High) — a buyer can forge allocation state via a direct table write (symmetric base RLS gap, same family as DEV-88). Non-blocking for a no-real-users demo; fix is Ayush's base-RLS lane.
+- **Push:** sorts last in the current pending set (`20260707090000` — after Phase 13's `20260706090xxx` and Phase 7's `20260706120000`); a single sequential `supabase db push` handles it with everything else, in timestamp order.
+
+### 2026-07-06 (Muskan) — Phase 7 Present fidelity + card-front batch schema — NOT on cloud
+
+| # | Migration | What it does |
+|---|-----------|--------------|
+| 1 | `20260706120000_product_terpene_percent.sql` | **F-02.** `alter table public.product add column if not exists terpene_percent numeric;` — one headline total-terpenes value, editable inline on the card. Additive, nullable, **no backfill** (existing rows read NULL and fall back to the derived batch-terpene sum). The ONLY schema change of the whole fidelity pass. |
+
+- **Status:** local-first; applied via `supabase db reset` (GREEN) + `database.types.ts` regenerated from local. **Not pushed to cloud.**
+- **Sibling Phase-7 migrations also still local-only** (from 07-03/04/05, appear to predate this ledger's PENDING list): `20260705120000_product_location.sql`, `20260705120100_product_media.sql`, `20260705120200_shop_media_allow_pdf.sql`. Push the whole Phase-7 set together, in timestamp order, when the human deploys.
+- **Migration before code** — `shop.ts` reads `product.terpene_percent`; shipping the app without this column errors the Present read on cloud.
+- **Push:** a clean single `supabase db push` from a LINKED machine, in timestamp order (`20260706120000` sorts last). Coordinate with Ayush if his lane added migrations in the meantime.
+
+### 2026-07-05 (Muskan) — DEV-99 #3 business-category taxonomy — NOT on cloud
+
+| # | Migration | What it does |
+|---|-----------|--------------|
+| 1 | `20260704090000_business_category_taxonomy.sql` | NEW `business_category` lookup (6 rows incl. `custom`) + `company_business_category` junction (nullable `custom_label`; CHECK = label present **iff** `code='custom'`; RLS `business_category_read` + `cbc_all` scoped to `current_company_id()`). Grows `company_type` (Activity) 4→8 to Marcel's list; **remaps** legacy `cultivator`→`eu_gmp_cultivator` then drops it; **backfills** the `pharma` category onto every company that has an activity. `CREATE OR REPLACE onboard_company` — **drops the old 3-arg**, adds a 5-arg (`+p_category_codes text[]`, `+p_custom_category text`) with a parallel category loop. Additive + idempotent. |
+
+- **Status:** local-first; **rollback-verified** (`BEGIN…ROLLBACK`, non-destructive) — **not yet `migration up`'d even to local** (89 files on disk vs 88 rows in local `schema_migrations`; this is the 1 gap). Next session: `migration up` + update `seed.sql` to the new codes + `supabase db reset` to prove a clean replay + regen `database.types.ts`.
+- **Migration before code** — the OnboardingStepper reads `business_category` and calls the 5-arg `onboard_company`; shipping app code without this migration errors onboarding.
+- **⚠️ Drops the old 3-arg `onboard_company`** (the current cloud body). The `DROP FUNCTION public.onboard_company(text,text,text[])` + the new 5-arg must land as **one unit** — no window where only the old signature exists beside new app code.
+- **Push:** a clean single `supabase db push` from a LINKED machine, in timestamp order (`20260704090000` sorts last, after any earlier pending batch). Coordinate with Ayush if his lane added migrations in the meantime.
+
 ### ⚠️ 2026-06-21 (Muskan) — verified against live cloud: the batch below is DONE; only Phase 10 remains
 
 A live `list_migrations` on 2026-06-21 shows cloud's tip = `20260620120000_canonical_display_name`.
@@ -124,6 +157,21 @@ Those sections are kept for history only — they are no longer pending.
 - Migrations 2 + 5 are `CREATE OR REPLACE` of shared functions (`onboard_company`, `handle_new_user`). Both compose cleanly on top of cloud's current `handle_new_user` (canonical `display_name` @ `20260620120000`) — the invite-linking + founder-seed are additive. Confirm the final body before push.
 - `supabase/seed/seed.sql` (founder-Superadmin backfill block + Carla demo member) is **LOCAL demo data only — never pushed** (cloud is seeded separately).
 - **Migration before code** — when Phase 11 app code (`/team`, the account gate, `admin.ts`) goes to prod, these 6 must be on cloud first or those paths error.
+
+#### Phase 12 — Path B (join existing company) (Muskan, 2026-06-22, local-first) — NOT on cloud
+
+One additive migration. The `join_request` table + status enum (incl. `cancelled`) + `jr_*` RLS already exist from Phase 1; this adds only RPCs + one index + 4 audit codes. No non-migration cloud steps (pure DB — no new env var or email template).
+
+| # | Migration file | What it does |
+|---|----------------|--------------|
+| 1 | `20260622091500_phase12_join_request_rpcs.sql` | 5 SECURITY DEFINER RPCs (`search_joinable_companies`, `list_pending_join_requests`, `request_to_join`, `approve_join_request`, `reject_join_request`, `withdraw_join_request`) + the `uq_join_request_active_pending` partial-unique index (one active pending request, D-12) + 4 `join.*` audit action codes. All `search_path=''`, two-door granted. Additive only — no `create table`/`create type`/`auditable_content_type` insert. |
+| 2 | `20260622100000_phase12_join_request_fixes.sql` | Code-review follow-up: `create or replace` of two RPCs from #1. **Fix A** — `request_to_join` rejects a caller who already belongs to a company (`current_company_id() is not null → raise`), closing a queue-pollution hole. **Fix B** — `approve_join_request` raises `'superadmin group missing'` instead of silently linking a Superadmin approval as an effective Member with a lying audit. No schema change; must be pushed in the same batch AFTER #1. |
+| 3 | `20260622110000_phase12_pathb_followups.sql` | Review follow-ups #6 + #4. **#6** — `create or replace search_joinable_companies` escaping LIKE metacharacters (`\ % _`) so a literal `%`/`_` in the search box matches literally instead of as a wildcard. **#4** — `create or replace onboard_company` (full body re-emit of `20260621110000`; only change is added step 2c) that cancels the caller's pending `join_request` on Path-A company birth by reusing `withdraw_join_request`, so a "create my own company instead" no longer leaves a phantom in the target's queue. No schema change; push AFTER #2 (depends on `withdraw_join_request`). |
+
+**Cautions:**
+- ⚠️ **Timestamp renamed `20260622090000` → `20260622091500`** to avoid a collision with Ayush's merged `20260622090000_thing_artifact_visibility.sql`; the new stamp sits after his `20260622091000` tail. Independent of his deal migrations (mine touches only `join_request`/`company`/`person`/`audit_log` + the RBAC helpers `current_company_id()`/`has_permission()`).
+- **Migration before code** — when the Phase 12 app code (onboarding Path B fork + the `/team` pending-requests queue) goes to prod, this must be on cloud first or those paths error (the RPCs won't exist).
+- Push alongside the Phase 10/11 deferred batch (Muskan-coordinated, local-first).
 
 ---
 
@@ -235,7 +283,53 @@ Cautions for the cloud apply:
 
 ---
 
+### 2026-07-06 (Muskan) — Phase 13 Settings + Lifecycle Emails (SET-02/03/04) — NOT on cloud
+
+Local-first: a clean `supabase db reset` replays all three in order and stays green; the three SQL
+invariants pass (`account_lifecycle`, `erasure_chain`, `notification_pref_rls`); `database.types.ts`
+regenerated (additive — person/company lifecycle columns + `notification_*` tables). Three additive
+migrations + two edge functions + one net-new edge secret. **Cloud push DEFERRED — this is a ledger
+entry only; nothing below has been run against cloud.**
+
+**Migrations (push in timestamp order, together):**
+
+| # | Migration file | What it does |
+|---|----------------|--------------|
+| 1 | `20260706090000_account_lifecycle.sql` | SET-02 sync half. Adds nullable lifecycle timestamps `person.deactivated_at` / `person.deletion_scheduled_for` / `person.anonymized_at` + `company.deactivated_at`; 6 `lifecycle` audit codes (`account.deactivated`/`reactivated`/`deletion_requested`/`deletion_cancelled`, `company.deactivated`/`reactivated`; `on conflict (code) do nothing`); 6 SECURITY DEFINER own-row/own-company RPCs (`deactivate_account`, `reactivate_account`, `request_account_deletion` [sole-Superadmin lockout], `cancel_account_deletion`, `deactivate_company` / `reactivate_company` [gated `has_permission('team.manage')`]). Additive only; **no base `person`/`company` grant or RLS widened** (DEV-88 discipline). |
+| 2 | `20260706090100_notification_preference.sql` | SET-04 stub. 3 tables — `notification_category` (4 transactional rows) + `notification_channel` (`email` wired, `in_app` reserved) + `notification_preference` (per-person category×channel, empty in v1). RLS: lookup `_read` to authenticated; preference SELECT-only own-row (`person_id = auth.uid()`), **no** write policy → the Notifications settings section is read-only. Additive. |
+| 3 | `20260706090200_erasure_cron.sql` | SET-02 async half. `scrub_person_pii(uuid)` + `audit_person_scrub(uuid)` (SECURITY DEFINER, **service_role ONLY** — explicitly revoked from anon/authenticated) + `run_scheduled_erasures()` (pg_cron entry: reads Vault `project_url`/`edge_anon_key`, `net.http_post` → `/functions/v1/erase-expired-accounts`). Daily `cron.schedule('erase-expired-accounts','0 3 * * *', …)`, idempotent unschedule-then-schedule. Reuses the `sella-detect` pg_cron/pg_net/Vault chain — extensions + Vault secrets already present, NOT re-created (`create extension if not exists`). |
+
+**Non-migration cloud steps — REQUIRED for lifecycle emails + the erasure sweep (do WITH the push):**
+- `supabase functions deploy send-lifecycle-email` — SET-03 sender (Deno `fetch` → Resend; resolves the recipient from `auth.users` via a service-role client; invoked fire-and-forget via Next 16 `after()` from each event's server action).
+- `supabase functions deploy erase-expired-accounts` — SET-02 day-30 sweep worker (performs the `auth.admin` email-tombstone + soft-delete that Postgres itself can't; called by the pg_cron `net.http_post` above).
+- `supabase secrets set RESEND_API_KEY=…` — **net-new edge secret**. The Resend sending domain is already verified for auth SMTP; confirm the same domain works for API `from: Hello Sello <noreply@hello-sello.com>` sends before relying on it (**Assumption A1** — silent rejection if the from-address isn't on a verified domain). Reused / already set: `SUPABASE_SERVICE_ROLE_KEY` (edge, auto-injected), Vault `project_url` / `edge_anon_key`.
+
+**⚠️ Cloud UAT required — two admin-API paths that 403 on the LOCAL GoTrue (RESEARCH A3):**
+- **Erasure auth-scrub** — `erase-expired-accounts` calls `auth.admin.updateUserById` (email tombstone) + `deleteUser({ shouldSoftDelete: true })`. Only the DB-side `scrub_person_pii` half is proven locally (invariant test); the GoTrue admin half must be UAT'd on cloud.
+- **Session-revoke** — the same `sb_secret_`-vs-local-GoTrue caveat as the Phase 11 token-revoke; exercise once on cloud to confirm the sign-out/revoke path.
+
+**Ordering dependency:**
+- Push **AFTER** the still-pending Phase 10 + 6×Phase 11 + 3×Phase 12 batches (CLAUDE.md #0). SET-02's RPCs reference `person_group` / `has_permission` / `current_superadmin_group_id` (Phase 11) and the lifecycle emails fire off the Phase 11/12 RPCs — those must be live first. The three `20260706090xxx` stamps sort last, so a single sequential `supabase db push` runs them in order after any earlier pending batch (no reconcile needed if cloud history is contiguous).
+- ⚠️ **Verify current cloud state first:** the "APPLIED TO CLOUD → 2026-06-23" entry below records a P10/11/12 push (cloud history 75→88). If that record is authoritative, the P10/11/12 dependency is already satisfied and only this Phase-13 batch remains pending — reconcile the pending list against a live `list_migrations` before pushing.
+
+---
+
 ## APPLIED TO CLOUD
+
+### 2026-06-23 — Phase 10 + 11 + 12 + Deal-Room batch (13 migrations)
+Clean sequential `supabase db push` against `byipusuthdlskdxoexkt` — **no reconciliation
+needed** (history aligned since the 06-20 reconcile). 13 applied, 0 errors:
+- Phase 10: `get_public_profile_verification`
+- Phase 11 (6): `rbac_activation`, `onboard_superadmin`, `backfill_superadmin`, `team_rpcs`,
+  `invite_accept_link`, `lockout_race_fix`
+- Deal Room (Ayush, 3): `thing_artifact_visibility`, `stage_done_and_finalize`,
+  `thing_artifact_withcheck_ownership`
+- Phase 12 (3): `join_request_rpcs`, `join_request_fixes`, `pathb_followups`
+
+Backfill: 6 real companies seeded Superadmin, 10 headless demo skipped (NULL `created_by`).
+Security advisor: **0 errors** (94 WARN, all pre-existing/by-design SECURITY DEFINER RPCs).
+Cloud config set same day: `SUPABASE_SECRET_KEY` in Vercel + 3 email templates in dashboard.
+Cloud history: 75 → 88.
 
 ### 2026-06-20 — combined batch (Muskan + Ayush), reconciled + pushed
 Ran the "⚠️ READ FIRST" reconciliation against `byipusuthdlskdxoexkt`:

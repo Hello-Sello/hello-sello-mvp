@@ -1,6 +1,8 @@
 ---
-status: accepted
+status: accepted (Option-A "transient" clause superseded 2026-06-29)
 ---
+
+> **Update 2026-06-29:** the **Option-A "transient basket" clause below is superseded** — the basket is now **persistent** (Option B), shared, and built by both buyers and sellers. The rest of this ADR (one reusable Deal Basket model + form, fed by every trigger) still stands. See `docs/decisions/DECISIONS.md` → "2026-06-29 — Persistent shared basket + seller-owned deal pricing".
 
 # The deal form is a reusable "Deal Basket", fed by every trigger
 

@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/shared/db/server'
 import { getCurrentPerson } from '@/shared/auth'
+import { getMyProfile } from '@/modules/profile'
 import { OnboardingStepper } from './OnboardingStepper'
 import type { RejectPreset } from '@/app/admin/verifications/reject-presets'
 
@@ -60,10 +61,43 @@ export default async function OnboardingPage({
   // Rejected is explicitly exempted to prevent the /home ↔ /onboarding redirect loop.
   if (person.company_id && !resumeStep && companyStatus !== 'rejected') redirect('/home')
 
-  // Business-category options come straight from the lookup so the codes stay
-  // owned by the DB.
+  // Path B (D-10): a COMPANY-LESS requester with a PENDING join_request lands on the
+  // S2 "Request sent" screen instead of the create-company fork. This read is
+  // unconditional for the company-less person and runs BEFORE the stepper renders,
+  // so a pending requester is never bounced past their own pending screen. This page
+  // does NOT call requireVerified() (its only gate is getCurrentPerson → /login), so
+  // there is no verification short-circuit to reorder around (review finding #1).
+  //
+  // jr_select lets the requester read their OWN row even while company-less. The
+  // target company NAME comes from the row's OWN metadata (captured at submit by
+  // request_to_join), NEVER a `company` read — company_select denies the
+  // company-less caller (Pitfall 5 / T-12-03-I).
+  let pendingJoin: { companyName: string; requestId: string } | null = null
+  if (!person.company_id) {
+    const { data: jr } = await supabase
+      .from('join_request')
+      .select('id, metadata, status')
+      .eq('requester_person_id', person.id)
+      .eq('status', 'pending')
+      .is('deleted_at', null)
+      .limit(1)
+      .maybeSingle()
+    if (jr) {
+      const companyName = (jr.metadata as { company_name?: string } | null)?.company_name ?? ''
+      pendingJoin = { companyName, requestId: jr.id }
+    }
+  }
+
+  // The two taxonomy levels come straight from their lookups so the codes stay
+  // owned by the DB (DEV-99 #3): company_type = Business Activities (role),
+  // business_category = Business Category (sector, incl. the 'custom' escape hatch).
   const { data: companyTypes } = await supabase
     .from('company_type')
+    .select('code, description')
+    .order('sort_order')
+
+  const { data: businessCategories } = await supabase
+    .from('business_category')
     .select('code, description')
     .order('sort_order')
 
@@ -140,10 +174,18 @@ export default async function OnboardingPage({
     rejectionPreset = presetCode as RejectPreset | null
   }
 
+  // Prefill the (optional) profile photo when resuming onboarding so an already
+  // uploaded avatar shows instead of a blank slate. Reuse the profile module's
+  // avatar-URL logic (public URL + cache nonce) rather than rebuilding it here.
+  const initialAvatarUrl = (await getMyProfile())?.avatarUrl ?? null
+
   return (
     <OnboardingStepper
       firstName={person.first_name ?? null}
+      personId={person.id}
+      initialAvatarUrl={initialAvatarUrl}
       companyTypes={companyTypes ?? []}
+      businessCategories={businessCategories ?? []}
       resumeStep={resumeStep}
       prefill={prefill}
       licenceRequired={licenceRequired}
@@ -151,6 +193,7 @@ export default async function OnboardingPage({
       rejectionPreset={rejectionPreset}
       isDuplicate={isDuplicate}
       isRejectedResume={companyStatus === 'rejected'}
+      pendingJoin={pendingJoin}
     />
   )
 }
