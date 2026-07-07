@@ -147,6 +147,13 @@ The plan's threat register (T-07-05-01/02/03) is mitigated server-side (07-02) a
 - 07-07 (deal-card "Talk about this deal") can dispatch `hs:new-group` with `{ dealCardId }` to open the GroupPicker in deal mode - contract exported as `NEW_GROUP_EVENT` / `NewGroupEventDetail`.
 - 07-08 must apply the 07-02 migrations (local db reset) and exercise the group flows e2e with a 3-party fixture.
 
+## Self-Check: PASSED
+
+- Created file present: `src/modules/messaging/components/GroupPicker.tsx`, `.planning/phases/07-chat/07-05-SUMMARY.md`
+- Commits present: `f3b295c` (Task 1), `946571c` (Task 3 store), `0dccad6` (Task 2 UI), `6998b39` (docs)
+- tsc 0, eslint 0 errors, `npm run build` exit 0
+- STATE.md / ROADMAP.md untouched (orchestrator owns those)
+
 ---
 *Phase: 07-chat*
 *Completed: 2026-07-07*
