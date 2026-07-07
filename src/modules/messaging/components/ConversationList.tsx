@@ -1,22 +1,43 @@
-import { Search, Plus } from "lucide-react";
+import { useState } from "react";
+import { Search, Plus, ChevronDown } from "lucide-react";
 import type { ConversationListItem, MyConnectionsView } from "@/modules/messaging";
 import { ConversationRow } from "./ConversationRow";
 import { NewChatDropdown, type NewChatSelection } from "./NewChatDropdown";
 
 /**
- * The panel-3 filter chips. `companies` regroups the same rows by company.
- * `deals` (3b) is the deal chats' ONLY home in this list - deal threads never
- * appear in the other three views (they'd read as broken "Unknown" P2Ps).
- * The full tab redesign (All Unread / P2P / C2C / Deals, tags, deal-logo rows)
- * is a separate later task.
+ * The panel-3 filters (D-01). Exactly THREE chips stay always-visible -
+ * `All / Unread / Deals` - and the rest live under a `Group ▾` dropdown:
+ * `Groups / Companies / Internal / External`. This reaffirms the 04B call that
+ * rejected a 5th always-visible tab as clumsier.
+ *   - deals    -> the deal chats' ONLY home (deal threads + deal-BORN groups, D-07);
+ *                 these never appear in the other views (they'd read as broken P2Ps).
+ *   - groups   -> plain multi-person groups only (type='group' with no deal card).
+ *   - companies-> the same p2p/c2c rows regrouped under a company heading.
+ *   - internal -> own-company-only chats (isExternal === false).
+ *   - external -> chats that involve another company (isExternal !== false).
  */
-export type ChatFilter = "all" | "unread" | "companies" | "deals";
+export type ChatFilter =
+  | "all"
+  | "unread"
+  | "deals"
+  | "groups"
+  | "companies"
+  | "internal"
+  | "external";
 
-const FILTERS: ReadonlyArray<{ key: ChatFilter; label: string }> = [
+/** Always-visible primary chips (D-01: exactly All / Unread / Deals). */
+const PRIMARY_FILTERS: ReadonlyArray<{ key: ChatFilter; label: string }> = [
   { key: "all", label: "All" },
   { key: "unread", label: "Unread" },
-  { key: "companies", label: "Companies" },
   { key: "deals", label: "Deals" },
+];
+
+/** The `Group ▾` dropdown members (everything else, per D-01). */
+const DROPDOWN_FILTERS: ReadonlyArray<{ key: ChatFilter; label: string }> = [
+  { key: "groups", label: "Groups" },
+  { key: "companies", label: "Companies" },
+  { key: "internal", label: "Internal" },
+  { key: "external", label: "External" },
 ];
 
 /**
@@ -94,7 +115,7 @@ export function ConversationList({
               />
             </div>
             <div className="flex gap-1.5">
-              {FILTERS.map((f) => {
+              {PRIMARY_FILTERS.map((f) => {
                 const isActive = f.key === filter;
                 return (
                   <button
@@ -112,6 +133,7 @@ export function ConversationList({
                   </button>
                 );
               })}
+              <GroupFilterDropdown filter={filter} onFilterChange={onFilterChange} />
             </div>
           </div>
 
@@ -134,13 +156,69 @@ export function ConversationList({
             onClose={onClosePicker}
           />
         )}
-
-        {/* 04C portal target: the Deal Card opens here as a leaflet over the rail
-            (DealPin portals into this slot for the chat variant) - the same place and
-            shape as the New chat picker. pointer-events-none so it never blocks the
-            rail when empty; the portaled leaflet re-enables pointer events on itself. */}
-        <div id="hs-deal-card-slot" className="pointer-events-none absolute inset-0 z-40" />
       </div>
+    </div>
+  );
+}
+
+/**
+ * The `Group ▾` dropdown chip (D-01). When one of its filters is active the
+ * chip shows that filter's name and lights up pink; otherwise it reads
+ * "Group ▾". A local open flag + a click-catcher backdrop close it (no global
+ * state - the project rule). Selecting an item sets the filter and closes.
+ */
+function GroupFilterDropdown({
+  filter,
+  onFilterChange,
+}: {
+  filter: ChatFilter;
+  onFilterChange: (filter: ChatFilter) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const active = DROPDOWN_FILTERS.find((f) => f.key === filter);
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-current={active ? "true" : undefined}
+        className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs transition-colors ${
+          active
+            ? "bg-brand font-medium text-white"
+            : "bg-ink/5 text-ink/50 hover:bg-ink/10"
+        }`}
+      >
+        {active ? active.label : "Group"}
+        <ChevronDown size={12} strokeWidth={2.25} />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
+          <div className="glass-strong absolute right-0 top-full z-40 mt-1.5 w-40 rounded-2xl p-1.5">
+            {DROPDOWN_FILTERS.map((f) => (
+              <button
+                key={f.key}
+                type="button"
+                onClick={() => {
+                  onFilterChange(f.key);
+                  setOpen(false);
+                }}
+                aria-current={f.key === filter ? "true" : undefined}
+                className={`flex w-full items-center rounded-lg px-2.5 py-2 text-left text-sm transition ${
+                  f.key === filter
+                    ? "bg-brand-soft/40 font-medium text-brand-deep"
+                    : "text-ink hover:bg-black/[0.04]"
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -149,6 +227,15 @@ type ListBodyProps = Pick<
   ConversationListProps,
   "conversations" | "filter" | "selectedThreadId" | "onSelect" | "search"
 >;
+
+/** A deal-filed row: a real deal thread OR a deal-card-born group (D-07). */
+function isDealFiled(c: ConversationListItem): boolean {
+  return c.threadType === "deal" || (c.threadType === "group" && !!c.dealCardId);
+}
+/** A plain multi-person group: type='group' with no owning deal card. */
+function isPlainGroup(c: ConversationListItem): boolean {
+  return c.threadType === "group" && !c.dealCardId;
+}
 
 function ListBody({
   conversations,
@@ -179,9 +266,11 @@ function ListBody({
             (c.lastMessagePreview ?? "").toLowerCase().includes(needle),
         );
 
-  // the deal chats live ONLY under the Deals tab; every other view excludes them
-  const deals = searched.filter((c) => c.threadType === "deal");
-  const chats = searched.filter((c) => c.threadType !== "deal");
+  // Deal-filed rows (deal threads + deal-born groups, D-07) live ONLY under the
+  // Deals tab; every other view excludes them. `chats` = everything else,
+  // including plain groups (they belong in All / Internal / External).
+  const deals = searched.filter(isDealFiled);
+  const chats = searched.filter((c) => !isDealFiled(c));
 
   if (filter === "deals") {
     const groups = groupByCompany(deals);
@@ -201,6 +290,15 @@ function ListBody({
     );
   }
 
+  if (filter === "groups") {
+    const plainGroups = chats.filter(isPlainGroup);
+    return plainGroups.length ? (
+      <div className="flex flex-col gap-1">{plainGroups.map(row)}</div>
+    ) : (
+      <Empty message="No groups yet. Start one from “+ New chat → New group”." />
+    );
+  }
+
   if (filter === "unread") {
     const unread = chats.filter((c) => c.unreadCount > 0);
     return unread.length ? (
@@ -210,8 +308,28 @@ function ListBody({
     );
   }
 
+  if (filter === "internal") {
+    const internal = chats.filter((c) => c.isExternal === false);
+    return internal.length ? (
+      <div className="flex flex-col gap-1">{internal.map(row)}</div>
+    ) : (
+      <Empty message="No internal chats. These are own-company-only conversations." />
+    );
+  }
+
+  if (filter === "external") {
+    const external = chats.filter((c) => c.isExternal !== false);
+    return external.length ? (
+      <div className="flex flex-col gap-1">{external.map(row)}</div>
+    ) : (
+      <Empty message="No external conversations yet." />
+    );
+  }
+
   if (filter === "companies") {
-    const groups = groupByCompany(chats);
+    // Company channels group p2p/c2c rows by company; plain groups (no single
+    // company) are excluded here - they live under the Groups filter.
+    const groups = groupByCompany(chats.filter((c) => c.threadType !== "group"));
     return groups.length ? (
       <div className="flex flex-col gap-2">
         {groups.map((g) => (
