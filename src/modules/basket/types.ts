@@ -28,7 +28,6 @@ export interface BasketView {
 
 /** Input to sendBasketGroup — the recipient chosen for ONE seller-group. */
 export interface SendGroupInput {
-  sellerCompanyId: string;
   relationshipId: string;
   /** the chosen person on the other side (own-company offer path); null → company-addressed */
   counterpartyPersonId: string | null;
