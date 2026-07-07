@@ -7,25 +7,27 @@
  * axis between the front (deal facts) and the back (Signals + Logs). The 3D is
  * inline-styled - `perspective` on the outer box, `preserve-3d` + `rotateY` on
  * the flipping layer, and `backface-visibility: hidden` on both faces so only
- * the facing side shows. (An earlier V3 pass replaced this with a cross-fade to
- * dodge a rotateY glitch, but the real flip is the intended feel, so it is
- * restored - the perspective + preserve-3d + backface combo renders cleanly.)
+ * the facing side shows.
  *
  * The FRONT is in normal flow and DEFINES the card box; the BACK fills it
  * (`absolute inset-0`) pre-rotated 180deg so it faces forward once flipped.
  *
- * The two corner controls live in the maroon HEADER corners (V3) and sit
- * OUTSIDE the flipping layer, so they stay upright on both faces: flip top-left,
- * Edit top-right - ~30px round translucent-white buttons over the maroon band.
+ * The two corner controls live in the header corners and sit OUTSIDE the flipping
+ * layer, so they stay upright on both faces: flip top-left, EDIT top-right.
  *
- * PENCIL LOCK (DCHG-03): the Edit button renders only when `onEdit` is defined.
- * DealPin passes `onEdit={data.pendingChange ? undefined : ...}`, so a held change
- * hides the pencil. The Seal gate is NOT on the card - it moved to the Sella strip.
- *
- * Kept as the single card entry point so the chat placement mounts one component.
+ * EDIT-MODE (07-07, D-16/D-17): the top-right control is the SINGLE inline
+ * edit-mode toggle for the WHOLE card (not a modal form). It renders as:
+ *   - a LOCK icon when the deal is CLOSED (status `done`) - the ONLY closed-state
+ *     cue now that the golden skin is gone (D-17); the card is sealed, no editing;
+ *   - nothing while a change is HELD (`pendingChange`) - the responder resolves it
+ *     via the on-card DecisionBar, so editing is locked (the DB unique index is the
+ *     real lock; DealPin passes `onEdit=undefined` in that state);
+ *   - a PENCIL otherwise - clicking toggles the card into inline row-edit mode.
+ * `onEdit` from the strip is the "editing allowed" gate; the actual edit is now the
+ * inline mode owned here + CardFront (the old EditDealForm modal is superseded).
  */
 import { useState } from "react";
-import { FlipHorizontal2, Pencil } from "lucide-react";
+import { FlipHorizontal2, Lock, Pencil } from "lucide-react";
 import { CardFront } from "./CardFront";
 import { CardBack } from "./CardBack";
 import type { DealCardView, ThingView } from "../types";
@@ -34,20 +36,30 @@ export function DealCard({
   data,
   onEdit,
   things = [],
+  workspaceId,
 }: {
   data: DealCardView;
-  /** open the edit form (3.5b); omitted in read-only contexts (no Edit corner) */
+  /**
+   * The "editing allowed" gate (3.5b). DealPin passes `undefined` while a change
+   * is held, which hides the pencil; when defined, the pencil toggles inline
+   * edit-mode (D-16). Kept as a prop so the strip still controls editability.
+   */
   onEdit?: () => void;
-  /** read-only assigned THINGS for the front (D-12); wired from the strip later (S1) */
+  /** the flat Open Items list for the front (D-15); wired from the panel host. */
   things?: ThingView[];
+  /** the deal_workspace_id - lets Open Items inline-add (createThing). */
+  workspaceId?: string | null;
 }) {
   const [flipped, setFlipped] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+
+  // D-17: a closed (sealed) deal locks editing - the pencil becomes a lock.
+  const isClosed = data.card.status === "done";
+  // the pencil shows only when editing is allowed AND the deal is open.
+  const canEdit = !!onEdit && !isClosed;
 
   return (
     <div className="relative w-full" style={{ perspective: "1600px" }}>
-      {/* ---- HEADER-CORNER CONTROLS (over the slim SHADED header, OUTSIDE the flipping
-           layer so they stay upright on both faces). Glassy ink buttons now, since the
-           header is light - white-on-maroon would be invisible on the new wash. ---- */}
       {/* flip - top-left corner */}
       <button
         onClick={() => setFlipped((f) => !f)}
@@ -58,16 +70,31 @@ export function DealCard({
         <FlipHorizontal2 className="h-[14px] w-[14px]" />
       </button>
 
-      {/* edit - top-right corner; pencil-lock: only when an edit handler is given */}
-      {onEdit && (
-        <button
-          onClick={onEdit}
-          className="absolute right-2.5 top-2.5 z-30 flex h-[28px] w-[28px] items-center justify-center rounded-full border border-black/[0.07] bg-white/70 text-ink/55 transition hover:bg-brand-soft hover:text-brand-deep"
-          title="Edit deal"
-          aria-label="Edit deal"
+      {/* edit / lock - top-right corner (D-16/D-17) */}
+      {isClosed ? (
+        <span
+          className="absolute right-2.5 top-2.5 z-30 flex h-[28px] w-[28px] items-center justify-center rounded-full border border-black/[0.07] bg-white/70 text-ink/45"
+          title="This deal is sealed"
+          aria-label="This deal is sealed"
         >
-          <Pencil className="h-[14px] w-[14px]" />
-        </button>
+          <Lock className="h-[14px] w-[14px]" />
+        </span>
+      ) : (
+        canEdit && (
+          <button
+            onClick={() => setEditMode((e) => !e)}
+            className={`absolute right-2.5 top-2.5 z-30 flex h-[28px] w-[28px] items-center justify-center rounded-full border transition ${
+              editMode
+                ? "border-brand/30 bg-brand text-white"
+                : "border-black/[0.07] bg-white/70 text-ink/55 hover:bg-brand-soft hover:text-brand-deep"
+            }`}
+            title={editMode ? "Done editing" : "Edit deal"}
+            aria-label={editMode ? "Done editing" : "Edit deal"}
+            aria-pressed={editMode}
+          >
+            <Pencil className="h-[14px] w-[14px]" />
+          </button>
+        )
       )}
 
       {/* ---- FLIPPING LAYER: rotates on Y between the two faces ---- */}
@@ -80,7 +107,13 @@ export function DealCard({
       >
         {/* FRONT - in normal flow, defines the card box; hidden once rotated away */}
         <div style={{ backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden" }}>
-          <CardFront data={data} things={things} />
+          <CardFront
+            data={data}
+            things={things}
+            workspaceId={workspaceId}
+            editMode={editMode}
+            onExitEdit={() => setEditMode(false)}
+          />
         </div>
 
         {/* BACK - fills the box, pre-rotated 180deg so it faces forward when flipped */}
