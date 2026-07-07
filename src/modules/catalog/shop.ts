@@ -7,6 +7,7 @@
  * the public-read RLS from the foundation migration already supports it.)
  */
 import { createClient } from "@/shared/db/server";
+import { getCurrentUser } from "@/shared/auth";
 import { pickRepresentativeBatch, deriveTerpPercent } from "./shopMap";
 import { deriveInitialLocations, type WarehouseLocation } from "./locations";
 
@@ -71,6 +72,10 @@ export type ShopProduct = {
   price_per_gram: number | null;
   bundle_threshold_grams: number | null;
   bundle_price_per_gram: number | null;
+  /** Extra sellable pack sizes beyond the product's own `pack_size_grams` — a
+   *  lightweight v0 (stored in `product.metadata.pack_sizes`, no schema change)
+   *  ahead of a proper `product_pack_size` table in a later phase. */
+  packSizes: number[];
 };
 
 /** A profile link, stored in `company.metadata.links` (no column per link).
@@ -116,12 +121,25 @@ function parseLinks(metadata: unknown): ShopLink[] {
   );
 }
 
-export async function getMyShop(): Promise<Shop | null> {
-  const supabase = await createClient();
+/** Extra pack sizes stashed in `product.metadata.pack_sizes` (v0, no schema
+ *  change). Tolerant of any legacy/foreign shape — returns [] rather than
+ *  throwing on unexpected data. */
+function parsePackSizes(metadata: unknown): number[] {
+  const raw = (metadata as { pack_sizes?: unknown } | null)?.pack_sizes;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((n): n is number => typeof n === "number" && Number.isFinite(n) && n > 0);
+}
 
-  const { data: claims } = await supabase.auth.getClaims();
-  const uid = claims?.claims?.sub;
-  if (!uid) return null;
+export async function getMyShop(): Promise<Shop | null> {
+  // Shares the request-memoized auth check with every other accessor (see
+  // shared/auth) instead of calling supabase.auth.getClaims() on its own fresh
+  // client — that redundant concurrent read (racing getCompanyProfile() in the
+  // same Promise.all) was the root cause of a transient logout-on-save bug.
+  const user = await getCurrentUser();
+  if (!user) return null;
+  const uid = user.id;
+
+  const supabase = await createClient();
 
   const { data: person } = await supabase
     .from("person")
@@ -143,7 +161,7 @@ export async function getMyShop(): Promise<Shop | null> {
   const { data: rows } = await supabase
     .from("product")
     .select(
-      "id, name, cultivar, thc_percent, cbd_percent, cbg_percent, cbn_percent, terpene_percent, cultivator, lineage_parent_a, lineage_parent_b, irradiation_code, supplier_product_code, packaging_material, resealable, location, pack_size_grams, unit_code, local_code_pzn, dominance_code, country_of_origin, region, profile_visible, price_public, product_image(id, image_path, position), product_media(id, kind, path, url, label, position), product_batch(id, batch_number, ready_for_sale_date, expiry_date, thc_percent, cbd_percent, created_at, deleted_at, batch_terpene(percent)), pricelist_item(price_per_gram, bundle_threshold_grams, bundle_price_per_gram)",
+      "id, name, cultivar, thc_percent, cbd_percent, cbg_percent, cbn_percent, terpene_percent, cultivator, lineage_parent_a, lineage_parent_b, irradiation_code, supplier_product_code, packaging_material, resealable, location, pack_size_grams, unit_code, local_code_pzn, dominance_code, country_of_origin, region, profile_visible, price_public, metadata, product_image(id, image_path, position), product_media(id, kind, path, url, label, position), product_batch(id, batch_number, ready_for_sale_date, expiry_date, thc_percent, cbd_percent, created_at, deleted_at, batch_terpene(percent)), pricelist_item(price_per_gram, bundle_threshold_grams, bundle_price_per_gram)",
     )
     .eq("company_id", companyId)
     .is("deleted_at", null)
@@ -207,6 +225,7 @@ export async function getMyShop(): Promise<Shop | null> {
       price_per_gram: price?.price_per_gram ?? null,
       bundle_threshold_grams: price?.bundle_threshold_grams ?? null,
       bundle_price_per_gram: price?.bundle_price_per_gram ?? null,
+      packSizes: parsePackSizes(r.metadata),
     };
   });
 

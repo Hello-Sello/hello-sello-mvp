@@ -13,15 +13,17 @@
  * (4:1 MVP banner, inline logo), an InfoBox row, and a sticky pulsing SaveBar. Any
  * banner/info/links change marks the shop dirty (pulsing the Save); Save commits
  * every chrome field — including the edited links — through the existing
- * updateShopProfile writer (no new manage.ts action, one links write). Logo/branding
- * stays behind the shared BrandingEditForm — the one logo writer (D-07). Editing
- * also exposes a "+ Add product" tile (opens the manual-add drawer) and a free-text
- * add-location that stages a group; empty location labels never persist.
+ * updateShopProfile writer (no new manage.ts action, one links write). The LOGO is
+ * edited in place — clicking the banner logo picks a new image; Save uploads it and
+ * persists logo_path through saveCompanyProfile, the ONE company-profile writer
+ * (D-07), so there is still no second logo writer. Editing also exposes a "+ Add
+ * product" tile (opens the manual-add drawer) and a free-text add-location that
+ * stages a group; empty location labels never persist.
  */
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Link2, UploadCloud, Plus, FileSpreadsheet, Globe, MapPin, ChevronDown, ChevronUp, X,
+  Link2, UploadCloud, Plus, FileSpreadsheet, Globe, MapPin, ChevronDown, ChevronUp, X, PackageOpen,
 } from "lucide-react";
 import { ProductCard, LocationGroup, renumberLocations } from "@/modules/catalog";
 import type {
@@ -32,12 +34,14 @@ import {
   softDeleteProductBatch,
 } from "@/modules/catalog/manage";
 import type { ProductFieldPatch, ProductBatchPatch } from "@/modules/catalog/manage";
+import { saveCompanyProfile } from "@/app/account/actions";
 import { createClient } from "@/shared/db/client";
 import { AddProductsDrawer } from "./AddProductsDrawer";
+import { AssignProductsDialog } from "./AssignProductsDialog";
 import { PresentBanner } from "./PresentBanner";
 import { SaveBar } from "./SaveBar";
 import { InfoBox, DescriptionEditor } from "./InfoBox";
-import { filterByLocation, groupByLocation, UNASSIGNED } from "./locationFilter";
+import { filterByLocation, groupByLocation, applyProductOrder, moveBefore, UNASSIGNED } from "./locationFilter";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 // Cover/logo now live at a STABLE path (overwritten in place, never orphaned), so
@@ -90,8 +94,6 @@ function BrandGlyph({ name, size = 15 }: { name: keyof typeof BRAND_PATH; size?:
   );
 }
 
-import type { CompanyProfile } from "@/modules/companies";
-import { BrandingEditForm } from "./BrandingEditForm";
 
 // The chrome fields the owner edits in place. These are exactly the text fields
 // updateShopProfile persists as the shop banner + info. `links` is editable here
@@ -156,6 +158,12 @@ function toFieldPatch(f: ProductFieldDraft): ProductFieldPatch {
     if (v !== undefined) patch[k] = v.trim() === "" ? null : v.trim();
   }
   if (f.resealable !== undefined) patch.resealable = f.resealable;
+  if (f.pack_sizes !== undefined) {
+    patch.pack_sizes = f.pack_sizes
+      .split(",")
+      .map((s) => parseNum(s))
+      .filter((n): n is number => n != null && n > 0);
+  }
   return patch;
 }
 
@@ -172,12 +180,11 @@ const emptyDraft = (): ProductDraft => ({
   fields: {}, batchInserts: [], batchEdits: {}, batchDeletes: [],
 });
 
-export function ShopView({ shop, company: companyProfile }: { shop: Shop; company: CompanyProfile | null }) {
+export function ShopView({ shop, canEditBranding = false }: { shop: Shop; canEditBranding?: boolean }) {
   const { company, products } = shop;
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [brandingOpen, setBrandingOpen] = useState(false);
   // Present mode (D-07): an in-app UI state that hides the app chrome. NEVER the
   // OS Fullscreen API (no requestFullscreen anywhere in this surface).
   const [presenting, setPresenting] = useState(false);
@@ -187,8 +194,16 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
   const [edits, setEdits] = useState<ChromeEdits>(() => initEdits(company));
   const [dirty, setDirty] = useState(false);
   const [coverFile, setCoverFile] = useState<File | null>(null);
+  // A picked-but-not-yet-uploaded logo image (in-place edit); staged like the cover
+  // and committed on Save through the one company-profile writer (D-07).
+  const [logoFile, setLogoFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Bumped on every successful save and folded into each ProductCard's key below —
+  // forces a remount so a card left showing its back (Docs & media) resets to the
+  // front instead of staying flipped after Save (ProductCard's `flipped` is local
+  // state Save has no other way to reach).
+  const [saveVersion, setSaveVersion] = useState(0);
 
   // Active location tab. "All" shows every location group; a named location
   // re-contexts the grid to that one group.
@@ -197,6 +212,13 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
   // to reorder). Persisting a bespoke group order is Phase 16 (structured
   // locations own ordering), so this stays ephemeral.
   const [groupOrder, setGroupOrder] = useState<string[]>([]);
+  // Client-only product order WITHIN each shop, keyed by group label (drag a card
+  // onto a sibling in the same shop to reorder). Same ephemeral rationale as
+  // groupOrder — a persisted per-product position is a later phase — so it resets
+  // to the default name order on reload.
+  const [productOrder, setProductOrder] = useState<Record<string, string[]>>({});
+  // "Assign products to shop" dialog (edit mode) — the fast two-pane drag surface.
+  const [assignOpen, setAssignOpen] = useState(false);
   // Free-text locations staged in edit mode (F-01). A staged label renders an
   // empty drop-target group; it only PERSISTS once a product is dragged into it
   // (setProductLocation). Empty groups never persist — this stays client-only and
@@ -262,22 +284,26 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
   function enterEdit() {
     setEdits(initEdits(company));
     setCoverFile(null);
+    setLogoFile(null);
     setDirty(false);
     setError(null);
     setPendingLocations([]);
     setPendingProductEdits({});
+    setProductOrder({});
     setEditing(true);
   }
 
   function discard() {
     if (dirty && !window.confirm("Discard unsaved changes?")) return;
     setEditing(false);
-    setBrandingOpen(false);
     setDirty(false);
     setCoverFile(null);
+    setLogoFile(null);
     setError(null);
     setPendingLocations([]);
     setPendingProductEdits({});
+    setProductOrder({});
+    setAssignOpen(false);
   }
 
   // Present mode never carries edit mode (prototype: setPresent → setEdit(false)),
@@ -285,12 +311,14 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
   // toggle, not a destructive action, and the SaveBar only renders while editing.
   function enterPresent() {
     setEditing(false);
-    setBrandingOpen(false);
     setDirty(false);
     setCoverFile(null);
+    setLogoFile(null);
     setError(null);
     setPendingLocations([]);
     setPendingProductEdits({});
+    setProductOrder({});
+    setAssignOpen(false);
     setPresenting(true);
   }
 
@@ -315,6 +343,19 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
       .from("shop-media")
       .upload(path, file, { upsert: true, contentType: file.type });
     return error ? { error: `cover upload failed: ${error.message}` } : { path };
+  }
+
+  // Logo upload — same stable-path client-direct pattern as the cover (upsert → no
+  // orphan). Only the path string is persisted, and only through saveCompanyProfile
+  // (the one logo writer, D-07), never updateShopProfile.
+  async function uploadLogo(file: File): Promise<{ path?: string; error?: string }> {
+    if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) return { error: "Use a JPG, PNG or WebP image." };
+    if (file.size > MAX_IMAGE_BYTES) return { error: "Image must be under 10 MB." };
+    const path = `${company.id}/logo`;
+    const { error } = await createClient().storage
+      .from("shop-media")
+      .upload(path, file, { upsert: true, contentType: file.type });
+    return error ? { error: `logo upload failed: ${error.message}` } : { path };
   }
 
   async function save() {
@@ -348,6 +389,16 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
     const res = await updateShopProfile(fd);
     if ("error" in res) { setError(res.error); setBusy(false); return; }
 
+    // Logo (D-07): upload the picked bytes, then persist logo_path through the ONE
+    // company-profile writer (saveCompanyProfile updates only the keys given, so
+    // this touches logo_path alone — updateShopProfile never writes the logo).
+    if (logoFile) {
+      const up = await uploadLogo(logoFile);
+      if (up.error) { setError(up.error); setBusy(false); return; }
+      const r = await saveCompanyProfile({ logoPath: up.path });
+      if (r.error) { setError(r.error); setBusy(false); return; }
+    }
+
     // Flush the per-product pending tree (F-02) AFTER the chrome commit — the field
     // patch, then batch inserts / edits / soft-deletes, all under this one Save.
     for (const [productId, d] of Object.entries(pendingProductEdits)) {
@@ -380,11 +431,12 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
 
     setBusy(false);
     setEditing(false);
-    setBrandingOpen(false);
     setDirty(false);
     setCoverFile(null);
+    setLogoFile(null);
     setPendingLocations([]);
     setPendingProductEdits({});
+    setSaveVersion((v) => v + 1);
     router.refresh();
   }
 
@@ -393,12 +445,16 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
     : company.cover_path
     ? mediaUrl(company.cover_path, company.updated_at)
     : null;
-  const logoUrl = company.logo_path ? mediaUrl(company.logo_path, company.updated_at) : null;
+  const logoUrl = logoFile
+    ? URL.createObjectURL(logoFile)
+    : company.logo_path
+    ? mediaUrl(company.logo_path, company.updated_at)
+    : null;
 
   // The location groups to render for the active tab (already square + 4-up
   // inside each LocationGroup). Grouping is pure — see ./locationFilter.
   const visibleGroups = groupByLocation(filterByLocation(products, loc));
-  const orderedGroups =
+  const groupOrdered =
     groupOrder.length === 0
       ? visibleGroups
       : [...visibleGroups].sort(
@@ -406,6 +462,9 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
             (groupOrder.indexOf(a.location) + 1 || 999) -
             (groupOrder.indexOf(b.location) + 1 || 999),
         );
+  // Then apply the in-shop card order (client-only reorder). Groups with no saved
+  // order keep the default name order from the query.
+  const orderedGroups = applyProductOrder(groupOrdered, productOrder);
 
   // Staged (empty) location groups render as drop targets while editing so the
   // seller can drag products into a freshly-typed location. They carry no products
@@ -427,6 +486,16 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
     if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return;
     current.splice(toIdx, 0, current.splice(fromIdx, 1)[0]);
     setGroupOrder(current);
+  }
+
+  // Reorder a card within its shop: place `draggedId` just before `targetId` in
+  // this location's client-only order. Keyed by the group LABEL (so the Unassigned
+  // bucket keys under its sentinel, matching applyProductOrder above).
+  function reorderProduct(location: string, draggedId: string, targetId: string) {
+    const group = orderedGroups.find((g) => g.location === location);
+    if (!group) return;
+    const next = moveBefore(group.products.map((p) => p.id), draggedId, targetId);
+    setProductOrder((prev) => ({ ...prev, [location]: next }));
   }
 
   const surface = (
@@ -451,7 +520,8 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
         onTaglineChange={(v) => updateEdit("tagline", v)}
         onPickCover={(f) => { setCoverFile(f); setDirty(true); }}
         onManage={enterEdit}
-        onEditLogo={() => setBrandingOpen((v) => !v)}
+        canEditLogo={canEditBranding}
+        onPickLogo={(f) => { setLogoFile(f); setDirty(true); }}
         onPresent={enterPresent}
       />
 
@@ -462,24 +532,29 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
         onEdit={updateEdit}
       />
 
-      {/* Logo & branding — the shared one-writer form (D-07), opened by clicking
-          the inline logo tile in edit mode (F-01; no separate branding button). */}
-      {editing && brandingOpen && companyProfile && (
-        <div className="glass rounded-3xl p-5">
-          <h3 className="mb-4 text-sm font-bold text-ink">Logo &amp; branding</h3>
-          <BrandingEditForm
-            company={companyProfile}
-            onDirty={() => {/* branding form owns its own dirty state + Save */}}
-            onSaved={() => { setBrandingOpen(false); router.refresh(); }}
-          />
-        </div>
-      )}
-
       {products.length === 0 ? (
         <EmptyShop onAdd={() => setDrawerOpen(true)} />
       ) : (
         <>
-          <LocationTabs products={products} active={loc} onSelect={setLoc} />
+          {/* Location filter + the two edit-mode shop controls. "+ Add shop" stages
+              a new shop label; "Assign products to shop" opens the two-pane drag
+              dialog (fast placement without scrolling the live grid). */}
+          <div className="flex flex-wrap items-center gap-2">
+            <LocationTabs products={products} active={loc} onSelect={setLoc} />
+            {editing && (
+              <>
+                <AddShopButton onAdd={addLocation} />
+                <button
+                  type="button"
+                  data-testid="assign-products-btn"
+                  onClick={() => setAssignOpen(true)}
+                  className="flex items-center gap-1.5 rounded-full bg-white/70 px-4 py-2 text-sm font-semibold text-ink/80 hover:bg-white"
+                >
+                  <PackageOpen size={15} className="text-brand" /> Assign products to shop
+                </button>
+              </>
+            )}
+          </div>
           {renderGroups.map((g) => (
             <LocationGroup
               key={g.location}
@@ -492,7 +567,7 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
             >
               {g.products.map((p) => (
                 <ProductCard
-                  key={p.id}
+                  key={`${p.id}:${saveVersion}`}
                   product={p}
                   companyId={company.id}
                   editing={editing}
@@ -502,6 +577,7 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
                   onBatchInsert={insertBatch}
                   onBatchChange={changeBatch}
                   onBatchRemove={removeBatch}
+                  onReorder={(draggedId, targetId) => reorderProduct(g.location, draggedId, targetId)}
                 />
               ))}
               {/* "+ Add product" tile — edit mode only. Opens the EXISTING manual-add
@@ -515,7 +591,6 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
               )}
             </LocationGroup>
           ))}
-          {editing && <AddLocationInput onAdd={addLocation} />}
         </>
       )}
 
@@ -523,6 +598,15 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         onImported={() => { setDrawerOpen(false); router.refresh(); }}
+      />
+
+      <AssignProductsDialog
+        open={assignOpen}
+        onClose={() => setAssignOpen(false)}
+        products={products}
+        stagedLocations={pendingLocations}
+        onAddLocation={addLocation}
+        onChanged={() => router.refresh()}
       />
     </>
   );
@@ -998,34 +1082,56 @@ function AddProductTile({ location, onClick }: { location: string | null; onClic
   );
 }
 
-// ---------- add-location input (edit mode) ----------
-// Type a free-text location label to STAGE a group. The staged group persists only
-// once a product is dragged into it (setProductLocation); empty labels never persist.
-function AddLocationInput({ onAdd }: { onAdd: (label: string) => void }) {
+// ---------- add-shop button (edit mode) ----------
+// A pill that expands into an inline name field. Confirming STAGES a new shop
+// label (D-05 mechanics: an empty staged group persists only once a product is
+// assigned to it — setProductLocation — so unfilled labels never hit the DB).
+// Sits beside the location filter, replacing the old full-width bottom bar.
+function AddShopButton({ onAdd }: { onAdd: (label: string) => void }) {
+  const [open, setOpen] = useState(false);
   const [value, setValue] = useState("");
+
   function submit() {
     const v = value.trim();
-    if (!v) return;
-    onAdd(v);
+    if (v) onAdd(v);
     setValue("");
+    setOpen(false);
   }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        data-testid="add-shop-btn"
+        onClick={() => setOpen(true)}
+        className="flex items-center gap-1.5 rounded-full bg-white/70 px-4 py-2 text-sm font-semibold text-ink/80 hover:bg-white"
+      >
+        <Plus size={15} className="text-brand" /> Add shop
+      </button>
+    );
+  }
+
   return (
-    <div className="flex items-center gap-2 rounded-2xl border border-dashed border-ink/20 bg-white/50 px-3.5 py-2.5">
-      <MapPin size={16} className="text-brand" />
+    <div className="flex items-center gap-1.5 rounded-full bg-white px-2.5 py-1 shadow-sm ring-1 ring-ink/10">
+      <MapPin size={15} className="text-brand" />
       <input
-        data-testid="add-location-input"
-        aria-label="Add a location"
+        autoFocus
+        data-testid="add-shop-input"
+        aria-label="New shop name"
         value={value}
-        placeholder="Add a location / shop (e.g. Vienna, AT)"
+        placeholder="e.g. Berlin"
         onChange={(e) => setValue(e.target.value)}
-        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); submit(); } }}
-        className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-ink/40"
+        onKeyDown={(e) => {
+          if (e.key === "Enter") { e.preventDefault(); submit(); }
+          if (e.key === "Escape") { setValue(""); setOpen(false); }
+        }}
+        className="w-32 bg-transparent text-sm outline-none placeholder:text-ink/40"
       />
       <button
         type="button"
-        data-testid="add-location-btn"
+        data-testid="add-shop-confirm"
         onClick={submit}
-        className="rounded-full bg-brand px-4 py-1.5 text-sm font-bold text-white hover:bg-brand-deep"
+        className="rounded-full bg-brand px-3 py-1 text-xs font-bold text-white hover:bg-brand-deep"
       >
         Add
       </button>

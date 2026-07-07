@@ -22,7 +22,7 @@
 import { useState } from "react";
 import {
   Heart, RotateCw, Minus, Plus, ShoppingCart, EyeOff, Eye,
-  GripVertical, Trash2, ChevronLeft, ChevronRight, ChevronDown, X,
+  GripVertical, Trash2, ChevronLeft, ChevronRight, ChevronDown, X, Pencil,
 } from "lucide-react";
 import type { ShopProduct } from "../shop";
 import { PackSizeSelector } from "./PackSizeSelector";
@@ -78,6 +78,9 @@ export type ProductFieldDraft = {
   packaging_material?: string;
   resealable?: boolean;
   supplier_product_code?: string;
+  /** Raw comma-separated grams (e.g. "10, 20, 50") — parsed to number[] at
+   *  flush, same raw-string-until-Save contract as the rest of this draft. */
+  pack_sizes?: string;
 };
 /** The per-product pending overlay ShopView flushes on Save. */
 export type ProductDraft = {
@@ -149,8 +152,12 @@ function countryFlag(country: string | null): string {
 /** The pack sizes offered for a product: its own pack size, plus the bundle tier
  *  when one is priced. v0 has one price/g — the bubbles select intent, not price. */
 function packLabels(p: ShopProduct): string[] {
-  const labels: string[] = [];
-  if (p.pack_size_grams != null) labels.push(`${p.pack_size_grams}g`);
+  // Discrete pack-size options — the product's own size plus any extra sizes
+  // the seller added (p.packSizes, v0 metadata list), deduped + sorted so the
+  // buyer picks a size like choosing a T-shirt size before adding to basket.
+  const sizes = new Set<number>(p.packSizes);
+  if (p.pack_size_grams != null) sizes.add(p.pack_size_grams);
+  const labels = [...sizes].sort((a, b) => a - b).map((g) => `${g}g`);
   if (p.bundle_threshold_grams != null) labels.push(`${p.bundle_threshold_grams}g+`);
   return labels;
 }
@@ -166,6 +173,7 @@ export function ProductCard({
   onBatchInsert,
   onBatchChange,
   onBatchRemove,
+  onReorder,
 }: {
   product: ShopProduct;
   companyId?: string;
@@ -184,14 +192,25 @@ export function ProductCard({
   onBatchChange?: (productId: string, ref: BatchRef, patch: PendingBatchEdit) => void;
   /** Drop a pending insert, or mark a live lot for soft-delete. */
   onBatchRemove?: (productId: string, ref: BatchRef) => void;
+  /** Reorder within the SAME shop: a card was dropped onto this one (dragged id,
+   *  this card's id). Only same-location drops reach here — a cross-shop drop
+   *  bubbles to the LocationGroup, which moves the location instead. Client-only. */
+  onReorder?: (draggedId: string, targetId: string) => void;
 }) {
   const [flipped, setFlipped] = useState(false);
+  // Highlights this card as the drop target while a sibling from the same shop is
+  // dragged over it (the insert-before hint for the reorder).
+  const [reorderOver, setReorderOver] = useState(false);
   const [pack, setPack] = useState(0);
   const [qty, setQty] = useState(1);
   const [liked, setLiked] = useState(false);
   // Carousel index over p.images (wraps); busy guards the immediate actions.
   const [imgIdx, setImgIdx] = useState(0);
   const [busy, setBusy] = useState(false);
+  // Full-field edit dialog (edit mode): the same spec rows as the inline scroll
+  // list, laid out full-size — feedback was that the cramped inline inputs are
+  // hard to see/use. Reuses the same onEditField draft, not a second write path.
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   async function toggleVisible() {
     setBusy(true);
@@ -206,6 +225,21 @@ export function ProductCard({
     const res = await softDeleteProduct(p.id);
     setBusy(false);
     if (!("error" in res)) onChanged?.();
+  }
+
+  // Reorder-within-shop drop. Only same-location drops reorder; a drop from
+  // another shop falls through (no stopPropagation) to LocationGroup, which
+  // persists the location move instead. dataTransfer payloads are unreadable
+  // during dragOver, so we always allow the drop and decide here on drop.
+  function handleReorderDrop(e: React.DragEvent) {
+    setReorderOver(false);
+    const draggedId = e.dataTransfer.getData("application/product-id");
+    if (!draggedId || draggedId === p.id) return;
+    const from = e.dataTransfer.getData("application/product-loc"); // "" for null
+    if (from !== (p.location ?? "")) return; // cross-shop → let LocationGroup handle it
+    e.preventDefault();
+    e.stopPropagation();
+    onReorder?.(draggedId, p.id);
   }
 
   // Field draft accessors (controlled by the overlay, falling back to the product).
@@ -256,10 +290,16 @@ export function ProductCard({
   const flag = countryFlag(p.country_of_origin);
 
   return (
+    <>
     <div
       data-testid="product-card"
-      className="relative h-[544px]"
+      className={`relative h-[640px] rounded-3xl transition ${
+        reorderOver ? "ring-2 ring-brand ring-offset-2" : ""
+      }`}
       style={{ perspective: "1900px" }}
+      onDragOver={editing && onReorder ? (e) => { e.preventDefault(); setReorderOver(true); } : undefined}
+      onDragLeave={editing && onReorder ? () => setReorderOver(false) : undefined}
+      onDrop={editing && onReorder ? handleReorderDrop : undefined}
     >
       <div
         className="relative h-full w-full transition-transform duration-500"
@@ -270,10 +310,13 @@ export function ProductCard({
           className="absolute inset-0 flex flex-col overflow-hidden rounded-3xl bg-white shadow-lg ring-1 ring-white/60"
           style={{ backfaceVisibility: "hidden", pointerEvents: flipped ? "none" : undefined }}
         >
-          {/* square cover carousel — object-cover keeps it square at any width */}
+          {/* Square cover, but capped at 250px tall (matches the prototype's
+              .pc-photo max-height) so the fixed-height card keeps ~294px for the
+              spec rows below — without the cap the square image swallows the card
+              and the spec list collapses to ~0px (object-cover crops the overflow). */}
           <div
             data-testid="card-photo"
-            className="relative aspect-square w-full shrink-0 overflow-hidden bg-brand-soft/40"
+            className="relative aspect-square max-h-[250px] w-full shrink-0 overflow-hidden bg-brand-soft/40"
           >
             {cover ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -338,6 +381,18 @@ export function ProductCard({
                 >
                   {p.profile_visible ? <Eye size={12} /> : <EyeOff size={12} />}
                   {p.profile_visible ? "Visible" : "Hidden"}
+                </button>
+                {/* Opens the full-field edit dialog — lives here (always visible)
+                    rather than above the scrollable spec list, which can be
+                    squeezed thin by the card's fixed height. */}
+                <button
+                  type="button"
+                  data-testid="open-details-dialog"
+                  aria-label="Edit all product details"
+                  onClick={() => setDetailsOpen(true)}
+                  className="inline-flex items-center gap-1 rounded-lg bg-white/95 px-2 py-1 text-[10px] font-bold text-ink shadow-sm"
+                >
+                  <Pencil size={12} /> Edit details
                 </button>
                 <button
                   type="button"
@@ -421,9 +476,12 @@ export function ProductCard({
                 row becomes a controlled input/select, batched the same way as the
                 strip above; lineage clamped to 2 lines in the read view. The batch
                 editor (edit) / picker (view) live here so the card keeps its fixed
-                height. The bottom fade + chevron cue that the list scrolls inside
-                that fixed height — else the rows below the fold are easy to miss. */}
-            <div className="relative mt-1.5 flex min-h-0 flex-1 flex-col">
+                height. min-h-[120px] is a hard floor (not min-h-0) — without it,
+                a tall footer (e.g. edit mode's stacked price fields, or the batch
+                picker) can flex-shrink this area to a sliver, hiding freshly
+                edited/saved fields entirely (reported bug, 2026-07-07). The bottom
+                fade + chevron cue that the list still scrolls past that floor. */}
+            <div className="relative mt-1.5 flex min-h-[120px] flex-1 flex-col">
               <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3.5">
                 {specRows.map((row) => (
                   <div key={row.label} className="flex items-start gap-2 border-b border-ink/10 py-1.5 text-xs">
@@ -442,7 +500,7 @@ export function ProductCard({
                     )}
                   </div>
                 ))}
-                {editing ? (
+                {editing && (
                   <BatchEditor
                     product={p}
                     draft={draft}
@@ -450,15 +508,12 @@ export function ProductCard({
                     onChange={onBatchChange}
                     onRemove={onBatchRemove}
                   />
-                ) : (
-                  p.batches.length > 0 && <BatchPicker product={p} />
                 )}
               </div>
-              {/* Scroll cue — pinned over the bottom of the scroll area, never
-                  interactive; fades the last row so it reads as "more below". */}
-              <div className="pointer-events-none absolute inset-x-0 bottom-0 flex h-6 items-end justify-center bg-gradient-to-t from-white via-white/70 to-transparent">
-                <ChevronDown size={13} className="mb-0.5 text-ink/30" />
-              </div>
+              {/* Soft scroll cue — a bottom fade (no button/chevron) that hints the
+                  spec list continues below the fold. Non-interactive; the clamped
+                  lineage row is the prototype's other "there's more" signal. */}
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-5 bg-gradient-to-t from-white via-white/70 to-transparent" />
             </div>
 
             {/* footer: pack bubbles + price, then availability + stepper + Add */}
@@ -530,6 +585,10 @@ export function ProductCard({
                   <ShoppingCart size={14} /> Add to basket
                 </button>
               </div>
+              {/* Batch selection lives in the footer, beside Add-to-basket — not
+                  inside the scrollable spec list above (feedback: it was easy to
+                  miss buried in the scroll). Owner-only, view mode. */}
+              {!editing && p.batches.length > 0 && <BatchPicker product={p} />}
             </div>
           </div>
         </div>
@@ -549,6 +608,114 @@ export function ProductCard({
               <RotateCw size={12} className="-scale-x-100" /> Back to front
             </button>
           </div>
+        </div>
+      </div>
+    </div>
+    {editing && detailsOpen && (
+      <ProductDetailsDialog
+        product={p}
+        nameVal={nameVal}
+        strip={strip}
+        numVal={numVal}
+        specRows={specRows}
+        fields={fields}
+        onEditField={(patch) => onEditField?.(p.id, patch)}
+        onClose={() => setDetailsOpen(false)}
+      />
+    )}
+    </>
+  );
+}
+
+// ── Full-field edit dialog (edit mode) ────────────────────────────────────────
+// The same fields as the inline strip + scrollable spec list, laid out full-size
+// in a modal instead of cramped inline inputs (feedback: hard to see/use while
+// editing). Reuses the SAME onEditField draft callback as the inline editors —
+// this is an alternate presentation over the existing pending-edit contract, not
+// a second write path.
+function ProductDetailsDialog({
+  product: p, nameVal, strip, numVal, specRows, fields, onEditField, onClose,
+}: {
+  product: ShopProduct;
+  nameVal: string;
+  strip: [string, NumFieldKey, number | null][];
+  numVal: (k: NumFieldKey, fallback: number | null) => string;
+  specRows: SpecRowDef[];
+  fields: ProductFieldDraft;
+  onEditField: (patch: Partial<ProductFieldDraft>) => void;
+  onClose: () => void;
+}) {
+  const field =
+    "w-full min-w-0 rounded-lg border border-ink/15 bg-white px-2.5 py-1.5 text-sm font-semibold text-brand-deep focus:border-brand focus:outline-none";
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/30 p-4 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        data-testid="product-details-dialog"
+        className="flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-ink/10 px-5 py-4">
+          <h3 className="text-base font-bold text-ink">Edit product details</h3>
+          <button onClick={onClose} className="rounded-full p-1.5 text-ink/50 hover:bg-ink/5">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="flex-1 space-y-3.5 overflow-y-auto px-5 py-4">
+          <label className="block">
+            <span className="text-xs font-semibold text-ink/70">Product name</span>
+            <input
+              aria-label="Product name"
+              value={nameVal}
+              onChange={(e) => onEditField({ name: e.target.value })}
+              className={field}
+            />
+          </label>
+
+          <div className="grid grid-cols-5 gap-2">
+            {strip.map(([label, key, val]) => (
+              <label key={key} className="block">
+                <span className="mb-1 block text-center text-[10px] font-bold uppercase tracking-wide text-ink/45">
+                  {label}
+                </span>
+                <input
+                  aria-label={label.replace("%", " %")}
+                  inputMode="decimal"
+                  value={numVal(key, val)}
+                  onChange={(e) => onEditField({ [key]: e.target.value })}
+                  className={`${field} px-1 text-center tabular-nums`}
+                />
+              </label>
+            ))}
+          </div>
+
+          {specRows.map((row) => (
+            <label key={row.label} className="block">
+              <span className="text-xs font-semibold text-ink/70">{row.label}</span>
+              <SpecFieldEditor row={row} fields={fields} product={p} onChange={onEditField} />
+            </label>
+          ))}
+
+          {/* Extra sellable pack sizes (v0 — see packLabels/manage.ts): the
+              buyer picks one of these beside the price, like choosing a
+              T-shirt size. p.pack_size_grams (the required CSV field) is
+              always included automatically; add more here. */}
+          <label className="block">
+            <span className="text-xs font-semibold text-ink/70">
+              Additional pack sizes (g) — comma-separated
+            </span>
+            <input
+              aria-label="Additional pack sizes"
+              placeholder="e.g. 10, 20, 50"
+              value={fields.pack_sizes ?? p.packSizes.join(", ")}
+              onChange={(e) => onEditField({ pack_sizes: e.target.value })}
+              className={field}
+            />
+          </label>
         </div>
       </div>
     </div>

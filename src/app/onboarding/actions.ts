@@ -1,9 +1,11 @@
 'use server'
 
+import { after } from 'next/server'
 import { createClient } from '@/shared/db/server'
 import { getCurrentCompanyId, getCurrentPerson } from '@/shared/auth'
 import { updateMyProfile, setMyAvatarPath } from '@/modules/profile'
 import { updateCompanyProfile } from '@/modules/companies'
+import { shouldDispatch } from '@/shared/email/dispatch'
 
 // Each action returns a result the client stepper acts on (advance or show
 // error). None redirect — navigation lives in the client so the modal sequence
@@ -126,6 +128,30 @@ export async function createCompany(formData: FormData): Promise<ActionResult> {
       return { error: error?.message ?? 'Could not create the company.' }
     }
     companyId = data
+
+    // SET-03 (welcome, Open-Q #1): fire the ONE-SHOT welcome email HERE, on the
+    // null→set company transition. This branch is only entered when the caller had
+    // no company; on any createCompany retry getCurrentCompanyId() returns the
+    // just-created company and short-circuits it, so the welcome fires exactly once
+    // per person WITHOUT a welcome_sent_at column. Fire-and-forget via after() +
+    // fail-soft: a send failure can never fail company creation. person.id ===
+    // auth.uid(), so the caller is the welcome recipient.
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (shouldDispatch({ error }) && user) {
+      const welcomePersonId = user.id
+      const welcomeCompanyId = companyId
+      after(async () => {
+        try {
+          await supabase.functions.invoke('send-lifecycle-email', {
+            body: { event: 'welcome', person_id: welcomePersonId, company_id: welcomeCompanyId },
+          })
+        } catch {
+          /* email transport down MUST NOT surface as an action failure */
+        }
+      })
+    }
   }
 
   for (const file of files) {
@@ -272,22 +298,37 @@ export async function requestToJoin(companyId: string, note?: string): Promise<A
   const supabase = await createClient()
 
   // WIDENED localized cast: expose `code` so the SQLSTATE check below is typed.
-  const { error } = await (supabase as unknown as {
+  const result = await (supabase as unknown as {
     rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string; code?: string } | null }>
   }).rpc('request_to_join', { p_company_id: companyId, p_note: note ?? null })
 
-  if (error) {
+  if (result.error) {
     // (1) Raw unique_violation from the one-active-pending index — detect by SQLSTATE.
-    if (error.code === '23505') {
+    if (result.error.code === '23505') {
       return { error: 'You already have a pending request. Withdraw it before requesting another company.' }
     }
     // (2) Caller already has a company: request_to_join's company-less guard
     //     (20260622100000) raises this, as does a raced Path-A self-onboard.
-    if (error.message.includes('already belongs to a company')) {
+    if (result.error.message.includes('already belongs to a company')) {
       return { error: "You're already part of a company." }
     }
     // (3) Verified-target guard + anything else → fail closed, no internal leak.
     return { error: GENERIC_ERROR }
+  }
+
+  // SET-03: join.requested — the edge fn fans out to the TARGET company's
+  // Superadmins (recipient resolution is server-side in 13-05; the action passes
+  // only the company id). Post-ok + fail-soft via after().
+  if (shouldDispatch(result)) {
+    after(async () => {
+      try {
+        await supabase.functions.invoke('send-lifecycle-email', {
+          body: { event: 'join.requested', company_id: companyId },
+        })
+      } catch {
+        /* email transport down MUST NOT surface as an action failure */
+      }
+    })
   }
   return { ok: true }
 }

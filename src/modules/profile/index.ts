@@ -45,16 +45,36 @@ async function ensureHandle(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
   displayName: string,
-): Promise<void> {
+): Promise<string | null> {
   const { data } = await supabase.from('person').select('public_handle').eq('id', userId).maybeSingle()
-  if (data?.public_handle) return
+  if (data?.public_handle) return data.public_handle
   const base = slugify(displayName) || 'user'
   for (let i = 0; i < 6; i++) {
     const candidate = i === 0 ? base : `${base}-${i + 1}`
     const { error } = await supabase.from('person').update({ public_handle: candidate }).eq('id', userId)
-    if (!error) return // success
-    if (error.code !== '23505') return // not a uniqueness clash — give up quietly
+    if (!error) return candidate // success — return the handle we just assigned
+    if (error.code !== '23505') return null // not a uniqueness clash — give up quietly
   }
+  return null
+}
+
+/**
+ * Ensure the signed-in person has a `public_handle`, assigning one lazily if the
+ * backfill hasn't reached them yet (new signups only get a handle on their first
+ * profile save). Returns the handle, or null when signed out / no person row.
+ *
+ * The public door onto the private `ensureHandle` helper — it resolves the auth
+ * user itself so callers (e.g. the account-card popover) never touch a Supabase
+ * client. Server-only. Lets the scan-to-connect QR render for EVERY account, not
+ * only those who have already edited their profile.
+ */
+export async function ensurePublicHandle(displayName?: string): Promise<string | null> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return null
+  return ensureHandle(supabase, user.id, displayName ?? '')
 }
 
 // `links` is a small open jsonb bag; today it only carries LinkedIn.

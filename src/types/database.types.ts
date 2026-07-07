@@ -475,6 +475,7 @@ export type Database = {
           cover_path: string | null
           created_at: string
           created_by: string | null
+          deactivated_at: string | null
           deleted_at: string | null
           deleted_by: string | null
           description: string | null
@@ -499,6 +500,7 @@ export type Database = {
           cover_path?: string | null
           created_at?: string
           created_by?: string | null
+          deactivated_at?: string | null
           deleted_at?: string | null
           deleted_by?: string | null
           description?: string | null
@@ -523,6 +525,7 @@ export type Database = {
           cover_path?: string | null
           created_at?: string
           created_by?: string | null
+          deactivated_at?: string | null
           deleted_at?: string | null
           deleted_by?: string | null
           description?: string | null
@@ -1083,11 +1086,13 @@ export type Database = {
           note_company_a: string | null
           note_company_b: string | null
           offer_expires_at: string | null
+          ordered_via: string
           payment_terms_code: string | null
           relationship_id: string
           seller_so_number: string | null
           status: string
           thread_id: string | null
+          ticket_status: string | null
           updated_at: string
           updated_by: string | null
           value_net: number | null
@@ -1109,11 +1114,13 @@ export type Database = {
           note_company_a?: string | null
           note_company_b?: string | null
           offer_expires_at?: string | null
+          ordered_via?: string
           payment_terms_code?: string | null
           relationship_id: string
           seller_so_number?: string | null
           status?: string
           thread_id?: string | null
+          ticket_status?: string | null
           updated_at?: string
           updated_by?: string | null
           value_net?: number | null
@@ -1135,11 +1142,13 @@ export type Database = {
           note_company_a?: string | null
           note_company_b?: string | null
           offer_expires_at?: string | null
+          ordered_via?: string
           payment_terms_code?: string | null
           relationship_id?: string
           seller_so_number?: string | null
           status?: string
           thread_id?: string | null
+          ticket_status?: string | null
           updated_at?: string
           updated_by?: string | null
           value_net?: number | null
@@ -1175,6 +1184,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "deal_card_ordered_via_fkey"
+            columns: ["ordered_via"]
+            isOneToOne: false
+            referencedRelation: "order_channel"
+            referencedColumns: ["code"]
+          },
+          {
             foreignKeyName: "deal_card_payment_terms_code_fkey"
             columns: ["payment_terms_code"]
             isOneToOne: false
@@ -1201,6 +1217,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "chat_thread"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deal_card_ticket_status_fkey"
+            columns: ["ticket_status"]
+            isOneToOne: false
+            referencedRelation: "deal_card_ticket_status"
+            referencedColumns: ["code"]
           },
           {
             foreignKeyName: "deal_card_updated_by_fkey"
@@ -1274,6 +1297,27 @@ export type Database = {
         ]
       }
       deal_card_status: {
+        Row: {
+          code: string
+          description: string
+          is_terminal: boolean
+          sort_order: number
+        }
+        Insert: {
+          code: string
+          description: string
+          is_terminal?: boolean
+          sort_order?: number
+        }
+        Update: {
+          code?: string
+          description?: string
+          is_terminal?: boolean
+          sort_order?: number
+        }
+        Relationships: []
+      }
+      deal_card_ticket_status: {
         Row: {
           code: string
           description: string
@@ -1455,6 +1499,8 @@ export type Database = {
       }
       deal_line_item: {
         Row: {
+          allocation_locked_at: string | null
+          allocation_status: string
           batch_id: string | null
           batch_number: string | null
           cbd_percent: number | null
@@ -1468,12 +1514,15 @@ export type Database = {
           product_name: string
           quantity: number
           sort_order: number
+          substituted_from_product_id: string | null
           thc_percent: number | null
           unit: string
           unit_price: number
           version: number
         }
         Insert: {
+          allocation_locked_at?: string | null
+          allocation_status?: string
           batch_id?: string | null
           batch_number?: string | null
           cbd_percent?: number | null
@@ -1487,12 +1536,15 @@ export type Database = {
           product_name: string
           quantity: number
           sort_order?: number
+          substituted_from_product_id?: string | null
           thc_percent?: number | null
           unit: string
           unit_price: number
           version: number
         }
         Update: {
+          allocation_locked_at?: string | null
+          allocation_status?: string
           batch_id?: string | null
           batch_number?: string | null
           cbd_percent?: number | null
@@ -1506,12 +1558,20 @@ export type Database = {
           product_name?: string
           quantity?: number
           sort_order?: number
+          substituted_from_product_id?: string | null
           thc_percent?: number | null
           unit?: string
           unit_price?: number
           version?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "deal_line_item_allocation_status_fkey"
+            columns: ["allocation_status"]
+            isOneToOne: false
+            referencedRelation: "deal_line_item_allocation_status"
+            referencedColumns: ["code"]
+          },
           {
             foreignKeyName: "deal_line_item_batch_id_fkey"
             columns: ["batch_id"]
@@ -1534,6 +1594,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "deal_line_item_substituted_from_product_id_fkey"
+            columns: ["substituted_from_product_id"]
+            isOneToOne: false
+            referencedRelation: "product"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "deal_line_item_unit_fkey"
             columns: ["unit"]
             isOneToOne: false
@@ -1541,6 +1608,24 @@ export type Database = {
             referencedColumns: ["code"]
           },
         ]
+      }
+      deal_line_item_allocation_status: {
+        Row: {
+          code: string
+          description: string
+          sort_order: number
+        }
+        Insert: {
+          code: string
+          description: string
+          sort_order?: number
+        }
+        Update: {
+          code?: string
+          description?: string
+          sort_order?: number
+        }
+        Relationships: []
       }
       deal_line_item_private: {
         Row: {
@@ -2334,6 +2419,109 @@ export type Database = {
         }
         Relationships: []
       }
+      notification_category: {
+        Row: {
+          code: string
+          description: string
+          is_transactional: boolean
+        }
+        Insert: {
+          code: string
+          description: string
+          is_transactional?: boolean
+        }
+        Update: {
+          code?: string
+          description?: string
+          is_transactional?: boolean
+        }
+        Relationships: []
+      }
+      notification_channel: {
+        Row: {
+          code: string
+          description: string
+        }
+        Insert: {
+          code: string
+          description: string
+        }
+        Update: {
+          code?: string
+          description?: string
+        }
+        Relationships: []
+      }
+      notification_preference: {
+        Row: {
+          category_code: string
+          channel_code: string
+          created_at: string
+          enabled: boolean
+          id: string
+          person_id: string
+          updated_at: string
+        }
+        Insert: {
+          category_code: string
+          channel_code: string
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          person_id: string
+          updated_at?: string
+        }
+        Update: {
+          category_code?: string
+          channel_code?: string
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          person_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_preference_category_code_fkey"
+            columns: ["category_code"]
+            isOneToOne: false
+            referencedRelation: "notification_category"
+            referencedColumns: ["code"]
+          },
+          {
+            foreignKeyName: "notification_preference_channel_code_fkey"
+            columns: ["channel_code"]
+            isOneToOne: false
+            referencedRelation: "notification_channel"
+            referencedColumns: ["code"]
+          },
+          {
+            foreignKeyName: "notification_preference_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "person"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      order_channel: {
+        Row: {
+          code: string
+          description: string
+          sort_order: number
+        }
+        Insert: {
+          code: string
+          description: string
+          sort_order?: number
+        }
+        Update: {
+          code?: string
+          description?: string
+          sort_order?: number
+        }
+        Relationships: []
+      }
       payment_terms: {
         Row: {
           code: string
@@ -2555,10 +2743,13 @@ export type Database = {
       }
       person: {
         Row: {
+          anonymized_at: string | null
           avatar_path: string | null
           company_id: string | null
           created_at: string
+          deactivated_at: string | null
           deleted_at: string | null
+          deletion_scheduled_for: string | null
           display_name: string | null
           first_name: string
           id: string
@@ -2573,10 +2764,13 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          anonymized_at?: string | null
           avatar_path?: string | null
           company_id?: string | null
           created_at?: string
+          deactivated_at?: string | null
           deleted_at?: string | null
+          deletion_scheduled_for?: string | null
           display_name?: string | null
           first_name: string
           id: string
@@ -2591,10 +2785,13 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          anonymized_at?: string | null
           avatar_path?: string | null
           company_id?: string | null
           created_at?: string
+          deactivated_at?: string | null
           deleted_at?: string | null
+          deletion_scheduled_for?: string | null
           display_name?: string | null
           first_name?: string
           id?: string
@@ -3033,6 +3230,7 @@ export type Database = {
           loss_on_drying_percent: number | null
           metadata: Json
           product_id: string
+          quantity_grams: number
           ready_for_sale_date: string | null
           shelf_life_months: number | null
           thc_percent: number | null
@@ -3056,6 +3254,7 @@ export type Database = {
           loss_on_drying_percent?: number | null
           metadata?: Json
           product_id: string
+          quantity_grams?: number
           ready_for_sale_date?: string | null
           shelf_life_months?: number | null
           thc_percent?: number | null
@@ -3079,6 +3278,7 @@ export type Database = {
           loss_on_drying_percent?: number | null
           metadata?: Json
           product_id?: string
+          quantity_grams?: number
           ready_for_sale_date?: string | null
           shelf_life_months?: number | null
           thc_percent?: number | null
@@ -4120,11 +4320,17 @@ export type Database = {
         Args: { p_request_id: string; p_role?: string }
         Returns: undefined
       }
+      audit_person_scrub: { Args: { p_person_id: string }; Returns: undefined }
       can_access_thread: { Args: { p_thread_id: string }; Returns: boolean }
       can_access_workspace: { Args: { p_ws_id: string }; Returns: boolean }
       can_see_person: {
         Args: { p_company_id: string; p_person_id: string }
         Returns: boolean
+      }
+      cancel_account_deletion: { Args: never; Returns: undefined }
+      cancel_line_substitution: {
+        Args: { p_line_item_id: string }
+        Returns: undefined
       }
       card_relationship_member: {
         Args: { p_card_id: string }
@@ -4141,6 +4347,10 @@ export type Database = {
       confirm_detected_deal: {
         Args: { p_decision: string; p_message_id: string }
         Returns: string
+      }
+      confirm_line_allocations: {
+        Args: { p_line_item_ids: string[] }
+        Returns: number
       }
       create_deal_draft: {
         Args: {
@@ -4160,6 +4370,8 @@ export type Database = {
       }
       current_company_id: { Args: never; Returns: string }
       current_superadmin_group_id: { Args: never; Returns: string }
+      deactivate_account: { Args: never; Returns: undefined }
+      deactivate_company: { Args: never; Returns: undefined }
       edit_deal_draft: {
         Args: {
           p_currency: string
@@ -4262,6 +4474,10 @@ export type Database = {
       is_hs_team: { Args: never; Returns: boolean }
       is_relationship_member: { Args: { p_rel_id: string }; Returns: boolean }
       is_workspace_member: { Args: { p_ws_id: string }; Returns: boolean }
+      line_seller_company_id: {
+        Args: { p_line_item_id: string }
+        Returns: string
+      }
       list_company_members: {
         Args: never
         Returns: {
@@ -4342,6 +4558,8 @@ export type Database = {
         Args: { p_deal_card_id: string; p_draft: Json; p_reason: string }
         Returns: string
       }
+      reactivate_account: { Args: never; Returns: undefined }
+      reactivate_company: { Args: never; Returns: undefined }
       record_invite_sent: {
         Args: { p_email: string; p_role: string }
         Returns: undefined
@@ -4355,10 +4573,13 @@ export type Database = {
         Returns: undefined
       }
       remove_member: { Args: { p_person_id: string }; Returns: undefined }
+      request_account_deletion: { Args: never; Returns: undefined }
       request_to_join: {
         Args: { p_company_id: string; p_note: string }
         Returns: string
       }
+      run_scheduled_erasures: { Args: never; Returns: undefined }
+      scrub_person_pii: { Args: { p_id: string }; Returns: undefined }
       search_joinable_companies: {
         Args: { p_term: string }
         Returns: {
@@ -4373,9 +4594,22 @@ export type Database = {
         Returns: string
       }
       sella_detect_worker: { Args: never; Returns: undefined }
+      set_line_allocation: {
+        Args: {
+          p_batch_id?: string
+          p_batch_splits?: Json
+          p_decision: string
+          p_line_item_id: string
+        }
+        Returns: undefined
+      }
       shares_connection_with_company: {
         Args: { p_company_id: string }
         Returns: boolean
+      }
+      substitute_line_product: {
+        Args: { p_line_item_id: string; p_new_product_id: string }
+        Returns: undefined
       }
       withdraw_deal_change: {
         Args: { p_deal_card_id: string }

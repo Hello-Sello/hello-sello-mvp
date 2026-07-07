@@ -8,6 +8,18 @@ const nextConfig: NextConfig = {
   // `{ position: "bottom-right" }` if the build/route indicator is wanted again.
   // Dev-only; has no effect in production.
   devIndicators: false,
+
+  // Old→new permanent 301s (SET-01, D-04). The settings home absorbs /account and
+  // /team, so their deep links must keep resolving. Redirects run BEFORE routing —
+  // the AUTH gate stays the proxy's job (`/settings/*` is gated-by-default, no
+  // allowlist entry), and the PATH move is next.config's job, NOT the proxy (B7
+  // lock). `permanent: true` = 301 so browsers/crawlers cache the new home.
+  async redirects() {
+    return [
+      { source: "/account", destination: "/settings/profile", permanent: true },
+      { source: "/team", destination: "/settings/organization/team", permanent: true },
+    ];
+  },
 };
 
 export default nextConfig;

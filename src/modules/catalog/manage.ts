@@ -341,6 +341,9 @@ export type ProductFieldPatch = {
   packaging_material?: string | null;
   resealable?: boolean | null;
   supplier_product_code?: string | null;
+  /** Extra sellable pack sizes beyond `pack_size_grams` — v0, merged into
+   *  `product.metadata.pack_sizes` (no schema change). [] clears it. */
+  pack_sizes?: number[];
 };
 
 const NUMERIC_PRODUCT_FIELDS = [
@@ -395,6 +398,20 @@ export async function updateProductFields(
     productPatch.irradiation_code = patch.irradiation_code;
   }
   if (patch.resealable !== undefined) productPatch.resealable = patch.resealable;
+
+  // Merge (not replace) — metadata may carry other per-company custom columns
+  // the card never touches. Read-then-write is fine at this scale (single
+  // product row, owner-only edit); a real product_pack_size table is the
+  // planned fix once this outgrows a v0 stopgap.
+  if (patch.pack_sizes !== undefined) {
+    const { data: existing } = await supabase
+      .from("product")
+      .select("metadata")
+      .eq("id", productId)
+      .single();
+    const metadata = (existing?.metadata as Record<string, unknown> | null) ?? {};
+    productPatch.metadata = { ...metadata, pack_sizes: patch.pack_sizes };
+  }
 
   if (Object.keys(productPatch).length > 0) {
     const { error } = await supabase.from("product").update(productPatch).eq("id", productId);
