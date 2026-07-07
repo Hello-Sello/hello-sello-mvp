@@ -29,6 +29,7 @@ export async function saveMyProfile(fields: ProfileFields) {
   const r = await updateMyProfile(fields)
   if (!r.error) {
     revalidatePath('/account')
+    revalidatePath('/settings/profile') // profile re-homed here (13-09) — refresh the route + sidebar header
     revalidatePath('/home') // refresh the onboarding "Your profile" check
   }
   return r

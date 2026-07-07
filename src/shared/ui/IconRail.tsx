@@ -548,9 +548,9 @@ function AccountCardSlot({ collapsed }: { collapsed: boolean }) {
             )}
 
             <div className="mt-4 space-y-1 border-t border-black/5 pt-3 text-left">
-              <MenuLink href="/account?tab=profile" icon={User} label="My Profile" onClick={() => setMenuOpen(false)} />
-              <MenuLink href="/account?tab=company" icon={Building2} label="Company Profile" onClick={() => setMenuOpen(false)} />
-              <MenuLink href="/account?tab=settings" icon={Settings} label="Settings" onClick={() => setMenuOpen(false)} />
+              <MenuLink href="/settings/profile" icon={User} label="My Profile" onClick={() => setMenuOpen(false)} />
+              <MenuLink href="/settings/organization/profile" icon={Building2} label="Company Profile" onClick={() => setMenuOpen(false)} />
+              <MenuLink href="/settings" icon={Settings} label="Settings" onClick={() => setMenuOpen(false)} />
               <form action={signOut}>
                 <button
                   type="submit"
