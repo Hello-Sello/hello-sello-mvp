@@ -42,6 +42,7 @@ import {
   RefreshCcw,
   RotateCcw,
   Trash2,
+  X,
 } from "lucide-react";
 import { averageMarginOf, formatMoney, lineValueOf, sumLineValue } from "../lib/derive";
 import { paymentTermLabel } from "../lib/paymentTerms";
@@ -56,6 +57,7 @@ import type {
   CatalogProduct,
   DealCardView,
   DraftLineInput,
+  MemberView,
   PromotionView,
   ThingView,
 } from "../types";
@@ -91,20 +93,6 @@ function dateLabel(iso: string | null): string {
     month: "short",
     year: "numeric",
   }).format(new Date(iso));
-}
-
-const STATUS_LABEL: Record<string, string> = {
-  draft: "Draft",
-  withdrawn: "Withdrawn",
-  confirmed: "Confirmed",
-  amended: "Open",
-  done: "Deal executed",
-  cancelled: "Cancelled",
-  ticket_created: "Ticket opened",
-  ticket_closed: "Ticket closed",
-};
-function statusLabel(status: string): string {
-  return STATUS_LABEL[status] ?? "Open";
 }
 
 function initialsOf(name: string): string {
@@ -203,12 +191,22 @@ export function CardFront({
   editMode = false,
   onExitEdit,
   onActivity,
+  onClose,
+  people = [],
+  viewerPersonId,
+  viewerCompanyId,
 }: {
   data: DealCardView;
   /** the flat Open Items list (D-15); wired from the panel host / 07-08. */
   things?: ThingView[];
   /** the deal_workspace_id - lets Open Items inline-add (createThing). */
   workspaceId?: string | null;
+  /** both companies' deal members - Open Items' assignable people (@mention/assign). */
+  people?: MemberView[];
+  /** the viewer's person id - marks "You" + enables assigning in Open Items. */
+  viewerPersonId?: string | null;
+  /** the viewer's company id - Open Items' private ownership + filter. */
+  viewerCompanyId?: string | null;
   /** whether the whole card is in inline row-edit mode (D-16); owned by DealCard. */
   editMode?: boolean;
   /** leave edit mode after a successful "Send change". */
@@ -216,6 +214,9 @@ export function CardFront({
   /** flip to the Signals & Logs back face - the title-bar "Activity" control.
    *  Owned by DealCard (which holds the flip state); the pill hides when absent. */
   onActivity?: () => void;
+  /** close the whole card panel - the title-bar X (from the panel host). Absent =
+   *  no X (e.g. the workspace/inline mounts that have no panel to close). */
+  onClose?: () => void;
 }) {
   const { card, sellerName, buyerName, lineItems, lineMargins, viewerSide, myNote, theirNote } = data;
   const cardId = card.id;
@@ -409,6 +410,19 @@ export function CardFront({
              (DealCard) float into the pl-12 / pr-12 gutters, so they read as the
              left-most and right-most controls of this bar. (fixed) ---- */}
       <div className="dc-titlebar flex items-center gap-2 py-2.5 pl-12 pr-12">
+        {/* close the panel - lives ON the title bar now (no separate strip above),
+            so the X shares this line instead of costing its own row. */}
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close deal card"
+            title="Close"
+            className="dc-tb-btn grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
         <button
           type="button"
           onClick={onTalkAboutDeal}
@@ -454,17 +468,15 @@ export function CardFront({
               </div>
               <div className="mt-0.5 flex items-center justify-end gap-1.5 text-[10px] text-[color:var(--dc-ink-55)]">
                 <span>{dateLabel(card.created_at)}</span>
-                <span className="inline-flex items-center gap-1">
-                  <span className="h-1.5 w-1.5 rounded-full bg-success" />
-                  {statusLabel(card.status)} · v{card.version}
-                </span>
               </div>
             </div>
           </header>
           <div className="dc-double-rule" />
 
-          {/* ---- 3 · PARTIES (fixed) ---- */}
-          <div className="flex items-baseline gap-2 py-3">
+          {/* ---- 3 · PARTIES (fixed) - seller pinned to the LEFT end, buyer to the
+                 RIGHT end of the paper, arrow between, so the two sides read as
+                 clearly opposite ends (feedback: two different ends). ---- */}
+          <div className="flex items-baseline justify-between gap-3 py-3">
             <div className="flex min-w-0 items-baseline gap-1.5">
               <span className="shrink-0 text-[9px] font-bold uppercase tracking-[0.16em] text-[color:var(--dc-ink-38)]">
                 Seller
@@ -482,7 +494,7 @@ export function CardFront({
               className="h-3.5 w-3.5 shrink-0 self-center text-[color:var(--dc-pink)]"
               strokeWidth={2.2}
             />
-            <div className="flex min-w-0 items-baseline gap-1.5">
+            <div className="flex min-w-0 items-baseline justify-end gap-1.5 text-right">
               <span className="shrink-0 text-[9px] font-bold uppercase tracking-[0.16em] text-[color:var(--dc-ink-38)]">
                 Buyer
               </span>
@@ -754,7 +766,9 @@ export function CardFront({
         <OpenItems
           things={things}
           workspaceId={workspaceId}
-          viewerCompanyId={isSeller ? data.sellerCompanyId : null}
+          people={people}
+          viewerPersonId={viewerPersonId}
+          viewerCompanyId={viewerCompanyId ?? (isSeller ? data.sellerCompanyId : null)}
         />
       </Sec>
 

@@ -65,6 +65,7 @@ export {
   getOwnCatalog,
   getWorkspace,
   getThings,
+  getDealPeople,
   getDealArtifacts,
   getPromotion,
   resolveP2pRecipient,

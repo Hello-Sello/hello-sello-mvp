@@ -5,8 +5,10 @@ import {
   getDealCard,
   getWorkspace,
   getThings,
+  getDealPeople,
   DealCard,
   type DealCardView,
+  type MemberView,
   type ThingView,
 } from "@/modules/deals";
 
@@ -41,6 +43,11 @@ export function DealCardPanelHost() {
   // before (or when) the extra reads resolve.
   const [things, setThings] = useState<ThingView[]>([]);
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
+  // Open Items' assignable people (both companies' deal members) + who the viewer
+  // is, resolved from the SAME getWorkspace read - powers @mention + assign (07-07).
+  const [people, setPeople] = useState<MemberView[]>([]);
+  const [viewerPersonId, setViewerPersonId] = useState<string | null>(null);
+  const [viewerCompanyId, setViewerCompanyId] = useState<string | null>(null);
 
   // listen for the open-card event (fired by DealPin's chip + RecordTabs' button)
   useEffect(() => {
@@ -60,19 +67,38 @@ export function DealCardPanelHost() {
   // results on a fast close/reopen.
   useEffect(() => {
     let alive = true;
-    setThings([]);
-    setWorkspaceId(null);
     void (async () => {
+      // Reset up front (inside the async body, not synchronously in the effect
+      // body) so the previous card's Things never flash on the next one - and
+      // without tripping react-hooks/set-state-in-effect. This still runs in the
+      // same tick (before the first await), so there is no stale flash.
+      setThings([]);
+      setWorkspaceId(null);
+      setPeople([]);
+      setViewerPersonId(null);
+      setViewerCompanyId(null);
       const d = openCardId ? await getDealCard(openCardId).catch(() => null) : null;
       if (alive) setData(d);
       if (!openCardId) return;
 
       const ws = await getWorkspace(openCardId).catch(() => null);
       const wsId = ws?.workspaceId ?? null;
-      const list = wsId ? await getThings(wsId).catch(() => []) : [];
+      // the Things list + the assignable ROSTER (both companies' people) in
+      // parallel - the roster powers Open Items' @mention + assign list.
+      const [list, roster] = await Promise.all([
+        wsId ? getThings(wsId).catch(() => []) : Promise.resolve([] as ThingView[]),
+        getDealPeople(openCardId).catch(() => [] as MemberView[]),
+      ]);
       if (alive) {
         setWorkspaceId(wsId);
         setThings(list);
+        setPeople(roster);
+        setViewerCompanyId(ws?.viewerCompanyId ?? null);
+        setViewerPersonId(
+          roster.find((m) => m.isViewer)?.personId ??
+            ws?.members.find((m) => m.isViewer)?.personId ??
+            null,
+        );
       }
     })();
     return () => {
@@ -104,31 +130,35 @@ export function DealCardPanelHost() {
   if (!openCardId) return null;
 
   return (
-    // a right-anchored side panel (D-32): a light backdrop close-catcher + a
-    // glass-strong panel pinned to the right edge, scrollable, holding the card.
-    <div className="fixed inset-0 z-50">
-      <button
-        type="button"
-        aria-label="Close deal card"
-        onClick={closePanel}
-        className="absolute inset-0 bg-ink/30 backdrop-blur-sm"
-      />
-      <div className="glass-strong absolute inset-y-2 right-2 flex w-[420px] max-w-[calc(100vw-1rem)] flex-col overflow-hidden rounded-3xl">
-        <div className="min-h-0 flex-1 overflow-y-auto p-3">
-          {data ? (
-            <DealCard
-              key={openCardId}
-              data={data}
-              things={things}
-              workspaceId={workspaceId}
-            />
-          ) : (
-            <div className="flex h-full items-center justify-center text-sm text-ink/40">
-              Loading deal card…
-            </div>
-          )}
-        </div>
+    // D-32 (revised): an IN-FLOW 50/50 panel, NOT a blurred overlay. As a flex
+    // sibling of the surface content (see the Connect layout), this flex-1 aside
+    // shrinks the content to the other half - the chat "minimizes" and the card
+    // takes the right half, no backdrop, no blur. The X closes it and the content
+    // expands back; the header's deal control reopens it.
+    <aside
+      aria-label="Deal card"
+      className="glass-strong flex min-w-0 flex-1 flex-col overflow-hidden rounded-3xl"
+    >
+      {/* No separate top bar - the close X now lives ON the card's own title bar
+          (passed as onClose), so the panel spends no extra row on it. */}
+      <div className="min-h-0 flex-1 overflow-y-auto p-3">
+        {data ? (
+          <DealCard
+            key={openCardId}
+            data={data}
+            things={things}
+            workspaceId={workspaceId}
+            people={people}
+            viewerPersonId={viewerPersonId}
+            viewerCompanyId={viewerCompanyId}
+            onClose={closePanel}
+          />
+        ) : (
+          <div className="flex h-full items-center justify-center text-sm text-ink/40">
+            Loading deal card…
+          </div>
+        )}
       </div>
-    </div>
+    </aside>
   );
 }

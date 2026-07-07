@@ -30,13 +30,17 @@ import { useState } from "react";
 import { FlipHorizontal2, Lock, Pencil } from "lucide-react";
 import { CardFront } from "./CardFront";
 import { CardBack } from "./CardBack";
-import type { DealCardView, ThingView } from "../types";
+import type { DealCardView, MemberView, ThingView } from "../types";
 
 export function DealCard({
   data,
   onEdit,
+  onClose,
   things = [],
   workspaceId,
+  people = [],
+  viewerPersonId,
+  viewerCompanyId,
 }: {
   data: DealCardView;
   /**
@@ -45,10 +49,17 @@ export function DealCard({
    * edit-mode (D-16). Kept as a prop so the strip still controls editability.
    */
   onEdit?: () => void;
+  /** close the whole card panel - forwarded to the title-bar X (panel host only). */
+  onClose?: () => void;
   /** the flat Open Items list for the front (D-15); wired from the panel host. */
   things?: ThingView[];
   /** the deal_workspace_id - lets Open Items inline-add (createThing). */
   workspaceId?: string | null;
+  /** both companies' deal members - Open Items' assignable people. */
+  people?: MemberView[];
+  /** the viewer's person + company - Open Items "You" + private ownership. */
+  viewerPersonId?: string | null;
+  viewerCompanyId?: string | null;
 }) {
   const [flipped, setFlipped] = useState(false);
   const [editMode, setEditMode] = useState(false);
@@ -112,9 +123,13 @@ export function DealCard({
             data={data}
             things={things}
             workspaceId={workspaceId}
+            people={people}
+            viewerPersonId={viewerPersonId}
+            viewerCompanyId={viewerCompanyId}
             editMode={editMode}
             onExitEdit={() => setEditMode(false)}
             onActivity={() => setFlipped(true)}
+            onClose={onClose}
           />
         </div>
 

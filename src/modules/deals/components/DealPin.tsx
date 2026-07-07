@@ -29,7 +29,7 @@ import {
   Check,
   ChevronDown,
   FileText,
-  MoreHorizontal,
+  MoreVertical,
   Plus,
   Sparkles,
   Users,
@@ -471,112 +471,129 @@ export function DealPin({
           relationship button (icon + name) + the deal-number dropdown + the ⋯
           menu. A thin divider sits under it, separating it from the controls. */}
       {variant === "chat" && threadId && (
-        <div className="flex items-center gap-3 border-b border-black/[0.06] px-4 py-3.5">
+        <div className="flex items-center gap-2 border-b border-black/[0.06] px-4 py-3">
           {/* left: circle avatar + person name */}
-          <span className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white text-sm font-semibold text-ink/70 ring-1 ring-black/5">
+          <span className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-sm font-semibold text-ink/70 ring-1 ring-black/5">
             {counterpartyInitials}
             {/* presence dot - UI placeholder until real presence is wired */}
             <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-success ring-2 ring-white" />
           </span>
-          <span className="min-w-0 truncate text-[15px] font-semibold text-ink">
+          <span className="min-w-0 shrink truncate text-[15px] font-semibold text-ink">
             {counterpartyPersonName ?? counterpartyName ?? "Deal"}
           </span>
 
-          {/* right group, by the ⋯: relationship (icon + company) + deal + menu */}
-          <div className="ml-auto flex shrink-0 items-center gap-2">
-            {/* relationship - icon + company name as one calm glass button */}
-            <Link
-              href={`/connect/relationship/${relationshipId}`}
-              title={`Relationship with ${counterpartyName ?? "this company"}`}
-              className="inline-flex max-w-[14rem] items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium text-ink/70 ring-1 ring-black/[0.06] transition hover:bg-white/70 hover:text-brand hover:ring-brand/20"
-            >
-              <Users size={14} strokeWidth={1.75} className="shrink-0 text-ink/45" />
-              <span className="truncate">{counterpartyName ?? "Relationship"}</span>
-            </Link>
+          {/* one merged header line now: the company + the deal all sit LEFT next
+              to the name (strip 1 - the standalone deal chip - is retired). The
+              deal number opens the card via the small pink card icon beside it. */}
+          {/* relationship - icon + company name as one calm glass button */}
+          <Link
+            href={`/connect/relationship/${relationshipId}`}
+            title={`Relationship with ${counterpartyName ?? "this company"}`}
+            className="inline-flex max-w-[10rem] shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium text-ink/70 ring-1 ring-black/[0.06] transition hover:bg-white/70 hover:text-brand hover:ring-brand/20"
+          >
+            <Users size={14} strokeWidth={1.75} className="shrink-0 text-ink/45" />
+            <span className="truncate">{counterpartyName ?? "Relationship"}</span>
+          </Link>
 
-            {/* deal-number dropdown - calm glass; the HS number when it exists */}
-            {hasDeal && (
-              <div className="relative shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setPicking((p) => !p)}
-                  aria-haspopup="listbox"
-                  aria-expanded={picking}
-                  aria-label="Choose a deal"
-                  className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium text-ink/70 ring-1 ring-black/[0.06] transition hover:bg-white/70 hover:text-ink"
-                >
-                  {selectedDeal?.hsNumber ?? "Draft deal"}
-                  <ChevronDown size={13} strokeWidth={2} className="text-ink/40" />
-                </button>
-                {picking && (
-                  <>
-                    <div className="fixed inset-0 z-10" onClick={() => setPicking(false)} />
-                    <div className="glass-strong absolute right-0 top-full z-20 mt-1.5 w-72 rounded-2xl p-1.5">
-                      <p className="px-2.5 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wide text-ink/40">
-                        Deals with {counterpartyName ?? "this company"}
-                      </p>
-                      {deals.map((d) => (
-                        <button
-                          key={d.id}
-                          type="button"
-                          onClick={() => pickDeal(d.id)}
-                          className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition hover:bg-black/[0.04]"
-                        >
-                          <span className="w-1 self-stretch rounded-full bg-brand" aria-hidden />
-                          <span className="flex min-w-0 flex-1 flex-col">
-                            <span className="truncate text-xs font-semibold text-ink">
-                              {d.hsNumber ?? "Draft deal"}
-                            </span>
-                            <span className="text-[10px] text-ink/45">Updated {timeAgo(d.updatedAt)}</span>
-                          </span>
-                          <StatusBadge status={d.status} />
-                          {d.id === selectedId && (
-                            <Check size={14} strokeWidth={2.5} className="shrink-0 text-brand" />
-                          )}
-                        </button>
-                      ))}
-                      {/* D-03 - "See all N deals" → the relationship page */}
-                      <Link
-                        href={`/connect/relationship/${relationshipId}`}
-                        onClick={() => setPicking(false)}
-                        className="mt-0.5 flex items-center justify-center rounded-lg px-2.5 py-2 text-[11px] font-semibold text-brand-deep transition hover:bg-brand-soft/30"
-                      >
-                        See all {deals.length} deals
-                      </Link>
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
-
-            {/* ⋯ menu - secondary actions */}
+          {/* deal-number dropdown - the PICKER (choose among the relationship's
+              deals). Its popover now drops from the LEFT since it moved left. */}
+          {hasDeal && (
             <div className="relative shrink-0">
               <button
                 type="button"
-                onClick={() => setMenuOpen((o) => !o)}
-                aria-label="More actions"
-                aria-haspopup="menu"
-                aria-expanded={menuOpen}
-                title="More"
-                className="flex h-9 w-9 items-center justify-center rounded-full text-ink/55 ring-1 ring-black/[0.06] transition hover:bg-white/70 hover:text-brand hover:ring-brand/20"
+                onClick={() => setPicking((p) => !p)}
+                aria-haspopup="listbox"
+                aria-expanded={picking}
+                aria-label="Choose a deal"
+                className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium text-ink/70 ring-1 ring-black/[0.06] transition hover:bg-white/70 hover:text-ink"
               >
-                <MoreHorizontal size={17} strokeWidth={1.75} />
+                {selectedDeal?.hsNumber ?? "Draft deal"}
+                <ChevronDown size={13} strokeWidth={2} className="text-ink/40" />
               </button>
-              {menuOpen && (
+              {picking && (
                 <>
-                  <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-                  <div className="glass-strong absolute right-0 top-full z-20 mt-1.5 w-56 rounded-2xl p-1.5">
+                  <div className="fixed inset-0 z-10" onClick={() => setPicking(false)} />
+                  <div className="glass-strong absolute left-0 top-full z-20 mt-1.5 w-72 rounded-2xl p-1.5">
+                    <p className="px-2.5 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wide text-ink/40">
+                      Deals with {counterpartyName ?? "this company"}
+                    </p>
+                    {deals.map((d) => (
+                      <button
+                        key={d.id}
+                        type="button"
+                        onClick={() => pickDeal(d.id)}
+                        className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition hover:bg-black/[0.04]"
+                      >
+                        <span className="w-1 self-stretch rounded-full bg-brand" aria-hidden />
+                        <span className="flex min-w-0 flex-1 flex-col">
+                          <span className="truncate text-xs font-semibold text-ink">
+                            {d.hsNumber ?? "Draft deal"}
+                          </span>
+                          <span className="text-[10px] text-ink/45">Updated {timeAgo(d.updatedAt)}</span>
+                        </span>
+                        <StatusBadge status={d.status} />
+                        {d.id === selectedId && (
+                          <Check size={14} strokeWidth={2.5} className="shrink-0 text-brand" />
+                        )}
+                      </button>
+                    ))}
+                    {/* D-03 - "See all N deals" → the relationship page */}
                     <Link
                       href={`/connect/relationship/${relationshipId}`}
-                      onClick={() => setMenuOpen(false)}
-                      className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-ink transition hover:bg-black/[0.04]"
+                      onClick={() => setPicking(false)}
+                      className="mt-0.5 flex items-center justify-center rounded-lg px-2.5 py-2 text-[11px] font-semibold text-brand-deep transition hover:bg-brand-soft/30"
                     >
-                      <Users size={15} strokeWidth={1.75} /> View relationship
+                      See all {deals.length} deals
                     </Link>
                   </div>
                 </>
               )}
             </div>
+          )}
+
+          {/* the pink card icon - the clickable "open the deal card" cue beside
+              the deal number (replaces the retired strip-1 chip). Opens the card
+              as the 50/50 side panel. */}
+          {hasDeal && (
+            <button
+              type="button"
+              onClick={openDealCard}
+              aria-label="Open the deal card"
+              title="Open the deal card"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-soft/50 text-brand ring-1 ring-brand/20 transition hover:bg-brand-soft hover:text-brand-deep"
+            >
+              <FileText size={15} strokeWidth={2} />
+            </button>
+          )}
+
+          {/* ⋮ menu - secondary actions, pushed right; vertical dots to spare
+              horizontal room now that the chat can be 50% wide */}
+          <div className="relative ml-auto shrink-0">
+            <button
+              type="button"
+              onClick={() => setMenuOpen((o) => !o)}
+              aria-label="More actions"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              title="More"
+              className="flex h-9 w-9 items-center justify-center rounded-full text-ink/55 ring-1 ring-black/[0.06] transition hover:bg-white/70 hover:text-brand hover:ring-brand/20"
+            >
+              <MoreVertical size={17} strokeWidth={1.75} />
+            </button>
+            {menuOpen && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+                <div className="glass-strong absolute right-0 top-full z-20 mt-1.5 w-56 rounded-2xl p-1.5">
+                  <Link
+                    href={`/connect/relationship/${relationshipId}`}
+                    onClick={() => setMenuOpen(false)}
+                    className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-ink transition hover:bg-black/[0.04]"
+                  >
+                    <Users size={15} strokeWidth={1.75} /> View relationship
+                  </Link>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -702,15 +719,10 @@ export function DealPin({
         </div>
       )}
 
-      {/* State C - a live deal is selected. Identity is in the P2P top bar above;
-          this row is now just the single "Deal [code]" chip (D-08) that opens the
-          card as a right-side panel. The retired [Deal Room | Deal Card] toggle,
-          the // Sella mark/curtain (D-10), and the translate glyph (D-09) are gone. */}
-      {variant === "chat" && !showProposal && hasDeal && (
-        <div className="flex items-center gap-3 border-b border-black/[0.06] px-4 py-3">
-          {dealCardChip}
-        </div>
-      )}
+      {/* State C - a live deal is selected. Its whole identity + the open-card
+          control now live in the P2P top bar above (the deal number + the pink
+          card icon), so the old standalone "Deal [code]" chip strip is retired -
+          it was a wasted row (feedback: "this strip has to go"). */}
 
       {/* State A - no deal, no proposal: a quiet invitation. p2p only (propose
           needs a p2p thread); a c2c thread with no deal shows just the label. */}

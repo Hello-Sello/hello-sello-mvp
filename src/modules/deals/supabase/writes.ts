@@ -185,6 +185,47 @@ export async function assignThing(
 }
 
 /**
+ * Rename a Thing's title (Phase 7, 07-07 follow-up). Used to weave an "@Name"
+ * assignment INTO the title text when someone is picked from a row's assign
+ * button (the assignee reads inline in the note, not as a separate chip). A
+ * single `thing` update - same shape as setThingVisibility.
+ */
+export async function renameThing(thingId: string, title: string): Promise<void> {
+  const supabase = createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("renameThing: no authenticated user");
+
+  const { error } = await supabase
+    .from("thing")
+    .update({ title: title.trim(), updated_by: user.id } as never)
+    .eq("id", thingId);
+  if (error) throw error;
+}
+
+/**
+ * Soft-delete a Thing (07-07 follow-up) - the row's dustbin. Sets deleted_at so
+ * getThings (which filters `deleted_at is null`) drops it on the next read. Same
+ * shape as the other thing writes (auth guard, throw on error).
+ */
+export async function removeThing(thingId: string): Promise<void> {
+  const supabase = createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("removeThing: no authenticated user");
+
+  const { error } = await supabase
+    .from("thing")
+    .update({ deleted_at: new Date().toISOString(), updated_by: user.id } as never)
+    .eq("id", thingId);
+  if (error) throw error;
+}
+
+/**
  * Upload the seller's invoice PDF (Phase 7, D-27/D-28) - the ONE close artifact.
  *
  * The client-side write that lands the invoice in the private `deal-artifacts`

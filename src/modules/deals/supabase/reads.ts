@@ -850,6 +850,59 @@ export async function getWorkspace(dealCardId: string): Promise<DealWorkspaceVie
 }
 
 /**
+ * Every person in BOTH deal companies (07-07 follow-up) - the assignable ROSTER
+ * for Open Items' @mention + assign list, not just the deal's two members. Reads
+ * the card's relationship, then all people in company_a + company_b. RLS (own
+ * company + the connect counterparty-visibility policy) scopes what returns.
+ * Shaped like MemberView so it drops straight into OpenItems; `role` is filler.
+ */
+export async function getDealPeople(dealCardId: string): Promise<MemberView[]> {
+  const supabase = createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("getDealPeople: no authenticated user");
+
+  const { data: cardRow, error: cardErr } = await supabase
+    .from("deal_card")
+    .select("relationship_id")
+    .eq("id", dealCardId)
+    .single();
+  if (cardErr) throw cardErr;
+
+  const { data: rel, error: relErr } = await supabase
+    .from("relationship")
+    .select("company_a_id, company_b_id")
+    .eq("id", cardRow.relationship_id)
+    .single();
+  if (relErr) throw relErr;
+
+  const companyIds = [rel.company_a_id, rel.company_b_id];
+  const { data: people, error: pplErr } = await supabase
+    .from("person")
+    .select("id, first_name, last_name, company_id")
+    .in("company_id", companyIds);
+  if (pplErr) throw pplErr;
+
+  const { data: companies } = await supabase
+    .from("company")
+    .select("id, name")
+    .in("id", companyIds);
+  const companyNameById = new Map((companies ?? []).map((c) => [c.id, c.name] as const));
+
+  return (people ?? []).map((p) => ({
+    id: p.id,
+    personId: p.id,
+    name: [p.first_name, p.last_name].filter(Boolean).join(" ") || "Unknown person",
+    companyId: p.company_id ?? "",
+    companyName: (p.company_id && companyNameById.get(p.company_id)) || "Unknown company",
+    role: "member" as MemberRole,
+    isViewer: p.id === user.id,
+  }));
+}
+
+/**
  * The card's Open Items - the flat, stageless Things checklist (D-15). RLS on
  * `thing` already scopes to workspace membership (the same guarantee
  * getDealArtifacts relies on), so this is a flat workspace-scoped fetch with NO

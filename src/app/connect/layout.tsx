@@ -35,17 +35,21 @@ export default async function ConnectLayout({
   }
 
   return (
-    <section className="flex h-full min-w-0 flex-1 flex-col">
-      {children}
-      {/* the deal card panel host (D-31/D-32) - mounted once at the Connect root
-          so any page's "Deal [code]" chip / "Open Deal Card" button can open the
-          card as a right-side panel; it listens for the `hs:open-deal-card`
-          window event and mounts the flip DealCard (the acyclic seam - no module
-          back-imports another). Replaces the retired Deal Room overlay host. */}
+    <section className="flex h-full min-w-0 flex-1 gap-3">
+      {/* the surface content (chat, relationship, inbox…). It shrinks to the left
+          half when the deal card opens beside it - the chat "minimizes", the card
+          takes the other half. */}
+      <div className="flex min-w-0 flex-1 flex-col">{children}</div>
+      {/* the deal card panel host (D-31/D-32, revised) - now an IN-FLOW 50/50
+          panel, not a blurred overlay. Any page's deal control fires
+          `hs:open-deal-card`; this host renders the flip DealCard as a flex
+          sibling here (chat left, card right, no blur), and its X closes it so
+          the content expands back. Mounted once at the Connect root; the acyclic
+          seam holds (no module back-imports another). */}
       <DealCardPanelHost />
-      {/* the Sella placeholder bar (D-10) - the retired inline // mark + curtain
-          are gone; Sella is now one minimal thin bar on the right edge that
-          opens/closes on click with no function yet (real Sella is Phase 8). */}
+      {/* the Sella placeholder bar (D-10) - the fixed right-edge ping bubble; the
+          real Sella opens from it in Phase 8. position:fixed keeps it out of the
+          split's flex flow. */}
       <SellaPlaceholderBar />
     </section>
   );
