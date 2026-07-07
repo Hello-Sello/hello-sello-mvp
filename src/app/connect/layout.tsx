@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { requireVerified } from "@/shared/auth";
 import { DealCardPanelHost } from "./DealCardPanelHost";
+import { SellaPlaceholderBar } from "./SellaPlaceholderBar";
 
 /**
  * Connect surface layout. After F2 there is only ONE global nav rail (IconRail),
@@ -42,6 +43,10 @@ export default async function ConnectLayout({
           window event and mounts the flip DealCard (the acyclic seam - no module
           back-imports another). Replaces the retired Deal Room overlay host. */}
       <DealCardPanelHost />
+      {/* the Sella placeholder bar (D-10) - the retired inline // mark + curtain
+          are gone; Sella is now one minimal thin bar on the right edge that
+          opens/closes on click with no function yet (real Sella is Phase 8). */}
+      <SellaPlaceholderBar />
     </section>
   );
 }
