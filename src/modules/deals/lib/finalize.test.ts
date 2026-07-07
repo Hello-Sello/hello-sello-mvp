@@ -1,66 +1,47 @@
 /**
- * Unit tests for the finalization GATE (Phase 5, D-15).
+ * Unit tests for the finalization GATE (Phase 7, D-27/D-28).
  *
- * `finalizeDeal` itself is integration-heavy (it loads the card, reads stages,
- * upserts a seal) and is verified against the LIVE local DB at apply time + a
- * Wave-2 cross-company isolation check. The one piece of PURE logic is the gate
- * decision: "every one of the deal's stages has a completion row". That decision
- * is the load-bearing rule (finalization is available ONLY when all stages are
- * marked done), so it lives in `allStagesDone` and is unit-tested here.
+ * The Stages finalize gate (allStagesDone / canFinalizeFromStatus) is RETIRED
+ * with Stages (D-15). D-27 replaces it: the SELLER uploading a real invoice PDF is
+ * the ONE close trigger. The load-bearing PURE decision is `canFinalizeByInvoice`
+ * - "an AGREED deal with a seller invoice may close" - so it is unit-tested here.
+ *
+ * `finalizeDeal` itself stays integration-heavy (it loads the card + relationship,
+ * derives the seller, and checks for a seller-uploaded invoice) and is exercised
+ * e2e in 07-08 against the local DB; this file locks only the gate decision.
  */
 import { describe, it, expect } from "vitest";
-import { allStagesDone, canFinalizeFromStatus } from "./finalize";
+import { canFinalizeByInvoice } from "./finalize";
 import type { DealCardStatus } from "../types";
 
-describe("allStagesDone (the D-15 finalization gate)", () => {
-  const FIVE = [
-    "negotiation",
-    "compliance_quality",
-    "agreement",
-    "payment",
-    "fulfilment_delivery",
-  ];
-
-  it("is TRUE only when every stage has a completion row", () => {
-    expect(allStagesDone(FIVE, FIVE)).toBe(true);
+describe("canFinalizeByInvoice (the D-27 invoice close gate)", () => {
+  it("BLOCKS a non-agreed deal even with an invoice (never close a draft)", () => {
+    // a draft was never confirmed by both sides - an invoice must not skip the gate.
+    expect(canFinalizeByInvoice("draft", true)).toBe(false);
   });
 
-  it("is FALSE when one stage is missing a completion row", () => {
-    const allButOne = FIVE.slice(0, 4); // 'fulfilment_delivery' not done
-    expect(allStagesDone(FIVE, allButOne)).toBe(false);
+  it("BLOCKS an agreed deal with NO seller invoice", () => {
+    // agreed but nothing uploaded - the close trigger has not fired.
+    expect(canFinalizeByInvoice("confirmed", false)).toBe(false);
   });
 
-  it("is FALSE when no stage is marked done", () => {
-    expect(allStagesDone(FIVE, [])).toBe(false);
+  it("ALLOWS a confirmed deal with a seller invoice", () => {
+    expect(canFinalizeByInvoice("confirmed", true)).toBe(true);
   });
 
-  it("ignores duplicate/extra completion codes - only the stage set matters", () => {
-    const withDupes = [...FIVE, "agreement", "payment"];
-    expect(allStagesDone(FIVE, withDupes)).toBe(true);
+  it("ALLOWS an amended deal with a seller invoice", () => {
+    // `amended` is the other live agreed state (a committed two-sided change).
+    expect(canFinalizeByInvoice("amended", true)).toBe(true);
   });
 
-  it("is FALSE when there are no stages at all (nothing to finalize)", () => {
-    // a deal with no stages can never be 'all done' - guards an empty-set
-    // false-positive (every() over [] is vacuously true, which would be wrong).
-    expect(allStagesDone([], [])).toBe(false);
-  });
-});
-
-describe("canFinalizeFromStatus (the HI-02 status precondition)", () => {
-  it("ALLOWS finalize from an agreed status (confirmed / amended)", () => {
-    // the two live agreed states - both sides have sealed (confirmed) or a
-    // two-sided change committed (amended). `done` must be reachable from these.
-    expect(canFinalizeFromStatus("confirmed")).toBe(true);
-    expect(canFinalizeFromStatus("amended")).toBe(true);
+  it("BLOCKS a deal that is already done (terminal; idempotency handled upstream)", () => {
+    expect(canFinalizeByInvoice("done", true)).toBe(false);
   });
 
-  it("BLOCKS finalize from a never-agreed or terminal status", () => {
-    // the load-bearing guard: a draft was never confirmed by both sides, so it
-    // must not be finalizable straight to `done` (bypassing the confirm gate);
-    // withdrawn/cancelled are dead; done is handled by the idempotency early-return.
-    const blocked: DealCardStatus[] = ["draft", "withdrawn", "cancelled", "done"];
-    for (const status of blocked) {
-      expect(canFinalizeFromStatus(status)).toBe(false);
+  it("BLOCKS a dead deal (withdrawn / cancelled) even with an invoice", () => {
+    const dead: DealCardStatus[] = ["withdrawn", "cancelled"];
+    for (const status of dead) {
+      expect(canFinalizeByInvoice(status, true)).toBe(false);
     }
   });
 });
