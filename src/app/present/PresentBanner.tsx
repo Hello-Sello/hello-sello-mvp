@@ -3,8 +3,8 @@
 /**
  * The MVP shop banner (D-05). A LinkedIn-proportion 4:1 cover carrying the logo
  * tile + enlarged company name (h1) and sub-headline (tagline), with the
- * banner-mounted owner controls "+Add products", "Manage shop" and "Present mode"
- * shown ONLY when not editing.
+ * banner-mounted owner controls "Manage shop" and "Present mode" shown ONLY when
+ * not editing ("+ Add products" now lives in the edit-mode SaveBar, not here).
  *
  * Unified edit model (F-01): "Manage shop" is the single edit entry — pink stays
  * reserved for the Save bar, so this is a calm white system button. In edit mode
@@ -20,7 +20,7 @@
  */
 import { useRef } from "react";
 import Link from "next/link";
-import { Plus, Pencil, ImagePlus, ScreenShare } from "lucide-react";
+import { Pencil, ImagePlus, ScreenShare } from "lucide-react";
 
 export function PresentBanner({
   companyName,
@@ -33,7 +33,6 @@ export function PresentBanner({
   onNameChange,
   onTaglineChange,
   onPickCover,
-  onAddProducts,
   onManage,
   onEditLogo,
   onPresent,
@@ -48,7 +47,6 @@ export function PresentBanner({
   onNameChange: (v: string) => void;
   onTaglineChange: (v: string) => void;
   onPickCover: (f: File) => void;
-  onAddProducts: () => void;
   onManage: () => void;
   onEditLogo: () => void;
   onPresent: () => void;
@@ -56,20 +54,13 @@ export function PresentBanner({
   return (
     <section data-testid="present-banner" className="flex flex-col gap-2">
       {/* Banner-mounted owner controls, shown ONLY when not editing/presenting.
-          "+Add products" opens the manual-add drawer; "Manage shop" is the single
-          edit entry (the sticky SaveBar then owns Save/Exit); "Present mode" hides
-          the app chrome (07-06 — an in-app view, not the OS Fullscreen API). In
-          edit mode the row collapses: Save/Exit live in the pink SaveBar, the logo
-          is edited inline, and products are added via the in-grid "+ Add product". */}
+          "Manage shop" is the single edit entry (the sticky SaveBar then owns
+          Save/Exit AND "+ Add products" — adding products is a manage-shop action,
+          not a public-shop control); "Present mode" hides the app chrome (07-06 —
+          an in-app view, not the OS Fullscreen API). In edit mode this row
+          collapses entirely. */}
       {!presenting && !editing && (
         <div className="flex items-center justify-end gap-2">
-          <button
-            type="button"
-            onClick={onAddProducts}
-            className="flex items-center gap-1.5 rounded-full bg-brand px-4 py-2 text-sm font-bold text-white hover:bg-brand-deep"
-          >
-            <Plus size={16} /> Add products
-          </button>
           <button
             type="button"
             onClick={onManage}

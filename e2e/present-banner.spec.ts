@@ -1,9 +1,11 @@
 /**
  * Phase 7 — Present banner E2E spec (07-05, UX-06 + F-01).
  *
- * Behavior: the "+Add products" and "Manage shop" controls live in the banner;
- * "Manage shop" turns on in-place edit and reveals a sticky Save that pulses only
- * when there are unsaved changes (data-dirty flips true on the first field edit).
+ * Behavior: the "Manage shop" control lives in the banner; "Manage shop" turns on
+ * in-place edit and reveals a sticky Save that pulses only when there are unsaved
+ * changes (data-dirty flips true on the first field edit). "+ Add products" is NOT
+ * a public-shop control — it lives in the edit-mode SaveBar (adding products is a
+ * manage-shop action), so the public shop view never shows it.
  *
  * F-01 (fidelity) additions: "Manage shop" is now the ONE edit entry and it puts
  * the WHOLE page into a calm grey edit wash (the surface wrapper flips
@@ -28,12 +30,20 @@ async function signIn(page: Page) {
   await page.waitForURL((url) => !url.pathname.startsWith("/login"));
 }
 
-test('UX-06 · "+Add products" and "Manage shop" live in the banner', async ({ page }) => {
+test('UX-06 · "Manage shop" lives in the banner; "Add products" moves into edit mode', async ({ page }) => {
   await signIn(page);
   await page.goto("/present");
   const banner = page.getByTestId("present-banner");
-  await expect(banner.getByRole("button", { name: /add products/i })).toBeVisible();
+  // "Manage shop" is the banner's edit entry; the banner no longer carries an
+  // "Add products" control — adding products is a manage-shop action. (An empty
+  // shop may still show an "Add products" CTA in the grid, so we scope to the
+  // banner, not the whole page.)
   await expect(banner.getByRole("button", { name: /manage shop/i })).toBeVisible();
+  await expect(banner.getByRole("button", { name: /add products/i })).toHaveCount(0);
+
+  // Entering "Manage shop" reveals "+ Add products" in the sticky SaveBar.
+  await banner.getByRole("button", { name: /manage shop/i }).click();
+  await expect(page.getByRole("button", { name: /add products/i })).toBeVisible();
 });
 
 test("UX-06 · Manage shop shows a sticky Save that pulses only when dirty", async ({ page }) => {

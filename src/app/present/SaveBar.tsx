@@ -13,9 +13,12 @@
  *
  * The bar renders ONLY in edit mode; the "Manage shop" entry lives in the banner.
  * Save commits the in-place edits (the parent wires `onSave` to updateShopProfile);
- * Exit discards them (with a confirm when dirty).
+ * Exit discards them (with a confirm when dirty). "+ Add products" opens the
+ * manual-add drawer — adding products is a manage-shop action, so its one home is
+ * here (top-left of edit mode), not the public shop view. It stays a calm white
+ * button: pink is reserved for Save.
  */
-import { Check, Loader2, X } from "lucide-react";
+import { Check, Loader2, Plus, X } from "lucide-react";
 
 export function SaveBar({
   dirty,
@@ -23,17 +26,30 @@ export function SaveBar({
   error,
   onSave,
   onDiscard,
+  onAddProducts,
 }: {
   dirty: boolean;
   busy?: boolean;
   error?: string | null;
   onSave: () => void;
   onDiscard: () => void;
+  onAddProducts?: () => void;
 }) {
   return (
     <div className="sticky top-0 z-40 -mx-1 flex items-center justify-end gap-2 px-1 py-1">
+      {/* mr-auto keeps Add-products at the far left while Exit/Save stay right. */}
+      {onAddProducts && (
+        <button
+          type="button"
+          onClick={onAddProducts}
+          disabled={busy}
+          className="mr-auto flex items-center gap-1.5 rounded-full bg-white/70 px-4 py-2 text-sm font-bold text-ink/75 shadow-sm hover:bg-white disabled:opacity-40"
+        >
+          <Plus size={16} /> Add products
+        </button>
+      )}
       {error && (
-        <span className="mr-auto rounded-full bg-rose-50 px-3 py-1 text-sm font-semibold text-rose-600">
+        <span className="rounded-full bg-rose-50 px-3 py-1 text-sm font-semibold text-rose-600">
           {error}
         </span>
       )}

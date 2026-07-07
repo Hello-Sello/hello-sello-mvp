@@ -421,36 +421,44 @@ export function ProductCard({
                 row becomes a controlled input/select, batched the same way as the
                 strip above; lineage clamped to 2 lines in the read view. The batch
                 editor (edit) / picker (view) live here so the card keeps its fixed
-                height. */}
-            <div className="mt-1.5 flex min-h-0 flex-1 flex-col overflow-y-auto px-3.5">
-              {specRows.map((row) => (
-                <div key={row.label} className="flex items-start gap-2 border-b border-ink/10 py-1.5 text-xs">
-                  <span className="w-[78px] shrink-0 font-medium text-ink-muted">{row.label}</span>
-                  {editing ? (
-                    <SpecFieldEditor
-                      row={row}
-                      fields={fields}
-                      product={p}
-                      onChange={(patch) => onEditField?.(p.id, patch)}
-                    />
-                  ) : (
-                    <span className={`font-semibold leading-snug ${row.label === "Lineage" ? "line-clamp-2" : ""}`}>
-                      {row.display}
-                    </span>
-                  )}
-                </div>
-              ))}
-              {editing ? (
-                <BatchEditor
-                  product={p}
-                  draft={draft}
-                  onInsert={onBatchInsert}
-                  onChange={onBatchChange}
-                  onRemove={onBatchRemove}
-                />
-              ) : (
-                p.batches.length > 0 && <BatchPicker product={p} />
-              )}
+                height. The bottom fade + chevron cue that the list scrolls inside
+                that fixed height — else the rows below the fold are easy to miss. */}
+            <div className="relative mt-1.5 flex min-h-0 flex-1 flex-col">
+              <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3.5">
+                {specRows.map((row) => (
+                  <div key={row.label} className="flex items-start gap-2 border-b border-ink/10 py-1.5 text-xs">
+                    <span className="w-[78px] shrink-0 font-medium text-ink-muted">{row.label}</span>
+                    {editing ? (
+                      <SpecFieldEditor
+                        row={row}
+                        fields={fields}
+                        product={p}
+                        onChange={(patch) => onEditField?.(p.id, patch)}
+                      />
+                    ) : (
+                      <span className={`font-semibold leading-snug ${row.label === "Lineage" ? "line-clamp-2" : ""}`}>
+                        {row.display}
+                      </span>
+                    )}
+                  </div>
+                ))}
+                {editing ? (
+                  <BatchEditor
+                    product={p}
+                    draft={draft}
+                    onInsert={onBatchInsert}
+                    onChange={onBatchChange}
+                    onRemove={onBatchRemove}
+                  />
+                ) : (
+                  p.batches.length > 0 && <BatchPicker product={p} />
+                )}
+              </div>
+              {/* Scroll cue — pinned over the bottom of the scroll area, never
+                  interactive; fades the last row so it reads as "more below". */}
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 flex h-6 items-end justify-center bg-gradient-to-t from-white via-white/70 to-transparent">
+                <ChevronDown size={13} className="mb-0.5 text-ink/30" />
+              </div>
             </div>
 
             {/* footer: pack bubbles + price, then availability + stepper + Add */}

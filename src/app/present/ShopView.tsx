@@ -431,11 +431,12 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
 
   const surface = (
     <>
-      {/* Sticky pulsing Save appears only while editing; "Manage shop" / "+Add
-          products" / "Present mode" live in the banner below. (Never both edit
-          and present at once — enterPresent() clears edit mode.) */}
+      {/* Sticky pulsing Save appears only while editing; it also carries "+ Add
+          products" (a manage-shop action). "Manage shop" / "Present mode" live in
+          the banner below. (Never both edit and present at once — enterPresent()
+          clears edit mode.) */}
       {editing && (
-        <SaveBar dirty={dirty} busy={busy} error={error} onSave={save} onDiscard={discard} />
+        <SaveBar dirty={dirty} busy={busy} error={error} onSave={save} onDiscard={discard} onAddProducts={() => setDrawerOpen(true)} />
       )}
 
       <PresentBanner
@@ -449,7 +450,6 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
         onNameChange={(v) => updateEdit("name", v)}
         onTaglineChange={(v) => updateEdit("tagline", v)}
         onPickCover={(f) => { setCoverFile(f); setDirty(true); }}
-        onAddProducts={() => setDrawerOpen(true)}
         onManage={enterEdit}
         onEditLogo={() => setBrandingOpen((v) => !v)}
         onPresent={enterPresent}
