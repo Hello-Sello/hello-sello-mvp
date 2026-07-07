@@ -60,20 +60,21 @@ export function DealCard({
 
   return (
     <div className="relative w-full" style={{ perspective: "1600px" }}>
-      {/* flip - top-left corner */}
+      {/* flip - top-left corner. Sits in the title-bar's left gutter (CardFront
+          leaves pl-12 clear), so it reads as the left-most title-bar control. */}
       <button
         onClick={() => setFlipped((f) => !f)}
-        className="absolute left-2.5 top-2.5 z-30 flex h-[28px] w-[28px] items-center justify-center rounded-full border border-black/[0.07] bg-white/70 text-ink/55 transition hover:bg-brand-soft hover:text-brand-deep"
+        className="dc-tb-btn absolute left-3 top-3 z-30 grid h-[30px] w-[30px] place-items-center rounded-full"
         title={flipped ? "Flip to deal" : "Flip to signals & logs"}
         aria-label={flipped ? "Flip to deal" : "Flip to signals and logs"}
       >
         <FlipHorizontal2 className="h-[14px] w-[14px]" />
       </button>
 
-      {/* edit / lock - top-right corner (D-16/D-17) */}
+      {/* edit / lock - top-right corner (D-16/D-17), in the title-bar's right gutter */}
       {isClosed ? (
         <span
-          className="absolute right-2.5 top-2.5 z-30 flex h-[28px] w-[28px] items-center justify-center rounded-full border border-black/[0.07] bg-white/70 text-ink/45"
+          className="dc-tb-btn absolute right-3 top-3 z-30 grid h-[30px] w-[30px] place-items-center rounded-full"
           title="This deal is sealed"
           aria-label="This deal is sealed"
         >
@@ -83,10 +84,10 @@ export function DealCard({
         canEdit && (
           <button
             onClick={() => setEditMode((e) => !e)}
-            className={`absolute right-2.5 top-2.5 z-30 flex h-[28px] w-[28px] items-center justify-center rounded-full border transition ${
+            className={`absolute right-3 top-3 z-30 grid h-[30px] w-[30px] place-items-center rounded-full border transition ${
               editMode
                 ? "border-brand/30 bg-brand text-white"
-                : "border-black/[0.07] bg-white/70 text-ink/55 hover:bg-brand-soft hover:text-brand-deep"
+                : "dc-tb-btn"
             }`}
             title={editMode ? "Done editing" : "Edit deal"}
             aria-label={editMode ? "Done editing" : "Edit deal"}
@@ -113,6 +114,7 @@ export function DealCard({
             workspaceId={workspaceId}
             editMode={editMode}
             onExitEdit={() => setEditMode(false)}
+            onActivity={() => setFlipped(true)}
           />
         </div>
 

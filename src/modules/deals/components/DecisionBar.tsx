@@ -86,7 +86,7 @@ export function DecisionBar({ data }: { data: DealCardView }) {
           type="button"
           disabled={busy}
           onClick={() => void runWithdraw()}
-          className="w-full rounded-xl px-3 py-2 text-[13px] font-semibold text-ink/70 ring-1 ring-ink/15 transition hover:bg-ink/5 disabled:opacity-50"
+          className="dc-btn-negotiate w-full rounded-full px-3 py-2.5 text-[13px] font-bold disabled:opacity-50"
         >
           {busy ? "Withdrawing…" : "Negotiate (withdraw change)"}
         </button>
@@ -131,8 +131,10 @@ export function DecisionBar({ data }: { data: DealCardView }) {
             type="button"
             disabled={busy || !reason.trim()}
             onClick={() => void runDecision(isSign ? "accept" : "decline")}
-            className={`rounded-lg px-4 py-1.5 text-[12px] font-semibold text-white transition disabled:opacity-50 ${
-              isSign ? "bg-success hover:brightness-95" : "bg-brand hover:bg-brand-deep"
+            className={`rounded-full px-4 py-1.5 text-[12px] font-bold transition disabled:opacity-50 ${
+              isSign
+                ? "dc-btn-sign"
+                : "bg-[color:var(--dc-pink)] text-white hover:bg-[color:var(--dc-pink-deep)]"
             }`}
           >
             {busy ? "Working…" : isSign ? "Sign the deal" : "Send & negotiate"}
@@ -153,7 +155,7 @@ export function DecisionBar({ data }: { data: DealCardView }) {
             setError(null);
             setPending("negotiate");
           }}
-          className="flex flex-1 items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-[13px] font-semibold text-ink/70 ring-1 ring-ink/15 transition hover:bg-ink/5 disabled:opacity-50"
+          className="dc-btn-negotiate flex flex-1 items-center justify-center gap-1.5 rounded-full px-3 py-2.5 text-[13px] font-bold disabled:opacity-50"
         >
           <Pencil className="h-3.5 w-3.5" /> Negotiate
         </button>
@@ -164,7 +166,7 @@ export function DecisionBar({ data }: { data: DealCardView }) {
             setError(null);
             setPending("sign");
           }}
-          className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-success px-3 py-2 text-[13px] font-semibold text-white transition hover:brightness-95 disabled:opacity-50"
+          className="dc-btn-sign flex flex-1 items-center justify-center gap-1.5 rounded-full px-3 py-2.5 text-[13px] font-bold disabled:opacity-50"
         >
           <PenLine className="h-3.5 w-3.5" /> Sign the deal
         </button>

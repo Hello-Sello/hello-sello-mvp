@@ -66,19 +66,20 @@ export function PromotionTrack({
     }
   }
 
-  // the yellow shell (D-21) - a soft amber wash, distinct from the pink card body.
+  // the yellow band (D-21) - a soft amber wash with the promo left-rail, distinct
+  // from the pink card body. `dc-promo-band` carries the wash + 3px yellow rail.
   const shell =
-    "rounded-xl border border-amber-300/70 bg-amber-50 p-2.5 text-[12px] text-amber-900";
+    "dc-promo-band overflow-hidden rounded-lg px-3 py-2.5 text-[12px] text-[color:var(--dc-promo-ink)]";
 
   const rewardLines =
     promotion.lineDeltas.length > 0 ? (
       <ul className="mb-1.5 flex flex-col gap-1">
         {promotion.lineDeltas.map((d, i) => (
           <li key={i} className="flex items-baseline justify-between gap-3">
-            <span className="min-w-0 flex-1 truncate font-medium">
+            <span className="min-w-0 flex-1 truncate font-medium text-[color:var(--dc-promo)]">
               +{d.quantity} {d.unit} {d.productName}
             </span>
-            <span className="shrink-0 font-mono text-[11px]">
+            <span className="shrink-0 font-mono text-[11px] text-[color:var(--dc-promo)]">
               {d.unitPrice === 0 ? "free" : `${formatMoney(d.unitPrice, d.currency)}/${d.unit}`}
             </span>
           </li>
@@ -88,8 +89,8 @@ export function PromotionTrack({
 
   const header = (
     <div className="mb-1.5 flex items-center gap-1.5">
-      <Sparkles className="h-3.5 w-3.5 text-amber-500" strokeWidth={2} />
-      <span className="text-[10px] font-bold uppercase tracking-wide text-amber-700">
+      <Sparkles className="h-3.5 w-3.5 text-[color:var(--dc-promo-strong)]" strokeWidth={2} />
+      <span className="text-[9.5px] font-extrabold uppercase tracking-[0.15em] text-[color:var(--dc-promo)]">
         Promotion
       </span>
     </div>
@@ -101,16 +102,18 @@ export function PromotionTrack({
       <div className={shell}>
         {header}
         {rewardLines}
-        <p className="font-semibold text-amber-800">Promotion accepted.</p>
-        {savings && <p className="text-[11px] text-amber-700">{savings}</p>}
+        <p className="font-semibold text-[color:var(--dc-promo)]">Promotion accepted.</p>
+        {savings && <p className="text-[11px] text-[color:var(--dc-promo)]">{savings}</p>}
       </div>
     );
   }
   if (promotion.state === "declined") {
     return (
-      <div className={shell}>
+      <div className={`${shell} dc-declined`}>
         {header}
-        <p className="text-amber-800">Promotion declined - the base deal stands.</p>
+        <p className="text-[color:var(--dc-ink-55)]">
+          Promotion declined - the base deal stands.
+        </p>
       </div>
     );
   }
@@ -121,8 +124,10 @@ export function PromotionTrack({
       <div className={shell}>
         {header}
         {rewardLines}
-        {savings && <p className="text-[11px] text-amber-700">{savings}</p>}
-        <p className="mt-1 text-[11px] text-amber-700">Waiting for the buyer to decide.</p>
+        {savings && <p className="text-[11px] text-[color:var(--dc-promo)]">{savings}</p>}
+        <p className="mt-1 text-[11px] text-[color:var(--dc-ink-55)]">
+          Waiting for the buyer to decide.
+        </p>
       </div>
     );
   }
@@ -132,14 +137,16 @@ export function PromotionTrack({
       {header}
       {/* D-23: the reward is shown once revealed; the button relabels below. */}
       {revealed && rewardLines}
-      {revealed && savings && <p className="mb-1.5 text-[11px] text-amber-700">{savings}</p>}
+      {revealed && savings && (
+        <p className="mb-1.5 text-[11px] text-[color:var(--dc-promo)]">{savings}</p>
+      )}
       {error && <p className="mb-1.5 text-[11px] text-danger">{error}</p>}
 
       {!revealed ? (
         <button
           type="button"
           onClick={() => setRevealed(true)}
-          className="w-full rounded-lg bg-amber-400/90 px-3 py-1.5 text-[12px] font-semibold text-amber-950 transition hover:bg-amber-400"
+          className="dc-btn-promo w-full rounded-full px-3 py-1.5 text-[12px] font-bold"
         >
           Promotion
         </button>
@@ -149,7 +156,7 @@ export function PromotionTrack({
             type="button"
             disabled={busy}
             onClick={() => void run("decline")}
-            className="flex-1 rounded-lg px-3 py-1.5 text-[12px] font-medium text-amber-800 ring-1 ring-amber-300 transition hover:bg-amber-100 disabled:opacity-50"
+            className="flex-1 rounded-full border-[1.5px] border-[color:var(--dc-promo-strong)] px-3 py-1.5 text-[12px] font-medium text-[color:var(--dc-promo)] transition hover:bg-[var(--dc-promo-soft)] disabled:opacity-50"
           >
             Decline
           </button>
@@ -157,7 +164,7 @@ export function PromotionTrack({
             type="button"
             disabled={busy}
             onClick={() => void run("accept")}
-            className="flex-1 rounded-lg bg-amber-500 px-3 py-1.5 text-[12px] font-semibold text-white transition hover:bg-amber-600 disabled:opacity-50"
+            className="dc-btn-promo flex-1 rounded-full px-3 py-1.5 text-[12px] font-bold disabled:opacity-50"
           >
             {busy ? "Working…" : "Accept"}
           </button>

@@ -60,22 +60,33 @@ function changed(cur: LineItemView, next: ProposalLineView): boolean {
   );
 }
 
-/** One struck (removed/old) diff row - red. */
+/** One struck (removed/old) diff row - red, bleeding to the paper edges. */
 function OldRow({ name, detail }: { name: string; detail: string }) {
   return (
-    <div className="flex items-baseline justify-between gap-3 rounded-md bg-danger/5 px-2 py-1 text-[12px]">
-      <span className="min-w-0 flex-1 truncate text-ink/60 line-through">{name}</span>
-      <span className="shrink-0 font-mono text-[11px] text-danger/80 line-through">{detail}</span>
+    <div className="dc-row-old flex items-baseline justify-between gap-3 px-2 py-1.5 text-[12px]">
+      <span className="min-w-0 flex-1 truncate line-through text-[color:var(--dc-red)]">{name}</span>
+      <span className="shrink-0 font-mono text-[11px] line-through text-[color:var(--dc-red)]">
+        {detail}
+      </span>
     </div>
   );
 }
 
-/** One new/added diff row - green. */
-function NewRow({ name, detail }: { name: string; detail: string }) {
+/** One new/added diff row - green, with an optional "Change" badge. */
+function NewRow({ name, detail, badge }: { name: string; detail: string; badge?: boolean }) {
   return (
-    <div className="flex items-baseline justify-between gap-3 rounded-md bg-success/8 px-2 py-1 text-[12px]">
-      <span className="min-w-0 flex-1 truncate font-medium text-ink">{name}</span>
-      <span className="shrink-0 font-mono text-[11px] font-semibold text-success">{detail}</span>
+    <div className="dc-row-new flex items-baseline justify-between gap-3 px-2 py-1.5 text-[12px]">
+      <span className="min-w-0 flex-1 truncate font-medium text-[color:var(--dc-green)]">
+        {name}
+        {badge && (
+          <span className="dc-badge-change ml-2 inline-block rounded-md px-1.5 py-0.5 align-[1px] text-[8px] font-extrabold uppercase">
+            Change
+          </span>
+        )}
+      </span>
+      <span className="shrink-0 font-mono text-[11px] font-semibold text-[color:var(--dc-green)]">
+        {detail}
+      </span>
     </div>
   );
 }
@@ -111,16 +122,16 @@ export function NegotiationDiff({
   const proposedTotal = sumLineValue(proposedAsLineItems(proposed));
 
   return (
-    <div className="rounded-xl border border-ink/10 bg-white/60 p-2">
-      <div className="mb-1.5 flex items-center gap-1.5 px-1">
-        <span className="h-1.5 w-1.5 rounded-full bg-danger" />
-        <span className="h-1.5 w-1.5 rounded-full bg-success" />
-        <span className="text-[10px] font-bold uppercase tracking-wide text-ink/45">
+    <div className="overflow-hidden rounded-xl border border-[color:var(--dc-hairline)] bg-white/50">
+      <div className="flex items-center gap-1.5 border-b border-[color:var(--dc-hairline)] px-2.5 py-1.5">
+        <span className="h-1.5 w-1.5 rounded-full bg-[color:var(--dc-red)]" />
+        <span className="h-1.5 w-1.5 rounded-full bg-[color:var(--dc-green)]" />
+        <span className="text-[9.5px] font-bold uppercase tracking-[0.14em] text-[color:var(--dc-ink-38)]">
           Proposed change
         </span>
       </div>
 
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col">
         {keys.map((k) => {
           const cur = currentByKey.get(k) ?? null;
           const next = proposedByKey.get(k) ?? null;
@@ -151,7 +162,7 @@ export function NegotiationDiff({
               return (
                 <div
                   key={k}
-                  className="flex items-baseline justify-between gap-3 px-2 py-1 text-[12px] text-ink/55"
+                  className="flex items-baseline justify-between gap-3 px-2 py-1.5 text-[12px] text-[color:var(--dc-ink-55)]"
                 >
                   <span className="min-w-0 flex-1 truncate">{next.name}</span>
                   <span className="shrink-0 font-mono text-[11px]">
@@ -161,7 +172,7 @@ export function NegotiationDiff({
               );
             }
             return (
-              <div key={k} className="flex flex-col gap-0.5">
+              <div key={k} className="flex flex-col">
                 <OldRow
                   name={cur.productName}
                   detail={lineLabel(cur.quantity, cur.unit, cur.unitPrice, cur.currency)}
@@ -169,6 +180,7 @@ export function NegotiationDiff({
                 <NewRow
                   name={next.name}
                   detail={lineLabel(next.quantity, next.unit, next.unitPrice, next.currency)}
+                  badge
                 />
               </div>
             );
@@ -178,15 +190,17 @@ export function NegotiationDiff({
       </div>
 
       {/* proposed total - canonical per-gram money via sumLineValue */}
-      <div className="mt-2 flex items-baseline justify-between border-t border-ink/10 px-2 pt-2 text-[12px]">
-        <span className="text-ink/50">New total</span>
+      <div className="flex items-baseline justify-between gap-3 border-t border-[color:var(--dc-hairline)] px-2.5 py-2 text-[12px]">
+        <span className="text-[9.5px] font-bold uppercase tracking-[0.14em] text-[color:var(--dc-ink-38)]">
+          New total
+        </span>
         <span className="flex items-baseline gap-2">
           {currentTotal != null && proposedTotal != null && currentTotal !== proposedTotal && (
-            <span className="font-mono text-[11px] text-ink/40 line-through">
+            <span className="font-mono text-[11px] line-through text-[color:var(--dc-ink-38)]">
               {formatMoney(currentTotal, currency)}
             </span>
           )}
-          <span className="font-mono font-semibold text-ink">
+          <span className="font-mono text-[14px] font-bold text-[color:var(--dc-green)]">
             {proposedTotal == null ? "—" : formatMoney(proposedTotal, currency)}
           </span>
         </span>

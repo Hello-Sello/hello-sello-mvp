@@ -145,38 +145,51 @@ export function OpenItems({
 
   return (
     <div>
-      <div className="mb-2 flex items-center justify-between">
-        <span className="text-[11px] font-bold uppercase tracking-wide text-ink/45">
+      <div className="mb-2 flex items-center gap-2">
+        <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--dc-ink-38)]">
           Open items
         </span>
-        <span className="text-[11px] font-semibold tabular-nums text-brand">
-          {doneCount} / {visible.length} done
+        <span className="grid h-[18px] min-w-[18px] place-items-center rounded-full bg-brand/12 px-1.5 font-mono text-[10px] font-bold tabular-nums text-[color:var(--dc-pink-deep)]">
+          {visible.length - doneCount}
         </span>
       </div>
 
       {visible.length === 0 && !adding && (
-        <p className="py-1 text-[12px] text-ink/40">No open items yet.</p>
+        <p className="py-1 text-[12px] text-[color:var(--dc-ink-38)]">No open items yet.</p>
       )}
 
       <ul className="flex flex-col">
         {visible.map((t) => {
           const done = t.status === "done";
           const word = ACTION_WORD[t.type];
-          return (
-            <li key={t.id} className="flex items-center gap-2 py-1 text-[12.5px]">
+          const rowInner = (
+            <>
               <button
                 type="button"
                 onClick={() => void onToggle(t)}
                 disabled={busyId === t.id}
                 aria-label={done ? "Mark open" : "Mark done"}
-                className={`flex h-[16px] w-[16px] shrink-0 items-center justify-center rounded border-[1.5px] transition ${
-                  done ? "border-success bg-success" : "border-ink/20 hover:border-brand"
+                className={`grid h-[18px] w-[18px] shrink-0 place-items-center rounded-md border-[1.5px] transition ${
+                  done
+                    ? "border-[color:var(--dc-pink)] bg-[color:var(--dc-pink)]"
+                    : "border-[color:var(--dc-ink-38)] bg-white hover:border-[color:var(--dc-pink)]"
                 }`}
               >
                 {done && <Check className="h-2.5 w-2.5 text-white" strokeWidth={3} />}
               </button>
-              <span className={`flex-1 truncate ${done ? "text-ink/45 line-through" : "text-ink"}`}>
-                {word && <span className="font-semibold text-brand-deep">{word} </span>}
+
+              {/* action word as a pill chip (Upload / Approve), D-15 */}
+              {word && (
+                <span className="shrink-0 rounded-full border border-brand/35 bg-white px-2 py-0.5 text-[8.5px] font-extrabold uppercase tracking-[0.1em] text-[color:var(--dc-pink-deep)]">
+                  {word}
+                </span>
+              )}
+
+              <span
+                className={`flex-1 truncate text-[12.5px] ${
+                  done ? "text-[color:var(--dc-ink-38)] line-through" : "text-[color:var(--dc-ink)]"
+                }`}
+              >
                 {t.title}
               </span>
 
@@ -188,23 +201,48 @@ export function OpenItems({
                   disabled={busyId === t.id}
                   title="Assign to me"
                   aria-label="Assign to me"
-                  className="shrink-0 text-ink/35 transition hover:text-brand"
+                  className="shrink-0 text-[color:var(--dc-ink-38)] transition hover:text-[color:var(--dc-pink)]"
                 >
                   <UserPlus className="h-3.5 w-3.5" />
                 </button>
               )}
 
-              {/* visibility toggle (D-15): private items belong to one side only */}
+              {/* visibility toggle (D-15): private items belong to one side only.
+                  A private item also carries the "Only you" tag below, so here the
+                  icon just flips the state. */}
               <button
                 type="button"
                 onClick={() => void onToggleVisibility(t)}
                 disabled={busyId === t.id}
                 title={t.isPrivate ? "Private - only your side" : "Shared with both sides"}
                 aria-label="Toggle visibility"
-                className="shrink-0 text-ink/35 transition hover:text-brand-deep"
+                className="shrink-0 text-[color:var(--dc-ink-38)] transition hover:text-[color:var(--dc-pink-deep)]"
               >
                 {t.isPrivate ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
               </button>
+
+              {/* the "Only you" tag on a private row (prototype .only-you) */}
+              {t.isPrivate && (
+                <span className="shrink-0 text-[8.5px] font-extrabold uppercase tracking-[0.1em] text-[color:var(--dc-maroon)]">
+                  Only you
+                </span>
+              )}
+            </>
+          );
+
+          // a private item sits in the dashed "only you" box (prototype .private-box)
+          return t.isPrivate ? (
+            <li key={t.id} className="my-1">
+              <div className="dc-private flex items-center gap-2 rounded-2xl px-2.5 py-1.5">
+                {rowInner}
+              </div>
+            </li>
+          ) : (
+            <li
+              key={t.id}
+              className="-mx-2 flex items-center gap-2 rounded-xl px-2 py-1.5 transition hover:bg-black/[0.04]"
+            >
+              {rowInner}
             </li>
           );
         })}
@@ -213,7 +251,7 @@ export function OpenItems({
       {/* inline add - only when the workspace is wired (createThing needs it) */}
       {workspaceId &&
         (adding ? (
-          <div className="mt-1.5 flex items-center gap-2">
+          <div className="mt-2 flex items-center gap-2">
             <input
               ref={inputRef}
               value={draft}
@@ -226,14 +264,14 @@ export function OpenItems({
                 }
               }}
               autoFocus
-              placeholder="Add an open item…"
-              className="flex-1 rounded-lg bg-white px-2.5 py-1.5 text-[12.5px] text-ink ring-1 ring-black/5 placeholder:text-ink/35 focus:outline-none focus:ring-2 focus:ring-brand/30"
+              placeholder="Add something…"
+              className="flex-1 rounded-full bg-white px-3 py-1.5 text-[12.5px] text-[color:var(--dc-ink)] ring-1 ring-black/5 placeholder:text-[color:var(--dc-ink-38)] focus:outline-none focus:ring-2 focus:ring-brand/30"
             />
             <button
               type="button"
               onClick={() => void onAdd()}
               disabled={!draft.trim() || busyId === "add"}
-              className="rounded-lg bg-brand px-3 py-1.5 text-[12px] font-semibold text-white transition hover:bg-brand-deep disabled:opacity-50"
+              className="rounded-full bg-[color:var(--dc-pink)] px-4 py-1.5 text-[12px] font-semibold text-white transition hover:bg-[color:var(--dc-pink-deep)] disabled:opacity-50"
             >
               Add
             </button>
@@ -242,9 +280,9 @@ export function OpenItems({
           <button
             type="button"
             onClick={() => setAdding(true)}
-            className="mt-1.5 flex items-center gap-1 text-[12px] font-semibold text-brand-deep transition hover:text-brand"
+            className="mt-2 flex items-center gap-1.5 rounded-full border-[1.5px] border-dashed border-brand/45 px-3.5 py-1.5 text-[12px] font-bold text-[color:var(--dc-pink-deep)] transition hover:bg-brand/[0.08]"
           >
-            <Plus className="h-3.5 w-3.5" /> Add item
+            <Plus className="h-3.5 w-3.5" /> Add something
           </button>
         ))}
     </div>

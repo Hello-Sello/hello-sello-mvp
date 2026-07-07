@@ -35,6 +35,7 @@
 import { useEffect, useState } from "react";
 import {
   ArrowRight,
+  History,
   Lock,
   MessageSquarePlus,
   Plus,
@@ -144,25 +145,55 @@ function editTotalOf(lines: EditLine[]): number | null {
   return priced.reduce((sum, l) => sum + lineValueOf(l.quantity, l.unit, l.unitPrice as number), 0);
 }
 
-/** One conditional note row. Renders nothing when the text is empty/blank (D-14). */
+/** One conditional note row (prototype `.note`). Renders nothing when the text is
+ *  empty/blank (D-14) - a blank note is never shown to the other side. */
 function Note({ company, text }: { company: string; text: string | null }) {
   if (!text || !text.trim()) return null;
   return (
-    <div className="border-t border-ink/10 py-2 first:border-t-0">
+    <div
+      className="mt-2 rounded-[8px_14px_14px_8px] border border-[color:var(--dc-hairline)] px-4 py-2.5 first:mt-0"
+      style={{ borderLeft: "3px solid var(--dc-pink)", background: "rgba(122,18,48,0.035)" }}
+    >
       <div className="mb-1 flex items-center gap-1.5">
-        <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full bg-brand text-[9px] font-bold text-white">
+        <span className="grid h-[16px] w-[16px] shrink-0 place-items-center rounded-full bg-[color:var(--dc-pink)] text-[8px] font-bold text-white">
           {initialsOf(company)}
         </span>
-        <span className="text-[11px] font-semibold text-ink">{company}</span>
+        <span className="text-[9.5px] font-bold uppercase tracking-[0.14em] text-[color:var(--dc-ink-38)]">
+          Note - {company}
+        </span>
       </div>
-      <div className="pl-6 text-[12px] text-ink/55">{text}</div>
+      <div className="text-[13px] leading-relaxed text-[color:var(--dc-ink-70)]">{text}</div>
     </div>
   );
 }
 
-/** A hairline-divided section (the V3 `.sec` primitive): one top divider, one inset. */
+/** A hairline-divided section on the paper slip: one top divider + vertical rhythm. */
 function Sec({ children }: { children: React.ReactNode }) {
-  return <div className="mx-4 border-t border-ink/10 py-3">{children}</div>;
+  return <div className="border-t border-[color:var(--dc-hairline)] py-3">{children}</div>;
+}
+
+/** The torn top edge of the paper slip (prototype `.tear`). */
+function TearTop() {
+  return (
+    <svg className="dc-tear" viewBox="0 0 160 10" preserveAspectRatio="none" aria-hidden="true">
+      <path
+        fill="#FFFFFF"
+        d="M0 10 L5 3 L10 10 L15 1.5 L20 10 L25 4 L30 10 L35 2 L40 10 L45 5 L50 10 L55 2.5 L60 10 L65 1 L70 10 L75 3.5 L80 10 L85 2 L90 10 L95 4.5 L100 10 L105 1.5 L110 10 L115 3 L120 10 L125 5 L130 10 L135 2 L140 10 L145 3.5 L150 10 L155 1 L160 10 Z"
+      />
+    </svg>
+  );
+}
+
+/** The torn bottom edge of the paper slip (prototype `.tear`, bottom fill). */
+function TearBottom() {
+  return (
+    <svg className="dc-tear" viewBox="0 0 160 10" preserveAspectRatio="none" aria-hidden="true">
+      <path
+        fill="#FFF9FA"
+        d="M0 0 L5 7 L10 0 L15 8.5 L20 0 L25 6 L30 0 L35 8 L40 0 L45 5 L50 0 L55 7.5 L60 0 L65 9 L70 0 L75 6.5 L80 0 L85 8 L90 0 L95 5.5 L100 0 L105 8.5 L110 0 L115 7 L120 0 L125 5 L130 0 L135 8 L140 0 L145 6.5 L150 0 L155 9 L160 0 Z"
+      />
+    </svg>
+  );
 }
 
 export function CardFront({
@@ -171,6 +202,7 @@ export function CardFront({
   workspaceId,
   editMode = false,
   onExitEdit,
+  onActivity,
 }: {
   data: DealCardView;
   /** the flat Open Items list (D-15); wired from the panel host / 07-08. */
@@ -181,6 +213,9 @@ export function CardFront({
   editMode?: boolean;
   /** leave edit mode after a successful "Send change". */
   onExitEdit?: () => void;
+  /** flip to the Signals & Logs back face - the title-bar "Activity" control.
+   *  Owned by DealCard (which holds the flip state); the pill hides when absent. */
+  onActivity?: () => void;
 }) {
   const { card, sellerName, buyerName, lineItems, lineMargins, viewerSide, myNote, theirNote } = data;
   const cardId = card.id;
@@ -369,82 +404,103 @@ export function CardFront({
   const conditionRewards = promotion?.conditionDeltas ?? [];
 
   return (
-    <div className="w-full max-w-full overflow-hidden rounded-3xl bg-white shadow-xl ring-1 ring-black/5">
-      {/* ---- 1 · TOOLBAR (fixed) ---- */}
-      <div className="flex items-center gap-2 px-4 pl-12 pt-3">
+    <div className="dealcard w-full max-w-full">
+      {/* ---- 1 · TITLE BAR — frosted control strip. The flip + edit/lock circles
+             (DealCard) float into the pl-12 / pr-12 gutters, so they read as the
+             left-most and right-most controls of this bar. (fixed) ---- */}
+      <div className="dc-titlebar flex items-center gap-2 py-2.5 pl-12 pr-12">
         <button
           type="button"
           onClick={onTalkAboutDeal}
-          className="inline-flex items-center gap-1.5 rounded-full bg-brand-soft/40 px-3 py-1 text-[11px] font-semibold text-brand-deep transition hover:bg-brand-soft/70"
+          className="dc-tb-pill inline-flex min-w-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-semibold"
         >
-          <MessageSquarePlus className="h-3.5 w-3.5" /> Talk about this deal
+          <MessageSquarePlus className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">Talk about this deal</span>
         </button>
+        {onActivity && (
+          <button
+            type="button"
+            onClick={onActivity}
+            title="Activity — signals & logs"
+            aria-label="Activity"
+            className="dc-tb-btn grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full"
+          >
+            <History className="h-3.5 w-3.5" />
+          </button>
+        )}
+        <div className="flex-1" />
         {isClosed && (
           <button
             type="button"
             disabled={reopenBusy}
             onClick={() => void onReopen()}
-            className="ml-auto inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-semibold text-ink/60 ring-1 ring-ink/15 transition hover:bg-ink/5 disabled:opacity-50"
+            className="dc-tb-pill inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-semibold disabled:opacity-50"
           >
-            <RotateCcw className="h-3.5 w-3.5" /> {reopenBusy ? "Opening…" : "Reopen ticket"}
+            <RotateCcw className="h-3.5 w-3.5" /> {reopenBusy ? "Opening…" : "Reopen"}
           </button>
         )}
       </div>
 
-      {/* ---- 2 · LETTERHEAD (fixed; finished-deal skin removed, D-17) ---- */}
-      <div className="px-4 pb-2 pt-2">
-        <div className="flex items-center gap-2 font-mono">
-          <span className="text-[9px] font-bold tracking-[0.18em] text-brand-deep">DEAL</span>
-          <span className="truncate text-[10px] tracking-wide tabular-nums text-ink/55">
-            {hsNumber}
-          </span>
-        </div>
-        <div className="relative mt-1 inline-block pb-1.5">
-          <span className="text-[26px] font-semibold leading-none tracking-tight tabular-nums text-ink">
-            {valueNet}
-          </span>
-          <span className="absolute bottom-0 left-0 h-[2px] w-9 rounded bg-brand-deep" />
-        </div>
-        <div className="mt-1.5 flex items-center justify-between">
-          <span className="text-[10px] text-ink/55">
-            {lineItems.length} {lineItems.length === 1 ? "product" : "products"} ·{" "}
-            {dateLabel(card.created_at)}
-          </span>
-          <span
-            className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-semibold text-brand-deep"
-            style={{ background: "color-mix(in srgb, var(--color-brand-deep) 10%, transparent)" }}
-          >
-            <span className="h-1.5 w-1.5 rounded-full bg-success" />
-            {statusLabel(card.status)} · v{card.version}
-          </span>
-        </div>
-      </div>
+      {/* ---- The torn white paper slip: it holds parts 2–7 (the deal facts). ---- */}
+      <div className="dc-paper-wrap mx-3.5 mb-4 mt-3">
+        <TearTop />
+        <div className="dc-paper px-5 pb-4">
+          {/* ---- 2 · MASTHEAD (fixed; finished-deal skin removed, D-17) ---- */}
+          <header className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1 pb-2 pt-3.5">
+            <div className="dc-wordmark text-[16px] leading-tight">He//oSe//o</div>
+            <div className="text-right">
+              <div className="truncate font-mono text-[10.5px] tracking-wide text-[color:var(--dc-ink-70)]">
+                {hsNumber}
+              </div>
+              <div className="mt-0.5 flex items-center justify-end gap-1.5 text-[10px] text-[color:var(--dc-ink-55)]">
+                <span>{dateLabel(card.created_at)}</span>
+                <span className="inline-flex items-center gap-1">
+                  <span className="h-1.5 w-1.5 rounded-full bg-success" />
+                  {statusLabel(card.status)} · v{card.version}
+                </span>
+              </div>
+            </div>
+          </header>
+          <div className="dc-double-rule" />
 
-      {/* ---- 3 · PARTIES (fixed) ---- */}
-      <div className="flex items-center justify-center gap-2.5 border-y border-ink/10 px-4 py-3">
-        <div className="text-center">
-          <div className="text-[9.5px] uppercase tracking-wider text-ink/45">Seller</div>
-          <div className="text-[13px] font-bold text-ink">
-            {sellerName}
-            {isSeller && <span className="ml-1 text-[10px] font-bold text-brand">· you</span>}
+          {/* ---- 3 · PARTIES (fixed) ---- */}
+          <div className="flex items-baseline gap-2 py-3">
+            <div className="flex min-w-0 items-baseline gap-1.5">
+              <span className="shrink-0 text-[9px] font-bold uppercase tracking-[0.16em] text-[color:var(--dc-ink-38)]">
+                Seller
+              </span>
+              <span className="truncate text-[13.5px] font-bold text-[color:var(--dc-ink)]">
+                {sellerName}
+              </span>
+              {isSeller && (
+                <span className="shrink-0 text-[11px] font-semibold text-[color:var(--dc-pink)]">
+                  · You
+                </span>
+              )}
+            </div>
+            <ArrowRight
+              className="h-3.5 w-3.5 shrink-0 self-center text-[color:var(--dc-pink)]"
+              strokeWidth={2.2}
+            />
+            <div className="flex min-w-0 items-baseline gap-1.5">
+              <span className="shrink-0 text-[9px] font-bold uppercase tracking-[0.16em] text-[color:var(--dc-ink-38)]">
+                Buyer
+              </span>
+              <span className="truncate text-[13.5px] font-bold text-[color:var(--dc-ink)]">
+                {buyerName}
+              </span>
+              {viewerSide === "buyer" && (
+                <span className="shrink-0 text-[11px] font-semibold text-[color:var(--dc-pink)]">
+                  · You
+                </span>
+              )}
+            </div>
           </div>
-        </div>
-        <ArrowRight className="h-4 w-4 shrink-0 text-brand" strokeWidth={2.2} />
-        <div className="text-center">
-          <div className="text-[9.5px] uppercase tracking-wider text-ink/45">Buyer</div>
-          <div className="text-[13px] font-bold text-ink">
-            {buyerName}
-            {viewerSide === "buyer" && (
-              <span className="ml-1 text-[10px] font-bold text-brand">· you</span>
-            )}
-          </div>
-        </div>
-      </div>
 
-      {/* ---- 4 · PRODUCTS ---- */}
-      <div className="px-4 pt-2">
-        {editMode ? (
-          <div className="flex flex-col gap-2">
+          {/* ---- 4 · PRODUCTS ---- */}
+          <section className="border-t border-[color:var(--dc-hairline)] pb-1 pt-2">
+            {editMode ? (
+              <div className="flex flex-col gap-2">
             {lines.map((l) => (
               <div key={l.key} className="rounded-xl border border-ink/10 bg-white/60 p-2">
                 <div className="mb-1.5 flex items-center gap-2">
@@ -554,36 +610,50 @@ export function CardFront({
               </span>
             </div>
           </div>
-        ) : (
-          <ProductList items={lineItems} />
-        )}
-      </div>
+            ) : (
+              <ProductList items={lineItems} />
+            )}
 
-      {/* red/green diff for a HELD change (D-18) - only outside edit mode */}
-      {!editMode && data.pendingChange && (
-        <div className="px-4 pt-2">
-          <NegotiationDiff
-            current={lineItems}
-            proposed={data.pendingChange.lines}
-            currency={data.pendingChange.currency}
-          />
-        </div>
-      )}
+            {/* red/green diff for a HELD change (D-18) - only outside edit mode.
+                Money is via sumLineValue in NegotiationDiff (never size×units×price). */}
+            {!editMode && data.pendingChange && (
+              <div className="mt-3">
+                <NegotiationDiff
+                  current={lineItems}
+                  proposed={data.pendingChange.lines}
+                  currency={data.pendingChange.currency}
+                />
+              </div>
+            )}
 
-      {/* the yellow promotion track (D-21..D-26) - never gates Sign */}
-      {!editMode && promotion && (
-        <div className="px-4 pt-2">
-          <PromotionTrack promotion={promotion} dealCardId={cardId} />
-        </div>
-      )}
+            {/* the yellow promotion track (D-21..D-26) - never gates Sign */}
+            {!editMode && promotion && (
+              <div className="mt-3">
+                <PromotionTrack promotion={promotion} dealCardId={cardId} />
+              </div>
+            )}
+
+            {/* total net - hidden while a diff shows its own new-total, so the
+                card never shows two competing totals (CARD-01 live sum). */}
+            {!editMode && !data.pendingChange && (
+              <div className="mt-3 flex items-baseline gap-3">
+                <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--dc-ink-38)]">
+                  Total net
+                </span>
+                <span className="ml-auto text-[22px] font-extrabold leading-none tabular-nums tracking-tight text-[color:var(--dc-ink)]">
+                  {valueNet}
+                </span>
+              </div>
+            )}
+          </section>
 
       {/* ---- 5 · EXTRA CONDITIONS (seller-only, Discounts its OWN section, D-13) ---- */}
       <Sec>
         <div className="mb-2 flex items-center gap-1.5">
-          <span className="text-[10px] font-bold uppercase tracking-wide text-ink/45">
+          <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--dc-ink-38)]">
             Extra conditions
           </span>
-          {!canEditConditions && <Lock className="h-3 w-3 text-ink/35" />}
+          {!canEditConditions && <Lock className="h-3 w-3 text-[color:var(--dc-ink-38)]" />}
         </div>
         {editMode && canEditConditions ? (
           <div className="grid grid-cols-3 gap-2 text-[12px]">
@@ -618,19 +688,27 @@ export function CardFront({
           </div>
         ) : (
           <div className="grid grid-cols-3 gap-2">
-            <div>
-              <div className="text-[10px] uppercase tracking-wide text-ink/45">Delivery</div>
-              <div className="text-[13px] font-semibold tabular-nums text-ink">
+            <div className="dc-term rounded-2xl px-3 py-2.5">
+              <div className="text-[9px] font-bold uppercase tracking-[0.13em] text-[color:var(--dc-ink-38)]">
+                Delivery
+              </div>
+              <div className="mt-0.5 text-[12.5px] font-semibold tabular-nums text-[color:var(--dc-ink)]">
                 {dateLabel(card.delivery_date_target)}
               </div>
             </div>
-            <div>
-              <div className="text-[10px] uppercase tracking-wide text-ink/45">Payment</div>
-              <div className="text-[13px] font-semibold text-ink">{paymentLabel}</div>
+            <div className="dc-term rounded-2xl px-3 py-2.5">
+              <div className="text-[9px] font-bold uppercase tracking-[0.13em] text-[color:var(--dc-ink-38)]">
+                Payment
+              </div>
+              <div className="mt-0.5 text-[12.5px] font-semibold text-[color:var(--dc-ink)]">
+                {paymentLabel}
+              </div>
             </div>
-            <div>
-              <div className="text-[10px] uppercase tracking-wide text-ink/45">Free delivery</div>
-              <div className="text-[13px] font-semibold text-ink">
+            <div className="dc-term rounded-2xl px-3 py-2.5">
+              <div className="text-[9px] font-bold uppercase tracking-[0.13em] text-[color:var(--dc-ink-38)]">
+                Free delivery
+              </div>
+              <div className="mt-0.5 text-[12.5px] font-semibold text-[color:var(--dc-ink)]">
                 {freeDeliveryStored ? "Yes" : "No"}
               </div>
             </div>
@@ -639,40 +717,34 @@ export function CardFront({
 
         {/* Discounts - its OWN labeled section (D-13); promotion non-product rewards
             render here, not in the product table (D-22). */}
-        <div className="mt-3 border-t border-ink/10 pt-2">
-          <div className="mb-1 text-[10px] font-bold uppercase tracking-wide text-ink/45">
+        <div className="mt-3 border-t border-[color:var(--dc-hairline)] pt-2.5">
+          <div className="mb-1 text-[9px] font-bold uppercase tracking-[0.16em] text-[color:var(--dc-ink-38)]">
             Discounts
           </div>
           {conditionRewards.length > 0 ? (
             <ul className="flex flex-col gap-0.5">
               {conditionRewards.map((c, i) => (
-                <li key={i} className="text-[12px] font-medium text-amber-700">
+                <li key={i} className="text-[12px] font-semibold text-[color:var(--dc-promo)]">
                   {c.label}
                 </li>
               ))}
             </ul>
           ) : (
-            <div className="text-[12px] text-ink/40">None</div>
+            <div className="text-[12px] text-[color:var(--dc-ink-38)]">None</div>
           )}
         </div>
       </Sec>
 
-      {/* ---- owner margin (private, "only you" lock) ---- */}
+      {/* ---- owner margin (private, "only you" - prototype .private-box) ---- */}
       <Sec>
-        <div
-          className="flex items-center gap-2 rounded-xl border border-dashed px-3 py-2 text-[12px]"
-          style={{
-            borderColor: "color-mix(in srgb, var(--color-brand-deep) 32%, transparent)",
-            background: "color-mix(in srgb, var(--color-brand-deep) 5%, transparent)",
-          }}
-        >
-          <Lock className="h-[12px] w-[12px] text-brand-deep" />
-          <span className="text-ink/55">Your avg. margin</span>
-          <span className="ml-auto font-bold tabular-nums text-brand-deep">
+        <div className="dc-private flex items-center gap-2 rounded-2xl px-3 py-2.5 text-[12px]">
+          <Lock className="h-[13px] w-[13px] text-[color:var(--dc-pink-deep)]" />
+          <span className="text-[color:var(--dc-ink-55)]">Your avg. margin</span>
+          <span className="ml-auto font-bold tabular-nums text-[color:var(--dc-pink-deep)]">
             {marginLabel(avgMargin)}
           </span>
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-brand-deep/70">
-            only you
+          <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-[color:var(--dc-maroon)]">
+            Only you
           </span>
         </div>
       </Sec>
@@ -689,7 +761,7 @@ export function CardFront({
       {/* ---- 7 · NOTES (per-party, D-14) ---- */}
       {editMode ? (
         <Sec>
-          <div className="mb-1 text-[10px] font-bold uppercase tracking-wide text-ink/45">
+          <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--dc-ink-38)]">
             Your note
           </div>
           <textarea
@@ -697,7 +769,7 @@ export function CardFront({
             onChange={(e) => setEditNote(e.target.value)}
             rows={2}
             placeholder="A note the other side will see on your behalf…"
-            className="w-full resize-none rounded-lg bg-white px-3 py-2 text-[12px] text-ink ring-1 ring-black/5 placeholder:text-ink/35 focus:outline-none focus:ring-2 focus:ring-brand/30"
+            className="w-full resize-none rounded-lg bg-white px-3 py-2 text-[12px] text-[color:var(--dc-ink)] ring-1 ring-black/5 placeholder:text-[color:var(--dc-ink-38)] focus:outline-none focus:ring-2 focus:ring-brand/30"
           />
           {/* the other side's note stays read-only; blank never shown (D-14) */}
           <Note company={theirCompanyName} text={theirNote} />
@@ -711,13 +783,20 @@ export function CardFront({
         )
       )}
 
-      {/* ---- 8 · DECISION ---- */}
+        </div>
+        <TearBottom />
+      </div>
+      {/* ---- /paper slip ---- */}
+
+      {/* ---- 8 · DECISION - the footer sitting on the glass, below the paper.
+             It only appears when there is something to act on: a proposed change
+             to send (edit mode) or a held change to Negotiate / Sign. ---- */}
       {editMode ? (
-        <Sec>
-          <div className="mb-1 text-[10px] font-bold uppercase tracking-wide text-ink/45">
+        <div className="dc-decision px-4 pb-3.5 pt-3">
+          <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--dc-ink-38)]">
             Send this change
           </div>
-          <p className="mb-2 text-[11px] text-ink/55">
+          <p className="mb-2 text-[11px] text-[color:var(--dc-ink-55)]">
             The other side reviews it before it takes effect. Say what changed and why.
           </p>
           <textarea
@@ -725,14 +804,14 @@ export function CardFront({
             onChange={(e) => setReason(e.target.value)}
             rows={2}
             placeholder="e.g. Bumped the price to match the new supplier cost…"
-            className="w-full resize-none rounded-lg bg-white px-3 py-2 text-[12px] text-ink ring-1 ring-black/5 placeholder:text-ink/35 focus:outline-none focus:ring-2 focus:ring-brand/30"
+            className="w-full resize-none rounded-lg bg-white px-3 py-2 text-[12px] text-[color:var(--dc-ink)] ring-1 ring-black/5 placeholder:text-[color:var(--dc-ink-38)] focus:outline-none focus:ring-2 focus:ring-brand/30"
           />
           {sendError && <p className="mt-1 text-[11px] text-danger">{sendError}</p>}
           <div className="mt-2 flex items-center justify-end gap-2">
             <button
               type="button"
               onClick={() => onExitEdit?.()}
-              className="rounded-lg px-3 py-1.5 text-[12px] font-medium text-ink/55 ring-1 ring-ink/15 transition hover:bg-ink/5"
+              className="rounded-full px-3 py-1.5 text-[12px] font-semibold text-[color:var(--dc-ink-55)] ring-1 ring-black/10 transition hover:bg-black/5"
             >
               Cancel
             </button>
@@ -740,28 +819,23 @@ export function CardFront({
               type="button"
               disabled={sendBusy || !reason.trim()}
               onClick={() => void onSendChange()}
-              className="rounded-lg bg-brand px-4 py-1.5 text-[12px] font-semibold text-white transition hover:bg-brand-deep disabled:opacity-50"
+              className="rounded-full bg-[color:var(--dc-pink)] px-4 py-1.5 text-[12px] font-bold text-white transition hover:bg-[color:var(--dc-pink-deep)] disabled:opacity-50"
             >
               {sendBusy ? "Sending…" : "Send change"}
             </button>
           </div>
-        </Sec>
+          {/* a subtle "editing" affordance echo so the mode is unmistakable */}
+          <div className="mt-3 flex items-center justify-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-[color:var(--dc-pink-deep)]">
+            <RefreshCcw className="h-3 w-3" /> Editing - changes are proposed, not saved directly
+          </div>
+        </div>
       ) : (
         data.pendingChange && (
-          <Sec>
+          <div className="dc-decision px-4 pb-3.5 pt-3.5">
             <DecisionBar data={data} />
-          </Sec>
+          </div>
         )
       )}
-
-      {/* a subtle "editing" affordance echo so the mode is unmistakable */}
-      {editMode && (
-        <div className="flex items-center justify-center gap-1.5 pb-3 text-[10px] font-semibold uppercase tracking-wide text-brand-deep/70">
-          <RefreshCcw className="h-3 w-3" /> Editing - changes are proposed, not saved directly
-        </div>
-      )}
-
-      <div className="h-2" />
     </div>
   );
 }
