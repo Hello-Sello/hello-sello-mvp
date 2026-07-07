@@ -156,6 +156,12 @@ function toFieldPatch(f: ProductFieldDraft): ProductFieldPatch {
     if (v !== undefined) patch[k] = v.trim() === "" ? null : v.trim();
   }
   if (f.resealable !== undefined) patch.resealable = f.resealable;
+  if (f.pack_sizes !== undefined) {
+    patch.pack_sizes = f.pack_sizes
+      .split(",")
+      .map((s) => parseNum(s))
+      .filter((n): n is number => n != null && n > 0);
+  }
   return patch;
 }
 
@@ -189,6 +195,11 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Bumped on every successful save and folded into each ProductCard's key below —
+  // forces a remount so a card left showing its back (Docs & media) resets to the
+  // front instead of staying flipped after Save (ProductCard's `flipped` is local
+  // state Save has no other way to reach).
+  const [saveVersion, setSaveVersion] = useState(0);
 
   // Active location tab. "All" shows every location group; a named location
   // re-contexts the grid to that one group.
@@ -385,6 +396,7 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
     setCoverFile(null);
     setPendingLocations([]);
     setPendingProductEdits({});
+    setSaveVersion((v) => v + 1);
     router.refresh();
   }
 
@@ -492,7 +504,7 @@ export function ShopView({ shop, company: companyProfile }: { shop: Shop; compan
             >
               {g.products.map((p) => (
                 <ProductCard
-                  key={p.id}
+                  key={`${p.id}:${saveVersion}`}
                   product={p}
                   companyId={company.id}
                   editing={editing}

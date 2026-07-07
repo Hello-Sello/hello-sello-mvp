@@ -79,8 +79,9 @@ export function PresentBanner({
         </div>
       )}
 
-      {/* LinkedIn 4:1 cover (DEV-118). aspect-[4/1] holds the ratio at any width. */}
-      <div className="relative aspect-[4/1] w-full overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-950 via-green-800 to-lime-700 shadow-lg">
+      {/* LinkedIn-style cover (DEV-118), trimmed shorter than the original 4:1 —
+          at full page width 4:1 read as too tall/dominant next to the info boxes. */}
+      <div className="relative aspect-[6/1] w-full overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-950 via-green-800 to-lime-700 shadow-lg">
         {coverUrl && (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={coverUrl} alt="" className="absolute inset-0 h-full w-full object-cover opacity-90" />

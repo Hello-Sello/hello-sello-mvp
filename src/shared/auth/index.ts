@@ -1,25 +1,31 @@
+import { cache } from 'react'
 import { createClient } from '@/shared/db/server'
 import type { Tables } from '@/shared/db'
 
 // Who is signed in. getUser() revalidates the JWT with the auth server, which is
 // safer on the server than getSession() (the latter trusts the cookie as-is).
-export async function getCurrentUser() {
+//
+// cache()-memoized so every accessor below shares ONE verified auth check per
+// request instead of each independently hitting the auth server. Server
+// Components that fetch in parallel (e.g. Promise.all) each used to create
+// their own client and call getUser()/getClaims() concurrently — a real race
+// against local token-rotation that transiently returned no session even
+// though the cookie was fine (Present logout-on-save bug, 2026-07-07).
+export const getCurrentUser = cache(async () => {
   const supabase = await createClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
   return user
-}
+})
 
 // The signed-in person's row. person.id === auth.uid(), and RLS lets a user read
 // their own row, so this resolves the app-level identity behind the auth user.
 export async function getCurrentPerson(): Promise<Tables<'person'> | null> {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const user = await getCurrentUser()
   if (!user) return null
 
+  const supabase = await createClient()
   const { data } = await supabase
     .from('person')
     .select('*')
