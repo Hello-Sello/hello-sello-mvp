@@ -510,12 +510,14 @@ export async function proposeDeal(input: ProposeDealInput): Promise<ProposeDealR
  * action serves BOTH doors - a Sella-detected and a manual proposal are the same
  * message shape, so birth follows one path with two entry doors.
  *
- * No audit is written here. The birth's `deal.created` audit is a known GAP on
- * the RPC-born path (createDeal stamps one; detection/propose never did): the
- * RPC returns the same card id whether THIS call birthed it or an earlier one
- * did (idempotency), so the action cannot tell "born now" from "already born"
- * and must not risk a double-stamp into the hash-chained log. The proper fix is
- * a "born_now" flag from the RPC - parked, and outside 4.5.2's UI scope.
+ * AUDIT-01: the birth's `deal.created` audit row is now stamped here, closing the
+ * RPC-born gap (createDeal stamped one; detection/propose never did). The RPC
+ * used to return the same card id whether THIS call birthed it or an earlier one
+ * did (idempotency), so the action could not tell "born now" from "already born"
+ * and dared not risk a double-stamp into the hash-chained log. The RPC now also
+ * returns a `born_now` boolean (20260707130200); we writeAudit('deal.created')
+ * ONLY when born_now is true, mirroring createDeal, so the row is written exactly
+ * once (T-07-03-02).
  */
 export async function confirmDetectedDeal(args: {
   messageId: string;
@@ -529,14 +531,39 @@ export async function confirmDetectedDeal(args: {
 
   // SECURITY DEFINER RPC: derives the caller's company from the SESSION (never
   // trusted from input) and gates on thread membership - the same guardrail as
-  // create_deal_draft. Direct supabase.rpc call so `this` stays bound.
-  const { data: cardId, error } = await supabase.rpc("confirm_detected_deal" as never, {
+  // create_deal_draft. Direct supabase.rpc call so `this` stays bound. The RPC's
+  // new OUT-param shape ({ deal_card_id, born_now }) is not in the generated types
+  // yet, so it rides the localized `as never` cast (Muskan's documented pattern;
+  // no full database.types regen this phase - 07-08 regenerates).
+  const { data, error } = await supabase.rpc("confirm_detected_deal" as never, {
     p_message_id: args.messageId,
     p_decision: args.decision,
   } as never);
   if (error) throw new Error((error as { message: string }).message);
 
-  return { bornCardId: (cardId as string | null) ?? null };
+  // Two OUT params come back as one record; be tolerant of a single-object or
+  // an array-of-one shape across PostgREST versions.
+  const rec = (Array.isArray(data) ? data[0] : data) as
+    | { deal_card_id: string | null; born_now: boolean }
+    | null;
+  const bornCardId = rec?.deal_card_id ?? null;
+  const bornNow = rec?.born_now === true;
+
+  // AUDIT-01: stamp deal.created EXACTLY once, on the true born-now path only.
+  // Mirrors createDeal's audit write (same actorType/action/contentType). The
+  // idempotent re-call path returns born_now=false, so a second confirmer's click
+  // never double-stamps the hash-chained log.
+  if (bornNow && bornCardId) {
+    await writeAudit({
+      actorType: "user",
+      action: "deal.created",
+      contentType: "deal_card",
+      contentId: bornCardId,
+      actorPersonId: user.id,
+    });
+  }
+
+  return { bornCardId };
 }
 
 /**
