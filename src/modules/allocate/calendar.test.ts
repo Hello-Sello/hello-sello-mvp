@@ -3,7 +3,7 @@
  * vitest, no Supabase, no React — mirrors status.test.ts's house style.
  */
 import { describe, it, expect } from "vitest";
-import { calendarDay, calendarKpis } from "./calendar";
+import { calendarDay, calendarKpis, lineGrams } from "./calendar";
 
 describe("calendarDay — which date positions a pill (delivery ?? created)", () => {
   it("uses the delivery date when one is set", () => {
@@ -14,6 +14,20 @@ describe("calendarDay — which date positions a pill (delivery ?? created)", ()
 
   it("falls back to the created date when there is no delivery date", () => {
     expect(calendarDay(null, "2026-07-01T00:00:00Z")).toBe("2026-07-01T00:00:00Z");
+  });
+});
+
+describe("lineGrams — a deal line's weight in grams for the €/g blend", () => {
+  it("passes grams straight through", () => {
+    expect(lineGrams(250, "g")).toBe(250);
+  });
+
+  it("converts kilograms to grams", () => {
+    expect(lineGrams(2, "kg")).toBe(2000);
+  });
+
+  it("treats a countable 'unit' line as zero grams (not a weight)", () => {
+    expect(lineGrams(5, "unit")).toBe(0);
   });
 });
 

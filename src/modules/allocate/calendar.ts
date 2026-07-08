@@ -13,6 +13,17 @@ export function calendarDay(deliveryDate: string | null, createdAt: string): str
   return deliveryDate ?? createdAt;
 }
 
+/**
+ * A deal line's weight in grams, for the weighted-avg €/g blend. `g` passes
+ * through, `kg` scales ×1000, and a countable `unit` line has no weight (0 g)
+ * so it never distorts the €/g denominator. (deal_line_unit codes: g/kg/unit.)
+ */
+export function lineGrams(quantity: number, unit: string): number {
+  if (unit === "kg") return quantity * 1000;
+  if (unit === "g") return quantity;
+  return 0; // "unit" — a count, not a weight
+}
+
 /** One deal's contribution to the calendar KPIs. */
 export interface CalendarKpiInput {
   value: number;
