@@ -4,6 +4,45 @@ Personal session recaps, newest-first. CLAUDE.md keeps no session prose — ever
 
 ---
 
+## Session 60 (2026-07-08) — BUY (PHASE 18) BUILT END-TO-END + SHIPPED, VERIFIED 7/7
+
+Autonomous loop per direct request ("build until Buy is done for demo"): research → plan → TDD → build → code review → verify. 13 plans / 6 waves via `/gsd:plan-phase` + `/gsd:execute-phase`, parallel git-worktree executors, plus 2 follow-up fix passes (18-14: real time-series chart + pack-size threading; 18-15: 5 code-review fixes).
+
+**Notable events:** (1) Research found the phase's assumed external dependency (shared Sales Calendar) was already built on a local branch — treated its merge as Wave 0, not a blocker. (2) Mid-Wave-0, discovered the actual account owner had independently merged that same branch via GitHub PR #141 while agents were running — reconciled via cherry-pick, no data lost (see ARCHITECTURE-NOTES 2026-07-08 "Concurrent-session branch collision"). (3) Found + fixed a real gap myself: `getBuyAnalytics()` had no date/pack-size data, contradicting locked spec. (4) Ran an 8-angle high-effort code review on the ~5,600-line diff, personally verified all 9 findings against source before fixing the 5 demo-critical ones (PencilEditCell re-select bug breaking multi-digit typing, cosmetic Time filter, mismatched KPI delta window, phantom chart bars, cross-supplier product-name collision). (5) Final `gsd-verifier` pass found one more gap — my own Time-filter fix was too strict, hiding all future-dated deals — fixed same-day; Muskan confirmed the fix's direction (count future-dated deals) during wrap-up, so it's locked (DECISIONS.md 2026-07-08). (6) User caught that the sidebar's "Buy" nav item was still hardcoded `state: "soon"` (pre-phase placeholder) — none of the 13 plans touched the shared nav config since they were scoped to the page itself; one-line fix in `src/shared/ui/surfaces.ts`.
+
+**Gate:** tsc/eslint clean, 248/248 unit tests, live-verified on a fresh `supabase db reset` + real seed data throughout. All pushed to `claude/muskan/work`.
+
+**Known follow-ups, not fixed (logged in ARCHITECTURE-NOTES/DECISIONS):** 3x-duplicated buyer-narrowing filter logic, a redundant `getBuyPartners()` requery inside `getBuyAnalytics()`, CSV currency field silently ignored, `BuyDealCardHost` triplicated across connect/sell/buy, and a pre-existing seed-data gap (no local product has `profile_visible=true`, so the Pack size filter shows no options in a live demo until that's set).
+
+**Migration** `20260708090000_buy_schema.sql` is local-only, cloud-pending per usual convention.
+
+---
+
+## Session 59 (2026-07-08, parallel worktree) — SALES CALENDAR (`DealCalendar`) built + verified live
+
+**Where:** worktree `worktree-sales-calendar` / branch `muskan/sales-calendar` — **built + committed there, NOT merged to `claude/muskan/work` and NOT pushed** (feature branch; user hasn't asked to merge/PR yet). Ran in parallel with the Product Basket work on the main checkout (`:3000`); this worktree's dev server ran on `:3001`.
+
+**The arc (long design-iteration session):** started as a discussion to make the Sell/Buy sales calendar a **reusable component**. Prototyped first (per rule) by evolving the calendar section of `prototypes/allocate-prototype/index.html` through **~7 live-feedback rounds** (folded in Marcel's DEV-154 asks, then Muskan's steers: dropped the bar/price-line chart, big clear months, full Jan–Dec, compact-chip month header, light table not checkers, default to current month, range filter, "Customers" column heading). **Hit a real bug twice** — "customer names vanish when scrolled" — which I initially mis-theorized as a large-grid limit; **caught it empirically with a headless-Chrome DOM measurement** (`position:sticky` name column drifting to `left:-324px` on scroll). Fix = **split-pane frozen columns** (non-scrolling names column beside a separately-scrolling day grid), not sticky. Verified the fix the same way (stayed at 128px + screenshot).
+
+**Then design-locked via grill-with-docs** (Muskan's chosen process): resolved terminology (Deal calendar / Counterparty / Pill / Deal display stage), pill = one Deal Card **from birth**, position = `delivery_date_target ?? created_at`, colour = **DEV-151 display stages** (found the authoritative Linear issue; reconciled Muskan's recollection vs Marcel's written list — yellow=accepted, ticket=blue, Deal-update kept separate=orange placeholder), KPI cards (side-flipped labels, weighted-avg = money÷grams), build contract. Wrote **`docs/muskan-build/deal-calendar.md`** + CONTEXT terms.
+
+**Then TDD build:**
+- Pure helpers `calendarDay` / `calendarKpis` / `lineGrams` — **7 tests, red→green** (`src/modules/allocate/calendar.ts`).
+- `getSellerCalendarDeals()` read (`src/modules/allocate/calendarDeals.ts`) — mirrors `getSellerOrders`, **reuses `statusOf`** for the colour, **money = Σ `line_total`** (found `value_net` is null in the data → fixed after seeing 0€ live).
+- **`DealCalendar.tsx`** (`src/modules/deals/components/`) — self-contained (allocate imports deals, so it can't import back; declares own prop types, Sell page passes KPIs). Split-pane freeze + 3-month paged window (‹ ›, default current month) + range filter + coloured pills + KPI cards + per-counterparty running total. Timeline view only.
+- Wired into Sell page (replaced `SalesCalendarStub`, removed it); seeded delivery dates across Jul–Aug 2026 on the existing 7 `ALLOC-SEED` orders (already span all 7 colours) via an idempotent UPDATE.
+
+**Verified LIVE** (`supabase db reset` → dev `:3001` → headless login `alice@greenleaf.test`/`password123` → `/sell`): renders correctly — frozen CUSTOMERS column (StonePharm 79k / Rheinland 71k this month), July-2026 current-month chip, today marked, **full colour range** (pink/yellow/green/orange/dark-green), KPIs 135.000€ / 6 deals / 5.93 €/g / 2 customers. Gate: **tsc 0 · eslint clean · 177/177 unit.**
+
+**⚠️ Open / carry-over:**
+- **Unmerged + unpushed** on `muskan/sales-calendar` (7 feature commits). Merge to `claude/muskan/work` when ready → then the sync-file + DECISIONS/ARCHITECTURE-NOTES/CONTEXT updates reach origin for Ayush.
+- **Touched `src/modules/deals/index.ts`** (one additive `DealCalendar` export) — Ayush's lane; flagged in sync for the merge.
+- **Ran `supabase db reset`** — shared local DB re-seeded (other worktrees/`:3000` now see fresh seed).
+- **Node_modules:** worktree got a real `npm ci` (symlink broke Turbopack).
+- **Deferred:** Year aggregate view (Timeline only built); richer seed (only 2 counterparties); pill length/span rule (cosmetic 2-day now); "Deal update" colour still Marcel-unconfirmed (orange placeholder).
+
+---
+
 - **2026-07-08 (session 58) — Merged Ayush's Phase-7 (Deal Room/Stages retirement, PR #139) into `claude/muskan/work` + fixed the one predicted break: Allocate now opens the real Deal Card, not the retired Deal Room.** Diagnosed a real cross-lane collision before it happened: session-53's `AllocateDealRoomHost` (Sell/Allocate) deliberately reused Ayush's `DealWorkspace`/`DealRoomOverlayHost` — but his Phase-7 work retired that whole Stages/Deal-Room model in favor of a flat `DealCard` + Things list (`DealCardPanelHost`, `hs:open-deal-card` event). Agreed order with Ayush: he merged PR #139 → `dev` first (git-mergeable, one predicted `tsc` break), then I pulled `dev` into my branch (`b4d3d38`; one real conflict in `deals/actions.ts`'s import list, resolved keeping both sides' helpers) and fixed the break.
   - **Deleted `AllocateDealRoomHost.tsx`**, added `AllocateDealCardHost.tsx` — mirrors `DealCardPanelHost`'s fetch (`getDealCard`/`getWorkspace`/`getThings`/`getDealPeople`) but renders as a right-side panel with **no backdrop/blur** (page stays interactive underneath, matching the chat-preview feel) rather than his in-flow 50/50 split, since Sell's page isn't a flex-split layout like Connect's. `OrdersTable.tsx` flipped to dispatch `hs:open-deal-card`.
   - **`supabase db reset`** — local DB was missing his 8 newer migrations (flat Things schema, promotion, chat groups); reset applied clean, `database.types.ts` already matched (no regen needed).

@@ -95,3 +95,5 @@ export {
 } from "./actions";
 export { DealCard } from "./components/DealCard";
 export { DealPin } from "./components/DealPin";
+export { DealCalendar } from "./components/DealCalendar";
+export type { CalendarDeal, DealCalendarKpis, DisplayStage } from "./components/DealCalendar";

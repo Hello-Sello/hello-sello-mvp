@@ -297,6 +297,87 @@ export type Database = {
         }
         Relationships: []
       }
+      buyer_resale_price: {
+        Row: {
+          buyer_company_id: string
+          created_at: string
+          created_by: string | null
+          gross: number | null
+          id: string
+          net: number | null
+          product_id: string | null
+          product_name: string
+          supplier_company_id: string | null
+          supplier_name: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          buyer_company_id: string
+          created_at?: string
+          created_by?: string | null
+          gross?: number | null
+          id?: string
+          net?: number | null
+          product_id?: string | null
+          product_name: string
+          supplier_company_id?: string | null
+          supplier_name: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          buyer_company_id?: string
+          created_at?: string
+          created_by?: string | null
+          gross?: number | null
+          id?: string
+          net?: number | null
+          product_id?: string | null
+          product_name?: string
+          supplier_company_id?: string | null
+          supplier_name?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "buyer_resale_price_buyer_company_id_fkey"
+            columns: ["buyer_company_id"]
+            isOneToOne: false
+            referencedRelation: "company"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "buyer_resale_price_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "person"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "buyer_resale_price_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "product"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "buyer_resale_price_supplier_company_id_fkey"
+            columns: ["supplier_company_id"]
+            isOneToOne: false
+            referencedRelation: "company"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "buyer_resale_price_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "person"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chat_message: {
         Row: {
           body: string
@@ -3729,6 +3810,70 @@ export type Database = {
           sort_order?: number
         }
         Relationships: []
+      }
+      purchase_history_import: {
+        Row: {
+          buyer_company_id: string
+          created_at: string
+          created_by: string | null
+          currency: string
+          id: string
+          product_name: string
+          purchase_date: string
+          quantity: number
+          supplier_name: string
+          unit: string
+          unit_price: number
+        }
+        Insert: {
+          buyer_company_id: string
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          id?: string
+          product_name: string
+          purchase_date: string
+          quantity: number
+          supplier_name: string
+          unit: string
+          unit_price: number
+        }
+        Update: {
+          buyer_company_id?: string
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          id?: string
+          product_name?: string
+          purchase_date?: string
+          quantity?: number
+          supplier_name?: string
+          unit?: string
+          unit_price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "purchase_history_import_buyer_company_id_fkey"
+            columns: ["buyer_company_id"]
+            isOneToOne: false
+            referencedRelation: "company"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_history_import_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "person"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_history_import_unit_fkey"
+            columns: ["unit"]
+            isOneToOne: false
+            referencedRelation: "deal_line_unit"
+            referencedColumns: ["code"]
+          },
+        ]
       }
       relationship: {
         Row: {

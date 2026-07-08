@@ -13,18 +13,21 @@ import {
 } from "@/modules/deals";
 
 /**
- * Deal card overlay host — the Sell-surface twin of
- * `src/app/connect/DealCardPanelHost.tsx` (Phase 7 retired the Deal Room +
+ * Deal card overlay host — the Buy-surface twin of
+ * `src/app/sell/AllocateDealCardHost.tsx` (itself the Sell-surface twin of
+ * `src/app/connect/DealCardPanelHost.tsx`, Phase 7 retired the Deal Room +
  * Stages, D-15/D-17; this host mounts ONLY the flip `DealCard`, never a
- * container). Sell's page is a plain single-column scroll (not Connect's
- * flex-split layout), so this keeps the same right-side overlay presentation
- * this host has always used, rather than adopting the in-flow 50/50 panel.
+ * container). A byte-for-byte copy per 18-13-PLAN.md's `<interfaces>` block —
+ * Buy's page is a plain single-column scroll (same shape as Sell's), so this
+ * keeps the identical right-side overlay presentation, never adopting the
+ * in-flow 50/50 panel.
  *
- * Speaks the IDENTICAL `hs:open-deal-card` window-event contract his host
- * listens for, so a row click on the Orders table opens the same real
- * `DealCard` the Connect surface uses — same data, same fetch shape.
+ * Speaks the IDENTICAL `hs:open-deal-card` window-event contract, so a pill
+ * click on Buy's Deals timeline opens the same real `DealCard` component
+ * Sell/Connect already use — same data, same fetch shape (T-18-20, accepted:
+ * no new attack surface introduced by this copy).
  */
-export function AllocateDealCardHost() {
+export function BuyDealCardHost() {
   const [openCardId, setOpenCardId] = useState<string | null>(null);
   const [data, setData] = useState<DealCardView | null>(null);
   const [things, setThings] = useState<ThingView[]>([]);
