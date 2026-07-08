@@ -1,80 +1,107 @@
 "use client";
 
 import { useState } from "react";
-import { X, Minus, Plus, Trash2, Send } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Minus, Plus, Trash2, FileText } from "lucide-react";
 import { useBasket } from "../BasketProvider";
 import { updateBasketLinePackCount, removeBasketLine } from "../supabase/writes";
 import { sendBasketGroup } from "../actions";
 import { RecipientPicker } from "./RecipientPicker";
+import { dealChatUrl } from "@/modules/deals";
 import type { BasketGroup } from "../types";
 
+/**
+ * The compact dropdown that replaced the full-height slide-in drawer (locked
+ * design: prototypes/basket-popover-prototype). Rendered by TopBar INSIDE the
+ * `relative` wrapper around the basket icon, so the `absolute` positioning
+ * below anchors directly to that icon - no portal, no getBoundingClientRect
+ * math, just CSS. TopBar owns the open/close toggle + the click-catcher
+ * backdrop (mirrors ConversationList's `NewMenu`, the closest existing analog
+ * for "small anchored dropdown under a trigger button"); this component only
+ * renders the panel and returns null while closed.
+ */
 export function BasketDrawer() {
   const { view, open, setOpen, refresh } = useBasket();
 
-  return (
-    <>
-      <div
-        className={`fixed inset-0 z-40 bg-ink/20 backdrop-blur-[1px] transition-opacity ${open ? "opacity-100" : "pointer-events-none opacity-0"}`}
-        onClick={() => setOpen(false)}
-      />
-      <aside
-        className={`glass-strong fixed right-0 top-0 z-50 flex h-full w-[392px] max-w-[92vw] flex-col rounded-l-3xl shadow-2xl transition-transform ${open ? "translate-x-0" : "translate-x-full"}`}
-      >
-        <header className="flex items-center gap-2 border-b border-ink/10 px-4 py-3">
-          <h2 className="text-sm font-bold text-ink">Your basket</h2>
-          <span className="text-xs text-ink/50">· {view.groups.length} {view.groups.length === 1 ? "shop" : "shops"}</span>
-          <button aria-label="Close basket" onClick={() => setOpen(false)} className="ml-auto rounded-full p-1 text-ink/50 hover:bg-ink/5">
-            <X size={16} />
-          </button>
-        </header>
+  if (!open) return null;
 
-        <div className="flex-1 overflow-auto px-4">
-          {view.groups.length === 0 ? (
-            <p className="py-10 text-center text-sm text-ink/45">Your basket is empty.</p>
-          ) : (
-            view.groups.map((g) => <Group key={g.sellerCompanyId} group={g} onChanged={refresh} />)
-          )}
-        </div>
-      </aside>
-    </>
+  return (
+    <div
+      role="menu"
+      aria-label="Your basket"
+      className="glass-strong absolute right-0 top-[calc(100%+10px)] z-50 w-80 max-w-[92vw] rounded-2xl p-3.5 shadow-2xl"
+    >
+      {/* caret pointing back up at the icon - two edges only (top+left) so the
+          panel's own opaque background covers the overlapping half, per the
+          locked prototype's `.pop::before`. */}
+      <span
+        aria-hidden
+        className="absolute -top-[6px] right-3.5 h-3 w-3 rotate-45 border-l border-t border-white/70 bg-white"
+      />
+
+      <div className="mb-2 flex items-center gap-1.5 px-0.5">
+        <h2 className="text-sm font-bold text-ink">Your basket</h2>
+        <span className="text-xs text-ink/50">
+          · {view.groups.length} {view.groups.length === 1 ? "shop" : "shops"}
+        </span>
+      </div>
+
+      <div className="max-h-[360px] overflow-y-auto">
+        {view.groups.length === 0 ? (
+          <p className="py-8 text-center text-xs text-ink/45">Your basket is empty.</p>
+        ) : (
+          view.groups.map((g) => (
+            <Group
+              key={g.sellerCompanyId}
+              group={g}
+              onChanged={refresh}
+              onDrafted={() => setOpen(false)}
+            />
+          ))
+        )}
+      </div>
+    </div>
   );
 }
 
-function Group({ group, onChanged }: { group: BasketGroup; onChanged: () => Promise<void> }) {
-  const [note, setNote] = useState("");
+function Group({
+  group,
+  onChanged,
+  onDrafted,
+}: {
+  group: BasketGroup;
+  onChanged: () => Promise<void>;
+  onDrafted: () => void;
+}) {
+  const router = useRouter();
   const [recipient, setRecipient] = useState<{ relationshipId: string; counterpartyPersonId: string | null } | null>(
     group.isOwnCompany ? null : (group.relationshipId ? { relationshipId: group.relationshipId, counterpartyPersonId: null } : null),
   );
   const [sending, setSending] = useState(false);
-  const [sent, setSent] = useState(false);
 
-  async function send() {
+  // Drafts the deal, then hands the viewer off to the relationship's chat
+  // where the new card now lives (Task 8b's dealChatUrl contract) - replaces
+  // the old drawer's static "✓ sent" row entirely.
+  async function draft() {
     if (!recipient) return;
     setSending(true);
     try {
-      await sendBasketGroup(group, {
+      const { dealCardId } = await sendBasketGroup(group, {
         relationshipId: recipient.relationshipId,
         counterpartyPersonId: recipient.counterpartyPersonId,
-        note: note.trim() || null,
+        note: null,
       });
-      setSent(true);
       await onChanged();
+      onDrafted();
+      router.push(dealChatUrl(recipient.relationshipId, dealCardId));
     } finally {
       setSending(false);
     }
   }
 
-  if (sent) {
-    return (
-      <div className="border-b border-ink/10 py-4 text-sm font-semibold text-success">
-        ✓ {group.isOwnCompany ? "Offer" : "Order"} sent to {group.sellerCompanyName}
-      </div>
-    );
-  }
-
   return (
-    <div className="border-b border-ink/10 py-3">
-      <div className="mb-2 flex items-center gap-2">
+    <div className="border-b border-ink/10 py-3 last:border-0 last:pb-0">
+      <div className="mb-1.5 flex items-center gap-2">
         <span className="text-sm font-bold text-ink">{group.sellerCompanyName}</span>
         {group.isOwnCompany && <span className="rounded-full bg-brand/10 px-2 py-0.5 text-[10px] font-bold text-brand-deep">Your shop</span>}
         <span className="ml-auto text-xs text-ink/50">{group.lines.length}</span>
@@ -106,13 +133,6 @@ function Group({ group, onChanged }: { group: BasketGroup; onChanged: () => Prom
         </div>
       ))}
 
-      <input
-        value={note}
-        onChange={(e) => setNote(e.target.value)}
-        placeholder="Add a note (optional)…"
-        className="mt-2 w-full rounded-lg bg-white/80 px-2.5 py-1.5 text-xs ring-1 ring-black/10"
-      />
-
       {group.isOwnCompany && (
         <div className="mt-2">
           <RecipientPicker onPick={setRecipient} />
@@ -121,10 +141,10 @@ function Group({ group, onChanged }: { group: BasketGroup; onChanged: () => Prom
 
       <button
         disabled={!recipient || sending}
-        onClick={send}
+        onClick={draft}
         className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg bg-brand py-2 text-xs font-bold text-white hover:bg-brand-deep disabled:opacity-40"
       >
-        <Send size={13} /> {group.isOwnCompany ? "Send offer" : "Send order"}
+        <FileText size={13} /> Draft deal
       </button>
     </div>
   );
