@@ -17,8 +17,8 @@ import {
  * `src/app/connect/DealCardPanelHost.tsx` (Phase 7 retired the Deal Room +
  * Stages, D-15/D-17; this host mounts ONLY the flip `DealCard`, never a
  * container). Sell's page is a plain single-column scroll (not Connect's
- * flex-split layout), so this keeps the overlay presentation the old
- * `AllocateDealRoomHost` used rather than adopting the in-flow 50/50 panel.
+ * flex-split layout), so this keeps the same right-side overlay presentation
+ * this host has always used, rather than adopting the in-flow 50/50 panel.
  *
  * Speaks the IDENTICAL `hs:open-deal-card` window-event contract his host
  * listens for, so a row click on the Orders table opens the same real

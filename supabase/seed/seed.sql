@@ -979,3 +979,22 @@ where c.created_by is not null
     select 1 from public."group" g
     where g.company_id = c.id and g.name = 'Superadmin' and g.deleted_at is null
   );
+
+-- ----------------------------------------------------------------------------
+-- 8c. Sales-calendar demo — spread the ALLOC-SEED orders' delivery dates across
+--     the current window so the calendar reads as a real timeline. Without this
+--     every pill positions on created_at (= seed time) and stacks on one day.
+--     The calendar positions a pill by delivery_date_target ?? created_at
+--     (deal-calendar.md §2). Idempotent (an UPDATE keyed on seller_so_number).
+-- ----------------------------------------------------------------------------
+update public.deal_card set delivery_date_target = d.dt
+from (values
+  ('ALLOC-SEED-01', timestamptz '2026-07-03 10:00+00'),
+  ('ALLOC-SEED-02', timestamptz '2026-07-08 10:00+00'),
+  ('ALLOC-SEED-03', timestamptz '2026-07-11 10:00+00'),
+  ('ALLOC-SEED-04', timestamptz '2026-07-16 10:00+00'),
+  ('ALLOC-SEED-05', timestamptz '2026-07-22 10:00+00'),
+  ('ALLOC-SEED-06', timestamptz '2026-08-06 10:00+00'),
+  ('ALLOC-SEED-07', timestamptz '2026-07-27 10:00+00')
+) as d(so, dt)
+where public.deal_card.seller_so_number = d.so;

@@ -22,9 +22,10 @@
  * purpose: importing messaging's hook would make deals ↔ messaging a cycle
  * (messaging already renders this component).
  */
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Check,
   ChevronDown,
@@ -43,8 +44,10 @@ import {
 } from "../supabase/reads";
 import {
   confirmDetectedDeal,
+  createDeal,
   proposeDealChange,
 } from "../actions";
+import { dealChatUrl } from "../lib/dealChatUrl";
 import { formatMoney } from "../lib/derive";
 import { DealCard } from "./DealCard";
 import { CreateDealForm } from "./CreateDealForm";
@@ -146,6 +149,7 @@ export function DealPin({
   counterpartyInitials?: string;
   children: React.ReactNode;
 }) {
+  const router = useRouter();
   const [deals, setDeals] = useState<RelationshipDealRow[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // the latest selected id for the realtime handler (avoids re-subscribing the
@@ -158,6 +162,13 @@ export function DealPin({
   const [menuOpen, setMenuOpen] = useState(false); // the top-tier three-dot menu
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState(false);
+  // Task 8c (Round 2) - "Create a deal" direct-birth in flight (disables the
+  // "Start a deal" button so a double-click can't fire create_deal_draft twice).
+  const [creatingDeal, setCreatingDeal] = useState(false);
+  // a ref twin of creatingDeal for the reentrancy guard itself: the window-event
+  // listener below closes over this function once per (canPropose) subscription,
+  // so a state read there could go stale between renders - the ref never does.
+  const creatingDealRef = useRef(false);
 
   // 04C - the conversation-rail slot the card portals into (chat variant only). The
   // card now opens as a LEAFLET over the conversation rail (same place/shape as the
@@ -215,6 +226,33 @@ export function DealPin({
       setActing(false);
     }
   }
+
+  // Task 8c (Round 2, Product Basket) - "Create a deal" no longer opens the
+  // propose form (CreateDealForm -> proposeDeal -> wait for accept). It births
+  // a REAL empty draft immediately via the same `createDeal` RPC the basket
+  // flow uses, then hands the viewer to the relationship's c2c chat with the
+  // card already open - `dealChatUrl` (Task 8b), the exact mechanism
+  // BasketDrawer's draft() uses. `relationshipId` is reused as-is (the same
+  // value proposeDeal already relies on); no new resolution logic.
+  // `setSelectedId` runs BEFORE the navigation so this instance - which
+  // survives a P2P -> C2C thread switch since it is keyed on relationshipId,
+  // not threadId - never flashes "No deal yet" while the route change lands.
+  const createEmptyDraft = useCallback(async () => {
+    if (creatingDealRef.current) return;
+    creatingDealRef.current = true;
+    setCreatingDeal(true);
+    try {
+      const { dealCardId } = await createDeal({ relationshipId, lines: [] });
+      setSelectedId(dealCardId);
+      void listRelationshipDeals(relationshipId).then(setDeals);
+      router.push(dealChatUrl(relationshipId, dealCardId));
+    } catch (e) {
+      console.error("create deal failed", e);
+    } finally {
+      creatingDealRef.current = false;
+      setCreatingDeal(false);
+    }
+  }, [relationshipId, router]);
 
   // 4.5.4 - re-read the loaded card after a change resolves. The card read also
   // refreshes `pendingChange`, so the strip control + the pencil lock both update
@@ -389,15 +427,19 @@ export function DealPin({
     };
   }, [canPropose, threadId, relationshipId]);
 
-  // the composer's "+ → Create a deal" door (5A.3): it fires a window event so
-  // the footer button and this form stay decoupled. p2p chat only - propose
-  // needs a p2p thread (the workspace/c2c chats cannot mint a proposal).
+  // the composer's "+ → Create a deal" door (5A.3 -> Task 8c): it fires a
+  // window event so the footer button and this component stay decoupled. p2p
+  // chat only - the RPC needs a relationship member either way, but this
+  // trigger's availability is unchanged from the old propose gate (D13: the
+  // workspace/c2c chats don't show the composer's create-deal affordance
+  // reacting here). Round 2: births the real draft directly (createEmptyDraft)
+  // instead of opening CreateDealForm.
   useEffect(() => {
     if (!canPropose) return;
-    const onCreate = () => setCreating(true);
+    const onCreate = () => void createEmptyDraft();
     window.addEventListener("hs:create-deal", onCreate);
     return () => window.removeEventListener("hs:create-deal", onCreate);
-  }, [canPropose]);
+  }, [canPropose, createEmptyDraft]);
 
   // load the full card for the selected deal (drives the overlay + confirm gate).
   // setState only inside the async callback - no selection resolves to null.
@@ -732,11 +774,12 @@ export function DealPin({
           {canPropose && (
             <button
               type="button"
-              onClick={() => setCreating(true)}
-              className="flex items-center gap-1.5 rounded-lg border border-dashed border-brand/45 px-3 py-1.5 text-xs font-semibold text-brand transition hover:border-brand hover:bg-brand-soft/30"
+              onClick={() => void createEmptyDraft()}
+              disabled={creatingDeal}
+              className="flex items-center gap-1.5 rounded-lg border border-dashed border-brand/45 px-3 py-1.5 text-xs font-semibold text-brand transition hover:border-brand hover:bg-brand-soft/30 disabled:cursor-wait disabled:opacity-50"
             >
               <Plus size={13} strokeWidth={2.5} />
-              Start a deal
+              {creatingDeal ? "Starting…" : "Start a deal"}
             </button>
           )}
         </div>

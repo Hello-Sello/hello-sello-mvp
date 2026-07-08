@@ -1371,3 +1371,24 @@ Buyer feedback: a product needs several discrete pack sizes (10g/20g/50g), picke
 ## 2026-07-08 — Allocate opens the Deal Card, not a Deal Room
 
 Following Ayush's Phase-7 retirement of the Deal Room/Stages container (D-15/D-17, PR #139), Sell/Allocate's order-row click now opens the real `DealCard` as a right-side panel beside the page content (mirrors Connect's `DealCardPanelHost`), not a duplicated Deal Room overlay. The old `AllocateDealRoomHost` (session 53, a deliberate duplicate of the now-retired `DealRoomOverlayHost`) is deleted; replaced by `AllocateDealCardHost`, sharing the `hs:open-deal-card` event contract and fetch shape his host uses. *Why:* the Deal Room/Stages model it depended on no longer exists, and a flip card was the right level of detail for "preview an order" anyway — no reason to rebuild the retired container.
+
+## 2026-07-08 — Sales/Purchase calendar: one shared `DealCalendar`
+
+Grill-with-docs design lock for the deal-timeline surface (SELL.md §3 was "deferred to Ayush's Buy component"; no such component ever landed — this lane now owns it).
+
+- **One side-agnostic `DealCalendar`** serves both surfaces: **Sales calendar** (Sell, rows = Customers) / **Purchase calendar** (Buy, rows = Suppliers), flipped by a `side` prop. Neutral row term = **Counterparty**.
+- **Pill = one Deal Card**, shown from **birth** (an offer/order exists; a grey Product-Basket draft is pre-birth, not a pill). Positioned by **`delivery_date_target ?? created_at`**.
+- **Pill colour = deal display stage** ([DEV-151](https://linear.app/hellosello/issue/DEV-151)), reusing allocate's `statusOf` (no re-map): pink offer/order · yellow accepted · green executed · orange update (*Marcel left this colour unset — orange is a placeholder*) · blue ticket-open · dark-green ticket-closed.
+- **Money = Σ `line_total`** (not `deal_card.value_net`, which is often null).
+- Full contract: [`docs/muskan-build/deal-calendar.md`](../muskan-build/deal-calendar.md). Built + verified live on Sell (Timeline view; the Year aggregate view is deferred).
+
+---
+
+## 2026-07-08 — Buy (Phase 18) v0 scope locks
+
+Buy shipped end-to-end this session. Four scope decisions got locked during the build, all reversible later:
+
+- **Buyer resale price schema:** `buyer_company_id` (RLS owner) + nullable `supplier_company_id` FK + always-populated `supplier_name` text + nullable `product_id`/`product_name` — supports both connected and CSV-only suppliers from day one. *Why:* CONTEXT.md's Partner definition requires unconnected suppliers to show up too; a bare company FK couldn't represent that.
+- **No fuzzy CSV-supplier matching in v0.** Every CSV-imported supplier name is its own partner row unless the buyer explicitly links it later. *Why:* keeps the "minimal CSV backfill" boundary honest — full reconciliation is the parked `catalogue-ingestion-DESIGN.md`'s job, not this phase's.
+- **Analytics/Sheet's degenerate category-per-product.** No real `product.category` field exists; each product renders as its own single-item "category" until real taxonomy data lands. *Why:* the 3-level tree structure stays intact without fabricating data the system doesn't have.
+- **Analytics Time filter counts future-dated (scheduled-but-undelivered) deals** (confirmed by Muskan), matching the KPI strip's own inclusive `sameMonth()` treatment. Made as a judgment call during verification after finding the initial implementation silently hid 3 of 4 real deals under every filter option — Muskan confirmed the direction is correct during wrap-up, so this is locked, not provisional.
