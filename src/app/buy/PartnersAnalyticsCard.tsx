@@ -230,9 +230,15 @@ function valueForTimeSeriesMeasure(
   net: number | null,
   gross: number | null,
 ): number {
+  // Checked FIRST, before the net/gross special-casing (code-review fix): a
+  // period with no line activity for this product must render 0 for EVERY
+  // measure, including net/gross — otherwise a period with zero purchases
+  // still shows a phantom bar at the buyer's flat resale price, fabricating
+  // activity the system has no record of (never-fabricate-data rule, same as
+  // every other measure below).
+  if (!point) return 0;
   if (measure === "net") return net ?? 0;
   if (measure === "gross") return gross ?? 0;
-  if (!point) return 0;
   switch (measure) {
     case "price_by_volume":
     case "revenue":
