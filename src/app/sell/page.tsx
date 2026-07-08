@@ -1,9 +1,14 @@
 import { getMyShop } from "@/modules/catalog/shop";
-import { getSellerOrders, getAllocationWorklist } from "@/modules/allocate";
+import {
+  getSellerOrders,
+  getAllocationWorklist,
+  getSellerCalendarDeals,
+  calendarKpis,
+} from "@/modules/allocate";
+import { DealCalendar } from "@/modules/deals";
 import { SurfacePlaceholder } from "@/shared/ui/SurfacePlaceholder";
 import { OrdersTable } from "./OrdersTable";
 import { BatchesSection } from "./BatchesSection";
-import { SalesCalendarStub } from "./SalesCalendarStub";
 import { JumpStrip } from "./JumpStrip";
 import { AllocateDealCardHost } from "./AllocateDealCardHost";
 
@@ -20,10 +25,11 @@ import { AllocateDealCardHost } from "./AllocateDealCardHost";
  * it) — mapped down to the small shape `BatchesSection`/`ProductStrip` need.
  */
 export default async function SellPage() {
-  const [orders, worklist, shop] = await Promise.all([
+  const [orders, worklist, shop, calendarDeals] = await Promise.all([
     getSellerOrders(),
     getAllocationWorklist(),
     getMyShop(),
+    getSellerCalendarDeals(),
   ]);
 
   if (!shop) {
@@ -41,6 +47,19 @@ export default async function SellPage() {
     cultivar: p.cultivar,
     coverImagePath: p.images[0]?.path ?? null,
   }));
+
+  // "Status this month" KPIs — current calendar month only (deal-calendar.md §3),
+  // computed here (the composition layer) via allocate's tested calendarKpis so
+  // the side-agnostic DealCalendar stays free of an allocate import.
+  const now = new Date();
+  const currentMonthKpis = calendarKpis(
+    calendarDeals
+      .filter((d) => {
+        const dt = new Date(d.date);
+        return dt.getFullYear() === now.getFullYear() && dt.getMonth() === now.getMonth();
+      })
+      .map((d) => ({ value: d.amount ?? 0, grams: d.grams, counterpartyId: d.counterparty.id })),
+  );
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6 p-4">
@@ -60,7 +79,7 @@ export default async function SellPage() {
       </section>
 
       <section id="calendar-section">
-        <SalesCalendarStub />
+        <DealCalendar deals={calendarDeals} kpis={currentMonthKpis} side="seller" />
       </section>
 
       <AllocateDealCardHost />

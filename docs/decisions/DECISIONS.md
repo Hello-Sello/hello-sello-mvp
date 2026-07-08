@@ -1371,3 +1371,13 @@ Buyer feedback: a product needs several discrete pack sizes (10g/20g/50g), picke
 ## 2026-07-08 — Allocate opens the Deal Card, not a Deal Room
 
 Following Ayush's Phase-7 retirement of the Deal Room/Stages container (D-15/D-17, PR #139), Sell/Allocate's order-row click now opens the real `DealCard` as a right-side panel beside the page content (mirrors Connect's `DealCardPanelHost`), not a duplicated Deal Room overlay. The old `AllocateDealRoomHost` (session 53, a deliberate duplicate of the now-retired `DealRoomOverlayHost`) is deleted; replaced by `AllocateDealCardHost`, sharing the `hs:open-deal-card` event contract and fetch shape his host uses. *Why:* the Deal Room/Stages model it depended on no longer exists, and a flip card was the right level of detail for "preview an order" anyway — no reason to rebuild the retired container.
+
+## 2026-07-08 — Sales/Purchase calendar: one shared `DealCalendar`
+
+Grill-with-docs design lock for the deal-timeline surface (SELL.md §3 was "deferred to Ayush's Buy component"; no such component ever landed — this lane now owns it).
+
+- **One side-agnostic `DealCalendar`** serves both surfaces: **Sales calendar** (Sell, rows = Customers) / **Purchase calendar** (Buy, rows = Suppliers), flipped by a `side` prop. Neutral row term = **Counterparty**.
+- **Pill = one Deal Card**, shown from **birth** (an offer/order exists; a grey Product-Basket draft is pre-birth, not a pill). Positioned by **`delivery_date_target ?? created_at`**.
+- **Pill colour = deal display stage** ([DEV-151](https://linear.app/hellosello/issue/DEV-151)), reusing allocate's `statusOf` (no re-map): pink offer/order · yellow accepted · green executed · orange update (*Marcel left this colour unset — orange is a placeholder*) · blue ticket-open · dark-green ticket-closed.
+- **Money = Σ `line_total`** (not `deal_card.value_net`, which is often null).
+- Full contract: [`docs/muskan-build/deal-calendar.md`](../muskan-build/deal-calendar.md). Built + verified live on Sell (Timeline view; the Year aggregate view is deferred).
