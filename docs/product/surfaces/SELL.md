@@ -11,7 +11,7 @@ Seller-side operations surface where a producer **allocates their batches across
 - Depth: **prototype finalized** (design contract = `prototypes/allocate-prototype/`, built 2026-07-05, finalized 2026-07-06)
 - Last updated: 2026-07-06
 - Build status: **BUILDING NOW.** Post-MVP lock un-parked (LAYER-2 §3, 2026-07-06) — goal is Sell/Allocate live in-product for the **8 July demo** (seed data OK). Marcel confirmed direction + filed line-item feedback same-day (DEV-157), folded into the prototype. Building via `/gsd:quick` — Orders & Offers + Batches first.
-- **Sales calendar section is DEFERRED** from this build — Ayush is building the Buy-side calendar (Marcel's DEV-154 feedback, 2026-07-06); Allocate ships with the calendar section as a stub/placeholder and adopts the shared component once it exists.
+- **Sales calendar section is LIVE** — the shared `DealCalendar` component (`docs/muskan-build/deal-calendar.md`) is built and wired in, replacing the earlier stub/placeholder; the same component is adopted by Buy (Phase 18).
 
 ## Who uses this surface and why
 
@@ -128,7 +128,7 @@ The key model insight: **substitution is a separate two-step attribute; Supply/D
 
 Deal-tracking timeline — **partners as rows, days/weeks/months as columns**, purchase pills, per-period €-totals ("Purchases / month"), sortable by revenue / top accounts / alphabetical, Week/Month/Year toggle. Clicking a pill opens the deal receipt. Sella = right-edge sliver, "AI functions coming soon".
 
-**⚠️ Design is a placeholder.** Ayush is building the same sales calendar for the **Buy** section — this section will **adopt his component** (one shared calendar, both surfaces). Muskan to sync with him; don't invest further in this section's layout.
+**Built and live** — the shared `DealCalendar` component (`docs/muskan-build/deal-calendar.md`) renders this section on real deal data; the same component is adopted by the **Buy** section (one shared calendar, both surfaces).
 
 ---
 
@@ -146,7 +146,7 @@ The red "ticket" rail (slides in from Calendar pills + Order rows). Carries: dea
 - **Cross-cutting Sella:** seller-Sella (help draft offers, suggest pricing, query analytics — "coming soon").
 - **Surface-to-surface contracts:**
   - **Present** owns the products/photos surfaced here (batch tile image = first shop photo).
-  - **Buy** shares the **Sales-calendar component** (Ayush's build).
+  - **Buy** shares the **Sales-calendar component** (`DealCalendar`, built in this lane).
   - Offers become **Deals** in Connect; the deal receipt card is the Layer-3 deal artifact.
   - **DEV-1 pricelist cascade** governs price/g: customer-specific (Relationship) → seller STANDARD → manual.
 
@@ -163,8 +163,7 @@ The red "ticket" rail (slides in from Calendar pills + Order rows). Carries: dea
 2. **Date format** `DD-Mon-YY` platform-wide → DECISIONS.md UI convention.
 3. **"Deal update" status colour** (prototype = orange).
 4. **Buttons vs swipe** for Supply/Substitute/Decline (prototype = buttons; swipe = possible mobile affordance).
-5. **Sales-calendar design** — adopt Ayush's Buy component.
-6. Deal receipt card — not yet iterated (still wireframe content).
+5. Deal receipt card — not yet iterated (still wireframe content).
 
 ## References
 
