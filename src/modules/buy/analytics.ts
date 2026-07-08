@@ -89,9 +89,13 @@ export interface AnalyticsSupplierRow {
  * its own resolved `net`/`gross` (the SAME `resaleByKey` lookup `priced`
  * already computes per merged group, just attached here at the line level
  * instead) so per-period revenue/DB1 can be computed without re-deriving the
- * lookup. Structurally a valid `TimeSeriesSourceLine` (`./lib/analyticsTimeSeries.ts`).
+ * lookup. `date`/`packSizeGrams` are re-declared non-optional here — this
+ * type always comes from `getBuyAnalytics()`, which always populates both —
+ * so it's structurally a valid `TimeSeriesSourceLine` (`./lib/analyticsTimeSeries.ts`).
  */
 export interface PricedAnalyticsSourceLine extends AnalyticsSourceLine {
+  date: string;
+  packSizeGrams: number | null;
   net: number | null;
   gross: number | null;
 }
@@ -309,7 +313,17 @@ export async function getBuyAnalytics(): Promise<BuyAnalytics> {
   // lookup `priced` below uses, never a second re-derivation.
   const pricedLines: PricedAnalyticsSourceLine[] = allLines.map((line) => {
     const resale = resaleByKey.get(`${line.supplierName}\0${line.productName}`);
-    return { ...line, net: resale?.net ?? null, gross: resale?.gross ?? null };
+    return {
+      ...line,
+      // Both always set by the dealLines/csvLines construction above — the
+      // `?? ` fallbacks here only satisfy AnalyticsSourceLine's optional
+      // typing (kept optional for analyticsMerge.test.ts's pre-existing
+      // fixtures), never a real runtime gap.
+      date: line.date ?? new Date(0).toISOString(),
+      packSizeGrams: line.packSizeGrams ?? null,
+      net: resale?.net ?? null,
+      gross: resale?.gross ?? null,
+    };
   });
 
   // 4b. wap/db1/margin per merged (supplier, product) line — all math

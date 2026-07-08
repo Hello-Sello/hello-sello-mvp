@@ -16,34 +16,34 @@
  *    `categoryId` and by `productId` narrow to the exact same single row. Both
  *    pills render the same option list and produce identical re-scoping. This
  *    is an honest v0 limitation, not a stub — documented inline near the Type
- *    pill below.
+ *    pill below. (Still true, NOT part of the 18-14 fix.)
  *
- * 2. "Pack size" (`packSize`) has NO backing field anywhere in `BuyAnalytics`
- *    (`getBuyAnalytics()`, plan 18-07, is out of this plan's `files_modified`
- *    scope) — the real per-product `product.pack_size_grams` column exists on
- *    the `product` table, but it isn't threaded through the Analytics
- *    aggregation. The pill is rendered and wired into `FilterState` (so it
- *    participates in "any filter change clears row selection" and the dynamic
- *    subtitle), but it has no real options to select and does not change what
- *    the chart/table show — documented inline near the Pack size pill. A
- *    follow-up plan should extend `getBuyAnalytics()` to carry pack-size data
- *    before this pill can filter anything for real.
+ * 2. (18-14 fix, formerly a documented gap) The chart now renders a REAL time
+ *    series: `getBuyAnalytics()` attaches a real per-line `date` (deal
+ *    `delivery_date_target ?? created_at`, or CSV `purchase_date`) and
+ *    exposes the raw lines via `BuyAnalytics.lines`; `buildTimeChartSeries()`
+ *    below delegates the actual bucketing to
+ *    `bucketAnalyticsTimeSeries()` (`modules/buy/lib/analyticsTimeSeries.ts`),
+ *    never re-deriving that math. Granularity follows the Time filter per
+ *    18-CONTEXT.md's locked rule (`GRANULARITY_BY_TIME` below): 3 months ->
+ *    monthly, last month -> weekly, 14/7 days -> daily. Row selection and
+ *    column-header clicks still only re-scope/re-value the SAME time axis —
+ *    they never switch the chart back to one-bar-per-entity.
  *
- * 3. There is no per-transaction date anywhere in `BuyAnalytics` either —
- *    `getBuyAnalytics()` returns period-summed totals per (supplier, product),
- *    not a real time series. So the chart cannot honestly render true weekly/
- *    monthly/daily bars. Instead of fabricating calendar buckets, the chart's
- *    bars are ONE PER ENTITY at the current scope's most granular level
- *    (supplier, or category/product once narrowed) — see `buildChartPoints()`.
- *    The "Time" pill / Quick-range chips still work (they narrow the label
- *    text used in the subtitle and clear row selection like any other filter)
- *    but do not change WHICH purchase lines are summed, for the same reason.
+ * 3. (18-14 fix, formerly a documented gap) "Pack size" (`packSize`) now has a
+ *    real backing field: `product.pack_size_grams`, threaded through
+ *    `getBuyAnalytics()` onto both `AnalyticsProductRow.packSizeGrams` and
+ *    each raw line's `packSizeGrams`. `distinctPackSizes()` derives the
+ *    pill's real option list; `filterAnalytics()`/`filterAnalyticsLines()`
+ *    both narrow by an exact formatted-grams match. CSV-only lines (no real
+ *    catalogue `product_id`) have no pack size — a Pack size filter honestly
+ *    excludes them, which is expected behavior, not a bug.
  */
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { UploadCloud, Loader2, X } from "lucide-react";
-import type { BuyAnalytics, AnalyticsProductRow } from "@/modules/buy/analytics";
-import { weightedAveragePrice } from "@/modules/buy/lib/money";
+import type { BuyAnalytics, AnalyticsProductRow, PricedAnalyticsSourceLine } from "@/modules/buy/analytics";
+import { bucketAnalyticsTimeSeries, type TimeGranularity, type TimeSeriesPoint } from "@/modules/buy/lib/analyticsTimeSeries";
 import { importPurchaseHistoryCsv, type CsvImportResult } from "@/modules/buy/csvImport";
 import { saveBuyerResalePrice } from "@/modules/buy/resalePriceActions";
 import { AnalyticsChart, MEASURE_LABELS, type ChartMeasure, type ChartSeriesPoint } from "./AnalyticsChart";
@@ -70,6 +70,15 @@ const TIME_OPTIONS: Array<{ value: TimeFilter; label: string }> = [
 const TIME_LABEL: Record<TimeFilter, string> = Object.fromEntries(
   TIME_OPTIONS.map((o) => [o.value, o.label.toLowerCase()]),
 ) as Record<TimeFilter, string>;
+
+/** Time filter -> chart granularity (18-CONTEXT.md's locked rule, 18-14 fix):
+ *  3 months -> monthly, last month -> weekly, 14/7 days -> daily. */
+const GRANULARITY_BY_TIME: Record<TimeFilter, TimeGranularity> = {
+  "7d": "day",
+  "14d": "day",
+  month: "week",
+  "3months": "month",
+};
 
 /** Table column -> chart measure, for the 5 columns that ARE chartable. The
  *  other 4 numeric columns (margin %, qty, share, db1/unit) have no
@@ -99,12 +108,33 @@ function flattenAll(data: BuyAnalytics): FlatProduct[] {
   return out;
 }
 
+/** Formats a pack size in grams as the Pack size pill's display/filter value
+ *  (18-14 fix) — e.g. `1000` -> `"1000 g"`. The one place this format is
+ *  defined; both the option list and the match check below call it. */
+function formatPackSize(grams: number): string {
+  return `${grams} g`;
+}
+
+/** Distinct pack sizes across the whole (unfiltered) dataset, ascending — the
+ *  Pack size pill's real option list (18-14 fix, was previously empty).
+ *  CSV-only lines / products whose pack size was never set are honestly
+ *  excluded from the list rather than shown as a fake "unset" bucket. */
+function distinctPackSizes(data: BuyAnalytics): string[] {
+  const seen = new Set<number>();
+  for (const { product } of flattenAll(data)) {
+    if (product.packSizeGrams != null) seen.add(product.packSizeGrams);
+  }
+  return Array.from(seen)
+    .sort((a, b) => a - b)
+    .map(formatPackSize);
+}
+
 /** Narrows `data` to the supplier/category-or-product currently in `filters`
  *  scope — the SAME re-scoped tree is passed to `AnalyticsTable` (so the table
  *  visibly reflects the filter, per the must-have) and used as the chart's
  *  scope when no row is explicitly selected. `categoryId` and `productId` are
  *  treated as one combined "product-ish" filter (note #1 above — they resolve
- *  to the same row in v0). */
+ *  to the same row in v0). `packSize` (18-14 fix) narrows the same way. */
 function filterAnalytics(data: BuyAnalytics, filters: FilterState): BuyAnalytics {
   const productFilter = filters.categoryId ?? filters.productId;
   let suppliers = data.suppliers;
@@ -123,7 +153,39 @@ function filterAnalytics(data: BuyAnalytics, filters: FilterState): BuyAnalytics
       }))
       .filter((s) => s.categories.length > 0);
   }
-  return { suppliers, totalRevenue: data.totalRevenue };
+  if (filters.packSize) {
+    suppliers = suppliers
+      .map((s) => ({
+        ...s,
+        categories: s.categories.filter((c) =>
+          c.products.some((p) => p.packSizeGrams != null && formatPackSize(p.packSizeGrams) === filters.packSize),
+        ),
+      }))
+      .filter((s) => s.categories.length > 0);
+  }
+  return { suppliers, totalRevenue: data.totalRevenue, lines: data.lines };
+}
+
+/** Narrows the raw per-line array the SAME way `filterAnalytics()` narrows the
+ *  tree above (supplier/product/pack-size match) — this is what feeds the
+ *  time-bucketed chart (18-14 fix), kept in lockstep with the table's own
+ *  filtering rather than a second independent filter implementation drifting
+ *  from it. `supplierKeyByName` resolves a line's plain `supplierName` to the
+ *  `supplierKey` the Supplier pill actually filters by. */
+function filterAnalyticsLines(
+  lines: PricedAnalyticsSourceLine[],
+  filters: FilterState,
+  supplierKeyByName: Map<string, string>,
+): PricedAnalyticsSourceLine[] {
+  const productFilter = filters.categoryId ?? filters.productId;
+  return lines.filter((line) => {
+    if (filters.supplierKey && supplierKeyByName.get(line.supplierName) !== filters.supplierKey) return false;
+    if (productFilter && (line.productId ?? line.productName) !== productFilter) return false;
+    if (filters.packSize && (line.packSizeGrams == null || formatPackSize(line.packSizeGrams) !== filters.packSize)) {
+      return false;
+    }
+    return true;
+  });
 }
 
 interface ResolvedScope {
@@ -138,7 +200,7 @@ interface ResolvedScope {
 function resolveScope(data: BuyAnalytics, key: string): ResolvedScope | null {
   for (const s of data.suppliers) {
     if (s.supplierKey === key) {
-      const products = flattenAll({ suppliers: [s], totalRevenue: data.totalRevenue });
+      const products = flattenAll({ suppliers: [s], totalRevenue: data.totalRevenue, lines: data.lines });
       return { label: s.supplierName, products };
     }
   }
@@ -157,67 +219,76 @@ function resolveScope(data: BuyAnalytics, key: string): ResolvedScope | null {
   return null;
 }
 
-function valueForMeasure(product: AnalyticsProductRow, measure: ChartMeasure): number {
+/** Per-period value for one product under the selected measure (18-14 fix,
+ *  replaces the old per-entity `valueForMeasure()`). `net`/`gross` are the
+ *  buyer's own hand-entered resale price — a constant per (supplier, product)
+ *  key, not a per-period total — so they're passed in directly rather than
+ *  read off a `TimeSeriesPoint` (which only carries summable totals). */
+function valueForTimeSeriesMeasure(
+  point: TimeSeriesPoint | undefined,
+  measure: ChartMeasure,
+  net: number | null,
+  gross: number | null,
+): number {
+  if (measure === "net") return net ?? 0;
+  if (measure === "gross") return gross ?? 0;
+  if (!point) return 0;
   switch (measure) {
     case "price_by_volume":
     case "revenue":
-      return product.revenue ?? 0;
+      return point.revenue ?? 0;
     case "db1_total":
-      return product.db1Total ?? 0;
+      return point.db1Total ?? 0;
     case "wap":
-      return product.wap;
-    case "net":
-      return product.net ?? 0;
-    case "gross":
-      return product.gross ?? 0;
+      return point.wap;
+    default:
+      return 0;
   }
-}
-
-/** One bar's worth of data for a given (label, products-in-that-bar) pairing —
- *  the weighted-avg-price line value is reconstructed via the SAME authoritative
- *  `weightedAveragePrice()` (lib/money.ts) the server aggregation itself uses,
- *  never re-derived: `product.wap * product.qty` recovers that product's own
- *  total spend exactly (wap is defined as totalSpend / totalGrams), so summing
- *  it back across products in the bar is not a fabrication. */
-function pointFor(label: string, products: FlatProduct[], measure: ChartMeasure): ChartSeriesPoint {
-  const byProduct = products.map(({ product }) => ({
-    productId: product.productId ?? product.productName,
-    productName: product.productName,
-    value: valueForMeasure(product, measure),
-  }));
-  const totalGrams = products.reduce((sum, { product }) => sum + product.qty, 0);
-  const totalSpend = products.reduce((sum, { product }) => sum + product.wap * product.qty, 0);
-  return {
-    label,
-    byProduct,
-    weightedAvgPrice: totalGrams > 0 ? weightedAveragePrice(totalSpend, totalGrams) : null,
-  };
 }
 
 /**
- * Builds the chart's bars. There is no real per-transaction date in
- * `BuyAnalytics` (file header note #3) so this renders one bar per entity at
- * the current scope's most granular level, instead of fabricating calendar
- * buckets: multiple suppliers in scope -> one bar per supplier; a single
- * supplier with multiple categories -> one bar per category; fully narrowed to
- * one category -> one bar for its products.
+ * Builds the chart's REAL time-bucketed bars (18-14 fix, replaces the old
+ * one-bar-per-entity `buildChartPoints()`). The x-axis is always periods
+ * (`bucketAnalyticsTimeSeries()`, `./lib/analyticsTimeSeries.ts` — never
+ * re-derived here); each period's bar stacks a value per product currently in
+ * scope, computed via a PER-PRODUCT time series so a period with no activity
+ * for a given product renders as 0 rather than being silently dropped —
+ * `AnalyticsChart` decides stack-vs-collapse from there (>6 products collapse
+ * to one total, per its own `MAX_STACK_PRODUCTS` rule, untouched).
  */
-function buildChartPoints(scoped: BuyAnalytics, measure: ChartMeasure): ChartSeriesPoint[] {
-  if (scoped.suppliers.length > 1) {
-    return scoped.suppliers.map((s) =>
-      pointFor(s.supplierName, flattenAll({ suppliers: [s], totalRevenue: scoped.totalRevenue }), measure),
-    );
+function buildTimeChartSeries(
+  lines: PricedAnalyticsSourceLine[],
+  granularity: TimeGranularity,
+  measure: ChartMeasure,
+): ChartSeriesPoint[] {
+  if (lines.length === 0) return [];
+
+  const linesByProductKey = new Map<string, { productId: string; productName: string; lines: PricedAnalyticsSourceLine[] }>();
+  for (const line of lines) {
+    const key = line.productId ?? line.productName;
+    const bucket = linesByProductKey.get(key) ?? { productId: key, productName: line.productName, lines: [] };
+    bucket.lines.push(line);
+    linesByProductKey.set(key, bucket);
   }
-  const supplier = scoped.suppliers[0];
-  if (!supplier) return [];
-  if (supplier.categories.length > 1) {
-    return supplier.categories.map((c) =>
-      pointFor(c.categoryName, c.products.map((p) => ({ product: p, supplierName: supplier.supplierName })), measure),
-    );
-  }
-  const category = supplier.categories[0];
-  if (!category) return [];
-  return [pointFor(category.categoryName, category.products.map((p) => ({ product: p, supplierName: supplier.supplierName })), measure)];
+
+  const overallPoints = bucketAnalyticsTimeSeries(lines, granularity);
+  const perProduct = Array.from(linesByProductKey.values()).map((p) => ({
+    productId: p.productId,
+    productName: p.productName,
+    net: p.lines[0]?.net ?? null,
+    gross: p.lines[0]?.gross ?? null,
+    pointsByPeriod: new Map(bucketAnalyticsTimeSeries(p.lines, granularity).map((pt) => [pt.periodStart, pt] as const)),
+  }));
+
+  return overallPoints.map((overall) => ({
+    label: overall.periodLabel,
+    byProduct: perProduct.map((p) => ({
+      productId: p.productId,
+      productName: p.productName,
+      value: valueForTimeSeriesMeasure(p.pointsByPeriod.get(overall.periodStart), measure, p.net, p.gross),
+    })),
+    weightedAvgPrice: overall.wap,
+  }));
 }
 
 /** Distinct products across the whole (unfiltered) dataset — the shared option
@@ -295,16 +366,35 @@ export function PartnersAnalyticsCard({ data }: { data: BuyAnalytics }) {
     return { label: "", products: flattenAll(filteredData) };
   }, [data, filteredData, selectedRowKey]);
 
-  const series = useMemo(
-    () => buildChartPoints({ suppliers: filteredData.suppliers, totalRevenue: filteredData.totalRevenue }, measure),
-    [filteredData, measure],
+  const supplierKeyByName = useMemo(
+    () => new Map(data.suppliers.map((s) => [s.supplierName, s.supplierKey] as const)),
+    [data.suppliers],
   );
-  // When a specific row is selected, the chart shows that node's own slice as
-  // ONE bar rather than the scope's progressive per-entity breakdown (rule 3).
-  const chartSeries = selectedRowKey ? [pointFor(chartScope.label, chartScope.products, measure)] : series;
+
+  // Raw lines feeding the REAL time-bucketed chart (18-14 fix): filtered the
+  // same way the table is, then further narrowed to the selected row's own
+  // scope when one is selected — re-scoping which lines get summed into the
+  // SAME time axis, never switching to a different axis type (rule 3).
+  const chartLines = useMemo(() => {
+    const filteredLines = filterAnalyticsLines(data.lines, filters, supplierKeyByName);
+    if (!selectedRowKey) return filteredLines;
+    const scopeKeys = new Set(
+      chartScope.products.map(
+        ({ product, supplierName }) => `${supplierName}\0${product.productId ?? product.productName}`,
+      ),
+    );
+    return filteredLines.filter((l) => scopeKeys.has(`${l.supplierName}\0${l.productId ?? l.productName}`));
+  }, [data.lines, filters, supplierKeyByName, selectedRowKey, chartScope]);
+
+  const granularity = GRANULARITY_BY_TIME[filters.time];
+  const chartSeries = useMemo(
+    () => buildTimeChartSeries(chartLines, granularity, measure),
+    [chartLines, granularity, measure],
+  );
 
   const supplierOptions = data.suppliers.map((s) => ({ key: s.supplierKey, name: s.supplierName }));
   const productOptions = useMemo(() => distinctProducts(data), [data]);
+  const packSizeOptions = useMemo(() => distinctPackSizes(data), [data]);
 
   const supplierCount = new Set(chartScope.products.length ? chartScope.products.map((p) => p.supplierName) : filteredData.suppliers.map((s) => s.supplierName)).size;
   const productCount = chartScope.products.length
@@ -339,6 +429,7 @@ export function PartnersAnalyticsCard({ data }: { data: BuyAnalytics }) {
           onChange={updateFilters}
           supplierOptions={supplierOptions}
           productOptions={productOptions}
+          packSizeOptions={packSizeOptions}
         />
 
         <div className="flex min-w-0 flex-1 flex-col gap-4">
@@ -398,11 +489,13 @@ function FilterRail({
   onChange,
   supplierOptions,
   productOptions,
+  packSizeOptions,
 }: {
   filters: FilterState;
   onChange: (patch: Partial<FilterState>) => void;
   supplierOptions: Array<{ key: string; name: string }>;
   productOptions: Array<{ id: string; name: string }>;
+  packSizeOptions: string[];
 }) {
   return (
     <aside className="flex w-full shrink-0 flex-col gap-3 lg:w-56">
@@ -457,18 +550,16 @@ function FilterRail({
         onSelect={(v) => onChange({ productId: v || null })}
       />
 
-      <div>
-        <FilterPill
-          label="Pack size"
-          value={filters.packSize}
-          display={filters.packSize ?? "All"}
-          options={[{ value: "", label: "All pack sizes" }]}
-          onSelect={(v) => onChange({ packSize: v || null })}
-        />
-        <p className="mt-1 text-[10px] leading-snug text-ink-muted/70">
-          v0: pack-size data isn&apos;t threaded through Analytics yet &mdash; no effect until it is.
-        </p>
-      </div>
+      <FilterPill
+        label="Pack size"
+        value={filters.packSize}
+        display={filters.packSize ?? "All"}
+        options={[
+          { value: "", label: "All pack sizes" },
+          ...packSizeOptions.map((size) => ({ value: size, label: size })),
+        ]}
+        onSelect={(v) => onChange({ packSize: v || null })}
+      />
 
       <div className="mt-2">
         <div className="text-[11px] font-bold uppercase tracking-wide text-ink-muted/70">Quick range</div>
