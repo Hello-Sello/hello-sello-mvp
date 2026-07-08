@@ -65,16 +65,31 @@ function inPreviousIsoWeek(d: Date, now: Date): boolean {
   return dWeek.year === prevWeek.year && dWeek.week === prevWeek.week;
 }
 
+/** Same ISO week as `now` — the same-sized-window counterpart to
+ *  `inPreviousIsoWeek()` above (code-review fix: the delta must compare two
+ *  real weeks, not a variable-length month-to-date sample against a fixed
+ *  week). */
+function inCurrentIsoWeek(d: Date, now: Date): boolean {
+  const dWeek = isoWeekOf(d);
+  const nowWeek = isoWeekOf(now);
+  return dWeek.year === nowWeek.year && dWeek.week === nowWeek.week;
+}
+
 export default async function BuyPage() {
   const [calendarDeals, buyAnalytics] = await Promise.all([getBuyerCalendarDeals(), getBuyAnalytics()]);
 
   const now = new Date();
   const monthDeals = calendarDeals.filter((d) => sameMonth(new Date(d.date), now));
+  const thisWeekDeals = calendarDeals.filter((d) => inCurrentIsoWeek(new Date(d.date), now));
   const prevWeekDeals = calendarDeals.filter((d) => inPreviousIsoWeek(new Date(d.date), now));
   const monthKpis = calendarKpis(monthDeals.map(toKpiInput));
+  const thisWeekKpis = calendarKpis(thisWeekDeals.map(toKpiInput));
   const prevWeekKpis = calendarKpis(prevWeekDeals.map(toKpiInput));
   const openDealsCount = monthDeals.filter((d) => isOpenDeal(d.status)).length;
-  const avgPriceDelta = monthKpis.weightedAvgPrice - prevWeekKpis.weightedAvgPrice;
+  // Week vs week (code-review fix), not month-to-date vs a fixed week — the
+  // old comparison mixed a 1-31-day sample against a 7-day sample and
+  // mislabeled the result "vs last week".
+  const avgPriceDelta = thisWeekKpis.weightedAvgPrice - prevWeekKpis.weightedAvgPrice;
   const db1TotalAcrossProducts = buyAnalytics.suppliers.reduce((sum, s) => sum + (s.db1Total ?? 0), 0);
 
   const kpiCards: KpiCard[] = [
