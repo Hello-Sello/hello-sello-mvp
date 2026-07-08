@@ -15,40 +15,27 @@
  * ever includes the ONE field being saved (net OR gross) — supabase-js's
  * upsert() generates `ON CONFLICT ... DO UPDATE SET <only the payload's own
  * columns>`, so the sibling field is never touched by an update it wasn't part
- * of (see buildResalePriceUpsertRow).
+ * of (see buildResalePriceUpsertRow, ./lib/resalePriceRow.ts).
+ *
+ * `buildResalePriceUpsertRow` (a sync pure builder) and the
+ * `SaveBuyerResalePriceInput`/`Result` types live in `./lib/resalePriceRow.ts`,
+ * NOT here — Next.js requires every export of a `"use server"` file to be an
+ * async function, so the pure builder cannot be co-located with the action
+ * (18-13-SUMMARY.md's Deviations: this was a latent bug from plan 18-09, only
+ * surfaced once a real page actually imported this module). The types are
+ * NOT re-exported from here either — Turbopack's server-action reference
+ * codegen picks up even type-only re-exports as if they were runtime values
+ * and fails to resolve them at request time. Callers (the buy barrel) import
+ * these two types directly from `./lib/resalePriceRow` instead.
  */
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/shared/db/server";
 import { getCurrentCompanyId, getCurrentPerson } from "@/shared/auth";
-import type { Database } from "@/shared/db";
-
-export type SaveBuyerResalePriceInput = {
-  supplierName: string;
-  productName: string;
-  field: "net" | "gross";
-  value: number;
-};
-
-export type SaveBuyerResalePriceResult = { ok: true } | { ok: false; error: string };
-
-type BuyerResalePriceInsert = Database["public"]["Tables"]["buyer_resale_price"]["Insert"];
-
-/** Pure: the exact row supabase-js will upsert. Isolated from the Supabase call
- *  itself so the "only the touched field is written, the sibling stays
- *  untouched" invariant is unit-testable without a live DB. */
-export function buildResalePriceUpsertRow(
-  input: SaveBuyerResalePriceInput,
-  buyerCompanyId: string,
-  updatedBy: string | null,
-): BuyerResalePriceInsert {
-  const base: BuyerResalePriceInsert = {
-    buyer_company_id: buyerCompanyId,
-    supplier_name: input.supplierName,
-    product_name: input.productName,
-    updated_by: updatedBy,
-  };
-  return input.field === "net" ? { ...base, net: input.value } : { ...base, gross: input.value };
-}
+import {
+  buildResalePriceUpsertRow,
+  type SaveBuyerResalePriceInput,
+  type SaveBuyerResalePriceResult,
+} from "./lib/resalePriceRow";
 
 export async function saveBuyerResalePrice(
   input: SaveBuyerResalePriceInput,
