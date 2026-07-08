@@ -1305,6 +1305,84 @@ git commit -m "feat(basket): grouped drawer + recipient picker + sendBasketGroup
 
 ---
 
+## Round 2 — Draft-deal redesign (2026-07-08, post-checkpoint, supersedes Task 8's UI)
+
+**Why:** live feedback on Task 8's `BasketDrawer` (a full-height side panel) + a live-tested design pass with Muskan produced three decisions, prototyped and confirmed in `prototypes/basket-popover-prototype/`:
+
+1. Replace the full drawer with a **compact dropdown anchored to the TopBar basket icon**, grouped by seller company, button relabeled **"Draft deal"**.
+2. "Draft deal" does NOT send anything — it calls the *existing, unchanged* `createDeal()` to birth a real `deal_card` in **`draft`** status (already the first-class initial status — no schema change), then the result is opened **inside that customer's chat** (the same place every deal already lives), not a basket-specific panel.
+3. Chat's own "Create Deal" button gets the same treatment: it currently requires the other person to Accept before any `deal_card` exists (`CreateDealForm` → `proposeDeal` → `confirmDetectedDeal`). Since the chat's relationship is already known, this becomes a direct `createDeal()` call with an empty line list (verified: `create_deal_draft` already accepts `p_lines: []` via `coalesce(p_lines, '[]'::jsonb)` — no RPC change needed), opening the real, empty, editable card immediately. **This removes the existing accept-before-birth gate for chat-initiated deals** — confirmed with Muskan as the intended trade-off.
+
+**Explicitly NOT doing (over-engineering guardrails):**
+- No schema/RLS change (`deal_card.relationship_id` stays `NOT NULL`, unchanged — the "no customer yet" idea from round 1 of this discussion was rejected in favor of this simpler design).
+- No new mocked/fake "pre-draft" UI — the REAL `DealCard` component opens directly; nothing is faked.
+- No removal pass on the old `deal_detected`/`confirmDetectedDeal` propose-to-birth RPCs/message type — they become unused by this UI, not deleted. Cleanup is a separate future task if confirmed dead.
+- No note field in the new dropdown (dropped per round 1 feedback).
+- Reuse `RecipientPicker`, `sendBasketGroup`, `groupBySeller`, `createDeal` exactly as already built in Tasks 3–8 — only the drawer's shape, the button's destination, and chat's trigger change.
+
+## Task 8a: Replace `BasketDrawer.tsx` with the compact dropdown popover
+
+**Files:** Modify `src/modules/basket/components/BasketDrawer.tsx`; modify `src/shared/ui/TopBar.tsx` only if the anchor markup needs a wrapping `position:relative` element (check first — it may already have one from the icon button's own styling).
+
+- [ ] **Step 1: Rebuild the popover shape**
+
+Fold in the locked design from `prototypes/basket-popover-prototype/index.html` + its `NOTES.md`: anchored directly under the TopBar basket icon (`top: 100% + gap`, not offset further down the page), grouped by `BasketGroup` (own-company gets a "Your shop" pill, matching today), steppers + remove per line, no note field. Keep `RecipientPicker` for own-company groups exactly as built (still needed — SOMEONE has to say which connected company this is for; that hasn't changed). Button label changes from "Send offer"/"Send order" to **"Draft deal"** for both group types.
+
+- [ ] **Step 2: Wire success to open the chat, not a static checkmark**
+
+On success, instead of a static "✓ sent" row, call the Task 8b helper to navigate into the resulting chat (don't just clear the line and show a checkmark).
+
+- [ ] **Step 3: Gate + verify**
+
+Typecheck + lint + unit: `npm run test:unit && npx tsc --noEmit && npm run lint`. Manually verify the popover opens/closes/groups correctly (real browser pass).
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/modules/basket/components/BasketDrawer.tsx src/shared/ui/TopBar.tsx
+git commit -m "feat(basket): compact dropdown popover replaces the full-height drawer"
+```
+
+---
+
+## Task 8b: Verify + wire "open a just-created deal inside its chat"
+
+**Files:** likely a small addition to `src/modules/basket/actions.ts` or a new tiny helper; possibly nothing new at all.
+
+- [ ] **Step 1: Investigate FIRST, don't guess**
+
+`DealPin.tsx:279` already does `setSelectedId(def?.id ?? null)` on mount/refetch — read what `def` resolves to (probably "the newest non-terminal deal for this relationship"). If navigating to a relationship's chat after `createDeal()` already causes `DealPin` to auto-select the fresh `draft` card via this existing default logic, **no new plumbing is needed** — just navigate (`router.push` to whatever route already opens that relationship's chat) and stop.
+
+- [ ] **Step 2: Add the minimal glue only if verification shows it's needed**
+
+Only add glue (a query param, or whatever event `DealPin`/`DealCardPanelHost` already listens for) if verification shows the default-selection logic does NOT pick up a same-second-old draft reliably (e.g. a realtime-lag race). Prefer the zero-new-code outcome; don't add a mechanism "to be safe" without first proving it's needed.
+
+- [ ] **Step 3: Gate + verify + commit (if any code changed)**
+
+If Step 1 found zero new code is needed, report that finding and skip to Task 8c — no commit required. Otherwise gate (`npm run test:unit && npx tsc --noEmit && npm run lint`), verify manually, and commit.
+
+---
+
+## Task 8c: Chat's "Create Deal" calls `createDeal()` directly, skips propose/accept-to-birth
+
+**Files:** `src/modules/messaging/components/Composer.tsx` (the `createDeal()` handler, currently just dispatches `hs:create-deal`), `src/modules/deals/components/DealPin.tsx` (the `creating`/`hs:create-deal` listener + the "Start a deal" dashed button, currently opens `CreateDealForm`).
+
+- [ ] **Step 1: Change both triggers**
+
+Instead of setting `creating = true` (which renders `CreateDealForm`), they call `createDeal({ relationshipId: <this chat's relationship>, lines: [] })` directly, then use the Task 8b mechanism to open the resulting card immediately — real, empty, in `draft` status, editable per the existing role-based field permissions already in `CardFront.tsx` (seller-only price/batch/conditions, joint quantity/product, per-party notes — already built, just being reused, not rebuilt).
+
+- [ ] **Step 2: Leave the old propose/accept path alone**
+
+Do NOT delete `CreateDealForm.tsx`/`proposeDeal`/`confirmDetectedDeal` — they become unused by this trigger, left in place per the over-engineering guardrail above.
+
+- [ ] **Step 4: Gate + verify + commit**
+
+Typecheck + lint + unit: `npm run test:unit && npx tsc --noEmit && npm run lint`. Manually verify: click "Create Deal" in a real chat, confirm an empty draft card opens immediately (no popup, no waiting for the other side), confirm role-based editing still works. Commit.
+
+> **Checkpoint after Round 2:** re-verify the full seller+chat flow end-to-end (Present → Draft deal → picks customer → card opens in their chat; Chat → Create Deal → empty card opens immediately; both editable per role) before touching the original Task 9 (buyer RPC) below, which is unrelated, independent work.
+
+---
+
 ## Task 9: `get_connected_shop` RPC (buyer read path)
 
 **Files:**
