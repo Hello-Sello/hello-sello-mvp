@@ -93,19 +93,23 @@ export async function getSellerCalendarDeals(): Promise<CalendarDeal[]> {
   if (coErr) throw coErr;
   const nameById = new Map((companies ?? []).map((c) => [c.id, c.name] as const));
 
-  // Current-version line grams per card (mirrors the version filter in getSellerOrders).
+  // Current-version line grams + line-total money per card (mirrors the version
+  // filter in getSellerOrders). Money comes from Σ line_total, not deal_card.value_net
+  // — the latter is frequently null, the former is always the real deal value.
   const cardIds = sellerCards.map((c) => c.id);
   const { data: lineRows, error: lineErr } = await supabase
     .from("deal_line_item")
-    .select("deal_card_id, version, quantity, unit")
+    .select("deal_card_id, version, quantity, unit, line_total")
     .in("deal_card_id", cardIds);
   if (lineErr) throw lineErr;
   const versionByCard = new Map(sellerCards.map((c) => [c.id, c.version] as const));
   const gramsByCard = new Map<string, number>();
+  const totalByCard = new Map<string, number>();
   for (const l of lineRows ?? []) {
     if (l.version !== versionByCard.get(l.deal_card_id)) continue;
     const g = lineGrams(Number(l.quantity), l.unit as string);
     gramsByCard.set(l.deal_card_id, (gramsByCard.get(l.deal_card_id) ?? 0) + g);
+    totalByCard.set(l.deal_card_id, (totalByCard.get(l.deal_card_id) ?? 0) + Number(l.line_total ?? 0));
   }
 
   return sellerCards.map((c) => {
@@ -117,7 +121,7 @@ export async function getSellerCalendarDeals(): Promise<CalendarDeal[]> {
       dealCardId: c.id,
       counterparty: { id: buyerId, name: buyerName, code: counterpartyCode(buyerName) },
       date: calendarDay(c.delivery_date_target, c.created_at),
-      amount: c.value_net,
+      amount: totalByCard.get(c.id) ?? c.value_net,
       grams: gramsByCard.get(c.id) ?? 0,
       displayStage: statusOf({
         status: c.status as DealCardStatus,

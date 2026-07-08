@@ -71,7 +71,7 @@ Four cards, current month (labels side-flipped per §1). *Not hard-locked — ea
 | Piece | Decision |
 |---|---|
 | Component | `DealCalendar` in `src/modules/deals/components/` — presentational, side-agnostic, props `{ deals, side }` |
-| Deal shape | `{ dealCardId, counterparty, date, amount, displayStage }` (date = delivery ?? created) |
+| Deal shape | `{ dealCardId, counterparty, date, amount, grams, displayStage }` (date = delivery ?? created; **amount = Σ line_total**, not `deal_card.value_net` — the latter is often null; grams feeds the €/g KPI) |
 | Data source | `getSellerCalendarDeals()` next to `getSellerOrders()` in `src/modules/allocate`; Buy's `getBuyerCalendarDeals()` deferred to when Buy is built |
 | Pill click | existing `hs:open-deal-room` window event (no new modal) |
 | Scope | build component + wire into **Sell** (replace `SalesCalendarStub`). **Buy: nothing this session** — it adopts the same component later |
