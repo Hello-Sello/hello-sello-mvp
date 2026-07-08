@@ -117,30 +117,95 @@
   .seg button.on{background:#fff;color:var(--brand);box-shadow:var(--shadow-sm)}
 
   /* ══ CALENDAR (light — matches system theme) ══
-     NOTE: layout/design is a PLACEHOLDER — to be replaced with Ayush's Buy-section
-     sales calendar (same component both surfaces). */
-  .calwrap{border-radius:16px;background:#fff;border:1px solid var(--line);box-shadow:var(--shadow-sm);padding:14px 16px;color:var(--ink);overflow:auto}
-  .caltotals{display:grid;gap:0;align-items:stretch;margin-bottom:4px}
-  .caltotals .tl{font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-faint);display:flex;align-items:center;padding:6px 8px}
-  .caltotals .tc{padding:8px 6px;text-align:center;font-size:13.5px;font-weight:700;color:var(--ink);border-left:1px solid var(--line)}
-  .caltotals .tc small{display:block;font-size:9.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint);margin-top:2px}
-  .calhead{display:grid;gap:0;border-bottom:1px solid var(--line-strong)}
-  .calhead .wk{grid-row:1;text-align:center;font-size:10px;font-weight:700;letter-spacing:.14em;color:var(--ink-faint);padding:7px 0 3px;border-left:1px solid var(--line)}
-  .calhead .dy{grid-row:2;text-align:center;font-size:11px;font-weight:600;color:var(--ink-muted);padding:4px 0 8px}
+     Was a placeholder pending Ayush's Buy-section calendar (DEV-154); no such build ever
+     landed in this repo (checked all branches 2026-07-07). Round 3 (Muskan, live
+     feedback + a WhatsApp screenshot from Ayush 2026-07-07 21:06 — likely the actual
+     DEV-154 reference we couldn't find): ONE continuous horizontally-scrollable
+     day-level timeline, not separate Week/Month toggle modes — "Month" toggle dropped,
+     it's redundant once the month-total row is always visible. Current month gets a
+     bold pink highlight box (not every month bolded); a real "today" column highlight
+     mirrors it at the day level. "Year" stays as the genuinely different zoomed-out
+     aggregate. Frozen header (sticky top) + frozen partner column (sticky left), like
+     the Orders table's Excel styling. */
+  .calwrap{border-radius:16px;background:#fff;border:1px solid var(--line);box-shadow:var(--shadow-sm);padding:0;color:var(--ink);overflow-y:auto;overflow-x:hidden;max-height:560px}
+  /* Round 7 (live feedback + empirically confirmed via a headless-browser check): a
+     sticky-left name column INSIDE a per-row CSS grid was measurably not sticking — it
+     drifted with the scroll instead of staying pinned (real DOM measurement showed its
+     rect.left going negative on scroll). Rebuilt as a real "frozen columns" split
+     instead: `.calnames` is a plain, non-scrolling column; `.calscroll` is the ONLY
+     horizontally-scrolling element, holding the day-grid. Both share one vertical
+     scrollbar on `.calwrap`, so rows always line up. Header still uses sticky-top for
+     the vertical freeze — that axis was never reported broken. */
+  .calsplit{display:flex;align-items:flex-start}
+  .calnames{flex:0 0 200px;display:flex;flex-direction:column;border-right:1px solid var(--line-strong)}
+  .calscroll{flex:1;min-width:0;overflow-x:auto}
+  /* Round 5 (live feedback): the per-day checker background looked messy, not
+     "aesthetic" — dropped. Header now uses the same tinted-background table-header
+     look as the Orders table (.otable th) instead of inventing a new visual language. */
+  .calhead{display:grid;gap:0;position:sticky;top:0;z-index:4;background:#fdf3f7}
+  /* Round 4 (live feedback): "compact chip" won the header comparison — baked in as the
+     only style now (merged-row alternative removed, decision made, no point keeping the
+     toggle around). Bumped bigger per "the months ... should be a bit bigger". */
+  .calmonthband{grid-row:1;display:inline-flex;align-items:baseline;gap:6px;width:fit-content;padding:5px 12px;margin:5px 0 2px 6px;border-radius:999px;background:rgba(20,10,16,.05)}
+  .calmonthband b{font-size:13.5px;font-weight:800;letter-spacing:-.01em;color:var(--ink-muted)}
+  .calmonthband small{font-size:12px;font-weight:600;color:var(--ink-faint)}
+  .calmonthband.cur{background:var(--brand)}
+  .calmonthband.cur b,.calmonthband.cur small{color:#fff}
+  .calhead .wk{grid-row:2;text-align:center;font-size:10.5px;font-weight:700;letter-spacing:.1em;color:var(--ink-faint);padding:6px 0 3px;border-bottom:1px solid var(--line-strong)}
+  .calhead .dy{grid-row:3;text-align:center;font-size:11px;font-weight:600;color:var(--ink-muted);padding:4px 0 7px;border-bottom:1px solid var(--line-strong)}
   .calhead .dy.today{color:var(--brand);font-weight:800}
-  .calrow{display:grid;gap:0;border-bottom:1px solid var(--line);position:relative;min-height:56px;align-items:center}
-  .calrow:hover{background:rgba(227,11,93,.02)}
-  .calrow .who{display:flex;align-items:center;gap:10px;padding:8px 8px 8px 2px;position:sticky;left:0;background:inherit}
-  .calrow .mono{width:32px;height:32px;border-radius:9px;background:rgba(227,11,93,.08);display:grid;place-items:center;font-size:10.5px;font-weight:800;letter-spacing:.03em;color:var(--brand-deep);flex:0 0 32px}
-  .calrow .who b{font-size:13.5px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .pillbtn{grid-row:1;height:30px;border-radius:999px;background:linear-gradient(135deg,var(--brand-soft),var(--brand));box-shadow:0 4px 14px -4px rgba(227,11,93,.45);display:flex;align-items:center;justify-content:center;transition:transform .15s var(--ease-out)}
+  /* names-column header cell — names the partner/customer column ("Give the heading to
+     the column where all the ... customers' names are written"). Sticky-top (vertical
+     freeze only — this column never scrolls horizontally, so no left-axis stickiness
+     is needed at all now). Height is synced to the real .calhead's height via JS
+     (renderCalendar) since its row content is genuinely variable. */
+  .calnameshd{position:sticky;top:0;z-index:4;display:flex;align-items:center;padding:0 8px 0 12px;font-size:11.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-muted);background:#fdf3f7;border-bottom:1px solid var(--line-strong)}
+  /* per-partner running total (live feedback: "how much business have they done") */
+  .calnamerow .whotxt{display:flex;flex-direction:column;min-width:0;overflow:hidden}
+  .calnamerow .whotxt small{font-size:10px;font-weight:700;color:var(--brand-deep);white-space:nowrap}
+  /* Year view: each column IS a year — keep the bigger bold header + zebra band. */
+  .calwrap[data-view="year"] .calhead .wk{grid-row:1;font-size:16px;font-weight:800;letter-spacing:-.01em;text-transform:none;color:var(--ink);padding:9px 0;border-bottom:1px solid var(--line-strong)}
+  .calwrap[data-view="year"] .calhead .wk:nth-child(odd){background:rgba(227,11,93,.055)}
+  .calwrap[data-view="year"] .calrow>*:nth-child(odd){background:rgba(227,11,93,.025)}
+  /* DEV-154 #5 — analytics strip: icon + "Status this month" + 4 KPI cards, all grouped
+     on the left (live feedback: was pinned to the extreme right, now sits right beside
+     the heading instead). */
+  .calanalytics{display:flex;align-items:center;gap:12px;margin-bottom:8px;flex-wrap:wrap}
+  .calanalytics .hd{display:flex;align-items:center;gap:7px;flex:0 0 auto}
+  .calanalytics .hd .icn{width:24px;height:24px;border-radius:8px;background:var(--brand);color:#fff;display:grid;place-items:center;flex:0 0 24px}
+  .calanalytics .hd b{font-size:13px;font-weight:700;color:var(--ink)}
+  .calanalytics .cards{display:flex;gap:8px;flex-wrap:wrap}
+  .calcard{background:#fff;border:1px solid var(--line);border-radius:12px;padding:6px 12px;min-width:0}
+  .calcard b{display:block;font-size:14px;font-weight:800;color:var(--ink);white-space:nowrap}
+  .calcard small{display:block;font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-faint)}
+  /* page through the year's 3-month windows (Round 6 fix — see .calwrap comment above) */
+  .calnav{display:flex;align-items:center;gap:2px}
+  .calnav button{width:26px;height:26px;border-radius:999px;display:grid;place-items:center;color:var(--ink-muted);background:rgba(20,10,16,.05)}
+  .calnav button:not(:disabled):hover{background:rgba(227,11,93,.09);color:var(--brand-deep)}
+  .calnav button:disabled{opacity:.35}
+  .calnav span{font-size:11.5px;font-weight:700;color:var(--ink-muted);padding:0 6px;white-space:nowrap}
+  /* date-range filter — granular data for a specific window (mock maps day-of-month → 1-28) */
+  .calrange{display:flex;align-items:center;gap:6px}
+  .calrange input[type=date]{border:1px solid var(--line-strong);border-radius:8px;padding:5px 8px;font-size:11.5px;font-weight:600;color:var(--ink);background:#fff}
+  .calrange button{border-radius:999px;padding:5px 12px;font-size:11.5px;font-weight:700;color:#fff;background:var(--brand)}
+  .calrange .clear{color:var(--ink-muted);background:rgba(20,10,16,.06);display:none}
+  .calrange.active .clear{display:inline-flex}
+  /* names column rows — plain, non-scrolling, same min-height as .calrow so the two
+     columns' rows always line up without any pixel-matching guesswork */
+  .calnamerow{display:flex;align-items:center;gap:9px;padding:6px 8px 6px 2px;min-height:44px;border-bottom:1px solid var(--line)}
+  .calnamerow:hover{background-color:rgba(227,11,93,.02)}
+  .calnamerow .mono{width:28px;height:28px;border-radius:8px;background:rgba(227,11,93,.08);display:grid;place-items:center;font-size:10px;font-weight:800;letter-spacing:.03em;color:var(--brand-deep);flex:0 0 28px}
+  .calnamerow b{font-size:13px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .calrow{display:grid;gap:0;border-bottom:1px solid var(--line);position:relative;min-height:44px;align-items:center}
+  .calrow:hover{background-color:rgba(227,11,93,.02)}
+  .pillbtn{grid-row:1;height:26px;border-radius:999px;background:linear-gradient(135deg,var(--brand-soft),var(--brand));box-shadow:0 4px 14px -4px rgba(227,11,93,.45);display:flex;align-items:center;justify-content:center;transition:transform .15s var(--ease-out)}
   .pillbtn:hover{transform:translateY(-1px) scale(1.04)}
   .pillbtn .dot{width:7px;height:7px;border-radius:999px;background:#fff;opacity:.95}
   .pillbtn .amt{display:none;font-size:10.5px;font-weight:700;color:#fff;padding:0 8px;white-space:nowrap}
-  .calwrap[data-view="month"] .pillbtn .amt,.calwrap[data-view="year"] .pillbtn .amt{display:block}
-  .calwrap[data-view="month"] .pillbtn .dot,.calwrap[data-view="year"] .pillbtn .dot{display:none}
+  .calwrap[data-view="year"] .pillbtn .amt{display:block}
+  .calwrap[data-view="year"] .pillbtn .dot{display:none}
   .todayline{position:absolute;top:0;bottom:0;width:1.5px;background:linear-gradient(180deg,rgba(227,11,93,0),rgba(227,11,93,.4) 12%,rgba(227,11,93,.4) 88%,rgba(227,11,93,0));pointer-events:none;z-index:2}
-  .callegend{display:flex;align-items:center;gap:14px;margin-top:12px;font-size:11px;color:var(--ink-faint)}
+  .callegend{display:flex;align-items:center;gap:14px;padding:8px 12px;font-size:10.5px;color:var(--ink-faint)}
   .callegend .k{display:inline-flex;align-items:center;gap:6px}
   .callegend .swatch{width:16px;height:9px;border-radius:999px;background:linear-gradient(135deg,var(--brand-soft),var(--brand))}
 
@@ -348,13 +413,19 @@
         <div class="secbar">
           <h2>Sales calendar</h2>
           <button class="chip" id="sortChip" onclick="cycleCalSort()"><svg class="ic xs"><use href="#i-sort"/></svg><span id="sortLbl">Sorted by revenue</span></button>
+          <div class="calrange" id="calRange">
+            <input type="date" id="calFrom"/><span style="color:var(--ink-faint);font-size:11px">–</span><input type="date" id="calTo"/>
+            <button onclick="applyCalRange()">View range</button>
+            <button class="clear" onclick="clearCalRange()"><svg class="ic xs"><use href="#i-x"/></svg></button>
+          </div>
+          <div class="calnav" id="calNav"><!-- injected: Prev/Next month-window paging --></div>
           <div class="spacer"></div>
           <div class="seg" id="viewSeg">
-            <button class="on" data-v="week"  onclick="setCalView('week')">Week</button>
-            <button data-v="month" onclick="setCalView('month')">Month</button>
+            <button class="on" data-v="week"  onclick="setCalView('week')">Timeline</button>
             <button data-v="year"  onclick="setCalView('year')">Year</button>
           </div>
         </div>
+        <div class="calanalytics" id="calAnalytics"><!-- injected: DEV-154 #5 --></div>
         <div class="calwrap" id="calwrap" data-view="week"><!-- grid injected --></div>
       </section>
 
@@ -474,20 +545,72 @@ const PARTNERS = [
   {code:'ME', name:'MedLink Systems',   rev: 18000},
   {code:'VI', name:'VitalPharma AG',    rev:  9000},
 ];
-/* calendar deals: day 1..28 (weeks 27-30), span in days */
-const CAL_DEALS = [
-  {p:'AU', d:4,  span:2, amt:'38.000€'}, {p:'AU', d:12, span:2, amt:'52.000€'}, {p:'AU', d:23, span:2, amt:'44.000€'},
-  {p:'CA', d:4,  span:2, amt:'21.000€'}, {p:'CA', d:10, span:2, amt:'33.000€'}, {p:'CA', d:18, span:2, amt:'27.000€'},
-  {p:'DE', d:2,  span:2, amt:'18.500€'}, {p:'DE', d:9,  span:2, amt:'24.000€'}, {p:'DE', d:15, span:2, amt:'19.000€'},
-  {p:'RE', d:3,  span:2, amt:'16.000€'}, {p:'RE', d:18, span:2, amt:'22.500€'},
-  {p:'FO', d:5,  span:2, amt:'14.000€'}, {p:'FO', d:15, span:2, amt:'17.500€'},
-  {p:'BI', d:8,  span:2, amt:'12.000€'}, {p:'BI', d:15, span:2, amt:'15.500€'},
-  {p:'PH', d:2,  span:2, amt:'9.500€'},  {p:'PH', d:10, span:2, amt:'11.000€'}, {p:'PH', d:21, span:2, amt:'8.500€'},
-  {p:'ME', d:5,  span:2, amt:'7.000€'},  {p:'ME', d:12, span:2, amt:'6.500€'},
-  {p:'VI', d:8,  span:2, amt:'4.500€'},
+/* calendar deals: day 1..28 = July (weeks 27-30), span in days */
+/* full calendar year (live feedback 2026-07-07: "I want to see all January to
+   December" — was only showing a 3-month July window). Calendar-order, index 0 = Jan.
+   FEB–JUN figures reuse the actual numbers from Ayush's WhatsApp screenshot (likely the
+   real DEV-154 reference) for continuity with that source; JUL–SEP keep this
+   prototype's own numbers; OCT–DEZ stay 0€ (no data yet, matches the original mock). */
+const MONTH_TOTALS = [
+  ['JAN','18.000€'],['FEB','262.000€'],['MAR','240.500€'],['APR','305.930€'],
+  ['MAY','120.000€'],['JUN','31.000€'],['JUL','290.000€'],['AUG','120.000€'],
+  ['SEP','29.000€'],['OCT','0€'],['NOV','0€'],['DEZ','0€'],
 ];
-const MONTH_TOTALS = [['JUL','290.000€'],['AUG','120.000€'],['SEP','29.000€'],['OCT','0€'],['NOV','0€'],['DEZ','0€'],['JAN','0€']];
+const MONTH_FULLNAME = {JAN:'January',FEB:'February',MAR:'March',APR:'April',MAY:'May',JUN:'June',
+  JUL:'July',AUG:'August',SEP:'September',OCT:'October',NOV:'November',DEZ:'December'};
+/* one mock month = 28 days, so the day-grid stays a clean repeat(); not calendar-accurate
+   (real months are 28-31 days) but this is a throwaway mock, not the real date engine. */
+const CAL_MONTHS = MONTH_TOTALS.map(([code,total],i)=>({code, total, from:i*28+1, to:i*28+28}));
+const CAL_CUR_MONTH_IDX = 6; // July — matches the session's "today" (2026-07-07); a real
+                              // build derives this from an actual date, not a fixed index
+const CAL_TODAY = CAL_MONTHS[CAL_CUR_MONTH_IDX].from + 6; // "day 7 of July" in mock terms
+/* deals authored per-month using LOCAL day-of-month (1-28); ALL_CAL_DEALS below maps
+   each into its global day-index via CAL_MONTHS, so authoring stays readable without
+   hand-computing offsets. Volume roughly follows each month's MONTH_TOTALS figure. */
+const CAL_DEALS_RAW = [
+  // JAN — quiet, ramp-up (18.000€)
+  {p:'DE', m:0, d:9,  span:2, amt:'10.000€'}, {p:'AU', m:0, d:20, span:2, amt:'8.000€'},
+  // FEB (262.000€)
+  {p:'AU', m:1, d:5,  span:2, amt:'62.000€'}, {p:'CA', m:1, d:9,  span:2, amt:'48.000€'},
+  {p:'DE', m:1, d:14, span:2, amt:'55.000€'}, {p:'FO', m:1, d:18, span:2, amt:'40.000€'},
+  {p:'PH', m:1, d:23, span:2, amt:'32.000€'}, {p:'ME', m:1, d:26, span:2, amt:'25.000€'},
+  // MAR (240.500€)
+  {p:'AU', m:2, d:4,  span:2, amt:'58.000€'}, {p:'CA', m:2, d:10, span:2, amt:'50.500€'},
+  {p:'RE', m:2, d:15, span:2, amt:'44.000€'}, {p:'BI', m:2, d:19, span:2, amt:'38.000€'},
+  {p:'VI', m:2, d:24, span:2, amt:'50.000€'},
+  // APR — best month before July (305.930€)
+  {p:'AU', m:3, d:3,  span:2, amt:'70.000€'}, {p:'CA', m:3, d:8,  span:2, amt:'62.000€'},
+  {p:'DE', m:3, d:12, span:2, amt:'58.000€'}, {p:'FO', m:3, d:17, span:2, amt:'48.930€'},
+  {p:'PH', m:3, d:22, span:2, amt:'40.000€'}, {p:'ME', m:3, d:26, span:2, amt:'27.000€'},
+  // MAY (120.000€)
+  {p:'AU', m:4, d:6,  span:2, amt:'35.000€'}, {p:'CA', m:4, d:14, span:2, amt:'30.000€'},
+  {p:'DE', m:4, d:21, span:2, amt:'30.000€'}, {p:'RE', m:4, d:25, span:2, amt:'25.000€'},
+  // JUN — quiet before the July ramp (31.000€)
+  {p:'AU', m:5, d:10, span:2, amt:'16.000€'}, {p:'DE', m:5, d:20, span:2, amt:'15.000€'},
+  // JUL — current month (290.000€)
+  {p:'AU', m:6, d:4,  span:2, amt:'38.000€'}, {p:'AU', m:6, d:12, span:2, amt:'52.000€'}, {p:'AU', m:6, d:23, span:2, amt:'44.000€'},
+  {p:'CA', m:6, d:4,  span:2, amt:'21.000€'}, {p:'CA', m:6, d:10, span:2, amt:'33.000€'}, {p:'CA', m:6, d:18, span:2, amt:'27.000€'},
+  {p:'DE', m:6, d:2,  span:2, amt:'18.500€'}, {p:'DE', m:6, d:9,  span:2, amt:'24.000€'}, {p:'DE', m:6, d:15, span:2, amt:'19.000€'},
+  {p:'RE', m:6, d:3,  span:2, amt:'16.000€'}, {p:'RE', m:6, d:18, span:2, amt:'22.500€'},
+  {p:'FO', m:6, d:5,  span:2, amt:'14.000€'}, {p:'FO', m:6, d:15, span:2, amt:'17.500€'},
+  {p:'BI', m:6, d:8,  span:2, amt:'12.000€'}, {p:'BI', m:6, d:15, span:2, amt:'15.500€'},
+  {p:'PH', m:6, d:2,  span:2, amt:'9.500€'},  {p:'PH', m:6, d:10, span:2, amt:'11.000€'}, {p:'PH', m:6, d:21, span:2, amt:'8.500€'},
+  {p:'ME', m:6, d:5,  span:2, amt:'7.000€'},  {p:'ME', m:6, d:12, span:2, amt:'6.500€'},
+  {p:'VI', m:6, d:8,  span:2, amt:'4.500€'},
+  // AUG (120.000€)
+  {p:'AU', m:7, d:5,  span:2, amt:'22.000€'}, {p:'AU', m:7, d:19, span:2, amt:'18.000€'},
+  {p:'CA', m:7, d:8,  span:2, amt:'15.000€'},
+  {p:'DE', m:7, d:3,  span:2, amt:'12.500€'}, {p:'DE', m:7, d:16, span:2, amt:'9.000€'},
+  {p:'FO', m:7, d:10, span:2, amt:'11.000€'}, {p:'PH', m:7, d:13, span:2, amt:'7.500€'},
+  // SEP (29.000€)
+  {p:'AU', m:8, d:5,  span:2, amt:'9.000€'}, {p:'DE', m:8, d:10, span:2, amt:'6.500€'}, {p:'RE', m:8, d:14, span:2, amt:'5.000€'},
+  // OCT/NOV/DEZ — 0€, no deals yet (matches the "future" 0€ totals)
+];
+const ALL_CAL_DEALS = CAL_DEALS_RAW.map(d=>({...d, d: CAL_MONTHS[d.m].from + d.d - 1}));
 const YEAR_TOTALS  = [['2024','1,2 M€'],['2025','2,8 M€'],['2026','1,9 M€ YTD']];
+/* weighted-avg price €/g for the current month — used by the "Status this month" KPI
+   card (real build: SUM(line total)/SUM(grams) per period from deal_line_item) */
+const MONTH_AVGPRICE = {JUL:7.8, AUG:6.9, SEP:7.4};
 
 /* order nr = HS-<seller initials>-<buyer initials>-<YYMMDD>-<seq> (Marcel 2026-07-05 — deviates from DEV-26 lock, see NOTES)
    date format = DD-Mon-YY, platform-wide standard (Muskan 2026-07-05) */
@@ -570,48 +693,164 @@ function sortedPartners(){
   else p.sort((a,b)=>b.rev-a.rev); // rev + top accounts both by revenue in the mock
   return p;
 }
+/* live feedback 2026-07-07: "how much business have they done" — per-partner running
+   total for the current filter (date range if set, else the current/highlighted month) */
+function parseEuro(s){ return parseFloat(String(s).replace('€','').replace(/\./g,'')) || 0; }
+function partnerTotal(code){
+  const range = calRangeActive || CAL_MONTHS[CAL_CUR_MONTH_IDX];
+  return ALL_CAL_DEALS.filter(d=>d.p===code && d.d>=range.from && d.d<=range.to)
+    .reduce((s,d)=>s+parseEuro(d.amt), 0);
+}
+/* DEV-154 #5 — "Status this month" strip: icon + 4 KPI cards, grouped left beside the
+   heading. Mirrors the existing Analytics-box KPI pattern (relationship page) rather
+   than inventing a new visual language. Always reads the current month (July). */
+function renderCalAnalytics(){
+  const curMonth = CAL_MONTHS[CAL_CUR_MONTH_IDX];
+  const inMonth = ALL_CAL_DEALS.filter(d=>d.d>=curMonth.from && d.d<=curMonth.to);
+  const avgPrice = MONTH_AVGPRICE[curMonth.code] || 0;
+  const cards = [
+    [curMonth.total,'Total purchases'],
+    [String(inMonth.length),'Deals'],
+    [avgPrice.toFixed(2)+' €/g','Weighted avg price'],
+    [String(new Set(inMonth.map(d=>d.p)).size),'Active partners'],
+  ];
+  document.getElementById('calAnalytics').innerHTML = `
+    <div class="hd"><span class="icn"><svg class="ic xs"><use href="#i-target"/></svg></span><b>Status this month</b></div>
+    <div class="cards">${cards.map(([v,l])=>`<div class="calcard"><b>${v}</b><small>${l}</small></div>`).join('')}</div>`;
+}
+function renderCalNav(){
+  const nav = document.getElementById('calNav');
+  if(calView!=='week'){ nav.innerHTML = ''; return; } // Year view has no window to page
+  const winMonths = CAL_MONTHS.slice(calWindowStart, calWindowStart+WINDOW_MONTHS);
+  const label = `${MONTH_FULLNAME[winMonths[0].code].slice(0,3)}–${MONTH_FULLNAME[winMonths[winMonths.length-1].code].slice(0,3)}`;
+  nav.innerHTML = `
+    <button onclick="shiftCalWindow(-1)" ${calWindowStart<=0?'disabled':''} aria-label="Previous month">‹</button>
+    <span>${label}</span>
+    <button onclick="shiftCalWindow(1)" ${calWindowStart+WINDOW_MONTHS>=CAL_MONTHS.length?'disabled':''} aria-label="Next month">›</button>`;
+}
+/* Round 6 (live feedback 2026-07-07): the full 12-month grid (~10,000px wide) was
+   hitting a real browser rendering limit — the sticky customer column and header
+   vanished once scrolled far enough right (reported after landing on July), on top of
+   the earlier "blank after February" report. Root cause: `position:sticky` gets
+   unreliable at very large scroll distances in some browsers. Fix: page through the
+   year a few months at a time instead of rendering all 12 in one grid — still reaches
+   every month, just at a scroll distance that stays well within safe bounds. */
+const WINDOW_MONTHS = 3;
+let calWindowStart = CAL_CUR_MONTH_IDX; // default: current month leads the window
+function shiftCalWindow(delta){
+  calWindowStart = Math.max(0, Math.min(CAL_MONTHS.length-WINDOW_MONTHS, calWindowStart+delta));
+  renderCalendar();
+}
+/* date-range filter: granular data for a specific window. The mock's months line up
+   1:1 with real calendar months (Jan=0..Dec=11), so a real picked date maps cleanly
+   onto the mock's day-index via its real month + day-of-month (clamped to the mock's
+   28-day-per-month scale) — a real build reads actual deal dates, no mapping needed. */
+let calRangeActive = null;
+function mockDayIndex(dateStr){
+  const dt = new Date(dateStr+'T00:00');
+  const month = CAL_MONTHS[Math.min(CAL_MONTHS.length-1, dt.getMonth())];
+  const localDay = Math.min(28, Math.max(1, dt.getDate()));
+  return month.from + localDay - 1;
+}
+function applyCalRange(){
+  const f = document.getElementById('calFrom').value, t = document.getElementById('calTo').value;
+  if(!f || !t) return;
+  const from = mockDayIndex(f), to = mockDayIndex(t);
+  calRangeActive = {from:Math.min(from,to), to:Math.max(from,to)};
+  // jump the window to wherever the picked range starts, so it's actually visible
+  const fromMonthIdx = CAL_MONTHS.findIndex(m=>calRangeActive.from>=m.from && calRangeActive.from<=m.to);
+  calWindowStart = Math.max(0, Math.min(CAL_MONTHS.length-WINDOW_MONTHS, fromMonthIdx));
+  document.getElementById('calRange').classList.add('active');
+  if(calView!=='week') setCalView('week'); else renderCalendar();
+}
+function clearCalRange(){
+  calRangeActive = null;
+  calWindowStart = CAL_CUR_MONTH_IDX; // back to the default "current month" window
+  document.getElementById('calFrom').value=''; document.getElementById('calTo').value='';
+  document.getElementById('calRange').classList.remove('active');
+  renderCalendar();
+}
+
 function renderCalendar(){
   const wrap = document.getElementById('calwrap');
   const parts = sortedPartners();
+  renderCalAnalytics();
+  renderCalNav();
+  let namesHtml, gridHtml, legendHtml;
   if(calView==='week'){
-    const DAYS=28, TODAY=7, colW='minmax(30px,1fr)';
-    const grid = `200px repeat(${DAYS},${colW})`;
-    let h = `<div class="caltotals" style="grid-template-columns:200px repeat(7,minmax(60px,1fr))">
-      <div class="tl">Purchases / month</div>${MONTH_TOTALS.map(([m,v])=>`<div class="tc">${v}<small>${m}</small></div>`).join('')}</div>`;
-    h += `<div class="calhead" style="grid-template-columns:${grid}"><div></div>`;
-    for(let w=0;w<4;w++) h+=`<div class="wk" style="grid-column:${2+w*7} / span 7">WEEK ${27+w}</div>`;
-    for(let d=1;d<=DAYS;d++) h+=`<div class="dy${d===TODAY?' today':''}" style="grid-column:${d+1}">${d}</div>`;
-    h += `</div>`;
-    parts.forEach(p=>{
-      h += `<div class="calrow" style="grid-template-columns:${grid}"><div class="who" style="grid-column:1"><div class="mono">${p.code}</div><b>${p.name}</b></div>`;
-      CAL_DEALS.filter(d=>d.p===p.code).forEach(d=>{
-        h += `<button class="pillbtn" style="grid-column:${d.d+1} / span ${d.span}" onclick="openRail('${p.name}','${d.amt}')" title="${p.name} · ${d.amt}"><span class="dot"></span><span class="amt">${d.amt}</span></button>`;
-      });
-      h += `</div>`;
+    // the visible window is WINDOW_MONTHS months starting at calWindowStart (Prev/Next
+    // page through the year); a date-range filter further narrows it to just those days
+    const winMonths = CAL_MONTHS.slice(calWindowStart, calWindowStart+WINDOW_MONTHS);
+    const winFrom = winMonths[0].from, winTo = winMonths[winMonths.length-1].to;
+    const rangeFrom = calRangeActive ? Math.max(winFrom, calRangeActive.from) : winFrom;
+    const rangeTo   = calRangeActive ? Math.min(winTo, calRangeActive.to)     : winTo;
+    const DAYS = rangeTo - rangeFrom + 1, TODAY = CAL_TODAY, colW='minmax(30px,1fr)';
+    const toLocalCol = globalDay => globalDay - rangeFrom + 1; // global day-index → visible grid column (1-based, no name column to offset for anymore)
+    const grid = `repeat(${DAYS},${colW})`;
+    let head = `<div class="calhead" style="grid-template-columns:${grid}">`;
+    winMonths.forEach(m=>{
+      const from = Math.max(m.from, rangeFrom), to = Math.min(m.to, rangeTo);
+      if(from>to) return; // month falls entirely outside the range filter
+      const cur = TODAY>=m.from && TODAY<=m.to;
+      head += `<div class="calmonthband${cur?' cur':''}" style="grid-column:${toLocalCol(from)} / span ${to-from+1}"><b>${MONTH_FULLNAME[m.code]}</b><small>${m.total}</small></div>`;
     });
-    wrap.innerHTML = h + `<div class="callegend"><span class="k"><span class="swatch"></span>confirmed purchase</span><span class="k">click a pill → deal receipt</span></div>`;
-    // today line — position over day column TODAY
-    const row0 = wrap.querySelector('.calrow');
-    if(row0){
+    const firstWeek = Math.floor((rangeFrom-1)/7), lastWeek = Math.floor((rangeTo-1)/7);
+    for(let w=firstWeek; w<=lastWeek; w++){
+      const from = Math.max(w*7+1, rangeFrom), to = Math.min(w*7+7, rangeTo);
+      head += `<div class="wk" style="grid-column:${toLocalCol(from)} / span ${to-from+1}">WEEK ${w+1}</div>`;
+    }
+    for(let d=rangeFrom; d<=rangeTo; d++) head += `<div class="dy${d===TODAY?' today':''}" style="grid-column:${toLocalCol(d)}">${((d-1)%28)+1}</div>`;
+    head += `</div>`;
+    let rows = '';
+    parts.forEach(p=>{
+      rows += `<div class="calrow" style="grid-template-columns:${grid}">`;
+      ALL_CAL_DEALS.filter(d=>d.p===p.code && d.d>=rangeFrom && d.d<=rangeTo).forEach(d=>{
+        const span = Math.min(d.span, rangeTo-d.d+1); // clip a pill that would overhang the range's edge
+        rows += `<button class="pillbtn" style="grid-column:${toLocalCol(d.d)} / span ${span}" onclick="openRail('${p.name}','${d.amt}')" title="${p.name} · ${d.amt}"><span class="dot"></span><span class="amt">${d.amt}</span></button>`;
+      });
+      rows += `</div>`;
+    });
+    gridHtml = head + rows;
+    namesHtml = `<div class="calnameshd">Customers</div>` + parts.map(p=>
+      `<div class="calnamerow"><div class="mono">${p.code}</div><div class="whotxt"><b>${p.name}</b><small>${fmtK(partnerTotal(p.code))} ${calRangeActive?'in range':'this month'}</small></div></div>`
+    ).join('');
+    const legendHint = calRangeActive ? 'showing your selected range — clear it to see the whole window' : 'use ‹ › to page through the year';
+    legendHtml = `<div class="callegend"><span class="k"><span class="swatch"></span>confirmed purchase</span><span class="k">click a pill → deal receipt · ${legendHint}</span></div>`;
+    wrap.innerHTML = `<div class="calsplit"><div class="calnames">${namesHtml}</div><div class="calscroll">${gridHtml}</div></div>${legendHtml}`;
+    syncNamesHeaderHeight(wrap);
+    // today line — only meaningful while today is inside the visible window
+    const row0 = wrap.querySelector('.calscroll .calrow');
+    if(row0 && TODAY>=rangeFrom && TODAY<=rangeTo){
       const line = document.createElement('div'); line.className='todayline';
-      const first = wrap.querySelector('.calhead');
-      line.style.left = `calc(200px + (100% - 200px) / ${DAYS} * ${TODAY - .5})`;
-      wrap.querySelectorAll('.calrow').forEach(r=>{ const l=line.cloneNode(); r.appendChild(l); });
+      line.style.left = `calc((100% / ${DAYS}) * ${toLocalCol(TODAY) - .5})`;
+      wrap.querySelectorAll('.calscroll .calrow').forEach(r=>{ const l=line.cloneNode(); r.appendChild(l); });
     }
   } else {
-    const cols = calView==='month' ? MONTH_TOTALS : YEAR_TOTALS;
-    const grid = `200px repeat(${cols.length},minmax(84px,1fr))`;
-    let h = `<div class="caltotals" style="grid-template-columns:${grid}">
-      <div class="tl">Purchases / ${calView==='month'?'month':'year'}</div>${cols.map(([m,v])=>`<div class="tc">${v}<small>${m}</small></div>`).join('')}</div>`;
-    h += `<div class="calhead" style="grid-template-columns:${grid}"><div></div>${cols.map(([m])=>`<div class="wk" style="grid-row:1">${m}</div>`).join('')}</div>`;
+    const cols = YEAR_TOTALS;
+    const grid = `repeat(${cols.length},minmax(84px,1fr))`;
+    const head = `<div class="calhead" style="grid-template-columns:${grid}">${cols.map(([m])=>`<div class="wk">${m}</div>`).join('')}</div>`;
+    let rows = '';
     parts.forEach((p,pi)=>{
-      h += `<div class="calrow" style="grid-template-columns:${grid}"><div class="who" style="grid-column:1"><div class="mono">${p.code}</div><b>${p.name}</b></div>`;
-      const buys = calView==='month' ? [[2,fmtK(p.rev)],[3,fmtK(Math.round(p.rev*.4))]] : [[2,fmtK(p.rev*4)],[3,fmtK(p.rev*7)],[4,fmtK(p.rev*5)]];
-      buys.forEach(([c,amt])=>{ if((pi+c)%3!==0) h+=`<button class="pillbtn" style="grid-column:${c};margin:0 8px" onclick="openRail('${p.name}','${amt}')"><span class="dot"></span><span class="amt">${amt}</span></button>`; });
-      h += `</div>`;
+      rows += `<div class="calrow" style="grid-template-columns:${grid}">`;
+      const buys = [[1,fmtK(p.rev*4)],[2,fmtK(p.rev*7)],[3,fmtK(p.rev*5)]];
+      buys.forEach(([c,amt])=>{ if((pi+c)%3!==0) rows+=`<button class="pillbtn" style="grid-column:${c};margin:0 8px" onclick="openRail('${p.name}','${amt}')"><span class="dot"></span><span class="amt">${amt}</span></button>`; });
+      rows += `</div>`;
     });
-    wrap.innerHTML = h + `<div class="callegend"><span class="k"><span class="swatch"></span>aggregated purchases</span><span class="k">toggle Week for day-level pills</span></div>`;
+    gridHtml = head + rows;
+    namesHtml = `<div class="calnameshd">Customers</div>` + parts.map(p=>`<div class="calnamerow"><div class="mono">${p.code}</div><b>${p.name}</b></div>`).join('');
+    legendHtml = `<div class="callegend"><span class="k"><span class="swatch"></span>aggregated purchases</span><span class="k">toggle Timeline for day-level pills</span></div>`;
+    wrap.innerHTML = `<div class="calsplit"><div class="calnames">${namesHtml}</div><div class="calscroll">${gridHtml}</div></div>${legendHtml}`;
+    syncNamesHeaderHeight(wrap);
   }
+}
+/* the names column's header ("Customers") has genuinely variable content on its
+   .calhead counterpart (month band appears/disappears, Year view has no month band at
+   all) — rather than duplicate row markup to force matching CSS heights, measure the
+   real header once it's rendered and apply it directly; simpler and can't drift. */
+function syncNamesHeaderHeight(wrap){
+  const realHead = wrap.querySelector('.calscroll .calhead');
+  const nameHead = wrap.querySelector('.calnameshd');
+  if(realHead && nameHead) nameHead.style.height = realHead.getBoundingClientRect().height + 'px';
 }
 function fmtK(n){ return (n>=1000000? (n/1000000).toFixed(1)+' M€' : Math.round(n/1000)+'.000€'); }
 
