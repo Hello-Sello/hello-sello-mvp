@@ -4,6 +4,19 @@ import { useState } from "react";
 import Link from "next/link";
 import type { BuyAnalytics, AnalyticsSupplierRow, AnalyticsCategoryRow, AnalyticsProductRow } from "@/modules/buy/analytics";
 import { PencilEditCell } from "./PencilEditCell";
+import type { ChartMeasure } from "./AnalyticsChart";
+
+/**
+ * Every numeric column a header click can identify — the 5 chartable
+ * `ChartMeasure` values PLUS the 4 columns that have no chart representation
+ * (`margin_percent`/`qty`/`share`/`db1_per_unit` — 18-10's `ChartMeasure`
+ * deliberately excludes these so an invalid chart state is unrepresentable;
+ * the parent, plan 18-12, shows a toast for these instead of switching the
+ * chart's measure). This is the "ONE additional optional prop" plan 18-12's
+ * `<interfaces>` calls for, typed to cover every real column rather than only
+ * the chartable subset.
+ */
+export type TableColumnClick = ChartMeasure | "margin_percent" | "qty" | "share" | "db1_per_unit";
 
 /**
  * Buy — the Analytics/Sheet block's 3-level drill-down table (plan 18-11).
@@ -61,8 +74,14 @@ export function AnalyticsTable(props: {
     field: "net" | "gross",
     value: number,
   ) => Promise<void>;
+  /** Fires on any numeric column header click — the parent (plan 18-12) maps
+   *  chartable columns to a `ChartMeasure` and shows a toast for the rest. */
+  onColumnHeaderClick?: (column: TableColumnClick) => void;
+  /** The column currently steering the chart (or null) — highlighted so
+   *  "clicking a column highlights it" (18-CONTEXT.md, locked) is visible. */
+  highlightedColumn?: TableColumnClick | null;
 }) {
-  const { data, selectedRowKey, onSelectRow, onSaveResalePrice } = props;
+  const { data, selectedRowKey, onSelectRow, onSaveResalePrice, onColumnHeaderClick, highlightedColumn } = props;
 
   // Local expand/collapse state, keyed "supplierKey" and "supplierKey::categoryId"
   // so identically-named categories under different suppliers never collide.
@@ -106,15 +125,33 @@ export function AnalyticsTable(props: {
         <thead>
           <tr>
             <Th sticky>Supplier / Product</Th>
-            <Th numeric>Revenue</Th>
-            <Th numeric>Avg. purchase price</Th>
-            <Th numeric>Net price</Th>
-            <Th numeric>Gross price</Th>
-            <Th numeric>DB1 total</Th>
-            <Th numeric>Margin %</Th>
-            <Th numeric>DB1 / unit</Th>
-            <Th numeric>Qty</Th>
-            <Th numeric>Share</Th>
+            <Th numeric column="revenue" highlighted={highlightedColumn === "revenue"} onColumnClick={onColumnHeaderClick}>
+              Revenue
+            </Th>
+            <Th numeric column="wap" highlighted={highlightedColumn === "wap"} onColumnClick={onColumnHeaderClick}>
+              Avg. purchase price
+            </Th>
+            <Th numeric column="net" highlighted={highlightedColumn === "net"} onColumnClick={onColumnHeaderClick}>
+              Net price
+            </Th>
+            <Th numeric column="gross" highlighted={highlightedColumn === "gross"} onColumnClick={onColumnHeaderClick}>
+              Gross price
+            </Th>
+            <Th numeric column="db1_total" highlighted={highlightedColumn === "db1_total"} onColumnClick={onColumnHeaderClick}>
+              DB1 total
+            </Th>
+            <Th numeric column="margin_percent" highlighted={highlightedColumn === "margin_percent"} onColumnClick={onColumnHeaderClick}>
+              Margin %
+            </Th>
+            <Th numeric column="db1_per_unit" highlighted={highlightedColumn === "db1_per_unit"} onColumnClick={onColumnHeaderClick}>
+              DB1 / unit
+            </Th>
+            <Th numeric column="qty" highlighted={highlightedColumn === "qty"} onColumnClick={onColumnHeaderClick}>
+              Qty
+            </Th>
+            <Th numeric column="share" highlighted={highlightedColumn === "share"} onColumnClick={onColumnHeaderClick}>
+              Share
+            </Th>
           </tr>
         </thead>
         <tbody>
@@ -392,16 +429,26 @@ function Th({
   children,
   numeric,
   sticky,
+  column,
+  highlighted,
+  onColumnClick,
 }: {
   children?: React.ReactNode;
   numeric?: boolean;
   sticky?: boolean;
+  column?: TableColumnClick;
+  highlighted?: boolean;
+  onColumnClick?: (column: TableColumnClick) => void;
 }) {
+  const clickable = column != null && onColumnClick != null;
   return (
     <th
+      onClick={clickable ? () => onColumnClick(column) : undefined}
       className={`whitespace-nowrap bg-brand/[0.03] px-3 py-2.5 text-[10px] font-bold uppercase tracking-wide text-ink-muted/70 ${
         numeric ? "text-right" : "text-left"
-      } ${sticky ? "sticky left-0 z-20" : ""}`}
+      } ${sticky ? "sticky left-0 z-20" : ""} ${clickable ? "cursor-pointer select-none hover:text-brand-deep" : ""} ${
+        highlighted ? "bg-brand/[0.12] text-brand-deep" : ""
+      }`}
     >
       {children}
     </th>
