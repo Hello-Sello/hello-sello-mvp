@@ -11,6 +11,7 @@
 import { createClient } from "@/shared/db/server";
 import { getCurrentCompanyId } from "@/shared/auth";
 import { writeAudit } from "@/shared/audit";
+import { createDealRpcArgs } from "./lib/createDealArgs";
 import { viewerSide } from "./lib/derive";
 import { allStagesDone, canFinalizeFromStatus } from "./lib/finalize";
 import type {
@@ -356,9 +357,10 @@ export async function createDeal(input: CreateDealInput): Promise<CreateDealResu
   // supabase.rpc DIRECTLY (not via a detached const) so its `this` stays bound.
   // p_private_value is now accepted-but-ignored server-side (D-09); we stop
   // forwarding a value and write the per-line private rows after birth instead.
+  const { p_deal_type, p_counterparty_person_id } = createDealRpcArgs(input);
   const { data: cardId, error } = await supabase.rpc("create_deal_draft" as never, {
     p_relationship_id: input.relationshipId,
-    p_deal_type: "offer",
+    p_deal_type,
     p_value_net: sumValueNet(input.lines),
     p_currency: currency,
     p_due_date: input.dueDate ?? null,
@@ -367,6 +369,7 @@ export async function createDeal(input: CreateDealInput): Promise<CreateDealResu
     p_lines: rpcLines(input.lines),
     p_private_value: null,
     p_note: input.note ?? null,
+    p_counterparty_person_id,
   } as never);
   if (error) throw new Error((error as { message: string }).message);
   const newCardId = cardId as string | null;
@@ -378,10 +381,17 @@ export async function createDeal(input: CreateDealInput): Promise<CreateDealResu
   // IS the input index), then upsert each line's own-side input into the
   // owner-only `deal_line_item_private`. The company is taken from the SESSION
   // (`getCurrentCompanyId()`), NEVER from input - the same guardrail the edit
-  // path uses. On the create path the creator is ALWAYS the seller:
-  // `create_deal_draft` hardcodes `deal_type 'offer'` + `initiating_company_id =
-  // v_company`, so the creator's `viewerSide` is "seller" - hence seller_margin
-  // is the correct column (no viewerSide call needed here, by construction).
+  // path uses. On the DEFAULT ('offer') create path the creator is ALWAYS the
+  // seller: `initiating_company_id = v_company` + `deal_type 'offer'`, so the
+  // creator's `viewerSide` is "seller" - hence seller_margin is the correct
+  // column (no viewerSide call needed here, by construction).
+  // NOTE (Product Basket, dealType/counterpartyPersonId passthrough): no
+  // current caller passes `dealType: "order"` together with `ownInput` lines,
+  // so this hardcoded seller_margin write is still correct for every existing
+  // and in-flight caller. A FUTURE buyer-initiated 'order' create path that
+  // also carries ownInput would need a viewerSide() check here (like
+  // proposeDealChange does) before this stays correct - flagged, not fixed,
+  // since no such caller exists yet.
   if (input.lines.some((l) => l.ownInput != null)) {
     const companyId = await getCurrentCompanyId();
     if (!companyId) throw new Error("createDeal: no company in session");
