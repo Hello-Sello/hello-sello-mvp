@@ -259,9 +259,12 @@ function EmojiButton({
 
 /**
  * The `+` attachment menu. "Create a deal" is REAL - it fires the `hs:create-deal`
- * window event that DealPin listens for, opening the existing create flow (a
- * second door, no new write path - the AI fence holds). The upload items are UI
- * placeholders ("soon") until a storage slice (bucket + RLS) lands.
+ * window event that DealPin listens for. As of Task 8c (Product Basket Round 2)
+ * that no longer opens a propose-and-wait form: DealPin births a real, empty
+ * `draft` deal card immediately and hands the viewer straight to it - no second
+ * door, still no new write path here (the AI fence holds, this component never
+ * calls a deal write itself). The upload items are UI placeholders ("soon")
+ * until a storage slice (bucket + RLS) lands.
  */
 function PlusMenu({ open, setOpen }: { open: boolean; setOpen: (v: boolean) => void }) {
   function createDeal() {
