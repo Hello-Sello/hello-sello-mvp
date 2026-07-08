@@ -316,7 +316,7 @@ export function AllocationTable({
 
   return (
     <section className="glass rounded-3xl p-5" onClick={() => setOpenMenu(null)}>
-      <h2 className="text-[22px] font-extrabold text-ink">Batches</h2>
+      <h2 className="text-[22px] font-extrabold text-ink">Allocate by Batches</h2>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">Sort by</span>

@@ -31,9 +31,11 @@ export type RelationshipRow = Tables["relationship"]["Row"];
 
 /**
  * chat_thread_type.code - seeded values.
- * This slice creates `c2c` + `p2p`; `deal` is the deal workspace (3a+).
+ * `c2c` + `p2p` are the 2a slice; `deal` is the deal workspace (3a+);
+ * `group` is the Phase-7 multi-member group chat (07-02 backend). A group
+ * resolves its participants from `chat_thread_member`, not the person slots.
  */
-export type ThreadType = "c2c" | "p2p" | "deal";
+export type ThreadType = "c2c" | "p2p" | "deal" | "group";
 
 /**
  * content_author.code - the message author class (`chat_message.sender`).
@@ -95,8 +97,13 @@ export interface ConversationListItem {
   /** chat_thread.id */
   threadId: string;
   threadType: ThreadType;
-  /** chat_thread.relationship_id - the deep-link target for the relationship page (2e) */
-  relationshipId: string;
+  /**
+   * chat_thread.relationship_id - the deep-link target for the relationship page
+   * (2e). A `group` thread carries NO relationship anchor (07-02 dropped the
+   * NOT NULL: group access is by membership), so this is `null` for groups;
+   * p2p/c2c/deal rows always fill it.
+   */
+  relationshipId: string | null;
   /** display name: the company name for a c2c, the other person's name for a p2p */
   name: string;
   /** subtitle under the name: "Company chat (C2C)" for c2c, the company name for a p2p */
@@ -113,11 +120,45 @@ export interface ConversationListItem {
   /** unread count - mock-derived for now */
   unreadCount: number;
   /**
-   * Only on `threadType === 'deal'` rows (3b): the deal this chat belongs to.
-   * A deal row does not select in place - it NAVIGATES to the workspace
-   * (`/connect/deal/[dealCardId]`), where the deal chat lives.
+   * On `threadType === 'deal'` rows (3b) AND deal-card-born `group` rows (D-07):
+   * the deal this chat belongs to. A deal row navigates to the workspace; a
+   * deal-born group files under the Deals filter (D-07) and can open the card.
    */
   dealCardId?: string;
+  /**
+   * True when the chat involves another company (external), false when it is
+   * own-company-only (internal). Drives the Group ▾ Internal/External filters
+   * (D-01). `p2p`/`c2c`/`deal` are always cross-company (external); a `group`
+   * computes it from its members. `undefined` is treated as external.
+   */
+  isExternal?: boolean;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Group creation (07-05) - the external-gate (D-05) result shapes            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A group member the server placed behind the D-05 external gate: an external
+ * company person added to a deal-card-born group, still `pending_external`
+ * until TWO distinct active members approve (`approve_group_member`).
+ */
+export interface PendingExternalMember {
+  /** person.id - the target handed to approveGroupMember */
+  personId: string;
+  /** display name for the approval row */
+  name: string;
+}
+
+/**
+ * What `createGroupThread` returns: the new group thread id plus any members
+ * the server put behind the external gate (D-05). An empty `pendingExternal`
+ * means the group is fully active (a plain new-chat group, or a deal group
+ * with only the 2 deal parties).
+ */
+export interface GroupCreationResult {
+  threadId: string;
+  pendingExternal: PendingExternalMember[];
 }
 
 /**
@@ -193,6 +234,23 @@ export interface ConnectedCompany {
  */
 export interface MyConnectionsView {
   companies: ConnectedCompany[];
+}
+
+/**
+ * One person row from the widened name search (D-04). The New-Group picker
+ * defaults to the connected directory but searches beyond it to ANY HelloSello
+ * user the viewer's RLS allows to see - this is that search's result shape.
+ */
+export interface PeopleSearchResult {
+  /** person.id - handed to createGroupThread as a member */
+  personId: string;
+  /** display_name ?? (first_name + " " + last_name) */
+  name: string;
+  /** computed avatar initials */
+  initials: string;
+  /** the person's company (for the subtitle line); null if RLS hid it */
+  companyId: string | null;
+  companyName: string | null;
 }
 
 /* -------------------------------------------------------------------------- */

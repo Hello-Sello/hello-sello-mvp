@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import { ArrowRight, FileText } from "lucide-react";
 import { buildLog, formatMoney } from "../lib/stats";
 import { NotesTab } from "./NotesTab";
@@ -257,22 +256,31 @@ function DealsTab({ deals }: { deals: DealSummaryView[] }) {
               <span className="shrink-0 text-sm font-semibold text-ink/70">
                 {d.valueNet != null ? formatMoney(d.valueNet, d.currency) : "-"}
               </span>
-              {/* the third door to screen ④ (3b). Only lights up for deals that
-                  actually have a workspace - historical seed deals have none. */}
+              {/* D-32/D-33 - open the deal CARD as a right-side panel (the Deal
+                  Room is retired). Dispatches hs:open-deal-card; the layout-level
+                  DealCardPanelHost listens + mounts the card. Only lights up for
+                  deals that actually have a card - historical seed deals have none. */}
               {d.hasWorkspace ? (
-                <Link
-                  href={`/connect/deal/${d.id}`}
+                <button
+                  type="button"
+                  onClick={() =>
+                    window.dispatchEvent(
+                      new CustomEvent("hs:open-deal-card", {
+                        detail: { dealCardId: d.id },
+                      }),
+                    )
+                  }
                   className="flex shrink-0 items-center gap-1 text-[11px] font-medium text-brand-deep transition hover:gap-1.5 hover:text-brand"
                 >
-                  Open Deal Room
+                  Open Deal Card
                   <ArrowRight size={12} strokeWidth={2} />
-                </Link>
+                </button>
               ) : (
                 <span
                   className="shrink-0 text-[11px] font-medium text-ink/25"
-                  title="No Deal Room for this deal"
+                  title="No Deal Card for this deal"
                 >
-                  No Deal Room
+                  No Deal Card
                 </span>
               )}
             </div>

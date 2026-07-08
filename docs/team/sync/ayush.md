@@ -5,9 +5,9 @@
 
 ---
 
-**Last updated:** 2026-06-22 11:49 CEST
-**Branch:** claude/ayush/work - **~26 commits LOCAL, UNPUSHED** (Sprint-2 Phase-04 + Phase-05 work; dev still at PR [#113](https://github.com/HelloSello/hello-sello-mvp/pull/113)).
-**Status:** idle. **This session = built Sprint-2 Phase-05 (Deal Room).** Built across 5 plans / 4 waves; verified 31/31 must-haves; gate-green (tsc 0 + eslint 0 + 69/69 unit + next build 0); all 3 code-review High bugs fixed. **Next = Phase 6 (Deal Basket / Deal Form).**
+**Last updated:** 2026-07-08 01:55 CEST
+**Branch:** claude/ayush/work - **PUSHED + synced with dev** (merge commit `e0a2fb7`; branch was 52 ahead / 185 behind, now up to date).
+**Status:** idle. **PR [#139](https://github.com/HelloSello/hello-sello-mvp/pull/139) (Phase-7 Connect chat + living deal card → dev) is OPEN and git-MERGEABLE.** Land it first (as your side asked, since our branch was very old), then rebase your Sell-opens-card fix on top - full detail in the note below.
 **Linear issue in progress:** none
 **Shared files locked:** none (all locks cleared).
 **⚠️ I RENAMED 3 of MY migrations (NOT yours) to fix timestamp collisions with your dev migrations:** `20260617140000_confirm_deal_change_announce` → `…140050`; `20260618120000_deal_card_notes` → `…120010`; `20260618120100_confirm_deal_change_notes` → `…120110`. Yours (`auth04_revoked_status`@140000, `company_city`@120000, `list_discoverable_companies_city`@120100) are UNTOUCHED. The chain now has no duplicate timestamps - `db reset` green.
@@ -18,6 +18,17 @@
 ---
 
 ## Notes for the other agent
+
+**2026-07-08 (01:55 CEST) - PR #139 is READY: land Phase-7 first, then rebase your Sell fix.** Your side asked us to merge first because our branch was very old (52 ahead / 185 behind). Done: I merged `origin/dev` into `claude/ayush/work` (merge `e0a2fb7`), resolved the only 2 conflicts, and pushed - **PR #139 is now git-mergeable.**
+> - **The one collision, as agreed:** Phase-7 retires the Deal Room + Stages (D-15). Your `src/app/sell/AllocateDealRoomHost.tsx` still `import`s the deleted `DealWorkspace`, so after #139 merges the build fails with **exactly 1 error** (nothing else - I verified with a full `tsc`). That is the handoff: rebase your **"Sell opens the deal card"** fix on top and it goes green.
+> - **Conflicts I resolved:** `deals/supabase/reads.ts` (kept YOUR Allocate columns `ordered_via`/`ticket_status` + the `noteRow` cast; my `getDealPeople` is a separate region, untouched) and regenerated `database.types.ts` from the combined 108-migration DB (has both my `is_private` and your `ordered_via`/`ticket_status`).
+> - **Nothing of yours clobbered** - all your Present / Settings / Allocate / Catalog / basket files merged in clean.
+
+**2026-06-23 (13:36 CEST) - Phase 6 (Deal Basket) HANDED OFF to you. No code, clean handover.** Phase 6 is the full Deal Basket (sub-phases 6A-6F), and it overlaps almost entirely with the Product Basket you're already building, so we agreed you take the whole phase. Nothing is built yet; the 6A design talk started but no CONTEXT.md was written, so there is nothing to un-build.
+> - **Read this first:** `_workshop/handoff/phase-6-context.md` (tracked). Per sub-phase 6A-6F it has the **Information / Decision / Problem / Questions**, plus a shared-foundation section (the locked 4-layer model `Product Card -> Product Basket -> Deal Basket -> Deal Card`, the carried-forward locked decisions, the wave order `6A -> 6B -> (6C+6D) -> (6E+6F)`, the deferred/dropped items). It also lists the real **23-ref / 8-file** rename surface for 6B (`src/modules/deals/*`, incl. an existing `lib/basket.ts`).
+> - **6A decides first:** the edit/sharing model - **Model B** (seller owns the offer) vs **Model C** (role-based: seller owns price, buyer owns quantity/delivery). Output of 6A = an ADR (next number is ADR-0004) + fresh req IDs.
+> - **Timestamp clash is RESOLVED** - you already renamed yours to `20260622091500_phase12_join_request_rpcs.sql` (your session 39); interleaved `db reset` green. Nothing owed.
+> - **My lane now = Phase 7 (Sella).** I will not touch `src/modules/deals/*` while you own Phase 6 - it's yours.
 
 **2026-06-22 (11:49 CEST) - Phase 5 (Deal Room) DONE. ⚠️ 3 new deal-domain migrations (additive; none of your catalogue/product/RLS) - please read before your next rebase; LOCAL only, cloud UNTOUCHED.** The Deal Room (the old "Deal Workspace", renamed DEV-66) is built + verified 31/31 must-haves + all 3 code-review High bugs fixed; gate-green (tsc 0 + eslint 0 + 69/69 unit + next build 0). ~26 commits LOCAL on `claude/ayush/work` (Phase-04 + Phase-05), **being pushed to dev** as one push.
 > - **3 new Phase-5 migrations** (deal-domain, additive): (1) thing / `deal_artifact` **visibility column + RLS** (per-thing private/shared, own-side defaults private, auto-shared to the other company), (2) **stage-done + `finalizeDeal`** (manual stage "mark done"; finalization on the LifecyclePill -> golden card, via `finalizeDeal`, NEVER `confirm_deal_change`), (3) a **WITH-CHECK ownership corrective** (the RLS write-ownership fix from code review).

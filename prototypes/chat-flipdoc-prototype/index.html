@@ -1,0 +1,1630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Chat + Flip Deal Document — prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<!--
+  PROTOTYPE — THROWAWAY. Not production.
+  Question: chat redesign — no separate Deal Room page, no Sella rail.
+  CHOSEN (2026-07-03): variant A — chat + toggleable side panel. The paper's
+  FLIP side = Signals | Logs only (no chat on the back; the deal group chat
+  is a normal conversation in the left list). Proposed changes render as a
+  red/green diff ON the card with Change / Approve.
+  UPDATE (2026-07-06): card = 8 parts (toolbar / letterhead / parties /
+  products / extra conditions / open items / notes / decision). ✎ = edit mode:
+  products row-edit (size dropdown, units stepper, price input, 🗑, add from
+  shop), extra conditions seller-only (payment, expiry, delivery, discounts,
+  bundle deals), one note per party. Signing is two-sided: seller signs →
+  invoice → buyer signs after delivery → closed → re-open ticket (LATER).
+  UPDATE (2026-07-06b): Seller/Buyer VIEW switch in the demo bar (no names —
+  the roles must read clearly). Buyer: edits product size/units, NEVER price
+  (lock icon); extra conditions read-only; edits only their own note; gets the
+  bundle "take the deal" button; signs after the invoice. Deal creation itself
+  is seller-only (rule noted, no create flow in this prototype). Bundle deals
+  are structured rules the seller builds in a BI-style if-then table:
+  product · (quantity g | units | price) ⋚ value → free delivery / discount.
+-->
+<style>
+  /* ============================================================
+     SECTION A — SHARED DESIGN SYSTEM (from dealcard-v3-prototype)
+     ============================================================ */
+  :root {
+    --maroon: #76002d;
+    --brand: #ec4899;   /* pink-500 — system */
+    --brand-2: #db2777; /* pink-600 — system primary */
+    --brand-soft: #f9a8d4; /* pink-300 */
+    --brand-tint: #fce7f3; /* pink-100 */
+    --ink: #0f172a;     /* slate-900 */
+    --ash: #64748b;     /* slate-500 */
+    --line: #e2e8f0;    /* slate-200 */
+    --bg: #fdf7fa;
+    --white: #ffffff;
+    --ok: #16924a;
+    --ok-tint: #e8f6ee;
+    --warn: #b45309;
+    --warn-tint: #fdf1e3;
+    --danger: #b3203f;
+    --danger-tint: #fdecef;
+    --link: #4a5de8;
+    --paper: #fdfcfa;
+    --paper-shadow: 0 14px 40px rgba(118, 0, 45, .16), 0 2px 8px rgba(31, 20, 48, .08);
+    --r-lg: 20px;
+    --r-md: 14px;
+    --r-sm: 10px;
+    --r-xs: 8px;
+    --s-2: 8px;
+    --s-3: 12px;
+    --s-4: 16px;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 14px;
+    overflow: hidden;
+  }
+  .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+  .disp { font-family: "Space Grotesk", ui-sans-serif, sans-serif; }
+  button { font: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+  input { font: inherit; }
+
+  /* ============================================================
+     SECTION B — APP SHELL (rail + chat list + stage)
+     ============================================================ */
+  .app { display: flex; height: 100vh; }
+
+  .rail {
+    width: 64px; flex: none; display: flex; flex-direction: column; align-items: center;
+    gap: 10px; padding: 14px 0; background: #fff; border-right: 1px solid var(--line);
+  }
+  .rail .logo { font-weight: 800; color: var(--brand-2); font-size: 11px; letter-spacing: .5px; margin-bottom: 8px; }
+  .rail .ric {
+    width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center;
+    color: var(--ash);
+  }
+  .rail .ric svg { width: 20px; height: 20px; }
+  .rail .ric.active { background: var(--brand-tint); color: var(--brand-2); }
+  .convo .av svg, .minav svg, .chathead .av svg { width: 18px; height: 18px; color: var(--maroon); }
+  .dealchip .doc svg { width: 14px; height: 14px; display: block; color: var(--brand-2); }
+  .edit svg { width: 14px; height: 14px; display: block; }
+  .ncmenu .mi svg { width: 16px; height: 16px; color: var(--brand-2); vertical-align: -3px; margin-right: 6px; }
+
+  .chatlist {
+    width: 292px; flex: none; background: #fff; border-right: 1px solid var(--line);
+    display: flex; flex-direction: column; min-width: 0; position: relative;
+    transition: width .18s ease;
+  }
+  .chatlist.min { width: 62px; }
+  .lhead { display: flex; align-items: center; gap: 8px; margin: 14px 14px 8px; flex: none; }
+  .lhead .newchat { flex: 1; margin: 0; }
+  .collapsebtn {
+    flex: none; width: 34px; height: 34px; border-radius: 50%;
+    border: 1px solid var(--line); background: #fff; color: var(--ash); font-size: 13px; font-weight: 700;
+  }
+  .collapsebtn:hover { background: var(--brand-tint); color: var(--brand-2); }
+  .minlist { display: flex; flex-direction: column; align-items: center; gap: 10px; padding-top: 6px; overflow-y: auto; flex: 1; }
+  .minav {
+    position: relative; width: 38px; height: 38px; border-radius: 50%; flex: none;
+    background: #efe7ee; display: grid; place-items: center; font-weight: 700; font-size: 12px; color: var(--maroon);
+  }
+  .minav.gav { font-size: 16px; background: #f3edf1; }
+  .minav.act { outline: 2px solid var(--brand-2); outline-offset: 1px; }
+  .minav .udot2 { position: absolute; top: -1px; right: -1px; width: 9px; height: 9px; border-radius: 50%; background: var(--brand-2); border: 2px solid #fff; }
+  .chatlist .newchat {
+    margin: 14px 14px 8px; background: var(--brand-2); color: #fff; border-radius: 999px;
+    padding: 10px; font-weight: 700; text-align: center; font-size: 13px; cursor: pointer;
+  }
+  .ncmenu {
+    position: absolute; top: 52px; left: 14px; right: 14px; z-index: 60;
+    background: #fff; border: 1px solid var(--line); border-radius: 14px;
+    box-shadow: 0 12px 32px rgba(31,20,48,.16); padding: 6px;
+  }
+  .ncmenu button { display: block; width: 100%; text-align: left; padding: 10px 12px; border-radius: 10px; font-size: 12.5px; }
+  .ncmenu button b { display: block; font-size: 13px; }
+  .ncmenu button span { color: var(--ash); font-size: 11.5px; }
+  .ncmenu button:hover { background: var(--brand-tint); }
+  .chatlist .search {
+    margin: 4px 14px 10px; background: var(--bg); border: 1px solid var(--line);
+    border-radius: 999px; padding: 8px 12px; color: var(--ash); font-size: 12.5px; flex: none;
+  }
+  .filters { display: flex; gap: 5px; padding: 0 14px 10px; flex: none; position: relative; }
+  .fchip {
+    border-radius: 999px; padding: 5px 11px; font-size: 11.5px; font-weight: 700;
+    color: var(--ash); background: var(--bg); border: 1px solid var(--line);
+  }
+  .fchip.on { background: var(--brand-2); border-color: var(--brand-2); color: #fff; }
+  .ddmenu {
+    position: absolute; top: 32px; right: 10px; z-index: 60; min-width: 150px;
+    background: #fff; border: 1px solid var(--line); border-radius: 12px;
+    box-shadow: 0 12px 32px rgba(31,20,48,.16); padding: 5px;
+  }
+  .ddmenu button { display: block; width: 100%; text-align: left; padding: 8px 12px; border-radius: 8px; font-size: 12.5px; font-weight: 600; }
+  .ddmenu button:hover { background: var(--brand-tint); }
+  .ddmenu button.on { color: var(--brand-2); }
+  #convos { overflow-y: auto; flex: 1; }
+
+  .convo { display: flex; gap: 10px; padding: 11px 14px; border-left: 3px solid transparent; cursor: default; }
+  .convo.active { background: var(--brand-tint); border-left-color: var(--brand-2); }
+  .convo .av {
+    width: 38px; height: 38px; flex: none; border-radius: 50%; display: grid; place-items: center;
+    background: #efe7ee; font-weight: 700; font-size: 12px; color: var(--maroon);
+  }
+  .convo .av.gav { font-size: 16px; background: #f3edf1; }
+  .convo .cmeta { min-width: 0; flex: 1; }
+  .convo .cnames { font-weight: 600; font-size: 12px; color: var(--ash); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .convo .csubj { font-weight: 700; font-size: 13px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin: 1px 0; }
+  .convo .cprev { color: var(--ash); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .convo.unread .cnames, .convo.unread .csubj { font-weight: 800; color: var(--ink); }
+  .convo .cright { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
+  .convo .ctime { color: var(--ash); font-size: 11px; }
+  .convo.unread .ctime { color: var(--brand-2); font-weight: 700; }
+  .convo .udot { width: 8px; height: 8px; border-radius: 50%; background: var(--brand-2); }
+
+  #stage { flex: 1; min-width: 0; display: flex; }
+
+  /* ============================================================
+     SECTION C — CHAT COLUMN (P2P = white)
+     ============================================================ */
+  .chatcol { flex: 1; min-width: 0; display: flex; flex-direction: column; background: #fff; }
+  .chathead {
+    display: flex; align-items: center; gap: 12px; padding: 0 18px; height: 64px;
+    border-bottom: 1px solid var(--line); flex: none;
+  }
+  .chathead .av { width: 40px; height: 40px; border-radius: 50%; background: #efe7ee; display: grid; place-items: center; font-weight: 700; font-size: 12px; color: var(--maroon); position: relative; }
+  .chathead .av::after { content: ""; position: absolute; right: 0; bottom: 0; width: 10px; height: 10px; border-radius: 50%; background: var(--ok); border: 2px solid #fff; }
+  .chathead .who .nm { font-weight: 700; font-size: 15px; }
+  .chathead .who .co { color: var(--ash); font-size: 12px; }
+  .chathead .spacer { flex: 1; }
+
+  .dealchip {
+    display: inline-flex; align-items: center; gap: 8px;
+    border: 1px solid var(--line); border-radius: 999px; padding: 7px 13px;
+    font-size: 12.5px; font-weight: 600; background: #fff;
+    transition: box-shadow .15s;
+  }
+  .dealchip:hover { box-shadow: 0 2px 10px rgba(196, 21, 107, .18); }
+  .dealchip .doc { font-size: 14px; }
+  .dealchip .ver { background: var(--brand-tint); color: var(--brand-2); border-radius: 999px; padding: 1px 7px; font-size: 11px; font-weight: 700; }
+  .dealchip .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
+  .dealchip .dot.pending { background: var(--warn); animation: pulse 1.4s infinite; }
+  @keyframes pulse { 50% { opacity: .35; } }
+  .dealchip.on { background: var(--brand-tint); border-color: var(--brand-soft); }
+
+  .msgs { flex: 1; overflow-y: auto; padding: 20px 22px; display: flex; flex-direction: column; gap: 4px; }
+  .mrow { display: flex; flex-direction: column; max-width: 66%; }
+  .mrow.in  { align-self: flex-start; align-items: flex-start; }
+  .mrow.out { align-self: flex-end; align-items: flex-end; }
+  .bubble { padding: 9px 14px; border-radius: 16px; font-size: 13.5px; line-height: 1.45; }
+  .mrow.in  .bubble { background: #f4eff3; border-bottom-left-radius: 5px; }
+  .mrow.out .bubble { background: var(--brand-2); color: #fff; border-bottom-right-radius: 5px; }
+  .mmeta { color: var(--ash); font-size: 10.5px; margin: 3px 6px 8px; }
+
+  .sysline { align-self: center; color: var(--ash); font-size: 11.5px; margin: 8px 0; }
+  /* system message = neutral fact, center; clickable when it points at the diff */
+  .syspill {
+    align-self: center; text-align: center; max-width: 85%; margin: 8px 0;
+    background: #f1f5f9; border: 1px solid var(--line); color: #475569;
+    font-size: 11.5px; font-weight: 600; border-radius: 999px; padding: 5px 14px;
+  }
+  .syspill.click { cursor: pointer; background: var(--warn-tint); border-color: #f3ddbe; color: #92400e; }
+  .syspill.click:hover { background: #fbe8cc; border-color: #eac989; }
+  .syspill .dealnum { color: var(--link); text-decoration: underline; font-weight: 700; }
+
+  .composer { flex: none; padding: 12px 18px 16px; border-top: 1px solid var(--line); }
+  .composer .box {
+    display: flex; align-items: center; gap: 10px;
+    border: 1px solid var(--line); border-radius: 16px; padding: 11px 14px; background: #fff;
+  }
+  .composer input { flex: 1; border: none; outline: none; font-size: 13.5px; background: transparent; }
+  .composer .send { color: var(--brand-2); font-weight: 800; font-size: 16px; }
+
+  /* ============================================================
+     SECTION D — THE PAPER (receipt-style deal document)
+     ============================================================ */
+  /* toolbar sits on the crimson mat, above the receipt */
+  .dtoolbar {
+    flex: none; display: flex; align-items: center; gap: 8px;
+    padding: 0 26px; height: 64px; background: transparent;
+  }
+  .dtoolbar .tspace { flex: 1; }
+  .tbtn {
+    display: inline-flex; align-items: center; gap: 8px;
+    border: none; border-radius: 999px;
+    background: rgba(255, 255, 255, .82);
+    padding: 10px 18px; font-size: 13px; font-weight: 700; color: #26212e;
+    box-shadow: 0 2px 10px rgba(180, 37, 99, .14);
+  }
+  .tbtn:hover { background: #fff; }
+  .tbtn.icon { width: 40px; height: 40px; padding: 0; justify-content: center; }
+  .tbtn svg { width: 15px; height: 15px; display: block; }
+  .tbtn.on { background: var(--maroon); color: #fff; }
+  .tbtn.on:hover { background: var(--maroon); filter: brightness(1.2); }
+  .docscroll { flex: 1; min-height: 0; overflow-y: auto; padding: 14px 26px 30px; }
+
+  /* the receipt: real paper floating on the mat, scalloped torn edges top + bottom */
+  .paperwrap { position: relative; width: 100%; margin: 0 auto; }
+  .paper {
+    position: relative;
+    background: rgba(255, 255, 255, .58);
+    backdrop-filter: blur(16px) saturate(1.2);
+    -webkit-backdrop-filter: blur(16px) saturate(1.2);
+    color: #26212e;
+    padding: 24px 42px 28px; animation: papein .28s ease;
+    box-shadow: 0 16px 40px rgba(180, 37, 99, .2), 0 3px 10px rgba(180, 37, 99, .12);
+  }
+  @keyframes papein { from { opacity: 0; transform: translateY(6px) scale(.985); } }
+  .paper::before, .paper::after {
+    content: ""; position: absolute; left: 0; right: 0; height: 12px;
+    background-size: 22px 12px; background-repeat: repeat-x;
+  }
+  .paper::before { top: -11px; background-image: radial-gradient(circle at 11px 12px, rgba(255,255,255,.58) 9.5px, transparent 10.5px); }
+  .paper::after  { bottom: -11px; background-image: radial-gradient(circle at 11px 0px, rgba(255,255,255,.58) 9.5px, transparent 10.5px); }
+
+  /* on-paper vocabulary: warm greys, hairline rules, letterpress small-caps labels */
+  .plabel {
+    font-size: 9.5px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase;
+    color: #9c8494;
+  }
+  .lhead2 { display: flex; justify-content: space-between; align-items: center; gap: 20px; }
+  .wordmark { font-weight: 700; font-size: 19px; color: var(--maroon); }
+  .docmeta { font-size: 11.5px; text-align: right; line-height: 1.55; color: #26212e; }
+  .rule2 { border-top: 2.5px solid #26212e; border-bottom: 1px solid #26212e; height: 4px; margin-top: 10px; }
+
+  /* parties = one line: SELLER x · You ────→ BUYER y (per mockup 2026-07-06) */
+  .parties {
+    display: flex; align-items: baseline; gap: 10px;
+    padding: 18px 0 16px; border-bottom: 1px solid rgba(130, 40, 80, .18);
+  }
+  .parties .pco2 { font-weight: 700; font-size: 15px; }
+  .parties .you { color: var(--brand-2); font-size: 12px; font-weight: 700; }
+  .parties .arrow { flex: 1; align-self: center; height: 1px; background: rgba(130, 40, 80, .4); position: relative; margin: 0 8px; }
+  .parties .arrow::after { content: ""; position: absolute; right: 0; top: -3px; border: 3.5px solid transparent; border-left: 6px solid rgba(130, 40, 80, .55); border-right: none; }
+
+  table.lines { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 16px; }
+  table.lines th {
+    text-align: left; font-size: 9.5px; text-transform: uppercase; letter-spacing: 1.2px;
+    color: #9c8494; font-weight: 700;
+    border-bottom: 1.5px solid #26212e; padding: 0 8px 7px;
+  }
+  table.lines td { padding: 10px 8px; border-bottom: 1px solid rgba(130, 40, 80, .12); vertical-align: top; }
+  table.lines td.num { text-align: right; white-space: nowrap; }
+  tr.removed td { color: var(--danger); background: var(--danger-tint); text-decoration: line-through; }
+  tr.added td   { color: var(--ok); background: var(--ok-tint); font-weight: 600; }
+  tr.added td .newtag { display: inline-block; font-size: 9.5px; letter-spacing: .8px; background: var(--ok); color: #fff; border-radius: 999px; padding: 2px 9px; margin-top: 4px; text-decoration: none; }
+
+  .totalrow {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 8px 16px; border-bottom: 1px solid rgba(130, 40, 80, .18);
+  }
+  .totalrow .plabel { margin-right: auto; }
+  .totalrow b { font-size: 18px; }
+  .totalrow b.up { font-size: 23px; color: var(--ok); }
+  .totalrow .was { color: var(--danger); text-decoration: line-through; font-weight: 500; font-size: 13px; }
+  .totalrow .delta { background: #edf3ee; border: 1px solid #cfe0d4; color: #26212e; border-radius: 999px; padding: 2px 10px; font-size: 11.5px; font-weight: 700; }
+
+  /* extra conditions = soft cards (seller-only editable; blank ones never shown) */
+  .condwrap { border-bottom: 1px solid rgba(130, 40, 80, .18); }
+  .condgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; padding: 16px 0; }
+  .condcard { background: rgba(255, 255, 255, .55); border-radius: 14px; padding: 12px 14px; box-shadow: 0 1px 6px rgba(180, 37, 99, .08); }
+  .condcard .tval { font-size: 12.5px; font-weight: 600; margin-top: 5px; line-height: 1.5; }
+  .condcard.wide { grid-column: 1 / -1; display: flex; align-items: center; gap: 14px; }
+  .condcard.wide > div { min-width: 0; }
+  .takebtn { margin-left: auto; flex: none; background: var(--brand-2); color: #fff; border-radius: 999px; padding: 8px 16px; font-size: 12px; font-weight: 700; }
+  .takebtn.taken { background: var(--ok); }
+  .condedit { padding: 0 0 16px; }
+  .condrow { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12.5px; flex-wrap: wrap; }
+  .condcard select, .condcard input[type="date"], .condrow input, .condrow select {
+    font: inherit; font-size: 12px; border: 1px solid #ecbcd2; border-radius: 8px;
+    padding: 5px 8px; background: #fff; outline: none; max-width: 100%;
+  }
+  .condcard label { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; }
+  /* bundle rule builder — BI-style if-then table (seller only) */
+  table.rulet { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 12px; }
+  table.rulet th { text-align: left; font-size: 9px; text-transform: uppercase; letter-spacing: 1px; color: #9c8494; font-weight: 700; padding: 4px 6px 5px; border-bottom: 1.5px solid rgba(130, 40, 80, .3); }
+  table.rulet td { padding: 6px; border-bottom: 1px solid rgba(130, 40, 80, .12); }
+  table.rulet select, table.rulet input { font: inherit; font-size: 12px; border: 1px solid #ecbcd2; border-radius: 8px; padding: 4px 6px; background: #fff; outline: none; max-width: 100%; }
+  .locksm svg { width: 12px; height: 12px; vertical-align: -2px; color: #9c8494; }
+
+  .items2 { padding: 16px 0 14px; border-bottom: 1px solid rgba(130, 40, 80, .18); }
+  .items2 .cnt { display: inline-block; background: #f6d3e3; color: #b42563; border-radius: 999px; padding: 1px 8px; font-size: 10px; font-weight: 800; margin-left: 4px; }
+  .item2 { display: flex; align-items: center; gap: 10px; padding: 9px 0 0; font-size: 13px; }
+  .item2 .ttext { min-width: 0; }
+  .item2 .asg {
+    margin-left: auto; flex: none; background: #f6d3e3; color: #b42563;
+    border-radius: 999px; padding: 3px 11px; font-size: 11px; font-weight: 700; white-space: nowrap;
+  }
+  .item2 .asg.me { background: var(--brand-2); color: #fff; }
+  .item2.draft .asg { margin-left: 0; }
+  .item2.priv { border: 1.5px dashed #d98ab1; border-radius: 12px; padding: 9px 12px; margin-top: 9px; }
+  .cb2 {
+    width: 20px; height: 20px; flex: none; cursor: pointer;
+    border: 1.5px solid #d9b6c6; border-radius: 7px; background: rgba(255, 255, 255, .65);
+    display: grid; place-items: center; font-size: 11px; font-weight: 800; color: #fff;
+  }
+  .item2.done .cb2 { background: #35b45f; border-color: #35b45f; }
+  .privchip {
+    display: inline-flex; align-items: center; gap: 5px; flex: none;
+    font-size: 10px; font-weight: 800; letter-spacing: .8px; color: #b42563;
+  }
+  .privchip svg { width: 11px; height: 11px; }
+  .achip svg { width: 11px; height: 11px; }
+  .achip { display: inline-flex; align-items: center; gap: 4px; }
+  .addwrap { position: relative; display: inline-block; }
+  .addmenu {
+    position: absolute; left: 0; bottom: 36px; z-index: 20; min-width: 225px;
+    background: #fff; border: 1px solid #f3d7e4; border-radius: 12px;
+    box-shadow: 0 14px 34px rgba(60, 8, 30, .25); padding: 5px;
+  }
+  .addmenu button { display: flex; align-items: center; gap: 9px; width: 100%; text-align: left; padding: 8px 10px; border-radius: 8px; font-size: 12.5px; font-weight: 600; color: #26212e; }
+  .addmenu button:hover { background: #fdf0f6; }
+  .addmenu button svg { width: 14px; height: 14px; color: #b42563; flex: none; }
+  .addmenu button .mut { color: #9c8494; font-weight: 500; font-size: 11px; }
+  .addmenu .sep { border-top: 1px solid rgba(130, 40, 80, .12); margin: 4px 0; }
+  .addmenu .priv.on { background: #b42563; color: #fff; }
+  .addmenu .priv.on svg { color: #fff; }
+  .item2.draft { position: relative; }
+  .tinp {
+    flex: 1; min-width: 110px; border: none; outline: none; background: transparent;
+    font: inherit; font-size: 12.5px; border-bottom: 1px dashed rgba(130, 40, 80, .35); padding: 2px;
+  }
+  .atmenu {
+    position: absolute; left: 40px; bottom: calc(100% + 6px); z-index: 25; min-width: 230px;
+    max-height: 225px; overflow-y: auto;
+    background: #fff; border: 1px solid #f3d7e4; border-radius: 12px;
+    box-shadow: 0 14px 34px rgba(60, 8, 30, .25); padding: 5px;
+  }
+  .atmenu button { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; width: 100%; padding: 7px 10px; border-radius: 8px; font-size: 12px; font-weight: 600; }
+  .atmenu button:hover { background: #fbe3ee; }
+  .atmenu button span { color: #9c8494; font-size: 10.5px; font-weight: 500; }
+  .fdoc {
+    display: inline-grid; place-items: center; flex: none;
+    width: 20px; height: 20px; border-radius: 5px;
+    background: #fde8e8; color: #c02626;
+  }
+  .fdoc svg { width: 12px; height: 12px; }
+  .achip {
+    border-radius: 999px; padding: 4px 13px; font-size: 10.5px; font-weight: 800;
+    letter-spacing: .6px; text-transform: uppercase; flex: none; cursor: pointer;
+    border: 1.5px solid #eec3d6;
+  }
+  .achip.big { padding: 7px 14px; font-size: 11.5px; border-radius: 8px; }
+  .achips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+  .addthing {
+    margin-top: 10px; font-size: 11.5px; font-weight: 700; color: var(--maroon);
+    border: 1px dashed rgba(130, 40, 80, .35); border-radius: 999px; padding: 5px 13px;
+  }
+  .addthing:hover { background: rgba(118, 0, 45, .05); }
+  /* edit-mode controls: row icons, unit stepper, dashed add buttons */
+  .icobtn {
+    width: 26px; height: 26px; border-radius: 8px; display: inline-grid; place-items: center;
+    color: #9c8494; border: 1px solid rgba(130, 40, 80, .2); background: rgba(255, 255, 255, .6);
+  }
+  .icobtn:hover { color: #b42563; border-color: #d98ab1; }
+  .icobtn svg { width: 13px; height: 13px; }
+  .stepper { display: inline-flex; align-items: center; gap: 7px; }
+  .stepper button { width: 20px; height: 20px; border-radius: 6px; background: #fbe3ee; color: #b42563; font-weight: 800; line-height: 1; display: grid; place-items: center; }
+  .stepper button:hover { background: #f6c8dd; }
+  .addrow {
+    font-size: 12px; font-weight: 700; color: var(--maroon);
+    border: 1.5px dashed rgba(130, 40, 80, .35); border-radius: 999px; padding: 6px 14px;
+  }
+  .addrow:hover { background: rgba(118, 0, 45, .05); }
+  table.lines td select, table.lines td input {
+    font: inherit; font-size: 12px; border: 1px solid #ecbcd2; border-radius: 8px;
+    padding: 4px 6px; background: #fff; outline: none;
+  }
+  .pchip { border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; font-size: 12px; font-weight: 600; color: var(--link); }
+  .pchip.sel { background: var(--link); border-color: var(--link); color: #fff; }
+
+  /* notes: ONE note per party; blank never shown; each edits only their own */
+  .noteblk {
+    border-left: 3px solid var(--maroon); background: rgba(255, 255, 255, .55);
+    border-radius: 0 14px 14px 0; box-shadow: 0 1px 6px rgba(180, 37, 99, .08);
+    padding: 12px 16px; margin: 14px 0 0; font-size: 13px; line-height: 1.6;
+  }
+  .noteblk .plabel { display: block; margin-bottom: 4px; }
+  .noteblk textarea {
+    width: 100%; border: 1px solid #ecbcd2; border-radius: 10px; padding: 8px 10px;
+    font: inherit; font-size: 12.5px; background: #fff; outline: none; resize: vertical; min-height: 54px;
+  }
+
+  /* decision bar (part 8): status left, actions right, hairline above */
+  .actions2 {
+    display: flex; justify-content: flex-end; align-items: center; gap: 12px; flex-wrap: wrap;
+    border-top: 1px solid rgba(130, 40, 80, .18); margin-top: 18px; padding: 16px 0 6px;
+  }
+  .actions2 .status { margin-right: auto; font-size: 12px; font-weight: 600; color: #7d6a73; display: inline-flex; align-items: center; gap: 7px; }
+  .btn2 { border-radius: 999px; padding: 12px 24px; font-size: 13.5px; font-weight: 700; display: inline-flex; align-items: center; gap: 8px; }
+  .btn2 svg { width: 15px; height: 15px; }
+  .btn2.neg { border: 1.5px solid var(--brand-soft); color: var(--brand-2); background: rgba(255, 255, 255, .6); }
+  .btn2.neg:hover { background: #fff; }
+  .btn2.dark { background: #26212e; color: #fffdf8; }
+  .btn2.dark:hover { background: #3a3347; }
+  .btn2.ghost { border: 1px solid rgba(130, 40, 80, .28); color: #7d6a73; background: transparent; }
+  .btn2.ghost:hover { border-color: #c79cae; color: #26212e; }
+  .btn2.green { background: var(--ok); color: #fff; }
+  .btn2.green:hover { filter: brightness(1.07); }
+  .btn2.amber { border: 1.5px solid var(--warn); color: var(--warn); background: transparent; }
+  .btn2.amber:hover { background: var(--warn-tint); }
+  .btn2 .later2 { font-size: 9px; background: #e9e2d2; color: #7d6a73; border-radius: 4px; padding: 1px 5px; margin-left: 6px; vertical-align: 1px; }
+
+
+  /* ============================================================
+     SECTION E — PAPER BACK FACE (Deal Room: pinkish chat + versions)
+     ============================================================ */
+  .backtabs { display: flex; justify-content: center; gap: 6px; margin-bottom: 14px; }
+  .backtabs .bt { border: 1px solid rgba(130, 40, 80, .28); border-radius: 999px; padding: 5px 16px; font-size: 12px; font-weight: 600; color: #7d6a73; }
+  .backtabs .bt.on { background: var(--maroon); border-color: var(--maroon); color: #fff; }
+
+  .siglist { display: flex; flex-direction: column; }
+  .sigrow { display: flex; gap: 14px; padding: 12px 6px; border-bottom: 1px solid rgba(130, 40, 80, .12); font-size: 12.5px; align-items: baseline; }
+  .sigl { flex: none; width: 100px; font-size: 9.5px; text-transform: uppercase; letter-spacing: 1.2px; color: #9c8494; font-weight: 700; }
+  .sigv { line-height: 1.5; }
+  .sigv s { color: var(--danger); }
+  .sigv .up { color: var(--ok); font-weight: 700; }
+  .sigv .wt { color: var(--warn); font-weight: 700; }
+  .sigv .okt { color: var(--ok); font-weight: 700; }
+
+  .vlist { display: flex; flex-direction: column; }
+  .ventry { display: flex; gap: 12px; padding: 11px 4px; border-bottom: 1px solid rgba(130, 40, 80, .12); font-size: 12.5px; }
+  .ventry .vv { flex: none; width: 34px; height: 24px; border-radius: 7px; display: grid; place-items: center; font-weight: 700; font-size: 11px; background: #efe7ee; color: var(--maroon); }
+  .ventry.pending .vv { background: var(--warn-tint); color: var(--warn); }
+  .ventry .vwhat { line-height: 1.45; }
+  .ventry .vmeta { color: var(--ash); font-size: 11px; margin-top: 2px; }
+
+  /* ============================================================
+     SECTION F — VARIANT LAYOUTS
+     ============================================================ */
+  /* Deal panel — 50/50 with the chat column; light-pink mat, glass paper floats on it */
+  .docpanel {
+    flex: 1 1 0; min-width: 0;
+    background: linear-gradient(165deg, #fbd9e9 0%, #f5c6db 100%);
+    display: flex; flex-direction: column; padding: 0; overflow: hidden;
+  }
+
+  /* ============================================================
+     SECTION F2 — GROUP CREATION MODAL + RENAME + TALK BUTTON
+     ============================================================ */
+  .gmodal {
+    position: fixed; inset: 0; z-index: 100; display: grid; place-items: center;
+    background: rgba(31,20,48,.45); animation: fadein .15s ease;
+  }
+  @keyframes fadein { from { opacity: 0; } }
+  .gpanel {
+    width: min(640px, 94vw); max-height: 88vh; overflow-y: auto;
+    background: #fff; border-radius: 18px; padding: 20px 24px;
+    box-shadow: 0 24px 60px rgba(31,20,48,.35);
+  }
+  .gpanel h3 { margin: 0 0 4px; font-size: 16px; }
+  .gpanel .gsub { color: var(--ash); font-size: 12px; margin-bottom: 10px; line-height: 1.5; }
+  .gsearch {
+    width: 100%; border: 1px solid var(--line); border-radius: 999px;
+    padding: 9px 14px; font-size: 12.5px; outline: none; margin: 2px 0 10px;
+  }
+  .gsearch:focus { border-color: var(--brand-soft); }
+  .phead, .person {
+    display: grid; grid-template-columns: 30px minmax(0, 1.05fr) minmax(0, 1fr) 106px 22px;
+    gap: 10px; align-items: center; padding: 6px 8px;
+  }
+  .phead {
+    font-size: 10px; text-transform: uppercase; letter-spacing: .5px;
+    color: var(--ash); font-weight: 700; border-bottom: 1px solid var(--line); padding-bottom: 5px;
+  }
+  .plist { max-height: 330px; overflow-y: auto; }
+  .gsec { font-size: 10.5px; text-transform: uppercase; letter-spacing: .5px; color: var(--ash); font-weight: 700; margin: 10px 0 2px; padding: 0 8px; }
+  .person { border-bottom: 1px dashed #f2e8f0; cursor: pointer; }
+  .person:hover { background: var(--bg); }
+  .person.locked { opacity: .6; cursor: default; }
+  .person .pav { width: 30px; height: 30px; border-radius: 50%; background: #efe7ee; display: grid; place-items: center; font-size: 10.5px; font-weight: 700; color: var(--maroon); }
+  .person .pnm { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .person .pco { font-size: 12px; color: var(--ash); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .badge { font-size: 10px; font-weight: 700; border-radius: 999px; padding: 2px 9px; white-space: nowrap; display: inline-block; }
+  .badge.bst { background: var(--brand-tint); color: var(--brand-2); }
+  .badge.bau { background: #e8ebfd; color: var(--link); }
+  .badge.bex { background: var(--warn-tint); color: var(--warn); }
+  .person .pcheck { width: 18px; height: 18px; border-radius: 6px; border: 1.5px solid #c9bcc6; display: grid; place-items: center; font-size: 11px; color: #fff; }
+  .person.on .pcheck { background: var(--brand-2); border-color: var(--brand-2); }
+  .extwarn {
+    background: var(--warn-tint); border: 1.5px solid #eec98d; border-radius: 12px;
+    padding: 10px 12px; margin: 10px 0 2px; font-size: 12px; line-height: 1.55;
+  }
+  .extwarn b { color: var(--warn); letter-spacing: .3px; }
+  .extwarn .exbtns { display: flex; gap: 8px; margin-top: 8px; }
+  .extwarn .exbtns button { border-radius: 999px; padding: 6px 14px; font-size: 12px; font-weight: 700; }
+  .extwarn .exok { background: var(--warn); color: #fff; }
+  .extwarn .exno { border: 1px solid var(--line); background: #fff; color: var(--ash); }
+  .gname { width: 100%; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; font-size: 13px; outline: none; margin-top: 2px; }
+  .gname:focus { border-color: var(--brand-soft); }
+  .ghint { font-size: 11px; color: var(--ash); margin-top: 5px; line-height: 1.5; }
+  .gfoot { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; }
+  .gfoot .gcreate { background: var(--brand-2); color: #fff; border-radius: 999px; padding: 9px 22px; font-weight: 700; font-size: 13px; }
+  .gfoot .gcreate:disabled { opacity: .4; cursor: default; }
+  .gfoot .gcancel { color: var(--ash); font-weight: 600; padding: 9px 10px; }
+
+  .chathead .rn { color: var(--ash); font-size: 12px; margin-left: 4px; }
+  .chathead .rn:hover { color: var(--brand-2); }
+  .rninput { font: inherit; font-weight: 700; font-size: 15px; border: 1px solid var(--brand-soft); border-radius: 8px; padding: 2px 8px; outline: none; }
+
+  /* ============================================================
+     SECTION G — PROTOTYPE CHROME (switcher + demo bar)
+     ============================================================ */
+  .demobar {
+    position: fixed; bottom: 16px; left: 14px; z-index: 90;
+    display: flex; align-items: center; gap: 8px;
+    background: var(--ink); color: #fff; border-radius: 999px; padding: 6px 10px 6px 14px;
+    font-size: 11.5px; box-shadow: 0 6px 18px rgba(31,20,48,.3);
+  }
+  .demobar .dtag { font-weight: 800; letter-spacing: 1px; color: var(--brand-soft); }
+  .demobar button { background: rgba(255,255,255,.14); border-radius: 999px; padding: 5px 12px; font-size: 11.5px; font-weight: 600; color: #fff; }
+  .demobar button:hover { background: rgba(255,255,255,.24); }
+  .demobar .seg { display: inline-flex; background: rgba(255,255,255,.14); border-radius: 999px; padding: 2px; gap: 2px; }
+  .demobar .seg button { background: transparent; padding: 4px 12px; }
+  .demobar .seg button.on { background: var(--brand-soft); color: #3d0620; font-weight: 800; }
+  .demobar .seg button.on:hover { background: var(--brand-soft); }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="rail">
+    <div class="logo">He::o<br/>Se::o</div>
+    <div class="ric"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 10.5 12 4l8.5 6.5"/><path d="M5.5 9.5V20h4.5v-5.5h4V20h4.5V9.5"/></svg></div>
+    <div class="ric active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v7a2.5 2.5 0 0 1-2.5 2.5H9.5L4 20.5v-14z"/></svg></div>
+    <div class="ric"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="m14.7 9.3-1.6 3.8-3.8 1.6 1.6-3.8z"/></svg></div>
+    <div class="ric"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 9 5.5 4.5h13L19.5 9"/><path d="M5 9v11h14V9"/><path d="M9.5 20v-5.5h5V20"/><path d="M4.5 9a2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0 5 0"/></svg></div>
+    <div class="ric"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 12.5v-9h9l8 8-9 9z"/><circle cx="8" cy="8" r="1.2"/></svg></div>
+  </div>
+  <div class="chatlist" id="chatlist"></div>
+  <div id="stage"></div>
+</div>
+
+<div class="demobar" id="demobar"></div>
+
+<script>
+/* ================= STATE ================= */
+const initialState = () => ({
+  docOpen: true,          // side panel visible
+  face: 'card',           // 'card' | 'back'
+  backTab: 'signals',     // 'signals' | 'logs'
+  version: 2,
+  pending: null,          // pending change (diff mode) or null
+  signed: false,          // seller signed → next step is the invoice
+  finalized: false,       // invoice uploaded → buyer may sign after delivery
+  buyerSigned: false,     // buyer signed → deal CLOSED, only re-open ticket left
+  invoiceFile: null,
+  edit: false,            // ✎ edit mode (card face only)
+  editRow: null,          // product line id currently in row-edit
+  shopOpen: false,        // "add product from shop" menu
+  term: '6 months',
+  /* totals are never stored — computed as size(g) × units × price(€/g) */
+  lines: [
+    { id: 1, name: 'Pedanios 22/1 · Mandarin Cookies', batch: '24-117', size: 1000, units: 3, price: 3.80 },
+    { id: 2, name: 'Bedrocan · Afina 22/1',            batch: '24-098', size: 500,  units: 2, price: 4.20 },
+    { id: 3, name: 'Aurora 20/1 · Pink Kush',          batch: '25-034', size: 250,  units: 4, price: 3.50 },
+  ],
+  /* extra conditions — SELLER-only edit; blank ones never render for the buyer */
+  /* extra conditions = ONLY: payment terms, deal expiry, delivery, discounts, bundle deals */
+  cond: {
+    payment: '14 days net · 2% Skonto 7d',
+    expiry: '',
+    freeDelivery: false,
+    deliveryDate: '',
+    discounts: [],       // { id, amount, scope: 'deal' | lineId }
+    /* bundle deals = structured if-then rules the seller builds in a table:
+       IF product · attr (qty g | units | price) ⋚ value → THEN reward */
+    bundles: [
+      { id: 1, prodId: 1, attr: 'units', op: '>=', val: 5, thenType: 'delivery', thenVal: '', taken: false },
+    ],
+  },
+  /* one note per party — each side edits only its OWN; role decides which is yours */
+  notes: [
+    { id: 'buyer',  side: 'buyer',  co: 'Aurora Deutschland GmbH', text: 'Please deliver temperature controlled and send me the logger data.' },
+    { id: 'seller', side: 'seller', co: 'StonePharm GmbH', text: '' },
+  ],
+  /* side = who created it; PRIVATE things are visible only to their own side */
+  things: [
+    { id: 1, action: 'upload', text: 'CNL for the June delivery', assignee: 'Jan', done: false, file: null, private: false, side: 'seller' },
+    { id: 2, action: 'upload', text: 'PO for the standing order', assignee: 'Jan', done: false, file: null, private: false, side: 'seller' },
+    { id: 3, action: 'approve', text: 'CoA of batch 24-117 against spec', assignee: 'You', done: false, file: null, private: false, side: 'seller' },
+    { id: 4, action: 'free', text: 'update the price', assignee: 'You', done: false, file: null, private: true, side: 'seller' },
+  ],
+  p2p: [
+    { who: 'in',  txt: 'Hey Marcel, the June batch cleared QC — CoAs all fine. We want to lock supply for H2.', meta: 'Alice Green · 10:02' },
+    { who: 'out', txt: 'Great to hear. Standing offer is on the card: 3 lines, 19.1k net, 6-month term, GMP, CoA per batch.', meta: 'You · 10:04' },
+    { who: 'in',  txt: '3.80 on the Pedanios is above our target. If we extend the term to 9 months, can you do 3.60?', meta: 'Alice Green · 10:07' },
+  ],
+  versions: [
+    { v: 'v2', what: 'Product swap: T27 CGG (out) → Pink Kush 20/1 (in)', meta: 'Approved by Alice Green · 21 JUN 2026', pending: false },
+    { v: 'v1', what: 'Deal created — initial offer, 3 products, 19,100 € net, 6-month term', meta: 'Proposed by you · 12 JUN 2026', pending: false },
+  ],
+});
+
+let S = initialState();
+
+/* whose eyes we look through — deal CREATION is seller-only; the switch lives
+   in the demo bar and survives Reset */
+let role = 'seller';   // 'seller' | 'buyer'
+function setRole(r) { role = r; S.editRow = null; S.shopOpen = false; render(); }
+
+/* the seller's shop — products you can pull into the deal in edit mode */
+const SHOP = [
+  { name: 'Pedanios 20/1 · Gorilla Glue',   batch: '24-201', size: 1000, price: 3.40 },
+  { name: 'Tilray THC25 · Sour Jack',       batch: '25-112', size: 500,  price: 4.60 },
+  { name: 'Cantourage 22/1 · Wedding Cake', batch: '25-034', size: 250,  price: 4.10 },
+  { name: 'Demecan 18/1 · Orange Velvet',   batch: '24-098', size: 500,  price: 3.20 },
+];
+/* batches the supplier can pick from — supplier-only, like the price */
+const BATCHES = ['24-098', '24-117', '24-201', '25-034', '25-112'];
+let lineSeq = 4, discSeq = 1, bundSeq = 2;
+
+const lineTotal = l => l.size * l.units * l.price;
+const dealTotal = ls => ls.reduce((s, l) => s + lineTotal(l), 0);
+const eur = n => Math.round(n).toLocaleString('en-US') + ' €';
+const perg = p => p.toFixed(2) + ' €/g';
+
+/* ================= CHAT LIST (Outlook-style rows + filters) ================= */
+/* Row anatomy (per Ayush): A = names · B = subject (deal code / group name; company for P2P) · C = last message */
+/* System-style line icons (stroke = currentColor, like the real shell) */
+const SVGI = (paths, size = 18) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="${size}" height="${size}">${paths}</svg>`;
+const ICONS = {
+  receipt: SVGI('<path d="M6.5 3.5h11v17l-1.9-1.4-1.8 1.4-1.8-1.4-1.8 1.4-1.8-1.4-1.9 1.4v-17z"/><path d="M9.5 8.5h5M9.5 12h5"/>'),
+  users: SVGI('<circle cx="9" cy="8.5" r="3"/><path d="M3.8 19.2c.9-3 2.9-4.5 5.2-4.5s4.3 1.5 5.2 4.5"/><circle cx="16.8" cy="9.5" r="2.3"/><path d="M15.6 14.9c2 .3 3.6 1.7 4.3 4"/>'),
+  building: SVGI('<path d="M4 20.5h16"/><path d="M6 20.5V4.5l6-1.5v17.5"/><path d="M12 20.5h6v-12l-6-1.8"/><path d="M8.8 7.5h.01M8.8 10.5h.01M8.8 13.5h.01M15 11h.01M15 14h.01"/>'),
+  chat: SVGI('<path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v7a2.5 2.5 0 0 1-2.5 2.5H9.5L4 20.5v-14z"/>'),
+  x: SVGI('<path d="M6 6l12 12M18 6 6 18"/>'),
+  pencil: SVGI('<path d="M4.8 19.2l.8-3.3L16.4 4.9a1.9 1.9 0 0 1 2.7 2.7L8.3 18.4l-3.5.8z"/>'),
+  flip: SVGI('<path d="M8 3.5 5.5 6 8 8.5"/><path d="M5.5 6H15a4.5 4.5 0 0 1 4.5 4.5"/><path d="m16 20.5 2.5-2.5L16 15.5"/><path d="M18.5 18H9a4.5 4.5 0 0 1-4.5-4.5"/>'),
+  lock: SVGI('<rect x="5.5" y="10.5" width="13" height="9" rx="2"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/>'),
+  up: SVGI('<path d="M12 15V4"/><path d="m8 7.5 4-3.5 4 3.5"/><path d="M4.5 15v3a2.5 2.5 0 0 0 2.5 2.5h10a2.5 2.5 0 0 0 2.5-2.5v-3"/>'),
+  at: SVGI('<circle cx="12" cy="12" r="4"/><path d="M16 8v5a2.5 2.5 0 0 0 5 0v-1a9 9 0 1 0-4 7.5"/>'),
+  text: SVGI('<path d="M6 5h12M12 5v14M9.5 19h5"/>'),
+  pdf: SVGI('<path d="M6.5 3.5h7L18 8v12.5H6.5z"/><path d="M13.5 3.5V8H18"/><path d="M9.5 12.5h5M9.5 15.5h5"/>'),
+  clock: SVGI('<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3.2 1.9"/>'),
+  trash: SVGI('<path d="M4.5 7h15"/><path d="M9.2 7V4.8h5.6V7"/><path d="M6.5 7l.9 13.2h9.2L17.5 7"/><path d="M10.3 10.5v6.5M13.7 10.5v6.5"/>'),
+  check: SVGI('<path d="m5 12.5 4.5 4.5L19 7.5"/>'),
+};
+const avHtml = c => c.icon ? ICONS[c.icon] : c.av;
+
+/* dealId links a conversation to its deal — the deal chip + panel exist ONLY inside chats
+   that carry the dealId. Switching to any other chat closes the deal (it belongs to its chat). */
+const CONVOS = [
+  { id: 'alice', kind: 'p2p', av: 'AG', names: 'Alice Green', dealId: 'A189371',
+    subject: 'Aurora Deutschland GmbH', preview: '', time: '10:07', unread: false },
+  { id: 'deal1', kind: 'deal', av: '', icon: 'receipt', names: 'Alice, Jan, You', dealId: 'A189371',
+    subject: 'HS-AUR07-CAN23-A189371', preview: 'Jan: Please deliver temperature controlled…', time: '09:40', unread: true,
+    msgs: [
+      { sys: true, txt: 'Deal group · tied to HS-AUR07-CAN23-A189371' },
+      { who: 'in', txt: 'Please deliver temperature controlled (2–8°C) and send me the logger data with each batch.', meta: 'Jan Weber · 09:40' },
+    ] },
+  { id: 'grp1', kind: 'group', av: '', icon: 'users', names: 'Ben, Alice, Bob', dealId: null,
+    subject: 'Problem with delivery June', preview: 'Ben: courier arrived without the logger data…', time: 'Yesterday', unread: true,
+    msgs: [{ who: 'in', txt: 'Courier arrived without the logger data attached — who follows up?', meta: 'Ben · yesterday' }] },
+  { id: 'deal2', kind: 'deal', av: '', icon: 'receipt', names: 'Tobias, You', dealId: null,
+    subject: 'HS-LUX99-CAN23-B220114', preview: 'Change approved — card moved to v4.', time: '28 Jun', unread: false,
+    msgs: [{ sys: true, txt: 'Change approved — card moved to v4.' }] },
+  { id: 'c2c', kind: 'company', av: '', icon: 'building', names: 'Aurora Deutschland GmbH', dealId: null,
+    subject: 'Company chat (C2C)', preview: 'Deal started — HS-AUR07-CAN23-A189371', time: '12 Jun', unread: false,
+    msgs: [{ sys: true, txt: 'Deal started — HS-AUR07-CAN23-A189371 · 12 JUN' }] },
+  { id: 'ben', kind: 'p2p', av: 'BK', names: 'Ben Krause', dealId: null,
+    subject: 'Lux 99 Pharmacy', preview: 'You: invoice for June is out, check the deal.', time: '27 Jun', unread: false,
+    msgs: [{ who: 'out', txt: 'Invoice for June is out, check the deal.', meta: 'You · 27 Jun' }] },
+  { id: 'musk', kind: 'internal', av: 'MV', names: 'Muskan Verma', dealId: null,
+    subject: 'StonePharm · internal', preview: 'No messages yet', time: '', unread: false, msgs: [] },
+];
+
+/* People roster for the group-creation popup. side: stone | aurora = the two deal parties; external = everyone else. */
+const PEOPLE = [
+  { id: 'you',    name: 'Marcel Riggs (you)', co: 'StonePharm GmbH',         side: 'stone' },
+  { id: 'muskan', name: 'Muskan Verma',       co: 'StonePharm GmbH',         side: 'stone' },
+  { id: 'alice',  name: 'Alice Green',        co: 'Aurora Deutschland GmbH', side: 'aurora' },
+  { id: 'jan',    name: 'Jan Weber',          co: 'Aurora Deutschland GmbH', side: 'aurora' },
+  { id: 'lena',   name: 'Lena Fischer',       co: 'StonePharm GmbH',         side: 'stone' },
+  { id: 'petra',  name: 'Petra Krüger',       co: 'Aurora Deutschland GmbH', side: 'aurora' },
+  { id: 'felix',  name: 'Felix Braun',        co: 'Aurora Deutschland GmbH', side: 'aurora' },
+  { id: 'ben',    name: 'Ben Krause',         co: 'Lux 99 Pharmacy',         side: 'external' },
+  { id: 'tobias', name: 'Tobias Lang',        co: 'Lux 99 Pharmacy',         side: 'external' },
+  { id: 'sara',   name: 'Sara Winter',        co: 'Lux 99 Pharmacy',         side: 'external' },
+  { id: 'nils',   name: 'Nils Hoffmann',      co: 'Berlin Kurier GDP',       side: 'external' },
+];
+
+let activeId = 'alice';
+let modal = null;       // { from: 'deal'|'new', picked: [ids], name, extPending, extClicks }
+let renaming = false;
+let rnVal = '';   // rename draft lives in state so background renders can't wipe the typing
+let groupSeq = 1;
+
+function activeConvo() { return CONVOS.find(c => c.id === activeId); }
+function convoMsgs(c) { return c.id === 'alice' ? S.p2p : c.msgs; }
+const DD_FILTERS = { people: 'People', groups: 'Groups', companies: 'Companies', internal: 'Internal', external: 'External' };
+let filterMode = 'all';
+let ddOpen = false;
+let ncOpen = false;
+let listMin = false;
+
+function toggleList() { listMin = !listMin; ddOpen = ncOpen = false; renderChatList(); }
+
+function convoPasses(c) {
+  switch (filterMode) {
+    case 'unread':    return c.unread;
+    case 'people':    return c.kind === 'p2p' || c.kind === 'internal';
+    case 'deals':     return c.kind === 'deal';
+    case 'groups':    return c.kind === 'group';
+    case 'companies': return c.kind === 'company';
+    case 'internal':  return c.kind === 'internal';
+    case 'external':  return c.kind !== 'internal';
+    default:          return true;
+  }
+}
+
+function renderChatList() {
+  const el = document.getElementById('chatlist');
+  el.className = 'chatlist' + (listMin ? ' min' : '');
+
+  if (listMin) {
+    el.innerHTML = `
+      <div class="lhead" style="justify-content:center; margin:14px 6px 8px;">
+        <button class="collapsebtn" title="Expand contacts" onclick="toggleList()">»</button>
+      </div>
+      <div class="minlist">
+        ${CONVOS.map(c => `<div class="minav ${c.icon ? 'gav' : ''} ${c.id === activeId ? 'act' : ''}" title="${escAttr(c.subject)}" onclick="selectConvo('${c.id}')">${avHtml(c)}${c.unread ? '<span class="udot2"></span>' : ''}</div>`).join('')}
+      </div>`;
+    return;
+  }
+
+  const ddActive = filterMode in DD_FILTERS;
+  const lastP2p = [...S.p2p].reverse().find(m => m.txt && m.who);   // previews show real bubbles, not sysline pills
+  const rows = CONVOS.filter(convoPasses).map(c => {
+    const prev = c.id === 'alice' && lastP2p ? (lastP2p.who === 'out' ? 'You: ' : '') + lastP2p.txt : c.preview;
+    return `<div class="convo ${c.id === activeId ? 'active' : ''} ${c.unread ? 'unread' : ''}" onclick="selectConvo('${c.id}')">
+      <div class="av ${c.icon ? 'gav' : ''}">${avHtml(c)}</div>
+      <div class="cmeta">
+        <div class="cnames">${esc(c.names)}</div>
+        <div class="csubj">${esc(c.subject)}</div>
+        <div class="cprev">${esc(prev)}</div>
+      </div>
+      <div class="cright">
+        <div class="ctime">${c.time}</div>
+        ${c.unread ? '<div class="udot"></div>' : ''}
+      </div>
+    </div>`;
+  }).join('') || `<div style="padding:22px 16px;color:var(--ash);font-size:12.5px;text-align:center">Nothing here for this filter.</div>`;
+
+  el.innerHTML = `
+    <div class="lhead">
+      <div class="newchat" onclick="event.stopPropagation(); ncOpen = !ncOpen; ddOpen = false; renderChatList()">+ New chat</div>
+      <button class="collapsebtn" title="Minimize contacts" onclick="toggleList()">«</button>
+    </div>
+    ${ncOpen ? `<div class="ncmenu" onclick="event.stopPropagation()">
+      <button><b><span class="mi">${ICONS.chat}</span>New chat</b><span>message one person</span></button>
+      <button onclick="openGroupModal('new')"><b><span class="mi">${ICONS.users}</span>New group</b><span>pick people + a name</span></button>
+    </div>` : ''}
+    <div class="search">🔍 Search conversations…</div>
+    <div class="filters">
+      <button class="fchip ${filterMode === 'all' ? 'on' : ''}" onclick="setFilter('all')">All</button>
+      <button class="fchip ${filterMode === 'unread' ? 'on' : ''}" onclick="setFilter('unread')">Unread</button>
+      <button class="fchip ${filterMode === 'deals' ? 'on' : ''}" onclick="setFilter('deals')">Deals</button>
+      <button class="fchip ${ddActive ? 'on' : ''}" onclick="event.stopPropagation(); ddOpen = !ddOpen; ncOpen = false; renderChatList()">
+        ${ddActive ? DD_FILTERS[filterMode] : 'More'} ▾
+      </button>
+      ${ddOpen ? `<div class="ddmenu" onclick="event.stopPropagation()">
+        ${Object.entries(DD_FILTERS).map(([k, lbl]) =>
+          `<button class="${filterMode === k ? 'on' : ''}" onclick="setFilter('${k}')">${lbl}</button>`).join('')}
+      </div>` : ''}
+    </div>
+    <div id="convos">${rows}</div>`;
+}
+
+function setFilter(f) { filterMode = f; ddOpen = false; renderChatList(); }
+document.addEventListener('click', () => {
+  if (ddOpen || ncOpen) { ddOpen = ncOpen = false; renderChatList(); }
+  if (addMenuOpen || S.shopOpen) { addMenuOpen = false; S.shopOpen = false; render(); }
+  if (thingDraft && thingDraft.atQuery !== null) { thingDraft.atQuery = null; updateAtMenu(); }
+});
+
+/* ================= DEMO ACTIONS ================= */
+function proposeChange() {
+  if (S.pending || S.signed) return;   // no new diffs once the signing chain started
+  S.pending = {
+    removesLineId: 1,
+    newLine: { id: 1, name: 'Pedanios 22/1 · Mandarin Cookies', batch: '24-117', size: 1000, units: 3, price: 3.60 },
+    termFrom: '6 months', termTo: '9 months',
+    by: 'Alice Green',
+    note: 'Extend commitment to 9 months in exchange for 3.60 €/g on the Pedanios.',
+  };
+  S.p2p.push({ sysline: true, click: true, txt: 'Alice Green edited the deal — ', num: 'HS-AUR07-CAN23-A189371' });
+  S.versions.unshift({ v: 'v3', what: 'PENDING — price 3.80 → 3.60 €/g on Pedanios, term 6 → 9 months', meta: 'Proposed by the buyer · today 10:08', pending: true });
+  render();
+}
+
+function approveChange() {
+  if (!S.pending) return;
+  const p = S.pending;
+  S.lines = S.lines.map(l => l.id === p.removesLineId ? p.newLine : l);
+  S.term = p.termTo;
+  S.version = 3;
+  S.pending = null;
+  S.signed = true;   // seller signed — next step: upload the invoice
+  S.edit = false; S.editRow = null; S.shopOpen = false;   // signing seals the card, any open edit session collapses
+  S.versions[0] = { v: 'v3', what: 'Price 3.80 → 3.60 €/g on Pedanios · term 6 → 9 months', meta: 'Proposed by the buyer · signed by the seller · today', pending: false };
+  pushDealMsg('The seller signed — the change is sealed');
+  render();
+}
+
+function startFinalize() { document.getElementById('finup').click(); }
+function invoiceChosen(e) {
+  const f = e.target.files && e.target.files[0];
+  if (!f) return;
+  S.finalized = true;
+  S.invoiceFile = f.name;
+  // the invoice lands in Things too: tick an existing invoice-upload thing, or auto-add one
+  const inv = S.things.find(t => t.action === 'upload' && /invoice/i.test(t.text));
+  if (inv) { inv.done = true; inv.file = f.name; }
+  else S.things.push({ id: thingSeq++, action: 'upload', text: 'Final invoice', assignee: 'You', done: true, file: f.name, private: false, side: role });
+  pushDealMsg('Deal finalized — invoice uploaded');
+  render();
+}
+
+/* lifecycle facts land in the chat you are acting FROM (if it carries the deal);
+   the P2P chat stays the default home of the demo script */
+function pushDealMsg(txt) {
+  const c = activeConvo();
+  if (c && c.dealId && c.id !== 'alice') c.msgs.push({ sys: true, txt });
+  else S.p2p.push({ sysline: true, txt });
+}
+
+function resetAll() {
+  S = initialState();
+  /* transient UI state must not survive the reset */
+  thingDraft = null; addMenuOpen = false; addPrivate = false; pendingUploadId = null;
+  renaming = false; rnVal = ''; modal = null;
+  focusThing = focusRename = false;
+  render();
+}
+
+/* ================= EDIT MODE + TWO-SIDED SIGNING ================= */
+function toggleEdit() {
+  if (S.signed) return;   // a signed deal is sealed — changes go through re-open ticket
+  S.edit = !S.edit; S.editRow = null; S.shopOpen = false; S.face = 'card'; render();
+}
+function setEditRow(id) { S.editRow = id; render(); }
+function rowSet(id, k, v) {
+  const l = S.lines.find(x => x.id === id);
+  if (!l) return;
+  if (typeof v === 'number' && !(v > 0)) return;   // numbers must stay positive; batch is a string
+  l[k] = v;
+  render();
+}
+function rowBump(id, d) { const l = S.lines.find(x => x.id === id); l.units = Math.max(1, l.units + d); render(); }
+function delLine(id) {
+  S.lines = S.lines.filter(l => l.id !== id);
+  S.cond.bundles = S.cond.bundles.filter(b => b.prodId !== id);       // rules about a gone product die with it
+  S.cond.discounts = S.cond.discounts.filter(d => +d.scope !== id);   // same for product-scoped discounts
+  if (S.editRow === id) S.editRow = null;
+  render();
+}
+function addProduct(i) {
+  const s = SHOP[i], id = lineSeq++;
+  S.lines.push({ id, name: s.name, batch: s.batch, size: s.size, units: 1, price: s.price });
+  S.shopOpen = false;
+  S.editRow = id;   // a fresh product lands straight in row-edit
+  render();
+}
+function condSet(k, v) { S.cond[k] = v; render(); }
+function addDiscount() { S.cond.discounts.push({ id: discSeq++, amount: '5%', scope: 'deal' }); render(); }
+function delDiscount(id) { S.cond.discounts = S.cond.discounts.filter(d => d.id !== id); render(); }
+function discInput(id, v) { S.cond.discounts.find(d => d.id === id).amount = v; }   // no render — keeps focus
+function discScope(id, v) { S.cond.discounts.find(d => d.id === id).scope = v; render(); }
+function addBundle() { S.cond.bundles.push({ id: bundSeq++, prodId: (S.lines[0] || {}).id, attr: 'units', op: '>=', val: 5, thenType: 'discDeal', thenVal: '5%', taken: false }); render(); }
+function delBundle(id) { S.cond.bundles = S.cond.bundles.filter(b => b.id !== id); render(); }
+function bundSet(id, k, v) { S.cond.bundles.find(b => b.id === id)[k] = v; render(); }
+function bundText(id, k, v) { S.cond.bundles.find(b => b.id === id)[k] = v; }       // no render — keeps focus
+function takeBundle(id) {
+  if (S.signed) return;   // sealed deal — the offer is no longer on the table
+  const b = S.cond.bundles.find(x => x.id === id);
+  b.taken = !b.taken;
+  if (b.taken) pushDealMsg('The buyer took a bundle deal — ' + bundleSentence(b));
+  render();
+}
+function noteInput(id, v) { S.notes.find(n => n.id === id).text = v; }              // no render — keeps focus
+function negotiate() { const i = document.querySelector('.composer .box input'); if (i) i.focus(); }
+function buyerSigns() {
+  if (!S.finalized || S.buyerSigned) return;   // buyer can sign only after the invoice landed
+  S.buyerSigned = true;
+  S.edit = false; S.editRow = null;
+  pushDealMsg('The buyer signed — the deal is closed');
+  render();
+}
+
+/* ================= SHARED RENDERERS ================= */
+const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+const escAttr = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+
+/* product rules: name never editable; the buyer may change size/units but NEVER price */
+const SIZES = [100, 250, 500, 1000];
+const lineCells = l => `<td class="num mono">${l.batch}</td><td class="num mono">${l.size} g</td><td class="num mono">${l.units}</td><td class="num mono">${perg(l.price)}</td><td class="num mono">${eur(lineTotal(l))}</td>`;
+
+function renderLinesTable() {
+  const E = S.edit, p = S.pending;
+  const rows = [];
+  for (const l of S.lines) {
+    if (p && l.id === p.removesLineId) {   // the diff pair is not row-editable
+      rows.push(`<tr class="removed"><td>${esc(l.name)}</td>${lineCells(l)}${E ? '<td></td>' : ''}</tr>`);
+      const n = p.newLine;
+      rows.push(`<tr class="added"><td>${esc(n.name)}<div><span class="newtag">CHANGE</span></div></td>${lineCells(n)}${E ? '<td></td>' : ''}</tr>`);
+    } else if (E && S.editRow === l.id) {
+      rows.push(`<tr>
+        <td>${esc(l.name)}</td>
+        <td class="num">${role === 'seller'
+          ? `<select onchange="rowSet(${l.id}, 'batch', this.value)">${BATCHES.map(b => `<option ${b === l.batch ? 'selected' : ''}>${b}</option>`).join('')}</select>`
+          : `<span class="mono">${l.batch}</span> <span class="locksm" title="Only the supplier can change the batch">${ICONS.lock}</span>`}</td>
+        <td class="num"><select onchange="rowSet(${l.id}, 'size', +this.value)">${SIZES.map(s => `<option value="${s}" ${s === l.size ? 'selected' : ''}>${s} g</option>`).join('')}</select></td>
+        <td class="num"><span class="stepper"><button onclick="rowBump(${l.id}, -1)">−</button><b class="mono">${l.units}</b><button onclick="rowBump(${l.id}, 1)">+</button></span></td>
+        <td class="num">${role === 'seller'
+          ? `<input type="number" step="0.05" min="0.05" value="${l.price}" style="width:74px" onchange="rowSet(${l.id}, 'price', +this.value)" /> €/g`
+          : `<span class="mono">${perg(l.price)}</span> <span class="locksm" title="Only the seller can change the price">${ICONS.lock}</span>`}</td>
+        <td class="num mono">${eur(lineTotal(l))}</td>
+        <td class="num"><button class="icobtn" title="Done with this row" onclick="setEditRow(null)">${ICONS.check}</button></td>
+      </tr>`);
+    } else {
+      rows.push(`<tr><td>${esc(l.name)}</td>${lineCells(l)}${E ? `<td class="num" style="white-space:nowrap"><button class="icobtn" title="Edit this line" onclick="setEditRow(${l.id})">${ICONS.pencil}</button> <button class="icobtn" title="Remove this product" onclick="delLine(${l.id})">${ICONS.trash}</button></td>` : ''}</tr>`);
+    }
+  }
+  const addRow = E ? `<div class="addwrap" style="margin-top:10px">
+      <button class="addrow" onclick="event.stopPropagation(); S.shopOpen = !S.shopOpen; render()">+ Add product from ${role === 'seller' ? 'your shop' : "the seller's shop (shared with you)"}</button>
+      ${S.shopOpen ? `<div class="addmenu" onclick="event.stopPropagation()" style="bottom:auto; top:36px">${SHOP.map((s, i) =>
+        `<button onclick="addProduct(${i})">${esc(s.name)} <span class="mut">${s.size} g · ${perg(s.price)}</span></button>`).join('')}</div>` : ''}
+    </div>` : '';
+  return `<table class="lines">
+    <thead><tr><th>Product</th><th style="text-align:right">Batch</th><th style="text-align:right">Unit size</th><th style="text-align:right">Units</th><th style="text-align:right">Price</th><th style="text-align:right">Total</th>${E ? '<th></th>' : ''}</tr></thead>
+    <tbody>${rows.join('')}</tbody>
+  </table>${addRow}`;
+}
+
+/* ===== part 5: extra conditions (seller-only edit; buyer looks, never touches) ===== */
+const PAY_OPTS = ['14 days net · 2% Skonto 7d', '30 days net', '60 days net', 'Prepayment'];
+const discScopeName = s => s === 'deal' ? 'the whole deal' : (S.lines.find(l => l.id === +s) || { name: 'a removed product' }).name;
+/* bundle rule vocabulary: x = a product attribute, y = the reward */
+const ATTRS = { qty: 'quantity (g)', units: 'units', price: 'price (€/g)' };
+const OPS = { '>=': '≥', '=': '=', '<=': '≤' };
+const THENS = { delivery: 'free delivery', discDeal: 'discount — whole deal', discProd: 'discount — this product' };
+
+function bundleSentence(b) {
+  const prod = S.lines.find(l => l.id === b.prodId);
+  const then = b.thenType === 'delivery' ? 'free delivery on the order'
+    : `${b.thenVal || '…'} off ${b.thenType === 'discDeal' ? 'the whole deal' : 'this product'}`;
+  return `If ${prod ? prod.name : 'a removed product'} · ${ATTRS[b.attr]} ${OPS[b.op]} ${b.val} → ${then}`;
+}
+
+function renderConds() {
+  const c = S.cond;
+  const E = S.edit && role === 'seller';
+  const card = (label, val) => `<div class="condcard"><div class="plabel">${label}</div><div class="tval">${val}</div></div>`;
+  const cards = [];
+  cards.push(card('Payment', E
+    ? `<select onchange="condSet('payment', this.value)">${PAY_OPTS.map(o => `<option ${o === c.payment ? 'selected' : ''}>${o}</option>`).join('')}</select>`
+    : esc(c.payment)));
+  if (E) {
+    cards.push(card('Deal expiry', `<input type="date" value="${c.expiry}" onchange="condSet('expiry', this.value)" />`));
+    cards.push(card('Delivery',
+      `<label><input type="checkbox" ${c.freeDelivery ? 'checked' : ''} onchange="condSet('freeDelivery', this.checked)" /> Free delivery</label>`
+      + (c.freeDelivery ? '' : `<input type="date" value="${c.deliveryDate}" onchange="condSet('deliveryDate', this.value)" style="margin-top:6px" />`)));
+  } else {
+    if (c.expiry) cards.push(card('Deal expiry', `<span class="mono">${c.expiry}</span>`));
+    if (c.freeDelivery) cards.push(card('Delivery', 'Free delivery'));
+    else if (c.deliveryDate) cards.push(card('Delivery date', `<span class="mono">${c.deliveryDate}</span>`));
+    for (const d of c.discounts) cards.push(card('Discount', `${esc(d.amount)} on ${esc(discScopeName(d.scope))}`));
+  }
+  /* bundle deals: the BUYER gets the take-button (mini-deal, marketplace style);
+     the seller just sees whether it was taken */
+  const bundleCards = E ? '' : c.bundles.map(b =>
+    `<div class="condcard wide">
+      <div><div class="plabel">Bundle deal</div><div class="tval">${esc(bundleSentence(b))}</div></div>
+      ${role === 'buyer'
+        ? `<button class="takebtn ${b.taken ? 'taken' : ''}" onclick="takeBundle(${b.id})">${b.taken ? '✓ Taken — in the deal' : '+ Take the deal'}</button>`
+        : `<span class="plabel" style="margin-left:auto; flex:none; ${b.taken ? 'color:var(--ok)' : ''}">${b.taken ? '✓ taken by the buyer' : 'waiting for the buyer'}</span>`}
+    </div>`).join('');
+  const buyerHint = S.edit && role === 'buyer'
+    ? `<div class="ghint" style="padding:12px 0 0">Extra conditions belong to the seller — you can look, not touch.</div>` : '';
+  const editRows = !E ? '' : `<div class="condedit">
+    ${c.discounts.map(d => `<div class="condrow"><span class="plabel" style="width:64px">Discount</span>
+      <input style="width:64px" value="${escAttr(d.amount)}" oninput="discInput(${d.id}, this.value)" />
+      <span>on</span>
+      <select onchange="discScope(${d.id}, this.value)">
+        <option value="deal" ${d.scope === 'deal' ? 'selected' : ''}>the whole deal</option>
+        ${S.lines.map(l => `<option value="${l.id}" ${+d.scope === l.id ? 'selected' : ''}>${esc(l.name)}</option>`).join('')}
+      </select>
+      <button class="icobtn" title="Remove" onclick="delDiscount(${d.id})">${ICONS.trash}</button></div>`).join('')}
+    ${c.bundles.length ? `<div class="plabel" style="display:block; margin-top:12px">Bundle deals — if this, then that</div>
+    <table class="rulet">
+      <thead><tr><th>If product</th><th>Attribute</th><th>Is</th><th>Value</th><th>Then</th><th>Amount</th><th></th></tr></thead>
+      <tbody>${c.bundles.map(b => `<tr>
+        <td><select onchange="bundSet(${b.id}, 'prodId', +this.value)">${S.lines.map(l => `<option value="${l.id}" ${l.id === b.prodId ? 'selected' : ''}>${esc(l.name)}</option>`).join('')}</select></td>
+        <td><select onchange="bundSet(${b.id}, 'attr', this.value)">${Object.entries(ATTRS).map(([k, lbl]) => `<option value="${k}" ${k === b.attr ? 'selected' : ''}>${lbl}</option>`).join('')}</select></td>
+        <td><select onchange="bundSet(${b.id}, 'op', this.value)">${Object.entries(OPS).map(([k, s]) => `<option value="${k}" ${k === b.op ? 'selected' : ''}>${s}</option>`).join('')}</select></td>
+        <td><input type="number" style="width:64px" value="${b.val}" onchange="bundSet(${b.id}, 'val', +this.value)" /></td>
+        <td><select onchange="bundSet(${b.id}, 'thenType', this.value)">${Object.entries(THENS).map(([k, lbl]) => `<option value="${k}" ${k === b.thenType ? 'selected' : ''}>${lbl}</option>`).join('')}</select></td>
+        <td>${b.thenType === 'delivery' ? '<span style="color:#9c8494">—</span>' : `<input style="width:52px" value="${escAttr(b.thenVal)}" oninput="bundText(${b.id}, 'thenVal', this.value)" />`}</td>
+        <td><button class="icobtn" title="Remove" onclick="delBundle(${b.id})">${ICONS.trash}</button></td>
+      </tr>`).join('')}</tbody>
+    </table>` : ''}
+    <div style="display:flex; gap:8px; margin-top:12px">
+      <button class="addrow" onclick="addDiscount()">+ Discount</button>
+      <button class="addrow" onclick="addBundle()">+ Bundle deal</button>
+    </div>
+  </div>`;
+  return `<div class="condwrap">${buyerHint}<div class="condgrid">${cards.join('')}${bundleCards}</div>${editRows}</div>`;
+}
+
+/* ===== part 7: notes — one per party, blank never shown, edit only your own ===== */
+function renderNotes() {
+  return S.notes.filter(n => n.text.trim() || (S.edit && n.side === role)).map(n => {
+    const editable = S.edit && n.side === role;
+    const body = editable
+      ? `<textarea placeholder="Write your note — the other side will see it" oninput="noteInput('${n.id}', this.value)">${esc(n.text)}</textarea>`
+      : esc(n.text);
+    return `<div class="noteblk"><span class="plabel">Note — ${n.side === 'seller' ? 'Seller' : 'Buyer'} · ${esc(n.co)}${n.side === role ? ' — you' : ''}</span>${body}</div>`;
+  }).join('');
+}
+
+/* ===== part 8: decision — role-aware two-sided signing:
+   buyer proposes → SELLER signs → seller uploads invoice → BUYER signs after
+   delivery → closed (only re-open ticket left) ===== */
+function renderDecision() {
+  const seller = role === 'seller';
+  if (S.pending) return seller ? `<div class="actions2">
+      <span class="status">The buyer proposed a change — sign it, or negotiate in the chat</span>
+      <button class="btn2 neg" onclick="negotiate()">Negotiate</button>
+      <button class="btn2 green" onclick="approveChange()">${ICONS.pencil} Sign the deal</button>
+    </div>` : `<div class="actions2">
+      <span class="status">Your side proposed this change — the seller signs next</span>
+      <button class="btn2 neg" onclick="negotiate()">Negotiate</button>
+    </div>`;
+  if (S.buyerSigned) return `<div class="actions2">
+      <span class="status">Deal closed — signed by both sides <span class="fdoc" title="${escAttr(S.invoiceFile)}">${ICONS.pdf}</span></span>
+      <button class="btn2 ghost">Re-open a ticket<span class="later2">LATER</span></button>
+    </div>`;
+  if (S.finalized) return seller ? `<div class="actions2">
+      <span class="status">Invoice uploaded <span class="fdoc" title="${escAttr(S.invoiceFile)}">${ICONS.pdf}</span> — waiting for the buyer to sign after delivery</span>
+    </div>` : `<div class="actions2">
+      <span class="status">Invoice received <span class="fdoc" title="${escAttr(S.invoiceFile)}">${ICONS.pdf}</span> — sign once the delivery arrived</span>
+      <button class="btn2 green" onclick="buyerSigns()">${ICONS.pencil} Sign the deal</button>
+    </div>`;
+  if (S.signed) return seller ? `<div class="actions2">
+      <span class="status">Signed by you — upload the invoice to move on</span>
+      <button class="btn2 dark" onclick="startFinalize()">${ICONS.up} Finalize by uploading invoice</button>
+    </div>` : `<div class="actions2">
+      <span class="status">The seller signed — waiting for the invoice</span>
+    </div>`;
+  return `<div class="actions2"><span class="status">Nothing waiting — edit the card ✎ or keep talking</span></div>`;
+}
+
+function renderCardFace() {
+  const p = S.pending;
+  const tot = dealTotal(S.lines);
+  const newTot = p ? dealTotal(S.lines.map(l => l.id === p.removesLineId ? p.newLine : l)) : tot;
+  const d = newTot - tot;
+  const totalHtml = p
+    ? `<span class="was mono">${eur(tot)}</span><span class="delta mono">${d < 0 ? '−' : '+'}${eur(Math.abs(d))}</span><b class="mono up">${eur(newTot)}</b>`
+    : `<b class="mono">${eur(tot)}</b>`;
+  return `
+    <div class="paper">
+      <div class="lhead2">
+        <div class="wordmark disp">He::oSe::o</div>
+        <div class="docmeta mono">
+          <div>HS-AUR07-CAN23-A189371</div>
+          <div>12-JUN-2026</div>
+        </div>
+      </div>
+      <div class="rule2"></div>
+      <div class="parties">
+        <span class="plabel">Seller</span><span class="pco2 disp">StonePharm GmbH</span>${role === 'seller' ? '<span class="you">· You</span>' : ''}
+        <span class="arrow"></span>
+        <span class="plabel">Buyer</span><span class="pco2 disp">Aurora Deutschland GmbH</span>${role === 'buyer' ? '<span class="you">· You</span>' : ''}
+      </div>
+      ${renderLinesTable()}
+      <div class="totalrow"><span class="plabel">Total net</span>${totalHtml}</div>
+      ${renderConds()}
+      ${renderThings()}
+      ${renderNotes()}
+      ${renderDecision()}
+      <input type="file" id="finup" accept="application/pdf,.pdf" style="display:none" onchange="invoiceChosen(event)" />
+    </div>`;
+}
+
+/* ================= THINGS (to-dos with action words) ================= */
+/* all action words wear the same pink (Ayush 2026-07-03) */
+const THING_PINK = { c: '#b42563', bg: 'rgba(255,255,255,.78)' };
+const THING_ACTIONS = {
+  upload:  { label: 'Upload',  ...THING_PINK },
+  approve: { label: 'Approve', ...THING_PINK },
+  confirm: { label: 'Confirm', ...THING_PINK },
+  review:  { label: 'Review',  ...THING_PINK },
+  pay:     { label: 'Pay',     ...THING_PINK },
+  sign:    { label: 'Sign',    ...THING_PINK },
+  custom:  { label: 'Custom',  ...THING_PINK },
+};
+let thingSeq = 5;
+let pendingUploadId = null;
+let addMenuOpen = false;
+let focusThing = false, focusRename = false;   // focus only on explicit intent, never on background renders
+let addPrivate = false;   // private/secret is the FIRST choice when adding a thing
+let thingDraft = null;    // { type: 'free'|'upload'|'approve', private, text, assignee, atQuery, atPos }
+
+/* WhatsApp-style mention: typing after @ filters the names live */
+function atMatches() {
+  const q = (thingDraft.atQuery || '').toLowerCase();
+  return PEOPLE.filter(p => p.side !== 'external')
+    .map(p => p.id === 'you' ? { name: 'You', co: 'StonePharm GmbH' } : { name: p.name, co: p.co })
+    .filter(p => p.name.toLowerCase().includes(q));
+}
+
+function atMenuHtml() {
+  const m = atMatches();
+  const items = m.length
+    ? m.map(p => `<button onclick="pickAt('${p.name === 'You' ? 'You' : p.name.split(' ')[0]}')">${esc(p.name)}<span>${esc(p.co)}</span></button>`).join('')
+    : `<div style="padding:8px 10px; font-size:11px; color:#9c8494">No match — keep typing or Esc</div>`;
+  return `<div class="atmenu" id="atmenu" onclick="event.stopPropagation()">${items}</div>`;
+}
+
+/* update only the floating menu while typing, so the input never loses focus */
+function updateAtMenu() {
+  const row = document.getElementById('draftrow');
+  const menu = document.getElementById('atmenu');
+  if (!thingDraft || thingDraft.atQuery === null) { if (menu) menu.remove(); return; }
+  if (menu) menu.outerHTML = atMenuHtml();
+  else if (row) row.insertAdjacentHTML('beforeend', atMenuHtml());
+}
+
+function renderThings() {
+  /* a PRIVATE thing exists only for the side that wrote it — the other view never sees it */
+  const visible = S.things.filter(t => !t.private || t.side === role);
+  const rows = visible.map(t => {
+    const a = t.action === 'upload' || t.action === 'approve' ? THING_ACTIONS[t.action] : null;
+    return `<div class="item2 ${t.done ? 'done' : ''} ${t.private ? 'priv' : ''}">
+      <button class="cb2" title="Tick when done" onclick="toggleThing(${t.id})">${t.done ? '✓' : ''}</button>
+      ${a ? `<button class="achip" style="color:${a.c}; background:${a.bg}" title="${t.action === 'upload' ? 'Click to upload the document' : 'Click when done'}" onclick="thingAct(${t.id})">${t.action === 'upload' ? ICONS.up : ICONS.check}${a.label}</button>` : ''}
+      <span class="ttext">${esc(t.text)}</span>
+      ${t.file ? `<span class="fdoc" title="${escAttr(t.file)}">${ICONS.pdf}</span>` : ''}
+      ${t.assignee ? `<span class="asg ${t.assignee === 'You' ? 'me' : ''}">@${esc(t.assignee)}</span>` : ''}
+      ${t.private ? `<span class="privchip">${ICONS.lock} ONLY YOU</span>` : ''}
+    </div>`;
+  }).join('');
+
+  const d = thingDraft;
+  const draftRow = d ? `
+    <div class="item2 draft" id="draftrow" onclick="event.stopPropagation()">
+      <span class="cb2" style="opacity:.35"></span>
+      ${d.private ? `<span class="privchip">${ICONS.lock} PRIVATE</span>` : ''}
+      ${d.type === 'upload' ? `<span class="achip" style="color:#b42563; background:rgba(255,255,255,.78)">${ICONS.up}Upload</span>` : ''}
+      ${d.assignee ? `<span class="asg">@${esc(d.assignee)}</span>` : ''}
+      <input id="thinginp" class="tinp"
+        placeholder="write it… @ tags someone · Enter adds it"
+        value="${escAttr(d.text)}" oninput="draftInput(this)" onkeydown="draftKey(event)" />
+      ${d.atQuery !== null ? atMenuHtml() : ''}
+    </div>` : '';
+
+  return `<div class="items2">
+    <div class="plabel">Open items <span class="cnt">${visible.filter(t => !t.done).length}</span></div>
+    ${rows}
+    ${draftRow}
+    <div class="addwrap">
+      <button class="addthing" onclick="event.stopPropagation(); toggleAddMenu()">+ Add something</button>
+      ${addMenuOpen ? `<div class="addmenu" onclick="event.stopPropagation()">
+        <button class="priv ${addPrivate ? 'on' : ''}" onclick="addPrivate = !addPrivate; render()">${ICONS.lock} Private / secret <span class="mut">${addPrivate ? 'ON — only your company' : 'choose first'}</span></button>
+        <div class="sep"></div>
+        <button onclick="pickThingType('free')">${ICONS.text} Free text</button>
+        <button onclick="pickThingType('upload')">${ICONS.up} Upload</button>
+        <button onclick="pickThingType('approve')">${ICONS.at} Approve <span class="mut">@ someone</span></button>
+      </div>` : ''}
+    </div>
+  </div>
+  <input type="file" id="fup" style="display:none" onchange="fileChosen(event)" />`;
+}
+
+function toggleAddMenu() {
+  addMenuOpen = !addMenuOpen;
+  if (addMenuOpen) { addPrivate = false; thingDraft = null; }
+  render();
+}
+function pickThingType(type) {
+  // approve pre-writes the @ — the name list opens and filters as you type, WhatsApp-style
+  thingDraft = {
+    type, private: addPrivate, assignee: null,
+    text: type === 'approve' ? '@' : '',   // approve pre-writes the @ — list waits for your letters
+    atQuery: null,
+    atPos: 0,
+  };
+  addMenuOpen = false;
+  focusThing = true;
+  render();
+}
+
+function draftInput(el) {
+  const v = el.value;
+  thingDraft.text = v;
+  const i = v.lastIndexOf('@');
+  if (i >= 0 && (i === 0 || v[i - 1] === ' ') && i < v.length - 1) {
+    thingDraft.atQuery = v.slice(i + 1);   // list opens only once you TYPE after the @
+    thingDraft.atPos = i;
+  } else {
+    thingDraft.atQuery = null;             // bare @ = wait, no popup yet
+  }
+  updateAtMenu();   // only the floating list updates — the input keeps focus
+}
+
+function pickAt(name) {
+  const d = thingDraft;
+  d.text = d.text.slice(0, d.atPos).trimEnd();   // strip the @query from the text
+  d.assignee = name;
+  d.atQuery = null;
+  focusThing = true;
+  render();
+}
+
+function draftKey(e) {
+  if (e.key === 'Escape') {
+    if (thingDraft.atQuery !== null) { thingDraft.atQuery = null; updateAtMenu(); return; }
+    thingDraft = null; render(); return;
+  }
+  if (e.key !== 'Enter') return;
+  const d = thingDraft;
+  if (d.atQuery !== null) {   // Enter while the list is open picks the top match
+    const m = atMatches();
+    if (m.length) pickAt(m[0].name === 'You' ? 'You' : m[0].name.split(' ')[0]);
+    return;
+  }
+  if (!d.text.trim()) return;
+  if (d.type === 'approve' && !d.assignee) {   // approve needs a someone — put the @ back, wait for typing
+    if (!d.text.endsWith('@')) d.text += d.text.endsWith(' ') ? '@' : ' @';
+    focusThing = true;
+    render();
+    return;
+  }
+  S.things.push({ id: thingSeq++, action: d.type === 'free' ? 'free' : d.type, text: d.text.trim(), assignee: d.assignee, done: false, file: null, private: d.private, side: role });
+  thingDraft = null;
+  render();
+}
+
+function thingAct(id) {
+  const t = S.things.find(x => x.id === id);
+  if (t.action === 'upload' && !t.done) {
+    pendingUploadId = id;
+    document.getElementById('fup').click();   // Upload is a REAL action: opens the file picker
+    return;
+  }
+  t.done = !t.done;   // other action words toggle done
+  render();
+}
+
+function toggleThing(id) {
+  const t = S.things.find(x => x.id === id);
+  t.done = !t.done;
+  render();
+}
+
+function fileChosen(e) {
+  const t = S.things.find(x => x.id === pendingUploadId);
+  const f = e.target.files && e.target.files[0];
+  if (t && f) { t.file = f.name; t.done = true; }
+  pendingUploadId = null;
+  render();
+}
+
+function sigRow(label, val) {
+  return `<div class="sigrow"><div class="sigl">${label}</div><div class="sigv">${val}</div></div>`;
+}
+
+function renderSignals() {
+  const p = S.pending;
+  const rows = [];
+  rows.push(sigRow('Version', p
+    ? `<span class="mono">v${S.version}</span> current · <span class="wt">v${S.version + 1} proposed</span>`
+    : `<span class="mono">v${S.version}</span> — current, all changes applied`));
+  rows.push(sigRow('Turn', p
+    ? (role === 'seller' ? `<span class="wt">Your turn</span> — the buyer is waiting on you`
+                         : `<span class="wt">Seller's turn</span> — your side proposed this change`)
+    : `<span class="okt">All agreed</span> — nothing waiting on anyone`));
+  if (p) {
+    rows.push(sigRow('On the table', `Pedanios <s>3.80 €/g</s> → <span class="up">3.60 €/g</span>`));
+    rows.push(sigRow('Commitment', `<s>${p.termFrom}</s> → <span class="up">${p.termTo}</span>`));
+    rows.push(sigRow('Proposed by', `The buyer · today 10:08`));
+  } else {
+    if (S.buyerSigned) rows.push(sigRow('Status', `<span class="okt">Closed</span> — signed by both sides`));
+    else if (S.finalized) rows.push(sigRow('Status', `<span class="okt">Finalized</span> — invoice attached, waiting on the buyer's signature`));
+    rows.push(sigRow('Commitment', S.term));
+    rows.push(sigRow('Total net', `<span class="mono">${eur(dealTotal(S.lines))}</span>`));
+    rows.push(sigRow('Things open', `${S.things.filter(t => !t.done).length} of ${S.things.length} still to do`));
+  }
+  return `<div class="siglist">${rows.join('')}</div>`;
+}
+
+function renderVersions() {
+  return `<div class="vlist">${S.versions.map(v =>
+    `<div class="ventry ${v.pending ? 'pending' : ''}">
+       <div class="vv mono">${v.v}</div>
+       <div><div class="vwhat">${esc(v.what)}</div><div class="vmeta">${esc(v.meta)}</div></div>
+     </div>`).join('')}</div>`;
+}
+
+function renderBackFace() {
+  return `
+    <div class="paper">
+      <div class="lhead2">
+        <div class="wordmark disp">He::oSe::o</div>
+        <div class="docmeta mono">
+          <div>HS-AUR07-CAN23-A189371</div>
+          <div>12-JUN-2026</div>
+        </div>
+      </div>
+      <div class="rule2"></div>
+      <div class="backtabs" style="margin-top:18px">
+        <button class="bt ${S.backTab === 'signals' ? 'on' : ''}" onclick="setBackTab('signals')">Signals</button>
+        <button class="bt ${S.backTab === 'logs' ? 'on' : ''}" onclick="setBackTab('logs')">Logs</button>
+      </div>
+      ${S.backTab === 'signals' ? renderSignals() : renderVersions()}
+    </div>`;
+}
+
+function renderChatCol() {
+  const c = activeConvo();
+  const msgs = convoMsgs(c).map(m => {
+    if (m.sysline) return m.click
+      ? `<button class="syspill click" title="Open the deal card with the diff" onclick="openDoc()">${esc(m.txt)}<span class="dealnum">${esc(m.num)}</span></button>`
+      : `<div class="syspill">${esc(m.txt)}</div>`;
+    if (m.sys) return `<div class="sysline">${esc(m.txt)}</div>`;
+    return `<div class="mrow ${m.who}"><div class="bubble">${esc(m.txt)}</div><div class="mmeta">${esc(m.meta || '')}</div></div>`;
+  }).join('');
+  const isGroup = c.kind !== 'p2p' && c.kind !== 'internal';
+  const canRename = c.kind === 'group' || c.kind === 'deal';
+  const titleHtml = renaming && canRename
+    ? `<input class="rninput" id="rninp" value="${escAttr(rnVal)}" oninput="rnVal = this.value" onkeydown="rnKey(event)" />`
+    : `${esc(isGroup ? c.subject : c.names)}${canRename ? ` <button class="rn" title="Rename this group — anytime">✎</button>` : ''}`;
+  const hint = c.kind === 'p2p' ? 'P2P chat — white = people talk here'
+    : c.kind === 'deal' ? 'Deal group — always lives under the Deals filter' : '';
+  return `
+  <div class="chatcol">
+    <div class="chathead">
+      <div class="av ${c.icon ? 'gav' : ''}">${avHtml(c)}</div>
+      <div class="who" ${canRename && !renaming ? 'onclick="startRename()" style="cursor:pointer"' : ''}>
+        <div class="nm">${titleHtml}</div>
+        <div class="co">${esc(isGroup ? c.names : c.subject)}</div>
+      </div>
+      <div class="spacer"></div>
+      ${c.dealId ? dealChipHtml() : ''}
+    </div>
+    <div class="msgs" id="msgs">
+      ${hint ? `<div class="sysline">${hint}</div>` : ''}
+      ${msgs}
+    </div>
+    <div class="composer">
+      <div class="box">
+        <input placeholder="Message ${escAttr(isGroup ? c.subject : c.names)}…" onkeydown="sendKey(event)" />
+        <button class="send">➤</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ================= GROUP CREATION ================= */
+function openGroupModal(from) {
+  modal = { from, picked: ['you'], name: '', q: '', extPending: null, extClicks: 0 };
+  ncOpen = false;
+  render();
+}
+function closeModal() { modal = null; render(); }
+
+function togglePick(id) {
+  const p = PEOPLE.find(x => x.id === id);
+  if (modal.picked.includes(id)) {
+    modal.picked = modal.picked.filter(x => x !== id);
+  } else if (modal.from === 'deal' && p.side === 'external') {
+    modal.extPending = id;   // external in a deal group → double-approval gate
+    modal.extClicks = 0;
+  } else {
+    modal.picked.push(id);
+  }
+  render();
+}
+function extApprove() {
+  modal.extClicks++;
+  if (modal.extClicks >= 2) { modal.picked.push(modal.extPending); modal.extPending = null; }
+  render();
+}
+function extCancel() { modal.extPending = null; render(); }
+
+function createGroup() {
+  const m = modal;
+  const others = PEOPLE.filter(p => m.picked.includes(p.id) && p.id !== 'you').map(p => p.name.split(' ')[0]);
+  const namesLine = [...others, 'You'].join(', ');
+  const fallback = m.from === 'deal' ? 'HS-AUR07-CAN23-A189371' : others.join(', ');
+  const conv = {
+    id: 'new' + groupSeq++,
+    kind: m.from === 'deal' ? 'deal' : 'group',   // deal-born → always under the Deals filter
+    av: '', icon: m.from === 'deal' ? 'receipt' : 'users',
+    names: namesLine,
+    subject: m.name.trim() || fallback,
+    preview: 'You created this group', time: 'now', unread: false,
+    dealId: m.from === 'deal' ? 'A189371' : null,
+    msgs: [{ sys: true, txt: `Group created by you · ${namesLine}${m.from === 'deal' ? ' · tied to HS-AUR07-CAN23-A189371' : ''}` }],
+  };
+  CONVOS.unshift(conv);
+  modal = null;
+  activeId = conv.id;              // the new group replaces the open chat
+  S.docOpen = !!conv.dealId;       // deal-born: the card opens with it · plain group: the deal closes completely
+  S.face = 'card';
+  render();
+}
+
+function personRow(p) {
+  const locked = p.id === 'you';
+  const on = modal.picked.includes(p.id);
+  const init = p.name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
+  const badge = modal.from === 'deal'
+    ? (p.side === 'stone' ? '<span class="badge bst">Your side</span>'
+      : p.side === 'aurora' ? '<span class="badge bau">Counterparty</span>'
+      : '<span class="badge bex">External</span>')
+    : (p.side === 'stone' ? '<span class="badge bst">Internal</span>'
+      : '<span class="badge bex">External</span>');
+  return `<div class="person ${on ? 'on' : ''} ${locked ? 'locked' : ''}" onclick="${locked ? '' : `togglePick('${p.id}')`}">
+    <div class="pav">${init}</div>
+    <div class="pnm">${esc(p.name)}</div>
+    <div class="pco">${esc(p.co)}</div>
+    <div>${badge}</div>
+    <div class="pcheck">${on ? '✓' : ''}</div>
+  </div>`;
+}
+
+function peopleSections() {
+  const q = (modal.q || '').trim().toLowerCase();
+  const match = p => !q || p.name.toLowerCase().includes(q) || p.co.toLowerCase().includes(q);
+  const sec = (label, pred) => {
+    const rows = PEOPLE.filter(p => pred(p) && match(p)).map(personRow).join('');
+    return rows ? `<div class="gsec">${label}</div>${rows}` : '';
+  };
+  const out = modal.from === 'deal'
+    ? sec('StonePharm — your side', p => p.side === 'stone')
+      + sec('Aurora Deutschland — counterparty', p => p.side === 'aurora')
+      + sec('External — NOT part of this deal', p => p.side === 'external')
+    : sec('Internal — StonePharm, my company', p => p.side === 'stone')
+      + sec('External — all other companies', p => p.side !== 'stone');
+  return out || `<div class="ghint" style="padding:12px 8px">No people match "${esc(modal.q)}".</div>`;
+}
+
+function refreshPplList() {
+  const el = document.getElementById('ppllist');
+  if (el) el.innerHTML = peopleSections();
+}
+
+function renderGroupModal() {
+  const m = modal;
+  const ext = m.extPending ? PEOPLE.find(p => p.id === m.extPending) : null;
+  return `<div class="gmodal" onclick="if (event.target === this) closeModal()">
+    <div class="gpanel">
+      <h3 class="disp">${m.from === 'deal' ? 'Talk about this deal' : 'New group'}</h3>
+      <div class="gsub">${m.from === 'deal'
+        ? 'Pick people to include — this group is tied to DEAL — HS-AUR07-CAN23-A189371 and lives under the Deals filter.'
+        : 'Pick people to include.'}</div>
+      <input class="gsearch" placeholder="🔍 Search people or companies…" value="${escAttr(m.q)}" oninput="modal.q = this.value; refreshPplList()" />
+      <div class="phead"><span></span><span>Name</span><span>Company</span><span>${m.from === 'deal' ? 'Deal side' : 'Relation'}</span><span></span></div>
+      <div class="plist" id="ppllist">${peopleSections()}</div>
+      ${ext ? `<div class="extwarn">
+        <b>⚠ EXTERNAL PARTY IS BEING ADDRESSED</b><br/>
+        ${esc(ext.name)} (${esc(ext.co)}) is not one of the two deal parties. Two approval clicks are required.
+        <div class="exbtns">
+          <button class="exok" onclick="extApprove()">Approve — click ${m.extClicks + 1} of 2</button>
+          <button class="exno" onclick="extCancel()">Cancel</button>
+        </div>
+      </div>` : ''}
+      <div class="gsec">Give this group a name (optional)</div>
+      <input class="gname" placeholder="Clarification for April delivery" value="${escAttr(m.name)}" oninput="modal.name = this.value" />
+      <div class="ghint">${m.from === 'deal'
+        ? 'No name → the deal code becomes the title. You can rename it anytime from the chat window.'
+        : 'No name → first names become the title (Alice, Bob). You can rename it anytime from the chat window.'}</div>
+      <div class="gfoot">
+        <button class="gcancel" onclick="closeModal()">Cancel</button>
+        <button class="gcreate" ${m.picked.length < 2 ? 'disabled' : ''} onclick="createGroup()">Create group</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function dealChipHtml() {
+  const pendingDot = S.pending ? 'pending' : '';
+  return `<button class="dealchip ${S.docOpen ? 'on' : ''}" onclick="toggleDoc()">
+    <span class="doc">${ICONS.receipt}</span> Deal <span class="mono">A189371</span>
+    <span class="dot ${pendingDot}"></span>
+  </button>`;
+}
+
+/* ================= LAYOUT (chosen: side panel + flip) ================= */
+function render() {
+  const stage = document.getElementById('stage');
+  const showDoc = S.docOpen && !!activeConvo().dealId;   // the deal panel exists only inside its own chat
+  stage.innerHTML = renderChatCol() + (showDoc ? `
+    <div class="docpanel">
+      <div class="dtoolbar">
+        <button class="tbtn icon" title="Close" onclick="toggleDoc()">${ICONS.x}</button>
+        <button class="tbtn" onclick="openGroupModal('deal')">${ICONS.chat} Talk about this deal</button>
+        <button class="tbtn" onclick="flipTo('${S.face === 'card' ? 'back' : 'card'}')">${S.face === 'card' ? ICONS.clock + ' Activity' : ICONS.flip + ' Deal Card'}</button>
+        <div class="tspace"></div>
+        ${S.signed
+          ? `<span class="tbtn icon" title="Signed — re-open a ticket to change the deal" style="opacity:.55; cursor:default">${ICONS.lock}</span>`
+          : `<button class="tbtn icon ${S.edit ? 'on' : ''}" title="${S.edit ? 'Done editing' : 'Edit the deal'}" onclick="toggleEdit()">${S.edit ? ICONS.check : ICONS.pencil}</button>`}
+      </div>
+      <div class="docscroll">
+        <div class="paperwrap">
+          ${S.face === 'card' ? renderCardFace() : renderBackFace()}
+        </div>
+      </div>
+    </div>` : '') + (modal ? renderGroupModal() : '');
+  renderChatList();
+  renderDemobar();
+  const m = document.getElementById('msgs');
+  if (m) m.scrollTop = m.scrollHeight;
+  /* focus only when the user just opened/changed the input — a background
+     render must never steal the caret (e.g. typing in the chat composer) */
+  const ri = document.getElementById('rninp');
+  if (ri && focusRename) { ri.focus(); ri.select(); focusRename = false; }
+  const ti = document.getElementById('thinginp');
+  if (ti && thingDraft && focusThing) {
+    ti.focus();
+    ti.setSelectionRange(ti.value.length, ti.value.length);
+    focusThing = false;
+  }
+}
+
+function renderDemobar() {
+  document.getElementById('demobar').innerHTML = `
+    <span class="dtag">DEMO</span>
+    <span class="seg">
+      <button class="${role === 'seller' ? 'on' : ''}" onclick="setRole('seller')">Seller view</button>
+      <button class="${role === 'buyer' ? 'on' : ''}" onclick="setRole('buyer')">Buyer view</button>
+    </span>
+    <button onclick="proposeChange()">Buyer proposes a change</button>
+    <button onclick="resetAll()">Reset</button>`;
+}
+
+function selectConvo(id) {
+  if (id !== activeId) {
+    activeId = id;
+    S.docOpen = false;   // a deal belongs to its chat — switching chats closes the deal completely
+    S.face = 'card';
+    renaming = false;
+  }
+  render();
+}
+
+function startRename() { renaming = true; rnVal = activeConvo().subject; focusRename = true; render(); }
+function rnKey(e) {
+  if (e.key === 'Escape') { renaming = false; render(); return; }
+  if (e.key !== 'Enter') return;
+  const v = e.target.value.trim();
+  if (v) activeConvo().subject = v;
+  renaming = false;
+  render();
+}
+
+function toggleDoc() { S.docOpen = !S.docOpen; S.face = 'card'; render(); }
+function openDoc() { S.docOpen = true; S.face = 'card'; render(); }
+function flipTo(face) { S.face = face; render(); }
+function setBackTab(t) { S.backTab = t; render(); }
+
+function sendKey(e) {
+  if (e.key !== 'Enter' || !e.target.value.trim()) return;
+  convoMsgs(activeConvo()).push({ who: 'out', txt: e.target.value.trim(), meta: 'You · now' });
+  e.target.value = '';
+  render();
+  const inp = document.querySelector('.composer .box input');   // the send came from here — give the caret back
+  if (inp) inp.focus();
+}
+
+render();
+</script>
+</body>
+</html>

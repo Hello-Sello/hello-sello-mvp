@@ -1368,6 +1368,10 @@ The Phase-7 execution shipped a working structural redesign (grid, cards, media 
 
 Buyer feedback: a product needs several discrete pack sizes (10g/20g/50g), picked like a T-shirt size before Add-to-basket. Decision (Muskan, for the imminent demo): ship lightweight now — extra sizes as a number array in `product.metadata.pack_sizes`, no migration — treat a real `product_pack_size` table (own pricing, CSV template, Deal Basket/Phase 17 integration) as its own planned phase. The required "Pack size (g)" field in the add-product form stays single-value/unchanged; extras are added via the card's "Edit details" dialog. *Why defer:* likely intersects Ayush's Deal Basket + per-customer pricing work — designing solo now risks rework.
 
+## 2026-07-08 — Allocate opens the Deal Card, not a Deal Room
+
+Following Ayush's Phase-7 retirement of the Deal Room/Stages container (D-15/D-17, PR #139), Sell/Allocate's order-row click now opens the real `DealCard` as a right-side panel beside the page content (mirrors Connect's `DealCardPanelHost`), not a duplicated Deal Room overlay. The old `AllocateDealRoomHost` (session 53, a deliberate duplicate of the now-retired `DealRoomOverlayHost`) is deleted; replaced by `AllocateDealCardHost`, sharing the `hs:open-deal-card` event contract and fetch shape his host uses. *Why:* the Deal Room/Stages model it depended on no longer exists, and a flip card was the right level of detail for "preview an order" anyway — no reason to rebuild the retired container.
+
 ## 2026-07-08 — Sales/Purchase calendar: one shared `DealCalendar`
 
 Grill-with-docs design lock for the deal-timeline surface (SELL.md §3 was "deferred to Ayush's Buy component"; no such component ever landed — this lane now owns it).
