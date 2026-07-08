@@ -62,7 +62,6 @@ export function PencilEditCell(props: {
       inputRef.current?.focus();
       inputRef.current?.select();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editing]);
 
   function openEdit() {
