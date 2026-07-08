@@ -57,12 +57,12 @@ export function ProductStrip({
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={mediaUrl(p.coverImagePath)}
-                  alt={p.cultivar ?? p.name}
+                  alt={p.name}
                   className="h-full w-full object-cover"
                 />
               ) : (
                 <span className="flex h-full w-full items-center justify-center px-1 text-center text-[10px] font-semibold text-brand-deep/70">
-                  {p.cultivar ?? p.name}
+                  {p.name}
                 </span>
               )}
             </span>
