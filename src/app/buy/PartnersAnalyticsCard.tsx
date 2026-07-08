@@ -145,16 +145,22 @@ const TIME_WINDOW_DAYS: Record<TimeFilter, number> = {
   "3months": 90,
 };
 
-/** True when `dateIso` falls within the last `TIME_WINDOW_DAYS[filter]` days
- *  of `now` (inclusive) — the one place the Time pill's actual restriction
- *  logic lives, so `filterAnalytics()`/`filterAnalyticsLines()` below never
- *  duplicate this date math. */
+/** True when `dateIso` is no older than `TIME_WINDOW_DAYS[filter]` days before
+ *  `now` — the one place the Time pill's actual restriction logic lives, so
+ *  `filterAnalytics()`/`filterAnalyticsLines()` below never duplicate this
+ *  date math. Deliberately open-ended on the future side (no `date <= now`
+ *  upper bound): a `deal_line_item`'s date is `delivery_date_target ?? created_at`
+ *  (analytics.ts), and a confirmed-but-not-yet-delivered order commonly carries
+ *  a future `delivery_date_target` — the same reason the KPI strip's own
+ *  `sameMonth()` check (page.tsx) doesn't exclude future-dated same-month deals
+ *  either. A closed window silently hid every such line under every Time
+ *  filter option with no way to reveal it (18-VERIFICATION.md gap). */
 function isInTimeWindow(dateIso: string, filter: TimeFilter, now: Date): boolean {
   const date = new Date(dateIso);
   if (Number.isNaN(date.getTime())) return false;
   const cutoff = new Date(now);
   cutoff.setDate(cutoff.getDate() - TIME_WINDOW_DAYS[filter]);
-  return date >= cutoff && date <= now;
+  return date >= cutoff;
 }
 
 /** `lines` narrowed to just the Time pill's window — the shared step both
