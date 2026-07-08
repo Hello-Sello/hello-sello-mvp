@@ -92,3 +92,8 @@ None - no external service configuration required.
 ---
 *Phase: 18-buy-page*
 *Completed: 2026-07-08*
+
+## Self-Check: PASSED
+
+- FOUND: src/modules/buy/csvImport.ts
+- FOUND: commit 3fdd297 (Task 1)
