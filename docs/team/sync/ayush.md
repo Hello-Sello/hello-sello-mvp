@@ -7,7 +7,7 @@
 
 **Last updated:** 2026-07-08 01:55 CEST
 **Branch:** claude/ayush/work - **PUSHED + synced with dev** (merge commit `e0a2fb7`; branch was 52 ahead / 185 behind, now up to date).
-**Status:** idle. **PR [#139](https://github.com/HelloSello/hello-sello-mvp/pull/139) (Phase-7 Connect chat + living deal card → dev) is OPEN and git-MERGEABLE.** Land it first (as your side asked, since our branch was very old), then rebase your Sell-opens-card fix on top - full detail in the note below.
+**Status:** offline (session closed). **PR [#139](https://github.com/HelloSello/hello-sello-mvp/pull/139) (Phase-7 Connect chat + living deal card → dev) is OPEN and git-MERGEABLE.** Land it first (as your side asked, since our branch was very old), then rebase your Sell-opens-card fix on top - full detail in the note below.
 **Linear issue in progress:** none
 **Shared files locked:** none (all locks cleared).
 **⚠️ I RENAMED 3 of MY migrations (NOT yours) to fix timestamp collisions with your dev migrations:** `20260617140000_confirm_deal_change_announce` → `…140050`; `20260618120000_deal_card_notes` → `…120010`; `20260618120100_confirm_deal_change_notes` → `…120110`. Yours (`auth04_revoked_status`@140000, `company_city`@120000, `list_discoverable_companies_city`@120100) are UNTOUCHED. The chain now has no duplicate timestamps - `db reset` green.
