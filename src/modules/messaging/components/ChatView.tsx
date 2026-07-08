@@ -91,6 +91,7 @@ export function ChatView() {
     const dealCardId = searchParams.get("deal");
     if (!relationshipId) return;
     let alive = true;
+    let rafId: number | null = null;
     void resolveC2cThread(relationshipId)
       .then(async (threadId) => {
         await getConversations().then((list) => {
@@ -99,15 +100,15 @@ export function ChatView() {
         if (!alive) return;
         setSelectedThreadId(threadId);
         if (!dealCardId) return;
-        // deferred to the next frame: on a fresh landing (arriving from
-        // outside /connect) the layout's DealCardPanelHost mounts its
-        // `hs:open-deal-card` listener in the SAME commit as this effect, and
-        // effects fire depth-first in JSX order - `children` (this page)
-        // before the layout's later <DealCardPanelHost/> sibling - so a
-        // synchronous dispatch here would race ahead of that listener and be
-        // missed. This mirrors the identical race already solved by the deal
-        // deep-link page (src/app/connect/deal/[dealCardId]/page.tsx, D-32).
-        requestAnimationFrame(() => {
+        // Deferred a frame, matching the deal deep-link page's dispatch
+        // (src/app/connect/deal/[dealCardId]/page.tsx, D-32) for cheap
+        // insurance against DealCardPanelHost's `hs:open-deal-card` listener
+        // effect. By this point resolveC2cThread's network round-trip has
+        // already let any same-commit mount effects settle, so - unlike that
+        // page's SYNCHRONOUS dispatch on mount - the defer likely isn't
+        // load-bearing here; kept anyway since it's free and one less thing
+        // to reason about if the timing ever changes.
+        rafId = requestAnimationFrame(() => {
           window.dispatchEvent(
             new CustomEvent("hs:open-deal-card", { detail: { dealCardId } }),
           );
@@ -116,6 +117,7 @@ export function ChatView() {
       .catch((e) => console.error("Task 8b: resolve c2c thread failed", e));
     return () => {
       alive = false;
+      if (rafId != null) cancelAnimationFrame(rafId);
     };
   }, [searchParams]);
 
