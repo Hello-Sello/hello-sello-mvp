@@ -583,6 +583,19 @@ export interface CreateDealInput {
   paymentTermsCode?: string | null;
   /** the creation note (optional at draft - D7; becomes mandatory on edits, 3.5b) */
   note?: string | null;
+  /**
+   * Who initiated the deal: 'offer' = seller-initiated (default, every existing
+   * call site), 'order' = buyer-initiated (the Product Basket buyer path). Maps
+   * to create_deal_draft's p_deal_type; sellerCompanyId()/viewerSide() already
+   * resolve buyer-vs-seller correctly for 'order'.
+   */
+  dealType?: DealType;
+  /**
+   * The chosen counterparty person on the other side (Product Basket own-company
+   * offer path). Threaded into create_deal_draft's existing p_counterparty_person_id
+   * so the picked person becomes a day-one deal owner. Null → company-addressed.
+   */
+  counterpartyPersonId?: string | null;
 }
 
 /** Result of `createDeal` - the new card id so the chat's deal area can open it. */

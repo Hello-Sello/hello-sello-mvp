@@ -12,9 +12,9 @@ import type { OrderStatusCode } from "@/modules/allocate/status";
  * `getSellerOrders()` read (Plan 4 passes the rows in as a server-fetched
  * prop — this component owns no data fetching itself).
  *
- * Row click + the ⋮ menu's View both dispatch `hs:open-deal-room` — the same
- * window-event contract `AllocateDealRoomHost` listens for, so opening an
- * order always opens the REAL Deal Room (`DealWorkspace`), never a rebuilt
+ * Row click + the ⋮ menu's View both dispatch `hs:open-deal-card` — the same
+ * window-event contract `AllocateDealCardHost` listens for, so opening an
+ * order always opens the REAL deal card (`DealCard`), never a rebuilt
  * receipt UI (T-260707-05 is a UI-only accept for Send/Print below).
  */
 
@@ -114,8 +114,8 @@ function applySortAndFilter(orders: SellerOrderRow[], sort: SortState, filter: F
   return rows;
 }
 
-function openDealRoom(dealCardId: string) {
-  window.dispatchEvent(new CustomEvent("hs:open-deal-room", { detail: { dealCardId } }));
+function openDealCard(dealCardId: string) {
+  window.dispatchEvent(new CustomEvent("hs:open-deal-card", { detail: { dealCardId } }));
 }
 
 export function OrdersTable({ orders }: { orders: SellerOrderRow[] }) {
@@ -295,7 +295,7 @@ export function OrdersTable({ orders }: { orders: SellerOrderRow[] }) {
             {rows.map((o) => (
               <tr
                 key={o.id}
-                onClick={() => openDealRoom(o.id)}
+                onClick={() => openDealCard(o.id)}
                 className="cursor-pointer border-t border-black/[0.06] transition hover:bg-brand/[0.03]"
               >
                 <td className="whitespace-nowrap px-3 py-2.5 font-mono text-[11.5px] font-semibold text-brand-deep">
@@ -336,7 +336,7 @@ export function OrdersTable({ orders }: { orders: SellerOrderRow[] }) {
                           label="View"
                           onClick={() => {
                             setOpenMenu(null);
-                            openDealRoom(o.id);
+                            openDealCard(o.id);
                           }}
                         />
                         <RowMenuButton

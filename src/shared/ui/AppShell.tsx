@@ -3,6 +3,8 @@
 import { usePathname } from "next/navigation";
 import { TopBar } from "./TopBar";
 import { IconRail } from "./IconRail";
+import { BasketProvider } from "@/modules/basket";
+import { BasketDrawer } from "@/modules/basket";
 
 // Routes rendered bare (no rail / top bar): the auth pages (nothing to navigate
 // to pre-login), `/c/<handle>` public profile pages (shown to outsiders, must
@@ -32,12 +34,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   if (bare) return <>{children}</>;
 
   return (
-    <div className="flex h-full">
-      <IconRail />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <TopBar />
-        <main className="min-h-0 flex-1 overflow-auto p-3">{children}</main>
+    <BasketProvider>
+      <div className="flex h-full">
+        <IconRail />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <TopBar />
+          <main className="min-h-0 flex-1 overflow-auto p-3">{children}</main>
+        </div>
       </div>
-    </div>
+      <BasketDrawer />
+    </BasketProvider>
   );
 }
