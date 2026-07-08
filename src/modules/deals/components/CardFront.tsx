@@ -32,28 +32,28 @@
  * proposeDealChange with the required change reason (REAS-01); the OTHER side then
  * sees the diff + DecisionBar. No new RPC.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowRight,
+  Check,
   History,
   Lock,
   MessageSquarePlus,
+  Pencil,
   Plus,
-  RefreshCcw,
-  RotateCcw,
   Trash2,
   X,
 } from "lucide-react";
-import { averageMarginOf, formatMoney, lineValueOf, sumLineValue } from "../lib/derive";
+import { averageMarginOf, formatMoney, lineValueOf } from "../lib/derive";
 import { paymentTermLabel } from "../lib/paymentTerms";
 import { getOwnCatalog, getPromotion } from "../supabase/reads";
-import { proposeDealChange, reopenTicket } from "../actions";
-import { ProductList } from "./ProductList";
+import { proposeDealChange } from "../actions";
 import { NegotiationDiff } from "./NegotiationDiff";
 import { DecisionBar } from "./DecisionBar";
 import { PromotionTrack } from "./PromotionTrack";
 import { OpenItems } from "./OpenItems";
 import type {
+  CardCreateInput,
   CatalogProduct,
   DealCardView,
   DraftLineInput,
@@ -70,6 +70,14 @@ interface EditLine {
   productName: string;
   quantity: number;
   unit: string;
+  /**
+   * How many packs of this line (chj/07-08, FRONTEND-ONLY mock). Our backend has
+   * no units count - the canonical value is per-gram (quantity x price, CARD-02).
+   * `units` is a visual multiplier on that per-gram value; it starts at 1 so the
+   * total matches real data on load, and the stepper just multiplies it in the UI.
+   * It is NOT persisted (today's demo is frontend-only).
+   */
+  units: number;
   unitPrice: number | null;
   currency: string;
   cultivar: string | null;
@@ -114,6 +122,7 @@ function seedLines(data: DealCardView): EditLine[] {
     productName: li.productName,
     quantity: li.quantity,
     unit: li.unit,
+    units: 1,
     unitPrice: li.unitPrice,
     currency: li.currency,
     cultivar: li.cultivar,
@@ -126,11 +135,27 @@ function seedLines(data: DealCardView): EditLine[] {
   }));
 }
 
-/** The edit-preview total on the canonical per-gram basis (unpriced lines excluded). */
+/** One line's total: the canonical per-gram value x the (mock) pack count. */
+function lineTotalOf(l: EditLine): number | null {
+  if (l.unitPrice == null) return null;
+  return lineValueOf(l.quantity, l.unit, l.unitPrice) * Math.max(1, l.units);
+}
+
+/* FRONTEND-ONLY mock option lists (chj/07-08) - the edit dropdowns for batch +
+   unit size. No backend yet; the current value is always merged in so it stays
+   selectable. Ported from the chat-flipdoc prototype. */
+const MOCK_BATCHES = ["24-098", "24-117", "24-201", "25-034", "25-112"];
+const MOCK_SIZES = [100, 250, 500, 1000];
+/** the current value merged into the option list, sorted, de-duped. */
+function withCurrent(options: number[], current: number): number[] {
+  return Array.from(new Set([...options, current])).sort((a, b) => a - b);
+}
+
+/** The edit-preview total: sum of the per-line totals (unpriced lines excluded). */
 function editTotalOf(lines: EditLine[]): number | null {
   const priced = lines.filter((l) => l.unitPrice != null);
   if (priced.length === 0) return null;
-  return priced.reduce((sum, l) => sum + lineValueOf(l.quantity, l.unit, l.unitPrice as number), 0);
+  return priced.reduce((sum, l) => sum + (lineTotalOf(l) ?? 0), 0);
 }
 
 /** One conditional note row (prototype `.note`). Renders nothing when the text is
@@ -189,12 +214,14 @@ export function CardFront({
   things = [],
   workspaceId,
   editMode = false,
-  onExitEdit,
   onActivity,
   onClose,
   people = [],
   viewerPersonId,
   viewerCompanyId,
+  createMode = false,
+  onCreate,
+  onExitEdit,
 }: {
   data: DealCardView;
   /** the flat Open Items list (D-15); wired from the panel host / 07-08. */
@@ -209,28 +236,31 @@ export function CardFront({
   viewerCompanyId?: string | null;
   /** whether the whole card is in inline row-edit mode (D-16); owned by DealCard. */
   editMode?: boolean;
-  /** leave edit mode after a successful "Send change". */
-  onExitEdit?: () => void;
   /** flip to the Signals & Logs back face - the title-bar "Activity" control.
    *  Owned by DealCard (which holds the flip state); the pill hides when absent. */
   onActivity?: () => void;
   /** close the whole card panel - the title-bar X (from the panel host). Absent =
    *  no X (e.g. the workspace/inline mounts that have no panel to close). */
   onClose?: () => void;
+  /**
+   * CREATE MODE (chj/07-08): the card is a NOT-yet-born draft. Edit mode is forced
+   * on, the id-bound sections (promotion / Open Items / margin) are hidden, and the
+   * footer becomes "Send deal" instead of "Send change". Pressing it hands the
+   * assembled draft up via `onCreate`; the strip runs `createDeal` + opens the born
+   * card. This replaced the old CreateDealForm.
+   */
+  createMode?: boolean;
+  onCreate?: (input: CardCreateInput) => Promise<void>;
+  /** leave edit mode - called after a successful "Send changes" so the diff shows.
+   *  Owned by DealCard (which holds editMode). */
+  onExitEdit?: () => void;
 }) {
   const { card, sellerName, buyerName, lineItems, lineMargins, viewerSide, myNote, theirNote } = data;
   const cardId = card.id;
   const isSeller = viewerSide === "seller";
-  const isClosed = card.status === "done";
-
-  // CARD-01: the value is SUMMED live from the priced lines (canonical per-gram),
-  // never the stale stored value_net. null = no priced line -> "—".
-  const net = sumLineValue(lineItems);
-  const valueNet = net == null ? "—" : formatMoney(net, card.currency);
 
   const meta = (card.metadata ?? {}) as Record<string, unknown>;
   const freeDeliveryStored = meta.free_delivery === true;
-  const paymentLabel = paymentTermLabel(card.payment_terms_code);
   const hsNumber =
     card.hs_deal_number ?? `HS-${card.id.replace(/-/g, "").slice(-4).toUpperCase()}`;
 
@@ -241,6 +271,7 @@ export function CardFront({
   /* ---- promotion (independent yellow track, D-21/D-26) ---- */
   const [promotion, setPromotion] = useState<PromotionView | null>(null);
   useEffect(() => {
+    if (createMode) return; // no born card yet - nothing to load / listen for
     let alive = true;
     const load = () => {
       void getPromotion(cardId)
@@ -259,34 +290,51 @@ export function CardFront({
       alive = false;
       window.removeEventListener("hs:deal-updated", onUpdated);
     };
-  }, [cardId]);
+  }, [cardId, createMode]);
 
   /* ---- inline edit state (D-16), seeded the moment edit mode turns on ---- */
   const [lines, setLines] = useState<EditLine[]>([]);
+  // which product row is expanded for editing (per-row edit, chj/07-08); null = none.
+  const [editRowKey, setEditRowKey] = useState<string | null>(null);
   const [editFreeDelivery, setEditFreeDelivery] = useState(false);
   const [editDueDate, setEditDueDate] = useState("");
+  // deal expiry (chj/07-08, FRONTEND-ONLY mock - no backend field yet).
+  const [editExpiry, setEditExpiry] = useState("");
   const [editPaymentCode, setEditPaymentCode] = useState("");
   const [editNote, setEditNote] = useState("");
-  const [reason, setReason] = useState("");
   const [sendBusy, setSendBusy] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
 
-  // Seed the editable fields from the current card ONLY on the edit-mode
-  // transition - React's documented "adjust state when a prop changes" render
-  // pattern (no effect, no ref). A later re-read while editing does NOT reseed, so
-  // in-flight edits are preserved; toggling edit off then on reseeds fresh.
-  const [editSeeded, setEditSeeded] = useState(false);
-  if (editMode && !editSeeded) {
-    setEditSeeded(true);
+  // Seed the working copy from the SERVER card (chj/07-08) - the "adjust state when
+  // a prop changes" render pattern (no effect, no ref). The card renders from this
+  // local copy in both read and edit; the read view mirrors the server, and edits
+  // are staged here until the ✓ commits them via proposeDealChange.
+  //
+  // Reseed key = a signature of the SERVER data (status + held-change id + line
+  // shape), NOT just the card id, so the read view follows the server after a
+  // change commits or is declined. Gated on `!editMode` so a live edit (or a
+  // realtime change mid-edit) never clobbers what the user is typing; create mode
+  // seeds once (its empty draft never changes server-side).
+  const changeSig = data.pendingChange
+    ? `${data.pendingChange.baseVersion}:${data.pendingChange.summary}`
+    : "";
+  const dataSig = createMode
+    ? "new"
+    : `${cardId}|${card.status}|${changeSig}|` +
+      lineItems
+        .map((li) => `${li.productId ?? li.productName}:${li.quantity}:${li.unit}:${li.unitPrice}`)
+        .join(",");
+  const [seededFor, setSeededFor] = useState<string | null>(null);
+  if (seededFor !== dataSig && (createMode || !editMode)) {
+    setSeededFor(dataSig);
     setLines(seedLines(data));
+    setEditRowKey(null);
     setEditFreeDelivery(freeDeliveryStored);
     setEditDueDate(card.delivery_date_target ? card.delivery_date_target.slice(0, 10) : "");
+    setEditExpiry(typeof meta.deal_expiry === "string" ? meta.deal_expiry : "");
     setEditPaymentCode(card.payment_terms_code ?? "");
     setEditNote(myNote ?? "");
-    setReason("");
     setSendError(null);
-  } else if (!editMode && editSeeded) {
-    setEditSeeded(false);
   }
 
   /* ---- catalogue for add-from-shop / swap (seller-only, D-12) ---- */
@@ -307,8 +355,15 @@ export function CardFront({
   function updateLine(key: string, patch: Partial<EditLine>) {
     setLines((cur) => cur.map((l) => (l.key === key ? { ...l, ...patch } : l)));
   }
+  // step the (mock) pack count, floored at 1.
+  function bumpUnits(key: string, delta: number) {
+    setLines((cur) =>
+      cur.map((l) => (l.key === key ? { ...l, units: Math.max(1, l.units + delta) } : l)),
+    );
+  }
   function removeLine(key: string) {
     setLines((cur) => cur.filter((l) => l.key !== key));
+    setEditRowKey((k) => (k === key ? null : k));
   }
   function lineFromCatalog(p: CatalogProduct): EditLine {
     return {
@@ -318,6 +373,7 @@ export function CardFront({
       productName: p.name,
       quantity: p.packSizeGrams ?? 1,
       unit: p.unit,
+      units: 1,
       unitPrice: p.unitPrice,
       currency: p.currency,
       cultivar: p.cultivar,
@@ -331,7 +387,11 @@ export function CardFront({
   }
   function addFromCatalog(productId: string) {
     const p = catalog.find((c) => c.id === productId);
-    if (p) setLines((cur) => [...cur, lineFromCatalog(p)]);
+    if (p) {
+      const line = lineFromCatalog(p);
+      setLines((cur) => [...cur, line]);
+      setEditRowKey(line.key); // a fresh product lands straight in row-edit
+    }
   }
   // D-12: swapping a product resets the line's other values (remove-old + add-new
   // fresh) - a NEW line with no carried lineItemId / private input.
@@ -341,8 +401,83 @@ export function CardFront({
     setLines((cur) => cur.map((l) => (l.key === key ? { ...lineFromCatalog(p), key } : l)));
   }
 
-  async function onSendChange() {
-    if (sendBusy || !reason.trim()) return;
+  // CREATE MODE (chj/07-08): "Send deal" on a not-yet-born draft. Same line
+  // mapping as onSendChange, but it hands the draft UP via onCreate (the strip
+  // runs createDeal + opens the born card) instead of proposeDealChange. No
+  // change reason - a first draft is not a negotiation.
+  async function onSendCreate() {
+    if (sendBusy || !onCreate || lines.length === 0) return;
+    setSendBusy(true);
+    setSendError(null);
+    try {
+      const payloadLines: DraftLineInput[] = lines.map((l) => ({
+        productId: l.productId,
+        lineItemId: l.lineItemId ?? undefined,
+        productName: l.productName,
+        quantity: l.quantity,
+        unit: l.unit,
+        unitPrice: l.unitPrice,
+        currency: l.currency,
+        cultivar: l.cultivar,
+        pzn: l.pzn,
+        thcPercent: l.thcPercent,
+        cbdPercent: l.cbdPercent,
+        batchId: l.batchId,
+        batchNumber: l.batchNumber,
+        ownInput: l.ownInput,
+      }));
+      await onCreate({
+        lines: payloadLines,
+        freeDelivery: editFreeDelivery,
+        dueDate: editDueDate || null,
+        paymentTermsCode: editPaymentCode || null,
+        note: editNote || null,
+      });
+      // the strip dispatches hs:open-deal-card + closes this create panel on success.
+    } catch (e) {
+      setSendError(e instanceof Error ? e.message : "Could not create the deal.");
+    } finally {
+      setSendBusy(false);
+    }
+  }
+
+  // COMMIT AN EDIT (chj/07-08): pressing the header ✓ leaves edit mode; if the
+  // SHARED payload actually changed vs the server, stage it as a negotiation change
+  // via proposeDealChange (auto reason - no permission modal, matching the direct-
+  // edit intent). The OTHER side then sees the red/green diff + DecisionBar. A no-op
+  // ✓ (nothing changed) does NOT propose, so it never creates an empty held change.
+  async function doSendChange() {
+    if (createMode || cardId === "new" || sendBusy || lines.length === 0) return;
+
+    // change detection vs the server card. `units` is a frontend-only mock and never
+    // enters the payload, so a units-only bump correctly does NOT propose.
+    const norm = (s: string | null) => (s && s.trim() ? s.trim() : null);
+    const shape = (key: string, q: number, u: string, p: number | null) =>
+      `${key}|${q}|${u}|${p ?? ""}`;
+    const workingLines = lines
+      .map((l) => shape(l.productId ?? l.productName.toLowerCase().trim(), l.quantity, l.unit, l.unitPrice))
+      .sort()
+      .join(",");
+    const serverLines = lineItems
+      .map((li) => shape(li.productId ?? li.productName.toLowerCase().trim(), li.quantity, li.unit, li.unitPrice))
+      .sort()
+      .join(",");
+    const workingTerms = [editFreeDelivery, norm(editDueDate), norm(editPaymentCode), norm(editNote)].join("|");
+    const serverTerms = [
+      freeDeliveryStored,
+      card.delivery_date_target ? card.delivery_date_target.slice(0, 10) : null,
+      norm(card.payment_terms_code ?? null),
+      norm(myNote ?? null),
+    ].join("|");
+    if (workingLines === serverLines && workingTerms === serverTerms) {
+      // nothing SHARED changed - the most common cause is a units-only bump (a local
+      // preview). Tell the user rather than failing silently.
+      setSendError(
+        "Nothing to send yet - the pack count is a local preview. Change the unit size, price or a condition first.",
+      );
+      return;
+    }
+
     setSendBusy(true);
     setSendError(null);
     try {
@@ -369,9 +504,12 @@ export function CardFront({
         dueDate: editDueDate || null,
         paymentTermsCode: editPaymentCode || null,
         note: editNote || null,
-        reason: reason.trim(),
+        reason: "Updated the deal on the card",
       });
-      window.dispatchEvent(new CustomEvent("hs:deal-updated", { detail: { dealCardId: cardId } }));
+      window.dispatchEvent(
+        new CustomEvent("hs:deal-updated", { detail: { dealCardId: cardId } }),
+      );
+      // leave edit mode so the read view + red/green diff show (the send succeeded).
       onExitEdit?.();
     } catch (e) {
       setSendError(e instanceof Error ? e.message : "Could not send the change.");
@@ -380,27 +518,29 @@ export function CardFront({
     }
   }
 
+  // When edit mode turns OFF, drop any UNSENT local edits so the read view always
+  // matches the server (= exactly what the other side sees). Sending is an explicit
+  // "Send changes" button (below); resetting seededFor re-runs the render-time reseed
+  // from the server card. This runs whether the user sent (already reseeds from the
+  // fresh data) or abandoned the edit.
+  const prevEditRef = useRef(editMode);
+  useEffect(() => {
+    const was = prevEditRef.current;
+    prevEditRef.current = editMode;
+    if (was && !editMode) setSeededFor(null);
+  }, [editMode]);
+
   /* ---- toolbar actions ---- */
-  const [reopenBusy, setReopenBusy] = useState(false);
   function onTalkAboutDeal() {
     // opens the messaging GroupPicker in deal mode (07-05) - window-event contract
     // keeps deals <-> messaging acyclic.
     window.dispatchEvent(new CustomEvent("hs:new-group", { detail: { dealCardId: cardId } }));
   }
-  async function onReopen() {
-    if (reopenBusy) return;
-    setReopenBusy(true);
-    try {
-      await reopenTicket({ dealCardId: cardId });
-      window.dispatchEvent(new CustomEvent("hs:deal-updated", { detail: { dealCardId: cardId } }));
-    } catch {
-      // surfaced by the host re-read; keep the card usable
-    } finally {
-      setReopenBusy(false);
-    }
-  }
 
+  // CARD-01: the deal value is SUMMED live from the (working-copy) priced lines x
+  // the mock pack count - reflects edits directly. null = no priced line -> "—".
   const editTotal = editTotalOf(lines);
+  const valueNet = editTotal == null ? "—" : formatMoney(editTotal, card.currency);
   const canEditConditions = isSeller; // D-13: extra conditions are seller-only
   const conditionRewards = promotion?.conditionDeltas ?? [];
 
@@ -443,16 +583,7 @@ export function CardFront({
           </button>
         )}
         <div className="flex-1" />
-        {isClosed && (
-          <button
-            type="button"
-            disabled={reopenBusy}
-            onClick={() => void onReopen()}
-            className="dc-tb-pill inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-semibold disabled:opacity-50"
-          >
-            <RotateCcw className="h-3.5 w-3.5" /> {reopenBusy ? "Opening…" : "Reopen"}
-          </button>
-        )}
+        {/* reopen moved to the single bottom decision bar ("Open a ticket", chj/07-08) */}
       </div>
 
       {/* ---- The torn white paper slip: it holds parts 2–7 (the deal facts). ---- */}
@@ -511,120 +642,251 @@ export function CardFront({
 
           {/* ---- 4 · PRODUCTS ---- */}
           <section className="border-t border-[color:var(--dc-hairline)] pb-1 pt-2">
-            {editMode ? (
-              <div className="flex flex-col gap-2">
-            {lines.map((l) => (
-              <div key={l.key} className="rounded-xl border border-ink/10 bg-white/60 p-2">
-                <div className="mb-1.5 flex items-center gap-2">
-                  {isSeller && catalog.length > 0 ? (
-                    <select
-                      value={l.productId ?? ""}
-                      onChange={(e) => swapProduct(l.key, e.target.value)}
-                      className="min-w-0 flex-1 rounded-md bg-white px-2 py-1 text-[12px] font-semibold text-ink ring-1 ring-black/10 focus:outline-none focus:ring-2 focus:ring-brand/30"
+            <div className="flex flex-col gap-2">
+                {/* ONE table for read + edit (chj/07-08). In edit mode every row gets
+                    an Edit + Delete button and the open row (editRowKey) turns editable
+                    with a checkmark; edits apply DIRECTLY (no send, no permission).
+                    Role-gated: the buyer edits unit size + units only; batch + price
+                    stay locked. */}
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse text-[11px]">
+                    <thead>
+                      <tr className="text-[8.5px] font-bold uppercase tracking-[0.08em] text-[color:var(--dc-ink-38)]">
+                        <th className="py-1 pr-1 text-left font-bold">Product</th>
+                        <th className="py-1 pr-1 text-left font-bold">Batch</th>
+                        <th className="py-1 pr-1 text-right font-bold">Unit size</th>
+                        <th className="py-1 pr-1 text-right font-bold">Units</th>
+                        <th className="py-1 pr-1 text-right font-bold">Price</th>
+                        <th className="py-1 pr-1 text-right font-bold">Total</th>
+                        {editMode && <th className="py-1" />}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {lines.map((l) => {
+                        const total = lineTotalOf(l);
+                        const totalLabel = total == null ? "—" : formatMoney(total, l.currency);
+                        const priceLabel =
+                          l.unitPrice != null
+                            ? `${formatMoney(l.unitPrice, l.currency)}/${l.unit}`
+                            : "—";
+                        if (editMode && editRowKey === l.key) {
+                          /* ---- the OPEN, editable row ---- */
+                          return (
+                            <tr key={l.key} className="border-t border-ink/10 align-middle">
+                              <td className="py-1.5 pr-1 font-semibold text-ink">
+                                {isSeller && catalog.length > 0 ? (
+                                  <select
+                                    value={l.productId ?? ""}
+                                    onChange={(e) => swapProduct(l.key, e.target.value)}
+                                    className="min-w-0 max-w-[92px] rounded-md bg-white px-1 py-1 text-[11px] font-semibold text-ink ring-1 ring-black/10 focus:outline-none focus:ring-2 focus:ring-brand/30"
+                                  >
+                                    <option value={l.productId ?? ""}>{l.productName}</option>
+                                    {catalog
+                                      .filter((c) => c.id !== l.productId)
+                                      .map((c) => (
+                                        <option key={c.id} value={c.id}>
+                                          {c.name}
+                                        </option>
+                                      ))}
+                                  </select>
+                                ) : (
+                                  <span className="block max-w-[92px] truncate">{l.productName}</span>
+                                )}
+                              </td>
+                              {/* batch: SELLER picks from the shop's lots (mock); BUYER locked */}
+                              <td className="py-1.5 pr-1">
+                                {isSeller ? (
+                                  <select
+                                    value={l.batchNumber ?? ""}
+                                    onChange={(e) =>
+                                      updateLine(l.key, { batchNumber: e.target.value || null })
+                                    }
+                                    className="rounded-md bg-white px-1 py-1 tabular-nums ring-1 ring-black/10 focus:outline-none focus:ring-2 focus:ring-brand/30"
+                                  >
+                                    <option value="">—</option>
+                                    {Array.from(
+                                      new Set([
+                                        ...(l.batchNumber ? [l.batchNumber] : []),
+                                        ...MOCK_BATCHES,
+                                      ]),
+                                    ).map((b) => (
+                                      <option key={b} value={b}>
+                                        {b}
+                                      </option>
+                                    ))}
+                                  </select>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 tabular-nums text-ink/55">
+                                    {l.batchNumber ?? "—"}
+                                    <Lock className="h-3 w-3" />
+                                  </span>
+                                )}
+                              </td>
+                              {/* unit size: ONE dropdown of pack sizes (both sides edit) */}
+                              <td className="py-1.5 pr-1 text-right">
+                                <select
+                                  value={l.quantity}
+                                  onChange={(e) =>
+                                    updateLine(l.key, { quantity: Number(e.target.value) })
+                                  }
+                                  className="rounded-md bg-white px-1 py-1 text-right tabular-nums ring-1 ring-black/10 focus:outline-none focus:ring-2 focus:ring-brand/30"
+                                >
+                                  {withCurrent(MOCK_SIZES, l.quantity).map((s) => (
+                                    <option key={s} value={s}>
+                                      {s} g
+                                    </option>
+                                  ))}
+                                </select>
+                              </td>
+                              {/* units: stepper (both sides edit) */}
+                              <td className="py-1.5 pr-1 text-right">
+                                <span className="inline-flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => bumpUnits(l.key, -1)}
+                                    aria-label="Fewer units"
+                                    className="grid h-4 w-4 place-items-center rounded-full bg-brand-soft/40 text-[11px] font-bold text-brand-deep transition hover:bg-brand-soft"
+                                  >
+                                    −
+                                  </button>
+                                  <b className="w-4 text-center tabular-nums">{l.units}</b>
+                                  <button
+                                    type="button"
+                                    onClick={() => bumpUnits(l.key, 1)}
+                                    aria-label="More units"
+                                    className="grid h-4 w-4 place-items-center rounded-full bg-brand-soft/40 text-[11px] font-bold text-brand-deep transition hover:bg-brand-soft"
+                                  >
+                                    +
+                                  </button>
+                                </span>
+                              </td>
+                              {/* price: SELLER edits; BUYER locked */}
+                              <td className="py-1.5 pr-1 text-right">
+                                {isSeller ? (
+                                  <span className="inline-flex items-center gap-0.5">
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      step="0.01"
+                                      value={l.unitPrice ?? ""}
+                                      placeholder="0"
+                                      onChange={(e) =>
+                                        updateLine(l.key, {
+                                          unitPrice:
+                                            e.target.value === "" ? null : Number(e.target.value),
+                                        })
+                                      }
+                                      className="w-12 rounded-md bg-white px-1 py-1 text-right tabular-nums ring-1 ring-black/10 focus:outline-none focus:ring-2 focus:ring-brand/30"
+                                    />
+                                    <span className="text-ink/45">€/{l.unit}</span>
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 tabular-nums text-ink/55">
+                                    <Lock className="h-3 w-3" />
+                                    {priceLabel}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-1.5 pr-1 text-right font-mono tabular-nums">
+                                {totalLabel}
+                              </td>
+                              <td className="py-1.5 text-right">
+                                <button
+                                  type="button"
+                                  onClick={() => setEditRowKey(null)}
+                                  title="Done with this row"
+                                  aria-label="Done editing this line"
+                                  className="grid h-6 w-6 place-items-center rounded-md text-brand-deep ring-1 ring-black/10 transition hover:bg-brand-soft/40"
+                                >
+                                  <Check className="h-3.5 w-3.5" />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        }
+                        /* ---- a READ row: values (+ Edit / Delete only in edit mode) ---- */
+                        return (
+                          <tr key={l.key} className="border-t border-ink/10 align-middle">
+                            <td className="py-1.5 pr-1 font-semibold text-ink">{l.productName}</td>
+                            <td className="py-1.5 pr-1 tabular-nums text-ink/70">
+                              {l.batchNumber ?? "—"}
+                            </td>
+                            <td className="py-1.5 pr-1 text-right tabular-nums text-ink/80">
+                              {l.quantity} {l.unit}
+                            </td>
+                            <td className="py-1.5 pr-1 text-right tabular-nums text-ink/80">
+                              {l.units}
+                            </td>
+                            <td className="py-1.5 pr-1 text-right tabular-nums text-ink/80">
+                              {priceLabel}
+                            </td>
+                            <td className="py-1.5 pr-1 text-right font-mono tabular-nums">
+                              {totalLabel}
+                            </td>
+                            {editMode && (
+                              <td className="py-1.5 pl-1">
+                                <div className="flex items-center justify-end gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditRowKey(l.key)}
+                                    title="Edit this line"
+                                    aria-label="Edit this line"
+                                    className="grid h-6 w-6 place-items-center rounded-md text-ink/45 ring-1 ring-black/10 transition hover:bg-black/5 hover:text-ink"
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => removeLine(l.key)}
+                                    title="Remove this product"
+                                    aria-label="Remove this product"
+                                    className="grid h-6 w-6 place-items-center rounded-md text-ink/45 ring-1 ring-black/10 transition hover:bg-black/5 hover:text-danger"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                              </td>
+                            )}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* add product - role-labeled (chj/07-08). Seller pulls from their own
+                    shop (real catalogue); the buyer sees the seller's shared shop, a
+                    frontend-only placeholder for today. */}
+                {editMode &&
+                  (isSeller ? (
+                    catalog.length > 0 && (
+                      <div className="flex items-center gap-2">
+                        <Plus className="h-3.5 w-3.5 text-brand-deep" />
+                        <select
+                          value=""
+                          onChange={(e) => e.target.value && addFromCatalog(e.target.value)}
+                          className="flex-1 rounded-md bg-white px-2 py-1 text-[12px] text-ink/70 ring-1 ring-black/10 focus:outline-none focus:ring-2 focus:ring-brand/30"
+                        >
+                          <option value="">+ Add product from your shop…</option>
+                          {catalog.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )
+                  ) : (
+                    <button
+                      type="button"
+                      disabled
+                      title="Coming soon"
+                      className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-brand/40 px-3 py-2 text-[12px] font-semibold text-brand-deep opacity-60"
                     >
-                      <option value={l.productId ?? ""}>{l.productName}</option>
-                      {catalog
-                        .filter((c) => c.id !== l.productId)
-                        .map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.name}
-                          </option>
-                        ))}
-                    </select>
-                  ) : (
-                    <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-ink">
-                      {l.productName}
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => removeLine(l.key)}
-                    title="Remove line"
-                    aria-label="Remove line"
-                    className="shrink-0 text-ink/35 transition hover:text-danger"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-                <div className="flex flex-wrap items-center gap-2 text-[12px]">
-                  {/* quantity + unit: JOINTLY editable (D-12) */}
-                  <input
-                    type="number"
-                    min={0}
-                    value={l.quantity}
-                    onChange={(e) => updateLine(l.key, { quantity: Number(e.target.value) })}
-                    className="w-20 rounded-md bg-white px-2 py-1 tabular-nums ring-1 ring-black/10 focus:outline-none focus:ring-2 focus:ring-brand/30"
-                  />
-                  <select
-                    value={l.unit}
-                    onChange={(e) => updateLine(l.key, { unit: e.target.value })}
-                    className="rounded-md bg-white px-2 py-1 ring-1 ring-black/10 focus:outline-none focus:ring-2 focus:ring-brand/30"
-                  >
-                    <option value="g">g</option>
-                    <option value="kg">kg</option>
-                    <option value="unit">unit</option>
-                  </select>
-                  {/* price: SELLER-ONLY (buyer locked, D-12) */}
-                  {isSeller ? (
-                    <input
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      value={l.unitPrice ?? ""}
-                      placeholder="price"
-                      onChange={(e) =>
-                        updateLine(l.key, {
-                          unitPrice: e.target.value === "" ? null : Number(e.target.value),
-                        })
-                      }
-                      className="w-24 rounded-md bg-white px-2 py-1 tabular-nums ring-1 ring-black/10 focus:outline-none focus:ring-2 focus:ring-brand/30"
-                    />
-                  ) : (
-                    <span className="inline-flex items-center gap-1 rounded-md bg-ink/5 px-2 py-1 tabular-nums text-ink/55">
-                      <Lock className="h-3 w-3" />
-                      {l.unitPrice != null ? `${formatMoney(l.unitPrice, l.currency)}/${l.unit}` : "—"}
-                    </span>
-                  )}
-                  {/* batch: SELLER-owned; buyer sees it locked (D-12) */}
-                  {l.batchNumber && (
-                    <span className="inline-flex items-center gap-1 rounded-md bg-ink/5 px-2 py-1 text-[11px] text-ink/55">
-                      {!isSeller && <Lock className="h-3 w-3" />}
-                      Batch {l.batchNumber}
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))}
-
-            {/* add-from-shop: SELLER-ONLY (own catalogue, D-12) */}
-            {isSeller && catalog.length > 0 && (
-              <div className="flex items-center gap-2">
-                <Plus className="h-3.5 w-3.5 text-brand-deep" />
-                <select
-                  value=""
-                  onChange={(e) => e.target.value && addFromCatalog(e.target.value)}
-                  className="flex-1 rounded-md bg-white px-2 py-1 text-[12px] text-ink/70 ring-1 ring-black/10 focus:outline-none focus:ring-2 focus:ring-brand/30"
-                >
-                  <option value="">Add from shop…</option>
-                  {catalog.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
+                      <Plus className="h-3.5 w-3.5" /> Add product from the seller&apos;s shop (shared with you)
+                    </button>
                   ))}
-                </select>
               </div>
-            )}
-
-            <div className="flex items-baseline justify-between border-t border-ink/10 px-1 pt-2 text-[12px]">
-              <span className="text-ink/50">Total (preview)</span>
-              <span className="font-mono font-semibold text-ink">
-                {editTotal == null ? "—" : formatMoney(editTotal, card.currency)}
-              </span>
-            </div>
-          </div>
-            ) : (
-              <ProductList items={lineItems} />
-            )}
 
             {/* red/green diff for a HELD change (D-18) - only outside edit mode.
                 Money is via sumLineValue in NegotiationDiff (never size×units×price). */}
@@ -668,60 +930,98 @@ export function CardFront({
           {!canEditConditions && <Lock className="h-3 w-3 text-[color:var(--dc-ink-38)]" />}
         </div>
         {editMode && canEditConditions ? (
-          <div className="grid grid-cols-3 gap-2 text-[12px]">
-            <label className="flex flex-col gap-1">
-              <span className="text-[10px] uppercase tracking-wide text-ink/45">Delivery</span>
-              <input
-                type="date"
-                value={editDueDate}
-                onChange={(e) => setEditDueDate(e.target.value)}
-                className="rounded-md bg-white px-2 py-1 ring-1 ring-black/10 focus:outline-none focus:ring-2 focus:ring-brand/30"
-              />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-[10px] uppercase tracking-wide text-ink/45">Payment</span>
-              <input
-                type="text"
-                value={editPaymentCode}
-                placeholder="e.g. net30"
-                onChange={(e) => setEditPaymentCode(e.target.value)}
-                className="rounded-md bg-white px-2 py-1 ring-1 ring-black/10 focus:outline-none focus:ring-2 focus:ring-brand/30"
-              />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-[10px] uppercase tracking-wide text-ink/45">Free delivery</span>
-              <input
-                type="checkbox"
-                checked={editFreeDelivery}
-                onChange={(e) => setEditFreeDelivery(e.target.checked)}
-                className="mt-1 h-4 w-4 accent-brand"
-              />
-            </label>
-          </div>
-        ) : (
-          <div className="grid grid-cols-3 gap-2">
-            <div className="dc-term rounded-2xl px-3 py-2.5">
-              <div className="text-[9px] font-bold uppercase tracking-[0.13em] text-[color:var(--dc-ink-38)]">
-                Delivery
-              </div>
-              <div className="mt-0.5 text-[12.5px] font-semibold tabular-nums text-[color:var(--dc-ink)]">
-                {dateLabel(card.delivery_date_target)}
+          <>
+            <div className="grid grid-cols-3 gap-2 text-[12px]">
+              <label className="flex flex-col gap-1">
+                <span className="text-[10px] uppercase tracking-wide text-ink/45">Payment</span>
+                <input
+                  type="text"
+                  value={editPaymentCode}
+                  placeholder="e.g. net30"
+                  onChange={(e) => setEditPaymentCode(e.target.value)}
+                  className="rounded-md bg-white px-2 py-1 ring-1 ring-black/10 focus:outline-none focus:ring-2 focus:ring-brand/30"
+                />
+              </label>
+              {/* deal expiry - FRONTEND-ONLY mock for today (chj/07-08) */}
+              <label className="flex flex-col gap-1">
+                <span className="text-[10px] uppercase tracking-wide text-ink/45">Deal expiry</span>
+                <input
+                  type="date"
+                  value={editExpiry}
+                  onChange={(e) => setEditExpiry(e.target.value)}
+                  className="rounded-md bg-white px-2 py-1 ring-1 ring-black/10 focus:outline-none focus:ring-2 focus:ring-brand/30"
+                />
+              </label>
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] uppercase tracking-wide text-ink/45">Delivery</span>
+                <label className="inline-flex items-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    checked={editFreeDelivery}
+                    onChange={(e) => setEditFreeDelivery(e.target.checked)}
+                    className="h-4 w-4 accent-brand"
+                  />
+                  <span className="text-[12px]">Free delivery</span>
+                </label>
+                {!editFreeDelivery && (
+                  <input
+                    type="date"
+                    value={editDueDate}
+                    onChange={(e) => setEditDueDate(e.target.value)}
+                    className="rounded-md bg-white px-2 py-1 ring-1 ring-black/10 focus:outline-none focus:ring-2 focus:ring-brand/30"
+                  />
+                )}
               </div>
             </div>
+            {/* discount + bundle: grayed for now (chj/07-08); wired in a later step */}
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                disabled
+                title="Coming soon"
+                className="cursor-not-allowed rounded-full border border-dashed border-ink/25 px-3 py-1.5 text-[11px] font-semibold text-ink/40"
+              >
+                + Discount
+              </button>
+              <button
+                type="button"
+                disabled
+                title="Coming soon"
+                className="cursor-not-allowed rounded-full border border-dashed border-ink/25 px-3 py-1.5 text-[11px] font-semibold text-ink/40"
+              >
+                + Bundle deal
+              </button>
+            </div>
+          </>
+        ) : (
+          <div className="grid grid-cols-3 gap-2">
+            {/* read view from the working copy (chj/07-08) so seller edits stick */}
             <div className="dc-term rounded-2xl px-3 py-2.5">
               <div className="text-[9px] font-bold uppercase tracking-[0.13em] text-[color:var(--dc-ink-38)]">
                 Payment
               </div>
               <div className="mt-0.5 text-[12.5px] font-semibold text-[color:var(--dc-ink)]">
-                {paymentLabel}
+                {editPaymentCode ? paymentTermLabel(editPaymentCode) : "—"}
               </div>
             </div>
             <div className="dc-term rounded-2xl px-3 py-2.5">
               <div className="text-[9px] font-bold uppercase tracking-[0.13em] text-[color:var(--dc-ink-38)]">
-                Free delivery
+                Deal expiry
               </div>
-              <div className="mt-0.5 text-[12.5px] font-semibold text-[color:var(--dc-ink)]">
-                {freeDeliveryStored ? "Yes" : "No"}
+              <div className="mt-0.5 text-[12.5px] font-semibold tabular-nums text-[color:var(--dc-ink)]">
+                {editExpiry ? dateLabel(editExpiry) : "—"}
+              </div>
+            </div>
+            <div className="dc-term rounded-2xl px-3 py-2.5">
+              <div className="text-[9px] font-bold uppercase tracking-[0.13em] text-[color:var(--dc-ink-38)]">
+                Delivery
+              </div>
+              <div className="mt-0.5 text-[12.5px] font-semibold tabular-nums text-[color:var(--dc-ink)]">
+                {editFreeDelivery
+                  ? "Free delivery"
+                  : editDueDate
+                    ? dateLabel(editDueDate)
+                    : "—"}
               </div>
             </div>
           </div>
@@ -747,30 +1047,37 @@ export function CardFront({
         </div>
       </Sec>
 
-      {/* ---- owner margin (private, "only you" - prototype .private-box) ---- */}
-      <Sec>
-        <div className="dc-private flex items-center gap-2 rounded-2xl px-3 py-2.5 text-[12px]">
-          <Lock className="h-[13px] w-[13px] text-[color:var(--dc-pink-deep)]" />
-          <span className="text-[color:var(--dc-ink-55)]">Your avg. margin</span>
-          <span className="ml-auto font-bold tabular-nums text-[color:var(--dc-pink-deep)]">
-            {marginLabel(avgMargin)}
-          </span>
-          <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-[color:var(--dc-maroon)]">
-            Only you
-          </span>
-        </div>
-      </Sec>
+      {/* ---- owner margin (private, "only you" - prototype .private-box) ----
+             hidden in create mode: the margin rolls up from born line-private rows
+             that do not exist yet. */}
+      {!createMode && (
+        <Sec>
+          <div className="dc-private flex items-center gap-2 rounded-2xl px-3 py-2.5 text-[12px]">
+            <Lock className="h-[13px] w-[13px] text-[color:var(--dc-pink-deep)]" />
+            <span className="text-[color:var(--dc-ink-55)]">Your avg. margin</span>
+            <span className="ml-auto font-bold tabular-nums text-[color:var(--dc-pink-deep)]">
+              {marginLabel(avgMargin)}
+            </span>
+            <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-[color:var(--dc-maroon)]">
+              Only you
+            </span>
+          </div>
+        </Sec>
+      )}
 
-      {/* ---- 6 · OPEN ITEMS (flat, D-15) ---- */}
-      <Sec>
-        <OpenItems
-          things={things}
-          workspaceId={workspaceId}
-          people={people}
-          viewerPersonId={viewerPersonId}
-          viewerCompanyId={viewerCompanyId ?? (isSeller ? data.sellerCompanyId : null)}
-        />
-      </Sec>
+      {/* ---- 6 · OPEN ITEMS (flat, D-15) ---- hidden in create mode: Open Items
+             live on the deal_workspace that is born with the card. */}
+      {!createMode && (
+        <Sec>
+          <OpenItems
+            things={things}
+            workspaceId={workspaceId}
+            people={people}
+            viewerPersonId={viewerPersonId}
+            viewerCompanyId={viewerCompanyId ?? (isSeller ? data.sellerCompanyId : null)}
+          />
+        </Sec>
+      )}
 
       {/* ---- 7 · NOTES (per-party, D-14) ---- */}
       {editMode ? (
@@ -789,10 +1096,11 @@ export function CardFront({
           <Note company={theirCompanyName} text={theirNote} />
         </Sec>
       ) : (
-        ((theirNote && theirNote.trim()) || (myNote && myNote.trim())) && (
+        ((theirNote && theirNote.trim()) || (editNote && editNote.trim())) && (
           <Sec>
             <Note company={theirCompanyName} text={theirNote} />
-            <Note company={myCompanyName} text={myNote} />
+            {/* own note from the working copy (chj/07-08) so the edit sticks */}
+            <Note company={myCompanyName} text={editNote} />
           </Sec>
         )
       )}
@@ -806,49 +1114,60 @@ export function CardFront({
              It only appears when there is something to act on: a proposed change
              to send (edit mode) or a held change to Negotiate / Sign. ---- */}
       {editMode ? (
-        <div className="dc-decision px-4 pb-3.5 pt-3">
-          <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--dc-ink-38)]">
-            Send this change
+        createMode ? (
+          /* CREATE MODE footer (chj/07-08): a brand-new draft is not a
+             negotiation, so there is no change-reason box. "Send deal" hands the
+             draft up + the strip births it via createDeal. */
+          <div className="dc-decision px-4 pb-3.5 pt-3">
+            <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--dc-ink-38)]">
+              Send this deal
+            </div>
+            <p className="mb-2 text-[11px] text-[color:var(--dc-ink-55)]">
+              Add your products, conditions and a note, then send it straight into the chat.
+            </p>
+            {sendError && <p className="mt-1 text-[11px] text-danger">{sendError}</p>}
+            <div className="mt-2 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => onClose?.()}
+                className="rounded-full px-3 py-1.5 text-[12px] font-semibold text-[color:var(--dc-ink-55)] ring-1 ring-black/10 transition hover:bg-black/5"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={sendBusy || lines.length === 0}
+                onClick={() => void onSendCreate()}
+                className="rounded-full bg-[color:var(--dc-pink)] px-4 py-1.5 text-[12px] font-bold text-white transition hover:bg-[color:var(--dc-pink-deep)] disabled:opacity-50"
+              >
+                {sendBusy ? "Sending…" : "Send deal"}
+              </button>
+            </div>
           </div>
-          <p className="mb-2 text-[11px] text-[color:var(--dc-ink-55)]">
-            The other side reviews it before it takes effect. Say what changed and why.
-          </p>
-          <textarea
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            rows={2}
-            placeholder="e.g. Bumped the price to match the new supplier cost…"
-            className="w-full resize-none rounded-lg bg-white px-3 py-2 text-[12px] text-[color:var(--dc-ink)] ring-1 ring-black/5 placeholder:text-[color:var(--dc-ink-38)] focus:outline-none focus:ring-2 focus:ring-brand/30"
-          />
-          {sendError && <p className="mt-1 text-[11px] text-danger">{sendError}</p>}
-          <div className="mt-2 flex items-center justify-end gap-2">
+        ) : (
+          /* EDIT MODE, existing deal (chj/07-08): ONE explicit "Send changes" button.
+             No reason box, no permission step - a single click stages the edits as a
+             negotiation change; the other side then sees a red/green diff to sign. */
+          <div className="dc-decision px-4 pb-3.5 pt-3">
+            {sendError && <p className="mb-2 text-[11px] font-medium text-danger">{sendError}</p>}
             <button
               type="button"
-              onClick={() => onExitEdit?.()}
-              className="rounded-full px-3 py-1.5 text-[12px] font-semibold text-[color:var(--dc-ink-55)] ring-1 ring-black/10 transition hover:bg-black/5"
+              disabled={sendBusy}
+              onClick={() => void doSendChange()}
+              className="w-full rounded-full bg-[color:var(--dc-pink)] px-4 py-2.5 text-[13px] font-bold text-white transition hover:bg-[color:var(--dc-pink-deep)] disabled:opacity-50"
             >
-              Cancel
+              {sendBusy ? "Sending…" : `Send changes to ${theirCompanyName}`}
             </button>
-            <button
-              type="button"
-              disabled={sendBusy || !reason.trim()}
-              onClick={() => void onSendChange()}
-              className="rounded-full bg-[color:var(--dc-pink)] px-4 py-1.5 text-[12px] font-bold text-white transition hover:bg-[color:var(--dc-pink-deep)] disabled:opacity-50"
-            >
-              {sendBusy ? "Sending…" : "Send change"}
-            </button>
-          </div>
-          {/* a subtle "editing" affordance echo so the mode is unmistakable */}
-          <div className="mt-3 flex items-center justify-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-[color:var(--dc-pink-deep)]">
-            <RefreshCcw className="h-3 w-3" /> Editing - changes are proposed, not saved directly
-          </div>
-        </div>
-      ) : (
-        data.pendingChange && (
-          <div className="dc-decision px-4 pb-3.5 pt-3.5">
-            <DecisionBar data={data} />
+            <p className="mt-1.5 text-center text-[10.5px] text-[color:var(--dc-ink-38)]">
+              The other side sees a red/green diff and signs. Pack count is a preview only.
+            </p>
           </div>
         )
+      ) : (
+        /* READ MODE (chj/07-08): the single bottom decision bar owns the whole
+           lifecycle - Sign / Negotiate / Decline (draft), Upload invoice (seller,
+           signed), Open a ticket (done). It decides what to show from the status. */
+        <DecisionBar data={data} workspaceId={workspaceId} />
       )}
     </div>
   );

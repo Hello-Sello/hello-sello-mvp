@@ -6,11 +6,56 @@ import {
   getWorkspace,
   getThings,
   getDealPeople,
+  createDeal,
   DealCard,
   type DealCardView,
+  type CardCreateInput,
   type MemberView,
   type ThingView,
 } from "@/modules/deals";
+
+/**
+ * A not-yet-born draft view for CREATE mode (chj/07-08). The card renders it
+ * empty, seller = me, buyer = the recipient DealPin passed. `id: "new"` never
+ * reaches the DB - "Send deal" calls createDeal, which mints the real card. The
+ * cast fills the DealCard DB columns the create front never reads (Muskan's
+ * localized-cast pattern); the create card hides the id-bound sections.
+ */
+function emptyDraftView(buyerName: string): DealCardView {
+  return {
+    card: {
+      id: "new",
+      status: "draft",
+      currency: "EUR",
+      payment_terms_code: null,
+      delivery_date_target: null,
+      metadata: {},
+      hs_deal_number: null,
+    } as unknown as DealCardView["card"],
+    sellerName: "You",
+    buyerName,
+    sellerCompanyId: "",
+    lineItems: [],
+    lineMargins: [],
+    signals: [],
+    log: [],
+    viewerSide: "seller",
+    confirmations: [],
+    pendingChange: null,
+    myNote: null,
+    theirNote: null,
+  };
+}
+
+/**
+ * `onEdit` on DealCard is only a truthy "editing allowed" gate - its pencil toggles
+ * inline edit itself and never calls this. So the panel passes this stable noop to
+ * mean "editable" (vs `undefined` = locked while a change is held). Both parties may
+ * edit a live deal; editing IS Negotiate (Send change -> proposeDealChange).
+ */
+const ALLOW_EDIT = () => {
+  /* gate only - DealCard.onEdit is a truthiness flag, never called */
+};
 
 /**
  * Deal card panel host (Phase 7, D-31/D-32) - the ROUTE-LEVEL composition root
@@ -49,15 +94,80 @@ export function DealCardPanelHost() {
   const [viewerPersonId, setViewerPersonId] = useState<string | null>(null);
   const [viewerCompanyId, setViewerCompanyId] = useState<string | null>(null);
 
+  // CREATE MODE (chj/07-08): a not-yet-born draft opened in the SAME 50/50 panel as
+  // a real card. DealPin (which knows the relationship) fires `hs:create-deal-card`
+  // with the recipient; we render an empty createMode card here, and on "Send deal"
+  // mint it + swap to the born card. Null = not creating.
+  const [createReq, setCreateReq] = useState<{
+    relationshipId: string;
+    buyerName: string;
+  } | null>(null);
+
+  // bumped on `hs:deal-updated` to re-run the card fetch (chj/07-08). This is how
+  // the open panel refreshes LIVE after a change is proposed / signed / declined -
+  // same-browser (DecisionBar + CardFront dispatch it) AND cross-browser (DealPin's
+  // realtime handler re-broadcasts it), so the red/green diff appears on both sides.
+  const [reloadKey, setReloadKey] = useState(0);
+
   // listen for the open-card event (fired by DealPin's chip + RecordTabs' button)
   useEffect(() => {
     function onOpen(e: Event) {
       const id = (e as CustomEvent<{ dealCardId?: string }>).detail?.dealCardId;
-      if (id) setOpenCardId(id);
+      if (id) {
+        setCreateReq(null); // opening a real card cancels any pending create
+        setOpenCardId(id);
+      }
     }
     window.addEventListener("hs:open-deal-card", onOpen);
     return () => window.removeEventListener("hs:open-deal-card", onOpen);
   }, []);
+
+  // listen for the create-card event (fired by DealPin's "+ Create a deal" door,
+  // which carries the relationship + recipient). Opens the create panel; a live
+  // card that was open is closed so the create card takes the slot.
+  useEffect(() => {
+    function onCreate(e: Event) {
+      const d = (e as CustomEvent<{ relationshipId?: string; buyerName?: string }>)
+        .detail;
+      if (d?.relationshipId) {
+        setOpenCardId(null);
+        setCreateReq({
+          relationshipId: d.relationshipId,
+          buyerName: d.buyerName ?? "your contact",
+        });
+      }
+    }
+    window.addEventListener("hs:create-deal-card", onCreate);
+    return () => window.removeEventListener("hs:create-deal-card", onCreate);
+  }, []);
+
+  // listen for `hs:deal-updated` and re-fetch the open card (chj/07-08). A change
+  // to any OTHER card is ignored (the id must match, or carry no id). This is the
+  // panel's live-refresh signal - see reloadKey above.
+  useEffect(() => {
+    function onUpdated(e: Event) {
+      const id = (e as CustomEvent<{ dealCardId?: string }>).detail?.dealCardId;
+      if (!id || id === openCardId) setReloadKey((k) => k + 1);
+    }
+    window.addEventListener("hs:deal-updated", onUpdated);
+    return () => window.removeEventListener("hs:deal-updated", onUpdated);
+  }, [openCardId]);
+
+  // CREATE (chj/07-08): the create card handed up the assembled draft. Mint it via
+  // createDeal (direct birth, no proposal/accept), tell siblings it changed, then
+  // swap the create panel for the born card in the SAME slot.
+  async function handleCreate(input: CardCreateInput) {
+    if (!createReq) return;
+    const { dealCardId } = await createDeal({
+      relationshipId: createReq.relationshipId,
+      ...input,
+    });
+    window.dispatchEvent(
+      new CustomEvent("hs:deal-updated", { detail: { dealCardId } }),
+    );
+    setCreateReq(null);
+    setOpenCardId(dealCardId);
+  }
 
   // fetch the card view when a deal is opened (RLS-scoped; same fetch DealPin uses).
   // ALSO load the workspace + its Things so Open Items renders the real list
@@ -104,30 +214,37 @@ export function DealCardPanelHost() {
     return () => {
       alive = false;
     };
-  }, [openCardId]);
+    // reloadKey re-runs this on hs:deal-updated so the panel refreshes live.
+  }, [openCardId, reloadKey]);
 
-  // D-31 - tell the rail to collapse while the panel is open, expand on close.
+  // D-31 - tell the rail to collapse while the panel is open (create or real),
+  // expand on close.
   useEffect(() => {
     window.dispatchEvent(
-      new CustomEvent("hs:deal-card-panel", { detail: { open: !!openCardId } }),
+      new CustomEvent("hs:deal-card-panel", {
+        detail: { open: !!openCardId || !!createReq },
+      }),
     );
-  }, [openCardId]);
+  }, [openCardId, createReq]);
 
-  // close on Escape - the keyboard mirror of the backdrop click
+  // close on Escape - the keyboard mirror of the backdrop click (either panel)
   useEffect(() => {
-    if (!openCardId) return;
+    if (!openCardId && !createReq) return;
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpenCardId(null);
+      if (e.key === "Escape") {
+        setOpenCardId(null);
+        setCreateReq(null);
+      }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [openCardId]);
+  }, [openCardId, createReq]);
 
   function closePanel() {
     setOpenCardId(null);
   }
 
-  if (!openCardId) return null;
+  if (!openCardId && !createReq) return null;
 
   return (
     // D-32 (revised): an IN-FLOW 50/50 panel, NOT a blurred overlay. As a flex
@@ -142,7 +259,16 @@ export function DealCardPanelHost() {
       {/* No separate top bar - the close X now lives ON the card's own title bar
           (passed as onClose), so the panel spends no extra row on it. */}
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
-        {data ? (
+        {createReq ? (
+          // CREATE MODE: an empty draft card. "Send deal" mints it via handleCreate,
+          // which then swaps this panel for the born card.
+          <DealCard
+            data={emptyDraftView(createReq.buyerName)}
+            createMode
+            onClose={() => setCreateReq(null)}
+            onCreate={handleCreate}
+          />
+        ) : data ? (
           <DealCard
             key={openCardId}
             data={data}
@@ -152,6 +278,12 @@ export function DealCardPanelHost() {
             viewerPersonId={viewerPersonId}
             viewerCompanyId={viewerCompanyId}
             onClose={closePanel}
+            // Editing is allowed ONLY on a live draft with no held change (chj/07-08).
+            // Once signed (confirmed), declined (cancelled), or executed (done) the
+            // card is locked; while a change is held the responder uses the DecisionBar.
+            onEdit={
+              data.card.status === "draft" && !data.pendingChange ? ALLOW_EDIT : undefined
+            }
           />
         ) : (
           <div className="flex h-full items-center justify-center text-sm text-ink/40">

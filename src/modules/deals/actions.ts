@@ -858,6 +858,144 @@ export async function withdrawDealChange({
   });
 }
 
+/**
+ * Decline a deal (chj/07-08) - the "end it" action from the on-card DecisionBar.
+ * A decline is a CLOSE, not a delete (the user's lifecycle rule): the card flips
+ * to `cancelled` and reuses the existing closed-deal handling (the lock, no more
+ * editing). It is distinct from Negotiate (`confirmDealChange({decision:'decline'})`,
+ * which only discards a held change and keeps bargaining).
+ *
+ * Guardrails: the caller's company is derived from the SESSION and must be a party
+ * to the deal's relationship (no trusted company id). Idempotent - an already-closed
+ * (`cancelled`/`done`) deal returns without a second write. Any held pending change
+ * is left in place; the `cancelled` status hides the DecisionBar, so it cannot be
+ * acted on.
+ */
+export async function declineDeal(args: { dealCardId: string }): Promise<void> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("declineDeal: no authenticated user");
+
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) throw new Error("declineDeal: no company in session");
+
+  const { data: card, error: cardErr } = await supabase
+    .from("deal_card")
+    .select("id, status, version, relationship_id")
+    .eq("id", args.dealCardId)
+    .single();
+  if (cardErr) throw cardErr;
+
+  // membership guard: the caller's company must be a party to this deal.
+  const { data: rel, error: relErr } = await supabase
+    .from("relationship")
+    .select("company_a_id, company_b_id")
+    .eq("id", card.relationship_id)
+    .single();
+  if (relErr) throw relErr;
+  if (companyId !== rel.company_a_id && companyId !== rel.company_b_id) {
+    throw new Error("Only a party to this deal can decline it.");
+  }
+
+  // idempotent: an already-closed deal does not get a second write.
+  if (card.status === "cancelled" || card.status === "done") return;
+
+  await updateStatus(supabase, card.id, "cancelled");
+  await logLine(
+    supabase,
+    card.id,
+    card.version,
+    user.id,
+    "Deal declined - the deal is closed.",
+  );
+  await writeAudit({
+    actorType: "user",
+    action: "deal.declined",
+    contentType: "deal_card",
+    contentId: card.id,
+    actorPersonId: user.id,
+  });
+}
+
+/**
+ * Sign a deal (chj/07-08) - the single-sign accept. The party who did NOT send the
+ * latest version signs; NO note, NO reason (the user's flow: sign is a direct
+ * button). If a change is held, it is committed first (confirm_deal_change accept,
+ * auto reason) so the signed version is the proposed one; then the card flips to
+ * `confirmed` - the AGREED state that locks editing and lets the SELLER upload the
+ * invoice (finalizeDeal's gate).
+ *
+ * Guardrails: the caller's company comes from the SESSION and must be a party;
+ * idempotent (a non-draft deal returns unchanged). This flips the status DIRECTLY
+ * and does NOT write `deal_confirmation`, keeping confirm_deal_change out of the
+ * seal gate (the prior regression: confirm writes leaked into that gate).
+ */
+export async function signDeal({
+  dealCardId,
+}: {
+  dealCardId: string;
+}): Promise<{ cardStatus: DealCardStatus }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("signDeal: no authenticated user");
+
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) throw new Error("signDeal: no company in session");
+
+  const { data: card, error: cardErr } = await supabase
+    .from("deal_card")
+    .select("id, status, version, relationship_id")
+    .eq("id", dealCardId)
+    .single();
+  if (cardErr) throw cardErr;
+
+  const { data: rel, error: relErr } = await supabase
+    .from("relationship")
+    .select("company_a_id, company_b_id")
+    .eq("id", card.relationship_id)
+    .single();
+  if (relErr) throw relErr;
+  if (companyId !== rel.company_a_id && companyId !== rel.company_b_id) {
+    throw new Error("Only a party to this deal can sign it.");
+  }
+
+  // idempotent: only a live draft can be signed.
+  if (card.status !== "draft") return { cardStatus: card.status as DealCardStatus };
+
+  // if a change is held, COMMIT it first so the signed version is the proposed one.
+  // confirm_deal_change (accept) is responder-only + enforces that in the RPC; the
+  // reason is auto (no note UI). Per D-20 the proposer's yes is implicit, so a
+  // responder accept commits the change (never a still-waiting first accept).
+  const { data: held } = await supabase
+    .from("deal_pending_change" as never)
+    .select("deal_card_id")
+    .eq("deal_card_id", dealCardId)
+    .maybeSingle();
+  if (held) {
+    const { error: cErr } = await supabase.rpc("confirm_deal_change" as never, {
+      p_deal_card_id: dealCardId,
+      p_decision: "accept",
+      p_reason: "Signed the deal",
+    } as never);
+    if (cErr) throw new Error((cErr as { message: string }).message);
+  }
+
+  await updateStatus(supabase, dealCardId, "confirmed");
+  await logLine(supabase, dealCardId, card.version, user.id, "Deal signed.");
+  await writeAudit({
+    actorType: "user",
+    action: "deal.confirmed",
+    contentType: "deal_card",
+    contentId: dealCardId,
+    actorPersonId: user.id,
+  });
+  return { cardStatus: "confirmed" };
+}
+
 /* -------------------------------------------------------------------------- */
 /* Promotion (07-06, PROMO-01) - the INDEPENDENT yellow track.                 */
 /*                                                                            */
