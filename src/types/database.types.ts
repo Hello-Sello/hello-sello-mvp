@@ -3339,6 +3339,51 @@ export type Database = {
           },
         ]
       }
+      product_basket_line: {
+        Row: {
+          created_at: string
+          id: string
+          owner_person_id: string
+          pack_count: number
+          pack_size_grams: number | null
+          product_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          owner_person_id: string
+          pack_count?: number
+          pack_size_grams?: number | null
+          product_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          owner_person_id?: string
+          pack_count?: number
+          pack_size_grams?: number | null
+          product_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_basket_line_owner_person_id_fkey"
+            columns: ["owner_person_id"]
+            isOneToOne: false
+            referencedRelation: "person"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_basket_line_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "product"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       product_batch: {
         Row: {
           batch_number: string

@@ -59,6 +59,8 @@ export {
 
 export { promotionSavings } from "./lib/promotion";
 
+export { dealChatUrl } from "./lib/dealChatUrl";
+
 export {
   getDealCard,
   getCurrentDealCardId,

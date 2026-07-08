@@ -5,7 +5,7 @@ import { OrdersTable } from "./OrdersTable";
 import { BatchesSection } from "./BatchesSection";
 import { SalesCalendarStub } from "./SalesCalendarStub";
 import { JumpStrip } from "./JumpStrip";
-import { AllocateDealRoomHost } from "./AllocateDealRoomHost";
+import { AllocateDealCardHost } from "./AllocateDealCardHost";
 
 /**
  * Allocate (Sell surface, DEV-76/DEV-157/DEV-151) — the seller's one
@@ -45,13 +45,11 @@ export default async function SellPage() {
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6 p-4">
       <div>
-        <h1 className="text-xl font-semibold text-ink">Allocate</h1>
-        <p className="mt-1 text-sm text-ink-muted">
-          Decide, substitute, and confirm supply against your open orders.
-        </p>
+        <h1 className="text-2xl font-bold text-ink">Allocate</h1>
+        <div className="mt-1">
+          <JumpStrip />
+        </div>
       </div>
-
-      <JumpStrip />
 
       <section id="orders-section">
         <OrdersTable orders={orders} />
@@ -65,7 +63,7 @@ export default async function SellPage() {
         <SalesCalendarStub />
       </section>
 
-      <AllocateDealRoomHost />
+      <AllocateDealCardHost />
     </div>
   );
 }

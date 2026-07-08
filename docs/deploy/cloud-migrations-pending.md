@@ -11,6 +11,18 @@
 
 ---
 
+## ✅ STATUS 2026-07-07 — cloud == local, tip `20260707090000`; NOTHING below is migration-pending
+
+Every migration through `20260707090000` is applied to cloud. The most recent batch (**9 migrations** —
+DEV-99 taxonomy + Phase 7 Present + Phase 13 lifecycle + Allocate) was pushed **2026-07-07** (0 errors,
+`get_advisors(security)` = 0 ERROR); see the top of **APPLIED TO CLOUD**. All "PENDING" sections below
+are **historical / superseded** — kept for their apply notes, not because anything is outstanding.
+The ONLY genuinely-outstanding cloud work is **non-migration**: deploy edge fns `send-lifecycle-email` +
+`erase-expired-accounts`, set `RESEND_API_KEY`, and (optional) unschedule the harmless
+`erase-expired-accounts` 3am cron. Details in the 2026-07-07 APPLIED entry.
+
+---
+
 ## ⚠️ READ FIRST (2026-06-20, Muskan) — cloud history has DIVERGED; a naive `db push` FAILS
 
 A `supabase db push --dry-run` on 2026-06-20 **failed**: *"Remote migration versions not found
@@ -90,7 +102,7 @@ in the correct final state; the intermediate version is never used mid-push.
 
 ## PENDING (local only — NOT on cloud yet)
 
-### 2026-07-07 (Muskan) — Allocate/Sell schema (DEV-76) — NOT on cloud
+### 2026-07-07 (Muskan) — Allocate/Sell schema (DEV-76) — ✅ APPLIED 2026-07-07 (see APPLIED TO CLOUD)
 
 | # | Migration | What it does |
 |---|-----------|---------------|
@@ -101,7 +113,7 @@ in the correct final state; the intermediate version is never used mid-push.
 - **⚠️ Known residual after push:** [DEV-159](https://linear.app/hellosello/issue/DEV-159) (High) — a buyer can forge allocation state via a direct table write (symmetric base RLS gap, same family as DEV-88). Non-blocking for a no-real-users demo; fix is Ayush's base-RLS lane.
 - **Push:** sorts last in the current pending set (`20260707090000` — after Phase 13's `20260706090xxx` and Phase 7's `20260706120000`); a single sequential `supabase db push` handles it with everything else, in timestamp order.
 
-### 2026-07-06 (Muskan) — Phase 7 Present fidelity + card-front batch schema — NOT on cloud
+### 2026-07-06 (Muskan) — Phase 7 Present fidelity + card-front batch schema — ✅ APPLIED 2026-07-07 (see APPLIED TO CLOUD)
 
 | # | Migration | What it does |
 |---|-----------|--------------|
@@ -112,7 +124,7 @@ in the correct final state; the intermediate version is never used mid-push.
 - **Migration before code** — `shop.ts` reads `product.terpene_percent`; shipping the app without this column errors the Present read on cloud.
 - **Push:** a clean single `supabase db push` from a LINKED machine, in timestamp order (`20260706120000` sorts last). Coordinate with Ayush if his lane added migrations in the meantime.
 
-### 2026-07-05 (Muskan) — DEV-99 #3 business-category taxonomy — NOT on cloud
+### 2026-07-05 (Muskan) — DEV-99 #3 business-category taxonomy — ✅ APPLIED 2026-07-07 (see APPLIED TO CLOUD)
 
 | # | Migration | What it does |
 |---|-----------|--------------|
@@ -283,7 +295,7 @@ Cautions for the cloud apply:
 
 ---
 
-### 2026-07-06 (Muskan) — Phase 13 Settings + Lifecycle Emails (SET-02/03/04) — NOT on cloud
+### 2026-07-06 (Muskan) — Phase 13 Settings + Lifecycle Emails (SET-02/03/04) — ✅ MIGRATIONS APPLIED 2026-07-07 (edge fns + RESEND key still pending — see APPLIED TO CLOUD)
 
 Local-first: a clean `supabase db reset` replays all three in order and stays green; the three SQL
 invariants pass (`account_lifecycle`, `erasure_chain`, `notification_pref_rls`); `database.types.ts`
@@ -315,6 +327,33 @@ entry only; nothing below has been run against cloud.**
 ---
 
 ## APPLIED TO CLOUD
+
+### 2026-07-07 — Present + Allocate + Phase 13 deploy (9 migrations)
+Clean sequential `supabase db push` against `byipusuthdlskdxoexkt` — **no reconciliation needed**
+(dry-run clean; cloud was contiguous at `20260622110000`). **9 applied, 0 errors:**
+- DEV-99 taxonomy: `business_category_taxonomy`
+- Phase 7 Present: `product_location`, `product_media`, `shop_media_allow_pdf`, `product_terpene_percent`
+- Phase 13 lifecycle: `account_lifecycle`, `notification_preference`, `erasure_cron`
+- Allocate/Sell: `allocate_schema`
+
+Verified on cloud (read-only SQL): all target objects present — `product.location` + `terpene_percent`,
+`product_media`, `business_category` + `company_business_category`, `notification_preference`,
+`company_type_assignment` remap, allocate lookups, the `erase-expired-accounts` cron row.
+`get_advisors(security)` = **0 ERROR** (117 WARN, all pre-existing / by-design SECURITY DEFINER RPCs; my
+9 added 8 of the same benign anon/authenticated-executable-definer pattern). Aurora's
+`cultivator`→`eu_gmp_cultivator` remap intact (valid FK, **0 orphaned** type assignments, 0 legacy
+`cultivator` rows). Cloud tip now `20260707090000` — **local == cloud**. Shipped via **PR #137 (dev→main)**;
+production Vercel deploy READY (`hello-sello-mvp.vercel.app`); product-add smoke-tested live (a product
+persisted with its `location`).
+
+**⚠️ STILL PENDING (non-migration — the erasure/email async half of Phase 13):**
+- `supabase functions deploy send-lifecycle-email` + `supabase functions deploy erase-expired-accounts` — **NOT deployed.**
+- `supabase secrets set RESEND_API_KEY=…` — **NOT set.**
+- Consequence: `erasure_cron` scheduled the nightly `erase-expired-accounts` job → it **fires at 3am and
+  errors harmlessly** (edge fn missing / no key). Deploy the fns + secret to activate lifecycle emails +
+  the day-30 sweep, or `select cron.unschedule('erase-expired-accounts');` to silence it. Emails won't send until then.
+- **Security residual [DEV-159]** (Linear, High): a buyer can forge allocation state via a direct table
+  write (symmetric base RLS, DEV-88 family). Non-blocking (seed data only); real fix = Ayush's base-RLS lane.
 
 ### 2026-06-23 — Phase 10 + 11 + 12 + Deal-Room batch (13 migrations)
 Clean sequential `supabase db push` against `byipusuthdlskdxoexkt` — **no reconciliation

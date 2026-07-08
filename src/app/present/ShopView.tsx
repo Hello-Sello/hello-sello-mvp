@@ -2,11 +2,15 @@
 
 /**
  * The seller storefront, with an owner edit mode. /present is always the caller's
- * OWN shop (getMyShop), so "Manage shop" is always available here; the visitor
- * view (/present/[companyId]) comes later. Products render as the redesigned
- * square 4-up grid, grouped under a per-location divider header, with a location
- * dropdown that re-contexts the grid to one location. The card itself is the
- * reusable ProductCard from the catalog module.
+ * OWN shop (getMyShop), so "Manage shop" is always available here (viewerCanManage
+ * defaults true); the visitor view (/present/[companyId], Task 11) passes
+ * viewerCanManage={false} to render the same grid + info boxes with every
+ * owner-only control (Manage shop, SaveBar, add/assign products, banner/logo
+ * edit) turned off. Products render as the redesigned square 4-up grid, grouped
+ * under a per-location divider header, with a location dropdown that re-contexts
+ * the grid to one location. The card itself is the reusable ProductCard from the
+ * catalog module — its Add-to-basket button is NOT owner-only chrome, it works
+ * for every viewer via handleAddToBasket below.
  *
  * The shop CHROME (07-05 + F-01) is fully in-place editable behind ONE "Manage
  * shop" entry: the whole surface takes a calm grey wash (data-edit), PresentBanner
@@ -36,6 +40,7 @@ import {
 import type { ProductFieldPatch, ProductBatchPatch } from "@/modules/catalog/manage";
 import { saveCompanyProfile } from "@/app/account/actions";
 import { createClient } from "@/shared/db/client";
+import { addToBasket, useBasket } from "@/modules/basket";
 import { AddProductsDrawer } from "./AddProductsDrawer";
 import { AssignProductsDialog } from "./AssignProductsDialog";
 import { PresentBanner } from "./PresentBanner";
@@ -180,9 +185,18 @@ const emptyDraft = (): ProductDraft => ({
   fields: {}, batchInserts: [], batchEdits: {}, batchDeletes: [],
 });
 
-export function ShopView({ shop, canEditBranding = false }: { shop: Shop; canEditBranding?: boolean }) {
+export function ShopView({ shop, canEditBranding = false, viewerCanManage = true }: {
+  shop: Shop;
+  canEditBranding?: boolean;
+  /** Whether the viewer may manage this shop — enter edit mode, add/assign
+   *  products, edit the banner/logo. /present is always the caller's OWN shop
+   *  (default true); the visitor route (/present/[companyId]) passes false so a
+   *  buyer sees the product grid + info boxes with none of the owner chrome. */
+  viewerCanManage?: boolean;
+}) {
   const { company, products } = shop;
   const router = useRouter();
+  const { refresh: refreshBasket } = useBasket();
   const [editing, setEditing] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   // Present mode (D-07): an in-app UI state that hides the app chrome. NEVER the
@@ -498,13 +512,41 @@ export function ShopView({ shop, canEditBranding = false }: { shop: Shop; canEdi
     setProductOrder((prev) => ({ ...prev, [location]: next }));
   }
 
+  // ProductCard reports the selected pack-size INDEX (not grams) — resolve it
+  // against the EXACT SAME bubble list ProductCard's own packLabels() renders
+  // (see components/ProductCard.tsx), so the index lines up 1:1 with what the
+  // buyer actually clicked:
+  //   1. the product's own pack_size_grams + any extra v0 sizes (packSizes),
+  //      deduped + sorted ascending — these are the plain "Ng" bubbles;
+  //   2. THEN, only when the pricelist priced a bundle tier, one more bubble
+  //      appended LAST for bundle_threshold_grams (the "Ng+" bubble) — a
+  //      PackSizeSelector option like any other, fully selectable.
+  // Skipping step 2 here made a bundle-tier pick silently resolve to the base
+  // pack size instead of the threshold the buyer chose (fixed after review).
+  // Then persist the line and refresh the shared basket context (TopBar badge +
+  // drawer). Available to every viewer, owner or buyer — adding to basket is not
+  // owner-only chrome.
+  async function handleAddToBasket(productId: string, packCount: number, packIndex: number) {
+    const product = products.find((p) => p.id === productId);
+    const numericSizes = [...new Set([
+      ...(product?.packSizes ?? []),
+      ...(product?.pack_size_grams != null ? [product.pack_size_grams] : []),
+    ])].sort((a, b) => a - b);
+    const sizes = product?.bundle_threshold_grams != null
+      ? [...numericSizes, product.bundle_threshold_grams]
+      : numericSizes;
+    const packSizeGrams = sizes[packIndex] ?? product?.pack_size_grams ?? null;
+    await addToBasket(productId, packCount, packSizeGrams);
+    await refreshBasket();
+  }
+
   const surface = (
     <>
       {/* Sticky pulsing Save appears only while editing; it also carries "+ Add
           products" (a manage-shop action). "Manage shop" / "Present mode" live in
           the banner below. (Never both edit and present at once — enterPresent()
           clears edit mode.) */}
-      {editing && (
+      {viewerCanManage && editing && (
         <SaveBar dirty={dirty} busy={busy} error={error} onSave={save} onDiscard={discard} onAddProducts={() => setDrawerOpen(true)} />
       )}
 
@@ -519,8 +561,8 @@ export function ShopView({ shop, canEditBranding = false }: { shop: Shop; canEdi
         onNameChange={(v) => updateEdit("name", v)}
         onTaglineChange={(v) => updateEdit("tagline", v)}
         onPickCover={(f) => { setCoverFile(f); setDirty(true); }}
-        onManage={enterEdit}
-        canEditLogo={canEditBranding}
+        onManage={viewerCanManage ? enterEdit : () => {}}
+        canEditLogo={viewerCanManage && canEditBranding}
         onPickLogo={(f) => { setLogoFile(f); setDirty(true); }}
         onPresent={enterPresent}
       />
@@ -533,7 +575,7 @@ export function ShopView({ shop, canEditBranding = false }: { shop: Shop; canEdi
       />
 
       {products.length === 0 ? (
-        <EmptyShop onAdd={() => setDrawerOpen(true)} />
+        <EmptyShop onAdd={() => setDrawerOpen(true)} canManage={viewerCanManage} />
       ) : (
         <>
           {/* Location filter + the two edit-mode shop controls. "+ Add shop" stages
@@ -541,7 +583,7 @@ export function ShopView({ shop, canEditBranding = false }: { shop: Shop; canEdi
               dialog (fast placement without scrolling the live grid). */}
           <div className="flex flex-wrap items-center gap-2">
             <LocationTabs products={products} active={loc} onSelect={setLoc} />
-            {editing && (
+            {viewerCanManage && editing && (
               <>
                 <AddShopButton onAdd={addLocation} />
                 <button
@@ -578,12 +620,13 @@ export function ShopView({ shop, canEditBranding = false }: { shop: Shop; canEdi
                   onBatchChange={changeBatch}
                   onBatchRemove={removeBatch}
                   onReorder={(draggedId, targetId) => reorderProduct(g.location, draggedId, targetId)}
+                  onAddToBasket={handleAddToBasket}
                 />
               ))}
               {/* "+ Add product" tile — edit mode only. Opens the EXISTING manual-add
                   drawer (one validation authority); it does not create a product
                   itself. New products land unassigned + draggable into this group. */}
-              {editing && (
+              {viewerCanManage && editing && (
                 <AddProductTile
                   location={g.location === UNASSIGNED ? null : g.location}
                   onClick={() => setDrawerOpen(true)}
@@ -1139,7 +1182,7 @@ function AddShopButton({ onAdd }: { onAdd: (label: string) => void }) {
   );
 }
 
-function EmptyShop({ onAdd }: { onAdd: () => void }) {
+function EmptyShop({ onAdd, canManage }: { onAdd: () => void; canManage: boolean }) {
   return (
     <div className="glass mt-2 flex flex-1 flex-col items-center justify-center rounded-3xl p-12 text-center">
       <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-brand-soft/50 text-brand-deep">
@@ -1147,22 +1190,26 @@ function EmptyShop({ onAdd }: { onAdd: () => void }) {
       </div>
       <h2 className="text-xl font-bold text-ink">Your shop is empty</h2>
       <p className="mt-1 max-w-sm text-sm text-ink/55">
-        Upload your product list as a CSV, or add a product manually. Then attach photos and your shop goes live.
+        {canManage
+          ? "Upload your product list as a CSV, or add a product manually. Then attach photos and your shop goes live."
+          : "This shop has no products yet."}
       </p>
-      <div className="mt-5 flex gap-2">
-        <button
-          onClick={onAdd}
-          className="flex items-center gap-1.5 rounded-full bg-brand px-5 py-2.5 text-sm font-bold text-white hover:bg-brand-deep"
-        >
-          <FileSpreadsheet size={16} /> Upload product CSV
-        </button>
-        <button
-          onClick={onAdd}
-          className="flex items-center gap-1.5 rounded-full bg-white/70 px-5 py-2.5 text-sm font-bold text-ink/75 hover:bg-white"
-        >
-          <Plus size={16} /> Add manually
-        </button>
-      </div>
+      {canManage && (
+        <div className="mt-5 flex gap-2">
+          <button
+            onClick={onAdd}
+            className="flex items-center gap-1.5 rounded-full bg-brand px-5 py-2.5 text-sm font-bold text-white hover:bg-brand-deep"
+          >
+            <FileSpreadsheet size={16} /> Upload product CSV
+          </button>
+          <button
+            onClick={onAdd}
+            className="flex items-center gap-1.5 rounded-full bg-white/70 px-5 py-2.5 text-sm font-bold text-ink/75 hover:bg-white"
+          >
+            <Plus size={16} /> Add manually
+          </button>
+        </div>
+      )}
     </div>
   );
 }
