@@ -287,12 +287,32 @@ export async function openTwoContexts(
 }
 
 /**
+ * STALE as of Task 8c (2026-07-08, Product Basket Round 2) — needs a rewrite,
+ * do not trust this doc-comment's flow description below until that lands.
+ *
+ * DealPin.tsx's "Start a deal" button (and the composer's "+ → Create a
+ * deal") no longer opens CreateDealForm / calls proposeDeal. They now call
+ * createDeal({ relationshipId, lines: [] }) directly, which births a REAL
+ * empty draft card immediately and navigates straight to it — there is no
+ * more product search box, no "Send proposal" button, and no pending
+ * proposal for the other side to accept. Step 2 below (click "Start a deal")
+ * now lands on an already-born empty draft, so steps 3+ (search "Pedanios",
+ * tap a batch chip, fill a price, click "Send proposal") time out looking for
+ * controls that never render.
+ *
+ * Every caller of this function (directly, or via birthAndOpenDeal below) is
+ * currently SKIPPED at the spec level (chat-phase7.spec.ts's beforeAll,
+ * deal-change.spec.ts's beforeEach) pending a rewrite that drives the new
+ * direct-birth flow — see the `test.skip(...)` calls in those two files for
+ * the full explanation. Un-skip only after this helper (and whatever each
+ * downstream test asserts about pre-filled deal data) is updated to match.
+ *
  * Drive the in-app deal-create flow as Alice to mint a fresh DRAFT deal card
  * with StonePharm, then have Bob accept the birth proposal so a live card
  * exists for both sides. Returns the deal card's id when it can be read from the
  * URL, else null (the caller can still act through the strip).
  *
- * Flow (best-effort, resilient selectors):
+ * Flow (best-effort, resilient selectors) — PRE-Task-8c, now stale:
  *   1. open the Connect chat with StonePharm (the p2p thread that can host a
  *      proposal — DealPin only proposes over a real p2p thread).
  *   2. press "Start a deal" (DealPin State A) to open CreateDealForm.
@@ -411,6 +431,10 @@ export async function refreshDealView(page: Page, who: Who): Promise<void> {
 }
 
 /**
+ * STALE as of Task 8c — inherits createDraftDealAsAlice's stale propose/accept
+ * flow above (this just wraps it + the open step). Every caller is currently
+ * skipped at the spec level pending that rewrite.
+ *
  * Full two-sided setup the held-change tests need: Alice proposes, Bob accepts
  * (births the draft card), then BOTH sides open the card overlay. After this each
  * page shows the live draft card with the Edit pencil reachable.
