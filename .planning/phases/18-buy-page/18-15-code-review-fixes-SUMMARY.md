@@ -120,3 +120,10 @@ None - no external service configuration required.
 ---
 *Phase: 18-buy-page*
 *Completed: 2026-07-08*
+
+## Self-Check: PASSED
+
+- All 4 modified source files present on disk.
+- All 6 fix/style commits (`3f0c9b6`, `823affe`, `66b2b6d`, `38fe526`, `7144c6b`, `6ad3034`) verified present in `git log --oneline --all`.
+- `npx tsc --noEmit` clean.
+- `npm run test:unit` — 248/248 tests passed (34 test files).
