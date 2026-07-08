@@ -29,7 +29,7 @@ import {
   Check,
   ChevronDown,
   FileText,
-  MoreHorizontal,
+  MoreVertical,
   Plus,
   Sparkles,
   Users,
@@ -42,20 +42,14 @@ import {
   type RelationshipDealRow,
 } from "../supabase/reads";
 import {
-  confirmDealChange,
   confirmDetectedDeal,
   proposeDealChange,
-  withdrawDealChange,
 } from "../actions";
 import { formatMoney } from "../lib/derive";
 import { DealCard } from "./DealCard";
 import { CreateDealForm } from "./CreateDealForm";
 import { EditDealForm, type ProposeChangePayload } from "./EditDealForm";
-import { SellaMark } from "./SellaMark";
-import { SellaCurtain } from "./SellaCurtain";
-import { TranslateButton } from "./TranslateButton";
 import type {
-  ConfirmSeat,
   DealCardStatus,
   DealCardView,
   PendingProposalView,
@@ -72,6 +66,10 @@ const STATUS_BADGE: Record<DealCardStatus, { label: string; cls: string }> = {
   done: { label: "Done", cls: "bg-success/15 text-success" },
   withdrawn: { label: "Withdrawn", cls: "bg-ink/10 text-ink/50" },
   cancelled: { label: "Cancelled", cls: "bg-ink/10 text-ink/50" },
+  // 07-06 reopen-ticket states (D-30 colours: blue / dark-green). The badge UI
+  // itself is deferred (D-17); these keep the exhaustive record complete.
+  ticket_created: { label: "Ticket opened", cls: "bg-blue-100 text-blue-700" },
+  ticket_closed: { label: "Ticket closed", cls: "bg-emerald-900/10 text-emerald-800" },
 };
 
 function StatusBadge({ status }: { status: DealCardStatus }) {
@@ -118,17 +116,15 @@ export function DealPin({
   counterpartyName,
   counterpartyPersonName,
   counterpartyInitials,
-  inRoom = false,
   children,
 }: {
   relationshipId: string;
   variant?: "chat" | "workspace";
   /**
-   * true when this strip is rendered INSIDE the Deal Room overlay (D-05). The
-   * card + chat are both permanently visible there, so the strip drops the
-   * [Deal Card]/[Deal Room] segmented toggle (and any picker dropdown) and keeps
-   * ONLY Sella (the // mark/curtain) + the Translator. Sella STAYS on the strip -
-   * it is NOT moved into the room.
+   * Vestigial (Phase 7): the Deal Room is retired (D-15), so this flag no longer
+   * changes the strip. Kept on the prop contract only so the orphaned `DealChat`
+   * (which still passes it) keeps compiling until the messaging rail rework
+   * (07-05) removes that caller.
    */
   inRoom?: boolean;
   /**
@@ -264,38 +260,11 @@ export function DealPin({
     }
   }
 
-  // 4.5.4 - the RESPONDER's Accept/Decline (mirror runProposal): record this
-  // side's vote with the required reason; on both-accept the RPC commits to
-  // base+1, on a decline it discards. Either way we re-read + dispatch so the
-  // lock clears live on both screens.
-  async function runChangeDecision(decision: "accept" | "decline", reason?: string) {
-    if (!data || changeBusy || !reason?.trim()) return;
-    setChangeBusy(true);
-    try {
-      await confirmDealChange({ dealCardId: data.card.id, decision, reason: reason.trim() });
-      setChangeOpen(false);
-      await refreshAfterChange(data.card.id);
-    } catch (e) {
-      console.error("change decision failed", e);
-    } finally {
-      setChangeBusy(false);
-    }
-  }
-
-  // 4.5.4 - the PROPOSER's Withdraw (DCHG-06): take back the held change with NO
-  // reason. Discards the held row and unlocks the pencil; re-read + dispatch.
-  async function runWithdrawChange() {
-    if (!data || changeBusy) return;
-    setChangeBusy(true);
-    try {
-      await withdrawDealChange({ dealCardId: data.card.id });
-      await refreshAfterChange(data.card.id);
-    } catch (e) {
-      console.error("withdraw change failed", e);
-    } finally {
-      setChangeBusy(false);
-    }
-  }
+  // NOTE (07-01 teardown): the responder Accept/Decline + proposer Withdraw
+  // handlers lived here to drive the now-removed inline review popup (D-10). The
+  // backend change engine is untouched; the on-card red/green diff + decision bar
+  // that replace this review UI are rebuilt on the card in plan 07-07 (D-18/D-19/
+  // D-20). The proposer's Send flow (runSendChange) stays - it still holds a change.
 
   // list the relationship's deals + pick a default (prefer the most recent LIVE
   // one, matching the old getCurrentDealCardId behaviour the workspace relies on).
@@ -461,110 +430,34 @@ export function DealPin({
   const mustAct = showProposal && proposal!.myVote == null; // my turn to accept/decline
   const waiting = showProposal && proposal!.myVote === "accept" && proposal!.otherVote !== "accept";
 
-  // 4.5.4 - the held CHANGE state, derived from the loaded card. `pendingChange`
-  // present = a change is held (the pencil locks on BOTH screens). The responder
-  // (the side that did NOT propose, with no vote yet) gets the reason gate; the
-  // proposer sees a "waiting" chip with a no-reason Withdraw.
-  const pendingChange = data?.pendingChange ?? null;
-  const changeMustAct = !!pendingChange && !pendingChange.iProposed && pendingChange.myVote == null;
-  const changeWaiting = !!pendingChange && pendingChange.iProposed;
-
-  // 4.5.4 - feed the dumb ConfirmBar the CHANGE's votes (not the seal's): reuse
-  // the two seats' side/company, but set each status from the change vote ('accept'
-  // → confirmed, else pending). The responder's own seat stays pending, so the
-  // bar shows its action buttons (the requireReason reason gate); the proposer's
-  // shows confirmed. "Same face, different engine" - exactly what the bar is for.
-  const changeSeats: ConfirmSeat[] = data
-    ? data.confirmations.map((seat) => {
-        const isViewer = seat.side === data.viewerSide;
-        const vote = isViewer ? pendingChange?.myVote : pendingChange?.otherVote;
-        return { ...seat, status: vote === "accept" ? "confirmed" : "pending", byName: null };
-      })
-    : [];
-
-  // Phase 5 / D-01 - open the Deal Room as a full blurred overlay. The strip only
-  // DISPATCHES a window event; the route-level DealRoomOverlayHost (in the Connect
-  // layout) listens and mounts the overlay. This keeps deals <-> messaging acyclic
-  // (no back-import), mirroring the app's existing hs:deal-updated / hs:create-deal
-  // contract. Carries the selected card id so the host knows which deal to open.
-  function openDealRoom() {
+  // Phase 7 / D-08/D-32 - open the deal CARD as a right-side panel. The strip only
+  // DISPATCHES a window event; the route-level DealCardPanelHost (in the Connect
+  // layout) listens, fetches the card, and mounts it as the right panel. This keeps
+  // deals <-> messaging acyclic (no back-import), mirroring the app's existing
+  // hs:deal-updated / hs:create-deal contract. Carries the selected card id so the
+  // host knows which deal to open.
+  function openDealCard() {
     if (!selectedId) return;
     window.dispatchEvent(
-      new CustomEvent("hs:open-deal-room", { detail: { dealCardId: selectedId } }),
+      new CustomEvent("hs:open-deal-card", { detail: { dealCardId: selectedId } }),
     );
   }
 
-  // D-04 - the bottom-tier left [Deal Room | Deal Card] segmented toggle. Deal
-  // Card is the REAL control (it toggles the card overlay - today's "Open card");
-  // when the card is open it reads as the active segment. Deal Room (Phase 5)
-  // OPENS the full blurred overlay (D-01) via openDealRoom. Inside the Room this
-  // whole toggle is hidden (D-05) - the card + chat are both permanently visible.
-  const dealRoomCardToggle = (
-    <div className="inline-flex shrink-0 items-center rounded-lg bg-black/[0.04] p-0.5 ring-1 ring-black/5">
-      <button
-        type="button"
-        title="Open the Deal Room"
-        aria-label="Open the Deal Room"
-        onClick={openDealRoom}
-        className="rounded-md px-3 py-1 text-xs font-semibold text-brand-deep transition hover:bg-white/70"
-      >
-        Deal Room
-      </button>
-      <button
-        type="button"
-        aria-pressed={open}
-        onClick={() => setOpen((o) => !o)}
-        className={`rounded-md px-3 py-1 text-xs font-semibold transition ${
-          open
-            ? "bg-brand text-white shadow-sm"
-            : "text-brand-deep hover:bg-white/70"
-        }`}
-      >
-        {open ? "Close card" : "Deal Card"}
-      </button>
-    </div>
-  );
-
-  // 4.5.4 / D-09 hybrid cue on the SINGLE `//` Sella mark. The mark is now the
-  // one entry point (D-08): loud "review" dot + label when it is my turn, a quiet
-  // "Awaiting reply" chip (no company name) while I wait, a clean mark otherwise.
-  const changeCue: "review" | "awaiting" | null = changeMustAct
-    ? "review"
-    : changeWaiting
-      ? "awaiting"
-      : null;
-
-  // 4.5.4 / D-06/D-07/D-08/D-09 - the held-CHANGE control: the shared SellaMark is
-  // the single entry point and the SellaCurtain drops from it. The mark toggles
-  // the existing `changeOpen` flag; the curtain re-homes the wired held-change
-  // flow (Accept/Decline/Reason via the reused ConfirmBar inside it, + Withdraw),
-  // calling the EXISTING runChangeDecision/runWithdrawChange handlers (which call
-  // confirmDealChange/withdrawDealChange from ../actions). No new flow, no new
-  // action - just a new VIEW over the proven wiring. The Withdraw lives ONLY
-  // inside the curtain now (D-09). When there is no held change the mark is clean.
-  const changeControl = (
-    <span className="relative inline-flex shrink-0 items-center">
-      <SellaMark
-        thinking={changeBusy}
-        open={changeOpen && !!pendingChange}
-        onClick={pendingChange ? () => setChangeOpen((o) => !o) : undefined}
-        cue={changeCue}
-      />
-      {data && pendingChange && (
-        <SellaCurtain
-          open={changeOpen && !!pendingChange}
-          pendingChange={pendingChange}
-          seats={changeSeats}
-          viewerSide={data.viewerSide}
-          busy={changeBusy}
-          counterpartyName={counterpartyName}
-          onConfirm={(reason) => void runChangeDecision("accept", reason)}
-          onDecline={(reason) => void runChangeDecision("decline", reason)}
-          onWithdraw={() => void runWithdrawChange()}
-          onClose={() => setChangeOpen(false)}
-        />
-      )}
-    </span>
+  // D-08 - the single "Deal [code]" chip (replaces the retired [Deal Room | Deal
+  // Card] segmented toggle). Shown only when the chat is tied to a deal; clicking
+  // it opens the card as a RIGHT-SIDE panel via openDealCard (dispatches
+  // hs:open-deal-card, which the layout-level DealCardPanelHost mounts, D-32).
+  const dealCardChip = (
+    <button
+      type="button"
+      onClick={openDealCard}
+      title="Open the deal card"
+      aria-label="Open the deal card"
+      className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-brand/15 bg-white px-3 py-1.5 text-xs font-semibold text-brand-deep transition hover:bg-brand-soft/30"
+    >
+      <FileText size={14} strokeWidth={2} className="text-brand" />
+      Deal {selectedDeal?.hsNumber ?? "card"}
+    </button>
   );
 
   // the strip's row shell - same border + padding across all three states
@@ -578,112 +471,129 @@ export function DealPin({
           relationship button (icon + name) + the deal-number dropdown + the ⋯
           menu. A thin divider sits under it, separating it from the controls. */}
       {variant === "chat" && threadId && (
-        <div className="flex items-center gap-3 border-b border-black/[0.06] px-4 py-3.5">
+        <div className="flex items-center gap-2 border-b border-black/[0.06] px-4 py-3">
           {/* left: circle avatar + person name */}
-          <span className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white text-sm font-semibold text-ink/70 ring-1 ring-black/5">
+          <span className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-sm font-semibold text-ink/70 ring-1 ring-black/5">
             {counterpartyInitials}
             {/* presence dot - UI placeholder until real presence is wired */}
             <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-success ring-2 ring-white" />
           </span>
-          <span className="min-w-0 truncate text-[15px] font-semibold text-ink">
+          <span className="min-w-0 shrink truncate text-[15px] font-semibold text-ink">
             {counterpartyPersonName ?? counterpartyName ?? "Deal"}
           </span>
 
-          {/* right group, by the ⋯: relationship (icon + company) + deal + menu */}
-          <div className="ml-auto flex shrink-0 items-center gap-2">
-            {/* relationship - icon + company name as one calm glass button */}
-            <Link
-              href={`/connect/relationship/${relationshipId}`}
-              title={`Relationship with ${counterpartyName ?? "this company"}`}
-              className="inline-flex max-w-[14rem] items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium text-ink/70 ring-1 ring-black/[0.06] transition hover:bg-white/70 hover:text-brand hover:ring-brand/20"
-            >
-              <Users size={14} strokeWidth={1.75} className="shrink-0 text-ink/45" />
-              <span className="truncate">{counterpartyName ?? "Relationship"}</span>
-            </Link>
+          {/* one merged header line now: the company + the deal all sit LEFT next
+              to the name (strip 1 - the standalone deal chip - is retired). The
+              deal number opens the card via the small pink card icon beside it. */}
+          {/* relationship - icon + company name as one calm glass button */}
+          <Link
+            href={`/connect/relationship/${relationshipId}`}
+            title={`Relationship with ${counterpartyName ?? "this company"}`}
+            className="inline-flex max-w-[10rem] shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium text-ink/70 ring-1 ring-black/[0.06] transition hover:bg-white/70 hover:text-brand hover:ring-brand/20"
+          >
+            <Users size={14} strokeWidth={1.75} className="shrink-0 text-ink/45" />
+            <span className="truncate">{counterpartyName ?? "Relationship"}</span>
+          </Link>
 
-            {/* deal-number dropdown - calm glass; the HS number when it exists */}
-            {hasDeal && (
-              <div className="relative shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setPicking((p) => !p)}
-                  aria-haspopup="listbox"
-                  aria-expanded={picking}
-                  aria-label="Choose a deal"
-                  className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium text-ink/70 ring-1 ring-black/[0.06] transition hover:bg-white/70 hover:text-ink"
-                >
-                  {selectedDeal?.hsNumber ?? "Draft deal"}
-                  <ChevronDown size={13} strokeWidth={2} className="text-ink/40" />
-                </button>
-                {picking && (
-                  <>
-                    <div className="fixed inset-0 z-10" onClick={() => setPicking(false)} />
-                    <div className="glass-strong absolute right-0 top-full z-20 mt-1.5 w-72 rounded-2xl p-1.5">
-                      <p className="px-2.5 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wide text-ink/40">
-                        Deals with {counterpartyName ?? "this company"}
-                      </p>
-                      {deals.map((d) => (
-                        <button
-                          key={d.id}
-                          type="button"
-                          onClick={() => pickDeal(d.id)}
-                          className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition hover:bg-black/[0.04]"
-                        >
-                          <span className="w-1 self-stretch rounded-full bg-brand" aria-hidden />
-                          <span className="flex min-w-0 flex-1 flex-col">
-                            <span className="truncate text-xs font-semibold text-ink">
-                              {d.hsNumber ?? "Draft deal"}
-                            </span>
-                            <span className="text-[10px] text-ink/45">Updated {timeAgo(d.updatedAt)}</span>
-                          </span>
-                          <StatusBadge status={d.status} />
-                          {d.id === selectedId && (
-                            <Check size={14} strokeWidth={2.5} className="shrink-0 text-brand" />
-                          )}
-                        </button>
-                      ))}
-                      {/* D-03 - "See all N deals" → the relationship page */}
-                      <Link
-                        href={`/connect/relationship/${relationshipId}`}
-                        onClick={() => setPicking(false)}
-                        className="mt-0.5 flex items-center justify-center rounded-lg px-2.5 py-2 text-[11px] font-semibold text-brand-deep transition hover:bg-brand-soft/30"
-                      >
-                        See all {deals.length} deals
-                      </Link>
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
-
-            {/* ⋯ menu - secondary actions */}
+          {/* deal-number dropdown - the PICKER (choose among the relationship's
+              deals). Its popover now drops from the LEFT since it moved left. */}
+          {hasDeal && (
             <div className="relative shrink-0">
               <button
                 type="button"
-                onClick={() => setMenuOpen((o) => !o)}
-                aria-label="More actions"
-                aria-haspopup="menu"
-                aria-expanded={menuOpen}
-                title="More"
-                className="flex h-9 w-9 items-center justify-center rounded-full text-ink/55 ring-1 ring-black/[0.06] transition hover:bg-white/70 hover:text-brand hover:ring-brand/20"
+                onClick={() => setPicking((p) => !p)}
+                aria-haspopup="listbox"
+                aria-expanded={picking}
+                aria-label="Choose a deal"
+                className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium text-ink/70 ring-1 ring-black/[0.06] transition hover:bg-white/70 hover:text-ink"
               >
-                <MoreHorizontal size={17} strokeWidth={1.75} />
+                {selectedDeal?.hsNumber ?? "Draft deal"}
+                <ChevronDown size={13} strokeWidth={2} className="text-ink/40" />
               </button>
-              {menuOpen && (
+              {picking && (
                 <>
-                  <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-                  <div className="glass-strong absolute right-0 top-full z-20 mt-1.5 w-56 rounded-2xl p-1.5">
+                  <div className="fixed inset-0 z-10" onClick={() => setPicking(false)} />
+                  <div className="glass-strong absolute left-0 top-full z-20 mt-1.5 w-72 rounded-2xl p-1.5">
+                    <p className="px-2.5 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wide text-ink/40">
+                      Deals with {counterpartyName ?? "this company"}
+                    </p>
+                    {deals.map((d) => (
+                      <button
+                        key={d.id}
+                        type="button"
+                        onClick={() => pickDeal(d.id)}
+                        className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition hover:bg-black/[0.04]"
+                      >
+                        <span className="w-1 self-stretch rounded-full bg-brand" aria-hidden />
+                        <span className="flex min-w-0 flex-1 flex-col">
+                          <span className="truncate text-xs font-semibold text-ink">
+                            {d.hsNumber ?? "Draft deal"}
+                          </span>
+                          <span className="text-[10px] text-ink/45">Updated {timeAgo(d.updatedAt)}</span>
+                        </span>
+                        <StatusBadge status={d.status} />
+                        {d.id === selectedId && (
+                          <Check size={14} strokeWidth={2.5} className="shrink-0 text-brand" />
+                        )}
+                      </button>
+                    ))}
+                    {/* D-03 - "See all N deals" → the relationship page */}
                     <Link
                       href={`/connect/relationship/${relationshipId}`}
-                      onClick={() => setMenuOpen(false)}
-                      className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-ink transition hover:bg-black/[0.04]"
+                      onClick={() => setPicking(false)}
+                      className="mt-0.5 flex items-center justify-center rounded-lg px-2.5 py-2 text-[11px] font-semibold text-brand-deep transition hover:bg-brand-soft/30"
                     >
-                      <Users size={15} strokeWidth={1.75} /> View relationship
+                      See all {deals.length} deals
                     </Link>
                   </div>
                 </>
               )}
             </div>
+          )}
+
+          {/* the pink card icon - the clickable "open the deal card" cue beside
+              the deal number (replaces the retired strip-1 chip). Opens the card
+              as the 50/50 side panel. */}
+          {hasDeal && (
+            <button
+              type="button"
+              onClick={openDealCard}
+              aria-label="Open the deal card"
+              title="Open the deal card"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-soft/50 text-brand ring-1 ring-brand/20 transition hover:bg-brand-soft hover:text-brand-deep"
+            >
+              <FileText size={15} strokeWidth={2} />
+            </button>
+          )}
+
+          {/* ⋮ menu - secondary actions, pushed right; vertical dots to spare
+              horizontal room now that the chat can be 50% wide */}
+          <div className="relative ml-auto shrink-0">
+            <button
+              type="button"
+              onClick={() => setMenuOpen((o) => !o)}
+              aria-label="More actions"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              title="More"
+              className="flex h-9 w-9 items-center justify-center rounded-full text-ink/55 ring-1 ring-black/[0.06] transition hover:bg-white/70 hover:text-brand hover:ring-brand/20"
+            >
+              <MoreVertical size={17} strokeWidth={1.75} />
+            </button>
+            {menuOpen && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+                <div className="glass-strong absolute right-0 top-full z-20 mt-1.5 w-56 rounded-2xl p-1.5">
+                  <Link
+                    href={`/connect/relationship/${relationshipId}`}
+                    onClick={() => setMenuOpen(false)}
+                    className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-ink transition hover:bg-black/[0.04]"
+                  >
+                    <Users size={15} strokeWidth={1.75} /> View relationship
+                  </Link>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -691,7 +601,6 @@ export function DealPin({
       {/* State B - a proposal is pending (the pre-card object, the new heart) */}
       {variant === "chat" && showProposal && (
         <div className={rowCls}>
-          <SellaMark thinking={acting} />
           <span className="min-w-0 flex-1 truncate text-xs text-ink/70">
             <span className="font-semibold text-ink/85">
               {proposal!.iProposed
@@ -810,16 +719,10 @@ export function DealPin({
         </div>
       )}
 
-      {/* State C - a live deal is selected. Identity is in the P2P top bar above;
-          this row is the controls: the [Deal Room | Deal Card] toggle (left), the
-          centered // Sella mark/curtain, and the translate glyph (right). */}
-      {variant === "chat" && !showProposal && hasDeal && (
-        <div className="flex items-center gap-3 border-b border-black/[0.06] px-4 py-3">
-          {dealRoomCardToggle}
-          <div className="mx-auto">{changeControl}</div>
-          <TranslateButton />
-        </div>
-      )}
+      {/* State C - a live deal is selected. Its whole identity + the open-card
+          control now live in the P2P top bar above (the deal number + the pink
+          card icon), so the old standalone "Deal [code]" chip strip is retired -
+          it was a wasted row (feedback: "this strip has to go"). */}
 
       {/* State A - no deal, no proposal: a quiet invitation. p2p only (propose
           needs a p2p thread); a c2c thread with no deal shows just the label. */}
@@ -839,27 +742,16 @@ export function DealPin({
         </div>
       )}
 
-      {/* workspace variant, OUTSIDE the Room - the deal is fixed; NO top-tier
-          identity (no source in the host, D-02): the chip + the [Deal Room | Deal
-          Card] toggle + the // Sella mark/curtain. */}
-      {variant === "workspace" && !inRoom && hasDeal && (
+      {/* workspace variant - the deal is fixed; NO top-tier identity (no source in
+          the host, D-02): the status chip + the single "Deal [code]" chip that
+          opens the card as a right-side panel. The retired toggle + // Sella mark
+          (D-10) are gone. (The Deal Room is retired, so `inRoom` no longer splits
+          this row; the whole workspace path is dead until 07-07 revisits it.) */}
+      {variant === "workspace" && hasDeal && (
         <div className={rowCls}>
           <span className="shrink-0 text-[11px] text-ink/45">Deal:</span>
           <DealChip status={chipStatus} selectable={false} />
-          {dealRoomCardToggle}
-          {changeControl}
-        </div>
-      )}
-
-      {/* workspace variant, INSIDE the Room (D-05) - the card + chat are both
-          permanently visible, so the [Deal Room | Deal Card] toggle + the chip
-          are redundant and dropped. The strip keeps ONLY Sella (the // mark/
-          curtain, which STAYS on the strip - not moved into the room) + the
-          Translator. */}
-      {variant === "workspace" && inRoom && hasDeal && (
-        <div className="flex items-center gap-3 border-b border-black/[0.06] px-4 py-3">
-          <div className="mx-auto">{changeControl}</div>
-          <TranslateButton />
+          {dealCardChip}
         </div>
       )}
 

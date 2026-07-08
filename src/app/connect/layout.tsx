@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { requireVerified } from "@/shared/auth";
-import { DealRoomOverlayHost } from "./DealRoomOverlayHost";
+import { DealCardPanelHost } from "./DealCardPanelHost";
+import { SellaPlaceholderBar } from "./SellaPlaceholderBar";
 
 /**
  * Connect surface layout. After F2 there is only ONE global nav rail (IconRail),
@@ -34,13 +35,22 @@ export default async function ConnectLayout({
   }
 
   return (
-    <section className="flex h-full min-w-0 flex-1 flex-col">
-      {children}
-      {/* the Deal Room overlay host (D-01) - mounted once at the Connect root so
-          the strip's "Deal Room" button can open the Room over any Connect page;
-          it is the acyclic composition point for deals' container + messaging's
-          chat (it listens for the strip's window event and mounts the overlay). */}
-      <DealRoomOverlayHost />
+    <section className="flex h-full min-w-0 flex-1 gap-3">
+      {/* the surface content (chat, relationship, inbox…). It shrinks to the left
+          half when the deal card opens beside it - the chat "minimizes", the card
+          takes the other half. */}
+      <div className="flex min-w-0 flex-1 flex-col">{children}</div>
+      {/* the deal card panel host (D-31/D-32, revised) - now an IN-FLOW 50/50
+          panel, not a blurred overlay. Any page's deal control fires
+          `hs:open-deal-card`; this host renders the flip DealCard as a flex
+          sibling here (chat left, card right, no blur), and its X closes it so
+          the content expands back. Mounted once at the Connect root; the acyclic
+          seam holds (no module back-imports another). */}
+      <DealCardPanelHost />
+      {/* the Sella placeholder bar (D-10) - the fixed right-edge ping bubble; the
+          real Sella opens from it in Phase 8. position:fixed keeps it out of the
+          split's flex flow. */}
+      <SellaPlaceholderBar />
     </section>
   );
 }

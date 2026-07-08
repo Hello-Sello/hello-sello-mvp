@@ -250,49 +250,52 @@ footer{margin-top:34px;color:var(--muted);font-size:12px;border-top:1px solid va
       <span class="mini">current phase</span>
     </summary>
     <div class="body">
-      <div class="goal">Goal: finish the deal-side form + card content (mine; the Present "product card" is Muskan's). Reqs: (new - define on plan) + DEV-84 / DEV-37. <b>This is the current phase - not started yet.</b></div>
+      <div class="goal">Goal: build the full <b>Deal Basket</b> (rename of Deal Form). Model (locked 06-22): <code>Product Card &rarr; Product Basket &rarr; Deal Basket &rarr; Deal Card</code>. The Product Card is Muskan's (we consume + snapshot it); our scope starts at the Product Basket. Level rule: product-related (batches, COA, detail) = product level; deal-wide (text/link, delivery, terms, recipient) = deal level. <b>Delivered as 6 sub-phases (6A-6F); waves: 6A &rarr; 6B &rarr; (6C + 6D) &rarr; (6E + 6F).</b> Deferred out: persistent Basket (after Notifications), full Sella/Shop/C2C origins (P7 / Muskan / post-P8), document upload (P9), deep polish (P10). Dropped: DEV-37 (parked chat-org). Reqs minted per sub-phase at plan time.</div>
       <div class="row">
         <div class="rmain">
-          <div class="rt">OBS-2 count-of-pack display</div>
-          <div class="rd">Drop the free g/kg unit; quantity = a COUNT of packs, weight = count &times; <code>product.pack_size_grams</code>, user picks counts &amp; sees grams (input already pack-based since 3e). Kills the &euro;/g-vs-kg mismatch by construction. Model decided 06-19; build here.</div>
-          <div class="rf">P2 verify &middot; pack_size_grams</div>
+          <div class="rt">6A &middot; Deal Basket model (design)</div>
+          <div class="rd">Lock the edit/sharing model before any build: who can edit what - Model B (seller owns the offer) vs C (role-based: seller owns price, buyer owns quantity/delivery) <b>[OPEN]</b>; field-by-field shared/private/editable; what shows on the card (auto show-when-filled + maybe one small toggle, <b>no separate panel</b>); recipient lock rules. Output = an ADR + fresh req IDs.</div>
+          <div class="rf">design &middot; first, alone</div>
+        </div>
+        <span class="chip c-prog" data-status="prog">&#9654; next</span>
+      </div>
+      <div class="row">
+        <div class="rmain">
+          <div class="rt">6B &middot; Rename + restructure</div>
+          <div class="rd">Rename Deal Form &rarr; Deal Basket everywhere (~23 refs, 8 files); output stays Deal Card. Wire permissions to 6A's model.</div>
+          <div class="rf">after 6A, alone</div>
         </div>
         <span class="chip c-todo">queued</span>
       </div>
       <div class="row">
         <div class="rmain">
-          <div class="rt">Card flexibility: text + link cards; non-catalogue</div>
-          <div class="rd">Plain text + link cards; pre-sell non-catalogue products.</div>
-          <div class="rf">DEV-84</div>
+          <div class="rt">6C &middot; Product Basket</div>
+          <div class="rd">The reusable Product Basket cart (a group of Product Cards), wired to the p2p path and built so <b>Muskan's shop reuses the same piece</b>. Folds in OBS-2 pack-count finish (custom lines + show the pack count on the card).</div>
+          <div class="rf">after 6B, parallel w/ 6D &middot; OBS-2 &middot; shared w/ Muskan</div>
         </div>
         <span class="chip c-todo">queued</span>
       </div>
       <div class="row">
         <div class="rmain">
-          <div class="rt">Clickable product detail</div>
-          <div class="rd">Terpenes, water activity, LOD, genetics, irradiation, origin - reads the deal-time snapshot, never live data.</div>
+          <div class="rt">6D &middot; Recipient picker</div>
+          <div class="rd">Full picker on the Deal Basket. p2p/C2C = pre-filled + locked; Shop/Sella = select, then lock. Only connected companies/people selectable.</div>
+          <div class="rf">after 6B, parallel w/ 6C &middot; ADR-0003</div>
         </div>
         <span class="chip c-todo">queued</span>
       </div>
       <div class="row">
         <div class="rmain">
-          <div class="rt">Configurable "what shows on the card" panel</div>
+          <div class="rt">6E &middot; Deal-level content</div>
+          <div class="rd">Plain text cards + link cards at the Deal Basket level (new line kind + migration + render). Pre-sell non-catalogue: add a product not in your catalogue yet.</div>
+          <div class="rf">after 6C, parallel w/ 6F &middot; DEV-84</div>
         </div>
         <span class="chip c-todo">queued</span>
       </div>
       <div class="row">
         <div class="rmain">
-          <div class="rt">Shop + Sella deal origins</div>
-          <div class="rd">The Basket from 3b is already reusable for these, so building those Baskets delivers this for free.</div>
-          <div class="rf">DealSource &middot; 3b</div>
-        </div>
-        <span class="chip c-todo">queued</span>
-      </div>
-      <div class="row">
-        <div class="rmain">
-          <div class="rt">Persistent Basket (Option B)</div>
-          <div class="rd">Today transient/Option A - ADR-0003.</div>
-          <div class="rf">ADR-0003</div>
+          <div class="rt">6F &middot; Product detail (consume Muskan's Product Card)</div>
+          <div class="rd">A product line is clickable &rarr; opens the Product Card (terpenes, water activity, LOD, genetics, irradiation, origin). Reads the <b>deal-time snapshot</b>, never live. Batches + COA per batch (COA file upload = placeholder; real upload = P9).</div>
+          <div class="rf">after 6C, parallel w/ 6E</div>
         </div>
         <span class="chip c-todo">queued</span>
       </div>

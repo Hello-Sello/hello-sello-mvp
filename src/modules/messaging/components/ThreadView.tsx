@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Building2, Users, MoreHorizontal, BellOff, Search, ChevronDown, type LucideIcon } from "lucide-react";
+import { Building2, Users, MoreHorizontal, BellOff, Search, ChevronDown, Pencil, Check, X, FileText, type LucideIcon } from "lucide-react";
 import { DealPin } from "@/modules/deals";
 import type { ChatMessageView, ConversationListItem } from "../types";
+import { renameGroupThread } from "../supabase/store";
 import { MessageBubble } from "./MessageBubble";
 import { Composer } from "./Composer";
 
@@ -16,10 +17,13 @@ export interface ThreadViewProps {
   conversation: ConversationListItem;
   messages: ChatMessageView[];
   onSend: (body: string) => void;
+  /** re-read the conversation list after an in-chat group rename (D-06) */
+  onGroupRenamed?: () => void;
 }
 
-export function ThreadView({ conversation, messages, onSend }: ThreadViewProps) {
+export function ThreadView({ conversation, messages, onSend, onGroupRenamed }: ThreadViewProps) {
   const isC2C = conversation.threadType === "c2c";
+  const isGroup = conversation.threadType === "group";
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   // header overflow menu (⋯) - the home for secondary actions (some still stubs)
@@ -65,6 +69,62 @@ export function ThreadView({ conversation, messages, onSend }: ThreadViewProps) 
     isAtBottomRef.current = true;
   }, [conversation.threadId]);
 
+  // the ordered message stream + the floating jump-to-bottom arrow, shared by
+  // the deal/c2c path (inside DealPin) and the group path (standalone).
+  const stream = (
+    <div className="relative h-full">
+      <div ref={scrollRef} onScroll={handleScroll} className="h-full overflow-y-auto p-4">
+        {/* full width (no centered max-w column) so bubbles sit at the extreme
+            ends of the panel - mine hard right, theirs hard left. */}
+        <div className="flex flex-col gap-2">
+          {messages.map((m) => (
+            <MessageBubble key={m.id} message={m} />
+          ))}
+          <div ref={bottomRef} />
+        </div>
+      </div>
+      {!isAtBottom && (
+        <button
+          type="button"
+          onClick={jumpToBottom}
+          aria-label="Jump to latest message"
+          title="Jump to latest message"
+          className="glass-strong absolute bottom-4 right-4 z-10 flex h-10 w-10 items-center justify-center rounded-full text-brand ring-1 ring-black/5 transition hover:text-brand-deep hover:ring-brand/20"
+        >
+          <ChevronDown size={20} strokeWidth={2} />
+        </button>
+      )}
+    </div>
+  );
+
+  // A group thread has no relationship anchor (person_a/b are unused), so it
+  // does NOT delegate to DealPin. It renders its own header with an in-chat
+  // rename (D-06) + the plain stream + composer.
+  if (isGroup) {
+    return (
+      <div className="flex h-full flex-col">
+        <GroupHeader
+          key={conversation.threadId}
+          conversation={conversation}
+          onGroupRenamed={onGroupRenamed}
+        />
+        <div className="min-h-0 flex-1">{stream}</div>
+        <Composer onSend={onSend} placeholder={`Message ${conversation.name}…`} />
+      </div>
+    );
+  }
+
+  // non-group threads (c2c/p2p/deal) are always anchored to a relationship -
+  // only a group carries a null relationship_id (07-02), and groups render
+  // above. Pin the id into a local so the relationship link + DealPin get a
+  // concrete value.
+  const relationshipId = conversation.relationshipId;
+  if (!relationshipId) {
+    // a non-group thread with no relationship is a data fault; show just the
+    // message stream rather than a broken relationship pin.
+    return <div className="flex h-full flex-col">{stream}</div>;
+  }
+
   return (
     <div className="flex h-full flex-col">
       {/* C2C company channels keep their identity header here. A P2P deal thread
@@ -89,7 +149,7 @@ export function ThreadView({ conversation, messages, onSend }: ThreadViewProps) 
           {/* actions - the relationship door + an overflow (⋯) menu */}
           <div className="ml-auto flex shrink-0 items-center gap-1.5">
             <Link
-              href={`/connect/relationship/${conversation.relationshipId}`}
+              href={`/connect/relationship/${relationshipId}`}
               aria-label={`Relationship with ${conversation.companyName}`}
               title={`Relationship with ${conversation.companyName}`}
               className="flex h-9 w-9 items-center justify-center rounded-xl text-ink/55 ring-1 ring-black/5 transition hover:bg-white/70 hover:text-brand hover:ring-brand/20"
@@ -113,7 +173,7 @@ export function ThreadView({ conversation, messages, onSend }: ThreadViewProps) 
                   <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
                   <div className="glass-strong absolute right-0 top-full z-20 mt-1.5 w-56 rounded-2xl p-1.5">
                     <Link
-                      href={`/connect/relationship/${conversation.relationshipId}`}
+                      href={`/connect/relationship/${relationshipId}`}
                       onClick={() => setMenuOpen(false)}
                       className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-ink transition hover:bg-black/[0.04]"
                     >
@@ -129,15 +189,15 @@ export function ThreadView({ conversation, messages, onSend }: ThreadViewProps) 
         </div>
       )}
 
-      {/* the deal "Talking about" bar + the card floated on the right (3a);
+      {/* the deal "Talking about" bar + the card opened on the right (3a);
           P2P + C2C both hang off a relationship, so the pin works in either.
-          Phase 5 (D-01): the strip's "Deal Room" button opens the full blurred
-          Room overlay by DISPATCHING a window event (hs:open-deal-room) that the
-          Connect layout's DealRoomOverlayHost listens for - so no open-handler
+          Phase 7 (D-32): the strip's "Deal [code]" chip opens the card as a
+          right-side panel by DISPATCHING a window event (hs:open-deal-card) that
+          the Connect layout's DealCardPanelHost listens for - so no open-handler
           prop is threaded here, and messaging stays acyclic with deals. */}
       <DealPin
-        key={conversation.relationshipId}
-        relationshipId={conversation.relationshipId}
+        key={relationshipId}
+        relationshipId={relationshipId}
         // propose + the pending-proposal strip are connected-P2P only (D13):
         // pass the thread for a P2P, omit it for a C2C company channel.
         threadId={isC2C ? undefined : conversation.threadId}
@@ -147,30 +207,7 @@ export function ThreadView({ conversation, messages, onSend }: ThreadViewProps) 
         counterpartyPersonName={conversation.name}
         counterpartyInitials={conversation.initials}
       >
-        {/* stream - relative so the floating jump-to-bottom arrow anchors here */}
-        <div className="relative h-full">
-          <div ref={scrollRef} onScroll={handleScroll} className="h-full overflow-y-auto p-4">
-            <div className="mx-auto flex max-w-2xl flex-col gap-2">
-              {messages.map((m) => (
-                <MessageBubble key={m.id} message={m} />
-              ))}
-              <div ref={bottomRef} />
-            </div>
-          </div>
-          {/* jump-to-bottom arrow - shown ONLY when scrolled up; glass surface
-              with a raspberry-accent icon, matching the header buttons */}
-          {!isAtBottom && (
-            <button
-              type="button"
-              onClick={jumpToBottom}
-              aria-label="Jump to latest message"
-              title="Jump to latest message"
-              className="glass-strong absolute bottom-4 right-4 z-10 flex h-10 w-10 items-center justify-center rounded-full text-brand ring-1 ring-black/5 transition hover:text-brand-deep hover:ring-brand/20"
-            >
-              <ChevronDown size={20} strokeWidth={2} />
-            </button>
-          )}
-        </div>
+        {stream}
       </DealPin>
 
       {/* composer - writable for both types; only the placeholder differs */}
@@ -182,6 +219,138 @@ export function ThreadView({ conversation, messages, onSend }: ThreadViewProps) 
             : `Message to ${conversation.name} from ${conversation.companyName}…`
         }
       />
+    </div>
+  );
+}
+
+/**
+ * The group thread header: avatar, an in-chat editable title (D-06 - click the
+ * title / ✎, Enter saves, Esc cancels, anyone in the thread may rename), the
+ * member subtitle, and - for a deal-born group - a "Deal" chip that opens the
+ * card as a right-side panel (D-08/D-32) by dispatching `hs:open-deal-card`.
+ */
+function GroupHeader({
+  conversation,
+  onGroupRenamed,
+}: {
+  conversation: ConversationListItem;
+  onGroupRenamed?: () => void;
+}) {
+  // This header is keyed by threadId at the call site, so it remounts (and
+  // re-initializes) whenever a different group opens - no reset effect needed.
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(conversation.name);
+  const [saving, setSaving] = useState(false);
+
+  function startEdit() {
+    setDraft(conversation.name); // start from the current title
+    setEditing(true);
+  }
+
+  async function save() {
+    const next = draft.trim();
+    if (!next || next === conversation.name) {
+      setEditing(false);
+      setDraft(conversation.name);
+      return;
+    }
+    setSaving(true);
+    try {
+      await renameGroupThread({ threadId: conversation.threadId, name: next });
+      onGroupRenamed?.();
+      setEditing(false);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-3 border-b border-black/5 px-4 py-3">
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-xs font-semibold text-ink/70 ring-1 ring-black/5">
+        <Users size={17} strokeWidth={1.75} className="text-ink/55" />
+      </span>
+      <div className="flex min-w-0 flex-col">
+        {editing ? (
+          <input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void save();
+              if (e.key === "Escape") {
+                setEditing(false);
+                setDraft(conversation.name);
+              }
+            }}
+            onBlur={() => void save()}
+            disabled={saving}
+            autoFocus
+            aria-label="Group name"
+            className="w-48 rounded-md bg-ink/5 px-2 py-0.5 text-sm font-semibold text-ink outline-none ring-1 ring-brand/20"
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={startEdit}
+            title="Rename group"
+            className="group/title flex items-center gap-1.5 text-left"
+          >
+            <span className="truncate text-sm font-semibold text-ink">{conversation.name}</span>
+            <Pencil
+              size={12}
+              strokeWidth={1.9}
+              className="shrink-0 text-ink/30 opacity-0 transition-opacity group-hover/title:opacity-100"
+            />
+          </button>
+        )}
+        <span className="truncate text-[11px] text-ink/45">{conversation.subtitle}</span>
+      </div>
+
+      <div className="ml-auto flex shrink-0 items-center gap-1.5">
+        {editing && (
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => void save()}
+            aria-label="Save name"
+            title="Save"
+            className="flex h-9 w-9 items-center justify-center rounded-xl text-success ring-1 ring-black/5 transition hover:bg-white/70"
+          >
+            <Check size={17} strokeWidth={2} />
+          </button>
+        )}
+        {editing && (
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => {
+              setEditing(false);
+              setDraft(conversation.name);
+            }}
+            aria-label="Cancel rename"
+            title="Cancel"
+            className="flex h-9 w-9 items-center justify-center rounded-xl text-ink/55 ring-1 ring-black/5 transition hover:bg-white/70"
+          >
+            <X size={17} strokeWidth={2} />
+          </button>
+        )}
+        {conversation.dealCardId && !editing && (
+          <button
+            type="button"
+            onClick={() =>
+              window.dispatchEvent(
+                new CustomEvent("hs:open-deal-card", {
+                  detail: { dealCardId: conversation.dealCardId },
+                }),
+              )
+            }
+            aria-label="Open deal card"
+            title="Open deal card"
+            className="flex items-center gap-1.5 rounded-xl px-2.5 py-2 text-xs font-medium text-ink/60 ring-1 ring-black/5 transition hover:bg-white/70 hover:text-brand hover:ring-brand/20"
+          >
+            <FileText size={15} strokeWidth={1.75} /> Deal
+          </button>
+        )}
+      </div>
     </div>
   );
 }

@@ -1,29 +1,39 @@
-import { DealWorkspace } from "@/modules/deals";
-import { DealChat } from "@/modules/messaging";
+"use client";
+
+import { use, useEffect } from "react";
 
 /**
- * Deal Room route (screen ④, Phase 5) - the deal container, deep-linked by
- * card id (both doors know it: the Chat list's Deals tab and the chat card
- * bar's "Open Deal Room ↗"). RLS scopes every read to the two deal companies.
+ * Deal deep-link (Phase 7, D-32) - a card opened by URL. The Deal Room page is
+ * retired (D-15); per D-32 a deal card ALWAYS opens as a right-side panel,
+ * wherever it is opened from. So this route no longer renders a full-page
+ * container - it just DISPATCHES `hs:open-deal-card` for the routed id, and the
+ * layout-level `DealCardPanelHost` (mounted around every Connect page) fetches
+ * the card and mounts it as the right panel. This keeps the modules acyclic (the
+ * page never imports deals' or messaging's internals) and makes the deep-link
+ * behave identically to opening from a chat or the Relationship page.
  *
- * This page is the deep-link composition root: deals owns the container,
- * messaging owns the deal chat - composing them HERE keeps the modules acyclic.
+ * The dispatch is deferred to the next animation frame so it fires AFTER the host
+ * has mounted its window-event listener (child effects run before parent effects,
+ * so a synchronous dispatch on mount would race the listener and be missed).
  *
- * Phase 5 (D-01): the Room is normally reached as a FULL BLURRED OVERLAY from the
- * chat, NOT this full-page detour. The overlay open/close lives at the Connect
- * layout's `DealRoomOverlayHost` (the strip dispatches `hs:open-deal-room`; the
- * host listens + mounts `DealWorkspace` + the `DealChat` slot, closing straight
- * back to the chat per D-03 - never via the relationship page). This page stays
- * as the acyclic deep-link entry; both modules are composed at the route, never
- * back-imported into each other.
- *
- * Next 16: `params` is async - await it before reading the segment.
+ * Next 16 / React 19: `params` is a promise - `use()` unwraps it in a client
+ * component.
  */
-export default async function ConnectDealWorkspacePage({
+export default function ConnectDealDeepLinkPage({
   params,
 }: {
   params: Promise<{ dealCardId: string }>;
 }) {
-  const { dealCardId } = await params;
-  return <DealWorkspace dealCardId={dealCardId} chat={<DealChat dealCardId={dealCardId} />} />;
+  const { dealCardId } = use(params);
+
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => {
+      window.dispatchEvent(
+        new CustomEvent("hs:open-deal-card", { detail: { dealCardId } }),
+      );
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [dealCardId]);
+
+  return null;
 }

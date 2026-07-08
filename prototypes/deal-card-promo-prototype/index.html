@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>He//oSe//o — Deal HS-AUR07-CAN23-A189371</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,500;0,600;0,700;0,800;1,800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --pink:#E1476F;
+    --pink-deep:#C13058;
+    --maroon:#5E0F2C;
+    --ink:#331520;
+    --ink-70:rgba(51,21,32,.74);
+    --ink-55:rgba(51,21,32,.55);
+    --ink-38:rgba(51,21,32,.38);
+    --hairline:rgba(94,15,44,.10);
+    --green:#178A52;
+    --green-soft:rgba(23,138,82,.10);
+    --red:#B42B45;
+    --red-soft:rgba(180,43,69,.08);
+    /* promotion yellow */
+    --promo:#B45309;
+    --promo-strong:#F59E0B;
+    --promo-soft:rgba(245,158,11,.14);
+    --promo-ink:#3F2A00;
+    --tint-hi:rgba(255,250,253,.78);
+    --tint-lo:rgba(252,239,246,.55);
+    --paper-top:#FFFFFF;
+    --paper-bot:#FFF9FA;
+    --sans:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:ui-monospace,"SF Mono","Cascadia Mono","JetBrains Mono",Menlo,Consolas,monospace;
+    --ease:cubic-bezier(.2,.7,.2,1);
+  }
+
+  *{box-sizing:border-box}
+  [hidden]{display:none!important}
+  html,body{height:100%}
+
+  body{
+    margin:0;
+    height:100dvh;
+    overflow:hidden;
+    font-family:var(--sans);
+    color:var(--ink);
+    background:
+      radial-gradient(900px 620px at 10% -12%, rgba(242,160,194,.5), transparent 62%),
+      radial-gradient(820px 560px at 106% 18%, rgba(255,211,183,.45), transparent 62%),
+      radial-gradient(1000px 720px at 48% 118%, rgba(223,192,242,.42), transparent 62%),
+      linear-gradient(160deg,#FEF6FA,#FBEDF3);
+    padding:12px;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  .bg{position:fixed;inset:0;z-index:-1;overflow:hidden;pointer-events:none}
+  .blob{position:absolute;border-radius:50%;filter:blur(95px);will-change:transform}
+  .b1{width:500px;height:500px;background:#F2A0C2;opacity:.5;top:-130px;left:-70px;animation:drift1 26s var(--ease) infinite alternate}
+  .b2{width:320px;height:320px;background:#E1476F;opacity:.17;top:38%;right:-90px;animation:drift2 22s var(--ease) infinite alternate}
+  .b3{width:540px;height:540px;background:#DFC0F2;opacity:.42;bottom:-210px;left:28%;animation:drift1 32s var(--ease) infinite alternate-reverse}
+  @keyframes drift1{to{transform:translate(56px,42px) scale(1.07)}}
+  @keyframes drift2{to{transform:translate(-48px,52px) scale(1.05)}}
+
+  .ic{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+  .ic-sm{width:12px;height:12px}
+  .ic-xs{width:11px;height:11px;stroke-width:3}
+
+  /* ── Glass window ───────────────────────────────────────────────── */
+  .card{
+    position:relative;
+    height:100%;
+    display:flex;flex-direction:column;
+    background:linear-gradient(180deg,var(--tint-hi),var(--tint-lo));
+    -webkit-backdrop-filter:blur(40px) saturate(1.8);
+    backdrop-filter:blur(40px) saturate(1.8);
+    border:1px solid rgba(255,255,255,.65);
+    border-radius:24px;
+    overflow:hidden;
+    box-shadow:
+      0 40px 90px -30px rgba(122,18,48,.30),
+      0 4px 16px rgba(122,18,48,.06),
+      inset 0 1px 1px rgba(255,255,255,.9);
+    animation:rise .5s var(--ease) both;
+  }
+  .card::after{
+    content:"";position:absolute;top:0;left:8%;right:8%;height:1px;
+    background:linear-gradient(90deg,transparent,rgba(255,255,255,.95),transparent);
+    pointer-events:none;
+  }
+  @supports not (backdrop-filter:blur(1px)){.card{background:rgba(255,250,253,.94)}}
+  @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+
+  .card-body{
+    flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+    scrollbar-width:thin;scrollbar-color:rgba(225,71,111,.35) transparent;
+  }
+  .card-body::-webkit-scrollbar{width:10px}
+  .card-body::-webkit-scrollbar-thumb{background:rgba(225,71,111,.3);border-radius:999px;border:3px solid transparent;background-clip:content-box}
+  .card-body::-webkit-scrollbar-thumb:hover{background:rgba(225,71,111,.5);background-clip:content-box}
+
+  /* ── ① Title bar ────────────────────────────────────────────────── */
+  .titlebar{
+    flex:none;display:flex;align-items:center;gap:8px;padding:12px 14px;
+    background:linear-gradient(180deg,rgba(255,255,255,.34),rgba(255,255,255,.1));
+    border-bottom:1px solid rgba(255,255,255,.55);
+  }
+  .tb-btn,.tb-pill{
+    background:rgba(255,255,255,.55);border:1px solid rgba(255,255,255,.9);color:var(--maroon);
+    cursor:pointer;box-shadow:0 2px 8px rgba(122,18,48,.08),inset 0 1px 0 rgba(255,255,255,.9);
+    transition:background .18s var(--ease),border-color .18s var(--ease),transform .18s var(--ease);
+  }
+  .tb-btn:hover,.tb-pill:hover{background:rgba(255,255,255,.8);border-color:#fff;transform:translateY(-1px)}
+  .tb-btn:active,.tb-pill:active{transform:translateY(0)}
+  .tb-btn{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;flex:none}
+  .tb-pill{height:34px;padding:0 15px;border-radius:999px;display:inline-flex;align-items:center;gap:8px;font:600 13px/1 var(--sans);white-space:nowrap}
+  .titlebar .spacer{flex:1}
+
+  /* ── The torn white paper inside the glass ──────────────────────── */
+  .paper-wrap{
+    margin:14px 16px 18px;
+    filter:drop-shadow(0 14px 28px rgba(122,18,48,.14)) drop-shadow(0 2px 6px rgba(122,18,48,.06));
+  }
+  .tear{display:block;width:100%;height:10px}
+  .paper{background:linear-gradient(180deg,var(--paper-top),var(--paper-bot))}
+
+  /* ── ② Masthead ─────────────────────────────────────────────────── */
+  .masthead{
+    display:flex;align-items:center;justify-content:space-between;
+    gap:14px;row-gap:6px;flex-wrap:wrap;padding:14px 28px 12px;
+  }
+  .wordmark{font:italic 800 17px/1.2 var(--sans);letter-spacing:-.01em;color:var(--pink)}
+  .meta-text{font:500 11.5px var(--mono);letter-spacing:.02em;color:var(--ink-55);white-space:nowrap}
+  .deal-no{color:var(--ink-70)}
+  .double-rule{margin:0 28px;height:6px;border-top:2.5px solid rgba(94,15,44,.92);border-bottom:1px solid rgba(94,15,44,.92)}
+
+  /* ── ③ Parties ──────────────────────────────────────────────────── */
+  .parties{display:flex;align-items:baseline;gap:10px;row-gap:4px;flex-wrap:wrap;padding:13px 28px 15px}
+  .party{display:flex;align-items:baseline;gap:7px;min-width:0}
+  .party-label{font:700 9px var(--sans);letter-spacing:.16em;text-transform:uppercase;color:var(--ink-38)}
+  .party-name{font:700 14px/1.3 var(--sans);color:var(--ink)}
+  .you-tag{font:600 11px var(--sans);color:var(--pink)}
+  .flow{flex:1;display:flex;align-items:center;align-self:center;min-width:32px;color:var(--pink)}
+  .flow::before{content:"";flex:1;height:1.5px;border-radius:2px;background:linear-gradient(90deg,transparent,rgba(225,71,111,.6))}
+  .flow .ic{margin-left:-4px}
+
+  /* ── ④ Products — negotiation diff (red/green) + promo diff (yellow) */
+  .products{border-top:1px solid var(--hairline);padding:4px 28px 18px}
+  .cols{display:grid;grid-template-columns:minmax(0,1fr) 72px 46px 92px 96px;column-gap:12px}
+  .p-head{padding:14px 0 9px;border-bottom:1px solid var(--hairline)}
+  .p-head span{font:700 9.5px var(--sans);letter-spacing:.15em;text-transform:uppercase;color:var(--ink-38)}
+  .p-row{padding:13px 0;border-bottom:1px solid var(--hairline);align-items:start}
+  .p-name{font:600 13.5px/1.4 var(--sans);color:var(--ink)}
+  .num{font-family:var(--mono);font-size:13px;line-height:1.4;text-align:right;color:var(--ink);font-variant-numeric:tabular-nums;white-space:nowrap}
+  .r{text-align:right}
+  .bleed{margin:0 -28px;padding-left:28px;padding-right:28px}
+
+  .row-old{background:var(--red-soft)}
+  .row-old .p-name,.row-old .num{color:var(--red);text-decoration:line-through;text-decoration-color:rgba(180,43,69,.65)}
+  .row-new{background:var(--green-soft)}
+  .row-new .p-name,.row-new .num{color:var(--green)}
+  .badge-change{
+    display:inline-block;margin-left:8px;padding:3px 9px 2.5px;vertical-align:2px;
+    border-radius:7px;background:var(--green);color:#fff;
+    font:800 9px var(--sans);letter-spacing:.12em;text-transform:uppercase;
+  }
+
+  /* promotion sub-diff — same idea, yellow */
+  .row-promo-old{background:var(--promo-soft);border-left:3px solid var(--promo-strong)}
+  .row-promo-old .p-name,.row-promo-old .num{color:var(--promo);text-decoration:line-through;text-decoration-color:rgba(180,83,9,.55)}
+  .row-promo-new{background:var(--promo-soft);border-left:3px solid var(--promo-strong)}
+  .row-promo-new .p-name,.row-promo-new .num{color:var(--promo)}
+  .previewing .row-promo-old,.previewing .row-promo-new{border-left-style:dashed}
+  .badge-promo{
+    display:inline-block;margin-left:8px;padding:3px 9px 2.5px;vertical-align:2px;
+    border-radius:7px;background:var(--promo-strong);color:var(--promo-ink);
+    font:800 9px var(--sans);letter-spacing:.12em;text-transform:uppercase;
+  }
+  .mini-old{display:block;font-size:11px;color:var(--ink-38);text-decoration:line-through;margin-top:2px}
+
+  /* ── Yellow promotion line, inserted with the products ──────────── */
+  .promo-band{
+    margin:0 -28px;padding:12px 28px 13px;
+    background:var(--promo-soft);
+    border-left:3px solid var(--promo-strong);
+    border-bottom:1px solid var(--hairline);
+    display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  }
+  .promo-band.declined{background:rgba(51,21,32,.05);border-left-color:rgba(51,21,32,.25)}
+  .promo-band.declined .promo-text,.promo-band.declined .promo-title{color:var(--ink-38)}
+  .promo-title{
+    display:inline-flex;align-items:center;gap:6px;flex:none;
+    color:var(--promo);font:800 9.5px var(--sans);letter-spacing:.15em;text-transform:uppercase;
+  }
+  .promo-text{font:500 13px/1.5 var(--sans);color:var(--promo-ink);flex:1;min-width:220px}
+  .slot{font-weight:700;border-bottom:1.5px dashed rgba(180,83,9,.5)}
+  .promo-state{font:700 11px var(--sans);color:var(--ink-38)}
+  .btn-preview{
+    flex:none;display:inline-flex;align-items:center;gap:6px;padding:6px 13px;
+    border:1.5px solid rgba(180,83,9,.5);border-radius:999px;background:rgba(255,255,255,.6);
+    color:var(--promo);font:700 11.5px var(--sans);cursor:pointer;
+    transition:background .15s var(--ease);
+  }
+  .btn-preview:hover{background:rgba(245,158,11,.18)}
+
+  /* ── Total line — the reused space ──────────────────────────────── */
+  .p-total{display:flex;align-items:baseline;justify-content:flex-end;gap:12px;padding:16px 0 2px;flex-wrap:wrap}
+  .pt-label{font:700 10px var(--sans);letter-spacing:.17em;text-transform:uppercase;color:var(--ink-38);margin-right:auto}
+  .promo-bubble{
+    display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:999px;
+    background:var(--promo-soft);border:1px solid rgba(245,158,11,.5);
+    color:var(--promo);font:700 11.5px var(--sans);
+  }
+  .pt-old{font:400 12.5px var(--mono);text-decoration:line-through}
+  .pt-old.neg{color:rgba(180,43,69,.8);text-decoration-color:rgba(180,43,69,.55)}
+  .pt-old.neu{color:var(--ink-38);text-decoration-color:rgba(51,21,32,.4)}
+  .pt-delta{padding:2.5px 9px;border-radius:999px;background:var(--green-soft);border:1px solid rgba(23,138,82,.25);color:var(--green);font:600 11.5px var(--mono)}
+  .pt-value{font:800 26px/1 var(--sans);color:var(--green);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+
+  /* ── ⑤ Contract conditions ──────────────────────────────────────── */
+  .terms{border-top:1px solid var(--hairline);display:grid;grid-template-columns:1fr 1.25fr 1fr;gap:10px;padding:14px 28px 15px}
+  .term{background:rgba(122,18,48,.035);border:1px solid rgba(122,18,48,.09);border-radius:14px;padding:11px 14px}
+  .term-label{font:700 9px var(--sans);letter-spacing:.16em;text-transform:uppercase;color:var(--ink-38);margin-bottom:4px}
+  .term-value{font:600 12.5px/1.5 var(--sans);color:var(--ink)}
+  .promo-extra{color:var(--promo);font-weight:700}
+
+  /* ── ⑥ Open items ───────────────────────────────────────────────── */
+  .todos{border-top:1px solid var(--hairline);padding:16px 28px 8px}
+  .todos-head{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+  .todos-title{font:700 10px var(--sans);letter-spacing:.17em;text-transform:uppercase;color:var(--ink-38)}
+  .count{min-width:19px;height:19px;padding:0 6px;border-radius:999px;background:rgba(225,71,111,.13);color:var(--pink-deep);font:700 10.5px var(--mono);display:grid;place-items:center}
+  .todo{display:flex;align-items:center;gap:10px;padding:8px 10px;margin:0 -10px;border-radius:12px;transition:background .15s var(--ease)}
+  .todo:hover{background:rgba(122,18,48,.045)}
+  .check{
+    width:19px;height:19px;flex:none;border-radius:6px;
+    border:1.5px solid rgba(94,15,44,.32);background:#fff;color:transparent;
+    display:grid;place-items:center;cursor:pointer;padding:0;
+    transition:background .15s var(--ease),border-color .15s var(--ease);
+  }
+  .done .check{background:var(--pink);border-color:var(--pink);color:#fff}
+  .action-chip{
+    flex:none;display:inline-flex;align-items:center;gap:5px;padding:4px 11px;
+    border:1px solid rgba(225,71,111,.38);border-radius:999px;background:#fff;
+    color:var(--pink-deep);font:800 9.5px var(--sans);letter-spacing:.11em;text-transform:uppercase;cursor:pointer;
+    transition:background .15s var(--ease);
+  }
+  .action-chip:hover{background:rgba(225,71,111,.1)}
+  .todo-text{font:500 13px/1.4 var(--sans);color:var(--ink);flex:1;min-width:0}
+  .done .todo-text{text-decoration:line-through;text-decoration-color:rgba(51,21,32,.4);color:var(--ink-38)}
+  .owner{flex:none;font:600 11px var(--mono);color:var(--pink-deep);background:rgba(225,71,111,.12);padding:3px 9px;border-radius:999px}
+  .owner.you{background:var(--pink);color:#fff}
+  .private-box{
+    display:flex;align-items:center;gap:10px;margin:6px 0 2px;padding:8px 12px;
+    border:1.5px dashed rgba(225,71,111,.55);border-radius:16px;background:rgba(225,71,111,.04);
+  }
+  .only-you{flex:none;display:inline-flex;align-items:center;gap:5px;color:var(--maroon);font:800 9.5px var(--sans);letter-spacing:.12em;text-transform:uppercase}
+  .add-item{
+    margin:9px 0 14px;display:inline-flex;align-items:center;gap:7px;padding:8px 15px;
+    border:1.5px dashed rgba(225,71,111,.45);border-radius:999px;background:none;
+    color:var(--pink-deep);font:700 12.5px var(--sans);cursor:pointer;transition:background .15s var(--ease);
+  }
+  .add-item:hover{background:rgba(225,71,111,.08)}
+
+  /* ── ⑦ Note ─────────────────────────────────────────────────────── */
+  .note{
+    margin:4px 28px 22px;padding:12px 16px 13px;
+    background:rgba(122,18,48,.035);
+    border:1px solid rgba(122,18,48,.09);border-left:3px solid var(--pink);
+    border-radius:8px 14px 14px 8px;
+  }
+  .note-label{font:700 9.5px var(--sans);letter-spacing:.15em;text-transform:uppercase;color:var(--ink-38);margin-bottom:5px}
+  .note-text{font:400 13.5px/1.55 var(--sans);color:var(--ink-70)}
+
+  /* ── ⑧ Decision — promo choice · negotiate · sign ───────────────── */
+  .decision{
+    flex:none;border-top:1px solid var(--hairline);
+    background:linear-gradient(180deg,rgba(255,255,255,.12),rgba(225,71,111,.12));
+    padding:14px 20px;
+    display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:10px;
+  }
+  .promo-seg{
+    grid-column:1;justify-self:start;
+    display:inline-flex;border-radius:999px;overflow:hidden;
+    border:1.5px solid rgba(180,83,9,.5);
+    box-shadow:0 4px 14px -6px rgba(245,158,11,.5);
+  }
+  .promo-seg button{
+    border:none;cursor:pointer;padding:11px 16px;
+    font:700 12.5px var(--sans);display:inline-flex;align-items:center;gap:6px;
+    transition:background .15s var(--ease),color .15s var(--ease);
+  }
+  .seg-accept{background:linear-gradient(180deg,#FBBF24,#F59E0B);color:var(--promo-ink)}
+  .seg-decline{background:rgba(245,158,11,.12);color:var(--promo)}
+  .seg-accept:hover{background:linear-gradient(180deg,#FCD34D,#F59E0B)}
+  .seg-decline:hover{background:rgba(245,158,11,.22)}
+  .promo-seg.state-accepted .seg-accept{box-shadow:inset 0 2px 5px rgba(63,42,0,.35)}
+  .promo-seg.state-accepted .seg-decline{opacity:.55}
+  .promo-seg.state-declined .seg-decline{background:rgba(180,83,9,.25);box-shadow:inset 0 2px 5px rgba(63,42,0,.25)}
+  .promo-seg.state-declined .seg-accept{opacity:.55;filter:saturate(.4)}
+
+  .btn{
+    border-radius:999px;font:700 14px var(--sans);cursor:pointer;padding:12px 24px;border:none;
+    transition:transform .18s var(--ease),box-shadow .18s var(--ease),background .18s var(--ease),opacity .18s var(--ease);
+  }
+  .btn.negotiate{
+    grid-column:2;justify-self:center;
+    background:rgba(225,71,111,.12);border:1.5px solid rgba(225,71,111,.5);color:var(--pink-deep);
+  }
+  .btn.negotiate:hover{background:rgba(225,71,111,.2)}
+  .btn.sign{
+    grid-column:3;justify-self:end;
+    display:inline-flex;align-items:center;gap:8px;
+    background:linear-gradient(180deg,#2BAC6E,#178A52);color:#fff;
+    box-shadow:0 14px 30px -12px rgba(23,138,82,.6),inset 0 1px 0 rgba(255,255,255,.35);
+  }
+  .btn.sign:hover:not([disabled]){transform:translateY(-1px)}
+  .btn.sign[disabled]{
+    background:linear-gradient(180deg,#B9AFB4,#9C8F96);
+    box-shadow:none;cursor:not-allowed;opacity:.75;
+  }
+
+  :focus-visible{outline:2px solid var(--pink);outline-offset:2px}
+
+  /* ── Responsive ─────────────────────────────────────────────────── */
+  @media (max-width:680px){
+    body{padding:6px}
+    .card{border-radius:18px}
+    .paper-wrap{margin:10px 10px 14px}
+    .masthead{padding:12px 20px 10px}
+    .double-rule,.note{margin-left:20px;margin-right:20px}
+    .parties,.products,.terms,.todos{padding-left:20px;padding-right:20px}
+    .bleed,.promo-band{margin:0 -20px;padding-left:20px;padding-right:20px}
+    .todo{margin:0 -8px;padding:8px}
+    .meta-text{font-size:10.5px}
+    .cols{grid-template-columns:minmax(0,1fr) 52px 32px 72px 78px;column-gap:8px}
+    .num{font-size:11px}
+    .p-name{font-size:12.5px}
+    .party-name{font-size:13px}
+    .flow{min-width:20px}
+    .terms{grid-template-columns:1fr;gap:8px}
+    .todo,.private-box{flex-wrap:wrap}
+    .decision{display:flex;flex-wrap:wrap;gap:8px;padding:12px 14px}
+    .promo-seg{width:100%;justify-content:stretch}
+    .promo-seg button{flex:1;justify-content:center}
+    .btn.negotiate,.btn.sign{flex:1;justify-content:center}
+    .tb-pill span{display:none}
+    .tb-pill{width:34px;padding:0;justify-content:center}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *,*::before,*::after{transition:none!important;animation:none!important}
+  }
+</style>
+</head>
+<body>
+<div class="bg">
+  <div class="blob b1"></div>
+  <div class="blob b2"></div>
+  <div class="blob b3"></div>
+</div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></symbol>
+    <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></symbol>
+    <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+    <symbol id="i-sign" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></symbol>
+    <symbol id="i-zap" viewBox="0 0 24 24"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></symbol>
+  </defs>
+</svg>
+
+<div class="card">
+
+  <!-- ① App controls — pinned top -->
+  <div class="titlebar">
+    <button class="tb-btn" aria-label="Close"><svg class="ic"><use href="#i-x"/></svg></button>
+    <button class="tb-pill"><svg class="ic"><use href="#i-chat"/></svg><span>Talk about this deal</span></button>
+    <button class="tb-pill"><svg class="ic"><use href="#i-history"/></svg><span>Activity</span></button>
+    <div class="spacer"></div>
+    <button class="tb-btn" aria-label="Edit deal"><svg class="ic"><use href="#i-pencil"/></svg></button>
+  </div>
+
+  <!-- Scrollable middle -->
+  <div class="card-body">
+    <!-- The white paper slip, torn top and bottom -->
+    <div class="paper-wrap">
+      <svg class="tear" viewBox="0 0 160 10" preserveAspectRatio="none" aria-hidden="true">
+        <path fill="#FFFFFF" d="M0 10 L5 3 L10 10 L15 1.5 L20 10 L25 4 L30 10 L35 2 L40 10 L45 5 L50 10 L55 2.5 L60 10 L65 1 L70 10 L75 3.5 L80 10 L85 2 L90 10 L95 4.5 L100 10 L105 1.5 L110 10 L115 3 L120 10 L125 5 L130 10 L135 2 L140 10 L145 3.5 L150 10 L155 1 L160 10 Z"/>
+      </svg>
+
+      <div class="paper">
+
+        <!-- ② Masthead -->
+        <header class="masthead">
+          <div class="wordmark">He//oSe//o</div>
+          <span class="meta-text"><span class="deal-no">HS-AUR07-CAN23-A189371</span> · 12-JUN-2026</span>
+        </header>
+        <div class="double-rule"></div>
+
+        <!-- ③ Parties -->
+        <div class="parties">
+          <div class="party">
+            <span class="party-label">Seller</span>
+            <span class="party-name">StonePharm GmbH</span>
+            <span class="you-tag">· You</span>
+          </div>
+          <div class="flow"><svg class="ic ic-sm"><use href="#i-chev"/></svg></div>
+          <div class="party">
+            <span class="party-label">Buyer</span>
+            <span class="party-name">Aurora Deutschland GmbH</span>
+          </div>
+        </div>
+
+        <!-- ④ Products -->
+        <section class="products" id="products">
+          <div class="cols p-head">
+            <span>Product</span>
+            <span class="r">Unit size</span>
+            <span class="r">Units</span>
+            <span class="r">Price</span>
+            <span class="r">Total</span>
+          </div>
+
+          <!-- negotiation diff (red / green) -->
+          <div class="cols p-row bleed row-old">
+            <div class="p-name">Pedanios 22/1 · Mandarin Cookies</div>
+            <div class="num">1000&nbsp;g</div>
+            <div class="num">3</div>
+            <div class="num">3.80&nbsp;€/g</div>
+            <div class="num">11,400&nbsp;€</div>
+          </div>
+          <div class="cols p-row bleed row-new">
+            <div class="p-name">Pedanios 22/1 · Mandarin Cookies<span class="badge-change">Change</span></div>
+            <div class="num">1000&nbsp;g</div>
+            <div class="num">3</div>
+            <div class="num">3.60&nbsp;€/g</div>
+            <div class="num">10,800&nbsp;€</div>
+          </div>
+
+          <div class="cols p-row">
+            <div class="p-name">Bedrocan · Afina 22/1</div>
+            <div class="num">500&nbsp;g</div>
+            <div class="num">2</div>
+            <div class="num">4.20&nbsp;€/g</div>
+            <div class="num">4,200&nbsp;€</div>
+          </div>
+
+          <!-- base line touched by the promotion -->
+          <div class="cols p-row" id="rowAuroraBase">
+            <div class="p-name">Aurora 20/1 · Pink Kush</div>
+            <div class="num">250&nbsp;g</div>
+            <div class="num">4</div>
+            <div class="num">3.50&nbsp;€/g</div>
+            <div class="num">3,500&nbsp;€</div>
+          </div>
+
+          <!-- promotion sub-diff (yellow), hidden until preview / accept -->
+          <div class="cols p-row bleed row-promo-old" id="promoOld" hidden>
+            <div class="p-name">Aurora 20/1 · Pink Kush</div>
+            <div class="num">250&nbsp;g</div>
+            <div class="num">4</div>
+            <div class="num">3.50&nbsp;€/g</div>
+            <div class="num">3,500&nbsp;€</div>
+          </div>
+          <div class="cols p-row bleed row-promo-new" id="promoNew" hidden>
+            <div class="p-name">Aurora 20/1 · Pink Kush<span class="badge-promo">Promo</span></div>
+            <div class="num">250&nbsp;g</div>
+            <div class="num">6</div>
+            <div class="num">3.50&nbsp;€/g</div>
+            <div class="num">5,250&nbsp;€</div>
+          </div>
+          <div class="cols p-row bleed row-promo-new" id="promoGift" hidden>
+            <div class="p-name">Free delivery<span class="badge-promo">Promo</span></div>
+            <div class="num">—</div>
+            <div class="num">1</div>
+            <div class="num">0&nbsp;€</div>
+            <div class="num">0&nbsp;€<span class="mini-old">240&nbsp;€</span></div>
+          </div>
+
+          <!-- ⚡ the promotion, inserted as a line with the products -->
+          <div class="promo-band" id="promoBand">
+            <span class="promo-title"><svg class="ic ic-sm"><use href="#i-zap"/></svg>Promotion</span>
+            <span class="promo-text" id="promoText">If you take <span class="slot">2 more units</span> of
+              <span class="slot">Aurora 20/1 · Pink Kush</span>, then I give you
+              <span class="slot">free delivery</span> — value <span class="slot">240&nbsp;€</span>.</span>
+            <span class="promo-state" id="promoStateNote" hidden>Declined — the base deal will be signed.</span>
+            <button class="btn-preview" id="previewBtn">
+              <svg class="ic ic-sm"><use href="#i-eye"/></svg><span>Preview</span>
+            </button>
+          </div>
+
+          <!-- total line — reused space -->
+          <div class="p-total">
+            <span class="pt-label">Total net</span>
+            <span class="promo-bubble" id="promoBubble" hidden>
+              <svg class="ic ic-sm"><use href="#i-zap"/></svg><span id="promoBubbleText">Promotion value 240&nbsp;€</span>
+            </span>
+            <span class="pt-old neg" id="totOld">19,100&nbsp;€</span>
+            <span class="pt-delta" id="totDelta">−600&nbsp;€</span>
+            <span class="pt-value" id="totMain">18,500&nbsp;€</span>
+          </div>
+        </section>
+
+        <!-- ⑤ Contract conditions -->
+        <section class="terms">
+          <div class="term">
+            <div class="term-label">Quality</div>
+            <div class="term-value">GMP · CoA per batch</div>
+          </div>
+          <div class="term">
+            <div class="term-label">Logistics</div>
+            <div class="term-value">DDP · 2–8&nbsp;°C temp-controlled<span class="promo-extra" id="logiPromo" hidden> · Free delivery ⚡</span></div>
+          </div>
+          <div class="term">
+            <div class="term-label">Payment</div>
+            <div class="term-value">14 days net · 2&nbsp;% Skonto 7&nbsp;d</div>
+          </div>
+        </section>
+
+        <!-- ⑥ Open items -->
+        <section class="todos">
+          <div class="todos-head">
+            <span class="todos-title">Open items</span>
+            <span class="count" id="todoCount">4</span>
+          </div>
+          <div class="todo">
+            <button class="check" aria-label="Mark done"><svg class="ic ic-xs"><use href="#i-check"/></svg></button>
+            <button class="action-chip"><svg class="ic ic-sm"><use href="#i-upload"/></svg>Upload</button>
+            <span class="todo-text">CNL for the June delivery</span>
+            <span class="owner">@Jan</span>
+          </div>
+          <div class="todo">
+            <button class="check" aria-label="Mark done"><svg class="ic ic-xs"><use href="#i-check"/></svg></button>
+            <button class="action-chip"><svg class="ic ic-sm"><use href="#i-upload"/></svg>Upload</button>
+            <span class="todo-text">PO for the standing order</span>
+            <span class="owner">@Jan</span>
+          </div>
+          <div class="todo">
+            <button class="check" aria-label="Mark done"><svg class="ic ic-xs"><use href="#i-check"/></svg></button>
+            <button class="action-chip"><svg class="ic ic-sm"><use href="#i-check"/></svg>Approve</button>
+            <span class="todo-text">CoA of batch 24-117 against spec</span>
+            <span class="owner you">@You</span>
+          </div>
+          <div class="private-box">
+            <button class="check" aria-label="Mark done"><svg class="ic ic-xs"><use href="#i-check"/></svg></button>
+            <span class="todo-text">Update the price</span>
+            <span class="owner you">@You</span>
+            <span class="only-you"><svg class="ic ic-sm"><use href="#i-lock"/></svg>Only you</span>
+          </div>
+          <button class="add-item"><svg class="ic ic-sm"><use href="#i-plus"/></svg>Add something</button>
+        </section>
+
+        <!-- ⑦ Note -->
+        <section class="note">
+          <div class="note-label">Note — Jan Weber · Aurora Deutschland</div>
+          <div class="note-text">Please deliver temperature-controlled and send me the logger data.</div>
+        </section>
+
+      </div><!-- /paper -->
+
+      <svg class="tear" viewBox="0 0 160 10" preserveAspectRatio="none" aria-hidden="true">
+        <path fill="#FFF9FA" d="M0 0 L5 7 L10 0 L15 8.5 L20 0 L25 6 L30 0 L35 8 L40 0 L45 5 L50 0 L55 7.5 L60 0 L65 9 L70 0 L75 6.5 L80 0 L85 8 L90 0 L95 5.5 L100 0 L105 8.5 L110 0 L115 7 L120 0 L125 5 L130 0 L135 8 L140 0 L145 6.5 L150 0 L155 9 L160 0 Z"/>
+      </svg>
+    </div><!-- /paper-wrap -->
+  </div><!-- /card-body -->
+
+  <!-- ⑧ Decision — accept/decline promo (click 1) · negotiate · sign (click 2) -->
+  <footer class="decision">
+    <div class="promo-seg" id="promoSeg">
+      <button class="seg-accept" id="acceptBtn"><svg class="ic ic-sm"><use href="#i-check"/></svg>Accept promotion</button>
+      <button class="seg-decline" id="declineBtn"><svg class="ic ic-sm"><use href="#i-x"/></svg>Decline</button>
+    </div>
+    <button class="btn negotiate">Negotiate</button>
+    <button class="btn sign" id="signBtn" disabled title="First accept or decline the promotion">
+      <svg class="ic"><use href="#i-sign"/></svg>
+      <span>Sign the deal</span>
+    </button>
+  </footer>
+
+</div>
+
+<script>
+  /* ── open items ── */
+  const count = document.getElementById('todoCount');
+  document.querySelectorAll('.check').forEach(btn => {
+    btn.addEventListener('click', () => {
+      btn.closest('.todo, .private-box').classList.toggle('done');
+      count.textContent = document.querySelectorAll('.todo:not(.done), .private-box:not(.done)').length;
+    });
+  });
+
+  /* ── promotion state machine ── */
+  const products   = document.getElementById('products');
+  const rowBase    = document.getElementById('rowAuroraBase');
+  const promoOld   = document.getElementById('promoOld');
+  const promoNew   = document.getElementById('promoNew');
+  const promoGift  = document.getElementById('promoGift');
+  const promoBand  = document.getElementById('promoBand');
+  const promoNote  = document.getElementById('promoStateNote');
+  const previewBtn = document.getElementById('previewBtn');
+  const promoSeg   = document.getElementById('promoSeg');
+  const acceptBtn  = document.getElementById('acceptBtn');
+  const declineBtn = document.getElementById('declineBtn');
+  const bubble     = document.getElementById('promoBubble');
+  const bubbleText = document.getElementById('promoBubbleText');
+  const totOld     = document.getElementById('totOld');
+  const totDelta   = document.getElementById('totDelta');
+  const totMain    = document.getElementById('totMain');
+  const logiPromo  = document.getElementById('logiPromo');
+  const signBtn    = document.getElementById('signBtn');
+
+  let promo = 'pending';   // 'pending' | 'accepted' | 'declined'
+  let preview = false;
+
+  function render(){
+    const applied = promo === 'accepted' || (promo === 'pending' && preview);
+
+    /* table: base row vs yellow sub-diff */
+    rowBase.hidden   = applied;
+    promoOld.hidden  = !applied;
+    promoNew.hidden  = !applied;
+    promoGift.hidden = !applied;
+    products.classList.toggle('previewing', promo === 'pending' && preview);
+
+    /* totals — the price and everything changes */
+    if (applied){
+      totOld.textContent = '18,500 €';
+      totOld.className = 'pt-old neu';
+      totDelta.hidden = true;
+      totMain.textContent = '20,250 €';
+      bubble.hidden = false;
+      bubbleText.textContent = promo === 'accepted'
+        ? 'Promotion value 240 €'
+        : 'Promotion value 240 € · preview';
+    } else {
+      totOld.textContent = '19,100 €';
+      totOld.className = 'pt-old neg';
+      totDelta.hidden = false;
+      totMain.textContent = '18,500 €';
+      bubble.hidden = true;
+    }
+
+    /* logistics gift */
+    logiPromo.hidden = !applied;
+
+    /* the promotion line itself */
+    promoBand.classList.toggle('declined', promo === 'declined');
+    promoNote.hidden = promo !== 'declined';
+    previewBtn.hidden = promo !== 'pending';
+    previewBtn.querySelector('span').textContent = preview ? 'Hide preview' : 'Preview';
+
+    /* footer — option stays visible in every state */
+    promoSeg.classList.toggle('state-accepted', promo === 'accepted');
+    promoSeg.classList.toggle('state-declined', promo === 'declined');
+    acceptBtn.lastChild.textContent = promo === 'accepted' ? 'Promotion accepted' : 'Accept promotion';
+    declineBtn.lastChild.textContent = promo === 'declined' ? 'Declined' : 'Decline';
+
+    /* click 1 resolves the promotion, click 2 signs */
+    signBtn.disabled = promo === 'pending';
+    signBtn.title = promo === 'pending' ? 'First accept or decline the promotion' : '';
+  }
+
+  previewBtn.addEventListener('click', () => { preview = !preview; render(); });
+  acceptBtn .addEventListener('click', () => { promo = 'accepted'; preview = false; render(); });
+  declineBtn.addEventListener('click', () => { promo = 'declined'; preview = false; render(); });
+
+  let t;
+  signBtn.addEventListener('click', () => {
+    if (signBtn.disabled) return;
+    clearTimeout(t);
+    signBtn.querySelector('span').textContent = 'Signed ✓';
+    t = setTimeout(() => { signBtn.querySelector('span').textContent = 'Sign the deal'; }, 2600);
+  });
+
+  render();
+</script>
+</body>
+</html>

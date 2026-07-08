@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Search, Building2, User, ChevronRight } from "lucide-react";
+import { Search, Building2, User, ChevronRight, X } from "lucide-react";
 import type { ConnectedCompany, MyConnectionsView } from "@/modules/messaging";
 import { isNewConnection, relativeDayLabel } from "@/modules/messaging";
 
@@ -120,6 +120,21 @@ export function NewChatDropdown({ connections, onSelect, onClose }: NewChatDropd
       ref={ref}
       className="glass-strong absolute inset-x-2 bottom-2 top-1 z-50 flex flex-col overflow-hidden rounded-2xl shadow-xl ring-1 ring-black/5"
     >
+      {/* Header: title + an explicit ✕ close (D-03). Until now the picker closed
+          only via escape / click-away, which was not discoverable enough. */}
+      <div className="flex items-center justify-between border-b border-black/5 px-3 py-2">
+        <span className="text-sm font-semibold text-ink">New chat</span>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          title="Close"
+          className="flex h-7 w-7 items-center justify-center rounded-full text-ink/45 transition hover:bg-ink/5 hover:text-ink"
+        >
+          <X size={15} strokeWidth={2} />
+        </button>
+      </div>
+
       {/* Person | Company toggle (pink active state, matches the list chips) */}
       <div className="flex gap-1.5 border-b border-black/5 p-2.5">
         <ToggleButton

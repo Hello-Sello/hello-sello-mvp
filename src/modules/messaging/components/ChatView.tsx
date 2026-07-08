@@ -11,16 +11,20 @@ import {
   getMessages,
   markRead,
   postMessage,
+  createGroupThread,
+  approveGroupMember,
 } from "../supabase/store";
 import {
   getMyConnections,
   openOrCreateP2pThread,
   resolveC2cThread,
+  NEW_GROUP_EVENT,
+  type NewGroupEventDetail,
 } from "@/modules/messaging";
 import { useChatRealtime } from "../lib/use-chat-realtime";
+import { usePersistedCollapse } from "@/shared/ui/use-persisted-collapse";
 import { ConversationList } from "./ConversationList";
 import { ThreadView } from "./ThreadView";
-import { SellaPanel } from "./SellaPanel";
 
 /**
  * Chat orchestrator (panels 3 + 4). The ONLY stateful piece of the chat: holds
@@ -35,12 +39,23 @@ export function ChatView() {
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessageView[]>([]);
   const [loading, setLoading] = useState(true);
+  // panel-3 collapse (mirrors the global IconRail, same shared hook so it is
+  // REMEMBERED across reloads): shrink the conversation list to a narrow avatar
+  // strip so the thread + deal card get more room. The width lives on the
+  // wrapper here (only the parent can shrink the rail); the list renders the
+  // strip when collapsed.
+  const [railCollapsed, toggleRailCollapsed] = usePersistedCollapse(
+    "hs:chat-list-collapsed",
+  );
   // live unread counts per thread, cleared on open - in-memory for the demo
   const [unread, setUnread] = useState<Record<string, number>>({});
   // the new-chat picker: the connected directory + its open/closed flag + the
   // live conversation-search value (local useState only - no global store)
   const [connections, setConnections] = useState<MyConnectionsView>({ companies: [] });
-  const [pickerOpen, setPickerOpen] = useState(false);
+  // which picker is open (D-02): the New-Chat picker, the New-Group picker, or
+  // none. A New-Group opened from a deal card carries that deal's id (deal mode).
+  const [pickerMode, setPickerMode] = useState<"newchat" | "group" | null>(null);
+  const [groupDealCardId, setGroupDealCardId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
 
   // initial load - auto-select the first conversation
@@ -107,8 +122,55 @@ export function ChatView() {
     // resolves the brand-new thread - else the panel shows the empty state (Pitfall 5).
     await getConversations().then(setConversations);
     setSelectedThreadId(threadId);
-    setPickerOpen(false);
+    setPickerMode(null);
   }
+
+  function handleOpenPicker(mode: "newchat" | "group") {
+    // opening from the +New menu is always a plain (non-deal) picker; deal mode
+    // is entered only via the hs:new-group event below.
+    setGroupDealCardId(null);
+    setPickerMode(mode);
+  }
+
+  function handleClosePicker() {
+    setPickerMode(null);
+    setGroupDealCardId(null);
+  }
+
+  // create a group (D-04 new-chat / D-05 deal). Returns the new thread + any
+  // server-gated externals so the picker can drive the two-approver flow.
+  async function handleCreateGroup(input: {
+    name: string;
+    memberPersonIds: string[];
+    dealCardId?: string;
+  }) {
+    const result = await createGroupThread(input);
+    // refresh so the new group row appears in the rail (and resolves on select)
+    await getConversations().then(setConversations);
+    return result;
+  }
+
+  async function handleApproveGroupMember(threadId: string, personId: string) {
+    await approveGroupMember({ threadId, personId });
+  }
+
+  // finished creating a group: open it + close the picker (mirrors new-chat).
+  function handleGroupDone(threadId: string) {
+    setSelectedThreadId(threadId);
+    handleClosePicker();
+  }
+
+  // the deal card (07-07) dispatches hs:new-group to open the picker in deal
+  // mode; messaging listens here, keeping the two modules acyclic (D-05).
+  useEffect(() => {
+    function onNewGroup(e: Event) {
+      const detail = (e as CustomEvent<NewGroupEventDetail>).detail;
+      setGroupDealCardId(detail?.dealCardId ?? null);
+      setPickerMode("group");
+    }
+    window.addEventListener(NEW_GROUP_EVENT, onNewGroup);
+    return () => window.removeEventListener(NEW_GROUP_EVENT, onNewGroup);
+  }, []);
 
   async function handleSend(body: string) {
     const text = body.trim();
@@ -154,10 +216,17 @@ export function ChatView() {
 
   return (
     <div className="flex h-full gap-3">
-      {/* panel 3 - conversation list (w-72: a touch wider so the Deal Card leaflet
-          that now opens over this rail has room to breathe, 04C) */}
-      <div className="glass flex w-72 shrink-0 flex-col overflow-hidden rounded-3xl">
-        {loading ? (
+      {/* panel 3 - conversation list. Collapses to a narrow avatar strip via a
+          toggle (mirrors the global IconRail's collapse) so the thread + deal
+          card get more room. Width lives here on the wrapper so the rail can
+          actually shrink; the list renders the strip when collapsed. w-72
+          expanded keeps the Deal Card leaflet room to breathe (04C). */}
+      <div
+        className={`glass flex shrink-0 flex-col overflow-hidden rounded-3xl transition-[width] duration-200 ease-out motion-reduce:transition-none ${
+          railCollapsed ? "w-[68px]" : "w-72"
+        }`}
+      >
+        {loading && !railCollapsed ? (
           <p className="flex-1 p-6 text-center text-sm text-ink/40">Loading conversations…</p>
         ) : (
           <ConversationList
@@ -166,13 +235,19 @@ export function ChatView() {
             onFilterChange={setFilter}
             selectedThreadId={selectedThreadId}
             onSelect={handleSelect}
+            collapsed={railCollapsed}
+            onToggleCollapsed={toggleRailCollapsed}
             connections={connections}
             search={search}
             onSearchChange={setSearch}
-            pickerOpen={pickerOpen}
-            onTogglePicker={() => setPickerOpen((v) => !v)}
-            onClosePicker={() => setPickerOpen(false)}
+            pickerMode={pickerMode}
+            onOpenPicker={handleOpenPicker}
+            onClosePicker={handleClosePicker}
             onNewChatSelect={handleNewChatSelect}
+            groupDealCardId={groupDealCardId}
+            onCreateGroup={handleCreateGroup}
+            onApproveMember={handleApproveGroupMember}
+            onGroupDone={handleGroupDone}
           />
         )}
       </div>
@@ -184,6 +259,7 @@ export function ChatView() {
             conversation={selectedConversation}
             messages={messages}
             onSend={handleSend}
+            onGroupRenamed={() => void getConversations().then(setConversations)}
           />
         ) : (
           <div className="flex flex-1 flex-col items-center justify-center p-10 text-center text-ink/40">
@@ -193,8 +269,9 @@ export function ChatView() {
         )}
       </div>
 
-      {/* panel 5 - Sella rail */}
-      <SellaPanel conversation={selectedConversation} />
+      {/* Sella panel (old panel 5) removed - the thread now expands to fill.
+          Sella's only presence is the route-level ping bubble (SellaPlaceholderBar,
+          right edge); the real Sella opens from there in Phase 8. */}
     </div>
   );
 }

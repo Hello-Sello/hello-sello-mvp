@@ -102,3 +102,181 @@ html { scroll-behavior: smooth; }
   .hs-blob-a, .hs-blob-b, .hs-blob-c { animation: none; }
   html { scroll-behavior: auto; }
 }
+
+/* =====================================================================
+   Deal card - paper-in-glass skin (07-07 final polish).
+   Restyles the 8-part deal card to the deal-card-promo prototype's visual
+   language: a frosted-glass window holding a torn-edge white "paper" slip.
+   Everything is scoped under `.dealcard` so the card's exact palette (from
+   the prototype) never leaks into the rest of the app; it builds on the
+   app's existing glass tokens + brand family. VISUAL only - no behavior
+   lives here.
+   ===================================================================== */
+.dealcard {
+  /* pink family reuses the app brand so the card stays in the app palette */
+  --dc-pink: var(--color-brand);
+  --dc-pink-deep: var(--color-brand-deep);
+  /* card-specific tokens the app theme does not carry */
+  --dc-maroon: #5e0f2c;
+  --dc-ink: #331520;
+  --dc-ink-70: rgba(51, 21, 32, 0.74);
+  --dc-ink-55: rgba(51, 21, 32, 0.55);
+  --dc-ink-38: rgba(51, 21, 32, 0.38);
+  --dc-hairline: rgba(94, 15, 44, 0.1);
+  --dc-green: #178a52;
+  --dc-green-soft: rgba(23, 138, 82, 0.1);
+  --dc-red: #b42b45;
+  --dc-red-soft: rgba(180, 43, 69, 0.08);
+  --dc-promo: #b45309;
+  --dc-promo-strong: #f59e0b;
+  --dc-promo-soft: rgba(245, 158, 11, 0.14);
+  --dc-promo-ink: #3f2a00;
+  --dc-paper-top: #ffffff;
+  --dc-paper-bot: #fff9fa;
+  --dc-tint-hi: rgba(255, 250, 253, 0.82);
+  --dc-tint-lo: rgba(252, 239, 246, 0.62);
+  --dc-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+
+  position: relative;
+  color: var(--dc-ink);
+  background: linear-gradient(180deg, var(--dc-tint-hi), var(--dc-tint-lo));
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  border-radius: 24px;
+  overflow: hidden;
+  box-shadow:
+    0 30px 70px -30px rgba(122, 18, 48, 0.28),
+    0 3px 12px rgba(122, 18, 48, 0.06),
+    inset 0 1px 1px rgba(255, 255, 255, 0.9);
+}
+/* the fine light seam along the top edge of the glass */
+.dealcard::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 8%;
+  right: 8%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.95), transparent);
+  pointer-events: none;
+}
+
+/* the frosted control strip along the top (prototype .titlebar) */
+.dc-titlebar {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0.12));
+  border-bottom: 1px solid rgba(255, 255, 255, 0.55);
+}
+
+/* circular + pill frosted controls (prototype .tb-btn / .tb-pill). The corner
+   flip/edit/lock buttons use `.dc-tb-btn` from OUTSIDE the `.dealcard` scope
+   (they are DealCard chrome, not card content), so the vars carry fallbacks. */
+.dc-tb-btn,
+.dc-tb-pill {
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  color: var(--dc-maroon, #5e0f2c);
+  box-shadow: 0 2px 8px rgba(122, 18, 48, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  transition: background 0.18s var(--dc-ease, ease), border-color 0.18s var(--dc-ease, ease),
+    transform 0.18s var(--dc-ease, ease);
+}
+.dc-tb-btn:hover,
+.dc-tb-pill:hover {
+  background: rgba(255, 255, 255, 0.85);
+  border-color: #fff;
+  transform: translateY(-1px);
+}
+.dc-tb-btn:active,
+.dc-tb-pill:active { transform: translateY(0); }
+
+/* the torn white paper slip */
+.dc-paper-wrap {
+  filter: drop-shadow(0 12px 24px rgba(122, 18, 48, 0.13))
+    drop-shadow(0 2px 5px rgba(122, 18, 48, 0.06));
+}
+.dc-paper { background: linear-gradient(180deg, var(--dc-paper-top), var(--dc-paper-bot)); }
+.dc-tear { display: block; width: 100%; height: 9px; }
+
+/* masthead */
+.dc-wordmark {
+  font-style: italic;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--dc-pink);
+}
+.dc-double-rule {
+  height: 6px;
+  border-top: 2.5px solid rgba(94, 15, 44, 0.92);
+  border-bottom: 1px solid rgba(94, 15, 44, 0.92);
+}
+
+/* hairline the sections share */
+.dc-hairline { border-color: var(--dc-hairline); }
+
+/* negotiation diff - red struck / green new */
+.dc-row-old { background: var(--dc-red-soft); }
+.dc-row-new { background: var(--dc-green-soft); }
+.dc-text-red { color: var(--dc-red); }
+.dc-text-green { color: var(--dc-green); }
+.dc-badge-change {
+  background: var(--dc-green);
+  color: #fff;
+  letter-spacing: 0.12em;
+}
+
+/* promotion - yellow */
+.dc-promo-band {
+  background: var(--dc-promo-soft);
+  border-left: 3px solid var(--dc-promo-strong);
+}
+.dc-promo-band.dc-declined {
+  background: rgba(51, 21, 32, 0.05);
+  border-left-color: rgba(51, 21, 32, 0.25);
+}
+.dc-text-promo { color: var(--dc-promo); }
+.dc-badge-promo {
+  background: var(--dc-promo-strong);
+  color: var(--dc-promo-ink);
+  letter-spacing: 0.12em;
+}
+.dc-btn-promo {
+  background: linear-gradient(180deg, #fbbf24, #f59e0b);
+  color: var(--dc-promo-ink);
+  transition: background 0.15s var(--dc-ease);
+}
+.dc-btn-promo:hover { background: linear-gradient(180deg, #fcd34d, #f59e0b); }
+
+/* condition cards + private "only you" box */
+.dc-term {
+  background: rgba(122, 18, 48, 0.035);
+  border: 1px solid rgba(122, 18, 48, 0.09);
+}
+.dc-private {
+  border: 1.5px dashed color-mix(in srgb, var(--dc-pink) 55%, transparent);
+  background: color-mix(in srgb, var(--dc-pink) 4%, transparent);
+}
+
+/* decision footer + sign / negotiate buttons */
+.dc-decision {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(225, 71, 111, 0.12));
+  border-top: 1px solid rgba(255, 255, 255, 0.5);
+}
+.dc-btn-sign {
+  background: linear-gradient(180deg, #2bac6e, #178a52);
+  color: #fff;
+  box-shadow: 0 12px 26px -12px rgba(23, 138, 82, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  transition: transform 0.18s var(--dc-ease), box-shadow 0.18s var(--dc-ease);
+}
+.dc-btn-sign:hover:not(:disabled) { transform: translateY(-1px); }
+.dc-btn-sign:disabled { opacity: 0.55; box-shadow: none; }
+.dc-btn-negotiate {
+  background: rgba(225, 71, 111, 0.12);
+  border: 1.5px solid rgba(225, 71, 111, 0.5);
+  color: var(--dc-pink-deep);
+  transition: background 0.18s var(--dc-ease);
+}
+.dc-btn-negotiate:hover { background: rgba(225, 71, 111, 0.2); }
+
+@media (prefers-reduced-motion: reduce) {
+  .dc-tb-btn, .dc-tb-pill, .dc-btn-sign, .dc-btn-promo, .dc-btn-negotiate {
+    transition: none !important;
+  }
+}
