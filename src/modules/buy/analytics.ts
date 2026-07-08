@@ -46,6 +46,12 @@ export interface AnalyticsProductRow {
   marginPercent: number | null;
   /** revenue / grand total revenue across all suppliers */
   share: number;
+  /**
+   * `product.pack_size_grams` for this (supplier, product) pair (18-14 fix) —
+   * null for a CSV-only product (no real catalogue row, so honestly no pack
+   * size) or a real product whose pack size was never set.
+   */
+  packSizeGrams: number | null;
 }
 
 /** v0 degenerate category: always exactly 1 product (no real taxonomy yet). */
@@ -78,9 +84,29 @@ export interface AnalyticsSupplierRow {
   share: number;
 }
 
+/**
+ * One raw source line (18-14 fix) — same shape as `AnalyticsSourceLine`, plus
+ * its own resolved `net`/`gross` (the SAME `resaleByKey` lookup `priced`
+ * already computes per merged group, just attached here at the line level
+ * instead) so per-period revenue/DB1 can be computed without re-deriving the
+ * lookup. Structurally a valid `TimeSeriesSourceLine` (`./lib/analyticsTimeSeries.ts`).
+ */
+export interface PricedAnalyticsSourceLine extends AnalyticsSourceLine {
+  net: number | null;
+  gross: number | null;
+}
+
 export interface BuyAnalytics {
   suppliers: AnalyticsSupplierRow[];
   totalRevenue: number;
+  /**
+   * Raw, per-source, NOT (supplier, product)-collapsed lines — every one
+   * carries its own real `date` and resolved `net`/`gross` (18-14 fix). This
+   * is what the Analytics chart's real time-bucketing
+   * (`./lib/analyticsTimeSeries.ts`) reads; `suppliers` above stays the
+   * table's (supplier -> category -> product) rollup tree, unaffected.
+   */
+  lines: PricedAnalyticsSourceLine[];
 }
 
 /** Minimal shape of a `deal_card` row needed for buyer-narrowing. */
@@ -90,6 +116,9 @@ interface DealCardRow {
   version: number;
   deal_type: string;
   initiating_company_id: string;
+  /** Real per-card date (18-14 fix) — preferred date for that card's lines. */
+  delivery_date_target: string | null;
+  created_at: string;
 }
 
 /** Minimal shape of a `relationship` row needed for buyer-narrowing. */
@@ -116,7 +145,7 @@ interface BuyPartnerLike {
 
 export async function getBuyAnalytics(): Promise<BuyAnalytics> {
   const callerCompanyId = await getCurrentCompanyId();
-  if (!callerCompanyId) return { suppliers: [], totalRevenue: 0 };
+  if (!callerCompanyId) return { suppliers: [], totalRevenue: 0, lines: [] };
 
   const supabase = await createClient();
 
@@ -126,9 +155,11 @@ export async function getBuyAnalytics(): Promise<BuyAnalytics> {
   // inverted (T-18-11) — no shared buyer-narrowing helper exists yet to reuse
   // (same as partners.ts's own note), so this duplicates the inline filter,
   // consistent in style with orders.ts/calendarDeals.ts/partners.ts.
+  // `delivery_date_target`/`created_at` are selected for the 18-14 fix —
+  // per-card real date, so the Analytics chart can bucket by real time.
   const { data: cards, error: cardsErr } = await supabase
     .from("deal_card")
-    .select("id, relationship_id, version, deal_type, initiating_company_id")
+    .select("id, relationship_id, version, deal_type, initiating_company_id, delivery_date_target, created_at")
     .is("deleted_at", null);
   if (cardsErr) throw cardsErr;
   const cardRows = (cards ?? []) as DealCardRow[];
@@ -170,6 +201,12 @@ export async function getBuyAnalytics(): Promise<BuyAnalytics> {
       if (coErr) throw coErr;
       const nameById = new Map((companies ?? []).map((c) => [c.id, c.name] as const));
       const versionByCard = new Map(buyerCards.map((c) => [c.id, c.version] as const));
+      // dealDate: real per-card date (18-14 fix) — delivery_date_target when
+      // set, else the card's created_at (both are honest "when this deal
+      // happened" candidates; created_at is NOT NULL so this always resolves).
+      const dateByCard = new Map(
+        buyerCards.map((c) => [c.id, c.delivery_date_target ?? c.created_at] as const),
+      );
 
       const cardIds = buyerCards.map((c) => c.id);
       const { data: lineRows, error: lineErr } = await supabase
@@ -178,25 +215,45 @@ export async function getBuyAnalytics(): Promise<BuyAnalytics> {
         .in("deal_card_id", cardIds);
       if (lineErr) throw lineErr;
 
-      dealLines = (lineRows ?? [])
-        .filter((l) => l.version === versionByCard.get(l.deal_card_id))
-        .map((l) => ({
-          source: "deal" as const,
-          supplierName: nameById.get(supplierIdByCard.get(l.deal_card_id) ?? "") ?? "Unknown company",
-          productName: l.product_name,
-          productId: l.product_id,
-          grams: lineGrams(Number(l.quantity), l.unit as string),
-          spend: lineTotalOf(Number(l.quantity), Number(l.unit_price), l.line_total),
-        }));
+      const currentLineRows = (lineRows ?? []).filter((l) => l.version === versionByCard.get(l.deal_card_id));
+
+      // Batch-fetch product.pack_size_grams for every distinct non-null
+      // product_id among this buyer's deal lines (18-14 fix) — mirrors this
+      // file's existing company/relationship batch-fetch style. CSV-only
+      // lines never have a product_id, so they honestly have no pack size.
+      const productIds = Array.from(
+        new Set(currentLineRows.map((l) => l.product_id).filter((id): id is string => id != null)),
+      );
+      const packSizeByProductId = new Map<string, number | null>();
+      if (productIds.length > 0) {
+        const { data: products, error: productErr } = await supabase
+          .from("product")
+          .select("id, pack_size_grams")
+          .in("id", productIds);
+        if (productErr) throw productErr;
+        for (const p of products ?? []) packSizeByProductId.set(p.id, p.pack_size_grams);
+      }
+
+      dealLines = currentLineRows.map((l) => ({
+        source: "deal" as const,
+        supplierName: nameById.get(supplierIdByCard.get(l.deal_card_id) ?? "") ?? "Unknown company",
+        productName: l.product_name,
+        productId: l.product_id,
+        grams: lineGrams(Number(l.quantity), l.unit as string),
+        spend: lineTotalOf(Number(l.quantity), Number(l.unit_price), l.line_total),
+        date: dateByCard.get(l.deal_card_id) ?? new Date(0).toISOString(),
+        packSizeGrams: l.product_id != null ? (packSizeByProductId.get(l.product_id) ?? null) : null,
+      }));
     }
   }
 
   // 2. CSV-imported purchase_history rows for the caller's company (RLS
   // already scopes it; the .eq below is defense-in-depth, same discipline as
-  // partners.ts's T-18-10 note).
+  // partners.ts's T-18-10 note). `purchase_date` is selected for the 18-14
+  // fix — CSV lines have no product_id, so they honestly have no pack size.
   const { data: csvRows, error: csvErr } = await supabase
     .from("purchase_history_import")
-    .select("supplier_name, product_name, quantity, unit, unit_price")
+    .select("supplier_name, product_name, quantity, unit, unit_price, purchase_date")
     .eq("buyer_company_id", callerCompanyId);
   if (csvErr) throw csvErr;
 
@@ -207,12 +264,34 @@ export async function getBuyAnalytics(): Promise<BuyAnalytics> {
     productId: null,
     grams: lineGrams(Number(r.quantity), r.unit),
     spend: Number(r.quantity) * Number(r.unit_price),
+    date: r.purchase_date,
+    // CSV-imported rows never carry a real catalogue product_id, so a
+    // pack size is honestly unknown — not fabricated (18-14 fix).
+    packSizeGrams: null,
   }));
+
+  const allLines = [...dealLines, ...csvLines];
+
+  // Distinct-product pack size, keyed the same way mergeAnalyticsLines()
+  // keys its groups — first non-null packSizeGrams for a (supplier, product)
+  // pair wins, mirroring that module's productId-identity rule (18-14 fix).
+  // Kept OUTSIDE mergeAnalyticsLines() itself so that module's tested
+  // contract stays untouched.
+  const packSizeByKey = new Map<string, number | null>();
+  for (const line of allLines) {
+    const key = `${line.supplierName}\0${line.productName}`;
+    const existing = packSizeByKey.get(key);
+    if (existing == null && line.packSizeGrams != null) {
+      packSizeByKey.set(key, line.packSizeGrams);
+    } else if (!packSizeByKey.has(key)) {
+      packSizeByKey.set(key, null);
+    }
+  }
 
   // 3. Layer both sources into one (supplierName, productName)-keyed list —
   // delegated to mergeAnalyticsLines(), never re-implemented inline here.
-  const merged: MergedAnalyticsLine[] = mergeAnalyticsLines([...dealLines, ...csvLines]);
-  if (merged.length === 0) return { suppliers: [], totalRevenue: 0 };
+  const merged: MergedAnalyticsLine[] = mergeAnalyticsLines(allLines);
+  if (merged.length === 0) return { suppliers: [], totalRevenue: 0, lines: [] };
 
   // 4a. buyer_resale_price lookup — exact (buyer_company_id, supplier_name,
   // product_name) match, the schema's own dedup key (plan 18-05).
@@ -224,6 +303,14 @@ export async function getBuyAnalytics(): Promise<BuyAnalytics> {
   const resaleByKey = new Map(
     (resaleRows ?? []).map((r) => [`${r.supplier_name}\0${r.product_name}`, r] as const),
   );
+
+  // Raw per-line array for the chart's time-bucketing (18-14 fix) — each line
+  // resolves its own (supplier, product) net/gross via the SAME resaleByKey
+  // lookup `priced` below uses, never a second re-derivation.
+  const pricedLines: PricedAnalyticsSourceLine[] = allLines.map((line) => {
+    const resale = resaleByKey.get(`${line.supplierName}\0${line.productName}`);
+    return { ...line, net: resale?.net ?? null, gross: resale?.gross ?? null };
+  });
 
   // 4b. wap/db1/margin per merged (supplier, product) line — all math
   // delegated to lib/money.ts, never re-derived inline here.
@@ -272,6 +359,7 @@ export async function getBuyAnalytics(): Promise<BuyAnalytics> {
         db1PerUnit: p.db1PerUnit,
         marginPercent: p.margin,
         share: shareOf(p.revenue),
+        packSizeGrams: packSizeByKey.get(`${p.m.supplierName}\0${p.m.productName}`) ?? null,
       };
       return {
         categoryId: p.m.productId ?? p.m.productName,
@@ -311,5 +399,5 @@ export async function getBuyAnalytics(): Promise<BuyAnalytics> {
     };
   });
 
-  return { suppliers, totalRevenue };
+  return { suppliers, totalRevenue, lines: pricedLines };
 }
