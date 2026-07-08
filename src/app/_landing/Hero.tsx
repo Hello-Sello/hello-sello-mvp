@@ -1,6 +1,6 @@
 import { AuroraBackground } from "./AuroraBackground";
 import { CTAButton } from "./CTAButton";
-import { PreviewFrame } from "./PreviewFrame";
+import { HeroDealFlow } from "./HeroDealFlow";
 import { Reveal } from "./Reveal";
 
 /**
@@ -55,11 +55,7 @@ export function Hero() {
         </Reveal>
 
         <Reveal delayMs={120} className="mt-16">
-          <PreviewFrame
-            label="Product visual"
-            hint="App preview — Discover → Connect → Deal. Swapped in once real assets exist."
-            aspect="video"
-          />
+          <HeroDealFlow />
         </Reveal>
       </div>
     </section>
