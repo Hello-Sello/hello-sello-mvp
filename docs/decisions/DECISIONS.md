@@ -1381,3 +1381,14 @@ Grill-with-docs design lock for the deal-timeline surface (SELL.md §3 was "defe
 - **Pill colour = deal display stage** ([DEV-151](https://linear.app/hellosello/issue/DEV-151)), reusing allocate's `statusOf` (no re-map): pink offer/order · yellow accepted · green executed · orange update (*Marcel left this colour unset — orange is a placeholder*) · blue ticket-open · dark-green ticket-closed.
 - **Money = Σ `line_total`** (not `deal_card.value_net`, which is often null).
 - Full contract: [`docs/muskan-build/deal-calendar.md`](../muskan-build/deal-calendar.md). Built + verified live on Sell (Timeline view; the Year aggregate view is deferred).
+
+---
+
+## 2026-07-08 — Buy (Phase 18) v0 scope locks
+
+Buy shipped end-to-end this session. Four scope decisions got locked during the build, all reversible later:
+
+- **Buyer resale price schema:** `buyer_company_id` (RLS owner) + nullable `supplier_company_id` FK + always-populated `supplier_name` text + nullable `product_id`/`product_name` — supports both connected and CSV-only suppliers from day one. *Why:* CONTEXT.md's Partner definition requires unconnected suppliers to show up too; a bare company FK couldn't represent that.
+- **No fuzzy CSV-supplier matching in v0.** Every CSV-imported supplier name is its own partner row unless the buyer explicitly links it later. *Why:* keeps the "minimal CSV backfill" boundary honest — full reconciliation is the parked `catalogue-ingestion-DESIGN.md`'s job, not this phase's.
+- **Analytics/Sheet's degenerate category-per-product.** No real `product.category` field exists; each product renders as its own single-item "category" until real taxonomy data lands. *Why:* the 3-level tree structure stays intact without fabricating data the system doesn't have.
+- **Analytics Time filter counts future-dated (scheduled-but-undelivered) deals** (confirmed by Muskan), matching the KPI strip's own inclusive `sameMonth()` treatment. Made as a judgment call during verification after finding the initial implementation silently hid 3 of 4 real deals under every filter option — Muskan confirmed the direction is correct during wrap-up, so this is locked, not provisional.
