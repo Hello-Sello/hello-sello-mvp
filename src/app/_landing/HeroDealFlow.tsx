@@ -43,7 +43,7 @@ const MESSAGES: Msg[] = [
     p: "lena",
     time: "09:24",
     html:
-      'Need <span class="hdf-tok" data-tok="qty">500 boxes</span> of <span class="hdf-tok" data-tok="product">Paracetamol 500mg</span> — what’s your price?',
+      'Need <span class="hdf-tok" data-tok="qty">500 boxes</span> of <span class="hdf-tok" data-tok="product">Paracetamol 500mg</span>. What’s your price?',
     toks: [
       { field: "product", val: "Paracetamol 500mg" },
       { field: "qty", val: "500 boxes" },
@@ -67,19 +67,19 @@ const MESSAGES: Msg[] = [
     html: 'Friday works. <span class="hdf-tok" data-tok="payment">Net 30</span> on payment?',
     toks: [{ field: "payment", val: "Net 30" }],
   },
-  { p: "lena", time: "09:26", html: "Deal — lock it in. 🤝", toks: [], seal: true },
+  { p: "lena", time: "09:26", html: "Deal, lock it in. 🤝", toks: [], seal: true },
 ];
 
 const NUM = new Set(["qty", "price"]); // fields shown in tabular mono numerals
 const FIELDS = ["product", "qty", "price", "delivery", "payment"] as const;
 
-// motion budget - short beats, one spring (on the seal)
-const TYPING = 560;
-const MSG_GAP = 1750;
-const FLY_DELAY = 460;
-const FLY_STAGGER = 300;
-const FLY_DUR = 460;
-const HOLD = 3200;
+// motion budget - slower + more graceful (client feedback: it read too fast)
+const TYPING = 720;
+const MSG_GAP = 2250;
+const FLY_DELAY = 640;
+const FLY_STAGGER = 380;
+const FLY_DUR = 660;
+const HOLD = 3600;
 
 export function HeroDealFlow() {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -92,13 +92,14 @@ export function HeroDealFlow() {
 
     const msgsEl = root.querySelector<HTMLElement>("[data-msgs]");
     const seamEl = root.querySelector<HTMLElement>("[data-seam]");
+    const rippleEl = root.querySelector<HTMLElement>("[data-ripple]");
     const stageEl = root.querySelector<HTMLElement>("[data-stage]");
     const totalEl = root.querySelector<HTMLElement>("[data-total]");
     const statusEl = root.querySelector<HTMLElement>("[data-status]");
     const footEl = root.querySelector<HTMLElement>("[data-foot]");
     const cardEl = root.querySelector<HTMLElement>("[data-card]");
     const ringEl = root.querySelector<HTMLElement>("[data-ring]");
-    if (!msgsEl || !seamEl || !stageEl || !totalEl || !statusEl || !footEl || !cardEl || !ringEl) return;
+    if (!msgsEl || !seamEl || !rippleEl || !stageEl || !totalEl || !statusEl || !footEl || !cardEl || !ringEl) return;
 
     const fieldEl = (n: string) => root.querySelector<HTMLElement>(`[data-field="${n}"]`);
 
@@ -143,9 +144,13 @@ export function HeroDealFlow() {
       chip.style.left = `${a.left - s.left}px`;
       chip.style.top = `${a.top - s.top}px`;
       stageEl.appendChild(chip);
-      after(FLY_DUR * 0.32, () => {
+      after(FLY_DUR * 0.42, () => {
         seamEl.classList.add("pulse");
-        after(620, () => seamEl.classList.remove("pulse"));
+        after(700, () => seamEl.classList.remove("pulse"));
+        rippleEl.classList.remove("go");
+        void rippleEl.offsetWidth; // restart the ripple each cross
+        rippleEl.classList.add("go");
+        after(700, () => rippleEl.classList.remove("go"));
       });
       requestAnimationFrame(() => {
         const dx = b.left + b.width / 2 - (a.left + chip.offsetWidth / 2);
@@ -177,6 +182,12 @@ export function HeroDealFlow() {
         if (p < 1) requestAnimationFrame(step);
       };
       requestAnimationFrame(step);
+    };
+
+    // keep the newest message in view - the feed scrolls up as it grows
+    const toBottom = () => {
+      if (reduced) return;
+      requestAnimationFrame(() => msgsEl.scrollTo({ top: msgsEl.scrollHeight, behavior: "smooth" }));
     };
 
     const makeLine = (m: Msg, typing: boolean) => {
@@ -244,26 +255,29 @@ export function HeroDealFlow() {
         runStatic();
         return;
       }
+      msgsEl.classList.add("scrolling");
       MESSAGES.forEach((m, i) => {
         after(i * MSG_GAP, () => {
           const typingEl = makeLine(m, true);
           msgsEl.appendChild(typingEl);
           requestAnimationFrame(() => typingEl.classList.add("show"));
+          toBottom();
           after(TYPING, () => {
             const realEl = makeLine(m, false);
             if (typingEl.parentNode === msgsEl) msgsEl.replaceChild(realEl, typingEl);
             else msgsEl.appendChild(realEl);
             requestAnimationFrame(() => realEl.classList.add("show"));
+            toBottom();
             m.toks.forEach((tk, j) => {
               after(FLY_DELAY + j * FLY_STAGGER, () => {
-                const litEl = realEl.querySelector<HTMLElement>(`[data-tok="${tk.field}"]`);
-                litEl?.classList.add("lit");
-                flyToken(litEl, tk.field, tk.val);
+                const srcEl = realEl.querySelector<HTMLElement>(`[data-tok="${tk.field}"]`);
+                flyToken(srcEl, tk.field, tk.val);
+                // Total computes live the moment quantity x unit price are both in
+                if (tk.field === "price") after(FLY_DUR + 120, () => countUp(1200));
               });
             });
             if (m.seal) {
-              after(560, () => countUp(1200));
-              after(1300, seal); // brief stillness, then the one spring
+              after(1300, seal); // brief stillness, then the sign
             }
           });
         });
@@ -300,8 +314,10 @@ export function HeroDealFlow() {
 
         <div className="hdf-seam" data-seam>
           <div className="hdf-vline" />
+          <div className="hdf-beam" />
           <div className="hdf-glow" />
           <div className="hdf-slash">{"//"}</div>
+          <div className="hdf-ripple" data-ripple />
         </div>
 
         <div className="hdf-col hdf-cardwrap">
@@ -312,9 +328,15 @@ export function HeroDealFlow() {
               <span className="hdf-status" data-status>Draft</span>
             </div>
             <div className="hdf-parties">
-              <span className="hdf-party">Greenleaf</span>
-              <span className="hdf-swap">⇄</span>
-              <span className="hdf-party">StonePharm</span>
+              <span className="hdf-party">
+                <span className="hdf-plabel">Seller</span>
+                <span className="hdf-pname">Greenleaf</span>
+              </span>
+              <span className="hdf-arrow" aria-hidden="true">&rarr;</span>
+              <span className="hdf-party hdf-party-right">
+                <span className="hdf-plabel">Buyer</span>
+                <span className="hdf-pname">StonePharm</span>
+              </span>
             </div>
             <div className="hdf-rows">
               <div className="hdf-row"><span className="hdf-k">Product</span><span className="hdf-v hdf-empty" data-field="product" /></div>

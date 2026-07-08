@@ -299,15 +299,16 @@ html { scroll-behavior: smooth; }
 
 .hdf-frame {
   position: relative;
-  border-radius: 22px;
+  border-radius: 26px;
   overflow: hidden;
-  border: 1px solid var(--glass-border);
-  background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(24px) saturate(160%);
-  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(30px) saturate(175%);
+  -webkit-backdrop-filter: blur(30px) saturate(175%);
   box-shadow:
-    0 60px 120px -46px color-mix(in srgb, var(--color-brand-deep) 42%, transparent),
-    0 10px 30px -14px color-mix(in srgb, var(--color-brand-deep) 16%, transparent);
+    0 70px 130px -46px color-mix(in srgb, var(--color-brand-deep) 46%, transparent),
+    0 14px 36px -16px color-mix(in srgb, var(--color-brand-deep) 18%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.75);
 }
 
 .hdf-chrome {
@@ -323,9 +324,14 @@ html { scroll-behavior: smooth; }
   position: relative; aspect-ratio: 16 / 10; display: grid;
   grid-template-columns: minmax(0, 0.92fr) 52px minmax(0, 1.08fr);
   padding: 30px 34px; overflow: hidden;
+  /* a VERY light pink glass screen - near-white base with faint glows for depth,
+     so the chat + card clearly pop off it (feedback: screen bg should be very
+     very light pink, glass-morph computer-screen look) */
   background:
-    radial-gradient(38% 60% at 82% 52%, color-mix(in srgb, var(--color-brand-soft) 22%, transparent), transparent 70%),
-    linear-gradient(180deg, color-mix(in srgb, var(--color-brand-soft) 10%, transparent), transparent 55%);
+    radial-gradient(44% 54% at 84% 20%, color-mix(in srgb, var(--color-brand) 9%, transparent), transparent 60%),
+    radial-gradient(44% 50% at 99% 100%, color-mix(in srgb, #ffb083 20%, transparent), transparent 62%),
+    radial-gradient(48% 55% at 4% 26%, color-mix(in srgb, var(--color-brand-soft) 24%, transparent), transparent 60%),
+    linear-gradient(160deg, #fffbfd, #fff3f8);
 }
 .hdf-col { display: flex; flex-direction: column; min-height: 0; }
 .hdf-chat { justify-content: center; }
@@ -334,10 +340,20 @@ html { scroll-behavior: smooth; }
 
 /* chat */
 .hdf-msgs { display: flex; flex-direction: column; gap: 16px; }
+/* live auto-scrolling feed: newest pinned to the bottom, older messages drift up
+   and dissolve under the top fade (premium glass-screen look). Only applied when
+   the timeline animates - static/reduced-motion shows the full thread uncapped. */
+.hdf-msgs.scrolling {
+  max-height: 360px; min-height: 0; overflow: hidden; padding: 2px 2px 4px;
+  scroll-behavior: smooth;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 40px, #000 calc(100% - 6px), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 40px, #000 calc(100% - 6px), transparent 100%);
+}
+.hdf-msgs.scrolling > .hdf-line:first-child { margin-top: auto; }
 .hdf-line {
   display: flex; align-items: flex-end; gap: 11px; max-width: 84%;
   opacity: 0; transform: translateY(10px) scale(0.97);
-  transition: opacity 0.28s var(--hdf-ease), transform 0.28s var(--hdf-ease);
+  transition: opacity 0.36s var(--hdf-ease), transform 0.36s var(--hdf-ease);
 }
 .hdf-line.show { opacity: 1; transform: none; }
 .hdf-line.left { align-self: flex-start; }
@@ -345,7 +361,7 @@ html { scroll-behavior: smooth; }
 .hdf-ava {
   flex: none; width: 40px; height: 40px; border-radius: 50%; overflow: hidden;
   display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 4px 12px -4px color-mix(in srgb, var(--color-brand-deep) 45%, transparent);
+  box-shadow: 0 3px 10px -5px color-mix(in srgb, var(--color-brand-deep) 28%, transparent);
 }
 .hdf-ava-svg { width: 100%; height: 100%; display: block; }
 .hdf-ava.gray { background: linear-gradient(180deg, #ffffff, #f1eff4); border: 1px solid rgba(255, 255, 255, 0.9); color: var(--color-ink); }
@@ -359,22 +375,26 @@ html { scroll-behavior: smooth; }
 .hdf-line.left .hdf-name { color: var(--color-ink-muted); }
 .hdf-line.right .hdf-name { color: var(--color-brand-deep); }
 .hdf-bubble {
-  position: relative; padding: 11px 15px; font-size: 15px; line-height: 1.45; border-radius: 16px;
-  backdrop-filter: blur(10px) saturate(140%); -webkit-backdrop-filter: blur(10px) saturate(140%);
-  box-shadow: 0 8px 20px -14px color-mix(in srgb, var(--color-brand-deep) 45%, transparent);
+  position: relative; padding: 11px 15px; font-size: 15px; line-height: 1.45; border-radius: 18px;
+  border: none;
+  box-shadow: 0 6px 16px -14px color-mix(in srgb, var(--color-brand-deep) 34%, transparent);
 }
+/* theirs (Lena) - flat soft gray, no border - like the real chat bg-ink/5 */
 .hdf-line.left .hdf-bubble {
-  background: linear-gradient(180deg, rgba(250, 250, 252, 0.82), rgba(233, 231, 238, 0.6));
-  color: var(--color-ink); border: 1px solid rgba(255, 255, 255, 0.72); border-bottom-left-radius: 5px;
+  background: #f2f0f4;
+  color: color-mix(in srgb, var(--color-ink) 88%, transparent);
+  border-bottom-left-radius: 6px;
 }
+/* mine (Marco) - flat LIGHT pink, no border - like the real chat bg-brand-soft/30 */
 .hdf-line.right .hdf-bubble {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--color-brand-soft) 42%, transparent), color-mix(in srgb, var(--color-brand) 13%, transparent));
-  color: var(--color-ink); border: 1px solid color-mix(in srgb, var(--color-brand) 24%, transparent); border-bottom-right-radius: 5px;
+  background: color-mix(in srgb, var(--color-brand-soft) 34%, #fff);
+  color: color-mix(in srgb, var(--color-ink) 88%, transparent);
+  border-bottom-right-radius: 6px;
 }
 .hdf-time { display: block; font-size: 10px; margin-top: 5px; opacity: 0.6; font-variant-numeric: tabular-nums; }
 
-.hdf-tok { font-weight: 600; border-radius: 5px; padding: 0 3px; color: var(--color-brand-deep); transition: background 0.24s var(--hdf-ease), box-shadow 0.24s var(--hdf-ease); }
-.hdf-tok.lit { background: color-mix(in srgb, var(--color-brand) 18%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-brand) 12%, transparent); }
+/* the fact inside a sentence - just maroon text, NO highlight box (feedback: the box looked cheap) */
+.hdf-tok { font-weight: 700; color: var(--color-brand-deep); }
 
 .hdf-typing-dots { display: flex; gap: 4px; align-items: center; padding: 2px 0; }
 .hdf-typing-dots i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: 0.35; animation: hdf-blink 1.1s infinite var(--hdf-eio); }
@@ -392,7 +412,11 @@ html { scroll-behavior: smooth; }
   background-size: 100% 200%; animation: hdf-seamflow 3.4s linear infinite;
 }
 @keyframes hdf-seamflow { to { background-position: 0 -200%; } }
-.hdf-glow { position: absolute; top: 50%; left: 50%; width: 46px; height: 46px; transform: translate(-50%, -50%); border-radius: 50%; background: radial-gradient(circle, color-mix(in srgb, var(--color-brand) 30%, transparent), transparent 70%); opacity: 0.4; filter: blur(2px); }
+/* a light beam that travels down the seam - the "//" from He//oSe//o, alive */
+.hdf-beam { position: absolute; left: 50%; top: 6%; width: 2px; height: 20%; transform: translateX(-50%); border-radius: 2px; background: linear-gradient(180deg, transparent, var(--color-brand), transparent); filter: blur(0.5px); animation: hdf-beam 3.4s var(--hdf-eio) infinite; }
+@keyframes hdf-beam { 0% { top: 2%; opacity: 0; } 15% { opacity: 0.9; } 85% { opacity: 0.9; } 100% { top: 78%; opacity: 0; } }
+.hdf-glow { position: absolute; top: 50%; left: 50%; width: 52px; height: 52px; transform: translate(-50%, -50%); border-radius: 50%; background: radial-gradient(circle, color-mix(in srgb, var(--color-brand) 28%, transparent), transparent 70%); filter: blur(2px); animation: hdf-breathe 3.6s var(--hdf-eio) infinite; }
+@keyframes hdf-breathe { 0%, 100% { opacity: 0.32; transform: translate(-50%, -50%) scale(1); } 50% { opacity: 0.6; transform: translate(-50%, -50%) scale(1.14); } }
 .hdf-slash {
   position: relative; font-family: var(--font-mono), monospace; font-weight: 600; font-size: 16px; color: var(--color-brand);
   background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
@@ -403,17 +427,21 @@ html { scroll-behavior: smooth; }
 .hdf-seam.pulse .hdf-slash { animation: hdf-slashkick 0.6s var(--hdf-ease); }
 @keyframes hdf-seampulse { 0% { opacity: 0.4; transform: translate(-50%, -50%) scale(1); } 40% { opacity: 0.95; transform: translate(-50%, -50%) scale(1.5); } 100% { opacity: 0.4; transform: translate(-50%, -50%) scale(1); } }
 @keyframes hdf-slashkick { 0%, 100% { transform: scale(1); } 40% { transform: scale(1.12); } }
+/* an expanding ring each time a fact crosses the seam */
+.hdf-ripple { position: absolute; top: 50%; left: 50%; width: 34px; height: 34px; margin: -17px 0 0 -17px; border-radius: 11px; border: 1.5px solid color-mix(in srgb, var(--color-brand) 55%, transparent); opacity: 0; pointer-events: none; }
+.hdf-ripple.go { animation: hdf-ripple 0.7s var(--hdf-ease); }
+@keyframes hdf-ripple { 0% { opacity: 0.6; transform: scale(0.9); } 100% { opacity: 0; transform: scale(2.6); } }
 
 /* deal card - the anchor */
 .hdf-card {
-  position: relative; width: 100%; max-width: 460px; border-radius: 20px; overflow: hidden;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.82), color-mix(in srgb, var(--color-brand-soft) 12%, rgba(255, 255, 255, 0.6)));
-  backdrop-filter: blur(22px) saturate(150%); -webkit-backdrop-filter: blur(22px) saturate(150%);
-  border: 1px solid var(--glass-border);
+  position: relative; width: 100%; max-width: 460px; border-radius: 24px; overflow: hidden;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.66), rgba(255, 255, 255, 0.5));
+  backdrop-filter: blur(40px) saturate(190%); -webkit-backdrop-filter: blur(40px) saturate(190%);
+  border: 1px solid rgba(255, 255, 255, 0.55);
   box-shadow:
-    0 44px 84px -30px color-mix(in srgb, var(--color-brand-deep) 42%, transparent),
-    0 8px 20px -10px color-mix(in srgb, var(--color-brand-deep) 16%, transparent),
-    inset 0 1px 1px rgba(255, 255, 255, 0.9);
+    0 56px 100px -32px color-mix(in srgb, var(--color-brand-deep) 46%, transparent),
+    0 12px 30px -12px color-mix(in srgb, var(--color-brand-deep) 20%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.85);
   transition: box-shadow 0.3s var(--hdf-eio);
 }
 .hdf-card.impact { animation: hdf-impact 0.5s var(--hdf-ease); }
@@ -425,15 +453,18 @@ html { scroll-behavior: smooth; }
 @keyframes hdf-ringout { 0% { opacity: 0.5; transform: scale(0.7); } 100% { opacity: 0; transform: scale(3.4); } }
 
 .hdf-cardhead { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid color-mix(in srgb, var(--color-brand-deep) 9%, transparent); background: linear-gradient(180deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.08)); }
-.hdf-mark { font-style: italic; font-weight: 800; font-size: 19px; color: var(--color-brand); letter-spacing: -0.01em; }
+.hdf-mark { font-style: italic; font-weight: 800; font-size: 22px; color: var(--color-brand); letter-spacing: -0.01em; }
 .hdf-status { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-ink-muted); background: color-mix(in srgb, var(--color-ink-muted) 12%, transparent); border: 1px solid color-mix(in srgb, var(--color-ink-muted) 22%, transparent); border-radius: 999px; padding: 4px 11px; display: inline-flex; align-items: center; gap: 6px; }
 .hdf-status.sealed { color: var(--color-success); background: color-mix(in srgb, var(--color-success) 12%, transparent); border-color: color-mix(in srgb, var(--color-success) 32%, transparent); animation: hdf-seal 0.52s cubic-bezier(0.34, 1.56, 0.64, 1); }
 .hdf-status.sealed::before { content: "\2713"; font-size: 11px; }
 @keyframes hdf-seal { 0% { transform: scale(1.25) rotate(-6deg); opacity: 0.4; } 55% { transform: scale(0.96) rotate(2deg); } 100% { transform: scale(1) rotate(0); } }
 
-.hdf-parties { display: flex; align-items: center; gap: 10px; padding: 12px 20px; border-bottom: 1px solid color-mix(in srgb, var(--color-brand-deep) 7%, transparent); }
-.hdf-party { font-size: 12.5px; font-weight: 600; color: var(--color-ink); background: color-mix(in srgb, var(--color-brand-soft) 20%, transparent); border: 1px solid color-mix(in srgb, var(--color-brand) 14%, transparent); border-radius: 8px; padding: 4px 10px; }
-.hdf-swap { color: var(--color-brand); font-size: 15px; }
+.hdf-parties { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 13px 20px; border-bottom: 1px solid color-mix(in srgb, var(--color-brand-deep) 7%, transparent); }
+.hdf-party { display: flex; align-items: baseline; gap: 7px; min-width: 0; }
+.hdf-party-right { justify-content: flex-end; text-align: right; }
+.hdf-plabel { font-size: 9px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--color-ink-muted); }
+.hdf-pname { font-size: 13.5px; font-weight: 700; color: var(--color-ink); }
+.hdf-arrow { color: var(--color-brand); font-size: 15px; font-weight: 700; align-self: center; }
 
 .hdf-rows { padding: 8px 20px 2px; }
 .hdf-row { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding: 11px 8px; margin: 0 -8px; border-radius: 9px; border-bottom: 1px solid color-mix(in srgb, var(--color-brand-deep) 7%, transparent); transition: background 0.5s var(--hdf-eio); }
@@ -454,23 +485,54 @@ html { scroll-behavior: smooth; }
 .hdf-foot.show { opacity: 1; transform: none; }
 .hdf-foot::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--color-success); flex: none; }
 
+/* cross-seam chip - LIGHT pink (client feedback: the dark pink read poorly) */
 .hdf-flyer {
   position: absolute; z-index: 30; pointer-events: none;
-  font-family: var(--font-mono), monospace; font-size: 12.5px; font-weight: 600; color: #fff;
+  font-family: var(--font-mono), monospace; font-size: 12.5px; font-weight: 600; color: var(--color-brand-deep);
   padding: 5px 11px; border-radius: 999px; white-space: nowrap;
-  background: linear-gradient(180deg, var(--color-brand), var(--color-brand-deep));
-  box-shadow: 0 12px 26px -8px color-mix(in srgb, var(--color-brand) 75%, transparent), 0 0 0 4px color-mix(in srgb, var(--color-brand) 10%, transparent);
-  transition: transform 0.46s var(--hdf-fly), opacity 0.3s var(--hdf-eio);
+  background: color-mix(in srgb, var(--color-brand-soft) 85%, #fff);
+  border: 1px solid color-mix(in srgb, var(--color-brand) 22%, transparent);
+  box-shadow: 0 10px 24px -8px color-mix(in srgb, var(--color-brand) 42%, transparent);
+  transition: transform 0.66s var(--hdf-fly), opacity 0.35s var(--hdf-eio);
 }
 
 @media (prefers-reduced-motion: reduce) {
   .hdf-line, .hdf-foot, .hdf-flyer, .hdf-row, .hdf-filled, .hdf-card { transition: none; }
-  .hdf-vline, .hdf-typing-dots i { animation: none; }
-  .hdf-seam.pulse .hdf-glow, .hdf-seam.pulse .hdf-slash, .hdf-status.sealed, .hdf-card.impact, .hdf-ring.go { animation: none; }
+  .hdf-vline, .hdf-beam, .hdf-glow, .hdf-typing-dots i { animation: none; }
+  .hdf-seam.pulse .hdf-glow, .hdf-seam.pulse .hdf-slash, .hdf-ripple.go, .hdf-status.sealed, .hdf-card.impact, .hdf-ring.go { animation: none; }
 }
 @media (max-width: 720px) {
   .hdf-stage { grid-template-columns: minmax(0, 1fr) 40px minmax(0, 1fr); padding: 16px; }
+  .hdf-msgs.scrolling { max-height: 230px; }
   .hdf-bubble { font-size: 13px; }
   .hdf-ava { width: 32px; height: 32px; }
   .hdf-row.total .hdf-v { font-size: 24px; }
+}
+
+/* =====================================================================
+   PRODUCT FLIP CARD (landing §6 - premium product preview)
+   A medical-cannabis product card that auto-flips front <-> back on a
+   loop (pure CSS 3D, SSR-safe). Front = product + potency + price;
+   back = documents / lab results. Scoped `pcard-`; content styling is
+   Tailwind on the faces. ILLUSTRATIVE product only (D-06).
+   ===================================================================== */
+.pcard { perspective: 1900px; }
+.pcard-inner {
+  position: relative; height: 100%; width: 100%;
+  transform-style: preserve-3d;
+  animation: pcard-flip 10s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+.pcard-face {
+  position: absolute; inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.pcard-back { transform: rotateY(180deg); }
+@keyframes pcard-flip {
+  0%, 42%  { transform: rotateY(0deg); }
+  50%, 92% { transform: rotateY(180deg); }
+  100%     { transform: rotateY(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pcard-inner { animation: none; }
 }

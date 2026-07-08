@@ -3,8 +3,9 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/shared/auth";
 import { LandingNav } from "./_landing/LandingNav";
 import { Hero } from "./_landing/Hero";
-import { PlaceholderSlot } from "./_landing/PlaceholderSlot";
-import { PreviewFrame } from "./_landing/PreviewFrame";
+import { TrustedBy } from "./_landing/TrustedBy";
+import { SocialProof } from "./_landing/SocialProof";
+import { ProductFlipCard } from "./_landing/ProductFlipCard";
 import { ValueProps } from "./_landing/ValueProps";
 import { HowItWorks } from "./_landing/HowItWorks";
 import { B2BOnlyBand } from "./_landing/B2BOnlyBand";
@@ -20,9 +21,9 @@ import { CookieBanner } from "./_landing/CookieBanner";
 // redirect. Interactivity lives in child "use client" components (LandingNav,
 // Reveal).
 export const metadata: Metadata = {
-  title: "Hello Sello — B2B pharma trade, connected",
+  title: "Hello Sello - B2B pharma trade, connected",
   description:
-    "Hello Sello is the B2B marketplace for verified companies — discover trusted partners, connect safely with no cross-company leaks, and turn conversations into documented deals.",
+    "Hello Sello is the B2B marketplace for verified companies. Discover trusted partners, connect safely with no cross-company leaks, and turn conversations into documented deals.",
 };
 
 /**
@@ -42,18 +43,15 @@ export default async function RootPage() {
       <main>
         <Hero />
 
-        {/* §3 logo bar — D-06 placeholder, no fabricated logos. */}
+        {/* §3 logo bar — illustrative partner logos (dummy medical companies)
+            standing in until real partner logos exist (see TrustedBy). */}
         <section className="mx-auto max-w-6xl px-6 py-10">
           <Reveal>
             <p className="text-center text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted">
-              Trusted by verified companies
+              Trusted by teams across pharma
             </p>
             <div className="mt-6">
-              <PlaceholderSlot
-                label="Customer logos"
-                hint="Trusted-by logo bar — added once real partner logos exist."
-                aspect="wide"
-              />
+              <TrustedBy />
             </div>
           </Reveal>
         </section>
@@ -61,47 +59,22 @@ export default async function RootPage() {
         <ValueProps />
         <HowItWorks />
 
-        {/* §6 product preview / demo — D-06 placeholder, framed as an app window. */}
+        {/* §6 product preview — a real product card (front/back flip). The
+            listing is illustrative (see ProductFlipCard). */}
         <section className="mx-auto max-w-5xl px-6 py-20">
           <SectionHeading
             eyebrow="See it in action"
-            title="A gated product — here's the inside"
+            title="A gated product, here's the inside"
             sub="You can't try it without verification, so here's a look at what's behind the gate."
           />
           <Reveal className="mt-12">
-            <PreviewFrame
-              label="Product demo"
-              hint="Guided walkthrough — Discover → Connect → Deal. Swapped in once real assets exist."
-              aspect="video"
-            />
+            <ProductFlipCard />
           </Reveal>
         </section>
 
-        {/* §7 social proof — testimonials + metrics, D-06 placeholders + the
-            verified-companies trust angle. No fabricated testimonials/metrics. */}
-        <section className="mx-auto max-w-6xl px-6 py-20">
-          <SectionHeading
-            eyebrow="Trust, not hype"
-            title="Proof, once it's real"
-            sub="We don't fabricate logos, quotes, or numbers. These slots fill in as verified partners come on board."
-          />
-          <div className="mt-12 grid gap-5 sm:grid-cols-2">
-            <Reveal>
-              <PlaceholderSlot
-                label="Testimonials"
-                hint="Customer quotes — added once real testimonials exist."
-                aspect="wide"
-              />
-            </Reveal>
-            <Reveal delayMs={90}>
-              <PlaceholderSlot
-                label="Metrics"
-                hint="Verified companies, deals closed — real numbers only, no fabrication."
-                aspect="wide"
-              />
-            </Reveal>
-          </div>
-        </section>
+        {/* §7 social proof — testimonials + metrics (illustrative / fictional
+            stand-in until real proof exists; see SocialProof). */}
+        <SocialProof />
 
         <B2BOnlyBand />
         <FAQ />
