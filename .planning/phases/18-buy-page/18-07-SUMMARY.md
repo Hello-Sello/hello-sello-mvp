@@ -122,3 +122,13 @@ None - no external service configuration required.
 ---
 *Phase: 18-buy-page*
 *Completed: 2026-07-08*
+
+## Self-Check: PASSED
+
+- FOUND: src/modules/buy/lib/analyticsMerge.ts
+- FOUND: src/modules/buy/lib/analyticsMerge.test.ts
+- FOUND: src/modules/buy/analytics.ts
+- FOUND: .planning/phases/18-buy-page/18-07-SUMMARY.md
+- FOUND commit: d1353b4 (test RED)
+- FOUND commit: 95b1e1f (feat GREEN — mergeAnalyticsLines)
+- FOUND commit: 3c2e362 (feat — getBuyAnalytics)
