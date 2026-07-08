@@ -1,6 +1,8 @@
 /**
  * RED/GREEN unit contract for saveBuyerResalePrice's upsert-row builder (Phase 18,
- * Plan 09, Task 1 — BUY-01).
+ * Plan 09, Task 1 — BUY-01). Relocated from `resalePriceActions.test.ts` when
+ * `buildResalePriceUpsertRow` moved out of the `"use server"` action file
+ * (18-13-SUMMARY.md's Deviations) — the behavior under test is unchanged.
  *
  * The behavior under test — "a second edit to the same (buyer, supplier, product)
  * touches only the field being saved, never overwrites the sibling net/gross
@@ -14,7 +16,7 @@
  * validation/shape layer is unit-tested, not the RPC/DB call itself).
  */
 import { describe, it, expect } from "vitest";
-import { buildResalePriceUpsertRow } from "./resalePriceActions";
+import { buildResalePriceUpsertRow } from "./resalePriceRow";
 
 describe("buildResalePriceUpsertRow", () => {
   it("includes only the touched field (net), never the sibling (gross)", () => {

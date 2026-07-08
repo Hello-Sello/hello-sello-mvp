@@ -17,8 +17,17 @@ export { getBuyAnalytics } from "./analytics";
 export type { CsvImportResult } from "./csvImport";
 export { importPurchaseHistoryCsv } from "./csvImport";
 
-export type { SaveBuyerResalePriceInput, SaveBuyerResalePriceResult } from "./resalePriceActions";
-export { buildResalePriceUpsertRow, saveBuyerResalePrice } from "./resalePriceActions";
+// `SaveBuyerResalePriceInput`/`Result` are typed here from `./lib/resalePriceRow`
+// (NOT from `./resalePriceActions`) — that module is a `"use server"` file, and
+// Turbopack's server-action codegen treats even a type-only re-export from a
+// "use server" module as a runtime value it must resolve, which fails at
+// request time. `buildResalePriceUpsertRow` (the sync pure builder living in
+// the same lib file) is likewise NOT re-exported here for the same reason one
+// step removed: Next.js requires every export of a `"use server"` file to be
+// async, so the builder was moved out of `resalePriceActions.ts` entirely; it
+// stays unit-tested directly against its own module (lib/resalePriceRow.test.ts).
+export type { SaveBuyerResalePriceInput, SaveBuyerResalePriceResult } from "./lib/resalePriceRow";
+export { saveBuyerResalePrice } from "./resalePriceActions";
 
 export { isOpenDeal } from "./lib/openDeals";
 

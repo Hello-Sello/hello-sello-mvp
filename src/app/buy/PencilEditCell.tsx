@@ -31,8 +31,11 @@ export function PencilEditCell(props: {
   value: number | null;
   onSave: (next: number) => Promise<void>;
   formatValue: (v: number) => string;
+  /** Optional caller-supplied test id (e2e/buy-pencil-edit.spec.ts) — lets a
+   *  caller distinguish e.g. a "net" cell from a "gross" cell in the same row. */
+  testId?: string;
 }) {
-  const { value, onSave, formatValue } = props;
+  const { value, onSave, formatValue, testId } = props;
 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
@@ -84,7 +87,7 @@ export function PencilEditCell(props: {
 
   if (editing) {
     return (
-      <span className="inline-flex flex-col items-end gap-0.5">
+      <span className="inline-flex flex-col items-end gap-0.5" data-testid={testId}>
         <input
           ref={(el) => {
             if (el) {
@@ -121,6 +124,7 @@ export function PencilEditCell(props: {
         type="button"
         onClick={openEdit}
         title="Can be inserted by the buyer"
+        data-testid={testId}
         className="inline-flex items-center gap-1 rounded-full border border-dashed border-brand/50 bg-brand/[0.04] px-2.5 py-0.5 text-[10.5px] font-semibold text-brand-deep hover:border-brand hover:bg-brand/[0.08]"
       >
         <Pencil size={11} /> insert
@@ -129,7 +133,7 @@ export function PencilEditCell(props: {
   }
 
   return (
-    <span className="inline-flex items-center gap-1.5">
+    <span className="inline-flex items-center gap-1.5" data-testid={testId}>
       <span className="tabular-nums">{formatValue(value)}</span>
       <button
         type="button"

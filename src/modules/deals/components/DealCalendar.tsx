@@ -404,6 +404,7 @@ export function DealCalendar({
                         key={p.deal.dealCardId}
                         onClick={() => openDeal(p.deal.dealCardId)}
                         title={`${p.deal.counterparty.name}${p.deal.amount != null ? " · " + euro(p.deal.amount) : ""}`}
+                        data-testid="deal-pill"
                         className={`mx-0.5 grid h-[26px] place-items-center rounded-full shadow-sm transition hover:-translate-y-px ${PILL_FILL[p.deal.displayStage]}`}
                         style={{ gridColumn: `${idx + 1} / span 2` }}
                       >

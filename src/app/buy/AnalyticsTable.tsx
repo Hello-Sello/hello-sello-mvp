@@ -387,6 +387,7 @@ function ProductRow({
           value={product.net}
           formatValue={formatEur2InputValue}
           onSave={(value) => onSaveResalePrice(supplierName, product.productName, "net", value)}
+          testId="pencil-cell-net"
         />
       </td>
       <td className="px-3 py-2 text-right tabular-nums" onClick={(e) => e.stopPropagation()}>
@@ -394,6 +395,7 @@ function ProductRow({
           value={product.gross}
           formatValue={formatEur2InputValue}
           onSave={(value) => onSaveResalePrice(supplierName, product.productName, "gross", value)}
+          testId="pencil-cell-gross"
         />
       </td>
       <td className="px-3 py-2 text-right tabular-nums">{formatEur0(product.db1Total)}</td>
