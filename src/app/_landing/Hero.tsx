@@ -35,7 +35,7 @@ export function Hero() {
         <Reveal delayMs={120}>
           <p className="mx-auto mt-6 max-w-2xl text-lg text-ink-muted">
             Discover verified partners, connect safely with no cross-company
-            leaks, and turn the conversation into a structured, documented deal —
+            leaks, and turn the conversation into a structured, documented deal,
             all in one place.
           </p>
         </Reveal>

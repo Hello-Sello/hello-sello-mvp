@@ -22,7 +22,7 @@ export function Footer() {
         <div className="max-w-xs">
           <Wordmark />
           <p className="mt-3 text-sm text-ink-muted">
-            The verified B2B marketplace for dealmakers — discover, connect, and
+            The verified B2B marketplace for dealmakers. Discover, connect, and
             close in one place.
           </p>
         </div>
@@ -88,7 +88,7 @@ export function Footer() {
 
       <div className="mx-auto mt-10 flex max-w-6xl flex-col gap-2 border-t border-ink/10 pt-6 text-xs sm:flex-row sm:items-center sm:justify-between">
         {/* B2B-only line (LAND-02) — verbatim German substring, do not paraphrase. */}
-        <p>Hello Sello ist eine B2B-Plattform — nicht an Verbraucher.</p>
+        <p>Hello Sello ist eine B2B-Plattform - nicht an Verbraucher.</p>
         <p>© 2026 Hello Sello</p>
       </div>
     </footer>

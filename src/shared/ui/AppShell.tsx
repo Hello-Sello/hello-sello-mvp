@@ -12,7 +12,7 @@ import { BasketDrawer } from "@/modules/basket";
 // marketing surface — TopBar calls the auth-only getCompanyChrome() action).
 // NOTE: "/" is NOT in this array — the matcher uses startsWith(r + "/"), so a
 // bare "/" is inert; the root is handled by the explicit exact check below.
-const BARE_ROUTES = ["/login", "/signup", "/c", "/impressum", "/datenschutz", "/agb"];
+const BARE_ROUTES = ["/login", "/signup", "/c", "/impressum", "/datenschutz", "/agb", "/sella"];
 
 /**
  * The frame every page sits inside: a full-height dark rail down the left, and

@@ -55,6 +55,7 @@ export async function updateSession(request: NextRequest) {
     path === '/impressum' ||     // legal — Impressum (§5 DDG)
     path === '/datenschutz' ||   // legal — Datenschutzerklärung
     path === '/agb' ||           // legal — AGB
+    path === '/sella' ||         // design preview — static dummy dashboard, no auth/backend
     path.startsWith('/c/') ||
     path === '/auth/callback' ||
     path === '/auth/confirm' ||
