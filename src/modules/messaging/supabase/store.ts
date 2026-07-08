@@ -151,7 +151,9 @@ export async function getConversations(): Promise<ConversationListItem[]> {
     lastByThread.set(m.thread_id, { body: m.body, created_at: m.created_at });
   }
 
-  const items: ConversationListItem[] = (threadsRes.data ?? []).map((t) => {
+  const items: ConversationListItem[] = (threadsRes.data ?? [])
+    .filter((t) => t.type !== "deal")
+    .map((t) => {
     // a group thread carries a null relationship_id (07-02) - it has no
     // relationship pair to resolve, so its counterparty comes from members.
     const rel = t.relationship_id ? relById.get(t.relationship_id) : undefined;
@@ -212,18 +214,8 @@ export async function getConversations(): Promise<ConversationListItem[]> {
       };
     }
 
-    // deal - the chat born with a deal; the row carries the deal number and
-    // NAVIGATES to the workspace (it never selects in place)
-    if (t.type === "deal") {
-      const dealNo = (t.deal_card_id && dealNoById.get(t.deal_card_id)) || "Deal";
-      return {
-        ...base,
-        name: dealNo,
-        subtitle: `Deal chat · ${otherCompanyName}`,
-        initials: "DL",
-        dealCardId: t.deal_card_id ?? undefined,
-      };
-    }
+    // deal threads are intentionally hidden from the list (filtered above) -
+    // the deal now lives only inside the p2p chat + the right-side deal-card panel.
 
     if (t.type === "c2c") {
       return {

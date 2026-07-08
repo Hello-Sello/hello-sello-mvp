@@ -604,6 +604,19 @@ export interface CreateDealResult {
 }
 
 /**
+ * What the card's CREATE mode hands up when the user presses "Send deal" (chj/
+ * 07-08). The card builds the draft inline (products/conditions/note); the strip
+ * adds `relationshipId` and calls `createDeal`. This replaced the old CreateDealForm.
+ */
+export interface CardCreateInput {
+  lines: DraftLineInput[];
+  freeDelivery: boolean;
+  dueDate: string | null;
+  paymentTermsCode: string | null;
+  note: string | null;
+}
+
+/**
  * The propose-form payload handed to `proposeDeal` (Waypoint 4.5.1). Same shape
  * as create plus the p2p `threadId` the proposal message is posted into. The
  * manual door no longer births a card - it writes a `deal_detected` proposal

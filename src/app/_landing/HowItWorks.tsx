@@ -7,23 +7,22 @@ import { Reveal } from "./Reveal";
  * Discover → Connect → Deal, iterated over a STEPS array + a co-located `Step`
  * sub-component (the `Meta` idiom), with a flow-line of pills underneath. Section
  * id="how" is the scroll target for the nav + hero "See how it works" anchor.
- * Placeholder bodies — real copy later.
  */
 const STEPS = [
   {
     icon: Search,
     title: "Discover",
-    body: "[placeholder] Browse the directory of verified companies and find partners that fit what you buy or sell.",
+    body: "Browse a directory of business-verified companies and find the partners that match what you buy or sell.",
   },
   {
     icon: Handshake,
     title: "Connect",
-    body: "[placeholder] Request access, exchange pricing, and start a real conversation — safely, no cross-company leaks.",
+    body: "Request access, share pricing, and start a real conversation in chat. Your data stays private, with no cross-company leaks.",
   },
   {
     icon: FileCheck,
     title: "Deal",
-    body: "[placeholder] Turn the conversation into a structured deal: quantities, prices, and terms, tracked to close.",
+    body: "Let AI shape the conversation into a structured deal, then track quantities, prices, and terms all the way to close.",
   },
 ];
 
@@ -75,9 +74,7 @@ function Step({
   return (
     <li className="glass h-full rounded-3xl p-6">
       <div className="flex items-center gap-3">
-        <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-brand to-brand-deep text-white shadow-[0_8px_20px_-8px_rgba(227,11,93,0.6)]">
-          <Icon size={20} />
-        </span>
+        <Icon className="text-brand" size={24} strokeWidth={1.75} aria-hidden />
         <span className="text-xs font-semibold uppercase tracking-[0.14em] text-brand">
           Step {step}
         </span>

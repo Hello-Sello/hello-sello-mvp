@@ -5,29 +5,28 @@ import { Reveal } from "./Reveal";
 /**
  * Value props (§4). Buyer-outcome cards rendered via a co-located `ValueProp`
  * sub-component (the `Meta` idiom). Glass cards with a gradient icon tile and a
- * hover lift give the Aurora feel; copy is interim placeholder (real positioning
- * is a later content pass).
+ * hover lift give the Aurora feel.
  */
 const PROPS = [
   {
     icon: ShieldCheck,
     title: "Verified partners only",
-    body: "[placeholder] Every company is business-verified before it can trade, so you know who you are dealing with.",
+    body: "Every company is business-verified before it can trade, so you always know exactly who is on the other side of the deal.",
   },
   {
     icon: Lock,
     title: "No cross-company leaks",
-    body: "[placeholder] Strict tenant isolation — your catalogue and deals stay private unless you choose to connect.",
+    body: "Strict company isolation keeps your catalogue, pricing, and deals private. Nothing is shared until you choose to connect.",
   },
   {
     icon: Workflow,
     title: "One place, end to end",
-    body: "[placeholder] Discover, connect, and close — the whole flow lives in a single workspace.",
+    body: "Chat, sell, buy, and negotiate in a single space, instead of jumping between mail, chat, PDFs, and your ERP.",
   },
   {
     icon: BadgeCheck,
     title: "Documented deals",
-    body: "[placeholder] Quantities, prices, and terms are tracked and frozen at deal time — an auditable record.",
+    body: "AI turns every conversation into a structured deal. Quantities, prices, and terms are captured and frozen at deal time.",
   },
 ];
 
@@ -62,9 +61,7 @@ function ValueProp({
 }) {
   return (
     <div className="glass h-full rounded-3xl p-6 transition duration-200 hover:-translate-y-1 hover:shadow-[0_24px_60px_-28px_rgba(118,0,45,0.45)]">
-      <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-brand to-brand-deep text-white shadow-[0_8px_20px_-8px_rgba(227,11,93,0.6)]">
-        <Icon size={20} />
-      </span>
+      <Icon className="text-brand" size={28} strokeWidth={1.75} aria-hidden />
       <h3 className="mt-5 text-base font-semibold text-ink">{title}</h3>
       <p className="mt-1.5 text-sm text-ink-muted">{body}</p>
     </div>

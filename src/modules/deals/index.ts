@@ -35,6 +35,7 @@ export type {
   DealSource,
   CreateDealInput,
   CreateDealResult,
+  CardCreateInput,
   EditDealInput,
   EditDealResult,
   PromotionState,
@@ -82,8 +83,10 @@ export {
 export {
   confirmDeal,
   createDeal,
+  declineDeal,
   editDeal,
   finalizeDeal,
+  signDeal,
   offerPromotion,
   acceptPromotion,
   declinePromotion,

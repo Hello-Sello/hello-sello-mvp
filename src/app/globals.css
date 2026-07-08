@@ -280,3 +280,259 @@ html { scroll-behavior: smooth; }
     transition: none !important;
   }
 }
+
+/* =====================================================================
+   Hero deal-flow animation (landing hero - product-visual slot). [v2]
+   Redesigned so the Deal Card is the visual ANCHOR: a chat between two
+   people crystallises into a structured, denser Deal Card across a "//"
+   seam. Premium-motion rules - short beats, custom easing curves, exactly
+   ONE spring (spent on the seal). All classes/keyframes are `hdf-` scoped
+   so nothing leaks into the app; reuses the app brand + glass tokens.
+   Sample content + illustrated avatars are ILLUSTRATIVE only (D-06).
+   VISUAL only; behaviour lives in HeroDealFlow.tsx.
+   ===================================================================== */
+:root {
+  --hdf-ease: cubic-bezier(0.16, 1, 0.3, 1);   /* ease-out quart - entrances */
+  --hdf-eio: cubic-bezier(0.65, 0, 0.35, 1);   /* ease-in-out - morph/settle */
+  --hdf-fly: cubic-bezier(0.5, 0, 0.1, 1);     /* front-loaded - cross-seam travel */
+}
+
+.hdf-frame {
+  position: relative;
+  border-radius: 26px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(30px) saturate(175%);
+  -webkit-backdrop-filter: blur(30px) saturate(175%);
+  box-shadow:
+    0 70px 130px -46px color-mix(in srgb, var(--color-brand-deep) 46%, transparent),
+    0 14px 36px -16px color-mix(in srgb, var(--color-brand-deep) 18%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.75);
+}
+
+.hdf-chrome {
+  height: 40px; display: flex; align-items: center; gap: 8px; padding: 0 18px;
+  border-bottom: 1px solid rgba(31, 32, 32, 0.06); background: rgba(255, 255, 255, 0.35);
+}
+.hdf-dot { width: 10px; height: 10px; border-radius: 50%; }
+.hdf-dot.a { background: var(--color-brand-soft); }
+.hdf-dot.b { background: color-mix(in srgb, var(--color-brand-soft) 70%, transparent); }
+.hdf-dot.c { background: color-mix(in srgb, var(--color-brand-soft) 50%, transparent); }
+
+.hdf-stage {
+  position: relative; aspect-ratio: 16 / 10; display: grid;
+  grid-template-columns: minmax(0, 0.92fr) 52px minmax(0, 1.08fr);
+  padding: 30px 34px; overflow: hidden;
+  /* a VERY light pink glass screen - near-white base with faint glows for depth,
+     so the chat + card clearly pop off it (feedback: screen bg should be very
+     very light pink, glass-morph computer-screen look) */
+  background:
+    radial-gradient(44% 54% at 84% 20%, color-mix(in srgb, var(--color-brand) 9%, transparent), transparent 60%),
+    radial-gradient(44% 50% at 99% 100%, color-mix(in srgb, #ffb083 20%, transparent), transparent 62%),
+    radial-gradient(48% 55% at 4% 26%, color-mix(in srgb, var(--color-brand-soft) 24%, transparent), transparent 60%),
+    linear-gradient(160deg, #fffbfd, #fff3f8);
+}
+.hdf-col { display: flex; flex-direction: column; min-height: 0; }
+.hdf-chat { justify-content: center; }
+.hdf-zone { font-size: 10.5px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--color-ink-muted); margin: 0 4px 16px; }
+.hdf-cardwrap { justify-content: center; align-items: center; }
+
+/* chat */
+.hdf-msgs { display: flex; flex-direction: column; gap: 16px; }
+/* live auto-scrolling feed: newest pinned to the bottom, older messages drift up
+   and dissolve under the top fade (premium glass-screen look). Only applied when
+   the timeline animates - static/reduced-motion shows the full thread uncapped. */
+.hdf-msgs.scrolling {
+  max-height: 360px; min-height: 0; overflow: hidden; padding: 2px 2px 4px;
+  scroll-behavior: smooth;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 40px, #000 calc(100% - 6px), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 40px, #000 calc(100% - 6px), transparent 100%);
+}
+.hdf-msgs.scrolling > .hdf-line:first-child { margin-top: auto; }
+.hdf-line {
+  display: flex; align-items: flex-end; gap: 11px; max-width: 84%;
+  opacity: 0; transform: translateY(10px) scale(0.97);
+  transition: opacity 0.36s var(--hdf-ease), transform 0.36s var(--hdf-ease);
+}
+.hdf-line.show { opacity: 1; transform: none; }
+.hdf-line.left { align-self: flex-start; }
+.hdf-line.right { align-self: flex-end; flex-direction: row-reverse; }
+.hdf-ava {
+  flex: none; width: 40px; height: 40px; border-radius: 50%; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 3px 10px -5px color-mix(in srgb, var(--color-brand-deep) 28%, transparent);
+}
+.hdf-ava-svg { width: 100%; height: 100%; display: block; }
+.hdf-ava.gray { background: linear-gradient(180deg, #ffffff, #f1eff4); border: 1px solid rgba(255, 255, 255, 0.9); color: var(--color-ink); }
+.hdf-ava.pink {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-brand-soft) 70%, #fff), color-mix(in srgb, var(--color-brand) 26%, #fff));
+  border: 1px solid color-mix(in srgb, var(--color-brand) 30%, transparent); color: var(--color-brand-deep);
+}
+.hdf-bubwrap { display: flex; flex-direction: column; min-width: 0; }
+.hdf-line.right .hdf-bubwrap { align-items: flex-end; }
+.hdf-name { font-size: 11px; font-weight: 700; margin: 0 4px 4px; }
+.hdf-line.left .hdf-name { color: var(--color-ink-muted); }
+.hdf-line.right .hdf-name { color: var(--color-brand-deep); }
+.hdf-bubble {
+  position: relative; padding: 11px 15px; font-size: 15px; line-height: 1.45; border-radius: 18px;
+  border: none;
+  box-shadow: 0 6px 16px -14px color-mix(in srgb, var(--color-brand-deep) 34%, transparent);
+}
+/* theirs (Lena) - flat soft gray, no border - like the real chat bg-ink/5 */
+.hdf-line.left .hdf-bubble {
+  background: #f2f0f4;
+  color: color-mix(in srgb, var(--color-ink) 88%, transparent);
+  border-bottom-left-radius: 6px;
+}
+/* mine (Marco) - flat LIGHT pink, no border - like the real chat bg-brand-soft/30 */
+.hdf-line.right .hdf-bubble {
+  background: color-mix(in srgb, var(--color-brand-soft) 34%, #fff);
+  color: color-mix(in srgb, var(--color-ink) 88%, transparent);
+  border-bottom-right-radius: 6px;
+}
+.hdf-time { display: block; font-size: 10px; margin-top: 5px; opacity: 0.6; font-variant-numeric: tabular-nums; }
+
+/* the fact inside a sentence - just maroon text, NO highlight box (feedback: the box looked cheap) */
+.hdf-tok { font-weight: 700; color: var(--color-brand-deep); }
+
+.hdf-typing-dots { display: flex; gap: 4px; align-items: center; padding: 2px 0; }
+.hdf-typing-dots i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: 0.35; animation: hdf-blink 1.1s infinite var(--hdf-eio); }
+.hdf-line.left .hdf-typing-dots i { color: var(--color-ink-muted); }
+.hdf-line.right .hdf-typing-dots i { color: var(--color-brand); }
+.hdf-typing-dots i:nth-child(2) { animation-delay: 0.16s; }
+.hdf-typing-dots i:nth-child(3) { animation-delay: 0.32s; }
+@keyframes hdf-blink { 0%, 60%, 100% { opacity: 0.3; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-2px); } }
+
+/* // transform seam (slimmed) */
+.hdf-seam { position: relative; display: flex; align-items: center; justify-content: center; }
+.hdf-vline {
+  position: absolute; top: 6%; bottom: 6%; width: 2px; left: 50%; transform: translateX(-50%);
+  background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--color-brand) 45%, transparent) 22%, color-mix(in srgb, var(--color-brand) 45%, transparent) 78%, transparent);
+  background-size: 100% 200%; animation: hdf-seamflow 3.4s linear infinite;
+}
+@keyframes hdf-seamflow { to { background-position: 0 -200%; } }
+/* a light beam that travels down the seam - the "//" from He//oSe//o, alive */
+.hdf-beam { position: absolute; left: 50%; top: 6%; width: 2px; height: 20%; transform: translateX(-50%); border-radius: 2px; background: linear-gradient(180deg, transparent, var(--color-brand), transparent); filter: blur(0.5px); animation: hdf-beam 3.4s var(--hdf-eio) infinite; }
+@keyframes hdf-beam { 0% { top: 2%; opacity: 0; } 15% { opacity: 0.9; } 85% { opacity: 0.9; } 100% { top: 78%; opacity: 0; } }
+.hdf-glow { position: absolute; top: 50%; left: 50%; width: 52px; height: 52px; transform: translate(-50%, -50%); border-radius: 50%; background: radial-gradient(circle, color-mix(in srgb, var(--color-brand) 28%, transparent), transparent 70%); filter: blur(2px); animation: hdf-breathe 3.6s var(--hdf-eio) infinite; }
+@keyframes hdf-breathe { 0%, 100% { opacity: 0.32; transform: translate(-50%, -50%) scale(1); } 50% { opacity: 0.6; transform: translate(-50%, -50%) scale(1.14); } }
+.hdf-slash {
+  position: relative; font-family: var(--font-mono), monospace; font-weight: 600; font-size: 16px; color: var(--color-brand);
+  background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--glass-border); width: 34px; height: 34px; border-radius: 11px;
+  display: flex; align-items: center; justify-content: center; box-shadow: var(--glass-shadow);
+}
+.hdf-seam.pulse .hdf-glow { animation: hdf-seampulse 0.6s var(--hdf-ease); }
+.hdf-seam.pulse .hdf-slash { animation: hdf-slashkick 0.6s var(--hdf-ease); }
+@keyframes hdf-seampulse { 0% { opacity: 0.4; transform: translate(-50%, -50%) scale(1); } 40% { opacity: 0.95; transform: translate(-50%, -50%) scale(1.5); } 100% { opacity: 0.4; transform: translate(-50%, -50%) scale(1); } }
+@keyframes hdf-slashkick { 0%, 100% { transform: scale(1); } 40% { transform: scale(1.12); } }
+/* an expanding ring each time a fact crosses the seam */
+.hdf-ripple { position: absolute; top: 50%; left: 50%; width: 34px; height: 34px; margin: -17px 0 0 -17px; border-radius: 11px; border: 1.5px solid color-mix(in srgb, var(--color-brand) 55%, transparent); opacity: 0; pointer-events: none; }
+.hdf-ripple.go { animation: hdf-ripple 0.7s var(--hdf-ease); }
+@keyframes hdf-ripple { 0% { opacity: 0.6; transform: scale(0.9); } 100% { opacity: 0; transform: scale(2.6); } }
+
+/* deal card - the anchor */
+.hdf-card {
+  position: relative; width: 100%; max-width: 460px; border-radius: 24px; overflow: hidden;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.66), rgba(255, 255, 255, 0.5));
+  backdrop-filter: blur(40px) saturate(190%); -webkit-backdrop-filter: blur(40px) saturate(190%);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  box-shadow:
+    0 56px 100px -32px color-mix(in srgb, var(--color-brand-deep) 46%, transparent),
+    0 12px 30px -12px color-mix(in srgb, var(--color-brand-deep) 20%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  transition: box-shadow 0.3s var(--hdf-eio);
+}
+.hdf-card.impact { animation: hdf-impact 0.5s var(--hdf-ease); }
+@keyframes hdf-impact { 0% { transform: scale(1); } 35% { transform: scale(1.012); } 100% { transform: scale(1); } }
+.hdf-card::before { content: ""; position: absolute; inset: 0; background: linear-gradient(120deg, transparent 42%, rgba(255, 255, 255, 0.26) 50%, transparent 58%); pointer-events: none; }
+
+.hdf-ring { position: absolute; top: 44px; left: 50%; width: 40px; height: 40px; margin-left: -20px; border-radius: 50%; border: 2px solid color-mix(in srgb, var(--color-brand) 50%, transparent); opacity: 0; pointer-events: none; }
+.hdf-ring.go { animation: hdf-ringout 0.62s var(--hdf-ease); }
+@keyframes hdf-ringout { 0% { opacity: 0.5; transform: scale(0.7); } 100% { opacity: 0; transform: scale(3.4); } }
+
+.hdf-cardhead { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid color-mix(in srgb, var(--color-brand-deep) 9%, transparent); background: linear-gradient(180deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.08)); }
+.hdf-mark { font-style: italic; font-weight: 800; font-size: 22px; color: var(--color-brand); letter-spacing: -0.01em; }
+.hdf-status { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-ink-muted); background: color-mix(in srgb, var(--color-ink-muted) 12%, transparent); border: 1px solid color-mix(in srgb, var(--color-ink-muted) 22%, transparent); border-radius: 999px; padding: 4px 11px; display: inline-flex; align-items: center; gap: 6px; }
+.hdf-status.sealed { color: var(--color-success); background: color-mix(in srgb, var(--color-success) 12%, transparent); border-color: color-mix(in srgb, var(--color-success) 32%, transparent); animation: hdf-seal 0.52s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.hdf-status.sealed::before { content: "\2713"; font-size: 11px; }
+@keyframes hdf-seal { 0% { transform: scale(1.25) rotate(-6deg); opacity: 0.4; } 55% { transform: scale(0.96) rotate(2deg); } 100% { transform: scale(1) rotate(0); } }
+
+.hdf-parties { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 13px 20px; border-bottom: 1px solid color-mix(in srgb, var(--color-brand-deep) 7%, transparent); }
+.hdf-party { display: flex; align-items: baseline; gap: 7px; min-width: 0; }
+.hdf-party-right { justify-content: flex-end; text-align: right; }
+.hdf-plabel { font-size: 9px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--color-ink-muted); }
+.hdf-pname { font-size: 13.5px; font-weight: 700; color: var(--color-ink); }
+.hdf-arrow { color: var(--color-brand); font-size: 15px; font-weight: 700; align-self: center; }
+
+.hdf-rows { padding: 8px 20px 2px; }
+.hdf-row { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding: 11px 8px; margin: 0 -8px; border-radius: 9px; border-bottom: 1px solid color-mix(in srgb, var(--color-brand-deep) 7%, transparent); transition: background 0.5s var(--hdf-eio); }
+.hdf-row.hit { background: color-mix(in srgb, var(--color-brand) 11%, transparent); }
+.hdf-k { font-size: 11.5px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--color-ink-muted); white-space: nowrap; }
+.hdf-v { font-size: 15px; font-weight: 600; color: var(--color-ink); text-align: right; }
+.hdf-v.num { font-family: var(--font-mono), monospace; font-weight: 500; font-variant-numeric: tabular-nums; }
+.hdf-v.hdf-empty { min-width: 64px; height: 13px; border-bottom: 1.5px dashed color-mix(in srgb, var(--color-brand) 32%, transparent); align-self: center; }
+.hdf-filled { display: inline-block; opacity: 0; transform: translateY(5px); }
+.hdf-filled.in { animation: hdf-fieldin 0.34s var(--hdf-ease) forwards; }
+@keyframes hdf-fieldin { to { opacity: 1; transform: none; } }
+.hdf-row.total { border-bottom: none; padding-top: 14px; margin-top: 2px; }
+.hdf-row.total .hdf-k { color: var(--color-ink); font-weight: 700; font-size: 12.5px; }
+.hdf-row.total .hdf-v { font-family: var(--font-mono), monospace; font-size: 30px; font-weight: 700; color: var(--color-brand-deep); font-variant-numeric: tabular-nums; transition: text-shadow 0.4s; }
+.hdf-row.total .hdf-v.glow { text-shadow: 0 0 20px color-mix(in srgb, var(--color-brand) 55%, transparent); }
+
+.hdf-foot { padding: 0 20px 16px; margin-top: 4px; font-size: 11.5px; color: var(--color-ink-muted); display: flex; align-items: center; gap: 7px; opacity: 0; transform: translateY(4px); transition: opacity 0.5s var(--hdf-ease), transform 0.5s var(--hdf-ease); }
+.hdf-foot.show { opacity: 1; transform: none; }
+.hdf-foot::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--color-success); flex: none; }
+
+/* cross-seam chip - LIGHT pink (client feedback: the dark pink read poorly) */
+.hdf-flyer {
+  position: absolute; z-index: 30; pointer-events: none;
+  font-family: var(--font-mono), monospace; font-size: 12.5px; font-weight: 600; color: var(--color-brand-deep);
+  padding: 5px 11px; border-radius: 999px; white-space: nowrap;
+  background: color-mix(in srgb, var(--color-brand-soft) 85%, #fff);
+  border: 1px solid color-mix(in srgb, var(--color-brand) 22%, transparent);
+  box-shadow: 0 10px 24px -8px color-mix(in srgb, var(--color-brand) 42%, transparent);
+  transition: transform 0.66s var(--hdf-fly), opacity 0.35s var(--hdf-eio);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hdf-line, .hdf-foot, .hdf-flyer, .hdf-row, .hdf-filled, .hdf-card { transition: none; }
+  .hdf-vline, .hdf-beam, .hdf-glow, .hdf-typing-dots i { animation: none; }
+  .hdf-seam.pulse .hdf-glow, .hdf-seam.pulse .hdf-slash, .hdf-ripple.go, .hdf-status.sealed, .hdf-card.impact, .hdf-ring.go { animation: none; }
+}
+@media (max-width: 720px) {
+  .hdf-stage { grid-template-columns: minmax(0, 1fr) 40px minmax(0, 1fr); padding: 16px; }
+  .hdf-msgs.scrolling { max-height: 230px; }
+  .hdf-bubble { font-size: 13px; }
+  .hdf-ava { width: 32px; height: 32px; }
+  .hdf-row.total .hdf-v { font-size: 24px; }
+}
+
+/* =====================================================================
+   PRODUCT FLIP CARD (landing §6 - premium product preview)
+   A medical-cannabis product card that auto-flips front <-> back on a
+   loop (pure CSS 3D, SSR-safe). Front = product + potency + price;
+   back = documents / lab results. Scoped `pcard-`; content styling is
+   Tailwind on the faces. ILLUSTRATIVE product only (D-06).
+   ===================================================================== */
+.pcard { perspective: 1900px; }
+.pcard-inner {
+  position: relative; height: 100%; width: 100%;
+  transform-style: preserve-3d;
+  animation: pcard-flip 10s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+.pcard-face {
+  position: absolute; inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.pcard-back { transform: rotateY(180deg); }
+@keyframes pcard-flip {
+  0%, 42%  { transform: rotateY(0deg); }
+  50%, 92% { transform: rotateY(180deg); }
+  100%     { transform: rotateY(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pcard-inner { animation: none; }
+}

@@ -27,10 +27,10 @@
  * inline mode owned here + CardFront (the old EditDealForm modal is superseded).
  */
 import { useState } from "react";
-import { FlipHorizontal2, Lock, Pencil } from "lucide-react";
+import { Check, FlipHorizontal2, Lock, Pencil } from "lucide-react";
 import { CardFront } from "./CardFront";
 import { CardBack } from "./CardBack";
-import type { DealCardView, MemberView, ThingView } from "../types";
+import type { CardCreateInput, DealCardView, MemberView, ThingView } from "../types";
 
 export function DealCard({
   data,
@@ -41,6 +41,8 @@ export function DealCard({
   people = [],
   viewerPersonId,
   viewerCompanyId,
+  createMode = false,
+  onCreate,
 }: {
   data: DealCardView;
   /**
@@ -60,30 +62,43 @@ export function DealCard({
   /** the viewer's person + company - Open Items "You" + private ownership. */
   viewerPersonId?: string | null;
   viewerCompanyId?: string | null;
+  /**
+   * CREATE MODE (chj/07-08): render a not-yet-born draft. Edit mode starts ON and
+   * stays on (no pencil, no flip, no back face), and the front's footer becomes
+   * "Send deal" which calls `onCreate`. Used by the chat "+ Create a deal" door.
+   */
+  createMode?: boolean;
+  onCreate?: (input: CardCreateInput) => Promise<void>;
 }) {
   const [flipped, setFlipped] = useState(false);
-  const [editMode, setEditMode] = useState(false);
+  // create mode is always-editing: seed edit mode ON so the empty draft is fillable.
+  const [editMode, setEditMode] = useState(!!createMode);
 
-  // D-17: a closed (sealed) deal locks editing - the pencil becomes a lock.
-  const isClosed = data.card.status === "done";
+  // Any non-draft deal is locked (chj/07-08): once signed (confirmed), declined
+  // (cancelled), executed (done) or ticketed, the pencil becomes a lock - no editing.
+  const isClosed = data.card.status !== "draft";
   // the pencil shows only when editing is allowed AND the deal is open.
   const canEdit = !!onEdit && !isClosed;
 
   return (
     <div className="relative w-full" style={{ perspective: "1600px" }}>
       {/* flip - top-left corner. Sits in the title-bar's left gutter (CardFront
-          leaves pl-12 clear), so it reads as the left-most title-bar control. */}
-      <button
-        onClick={() => setFlipped((f) => !f)}
-        className="dc-tb-btn absolute left-3 top-3 z-30 grid h-[30px] w-[30px] place-items-center rounded-full"
-        title={flipped ? "Flip to deal" : "Flip to signals & logs"}
-        aria-label={flipped ? "Flip to deal" : "Flip to signals and logs"}
-      >
-        <FlipHorizontal2 className="h-[14px] w-[14px]" />
-      </button>
+          leaves pl-12 clear), so it reads as the left-most title-bar control.
+          Hidden in create mode: a not-yet-born draft has no Signals/Logs back. */}
+      {!createMode && (
+        <button
+          onClick={() => setFlipped((f) => !f)}
+          className="dc-tb-btn absolute left-3 top-3 z-30 grid h-[30px] w-[30px] place-items-center rounded-full"
+          title={flipped ? "Flip to deal" : "Flip to signals & logs"}
+          aria-label={flipped ? "Flip to deal" : "Flip to signals and logs"}
+        >
+          <FlipHorizontal2 className="h-[14px] w-[14px]" />
+        </button>
+      )}
 
-      {/* edit / lock - top-right corner (D-16/D-17), in the title-bar's right gutter */}
-      {isClosed ? (
+      {/* edit / lock - top-right corner (D-16/D-17), in the title-bar's right gutter.
+          Hidden in create mode: the card is already (and only) in edit mode. */}
+      {createMode ? null : isClosed ? (
         <span
           className="dc-tb-btn absolute right-3 top-3 z-30 grid h-[30px] w-[30px] place-items-center rounded-full"
           title="This deal is sealed"
@@ -104,7 +119,11 @@ export function DealCard({
             aria-label={editMode ? "Done editing" : "Edit deal"}
             aria-pressed={editMode}
           >
-            <Pencil className="h-[14px] w-[14px]" />
+            {editMode ? (
+              <Check className="h-[14px] w-[14px]" />
+            ) : (
+              <Pencil className="h-[14px] w-[14px]" />
+            )}
           </button>
         )
       )}
@@ -127,23 +146,29 @@ export function DealCard({
             viewerPersonId={viewerPersonId}
             viewerCompanyId={viewerCompanyId}
             editMode={editMode}
-            onExitEdit={() => setEditMode(false)}
             onActivity={() => setFlipped(true)}
             onClose={onClose}
+            createMode={createMode}
+            onCreate={onCreate}
+            onExitEdit={() => setEditMode(false)}
           />
         </div>
 
-        {/* BACK - fills the box, pre-rotated 180deg so it faces forward when flipped */}
-        <div
-          className="absolute inset-0"
-          style={{
-            backfaceVisibility: "hidden",
-            WebkitBackfaceVisibility: "hidden",
-            transform: "rotateY(180deg)",
-          }}
-        >
-          <CardBack data={data} />
-        </div>
+        {/* BACK - fills the box, pre-rotated 180deg so it faces forward when flipped.
+            Not mounted in create mode: the back reads signals/log/confirmations that
+            a not-yet-born draft does not have. */}
+        {!createMode && (
+          <div
+            className="absolute inset-0"
+            style={{
+              backfaceVisibility: "hidden",
+              WebkitBackfaceVisibility: "hidden",
+              transform: "rotateY(180deg)",
+            }}
+          >
+            <CardBack data={data} />
+          </div>
+        )}
       </div>
     </div>
   );

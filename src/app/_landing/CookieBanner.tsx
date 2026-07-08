@@ -86,7 +86,7 @@ export function CookieBanner() {
       <p className="text-sm text-ink">
         <b className="font-semibold">We use cookies.</b> Essential cookies keep
         you signed in. We&apos;ll only set optional cookies (e.g. analytics) with
-        your consent — rejecting is as easy as accepting. See our{" "}
+        your consent. Rejecting is as easy as accepting. See our{" "}
         <a href="/datenschutz" className="font-semibold text-brand hover:underline">
           Datenschutz
         </a>
