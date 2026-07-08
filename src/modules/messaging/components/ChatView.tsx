@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { MessageSquare } from "lucide-react";
 import type { ChatMessageView, ConversationListItem, MyConnectionsView } from "../types";
 import type { ChatFilter } from "./ConversationList";
@@ -34,6 +34,7 @@ import { ThreadView } from "./ThreadView";
  */
 export function ChatView() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [conversations, setConversations] = useState<ConversationListItem[]>([]);
   const [filter, setFilter] = useState<ChatFilter>("all");
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
@@ -76,6 +77,47 @@ export function ChatView() {
       alive = false;
     };
   }, []);
+
+  // Task 8b - land on a specific relationship's c2c chat with a deal card open
+  // (dealChatUrl, `@/modules/deals`). Both createDeal() callers that need to
+  // show their result (the basket popover + the chat "Create Deal" button)
+  // route here as `?relationship=<id>&deal=<dealCardId>`. DealPin itself needs
+  // no new selection logic - it already defaults to the newest live deal for a
+  // relationship - so this effect only closes the actual gap: nothing else
+  // lets you deep-link INTO a specific relationship's chat (selectedThreadId
+  // is plain client state, never synced to the URL).
+  useEffect(() => {
+    const relationshipId = searchParams.get("relationship");
+    const dealCardId = searchParams.get("deal");
+    if (!relationshipId) return;
+    let alive = true;
+    void resolveC2cThread(relationshipId)
+      .then(async (threadId) => {
+        await getConversations().then((list) => {
+          if (alive) setConversations(list);
+        });
+        if (!alive) return;
+        setSelectedThreadId(threadId);
+        if (!dealCardId) return;
+        // deferred to the next frame: on a fresh landing (arriving from
+        // outside /connect) the layout's DealCardPanelHost mounts its
+        // `hs:open-deal-card` listener in the SAME commit as this effect, and
+        // effects fire depth-first in JSX order - `children` (this page)
+        // before the layout's later <DealCardPanelHost/> sibling - so a
+        // synchronous dispatch here would race ahead of that listener and be
+        // missed. This mirrors the identical race already solved by the deal
+        // deep-link page (src/app/connect/deal/[dealCardId]/page.tsx, D-32).
+        requestAnimationFrame(() => {
+          window.dispatchEvent(
+            new CustomEvent("hs:open-deal-card", { detail: { dealCardId } }),
+          );
+        });
+      })
+      .catch((e) => console.error("Task 8b: resolve c2c thread failed", e));
+    return () => {
+      alive = false;
+    };
+  }, [searchParams]);
 
   // load the stream whenever the selected thread changes. The clear-on-switch
   // lives in handleSelect (an event handler) so we never setState synchronously
