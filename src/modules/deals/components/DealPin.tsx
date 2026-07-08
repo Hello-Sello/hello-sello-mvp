@@ -793,21 +793,18 @@ export function DealPin({
           cardHost,
         )}
 
-      {/* the propose form (4.5.2, was create 3.5a) - a human-pressed Send writes
-          a PROPOSAL (no card yet); on success the strip re-reads to show pending.
-          p2p only - guarded by canPropose + threadId so c2c never reaches it. */}
+      {/* the create form (chj, was propose 4.5.2) - a human-pressed "Send deal"
+          BIRTHS a Draft card directly (no proposal, no accept); the born deal
+          arrives via the strip's chat_thread realtime and the card opens via the
+          dispatched hs:open-deal-card. p2p only - guarded by canPropose +
+          threadId so c2c never reaches it. */}
       {creating && canPropose && threadId && (
         <CreateDealForm
           relationshipId={relationshipId}
           threadId={threadId}
           counterpartyName={counterpartyName ?? "your contact"}
           onClose={() => setCreating(false)}
-          onProposed={() => {
-            setCreating(false);
-            void getPendingProposal(threadId)
-              .then(setProposal)
-              .catch(() => {});
-          }}
+          onCreated={() => setCreating(false)}
         />
       )}
 
