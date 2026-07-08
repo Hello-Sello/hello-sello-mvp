@@ -213,7 +213,7 @@ export function DealCalendar({
   };
 
   function openDeal(dealCardId: string) {
-    window.dispatchEvent(new CustomEvent("hs:open-deal-room", { detail: { dealCardId } }));
+    window.dispatchEvent(new CustomEvent("hs:open-deal-card", { detail: { dealCardId } }));
   }
 
   const totalCols = columns.length;
