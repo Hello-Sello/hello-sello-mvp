@@ -14,7 +14,7 @@ export type { OrderStatus, OrderStatusCode, TicketStatus } from "./status";
 export { statusOf, orderNumberOf, formatOrderDate, isKeyAccount } from "./status";
 
 export type { CalendarDeal } from "./calendarDeals";
-export { getSellerCalendarDeals } from "./calendarDeals";
+export { getSellerCalendarDeals, getBuyerCalendarDeals } from "./calendarDeals";
 export type { CalendarKpis, CalendarKpiInput } from "./calendar";
 export { calendarDay, calendarKpis, lineGrams } from "./calendar";
 
