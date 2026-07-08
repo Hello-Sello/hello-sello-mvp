@@ -38,8 +38,10 @@ A **display vocabulary** richer than the DB `deal_card_status` enum. Derivation 
 | **yellow** | Deal accepted | `status='confirmed'` |
 | **green** | Deal executed | `status='done'` |
 | **orange** | Deal update | `status='amended'` (*Marcel left this colour unset; orange is our placeholder*) |
-| **blue** | Ticket created | ❌ **no ticket table exists yet** — see §6 |
-| **dark green** | Ticket closed | ❌ **no ticket table exists yet** — see §6 |
+| **blue** | Ticket created | `deal_card.ticket_status='open'` (overrides base status) |
+| **dark green** | Ticket closed | `deal_card.ticket_status='closed'` |
+
+> **Already derived by `statusOf()` in `src/modules/allocate/status.ts`** (the Orders table's shared display-stage helper — reuse it, don't re-map). `deal_card.ticket_status` (open/closed/null) was added by the Allocate migration `20260707090000_allocate_schema.sql`. `withdrawn`/`cancelled` deals fall outside the 7-vocab → neutral `cancelled` code.
 
 ---
 
@@ -79,7 +81,7 @@ Four cards, current month (labels side-flipped per §1). *Not hard-locked — ea
 
 ## 6. Known gaps / deferred
 
-- **Tickets have no backing table.** The blue (Ticket created) and dark-green (Ticket closed) stages can't derive from real data. **For the 8-Jul demo (decision A):** seed all real statuses **+ fake the two ticket pills via a `metadata` flag** so the full colour legend shows; real ticket wiring comes later.
+- **Demo seed (decision A):** seed deals across **all** display stages so the full colour legend shows. The two ticket colours seed **cleanly via the real `deal_card.ticket_status` column** (`open`/`closed`) — no metadata hack needed (earlier "no ticket table" note was wrong; the Allocate migration added the column + lookup).
 - **"Deal update" colour** = orange placeholder (Marcel unspecified).
 - **Weighted-avg-price maths** confirmed money÷grams but explicitly "easy to change later".
 - **Pill length/span** is cosmetic in the prototype (faked 2-day width); real span rule TBD (single-day dot vs delivery-window bar).
