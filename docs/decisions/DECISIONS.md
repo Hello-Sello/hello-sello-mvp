@@ -1367,3 +1367,13 @@ The Phase-7 execution shipped a working structural redesign (grid, cards, media 
 ## 2026-07-07 — Multi pack-size: v0 stopgap in `product.metadata`, proper table deferred
 
 Buyer feedback: a product needs several discrete pack sizes (10g/20g/50g), picked like a T-shirt size before Add-to-basket. Decision (Muskan, for the imminent demo): ship lightweight now — extra sizes as a number array in `product.metadata.pack_sizes`, no migration — treat a real `product_pack_size` table (own pricing, CSV template, Deal Basket/Phase 17 integration) as its own planned phase. The required "Pack size (g)" field in the add-product form stays single-value/unchanged; extras are added via the card's "Edit details" dialog. *Why defer:* likely intersects Ayush's Deal Basket + per-customer pricing work — designing solo now risks rework.
+
+## 2026-07-08 — Sales/Purchase calendar: one shared `DealCalendar`
+
+Grill-with-docs design lock for the deal-timeline surface (SELL.md §3 was "deferred to Ayush's Buy component"; no such component ever landed — this lane now owns it).
+
+- **One side-agnostic `DealCalendar`** serves both surfaces: **Sales calendar** (Sell, rows = Customers) / **Purchase calendar** (Buy, rows = Suppliers), flipped by a `side` prop. Neutral row term = **Counterparty**.
+- **Pill = one Deal Card**, shown from **birth** (an offer/order exists; a grey Product-Basket draft is pre-birth, not a pill). Positioned by **`delivery_date_target ?? created_at`**.
+- **Pill colour = deal display stage** ([DEV-151](https://linear.app/hellosello/issue/DEV-151)), reusing allocate's `statusOf` (no re-map): pink offer/order · yellow accepted · green executed · orange update (*Marcel left this colour unset — orange is a placeholder*) · blue ticket-open · dark-green ticket-closed.
+- **Money = Σ `line_total`** (not `deal_card.value_net`, which is often null).
+- Full contract: [`docs/muskan-build/deal-calendar.md`](../muskan-build/deal-calendar.md). Built + verified live on Sell (Timeline view; the Year aggregate view is deferred).
