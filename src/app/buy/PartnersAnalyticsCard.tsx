@@ -258,10 +258,16 @@ interface ResolvedScope {
   products: FlatProduct[];
 }
 
-/** Resolves a table row key (supplierKey, categoryId, or productId/productName
- *  — the same three key spaces `AnalyticsTable` uses for `onSelectRow`) to its
- *  own data slice, searched depth-first supplier -> category -> product so a
- *  key is matched at its most specific level first. */
+/** Resolves a table row key to its own data slice, searched depth-first
+ *  supplier -> category -> product so a key is matched at its most specific
+ *  level first. `supplierKey` alone identifies a supplier row (already
+ *  globally unique); category/product rows use `AnalyticsTable`'s own
+ *  `${supplierKey}::${categoryId}` / `${supplierKey}::${productId ??
+ *  productName}` compound keys (code-review fix) — a bare productId/
+ *  productName is NOT unique across suppliers (two unconnected/CSV-only
+ *  suppliers can use the same free-text product name), so matching on the
+ *  bare id resolved to whichever supplier's row happened to be found FIRST,
+ *  not the one the user actually clicked. */
 function resolveScope(data: BuyAnalytics, key: string): ResolvedScope | null {
   for (const s of data.suppliers) {
     if (s.supplierKey === key) {
@@ -271,11 +277,11 @@ function resolveScope(data: BuyAnalytics, key: string): ResolvedScope | null {
   }
   for (const s of data.suppliers) {
     for (const c of s.categories) {
-      if (c.categoryId === key) {
+      if (`${s.supplierKey}::${c.categoryId}` === key) {
         return { label: c.categoryName, products: c.products.map((p) => ({ product: p, supplierName: s.supplierName })) };
       }
       for (const p of c.products) {
-        if ((p.productId ?? p.productName) === key) {
+        if (`${s.supplierKey}::${p.productId ?? p.productName}` === key) {
           return { label: p.productName, products: [{ product: p, supplierName: s.supplierName }] };
         }
       }
@@ -334,9 +340,16 @@ function buildTimeChartSeries(
 ): ChartSeriesPoint[] {
   if (lines.length === 0) return [];
 
+  // Supplier-scoped grouping key (code-review fix): two different suppliers'
+  // identically-named products must render as separate stack segments, never
+  // silently merged into one bar with a combined (and wrong) net/gross/spend.
+  // `productId` below is this chart's OWN distinct key for
+  // `collectProductKeys()`/`valueFor()` (AnalyticsChart.tsx) — those only use
+  // it for identity + React keys, never as a real catalogue FK, so a
+  // compound key here is safe.
   const linesByProductKey = new Map<string, { productId: string; productName: string; lines: PricedAnalyticsSourceLine[] }>();
   for (const line of lines) {
-    const key = line.productId ?? line.productName;
+    const key = `${line.supplierName}::${line.productId ?? line.productName}`;
     const bucket = linesByProductKey.get(key) ?? { productId: key, productName: line.productName, lines: [] };
     bucket.lines.push(line);
     linesByProductKey.set(key, bucket);
