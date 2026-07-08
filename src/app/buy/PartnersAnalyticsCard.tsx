@@ -129,18 +129,81 @@ function distinctPackSizes(data: BuyAnalytics): string[] {
     .map(formatPackSize);
 }
 
+/**
+ * Day-count window for each Time pill value (code-review fix): the Time
+ * filter previously only steered the chart's bucket GRANULARITY
+ * (`GRANULARITY_BY_TIME` above) and never actually restricted which lines/
+ * rows are in scope, so "Last 7 days" still showed all-time totals. Simple
+ * `now - N days` cutoffs (not calendar-month/quarter boundaries) — picked for
+ * consistency with `GRANULARITY_BY_TIME`'s own "whichever is simpler" bias;
+ * documented here rather than re-derived at each call site.
+ */
+const TIME_WINDOW_DAYS: Record<TimeFilter, number> = {
+  "7d": 7,
+  "14d": 14,
+  month: 30,
+  "3months": 90,
+};
+
+/** True when `dateIso` falls within the last `TIME_WINDOW_DAYS[filter]` days
+ *  of `now` (inclusive) — the one place the Time pill's actual restriction
+ *  logic lives, so `filterAnalytics()`/`filterAnalyticsLines()` below never
+ *  duplicate this date math. */
+function isInTimeWindow(dateIso: string, filter: TimeFilter, now: Date): boolean {
+  const date = new Date(dateIso);
+  if (Number.isNaN(date.getTime())) return false;
+  const cutoff = new Date(now);
+  cutoff.setDate(cutoff.getDate() - TIME_WINDOW_DAYS[filter]);
+  return date >= cutoff && date <= now;
+}
+
+/** `lines` narrowed to just the Time pill's window — the shared step both
+ *  `filterAnalytics()` (table tree) and `filterAnalyticsLines()` (chart's raw
+ *  lines) build on, so the date math above is never duplicated. */
+function linesInTimeWindow(
+  lines: PricedAnalyticsSourceLine[],
+  filter: TimeFilter,
+  now: Date,
+): PricedAnalyticsSourceLine[] {
+  return lines.filter((line) => isInTimeWindow(line.date, filter, now));
+}
+
 /** Narrows `data` to the supplier/category-or-product currently in `filters`
  *  scope — the SAME re-scoped tree is passed to `AnalyticsTable` (so the table
  *  visibly reflects the filter, per the must-have) and used as the chart's
  *  scope when no row is explicitly selected. `categoryId` and `productId` are
  *  treated as one combined "product-ish" filter (note #1 above — they resolve
- *  to the same row in v0). `packSize` (18-14 fix) narrows the same way. */
-function filterAnalytics(data: BuyAnalytics, filters: FilterState): BuyAnalytics {
+ *  to the same row in v0). `packSize` (18-14 fix) narrows the same way.
+ *  `now` defaults to `new Date()`; overridable so the Time-window check
+ *  above is deterministically testable. */
+function filterAnalytics(data: BuyAnalytics, filters: FilterState, now: Date = new Date()): BuyAnalytics {
   const productFilter = filters.categoryId ?? filters.productId;
   let suppliers = data.suppliers;
   if (filters.supplierKey) {
     suppliers = suppliers.filter((s) => s.supplierKey === filters.supplierKey);
   }
+
+  // Time filter (code-review fix): a product/category with NO line activity
+  // inside the window is dropped entirely, rather than the Time pill only
+  // ever affecting the chart's bucket granularity. The table's per-row
+  // TOTALS stay the already-computed all-time rollups (recomputing them
+  // per-window would require re-deriving getBuyAnalytics()'s money math here
+  // — out of this fix's scope); this at minimum stops showing rows/data that
+  // have zero activity in the selected window.
+  const activeKeys = new Set(
+    linesInTimeWindow(data.lines, filters.time, now).map(
+      (l) => `${l.supplierName}\0${l.productId ?? l.productName}`,
+    ),
+  );
+  suppliers = suppliers
+    .map((s) => ({
+      ...s,
+      categories: s.categories.filter((c) =>
+        c.products.some((p) => activeKeys.has(`${s.supplierName}\0${p.productId ?? p.productName}`)),
+      ),
+    }))
+    .filter((s) => s.categories.length > 0);
+
   if (productFilter) {
     suppliers = suppliers
       .map((s) => ({
@@ -167,18 +230,20 @@ function filterAnalytics(data: BuyAnalytics, filters: FilterState): BuyAnalytics
 }
 
 /** Narrows the raw per-line array the SAME way `filterAnalytics()` narrows the
- *  tree above (supplier/product/pack-size match) — this is what feeds the
- *  time-bucketed chart (18-14 fix), kept in lockstep with the table's own
+ *  tree above (time/supplier/product/pack-size match) — this is what feeds
+ *  the time-bucketed chart (18-14 fix), kept in lockstep with the table's own
  *  filtering rather than a second independent filter implementation drifting
  *  from it. `supplierKeyByName` resolves a line's plain `supplierName` to the
- *  `supplierKey` the Supplier pill actually filters by. */
+ *  `supplierKey` the Supplier pill actually filters by. `now` defaults to
+ *  `new Date()`; overridable for deterministic tests. */
 function filterAnalyticsLines(
   lines: PricedAnalyticsSourceLine[],
   filters: FilterState,
   supplierKeyByName: Map<string, string>,
+  now: Date = new Date(),
 ): PricedAnalyticsSourceLine[] {
   const productFilter = filters.categoryId ?? filters.productId;
-  return lines.filter((line) => {
+  return linesInTimeWindow(lines, filters.time, now).filter((line) => {
     if (filters.supplierKey && supplierKeyByName.get(line.supplierName) !== filters.supplierKey) return false;
     if (productFilter && (line.productId ?? line.productName) !== productFilter) return false;
     if (filters.packSize && (line.packSizeGrams == null || formatPackSize(line.packSizeGrams) !== filters.packSize)) {
@@ -193,10 +258,16 @@ interface ResolvedScope {
   products: FlatProduct[];
 }
 
-/** Resolves a table row key (supplierKey, categoryId, or productId/productName
- *  — the same three key spaces `AnalyticsTable` uses for `onSelectRow`) to its
- *  own data slice, searched depth-first supplier -> category -> product so a
- *  key is matched at its most specific level first. */
+/** Resolves a table row key to its own data slice, searched depth-first
+ *  supplier -> category -> product so a key is matched at its most specific
+ *  level first. `supplierKey` alone identifies a supplier row (already
+ *  globally unique); category/product rows use `AnalyticsTable`'s own
+ *  `${supplierKey}::${categoryId}` / `${supplierKey}::${productId ??
+ *  productName}` compound keys (code-review fix) — a bare productId/
+ *  productName is NOT unique across suppliers (two unconnected/CSV-only
+ *  suppliers can use the same free-text product name), so matching on the
+ *  bare id resolved to whichever supplier's row happened to be found FIRST,
+ *  not the one the user actually clicked. */
 function resolveScope(data: BuyAnalytics, key: string): ResolvedScope | null {
   for (const s of data.suppliers) {
     if (s.supplierKey === key) {
@@ -206,11 +277,11 @@ function resolveScope(data: BuyAnalytics, key: string): ResolvedScope | null {
   }
   for (const s of data.suppliers) {
     for (const c of s.categories) {
-      if (c.categoryId === key) {
+      if (`${s.supplierKey}::${c.categoryId}` === key) {
         return { label: c.categoryName, products: c.products.map((p) => ({ product: p, supplierName: s.supplierName })) };
       }
       for (const p of c.products) {
-        if ((p.productId ?? p.productName) === key) {
+        if (`${s.supplierKey}::${p.productId ?? p.productName}` === key) {
           return { label: p.productName, products: [{ product: p, supplierName: s.supplierName }] };
         }
       }
@@ -230,9 +301,15 @@ function valueForTimeSeriesMeasure(
   net: number | null,
   gross: number | null,
 ): number {
+  // Checked FIRST, before the net/gross special-casing (code-review fix): a
+  // period with no line activity for this product must render 0 for EVERY
+  // measure, including net/gross — otherwise a period with zero purchases
+  // still shows a phantom bar at the buyer's flat resale price, fabricating
+  // activity the system has no record of (never-fabricate-data rule, same as
+  // every other measure below).
+  if (!point) return 0;
   if (measure === "net") return net ?? 0;
   if (measure === "gross") return gross ?? 0;
-  if (!point) return 0;
   switch (measure) {
     case "price_by_volume":
     case "revenue":
@@ -263,9 +340,16 @@ function buildTimeChartSeries(
 ): ChartSeriesPoint[] {
   if (lines.length === 0) return [];
 
+  // Supplier-scoped grouping key (code-review fix): two different suppliers'
+  // identically-named products must render as separate stack segments, never
+  // silently merged into one bar with a combined (and wrong) net/gross/spend.
+  // `productId` below is this chart's OWN distinct key for
+  // `collectProductKeys()`/`valueFor()` (AnalyticsChart.tsx) — those only use
+  // it for identity + React keys, never as a real catalogue FK, so a
+  // compound key here is safe.
   const linesByProductKey = new Map<string, { productId: string; productName: string; lines: PricedAnalyticsSourceLine[] }>();
   for (const line of lines) {
-    const key = line.productId ?? line.productName;
+    const key = `${line.supplierName}::${line.productId ?? line.productName}`;
     const bucket = linesByProductKey.get(key) ?? { productId: key, productName: line.productName, lines: [] };
     bucket.lines.push(line);
     linesByProductKey.set(key, bucket);

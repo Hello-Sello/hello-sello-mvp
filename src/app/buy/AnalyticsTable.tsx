@@ -296,14 +296,21 @@ function CategoryRows({
     value: number,
   ) => Promise<void>;
 }) {
+  // Supplier-scoped selection key (code-review fix, matches
+  // `resolveScope()`'s own `${supplierKey}::${categoryId}` match): a bare
+  // `category.categoryId` is NOT unique across suppliers (v0's degenerate
+  // category-per-product rule makes it identical to a bare productId — see
+  // ProductRow below), so two different suppliers' identically-named
+  // products/categories previously collided on selection. Reused for both
+  // the expand/collapse Set key (unchanged) and row selection now.
   const categoryKey = `${supplierKey}::${category.categoryId}`;
   const isOpen = expandedCategories.has(categoryKey);
-  const isSelected = selectedRowKey === category.categoryId;
+  const isSelected = selectedRowKey === categoryKey;
 
   return (
     <>
       <tr
-        onClick={() => onSelectRow(category.categoryId)}
+        onClick={() => onSelectRow(categoryKey)}
         className={`cursor-pointer border-t border-black/[0.04] transition hover:bg-brand/[0.03] ${
           isSelected ? "bg-brand/[0.06]" : ""
         }`}
@@ -340,6 +347,7 @@ function CategoryRows({
         category.products.map((product) => (
           <ProductRow
             key={product.productId ?? product.productName}
+            supplierKey={supplierKey}
             supplierName={supplierName}
             product={product}
             selectedRowKey={selectedRowKey}
@@ -352,12 +360,14 @@ function CategoryRows({
 }
 
 function ProductRow({
+  supplierKey,
   supplierName,
   product,
   selectedRowKey,
   onSelectRow,
   onSaveResalePrice,
 }: {
+  supplierKey: string;
   supplierName: string;
   product: AnalyticsProductRow;
   selectedRowKey: string | null;
@@ -369,7 +379,13 @@ function ProductRow({
     value: number,
   ) => Promise<void>;
 }) {
-  const rowKey = product.productId ?? product.productName;
+  // Supplier-scoped (code-review fix, matches `resolveScope()`'s own
+  // `${supplierKey}::${productId ?? productName}` match) — a bare
+  // productId/productName collides across two different suppliers who
+  // happen to use the same free-text product name (CSV-only partners have
+  // no real catalogue productId), previously resolving row clicks to the
+  // wrong supplier's data.
+  const rowKey = `${supplierKey}::${product.productId ?? product.productName}`;
   const isSelected = selectedRowKey === rowKey;
 
   return (
