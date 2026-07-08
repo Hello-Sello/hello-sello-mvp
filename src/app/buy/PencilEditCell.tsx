@@ -24,7 +24,7 @@
  * Zero knowledge of DB1/margin/rollups — it only round-trips a number; recompute
  * after a save is entirely the caller's responsibility.
  */
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pencil } from "lucide-react";
 
 export function PencilEditCell(props: {
@@ -47,6 +47,23 @@ export function PencilEditCell(props: {
   // follows it also commit. Reset to false whenever a fresh commit attempt is
   // allowed (edit opened, or a prior attempt failed and needs a retry).
   const committedRef = useRef(false);
+
+  // A STABLE ref, not an inline `ref={(el) => ...}` callback (code-review
+  // fix): an inline arrow function is a new reference every render, so React
+  // re-invokes it (null then set) on every keystroke's re-render, and
+  // `el.select()` re-selecting the WHOLE value after every keystroke breaks
+  // native multi-character typing (2nd digit replaces the 1st instead of
+  // appending). The effect below focuses+selects exactly once when `editing`
+  // flips true — never re-firing on a `draft` change.
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editing) {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing]);
 
   function openEdit() {
     setDraft(value == null ? "" : String(value));
@@ -89,12 +106,7 @@ export function PencilEditCell(props: {
     return (
       <span className="inline-flex flex-col items-end gap-0.5" data-testid={testId}>
         <input
-          ref={(el) => {
-            if (el) {
-              el.focus();
-              el.select();
-            }
-          }}
+          ref={inputRef}
           type="number"
           inputMode="decimal"
           aria-label="Edit value"
