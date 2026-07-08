@@ -22,6 +22,21 @@ export interface AnalyticsSourceLine {
   grams: number;
   /** Total euros spent on this line (price * grams-equivalent qty). */
   spend: number;
+  /**
+   * ISO date string — deal `delivery_date_target ?? created_at`, or CSV
+   * `purchase_date` (18-14 fix). ADDITIVE ONLY, optional so existing callers/
+   * fixtures that predate this field keep compiling: `mergeAnalyticsLines()`
+   * below still groups/sums purely by (supplierName, productName) and never
+   * reads this field — it exists so `getBuyAnalytics()` can expose the raw,
+   * per-line, date-carrying array (`BuyAnalytics.lines`) for the Analytics
+   * chart's real time-bucketing (`./analyticsTimeSeries.ts`), alongside the
+   * (supplier, product)-collapsed totals this module still produces for the
+   * table. Always populated by `getBuyAnalytics()` itself — optional only for
+   * the type's backward compatibility, not because a real caller may omit it.
+   */
+  date?: string;
+  /** Same rationale as `date` — not read by `mergeAnalyticsLines()`. */
+  packSizeGrams?: number | null;
 }
 
 /** One (supplierName, productName) key's combined purchase history, both sources summed. */
