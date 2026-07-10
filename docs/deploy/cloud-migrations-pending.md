@@ -23,6 +23,25 @@ The ONLY genuinely-outstanding cloud work is **non-migration**: deploy edge fns 
 
 ---
 
+## ⚠️ PENDING (2026-07-10, Muskan) — 1 migration: person.company_id self-write lockdown (SECURITY)
+
+- **`20260710120000_person_company_id_lockdown.sql`** — closes the cross-tenant self-join hole
+  (any authenticated user could `UPDATE person SET company_id = <any>` on their own row via a
+  direct API call and read that company's private data). Two parts, one migration:
+  1. `REVOKE UPDATE ON person FROM authenticated` + re-`GRANT UPDATE` on every column **except**
+     `company_id`. (A column-only `REVOKE (company_id)` does NOT work — Supabase's table-level
+     grant overrides it; same lesson as the allocate-schema note.)
+  2. `onboard_company` → `SECURITY DEFINER` so founder onboarding can still set `company_id`.
+- **⚠️ PRODUCTION IS STILL VULNERABLE until this is pushed** — cloud has the same base RLS + table
+  grant. Push together with any other pending migration; additive + safe (no data change). Apply
+  the two halves atomically (this one migration does that).
+- **Before/after push, run:** `bash supabase/tests/run_person_company_lockdown_test.sh` (proves the
+  direct write is denied + onboard_company still links). Local: RED→GREEN verified 2026-07-10.
+- **Needs Ayush review before cloud** — base RLS (`20260607170000`) + the onboarding security model
+  are the shared lane. Tracked: DEV-88 (Urgent).
+
+---
+
 ## ⚠️ READ FIRST (2026-06-20, Muskan) — cloud history has DIVERGED; a naive `db push` FAILS
 
 A `supabase db push --dry-run` on 2026-06-20 **failed**: *"Remote migration versions not found
