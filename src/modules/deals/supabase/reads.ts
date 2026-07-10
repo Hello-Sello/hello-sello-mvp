@@ -182,9 +182,10 @@ export async function getPendingProposal(
   const currency = typeof draft["currency"] === "string" ? (draft["currency"] as string) : "EUR";
   const rawLines = Array.isArray(draft["line_items"]) ? (draft["line_items"] as Meta[]) : [];
   const lines: ProposalLineView[] = rawLines.map((l) => ({
-    // A birth PROPOSAL draft carries no product link (proposeDeal omits it), so
-    // this is null here - there is no existing card to diff against yet. The
-    // field exists so the held-CHANGE path (getPendingChange) can populate it.
+    // A birth PROPOSAL draft carries no product link (a manual or Sella-detected
+    // proposal never resolves one), so this is null here - there is no existing
+    // card to diff against yet. The field exists so the held-CHANGE path
+    // (getPendingChange) can populate it.
     productId: typeof l["productId"] === "string" ? (l["productId"] as string) : null,
     name: typeof l["name"] === "string" && l["name"].trim() ? (l["name"] as string) : "Item",
     quantity: Number(l["quantity"] ?? 0),

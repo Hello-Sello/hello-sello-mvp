@@ -616,27 +616,6 @@ export interface CardCreateInput {
   note: string | null;
 }
 
-/**
- * The propose-form payload handed to `proposeDeal` (Waypoint 4.5.1). Same shape
- * as create plus the p2p `threadId` the proposal message is posted into. The
- * manual door no longer births a card - it writes a `deal_detected` proposal
- * (sender's side pre-accepted) and the card is born only when the other side
- * accepts (the unified `confirm_detected_deal` birth).
- *
- * Note: no per-line private input is carried to the proposal - the proposal is a
- * chat message both sides can read, so a proposer's own-side cost would leak.
- * The per-line margin is added after birth via the create/edit private write.
- */
-export interface ProposeDealInput extends CreateDealInput {
-  /** the p2p chat thread the proposal message is posted into */
-  threadId: string;
-}
-
-/** Result of `proposeDeal` - the `deal_detected` proposal message id (pre-card object). */
-export interface ProposeDealResult {
-  messageId: string;
-}
-
 /* -------------------------------------------------------------------------- */
 /* Pending proposal (4.5.2) - the pre-card object the Sella strip renders.     */
 /* -------------------------------------------------------------------------- */
