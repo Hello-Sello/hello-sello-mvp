@@ -59,7 +59,7 @@ export const SURFACES: Surface[] = [
   },
   { key: "discover", label: "Discover", href: "/discover", icon: Compass, state: "active" },
   { key: "present", label: "Present", href: "/present", icon: Store, state: "active" },
-  { key: "buy", label: "Buy", href: "/buy", icon: ShoppingCart, state: "active" },
+  { key: "buy", label: "Buy", href: "/buy", icon: ShoppingCart, state: "soon" },
   { key: "sell", label: "Allocate", href: "/sell", icon: Tag, state: "active" },
   { key: "trade", label: "Trade", href: "/trade", icon: ArrowLeftRight, state: "soon" },
 ];
