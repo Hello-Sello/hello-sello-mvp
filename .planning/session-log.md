@@ -4,6 +4,28 @@ Personal session recaps, newest-first. CLAUDE.md keeps no session prose — ever
 
 ---
 
+## Session 64 (2026-07-16) — Brought dev work to `main` (landing hero + deal card animation, everything else), excluding Buy; fixed a broken Vercel↔GitHub deploy pipeline
+
+**The ask:** update `main` so the new landing-page hero animation and deal-card redesign go live, without bringing Allocate or Buy along — both "made in a rush," per Muskan.
+
+**Investigation before touching anything:** `origin/main` was 178 commits behind `claude/muskan/work`. Allocate turned out to already be live on `main` (merged 2026-07-07 via PR #134→#136→#137, migration already deployed to production) — reverting it would mean undoing shipped/deployed code, and the Sales Calendar already depends on its `statusOf()` helper. Buy (Phase 18), by contrast, was cleanly isolated to `src/app/buy/` + `src/modules/buy/` (27 files) plus one nav line, with zero reverse dependencies anywhere else in the codebase — genuinely easy to exclude.
+
+**Decision (DECISIONS.md):** merge everything to `main`, strip Buy's app code/e2e specs/migration, leave Allocate alone.
+
+**Execution:** branched `main-update-no-buy` off `origin/main`, fast-forward-merged `claude/muskan/work` in (clean, no conflicts), removed the 27 Buy files + 2 e2e specs + its migration, restored the nav entry to `state: "soon"` with its original placeholder stub. Gate: tsc clean, eslint's 6 errors confirmed pre-existing on `origin/main` (unrelated lines, verified via diff), 188/188 unit passing.
+
+**Migrations:** queried the live Supabase project directly instead of trusting the local deploy ledger — only one migration was actually missing from production, DEV-88's `person_company_id_lockdown` (the session-62 security fix). Pushed it (`REVOKE UPDATE` + column allowlist + `onboard_company`→`SECURITY DEFINER`; verified live via a direct grants query — `company_id` absent from `authenticated`'s UPDATE columns). Also discovered Buy's schema (`buyer_resale_price`, `purchase_history_import`) had already been applied to production independently of the git migration file — both tables were empty with zero audit_log references, so added and applied a cleanup migration (`20260716120000_drop_buy_orphaned_tables.sql`) rather than leaving orphaned tables with no matching file in git.
+
+**Shipped:** PR #144 → `main`, merged by Muskan.
+
+**Deploy pipeline broke, then got fixed:** production didn't rebuild after the merge — traced to the Vercel GitHub App having lost access to the `hello-sello-mvp` repo after a visibility toggle (public→private→public). Muskan reinstalled the App on the `Hello-Sello` org with explicit repo access; since GitHub doesn't replay missed webhooks retroactively, confirmed the fix by manually triggering **Create Deployment → main** from the Vercel dashboard rather than waiting on a future push. Production (`hello-sello-mvp.vercel.app`) now serves `d219158` (the PR #144 merge).
+
+**Also fixed, unrelated:** the local `next dev` server had been running continuously since the previous Friday, straight through the branch surgery — its cache/HMR desynced, rendering the landing hero as raw unstyled text. Killed the stale process, cleared `.next`, restarted clean.
+
+**Still open:** whether the Vercel↔GitHub webhook itself is healthy again is unconfirmed — tonight's production deploy was triggered manually. The first real push/merge to `main` after this session is the actual test.
+
+---
+
 ## Session 63 (2026-07-08 → 2026-07-10) — Product Basket "Draft deal" redesign (popover + direct-birth), reconciled with Ayush's parallel rework, e2e/dead-code cleanup
 
 **The arc:** live feedback on the just-shipped `BasketDrawer` (full-height side panel) turned into a full redesign conversation. Muskan wanted the basket icon to open something anchored and compact instead, and for "Send" to hand off into a real chat-embedded deal card rather than just clearing the cart. Researched the industry pattern first (CRM Lead→Opportunity: don't make the deal's foreign key nullable, keep the "no customer yet" state ephemeral until qualification) before proposing an approach — confirmed the current schema (`deal_card.relationship_id NOT NULL`, RLS derives all deal-object visibility from it) hard-blocks a "customer-less persisted draft," so the redesign works WITH that constraint, not against it.
