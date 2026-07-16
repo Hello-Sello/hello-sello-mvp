@@ -23,7 +23,8 @@
  *     finalize precondition); an external non-member cannot read it (workspace
  *     isolation). The seller-only finalize GUARD + the pure gate are covered by
  *     the finalizeDeal server action + finalize.test.ts unit tests.
- *   - AUDIT-01: an accepted-proposal (RPC-born) deal writes a deal.created audit.
+ *   - AUDIT-01: a directly-created deal (createDeal, the living-deal-card birth
+ *     path) writes a deal.created audit.
  *   - OBS-3 / SELL-01 / D-18: a committed change resolves via confirm_deal_change
  *     and its narration speaks as System (not Sella).
  *
@@ -37,12 +38,7 @@ import { createClient } from '@supabase/supabase-js'
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import * as path from 'node:path'
-import {
-  openTwoContexts,
-  createDraftDealAsAlice,
-  acceptBirthAsBob,
-  resetDealData,
-} from './fixtures/two-company'
+import { loginAs, createDraftDealAsAlice, resetDealData } from './fixtures/two-company'
 
 // Serial: every test shares the ONE minted card + the GreenLeaf<->StonePharm
 // relationship, so they must never run in parallel against each other.
@@ -160,7 +156,7 @@ function bornCardId(): string {
   )
 }
 
-/** Poll until Bob's accept has birthed the card server-side (the RPC lags the click). */
+/** Poll until Alice's create has birthed the card server-side (the action lags the click). */
 async function waitForBornCard(timeoutMs = 20000): Promise<string> {
   const start = Date.now()
   while (Date.now() - start < timeoutMs) {
@@ -188,32 +184,23 @@ const PID = { alice: '', bob: '', eva: '', david: '' }
 const CID = { alice: '', bob: '' }
 
 test.beforeAll(async ({ browser }) => {
-  // SKIPPED (Task 8c, 2026-07-08, Product Basket Round 2): createDraftDealAsAlice
-  // below drives the OLD "Start a deal -> CreateDealForm -> Send proposal" flow.
-  // DealPin.tsx's "Start a deal" (and the composer's "+ -> Create a deal") no
-  // longer open that form - they call createDeal({ relationshipId, lines: [] })
-  // directly and birth a real empty draft immediately, so createDraftDealAsAlice
-  // times out looking for controls (the catalogue search box, "Send proposal")
-  // that never render, and acceptBirthAsBob has nothing pending to accept. All 4
-  // tests in this file share this beforeAll, so all 4 skip. Un-skip once
-  // createDraftDealAsAlice/birthAndOpenDeal (e2e/fixtures/two-company.ts) are
-  // rewritten to match the new direct-birth flow - see the stale-fixture note
-  // above those functions. This is a placeholder, not a fix for the underlying
-  // fixture drift.
-  test.skip(true, 'Task 8c: createDraftDealAsAlice needs a rewrite for the new direct-birth create-deal flow')
   // clean the relationship to the "no deal" state, then mint ONE live card through
-  // the real app: Alice proposes -> Bob accepts (births). The birth goes through
-  // confirm_detected_deal, whose born_now flag makes the action stamp the
-  // deal.created audit row this spec asserts (AUDIT-01). We deliberately do NOT
-  // open the card overlay - all assertions run against the DB/RPC layer, so the
-  // spec is independent of the (Phase-7-restructured) card-open UI.
+  // the real app: Alice's "Start a deal" -> CardFront create-mode -> "Send deal"
+  // now births the card DIRECTLY (createDeal), no propose/accept door anymore (the
+  // living-deal-card rework, chj/07-08, retired CreateDealForm + the accept-a-
+  // proposal birth path). createDeal itself stamps the deal.created audit row this
+  // spec asserts (AUDIT-01) - the same audit action confirmDetectedDeal used to
+  // stamp on the old accept-a-proposal path. We deliberately do NOT open the card
+  // panel here - all assertions run against the DB/RPC layer, so the spec is
+  // independent of the card-open UI. Only Alice's browser is needed (there is no
+  // more accept step for Bob).
   resetDealData()
-  const { aliceContext, bobContext, alicePage, bobPage } = await openTwoContexts(browser)
+  const aliceContext = await browser.newContext()
+  const alicePage = await aliceContext.newPage()
+  await loginAs(alicePage, 'alice')
   await createDraftDealAsAlice(alicePage)
-  await acceptBirthAsBob(bobPage)
   dealCardId = await waitForBornCard()
   await aliceContext.close()
-  await bobContext.close()
   workspaceId = sql(
     `select id from public.deal_workspace where deal_card_id = '${dealCardId}' and deleted_at is null order by created_at limit 1`,
   )
