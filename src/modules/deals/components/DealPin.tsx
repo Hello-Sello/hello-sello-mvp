@@ -22,14 +22,14 @@
  * purpose: importing messaging's hook would make deals ↔ messaging a cycle
  * (messaging already renders this component).
  */
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import {
   Check,
   ChevronDown,
   FileText,
-  MoreHorizontal,
+  MoreVertical,
   Plus,
   Sparkles,
   Users,
@@ -41,21 +41,10 @@ import {
   listRelationshipDeals,
   type RelationshipDealRow,
 } from "../supabase/reads";
-import {
-  confirmDealChange,
-  confirmDetectedDeal,
-  proposeDealChange,
-  withdrawDealChange,
-} from "../actions";
+import { confirmDetectedDeal } from "../actions";
 import { formatMoney } from "../lib/derive";
 import { DealCard } from "./DealCard";
-import { CreateDealForm } from "./CreateDealForm";
-import { EditDealForm, type ProposeChangePayload } from "./EditDealForm";
-import { SellaMark } from "./SellaMark";
-import { SellaCurtain } from "./SellaCurtain";
-import { TranslateButton } from "./TranslateButton";
 import type {
-  ConfirmSeat,
   DealCardStatus,
   DealCardView,
   PendingProposalView,
@@ -72,6 +61,10 @@ const STATUS_BADGE: Record<DealCardStatus, { label: string; cls: string }> = {
   done: { label: "Done", cls: "bg-success/15 text-success" },
   withdrawn: { label: "Withdrawn", cls: "bg-ink/10 text-ink/50" },
   cancelled: { label: "Cancelled", cls: "bg-ink/10 text-ink/50" },
+  // 07-06 reopen-ticket states (D-30 colours: blue / dark-green). The badge UI
+  // itself is deferred (D-17); these keep the exhaustive record complete.
+  ticket_created: { label: "Ticket opened", cls: "bg-blue-100 text-blue-700" },
+  ticket_closed: { label: "Ticket closed", cls: "bg-emerald-900/10 text-emerald-800" },
 };
 
 function StatusBadge({ status }: { status: DealCardStatus }) {
@@ -111,6 +104,15 @@ function DealChip({ status, selectable }: { status: DealCardStatus; selectable: 
   );
 }
 
+/**
+ * `onEdit` on DealCard is only a truthy "editing allowed" gate - the pencil toggles
+ * inline edit itself and never invokes this. The strip passes this stable noop to
+ * mean "editable" (vs `undefined` = locked while a change is held).
+ */
+const ALLOW_EDIT = () => {
+  /* gate only - DealCard.onEdit is a truthiness flag, never called */
+};
+
 export function DealPin({
   relationshipId,
   variant = "chat",
@@ -118,17 +120,15 @@ export function DealPin({
   counterpartyName,
   counterpartyPersonName,
   counterpartyInitials,
-  inRoom = false,
   children,
 }: {
   relationshipId: string;
   variant?: "chat" | "workspace";
   /**
-   * true when this strip is rendered INSIDE the Deal Room overlay (D-05). The
-   * card + chat are both permanently visible there, so the strip drops the
-   * [Deal Card]/[Deal Room] segmented toggle (and any picker dropdown) and keeps
-   * ONLY Sella (the // mark/curtain) + the Translator. Sella STAYS on the strip -
-   * it is NOT moved into the room.
+   * Vestigial (Phase 7): the Deal Room is retired (D-15), so this flag no longer
+   * changes the strip. Kept on the prop contract only so the orphaned `DealChat`
+   * (which still passes it) keeps compiling until the messaging rail rework
+   * (07-05) removes that caller.
    */
   inRoom?: boolean;
   /**
@@ -160,8 +160,6 @@ export function DealPin({
   const [open, setOpen] = useState(false); // the card overlay
   const [picking, setPicking] = useState(false); // the deal dropdown
   const [menuOpen, setMenuOpen] = useState(false); // the top-tier three-dot menu
-  const [creating, setCreating] = useState(false);
-  const [editing, setEditing] = useState(false);
 
   // 04C - the conversation-rail slot the card portals into (chat variant only). The
   // card now opens as a LEAFLET over the conversation rail (same place/shape as the
@@ -179,14 +177,6 @@ export function DealPin({
   const [proposal, setProposal] = useState<PendingProposalView | null>(null);
   const [asksOpen, setAsksOpen] = useState(false); // the loud pill's popover
   const [acting, setActing] = useState(false); // accept/decline in flight
-
-  // 4.5.4 - the held two-sided CHANGE. The pending change itself rides on the
-  // loaded card (`data.pendingChange`), so it stays in sync with the card on
-  // every re-read. These drive the SEND reason pop-up + the strip controls.
-  const [pendingEdit, setPendingEdit] = useState<ProposeChangePayload | null>(null); // the edit awaiting Send
-  const [sendReason, setSendReason] = useState(""); // the proposer's required Send reason
-  const [changeOpen, setChangeOpen] = useState(false); // the responder review popover
-  const [changeBusy, setChangeBusy] = useState(false); // a change action in flight (send/accept/decline/withdraw)
 
   // whether THIS strip can host a proposal: chat variant over a real p2p thread
   const canPropose = variant === "chat" && !!threadId;
@@ -220,82 +210,23 @@ export function DealPin({
     }
   }
 
-  // 4.5.4 - re-read the loaded card after a change resolves. The card read also
-  // refreshes `pendingChange`, so the strip control + the pencil lock both update
-  // from one fresh server read (no second state to drift). Every resolve path
-  // ends with the hs:deal-updated dispatch so the sibling chat + workspace pill
-  // re-read too (the project's cross-component refresh rule; Pitfall 4/5).
-  async function refreshAfterChange(dealCardId: string) {
-    const fresh = await getDealCard(dealCardId);
-    setData(fresh);
-    void listRelationshipDeals(relationshipId).then(setDeals);
+  // CREATE (chj/07-08): the card's CREATE mode handed up the assembled draft; the
+  // CREATE (chj/07-08): the "+ Create a deal" door + the "Start a deal" button
+  // open a create-mode card in the SAME 50/50 panel a real card uses. DealPin knows
+  // the relationship + recipient, so it just broadcasts them; DealCardPanelHost owns
+  // the create card + the createDeal birth. Acyclic: DealPin only dispatches.
+  const openCreateCard = useCallback(() => {
     window.dispatchEvent(
-      new CustomEvent("hs:deal-updated", { detail: { dealCardId } }),
+      new CustomEvent("hs:create-deal-card", {
+        detail: { relationshipId, buyerName: counterpartyName ?? "your contact" },
+      }),
     );
-  }
+  }, [relationshipId, counterpartyName]);
 
-  // 4.5.4 - the PROPOSER's Send: the edit form handed up its SHARED fields (the
-  // per-line own-side input rides inside `lines`); this collects the required
-  // reason and writes the held change. proposeDealChange writes the per-line
-  // input to deal_line_item_private immediately + ungated (D-09) and holds the
-  // SHARED draft. On success we re-read (the pending change + the lock appear)
-  // and dispatch the refresh event.
-  async function runSendChange() {
-    if (!data || !pendingEdit || changeBusy || !sendReason.trim()) return;
-    setChangeBusy(true);
-    try {
-      await proposeDealChange({
-        dealCardId: data.card.id,
-        lines: pendingEdit.lines,
-        freeDelivery: pendingEdit.freeDelivery,
-        dueDate: pendingEdit.dueDate,
-        paymentTermsCode: pendingEdit.paymentTermsCode,
-        note: pendingEdit.note,
-        reason: sendReason.trim(),
-      });
-      setChangeOpen(false);
-      setPendingEdit(null);
-      setSendReason("");
-      await refreshAfterChange(data.card.id);
-    } catch (e) {
-      console.error("propose change failed", e);
-    } finally {
-      setChangeBusy(false);
-    }
-  }
-
-  // 4.5.4 - the RESPONDER's Accept/Decline (mirror runProposal): record this
-  // side's vote with the required reason; on both-accept the RPC commits to
-  // base+1, on a decline it discards. Either way we re-read + dispatch so the
-  // lock clears live on both screens.
-  async function runChangeDecision(decision: "accept" | "decline", reason?: string) {
-    if (!data || changeBusy || !reason?.trim()) return;
-    setChangeBusy(true);
-    try {
-      await confirmDealChange({ dealCardId: data.card.id, decision, reason: reason.trim() });
-      setChangeOpen(false);
-      await refreshAfterChange(data.card.id);
-    } catch (e) {
-      console.error("change decision failed", e);
-    } finally {
-      setChangeBusy(false);
-    }
-  }
-
-  // 4.5.4 - the PROPOSER's Withdraw (DCHG-06): take back the held change with NO
-  // reason. Discards the held row and unlocks the pencil; re-read + dispatch.
-  async function runWithdrawChange() {
-    if (!data || changeBusy) return;
-    setChangeBusy(true);
-    try {
-      await withdrawDealChange({ dealCardId: data.card.id });
-      await refreshAfterChange(data.card.id);
-    } catch (e) {
-      console.error("withdraw change failed", e);
-    } finally {
-      setChangeBusy(false);
-    }
-  }
+  // NOTE (07-01 / chj teardown): the responder Accept/Decline + proposer Withdraw
+  // + the old proposer Send-reason popup lived here. The backend change engine is
+  // untouched; the on-card red/green diff + decision bar (D-18/D-19/D-20) replace
+  // the review UI, and inline card edit (CardFront) replaces the Send-reason popup.
 
   // list the relationship's deals + pick a default (prefer the most recent LIVE
   // one, matching the old getCurrentDealCardId behaviour the workspace relies on).
@@ -370,7 +301,16 @@ export function DealPin({
       const id = selectedIdRef.current;
       if (!id) return;
       void getDealCard(id)
-        .then((d) => !cancelled && setData(d))
+        .then((d) => {
+          if (cancelled) return;
+          setData(d);
+          // re-broadcast so the open DealCardPanelHost refetches too (chj/07-08).
+          // This is the CROSS-BROWSER live-refresh path: the OTHER laptop's DB write
+          // fires this realtime handler, and the event drives the panel's diff.
+          window.dispatchEvent(
+            new CustomEvent("hs:deal-updated", { detail: { dealCardId: id } }),
+          );
+        })
         .catch(() => {});
     };
 
@@ -420,15 +360,16 @@ export function DealPin({
     };
   }, [canPropose, threadId, relationshipId]);
 
-  // the composer's "+ → Create a deal" door (5A.3): it fires a window event so
-  // the footer button and this form stay decoupled. p2p chat only - propose
-  // needs a p2p thread (the workspace/c2c chats cannot mint a proposal).
+  // the composer's "+ → Create a deal" door (5A.3): it fires a context-free window
+  // event; DealPin re-broadcasts it WITH the relationship + recipient so the panel
+  // host can open the create card. p2p chat only - propose needs a p2p thread (the
+  // workspace/c2c chats cannot mint a proposal).
   useEffect(() => {
     if (!canPropose) return;
-    const onCreate = () => setCreating(true);
+    const onCreate = () => openCreateCard();
     window.addEventListener("hs:create-deal", onCreate);
     return () => window.removeEventListener("hs:create-deal", onCreate);
-  }, [canPropose]);
+  }, [canPropose, openCreateCard]);
 
   // load the full card for the selected deal (drives the overlay + confirm gate).
   // setState only inside the async callback - no selection resolves to null.
@@ -461,110 +402,34 @@ export function DealPin({
   const mustAct = showProposal && proposal!.myVote == null; // my turn to accept/decline
   const waiting = showProposal && proposal!.myVote === "accept" && proposal!.otherVote !== "accept";
 
-  // 4.5.4 - the held CHANGE state, derived from the loaded card. `pendingChange`
-  // present = a change is held (the pencil locks on BOTH screens). The responder
-  // (the side that did NOT propose, with no vote yet) gets the reason gate; the
-  // proposer sees a "waiting" chip with a no-reason Withdraw.
-  const pendingChange = data?.pendingChange ?? null;
-  const changeMustAct = !!pendingChange && !pendingChange.iProposed && pendingChange.myVote == null;
-  const changeWaiting = !!pendingChange && pendingChange.iProposed;
-
-  // 4.5.4 - feed the dumb ConfirmBar the CHANGE's votes (not the seal's): reuse
-  // the two seats' side/company, but set each status from the change vote ('accept'
-  // → confirmed, else pending). The responder's own seat stays pending, so the
-  // bar shows its action buttons (the requireReason reason gate); the proposer's
-  // shows confirmed. "Same face, different engine" - exactly what the bar is for.
-  const changeSeats: ConfirmSeat[] = data
-    ? data.confirmations.map((seat) => {
-        const isViewer = seat.side === data.viewerSide;
-        const vote = isViewer ? pendingChange?.myVote : pendingChange?.otherVote;
-        return { ...seat, status: vote === "accept" ? "confirmed" : "pending", byName: null };
-      })
-    : [];
-
-  // Phase 5 / D-01 - open the Deal Room as a full blurred overlay. The strip only
-  // DISPATCHES a window event; the route-level DealRoomOverlayHost (in the Connect
-  // layout) listens and mounts the overlay. This keeps deals <-> messaging acyclic
-  // (no back-import), mirroring the app's existing hs:deal-updated / hs:create-deal
-  // contract. Carries the selected card id so the host knows which deal to open.
-  function openDealRoom() {
+  // Phase 7 / D-08/D-32 - open the deal CARD as a right-side panel. The strip only
+  // DISPATCHES a window event; the route-level DealCardPanelHost (in the Connect
+  // layout) listens, fetches the card, and mounts it as the right panel. This keeps
+  // deals <-> messaging acyclic (no back-import), mirroring the app's existing
+  // hs:deal-updated / hs:create-deal contract. Carries the selected card id so the
+  // host knows which deal to open.
+  function openDealCard() {
     if (!selectedId) return;
     window.dispatchEvent(
-      new CustomEvent("hs:open-deal-room", { detail: { dealCardId: selectedId } }),
+      new CustomEvent("hs:open-deal-card", { detail: { dealCardId: selectedId } }),
     );
   }
 
-  // D-04 - the bottom-tier left [Deal Room | Deal Card] segmented toggle. Deal
-  // Card is the REAL control (it toggles the card overlay - today's "Open card");
-  // when the card is open it reads as the active segment. Deal Room (Phase 5)
-  // OPENS the full blurred overlay (D-01) via openDealRoom. Inside the Room this
-  // whole toggle is hidden (D-05) - the card + chat are both permanently visible.
-  const dealRoomCardToggle = (
-    <div className="inline-flex shrink-0 items-center rounded-lg bg-black/[0.04] p-0.5 ring-1 ring-black/5">
-      <button
-        type="button"
-        title="Open the Deal Room"
-        aria-label="Open the Deal Room"
-        onClick={openDealRoom}
-        className="rounded-md px-3 py-1 text-xs font-semibold text-brand-deep transition hover:bg-white/70"
-      >
-        Deal Room
-      </button>
-      <button
-        type="button"
-        aria-pressed={open}
-        onClick={() => setOpen((o) => !o)}
-        className={`rounded-md px-3 py-1 text-xs font-semibold transition ${
-          open
-            ? "bg-brand text-white shadow-sm"
-            : "text-brand-deep hover:bg-white/70"
-        }`}
-      >
-        {open ? "Close card" : "Deal Card"}
-      </button>
-    </div>
-  );
-
-  // 4.5.4 / D-09 hybrid cue on the SINGLE `//` Sella mark. The mark is now the
-  // one entry point (D-08): loud "review" dot + label when it is my turn, a quiet
-  // "Awaiting reply" chip (no company name) while I wait, a clean mark otherwise.
-  const changeCue: "review" | "awaiting" | null = changeMustAct
-    ? "review"
-    : changeWaiting
-      ? "awaiting"
-      : null;
-
-  // 4.5.4 / D-06/D-07/D-08/D-09 - the held-CHANGE control: the shared SellaMark is
-  // the single entry point and the SellaCurtain drops from it. The mark toggles
-  // the existing `changeOpen` flag; the curtain re-homes the wired held-change
-  // flow (Accept/Decline/Reason via the reused ConfirmBar inside it, + Withdraw),
-  // calling the EXISTING runChangeDecision/runWithdrawChange handlers (which call
-  // confirmDealChange/withdrawDealChange from ../actions). No new flow, no new
-  // action - just a new VIEW over the proven wiring. The Withdraw lives ONLY
-  // inside the curtain now (D-09). When there is no held change the mark is clean.
-  const changeControl = (
-    <span className="relative inline-flex shrink-0 items-center">
-      <SellaMark
-        thinking={changeBusy}
-        open={changeOpen && !!pendingChange}
-        onClick={pendingChange ? () => setChangeOpen((o) => !o) : undefined}
-        cue={changeCue}
-      />
-      {data && pendingChange && (
-        <SellaCurtain
-          open={changeOpen && !!pendingChange}
-          pendingChange={pendingChange}
-          seats={changeSeats}
-          viewerSide={data.viewerSide}
-          busy={changeBusy}
-          counterpartyName={counterpartyName}
-          onConfirm={(reason) => void runChangeDecision("accept", reason)}
-          onDecline={(reason) => void runChangeDecision("decline", reason)}
-          onWithdraw={() => void runWithdrawChange()}
-          onClose={() => setChangeOpen(false)}
-        />
-      )}
-    </span>
+  // D-08 - the single "Deal [code]" chip (replaces the retired [Deal Room | Deal
+  // Card] segmented toggle). Shown only when the chat is tied to a deal; clicking
+  // it opens the card as a RIGHT-SIDE panel via openDealCard (dispatches
+  // hs:open-deal-card, which the layout-level DealCardPanelHost mounts, D-32).
+  const dealCardChip = (
+    <button
+      type="button"
+      onClick={openDealCard}
+      title="Open the deal card"
+      aria-label="Open the deal card"
+      className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-brand/15 bg-white px-3 py-1.5 text-xs font-semibold text-brand-deep transition hover:bg-brand-soft/30"
+    >
+      <FileText size={14} strokeWidth={2} className="text-brand" />
+      Deal {selectedDeal?.hsNumber ?? "card"}
+    </button>
   );
 
   // the strip's row shell - same border + padding across all three states
@@ -578,112 +443,129 @@ export function DealPin({
           relationship button (icon + name) + the deal-number dropdown + the ⋯
           menu. A thin divider sits under it, separating it from the controls. */}
       {variant === "chat" && threadId && (
-        <div className="flex items-center gap-3 border-b border-black/[0.06] px-4 py-3.5">
+        <div className="flex items-center gap-2 border-b border-black/[0.06] px-4 py-3">
           {/* left: circle avatar + person name */}
-          <span className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white text-sm font-semibold text-ink/70 ring-1 ring-black/5">
+          <span className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-sm font-semibold text-ink/70 ring-1 ring-black/5">
             {counterpartyInitials}
             {/* presence dot - UI placeholder until real presence is wired */}
             <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-success ring-2 ring-white" />
           </span>
-          <span className="min-w-0 truncate text-[15px] font-semibold text-ink">
+          <span className="min-w-0 shrink truncate text-[15px] font-semibold text-ink">
             {counterpartyPersonName ?? counterpartyName ?? "Deal"}
           </span>
 
-          {/* right group, by the ⋯: relationship (icon + company) + deal + menu */}
-          <div className="ml-auto flex shrink-0 items-center gap-2">
-            {/* relationship - icon + company name as one calm glass button */}
-            <Link
-              href={`/connect/relationship/${relationshipId}`}
-              title={`Relationship with ${counterpartyName ?? "this company"}`}
-              className="inline-flex max-w-[14rem] items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium text-ink/70 ring-1 ring-black/[0.06] transition hover:bg-white/70 hover:text-brand hover:ring-brand/20"
-            >
-              <Users size={14} strokeWidth={1.75} className="shrink-0 text-ink/45" />
-              <span className="truncate">{counterpartyName ?? "Relationship"}</span>
-            </Link>
+          {/* one merged header line now: the company + the deal all sit LEFT next
+              to the name (strip 1 - the standalone deal chip - is retired). The
+              deal number opens the card via the small pink card icon beside it. */}
+          {/* relationship - icon + company name as one calm glass button */}
+          <Link
+            href={`/connect/relationship/${relationshipId}`}
+            title={`Relationship with ${counterpartyName ?? "this company"}`}
+            className="inline-flex max-w-[10rem] shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium text-ink/70 ring-1 ring-black/[0.06] transition hover:bg-white/70 hover:text-brand hover:ring-brand/20"
+          >
+            <Users size={14} strokeWidth={1.75} className="shrink-0 text-ink/45" />
+            <span className="truncate">{counterpartyName ?? "Relationship"}</span>
+          </Link>
 
-            {/* deal-number dropdown - calm glass; the HS number when it exists */}
-            {hasDeal && (
-              <div className="relative shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setPicking((p) => !p)}
-                  aria-haspopup="listbox"
-                  aria-expanded={picking}
-                  aria-label="Choose a deal"
-                  className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium text-ink/70 ring-1 ring-black/[0.06] transition hover:bg-white/70 hover:text-ink"
-                >
-                  {selectedDeal?.hsNumber ?? "Draft deal"}
-                  <ChevronDown size={13} strokeWidth={2} className="text-ink/40" />
-                </button>
-                {picking && (
-                  <>
-                    <div className="fixed inset-0 z-10" onClick={() => setPicking(false)} />
-                    <div className="glass-strong absolute right-0 top-full z-20 mt-1.5 w-72 rounded-2xl p-1.5">
-                      <p className="px-2.5 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wide text-ink/40">
-                        Deals with {counterpartyName ?? "this company"}
-                      </p>
-                      {deals.map((d) => (
-                        <button
-                          key={d.id}
-                          type="button"
-                          onClick={() => pickDeal(d.id)}
-                          className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition hover:bg-black/[0.04]"
-                        >
-                          <span className="w-1 self-stretch rounded-full bg-brand" aria-hidden />
-                          <span className="flex min-w-0 flex-1 flex-col">
-                            <span className="truncate text-xs font-semibold text-ink">
-                              {d.hsNumber ?? "Draft deal"}
-                            </span>
-                            <span className="text-[10px] text-ink/45">Updated {timeAgo(d.updatedAt)}</span>
-                          </span>
-                          <StatusBadge status={d.status} />
-                          {d.id === selectedId && (
-                            <Check size={14} strokeWidth={2.5} className="shrink-0 text-brand" />
-                          )}
-                        </button>
-                      ))}
-                      {/* D-03 - "See all N deals" → the relationship page */}
-                      <Link
-                        href={`/connect/relationship/${relationshipId}`}
-                        onClick={() => setPicking(false)}
-                        className="mt-0.5 flex items-center justify-center rounded-lg px-2.5 py-2 text-[11px] font-semibold text-brand-deep transition hover:bg-brand-soft/30"
-                      >
-                        See all {deals.length} deals
-                      </Link>
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
-
-            {/* ⋯ menu - secondary actions */}
+          {/* deal-number dropdown - the PICKER (choose among the relationship's
+              deals). Its popover now drops from the LEFT since it moved left. */}
+          {hasDeal && (
             <div className="relative shrink-0">
               <button
                 type="button"
-                onClick={() => setMenuOpen((o) => !o)}
-                aria-label="More actions"
-                aria-haspopup="menu"
-                aria-expanded={menuOpen}
-                title="More"
-                className="flex h-9 w-9 items-center justify-center rounded-full text-ink/55 ring-1 ring-black/[0.06] transition hover:bg-white/70 hover:text-brand hover:ring-brand/20"
+                onClick={() => setPicking((p) => !p)}
+                aria-haspopup="listbox"
+                aria-expanded={picking}
+                aria-label="Choose a deal"
+                className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium text-ink/70 ring-1 ring-black/[0.06] transition hover:bg-white/70 hover:text-ink"
               >
-                <MoreHorizontal size={17} strokeWidth={1.75} />
+                {selectedDeal?.hsNumber ?? "Draft deal"}
+                <ChevronDown size={13} strokeWidth={2} className="text-ink/40" />
               </button>
-              {menuOpen && (
+              {picking && (
                 <>
-                  <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-                  <div className="glass-strong absolute right-0 top-full z-20 mt-1.5 w-56 rounded-2xl p-1.5">
+                  <div className="fixed inset-0 z-10" onClick={() => setPicking(false)} />
+                  <div className="glass-strong absolute left-0 top-full z-20 mt-1.5 w-72 rounded-2xl p-1.5">
+                    <p className="px-2.5 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wide text-ink/40">
+                      Deals with {counterpartyName ?? "this company"}
+                    </p>
+                    {deals.map((d) => (
+                      <button
+                        key={d.id}
+                        type="button"
+                        onClick={() => pickDeal(d.id)}
+                        className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition hover:bg-black/[0.04]"
+                      >
+                        <span className="w-1 self-stretch rounded-full bg-brand" aria-hidden />
+                        <span className="flex min-w-0 flex-1 flex-col">
+                          <span className="truncate text-xs font-semibold text-ink">
+                            {d.hsNumber ?? "Draft deal"}
+                          </span>
+                          <span className="text-[10px] text-ink/45">Updated {timeAgo(d.updatedAt)}</span>
+                        </span>
+                        <StatusBadge status={d.status} />
+                        {d.id === selectedId && (
+                          <Check size={14} strokeWidth={2.5} className="shrink-0 text-brand" />
+                        )}
+                      </button>
+                    ))}
+                    {/* D-03 - "See all N deals" → the relationship page */}
                     <Link
                       href={`/connect/relationship/${relationshipId}`}
-                      onClick={() => setMenuOpen(false)}
-                      className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-ink transition hover:bg-black/[0.04]"
+                      onClick={() => setPicking(false)}
+                      className="mt-0.5 flex items-center justify-center rounded-lg px-2.5 py-2 text-[11px] font-semibold text-brand-deep transition hover:bg-brand-soft/30"
                     >
-                      <Users size={15} strokeWidth={1.75} /> View relationship
+                      See all {deals.length} deals
                     </Link>
                   </div>
                 </>
               )}
             </div>
+          )}
+
+          {/* the pink card icon - the clickable "open the deal card" cue beside
+              the deal number (replaces the retired strip-1 chip). Opens the card
+              as the 50/50 side panel. */}
+          {hasDeal && (
+            <button
+              type="button"
+              onClick={openDealCard}
+              aria-label="Open the deal card"
+              title="Open the deal card"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-soft/50 text-brand ring-1 ring-brand/20 transition hover:bg-brand-soft hover:text-brand-deep"
+            >
+              <FileText size={15} strokeWidth={2} />
+            </button>
+          )}
+
+          {/* ⋮ menu - secondary actions, pushed right; vertical dots to spare
+              horizontal room now that the chat can be 50% wide */}
+          <div className="relative ml-auto shrink-0">
+            <button
+              type="button"
+              onClick={() => setMenuOpen((o) => !o)}
+              aria-label="More actions"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              title="More"
+              className="flex h-9 w-9 items-center justify-center rounded-full text-ink/55 ring-1 ring-black/[0.06] transition hover:bg-white/70 hover:text-brand hover:ring-brand/20"
+            >
+              <MoreVertical size={17} strokeWidth={1.75} />
+            </button>
+            {menuOpen && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+                <div className="glass-strong absolute right-0 top-full z-20 mt-1.5 w-56 rounded-2xl p-1.5">
+                  <Link
+                    href={`/connect/relationship/${relationshipId}`}
+                    onClick={() => setMenuOpen(false)}
+                    className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-ink transition hover:bg-black/[0.04]"
+                  >
+                    <Users size={15} strokeWidth={1.75} /> View relationship
+                  </Link>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -691,7 +573,6 @@ export function DealPin({
       {/* State B - a proposal is pending (the pre-card object, the new heart) */}
       {variant === "chat" && showProposal && (
         <div className={rowCls}>
-          <SellaMark thinking={acting} />
           <span className="min-w-0 flex-1 truncate text-xs text-ink/70">
             <span className="font-semibold text-ink/85">
               {proposal!.iProposed
@@ -810,16 +691,10 @@ export function DealPin({
         </div>
       )}
 
-      {/* State C - a live deal is selected. Identity is in the P2P top bar above;
-          this row is the controls: the [Deal Room | Deal Card] toggle (left), the
-          centered // Sella mark/curtain, and the translate glyph (right). */}
-      {variant === "chat" && !showProposal && hasDeal && (
-        <div className="flex items-center gap-3 border-b border-black/[0.06] px-4 py-3">
-          {dealRoomCardToggle}
-          <div className="mx-auto">{changeControl}</div>
-          <TranslateButton />
-        </div>
-      )}
+      {/* State C - a live deal is selected. Its whole identity + the open-card
+          control now live in the P2P top bar above (the deal number + the pink
+          card icon), so the old standalone "Deal [code]" chip strip is retired -
+          it was a wasted row (feedback: "this strip has to go"). */}
 
       {/* State A - no deal, no proposal: a quiet invitation. p2p only (propose
           needs a p2p thread); a c2c thread with no deal shows just the label. */}
@@ -829,7 +704,7 @@ export function DealPin({
           {canPropose && (
             <button
               type="button"
-              onClick={() => setCreating(true)}
+              onClick={openCreateCard}
               className="flex items-center gap-1.5 rounded-lg border border-dashed border-brand/45 px-3 py-1.5 text-xs font-semibold text-brand transition hover:border-brand hover:bg-brand-soft/30"
             >
               <Plus size={13} strokeWidth={2.5} />
@@ -839,27 +714,16 @@ export function DealPin({
         </div>
       )}
 
-      {/* workspace variant, OUTSIDE the Room - the deal is fixed; NO top-tier
-          identity (no source in the host, D-02): the chip + the [Deal Room | Deal
-          Card] toggle + the // Sella mark/curtain. */}
-      {variant === "workspace" && !inRoom && hasDeal && (
+      {/* workspace variant - the deal is fixed; NO top-tier identity (no source in
+          the host, D-02): the status chip + the single "Deal [code]" chip that
+          opens the card as a right-side panel. The retired toggle + // Sella mark
+          (D-10) are gone. (The Deal Room is retired, so `inRoom` no longer splits
+          this row; the whole workspace path is dead until 07-07 revisits it.) */}
+      {variant === "workspace" && hasDeal && (
         <div className={rowCls}>
           <span className="shrink-0 text-[11px] text-ink/45">Deal:</span>
           <DealChip status={chipStatus} selectable={false} />
-          {dealRoomCardToggle}
-          {changeControl}
-        </div>
-      )}
-
-      {/* workspace variant, INSIDE the Room (D-05) - the card + chat are both
-          permanently visible, so the [Deal Room | Deal Card] toggle + the chip
-          are redundant and dropped. The strip keeps ONLY Sella (the // mark/
-          curtain, which STAYS on the strip - not moved into the room) + the
-          Translator. */}
-      {variant === "workspace" && inRoom && hasDeal && (
-        <div className="flex items-center gap-3 border-b border-black/[0.06] px-4 py-3">
-          <div className="mx-auto">{changeControl}</div>
-          <TranslateButton />
+          {dealCardChip}
         </div>
       )}
 
@@ -876,7 +740,7 @@ export function DealPin({
             <div className="pointer-events-auto w-[390px] max-w-full self-start">
               <DealCard
                 data={data}
-                onEdit={data.pendingChange ? undefined : () => setEditing(true)}
+                onEdit={data.pendingChange ? undefined : ALLOW_EDIT}
               />
             </div>
           </div>
@@ -894,107 +758,18 @@ export function DealPin({
             <div className="min-h-0 flex-1 overflow-y-auto p-3">
               <DealCard
                 data={data}
-                onEdit={data.pendingChange ? undefined : () => setEditing(true)}
+                onEdit={data.pendingChange ? undefined : ALLOW_EDIT}
               />
             </div>
           </div>,
           cardHost,
         )}
 
-      {/* the propose form (4.5.2, was create 3.5a) - a human-pressed Send writes
-          a PROPOSAL (no card yet); on success the strip re-reads to show pending.
-          p2p only - guarded by canPropose + threadId so c2c never reaches it. */}
-      {creating && canPropose && threadId && (
-        <CreateDealForm
-          relationshipId={relationshipId}
-          threadId={threadId}
-          counterpartyName={counterpartyName ?? "your contact"}
-          onClose={() => setCreating(false)}
-          onProposed={() => {
-            setCreating(false);
-            void getPendingProposal(threadId)
-              .then(setProposal)
-              .catch(() => {});
-          }}
-        />
-      )}
+      {/* CREATE-MODE card (chj/07-08): the "+ Create a deal" door + the "Start a
+          deal" button dispatch hs:create-deal-card; DealCardPanelHost opens the
+          empty create card in the SAME 50/50 right panel a real card uses (see
+          openCreateCard above). DealPin no longer renders the create card itself. */}
 
-      {/* the edit form (3.5b → 4.5.4) - the form no longer commits. It hands the
-          edited SHARED fields + the private box UP via onProposeChange; we stash
-          them, close the form, and open the strip Send pop-up to collect the
-          required reason (D-08) before proposeDealChange holds the change. */}
-      {editing && data && (
-        <EditDealForm
-          data={data}
-          onClose={() => setEditing(false)}
-          onProposeChange={(payload) => {
-            setEditing(false);
-            setPendingEdit(payload);
-            setSendReason("");
-            setChangeOpen(true);
-          }}
-        />
-      )}
-
-      {/* 4.5.4 the proposer's SEND reason pop-up (D-08) - the required change
-          reason is collected HERE in the strip, never on the edit form. On Send
-          proposeDealChange holds the change (private box written immediately +
-          ungated, D-09) and the strip re-reads so the lock + pending pill appear. */}
-      {changeOpen && pendingEdit && data && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <button
-            type="button"
-            aria-label="Close"
-            onClick={() => {
-              setChangeOpen(false);
-              setPendingEdit(null);
-            }}
-            className="absolute inset-0 bg-ink/30 backdrop-blur-sm"
-          />
-          <div className="glass-strong relative w-full max-w-sm overflow-hidden rounded-3xl">
-            <div className="flex items-stretch">
-              <span className="w-1 shrink-0 bg-brand" aria-hidden />
-              <div className="min-w-0 flex-1 p-5">
-                <div className="mb-0.5 flex items-center gap-1.5 text-sm font-bold text-ink">
-                  <Sparkles size={14} strokeWidth={2} className="text-brand" />
-                  Send this change
-                </div>
-                <p className="mb-3 text-[12px] text-ink/55">
-                  {`${counterpartyName ?? "The other side"} reviews it before it takes effect. Say what changed and why - everyone sees this on the deal's history.`}
-                </p>
-                <textarea
-                  value={sendReason}
-                  onChange={(e) => setSendReason(e.target.value)}
-                  rows={3}
-                  autoFocus
-                  className="w-full resize-none rounded-lg bg-white px-3 py-2 text-sm text-ink ring-1 ring-black/5 placeholder:text-ink/35 focus:outline-none focus:ring-2 focus:ring-brand/30"
-                  placeholder="e.g. Bumped the price to match the new supplier cost…"
-                />
-                <div className="mt-4 flex items-center justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setChangeOpen(false);
-                      setPendingEdit(null);
-                    }}
-                    className="rounded-lg px-4 py-2 text-sm font-medium text-ink/55 ring-1 ring-ink/15 transition hover:bg-ink/5"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void runSendChange()}
-                    disabled={changeBusy || !sendReason.trim()}
-                    className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-deep disabled:opacity-50"
-                  >
-                    {changeBusy ? "Sending…" : "Send change"}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 }

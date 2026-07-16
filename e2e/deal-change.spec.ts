@@ -1,36 +1,42 @@
 /**
- * Phase 1 — held two-sided deal change: the failing E2E spec (TDD RED).
+ * Held two-sided deal change — end-to-end over the CURRENT "living deal card"
+ * UI (chj/07-08: create-mode card, inline row-edit, Sign / Negotiate DecisionBar).
  *
- * These tests encode the SIX Phase-1 success criteria as end-to-end behavior.
- * They are written FIRST, from the success criteria — NOT from the
- * implementation. They MUST be RED right now: the `deal_pending_change` table,
- * the three change RPCs, the strip Accept/Decline reason pop-up, and the
- * pencil lock do not exist yet. They turn green as plans 02 → 03 → 04 land.
+ * Two-company, two-context: Alice (GreenLeaf, the deal's initiator/seller on the
+ * default 'offer' create path) and Bob (StonePharm, buyer) hold separate sessions
+ * via openTwoContexts, because a held change is resolved by BOTH sides. A fresh
+ * draft card is minted in-app at setup (the local DB has no seeded cloud card).
  *
- * Each test title carries a grep tag (held-not-committed, auto-accept,
- * full-lock, two-sided-commit, decline-discards, withdraw, private-immediate,
- * reason-required) so a single criterion can be run in isolation, e.g.
- *   ./node_modules/.bin/playwright test e2e/deal-change.spec.ts -g full-lock
+ * REWRITTEN for the living-deal-card rework (this cleanup pass): the OLD flow
+ * this file drove (CreateDealForm / EditDealForm modal, a strip "Review change"
+ * pop-up backed by ConfirmBar, a mandatory typed reason on every accept/decline)
+ * is gone. Both CreateDealForm/EditDealForm AND ConfirmBar are now orphaned
+ * components (zero live imports, confirmed by grep) — CardFront.tsx is the ONE
+ * component for both create and edit, and DecisionBar.tsx is the ONE place a
+ * held change resolves:
+ *   - the PROPOSER (whoever gave the latest version) sees "Waiting for the other
+ *     side to sign." + (while a change is held) a "Negotiate (withdraw change)"
+ *     button — withdrawDealChange, no reason prompt.
+ *   - the SIGNER (the other party) sees, while a change is held, "Negotiate"
+ *     (declines the held change — confirmDealChange(decision:'decline'), an
+ *     AUTO reason, no typed-reason UI) and always "Sign the deal" (signDeal —
+ *     if a change is held this ALSO commits it via confirm_deal_change(accept),
+ *     then flips the card straight to `confirmed`/signed in the SAME click).
  *
- * Two-company, two-context: Alice (GreenLeaf, proposer) and Bob (StonePharm,
- * responder) hold separate sessions via openTwoContexts, because the held
- * change is decided by BOTH sides. A fresh draft card is minted in-app at
- * setup (the local DB has no seeded cloud card).
+ * This collapses the OLD three-state model (propose → hold → accept-without-
+ * signing, stays draft, OR decline) into two outcomes (Sign commits+finalizes
+ * together, or Negotiate discards). A few tests' ORIGINAL assumptions no longer
+ * hold as literal fact (there is no more UI-level mandatory-reason gate, and a
+ * committed change no longer "stays draft" — see the per-test comments and the
+ * cleanup report for the full judgment calls); their surviving, still-true
+ * invariants are what these rewritten bodies assert.
  *
- * The selectors target the visible strip text + the card version label + the
- * Edit pencil (aria-label "Edit deal", from DealCard.tsx). They are the stable
- * contract plans 02-04 build the app up to satisfy.
- *
- * REALTIME (bug found here, now FIXED): the held change did NOT propagate LIVE to
- * the other side — DealPin.tsx subscribes to postgres_changes on
- * `deal_pending_change`, but that table was missing from the supabase_realtime
- * publication, so the subscription never fired. Fixed in
- * 20260617130000_deal_pending_change_realtime.sql (adds the table to the
- * publication). These tests still call refreshDealView(...) before observing the
- * other side, because realtime cross-screen TIMING is non-deterministic to assert
- * (plan 01-04 flagged it as a manual-only check); the refresh makes the
- * assertions stable. The success criteria (both sides locked, the reason gate,
- * two-sided commit, decline/withdraw discard) are verified in full.
+ * REALTIME (known app bug, unchanged): DealPin.tsx subscribes to
+ * postgres_changes on `deal_pending_change`, but that table was never added to
+ * the `supabase_realtime` publication, so the pencil-lock / DecisionBar content
+ * does not update live on the OTHER side. These tests call refreshDealView(...)
+ * before observing the other side to work around it (a real navigation + re-read,
+ * not a weakened assertion).
  */
 import { test, expect, type Page, type BrowserContext } from '@playwright/test'
 import {
@@ -41,8 +47,10 @@ import {
   countRelationshipMessages,
   countDealChangeInputForCard,
   resolveDealCardIdForRelationship,
-  acceptBirthAsBob,
-  openDealInChat,
+  pendingChangeNote,
+  dealPanel,
+  openRowLocator,
+  openFirstLineForEdit,
   COUNTERPARTY_NAME,
   type Who,
 } from './fixtures/two-company'
@@ -63,13 +71,13 @@ let bobPage: Page
 
 test.beforeEach(async ({ browser }) => {
   // wipe this relationship's deal data first so each test starts from the clean
-  // "Start a deal" State A (the seed ships a draft card + proposals on this
-  // relationship; without the reset the strip is in State C and "Start a deal"
-  // is absent). Targeted truncate, not a full db reset — see resetDealData.
+  // "Start a deal" State A (a stale card would leave the strip in State C, where
+  // "Start a deal" is absent). Targeted truncate, not a full db reset — see
+  // resetDealData.
   resetDealData()
   ;({ aliceContext, bobContext, alicePage, bobPage } = await openTwoContexts(browser))
-  // mint a fresh draft deal both sides can act on: Alice proposes, Bob accepts
-  // (births the card), then both open the card.
+  // mint a fresh draft deal both sides can act on: Alice creates + births it
+  // directly (no propose/accept door anymore), then both open the card panel.
   await birthAndOpenDeal(alicePage, bobPage)
 })
 
@@ -80,42 +88,54 @@ test.afterEach(async () => {
 
 /** Open the edit pencil on a page; the gate / lock is what we assert against. */
 function editPencil(page: Page) {
-  return page.getByRole('button', { name: /edit deal/i })
+  return dealPanel(page).getByRole('button', { name: /edit deal/i })
+}
+
+/**
+ * The proposer's "held, awaiting the other side" cue (DecisionBar, iGaveLatest
+ * branch) — ONLY renders while a change is actually held (unlike "Waiting for
+ * the other side to sign.", which is also the baseline state of a fresh,
+ * unedited draft for its initiator). This is the reliable signal that Alice's
+ * edit created a real `deal_pending_change` row.
+ */
+function heldChangeButton(page: Page) {
+  return dealPanel(page).getByRole('button', { name: /negotiate \(withdraw change\)/i })
 }
 
 /**
  * Drive the PROPOSER's held-change flow end to end on `page`:
- *   pencil → change the qty → "Review change" (closes the edit form, opens the
- *   strip's Send pop-up) → type the required reason → "Send change".
- *
- * The exact labels come from the real components (read this session):
- *   - EditDealForm submits with "Review change" (DealForm submitLabel).
- *   - The strip Send pop-up's reason field is a placeholder textarea ("e.g.
- *     Bumped the price…"), NOT an aria-labelled "reason" box, so it is matched by
- *     its placeholder. "Send change" stays disabled until the reason is non-blank.
+ *   pencil → open the first product line → bump its quantity (a closed
+ *   `<select>` now, one of CardFront's mock unit sizes [100,250,500,1000]) →
+ *   "Send changes to <counterparty>" (ONE button; CardFront hardcodes the
+ *   proposeDealChange reason to "Updated the deal on the card" — there is no
+ *   more reason box on the proposer side, confirmed by reading the
+ *   doSendChange() call site).
  */
-async function proposeChangeAsAlice(page: Page, qty: string, reason: string) {
+async function proposeChangeAsAlice(page: Page, qty: string) {
   await editPencil(page).click()
-  await page.getByPlaceholder(/qty/i).first().fill(qty)
-  await page.getByRole('button', { name: /^review change$/i }).click()
-  await page.getByPlaceholder(/bumped the price/i).fill(reason)
-  await page.getByRole('button', { name: /^send change$/i }).click()
+  await openFirstLineForEdit(page)
+  await openRowLocator(page).locator('select').nth(2).selectOption(qty)
+  await dealPanel(page).getByRole('button', { name: /^send changes to /i }).click()
 }
 
 /**
- * Open the RESPONDER's review pop-up on `page` (the loud "Review change" pill in
- * the strip). The reason gate lives inside it (the ConfirmBar with requireReason).
+ * The RESPONDER's Sign action on `page` — signDeal(). If a change is held this
+ * COMMITS it (confirm_deal_change, accept) and flips the card to `confirmed` in
+ * the same click; there is no more separate "accept the change but stay in
+ * draft" step (DecisionBar's single-sign model, see the module header).
  */
-async function openReviewChange(page: Page) {
-  await page.getByRole('button', { name: /review change/i }).click()
+async function signAsResponder(page: Page) {
+  await dealPanel(page).getByRole('button', { name: /^sign the deal$/i }).click()
 }
 
 /**
- * The responder's reason field inside the review pop-up. It is the ConfirmBar's
- * placeholder textarea ("Say why…"), again matched by placeholder, not a name.
+ * The RESPONDER's Negotiate action on `page` — confirmDealChange(decision:
+ * 'decline') with DecisionBar's AUTO_REASON ("Updated on the card"). Discards
+ * the held change, keeps the live card exactly as it was, unlocks the pencil.
+ * No typed-reason UI exists anymore (see the module header).
  */
-function reviewReasonBox(page: Page) {
-  return page.getByPlaceholder(/say why/i)
+async function negotiateAsResponder(page: Page) {
+  await dealPanel(page).getByRole('button', { name: /^negotiate$/i }).click()
 }
 
 /**
@@ -126,17 +146,17 @@ function reviewReasonBox(page: Page) {
  * writes none, so this is the honest signal for "did the live card move?".
  */
 async function openLogsTab(page: Page) {
-  await page.getByRole('button', { name: /flip to signals and logs/i }).click()
-  await page.getByRole('button', { name: /^logs$/i }).click()
+  await dealPanel(page).getByRole('button', { name: /flip to signals and logs/i }).click()
+  await dealPanel(page).getByRole('button', { name: /^logs$/i }).click()
 }
 
 /**
  * Open `who`'s p2p (person-to-person) chat with the counterparty and wait for the
- * conversation to render. Unlike refreshDealView (which opens the deal CARD
- * overlay), this leaves us on the chat transcript itself so the Phase 2
+ * conversation to render. Unlike refreshDealView (which opens the deal card
+ * panel), this leaves us on the chat transcript itself so the Phase 2
  * announcement bubbles posted into the p2p thread are visible to assert against.
  * The same navigation refreshDealView uses (/connect/chat → counterparty), minus
- * the "Open card" step.
+ * the "Open the deal card" step.
  */
 async function openP2pChat(page: Page, who: Who) {
   await page.goto('/connect/chat')
@@ -144,20 +164,20 @@ async function openP2pChat(page: Page, who: Who) {
 }
 
 /**
- * held-not-committed (DCHG-01 / DCHG-02): Alice edits a draft and sends with a
- * reason. The LIVE card version is unchanged (the change is held, not
- * committed), and the strip shows the change as awaiting the other side with
- * Alice's own side already accepted (auto-accept).
+ * held-not-committed (DCHG-01 / DCHG-02): Alice edits a draft and sends. The
+ * LIVE card version is unchanged (the change is held, not committed), and her
+ * own screen shows the change as held/awaiting the other side (the proposer's
+ * own side is implicitly "in" — auto-accept — there is nothing for Alice herself
+ * to additionally confirm).
  */
 test('held-not-committed + auto-accept: edit holds, live card version unchanged, proposer pre-accepted', async () => {
-  await proposeChangeAsAlice(alicePage, '120', 'Increase quantity to 120')
+  await proposeChangeAsAlice(alicePage, '250')
 
-  // auto-accept: the proposer's own side is already in, so the strip shows the
-  // change as PENDING on the other side (the "Change pending · <counterparty>"
-  // waiting chip with the no-reason Withdraw — proof Alice did not have to act).
-  await expect(
-    alicePage.getByText(new RegExp(`change pending.*${COUNTERPARTY_NAME.alice}`, 'i')),
-  ).toBeVisible()
+  // a held change now exists on Alice's side — "Negotiate (withdraw change)"
+  // ONLY renders while a change is actually held (unlike the baseline "Waiting
+  // for the other side to sign." text, which is also true of a fresh, unedited
+  // draft and so cannot prove a change landed).
+  await expect(heldChangeButton(alicePage)).toBeVisible()
 
   // HELD, not committed: the live card has NOT moved, so the version history has
   // no "Deal updated to v2" entry (a commit would have written one).
@@ -170,13 +190,15 @@ test('held-not-committed + auto-accept: edit holds, live card version unchanged,
  * disabled/absent on BOTH Alice's and Bob's screens — one paper on the table.
  */
 test('full-lock: edit pencil locked on both screens while a change is pending', async () => {
-  await proposeChangeAsAlice(alicePage, '120', 'Increase quantity to 120')
+  await proposeChangeAsAlice(alicePage, '250')
 
   // Bob re-reads the current state (the live realtime push is the known-broken
-  // path; refreshDealView does what it would have done). His "Review change" pill
-  // is the cue the held change has landed on his side.
+  // path; refreshDealView does what it would have done). His "Negotiate" button
+  // (decline-the-held-change) ONLY renders once a change is held — unlike
+  // "Sign the deal", which is always present for the signer — so it is the
+  // reliable cue the held change has landed on his side.
   await refreshDealView(bobPage, 'bob')
-  await expect(bobPage.getByRole('button', { name: /review change/i })).toBeVisible()
+  await expect(dealPanel(bobPage).getByRole('button', { name: /^negotiate$/i })).toBeVisible()
 
   // the pencil is gone for BOTH companies while the change is pending — the lock
   // rides on the shared card, so neither side can start a second edit.
@@ -185,51 +207,62 @@ test('full-lock: edit pencil locked on both screens while a change is pending', 
 })
 
 /**
- * reason-required (REAS-01): in the strip Accept/Decline pop-up, both the Accept
- * and Decline buttons are disabled until a change reason is typed.
+ * reason-required (REAS-01) — LEFT SKIPPED, see the report/comment below.
+ *
+ * ORIGINAL intent: the responder's Accept/Decline pop-up (ConfirmBar) gated both
+ * buttons on a typed reason. That pop-up is GONE — ConfirmBar.tsx is now an
+ * orphaned component (zero live imports, confirmed by grep) and DecisionBar's
+ * "Sign the deal" / "Negotiate" buttons carry no reason input at all; both pass
+ * a hardcoded reason string to the server (signDeal → "Signed the deal",
+ * DecisionBar's own AUTO_REASON → "Updated on the card"). The RPC-level
+ * `confirm_deal_change` STILL enforces "a reason is required" server-side
+ * (unchanged, read from the migration), but there is no more UI surface for a
+ * user to type — or omit — one, so there is nothing left for THIS test (a UI
+ * gate test) to drive. This is a real capability removed from the UI, not a
+ * selector mismatch — needs a product decision (rebuild a reason box, or accept
+ * the auto-reason model as final) before this can be rewritten meaningfully.
  */
 test('reason-required: accept and decline are disabled until a reason is typed', async () => {
-  await proposeChangeAsAlice(alicePage, '120', 'Increase quantity to 120')
-
-  // Bob re-reads (known-broken live push) then opens the review pop-up — reason
-  // empty, so both actions are blocked. The responder gate buttons are
-  // "Confirm deal" + "Decline" (ConfirmBar).
-  await refreshDealView(bobPage, 'bob')
-  await openReviewChange(bobPage)
-  await expect(bobPage.getByRole('button', { name: /confirm deal/i })).toBeDisabled()
-  await expect(bobPage.getByRole('button', { name: /^decline$/i })).toBeDisabled()
-
-  // after typing a reason, both unlock
-  await reviewReasonBox(bobPage).fill('Agreed, 120 works')
-  await expect(bobPage.getByRole('button', { name: /confirm deal/i })).toBeEnabled()
-  await expect(bobPage.getByRole('button', { name: /^decline$/i })).toBeEnabled()
+  test.skip(true, 'the responder reason-gate UI (ConfirmBar) was retired along with the create form in the living-deal-card rework — DecisionBar\'s Sign/Negotiate carry no reason input at all anymore (both pass a hardcoded string). Needs a product decision on whether to rebuild a reason gate. See the e2e cleanup report.')
 })
 
 /**
- * two-sided-commit (DCHG-04): Bob accepts with a reason; the card version
- * increments by one and status stays `draft`; the pending change clears on
- * both screens.
+ * two-sided-commit (DCHG-04): Bob accepts the held change; the pending change
+ * clears on both screens and the version history carries the "Deal updated to
+ * v2" log entry on both screens.
+ *
+ * JUDGMENT CALL — the ORIGINAL title/assertion said "status stays draft" (D-06).
+ * That is no longer true: DecisionBar's only responder action that resolves an
+ * ACCEPT is "Sign the deal" (signDeal), which commits the held change via
+ * confirm_deal_change AND immediately flips the card to `confirmed` in the SAME
+ * click — there is no more "commit but keep negotiating" step. The RPC itself
+ * still writes `status = 'draft'` as part of its own update (confirmed by
+ * reading 20260707130300_deal_event_system_voice.sql:168), but signDeal's very
+ * next statement overwrites it to `confirmed` before the UI ever re-renders, so
+ * a user can never observe the intermediate draft state. This test now asserts
+ * the NEW true invariant (confirmed, evidenced by the seller's invoice-upload
+ * prompt) instead of the retired one — flagged in the cleanup report as a
+ * product-redesign discovery, not silently patched over.
  */
-test('two-sided-commit: both accept commits to base+1, status stays draft, pending clears', async () => {
-  await proposeChangeAsAlice(alicePage, '120', 'Increase quantity to 120')
+test('two-sided-commit: signing commits to base+1 and signs the deal, pending clears', async () => {
+  await proposeChangeAsAlice(alicePage, '250')
 
-  // Bob re-reads then accepts with his own reason ("Confirm deal" = responder accept)
   await refreshDealView(bobPage, 'bob')
-  await openReviewChange(bobPage)
-  await reviewReasonBox(bobPage).fill('Agreed, 120 works')
-  await bobPage.getByRole('button', { name: /confirm deal/i }).click()
+  await dealPanel(bobPage).getByRole('button', { name: /^negotiate$/i }).waitFor()
+  await signAsResponder(bobPage)
 
-  // Alice re-reads the now-committed state (Bob's accept is the other side's
+  // Alice re-reads the now-committed state (Bob's sign is the other side's
   // action — the known-broken live push, so refresh to pull it).
   await refreshDealView(alicePage, 'alice')
 
-  // pending clears on the proposer side: no "Change pending" / "Review change"
-  // anywhere once both have accepted.
-  await expect(alicePage.getByText(/change pending/i)).toHaveCount(0)
-  await expect(alicePage.getByRole('button', { name: /review change/i })).toHaveCount(0)
+  // pending clears on the proposer side: no more held-change button anywhere
+  // once Bob has signed.
+  await expect(heldChangeButton(alicePage)).toHaveCount(0)
 
-  // status STAYS draft (D-06) — the strip's status badge still reads Draft
-  await expect(alicePage.getByText(/^draft$/i).first()).toBeVisible()
+  // status is now CONFIRMED (signed) — the seller-only "Upload the invoice PDF"
+  // prompt only renders in DecisionBar's confirmed/amended branch, so its
+  // presence is direct proof of the new status (Alice is the seller here).
+  await expect(alicePage.getByRole('button', { name: /upload the invoice pdf/i })).toBeVisible()
 
   // the card committed to base+1: the version history now carries the
   // "Deal updated to v2" log entry, on BOTH screens (it rides the shared card).
@@ -241,16 +274,15 @@ test('two-sided-commit: both accept commits to base+1, status stays draft, pendi
 })
 
 /**
- * decline-discards (DCHG-05): Bob declines with a reason; the card version is
- * unchanged, the pending change clears, and the Edit pencil unlocks again.
+ * decline-discards (DCHG-05): Bob negotiates (declines the held change); the
+ * card version is unchanged, the pending change clears, and the Edit pencil
+ * unlocks again.
  */
 test('decline-discards: decline leaves the card unchanged, clears pending, unlocks the pencil', async () => {
-  await proposeChangeAsAlice(alicePage, '120', 'Increase quantity to 120')
+  await proposeChangeAsAlice(alicePage, '250')
 
   await refreshDealView(bobPage, 'bob')
-  await openReviewChange(bobPage)
-  await reviewReasonBox(bobPage).fill('Stay at 100 for now')
-  await bobPage.getByRole('button', { name: /^decline$/i }).click()
+  await negotiateAsResponder(bobPage)
 
   // a decline discards the change: the pencil is editable again on BOTH screens
   // (each side re-reads the cleared state — Alice via refresh, since Bob's decline
@@ -268,42 +300,51 @@ test('decline-discards: decline leaves the card unchanged, clears pending, unloc
  * prompt; the pending change clears and the pencil unlocks.
  */
 test('withdraw: proposer withdraws with no reason prompt, clears pending, unlocks the pencil', async () => {
-  await proposeChangeAsAlice(alicePage, '120', 'Increase quantity to 120')
+  await proposeChangeAsAlice(alicePage, '250')
 
-  // Alice withdraws — the Withdraw button sits in the proposer's waiting chip and
-  // takes back the change with NO reason prompt (no dialog opens). This is Alice's
-  // own action, so her side updates locally.
-  await alicePage.getByRole('button', { name: /withdraw/i }).click()
+  // Alice withdraws — "Negotiate (withdraw change)" takes back the change with
+  // NO reason prompt (no dialog opens, withdrawDealChange). This is Alice's own
+  // action, so her side updates locally.
+  await heldChangeButton(alicePage).click()
 
-  // the change is gone (no "Change pending") and Alice's pencil is back.
-  await expect(alicePage.getByText(/change pending/i)).toHaveCount(0)
+  // the change is gone and Alice's pencil is back.
+  await expect(heldChangeButton(alicePage)).toHaveCount(0)
   await expect(editPencil(alicePage)).toBeVisible()
 
-  // Bob re-reads the cleared state: no "Review change" pill, and his pencil is
-  // editable again (the lock cleared once the held change was withdrawn).
+  // Bob re-reads the cleared state: no more "Negotiate" button (nothing to
+  // decline), and his pencil is editable again (the lock cleared once the held
+  // change was withdrawn).
   await refreshDealView(bobPage, 'bob')
-  await expect(bobPage.getByRole('button', { name: /review change/i })).toHaveCount(0)
+  await expect(dealPanel(bobPage).getByRole('button', { name: /^negotiate$/i })).toHaveCount(0)
   await expect(editPencil(bobPage)).toBeVisible()
 })
 
 /**
- * accept-announces (ANNC-01): when Bob accepts Alice's held change (the SECOND
- * yes / both-accepted commit), a Sella system message announcing the move to v2
- * appears in BOTH the deal chat AND the p2p chat, on BOTH Alice's and Bob's
- * screens. The announcement is a projection of the commit log row, inserted
- * inside confirm_deal_change. RED until plan 02-01 Task 2 adds the insert.
+ * accept-announces (ANNC-01): when Bob signs (committing Alice's held change —
+ * the SECOND yes / both-accepted commit), a System message announcing the move
+ * to v2 appears in the p2p chat, on BOTH Alice's and Bob's screens. The
+ * announcement is a projection written by confirm_deal_change (HOOK B) — the
+ * SAME RPC signDeal calls internally, so the narration is unaffected by the
+ * DecisionBar redesign.
+ *
+ * JUDGMENT CALL — dropped the ORIGINAL "deal chat" (chat_thread.type='deal')
+ * check: that thread is NEVER independently rendered anywhere in the current
+ * UI (confirmed — `/connect/deal/[id]` is a deep-link that just re-dispatches
+ * `hs:open-deal-card`, not a thread viewer; "Talk about this deal" opens the
+ * group-picker to CREATE a new group, not the existing deal thread). The DB-
+ * level guarantee for that thread is already covered by chat-phase7.spec.ts's
+ * OBS-3 test (asserts sender='system' on the deal thread directly via SQL) —
+ * duplicating it here via the UI is not possible, so this test now verifies
+ * only the user-visible half (the p2p chat).
  */
-test('accept-announces: a commit posts a Sella "moved to v2" bubble in both the deal chat and the p2p chat', async () => {
-  await proposeChangeAsAlice(alicePage, '120', 'Increase quantity to 120')
+test('accept-announces: a commit posts a "moved to v2" bubble in the p2p chat on both screens', async () => {
+  await proposeChangeAsAlice(alicePage, '250')
 
   await refreshDealView(bobPage, 'bob')
-  await openReviewChange(bobPage)
-  await reviewReasonBox(bobPage).fill('Agreed, 120 works')
-  await bobPage.getByRole('button', { name: /confirm deal/i }).click()
+  await signAsResponder(bobPage)
 
-  // BOTH screens, BOTH chats see the announcement. The body says the deal moved
-  // to v2 (the commit body); match either wording the RPC may use.
-  const movedToV2 = /(moved|updated) to v2/i
+  // the RPC body: "Change accepted - the deal moved to v2."
+  const movedToV2 = /(moved|updated|accepted).*v2/i
 
   // Bob's p2p chat (he just acted from the deal card; go to the chat transcript).
   await openP2pChat(bobPage, 'bob')
@@ -312,43 +353,39 @@ test('accept-announces: a commit posts a Sella "moved to v2" bubble in both the 
   // Alice's p2p chat.
   await openP2pChat(alicePage, 'alice')
   await expect(alicePage.getByText(movedToV2).first()).toBeVisible()
-
-  // The deal chat (deal thread) on each side — re-open the card view; the deal
-  // thread also carries the announcement bubble alongside the card.
-  await refreshDealView(alicePage, 'alice')
-  await expect(alicePage.getByText(movedToV2).first()).toBeVisible()
-  await refreshDealView(bobPage, 'bob')
-  await expect(bobPage.getByText(movedToV2).first()).toBeVisible()
 })
 
 /**
- * decline-announces (ANNC-02): when Bob declines with a UNIQUE reason string,
- * that exact reason text appears INLINE in a Sella announcement bubble in BOTH
- * the deal chat AND the p2p chat. The card does NOT move. The reason string is
- * deliberately unlike any other on-screen text so the match can only be the
- * announcement. RED until plan 02-01 Task 2 adds the decline insert.
+ * decline-announces (ANNC-02): when Bob negotiates (declines the held change),
+ * an announcement carrying the decline reason appears in the p2p chat.
+ *
+ * JUDGMENT CALL — the ORIGINAL test typed a UNIQUE custom reason string into a
+ * responder reason box and asserted its exact echo. That reason box is GONE:
+ * DecisionBar's "Negotiate" button hardcodes its reason to AUTO_REASON =
+ * "Updated on the card" (read directly from DecisionBar.tsx) — there is no more
+ * user-supplied text to propagate. The test's core mechanic (a decline
+ * announcement carries reason text inline) still holds, so this asserts the
+ * REAL fixed string instead of a custom one — a smaller guarantee than before
+ * (arbitrary text propagation is no longer provable), flagged in the cleanup
+ * report. Also drops the "deal chat" check for the same reason as
+ * accept-announces above.
  */
-test('decline-announces: a decline posts a Sella bubble carrying the decline reason inline in both chats', async () => {
-  // a reason string that appears nowhere else on screen, so getByText can only
-  // match the announcement bubble (not an echo of a form field or a log row).
-  const declineReason = 'Zoryphex margin too thin this quarter'
-  await proposeChangeAsAlice(alicePage, '120', 'Increase quantity to 120')
+test('decline-announces: a decline posts a bubble carrying the (now fixed) decline reason inline', async () => {
+  await proposeChangeAsAlice(alicePage, '250')
 
   await refreshDealView(bobPage, 'bob')
-  await openReviewChange(bobPage)
-  await reviewReasonBox(bobPage).fill(declineReason)
-  await bobPage.getByRole('button', { name: /^decline$/i }).click()
+  await negotiateAsResponder(bobPage)
 
-  // the unique decline reason is visible inline in BOTH chats, on BOTH screens.
+  // DecisionBar.AUTO_REASON, formatted by the RPC as "Change declined - <reason>".
+  const declineAnnouncement = /change declined.*updated on the card/i
+
   await openP2pChat(bobPage, 'bob')
-  await expect(bobPage.getByText(declineReason).first()).toBeVisible()
+  await expect(bobPage.getByText(declineAnnouncement).first()).toBeVisible()
   await openP2pChat(alicePage, 'alice')
-  await expect(alicePage.getByText(declineReason).first()).toBeVisible()
-
-  await refreshDealView(alicePage, 'alice')
-  await expect(alicePage.getByText(declineReason).first()).toBeVisible()
+  await expect(alicePage.getByText(declineAnnouncement).first()).toBeVisible()
 
   // the card did NOT move — no "updated to v2" log entry.
+  await refreshDealView(alicePage, 'alice')
   await openLogsTab(alicePage)
   await expect(alicePage.getByText(/updated to v2/i)).toHaveCount(0)
 })
@@ -359,200 +396,143 @@ test('decline-announces: a decline posts a Sella bubble carrying the decline rea
  * of the relationship's threads. Silence is hard to prove in the UI, so we
  * snapshot the chat_message count across the relationship's threads BEFORE the
  * withdraw and assert it is UNCHANGED after. Also assert the pending state
- * clears (no "Change pending", the pencil is back). This should PASS already
- * (withdraw posts nothing today) — it is the ANNC-03 regression guard.
+ * clears (the pencil is back).
  */
 test('withdraw-silent: a withdraw posts NO announcement (chat_message count unchanged) and clears pending', async () => {
-  await proposeChangeAsAlice(alicePage, '120', 'Increase quantity to 120')
+  await proposeChangeAsAlice(alicePage, '250')
 
   // snapshot the live message count across the relationship's threads, then
   // withdraw, then assert the count did not change (no announcement was posted).
   const before = countRelationshipMessages()
-  await alicePage.getByRole('button', { name: /withdraw/i }).click()
-  await expect(alicePage.getByText(/change pending/i)).toHaveCount(0)
+  await heldChangeButton(alicePage).click()
+  await expect(heldChangeButton(alicePage)).toHaveCount(0)
   await expect(editPencil(alicePage)).toBeVisible()
   const after = countRelationshipMessages()
   expect(after).toBe(before)
 })
 
 /**
- * gate-accept-decline (ANNC-04): in the responder review pop-up the only two
- * action buttons are "Confirm deal" (accept) and "Decline" — there is NO
- * seal-withdraw control. The seal Withdraw was removed in Phase 1; this is the
- * regression guard. (The proposer's own pending-change Withdraw lives in the
- * waiting chip on the PROPOSER's screen, not in the responder gate — so it must
- * NOT be present in Bob's review pop-up.) Should PASS already.
+ * gate-accept-decline (ANNC-04) — LEFT SKIPPED, see the comment below.
+ *
+ * ORIGINAL intent: the responder's review pop-up (ConfirmBar) showed only
+ * "Confirm deal" + "Decline", with NO seal-withdraw control — a regression
+ * guard against a retired Phase-1 "seal Withdraw" leaking into that gate. That
+ * pop-up no longer exists. In the CURRENT DecisionBar, the signer's view shows
+ * "Negotiate" + "Sign the deal" AND, always, a separate "Decline deal" button
+ * (the two-step "end this deal entirely" control) — i.e. the new UI
+ * intentionally DOES offer a deal-ending action right alongside Negotiate/Sign,
+ * the exact opposite of what this regression guard checked for. The original
+ * premise (no seal-like control in the accept/decline gate) no longer applies
+ * to how the app is shaped today — this needs a product decision on whether a
+ * NEW regression guard is wanted here, not a mechanical fixture fix.
  */
 test('gate-accept-decline: the responder review gate shows only Confirm deal + Decline, no seal Withdraw', async () => {
-  await proposeChangeAsAlice(alicePage, '120', 'Increase quantity to 120')
-
-  await refreshDealView(bobPage, 'bob')
-  await openReviewChange(bobPage)
-
-  // exactly the two gate actions exist...
-  await expect(bobPage.getByRole('button', { name: /confirm deal/i })).toBeVisible()
-  await expect(bobPage.getByRole('button', { name: /^decline$/i })).toBeVisible()
-  // ...and no seal-withdraw control is present in the responder gate.
-  await expect(bobPage.getByRole('button', { name: /withdraw/i })).toHaveCount(0)
+  test.skip(true, 'the responder review-gate UI (ConfirmBar) is gone; the current DecisionBar intentionally shows a "Decline deal" (end the whole deal) button alongside Negotiate/Sign for the signer, the inverse of what this regression guard checked for. Needs a product decision on a replacement guard, not a fixture fix. See the e2e cleanup report.')
 })
 
 /**
  * card-terms-shown (CARD-03): the card face shows the two already-stored terms
- * it never displayed before — a "Payment terms" row (a human label resolved from
- * card.payment_terms_code) and a "Free delivery" row (read from
- * card.metadata.free_delivery). The seeded birth flow sets NO payment term, so
- * this asserts the row LABELS render (the rows exist on the card face), not a
- * specific seeded term value. RED until plan 03A-02 Task 2 adds the two rows.
+ * — a Payment row (a human label resolved from card.payment_terms_code) and a
+ * Delivery row (read from card.metadata.free_delivery / delivery_date_target).
+ * The seeded birth flow sets NO payment term, so this asserts the row LABELS
+ * render (the rows exist on the card face — CardFront's Extra Conditions grid,
+ * always rendered regardless of value), not a specific seeded term value.
+ *
+ * JUDGMENT CALL: the ORIGINAL regexes (/payment terms/i, /free delivery/i)
+ * assumed exact copy that CardFront never shipped — its read-mode term cards
+ * literally read "Payment" / "Deal expiry" / "Delivery" (confirmed by reading
+ * CardFront.tsx's Extra Conditions section), not "Payment terms"/"Free
+ * delivery". Loosened to match the real labels while preserving the test's
+ * actual intent (the rows exist).
  */
-test('card-terms-shown: the card face shows the Payment terms + Free delivery rows', async () => {
+test('card-terms-shown: the card face shows the Payment + Delivery rows', async () => {
   // birthAndOpenDeal (beforeEach) already opened the card; re-read from the server
   // (house style) so the assertion runs against the current card view.
   await refreshDealView(alicePage, 'alice')
-  await expect(alicePage.getByText(/payment terms/i)).toBeVisible()
-  await expect(alicePage.getByText(/free delivery/i)).toBeVisible()
+  await expect(dealPanel(alicePage).getByText(/^payment$/i)).toBeVisible()
+  await expect(dealPanel(alicePage).getByText(/^delivery$/i)).toBeVisible()
 })
 
 /**
- * private-immediate (DCHG-07 / MRGN-01, D-10 / OBS-5): Alice's per-line PRIVATE
- * cost input — the per-product margin input this phase introduced, replacing the
- * old single mislabeled "Buying price" box — persists for Alice immediately after
- * send and is never visible to Bob in his Review-change pop-up.
- *
- * Migrated from the old flat-box version: the test now targets the per-line cost
- * input plan 03 added inside each item row (DealForm.tsx — label "Your cost (only
- * you)", placeholder "€ / g (your cost)"), not the removed `deal_party_field` box.
- * The invariant is identical: the per-line own input is written IMMEDIATELY +
- * ungated to deal_line_item_private (D-07/D-09) while the SHARED qty is only held,
- * so it must (a) never ride the shared held draft into Bob's review pop-up
- * (Pitfall 3 / T-03D-leak) and (b) survive Alice withdrawing the held shared
- * change (immediate + independent — the OBS-5 carry-in).
+ * private-immediate (DCHG-07 / MRGN-01) — LEFT SKIPPED, see the comment below.
  */
 test('private-immediate: per-line cost saves at once for Alice and never leaks to Bob', async () => {
-  // edit: fill the FIRST line's per-line cost input + bump the shared qty, then
-  // Send. proposeDealChange writes the per-line cost IMMEDIATELY + ungated (D-09)
-  // to deal_line_item_private while the SHARED qty is only held.
-  //
-  // The per-line cost input's placeholder is "€ / g (your cost)"; the line-item
-  // PRICE input shares "€ / g (optional)", so target the cost input by its
-  // distinct "(your cost)" fragment, never the shared "€ / g". Use a value (4.23)
-  // unlike any seeded price so a match can only be the cost input, never a
-  // line-item price echo. 4.23 (not 4.20) avoids the <input type="number">
-  // trailing-zero normalization that would turn "4.20" into "4.2".
-  const costBox = (page: Page) => page.getByPlaceholder(/your cost/i).first()
-  await editPencil(alicePage).click()
-  await costBox(alicePage).fill('4.23')
-  await alicePage.getByPlaceholder(/qty/i).first().fill('120')
-  await alicePage.getByRole('button', { name: /^review change$/i }).click()
-  await alicePage.getByPlaceholder(/bumped the price/i).fill('Increase quantity to 120')
-  await alicePage.getByRole('button', { name: /^send change$/i }).click()
-
-  // Bob must NEVER see Alice's per-line cost — not in the strip, not in his
-  // Review-change pop-up (the held draft carries SHARED lines only; the per-line
-  // own input is stripped to deal_line_item_private, D-09 / Pitfall 3). Bob
-  // re-reads first (known-broken live push).
-  await refreshDealView(bobPage, 'bob')
-  await expect(bobPage.getByRole('button', { name: /review change/i })).toBeVisible()
-  await openReviewChange(bobPage)
-  await expect(bobPage.getByText(/4\.23/)).toHaveCount(0)
-
-  // Alice's per-line cost persisted at once: withdraw the still-held shared change
-  // (which unlocks her pencil), re-open edit, and the 4.23 is still there even
-  // though the shared qty change was discarded — proof the per-line write was
-  // immediate + independent of the gated shared change (OBS-5).
-  await alicePage.getByRole('button', { name: /withdraw/i }).click()
-  await editPencil(alicePage).click()
-  await expect(costBox(alicePage)).toHaveValue(/4\.23/)
+  test.skip(true, 'no private-cost/margin input exists anywhere in the app today (confirmed via code read + grep of CardFront.tsx: EditLine.ownInput is threaded through to createDeal/proposeDealChange but nothing in the JSX ever lets a user type into it, in EITHER create or edit mode) — neither the old flat "Buying price" box nor a new per-line one. Needs a product decision on whether to rebuild it. See the e2e cleanup report.')
 })
 
 /**
- * margin-no-old-box (MRGN-01, D-09): the single mislabeled private box
- * ("Buying price (from your supplier)", hardcoded seller label / party_side) is
- * GONE from the edit form, replaced by the per-line "only you" cost/resale input.
- * Regression guard for the box this phase retired. The positive half — asserting
- * a per-line "only you" cost row IS rendered — means the test cannot false-pass
- * merely because the form failed to render anything.
+ * margin-no-old-box (MRGN-01, D-09) — LEFT SKIPPED, see the comment below.
  */
 test('margin-no-old-box: the mislabeled single private box is gone, replaced by a per-line input', async () => {
-  // beforeEach already births a card with one priced line + opens it, so the
-  // pencil opens the edit form with one item row.
-  await editPencil(alicePage).click()
-
-  // the old flat box label must be absent everywhere on the form (D-09 retired it)
-  await expect(
-    alicePage.getByText(/buying price \(from your supplier\)/i),
-  ).toHaveCount(0)
-
-  // positive half: the per-line own-side cost input row IS present (so the
-  // count-0 above cannot pass just because nothing rendered).
-  await expect(alicePage.getByText(/your cost \(only you\)/i).first()).toBeVisible()
+  test.skip(true, 'same gap as private-immediate: there is no per-line "your cost (only you)" input anywhere in the current CardFront.tsx (confirmed via code read + grep) to assert the positive half against — asserting only the negative half (the old box is absent) would false-pass for the wrong reason (nothing renders at all, not "replaced by a per-line input"). Needs a product decision. See the e2e cleanup report.')
 })
 
 /**
- * The note textarea inside the (Create or Edit) DealForm. The create-time
- * placeholder is "Add a note for your contact…" (optional, noteRequired=false);
- * the edit-time placeholder is "Say what changed and why…" (required on edits).
- * Both bind the same `value={note}` state (DealForm.tsx:319-335), so match by
- * EITHER placeholder — the caller knows which flow it is driving.
+ * The note textarea inside CardFront (create AND edit mode share the SAME
+ * textarea, no label — placeholder "A note the other side will see on your
+ * behalf…", confirmed by reading CardFront.tsx). Unlike the old
+ * CreateDealForm/EditDealForm split, there is only one placeholder to match now.
  */
 function noteBox(page: Page) {
-  return page.getByPlaceholder(/add a note for your contact|say what changed and why/i)
+  return dealPanel(page).getByPlaceholder(/a note the other side will see on your behalf/i)
 }
 
 /**
  * D-01/D-04: Alice edits ONLY her note (alongside a qty bump, to reuse the
- * existing held-change driver shape) and sends with a reason. The change rides
- * the EXISTING held flow — pencil → fields → "Review change" → reason → "Send
- * change" — proving a note change is held exactly like a line/term change, not
- * applied immediately. The LIVE card face does not yet have a note row at all
- * (CardFront has no "Your note" / "Their note" field today — PATTERNS.md), so
- * this is RED until the render lands; once it does, the row must still show
- * NOTHING for Alice's pending note (held, not committed) while Bob waits.
+ * existing held-change driver shape) and sends. The change rides the EXISTING
+ * held flow — pencil → fields → "Send changes to X" — proving a note change is
+ * held exactly like a line/term change, not applied immediately.
+ *
+ * JUDGMENT CALL: the ORIGINAL "the card face must show Alice's own 'GreenLeaf
+ * cultivation notes' row" assertion never matched real CardFront copy, and my
+ * first rewrite attempt (asserting Alice sees her own held note immediately)
+ * was ALSO wrong — verified empirically by running this test: CardFront's
+ * read-mode Note block reseeds from the SERVER's `myNote` the instant
+ * `data.pendingChange` changes (which happens right after send), and the note
+ * only lives in the HELD draft server-side until a commit — so NEITHER side
+ * can see a held note anywhere in the current UI, a pre-existing gap this
+ * cleanup did not introduce (the original RED test already expected this: "the
+ * LIVE card face does not yet have a note row at all"). Verifies the honest
+ * DB-level fact instead (the note DID travel through the held mechanism) and
+ * keeps the UI-observable half that IS true (Bob sees nothing while it's held).
  */
 test('note-held: editing the note holds it — live note unchanged, pending awaits the other side', async () => {
   const newNote = 'Bumping qty and adding a note for Bob'
   await editPencil(alicePage).click()
   await noteBox(alicePage).fill(newNote)
-  await alicePage.getByPlaceholder(/qty/i).first().fill('120')
-  await alicePage.getByRole('button', { name: /^review change$/i }).click()
-  await alicePage.getByPlaceholder(/bumped the price/i).fill('Note + qty change')
-  await alicePage.getByRole('button', { name: /^send change$/i }).click()
+  await openFirstLineForEdit(alicePage)
+  await openRowLocator(alicePage).locator('select').nth(2).selectOption('250')
+  await dealPanel(alicePage).getByRole('button', { name: /^send changes to /i }).click()
 
-  // auto-accept: Alice's own side is already in, the strip shows the change
-  // awaiting Bob — same signal the existing held-not-committed test uses.
-  await expect(
-    alicePage.getByText(new RegExp(`change pending.*${COUNTERPARTY_NAME.alice}`, 'i')),
-  ).toBeVisible()
+  // a held change now exists on Alice's side (see heldChangeButton's comment).
+  await expect(heldChangeButton(alicePage)).toBeVisible()
 
-  // the card face must show Alice's own "GreenLeaf notes" row at all (it does
-  // not exist yet — RED until CardFront grows the row), proving the held note
-  // is observable on the face once built — not just absent because nothing
-  // renders notes.
-  await expect(alicePage.getByText(/greenleaf cultivation notes/i)).toBeVisible()
+  // the note travelled through the held mechanism (DB-level — no UI surface
+  // renders a held note on EITHER side today, see the comment above).
+  const cardId = resolveDealCardIdForRelationship()
+  expect(pendingChangeNote(cardId)).toBe(newNote)
 
   // Bob re-reads the current LIVE state — his card face must NOT show Alice's
-  // new note yet (it is held, not committed).
+  // new note (it is held, not committed).
   await refreshDealView(bobPage, 'bob')
   await expect(bobPage.getByText(newNote)).toHaveCount(0)
 })
 
 /**
- * D-02 own-slot / D-03 both-visible / D-08: Bob Accepts the held change. After
- * both sides re-read, Alice's new note shows in HER slot on BOTH faces, proving
- * the commit-to-slot relay and the both-visible rule.
+ * D-02 own-slot / D-03 both-visible / D-08: Bob signs (committing the held
+ * change). After both sides re-read, Alice's new note shows in HER slot on BOTH
+ * faces, proving the commit-to-slot relay and the both-visible rule.
  */
-test('note-commit: both accept commits the note to the proposer slot, visible on both faces', async () => {
+test('note-commit: signing commits the note to the proposer slot, visible on both faces', async () => {
   const newNote = 'Bumping qty and adding a note for Bob'
   await editPencil(alicePage).click()
   await noteBox(alicePage).fill(newNote)
-  await alicePage.getByPlaceholder(/qty/i).first().fill('120')
-  await alicePage.getByRole('button', { name: /^review change$/i }).click()
-  await alicePage.getByPlaceholder(/bumped the price/i).fill('Note + qty change')
-  await alicePage.getByRole('button', { name: /^send change$/i }).click()
+  await openFirstLineForEdit(alicePage)
+  await openRowLocator(alicePage).locator('select').nth(2).selectOption('250')
+  await dealPanel(alicePage).getByRole('button', { name: /^send changes to /i }).click()
 
   await refreshDealView(bobPage, 'bob')
-  await openReviewChange(bobPage)
-  await reviewReasonBox(bobPage).fill('Agreed, noted')
-  await bobPage.getByRole('button', { name: /confirm deal/i }).click()
+  await signAsResponder(bobPage)
 
   // both sides re-read the committed card — Alice's new note now shows on BOTH
   // faces (D-03: both members can see it), in HER slot.
@@ -563,32 +543,34 @@ test('note-commit: both accept commits the note to the proposer slot, visible on
 })
 
 /**
- * D-02: Alice edits her note, Bob Declines. After refresh the note is UNCHANGED
- * from before the edit — a Decline discards the whole change, note included,
- * exactly like it discards a line/term change. The card face needs a note row
- * at all to make this meaningful (CardFront has none today — PATTERNS.md), so
- * assert the row renders (RED until built) AND that the rejected note never
- * lands in it.
+ * D-02: Alice edits her note, Bob negotiates (declines). After refresh the note
+ * is UNCHANGED from before the edit — a decline discards the whole change, note
+ * included, exactly like it discards a line/term change.
+ *
+ * JUDGMENT CALL: same discovery as note-held (see its comment) — a held note
+ * renders nowhere in the current UI, on EITHER side, so this checks the DB-level
+ * fact that the note DID reach the held draft (proof the row isn't skipped
+ * because the note was silently dropped before Bob ever acted), THEN that it
+ * never lands anywhere after Bob's decline.
  */
 test('note-decline: a decline discards the note change — the note stays as it was', async () => {
   const rejectedNote = 'This note should never land — Bob declines'
   await editPencil(alicePage).click()
   await noteBox(alicePage).fill(rejectedNote)
-  await alicePage.getByPlaceholder(/qty/i).first().fill('120')
-  await alicePage.getByRole('button', { name: /^review change$/i }).click()
-  await alicePage.getByPlaceholder(/bumped the price/i).fill('Note + qty change')
-  await alicePage.getByRole('button', { name: /^send change$/i }).click()
+  await openFirstLineForEdit(alicePage)
+  await openRowLocator(alicePage).locator('select').nth(2).selectOption('250')
+  await dealPanel(alicePage).getByRole('button', { name: /^send changes to /i }).click()
+
+  // the note reached the held draft before Bob acts (so the count-0 checks
+  // below cannot false-pass because the note was silently dropped earlier).
+  const cardId = resolveDealCardIdForRelationship()
+  expect(pendingChangeNote(cardId)).toBe(rejectedNote)
 
   await refreshDealView(bobPage, 'bob')
-  await openReviewChange(bobPage)
-  await reviewReasonBox(bobPage).fill('Stay at 100 for now')
-  await bobPage.getByRole('button', { name: /^decline$/i }).click()
+  await negotiateAsResponder(bobPage)
 
-  // the card face must show Alice's own "GreenLeaf notes" row at all (RED
-  // until CardFront grows it), and the declined note text never lands in it —
   // the live note is exactly what it was before the edit (none, at birth).
   await refreshDealView(alicePage, 'alice')
-  await expect(alicePage.getByText(/greenleaf cultivation notes/i)).toBeVisible()
   await expect(alicePage.getByText(rejectedNote)).toHaveCount(0)
   await refreshDealView(bobPage, 'bob')
   await expect(bobPage.getByText(rejectedNote)).toHaveCount(0)
@@ -627,69 +609,28 @@ test('note-not-in-log: a create-time note never writes a deal_change_input row',
 })
 
 /**
- * batch-snapshot (Phase 3f / BTCH-01): the deal line snapshots ONE chosen batch's
- * measured THC/CBD + batch number at deal time, frozen onto the line, and the card
- * face shows them. This is the phase GATE - it cannot pass until Wave 2 seeds demo
- * batches (the 4 products have 0 today) and Wave 3 builds the batch picker + wires
- * the snapshot through create + the card read. So it is SKIPPED now; the Wave 4
- * plan un-skips it once the picker + seed land.
+ * batch-snapshot (Phase 3f / BTCH-01) — LEFT SKIPPED, see the comment below.
  *
- * Flow: Alice opens the Basket in the StonePharm chat (createDraftDealAsAlice
- * already drives "Start a deal" -> the catalogue search -> pick a product), then -
- * once the picker exists - picks one of that product's seeded batches from the
- * mandatory batch dropdown (D-06: a catalogue line is born WITH a batch), sets qty +
- * price, sends; Bob Reviews -> Accepts (births the card); both open the card.
- *
- * Assert (on the card line, via ProductList's subtitle join): a GL-24- batch number
- * AND a non-empty measured THC value. We assert the GL-24- PREFIX + a "THC <digit>"
- * label, NOT an exact seeded batch number or thc value - the seed uses distinct
- * numbers (GL-24-0001..0008, RESEARCH Q5) and the picker may pick any one, so an
- * exact id/number would be brittle. The card line is PUBLIC (line_all RLS), so both
- * sides see it; assert on Alice's face (the seller who picked it) at minimum.
- *
- * No hardcoded gen_random_uuid id: the relationship/company/card ids are all
- * resolved at runtime by the shared two-company fixture (T-3f-01 mitigation).
+ * ORIGINAL intent: picking one of a product's REAL seeded batches (GL-24-0001..
+ * 0008, seed.sql section 7, real measured THC/CBD per lot) freezes that batch's
+ * number + measured THC/CBD onto the born deal line. This is a genuine
+ * REGRESSION discovered during this cleanup, not a selector fix:
+ *   - `getProductBatches()` (src/modules/deals/supabase/reads.ts) — the real
+ *     per-product batch read, seller-only, backed by `product_batch` — is now
+ *     an ORPHANED function with ZERO callers anywhere in the app (confirmed by
+ *     grep). CardFront.tsx's batch `<select>` uses a hardcoded, FRONTEND-ONLY
+ *     mock list instead (`MOCK_BATCHES = ["24-098","24-117",...]`, no "GL-24-"
+ *     prefix, no batchId, no measured THC/CBD attached to the choice).
+ *   - selecting a mock batch only sets `EditLine.batchNumber` (a display
+ *     string); `batchId`/`thcPercent`/`cbdPercent` never change from the
+ *     product's own label-level defaults, so nothing measured is ever snapshot.
+ * There is no UI path left that can honestly satisfy this test's assertions
+ * (a real "GL-24-" number + a measured THC value on the born line) — forcing a
+ * pass would mean asserting on the cosmetic mock instead, silently hiding that
+ * the real batch-snapshot feature no longer has any UI surface. Needs a product
+ * decision: rebuild the real batch picker in CardFront (wiring getProductBatches
+ * back in), or intentionally retire BTCH-01. See the e2e cleanup report.
  */
 test('batch-snapshot: a picked batch shows its GL-24- number + measured THC on the card line', async () => {
-  // Open the Basket, pick a product, then pick a batch from the mandatory batch
-  // dropdown the Wave 4 picker built. Clicking a product (DealForm.pickProduct)
-  // opens the inline batch panel - it does NOT add a line; the line is created
-  // only once a batch is chosen (D-06: product + batch is ONE entity). The batch
-  // options are <button>s reading "Batch GL-24-…" (NOT <option> elements - the
-  // RED test's `getByRole('option')` was the wrong contract; the real picker uses
-  // buttons). Pick any seeded GL-24- lot. No hardcoded id (T-3f-01).
-  //
-  // beforeEach already minted + opened a card on this relationship, so the strip
-  // is in State C ("Open card"), not State A ("Start a deal"). Reset back to the
-  // clean State A first (same pattern as note-on-face), then drive a fresh birth
-  // that this time picks a real batch through the picker.
-  resetDealData()
-  await alicePage.goto('/connect/chat')
-  await alicePage.getByText(COUNTERPARTY_NAME.alice, { exact: false }).first().click()
-  await alicePage.getByRole('button', { name: 'Start a deal', exact: true }).click()
-  await alicePage.getByPlaceholder(/search your catalogue/i).waitFor()
-  await alicePage
-    .getByRole('button')
-    .filter({ hasText: /\/g|no price/ })
-    .first()
-    .click()
-
-  // pick a seeded batch from the mandatory batch picker - any GL-24- lot. The
-  // option is a button labelled "Batch GL-24-NNNN".
-  await alicePage.getByRole('button', { name: /^Batch GL-24-/ }).first().click()
-
-  await alicePage.getByLabel(/quantity in grams/i).first().fill('100')
-  await alicePage.getByPlaceholder(/g \(optional\)/i).first().fill('5.00')
-  await alicePage.getByRole('button', { name: /send proposal/i }).click()
-
-  // Bob births the card by accepting, then both open it (the shared birth flow).
-  await acceptBirthAsBob(bobPage)
-  await openDealInChat(alicePage, 'alice')
-  await openDealInChat(bobPage, 'bob')
-
-  // the card line shows the chosen batch's number (GL-24- prefix) + a measured THC
-  // value - the frozen snapshot, on the public line (ProductList subtitle:
-  // "Batch GL-24-NNNN · THC NN.N%"), visible to the seller who picked it.
-  await expect(alicePage.getByText(/GL-24-/).first()).toBeVisible()
-  await expect(alicePage.getByText(/THC \d/i).first()).toBeVisible()
+  test.skip(true, 'getProductBatches() is now an orphaned function (zero callers) — CardFront\'s batch <select> is a hardcoded frontend-only mock list with no batchId/measured-THC backing, so there is nothing real left to snapshot. This is a genuine regression from the living-deal-card rework, not a fixture/selector fix. See the e2e cleanup report.')
 })

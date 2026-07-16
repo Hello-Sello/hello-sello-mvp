@@ -6,9 +6,15 @@ import { runSummary, type SummaryLine } from "../_shared/sella/summarize.ts";
 // (a human just clicked Update), so by the placement rule it is triggered INLINE by the
 // editDeal server action - but the Bedrock call lives HERE so the key stays in Supabase
 // (Path A). It reads the before/after versions + the editor's note, asks Haiku for one
-// neutral sentence, and writes it BOTH to deal_card_log (changed_by='sella', shows in the
-// card's Logs tab with the Sparkles icon) AND as a `sella`-authored `deal_card_updated`
+// neutral sentence, and writes it BOTH to deal_card_log AND as a `deal_card_updated`
 // message in the deal workspace chat (decision: chat line AND log). Fail-soft throughout.
+//
+// OBS-3 / D-10: the mechanical narration author is `system` (neutral audit voice), NOT
+// `sella` - Sella is a functionless placeholder this phase, so the brand is not attached
+// to auto-narration. Both the log's `changed_by` and the chat message `sender` are
+// 'system'; the idempotency probe matches the same author. The `ai: true` metadata tag
+// STAYS (the summary is still Haiku-generated - Art. 50 transparency is about provenance,
+// not display author). Safe: the sella_detect trigger fires only on sender='person'.
 
 interface LineRow {
   product_name: string;
@@ -63,13 +69,15 @@ Deno.serve(async (req: Request) => {
   const vOld = vNew - 1;
   if (vOld < 1) return json({ deal_card_id: cardId, version: vNew, skipped: "no prior version (creation, not an edit)" }, 200);
 
-  // idempotency: Sella summarizes each version at most once
+  // idempotency: summarize each version at most once. The probe MUST match the
+  // author the log is written under below (OBS-3: 'system'), or it would never
+  // find the prior row and re-summarize on every call.
   const { data: existing } = await supabase
     .from("deal_card_log")
     .select("id")
     .eq("deal_card_id", cardId)
     .eq("version", vNew)
-    .eq("changed_by", "sella")
+    .eq("changed_by", "system")
     .maybeSingle();
   if (existing) {
     return json({ deal_card_id: cardId, version: vNew, skipped: "already summarized" }, 200);
@@ -110,13 +118,13 @@ Deno.serve(async (req: Request) => {
   });
   if (!outcome.ok) return json({ deal_card_id: cardId, version: vNew, outcome }, 200);
 
-  // 1. the log line (changed_by='sella') - shows in the card's Logs tab (Sparkles icon)
+  // 1. the log line (changed_by='system', OBS-3) - shows in the card's Logs tab
   await supabase.from("deal_card_log").insert({
     deal_card_id: cardId,
     version: vNew,
     change_summary: outcome.summary,
     origin: "deal_chat",
-    changed_by: "sella",
+    changed_by: "system",
     changed_by_person_id: null,
   });
 
@@ -136,11 +144,11 @@ Deno.serve(async (req: Request) => {
   for (const threadId of targets) {
     const { error: mErr } = await supabase.from("chat_message").insert({
       thread_id: threadId,
-      sender: "sella",
+      sender: "system", // OBS-3/D-10: neutral audit voice while Sella is a placeholder
       sender_person_id: null,
       type: "deal_card_updated",
       body: outcome.summary,
-      metadata: { deal_card_id: cardId, version: vNew, ai: true }, // ai:true = Art. 50 tag
+      metadata: { deal_card_id: cardId, version: vNew, ai: true }, // ai:true = Art. 50 tag (still Haiku-generated)
     });
     if (!mErr) postedTo.push(threadId);
   }

@@ -16,6 +16,7 @@
  */
 import { createClient } from "@/shared/db/client";
 import { sellerCompanyId, viewerSide, lineTotalOf, lineMarginOf } from "../lib/derive";
+import { promotionSavings } from "../lib/promotion";
 import { otherOf } from "../lib/recipient";
 import { seededSignals } from "../lib/signals";
 import type {
@@ -40,12 +41,13 @@ import type {
   ProductBatchView,
   PendingChangeView,
   PendingProposalView,
+  PromotionConditionDelta,
+  PromotionLineDelta,
+  PromotionState,
+  PromotionView,
   ProposalLineView,
   ProposalSource,
   ProposalVote,
-  StageCode,
-  StageCompletionView,
-  StageView,
   ThingStatus,
   ThingType,
   ThingView,
@@ -53,20 +55,6 @@ import type {
 } from "../types";
 
 type Meta = Record<string, unknown>;
-
-/**
- * Clean display labels for the 5 stages, keyed by `deal_stage.code`. The
- * `deal_stage.description` column reads like a sentence ("Negotiating terms");
- * the pipeline bar + Things headings want a short title, so we map here. The
- * stage order still comes from `deal_stage.sort_order`, never this map.
- */
-const STAGE_LABELS: Record<StageCode, string> = {
-  negotiation: "Negotiation",
-  compliance_quality: "Compliance & Quality",
-  agreement: "Agreement",
-  payment: "Payment",
-  fulfilment_delivery: "Fulfilment & Delivery",
-};
 
 const str = (m: Meta, k: string): string | null => {
   const v = m[k];
@@ -194,6 +182,11 @@ export async function getPendingProposal(
   const currency = typeof draft["currency"] === "string" ? (draft["currency"] as string) : "EUR";
   const rawLines = Array.isArray(draft["line_items"]) ? (draft["line_items"] as Meta[]) : [];
   const lines: ProposalLineView[] = rawLines.map((l) => ({
+    // A birth PROPOSAL draft carries no product link (a manual or Sella-detected
+    // proposal never resolves one), so this is null here - there is no existing
+    // card to diff against yet. The field exists so the held-CHANGE path
+    // (getPendingChange) can populate it.
+    productId: typeof l["productId"] === "string" ? (l["productId"] as string) : null,
     name: typeof l["name"] === "string" && l["name"].trim() ? (l["name"] as string) : "Item",
     quantity: Number(l["quantity"] ?? 0),
     unit: typeof l["unit"] === "string" ? (l["unit"] as string) : "g",
@@ -288,6 +281,10 @@ export async function getPendingChange(
   const currency = typeof draft["currency"] === "string" ? (draft["currency"] as string) : "EUR";
   const rawLines = Array.isArray(draft["line_items"]) ? (draft["line_items"] as Meta[]) : [];
   const lines: ProposalLineView[] = rawLines.map((l) => ({
+    // SELL-01/D-18: the held draft line already persists `productId` (camelCase,
+    // written by actions.ts `proposeDealChange`); carry it so the on-card diff
+    // (07-07) can pair current-vs-proposed lines BY id. Free-typed lines -> null.
+    productId: typeof l["productId"] === "string" ? (l["productId"] as string) : null,
     name: typeof l["name"] === "string" && l["name"].trim() ? (l["name"] as string) : "Item",
     quantity: Number(l["quantity"] ?? 0),
     unit: typeof l["unit"] === "string" ? (l["unit"] as string) : "g",
@@ -311,6 +308,121 @@ export async function getPendingChange(
     iProposed: row.proposed_by_company === viewerCompanyId,
     baseVersion: row.base_version,
     proposerReason: row.proposer_reason,
+  };
+}
+
+/** The `deal_promotion` row shape we read (the table is not in the generated
+ * types yet, so we narrow the casted `select` result here). */
+type PromotionRow = {
+  deal_card_id: string;
+  base_version: number;
+  offered_by_company: string;
+  line_deltas: Meta[];
+  condition_deltas: Meta[];
+  state: string;
+};
+
+/** Coerce one stored jsonb line-delta into a typed PromotionLineDelta. */
+const toLineDelta = (m: Meta): PromotionLineDelta => ({
+  productId: typeof m["productId"] === "string" ? (m["productId"] as string) : null,
+  productName:
+    typeof m["productName"] === "string" && m["productName"].trim()
+      ? (m["productName"] as string)
+      : "Reward",
+  quantity: Number(m["quantity"] ?? 0),
+  unit: typeof m["unit"] === "string" ? (m["unit"] as string) : "g",
+  unitPrice: Number(m["unitPrice"] ?? 0),
+  currency: typeof m["currency"] === "string" ? (m["currency"] as string) : "EUR",
+  referencePrice: m["referencePrice"] == null ? null : Number(m["referencePrice"]),
+});
+
+/** A reward delta valued at a given price, as a minimal LineItemView for the
+ * canonical `promotionSavings` money (only the money-bearing fields matter). */
+const rewardLineAt = (d: PromotionLineDelta, price: number): LineItemView => ({
+  id: "reward",
+  productId: d.productId,
+  productName: d.productName,
+  thumbnailTint: null,
+  cultivar: null,
+  quantity: d.quantity,
+  unit: d.unit,
+  unitPrice: price,
+  currency: d.currency,
+  lineTotal: 0,
+  pzn: null,
+  batchId: null,
+  batchNumber: null,
+  thcPercent: null,
+  cbdPercent: null,
+});
+
+/**
+ * The card's current promotion, resolved for the viewer (07-06) - or null when
+ * the card has no promotion. Reads the newest `deal_promotion` row for the card
+ * (RLS = relationship member, so it returns for BOTH sides). The saving is
+ * pre-computed on the CANONICAL per-gram money (D-25): each reward line is valued
+ * twice - at its struck `referencePrice` (worth) and at its `unitPrice` (paid) -
+ * and `promotionSavings` returns worth minus paid. Resolving `iOffered` HERE keeps
+ * the yellow track (07-07) a pure renderer.
+ *
+ * `deal_promotion` is not in the generated types, so the table read uses the
+ * localized `as never` cast (the same discipline as `getPendingChange`).
+ */
+export async function getPromotion(dealCardId: string): Promise<PromotionView | null> {
+  const supabase = createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data: viewerPerson } = await supabase
+    .from("person")
+    .select("company_id")
+    .eq("id", user.id)
+    .single();
+  const viewerCompanyId: string | null = viewerPerson?.company_id ?? null;
+
+  // the card's current promotion (newest first). There is no one-active-row lock,
+  // so a card could carry more than one over its life; the yellow track shows the
+  // latest. The table is not in the generated types -> the table name is cast.
+  const { data, error } = await supabase
+    .from("deal_promotion" as never)
+    .select("deal_card_id, base_version, offered_by_company, line_deltas, condition_deltas, state")
+    .eq("deal_card_id", dealCardId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  const row = data as PromotionRow;
+
+  const lineDeltas: PromotionLineDelta[] = (
+    Array.isArray(row.line_deltas) ? row.line_deltas : []
+  ).map(toLineDelta);
+  const rawConditions = Array.isArray(row.condition_deltas) ? row.condition_deltas : [];
+  const conditionDeltas: PromotionConditionDelta[] = rawConditions.map((m) => ({
+    kind: typeof m["kind"] === "string" ? (m["kind"] as string) : "reward",
+    label: typeof m["label"] === "string" ? (m["label"] as string) : "Reward",
+  }));
+
+  const currency = lineDeltas[0]?.currency ?? "EUR";
+
+  // D-25: worth (each reward at its struck referencePrice) minus paid (at its
+  // actual unitPrice), on the canonical per-gram money. A reward with no known
+  // referencePrice contributes nothing to "worth", so it yields no phantom saving.
+  const worthLines = lineDeltas.map((d) => rewardLineAt(d, d.referencePrice ?? d.unitPrice));
+  const paidLines = lineDeltas.map((d) => rewardLineAt(d, d.unitPrice));
+  const savings = promotionSavings(worthLines, paidLines);
+
+  return {
+    dealCardId: row.deal_card_id,
+    state: row.state as PromotionState,
+    baseVersion: row.base_version,
+    lineDeltas,
+    conditionDeltas,
+    savings,
+    currency,
+    iOffered: viewerCompanyId != null && row.offered_by_company === viewerCompanyId,
   };
 }
 
@@ -749,108 +861,87 @@ export async function getWorkspace(dealCardId: string): Promise<DealWorkspaceVie
 }
 
 /**
- * Load the 5 stages + their Things for the workspace (3c). The stage list and
- * its order come from `deal_stage` (schema-driven, never hardcoded); each
- * stage carries the Things whose `stage_code` matches, ordered by `sort_order`.
- * RLS (`thing_all`) scopes Things to deal members - both relationship companies
- * see the company_wide workspace's Things. A stage with no Things returns empty.
- *
- * The "current stage" highlight is NOT computed here: the 3c bar is screen-only
- * (D2), so the highlight lives as local React state, not in this read.
+ * Every person in BOTH deal companies (07-07 follow-up) - the assignable ROSTER
+ * for Open Items' @mention + assign list, not just the deal's two members. Reads
+ * the card's relationship, then all people in company_a + company_b. RLS (own
+ * company + the connect counterparty-visibility policy) scopes what returns.
+ * Shaped like MemberView so it drops straight into OpenItems; `role` is filler.
  */
-export async function getStagesAndThings(workspaceId: string): Promise<StageView[]> {
+export async function getDealPeople(dealCardId: string): Promise<MemberView[]> {
   const supabase = createClient();
 
-  const [stagesRes, thingsRes] = await Promise.all([
-    supabase
-      .from("deal_stage")
-      .select("code, sort_order")
-      .order("sort_order", { ascending: true }),
-    supabase
-      .from("thing")
-      // assignee_person_id (D-09, column exists) + is_private/owner_company_id
-      // (D-10, new columns) are not in the generated row type yet, so the
-      // select-string is cast to its narrower literal and the extras are read off
-      // a locally-cast view below (same as-never discipline as getDealCard's
-      // batch/note columns). DO NOT regenerate database.types.
-      .select(
-        "id, title, type, status, stage_code, sort_order, assignee_person_id, is_private, owner_company_id" as "id, title, type, status, stage_code, sort_order",
-      )
-      .eq("deal_workspace_id", workspaceId)
-      .is("deleted_at", null)
-      .order("sort_order", { ascending: true }),
-  ]);
-  if (stagesRes.error) throw stagesRes.error;
-  if (thingsRes.error) throw thingsRes.error;
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("getDealPeople: no authenticated user");
 
-  // group Things under their stage code
-  const byStage = new Map<string, ThingView[]>();
-  for (const r of thingsRes.data ?? []) {
-    // the new columns are not on the generated row type (the select cast above);
-    // read them off a locally-cast view (same as the batch/note discipline).
-    const v = r as unknown as {
-      assignee_person_id: string | null;
-      is_private: boolean;
-      owner_company_id: string | null;
-    };
-    const view: ThingView = {
-      id: r.id,
-      title: r.title,
-      type: r.type as ThingType,
-      status: r.status as ThingStatus,
-      stageCode: r.stage_code as StageCode,
-      sortOrder: r.sort_order,
-      assigneePersonId: v.assignee_person_id ?? null,
-      isPrivate: v.is_private ?? false,
-      ownerCompanyId: v.owner_company_id ?? null,
-    };
-    const list = byStage.get(r.stage_code) ?? [];
-    list.push(view);
-    byStage.set(r.stage_code, list);
-  }
+  const { data: cardRow, error: cardErr } = await supabase
+    .from("deal_card")
+    .select("relationship_id")
+    .eq("id", dealCardId)
+    .single();
+  if (cardErr) throw cardErr;
 
-  return (stagesRes.data ?? []).map((s) => {
-    const code = s.code as StageCode;
-    const things = byStage.get(code) ?? [];
-    return {
-      code,
-      label: STAGE_LABELS[code] ?? code,
-      sortOrder: s.sort_order,
-      things,
-      thingsTotal: things.length,
-      thingsDone: things.filter((t) => t.status === "done").length,
-    };
-  });
+  const { data: rel, error: relErr } = await supabase
+    .from("relationship")
+    .select("company_a_id, company_b_id")
+    .eq("id", cardRow.relationship_id)
+    .single();
+  if (relErr) throw relErr;
+
+  const companyIds = [rel.company_a_id, rel.company_b_id];
+  const { data: people, error: pplErr } = await supabase
+    .from("person")
+    .select("id, first_name, last_name, company_id")
+    .in("company_id", companyIds);
+  if (pplErr) throw pplErr;
+
+  const { data: companies } = await supabase
+    .from("company")
+    .select("id, name")
+    .in("id", companyIds);
+  const companyNameById = new Map((companies ?? []).map((c) => [c.id, c.name] as const));
+
+  return (people ?? []).map((p) => ({
+    id: p.id,
+    personId: p.id,
+    name: [p.first_name, p.last_name].filter(Boolean).join(" ") || "Unknown person",
+    companyId: p.company_id ?? "",
+    companyName: (p.company_id && companyNameById.get(p.company_id)) || "Unknown company",
+    role: "member" as MemberRole,
+    isViewer: p.id === user.id,
+  }));
 }
 
 /**
- * Read a workspace's STORED stage-done state (Phase 5, D-14). Each row is a
- * deliberate "Mark stage done" click; a stage with NO row reads as not-done.
- * `deal_stage_completion` is SHARED (both sides see progress), so RLS already
- * returns every member's view - no manual filter. The table is not in the
- * generated types yet, so the table name uses the `as never` cast (Muskan's
- * documented pattern; no full regen this phase).
+ * The card's Open Items - the flat, stageless Things checklist (D-15). RLS on
+ * `thing` already scopes to workspace membership (the same guarantee
+ * getDealArtifacts relies on), so this is a flat workspace-scoped fetch with NO
+ * manual company filter: the other side's private rows never return here. All
+ * selected columns are on the generated `thing` Row type, so no select-string
+ * cast is needed; `type` and `status` are stored as codes and narrowed to their
+ * literal unions on map (the same discipline as `deal_type as DealType`).
  */
-export async function getStageCompletions(
-  workspaceId: string,
-): Promise<StageCompletionView[]> {
+export async function getThings(workspaceId: string): Promise<ThingView[]> {
   const supabase = createClient();
-
   const { data, error } = await supabase
-    .from("deal_stage_completion" as never)
-    .select("stage_code, marked_done_at, marked_done_by_person_id")
-    .eq("deal_workspace_id", workspaceId);
+    .from("thing")
+    .select(
+      "id, title, type, status, sort_order, assignee_person_id, is_private, owner_company_id",
+    )
+    .eq("deal_workspace_id", workspaceId)
+    .is("deleted_at", null)
+    .order("sort_order", { ascending: true });
   if (error) throw error;
-
-  const rows = (data ?? []) as unknown as {
-    stage_code: string;
-    marked_done_at: string | null;
-    marked_done_by_person_id: string | null;
-  }[];
-  return rows.map((r) => ({
-    stageCode: r.stage_code as StageCode,
-    markedDoneAt: r.marked_done_at ?? null,
-    markedDoneByPersonId: r.marked_done_by_person_id ?? null,
+  return (data ?? []).map((r) => ({
+    id: r.id,
+    title: r.title,
+    type: r.type as ThingType,
+    status: r.status as ThingStatus,
+    sortOrder: r.sort_order,
+    assigneePersonId: r.assignee_person_id,
+    isPrivate: r.is_private,
+    ownerCompanyId: r.owner_company_id,
   }));
 }
 

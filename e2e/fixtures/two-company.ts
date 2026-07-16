@@ -1,34 +1,49 @@
 /**
- * Two-company test fixture for the held-deal-change flow (Phase 1).
+ * Two-company test fixture for the held-deal-change flow.
  *
  * SETUP ONLY — this module makes NO behavioral assertions. It gives the
- * deal-change spec three things it needs:
+ * deal-change / chat-phase7 specs three things they need:
  *
  *   1. `loginAs(page, who)`        — sign one page in as Alice or Bob.
  *   2. `openTwoContexts(browser)`  — two independent browser contexts so Alice
  *                                    and Bob hold separate sessions (required to
- *                                    test the two-sided accept / decline gate).
- *   3. `createDraftDealAsAlice(p)` — drive the in-app deal-create flow to get a
+ *                                    test the two-sided sign / negotiate gate).
+ *   3. `createDraftDealAsAlice(p)` — drive the in-app deal-CREATE flow to birth a
  *                                    live draft card both sides can act on
  *                                    (the LOCAL DB has no seeded cloud card, so
  *                                    every test mints its own).
  *
- * Selectors mirror `e2e/smoke.spec.ts` (the only existing e2e) and the real
- * components read this session:
+ * THE CURRENT (chj/07-08 "living deal card") flow, driven here:
+ *   DealPin.tsx's "Start a deal" button dispatches `hs:create-deal-card`, which
+ *   `DealCardPanelHost` (src/app/connect/DealCardPanelHost.tsx) turns into an
+ *   empty CREATE-mode card in the SAME 50/50 side panel a real card uses — the
+ *   real `CardFront`/`DealCard` component, permanently in edit mode, seeded via
+ *   `emptyDraftView(buyerName)`. There is no more modal, no product search box,
+ *   no "Send proposal" chat message, and no accept step for the other side:
+ *   pressing "Send deal" calls `createDeal(...)` directly and the card is REAL
+ *   the instant that resolves (D-32: no navigation, the panel swaps in place).
+ *   `acceptBirthAsBob` (the old propose->accept birth door) no longer exists —
+ *   there is nothing left for the other side to accept.
+ *
+ * Selectors mirror the real components as read this session:
  *   - login form (src/app/(auth)/login/page.tsx + AuthCard.tsx):
  *       input[name="email"], input[name="password"], a "Sign in" submit button.
- *   - the deal create flow (DealPin.tsx "Start a deal" → CreateDealForm →
- *       DealForm "Send proposal").
- *
- * Resilient by design: we prefer getByRole + name regexes over brittle class
- * selectors, because the held-change UI does not exist yet — these helpers are
- * the stable contract plans 02-04 build the app up to meet.
+ *   - the deal card panel: `<aside aria-label="Deal card">` (dealPanel below),
+ *     mounted once at the Connect layout root (DealCardPanelHost).
+ *   - the create-mode card (CardFront.tsx): a `+ Add product from your shop…`
+ *     `<select>` (seller-only, only rendered when the catalogue is non-empty),
+ *     per-row Batch/Unit-size `<select>`s (MOCK options, no real batch data),
+ *     a Price `<input type="number">`, a Note `<textarea>`, and a "Send deal"
+ *     button (disabled until at least one product line exists).
  *
  * Local stack: app on http://localhost:3000 (Playwright baseURL), Supabase on
  * 127.0.0.1:54321. Seeded logins: alice@greenleaf.test / bob@stonepharm.test,
- * password `password123`.
+ * password `password123`. Alice's (GreenLeaf's) real catalogue always includes
+ * "Pedanios 31/1 COS-CA" (supplier_product_code AUR-1A, seed.sql section 6) —
+ * used here as the deterministic create-time product so downstream tests can
+ * rely on a stable name/price/quantity.
  */
-import type { Browser, BrowserContext, Page } from '@playwright/test'
+import type { Browser, BrowserContext, Locator, Page } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
 
 /** The two seeded counterparties — Alice (GreenLeaf) and Bob (StonePharm). */
@@ -59,8 +74,6 @@ const DB_URL = 'postgresql://postgres:postgres@127.0.0.1:54322/postgres'
  *     deal_card_id, per the chat_thread_deal_has_card CHECK);
  *   - deal_change_input is removed before deal_card_log (it FK's the log);
  *   - workspace + line-item children are removed before their parents.
- *
- * Runs straight against the local Postgres via psql (no `pg` dep in the repo).
  */
 const RESET_SQL = `
 BEGIN;
@@ -91,10 +104,10 @@ DELETE FROM pending_inbox_item  WHERE deal_card_id IN (SELECT id FROM _cards);
 DELETE FROM deal_card WHERE id IN (SELECT id FROM _cards);
 -- Phase 2 (announcements): the deal thread is re-minted each test (it self-cleans
 -- above with the card), but the p2p thread PERSISTS across serial tests. So a prior
--- test's accept/decline announcement (sender='sella', type 'deal_card_updated' /
+-- test's accept/decline announcement (sender='sella'/'system', type 'deal_card_updated' /
 -- 'deal_change_declined') would otherwise leak into the next test's p2p chat and make
 -- a getByText assertion match the stale bubble. Widen this delete to clear all three
--- projection types from the relationship's p2p thread (RESEARCH Pitfall 4).
+-- projection types from the relationship's p2p thread.
 DELETE FROM chat_message
   WHERE type IN ('deal_detected', 'deal_card_updated', 'deal_change_declined')
   AND thread_id IN (SELECT id FROM chat_thread WHERE relationship_id = :'rel');
@@ -194,9 +207,9 @@ export function countRelationshipMessages(): number {
  * `birthAndOpenDeal`). `resetDealData` truncates every prior card on this
  * relationship, so after a birth exactly one card exists — `limit 1` is safe.
  *
- * Needed by the "note-not-in-log" test (D-05): it must pass a real card id to
- * `countDealChangeInputForCard`, and the card overlay exposes no id in the DOM
- * or URL (it opens as an in-page overlay, not a routed page).
+ * Needed by the "note-not-in-log" test: it must pass a real card id to
+ * `countDealChangeInputForCard`, and the card panel exposes no id in the DOM
+ * or URL (D-32: it opens as an in-page 50/50 panel, never a routed page).
  */
 export function resolveDealCardIdForRelationship(): string {
   const bin = psqlBin()
@@ -211,16 +224,11 @@ export function resolveDealCardIdForRelationship(): string {
 }
 
 /**
- * Count the live `deal_change_input` rows for ONE deal card (NOTE-01 / D-05).
- * The create-time note must NEVER add a log row — only a held CHANGE (the
- * Accept/Decline reason gate) writes `deal_change_input`. The card id is
- * passed in by the caller, resolved at RUNTIME from the freshly-born card
- * (NEVER hardcoded — the seed regenerates ids on every `supabase db reset`).
- *
- * Mirrors countRelationshipMessages's shape exactly: psqlBin() + execFileSync
- * + `-At -c` + `.trim()` + `Number(out)`. `deal_change_input` is already a
- * child of `deal_card`, so resetDealData's existing truncate covers it — no
- * new reset row needed here.
+ * Count the live `deal_change_input` rows for ONE deal card (NOTE-01). The
+ * create-time note must NEVER add a log row — only a held CHANGE (a negotiate /
+ * sign resolution) writes `deal_change_input`. The card id is passed in by the
+ * caller, resolved at RUNTIME from the freshly-born card (NEVER hardcoded — the
+ * seed regenerates ids on every `supabase db reset`).
  */
 export function countDealChangeInputForCard(dealCardId: string): number {
   const bin = psqlBin()
@@ -235,6 +243,31 @@ export function countDealChangeInputForCard(dealCardId: string): number {
     { encoding: 'utf8' },
   ).trim()
   return Number(out)
+}
+
+/**
+ * The `note` field of a card's currently-HELD change draft, or null if none is
+ * held. A held note is NOT rendered anywhere in the current UI while it is only
+ * held (CardFront's read-mode Note block reseeds from the SERVER's still-
+ * uncommitted `myNote`/`theirNote` the moment `data.pendingChange` changes —
+ * confirmed empirically: a just-sent note does not appear on the sender's own
+ * screen until the change actually commits). This is the honest, DB-level way
+ * to prove a held change's note "held, not committed" — mirrors
+ * countDealChangeInputForCard's shape exactly.
+ */
+export function pendingChangeNote(dealCardId: string): string | null {
+  const bin = psqlBin()
+  const out = execFileSync(
+    bin,
+    [
+      DB_URL,
+      '-At',
+      '-c',
+      `select draft->>'note' from public.deal_pending_change where deal_card_id = '${dealCardId}'`,
+    ],
+    { encoding: 'utf8' },
+  ).trim()
+  return out || null
 }
 
 const CREDENTIALS: Record<Who, { email: string; password: string }> = {
@@ -266,7 +299,7 @@ export async function loginAs(page: Page, who: Who): Promise<void> {
 /**
  * Open two independent browser contexts and return a logged-in page for each
  * side. Separate contexts (not just two tabs) are required so Alice's and Bob's
- * Supabase sessions never share cookies — the two-sided accept / decline gate
+ * Supabase sessions never share cookies — the two-sided sign / negotiate gate
  * only makes sense when each side acts as itself.
  */
 export async function openTwoContexts(
@@ -287,29 +320,69 @@ export async function openTwoContexts(
 }
 
 /**
- * Drive the in-app deal-create flow as Alice to mint a fresh DRAFT deal card
- * with StonePharm, then have Bob accept the birth proposal so a live card
- * exists for both sides. Returns the deal card's id when it can be read from the
- * URL, else null (the caller can still act through the strip).
+ * The deal card panel — `DealCardPanelHost` renders both the CREATE-mode card
+ * and a real card inside this same `<aside aria-label="Deal card">`, mounted
+ * once at the Connect layout root. Scoping locators to this element (instead of
+ * the whole page) avoids collisions with unrelated `<select>`s / buttons
+ * elsewhere in the app shell.
+ */
+export function dealPanel(page: Page): Locator {
+  return page.locator('aside[aria-label="Deal card"]')
+}
+
+/**
+ * The ONE product row currently open for edit inside the deal panel (CardFront.tsx).
+ * An open row is the only `<tr>` carrying the "Done editing this line" checkmark
+ * button, so that is the stable anchor — it works identically whether the row was
+ * just added from the catalogue (auto-opens) or opened via its own "Edit this
+ * line" pencil. Within an open row the `<select>`s are, in DOM/column order:
+ * [0] product swap (seller + non-empty catalogue only), [1] batch (mock list),
+ * [2] unit size / quantity (mock list) — see CardFront.tsx's product table.
+ */
+export function openRowLocator(page: Page): Locator {
+  return dealPanel(page)
+    .getByRole('row')
+    .filter({ has: page.getByRole('button', { name: /done editing this line/i }) })
+}
+
+/**
+ * Open an EXISTING line for edit (a no-op if a line is already open — e.g. right
+ * after adding a fresh product, which auto-opens via CardFront's addFromCatalog).
+ * Existing lines start collapsed in edit mode and need their own "Edit this line"
+ * pencil clicked first.
+ */
+export async function openFirstLineForEdit(page: Page): Promise<void> {
+  const editBtn = dealPanel(page).getByRole('button', { name: /edit this line/i }).first()
+  if ((await editBtn.count()) > 0) await editBtn.click()
+}
+
+/**
+ * Drive the NEW in-app deal-CREATE flow as Alice to mint a fresh, REAL DRAFT deal
+ * card with StonePharm — direct birth, no proposal/accept (see the module header).
  *
- * Flow (best-effort, resilient selectors):
- *   1. open the Connect chat with StonePharm (the p2p thread that can host a
- *      proposal — DealPin only proposes over a real p2p thread).
- *   2. press "Start a deal" (DealPin State A) to open CreateDealForm.
- *   3. add a product line, set a quantity + unit price, Send the proposal.
+ * Flow:
+ *   1. open the Connect chat with StonePharm (the p2p thread DealPin proposes
+ *      over).
+ *   2. click "Start a deal" (DealPin's State-A door) — opens an empty CREATE-mode
+ *      card in the 50/50 panel (`emptyDraftView`, permanently in edit mode).
+ *   3. pick a real product from Alice's (GreenLeaf's) own catalogue via the
+ *      "+ Add product from your shop…" select (seller-only, non-empty-catalogue
+ *      gated) — this auto-opens the fresh line for edit.
+ *   4. set a deterministic quantity (100g, one of the mock unit-size options) and
+ *      price (5.00) on the open row so downstream tests have stable values to
+ *      assert against.
+ *   5. optionally seed the create-time note (CardFront's note textarea — no
+ *      label, placeholder "A note the other side will see on your behalf…").
+ *   6. click "Send deal" — calls `createDeal(...)` for real and swaps the panel
+ *      to the born card in place (no navigation).
  *
- * The acceptance + birth (Bob's side) is left to the spec, because each test
- * needs the proposal in a specific pre- or post-birth state.
- *
- * NOTE: this is setup scaffolding for a flow that is not fully built for held
- * CHANGES yet. It deliberately makes no assertions; if a step's selector is not
- * present, the helper surfaces the failure to the calling test (which is
- * expected to be RED until plans 02-04 land the held-change UI).
+ * Deterministic product: "Pedanios 31/1 COS-CA" (seed.sql section 6, GreenLeaf's
+ * AUR-1A) — always present in Alice's catalogue on a fresh `supabase db reset`.
  */
 export async function createDraftDealAsAlice(
   alicePage: Page,
   opts?: { note?: string },
-): Promise<{ dealCardId: string | null }> {
+): Promise<void> {
   // 1. land in Connect and open the StonePharm conversation.
   await alicePage.goto('/connect/chat')
   await alicePage
@@ -317,81 +390,75 @@ export async function createDraftDealAsAlice(
     .first()
     .click()
 
-  // 2. open the create-deal form from the strip's "Start a deal" affordance.
-  //    `exact` so we hit the strip button, not the "Coming soon" home-card that
-  //    also contains the words "Start a deal" (strict-mode would match both).
+  // 2. open the create-mode card from the strip's "Start a deal" door. `exact` so
+  //    we hit the strip button, not any other control that happens to contain the
+  //    same words (strict-mode would match both).
   await alicePage.getByRole('button', { name: 'Start a deal', exact: true }).click()
 
-  // 3. add a product + batch (ONE tap), set the sell price, send.
-  //    The catalogue grid (04C rework) is GATED on a non-empty search query: the
-  //    product results only render once something is typed into the search box. So
-  //    we FIRST type a product name, THEN act on the result. We search "Pedanios"
-  //    (every seeded GreenLeaf product is "Pedanios …", so this always matches).
-  await alicePage.getByPlaceholder(/search your catalogue/i).fill('Pedanios')
+  // 3. pick a real product from Alice's own catalogue. The select's only rendered
+  //    while no line is open yet, so it is the single `<select>` in the panel at
+  //    this point; `selectOption` fires a real change event, which CardFront's
+  //    addFromCatalog turns into a fresh, auto-opened line.
+  const addProductSelect = dealPanel(alicePage)
+    .locator('select')
+    .filter({ hasText: /add product from your shop/i })
+  await addProductSelect.waitFor()
+  await addProductSelect.selectOption({ label: 'Pedanios 31/1 COS-CA' })
 
-  // 3f / 04C (BTCH-01 / D-06): product + batch is ONE entity, now ONE TAP. Each
-  // search result shows its batches inline as tap-to-add chips; ONE tap on a batch
-  // chip ADDS the product + that exact batch AND sets the quantity (one pack) in a
-  // single action — there is no longer a separate product card, a "pick a batch"
-  // popup, or a "quantity in grams" field. The chip is a <button> whose VISIBLE
-  // label (its accessible name) is just the batch number "GL-24-####" + its THC/CBD
-  // sub-chips — NOT the word "Batch" — so we match the seeded GreenLeaf lot number.
-  await alicePage.getByRole('button', { name: /GL-24-/i }).first().click()
+  // 4. the fresh line auto-opens (setEditRowKey in addFromCatalog) — set a
+  //    deterministic quantity + price on it. Quantity is the row's 3rd select
+  //    (product swap, batch, THEN unit size); price is the row's only number input.
+  const row = openRowLocator(alicePage)
+  await row.locator('select').nth(2).selectOption('100')
+  await row.locator('input[type="number"]').fill('5.00')
 
-  // 3f: set the buyer-visible unit price. The field is the labelled "Sell price
-  // per gram" number input (aria-label="Sell price per gram"); the old "g
-  // (optional)" placeholder is gone. A price is needed so the proposal is priced.
-  await alicePage.getByLabel(/sell price per gram/i).first().fill('5.00')
-  // 3c (NOTE-01 D-08): optionally seed the create-time note — CreateDealForm's
-  // note textarea is optional at draft (noteRequired=false), placeholder "Add a
-  // note for your contact…" (DealForm.tsx:330-332).
+  // 5. optionally seed the create-time note (no label — the placeholder is the
+  //    only handle; same textarea drives both create and edit mode).
   if (opts?.note) {
-    await alicePage.getByPlaceholder(/add a note for your contact/i).fill(opts.note)
+    await dealPanel(alicePage)
+      .getByPlaceholder(/a note the other side will see on your behalf/i)
+      .fill(opts.note)
   }
-  await alicePage.getByRole('button', { name: /send proposal/i }).click()
 
-  // try to read the born card id from the deal route, if the app navigates there.
-  const match = alicePage.url().match(/\/deal\/([0-9a-f-]{36})/)
-  return { dealCardId: match ? match[1] : null }
+  // 6. birth it for real. Wait for the panel to swap from the create-mode footer
+  //    to a real card's title-bar pill ("Talk about this deal" — present in EVERY
+  //    card state/status, unlike the pencil or DecisionBar content) before
+  //    returning, so callers never race the create -> fetch -> render round trip.
+  await dealPanel(alicePage).getByRole('button', { name: /^send deal$/i }).click()
+  await dealPanel(alicePage).getByRole('button', { name: /talk about this deal/i }).waitFor({
+    timeout: 15000,
+  })
 }
 
 /**
- * Bob accepts Alice's birth proposal. `proposeDeal` only writes a PROPOSAL — the
- * card is born when the OTHER side accepts (confirm_detected_deal). Bob opens the
- * GreenLeaf chat, clicks the "Review" pill, then "Accept" inside the popover.
- */
-export async function acceptBirthAsBob(bobPage: Page): Promise<void> {
-  await bobPage.goto('/connect/chat')
-  await bobPage.getByText(COUNTERPARTY_NAME.bob, { exact: false }).first().click()
-  await bobPage.getByRole('button', { name: /review/i }).first().click()
-  await bobPage.getByRole('button', { name: /^accept/i }).first().click()
-}
-
-/**
- * Open the deal in `who`'s counterparty chat and open the card overlay so the
- * Edit pencil + card content are visible. Waiting for the card-open affordance
- * doubles as the "card has been born" sync point.
+ * Open the deal in `who`'s counterparty chat and open the card panel so the Edit
+ * pencil / DecisionBar / card content are visible. Waiting for the card-open
+ * affordance doubles as the "card has been born" sync point.
  *
- * 04C / Phase 5: the old standalone "Open card" button is GONE. The card now
- * opens from the strip's [Deal Room | Deal Card] segmented toggle (DealPin.tsx) -
- * a single button that reads "Deal Card" when the card is closed and "Close card"
- * once it is open. So we wait for the "Deal Card" segment (the born-sync point),
- * then click it to open the card leaflet. We re-query for "Close card" only to
- * confirm the open (idempotent: if it is already open we leave it open).
+ * D-32 (living deal card): the old standalone "Deal Card" toggle button is GONE —
+ * the strip's top bar now shows a small icon button (aria-label "Open the deal
+ * card", FileText icon) once a real deal exists on the relationship; clicking it
+ * dispatches `hs:open-deal-card`, which the layout-level `DealCardPanelHost`
+ * turns into the 50/50 side panel.
  */
 export async function openDealInChat(page: Page, who: Who): Promise<void> {
   await page.goto('/connect/chat')
   await page.getByText(COUNTERPARTY_NAME[who], { exact: false }).first().click()
-  // exact match so "Deal Card" never collides with "Deal Room" (the sibling
-  // segment) — both contain the word "Deal".
-  const openCard = page.getByRole('button', { name: 'Deal Card', exact: true })
+  const openCard = page.getByRole('button', { name: 'Open the deal card', exact: true })
   await openCard.first().waitFor({ timeout: 15000 })
   await openCard.first().click()
+  // wait for the REAL card to render (not the "Loading deal card…" placeholder) —
+  // "Talk about this deal" is CardFront's fixed toolbar pill, present in EVERY
+  // card state/status, unlike the pencil (hidden while a change is pending) or
+  // DecisionBar's content (varies by status) — the most stable "loaded" signal.
+  await dealPanel(page).getByRole('button', { name: /talk about this deal/i }).waitFor({
+    timeout: 15000,
+  })
 }
 
 /**
  * Re-read the deal on `who`'s screen from the server: reload the page, re-open the
- * counterparty chat, and re-open the card overlay. The strip then reflects the
+ * counterparty chat, and re-open the card panel. The strip then reflects the
  * CURRENT server state (the held change appeared / cleared, the lock flipped).
  *
  * WHY this is needed (KNOWN APP BUG, see the spec header): DealPin.tsx subscribes
@@ -399,21 +466,23 @@ export async function openDealInChat(page: Page, who: Who): Promise<void> {
  * the `supabase_realtime` publication (only chat_message + chat_thread are — see
  * supabase/migrations/20260616120000_deal_pending_change.sql, which omits the
  * `alter publication supabase_realtime add table deal_pending_change`). So the
- * pencil-lock / "Review change" pill DOES NOT update live on the OTHER side — the
+ * pencil-lock / DecisionBar content DOES NOT update live on the OTHER side — the
  * user must refresh. This helper performs exactly that refresh, so the tests can
- * still verify the real success criteria (both sides locked, the reason gate, the
- * two-sided commit) on the correct server state without depending on the broken
- * live transport. It does NOT weaken any assertion — it only re-reads the state
- * the missing realtime event would have delivered.
+ * still verify the real success criteria (both sides locked, the two-sided sign /
+ * negotiate resolution) on the correct server state without depending on the
+ * broken live transport. It does NOT weaken any assertion — it only re-reads the
+ * state the missing realtime event would have delivered.
  */
 export async function refreshDealView(page: Page, who: Who): Promise<void> {
   await openDealInChat(page, who)
 }
 
 /**
- * Full two-sided setup the held-change tests need: Alice proposes, Bob accepts
- * (births the draft card), then BOTH sides open the card overlay. After this each
- * page shows the live draft card with the Edit pencil reachable.
+ * Full two-sided setup the negotiate/sign tests need: Alice creates + births a
+ * real draft card (direct birth — no proposal/accept anymore), then BOTH sides
+ * open the card panel from a fresh navigation so each starts from a known,
+ * server-read state. After this each page shows the live draft card with the
+ * Edit pencil reachable (no held change yet).
  */
 export async function birthAndOpenDeal(
   alicePage: Page,
@@ -421,7 +490,6 @@ export async function birthAndOpenDeal(
   opts?: { note?: string },
 ): Promise<void> {
   await createDraftDealAsAlice(alicePage, opts)
-  await acceptBirthAsBob(bobPage)
   await openDealInChat(alicePage, 'alice')
   await openDealInChat(bobPage, 'bob')
 }

@@ -11,8 +11,9 @@
 import { createClient } from "@/shared/db/server";
 import { getCurrentCompanyId } from "@/shared/auth";
 import { writeAudit } from "@/shared/audit";
-import { viewerSide } from "./lib/derive";
-import { allStagesDone, canFinalizeFromStatus } from "./lib/finalize";
+import { createDealRpcArgs } from "./lib/createDealArgs";
+import { buyerCompanyId, sellerCompanyId, viewerSide } from "./lib/derive";
+import { canFinalizeByInvoice } from "./lib/finalize";
 import type {
   ConfirmDealChangeInput,
   ConfirmDealChangeResult,
@@ -25,10 +26,10 @@ import type {
   EditDealInput,
   EditDealResult,
   FinalizeDealResult,
+  OfferPromotionInput,
+  OfferPromotionResult,
   ProposeDealChangeInput,
   ProposeDealChangeResult,
-  ProposeDealInput,
-  ProposeDealResult,
 } from "./types";
 
 /** Map the form's draft lines to the RPC's jsonb line shape (shared by create + edit). */
@@ -187,21 +188,27 @@ export async function confirmDeal(args: {
 }
 
 /**
- * Finalize a deal (Phase 5, D-15/D-16/D-17) - the LAST-stage commit that moves
- * the card to Done and writes the single golden seal.
+ * Finalize a deal (Phase 7, D-27/D-28) - the invoice close that moves the card to
+ * Done (Deal Executed).
  *
- * Gate (D-15): finalization is available ONLY when every one of the deal's
- * stages has a deal_stage_completion row (the stored, manual stage-done state).
- * The gate decision is `allStagesDone` (pure, unit-tested) over the stage codes
- * vs the workspace's completion rows; if any stage is missing, this throws and
- * never flips the status.
+ * D-27 makes ONE thing the close trigger: the SELLER uploading a real invoice PDF.
+ * There is no buyer confirm-receipt gate, and the Stages finalize gate (D-15) is
+ * retired. DocumentsTab calls this right after the seller's upload, so the upload
+ * itself closes the deal.
  *
- * The seal (D-17): the deal_confirmation seal is written ONLY here, NEVER via
- * confirm_deal_change (the seal-deferred-to-final-stage rule). An idempotency
- * guard - if the card is already 'done', return WITHOUT a second write - plus
- * the onConflict upsert key prevent a double-write race with the draft gate
- * (T-05-04). The company is resolved from the SESSION (never input), so only a
- * relationship member acting as their own side can finalize (T-05-03).
+ * Guardrails:
+ *   - SELLER-ONLY (ASVS V4): the caller's company is derived from the SESSION and
+ *     must BE the seller (derived from the card + relationship). A buyer-session
+ *     finalize call is rejected before the gate.
+ *   - INVOICE TRIGGER: the gate (`canFinalizeByInvoice`, pure/unit-tested) requires
+ *     an AGREED status (`confirmed`/`amended`) AND a `deal_artifact(category=
+ *     'invoice')` whose `uploaded_by_company_id` is the SELLER company. The
+ *     uploader identity is stamped from the session at upload time
+ *     (uploadDealInvoice), so a buyer-uploaded or forged invoice cannot satisfy it.
+ *   - IDEMPOTENCY: an already-`done` card returns WITHOUT a second write.
+ *
+ * On pass: flip status -> done, log the invoice-close event to `deal_card_log`
+ * (D-28 version history), and `writeAudit('deal.finalized')`.
  */
 export async function finalizeDeal(args: {
   dealCardId: string;
@@ -215,33 +222,43 @@ export async function finalizeDeal(args: {
   const companyId = await getCurrentCompanyId();
   if (!companyId) throw new Error("finalizeDeal: no company in session");
 
-  // the card (status + version drive the idempotency guard, the status
-  // precondition, and the seal key)
+  // the card: status drives the idempotency guard + the gate; deal_type +
+  // initiating_company_id + relationship_id derive the seller.
   const { data: card, error: cardErr } = await supabase
     .from("deal_card")
-    .select("id, status, version")
+    .select("id, status, version, deal_type, initiating_company_id, relationship_id")
     .eq("id", args.dealCardId)
     .single();
   if (cardErr) throw cardErr;
 
-  // idempotency guard (D-17): if already done, do NOT write a second seal.
+  // idempotency guard: if already done, do NOT write again.
   if (card.status === "done") {
     return { cardStatus: "done" };
   }
 
-  // STATUS PRECONDITION (HI-02): `done` is a terminal status that must only be
-  // reachable from an AGREED deal. Stage-done rows can be marked from a deal's
-  // birth (the workspace exists while the card is still `draft`), so without this
-  // guard a never-confirmed `draft` (or a `withdrawn`/`cancelled`) deal could be
-  // finalized straight to `done`, bypassing the two-sided confirm gate (D-15).
-  // The live agreed states are `confirmed` (both sides sealed) and `amended` (a
-  // committed change) per the deal_card_status lookup; nothing else may finalize.
-  // The decision is the pure, unit-tested `canFinalizeFromStatus`.
-  if (!canFinalizeFromStatus(card.status as DealCardStatus)) {
-    throw new Error("Only a confirmed deal can be finalized.");
+  // derive the SELLER company from the card's issuer facts + the relationship pair.
+  const { data: rel, error: relErr } = await supabase
+    .from("relationship")
+    .select("company_a_id, company_b_id")
+    .eq("id", card.relationship_id)
+    .single();
+  if (relErr) throw relErr;
+  const seller = sellerCompanyId(
+    {
+      deal_type: card.deal_type as "offer" | "order",
+      initiating_company_id: card.initiating_company_id,
+    },
+    rel.company_a_id,
+    rel.company_b_id,
+  );
+
+  // SELLER-ONLY guard (ASVS V4): only the seller side may close the deal. A
+  // buyer-session finalize call is rejected here, before the gate.
+  if (companyId !== seller) {
+    throw new Error("Only the seller can finalize this deal.");
   }
 
-  // the workspace this card belongs to (the stage-completion rows hang off it)
+  // the workspace this card belongs to (the invoice artifact hangs off it).
   const { data: ws, error: wsErr } = await supabase
     .from("deal_workspace")
     .select("id")
@@ -250,65 +267,36 @@ export async function finalizeDeal(args: {
     .single();
   if (wsErr) throw wsErr;
 
-  // GATE (D-15): every stage must have a completion row. deal_stage_completion is
-  // not in the generated types, so the table name is cast (as-never discipline).
-  const [stagesRes, doneRes] = await Promise.all([
-    supabase.from("deal_stage").select("code"),
-    supabase
-      .from("deal_stage_completion" as never)
-      .select("stage_code")
-      .eq("deal_workspace_id", ws.id),
-  ]);
-  if (stagesRes.error) throw stagesRes.error;
-  if (doneRes.error) throw doneRes.error;
+  // TRIGGER: a SELLER-uploaded invoice must exist. Requiring
+  // uploaded_by_company_id = the seller company rejects a buyer-uploaded or forged
+  // invoice (ASVS V4). deal_artifact + its columns ARE in the generated types.
+  const { data: invoices, error: invErr } = await supabase
+    .from("deal_artifact")
+    .select("id")
+    .eq("deal_workspace_id", ws.id)
+    .eq("category", "invoice")
+    .eq("uploaded_by_company_id", seller)
+    .is("deleted_at", null)
+    .limit(1);
+  if (invErr) throw invErr;
+  const hasSellerInvoice = (invoices?.length ?? 0) > 0;
 
-  const stageCodes = (stagesRes.data ?? []).map((s) => s.code);
-  const doneCodes = (
-    (doneRes.data ?? []) as unknown as { stage_code: string }[]
-  ).map((r) => r.stage_code);
-  if (!allStagesDone(stageCodes, doneCodes)) {
-    throw new Error("All stages must be marked done before finalizing.");
+  // GATE (D-27): agreed status + a seller invoice. Pure, unit-tested.
+  if (!canFinalizeByInvoice(card.status as DealCardStatus, hasSellerInvoice)) {
+    throw new Error(
+      "A confirmed deal with the seller's invoice is required to finalize.",
+    );
   }
 
-  // flip status -> done (reuse the existing helper)
+  // flip status -> done (Deal Executed) and record the close in the card's version
+  // history (D-28) + the audit chain.
   await updateStatus(supabase, card.id, "done");
-
-  // write the SINGLE finalize seal (D-17): the viewer's company, current version,
-  // status 'confirmed'. This is the ONLY place a finalize-seal is written - it
-  // MUST NOT route through confirm_deal_change.
-  //
-  // INSERT-ONLY (HI-03): the seal is written at card.version (finalize does NOT
-  // bump the version). At a confirmed deal, `confirmDeal` already wrote this
-  // company's deal_confirmation row at (card, version) with the REAL "who sealed
-  // the deal" provenance (responding_person_id + responded_at + note). An
-  // ON CONFLICT ... DO UPDATE would overwrite that legal seal with the finalizer's
-  // identity + the finalize note, destroying the original audit. So we use
-  // ignoreDuplicates (INSERT ... ON CONFLICT DO NOTHING): an existing confirm seal
-  // is PRESERVED untouched, and a fresh finalize seal is inserted only when none
-  // exists. This also keeps a re-call idempotent (no duplicate seat row). The
-  // deal.finalized event itself is recorded separately in deal_card_log +
-  // audit_log below, so finalize provenance is never lost.
-  const now = new Date().toISOString();
-  const { error: sealErr } = await supabase.from("deal_confirmation").upsert(
-    {
-      deal_card_id: card.id,
-      version: card.version,
-      company_id: companyId,
-      status: "confirmed",
-      responding_person_id: user.id,
-      responded_at: now,
-      note: "Deal finalized - all stages done.",
-    },
-    { onConflict: "deal_card_id,version,company_id", ignoreDuplicates: true },
-  );
-  if (sealErr) throw sealErr;
-
   await logLine(
     supabase,
     card.id,
     card.version,
     user.id,
-    "Deal finalized - all stages done.",
+    "Deal Executed - the seller uploaded the invoice.",
   );
   await writeAudit({
     actorType: "user",
@@ -356,9 +344,10 @@ export async function createDeal(input: CreateDealInput): Promise<CreateDealResu
   // supabase.rpc DIRECTLY (not via a detached const) so its `this` stays bound.
   // p_private_value is now accepted-but-ignored server-side (D-09); we stop
   // forwarding a value and write the per-line private rows after birth instead.
+  const { p_deal_type, p_counterparty_person_id } = createDealRpcArgs(input);
   const { data: cardId, error } = await supabase.rpc("create_deal_draft" as never, {
     p_relationship_id: input.relationshipId,
-    p_deal_type: "offer",
+    p_deal_type,
     p_value_net: sumValueNet(input.lines),
     p_currency: currency,
     p_due_date: input.dueDate ?? null,
@@ -367,6 +356,7 @@ export async function createDeal(input: CreateDealInput): Promise<CreateDealResu
     p_lines: rpcLines(input.lines),
     p_private_value: null,
     p_note: input.note ?? null,
+    p_counterparty_person_id,
   } as never);
   if (error) throw new Error((error as { message: string }).message);
   const newCardId = cardId as string | null;
@@ -378,10 +368,17 @@ export async function createDeal(input: CreateDealInput): Promise<CreateDealResu
   // IS the input index), then upsert each line's own-side input into the
   // owner-only `deal_line_item_private`. The company is taken from the SESSION
   // (`getCurrentCompanyId()`), NEVER from input - the same guardrail the edit
-  // path uses. On the create path the creator is ALWAYS the seller:
-  // `create_deal_draft` hardcodes `deal_type 'offer'` + `initiating_company_id =
-  // v_company`, so the creator's `viewerSide` is "seller" - hence seller_margin
-  // is the correct column (no viewerSide call needed here, by construction).
+  // path uses. On the DEFAULT ('offer') create path the creator is ALWAYS the
+  // seller: `initiating_company_id = v_company` + `deal_type 'offer'`, so the
+  // creator's `viewerSide` is "seller" - hence seller_margin is the correct
+  // column (no viewerSide call needed here, by construction).
+  // NOTE (Product Basket, dealType/counterpartyPersonId passthrough): no
+  // current caller passes `dealType: "order"` together with `ownInput` lines,
+  // so this hardcoded seller_margin write is still correct for every existing
+  // and in-flight caller. A FUTURE buyer-initiated 'order' create path that
+  // also carries ownInput would need a viewerSide() check here (like
+  // proposeDealChange does) before this stays correct - flagged, not fixed,
+  // since no such caller exists yet.
   if (input.lines.some((l) => l.ownInput != null)) {
     const companyId = await getCurrentCompanyId();
     if (!companyId) throw new Error("createDeal: no company in session");
@@ -434,73 +431,6 @@ function draftSummary(lines: CreateDealInput["lines"]): string {
 }
 
 /**
- * Propose a deal from a chat (Waypoint 4.5.1) - the manual door's NEW commit.
- *
- * Unlike `createDeal`, this does NOT birth a card. It writes a `deal_detected`
- * PROPOSAL message into the p2p thread (via the `propose_deal` SECURITY DEFINER
- * RPC), with the proposer's own side pre-voted `accept` (sending IS the
- * proposer's yes). The card is born only when the OTHER side accepts, through the
- * unified `confirm_detected_deal` birth - one birth path, two doors (Sella detect
- * + this manual propose). The AI fence still holds: a human's Send press writes
- * the suggestion; a human's Accept press writes the deal.
- *
- * Privacy: the proposal is a shared chat message, so the proposer's own-side
- * private box is NOT carried here (it would leak to the other side); it is added
- * after birth via edit. No audit here - a proposal is not yet a deal; the audited
- * `deal.created` moment is the birth.
- */
-export async function proposeDeal(input: ProposeDealInput): Promise<ProposeDealResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("proposeDeal: no authenticated user");
-
-  const currency = input.lines[0]?.currency ?? "EUR";
-
-  // The shared draft: line_items use the SAME keys the confirm_detected_deal
-  // birth reads (name, quantity, unit, unit_price, cultivar, pzn). Shared facts
-  // only - no private box (privacy).
-  //
-  // BTCH-01 (D-04): the batch snapshot is a SHARED fact (the buyer sees the
-  // frozen batch number + measured THC/CBD on the public card line), so it MUST
-  // ride the proposal draft through to birth. confirm_detected_deal carries these
-  // four keys into create_deal_draft, which writes them into the real line
-  // columns. Without this the proposal birth path (the demo's main door) silently
-  // dropped the batch snapshot. Custom lines carry nulls naturally.
-  const draft = {
-    line_items: input.lines.map((l) => ({
-      name: l.productName,
-      quantity: l.quantity,
-      unit: l.unit,
-      unit_price: l.unitPrice,
-      cultivar: l.cultivar ?? null,
-      pzn: l.pzn ?? null,
-      batchId: l.batchId ?? null,
-      batchNumber: l.batchNumber ?? null,
-      thcPercent: l.thcPercent ?? null,
-      cbdPercent: l.cbdPercent ?? null,
-    })),
-    currency,
-    summary: draftSummary(input.lines),
-    due_date: input.dueDate ?? null,
-    payment_terms_code: input.paymentTermsCode ?? null,
-    free_delivery: input.freeDelivery ?? false,
-    note: input.note ?? null,
-  };
-
-  const { data: messageId, error } = await supabase.rpc("propose_deal" as never, {
-    p_thread_id: input.threadId,
-    p_draft: draft,
-  } as never);
-  if (error) throw new Error((error as { message: string }).message);
-  const newMessageId = messageId as string | null;
-  if (!newMessageId) throw new Error("proposeDeal: no message id returned from propose_deal");
-
-  return { messageId: newMessageId };
-}
-
-/**
  * Accept or decline a deal PROPOSAL (Waypoint 4.5.2) - the unified birth-accept.
  *
  * Wraps `confirm_detected_deal`: records THIS side's vote on the `deal_detected`
@@ -510,12 +440,14 @@ export async function proposeDeal(input: ProposeDealInput): Promise<ProposeDealR
  * action serves BOTH doors - a Sella-detected and a manual proposal are the same
  * message shape, so birth follows one path with two entry doors.
  *
- * No audit is written here. The birth's `deal.created` audit is a known GAP on
- * the RPC-born path (createDeal stamps one; detection/propose never did): the
- * RPC returns the same card id whether THIS call birthed it or an earlier one
- * did (idempotency), so the action cannot tell "born now" from "already born"
- * and must not risk a double-stamp into the hash-chained log. The proper fix is
- * a "born_now" flag from the RPC - parked, and outside 4.5.2's UI scope.
+ * AUDIT-01: the birth's `deal.created` audit row is now stamped here, closing the
+ * RPC-born gap (createDeal stamped one; detection/propose never did). The RPC
+ * used to return the same card id whether THIS call birthed it or an earlier one
+ * did (idempotency), so the action could not tell "born now" from "already born"
+ * and dared not risk a double-stamp into the hash-chained log. The RPC now also
+ * returns a `born_now` boolean (20260707130200); we writeAudit('deal.created')
+ * ONLY when born_now is true, mirroring createDeal, so the row is written exactly
+ * once (T-07-03-02).
  */
 export async function confirmDetectedDeal(args: {
   messageId: string;
@@ -529,14 +461,39 @@ export async function confirmDetectedDeal(args: {
 
   // SECURITY DEFINER RPC: derives the caller's company from the SESSION (never
   // trusted from input) and gates on thread membership - the same guardrail as
-  // create_deal_draft. Direct supabase.rpc call so `this` stays bound.
-  const { data: cardId, error } = await supabase.rpc("confirm_detected_deal" as never, {
+  // create_deal_draft. Direct supabase.rpc call so `this` stays bound. The RPC's
+  // new OUT-param shape ({ deal_card_id, born_now }) is not in the generated types
+  // yet, so it rides the localized `as never` cast (Muskan's documented pattern;
+  // no full database.types regen this phase - 07-08 regenerates).
+  const { data, error } = await supabase.rpc("confirm_detected_deal" as never, {
     p_message_id: args.messageId,
     p_decision: args.decision,
   } as never);
   if (error) throw new Error((error as { message: string }).message);
 
-  return { bornCardId: (cardId as string | null) ?? null };
+  // Two OUT params come back as one record; be tolerant of a single-object or
+  // an array-of-one shape across PostgREST versions.
+  const rec = (Array.isArray(data) ? data[0] : data) as
+    | { deal_card_id: string | null; born_now: boolean }
+    | null;
+  const bornCardId = rec?.deal_card_id ?? null;
+  const bornNow = rec?.born_now === true;
+
+  // AUDIT-01: stamp deal.created EXACTLY once, on the true born-now path only.
+  // Mirrors createDeal's audit write (same actorType/action/contentType). The
+  // idempotent re-call path returns born_now=false, so a second confirmer's click
+  // never double-stamps the hash-chained log.
+  if (bornNow && bornCardId) {
+    await writeAudit({
+      actorType: "user",
+      action: "deal.created",
+      contentType: "deal_card",
+      contentId: bornCardId,
+      actorPersonId: user.id,
+    });
+  }
+
+  return { bornCardId };
 }
 
 /**
@@ -832,9 +789,512 @@ export async function withdrawDealChange({
   });
 }
 
+/**
+ * Decline a deal (chj/07-08) - the "end it" action from the on-card DecisionBar.
+ * A decline is a CLOSE, not a delete (the user's lifecycle rule): the card flips
+ * to `cancelled` and reuses the existing closed-deal handling (the lock, no more
+ * editing). It is distinct from Negotiate (`confirmDealChange({decision:'decline'})`,
+ * which only discards a held change and keeps bargaining).
+ *
+ * Guardrails: the caller's company is derived from the SESSION and must be a party
+ * to the deal's relationship (no trusted company id). Idempotent - an already-closed
+ * (`cancelled`/`done`) deal returns without a second write. Any held pending change
+ * is left in place; the `cancelled` status hides the DecisionBar, so it cannot be
+ * acted on.
+ */
+export async function declineDeal(args: { dealCardId: string }): Promise<void> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("declineDeal: no authenticated user");
+
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) throw new Error("declineDeal: no company in session");
+
+  const { data: card, error: cardErr } = await supabase
+    .from("deal_card")
+    .select("id, status, version, relationship_id")
+    .eq("id", args.dealCardId)
+    .single();
+  if (cardErr) throw cardErr;
+
+  // membership guard: the caller's company must be a party to this deal.
+  const { data: rel, error: relErr } = await supabase
+    .from("relationship")
+    .select("company_a_id, company_b_id")
+    .eq("id", card.relationship_id)
+    .single();
+  if (relErr) throw relErr;
+  if (companyId !== rel.company_a_id && companyId !== rel.company_b_id) {
+    throw new Error("Only a party to this deal can decline it.");
+  }
+
+  // idempotent: an already-closed deal does not get a second write.
+  if (card.status === "cancelled" || card.status === "done") return;
+
+  await updateStatus(supabase, card.id, "cancelled");
+  await logLine(
+    supabase,
+    card.id,
+    card.version,
+    user.id,
+    "Deal declined - the deal is closed.",
+  );
+  await writeAudit({
+    actorType: "user",
+    action: "deal.declined",
+    contentType: "deal_card",
+    contentId: card.id,
+    actorPersonId: user.id,
+  });
+}
+
+/**
+ * Sign a deal (chj/07-08) - the single-sign accept. The party who did NOT send the
+ * latest version signs; NO note, NO reason (the user's flow: sign is a direct
+ * button). If a change is held, it is committed first (confirm_deal_change accept,
+ * auto reason) so the signed version is the proposed one; then the card flips to
+ * `confirmed` - the AGREED state that locks editing and lets the SELLER upload the
+ * invoice (finalizeDeal's gate).
+ *
+ * Guardrails: the caller's company comes from the SESSION and must be a party;
+ * idempotent (a non-draft deal returns unchanged). This flips the status DIRECTLY
+ * and does NOT write `deal_confirmation`, keeping confirm_deal_change out of the
+ * seal gate (the prior regression: confirm writes leaked into that gate).
+ */
+export async function signDeal({
+  dealCardId,
+}: {
+  dealCardId: string;
+}): Promise<{ cardStatus: DealCardStatus }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("signDeal: no authenticated user");
+
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) throw new Error("signDeal: no company in session");
+
+  const { data: card, error: cardErr } = await supabase
+    .from("deal_card")
+    .select("id, status, version, relationship_id")
+    .eq("id", dealCardId)
+    .single();
+  if (cardErr) throw cardErr;
+
+  const { data: rel, error: relErr } = await supabase
+    .from("relationship")
+    .select("company_a_id, company_b_id")
+    .eq("id", card.relationship_id)
+    .single();
+  if (relErr) throw relErr;
+  if (companyId !== rel.company_a_id && companyId !== rel.company_b_id) {
+    throw new Error("Only a party to this deal can sign it.");
+  }
+
+  // idempotent: only a live draft can be signed.
+  if (card.status !== "draft") return { cardStatus: card.status as DealCardStatus };
+
+  // if a change is held, COMMIT it first so the signed version is the proposed one.
+  // confirm_deal_change (accept) is responder-only + enforces that in the RPC; the
+  // reason is auto (no note UI). Per D-20 the proposer's yes is implicit, so a
+  // responder accept commits the change (never a still-waiting first accept).
+  const { data: held } = await supabase
+    .from("deal_pending_change" as never)
+    .select("deal_card_id")
+    .eq("deal_card_id", dealCardId)
+    .maybeSingle();
+  if (held) {
+    const { error: cErr } = await supabase.rpc("confirm_deal_change" as never, {
+      p_deal_card_id: dealCardId,
+      p_decision: "accept",
+      p_reason: "Signed the deal",
+    } as never);
+    if (cErr) throw new Error((cErr as { message: string }).message);
+  }
+
+  await updateStatus(supabase, dealCardId, "confirmed");
+  await logLine(supabase, dealCardId, card.version, user.id, "Deal signed.");
+  await writeAudit({
+    actorType: "user",
+    action: "deal.confirmed",
+    contentType: "deal_card",
+    contentId: dealCardId,
+    actorPersonId: user.id,
+  });
+  return { cardStatus: "confirmed" };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Promotion (07-06, PROMO-01) - the INDEPENDENT yellow track.                 */
+/*                                                                            */
+/* D-21: a seller promotion is a SEPARATE decision from the negotiation diff - */
+/* its own `deal_promotion` row, NO shared lock (a live promotion and a live   */
+/* negotiation never block each other). D-26 (load-bearing): NONE of these     */
+/* touch `deal_confirmation` or the Sign gate, and offer does NOT bump the      */
+/* version - Sign stays callable throughout. The savings math lives in          */
+/* `lib/promotion.ts` (pure, canonical per-gram money, D-25).                  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Offer a promotion (07-06, seller-only). Inserts one pending `deal_promotion`
+ * row with the seller's REAL product-table reward lines (D-21) + any non-product
+ * rewards (D-22). Unlike `proposeDealChange` there is NO reason gate and NO
+ * version bump (D-26). The seller side is re-derived from the SESSION + the card
+ * (T-07-06-01) - never trusted from the caller.
+ */
+export async function offerPromotion(
+  input: OfferPromotionInput,
+): Promise<OfferPromotionResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("offerPromotion: no authenticated user");
+
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) throw new Error("offerPromotion: no company in session");
+
+  const { version, sellerId } = await dealSides(supabase, input.dealCardId);
+  if (companyId !== sellerId) {
+    throw new Error("Only the seller can offer a promotion.");
+  }
+
+  // deal_promotion is not in the generated types -> the localized `as never` cast
+  // (Muskan's documented pattern; no full regen this phase).
+  const { data, error } = await supabase
+    .from("deal_promotion" as never)
+    .insert({
+      deal_card_id: input.dealCardId,
+      base_version: version,
+      offered_by_company: companyId,
+      offered_by_person: user.id,
+      line_deltas: input.lineDeltas,
+      condition_deltas: input.conditionDeltas ?? [],
+      state: "pending",
+    } as never)
+    .select("id")
+    .single();
+  if (error) throw new Error((error as { message: string }).message);
+  const promotionId = (data as { id: string } | null)?.id;
+  if (!promotionId) throw new Error("offerPromotion: no promotion id returned");
+
+  await writeAudit({
+    actorType: "user",
+    action: "promotion.offered",
+    contentType: "deal_card",
+    contentId: input.dealCardId,
+    actorPersonId: user.id,
+  });
+
+  return { promotionId };
+}
+
+/**
+ * Accept a promotion (07-06, buyer-only). Applies the reward's line deltas
+ * INDEPENDENTLY at accept time (Open Question 2): each reward becomes a REAL
+ * `deal_line_item` row at the CURRENT version (D-21). CRITICAL (D-26): this never
+ * touches `deal_confirmation` and never bumps the version - Sign stays callable.
+ * Non-product rewards (`condition_deltas`) are NOT applied as lines (D-22); they
+ * stay on the promotion row and render in Extra Conditions. The buyer side is
+ * re-derived from the SESSION (T-07-06-01).
+ */
+export async function acceptPromotion({
+  dealCardId,
+}: {
+  dealCardId: string;
+}): Promise<void> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("acceptPromotion: no authenticated user");
+
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) throw new Error("acceptPromotion: no company in session");
+
+  const { version, buyerId } = await dealSides(supabase, dealCardId);
+  if (companyId !== buyerId) {
+    throw new Error("Only the buyer can accept a promotion.");
+  }
+
+  // the card's current pending promotion (newest first; there is no active-row lock).
+  const { data: promoData, error: promoErr } = await supabase
+    .from("deal_promotion" as never)
+    .select("id, line_deltas")
+    .eq("deal_card_id", dealCardId)
+    .eq("state", "pending")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (promoErr) throw new Error((promoErr as { message: string }).message);
+  const promo = promoData as { id: string; line_deltas: unknown } | null;
+  if (!promo) throw new Error("acceptPromotion: no pending promotion to accept.");
+
+  // apply the REAL line deltas onto the current version (D-21). unit_price is NOT
+  // NULL, so a free reward carries 0 explicitly. sort_order must be distinct
+  // (the (card, version, sort_order) unique key), so continue after the last line.
+  const deltas = Array.isArray(promo.line_deltas)
+    ? (promo.line_deltas as Array<Record<string, unknown>>)
+    : [];
+  if (deltas.length) {
+    const { data: lastLine } = await supabase
+      .from("deal_line_item")
+      .select("sort_order")
+      .eq("deal_card_id", dealCardId)
+      .eq("version", version)
+      .order("sort_order", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    let nextSort = (lastLine?.sort_order ?? -1) + 1;
+    for (const d of deltas) {
+      const { error: lineErr } = await supabase.from("deal_line_item").insert({
+        deal_card_id: dealCardId,
+        version,
+        product_id: typeof d["productId"] === "string" ? (d["productId"] as string) : null,
+        product_name:
+          typeof d["productName"] === "string" && (d["productName"] as string).trim()
+            ? (d["productName"] as string)
+            : "Promotion reward",
+        quantity: Number(d["quantity"] ?? 0),
+        unit: typeof d["unit"] === "string" ? (d["unit"] as string) : "g",
+        unit_price: Number(d["unitPrice"] ?? 0),
+        currency: typeof d["currency"] === "string" ? (d["currency"] as string) : "EUR",
+        sort_order: nextSort,
+      });
+      if (lineErr) throw lineErr;
+      nextSort += 1;
+    }
+  }
+
+  const { error: updErr } = await supabase
+    .from("deal_promotion" as never)
+    .update({
+      state: "accepted",
+      resolved_by_person: user.id,
+      resolved_at: new Date().toISOString(),
+    } as never)
+    .eq("id", promo.id);
+  if (updErr) throw new Error((updErr as { message: string }).message);
+
+  await logLine(
+    supabase,
+    dealCardId,
+    version,
+    user.id,
+    "Promotion accepted - the reward was added to the deal.",
+  );
+  await writeAudit({
+    actorType: "user",
+    action: "promotion.accepted",
+    contentType: "deal_card",
+    contentId: dealCardId,
+    actorPersonId: user.id,
+  });
+}
+
+/**
+ * Decline a promotion (07-06, buyer-only). Records `state='declined'`; the base
+ * deal is left UNCHANGED (no line writes) and Sign is untouched (D-26). The buyer
+ * side is re-derived from the SESSION (T-07-06-01).
+ */
+export async function declinePromotion({
+  dealCardId,
+}: {
+  dealCardId: string;
+}): Promise<void> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("declinePromotion: no authenticated user");
+
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) throw new Error("declinePromotion: no company in session");
+
+  const { buyerId } = await dealSides(supabase, dealCardId);
+  if (companyId !== buyerId) {
+    throw new Error("Only the buyer can decline a promotion.");
+  }
+
+  const { data: promoData, error: promoErr } = await supabase
+    .from("deal_promotion" as never)
+    .select("id")
+    .eq("deal_card_id", dealCardId)
+    .eq("state", "pending")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (promoErr) throw new Error((promoErr as { message: string }).message);
+  const promo = promoData as { id: string } | null;
+  if (!promo) throw new Error("declinePromotion: no pending promotion to decline.");
+
+  const { error: updErr } = await supabase
+    .from("deal_promotion" as never)
+    .update({
+      state: "declined",
+      resolved_by_person: user.id,
+      resolved_at: new Date().toISOString(),
+    } as never)
+    .eq("id", promo.id);
+  if (updErr) throw new Error((updErr as { message: string }).message);
+
+  await writeAudit({
+    actorType: "user",
+    action: "promotion.declined",
+    contentType: "deal_card",
+    contentId: dealCardId,
+    actorPersonId: user.id,
+  });
+}
+
+/* -------------------------------------------------------------------------- */
+/* Reopen ticket (07-06, RTKT-01) - the post-close path back in (D-29/D-30).   */
+/*                                                                            */
+/* After a deal closes (`done`, set by the invoice trigger), the ONLY path     */
+/* back is a reopen ticket - and EITHER party may open it (D-29). CRITICAL      */
+/* (D-29): these move the lifecycle STATUS + append a log note ONLY; they NEVER */
+/* mutate the sealed deal terms (line items / conditions). This is DISTINCT     */
+/* from the parked C2C ticketing - the inbox primitives are untouched.         */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Reopen a closed deal into a ticket (07-06). Allowed for EITHER deal party (the
+ * session company must be a member), and only from a closed deal (`done`). Moves
+ * the status to `ticket_created` and appends the reopen (+ optional note) to the
+ * card log. NEVER changes the sealed terms (T-07-06-03).
+ */
+export async function reopenTicket({
+  dealCardId,
+  note,
+}: {
+  dealCardId: string;
+  note?: string;
+}): Promise<void> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("reopenTicket: no authenticated user");
+
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) throw new Error("reopenTicket: no company in session");
+
+  const { version, status, sellerId, buyerId } = await dealSides(supabase, dealCardId);
+  // EITHER party may reopen - the session company must be one of the two sides.
+  if (companyId !== sellerId && companyId !== buyerId) {
+    throw new Error("Only a deal party can reopen this deal.");
+  }
+  // D-29: the ONLY path back is from a closed deal.
+  if (status !== "done") {
+    throw new Error("Only a closed (executed) deal can be reopened.");
+  }
+
+  await updateStatus(supabase, dealCardId, "ticket_created");
+  const trimmed = note?.trim();
+  await logLine(
+    supabase,
+    dealCardId,
+    version,
+    user.id,
+    trimmed
+      ? `Reopen ticket opened - ${trimmed}`
+      : "Reopen ticket opened.",
+  );
+  await writeAudit({
+    actorType: "user",
+    action: "deal.reopened",
+    contentType: "deal_card",
+    contentId: dealCardId,
+    actorPersonId: user.id,
+  });
+}
+
+/**
+ * Close a reopen ticket (07-06). Allowed for EITHER deal party, only from
+ * `ticket_created`; moves the status to `ticket_closed` and logs it. Like
+ * `reopenTicket`, it never touches the sealed terms (T-07-06-03).
+ */
+export async function closeTicket({
+  dealCardId,
+}: {
+  dealCardId: string;
+}): Promise<void> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("closeTicket: no authenticated user");
+
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) throw new Error("closeTicket: no company in session");
+
+  const { version, status, sellerId, buyerId } = await dealSides(supabase, dealCardId);
+  if (companyId !== sellerId && companyId !== buyerId) {
+    throw new Error("Only a deal party can close this ticket.");
+  }
+  if (status !== "ticket_created") {
+    throw new Error("Only an open reopen ticket can be closed.");
+  }
+
+  await updateStatus(supabase, dealCardId, "ticket_closed");
+  await logLine(supabase, dealCardId, version, user.id, "Reopen ticket closed.");
+  await writeAudit({
+    actorType: "user",
+    action: "deal.ticket_closed",
+    contentType: "deal_card",
+    contentId: dealCardId,
+    actorPersonId: user.id,
+  });
+}
+
 /* ---- small server-only helpers (not exported) ---- */
 
 type ServerClient = Awaited<ReturnType<typeof createClient>>;
+
+/**
+ * Resolve a card's live version, status, and derived seller/buyer company ids -
+ * the shared load for the promotion + reopen actions (07-06). One card read + one
+ * relationship read; the sides come from the pure `sellerCompanyId`/
+ * `buyerCompanyId` derivation, so a caller only compares its session company
+ * against these (never trusting a client-claimed side, T-07-06-01/03).
+ */
+async function dealSides(
+  supabase: ServerClient,
+  dealCardId: string,
+): Promise<{
+  version: number;
+  status: DealCardStatus;
+  sellerId: string;
+  buyerId: string;
+}> {
+  const { data: card, error: cardErr } = await supabase
+    .from("deal_card")
+    .select("deal_type, initiating_company_id, relationship_id, version, status")
+    .eq("id", dealCardId)
+    .single();
+  if (cardErr) throw cardErr;
+
+  const { data: rel, error: relErr } = await supabase
+    .from("relationship")
+    .select("company_a_id, company_b_id")
+    .eq("id", card.relationship_id)
+    .single();
+  if (relErr) throw relErr;
+
+  const facts = {
+    deal_type: card.deal_type as "offer" | "order",
+    initiating_company_id: card.initiating_company_id,
+  };
+  return {
+    version: card.version,
+    status: card.status as DealCardStatus,
+    sellerId: sellerCompanyId(facts, rel.company_a_id, rel.company_b_id),
+    buyerId: buyerCompanyId(facts, rel.company_a_id, rel.company_b_id),
+  };
+}
 
 async function updateStatus(supabase: ServerClient, cardId: string, status: DealCardStatus) {
   const { error } = await supabase

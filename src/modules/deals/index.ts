@@ -17,14 +17,10 @@ export type {
   MemberRole,
   MemberView,
   WorkspaceVisibility,
-  DealWorkspaceView,
-  StageCode,
   ThingType,
   ThingStatus,
   ThingView,
   ArtifactView,
-  StageCompletionView,
-  StageView,
   ConfirmationStatus,
   ConfirmSeat,
   ConfirmDecision,
@@ -39,8 +35,15 @@ export type {
   DealSource,
   CreateDealInput,
   CreateDealResult,
+  CardCreateInput,
   EditDealInput,
   EditDealResult,
+  PromotionState,
+  PromotionLineDelta,
+  PromotionConditionDelta,
+  PromotionView,
+  OfferPromotionInput,
+  OfferPromotionResult,
 } from "./types";
 
 export {
@@ -55,14 +58,19 @@ export {
   DEMO_VAT_RATE,
 } from "./lib/derive";
 
+export { promotionSavings } from "./lib/promotion";
+
+export { dealChatUrl } from "./lib/dealChatUrl";
+
 export {
   getDealCard,
   getCurrentDealCardId,
   getOwnCatalog,
   getWorkspace,
-  getStagesAndThings,
-  getStageCompletions,
+  getThings,
+  getDealPeople,
   getDealArtifacts,
+  getPromotion,
   resolveP2pRecipient,
 } from "./supabase/reads";
 export {
@@ -70,12 +78,22 @@ export {
   createThing,
   setThingVisibility,
   assignThing,
-  markStageDone,
+  uploadDealInvoice,
 } from "./supabase/writes";
-export { confirmDeal, createDeal, editDeal, finalizeDeal } from "./actions";
+export {
+  confirmDeal,
+  createDeal,
+  declineDeal,
+  editDeal,
+  finalizeDeal,
+  signDeal,
+  offerPromotion,
+  acceptPromotion,
+  declinePromotion,
+  reopenTicket,
+  closeTicket,
+} from "./actions";
 export { DealCard } from "./components/DealCard";
 export { DealPin } from "./components/DealPin";
-export { DealWorkspace } from "./components/DealWorkspace";
-export { SellaMark } from "./components/SellaMark";
-export { SellaCurtain } from "./components/SellaCurtain";
-export { TranslateButton } from "./components/TranslateButton";
+export { DealCalendar } from "./components/DealCalendar";
+export type { CalendarDeal, DealCalendarKpis, DisplayStage } from "./components/DealCalendar";
