@@ -129,6 +129,15 @@ export async function getAssignableMembers(): Promise<TeamMember[]> {
 /** The inbox queue for the viewing company, newest first. */
 export async function getInbox(): Promise<InboxItemView[]> {
   const supabase = createClient();
+  // the viewer's company — each row is marked viewerIsReceiver so lenses can
+  // hide OUTGOING items (the select RLS shows a row to sender AND receiver)
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const { data: viewerPerson } = user
+    ? await supabase.from("person").select("company_id").eq("id", user.id).single()
+    : { data: null };
+  const viewerCompanyId = viewerPerson?.company_id ?? null;
   const { data, error } = await supabase
     .from("pending_inbox_item")
     .select(
@@ -181,6 +190,7 @@ export async function getInbox(): Promise<InboxItemView[]> {
       // Lane A: the joined card projected to display strings (null for
       // connection requests, or when the card is not readable/has no lines)
       dealCard: dealPreviewOf(one(row.deal_card) as DealCardEmbed),
+      viewerIsReceiver: viewerCompanyId != null && row.receiver_company_id === viewerCompanyId,
     };
   });
 }

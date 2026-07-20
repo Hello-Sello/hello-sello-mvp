@@ -101,6 +101,20 @@ test('the ticket lands in the other company\'s Deal tickets lens; accepting join
     await createC2cDealAsAlice(alicePage)
     const cardId = resolveDealCardIdForRelationship()
 
+    // NEGATIVE SPACE: the ticket row is visible to both companies at the DB
+    // layer (inbox select RLS is deliberately two-sided), but only the RECEIVER
+    // can act — so the SENDER's inbox must offer it in NO actionable lens.
+    await alicePage.goto('/connect/inbox')
+    // wait for the queue to actually load (also guarantees hydration) before
+    // driving the tabs — a click during load lands on a handler-less button
+    await expect(alicePage.getByText('Loading inbox…')).toBeHidden({ timeout: 15000 })
+    // default lens (Unassigned): her outgoing ticket must not be listed
+    await expect(alicePage.getByText('Pedanios 31/1 COS-CA')).toHaveCount(0)
+    await alicePage.getByRole('button', { name: /deal tickets/i }).click()
+    await expect(
+      alicePage.getByText('No deal tickets waiting to be picked up.', { exact: false }),
+    ).toBeVisible({ timeout: 15000 })
+
     // Bob (StonePharm) finds the claimable ticket under its OWN lens, with the
     // real card preview (deterministic Pedanios line from the create fixture)
     await bobPage.goto('/connect/inbox')
@@ -109,8 +123,9 @@ test('the ticket lands in the other company\'s Deal tickets lens; accepting join
     await expect(ticketRow).toBeVisible({ timeout: 15000 })
     await ticketRow.click()
 
-    // Accept = claim: Bob becomes a deal_member OWNER on the SAME deal
-    await bobPage.getByRole('button', { name: /accept & connect/i }).first().click()
+    // Accept = claim (the button is deal-worded — nothing is being "connected"):
+    // Bob becomes a deal_member OWNER on the SAME deal
+    await bobPage.getByRole('button', { name: /pick up deal/i }).first().click()
     await expect
       .poll(() => countDealMembersForCard(cardId), { timeout: 15000 })
       .toBe(2)
