@@ -233,6 +233,7 @@ export async function getConversations(): Promise<ConversationListItem[]> {
     return {
       ...base,
       name: personName,
+      otherPersonId,
       subtitle: otherCompanyName,
       initials: personInitials(per?.first_name, per?.last_name),
     };
@@ -514,6 +515,40 @@ export async function postMessage(threadId: string, body: string): Promise<ChatM
   });
   if (error) throw error;
   return getMessages(threadId);
+}
+
+/**
+ * Person-target deal delivery (Lane A): drop the "[Sender] has sent a deal"
+ * message into a p2p thread. `type: 'deal_card'` + `metadata.deal_card_id`
+ * make the bubble clickable (MessageBubble dispatches hs:open-deal-card);
+ * the typed message never trips Sella detection (its trigger only enqueues
+ * plain 'message' rows). Sender = the real person — the send is their action.
+ *
+ * Called from the SEND/COMPOSITION layer only (create-card host, basket send).
+ * Never from deals/ (module cycle) and never from SQL (it would double-deliver
+ * the Sella-detection door, which posts its own deal_detected message).
+ */
+export async function postDealMessage(threadId: string, dealCardId: string): Promise<void> {
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("messaging: no authenticated user");
+  const { data: me } = await supabase
+    .from("person")
+    .select("first_name, last_name")
+    .eq("id", user.id)
+    .single();
+  const name = me ? `${me.first_name} ${me.last_name}`.trim() : "Someone";
+  const { error } = await supabase.from("chat_message").insert({
+    thread_id: threadId,
+    sender: "person",
+    sender_person_id: user.id,
+    type: "deal_card",
+    body: `${name} has sent a deal`,
+    metadata: { deal_card_id: dealCardId },
+  });
+  if (error) throw error;
 }
 
 /**

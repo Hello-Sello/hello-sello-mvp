@@ -202,6 +202,9 @@ export function ThreadView({ conversation, messages, onSend, onGroupRenamed }: T
         // pass the thread for a P2P, omit it for a C2C company channel.
         threadId={isC2C ? undefined : conversation.threadId}
         counterpartyName={conversation.companyName}
+        // Lane A: the other PERSON is the counterparty co-owner for a chat-born
+        // deal (person-target routing). A c2c chat has no person — company-target.
+        counterpartyPersonId={isC2C ? undefined : conversation.otherPersonId ?? undefined}
         // 04A polish: the strip's top bar owns identity on the P2P deal path - the
         // PERSON's name on the left, the company on the relationship button (right).
         counterpartyPersonName={conversation.name}

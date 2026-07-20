@@ -109,7 +109,7 @@ DELETE FROM deal_card WHERE id IN (SELECT id FROM _cards);
 -- a getByText assertion match the stale bubble. Widen this delete to clear all three
 -- projection types from the relationship's p2p thread.
 DELETE FROM chat_message
-  WHERE type IN ('deal_detected', 'deal_card_updated', 'deal_change_declined')
+  WHERE type IN ('deal_detected', 'deal_card_updated', 'deal_change_declined', 'deal_card')
   AND thread_id IN (SELECT id FROM chat_thread WHERE relationship_id = :'rel');
 DELETE FROM sella_detection
   WHERE thread_id IN (SELECT id FROM chat_thread WHERE relationship_id = :'rel');
@@ -263,6 +263,28 @@ export function countDealMembersForCard(dealCardId: string): number {
       `select count(*) from public.deal_member dm ` +
         `join public.deal_workspace dw on dw.id = dm.deal_workspace_id ` +
         `where dw.deal_card_id = '${dealCardId}'`,
+    ],
+    { encoding: 'utf8' },
+  ).trim()
+  return Number(out)
+}
+
+/**
+ * Count the live pending_inbox_item rows for ONE card (Lane A routing). A
+ * PERSON-target birth (counterparty co-owner set) must deliver as a chat
+ * message, never as a company inbox ticket — this proves the ticket half
+ * stayed silent. Card id resolved at RUNTIME by the caller.
+ */
+export function countTicketsForCard(dealCardId: string): number {
+  const bin = psqlBin()
+  const out = execFileSync(
+    bin,
+    [
+      DB_URL,
+      '-At',
+      '-c',
+      `select count(*) from public.pending_inbox_item ` +
+        `where deal_card_id = '${dealCardId}' and deleted_at is null`,
     ],
     { encoding: 'utf8' },
   ).trim()
@@ -452,6 +474,34 @@ export async function createDraftDealAsAlice(
   await dealPanel(alicePage).getByRole('button', { name: /talk about this deal/i }).waitFor({
     timeout: 15000,
   })
+}
+
+/**
+ * Drive the c2c (COMPANY chat) deal-create flow as Alice (Lane A): open the
+ * GreenLeaf<->StonePharm company channel (found by its fixed "Company chat
+ * (C2C)" subtitle after narrowing the list by search — the p2p row subtitles
+ * the company name instead), press its "Start a deal" door, and birth the same
+ * deterministic Pedanios draft as createDraftDealAsAlice. No counterparty
+ * person exists in a company chat, so the birth is COMPANY-target: deliver_deal
+ * writes the claimable inbox ticket for StonePharm at birth.
+ */
+export async function createC2cDealAsAlice(alicePage: Page): Promise<void> {
+  await alicePage.goto('/connect/chat')
+  await alicePage.getByPlaceholder('Search conversations…').fill(COUNTERPARTY_NAME.alice)
+  await alicePage.getByText('Company chat (C2C)', { exact: true }).first().click()
+  await alicePage.getByRole('button', { name: 'Start a deal', exact: true }).click()
+  const addProductSelect = dealPanel(alicePage)
+    .locator('select')
+    .filter({ hasText: /add product from your shop/i })
+  await addProductSelect.waitFor()
+  await addProductSelect.selectOption({ label: 'Pedanios 31/1 COS-CA' })
+  const row = openRowLocator(alicePage)
+  await row.locator('select').nth(2).selectOption('100')
+  await row.locator('input[type="number"]').fill('5.00')
+  await dealPanel(alicePage).getByRole('button', { name: /^send deal$/i }).click()
+  await dealPanel(alicePage)
+    .getByRole('button', { name: /talk about this deal/i })
+    .waitFor({ timeout: 15000 })
 }
 
 /**

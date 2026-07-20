@@ -1,43 +1,37 @@
 /**
- * A1 — deal creation from the c2c (company) chat.
+ * Lane A — deal creation from the c2c (company) chat + the company-delivery
+ * spine (birth → inbox ticket → claim).
  *
- * Today the c2c chat renders DealPin's State A as just "No deal yet": the
- * "Start a deal" button + the `hs:create-deal` listener are gated on
+ * Before this lane the c2c chat rendered DealPin's State A as just "No deal
+ * yet": the "Start a deal" button + the `hs:create-deal` listener were gated on
  * `canPropose = variant === "chat" && !!threadId`, and ThreadView passes
- * `threadId: undefined` for a c2c conversation. So a company chat offers no
- * way to create a deal, and a deal born on the relationship has no visible
- * surface in the c2c chat (the picker + open-card chip live inside the
- * threadId-gated p2p top bar).
+ * `threadId: undefined` for a c2c conversation — so a company chat offered no
+ * way to create a deal, and a born deal had no visible c2c surface.
  *
- * This spec drives the WANTED behaviour (Lane A / A1):
- *   1. the c2c chat shows "Start a deal"; clicking it opens the create-mode
- *      card (same DealCardPanelHost panel the p2p door uses — DealPin knows the
- *      relationship, which is all `createDeal` needs);
- *   2. "Send deal" births a real draft with the CREATOR AS SOLE OWNER (no
- *      counterparty person exists in a company chat — that is the routing key
- *      A2's deliver_deal reads);
- *   3. after a re-open the c2c chat shows the born deal as its own row (chip +
- *      "Open the deal card"), which opens the card panel.
+ * What this file proves, in order:
+ *   1. the c2c chat offers "Start a deal"; the birth has the CREATOR AS SOLE
+ *      OWNER (no counterparty person exists in a company chat — that absence
+ *      is deliver_deal's company-target routing key);
+ *   2. the born deal's row appears in the c2c chat LIVE (hs:deal-updated —
+ *      the c2c strip has no p2p thread, so realtime never covers it);
+ *   3. the row survives a fresh navigation and opens the card panel;
+ *   4. the full company delivery: the ticket lands in the OTHER company's
+ *      "Deal tickets" inbox lens with a real card preview, "Accept & connect"
+ *      makes the claimer a deal_member owner on the SAME deal (no new
+ *      relationship), and the deal then opens from the claimer's own c2c chat.
  *
- * p2p regression is covered by the existing deal-change suite (same button,
- * same panel) — not duplicated here.
- *
- * Selector notes (mirrors fixtures/two-company.ts):
- *   - the c2c conversation row is found by narrowing the list with the
- *     "Search conversations…" box, then clicking the one row whose subtitle is
- *     "Company chat (C2C)" (p2p rows subtitle the company name instead);
- *   - the create-mode card + the born card render inside
- *     `<aside aria-label="Deal card">`; "Talk about this deal" is the stable
- *     "real card is rendered" signal (present in every card state).
+ * Selectors mirror fixtures/two-company.ts (createC2cDealAsAlice drives the
+ * create flow; the panel is `<aside aria-label="Deal card">`).
  */
 import { test, expect, type Page } from '@playwright/test'
 import {
   loginAs,
+  openTwoContexts,
+  createC2cDealAsAlice,
   resetDealData,
   resolveDealCardIdForRelationship,
   countDealMembersForCard,
   dealPanel,
-  openRowLocator,
   COUNTERPARTY_NAME,
 } from './fixtures/two-company'
 
@@ -46,11 +40,9 @@ import {
 test.describe.configure({ mode: 'serial' })
 
 /** Open the GreenLeaf <-> StonePharm COMPANY (c2c) chat as the current user. */
-async function openC2cChat(page: Page): Promise<void> {
+async function openC2cChat(page: Page, counterparty: string = COUNTERPARTY_NAME.alice) {
   await page.goto('/connect/chat')
-  // narrow the list to StonePharm rows, then pick the one c2c row by its
-  // fixed subtitle (the p2p row's subtitle is the company name, never this).
-  await page.getByPlaceholder('Search conversations…').fill(COUNTERPARTY_NAME.alice)
+  await page.getByPlaceholder('Search conversations…').fill(counterparty)
   await page.getByText('Company chat (C2C)', { exact: true }).first().click()
 }
 
@@ -64,54 +56,34 @@ test('c2c chat offers "Start a deal" and births a draft with the creator as sole
   await loginAs(page, 'alice')
   await openC2cChat(page)
 
-  // A1 core: the company chat must offer deal creation (today: "No deal yet" only)
-  const startButton = page.getByRole('button', { name: 'Start a deal', exact: true })
-  await expect(startButton).toBeVisible()
-  await startButton.click()
+  // A1 core: the company chat must offer deal creation (was: "No deal yet" only)
+  await expect(page.getByRole('button', { name: 'Start a deal', exact: true })).toBeVisible()
 
-  // the SAME create-mode card the p2p door opens (DealCardPanelHost)
-  const addProductSelect = dealPanel(page)
-    .locator('select')
-    .filter({ hasText: /add product from your shop/i })
-  await addProductSelect.waitFor()
-  await addProductSelect.selectOption({ label: 'Pedanios 31/1 COS-CA' })
-
-  const row = openRowLocator(page)
-  await row.locator('select').nth(2).selectOption('100')
-  await row.locator('input[type="number"]').fill('5.00')
-
-  await dealPanel(page).getByRole('button', { name: /^send deal$/i }).click()
-  await dealPanel(page)
-    .getByRole('button', { name: /talk about this deal/i })
-    .waitFor({ timeout: 15000 })
+  await createC2cDealAsAlice(page)
 
   // no counterparty person exists in a company chat → the creator is the SOLE
-  // deal_member owner (this absence is A2's company-target routing key).
+  // deal_member owner (this absence is deliver_deal's company-target routing key)
   const cardId = resolveDealCardIdForRelationship()
   expect(countDealMembersForCard(cardId)).toBe(1)
 })
 
+test('the born deal row appears in the c2c chat LIVE — no reload needed', async ({ page }) => {
+  await loginAs(page, 'alice')
+  await createC2cDealAsAlice(page)
+
+  // NO navigation: the strip must pick the born deal up from the panel host's
+  // hs:deal-updated broadcast (the c2c chat has no p2p thread, so the realtime
+  // channel never runs here). The deal chip row is the live-refresh proof.
+  await expect(
+    page.getByRole('button', { name: 'Open the deal card', exact: true }).first(),
+  ).toBeVisible({ timeout: 10000 })
+})
+
 test('a born deal shows as a c2c row that opens the card', async ({ page }) => {
   await loginAs(page, 'alice')
-  await openC2cChat(page)
+  await createC2cDealAsAlice(page)
 
-  // birth a draft from the c2c chat (as above, condensed)
-  await page.getByRole('button', { name: 'Start a deal', exact: true }).click()
-  const addProductSelect = dealPanel(page)
-    .locator('select')
-    .filter({ hasText: /add product from your shop/i })
-  await addProductSelect.waitFor()
-  await addProductSelect.selectOption({ label: 'Pedanios 31/1 COS-CA' })
-  const row = openRowLocator(page)
-  await row.locator('select').nth(2).selectOption('100')
-  await row.locator('input[type="number"]').fill('5.00')
-  await dealPanel(page).getByRole('button', { name: /^send deal$/i }).click()
-  await dealPanel(page)
-    .getByRole('button', { name: /talk about this deal/i })
-    .waitFor({ timeout: 15000 })
-
-  // fresh navigation (A1 needs no live refresh — that is A7): the c2c chat now
-  // shows the born deal as its own row with the open-card control.
+  // fresh navigation: the c2c chat still shows the born deal as its own row
   await openC2cChat(page)
   const openCard = page.getByRole('button', { name: 'Open the deal card', exact: true })
   await expect(openCard.first()).toBeVisible({ timeout: 15000 })
@@ -119,4 +91,41 @@ test('a born deal shows as a c2c row that opens the card', async ({ page }) => {
   await dealPanel(page)
     .getByRole('button', { name: /talk about this deal/i })
     .waitFor({ timeout: 15000 })
+})
+
+test('the ticket lands in the other company\'s Deal tickets lens; accepting joins the deal', async ({
+  browser,
+}) => {
+  const { aliceContext, bobContext, alicePage, bobPage } = await openTwoContexts(browser)
+  try {
+    await createC2cDealAsAlice(alicePage)
+    const cardId = resolveDealCardIdForRelationship()
+
+    // Bob (StonePharm) finds the claimable ticket under its OWN lens, with the
+    // real card preview (deterministic Pedanios line from the create fixture)
+    await bobPage.goto('/connect/inbox')
+    await bobPage.getByRole('button', { name: /deal tickets/i }).click()
+    const ticketRow = bobPage.getByText('Pedanios 31/1 COS-CA', { exact: false }).first()
+    await expect(ticketRow).toBeVisible({ timeout: 15000 })
+    await ticketRow.click()
+
+    // Accept = claim: Bob becomes a deal_member OWNER on the SAME deal
+    await bobPage.getByRole('button', { name: /accept & connect/i }).first().click()
+    await expect
+      .poll(() => countDealMembersForCard(cardId), { timeout: 15000 })
+      .toBe(2)
+
+    // …and NO new relationship was minted: the deal opens from the EXISTING
+    // GreenLeaf c2c chat on Bob's side.
+    await openC2cChat(bobPage, COUNTERPARTY_NAME.bob)
+    const openCard = bobPage.getByRole('button', { name: 'Open the deal card', exact: true })
+    await expect(openCard.first()).toBeVisible({ timeout: 15000 })
+    await openCard.first().click()
+    await dealPanel(bobPage)
+      .getByRole('button', { name: /talk about this deal/i })
+      .waitFor({ timeout: 15000 })
+  } finally {
+    await aliceContext.close()
+    await bobContext.close()
+  }
 })

@@ -13,6 +13,7 @@ import {
   type MemberView,
   type ThingView,
 } from "@/modules/deals";
+import { openOrCreateP2pThread, postDealMessage } from "@/modules/messaging";
 
 /**
  * A not-yet-born draft view for CREATE mode (chj/07-08). The card renders it
@@ -101,6 +102,10 @@ export function DealCardPanelHost() {
   const [createReq, setCreateReq] = useState<{
     relationshipId: string;
     buyerName: string;
+    /** Lane A: present when the door is a p2p chat — the born deal gets this
+     *  person as counterparty co-owner (person-target routing) and the
+     *  delivery bubble is posted into their chat after birth. */
+    counterpartyPersonId?: string;
   } | null>(null);
 
   // bumped on `hs:deal-updated` to re-run the card fetch (chj/07-08). This is how
@@ -127,13 +132,19 @@ export function DealCardPanelHost() {
   // card that was open is closed so the create card takes the slot.
   useEffect(() => {
     function onCreate(e: Event) {
-      const d = (e as CustomEvent<{ relationshipId?: string; buyerName?: string }>)
-        .detail;
+      const d = (
+        e as CustomEvent<{
+          relationshipId?: string;
+          buyerName?: string;
+          counterpartyPersonId?: string;
+        }>
+      ).detail;
       if (d?.relationshipId) {
         setOpenCardId(null);
         setCreateReq({
           relationshipId: d.relationshipId,
           buyerName: d.buyerName ?? "your contact",
+          counterpartyPersonId: d.counterpartyPersonId,
         });
       }
     }
@@ -160,8 +171,25 @@ export function DealCardPanelHost() {
     if (!createReq) return;
     const { dealCardId } = await createDeal({
       relationshipId: createReq.relationshipId,
+      // Lane A routing key: a p2p door names the counterparty co-owner, so the
+      // birth is person-target (no company inbox ticket from deliver_deal)
+      counterpartyPersonId: createReq.counterpartyPersonId ?? null,
       ...input,
     });
+    // Person delivery (Lane A): the SEND layer posts the "[Sender] has sent a
+    // deal" bubble into the recipient's chat. Fail-soft: a delivery hiccup
+    // must not lose the just-born deal — the panel still swaps to the card.
+    if (createReq.counterpartyPersonId) {
+      try {
+        const tid = await openOrCreateP2pThread(
+          createReq.relationshipId,
+          createReq.counterpartyPersonId,
+        );
+        await postDealMessage(tid, dealCardId);
+      } catch (e) {
+        console.error("deal delivery message failed", e);
+      }
+    }
     window.dispatchEvent(
       new CustomEvent("hs:deal-updated", { detail: { dealCardId } }),
     );

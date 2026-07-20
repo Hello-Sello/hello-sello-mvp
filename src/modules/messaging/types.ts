@@ -59,7 +59,10 @@ export type MessageType =
   | "workspace_created"
   | "deal_opened"
   | "deal_cancelled"
-  | "deal_card_updated";
+  | "deal_card_updated"
+  // Lane A person delivery: "[Sender] has sent a deal" — metadata carries the
+  // deal_card_id; the bubble opens the card in the side panel
+  | "deal_card";
 
 /** relationship_status.code - seeded values. This slice writes `active`. */
 export type RelationshipStatus = "active" | "suspended" | "ended";
@@ -106,6 +109,11 @@ export interface ConversationListItem {
   relationshipId: string | null;
   /** display name: the company name for a c2c, the other person's name for a p2p */
   name: string;
+  /**
+   * the other PERSON's id (p2p rows only) — the deal create door passes it as
+   * the counterparty co-owner so a chat-born deal routes person-target (Lane A)
+   */
+  otherPersonId?: string | null;
   /** subtitle under the name: "Company chat (C2C)" for c2c, the company name for a p2p */
   subtitle: string;
   /** computed avatar initials */

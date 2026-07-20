@@ -21,6 +21,7 @@ export { DealChat } from "./components/DealChat";
 export {
   acceptInbox,
   openOrCreateP2pThread,
+  postDealMessage,
   resolveC2cThread,
   createGroupThread,
   approveGroupMember,

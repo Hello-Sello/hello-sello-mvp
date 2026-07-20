@@ -1,0 +1,83 @@
+/**
+ * A5 — person delivery: a deal sent to a PERSON lands as a clickable
+ * "[Sender] has sent a deal" message in that person's chat.
+ *
+ * The routing spine (deliver_deal) makes a birth WITH a counterparty co-owner
+ * person-target: NO inbox ticket — the delivery is a chat_message of type
+ * 'deal_card' posted by the SEND layer (the create-card host / basket send),
+ * never by SQL (which would double-deliver the Sella-detection door) and never
+ * by deals/ (module cycle).
+ *
+ * Drives the chat door end-to-end over the seeded Alice (GreenLeaf) ↔ Bob
+ * (StonePharm) p2p thread:
+ *   1. Alice births a draft from Bob's chat (the existing create-mode card) —
+ *      the door now carries Bob as counterparty co-owner;
+ *   2. the "has sent a deal" bubble appears in Alice's chat, and in Bob's;
+ *   3. clicking the bubble opens the deal card in the side panel;
+ *   4. DB: the born card has ZERO pending_inbox_item rows (person-target).
+ *
+ * NOT covered here (and why): the "no chat yet → a new p2p conversation opens"
+ * arm rides openOrCreateP2pThread (existing, already exercised by the accept
+ * flow); the "detection deals are not doubled" arm is proven at the SQL layer
+ * by deliver_deal_test.sql (the send layer simply isn't in the detection path).
+ */
+import { test, expect, type Page, type BrowserContext } from '@playwright/test'
+import {
+  openTwoContexts,
+  createDraftDealAsAlice,
+  resetDealData,
+  resolveDealCardIdForRelationship,
+  countTicketsForCard,
+  dealPanel,
+  COUNTERPARTY_NAME,
+  type Who,
+} from './fixtures/two-company'
+
+test.describe.configure({ mode: 'serial' })
+
+let aliceContext: BrowserContext
+let bobContext: BrowserContext
+let alicePage: Page
+let bobPage: Page
+
+async function openP2pChat(page: Page, who: Who) {
+  await page.goto('/connect/chat')
+  await page.getByText(COUNTERPARTY_NAME[who], { exact: false }).first().click()
+}
+
+test.beforeEach(async ({ browser }) => {
+  resetDealData()
+  ;({ aliceContext, bobContext, alicePage, bobPage } = await openTwoContexts(browser))
+})
+
+test.afterEach(async () => {
+  await aliceContext?.close()
+  await bobContext?.close()
+})
+
+test('sending a deal from a p2p chat drops the clickable bubble on both sides, no inbox ticket', async () => {
+  // Alice births from Bob's chat (the fixture drives the create-mode card door)
+  await createDraftDealAsAlice(alicePage)
+
+  // 1 · the sender's own chat shows the delivery bubble (the BUBBLE button —
+  //     its accessible name carries the "Click to open…" hint line, which the
+  //     conversation-list row's preview text never does)
+  await expect(
+    alicePage.getByRole('button', { name: /click to open the deal card/i }).first(),
+  ).toBeVisible({ timeout: 15000 })
+
+  // 2 · person-target birth → NO company inbox ticket
+  const cardId = resolveDealCardIdForRelationship()
+  expect(countTicketsForCard(cardId)).toBe(0)
+
+  // 3 · the recipient sees the same bubble in his chat with Alice…
+  await openP2pChat(bobPage, 'bob')
+  const bobBubble = bobPage.getByRole('button', { name: /click to open the deal card/i }).first()
+  await expect(bobBubble).toBeVisible({ timeout: 15000 })
+
+  // 4 · …and clicking it opens the deal card in the side panel
+  await bobBubble.click()
+  await dealPanel(bobPage)
+    .getByRole('button', { name: /talk about this deal/i })
+    .waitFor({ timeout: 15000 })
+})

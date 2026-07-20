@@ -119,6 +119,7 @@ export function DealPin({
   threadId,
   counterpartyName,
   counterpartyPersonName,
+  counterpartyPersonId,
   counterpartyInitials,
   children,
 }: {
@@ -142,6 +143,12 @@ export function DealPin({
   counterpartyName?: string;
   /** the other PERSON's name (P2P) - the top-bar identity on the left */
   counterpartyPersonName?: string;
+  /**
+   * the other PERSON's id (P2P only; Lane A) - broadcast with the create-card
+   * event so the panel host births the deal WITH a counterparty co-owner
+   * (person-target routing: chat-message delivery, no company inbox ticket)
+   */
+  counterpartyPersonId?: string;
   /**
    * The counterparty avatar initials for the strip's top-tier identity (D-02).
    * ThreadView passes `conversation.initials` on the P2P deal path; the workspace
@@ -222,10 +229,16 @@ export function DealPin({
   const openCreateCard = useCallback(() => {
     window.dispatchEvent(
       new CustomEvent("hs:create-deal-card", {
-        detail: { relationshipId, buyerName: counterpartyName ?? "your contact" },
+        detail: {
+          relationshipId,
+          buyerName: counterpartyName ?? "your contact",
+          // person-target routing key (Lane A): present for a p2p chat door,
+          // absent for c2c — the host passes it into createDeal + the delivery
+          counterpartyPersonId,
+        },
       }),
     );
-  }, [relationshipId, counterpartyName]);
+  }, [relationshipId, counterpartyName, counterpartyPersonId]);
 
   // NOTE (07-01 / chj teardown): the responder Accept/Decline + proposer Withdraw
   // + the old proposer Send-reason popup lived here. The backend change engine is
@@ -363,6 +376,28 @@ export function DealPin({
       if (channel) void supabase.removeChannel(channel);
     };
   }, [canPropose, threadId, relationshipId]);
+
+  // c2c live-refresh (Lane A): the realtime channel above is gated on a p2p
+  // thread, so a c2c chat never hears about a birth — the born deal's row only
+  // appeared after a manual reload. The panel host broadcasts hs:deal-updated
+  // after every birth/change (same-window), so re-list the relationship's
+  // deals on it. Window-event only: deals stays acyclic with messaging.
+  useEffect(() => {
+    if (variant !== "chat" || threadId) return;
+    const onUpdated = () => {
+      void listRelationshipDeals(relationshipId)
+        .then((list) => {
+          setDeals(list);
+          // adopt the freshly-born deal only when nothing is selected yet
+          setSelectedId(
+            (cur) => cur ?? (list.find((d) => LIVE_STATUSES.has(d.status)) ?? list[0])?.id ?? null,
+          );
+        })
+        .catch(() => {});
+    };
+    window.addEventListener("hs:deal-updated", onUpdated);
+    return () => window.removeEventListener("hs:deal-updated", onUpdated);
+  }, [variant, threadId, relationshipId]);
 
   // the composer's "+ → Create a deal" door (5A.3): it fires a context-free window
   // event; DealPin re-broadcasts it WITH the relationship + recipient so the panel

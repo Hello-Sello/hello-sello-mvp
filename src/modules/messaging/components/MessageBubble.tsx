@@ -1,4 +1,4 @@
-import { Sparkles } from "lucide-react";
+import { FileText, Sparkles } from "lucide-react";
 import type { ChatMessageView } from "../types";
 import { formatTimeAgo } from "../lib/chat-display";
 import { RichText } from "./RichText";
@@ -17,6 +17,41 @@ export interface MessageBubbleProps {
 }
 
 export function MessageBubble({ message }: MessageBubbleProps) {
+  // Person-target deal delivery (Lane A): the "[Sender] has sent a deal" line
+  // is a clickable card-shaped bubble that opens the deal in the side panel.
+  // Branches on TYPE (not sender) — the send layer posts it in the sender's
+  // own voice, but both sides see the same affordance. Acyclic: it only
+  // dispatches the existing window event; DealCardPanelHost owns the panel.
+  if (message.type === "deal_card") {
+    const dealCardId = (message.metadata as { deal_card_id?: string } | null)?.deal_card_id;
+    return (
+      <div className={`my-1 flex ${message.isMine ? "justify-end" : "justify-start"}`}>
+        <button
+          type="button"
+          onClick={() =>
+            dealCardId &&
+            window.dispatchEvent(
+              new CustomEvent("hs:open-deal-card", { detail: { dealCardId } }),
+            )
+          }
+          title="Open the deal card"
+          className="flex items-stretch overflow-hidden rounded-xl border border-brand/15 bg-white text-left transition hover:bg-brand-soft/20"
+        >
+          <span className="w-1.5 shrink-0 bg-brand" aria-hidden />
+          <span className="flex items-center gap-2 px-3 py-2">
+            <FileText size={16} strokeWidth={2} className="shrink-0 text-brand" />
+            <span className="flex flex-col">
+              <span className="text-sm font-semibold text-ink">{message.body}</span>
+              <span className="text-[10px] text-ink/45">
+                Click to open the deal card · {formatTimeAgo(message.created_at)}
+              </span>
+            </span>
+          </span>
+        </button>
+      </div>
+    );
+  }
+
   if (message.sender === "system") {
     return (
       <div className="my-1 flex justify-center">
