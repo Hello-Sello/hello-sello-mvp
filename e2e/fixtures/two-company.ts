@@ -246,6 +246,30 @@ export function countDealChangeInputForCard(dealCardId: string): number {
 }
 
 /**
+ * Count the live `deal_member` rows across ONE card's workspace (A1). A deal
+ * born from a c2c COMPANY chat has no counterparty person, so its creator must
+ * be the SOLE owner — that absence is the company-target routing key the
+ * delivery spine (deliver_deal) reads. Card id resolved at RUNTIME by the
+ * caller (never hardcoded — the seed regenerates ids on every db reset).
+ */
+export function countDealMembersForCard(dealCardId: string): number {
+  const bin = psqlBin()
+  const out = execFileSync(
+    bin,
+    [
+      DB_URL,
+      '-At',
+      '-c',
+      `select count(*) from public.deal_member dm ` +
+        `join public.deal_workspace dw on dw.id = dm.deal_workspace_id ` +
+        `where dw.deal_card_id = '${dealCardId}'`,
+    ],
+    { encoding: 'utf8' },
+  ).trim()
+  return Number(out)
+}
+
+/**
  * The `note` field of a card's currently-HELD change draft, or null if none is
  * held. A held note is NOT rendered anywhere in the current UI while it is only
  * held (CardFront's read-mode Note block reseeds from the SERVER's still-

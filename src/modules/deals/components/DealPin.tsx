@@ -180,6 +180,10 @@ export function DealPin({
 
   // whether THIS strip can host a proposal: chat variant over a real p2p thread
   const canPropose = variant === "chat" && !!threadId;
+  // whether THIS strip can CREATE a deal (A1): any chat over a relationship —
+  // c2c included. Direct birth only needs the relationship (createDeal), unlike
+  // propose/accept which needs a p2p thread (canPropose above).
+  const canCreate = variant === "chat" && !!relationshipId;
 
   // 4.5.2 - the birth-accept. Record this side's vote; on both-accept the RPC
   // births the card atomically and hands back its id, so we select + open it.
@@ -365,11 +369,11 @@ export function DealPin({
   // host can open the create card. p2p chat only - propose needs a p2p thread (the
   // workspace/c2c chats cannot mint a proposal).
   useEffect(() => {
-    if (!canPropose) return;
+    if (!canCreate) return;
     const onCreate = () => openCreateCard();
     window.addEventListener("hs:create-deal", onCreate);
     return () => window.removeEventListener("hs:create-deal", onCreate);
-  }, [canPropose, openCreateCard]);
+  }, [canCreate, openCreateCard]);
 
   // load the full card for the selected deal (drives the overlay + confirm gate).
   // setState only inside the async callback - no selection resolves to null.
@@ -701,7 +705,7 @@ export function DealPin({
       {variant === "chat" && !showProposal && !hasDeal && (
         <div className={rowCls}>
           <span className="shrink-0 text-[11px] text-ink/45">No deal yet</span>
-          {canPropose && (
+          {canCreate && (
             <button
               type="button"
               onClick={openCreateCard}
@@ -711,6 +715,15 @@ export function DealPin({
               Start a deal
             </button>
           )}
+        </div>
+      )}
+
+      {/* c2c has no threadId, so the p2p top-bar (picker + open-card) never renders;
+          give a born c2c deal its own minimal surface. */}
+      {variant === "chat" && !threadId && hasDeal && (
+        <div className={rowCls}>
+          <DealChip status={chipStatus} selectable={false} />
+          {dealCardChip}
         </div>
       )}
 
