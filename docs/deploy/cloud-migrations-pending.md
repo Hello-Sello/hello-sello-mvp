@@ -11,6 +11,24 @@
 
 ---
 
+## 🔴 PENDING 2026-07-20 — Lane A (deal creation & delivery), 4 migrations
+
+Built + proven locally (pgTAP probes `deliver_deal_test.sql` / `claim_deal_ticket_test.sql` GREEN
+on a fresh reset; full deal e2e green). **⚠️ Needs Ayush's review before cloud** — `create_deal_draft`
+is re-emitted (his RPC lane) and `claim_deal_ticket` writes `deal_member` (his RLS lane). Apply in
+timestamp order; all additive (`create or replace` on the same signature / new function / one seed row):
+
+| # | file | what |
+|---|------|------|
+| 1 | `20260720100000_deliver_deal.sql` | the routing primitive: no counterparty co-owner → one claimable `pending_inbox_item` deal ticket for the other company (idempotent); else no-op |
+| 2 | `20260720100100_create_deal_draft_delivers.sql` | live `20260618140000` body verbatim + `perform deliver_deal(v_card)` before `return` |
+| 3 | `20260720110000_claim_deal_ticket.sql` | pickup RPC: receiver-company member → `deal_member` owner on the existing deal |
+| 4 | `20260720130000_chat_message_type_deal_card_seed.sql` | one `chat_message_type` row (`deal_card`) for person-target delivery bubbles |
+
+> Note: this ledger's 2026-07-07 status below predates session 64 (which pushed
+> `20260710120000_person_company_id_lockdown` + `20260716120000_drop_buy_orphaned_tables` directly
+> to production) — the full pre-Lane-A reconcile pass is still owed (see CLAUDE.md #0).
+
 ## ✅ STATUS 2026-07-07 — cloud == local, tip `20260707090000`; NOTHING below is migration-pending
 
 Every migration through `20260707090000` is applied to cloud. The most recent batch (**9 migrations** —
