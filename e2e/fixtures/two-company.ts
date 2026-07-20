@@ -270,6 +270,22 @@ export function countDealMembersForCard(dealCardId: string): number {
 }
 
 /**
+ * Count the deal_card rows on the GreenLeaf <-> StonePharm relationship — the
+ * second-deal tests assert a repeat create really births a NEW card (2 rows),
+ * not an edit of the first. Resolved at RUNTIME like everything else here.
+ */
+export function countDealCardsForRelationship(): number {
+  const bin = psqlBin()
+  const rel = resolveRelationshipId(bin)
+  const out = execFileSync(
+    bin,
+    [DB_URL, '-At', '-c', `select count(*) from public.deal_card where relationship_id = '${rel}'`],
+    { encoding: 'utf8' },
+  ).trim()
+  return Number(out)
+}
+
+/**
  * Count the live pending_inbox_item rows for ONE card (Lane A routing). A
  * PERSON-target birth (counterparty co-owner set) must deliver as a chat
  * message, never as a company inbox ticket — this proves the ticket half
@@ -466,12 +482,14 @@ export async function createDraftDealAsAlice(
       .fill(opts.note)
   }
 
-  // 6. birth it for real. Wait for the panel to swap from the create-mode footer
-  //    to a real card's title-bar pill ("Talk about this deal" — present in EVERY
-  //    card state/status, unlike the pencil or DecisionBar content) before
-  //    returning, so callers never race the create -> fetch -> render round trip.
+  // 6. birth it for real. Wait for a signal UNIQUE to the BORN card: the
+  //    "Edit deal" pencil (a fresh draft with no held change always has it).
+  //    ⚠️ NOT "Talk about this deal" — the CREATE-mode card shows that pill
+  //    too, so it can resolve while the birth roundtrip is still in flight;
+  //    a caller that keeps driving the panel then races handleCreate's
+  //    completion (which closes any create session and swaps the born card in).
   await dealPanel(alicePage).getByRole('button', { name: /^send deal$/i }).click()
-  await dealPanel(alicePage).getByRole('button', { name: /talk about this deal/i }).waitFor({
+  await dealPanel(alicePage).getByRole('button', { name: /edit deal/i }).waitFor({
     timeout: 15000,
   })
 }
@@ -498,9 +516,11 @@ export async function createC2cDealAsAlice(alicePage: Page): Promise<void> {
   const row = openRowLocator(alicePage)
   await row.locator('select').nth(2).selectOption('100')
   await row.locator('input[type="number"]').fill('5.00')
+  // wait on the BORN-card-only pencil, not "Talk about this deal" (the create
+  // card shows that too — see createDraftDealAsAlice's note on the race)
   await dealPanel(alicePage).getByRole('button', { name: /^send deal$/i }).click()
   await dealPanel(alicePage)
-    .getByRole('button', { name: /talk about this deal/i })
+    .getByRole('button', { name: /edit deal/i })
     .waitFor({ timeout: 15000 })
 }
 

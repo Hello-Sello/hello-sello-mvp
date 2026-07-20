@@ -28,6 +28,7 @@ import {
   resetDealData,
   resolveDealCardIdForRelationship,
   countTicketsForCard,
+  countDealCardsForRelationship,
   dealPanel,
   COUNTERPARTY_NAME,
   type Who,
@@ -80,4 +81,34 @@ test('sending a deal from a p2p chat drops the clickable bubble on both sides, n
   await dealPanel(bobPage)
     .getByRole('button', { name: /talk about this deal/i })
     .waitFor({ timeout: 15000 })
+})
+
+test('a SECOND deal can be started from the same p2p chat — button visible, composer + door works', async () => {
+  await createDraftDealAsAlice(alicePage)
+
+  // a deal exists — the strip must STILL offer "Start a deal" (Muskan's call,
+  // 2026-07-20: a chat hosts many deals; the first birth must not hide the door)
+  await expect(
+    alicePage.getByRole('button', { name: 'Start a deal', exact: true }),
+  ).toBeVisible({ timeout: 10000 })
+
+  // drive the SECOND create through the composer's "+" door (the other entry
+  // point that must keep working once deals exist)
+  await alicePage.getByRole('button', { name: 'Add', exact: true }).click()
+  await alicePage.getByRole('button', { name: /create a deal/i }).click()
+  const addProductSelect = dealPanel(alicePage)
+    .locator('select')
+    .filter({ hasText: /add product from your shop/i })
+  await addProductSelect.waitFor({ timeout: 15000 })
+  await addProductSelect.selectOption({ label: 'Pedanios 31/1 COS-CA' })
+  const row = dealPanel(alicePage)
+    .getByRole('row')
+    .filter({ has: alicePage.getByRole('button', { name: /done editing this line/i }) })
+  await row.locator('select').nth(2).selectOption('100')
+  await row.locator('input[type="number"]').fill('7.50')
+  await dealPanel(alicePage).getByRole('button', { name: /^send deal$/i }).click()
+  await dealPanel(alicePage).getByRole('button', { name: /edit deal/i }).waitFor({ timeout: 15000 })
+
+  // a genuinely NEW card (2 on the relationship), person-target like the first
+  await expect.poll(() => countDealCardsForRelationship(), { timeout: 15000 }).toBe(2)
 })

@@ -577,6 +577,20 @@ export function DealPin({
             </button>
           )}
 
+          {/* a chat hosts MANY deals: the create door stays visible after the
+              first birth (State A only covers the no-deal case). Same event as
+              the composer's "+" — DealCardPanelHost owns the create card. */}
+          {canCreate && hasDeal && (
+            <button
+              type="button"
+              onClick={openCreateCard}
+              className="flex shrink-0 items-center gap-1.5 rounded-full border border-dashed border-brand/45 px-3 py-1.5 text-xs font-semibold text-brand transition hover:border-brand hover:bg-brand-soft/30"
+            >
+              <Plus size={13} strokeWidth={2.5} />
+              Start a deal
+            </button>
+          )}
+
           {/* ⋮ menu - secondary actions, pushed right; vertical dots to spare
               horizontal room now that the chat can be 50% wide */}
           <div className="relative ml-auto shrink-0">
@@ -754,11 +768,21 @@ export function DealPin({
       )}
 
       {/* c2c has no threadId, so the p2p top-bar (picker + open-card) never renders;
-          give a born c2c deal its own minimal surface. */}
+          give a born c2c deal its own minimal surface — including the create door,
+          which stays visible after the first birth (a company chat hosts many
+          deals; any teammate starts the next one from here). */}
       {variant === "chat" && !threadId && hasDeal && (
         <div className={rowCls}>
           <DealChip status={chipStatus} selectable={false} />
           {dealCardChip}
+          <button
+            type="button"
+            onClick={openCreateCard}
+            className="ml-auto flex shrink-0 items-center gap-1.5 rounded-lg border border-dashed border-brand/45 px-3 py-1.5 text-xs font-semibold text-brand transition hover:border-brand hover:bg-brand-soft/30"
+          >
+            <Plus size={13} strokeWidth={2.5} />
+            Start a deal
+          </button>
         </div>
       )}
 

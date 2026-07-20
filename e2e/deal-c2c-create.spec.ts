@@ -31,6 +31,7 @@ import {
   resetDealData,
   resolveDealCardIdForRelationship,
   countDealMembersForCard,
+  countDealCardsForRelationship,
   dealPanel,
   COUNTERPARTY_NAME,
 } from './fixtures/two-company'
@@ -91,6 +92,37 @@ test('a born deal shows as a c2c row that opens the card', async ({ page }) => {
   await dealPanel(page)
     .getByRole('button', { name: /talk about this deal/i })
     .waitFor({ timeout: 15000 })
+})
+
+test('a SECOND deal can be started from the same c2c chat — the button stays visible', async ({
+  page,
+}) => {
+  await loginAs(page, 'alice')
+  await createC2cDealAsAlice(page)
+
+  // the first deal exists (its chip row is showing) — "Start a deal" must
+  // STILL be offered so the chat can host more than one deal (Muskan's call,
+  // 2026-07-20: multiple deal cards per company chat is the designed flow)
+  const startAgain = page.getByRole('button', { name: 'Start a deal', exact: true })
+  await expect(startAgain).toBeVisible({ timeout: 10000 })
+  await startAgain.click()
+
+  const addProductSelect = dealPanel(page)
+    .locator('select')
+    .filter({ hasText: /add product from your shop/i })
+  await addProductSelect.waitFor()
+  await addProductSelect.selectOption({ label: 'Pedanios 31/1 COS-CA' })
+  const row = dealPanel(page)
+    .getByRole('row')
+    .filter({ has: page.getByRole('button', { name: /done editing this line/i }) })
+  await row.locator('select').nth(2).selectOption('100')
+  await row.locator('input[type="number"]').fill('7.50')
+  await dealPanel(page).getByRole('button', { name: /^send deal$/i }).click()
+  // BORN-card-only signal (the create card also shows "Talk about this deal")
+  await dealPanel(page).getByRole('button', { name: /edit deal/i }).waitFor({ timeout: 15000 })
+
+  // a genuinely NEW card was born (not an edit of the first)
+  await expect.poll(() => countDealCardsForRelationship(), { timeout: 15000 }).toBe(2)
 })
 
 test('the ticket lands in the other company\'s Deal tickets lens; accepting joins the deal', async ({
