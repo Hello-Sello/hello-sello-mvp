@@ -1,24 +1,25 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Search, Building2, User, ChevronRight, X } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Search, Building2, User, ChevronRight } from "lucide-react";
 import type { ConnectedCompany, MyConnectionsView } from "@/modules/messaging";
 import { isNewConnection, relativeDayLabel } from "@/modules/messaging";
 
 /**
- * The "+ New chat" picker (B2, Option A) - a leaflet that drops from the New chat
- * button and COVERS the whole conversation-list region below it (the base
- * "Search conversations" box, the All/Unread/Companies/Deals tabs, and the rows
- * all sit behind this opaque overlay), so only ONE list shows at a time - never
- * the base filters AND the picker stacked (D-04). It shows ONLY the viewer's connected people /
+ * The "+ New chat" picker content (B2, Option A) - rendered INSIDE the shared
+ * `Dialog` (owned by ChatView, mirroring the New-Group picker) as a centered
+ * modal, not a positioned overlay; it never decides its own backdrop or
+ * Escape/click-away close. It shows ONLY the viewer's connected people /
  * companies (D-01) in a Person|Company toggle, with a per-mode search and a
  * "New connections by date" section (D-03). Picking a person opens/creates a
- * P2P thread; picking a company opens the C2C thread (the parent routes it).
+ * P2P thread; picking a company opens the C2C thread (the parent routes it) -
+ * either pick resolves + closes the dialog immediately, so there is no
+ * separate name field or Create/Cancel footer (unlike the multi-select group
+ * picker).
  *
- * State is local useState ONLY (no global store - the project rule); the
- * open/closed flag is owned by the PARENT (ConversationList) so the trigger and
- * this overlay are siblings. Colours come from the REAL theme tokens
- * (bg-brand / .glass-strong / text-ink), never the prototype's literals (D-04).
- * The prototype's live-status dots are deliberately left out - there is no
- * last-seen / status backend, so the picker never fakes one (directive 3).
+ * State is local useState ONLY (no global store - the project rule). Colours
+ * come from the REAL theme tokens (bg-brand / text-ink), never the
+ * prototype's literals (D-04). The prototype's live-status dots are
+ * deliberately left out - there is no last-seen / status backend, so the
+ * picker never fakes one (directive 3).
  */
 
 /** What the dropdown reports up on a row click. */
@@ -33,7 +34,6 @@ export interface NewChatSelection {
 export interface NewChatDropdownProps {
   connections: MyConnectionsView;
   onSelect: (sel: NewChatSelection) => void;
-  onClose: () => void;
 }
 
 type Mode = "person" | "company";
@@ -50,33 +50,14 @@ interface FlatPerson {
   connectedAt: string;
 }
 
-export function NewChatDropdown({ connections, onSelect, onClose }: NewChatDropdownProps) {
+export function NewChatDropdown({ connections, onSelect }: NewChatDropdownProps) {
   const [mode, setMode] = useState<Mode>("person");
   const [query, setQuery] = useState("");
-  const ref = useRef<HTMLDivElement>(null);
   // Capture "now" ONCE at open time (lazy initializer runs a single time), so the
   // 30-day "new connections" window is stable across re-renders. Calling Date.now()
-  // bare in render is impure (react-hooks/purity) and the popover is short-lived,
+  // bare in render is impure (react-hooks/purity) and the dialog is short-lived,
   // so one frozen timestamp is exactly the right semantics here.
   const [now] = useState(() => Date.now());
-
-  // esc + click-away: a stable container ref + a document mousedown listener
-  // (NOT the prototype's innerHTML-rebuild hack). A controlled <input> keeps
-  // focus across re-render automatically, so no manual caret restore is needed.
-  useEffect(() => {
-    function onDown(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
-    }
-    function onEsc(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onEsc);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onEsc);
-    };
-  }, [onClose]);
 
   const needle = query.trim().toLowerCase();
 
@@ -116,27 +97,16 @@ export function NewChatDropdown({ connections, onSelect, onClose }: NewChatDropd
     .sort((a, b) => b.connectedAt.localeCompare(a.connectedAt));
 
   return (
-    <div
-      ref={ref}
-      className="glass-strong absolute inset-x-2 bottom-2 top-1 z-50 flex flex-col overflow-hidden rounded-2xl shadow-xl ring-1 ring-black/5"
-    >
-      {/* Header: title + an explicit ✕ close (D-03). Until now the picker closed
-          only via escape / click-away, which was not discoverable enough. */}
-      <div className="flex items-center justify-between border-b border-black/5 px-3 py-2">
-        <span className="text-sm font-semibold text-ink">New chat</span>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close"
-          title="Close"
-          className="flex h-7 w-7 items-center justify-center rounded-full text-ink/45 transition hover:bg-ink/5 hover:text-ink"
-        >
-          <X size={15} strokeWidth={2} />
-        </button>
+    <div className="flex max-h-[75vh] flex-col">
+      <div className="pb-3">
+        <h3 className="text-base font-semibold text-ink">New chat</h3>
+        <p className="mt-1 text-xs leading-relaxed text-ink/50">
+          Pick a person or company to start chatting.
+        </p>
       </div>
 
       {/* Person | Company toggle (pink active state, matches the list chips) */}
-      <div className="flex gap-1.5 border-b border-black/5 p-2.5">
+      <div className="flex gap-1.5 pb-2.5">
         <ToggleButton
           active={mode === "person"}
           onClick={() => setMode("person")}
@@ -152,7 +122,7 @@ export function NewChatDropdown({ connections, onSelect, onClose }: NewChatDropd
       </div>
 
       {/* per-mode real search input */}
-      <div className="px-2.5 pt-2.5">
+      <div className="pb-2.5">
         <div className="flex items-center gap-2 rounded-full bg-ink/5 px-3 py-1.5">
           <Search size={13} strokeWidth={1.75} className="text-ink/40" />
           <input
@@ -166,7 +136,7 @@ export function NewChatDropdown({ connections, onSelect, onClose }: NewChatDropd
       </div>
 
       {/* body */}
-      <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
+      <div className="min-h-0 max-h-[380px] flex-1 overflow-y-auto rounded-xl bg-ink/[0.02] p-1.5">
         {mode === "person" ? (
           <PersonBody
             all={visiblePeople}

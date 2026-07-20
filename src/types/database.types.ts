@@ -4632,10 +4632,6 @@ export type Database = {
     }
     Functions: {
       approve_company: { Args: { p_company_id: string }; Returns: undefined }
-      approve_group_member: {
-        Args: { p_person_id: string; p_thread_id: string }
-        Returns: string
-      }
       approve_join_request: {
         Args: { p_request_id: string; p_role?: string }
         Returns: undefined

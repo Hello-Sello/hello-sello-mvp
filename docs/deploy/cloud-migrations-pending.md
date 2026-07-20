@@ -30,15 +30,25 @@ timestamp order; all additive (`create or replace` on the same signature / new f
 > `20260710120000_person_company_id_lockdown` + `20260716120000_drop_buy_orphaned_tables` directly
 > to production) — the full pre-Lane-A reconcile pass is still owed (see CLAUDE.md #0).
 
-## ✅ STATUS 2026-07-07 — cloud == local, tip `20260707090000`; NOTHING below is migration-pending
+## ⚠️ PENDING 2026-07-20 — 1 migration: drop the group-thread external-approval gate (Ayush)
+
+- **`20260720100000_drop_group_thread_external_gate.sql`** (Ayush, 2026-07-20) — `create or replace`s
+  `create_group_thread` so every invited group member (deal party or not) goes straight to `active`;
+  drops `approve_group_member` outright (no remaining caller once the gate is gone). Reverses D-05's
+  external-approval mechanic on product direction, not a bug fix. Local only, additive/idempotent
+  (`create or replace` + `drop function if exists`) — safe to push whenever the rest of this backlog is
+  reconciled.
+
+## ✅ STATUS 2026-07-07 (historical) — cloud == local, tip `20260707090000`
 
 Every migration through `20260707090000` is applied to cloud. The most recent batch (**9 migrations** —
 DEV-99 taxonomy + Phase 7 Present + Phase 13 lifecycle + Allocate) was pushed **2026-07-07** (0 errors,
 `get_advisors(security)` = 0 ERROR); see the top of **APPLIED TO CLOUD**. All "PENDING" sections below
-are **historical / superseded** — kept for their apply notes, not because anything is outstanding.
-The ONLY genuinely-outstanding cloud work is **non-migration**: deploy edge fns `send-lifecycle-email` +
-`erase-expired-accounts`, set `RESEND_API_KEY`, and (optional) unschedule the harmless
-`erase-expired-accounts` 3am cron. Details in the 2026-07-07 APPLIED entry.
+that predate this entry are **historical / superseded** — kept for their apply notes, not because
+anything from THEM is outstanding (see the 2026-07-20 marker above for what actually is).
+The ONLY genuinely-outstanding cloud work THIS entry knew about is **non-migration**: deploy edge fns
+`send-lifecycle-email` + `erase-expired-accounts`, set `RESEND_API_KEY`, and (optional) unschedule the
+harmless `erase-expired-accounts` 3am cron. Details in the 2026-07-07 APPLIED entry.
 
 ---
 
