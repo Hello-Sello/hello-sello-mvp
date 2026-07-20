@@ -12,6 +12,7 @@ export const LENSES: LensDef[] = [
   { key: "unassigned", label: "Unassigned" },
   { key: "mine", label: "Mine" },
   { key: "all", label: "All" },
+  { key: "deal_tickets", label: "Deal tickets" },
   { key: "history", label: "History" },
 ];
 
@@ -28,6 +29,9 @@ export function matchesLens(
       return item.status === "pending" && item.assigned_to === viewerPersonId;
     case "all":
       return item.status === "pending";
+    case "deal_tickets":
+      // Lane A: born deals delivered company-target — claimable by any member
+      return item.type === "deal_card" && item.status === "pending";
     case "history":
       return item.status === "accepted" || item.status === "rejected";
     default: {
@@ -52,7 +56,13 @@ export function lensCounts(
   items: InboxItemView[],
   viewerPersonId: string,
 ): Record<LensKey, number> {
-  const counts: Record<LensKey, number> = { unassigned: 0, mine: 0, all: 0, history: 0 };
+  const counts: Record<LensKey, number> = {
+    unassigned: 0,
+    mine: 0,
+    all: 0,
+    deal_tickets: 0,
+    history: 0,
+  };
   for (const lens of LENSES) {
     counts[lens.key] = filterByLens(items, lens.key, viewerPersonId).length;
   }

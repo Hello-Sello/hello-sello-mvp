@@ -312,4 +312,10 @@ export interface AcceptInput {
   viewerPerson: PartyPerson;
   /** the sender's contact person on their side (the other P2P participant) */
   senderPerson: PartyPerson;
+  /**
+   * pending_inbox_item.deal_card_id — REQUIRED when requestType === 'deal_card'
+   * (Lane A pickup): the accept claims this existing deal via claim_deal_ticket
+   * instead of minting a relationship/threads. Absent for the connection types.
+   */
+  dealCardId?: string | null;
 }

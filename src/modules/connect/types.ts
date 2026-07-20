@@ -92,4 +92,4 @@ export interface InboxItemView extends InboxItem {
 }
 
 /** The four inbox lenses (panel-3 tabs). Default = `unassigned`. */
-export type LensKey = "unassigned" | "mine" | "all" | "history";
+export type LensKey = "unassigned" | "mine" | "all" | "deal_tickets" | "history";

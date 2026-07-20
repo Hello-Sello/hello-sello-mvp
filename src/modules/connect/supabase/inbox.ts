@@ -13,6 +13,7 @@
 import { createClient } from "@/shared/db/client";
 import { acceptInbox, type AcceptRequestType } from "@/modules/messaging";
 import type {
+  InboxDealCardPreview,
   InboxItemView,
   InboxRequestType,
   InboxStatus,
@@ -38,6 +39,61 @@ function companyInitials(name: string): string {
 function one<T>(v: T | T[] | null | undefined): T | null {
   if (Array.isArray(v)) return v[0] ?? null;
   return v ?? null;
+}
+
+/** "€5.00"-style money for the deal-ticket preview (display only). */
+function money(value: number | null | undefined, currency: string): string {
+  if (value == null) return "—";
+  return new Intl.NumberFormat("de-DE", { style: "currency", currency }).format(value);
+}
+
+/** The joined deal_card row shape the getInbox embed returns (display read). */
+type DealCardEmbed = {
+  currency: string | null;
+  version: number;
+  delivery_date_target: string | null;
+  deal_line_item: Array<{
+    product_name: string | null;
+    quantity: number | null;
+    unit: string | null;
+    unit_price: number | null;
+    line_total: number | null;
+    version: number;
+    sort_order: number | null;
+  }>;
+} | null;
+
+/**
+ * Project a ticket's joined deal_card into the display-only preview strings
+ * the inbox row + detail panel render. Lines are filtered to the card's
+ * CURRENT version (old versions stay frozen in the table) — first line leads,
+ * extra lines collapse into "+N more"; the total sums every current line.
+ */
+function dealPreviewOf(card: DealCardEmbed): InboxDealCardPreview | null {
+  if (!card) return null;
+  const currency = card.currency ?? "EUR";
+  const lines = (card.deal_line_item ?? [])
+    .filter((l) => l.version === card.version)
+    .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+  const first = lines[0];
+  if (!first) return null;
+  const extra = lines.length - 1;
+  return {
+    product: `${first.product_name ?? "Unnamed product"}${extra > 0 ? ` +${extra} more` : ""}`,
+    quantity: first.quantity != null ? `${first.quantity} ${first.unit ?? "g"}` : "—",
+    unitPrice: money(first.unit_price, currency),
+    total: money(
+      lines.reduce((s, l) => s + (l.line_total ?? 0), 0),
+      currency,
+    ),
+    delivery: card.delivery_date_target
+      ? new Date(card.delivery_date_target).toLocaleDateString("en-GB", {
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+        })
+      : "To be agreed",
+  };
 }
 
 /** The current viewer, from the logged-in Supabase session (person.id = auth.uid()). */
@@ -79,7 +135,11 @@ export async function getInbox(): Promise<InboxItemView[]> {
       `id, type, status, note, sender_company_id, sender_person_id, receiver_company_id,
        assigned_to, assigned_by, assigned_at, deal_card_id, metadata, created_at, updated_at, deleted_at,
        sender:company!pending_inbox_item_sender_company_id_fkey ( name ),
-       assignee:person!pending_inbox_item_assigned_to_fkey ( id, first_name, last_name )`,
+       assignee:person!pending_inbox_item_assigned_to_fkey ( id, first_name, last_name ),
+       deal_card:deal_card!pending_inbox_item_deal_card_id_fkey (
+         currency, version, delivery_date_target,
+         deal_line_item ( product_name, quantity, unit, unit_price, line_total, version, sort_order )
+       )`,
     )
     .is("deleted_at", null)
     .order("created_at", { ascending: false });
@@ -118,7 +178,9 @@ export async function getInbox(): Promise<InboxItemView[]> {
           }
         : null,
       mutualCount: 0, // derived later; not needed for the demo
-      dealCard: null, // deal_card preview lands in 3a
+      // Lane A: the joined card projected to display strings (null for
+      // connection requests, or when the card is not readable/has no lines)
+      dealCard: dealPreviewOf(one(row.deal_card) as DealCardEmbed),
     };
   });
 }
@@ -189,7 +251,7 @@ export async function acceptItem(itemId: string): Promise<InboxItemView[]> {
   const { data: item, error } = await supabase
     .from("pending_inbox_item")
     .select(
-      `id, type, note, sender_company_id, sender_person_id,
+      `id, type, note, sender_company_id, sender_person_id, deal_card_id,
        sender:company!pending_inbox_item_sender_company_id_fkey ( name ),
        sender_person:person!pending_inbox_item_sender_person_id_fkey ( first_name, last_name )`,
     )
@@ -204,10 +266,13 @@ export async function acceptItem(itemId: string): Promise<InboxItemView[]> {
     ? `${senderPerson.first_name} ${senderPerson.last_name}`.trim()
     : "Unknown";
 
-  // 1) create relationship + threads + seed lines
+  // 1) create relationship + threads + seed lines — EXCEPT for a deal ticket
+  //    (type 'deal_card'), where acceptInbox instead claims the EXISTING deal
+  //    via claim_deal_ticket (the relationship + deal already exist since birth)
   const { relationshipId } = await acceptInbox({
     inboxItemId: item.id,
     requestType: item.type as AcceptRequestType,
+    dealCardId: item.deal_card_id,
     note: item.note,
     ownCompany: viewer.company,
     senderCompany: {
@@ -227,6 +292,16 @@ export async function acceptItem(itemId: string): Promise<InboxItemView[]> {
   // (person-waiting -> inline, per the placement rule). The Bedrock call lives in the
   // sella-intro edge fn so the key stays in Supabase (Path A). FAIL-SOFT: if Sella is
   // down the static seeded intro simply stays - the accept is unaffected.
+  // A deal-ticket accept opened NO new threads (the claim joins an existing
+  // deal), so there is no intro to rewrite — skip Sella entirely.
+  if (item.type === "deal_card") {
+    const { error: upDealErr } = await supabase
+      .from("pending_inbox_item")
+      .update({ status: "accepted" })
+      .eq("id", itemId);
+    if (upDealErr) throw upDealErr;
+    return getInbox();
+  }
   try {
     await supabase.functions.invoke("sella-intro", {
       body: {

@@ -36,6 +36,7 @@ const EMPTY_HINT: Record<LensKey, string> = {
   unassigned: "No new requests waiting to be claimed.",
   mine: "Nothing assigned to you right now.",
   all: "No open requests.",
+  deal_tickets: "No deal tickets waiting to be picked up.",
   history: "No accepted or declined requests yet.",
 };
 
@@ -43,6 +44,7 @@ const ZERO_COUNTS: Record<LensKey, number> = {
   unassigned: 0,
   mine: 0,
   all: 0,
+  deal_tickets: 0,
   history: 0,
 };
 

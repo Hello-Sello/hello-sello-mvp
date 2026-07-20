@@ -542,6 +542,24 @@ export async function acceptInbox(
     return { relationshipId: existing.id, threadIds: (thr ?? []).map((t) => t.id) };
   }
 
+  // Deal-ticket pickup (Lane A): the deal AND its relationship exist since
+  // birth — claiming means becoming a deal_member owner on the existing deal
+  // (a SECURITY DEFINER RPC: deal_member RLS cannot express the bootstrap).
+  // No relationship mint, no rollout threads, no Sella intro.
+  if (input.requestType === "deal_card") {
+    if (!input.dealCardId) {
+      throw new Error("acceptInbox: a deal_card accept needs its dealCardId");
+    }
+    // the RPC is not in the generated types yet — localized cast, direct
+    // supabase.rpc call so `this` stays bound (createDeal's documented pattern)
+    const { data: relId, error: claimErr } = await supabase.rpc(
+      "claim_deal_ticket" as never,
+      { p_deal_card_id: input.dealCardId } as never,
+    );
+    if (claimErr) throw new Error((claimErr as { message: string }).message);
+    return { relationshipId: relId as unknown as string, threadIds: [] };
+  }
+
   // relationship - canonical company order (CHECK company_a_id < company_b_id)
   const [companyA, companyB] =
     input.ownCompany.id < input.senderCompany.id
