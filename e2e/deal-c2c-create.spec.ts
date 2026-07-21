@@ -111,6 +111,13 @@ test('a SECOND deal can be started from the same c2c chat — the button stays v
     .locator('select')
     .filter({ hasText: /add product from your shop/i })
   await addProductSelect.waitFor()
+
+  // the CREATE form is pre-birth: no deal exists yet, so the toolbar must not
+  // offer "Talk about this deal" (it would point the group picker at a deal
+  // id of "new", which cannot exist in the DB)
+  await expect(
+    dealPanel(page).getByRole('button', { name: /talk about this deal/i }),
+  ).toHaveCount(0)
   await addProductSelect.selectOption({ label: 'Pedanios 31/1 COS-CA' })
   const row = dealPanel(page)
     .getByRole('row')

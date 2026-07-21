@@ -563,15 +563,20 @@ export function CardFront({
             <X className="h-3.5 w-3.5" />
           </button>
         )}
-        <button
-          type="button"
-          onClick={onTalkAboutDeal}
-          className="dc-tb-pill inline-flex min-w-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-semibold"
-        >
-          <MessageSquarePlus className="h-3.5 w-3.5 shrink-0" />
-          <span className="truncate">Talk about this deal</span>
-        </button>
-        {onActivity && (
+        {/* pre-birth (create mode) the deal has no real id yet — a group chat
+            can't attach to it and there are no logs, so both toolbar actions
+            only render once the card is born */}
+        {!createMode && (
+          <button
+            type="button"
+            onClick={onTalkAboutDeal}
+            className="dc-tb-pill inline-flex min-w-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-semibold"
+          >
+            <MessageSquarePlus className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">Talk about this deal</span>
+          </button>
+        )}
+        {!createMode && onActivity && (
           <button
             type="button"
             onClick={onActivity}
