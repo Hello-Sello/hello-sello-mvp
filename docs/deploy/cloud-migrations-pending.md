@@ -11,7 +11,7 @@
 
 ---
 
-## 🔴 PENDING 2026-07-20 — Lane A (deal creation & delivery), 4 migrations
+## 🔴 PENDING 2026-07-20 (+2026-07-22) — Lane A (deal creation & delivery), 5 migrations
 
 Built + proven locally (pgTAP probes `deliver_deal_test.sql` / `claim_deal_ticket_test.sql` GREEN
 on a fresh reset; full deal e2e green). **⚠️ Needs Ayush's review before cloud** — `create_deal_draft`
@@ -24,6 +24,7 @@ timestamp order; all additive (`create or replace` on the same signature / new f
 | 2 | `20260720100100_create_deal_draft_delivers.sql` | live `20260618140000` body verbatim + `perform deliver_deal(v_card)` before `return` |
 | 3 | `20260720110000_claim_deal_ticket.sql` | pickup RPC: receiver-company member → `deal_member` owner on the existing deal |
 | 4 | `20260720130000_chat_message_type_deal_card_seed.sql` | one `chat_message_type` row (`deal_card`) for person-target delivery bubbles |
+| 5 | `20260722100000_chat_message_type_deal_signed_seed.sql` | one `chat_message_type` row (`deal_signed`) — sign/decline now project into chat (DEV-33 lines) |
 
 > Note: this ledger's 2026-07-07 status below predates session 64 (which pushed
 > `20260710120000_person_company_id_lockdown` + `20260716120000_drop_buy_orphaned_tables` directly
