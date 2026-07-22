@@ -95,9 +95,14 @@ test('declining a deal posts a system line in the chat (the WhatsApp-style activ
   await dealPanel(bobPage).getByRole('button', { name: /decline deal/i }).click()
 
   // the decline is not just a card-state change — it projects into the chat
-  // stream as a centered system line, on BOTH sides (realtime insert)
-  await expect(bobPage.getByText(/deal declined/i).first()).toBeVisible({ timeout: 15000 })
-  await expect(alicePage.getByText(/deal declined/i).first()).toBeVisible({ timeout: 15000 })
+  // stream as the SAME clickable pill every deal signal uses (one pattern,
+  // Muskan's 2026-07-22 call), on BOTH sides (realtime insert)
+  await expect(
+    bobPage.getByRole('button', { name: /deal declined/i }).first(),
+  ).toBeVisible({ timeout: 15000 })
+  await expect(
+    alicePage.getByRole('button', { name: /deal declined/i }).first(),
+  ).toBeVisible({ timeout: 15000 })
 })
 
 test('signing a deal posts a system line in the chat', async () => {
@@ -108,8 +113,12 @@ test('signing a deal posts a system line in the chat', async () => {
   await bobPage.getByRole('button', { name: /click to open the deal card/i }).first().click()
   await dealPanel(bobPage).getByRole('button', { name: /sign the deal/i }).click()
 
-  await expect(bobPage.getByText(/deal signed/i).first()).toBeVisible({ timeout: 15000 })
-  await expect(alicePage.getByText(/deal signed/i).first()).toBeVisible({ timeout: 15000 })
+  await expect(
+    bobPage.getByRole('button', { name: /deal signed/i }).first(),
+  ).toBeVisible({ timeout: 15000 })
+  await expect(
+    alicePage.getByRole('button', { name: /deal signed/i }).first(),
+  ).toBeVisible({ timeout: 15000 })
 })
 
 test('a SECOND deal can be started from the same p2p chat — button visible, composer + door works', async () => {
