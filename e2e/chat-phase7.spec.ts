@@ -17,8 +17,9 @@
  * server ACTION, not the RPC) is minted via the two-company UI fixture.
  *
  * Coverage (the plan's load-bearing truths):
- *   - D-05 / T-07-08-01 / T-07-08-02: a non-member reads 0 group messages; an
- *     external party stays pending until TWO DISTINCT members approve.
+ *   - T-07-08-01: a non-member reads 0 group messages; every invited member
+ *     (deal party or not) is active immediately (D-05's external gate was
+ *     reversed 2026-07-20 - see migration 20260720100000).
  *   - D-27 / D-28 / T-07-08-03: the seller lands the ONE invoice artifact (the
  *     finalize precondition); an external non-member cannot read it (workspace
  *     isolation). The seller-only finalize GUARD + the pure gate are covered by
@@ -237,17 +238,19 @@ test('AUDIT-01: an accepted-proposal (RPC-born) deal has a deal.created audit_lo
 })
 
 /**
- * D-05 / T-07-08-01 / T-07-08-02: the group-chat security surface.
- *  - a deal-card group gates an EXTERNAL-company member to pending_external;
- *  - a NON-member reads 0 of the group's messages (RLS, not emptiness);
- *  - only TWO DISTINCT active-member approvals flip the external party active.
+ * T-07-08-01: the group-chat security surface (D-05's external gate was
+ * reversed 2026-07-20 - every invited member, deal party or not, is active
+ * immediately; there is no more pending_external/approve_group_member step).
+ *  - a deal-card group activates EVERY invited member right away, including a
+ *    THIRD company that is neither deal party;
+ *  - a NON-member still reads 0 of the group's messages (RLS, not emptiness).
  */
-test('D-05 group chat: non-member reads 0 messages; external gated until two distinct approvals', async () => {
+test('group chat: every invited member (including a non-deal-party company) is active immediately; non-member reads 0 messages', async () => {
   const alice = await signIn('alice@greenleaf.test')
   const david = await signIn('david@nordcanna.test')
 
   // Alice (a deal party) births a deal-card group inviting Bob (the other party)
-  // and Eva (a THIRD company => external). The RPC decides each member's state.
+  // and Eva (a THIRD company). Nobody is gated anymore - all three go active.
   const { data: newThreadId, error: createErr } = await alice.client.rpc('create_group_thread', {
     p_name: 'Phase7 e2e group',
     p_member_person_ids: [PID.bob, PID.eva],
@@ -263,7 +266,7 @@ test('D-05 group chat: non-member reads 0 messages; external gated until two dis
     )
   expect(stateOf(PID.alice)).toBe('active') // the creator is bootstrapped active
   expect(stateOf(PID.bob)).toBe('active') // a deal party is active
-  expect(stateOf(PID.eva)).toBe('pending_external') // the external company is gated (D-05)
+  expect(stateOf(PID.eva)).toBe('active') // a non-deal-party company is ALSO active now (no gate)
 
   // an ACTIVE member can write (the group WITH CHECK branch on can_access_thread).
   const { error: postErr } = await alice.client.from('chat_message').insert({
@@ -288,22 +291,12 @@ test('D-05 group chat: non-member reads 0 messages; external gated until two dis
   expect(davidErr).toBeNull()
   expect((davidRows ?? []) as unknown[]).toHaveLength(0)
 
-  // T-07-08-02: the external gate needs TWO DISTINCT active-member approvals.
-  const bob = await signIn('bob@stonepharm.test')
-  const { data: afterOne, error: approveErr1 } = await alice.client.rpc('approve_group_member', {
+  // approve_group_member no longer exists - there is nothing left to approve.
+  const { error: droppedErr } = await alice.client.rpc('approve_group_member', {
     p_thread_id: gid,
     p_person_id: PID.eva,
   })
-  expect(approveErr1).toBeNull()
-  expect(String(afterOne)).toBe('pending_external') // one approval is not enough
-
-  const { data: afterTwo, error: approveErr2 } = await bob.client.rpc('approve_group_member', {
-    p_thread_id: gid,
-    p_person_id: PID.eva,
-  })
-  expect(approveErr2).toBeNull()
-  expect(String(afterTwo)).toBe('active') // the SECOND distinct approver flips it
-  expect(stateOf(PID.eva)).toBe('active')
+  expect(droppedErr).not.toBeNull()
 })
 
 /**

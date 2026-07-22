@@ -5,14 +5,13 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { MessageSquare } from "lucide-react";
 import type { ChatMessageView, ConversationListItem, MyConnectionsView } from "../types";
 import type { ChatFilter } from "./ConversationList";
-import type { NewChatSelection } from "./NewChatDropdown";
+import { NewChatDropdown, type NewChatSelection } from "./NewChatDropdown";
 import {
   getConversations,
   getMessages,
   markRead,
   postMessage,
   createGroupThread,
-  approveGroupMember,
 } from "../supabase/store";
 import {
   getMyConnections,
@@ -23,7 +22,9 @@ import {
 } from "@/modules/messaging";
 import { useChatRealtime } from "../lib/use-chat-realtime";
 import { usePersistedCollapse } from "@/shared/ui/use-persisted-collapse";
+import { Dialog } from "@/modules/relationship/components/Dialog";
 import { ConversationList } from "./ConversationList";
+import { GroupPicker } from "./GroupPicker";
 import { ThreadView } from "./ThreadView";
 
 /**
@@ -52,7 +53,12 @@ export function ChatView() {
   const [unread, setUnread] = useState<Record<string, number>>({});
   // the new-chat picker: the connected directory + its open/closed flag + the
   // live conversation-search value (local useState only - no global store)
-  const [connections, setConnections] = useState<MyConnectionsView>({ companies: [] });
+  const [connections, setConnections] = useState<MyConnectionsView>({
+    companies: [],
+    viewerCompanyId: null,
+    viewerPersonId: "",
+    myCompany: null,
+  });
   // which picker is open (D-02): the New-Chat picker, the New-Group picker, or
   // none. A New-Group opened from a deal card carries that deal's id (deal mode).
   const [pickerMode, setPickerMode] = useState<"newchat" | "group" | null>(null);
@@ -181,8 +187,7 @@ export function ChatView() {
     setGroupDealCardId(null);
   }
 
-  // create a group (D-04 new-chat / D-05 deal). Returns the new thread + any
-  // server-gated externals so the picker can drive the two-approver flow.
+  // create a group (D-04 new-chat / deal). Every member is active immediately.
   async function handleCreateGroup(input: {
     name: string;
     memberPersonIds: string[];
@@ -194,10 +199,6 @@ export function ChatView() {
     return result;
   }
 
-  async function handleApproveGroupMember(threadId: string, personId: string) {
-    await approveGroupMember({ threadId, personId });
-  }
-
   // finished creating a group: open it + close the picker (mirrors new-chat).
   function handleGroupDone(threadId: string) {
     setSelectedThreadId(threadId);
@@ -205,7 +206,7 @@ export function ChatView() {
   }
 
   // the deal card (07-07) dispatches hs:new-group to open the picker in deal
-  // mode; messaging listens here, keeping the two modules acyclic (D-05).
+  // mode; messaging listens here, keeping the two modules acyclic.
   useEffect(() => {
     function onNewGroup(e: Event) {
       const detail = (e as CustomEvent<NewGroupEventDetail>).detail;
@@ -281,20 +282,34 @@ export function ChatView() {
             onSelect={handleSelect}
             collapsed={railCollapsed}
             onToggleCollapsed={toggleRailCollapsed}
-            connections={connections}
             search={search}
             onSearchChange={setSearch}
             pickerMode={pickerMode}
             onOpenPicker={handleOpenPicker}
-            onClosePicker={handleClosePicker}
-            onNewChatSelect={handleNewChatSelect}
-            groupDealCardId={groupDealCardId}
-            onCreateGroup={handleCreateGroup}
-            onApproveMember={handleApproveGroupMember}
-            onGroupDone={handleGroupDone}
           />
         )}
       </div>
+
+      {/* New-chat picker (D-01/D-02): a real centered dialog, not an inline
+          sidebar leaflet - a single pick resolves + closes immediately (no
+          name field, no Create/Cancel footer - unlike the group picker). */}
+      <Dialog open={pickerMode === "newchat"} onClose={handleClosePicker} width="max-w-[420px]">
+        <NewChatDropdown connections={connections} onSelect={handleNewChatSelect} />
+      </Dialog>
+
+      {/* New-group picker (D-02/D-05): a real centered dialog, not an inline
+          sidebar leaflet - owned here since ChatView already holds pickerMode,
+          groupDealCardId, and every handler the picker needs. */}
+      <Dialog open={pickerMode === "group"} onClose={handleClosePicker} width="max-w-[640px]">
+        <GroupPicker
+          connections={connections}
+          mode={groupDealCardId ? "deal" : "newchat"}
+          dealCardId={groupDealCardId ?? undefined}
+          onCreate={handleCreateGroup}
+          onDone={handleGroupDone}
+          onClose={handleClosePicker}
+        />
+      </Dialog>
 
       {/* panel 4 - thread */}
       <div className="glass flex min-w-0 flex-1 flex-col overflow-hidden rounded-3xl">

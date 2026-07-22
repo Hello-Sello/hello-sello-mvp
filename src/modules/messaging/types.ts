@@ -145,30 +145,13 @@ export interface ConversationListItem {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Group creation (07-05) - the external-gate (D-05) result shapes            */
+/* Group creation (07-05)                                                     */
 /* -------------------------------------------------------------------------- */
 
-/**
- * A group member the server placed behind the D-05 external gate: an external
- * company person added to a deal-card-born group, still `pending_external`
- * until TWO distinct active members approve (`approve_group_member`).
- */
-export interface PendingExternalMember {
-  /** person.id - the target handed to approveGroupMember */
-  personId: string;
-  /** display name for the approval row */
-  name: string;
-}
-
-/**
- * What `createGroupThread` returns: the new group thread id plus any members
- * the server put behind the external gate (D-05). An empty `pendingExternal`
- * means the group is fully active (a plain new-chat group, or a deal group
- * with only the 2 deal parties).
- */
+/** What `createGroupThread` returns: every invited member is active immediately
+ *  (D-05's external gate was removed - see 20260720100000). */
 export interface GroupCreationResult {
   threadId: string;
-  pendingExternal: PendingExternalMember[];
 }
 
 /**
@@ -244,6 +227,16 @@ export interface ConnectedCompany {
  */
 export interface MyConnectionsView {
   companies: ConnectedCompany[];
+  /** the viewer's own company id; null only if the viewer somehow has no company */
+  viewerCompanyId: string | null;
+  /** the viewer's own person id - lets the group picker lock a "(you)" row and never re-list the viewer as a pickable option */
+  viewerPersonId: string;
+  /**
+   * the viewer's OWN company + its people - separate from `companies` (which is
+   * only OTHER, already-connected companies). Powers the group picker's
+   * "Your company" / "Internal" section (D-04/D-05 grouping).
+   */
+  myCompany: { id: string; name: string; people: ConnectedPerson[] } | null;
 }
 
 /**

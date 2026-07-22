@@ -151,7 +151,72 @@ export async function getMyConnections(): Promise<MyConnectionsView> {
 
   // Newest connection first (drives the "New connections by date" section).
   companies.sort((a, b) => (b.connectedAt ?? "").localeCompare(a.connectedAt ?? ""));
-  return { companies };
+
+  // the viewer's OWN company + roster (D-04/D-05 "Your company"/"Internal"
+  // section) - reuses the same peopleByCompany/companyById maps built above.
+  const myCompany = viewer.companyId
+    ? {
+        id: viewer.companyId,
+        name: companyById.get(viewer.companyId)?.name ?? "My company",
+        people: peopleByCompany.get(viewer.companyId) ?? [],
+      }
+    : null;
+
+  return {
+    companies,
+    viewerCompanyId: viewer.companyId,
+    viewerPersonId: viewer.personId,
+    myCompany,
+  };
+}
+
+/**
+ * The two companies on a deal (for the group picker's D-05 "your company /
+ * counterparty / external" grouping). Mirrors the same
+ * deal_card -> relationship join `create_group_thread` does server-side,
+ * read-only here, RLS-scoped like every other read in this file.
+ */
+export async function getDealParties(dealCardId: string): Promise<{
+  companyAId: string;
+  companyAName: string;
+  companyBId: string;
+  companyBName: string;
+  hsDealNumber: string | null;
+} | null> {
+  const supabase = createClient();
+
+  const { data: card, error: cardErr } = await supabase
+    .from("deal_card")
+    .select("id, relationship_id, hs_deal_number")
+    .eq("id", dealCardId)
+    .single();
+  if (cardErr || !card?.relationship_id) return null;
+  // mirrors CardFront's own fallback (card.hs_deal_number is often unset) so the
+  // picker's subtitle shows the same code the card itself displays.
+  const hsDealNumber =
+    card.hs_deal_number ?? `HS-${card.id.replace(/-/g, "").slice(-4).toUpperCase()}`;
+
+  const { data: rel, error: relErr } = await supabase
+    .from("relationship")
+    .select("company_a_id, company_b_id")
+    .eq("id", card.relationship_id)
+    .single();
+  if (relErr || !rel) return null;
+
+  const { data: cos, error: coErr } = await supabase
+    .from("company")
+    .select("id, name")
+    .in("id", [rel.company_a_id, rel.company_b_id]);
+  if (coErr) throw coErr;
+  const nameOf = (id: string) => cos?.find((c) => c.id === id)?.name ?? "Unknown company";
+
+  return {
+    companyAId: rel.company_a_id,
+    companyAName: nameOf(rel.company_a_id),
+    companyBId: rel.company_b_id,
+    companyBName: nameOf(rel.company_b_id),
+    hsDealNumber,
+  };
 }
 
 /**
