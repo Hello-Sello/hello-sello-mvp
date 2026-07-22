@@ -20,11 +20,18 @@ timestamp order; all additive (`create or replace` on the same signature / new f
 
 | # | file | what |
 |---|------|------|
-| 1 | `20260720100000_deliver_deal.sql` | the routing primitive: no counterparty co-owner → one claimable `pending_inbox_item` deal ticket for the other company (idempotent); else no-op |
+| 1 | `20260720095000_deliver_deal.sql` | the routing primitive: no counterparty co-owner → one claimable `pending_inbox_item` deal ticket for the other company (idempotent); else no-op |
 | 2 | `20260720100100_create_deal_draft_delivers.sql` | live `20260618140000` body verbatim + `perform deliver_deal(v_card)` before `return` |
 | 3 | `20260720110000_claim_deal_ticket.sql` | pickup RPC: receiver-company member → `deal_member` owner on the existing deal |
 | 4 | `20260720130000_chat_message_type_deal_card_seed.sql` | one `chat_message_type` row (`deal_card`) for person-target delivery bubbles |
 | 5 | `20260722100000_chat_message_type_deal_signed_seed.sql` | one `chat_message_type` row (`deal_signed`) — sign/decline now project into chat (DEV-33 lines) |
+
+> **⚠️ Renamed `20260720100000_deliver_deal.sql` → `20260720095000_deliver_deal.sql`** (Muskan) — it
+> collided on the exact same timestamp with Ayush's `20260720100000_drop_group_thread_external_gate.sql`
+> (written independently, ~1.5h apart, same day). Same class of bug he already fixed once this week for
+> 3 other files; renaming MY file to match his own convention (rename your own side of a collision, not
+> the other's). New timestamp still sorts before `…100100_create_deal_draft_delivers` (which calls
+> `deliver_deal()`), so apply order is unchanged. No functional change — filename/version only.
 
 > Note: this ledger's 2026-07-07 status below predates session 64 (which pushed
 > `20260710120000_person_company_id_lockdown` + `20260716120000_drop_buy_orphaned_tables` directly
