@@ -9,14 +9,8 @@ import {
   Building2,
   FileText,
 } from "lucide-react";
-import type {
-  ConversationListItem,
-  GroupCreationResult,
-  MyConnectionsView,
-} from "@/modules/messaging";
+import type { ConversationListItem } from "@/modules/messaging";
 import { ConversationRow } from "./ConversationRow";
-import { NewChatDropdown, type NewChatSelection } from "./NewChatDropdown";
-import { GroupPicker } from "./GroupPicker";
 
 /**
  * The panel-3 filters (D-01). Exactly THREE chips stay always-visible -
@@ -72,30 +66,15 @@ export interface ConversationListProps {
       strip; the parent owns the flag + the wrapper width. */
   collapsed: boolean;
   onToggleCollapsed: () => void;
-  /** the connected companies/people directory the picker shows (D-01) */
-  connections: MyConnectionsView;
   /** the live conversation-search value (D-09 - filters the base list rows) */
   search: string;
   onSearchChange: (q: string) => void;
-  /** which picker is open (owned by ChatView, no global store): the New-Chat
-      picker, the New-Group picker, or none - the +New menu is 2-item (D-02) */
+  /** which picker is open (owned by ChatView, no global store): both the
+      New-Chat and New-Group pickers now open as a Dialog owned by ChatView
+      itself, so this component only needs the flag to disable the +New
+      trigger while either is open - it never renders a picker itself. */
   pickerMode: "newchat" | "group" | null;
   onOpenPicker: (mode: "newchat" | "group") => void;
-  onClosePicker: () => void;
-  /** routed up to ChatView to open/create the right thread on a pick (D-05) */
-  onNewChatSelect: (sel: NewChatSelection) => void;
-  /** the deal a New-Group is spawned from (deal mode, D-05); null = new-chat group */
-  groupDealCardId: string | null;
-  /** create the group (store) - resolves to the new thread + any gated externals */
-  onCreateGroup: (input: {
-    name: string;
-    memberPersonIds: string[];
-    dealCardId?: string;
-  }) => Promise<GroupCreationResult>;
-  /** approve one pending external member (D-05 two-approver gate) */
-  onApproveMember: (threadId: string, personId: string) => Promise<void>;
-  /** finished creating: open the new group thread + close the picker */
-  onGroupDone: (threadId: string) => void;
 }
 
 export function ConversationList({
@@ -106,17 +85,10 @@ export function ConversationList({
   onSelect,
   collapsed,
   onToggleCollapsed,
-  connections,
   search,
   onSearchChange,
   pickerMode,
   onOpenPicker,
-  onClosePicker,
-  onNewChatSelect,
-  groupDealCardId,
-  onCreateGroup,
-  onApproveMember,
-  onGroupDone,
 }: ConversationListProps) {
   // Collapsed: a narrow strip - the expand toggle on top, then one avatar per
   // conversation (selected ringed, unread dotted, name as a native tooltip).
@@ -168,11 +140,7 @@ export function ConversationList({
         </button>
       </div>
 
-      {/* Everything below the button. `relative` so the new-chat picker can cover
-          this WHOLE region (search + filter tabs + conversation rows) as one clean
-          leaflet; picking someone (or esc / click-away) closes it and the normal
-          list returns. */}
-      <div className="relative min-h-0 flex-1">
+      <div className="min-h-0 flex-1">
         <div className="flex h-full flex-col">
           <div className="space-y-2 border-b border-black/5 px-3 pb-3">
             <div className="flex items-center gap-2 rounded-full bg-ink/5 px-3 py-1.5">
@@ -218,25 +186,6 @@ export function ConversationList({
             />
           </div>
         </div>
-
-        {pickerMode === "newchat" && (
-          <NewChatDropdown
-            connections={connections}
-            onSelect={onNewChatSelect}
-            onClose={onClosePicker}
-          />
-        )}
-        {pickerMode === "group" && (
-          <GroupPicker
-            connections={connections}
-            mode={groupDealCardId ? "deal" : "newchat"}
-            dealCardId={groupDealCardId ?? undefined}
-            onCreate={onCreateGroup}
-            onApproveMember={onApproveMember}
-            onDone={onGroupDone}
-            onClose={onClosePicker}
-          />
-        )}
       </div>
     </div>
   );

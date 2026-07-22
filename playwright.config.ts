@@ -17,6 +17,13 @@ import { defineConfig, devices } from '@playwright/test'
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: true,
+  // ONE worker, always: every spec hits the SAME local Supabase, and the deal
+  // specs (deal-change, chat-phase7, deal-c2c-create) all reset + mint deals on
+  // the ONE seeded GreenLeaf<->StonePharm relationship. Two workers running two
+  // of those files concurrently wipe each other's cards mid-test (proven:
+  // deal-change's birth hangs on "Start a deal" when deal-c2c-create runs
+  // beside it). Per-file `serial` mode cannot protect across files.
+  workers: 1,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   reporter: 'html',

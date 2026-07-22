@@ -119,6 +119,7 @@ export function DealPin({
   threadId,
   counterpartyName,
   counterpartyPersonName,
+  counterpartyPersonId,
   counterpartyInitials,
   children,
 }: {
@@ -142,6 +143,12 @@ export function DealPin({
   counterpartyName?: string;
   /** the other PERSON's name (P2P) - the top-bar identity on the left */
   counterpartyPersonName?: string;
+  /**
+   * the other PERSON's id (P2P only; Lane A) - broadcast with the create-card
+   * event so the panel host births the deal WITH a counterparty co-owner
+   * (person-target routing: chat-message delivery, no company inbox ticket)
+   */
+  counterpartyPersonId?: string;
   /**
    * The counterparty avatar initials for the strip's top-tier identity (D-02).
    * ThreadView passes `conversation.initials` on the P2P deal path; the workspace
@@ -180,6 +187,10 @@ export function DealPin({
 
   // whether THIS strip can host a proposal: chat variant over a real p2p thread
   const canPropose = variant === "chat" && !!threadId;
+  // whether THIS strip can CREATE a deal (A1): any chat over a relationship —
+  // c2c included. Direct birth only needs the relationship (createDeal), unlike
+  // propose/accept which needs a p2p thread (canPropose above).
+  const canCreate = variant === "chat" && !!relationshipId;
 
   // 4.5.2 - the birth-accept. Record this side's vote; on both-accept the RPC
   // births the card atomically and hands back its id, so we select + open it.
@@ -218,10 +229,16 @@ export function DealPin({
   const openCreateCard = useCallback(() => {
     window.dispatchEvent(
       new CustomEvent("hs:create-deal-card", {
-        detail: { relationshipId, buyerName: counterpartyName ?? "your contact" },
+        detail: {
+          relationshipId,
+          buyerName: counterpartyName ?? "your contact",
+          // person-target routing key (Lane A): present for a p2p chat door,
+          // absent for c2c — the host passes it into createDeal + the delivery
+          counterpartyPersonId,
+        },
       }),
     );
-  }, [relationshipId, counterpartyName]);
+  }, [relationshipId, counterpartyName, counterpartyPersonId]);
 
   // NOTE (07-01 / chj teardown): the responder Accept/Decline + proposer Withdraw
   // + the old proposer Send-reason popup lived here. The backend change engine is
@@ -360,16 +377,38 @@ export function DealPin({
     };
   }, [canPropose, threadId, relationshipId]);
 
+  // c2c live-refresh (Lane A): the realtime channel above is gated on a p2p
+  // thread, so a c2c chat never hears about a birth — the born deal's row only
+  // appeared after a manual reload. The panel host broadcasts hs:deal-updated
+  // after every birth/change (same-window), so re-list the relationship's
+  // deals on it. Window-event only: deals stays acyclic with messaging.
+  useEffect(() => {
+    if (variant !== "chat" || threadId) return;
+    const onUpdated = () => {
+      void listRelationshipDeals(relationshipId)
+        .then((list) => {
+          setDeals(list);
+          // adopt the freshly-born deal only when nothing is selected yet
+          setSelectedId(
+            (cur) => cur ?? (list.find((d) => LIVE_STATUSES.has(d.status)) ?? list[0])?.id ?? null,
+          );
+        })
+        .catch(() => {});
+    };
+    window.addEventListener("hs:deal-updated", onUpdated);
+    return () => window.removeEventListener("hs:deal-updated", onUpdated);
+  }, [variant, threadId, relationshipId]);
+
   // the composer's "+ → Create a deal" door (5A.3): it fires a context-free window
   // event; DealPin re-broadcasts it WITH the relationship + recipient so the panel
   // host can open the create card. p2p chat only - propose needs a p2p thread (the
   // workspace/c2c chats cannot mint a proposal).
   useEffect(() => {
-    if (!canPropose) return;
+    if (!canCreate) return;
     const onCreate = () => openCreateCard();
     window.addEventListener("hs:create-deal", onCreate);
     return () => window.removeEventListener("hs:create-deal", onCreate);
-  }, [canPropose, openCreateCard]);
+  }, [canCreate, openCreateCard]);
 
   // load the full card for the selected deal (drives the overlay + confirm gate).
   // setState only inside the async callback - no selection resolves to null.
@@ -538,6 +577,20 @@ export function DealPin({
             </button>
           )}
 
+          {/* a chat hosts MANY deals: the create door stays visible after the
+              first birth (State A only covers the no-deal case). Same event as
+              the composer's "+" — DealCardPanelHost owns the create card. */}
+          {canCreate && hasDeal && (
+            <button
+              type="button"
+              onClick={openCreateCard}
+              className="flex shrink-0 items-center gap-1.5 rounded-full border border-dashed border-brand/45 px-3 py-1.5 text-xs font-semibold text-brand transition hover:border-brand hover:bg-brand-soft/30"
+            >
+              <Plus size={13} strokeWidth={2.5} />
+              Start a deal
+            </button>
+          )}
+
           {/* ⋮ menu - secondary actions, pushed right; vertical dots to spare
               horizontal room now that the chat can be 50% wide */}
           <div className="relative ml-auto shrink-0">
@@ -701,7 +754,7 @@ export function DealPin({
       {variant === "chat" && !showProposal && !hasDeal && (
         <div className={rowCls}>
           <span className="shrink-0 text-[11px] text-ink/45">No deal yet</span>
-          {canPropose && (
+          {canCreate && (
             <button
               type="button"
               onClick={openCreateCard}
@@ -711,6 +764,25 @@ export function DealPin({
               Start a deal
             </button>
           )}
+        </div>
+      )}
+
+      {/* c2c has no threadId, so the p2p top-bar (picker + open-card) never renders;
+          give a born c2c deal its own minimal surface — including the create door,
+          which stays visible after the first birth (a company chat hosts many
+          deals; any teammate starts the next one from here). */}
+      {variant === "chat" && !threadId && hasDeal && (
+        <div className={rowCls}>
+          <DealChip status={chipStatus} selectable={false} />
+          {dealCardChip}
+          <button
+            type="button"
+            onClick={openCreateCard}
+            className="ml-auto flex shrink-0 items-center gap-1.5 rounded-lg border border-dashed border-brand/45 px-3 py-1.5 text-xs font-semibold text-brand transition hover:border-brand hover:bg-brand-soft/30"
+          >
+            <Plus size={13} strokeWidth={2.5} />
+            Start a deal
+          </button>
         </div>
       )}
 

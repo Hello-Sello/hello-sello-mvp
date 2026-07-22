@@ -21,12 +21,12 @@ export { DealChat } from "./components/DealChat";
 export {
   acceptInbox,
   openOrCreateP2pThread,
+  postDealMessage,
   resolveC2cThread,
   createGroupThread,
-  approveGroupMember,
   renameGroupThread,
 } from "./supabase/store";
-export { getMyConnections, searchPeople } from "./supabase/connections";
+export { getMyConnections, searchPeople, getDealParties } from "./supabase/connections";
 export { isNewConnection, relativeDayLabel } from "./lib/connections-shape";
 // Group creation (07-05): the picker + the window-event contract the deal card
 // (07-07) dispatches to open it in deal mode.
@@ -47,5 +47,4 @@ export type {
   ConnectedPerson,
   PeopleSearchResult,
   GroupCreationResult,
-  PendingExternalMember,
 } from "./types";

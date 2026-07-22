@@ -11,15 +11,27 @@
 
 ---
 
-## ✅ STATUS 2026-07-07 — cloud == local, tip `20260707090000`; NOTHING below is migration-pending
+## ✅ APPLIED 2026-07-22 — Lane A (deal creation & delivery) + Ayush's group-thread gate drop, 6 migrations
+
+Pushed to production ahead of the `dev` → `main` merge (Muskan's explicit call, PR review skipped for
+`create_deal_draft`/`claim_deal_ticket` — same override precedent as DEV-88 — since `create_deal_draft`
+is on the golden path for every deal creation and shipping the app code without these live would break
+deal creation/delivery/pickup in production). See **APPLIED TO CLOUD** below for the full record.
+
+> Note: this ledger's 2026-07-07 status below predates session 64 (which pushed
+> `20260710120000_person_company_id_lockdown` + `20260716120000_drop_buy_orphaned_tables` directly
+> to production) — the full pre-Lane-A reconcile pass is still owed (see CLAUDE.md #0).
+
+## ✅ STATUS 2026-07-07 (historical) — cloud == local, tip `20260707090000`
 
 Every migration through `20260707090000` is applied to cloud. The most recent batch (**9 migrations** —
 DEV-99 taxonomy + Phase 7 Present + Phase 13 lifecycle + Allocate) was pushed **2026-07-07** (0 errors,
 `get_advisors(security)` = 0 ERROR); see the top of **APPLIED TO CLOUD**. All "PENDING" sections below
-are **historical / superseded** — kept for their apply notes, not because anything is outstanding.
-The ONLY genuinely-outstanding cloud work is **non-migration**: deploy edge fns `send-lifecycle-email` +
-`erase-expired-accounts`, set `RESEND_API_KEY`, and (optional) unschedule the harmless
-`erase-expired-accounts` 3am cron. Details in the 2026-07-07 APPLIED entry.
+that predate this entry are **historical / superseded** — kept for their apply notes, not because
+anything from THEM is outstanding (see the 2026-07-20 marker above for what actually is).
+The ONLY genuinely-outstanding cloud work THIS entry knew about is **non-migration**: deploy edge fns
+`send-lifecycle-email` + `erase-expired-accounts`, set `RESEND_API_KEY`, and (optional) unschedule the
+harmless `erase-expired-accounts` 3am cron. Details in the 2026-07-07 APPLIED entry.
 
 ---
 
@@ -346,6 +358,28 @@ entry only; nothing below has been run against cloud.**
 ---
 
 ## APPLIED TO CLOUD
+
+### 2026-07-22 — Lane A (deal creation & delivery) + group-thread gate drop (6 migrations)
+Applied via `mcp__supabase__apply_migration` against `byipusuthdlskdxoexkt` (not a CLI `db push`) —
+**cloud history now records these under fresh timestamps** (`20260722120421`…`20260722120711`), not
+the local filenames' timestamps. Same divergence class as the 2026-07-08 Buy-era batch below; the
+pre-Lane-A reconcile pass (CLAUDE.md #0) still needs to fold this batch in too. **6 applied, 0 errors:**
+- `deliver_deal` (local `20260720095000_deliver_deal.sql`)
+- `create_deal_draft_delivers` (local `20260720100100_create_deal_draft_delivers.sql`)
+- `claim_deal_ticket` (local `20260720110000_claim_deal_ticket.sql`)
+- `chat_message_type_deal_card_seed` (local `20260720130000_chat_message_type_deal_card_seed.sql`)
+- `chat_message_type_deal_signed_seed` (local `20260722100000_chat_message_type_deal_signed_seed.sql`)
+- `drop_group_thread_external_gate` (local `20260720100000_drop_group_thread_external_gate.sql`, Ayush)
+
+Before applying: diffed `create_deal_draft`'s and `create_group_thread`'s LIVE `pg_get_functiondef`
+bodies against each migration's assumed base — both matched exactly (no stale-base drift). Verified
+`pending_inbox_item` / `chat_message_type` / `deal_member` exist on cloud first. **Applied without
+Ayush's review** (Muskan's explicit call, same override precedent as DEV-88) — `create_deal_draft` is
+the golden path for every deal creation, so shipping `dev`'s app code to `main` without these live would
+break deal creation/delivery/pickup in production. `get_advisors(security)` = **0 ERROR** (126 WARN, all
+pre-existing/by-design SECURITY DEFINER RPCs — my 4 new functions added the same benign
+anon/authenticated-executable-definer pattern every prior batch has). Flag for Ayush to review after the
+fact, same as DEV-88.
 
 ### 2026-07-07 — Present + Allocate + Phase 13 deploy (9 migrations)
 Clean sequential `supabase db push` against `byipusuthdlskdxoexkt` — **no reconciliation needed**

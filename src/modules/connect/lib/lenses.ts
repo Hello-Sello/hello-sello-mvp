@@ -12,6 +12,7 @@ export const LENSES: LensDef[] = [
   { key: "unassigned", label: "Unassigned" },
   { key: "mine", label: "Mine" },
   { key: "all", label: "All" },
+  { key: "deal_tickets", label: "Deal tickets" },
   { key: "history", label: "History" },
 ];
 
@@ -21,13 +22,22 @@ export function matchesLens(
   lens: LensKey,
   viewerPersonId: string,
 ): boolean {
+  // An OUTGOING deal ticket is never actionable for its sender: the row is
+  // visible to both sides (two-sided select RLS) but only the receiver can
+  // act, so every actionable lens hides it (History keeps the record once
+  // accepted). Connection-type items keep their historical two-sided
+  // visibility — changing that is a platform-wide call, not taken here.
+  const outgoingDealTicket = item.type === "deal_card" && !item.viewerIsReceiver;
   switch (lens) {
     case "unassigned":
-      return item.status === "pending" && item.assigned_to === null;
+      return !outgoingDealTicket && item.status === "pending" && item.assigned_to === null;
     case "mine":
-      return item.status === "pending" && item.assigned_to === viewerPersonId;
+      return !outgoingDealTicket && item.status === "pending" && item.assigned_to === viewerPersonId;
     case "all":
-      return item.status === "pending";
+      return !outgoingDealTicket && item.status === "pending";
+    case "deal_tickets":
+      // Lane A: born deals delivered company-target — claimable by any member
+      return !outgoingDealTicket && item.type === "deal_card" && item.status === "pending";
     case "history":
       return item.status === "accepted" || item.status === "rejected";
     default: {
@@ -52,7 +62,13 @@ export function lensCounts(
   items: InboxItemView[],
   viewerPersonId: string,
 ): Record<LensKey, number> {
-  const counts: Record<LensKey, number> = { unassigned: 0, mine: 0, all: 0, history: 0 };
+  const counts: Record<LensKey, number> = {
+    unassigned: 0,
+    mine: 0,
+    all: 0,
+    deal_tickets: 0,
+    history: 0,
+  };
   for (const lens of LENSES) {
     counts[lens.key] = filterByLens(items, lens.key, viewerPersonId).length;
   }

@@ -1,4 +1,4 @@
-import { Sparkles } from "lucide-react";
+import { FileText, Sparkles } from "lucide-react";
 import type { ChatMessageView } from "../types";
 import { formatTimeAgo } from "../lib/chat-display";
 import { RichText } from "./RichText";
@@ -16,7 +16,50 @@ export interface MessageBubbleProps {
   message: ChatMessageView;
 }
 
+/** The deal-signal message types — all render as the ONE centered clickable pill. */
+const DEAL_SIGNAL_TYPES = new Set<string>([
+  "deal_card",
+  "deal_cancelled",
+  "deal_signed",
+  "deal_card_updated",
+  "deal_change_declined",
+]);
+
 export function MessageBubble({ message }: MessageBubbleProps) {
+  // EVERY deal signal renders as the SAME centered, WhatsApp-style thin pill
+  // (DEV-33 doctrine: the chat is the activity feed; a deal signal is a
+  // passive status artifact with a timestamp, never a party's speech bubble —
+  // and one pattern for all of them, per Agentation feedback 2026-07-22):
+  // sent (deal_card) · declined (deal_cancelled) · signed (deal_signed) ·
+  // change committed (deal_card_updated) · change declined (deal_change_declined).
+  // Each carries metadata.deal_card_id, so the pill is CLICKABLE and opens the
+  // card in the side panel via the existing window event (acyclic:
+  // DealCardPanelHost owns the panel).
+  if (DEAL_SIGNAL_TYPES.has(message.type)) {
+    const dealCardId = (message.metadata as { deal_card_id?: string } | null)?.deal_card_id;
+    return (
+      <div className="my-1.5 flex justify-center">
+        <button
+          type="button"
+          onClick={() =>
+            dealCardId &&
+            window.dispatchEvent(
+              new CustomEvent("hs:open-deal-card", { detail: { dealCardId } }),
+            )
+          }
+          title="Open the deal card"
+          className="inline-flex max-w-[85%] items-center gap-1.5 rounded-full bg-brand-soft/40 px-3 py-1 text-[11px] text-brand-deep ring-1 ring-brand/15 transition hover:bg-brand-soft/70"
+        >
+          <FileText size={12} strokeWidth={2} className="shrink-0" />
+          <span className="min-w-0 truncate font-semibold">{message.body}</span>
+          <span className="shrink-0 text-brand-deep/60">
+            · Click to open the deal card · {formatTimeAgo(message.created_at)}
+          </span>
+        </button>
+      </div>
+    );
+  }
+
   if (message.sender === "system") {
     return (
       <div className="my-1 flex justify-center">

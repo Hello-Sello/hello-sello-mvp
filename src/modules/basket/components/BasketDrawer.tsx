@@ -8,6 +8,7 @@ import { updateBasketLinePackCount, removeBasketLine } from "../supabase/writes"
 import { sendBasketGroup } from "../actions";
 import { RecipientPicker } from "./RecipientPicker";
 import { dealChatUrl } from "@/modules/deals";
+import { openOrCreateP2pThread, postDealMessage } from "@/modules/messaging";
 import type { BasketGroup } from "../types";
 
 /**
@@ -91,6 +92,21 @@ function Group({
         counterpartyPersonId: recipient.counterpartyPersonId,
         note: null,
       });
+      // Person delivery (Lane A): when a PERSON was picked, drop the
+      // "[Sender] has sent a deal" bubble into their chat. Company-target
+      // sends (no person picked) deliver as an inbox ticket at birth instead.
+      // Fail-soft: the deal is already born — a delivery hiccup never blocks.
+      if (recipient.counterpartyPersonId) {
+        try {
+          const tid = await openOrCreateP2pThread(
+            recipient.relationshipId,
+            recipient.counterpartyPersonId,
+          );
+          await postDealMessage(tid, dealCardId);
+        } catch (e) {
+          console.error("deal delivery message failed", e);
+        }
+      }
       await onChanged();
       onDrafted();
       router.push(dealChatUrl(recipient.relationshipId, dealCardId));

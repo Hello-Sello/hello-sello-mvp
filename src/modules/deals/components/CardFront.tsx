@@ -44,11 +44,11 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { averageMarginOf, formatMoney, lineValueOf } from "../lib/derive";
+import { averageMarginOf, formatMoney, lineValueOf, sumLineValue } from "../lib/derive";
 import { paymentTermLabel } from "../lib/paymentTerms";
 import { getOwnCatalog, getPromotion } from "../supabase/reads";
 import { proposeDealChange } from "../actions";
-import { NegotiationDiff } from "./NegotiationDiff";
+import { pairDealDiff, proposedLinesTotal, proposedLineTotal } from "./NegotiationDiff";
 import { DecisionBar } from "./DecisionBar";
 import { PromotionTrack } from "./PromotionTrack";
 import { OpenItems } from "./OpenItems";
@@ -222,6 +222,7 @@ export function CardFront({
   createMode = false,
   onCreate,
   onExitEdit,
+  registerExitRequest,
 }: {
   data: DealCardView;
   /** the flat Open Items list (D-15); wired from the panel host / 07-08. */
@@ -254,6 +255,12 @@ export function CardFront({
   /** leave edit mode - called after a successful "Send changes" so the diff shows.
    *  Owned by DealCard (which holds editMode). */
   onExitEdit?: () => void;
+  /**
+   * DealCard registers its header-✓ here (2026-07-22): the ✓ must SEND unsent
+   * edits (doSendChange fromExit) instead of silently discarding them — the
+   * card owns the send logic, the shell owns the button.
+   */
+  registerExitRequest?: (fn: () => void) => void;
 }) {
   const { card, sellerName, buyerName, lineItems, lineMargins, viewerSide, myNote, theirNote } = data;
   const cardId = card.id;
@@ -441,12 +448,17 @@ export function CardFront({
     }
   }
 
-  // COMMIT AN EDIT (chj/07-08): pressing the header ✓ leaves edit mode; if the
-  // SHARED payload actually changed vs the server, stage it as a negotiation change
-  // via proposeDealChange (auto reason - no permission modal, matching the direct-
-  // edit intent). The OTHER side then sees the red/green diff + DecisionBar. A no-op
-  // ✓ (nothing changed) does NOT propose, so it never creates an empty held change.
-  async function doSendChange() {
+  // COMMIT AN EDIT (chj/07-08): if the SHARED payload actually changed vs the
+  // server, stage it as a negotiation change via proposeDealChange (auto reason -
+  // no permission modal, matching the direct-edit intent). The OTHER side then
+  // sees the red/green diff + DecisionBar. Reached two ways (2026-07-22 — this
+  // restores the header-✓ intent that had drifted into a silent discard):
+  //   - the footer "Send changes" button (fromExit absent): a no-op shows the
+  //     "Nothing to send yet" hint, so the button never fails silently;
+  //   - the header ✓ via registerExitRequest (fromExit): a no-op simply leaves
+  //     edit mode; a real change is SENT (never dropped) — on failure the card
+  //     STAYS in edit mode with the error, so unsent work is never lost.
+  async function doSendChange(opts?: { fromExit?: boolean }) {
     if (createMode || cardId === "new" || sendBusy || lines.length === 0) return;
 
     // change detection vs the server card. `units` is a frontend-only mock and never
@@ -470,6 +482,11 @@ export function CardFront({
       norm(myNote ?? null),
     ].join("|");
     if (workingLines === serverLines && workingTerms === serverTerms) {
+      if (opts?.fromExit) {
+        // exiting with nothing changed - a plain, safe close of edit mode
+        onExitEdit?.();
+        return;
+      }
       // nothing SHARED changed - the most common cause is a units-only bump (a local
       // preview). Tell the user rather than failing silently.
       setSendError(
@@ -530,6 +547,12 @@ export function CardFront({
     if (was && !editMode) setSeededFor(null);
   }, [editMode]);
 
+  // hand the shell's header-✓ the send-then-exit behaviour (fresh closure every
+  // render so it always sees the latest edit state; a ref write is cheap).
+  useEffect(() => {
+    registerExitRequest?.(() => void doSendChange({ fromExit: true }));
+  });
+
   /* ---- toolbar actions ---- */
   function onTalkAboutDeal() {
     // opens the messaging GroupPicker in deal mode (07-05) - window-event contract
@@ -563,15 +586,20 @@ export function CardFront({
             <X className="h-3.5 w-3.5" />
           </button>
         )}
-        <button
-          type="button"
-          onClick={onTalkAboutDeal}
-          className="dc-tb-pill inline-flex min-w-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-semibold"
-        >
-          <MessageSquarePlus className="h-3.5 w-3.5 shrink-0" />
-          <span className="truncate">Talk about this deal</span>
-        </button>
-        {onActivity && (
+        {/* pre-birth (create mode) the deal has no real id yet — a group chat
+            can't attach to it and there are no logs, so both toolbar actions
+            only render once the card is born */}
+        {!createMode && (
+          <button
+            type="button"
+            onClick={onTalkAboutDeal}
+            className="dc-tb-pill inline-flex min-w-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-semibold"
+          >
+            <MessageSquarePlus className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">Talk about this deal</span>
+          </button>
+        )}
+        {!createMode && onActivity && (
           <button
             type="button"
             onClick={onActivity}
@@ -662,7 +690,93 @@ export function CardFront({
                       </tr>
                     </thead>
                     <tbody>
-                      {lines.map((l) => {
+                      {/* HELD CHANGE (read mode): the diff renders as a REDLINE
+                          inside this table — struck red old row above the green
+                          new row with a CHANGE tag (the chat-flipdoc prototype
+                          pattern) — never as a separate boxed section. */}
+                      {!editMode && data.pendingChange
+                        ? pairDealDiff(lineItems, data.pendingChange.lines).flatMap((d) => {
+                            const oldRow =
+                              d.kind === "changed" || d.kind === "removed" ? (
+                                <tr
+                                  key={`${d.key}-old`}
+                                  className="dc-row-old border-t border-ink/10 align-middle dc-text-red line-through"
+                                >
+                                  <td className="py-1.5 pr-1 font-semibold">{d.cur.productName}</td>
+                                  <td className="py-1.5 pr-1 tabular-nums">{d.cur.batchNumber ?? "—"}</td>
+                                  <td className="py-1.5 pr-1 text-right tabular-nums">
+                                    {d.cur.quantity} {d.cur.unit}
+                                  </td>
+                                  <td className="py-1.5 pr-1 text-right tabular-nums">1</td>
+                                  <td className="py-1.5 pr-1 text-right tabular-nums">
+                                    {d.cur.unitPrice != null
+                                      ? `${formatMoney(d.cur.unitPrice, d.cur.currency)}/${d.cur.unit}`
+                                      : "—"}
+                                  </td>
+                                  <td className="py-1.5 pr-1 text-right font-mono tabular-nums">
+                                    {d.cur.unitPrice != null
+                                      ? formatMoney(lineValueOf(d.cur.quantity, d.cur.unit, d.cur.unitPrice) ?? 0, d.cur.currency)
+                                      : "—"}
+                                  </td>
+                                </tr>
+                              ) : null;
+                            const next = d.kind === "changed" || d.kind === "added" || d.kind === "same" ? d.next : null;
+                            const newTotal = next ? proposedLineTotal(next) : null;
+                            const newRow =
+                              next && d.kind !== "same" ? (
+                                <tr
+                                  key={`${d.key}-new`}
+                                  className="dc-row-new border-t border-ink/10 align-middle font-semibold dc-text-green"
+                                >
+                                  <td className="py-1.5 pr-1">
+                                    {next.name}
+                                    <span className="dc-badge-change ml-2 inline-block rounded-md px-1.5 py-0.5 align-[1px] text-[8px] font-extrabold uppercase">
+                                      CHANGE
+                                    </span>
+                                  </td>
+                                  <td className="py-1.5 pr-1 tabular-nums">
+                                    {(d.kind === "changed" ? d.cur.batchNumber : null) ?? "—"}
+                                  </td>
+                                  <td className="py-1.5 pr-1 text-right tabular-nums">
+                                    {next.quantity} {next.unit}
+                                  </td>
+                                  <td className="py-1.5 pr-1 text-right tabular-nums">1</td>
+                                  <td className="py-1.5 pr-1 text-right tabular-nums">
+                                    {next.unitPrice != null
+                                      ? `${formatMoney(next.unitPrice, next.currency)}/${next.unit}`
+                                      : "—"}
+                                  </td>
+                                  <td className="py-1.5 pr-1 text-right font-mono tabular-nums">
+                                    {newTotal == null ? "—" : formatMoney(newTotal, next.currency)}
+                                  </td>
+                                </tr>
+                              ) : null;
+                            const sameRow =
+                              d.kind === "same" ? (
+                                <tr key={d.key} className="border-t border-ink/10 align-middle">
+                                  <td className="py-1.5 pr-1 font-semibold text-ink">{d.cur.productName}</td>
+                                  <td className="py-1.5 pr-1 tabular-nums text-ink/70">
+                                    {d.cur.batchNumber ?? "—"}
+                                  </td>
+                                  <td className="py-1.5 pr-1 text-right tabular-nums text-ink/80">
+                                    {d.cur.quantity} {d.cur.unit}
+                                  </td>
+                                  <td className="py-1.5 pr-1 text-right tabular-nums text-ink/80">1</td>
+                                  <td className="py-1.5 pr-1 text-right tabular-nums text-ink/80">
+                                    {d.cur.unitPrice != null
+                                      ? `${formatMoney(d.cur.unitPrice, d.cur.currency)}/${d.cur.unit}`
+                                      : "—"}
+                                  </td>
+                                  <td className="py-1.5 pr-1 text-right font-mono tabular-nums">
+                                    {d.cur.unitPrice != null
+                                      ? formatMoney(lineValueOf(d.cur.quantity, d.cur.unit, d.cur.unitPrice) ?? 0, d.cur.currency)
+                                      : "—"}
+                                  </td>
+                                </tr>
+                              ) : null;
+                            return [oldRow, newRow, sameRow].filter(Boolean);
+                          })
+                        : lines.map((l) => {
                         const total = lineTotalOf(l);
                         const totalLabel = total == null ? "—" : formatMoney(total, l.currency);
                         const priceLabel =
@@ -888,18 +1002,6 @@ export function CardFront({
                   ))}
               </div>
 
-            {/* red/green diff for a HELD change (D-18) - only outside edit mode.
-                Money is via sumLineValue in NegotiationDiff (never size×units×price). */}
-            {!editMode && data.pendingChange && (
-              <div className="mt-3">
-                <NegotiationDiff
-                  current={lineItems}
-                  proposed={data.pendingChange.lines}
-                  currency={data.pendingChange.currency}
-                />
-              </div>
-            )}
-
             {/* the yellow promotion track (D-21..D-26) - never gates Sign */}
             {!editMode && promotion && (
               <div className="mt-3">
@@ -907,18 +1009,44 @@ export function CardFront({
               </div>
             )}
 
-            {/* total net - hidden while a diff shows its own new-total, so the
-                card never shows two competing totals (CARD-01 live sum). */}
-            {!editMode && !data.pendingChange && (
-              <div className="mt-3 flex items-baseline gap-3">
-                <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--dc-ink-38)]">
-                  Total net
-                </span>
-                <span className="ml-auto text-[22px] font-extrabold leading-none tabular-nums tracking-tight text-[color:var(--dc-ink)]">
-                  {valueNet}
-                </span>
-              </div>
-            )}
+            {/* total net (CARD-01 live sum). With a HELD change it redlines like
+                the prototype's totalrow: struck old · delta pill · big green new. */}
+            {!editMode &&
+              (() => {
+                const held = data.pendingChange;
+                const curTotal = held ? sumLineValue(lineItems) : null;
+                const newTotal = held ? proposedLinesTotal(held.lines) : null;
+                const delta = curTotal != null && newTotal != null ? newTotal - curTotal : null;
+                return (
+                  <div className="mt-3 flex items-baseline gap-3">
+                    <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--dc-ink-38)]">
+                      Total net
+                    </span>
+                    {held ? (
+                      <span className="ml-auto flex items-baseline gap-2.5">
+                        {curTotal != null && delta !== 0 && (
+                          <span className="font-mono text-[13px] line-through dc-text-red">
+                            {formatMoney(curTotal, held.currency)}
+                          </span>
+                        )}
+                        {delta != null && delta !== 0 && (
+                          <span className="rounded-full bg-[color:var(--dc-green-soft)] px-2.5 py-0.5 font-mono text-[11px] font-bold text-ink ring-1 ring-[color:var(--dc-green)]/30">
+                            {delta < 0 ? "−" : "+"}
+                            {formatMoney(Math.abs(delta), held.currency)}
+                          </span>
+                        )}
+                        <span className="text-[22px] font-extrabold leading-none tabular-nums tracking-tight dc-text-green">
+                          {newTotal == null ? "—" : formatMoney(newTotal, held.currency)}
+                        </span>
+                      </span>
+                    ) : (
+                      <span className="ml-auto text-[22px] font-extrabold leading-none tabular-nums tracking-tight text-[color:var(--dc-ink)]">
+                        {valueNet}
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
           </section>
 
       {/* ---- 5 · EXTRA CONDITIONS (seller-only, Discounts its OWN section, D-13) ---- */}
@@ -1117,7 +1245,7 @@ export function CardFront({
         createMode ? (
           /* CREATE MODE footer (chj/07-08): a brand-new draft is not a
              negotiation, so there is no change-reason box. "Send deal" hands the
-             draft up + the strip births it via createDeal. */
+             draft up + the strip births it via createDeal.*/
           <div className="dc-decision px-4 pb-3.5 pt-3">
             <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--dc-ink-38)]">
               Send this deal
@@ -1147,7 +1275,10 @@ export function CardFront({
         ) : (
           /* EDIT MODE, existing deal (chj/07-08): ONE explicit "Send changes" button.
              No reason box, no permission step - a single click stages the edits as a
-             negotiation change; the other side then sees a red/green diff to sign. */
+             negotiation change; the other side then sees a red/green diff to sign.
+             (A sticky footer is blocked by the card shell: .dealcard is
+             overflow-hidden inside the flip transform — the header ✓ sending
+             unsent edits is the guard against off-screen-save loss.) */
           <div className="dc-decision px-4 pb-3.5 pt-3">
             {sendError && <p className="mb-2 text-[11px] font-medium text-danger">{sendError}</p>}
             <button

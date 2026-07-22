@@ -109,7 +109,8 @@ DELETE FROM deal_card WHERE id IN (SELECT id FROM _cards);
 -- a getByText assertion match the stale bubble. Widen this delete to clear all three
 -- projection types from the relationship's p2p thread.
 DELETE FROM chat_message
-  WHERE type IN ('deal_detected', 'deal_card_updated', 'deal_change_declined')
+  WHERE type IN ('deal_detected', 'deal_card_updated', 'deal_change_declined',
+                 'deal_card', 'deal_cancelled', 'deal_signed')
   AND thread_id IN (SELECT id FROM chat_thread WHERE relationship_id = :'rel');
 DELETE FROM sella_detection
   WHERE thread_id IN (SELECT id FROM chat_thread WHERE relationship_id = :'rel');
@@ -239,6 +240,68 @@ export function countDealChangeInputForCard(dealCardId: string): number {
       '-At',
       '-c',
       `select count(*) from public.deal_change_input where deal_card_id = '${dealCardId}'`,
+    ],
+    { encoding: 'utf8' },
+  ).trim()
+  return Number(out)
+}
+
+/**
+ * Count the live `deal_member` rows across ONE card's workspace (A1). A deal
+ * born from a c2c COMPANY chat has no counterparty person, so its creator must
+ * be the SOLE owner — that absence is the company-target routing key the
+ * delivery spine (deliver_deal) reads. Card id resolved at RUNTIME by the
+ * caller (never hardcoded — the seed regenerates ids on every db reset).
+ */
+export function countDealMembersForCard(dealCardId: string): number {
+  const bin = psqlBin()
+  const out = execFileSync(
+    bin,
+    [
+      DB_URL,
+      '-At',
+      '-c',
+      `select count(*) from public.deal_member dm ` +
+        `join public.deal_workspace dw on dw.id = dm.deal_workspace_id ` +
+        `where dw.deal_card_id = '${dealCardId}'`,
+    ],
+    { encoding: 'utf8' },
+  ).trim()
+  return Number(out)
+}
+
+/**
+ * Count the deal_card rows on the GreenLeaf <-> StonePharm relationship — the
+ * second-deal tests assert a repeat create really births a NEW card (2 rows),
+ * not an edit of the first. Resolved at RUNTIME like everything else here.
+ */
+export function countDealCardsForRelationship(): number {
+  const bin = psqlBin()
+  const rel = resolveRelationshipId(bin)
+  const out = execFileSync(
+    bin,
+    [DB_URL, '-At', '-c', `select count(*) from public.deal_card where relationship_id = '${rel}'`],
+    { encoding: 'utf8' },
+  ).trim()
+  return Number(out)
+}
+
+/**
+ * Count the live pending_inbox_item rows for ONE card (Lane A routing). A
+ * PERSON-target birth (counterparty co-owner set) must deliver as a chat
+ * message, never as a company inbox ticket — this proves the ticket half
+ * stayed silent. Card id resolved at RUNTIME by the caller.
+ */
+export function countTicketsForCard(dealCardId: string): number {
+  const bin = psqlBin()
+  const out = execFileSync(
+    bin,
+    [
+      DB_URL,
+      '-At',
+      '-c',
+      `select count(*) from public.pending_inbox_item ` +
+        `where deal_card_id = '${dealCardId}' and deleted_at is null`,
     ],
     { encoding: 'utf8' },
   ).trim()
@@ -420,14 +483,46 @@ export async function createDraftDealAsAlice(
       .fill(opts.note)
   }
 
-  // 6. birth it for real. Wait for the panel to swap from the create-mode footer
-  //    to a real card's title-bar pill ("Talk about this deal" — present in EVERY
-  //    card state/status, unlike the pencil or DecisionBar content) before
-  //    returning, so callers never race the create -> fetch -> render round trip.
+  // 6. birth it for real. Wait for a signal UNIQUE to the BORN card: the
+  //    "Edit deal" pencil (a fresh draft with no held change always has it).
+  //    ⚠️ NOT "Talk about this deal" — the CREATE-mode card shows that pill
+  //    too, so it can resolve while the birth roundtrip is still in flight;
+  //    a caller that keeps driving the panel then races handleCreate's
+  //    completion (which closes any create session and swaps the born card in).
   await dealPanel(alicePage).getByRole('button', { name: /^send deal$/i }).click()
-  await dealPanel(alicePage).getByRole('button', { name: /talk about this deal/i }).waitFor({
+  await dealPanel(alicePage).getByRole('button', { name: /edit deal/i }).waitFor({
     timeout: 15000,
   })
+}
+
+/**
+ * Drive the c2c (COMPANY chat) deal-create flow as Alice (Lane A): open the
+ * GreenLeaf<->StonePharm company channel (found by its fixed "Company chat
+ * (C2C)" subtitle after narrowing the list by search — the p2p row subtitles
+ * the company name instead), press its "Start a deal" door, and birth the same
+ * deterministic Pedanios draft as createDraftDealAsAlice. No counterparty
+ * person exists in a company chat, so the birth is COMPANY-target: deliver_deal
+ * writes the claimable inbox ticket for StonePharm at birth.
+ */
+export async function createC2cDealAsAlice(alicePage: Page): Promise<void> {
+  await alicePage.goto('/connect/chat')
+  await alicePage.getByPlaceholder('Search conversations…').fill(COUNTERPARTY_NAME.alice)
+  await alicePage.getByText('Company chat (C2C)', { exact: true }).first().click()
+  await alicePage.getByRole('button', { name: 'Start a deal', exact: true }).click()
+  const addProductSelect = dealPanel(alicePage)
+    .locator('select')
+    .filter({ hasText: /add product from your shop/i })
+  await addProductSelect.waitFor()
+  await addProductSelect.selectOption({ label: 'Pedanios 31/1 COS-CA' })
+  const row = openRowLocator(alicePage)
+  await row.locator('select').nth(2).selectOption('100')
+  await row.locator('input[type="number"]').fill('5.00')
+  // wait on the BORN-card-only pencil, not "Talk about this deal" (the create
+  // card shows that too — see createDraftDealAsAlice's note on the race)
+  await dealPanel(alicePage).getByRole('button', { name: /^send deal$/i }).click()
+  await dealPanel(alicePage)
+    .getByRole('button', { name: /edit deal/i })
+    .waitFor({ timeout: 15000 })
 }
 
 /**

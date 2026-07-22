@@ -28,7 +28,6 @@ import type {
   GroupCreationResult,
   MessageSender,
   MessageType,
-  PendingExternalMember,
   ThreadType,
 } from "../types";
 
@@ -233,6 +232,7 @@ export async function getConversations(): Promise<ConversationListItem[]> {
     return {
       ...base,
       name: personName,
+      otherPersonId,
       subtitle: otherCompanyName,
       initials: personInitials(per?.first_name, per?.last_name),
     };
@@ -392,17 +392,14 @@ export async function openOrCreateP2pThread(
 /* -------------------------------------------------------------------------- */
 
 /**
- * Create a group thread (D-04 new-chat groups + D-05 deal-card groups) via the
+ * Create a group thread (D-04 new-chat groups + deal-card groups) via the
  * atomic `create_group_thread` RPC. The RPC derives the creator from
- * `auth.uid()` (never a client company id), adds the creator as active, and -
- * for a deal-card group - resolves the 2 deal parties and gates any external
- * company member to `pending_external`. The RPC + `chat_thread_member` table
- * are new (07-02), not in the generated types yet, so the RPC name + params +
- * table read are cast (the documented `as never` discipline).
- *
- * Returns the new thread id plus any members the server put behind the external
- * gate (D-05), so the picker can drive the two-approver flow. The UI can NEVER
- * activate an external party - only `approve_group_member` transitions it.
+ * `auth.uid()` (never a client company id) and adds every member - creator
+ * included - as active immediately; there is no external-company gate
+ * (2026-07-20 reversed D-05's pending_external/two-approver mechanism). The
+ * RPC + `chat_thread_member` table are new (07-02), not in the generated
+ * types yet, so the RPC name + params are cast (the documented `as never`
+ * discipline).
  */
 export async function createGroupThread(input: {
   name: string;
@@ -418,56 +415,7 @@ export async function createGroupThread(input: {
     p_deal_card_id: input.dealCardId ?? null,
   } as never);
   if (error) throw error;
-  const threadId = newId as unknown as string;
-
-  // D-05: read back the members the server placed behind the external gate.
-  // RLS (is_group_member) scopes this to the thread the creator just joined.
-  const { data: gated, error: mErr } = await supabase
-    .from("chat_thread_member" as never)
-    .select("person_id, state")
-    .eq("thread_id", threadId)
-    .eq("state", "pending_external");
-  if (mErr) throw mErr;
-  const gatedRows = (gated ?? []) as unknown as { person_id: string }[];
-
-  const pendingExternal: PendingExternalMember[] = [];
-  if (gatedRows.length) {
-    const ids = gatedRows.map((r) => r.person_id);
-    const { data: people, error: pErr } = await supabase
-      .from("person")
-      .select("id, first_name, last_name")
-      .in("id", ids);
-    if (pErr) throw pErr;
-    const byId = new Map((people ?? []).map((p) => [p.id, p] as const));
-    for (const r of gatedRows) {
-      const p = byId.get(r.person_id);
-      pendingExternal.push({
-        personId: r.person_id,
-        name: p ? `${p.first_name} ${p.last_name}`.trim() : "External member",
-      });
-    }
-  }
-
-  return { threadId, pendingExternal };
-}
-
-/**
- * Record the viewer's approval of one external group member (D-05). The
- * `approve_group_member` RPC enforces the gate server-side: only an ACTIVE
- * member may approve, an approver cannot approve themselves, and only TWO
- * DISTINCT approvers flip `pending_external → active`. This UI call is a single
- * approver's click; the second comes from another member's own session.
- */
-export async function approveGroupMember(input: {
-  threadId: string;
-  personId: string;
-}): Promise<void> {
-  const supabase = createClient();
-  const { error } = await supabase.rpc("approve_group_member" as never, {
-    p_thread_id: input.threadId,
-    p_person_id: input.personId,
-  } as never);
-  if (error) throw error;
+  return { threadId: newId as unknown as string };
 }
 
 /**
@@ -517,6 +465,40 @@ export async function postMessage(threadId: string, body: string): Promise<ChatM
 }
 
 /**
+ * Person-target deal delivery (Lane A): drop the "[Sender] has sent a deal"
+ * message into a p2p thread. `type: 'deal_card'` + `metadata.deal_card_id`
+ * make the bubble clickable (MessageBubble dispatches hs:open-deal-card);
+ * the typed message never trips Sella detection (its trigger only enqueues
+ * plain 'message' rows). Sender = the real person — the send is their action.
+ *
+ * Called from the SEND/COMPOSITION layer only (create-card host, basket send).
+ * Never from deals/ (module cycle) and never from SQL (it would double-deliver
+ * the Sella-detection door, which posts its own deal_detected message).
+ */
+export async function postDealMessage(threadId: string, dealCardId: string): Promise<void> {
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("messaging: no authenticated user");
+  const { data: me } = await supabase
+    .from("person")
+    .select("first_name, last_name")
+    .eq("id", user.id)
+    .single();
+  const name = me ? `${me.first_name} ${me.last_name}`.trim() : "Someone";
+  const { error } = await supabase.from("chat_message").insert({
+    thread_id: threadId,
+    sender: "person",
+    sender_person_id: user.id,
+    type: "deal_card",
+    body: `${name} has sent a deal`,
+    metadata: { deal_card_id: dealCardId },
+  });
+  if (error) throw error;
+}
+
+/**
  * Run the accept rollout against Supabase: mint a `relationship` (+ the C2C/P2P
  * threads and their seed lines per `planRollout`). Idempotent on
  * `inbox_item_id`, so a double-accept is a no-op. Does NOT touch the inbox item
@@ -540,6 +522,24 @@ export async function acceptInbox(
       .select("id")
       .eq("relationship_id", existing.id);
     return { relationshipId: existing.id, threadIds: (thr ?? []).map((t) => t.id) };
+  }
+
+  // Deal-ticket pickup (Lane A): the deal AND its relationship exist since
+  // birth — claiming means becoming a deal_member owner on the existing deal
+  // (a SECURITY DEFINER RPC: deal_member RLS cannot express the bootstrap).
+  // No relationship mint, no rollout threads, no Sella intro.
+  if (input.requestType === "deal_card") {
+    if (!input.dealCardId) {
+      throw new Error("acceptInbox: a deal_card accept needs its dealCardId");
+    }
+    // the RPC is not in the generated types yet — localized cast, direct
+    // supabase.rpc call so `this` stays bound (createDeal's documented pattern)
+    const { data: relId, error: claimErr } = await supabase.rpc(
+      "claim_deal_ticket" as never,
+      { p_deal_card_id: input.dealCardId } as never,
+    );
+    if (claimErr) throw new Error((claimErr as { message: string }).message);
+    return { relationshipId: relId as unknown as string, threadIds: [] };
   }
 
   // relationship - canonical company order (CHECK company_a_id < company_b_id)

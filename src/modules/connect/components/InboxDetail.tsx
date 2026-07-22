@@ -72,6 +72,10 @@ export function InboxDetail({
   const TypeIcon = meta.icon;
   const mode = detailMode(item, viewer);
   const ownerFirstName = item.assignee?.displayName.split(" ")[0] ?? "Someone";
+  // A deal ticket accepts a DEAL on an existing relationship — nothing is being
+  // "connected"; the shared footer wording follows the item type.
+  const isDealTicket = item.type === "deal_card";
+  const acceptLabel = isDealTicket ? "Pick up deal" : "Accept & connect";
 
   return (
     <div className="flex h-full flex-col">
@@ -149,12 +153,17 @@ export function InboxDetail({
           <div className="space-y-3">
             <div className="flex items-center gap-2 rounded-2xl bg-success/12 p-3 text-sm font-medium text-success ring-1 ring-success/25">
               <Check size={16} strokeWidth={2.2} />
-              Connected with {item.sender.companyName}
+              {isDealTicket
+                ? `Deal picked up — find it in your chat with ${item.sender.companyName}`
+                : `Connected with ${item.sender.companyName}`}
             </div>
-            <button type="button" onClick={() => onStartDeal(item.id)} className={`${BTN_OUTLINE} w-full`}>
-              Start a deal
-              <ArrowRight size={15} strokeWidth={2} />
-            </button>
+            {/* a picked-up deal ticket already IS a deal — no start-a-deal step */}
+            {!isDealTicket && (
+              <button type="button" onClick={() => onStartDeal(item.id)} className={`${BTN_OUTLINE} w-full`}>
+                Start a deal
+                <ArrowRight size={15} strokeWidth={2} />
+              </button>
+            )}
           </div>
         )}
 
@@ -172,7 +181,7 @@ export function InboxDetail({
             </button>
             <button type="button" onClick={() => onAccept(item.id)} className={BTN_OUTLINE}>
               <Check size={15} strokeWidth={2} />
-              Accept &amp; connect
+              {acceptLabel}
             </button>
             <button type="button" onClick={() => onDecline(item.id)} className={BTN_DECLINE}>
               <X size={15} strokeWidth={2} />
@@ -185,7 +194,7 @@ export function InboxDetail({
           <div className="flex flex-wrap items-center gap-2">
             <button type="button" onClick={() => onAccept(item.id)} className={BTN_PRIMARY}>
               <Check size={15} strokeWidth={2} />
-              Accept &amp; connect
+              {acceptLabel}
             </button>
             <button type="button" onClick={() => onDecline(item.id)} className={BTN_DECLINE}>
               <X size={15} strokeWidth={2} />

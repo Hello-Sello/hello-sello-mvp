@@ -59,7 +59,12 @@ export type MessageType =
   | "workspace_created"
   | "deal_opened"
   | "deal_cancelled"
-  | "deal_card_updated";
+  | "deal_card_updated"
+  // Lane A person delivery: "[Sender] has sent a deal" — metadata carries the
+  // deal_card_id; the bubble opens the card in the side panel
+  | "deal_card"
+  // deal lifecycle projection (DEV-33 thin status line): the deal was signed
+  | "deal_signed";
 
 /** relationship_status.code - seeded values. This slice writes `active`. */
 export type RelationshipStatus = "active" | "suspended" | "ended";
@@ -106,6 +111,11 @@ export interface ConversationListItem {
   relationshipId: string | null;
   /** display name: the company name for a c2c, the other person's name for a p2p */
   name: string;
+  /**
+   * the other PERSON's id (p2p rows only) — the deal create door passes it as
+   * the counterparty co-owner so a chat-born deal routes person-target (Lane A)
+   */
+  otherPersonId?: string | null;
   /** subtitle under the name: "Company chat (C2C)" for c2c, the company name for a p2p */
   subtitle: string;
   /** computed avatar initials */
@@ -135,30 +145,13 @@ export interface ConversationListItem {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Group creation (07-05) - the external-gate (D-05) result shapes            */
+/* Group creation (07-05)                                                     */
 /* -------------------------------------------------------------------------- */
 
-/**
- * A group member the server placed behind the D-05 external gate: an external
- * company person added to a deal-card-born group, still `pending_external`
- * until TWO distinct active members approve (`approve_group_member`).
- */
-export interface PendingExternalMember {
-  /** person.id - the target handed to approveGroupMember */
-  personId: string;
-  /** display name for the approval row */
-  name: string;
-}
-
-/**
- * What `createGroupThread` returns: the new group thread id plus any members
- * the server put behind the external gate (D-05). An empty `pendingExternal`
- * means the group is fully active (a plain new-chat group, or a deal group
- * with only the 2 deal parties).
- */
+/** What `createGroupThread` returns: every invited member is active immediately
+ *  (D-05's external gate was removed - see 20260720100000). */
 export interface GroupCreationResult {
   threadId: string;
-  pendingExternal: PendingExternalMember[];
 }
 
 /**
@@ -234,6 +227,16 @@ export interface ConnectedCompany {
  */
 export interface MyConnectionsView {
   companies: ConnectedCompany[];
+  /** the viewer's own company id; null only if the viewer somehow has no company */
+  viewerCompanyId: string | null;
+  /** the viewer's own person id - lets the group picker lock a "(you)" row and never re-list the viewer as a pickable option */
+  viewerPersonId: string;
+  /**
+   * the viewer's OWN company + its people - separate from `companies` (which is
+   * only OTHER, already-connected companies). Powers the group picker's
+   * "Your company" / "Internal" section (D-04/D-05 grouping).
+   */
+  myCompany: { id: string; name: string; people: ConnectedPerson[] } | null;
 }
 
 /**
@@ -312,4 +315,10 @@ export interface AcceptInput {
   viewerPerson: PartyPerson;
   /** the sender's contact person on their side (the other P2P participant) */
   senderPerson: PartyPerson;
+  /**
+   * pending_inbox_item.deal_card_id — REQUIRED when requestType === 'deal_card'
+   * (Lane A pickup): the accept claims this existing deal via claim_deal_ticket
+   * instead of minting a relationship/threads. Absent for the connection types.
+   */
+  dealCardId?: string | null;
 }

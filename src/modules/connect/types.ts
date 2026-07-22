@@ -89,7 +89,14 @@ export interface InboxItemView extends InboxItem {
   mutualCount: number;
   /** present only when type === 'deal_card' */
   dealCard: InboxDealCardPreview | null;
+  /**
+   * whether the VIEWER's company is this row's receiver. The inbox select RLS
+   * deliberately shows a row to sender AND receiver (only the receiver can
+   * act), so actionable lenses must filter on this — an outgoing item is not
+   * something the sender can claim/accept.
+   */
+  viewerIsReceiver: boolean;
 }
 
 /** The four inbox lenses (panel-3 tabs). Default = `unassigned`. */
-export type LensKey = "unassigned" | "mine" | "all" | "history";
+export type LensKey = "unassigned" | "mine" | "all" | "deal_tickets" | "history";
