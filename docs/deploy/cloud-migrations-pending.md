@@ -11,40 +11,16 @@
 
 ---
 
-## 🔴 PENDING 2026-07-20 (+2026-07-22) — Lane A (deal creation & delivery), 5 migrations
+## ✅ APPLIED 2026-07-22 — Lane A (deal creation & delivery) + Ayush's group-thread gate drop, 6 migrations
 
-Built + proven locally (pgTAP probes `deliver_deal_test.sql` / `claim_deal_ticket_test.sql` GREEN
-on a fresh reset; full deal e2e green). **⚠️ Needs Ayush's review before cloud** — `create_deal_draft`
-is re-emitted (his RPC lane) and `claim_deal_ticket` writes `deal_member` (his RLS lane). Apply in
-timestamp order; all additive (`create or replace` on the same signature / new function / one seed row):
-
-| # | file | what |
-|---|------|------|
-| 1 | `20260720095000_deliver_deal.sql` | the routing primitive: no counterparty co-owner → one claimable `pending_inbox_item` deal ticket for the other company (idempotent); else no-op |
-| 2 | `20260720100100_create_deal_draft_delivers.sql` | live `20260618140000` body verbatim + `perform deliver_deal(v_card)` before `return` |
-| 3 | `20260720110000_claim_deal_ticket.sql` | pickup RPC: receiver-company member → `deal_member` owner on the existing deal |
-| 4 | `20260720130000_chat_message_type_deal_card_seed.sql` | one `chat_message_type` row (`deal_card`) for person-target delivery bubbles |
-| 5 | `20260722100000_chat_message_type_deal_signed_seed.sql` | one `chat_message_type` row (`deal_signed`) — sign/decline now project into chat (DEV-33 lines) |
-
-> **⚠️ Renamed `20260720100000_deliver_deal.sql` → `20260720095000_deliver_deal.sql`** (Muskan) — it
-> collided on the exact same timestamp with Ayush's `20260720100000_drop_group_thread_external_gate.sql`
-> (written independently, ~1.5h apart, same day). Same class of bug he already fixed once this week for
-> 3 other files; renaming MY file to match his own convention (rename your own side of a collision, not
-> the other's). New timestamp still sorts before `…100100_create_deal_draft_delivers` (which calls
-> `deliver_deal()`), so apply order is unchanged. No functional change — filename/version only.
+Pushed to production ahead of the `dev` → `main` merge (Muskan's explicit call, PR review skipped for
+`create_deal_draft`/`claim_deal_ticket` — same override precedent as DEV-88 — since `create_deal_draft`
+is on the golden path for every deal creation and shipping the app code without these live would break
+deal creation/delivery/pickup in production). See **APPLIED TO CLOUD** below for the full record.
 
 > Note: this ledger's 2026-07-07 status below predates session 64 (which pushed
 > `20260710120000_person_company_id_lockdown` + `20260716120000_drop_buy_orphaned_tables` directly
 > to production) — the full pre-Lane-A reconcile pass is still owed (see CLAUDE.md #0).
-
-## ⚠️ PENDING 2026-07-20 — 1 migration: drop the group-thread external-approval gate (Ayush)
-
-- **`20260720100000_drop_group_thread_external_gate.sql`** (Ayush, 2026-07-20) — `create or replace`s
-  `create_group_thread` so every invited group member (deal party or not) goes straight to `active`;
-  drops `approve_group_member` outright (no remaining caller once the gate is gone). Reverses D-05's
-  external-approval mechanic on product direction, not a bug fix. Local only, additive/idempotent
-  (`create or replace` + `drop function if exists`) — safe to push whenever the rest of this backlog is
-  reconciled.
 
 ## ✅ STATUS 2026-07-07 (historical) — cloud == local, tip `20260707090000`
 
@@ -382,6 +358,28 @@ entry only; nothing below has been run against cloud.**
 ---
 
 ## APPLIED TO CLOUD
+
+### 2026-07-22 — Lane A (deal creation & delivery) + group-thread gate drop (6 migrations)
+Applied via `mcp__supabase__apply_migration` against `byipusuthdlskdxoexkt` (not a CLI `db push`) —
+**cloud history now records these under fresh timestamps** (`20260722120421`…`20260722120711`), not
+the local filenames' timestamps. Same divergence class as the 2026-07-08 Buy-era batch below; the
+pre-Lane-A reconcile pass (CLAUDE.md #0) still needs to fold this batch in too. **6 applied, 0 errors:**
+- `deliver_deal` (local `20260720095000_deliver_deal.sql`)
+- `create_deal_draft_delivers` (local `20260720100100_create_deal_draft_delivers.sql`)
+- `claim_deal_ticket` (local `20260720110000_claim_deal_ticket.sql`)
+- `chat_message_type_deal_card_seed` (local `20260720130000_chat_message_type_deal_card_seed.sql`)
+- `chat_message_type_deal_signed_seed` (local `20260722100000_chat_message_type_deal_signed_seed.sql`)
+- `drop_group_thread_external_gate` (local `20260720100000_drop_group_thread_external_gate.sql`, Ayush)
+
+Before applying: diffed `create_deal_draft`'s and `create_group_thread`'s LIVE `pg_get_functiondef`
+bodies against each migration's assumed base — both matched exactly (no stale-base drift). Verified
+`pending_inbox_item` / `chat_message_type` / `deal_member` exist on cloud first. **Applied without
+Ayush's review** (Muskan's explicit call, same override precedent as DEV-88) — `create_deal_draft` is
+the golden path for every deal creation, so shipping `dev`'s app code to `main` without these live would
+break deal creation/delivery/pickup in production. `get_advisors(security)` = **0 ERROR** (126 WARN, all
+pre-existing/by-design SECURITY DEFINER RPCs — my 4 new functions added the same benign
+anon/authenticated-executable-definer pattern every prior batch has). Flag for Ayush to review after the
+fact, same as DEV-88.
 
 ### 2026-07-07 — Present + Allocate + Phase 13 deploy (9 migrations)
 Clean sequential `supabase db push` against `byipusuthdlskdxoexkt` — **no reconciliation needed**
