@@ -62,7 +62,9 @@ export type MessageType =
   | "deal_card_updated"
   // Lane A person delivery: "[Sender] has sent a deal" — metadata carries the
   // deal_card_id; the bubble opens the card in the side panel
-  | "deal_card";
+  | "deal_card"
+  // deal lifecycle projection (DEV-33 thin status line): the deal was signed
+  | "deal_signed";
 
 /** relationship_status.code - seeded values. This slice writes `active`. */
 export type RelationshipStatus = "active" | "suspended" | "ended";

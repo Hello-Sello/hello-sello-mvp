@@ -790,6 +790,56 @@ export async function withdrawDealChange({
 }
 
 /**
+ * Project a deal lifecycle event into the chat stream — the DEV-33 doctrine:
+ * the chat is the activity feed, and every deal event lands as a thin
+ * WhatsApp-style system line ("the system message is a projection of a log
+ * entry", DECISIONS 2026-05-22). Posts into the thread people actually read —
+ * the relationship's p2p thread when one exists (person deals), else the c2c
+ * company channel — plus the deal's own hidden thread as the durable record.
+ *
+ * FAIL-SOFT by design: the deal action has already committed by the time this
+ * runs, so a failed announcement logs and returns — it never surfaces as a
+ * failed decline/sign. (The SQL-side announcements in confirm_deal_change are
+ * transactional with their status change; these app-side ones are not — the
+ * accepted trade-off of keeping declineDeal/signDeal as app actions.)
+ * Inserted per-thread (not one batch) so an RLS miss on one thread — e.g. a
+ * p2p pair the actor isn't part of — never voids the others.
+ */
+async function announceDealEvent(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  dealCardId: string,
+  relationshipId: string,
+  type: "deal_cancelled" | "deal_signed",
+  body: string,
+): Promise<void> {
+  try {
+    const { data: threads } = await supabase
+      .from("chat_thread")
+      .select("id, type, deal_card_id")
+      .eq("relationship_id", relationshipId)
+      .is("deleted_at", null);
+    const list = threads ?? [];
+    const targets: string[] = [];
+    const dealThread = list.find((t) => t.type === "deal" && t.deal_card_id === dealCardId);
+    if (dealThread) targets.push(dealThread.id);
+    const visible = list.find((t) => t.type === "p2p") ?? list.find((t) => t.type === "c2c");
+    if (visible) targets.push(visible.id);
+    for (const thread_id of targets) {
+      const { error } = await supabase.from("chat_message").insert({
+        thread_id,
+        sender: "sella",
+        type,
+        body,
+        metadata: { deal_card_id: dealCardId },
+      });
+      if (error) console.error("deal event announcement failed", error);
+    }
+  } catch (e) {
+    console.error("deal event announcement failed", e);
+  }
+}
+
+/**
  * Decline a deal (chj/07-08) - the "end it" action from the on-card DecisionBar.
  * A decline is a CLOSE, not a delete (the user's lifecycle rule): the card flips
  * to `cancelled` and reuses the existing closed-deal handling (the lock, no more
@@ -848,6 +898,14 @@ export async function declineDeal(args: { dealCardId: string }): Promise<void> {
     contentId: card.id,
     actorPersonId: user.id,
   });
+  // DEV-33: project the decline into the chat stream (thin system line)
+  await announceDealEvent(
+    supabase,
+    card.id,
+    card.relationship_id,
+    "deal_cancelled",
+    "Deal declined - the deal is closed.",
+  );
 }
 
 /**
@@ -924,6 +982,14 @@ export async function signDeal({
     contentId: dealCardId,
     actorPersonId: user.id,
   });
+  // DEV-33: project the sign into the chat stream (thin system line)
+  await announceDealEvent(
+    supabase,
+    dealCardId,
+    card.relationship_id,
+    "deal_signed",
+    "Deal signed - the deal is confirmed.",
+  );
   return { cardStatus: "confirmed" };
 }
 

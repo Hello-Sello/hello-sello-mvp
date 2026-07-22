@@ -17,15 +17,17 @@ export interface MessageBubbleProps {
 }
 
 export function MessageBubble({ message }: MessageBubbleProps) {
-  // Person-target deal delivery (Lane A): the "[Sender] has sent a deal" line
-  // is a clickable card-shaped bubble that opens the deal in the side panel.
-  // Branches on TYPE (not sender) — the send layer posts it in the sender's
-  // own voice, but both sides see the same affordance. Acyclic: it only
-  // dispatches the existing window event; DealCardPanelHost owns the panel.
+  // Deal-event lines render as CENTERED, WhatsApp-style thin system lines
+  // (DEV-33 doctrine: the chat is the activity feed; a deal signal is a
+  // passive status artifact with a timestamp, never a party's speech bubble).
+  //
+  // "[Sender] has sent a deal" (type deal_card, Lane A person delivery) is the
+  // one CLICKABLE line — it opens the card in the side panel via the existing
+  // window event (acyclic: DealCardPanelHost owns the panel).
   if (message.type === "deal_card") {
     const dealCardId = (message.metadata as { deal_card_id?: string } | null)?.deal_card_id;
     return (
-      <div className={`my-1 flex ${message.isMine ? "justify-end" : "justify-start"}`}>
+      <div className="my-1.5 flex justify-center">
         <button
           type="button"
           onClick={() =>
@@ -35,17 +37,12 @@ export function MessageBubble({ message }: MessageBubbleProps) {
             )
           }
           title="Open the deal card"
-          className="flex items-stretch overflow-hidden rounded-xl border border-brand/15 bg-white text-left transition hover:bg-brand-soft/20"
+          className="inline-flex items-center gap-1.5 rounded-full bg-brand-soft/40 px-3 py-1 text-[11px] text-brand-deep ring-1 ring-brand/15 transition hover:bg-brand-soft/70"
         >
-          <span className="w-1.5 shrink-0 bg-brand" aria-hidden />
-          <span className="flex items-center gap-2 px-3 py-2">
-            <FileText size={16} strokeWidth={2} className="shrink-0 text-brand" />
-            <span className="flex flex-col">
-              <span className="text-sm font-semibold text-ink">{message.body}</span>
-              <span className="text-[10px] text-ink/45">
-                Click to open the deal card · {formatTimeAgo(message.created_at)}
-              </span>
-            </span>
+          <FileText size={12} strokeWidth={2} className="shrink-0" />
+          <span className="font-semibold">{message.body}</span>
+          <span className="text-brand-deep/60">
+            · Click to open the deal card · {formatTimeAgo(message.created_at)}
           </span>
         </button>
       </div>
