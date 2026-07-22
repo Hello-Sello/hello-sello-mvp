@@ -18,9 +18,29 @@ Pushed to production ahead of the `dev` → `main` merge (Muskan's explicit call
 is on the golden path for every deal creation and shipping the app code without these live would break
 deal creation/delivery/pickup in production). See **APPLIED TO CLOUD** below for the full record.
 
-> Note: this ledger's 2026-07-07 status below predates session 64 (which pushed
-> `20260710120000_person_company_id_lockdown` + `20260716120000_drop_buy_orphaned_tables` directly
-> to production) — the full pre-Lane-A reconcile pass is still owed (see CLAUDE.md #0).
+## ✅ RECONCILED 2026-07-22 — cloud `schema_migrations` history now matches local filenames (the pre-Lane-A reconcile pass CLAUDE.md #0 flagged as owed)
+
+Every migration applied via `mcp__supabase__apply_migration` (rather than a CLI `db push`) gets stamped
+with the *call time* as its version, not the local file's timestamp — that's what caused the divergence
+this ledger has been carrying since the 2026-07-08 Buy-era batch. Reconciled by directly `UPDATE`ing
+`supabase_migrations.schema_migrations.version` (the same effect as `supabase migration repair`, just
+via SQL since no linked CLI session was available) — **21 rows repaired to their real local filenames**,
+0 schema/data change, verified no version collisions before each batch:
+
+- The 2026-07-22 Lane A + group-thread-gate batch (6, applied earlier this session — see above)
+- The 2026-07-08 Buy-era batch (10): `product_basket_line`, `chat_thread_member`, `group_thread_rls`,
+  `create_group_thread_rpc`, `deal_artifacts_storage`, `thing_stage_code_nullable`,
+  `confirm_detected_deal_born_now`, `deal_event_system_voice`, `deal_promotion`, `lifecycle_status_codes`
+- Session 64's direct pushes (2): `person_company_id_lockdown`, `drop_buy_orphaned_tables`
+
+**⚠️ One entry deliberately NOT reconciled:** `20260708155722_buy_schema` — Buy's schema migration file
+was stripped from git in session 64 (its tables already dropped by `drop_buy_orphaned_tables`), so there
+is no local file to repair it against. This one row will still trip "remote migration version not found
+locally" on a future plain `supabase db push` — the only full fix would be re-adding a no-op placeholder
+file, which is a call for whoever next needs a clean CLI push, not a mechanical repair.
+
+**Full history is now clean** except that single known exception. This closes the CLAUDE.md #0 "pre-Lane-A
+reconcile pass" item.
 
 ## ✅ STATUS 2026-07-07 (historical) — cloud == local, tip `20260707090000`
 
