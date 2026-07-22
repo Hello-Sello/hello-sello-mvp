@@ -26,7 +26,7 @@
  * `onEdit` from the strip is the "editing allowed" gate; the actual edit is now the
  * inline mode owned here + CardFront (the old EditDealForm modal is superseded).
  */
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Check, FlipHorizontal2, Lock, Pencil } from "lucide-react";
 import { CardFront } from "./CardFront";
 import { CardBack } from "./CardBack";
@@ -73,6 +73,9 @@ export function DealCard({
   const [flipped, setFlipped] = useState(false);
   // create mode is always-editing: seed edit mode ON so the empty draft is fillable.
   const [editMode, setEditMode] = useState(!!createMode);
+  // the front card registers its send-then-exit here (2026-07-22): the header ✓
+  // routes through it so unsent edits are SENT, never silently discarded.
+  const exitRequestRef = useRef<(() => void) | null>(null);
 
   // Any non-draft deal is locked (chj/07-08): once signed (confirmed), declined
   // (cancelled), executed (done) or ticketed, the pencil becomes a lock - no editing.
@@ -109,7 +112,16 @@ export function DealCard({
       ) : (
         canEdit && (
           <button
-            onClick={() => setEditMode((e) => !e)}
+            onClick={() => {
+              // 2026-07-22: leaving edit mode goes through the card's exit
+              // request, which SENDS unsent edits (or plainly exits when
+              // nothing changed) — the ✓ must never silently discard work.
+              if (editMode && exitRequestRef.current) {
+                exitRequestRef.current();
+                return;
+              }
+              setEditMode((e) => !e);
+            }}
             className={`absolute right-3 top-3 z-30 grid h-[30px] w-[30px] place-items-center rounded-full border transition ${
               editMode
                 ? "border-brand/30 bg-brand text-white"
@@ -151,6 +163,9 @@ export function DealCard({
             createMode={createMode}
             onCreate={onCreate}
             onExitEdit={() => setEditMode(false)}
+            registerExitRequest={(fn) => {
+              exitRequestRef.current = fn;
+            }}
           />
         </div>
 

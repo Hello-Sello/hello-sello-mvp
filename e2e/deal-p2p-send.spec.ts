@@ -121,6 +121,50 @@ test('signing a deal posts a system line in the chat', async () => {
   ).toBeVisible({ timeout: 15000 })
 })
 
+test('edit flow: Send changes stays visible; the held diff redlines IN the product table', async () => {
+  await createDraftDealAsAlice(alicePage)
+
+  // pencil → add a second product from the shop dropdown
+  await dealPanel(alicePage).getByRole('button', { name: /edit deal/i }).click()
+  const sel = dealPanel(alicePage)
+    .locator('select')
+    .filter({ hasText: /add product from your shop/i })
+  await sel.waitFor({ timeout: 10000 })
+  await sel.selectOption({ label: 'Pedanios 10/10 MBE-CA' })
+
+  // (a sticky always-on-screen footer is blocked by the card shell —
+  // overflow-hidden + the flip transform; the trap is instead closed by the
+  // header ✓ SENDING unsent edits, covered by the next test)
+  await dealPanel(alicePage).getByRole('button', { name: /send changes/i }).click()
+
+  // PROTOTYPE MATCH (chat-flipdoc): the held change renders as a redline IN
+  // the product table (green new row with a CHANGE tag) — the separate
+  // "Proposed change" box is gone
+  const table = dealPanel(alicePage).locator('table')
+  await expect(table.getByText('CHANGE', { exact: true }).first()).toBeVisible({ timeout: 15000 })
+  await expect(dealPanel(alicePage).getByText(/proposed change/i)).toHaveCount(0)
+})
+
+test('the header ✓ SENDS unsent edits instead of discarding them (the reported trap)', async () => {
+  await createDraftDealAsAlice(alicePage)
+
+  // Muskan's reported flow: pencil → add product → row ✓ → header ✓ ("Done")
+  await dealPanel(alicePage).getByRole('button', { name: /edit deal/i }).click()
+  const sel = dealPanel(alicePage)
+    .locator('select')
+    .filter({ hasText: /add product from your shop/i })
+  await sel.waitFor({ timeout: 10000 })
+  await sel.selectOption({ label: 'Pedanios 10/10 MBE-CA' })
+  await dealPanel(alicePage).getByRole('button', { name: /done editing this line/i }).click()
+  await dealPanel(alicePage).getByRole('button', { name: /done editing/i }).click()
+
+  // the added product must NOT be silently dropped: the ✓ stages it as a held
+  // change (doSendChange's own documented intent), so the redline diff shows
+  await expect(
+    dealPanel(alicePage).locator('table').getByText('CHANGE', { exact: true }).first(),
+  ).toBeVisible({ timeout: 15000 })
+})
+
 test('a SECOND deal can be started from the same p2p chat — button visible, composer + door works', async () => {
   await createDraftDealAsAlice(alicePage)
 
