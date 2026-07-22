@@ -109,7 +109,8 @@ DELETE FROM deal_card WHERE id IN (SELECT id FROM _cards);
 -- a getByText assertion match the stale bubble. Widen this delete to clear all three
 -- projection types from the relationship's p2p thread.
 DELETE FROM chat_message
-  WHERE type IN ('deal_detected', 'deal_card_updated', 'deal_change_declined', 'deal_card')
+  WHERE type IN ('deal_detected', 'deal_card_updated', 'deal_change_declined',
+                 'deal_card', 'deal_cancelled', 'deal_signed')
   AND thread_id IN (SELECT id FROM chat_thread WHERE relationship_id = :'rel');
 DELETE FROM sella_detection
   WHERE thread_id IN (SELECT id FROM chat_thread WHERE relationship_id = :'rel');
