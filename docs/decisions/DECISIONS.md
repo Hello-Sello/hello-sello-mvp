@@ -1415,3 +1415,26 @@ Researched first (CRM Lead→Opportunity is the standard pattern for "I don't kn
 - **Deal tickets are receiver-only in every actionable inbox lens; receiver-side visibility stays company-wide.** *Why:* the DB deliberately shows a ticket to both companies, but only the receiver can act — the sender saw phantom claimables; company-wide receiver visibility is the designed pickup model (any teammate claims, or the super admin assigns).
 - **A chat hosts many deals — the "Start a deal" door stays visible after the first birth** (strip button + composer "+" both work). *Why:* Muskan's call; the old State-A gate hid the door once one deal existed.
 - **Playwright runs `workers: 1`.** *Why:* every deal spec resets + mints deals on the ONE seeded GreenLeaf↔StonePharm relationship in ONE local Supabase — parallel workers provably wipe each other mid-test; per-file serial cannot protect across files.
+
+---
+
+## 2026-07-23 — Discover → open LinkedIn-style directory of companies + people (supersedes the 2026-06-11 closed model + ad-cut)
+
+Discover Lane B design session (prototype-first; no code). Reverses the two most restrictive parts of the 2026-06-11 lock while keeping the shop gated.
+
+- **Discover becomes an OPEN, LinkedIn-style directory of BOTH companies and people.** Everyone on the selling side is visible by their tag; the directory is browsable, not a search-only lobby. *Why:* Discover should drive real networking + supplier discovery for onboarding/testing, not just a closed "ask to enter" lobby. The **shop/catalogue stays gated** (soft-openness, 2026-06-14) — "open directory" ≠ "open catalog", so the NON-marketplace concern for the *shop* is untouched.
+- **Pharmacies stay hidden-but-searchable — the asymmetric-listing lock survives, now applied to PEOPLE too.** A pharmacy-only company (and a pharmacy-only person) is hidden from the default view, reachable only by exact-name search; every other tag is visible. *Why:* buyers still don't want to be cold-listed; the rule is unchanged, just extended to the new people directory (uniform gate — Muskan's call).
+- **Ads banner reinstated** as a full-width top leaderboard placeholder (reverses the 2026-06-11 "ad/social feed = CUT"). *Why:* a top ad unit ≠ a social feed; Marcel's FLOWZ reference shows the expected placement.
+- **Page = one scrolling surface, Variant D layout** (chosen from a 4-variant prototype): Ads → [Connection Requests | My Network, side-by-side, bounded height, expand-scrolls-within] → New People (cards) → Companies (rows). Company-type + Country are **multi-select dropdown filters** (scale to any platform tag). Connection Requests **move from Connect into Discover** (connect-type items only; deal tickets stay in Connect — see the deals-on-Home entry).
+- **⚠️ Reverses Marcel's 2026-06-10 "closed, non-marketplace, no ads" directive** — Muskan's (product) call; worth confirming with Marcel. Prototype: `prototypes/discover-linkedin-prototype/`. Build plan: [`docs/muskan-build/discover-linkedin.md`](../muskan-build/discover-linkedin.md).
+
+---
+
+## 2026-07-23 — Incoming company-wide deals surface on Home (not a Connect-inbox lens)
+
+Follows from moving Connection Requests out of the Connect inbox into Discover: the incoming-DEAL workflow shouldn't stay orphaned as a lens. Grounded in a research pass (Salesforce lead queues, Zendesk Play, Linear Triage, Front shared inbox).
+
+- **An inbound deal addressed to a company surfaces on the HOME dashboard**, in a shared company-wide "up-for-grabs" area; any team member **claims** it (pull-to-claim, keeps the built `claim_deal_ticket` → `deal_member` owner model). *Why:* enterprise tools converge on a dedicated shared queue + pull-to-claim for inbound-to-a-company where reps aren't fungible; Home is a dummy dashboard today, so this gives it a real job.
+- **The Connect "Deal tickets" lens retires** (proposed — pending Muskan's final confirm) so a deal has ONE home. *Why:* DRY — one authoritative pickup surface, not two.
+- **Home board = 2 zones (Incoming-to-claim / In-progress)** — detailed design is its own prototype-first pass (deferred). Build shape on top of today's claim model: release/reassign, claim collision-safety, and an aging/escalation backstop (so hard deals don't rot). *Why:* the research's standard hardening for a pull-to-claim queue.
+- Supersedes the interim "deal tickets live in the Connect inbox lens" placement (2026-07-20 Lane A). Pull-to-claim + company-wide receiver visibility (locked in the Lane A entry) is unchanged — only the SURFACE moves.

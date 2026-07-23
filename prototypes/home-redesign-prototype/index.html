@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<!-- PROTOTYPE — throwaway. DEV-68 Home checklist (round 3 — one-row strip at top). variant=A|B|C. Real theme. Not React. -->
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Home redesign — prototype v3 (DEV-68)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: {
+    colors: { brand:'#e30b5d', 'brand-soft':'#ffb7d5', 'brand-deep':'#76002d',
+      ink:'#1f2020', 'ink-muted':'#6b6470', success:'#34b233', 'success-deep':'#1f7a1e', info:'#6c7bd9', danger:'#dc2626' },
+    fontFamily: { sans:['Inter','-apple-system','BlinkMacSystemFont','Segoe UI','sans-serif'] },
+  } } };
+</script>
+<style>
+  :root { --bg-from:#ffffff; --bg-to:#fff1f7;
+    --glass-bg:rgba(255,255,255,0.62); --glass-bg-strong:rgba(255,255,255,0.78);
+    --glass-border:rgba(255,255,255,0.65); --glass-shadow:0 10px 34px -12px rgba(118,0,45,0.18); }
+  html,body { height:100%; }
+  body { color:#1f2020; font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; -webkit-font-smoothing:antialiased;
+    background:
+      radial-gradient(60rem 60rem at 10% -12%, rgba(255,183,213,0.55), transparent 60%),
+      radial-gradient(46rem 46rem at 108% 6%, rgba(227,11,93,0.10), transparent 55%),
+      linear-gradient(160deg, var(--bg-from) 0%, var(--bg-to) 100%);
+    background-attachment:fixed; }
+  .glass { background:var(--glass-bg); backdrop-filter:blur(20px) saturate(140%); -webkit-backdrop-filter:blur(20px) saturate(140%);
+    border:1px solid var(--glass-border); box-shadow:var(--glass-shadow); }
+  .glass-strong { background:var(--glass-bg-strong); backdrop-filter:blur(24px) saturate(160%); -webkit-backdrop-filter:blur(24px) saturate(160%);
+    border:1px solid var(--glass-border); box-shadow:var(--glass-shadow); }
+  .pop { transition:transform .12s ease, background .14s ease, box-shadow .14s ease; }
+  .pop:hover { transform:translateY(-2px); } .pop:active { transform:translateY(0) scale(.98); }
+  .bar { transition:width .5s cubic-bezier(.2,.8,.3,1); }
+</style>
+</head>
+<body>
+<div id="app" class="min-h-screen"></div>
+<div id="switcher"></div>
+
+<script>
+/* ============================ ICONS ============================ */
+function ic(name, s=18){
+  const a=`xmlns="http://www.w3.org/2000/svg" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"`;
+  const P={
+    mail:'<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m2 7 10 6 10-6"/>',
+    user:'<circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/>',
+    building:'<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M9 8h.01M15 8h.01M9 12h.01M15 12h.01M9 21v-4h6v4"/>',
+    box:'<path d="m7.5 4.27 9 5.15M21 8l-9-5-9 5 9 5 9-5Z"/><path d="M3 8v8l9 5 9-5V8M12 13v8"/>',
+    tag:'<path d="M12 2H2v10l9.29 9.29a2 2 0 0 0 2.83 0l7.17-7.17a2 2 0 0 0 0-2.83Z"/><circle cx="7" cy="7" r="1.2" fill="currentColor"/>',
+    users:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13A4 4 0 0 1 16 11"/>',
+    check:'<path d="M20 6 9 17l-5-5"/>', arrow:'<path d="M5 12h14M13 5l7 7-7 7"/>', x:'<path d="M18 6 6 18M6 6l12 12"/>',
+    clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  };
+  return `<svg ${a}>${P[name]||''}</svg>`;
+}
+const USER={ name:"Alice", company:"GreenLeaf Cultivation", verification:"pending" };
+
+/* ============================ 6 BLOCKS (short labels for one-row fit) ============================ */
+const BLOCKS=[
+  { key:"email",      icon:"mail",     short:"Connect email",    title:"Connect your email",       done:false, doneTxt:"Connected" },
+  { key:"profile",    icon:"user",     short:"Your profile",     title:"Complete your profile",    done:true,  doneTxt:"Done" },
+  { key:"company",    icon:"building", short:"Company details",  title:"Add company details",      done:false, doneTxt:"Added" },
+  { key:"products",   icon:"box",      short:"Upload products",  title:"Upload products",          done:true,  doneTxt:"12 added" },
+  { key:"pricelists", icon:"tag",      short:"Pricelists",       title:"Define pricelists",        done:false, doneTxt:"Priced" },
+  { key:"connect",    icon:"users",    short:"Find connections", title:"Connect with companies you know", done:false, doneTxt:"Request sent" },
+];
+const state={ variant:(new URLSearchParams(location.search).get("variant")||"A").toUpperCase(),
+  done:Object.fromEntries(BLOCKS.map(b=>[b.key,!!b.done])), dismissed:false };
+const doneCount=()=>BLOCKS.filter(b=>state.done[b.key]).length;
+const total=()=>BLOCKS.length;
+const pct=()=>Math.round(doneCount()/total()*100);
+
+/* ============================ SHARED ============================ */
+function header(){
+  return `<div><h1 class="text-2xl font-bold tracking-tight text-ink">Welcome, ${USER.name}</h1>
+    <p class="mt-0.5 text-sm text-ink-muted">${USER.company}</p></div>`;
+}
+function progressBar(){
+  return `<div class="h-1.5 w-full overflow-hidden rounded-full bg-black/[0.07]">
+    <div class="bar h-full rounded-full bg-success" style="width:${pct()}%"></div></div>`;
+}
+const dismiss=()=>`<button data-dismiss class="rounded-lg p-1 text-ink-muted transition hover:bg-black/5 hover:text-ink" aria-label="Dismiss">${ic('x',15)}</button>`;
+// the empty space below the strip — Home has nothing else yet (future content goes here)
+const futureSpace=`<div class="mt-5 grid h-44 place-items-center rounded-2xl border border-dashed border-black/[0.08] text-center">
+  <p class="text-xs text-ink-muted">Your space — dashboard content coming in a later stage.</p></div>`;
+const hint=`<p class="mt-4 text-center text-[11px] text-ink-muted">Prototype — click a tile to preview <b class="text-success-deep">done</b> ↔ <b class="text-brand-deep">to-do</b>. Real states derive from your data; <i>Find connections</i> turns green after you send ≥1 connection request.</p>`;
+
+/* ============================ VARIANT A — one-row mini tiles ============================ */
+function miniTile(b){
+  const d=state.done[b.key];
+  const skin=d?"bg-success/[0.08] ring-1 ring-success/25":"bg-brand-soft/25 ring-1 ring-brand-soft/70 hover:bg-brand-soft/40";
+  const iconCls=d?"bg-success text-white":"bg-brand text-white";
+  return `<div data-toggle="${b.key}" title="${b.title}" class="pop relative cursor-pointer rounded-2xl p-3 text-center ${skin}">
+    <span class="mx-auto flex h-9 w-9 items-center justify-center rounded-xl ${iconCls} shadow-sm">${d?ic('check',17):ic(b.icon,17)}</span>
+    <div class="mt-2 text-[12px] font-semibold leading-tight text-ink">${b.short}</div>
+    <div class="mt-0.5 text-[11px] font-medium ${d?'text-success-deep':'text-brand'}">${d?b.doneTxt:'Set up →'}</div>
+  </div>`;
+}
+function variantA(){
+  if(state.dismissed) return `<div class="mx-auto max-w-5xl px-4 py-8 sm:px-6">${header()}
+    <button data-undismiss class="mt-5 text-sm font-semibold text-brand hover:underline">Show setup checklist</button>${futureSpace}</div>`;
+  return `<div class="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6">
+    ${header()}
+    <section class="glass mt-5 rounded-2xl p-4">
+      <div class="mb-3 flex items-center gap-3">
+        <div class="flex-1"><h2 class="text-sm font-bold text-ink">Finish setting up</h2>
+          <p class="text-xs text-ink-muted">${doneCount()} of ${total()} complete</p></div>
+        <div class="hidden w-40 sm:block">${progressBar()}</div>
+        ${dismiss()}
+      </div>
+      <div class="grid grid-cols-3 gap-2.5 sm:grid-cols-6">${BLOCKS.map(miniTile).join("")}</div>
+    </section>
+    ${futureSpace} ${hint}
+  </div>`;
+}
+
+/* ============================ VARIANT B — slim inline bar (single line of items) ============================ */
+function inlineItem(b,i){
+  const d=state.done[b.key];
+  return `<div data-toggle="${b.key}" title="${b.title}" class="pop flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-xl px-2.5 py-2 hover:bg-white/55">
+    <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${d?'bg-success/15 text-success':'bg-brand-soft/45 text-brand'}">${d?ic('check',14):ic(b.icon,14)}</span>
+    <span class="min-w-0 flex-1"><span class="block truncate text-[12px] font-semibold text-ink">${b.short}</span>
+      <span class="block text-[10px] ${d?'text-success-deep':'text-brand'}">${d?'Done':'Set up'}</span></span>
+  </div>`;
+}
+function variantB(){
+  return `<div class="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6">
+    ${header()}
+    <section class="glass mt-5 rounded-2xl p-2.5">
+      <div class="mb-1.5 flex items-center gap-3 px-1.5 pt-1">
+        <h2 class="text-xs font-bold text-ink">Finish setting up</h2>
+        <span class="text-[11px] font-semibold text-ink-muted">${doneCount()}/${total()}</span>
+        <div class="ml-auto w-32">${progressBar()}</div>${dismiss()}
+      </div>
+      <div class="flex items-stretch gap-1 divide-x divide-black/[0.06] overflow-x-auto">${BLOCKS.map(inlineItem).join("")}</div>
+    </section>
+    ${futureSpace} ${hint}
+  </div>`;
+}
+
+/* ============================ VARIANT C — segmented stepper (circles + labels under) ============================ */
+function variantC(){
+  const steps=BLOCKS.map((b,i)=>{ const d=state.done[b.key];
+    return `<div data-toggle="${b.key}" class="pop flex cursor-pointer flex-col items-center gap-1.5 text-center">
+      <span class="flex h-11 w-11 items-center justify-center rounded-2xl ${d?'bg-success text-white':'bg-white/70 text-brand ring-1 ring-brand-soft'} shadow-sm">${d?ic('check',19):ic(b.icon,18)}</span>
+      <span class="max-w-[84px] text-[11px] font-semibold leading-tight text-ink">${b.short}</span>
+      <span class="text-[10px] ${d?'text-success-deep':'text-brand'}">${d?'Done':'Set up'}</span>
+    </div>`; }).join('<div class="mt-5 h-px flex-1 bg-black/[0.08]"></div>');
+  return `<div class="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6">
+    ${header()}
+    <section class="glass-strong mt-5 rounded-2xl p-4">
+      <div class="mb-3 flex items-center gap-3">
+        <h2 class="text-sm font-bold text-ink">Finish setting up</h2>
+        <span class="text-xs font-semibold text-ink-muted">${pct()}% · ${total()-doneCount()} left</span>
+        <div class="ml-auto w-40 hidden sm:block">${progressBar()}</div>${dismiss()}
+      </div>
+      <div class="flex items-start gap-1 overflow-x-auto pb-1">${steps}</div>
+    </section>
+    ${futureSpace} ${hint}
+  </div>`;
+}
+
+/* ============================ SWITCHER + RENDER ============================ */
+const VARIANTS={ A:{fn:variantA,name:"One-row mini tiles"}, B:{fn:variantB,name:"Slim inline bar"}, C:{fn:variantC,name:"Segmented stepper"} };
+function renderSwitcher(){
+  const keys=Object.keys(VARIANTS), cur=state.variant, idx=keys.indexOf(cur);
+  document.getElementById("switcher").innerHTML=`
+    <div class="glass-strong fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 items-center gap-1 rounded-full px-2 py-1.5 text-ink shadow-2xl">
+      <button id="prev" class="rounded-full px-3 py-1.5 text-lg hover:bg-brand-soft/30">‹</button>
+      <span class="min-w-[195px] text-center text-sm font-semibold">${cur} — ${VARIANTS[cur].name}</span>
+      <button id="next" class="rounded-full px-3 py-1.5 text-lg hover:bg-brand-soft/30">›</button>
+      <span class="ml-1 hidden rounded-full bg-brand-soft/40 px-2 py-1 text-[11px] text-brand-deep lg:inline">click tiles · resize → mobile</span></div>`;
+  const go=(d)=>{ state.variant=keys[(idx+d+keys.length)%keys.length];
+    const u=new URL(location); u.searchParams.set("variant",state.variant); history.replaceState({},"",u); render(); };
+  document.getElementById("prev").onclick=()=>go(-1); document.getElementById("next").onclick=()=>go(1);
+}
+function render(){
+  document.getElementById("app").innerHTML=(VARIANTS[state.variant]||VARIANTS.A).fn();
+  document.querySelectorAll("[data-toggle]").forEach(el=>{ el.onclick=(e)=>{ if(e.target.closest("a")) return;
+    const k=el.dataset.toggle; state.done[k]=!state.done[k]; render(); }; });
+  const dm=document.querySelector("[data-dismiss]"); if(dm) dm.onclick=()=>{ state.dismissed=true; render(); };
+  const ud=document.querySelector("[data-undismiss]"); if(ud) ud.onclick=()=>{ state.dismissed=false; render(); };
+  renderSwitcher();
+}
+document.addEventListener("keydown",(e)=>{ const t=(document.activeElement?.tagName||"").toLowerCase(); if(t==="input"||t==="textarea") return;
+  if(e.key==="ArrowLeft") document.getElementById("prev")?.click(); if(e.key==="ArrowRight") document.getElementById("next")?.click(); });
+render();
+</script>
+</body>
+</html>

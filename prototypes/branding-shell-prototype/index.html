@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<!-- PROTOTYPE — throwaway. DEV-70 (company branding → one edit point, propagates) + DEV-69 (HS brand logo in shell).
+     variant=A|B = where the edit point lives. Real theme. Not React. -->
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Branding + shell — prototype (DEV-70 / DEV-69)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: {
+    colors: { brand:'#e30b5d', 'brand-soft':'#ffb7d5', 'brand-deep':'#76002d',
+      ink:'#1f2020', 'ink-muted':'#6b6470', success:'#34b233', info:'#6c7bd9', danger:'#dc2626' },
+    fontFamily: { sans:['Inter','-apple-system','BlinkMacSystemFont','Segoe UI','sans-serif'] },
+  } } };
+</script>
+<style>
+  :root { --bg-from:#ffffff; --bg-to:#fff1f7;
+    --glass-bg:rgba(255,255,255,0.62); --glass-bg-strong:rgba(255,255,255,0.78);
+    --glass-border:rgba(255,255,255,0.65); --glass-shadow:0 10px 34px -12px rgba(118,0,45,0.18); }
+  html,body { height:100%; }
+  body { color:#1f2020; font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; -webkit-font-smoothing:antialiased;
+    background:
+      radial-gradient(60rem 60rem at 10% -12%, rgba(255,183,213,0.55), transparent 60%),
+      radial-gradient(46rem 46rem at 108% 6%, rgba(227,11,93,0.10), transparent 55%),
+      linear-gradient(160deg, var(--bg-from) 0%, var(--bg-to) 100%);
+    background-attachment:fixed; }
+  .glass { background:var(--glass-bg); backdrop-filter:blur(20px) saturate(140%); -webkit-backdrop-filter:blur(20px) saturate(140%);
+    border:1px solid var(--glass-border); box-shadow:var(--glass-shadow); }
+  .glass-strong { background:var(--glass-bg-strong); backdrop-filter:blur(24px) saturate(160%); -webkit-backdrop-filter:blur(24px) saturate(160%);
+    border:1px solid var(--glass-border); box-shadow:var(--glass-shadow); }
+  .pop { transition:transform .12s ease, background .14s ease; } .pop:active { transform:scale(.97); }
+  .flash { animation:flash .6s ease; } @keyframes flash { 0%{background:rgba(227,11,93,.14)} 100%{background:transparent} }
+  input,textarea { outline:none; }
+</style>
+</head>
+<body>
+<div id="app" class="h-screen"></div>
+<div id="switcher"></div>
+
+<script>
+/* ============================ ICONS ============================ */
+function ic(name, s=18){
+  const a=`xmlns="http://www.w3.org/2000/svg" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"`;
+  const P={
+    home:'<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9v11h14V9"/>', chat:'<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/>',
+    search:'<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>', shop:'<path d="M3 9h18l-1 11H4Z"/><path d="M3 9l2-5h14l2 5"/>',
+    cart:'<circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.6 13H19l2-8H6"/>',
+    bell:'<path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/>',
+    pencil:'<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>', pin:'<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>',
+    upload:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 9 5-5 5 5"/><path d="M12 4v12"/>', lock:'<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+    check:'<path d="M20 6 9 17l-5-5"/>',
+  };
+  return `<svg ${a}>${P[name]||''}</svg>`;
+}
+
+/* ============================ STATE — the single company-branding record ============================ */
+// Editing ANY of these (one place) re-renders the whole shell + previews — that IS DEV-70.
+const company={ name:"Aurora Deutschland GmbH", tagline:"Premium EU cultivation & wholesale", city:"Berlin", country:"Germany", website:"aurora-dt.de", logo:null /* dataURL */, tint:"#e30b5d" };
+const state={ variant:(new URLSearchParams(location.search).get("variant")||"A").toUpperCase() };
+const initials=(n)=>n.split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0]).join("").toUpperCase();
+
+function companyLogo(size){
+  if(company.logo) return `<img src="${company.logo}" alt="" style="width:${size}px;height:${size}px" class="shrink-0 rounded-xl object-cover ring-1 ring-black/5"/>`;
+  return `<span class="flex shrink-0 items-center justify-center rounded-xl font-bold text-white ring-1 ring-black/5"
+    style="width:${size}px;height:${size}px;font-size:${size*0.34}px;background:linear-gradient(140deg,rgba(255,255,255,.28),transparent 55%),${company.tint}">${initials(company.name)}</span>`;
+}
+
+/* ============================ SHELL: rail (HS logo) + topbar (company) ============================ */
+const SURFACES=[["home","Home",true],["chat","Connect",false],["search","Discover",false],["shop","Present",false],["cart","Buy",false]];
+function rail(){
+  return `<aside class="glass m-3 mr-0 flex w-[88px] shrink-0 flex-col items-stretch gap-1 rounded-3xl p-2.5">
+    <!-- DEV-69: real Hello Sello brand logo asset in the shell -->
+    <div class="mb-3 mt-1 flex justify-center" title="Hello Sello"><img src="hello-sello-logo.png" alt="Hello Sello" class="h-9 w-auto"/></div>
+    <nav class="flex flex-col gap-1">
+      ${SURFACES.map(([i,label,active])=>`
+        <a href="#" class="pop flex flex-col items-center gap-1 rounded-2xl px-1 py-2 text-[10px] font-semibold ${active?'bg-brand text-white':'text-ink-muted hover:bg-white/60'}">
+          <span>${ic(i,19)}</span>${label}</a>`).join("")}
+    </nav>
+    <div class="mt-auto flex justify-center pt-2">
+      <span class="flex h-9 w-9 items-center justify-center rounded-full bg-ink text-xs font-bold text-white">AL</span></div>
+  </aside>`;
+}
+function topbar(){
+  return `<header class="glass-strong z-10 m-3 mb-0 flex h-14 items-center gap-4 rounded-2xl px-4">
+    <div class="flex w-full max-w-md items-center gap-2 rounded-full bg-white/55 px-4 py-2 text-sm text-ink-muted">
+      ${ic('search',16)} Search for company, product or service…</div>
+    <div class="ml-auto flex shrink-0 items-center gap-2.5">
+      <button class="flex h-9 w-9 items-center justify-center rounded-xl text-ink-muted ring-1 ring-black/5 hover:bg-white/60" title="Notifications">${ic('bell',17)}</button>
+      <!-- DEV-70: REAL company logo + name (today this is hardcoded text) -->
+      <span id="tb-logo" class="inline-flex">${companyLogo(34)}</span>
+      <span class="text-sm font-semibold text-ink">${company.name}</span>
+    </div>
+  </header>`;
+}
+
+/* ============================ THE EDIT FORM (shared; one writer) ============================ */
+function field(label, key, val, ph){
+  return `<label class="block"><span class="mb-1 block text-xs font-semibold text-ink-muted">${label}</span>
+    <input data-edit="${key}" value="${val||''}" placeholder="${ph||''}" class="w-full rounded-xl bg-white/70 px-3 py-2 text-sm text-ink ring-1 ring-black/5 focus:ring-brand"/></label>`;
+}
+function lockedField(label, val){
+  return `<label class="block"><span class="mb-1 block text-xs font-semibold text-ink-muted">${label}</span>
+    <div class="flex items-center justify-between rounded-xl bg-black/[0.03] px-3 py-2 text-sm text-ink-muted ring-1 ring-black/5">
+      <span>${val}</span><span class="inline-flex items-center gap-1 text-[11px]">${ic('lock',12)} set at signup</span></div></label>`;
+}
+function logoEditor(){
+  return `<div class="flex items-center gap-3">
+    ${companyLogo(56)}
+    <div><label class="pop inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-ink px-3.5 py-2 text-xs font-semibold text-white hover:bg-brand">
+        ${ic('upload',14)} ${company.logo?'Change logo':'Upload logo'}<input type="file" accept="image/*" data-logo hidden/></label>
+      ${company.logo?`<button data-logo-clear class="ml-2 text-xs font-semibold text-ink-muted hover:text-brand">Remove</button>`:''}
+      <p class="mt-1 text-[11px] text-ink-muted">PNG/JPG · shown across the app instantly</p></div>
+  </div>`;
+}
+function editFields(){
+  return `<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+    ${lockedField("Company name", company.name)}
+    ${field("City","city",company.city,"Berlin")}
+    ${field("Tagline","tagline",company.tagline,"One line about your company")}
+    ${field("Website","website",company.website,"example.com")}
+  </div>`;
+}
+
+/* ============================ PROPAGATION PREVIEW (the "everywhere") ============================ */
+function preview(){
+  return `<div class="mt-6">
+    <p class="mb-2 text-xs font-bold uppercase tracking-wide text-ink-muted">Appears everywhere — live</p>
+    <div class="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+      <!-- top bar chip -->
+      <div class="glass flash rounded-2xl p-3"><p class="mb-2 text-[11px] font-semibold text-ink-muted">Top bar</p>
+        <div class="flex items-center gap-2">${companyLogo(26)}<span class="truncate text-xs font-semibold text-ink">${company.name}</span></div></div>
+      <!-- discover row -->
+      <div class="glass flash rounded-2xl p-3"><p class="mb-2 text-[11px] font-semibold text-ink-muted">Discover row</p>
+        <div class="flex items-center gap-2">${companyLogo(30)}<div class="min-w-0"><div class="truncate text-xs font-bold text-ink">${company.name}</div>
+          <div class="truncate text-[11px] text-ink-muted">${company.city}, ${company.country}</div></div></div></div>
+      <!-- public card -->
+      <div class="glass flash rounded-2xl p-3"><p class="mb-2 text-[11px] font-semibold text-ink-muted">Public card /c/…</p>
+        <div class="flex items-center gap-2">${companyLogo(30)}<div class="min-w-0"><div class="truncate text-xs font-bold text-ink">${company.name}</div>
+          <div class="truncate text-[11px] text-ink-muted">${company.tagline}</div></div></div></div>
+    </div></div>`;
+}
+
+/* ============================ VARIANT A — edit lives in the PRESENT banner ============================ */
+function variantA(){
+  return `<div class="mx-auto w-full max-w-3xl">
+    <div class="mb-1 flex items-center gap-2 text-xs font-semibold text-ink-muted"><span class="rounded-full bg-brand-soft/40 px-2 py-0.5 text-brand-deep">Edit point</span> Present → your shop banner</div>
+    <h2 class="mb-3 text-lg font-bold text-ink">Present · Company profile</h2>
+    <!-- the present banner, with branding edited inline -->
+    <div class="glass overflow-hidden rounded-3xl">
+      <div class="relative h-28" style="background:linear-gradient(120deg, ${company.tint}, #76002d)"></div>
+      <div class="relative px-5 pb-5">
+        <div class="-mt-9 flex items-end gap-3">
+          <div class="rounded-2xl ring-4 ring-white">${companyLogo(72)}</div>
+          <div class="pb-1"><div class="text-lg font-bold text-ink">${company.name}</div>
+            <div class="flex items-center gap-1 text-sm text-ink-muted">${ic('pin',13)} ${company.city}, ${company.country}</div></div>
+          <span class="ml-auto inline-flex items-center gap-1.5 rounded-full bg-ink px-3 py-1.5 text-xs font-semibold text-white">${ic('pencil',13)} Editing</span>
+        </div>
+        <p class="mt-2 text-sm text-ink-muted">${company.tagline}</p>
+        <div class="mt-4 rounded-2xl bg-white/50 p-4 ring-1 ring-black/5">
+          <p class="mb-3 text-xs font-bold uppercase tracking-wide text-ink-muted">Edit branding</p>
+          ${logoEditor()}<div class="mt-4">${editFields()}</div>
+        </div>
+      </div>
+    </div>
+    ${preview()} ${hint}
+  </div>`;
+}
+
+/* ============================ VARIANT B — edit lives in ACCOUNT → Company ============================ */
+function variantB(){
+  return `<div class="mx-auto w-full max-w-2xl">
+    <div class="mb-1 flex items-center gap-2 text-xs font-semibold text-ink-muted"><span class="rounded-full bg-brand-soft/40 px-2 py-0.5 text-brand-deep">Edit point</span> Account → Company</div>
+    <h2 class="mb-3 text-lg font-bold text-ink">Account · Company profile</h2>
+    <div class="glass rounded-3xl p-5">
+      <p class="mb-3 text-xs font-bold uppercase tracking-wide text-ink-muted">Logo</p>
+      ${logoEditor()}
+      <div class="my-4 h-px bg-black/[0.06]"></div>
+      <p class="mb-3 text-xs font-bold uppercase tracking-wide text-ink-muted">Details</p>
+      ${editFields()}
+      ${field("","tagline_full",company.tagline,"") /* spacer placeholder removed below */ ? '' : ''}
+      <div class="mt-4"><label class="block"><span class="mb-1 block text-xs font-semibold text-ink-muted">Tagline</span>
+        <textarea data-edit="tagline" rows="2" class="w-full rounded-xl bg-white/70 px-3 py-2 text-sm text-ink ring-1 ring-black/5 focus:ring-brand">${company.tagline}</textarea></label></div>
+      <div class="mt-4 flex justify-end"><span class="inline-flex items-center gap-1.5 rounded-full bg-success/15 px-3 py-1.5 text-xs font-semibold text-success">${ic('check',14)} Saved · live everywhere</span></div>
+    </div>
+    ${preview()} ${hint}
+  </div>`;
+}
+const hint=`<p class="mt-5 text-center text-[11px] text-ink-muted">Prototype — edit the logo / city / tagline above and watch the <b>top bar</b> + previews update. That is DEV-70: one edit point, reflected everywhere. The rail logo is the real DEV-69 asset.</p>`;
+
+/* ============================ SHELL WRAP + RENDER ============================ */
+const VARIANTS={ A:{fn:variantA,name:"Edit in Present banner"}, B:{fn:variantB,name:"Edit in Account"} };
+function shell(inner){
+  return `<div class="flex h-full">${rail()}
+    <div class="flex min-w-0 flex-1 flex-col">${topbar()}
+      <main class="min-h-0 flex-1 overflow-auto p-3 pb-24">${inner}</main></div></div>`;
+}
+function renderSwitcher(){
+  const keys=Object.keys(VARIANTS), cur=state.variant, idx=keys.indexOf(cur);
+  document.getElementById("switcher").innerHTML=`
+    <div class="glass-strong fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 items-center gap-1 rounded-full px-2 py-1.5 text-ink shadow-2xl">
+      <button id="prev" class="rounded-full px-3 py-1.5 text-lg hover:bg-brand-soft/30">‹</button>
+      <span class="min-w-[185px] text-center text-sm font-semibold">${cur} — ${VARIANTS[cur].name}</span>
+      <button id="next" class="rounded-full px-3 py-1.5 text-lg hover:bg-brand-soft/30">›</button>
+      <span class="ml-1 hidden rounded-full bg-brand-soft/40 px-2 py-1 text-[11px] text-brand-deep lg:inline">edit fields → watch it propagate</span></div>`;
+  const go=(d)=>{ state.variant=keys[(idx+d+keys.length)%keys.length];
+    const u=new URL(location); u.searchParams.set("variant",state.variant); history.replaceState({},"",u); render(); };
+  document.getElementById("prev").onclick=()=>go(-1); document.getElementById("next").onclick=()=>go(1);
+}
+function render(keepFocus){
+  document.getElementById("app").innerHTML=shell((VARIANTS[state.variant]||VARIANTS.A).fn());
+  // text edits (live propagation)
+  document.querySelectorAll("[data-edit]").forEach(el=>{ el.oninput=(e)=>{ company[el.dataset.edit]=e.target.value;
+    const pos=e.target.selectionStart; render(true);
+    const n=document.querySelector(`[data-edit="${el.dataset.edit}"]`); if(n){ n.focus(); try{n.setSelectionRange(pos,pos);}catch(_){} } }; });
+  // logo upload
+  const lu=document.querySelector("[data-logo]"); if(lu) lu.onchange=(e)=>{ const f=e.target.files?.[0]; if(!f) return;
+    const r=new FileReader(); r.onload=()=>{ company.logo=r.result; render(); }; r.readAsDataURL(f); };
+  const lc=document.querySelector("[data-logo-clear]"); if(lc) lc.onclick=()=>{ company.logo=null; render(); };
+  renderSwitcher();
+}
+document.addEventListener("keydown",(e)=>{ const t=(document.activeElement?.tagName||"").toLowerCase(); if(t==="input"||t==="textarea") return;
+  if(e.key==="ArrowLeft") document.getElementById("prev")?.click(); if(e.key==="ArrowRight") document.getElementById("next")?.click(); });
+render();
+</script>
+</body>
+</html>
