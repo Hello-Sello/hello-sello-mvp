@@ -2,7 +2,7 @@
 
 > Source: session with Claude - review of the two prototypes (`chat-flipdoc`, `deal-card-promo`),
 > a full 7-reader code survey of `src/modules/deals/`, Ayush's notebook pages, and Q&A.
-> Status: **build running, wave by wave.** Wave 0 (F1) DONE 2026-07-23 - decisions recorded in shared DECISIONS.md. Next: Wave 1 (D1 + B2).
+> Status: **build running, wave by wave.** Wave 0 (F1) DONE 2026-07-23 - decisions recorded in shared DECISIONS.md. Wave 1 (D1 + B2) DONE 2026-07-23 - pinned shell + "Withdraw changes" label, merged to dev. Next: Wave 2 (A1+A2+A3+C2, full GSD planning + Muskan sync first).
 >
 > **Verification pass (2026-07-22 evening):** every item was checked against the live code by 6
 > parallel verifiers. Result: all items confirmed NOT done, except **C1** (functionally already
@@ -47,7 +47,7 @@ Change-level: proposer can always **withdraw** their held change (exists; only t
 | ID | Task | Notes |
 |---|---|---|
 | B1 | Negotiate button - always present for the signer, refined semantics | DECIDED (refined 2026-07-22): jump to chat + post a "wants to negotiate" pill + card-top "In negotiation" strip. NEVER discards a held proposal - it stays on the table until withdrawn, replaced by the proposer's next Send, or accepted. Does NOT open edit mode. (Today's receiver-Negotiate discards via confirmDealChange decline - that behavior goes away) |
-| B2 | Proposer's button label -> "Withdraw changes" | Drop the "Negotiate (...)" phrasing on the proposer side |
+| B2 | ✅ **DONE 2026-07-23** - Proposer's button label -> "Withdraw changes" | Label only, handler untouched; e2e locator updated in the same commit (`1a7b542`) |
 | B3 | After decline / after change resolved, both parties see the last clean state | Bug: declineDeal leaves the deal_pending_change row; CardFront renders the diff whenever pendingChange exists, ignoring status |
 | B4 | Terms-only change (payment / delivery date / free delivery / note) shows NO redline - receiver signs blind | pairDealDiff compares only qty/unit/price; Extra Conditions renders current card, not held draft |
 | B5 | Batch-only change shows NO diff | batch fields not compared in changed(); new rows show old batch |
@@ -67,7 +67,7 @@ Change-level: proposer can always **withdraw** their held change (exists; only t
 
 | ID | Task | Notes |
 |---|---|---|
-| D1 | Pin the top toolbar (X close, flip/Activity, "Talk about this deal", pencil) and the bottom decision bar; only the paper scrolls between them | Promo prototype = the visual reference (pinned titlebar / scrollable body / pinned footer). Constraint: the 3D flip needs overflow-hidden on the shell, which currently blocks sticky bars - restructure: bars outside the flipping part |
+| D1 | ✅ **DONE 2026-07-23** - Pin the top toolbar (X close, flip/Activity, "Talk about this deal", pencil) and the bottom decision bar; only the paper scrolls between them | Shipped (`5710a60`): NOT sticky - hosts stop scrolling, h-full chain through DealCard's wrappers, CardFront = flex column (pinned titlebar / inner scroll region / pinned footer, all 3 footer variants). CardBack min-h-640 -> h-full. globals.css untouched. AllocateDealCardHost got the minimal 1-word edit (Muskan's lane, flagged). Third mount found in DealPin: chat leaflet gets pinning free; workspace overlay degrades to old behavior (dead code) |
 
 ## Category E - Chat and signals
 
@@ -106,7 +106,7 @@ Change-level: proposer can always **withdraw** their held change (exists; only t
 | Wave | Items | Why this position |
 |---|---|---|
 | 0 | ✅ **DONE 2026-07-23** - F1 - write the new rules into shared DECISIONS.md (propose-mode + sync ritual first) | Protects Muskan NOW - she is building on the old assumptions (her basket lane touches the 'order' type we redefined). Cheapest insurance on the board |
-| 1 | D1 + B2 - pinned shell + "Withdraw changes" label | Zero backend risk. Restructure the shell BEFORE the DecisionBar rewrite, so Wave 3 builds buttons into the final structure (no double DOM work) |
+| 1 | ✅ **DONE 2026-07-23** - D1 + B2 - pinned shell + "Withdraw changes" label | Shipped as `5710a60` + `1a7b542`, merged to dev. Gate: tsc clean, 192/192 unit, e2e 15 pass + 2 PROVEN pre-existing fails (chat_message_type seed FK; note-decline missing wait - both recorded in the quick-task summary, not this wave's) |
 | 2 | A1 + A2 + A3 + C2 - the status machine: DB-persisted private Draft, `negotiation` status, new sendDeal (delivery moves from birth to send), RLS draft privacy, dead-code cleanup (confirmDeal/ConfirmBar/propose_deal RPC/edit_deal_draft, statuses withdrawn+amended), server-side fixed-signer check, OpenItems on drafts (free win - a persisted draft has a workspace) | THE foundation - every status check in the app changes. Ground floor before furniture. Riskiest wave: migrations + RLS + birth RPC. Plan this one properly (full GSD planning, not quick) |
 | 3 | B6 + B1 + B3 + E1 - DecisionBar around fixed roles: Sign (deal receiver only, disabled while own proposal pending) / Accept changes (deal sender) / Withdraw changes; Negotiate = chat pill + card-top "In negotiation" strip, NEVER discards; replace-proposal path for the proposer; pending-row cleanup on decline; the missing "change proposed" pill | Same files Wave 2 just touched - hot context, e2e tests updated once instead of twice |
 | 4 | B4 + B5 + C3 + C4 - full diff coverage (terms + batch fields in pairDealDiff + Extra Conditions rendering) + real units (pack_count column: migration + payload + diff + totals) + real batches (wire orphaned getProductBatches) + backend deal-expiry field | The proposal payload and compare logic must be FINAL before the buyer door produces them - otherwise the door gets built twice |

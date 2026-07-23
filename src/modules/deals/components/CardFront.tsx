@@ -568,10 +568,11 @@ export function CardFront({
   const conditionRewards = promotion?.conditionDeltas ?? [];
 
   return (
-    <div className="dealcard w-full max-w-full">
-      {/* ---- 1 · TITLE BAR — frosted control strip. The flip + edit/lock circles
+    <div className="dealcard flex h-full w-full max-w-full flex-col">
+      {/* ---- 1 · TITLE BAR - frosted control strip. The flip + edit/lock circles
              (DealCard) float into the pl-12 / pr-12 gutters, so they read as the
-             left-most and right-most controls of this bar. (fixed) ---- */}
+             left-most and right-most controls of this bar. First flex child of the
+             D1 shell, so it stays PINNED while the paper scrolls. ---- */}
       <div className="dc-titlebar flex items-center gap-2 py-2.5 pl-12 pr-12">
         {/* close the panel - lives ON the title bar now (no separate strip above),
             so the X shares this line instead of costing its own row. */}
@@ -614,6 +615,10 @@ export function CardFront({
         {/* reopen moved to the single bottom decision bar ("Open a ticket", chj/07-08) */}
       </div>
 
+      {/* ---- SCROLL REGION (D1, Wave 1): the ONLY scrolling part of the card.
+             It holds the torn paper slip; the titlebar above and the decision
+             zone below are flex siblings, so they stay pinned. ---- */}
+      <div className="min-h-0 flex-1 overflow-y-auto">
       {/* ---- The torn white paper slip: it holds parts 2–7 (the deal facts). ---- */}
       <div className="dc-paper-wrap mx-3.5 mb-4 mt-3">
         <TearTop />
@@ -1237,8 +1242,11 @@ export function CardFront({
         <TearBottom />
       </div>
       {/* ---- /paper slip ---- */}
+      </div>
+      {/* ---- /scroll region (D1) ---- */}
 
       {/* ---- 8 · DECISION - the footer sitting on the glass, below the paper.
+             A flex sibling AFTER the scroll region, so it stays PINNED (D1).
              It only appears when there is something to act on: a proposed change
              to send (edit mode) or a held change to Negotiate / Sign. ---- */}
       {editMode ? (
@@ -1276,9 +1284,8 @@ export function CardFront({
           /* EDIT MODE, existing deal (chj/07-08): ONE explicit "Send changes" button.
              No reason box, no permission step - a single click stages the edits as a
              negotiation change; the other side then sees a red/green diff to sign.
-             (A sticky footer is blocked by the card shell: .dealcard is
-             overflow-hidden inside the flip transform — the header ✓ sending
-             unsent edits is the guard against off-screen-save loss.) */
+             (Pinned by the flex shell since D1, Wave 1 - always on screen; the
+             header ✓ sending unsent edits stays as belt-and-braces.) */
           <div className="dc-decision px-4 pb-3.5 pt-3">
             {sendError && <p className="mb-2 text-[11px] font-medium text-danger">{sendError}</p>}
             <button

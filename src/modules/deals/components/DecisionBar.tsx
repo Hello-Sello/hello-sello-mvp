@@ -201,7 +201,7 @@ export function DecisionBar({
   // who signs? the party who did NOT give the latest version.
   const iGaveLatest = change ? change.iProposed : iInitiated;
   if (iGaveLatest) {
-    // I gave it -> I wait. I can withdraw a held change (Negotiate) or Decline.
+    // I gave it -> I wait. I can withdraw a held change or Decline.
     return shell(
       <>
         <p className="text-[11px] text-ink/55">Waiting for the other side to sign.</p>
@@ -212,7 +212,7 @@ export function DecisionBar({
             onClick={() => void run(() => withdrawDealChange({ dealCardId }))}
             className="dc-btn-negotiate w-full rounded-full px-3 py-2.5 text-[13px] font-bold disabled:opacity-50"
           >
-            {busy ? "Withdrawing…" : "Negotiate (withdraw change)"}
+            {busy ? "Withdrawing…" : "Withdraw changes"}
           </button>
         )}
         {declineControl}

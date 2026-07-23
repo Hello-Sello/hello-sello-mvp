@@ -89,7 +89,7 @@
     <div class="sub">2026-07-22 &middot; Collection complete, planning next &middot; Nothing built yet.<br/>
     Source: prototype review (chat-flipdoc, deal-card-promo) + 7-reader code survey of <code>src/modules/deals/</code> + Ayush's notebook + Q&amp;A.<br/>
     <b>Verification pass (2026-07-22 evening):</b> 6 parallel verifiers checked every item against the live code. All confirmed NOT done, except <b>C1</b> (already working) and <b>E4</b> (true for 1:1 chats; internal groups DO work). <b>B6</b> awaits Ayush's decision.<br/>
-    <b>Progress:</b> <span class="badge done">WAVE 0 DONE 2026-07-23</span> F1 shipped - the lifecycle / fixed-signer / buyer-door rules are recorded in shared <code>DECISIONS.md</code> (entry "2026-07-23 - Deal card single-sign lifecycle LOCKED", commit <code>a63afc5</code>).</div>
+    <b>Progress:</b> <span class="badge done">WAVE 0 DONE 2026-07-23</span> F1 shipped - the lifecycle / fixed-signer / buyer-door rules are recorded in shared <code>DECISIONS.md</code> (entry "2026-07-23 - Deal card single-sign lifecycle LOCKED", commit <code>a63afc5</code>). <span class="badge done">WAVE 1 DONE 2026-07-23</span> D1 + B2 shipped (<code>5710a60</code> + <code>1a7b542</code>, merged to dev) - pinned shell (flex column, not sticky) + "Withdraw changes" label. Next: Wave 2 (full GSD planning + Muskan sync first).</div>
   </header>
 
   <nav class="toc">
@@ -153,7 +153,7 @@
     <thead><tr><th>ID</th><th>Task</th><th>Notes</th></tr></thead>
     <tbody>
       <tr><td class="id">B1</td><td>Negotiate button - always present for the signer, refined semantics</td><td><span class="badge decided">DECIDED (refined)</span> jump to chat + "wants to negotiate" pill + card-top "In negotiation" strip. NEVER discards a held proposal - it stays on the table until withdrawn, replaced by the proposer's next Send, or accepted. Does NOT open edit mode. (Today's discard-on-Negotiate goes away)</td></tr>
-      <tr><td class="id">B2</td><td>Proposer's button label &rarr; <b>"Withdraw changes"</b></td><td>Drop the "Negotiate (...)" phrasing on the proposer side</td></tr>
+      <tr class="done"><td class="id">B2</td><td><span class="badge done">DONE 2026-07-23</span> Proposer's button label &rarr; <b>"Withdraw changes"</b></td><td>Label only, handler untouched; e2e locator updated in the same commit (<code>1a7b542</code>)</td></tr>
       <tr><td class="id">B3</td><td>After decline / after a change is resolved, both parties see the last clean state</td><td><span class="badge bug">BUG</span> declineDeal leaves the deal_pending_change row; CardFront renders the diff whenever pendingChange exists, ignoring status</td></tr>
       <tr><td class="id">B4</td><td>Terms-only change (payment / delivery date / free delivery / note) shows NO redline - the receiver signs blind</td><td><span class="badge bug">BUG</span> pairDealDiff compares only qty/unit/price; Extra Conditions renders the current card, not the held draft</td></tr>
       <tr><td class="id">B5</td><td>Batch-only change shows NO diff</td><td><span class="badge bug">BUG</span> batch fields not compared in changed(); new rows show the old batch</td></tr>
@@ -177,7 +177,7 @@
   <table>
     <thead><tr><th>ID</th><th>Task</th><th>Notes</th></tr></thead>
     <tbody>
-      <tr><td class="id">D1</td><td>Pin the top toolbar (X close, flip/Activity, "Talk about this deal", pencil) and the bottom decision bar; only the paper scrolls between them</td><td>Promo prototype = the visual reference (pinned titlebar / scrollable body / pinned footer). Constraint: the 3D flip needs overflow-hidden on the shell, which currently blocks sticky bars - restructure: bars outside the flipping part</td></tr>
+      <tr class="done"><td class="id">D1</td><td><span class="badge done">DONE 2026-07-23</span> Pin the top toolbar (X close, flip/Activity, "Talk about this deal", pencil) and the bottom decision bar; only the paper scrolls between them</td><td>Shipped (<code>5710a60</code>): NOT sticky - hosts stop scrolling, h-full chain through DealCard's wrappers, CardFront = flex column (pinned titlebar / inner scroll / pinned footer, all 3 footer variants). CardBack min-h-640 &rarr; h-full. globals.css untouched. AllocateDealCardHost: minimal 1-word edit (Muskan's lane, flagged). Third mount in DealPin: chat leaflet gets pinning free; workspace overlay degrades safely (dead code)</td></tr>
     </tbody>
   </table>
 
@@ -206,7 +206,7 @@
     <thead><tr><th>Wave</th><th>Items</th><th>Why this position</th></tr></thead>
     <tbody>
       <tr class="done"><td class="id">0</td><td><span class="badge done">DONE 2026-07-23</span> <b>F1</b> - write the new rules into shared DECISIONS.md (propose-mode + sync ritual first)</td><td>Protects Muskan NOW - she is building on the old assumptions (her basket lane touches the 'order' type we redefined). Cheapest insurance on the board</td></tr>
-      <tr><td class="id">1</td><td><b>D1 + B2</b> - pinned shell + "Withdraw changes" label</td><td>Zero backend risk. Restructure the shell BEFORE the DecisionBar rewrite, so Wave 3 builds buttons into the final structure</td></tr>
+      <tr class="done"><td class="id">1</td><td><span class="badge done">DONE 2026-07-23</span> <b>D1 + B2</b> - pinned shell + "Withdraw changes" label</td><td>Shipped as <code>5710a60</code> + <code>1a7b542</code>, merged to dev. Gate: tsc clean, 192/192 unit, e2e 15 pass + 2 proven pre-existing fails (chat_message_type seed FK; note-decline missing wait)</td></tr>
       <tr><td class="id">2</td><td><b>A1 + A2 + A3 + C2</b> - the status machine: DB-persisted private Draft, <code>negotiation</code> status, new sendDeal (delivery moves birth &rarr; send), RLS draft privacy, dead-code cleanup, server-side fixed-signer check, OpenItems on drafts</td><td>THE foundation - every status check changes. Riskiest wave (migrations + RLS + birth RPC): plan with full GSD, not quick</td></tr>
       <tr><td class="id">3</td><td><b>B6 + B1 + B3 + E1</b> - DecisionBar on fixed roles: Sign (receiver, disabled while own proposal pending) / Accept changes (sender) / Withdraw changes; Negotiate = pill + card-top strip, never discards; replace-proposal path; decline cleanup; propose pill</td><td>Same files Wave 2 just touched - hot context, e2e updated once</td></tr>
       <tr><td class="id">4</td><td><b>B4 + B5 + C3 + C4</b> - full diff coverage (terms + batch) + real units (pack_count) + real batches + backend expiry</td><td>Payload + compare logic must be FINAL before the buyer door produces them</td></tr>
