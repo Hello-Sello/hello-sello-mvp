@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Deal Card - Problem Board (2026-07-22)</title>
+<style>
+  :root {
+    --pink: #ec4899;
+    --pink-deep: #db2777;
+    --maroon: #76002d;
+    --ink: #1e293b;
+    --ash: #64748b;
+    --line: #e2e8f0;
+    --bg: #fdf7fa;
+    --ok: #16924a;
+    --ok-tint: #e8f6ee;
+    --warn: #b45309;
+    --warn-tint: #fdf1e3;
+    --danger: #b3203f;
+    --danger-tint: #fdecef;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 32px 24px 80px; }
+  header.top {
+    border-bottom: 3px solid var(--maroon);
+    padding-bottom: 16px;
+    margin-bottom: 24px;
+  }
+  header.top h1 { margin: 0 0 6px; font-size: 26px; color: var(--maroon); }
+  header.top .sub { color: var(--ash); font-size: 13.5px; }
+  .badge {
+    display: inline-block; border-radius: 999px; padding: 2px 10px;
+    font-size: 11px; font-weight: 700; letter-spacing: .4px; vertical-align: 1px;
+  }
+  .badge.decided { background: var(--ok-tint); color: var(--ok); }
+  .badge.bug { background: var(--danger-tint); color: var(--danger); }
+  .badge.new { background: var(--warn-tint); color: var(--warn); }
+  .badge.out { background: #eef2f7; color: var(--ash); }
+  .badge.done { background: var(--ok); color: #fff; }
+  tr.done td { background: var(--ok-tint); }
+  tr.done td.id { color: var(--ok); }
+
+  nav.toc {
+    background: #fff; border: 1px solid var(--line); border-radius: 14px;
+    padding: 14px 18px; margin-bottom: 28px; font-size: 13.5px;
+  }
+  nav.toc b { display: block; margin-bottom: 6px; color: var(--maroon); font-size: 12px; letter-spacing: 1px; text-transform: uppercase; }
+  nav.toc a { color: var(--pink-deep); text-decoration: none; margin-right: 14px; white-space: nowrap; }
+  nav.toc a:hover { text-decoration: underline; }
+
+  h2 {
+    font-size: 18px; color: var(--maroon); margin: 36px 0 10px;
+    padding-top: 8px; border-top: 1px solid var(--line);
+  }
+  h2 .cat { color: var(--pink-deep); }
+  p.note { color: var(--ash); font-size: 13.5px; margin: 4px 0 12px; }
+
+  table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 4px rgba(118,0,45,.06); margin: 10px 0 6px; }
+  th {
+    text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;
+    color: var(--ash); background: #faf3f7; padding: 9px 12px; border-bottom: 2px solid var(--line);
+  }
+  td { padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; font-size: 14px; }
+  tr:last-child td { border-bottom: none; }
+  td.id { font-weight: 800; color: var(--pink-deep); white-space: nowrap; width: 46px; }
+  ul { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  .rule-box {
+    background: #fff; border: 1px solid var(--line); border-left: 4px solid var(--pink);
+    border-radius: 0 12px 12px 0; padding: 12px 16px; margin: 12px 0; font-size: 14px;
+  }
+  footer { margin-top: 44px; color: var(--ash); font-size: 12.5px; border-top: 1px solid var(--line); padding-top: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <h1>Deal Card - Problem Board</h1>
+    <div class="sub">2026-07-22 &middot; Collection complete, planning next &middot; Nothing built yet.<br/>
+    Source: prototype review (chat-flipdoc, deal-card-promo) + 7-reader code survey of <code>src/modules/deals/</code> + Ayush's notebook + Q&amp;A.<br/>
+    <b>Verification pass (2026-07-22 evening):</b> 6 parallel verifiers checked every item against the live code. All confirmed NOT done, except <b>C1</b> (already working) and <b>E4</b> (true for 1:1 chats; internal groups DO work). <b>B6</b> awaits Ayush's decision.<br/>
+    <b>Progress:</b> <span class="badge done">WAVE 0 DONE 2026-07-23</span> F1 shipped - the lifecycle / fixed-signer / buyer-door rules are recorded in shared <code>DECISIONS.md</code> (entry "2026-07-23 - Deal card single-sign lifecycle LOCKED", commit <code>a63afc5</code>).</div>
+  </header>
+
+  <nav class="toc">
+    <b>Jump to</b>
+    <a href="#statuses">Status model</a>
+    <a href="#turnrule">Turn rule</a>
+    <a href="#catA">A &middot; Lifecycle</a>
+    <a href="#catB">B &middot; Decision bar</a>
+    <a href="#catC">C &middot; Editing</a>
+    <a href="#catD">D &middot; Card shell</a>
+    <a href="#catE">E &middot; Chat &amp; signals</a>
+    <a href="#catF">F &middot; Docs</a>
+    <a href="#roadmap">Build roadmap</a>
+    <a href="#oos">Out of scope</a>
+    <a href="#notebook">Notebook record</a>
+  </nav>
+
+  <h2 id="statuses">The decided status model <span class="badge decided">REFINED 2026-07-22</span></h2>
+  <table>
+    <thead><tr><th>State</th><th>Meaning</th><th>Today in code</th><th>Change needed</th></tr></thead>
+    <tbody>
+      <tr><td><b>Draft</b></td><td>Built but NOT sent - exists only for the creator</td><td>Does not exist (create-mode card is browser-only; Send = birth)</td><td><span class="badge new">NEW</span> persist unsent draft in DB, private to creator side</td></tr>
+      <tr><td><b>Negotiation</b></td><td>Sent - all bargaining happens here</td><td>Called <code>draft</code> in DB from birth to sign</td><td>Rename/split; Send = deliver + flip to Negotiation</td></tr>
+      <tr><td><b>Confirmed</b></td><td>Receiver signed</td><td><code>confirmed</code> - works</td><td>-</td></tr>
+      <tr><td><b>Done</b></td><td>Executed (seller invoice)</td><td><code>done</code> - works</td><td>-</td></tr>
+      <tr><td><b>Cancelled</b></td><td>Declined - a close, not a delete</td><td><code>cancelled</code> - works</td><td>-</td></tr>
+      <tr><td><b>Ticket created / closed</b></td><td>Post-close reopen path</td><td>works (close-ticket has no UI button)</td><td>small: add button</td></tr>
+    </tbody>
+  </table>
+  <p class="note">Change-level: the proposer can always <b>withdraw</b> their held change (exists; only the label changes).</p>
+
+  <h2 id="turnrule">The turn rule <span class="badge decided">CORRECTED 2026-07-22, 2nd PASS</span></h2>
+  <div class="rule-box">
+    <ul>
+      <li><b>Sign is FIXED to the deal, not the version</b>: the party that did NOT send the deal card is the signer for the deal's whole life. Seller sent &rarr; buyer signs; buyer sent &rarr; seller signs. Changes during negotiation NEVER flip the sign right (&rarr; B6).</li>
+      <li><b>Negotiate = talk, never delete</b>: pressing Negotiate jumps to the chat, posts a pill ("[Name] wants to negotiate") and shows a strip at the TOP of the card ("In negotiation"). A held proposal STAYS on the table while people talk - it leaves only when withdrawn, replaced by the proposer's next Send, or accepted.</li>
+      <li><b>Replacement rule</b>: while a proposal is on the table, its PROPOSER can edit and re-Send - the new version replaces the old proposal. The other side does not edit meanwhile.</li>
+      <li><b>Decline deal</b>: always available to BOTH sides.</li>
+      <li><b>Pencil (edit)</b>: available to both sides when no change is held. The pencil is the ONLY editor.</li>
+      <li><b>Resolving a held change stays two-sided</b>: if the deal SENDER must resolve a change (the signer proposed it), the sender gets <b>"Accept changes"</b> - commits the new version but does NOT sign; the signer then signs the updated card.</li>
+      <li>Send = implicit yes at both levels (sending the deal / sending a change).</li>
+      <li>The deal receiver (the fixed signer) ALWAYS has three options: <b>Negotiate / Sign / Decline</b> - including on the very first version (B1).</li>
+      <li><b>The signer never signs their own unaccepted proposal</b>: while the signer's OWN proposal is on the table, their Sign button stays VISIBLE but DISABLED ("Waiting for [name]'s acceptance") and activates only after the other side presses Accept changes. Consequence: a buyer-sent deal always takes ONE EXTRA STEP (seller sends changes &rarr; buyer accepts &rarr; seller signs); a seller-sent deal signs directly (buyer's Sign = accept + sign in one).</li>
+      <li><b>Product reality (Ayush)</b>: buyers mostly do NOT edit the card - most edit features are seller-only anyway. Buyers negotiate through CHAT; the seller makes the versions, in BOTH deal directions.</li>
+      <li><b>Buyer-initiated (order) mirror</b>: buyer builds the order (prices may stay empty - seller-owned pricing), sends it; the SELLER is the fixed signer; the seller fills prices via Send-changes; the BUYER gets "Accept changes"; after accept, the seller's Sign activates and they sign. DECIDED: a buyer create-door WILL be built (&rarr; C5). A1 keeps the machinery direction-neutral.</li>
+    </ul>
+  </div>
+
+  <h2 id="catA"><span class="cat">Category A</span> - Lifecycle and statuses (backend-heavy)</h2>
+  <table>
+    <thead><tr><th>ID</th><th>Task</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td class="id">A1</td><td>Draft (unsent) state saved in DB, private to creator; Send delivers + moves to Negotiation status</td><td><span class="badge decided">DECIDED</span> DB-persisted (survives closing panel/app). Anchor task - touches the birth transaction, deliver_deal, every status check</td></tr>
+      <tr><td class="id">A2</td><td>Clean up dead statuses (<code>withdrawn</code>, <code>amended</code>) + dead code (two-sided confirmDeal, ConfirmBar, propose_deal RPC, DealPin State B for manual proposals, dormant edit_deal_draft)</td><td>Do while A1 is open</td></tr>
+      <tr><td class="id">A3</td><td>Enforce the FIXED signer server-side: signer = the non-initiating company, one stored fact from birth (today: UI-only, and the moving latest-version rule)</td><td>Hardening - becomes easy under B6</td></tr>
+    </tbody>
+  </table>
+
+  <h2 id="catB"><span class="cat">Category B</span> - Decision bar and negotiation flow</h2>
+  <table>
+    <thead><tr><th>ID</th><th>Task</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td class="id">B1</td><td>Negotiate button - always present for the signer, refined semantics</td><td><span class="badge decided">DECIDED (refined)</span> jump to chat + "wants to negotiate" pill + card-top "In negotiation" strip. NEVER discards a held proposal - it stays on the table until withdrawn, replaced by the proposer's next Send, or accepted. Does NOT open edit mode. (Today's discard-on-Negotiate goes away)</td></tr>
+      <tr><td class="id">B2</td><td>Proposer's button label &rarr; <b>"Withdraw changes"</b></td><td>Drop the "Negotiate (...)" phrasing on the proposer side</td></tr>
+      <tr><td class="id">B3</td><td>After decline / after a change is resolved, both parties see the last clean state</td><td><span class="badge bug">BUG</span> declineDeal leaves the deal_pending_change row; CardFront renders the diff whenever pendingChange exists, ignoring status</td></tr>
+      <tr><td class="id">B4</td><td>Terms-only change (payment / delivery date / free delivery / note) shows NO redline - the receiver signs blind</td><td><span class="badge bug">BUG</span> pairDealDiff compares only qty/unit/price; Extra Conditions renders the current card, not the held draft</td></tr>
+      <tr><td class="id">B5</td><td>Batch-only change shows NO diff</td><td><span class="badge bug">BUG</span> batch fields not compared in changed(); new rows show the old batch</td></tr>
+      <tr><td class="id">B6</td><td>OPEN DECISION - fixed signer vs latest-version signer. VERIFIED FACT: on a fresh deal only the receiver signs (matches Ayush's rule). BUT when the receiver proposes a counter-change, the built code flips Sign to the deal SENDER (DecisionBar.tsx:202). Choose: (a) current flip is fine &rarr; remove B6; (b) fixed signer &rarr; sender gets "Accept changes" for counters</td><td><span class="badge new">AWAITING CALL</span></td></tr>
+    </tbody>
+  </table>
+
+  <h2 id="catC"><span class="cat">Category C</span> - Card editing (create + edit mode)</h2>
+  <table>
+    <thead><tr><th>ID</th><th>Task</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td class="id">C1</td><td>Adding a product applies instantly - no tick step</td><td><span class="badge decided">VERIFIED DONE</span> the picked line counts immediately (total + send payload); the tick only collapses the row display. Optional polish: land the new row collapsed</td></tr>
+      <tr><td class="id">C2</td><td>Open Items usable at creation time, before Send</td><td><span class="badge new">VERIFIED NOT DONE</span> hidden in create mode - OpenItems needs a deal_workspace_id, which exists only after birth. Depends on A1: a DB-persisted draft gets a workspace at draft-birth, solving this naturally</td></tr>
+      <tr><td class="id">C3</td><td>Units become real - editable and carried in the proposal</td><td><span class="badge bug">BUG</span> today the stepper is a frontend mock, never enters the payload ("not able to edit units to counter")</td></tr>
+      <tr><td class="id">C4</td><td>Replace mocks: deal-expiry field (no backend), MOCK_BATCHES dropdown (getProductBatches() is orphaned), enable buyer "add product from seller's shop"</td><td>-</td></tr>
+      <tr><td class="id">C5</td><td>Buyer create-door + direction fix. <b>Bug today:</b> Start-a-deal hardcodes creator = seller - a buyer is silently cast as seller. <b>The rule:</b> the owner of the products on the card = the seller (always code-derivable). <b>Door:</b> empty paper opens, Send dead until &ge;1 product (empty card discards on close; with content = A1 Draft). Picker by shop presence: only my shop &rarr; my catalogue, offer, automatic; only theirs &rarr; their catalogue, order, automatic; both &rarr; ONE choice "Your products or [X]'s?"; neither &rarr; button HIDDEN. "Has products" = system-level fact (definer yes/no fn - private catalogues stay private). Counterparty products not visible / none at all &rarr; POSITIVE encouraging message in both situations (e.g. "Request [supplier] for their products"), never a dead-end text. Free-text lines SELLER-only. One seller per card - no catalogue mixing. Buyer fills known (public) prices, else empty - seller fills in their first version</td><td><span class="badge decided">DECIDED</span> full spec 2026-07-22. Coordinate with Muskan: 'order' type + from-shop door ride her basket lane</td></tr>
+    </tbody>
+  </table>
+
+  <h2 id="catD"><span class="cat">Category D</span> - Card shell and layout</h2>
+  <table>
+    <thead><tr><th>ID</th><th>Task</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td class="id">D1</td><td>Pin the top toolbar (X close, flip/Activity, "Talk about this deal", pencil) and the bottom decision bar; only the paper scrolls between them</td><td>Promo prototype = the visual reference (pinned titlebar / scrollable body / pinned footer). Constraint: the 3D flip needs overflow-hidden on the shell, which currently blocks sticky bars - restructure: bars outside the flipping part</td></tr>
+    </tbody>
+  </table>
+
+  <h2 id="catE"><span class="cat">Category E</span> - Chat and signals</h2>
+  <table>
+    <thead><tr><th>ID</th><th>Task</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td class="id">E1</td><td>Post a chat pill when a change is PROPOSED</td><td>Today pills exist for sent/signed/declined/committed/change-declined - nothing on propose</td></tr>
+      <tr><td class="id">E2</td><td>Clicking an old signal pill opens that card version, READ-ONLY, clearly marked as old</td><td><span class="badge decided">DECIDED</span> frozen historical view, not current-card-plus-logs</td></tr>
+      <tr><td class="id">E3</td><td>C2C chat grouped by company side - own company right, other left, sender name shown, like a group chat</td><td><span class="badge new">VERIFIED NOT DONE</span> alignment is keyed on the viewer's person id, so colleagues' messages land LEFT mixed with the counterparty; the message model has NO company id. Sender names show only on incoming messages</td></tr>
+      <tr><td class="id">E4</td><td>Cannot create a chat with INTERNAL people (own-company colleagues)</td><td><span class="badge bug">BUG CONFIRMED (1:1)</span> the new-chat picker only lists counterparty people (ignores the own-company roster) and a same-company pair has no relationship id for the P2P thread. Internal GROUPS work. Fix must also file it under the Internal filter (p2p is hardcoded isExternal=true)</td></tr>
+      <tr><td class="id">E5</td><td>Group creation: the subject/name becomes MANDATORY</td><td><span class="badge new">VERIFIED NOT DONE</span> optional at every layer; the RPC substitutes a default (deal code / first names / 'Group'). Enforce in 3 places: GroupPicker gate, client write, RPC. Also cover rename (blank rename possible today)</td></tr>
+    </tbody>
+  </table>
+
+  <h2 id="catF"><span class="cat">Category F</span> - Documentation</h2>
+  <table>
+    <thead><tr><th>ID</th><th>Task</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr class="done"><td class="id">F1</td><td><span class="badge done">DONE 2026-07-23</span> Record the lifecycle + today's decisions in the shared DECISIONS.md (propose-mode, sync ritual)</td><td>Shipped as the "2026-07-23 - Deal card single-sign lifecycle LOCKED" entry (commit <code>a63afc5</code>): full lifecycle + fixed signer + Negotiate + buyer door, supersede pointers on 10+ old entries, Muskan calendar/basket heads-up with timing. Sync ritual run; Muskan was idle, no locks</td></tr>
+    </tbody>
+  </table>
+
+  <h2 id="roadmap">Build roadmap <span class="badge decided">DECIDED - gsd-quick, one task at a time, in this order</span></h2>
+  <table>
+    <thead><tr><th>Wave</th><th>Items</th><th>Why this position</th></tr></thead>
+    <tbody>
+      <tr class="done"><td class="id">0</td><td><span class="badge done">DONE 2026-07-23</span> <b>F1</b> - write the new rules into shared DECISIONS.md (propose-mode + sync ritual first)</td><td>Protects Muskan NOW - she is building on the old assumptions (her basket lane touches the 'order' type we redefined). Cheapest insurance on the board</td></tr>
+      <tr><td class="id">1</td><td><b>D1 + B2</b> - pinned shell + "Withdraw changes" label</td><td>Zero backend risk. Restructure the shell BEFORE the DecisionBar rewrite, so Wave 3 builds buttons into the final structure</td></tr>
+      <tr><td class="id">2</td><td><b>A1 + A2 + A3 + C2</b> - the status machine: DB-persisted private Draft, <code>negotiation</code> status, new sendDeal (delivery moves birth &rarr; send), RLS draft privacy, dead-code cleanup, server-side fixed-signer check, OpenItems on drafts</td><td>THE foundation - every status check changes. Riskiest wave (migrations + RLS + birth RPC): plan with full GSD, not quick</td></tr>
+      <tr><td class="id">3</td><td><b>B6 + B1 + B3 + E1</b> - DecisionBar on fixed roles: Sign (receiver, disabled while own proposal pending) / Accept changes (sender) / Withdraw changes; Negotiate = pill + card-top strip, never discards; replace-proposal path; decline cleanup; propose pill</td><td>Same files Wave 2 just touched - hot context, e2e updated once</td></tr>
+      <tr><td class="id">4</td><td><b>B4 + B5 + C3 + C4</b> - full diff coverage (terms + batch) + real units (pack_count) + real batches + backend expiry</td><td>Payload + compare logic must be FINAL before the buyer door produces them</td></tr>
+      <tr><td class="id">5</td><td><b>C5</b> - the buyer door: has-products fn, 4-case picker, direction from product ownership, positive empty-states</td><td>Needs W2 machinery, W3 bar, W4 payload. Muskan was warned in Wave 0</td></tr>
+      <tr><td class="id">P</td><td><b>E4 + E5 + E3 + E2</b> - the chat-module track</td><td>PARALLEL: messaging shares almost no files with waves 2-5. E2 last (touches the card render)</td></tr>
+    </tbody>
+  </table>
+  <p class="note"><b>Every wave closes with the same gate:</b> tsc, unit tests, the e2e deal flow (re-mint in-app after any db reset), and the cloud-migrations queue updated for new migrations (sync ritual first). The one-line logic: docs to protect the team, shell to avoid double DOM work, foundation before furniture, payload before door, parallel chat track because it shares no files - every line of code gets written once.</p>
+
+  <h2 id="oos">Out of scope <span class="badge out">PARKED</span></h2>
+  <p><b>Promotions / bundle deals</b> - dropped for now (Ayush, 2026-07-22, re-confirming 2026-07-08). The dormant code stays untouched; no planning on it.</p>
+  <p><b>Price-list sharing (per relationship)</b> - the next task AFTER this board, built later. Until then the buyer door works with public prices + empty-price lines. Facts: sharing today is the <code>price_public</code> flag only; "Request pricing" on Discover only mints the connection - it shares no prices.</p>
+
+  <h2 id="notebook">Notebook readings (for the record)</h2>
+  <table>
+    <thead><tr><th>#</th><th>Note</th><th>Maps to</th></tr></thead>
+    <tbody>
+      <tr><td class="id">1</td><td>After declining / in negotiation, the card shows just the last clean state to both parties</td><td>B3</td></tr>
+      <tr><td class="id">2</td><td>C2C chat: one company's messages on one side, with sender name, like a group</td><td>E3</td></tr>
+      <tr><td class="id">3</td><td>Product add should be instant, no tick</td><td>C1</td></tr>
+      <tr><td class="id">4</td><td>Things-to-add should exist at deal creation time</td><td>C2</td></tr>
+      <tr><td class="id">5</td><td>No signal/notification in chat after a deal card edit</td><td>E1</td></tr>
+      <tr><td class="id">6</td><td>The sender of changes sees only "Withdraw changes"</td><td>B2</td></tr>
+      <tr><td class="id">7</td><td>Not able to edit units to counter</td><td>C3</td></tr>
+      <tr><td class="id">8</td><td>After accepting, previous card states visible via previous signals</td><td>E2</td></tr>
+    </tbody>
+  </table>
+
+  <footer>
+    Next: plan the order of attack. A1 is the anchor (status model); B2/C1 are small riders; D1 is layout-only and independent; E-items depend lightly on A1 naming.<br/>
+    Companion file: <code>2026-07-22-deal-card-problems.md</code> (same folder, same content - the md is the source of truth).
+  </footer>
+
+</div>
+</body>
+</html>
