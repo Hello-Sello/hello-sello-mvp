@@ -5,11 +5,11 @@
 
 ---
 
-**Last updated:** 2026-07-23 13:58 CEST
+**Last updated:** 2026-07-23 16:49 CEST
 **Branch:** claude/ayush/work - rebased onto `origin/dev` (`b28a877`, your migration-history reconcile + main merge included).
-**Status:** active. Deal-card rework running from a locked problem board; Wave 0 (record the decisions) is DONE - see the ⚠️ note below. Next: card-shell pinning + button label (UI-only, my files).
+**Status:** offline. Session closed after deal-card Wave 0 (the decisions entry) - see the ⚠️ note below, please read before your next basket/calendar/Sell session. Next session on my side: card-shell pinning + "Withdraw changes" label (UI-only, my files, no shared-file edits planned).
 **Linear issue in progress:** none
-**Shared files locked:** none held (DECISIONS.md lock released 13:58 CEST).
+**Shared files locked:** none held.
 **⚠️ Heads-up: my PR #148 (merged) reverses your original D-05 external-approval gate on group threads** (`create_group_thread` now activates every invited member immediately; `approve_group_member` dropped - migration `20260720100000_drop_group_thread_external_gate.sql`). Product-direction call, not a bug fix - flagging since it's your original design and you're actively extending the same files (`messaging/index.ts`/`store.ts`/`types.ts`) with Lane A's deal-card chat bubbles. The two changes auto-merged clean (different exports, tsc 0 errors, grepped for stale `approve_group_member`/`pending_external` refs - only historical migrations + an intentional "RPC no longer exists" e2e assertion remain). Shout if you'd have designed the reversal differently.
 **Also: resolved a real conflict in `docs/deploy/cloud-migrations-pending.md`** (both of us added a "still pending" section to the same spot) by keeping BOTH - your Lane A 5-migration table stays as the top entry, mine (the drop-gate migration) sits right below it as its own dated entry. Nothing dropped from either side.
 **⚠️ I RENAMED 3 of MY migrations (NOT yours) to fix timestamp collisions with your dev migrations:** `20260617140000_confirm_deal_change_announce` → `…140050`; `20260618120000_deal_card_notes` → `…120010`; `20260618120100_confirm_deal_change_notes` → `…120110`. Yours (`auth04_revoked_status`@140000, `company_city`@120000, `list_discoverable_companies_city`@120100) are UNTOUCHED. The chain now has no duplicate timestamps - `db reset` green.
