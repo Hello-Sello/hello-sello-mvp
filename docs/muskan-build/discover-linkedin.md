@@ -149,6 +149,7 @@ Files: new server read in `src/app/discover/`. Test: unit/integration.
 
 ### ─────────── Discover surface · directory display (DISC-1 … DISC-9, DISC-15) ───────────
 *Independent of the person graph — the directory just renders. Can run first / in parallel.*
+> **Progress 2026-07-24:** ✅ DISC-1 (prototype), ✅ DISC-2 (verified-caller gate restored, pgTAP), ✅ DISC-3 (taxonomy sync — pure `taxonomy.ts`, 8 codes + `isListedCompany`, unit 6/6), ✅ DISC-4 (ads banner, render test). **NEXT: DISC-5** (extract `CompaniesSection`) → DISC-6 (shell) → DISC-7/8/9 (people) → DISC-10..14 (requests/network) → DISC-15 (seed). ⚠️ **Verification note:** DISC-5/6/9/12/14 are interactive client components; the node vitest env has no jsdom, so they're gated by tsc + eslint + `renderToStaticMarkup` smoke tests only. **A live browser pass (or Discover e2e specs) is owed before final ship** — the loop can't drive a browser. Flagging per the prototype-first rule.
 
 ### DISC-1 — Prototype the LinkedIn Discover · **M** — ✅ DONE (Variant D, `prototypes/discover-linkedin-prototype/`, approved 2026-07-23)
 
