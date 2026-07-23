@@ -20,6 +20,7 @@
 import { createClient } from "@/shared/db/client";
 import { previewOf } from "../lib/chat-display";
 import { canonicalPair } from "../lib/connections-shape";
+import { companylessP2pDisplay } from "../lib/companylessP2pDisplay";
 import { planRollout } from "../lib/rollout";
 import type {
   AcceptInput,
@@ -229,6 +230,27 @@ export async function getConversations(): Promise<ConversationListItem[]> {
     const otherPersonId = t.person_a_id === viewer.personId ? t.person_b_id : t.person_a_id;
     const per = otherPersonId ? personById.get(otherPersonId) : undefined;
     const personName = per ? `${per.first_name} ${per.last_name}`.trim() : "Unknown";
+    // A company-less p2p (Discover person↔person DM, relationship_id null) has no
+    // relationship pair, so `otherCompanyName` fell back to "Unknown company".
+    // Resolve the counterparty from the PERSON instead (PG-12).
+    if (t.relationship_id == null) {
+      const d = companylessP2pDisplay({
+        personName,
+        personCompanyId: per?.company_id ?? null,
+        personCompanyName: (per?.company_id && coNameById.get(per.company_id)) || null,
+        viewerCompanyId: viewer.companyId,
+      });
+      return {
+        ...base,
+        name: personName,
+        otherPersonId,
+        companyId: d.companyId,
+        companyName: d.companyName,
+        subtitle: d.subtitle,
+        initials: personInitials(per?.first_name, per?.last_name),
+        isExternal: d.isExternal,
+      };
+    }
     return {
       ...base,
       name: personName,
