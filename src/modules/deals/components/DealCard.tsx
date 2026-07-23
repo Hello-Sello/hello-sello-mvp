@@ -84,7 +84,7 @@ export function DealCard({
   const canEdit = !!onEdit && !isClosed;
 
   return (
-    <div className="relative w-full" style={{ perspective: "1600px" }}>
+    <div className="relative h-full w-full" style={{ perspective: "1600px" }}>
       {/* flip - top-left corner. Sits in the title-bar's left gutter (CardFront
           leaves pl-12 clear), so it reads as the left-most title-bar control.
           Hidden in create mode: a not-yet-born draft has no Signals/Logs back. */}
@@ -142,14 +142,19 @@ export function DealCard({
 
       {/* ---- FLIPPING LAYER: rotates on Y between the two faces ---- */}
       <div
-        className="relative transition-transform duration-500 ease-in-out"
+        className="relative h-full transition-transform duration-500 ease-in-out"
         style={{
           transformStyle: "preserve-3d",
           transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)",
         }}
       >
-        {/* FRONT - in normal flow, defines the card box; hidden once rotated away */}
-        <div style={{ backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden" }}>
+        {/* FRONT - in normal flow, defines the card box; hidden once rotated away.
+            h-full chain (D1, Wave 1): host box -> perspective wrapper -> flipping
+            layer -> this face, so the card is BOUNDED and owns its inner scroll. */}
+        <div
+          className="h-full"
+          style={{ backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden" }}
+        >
           <CardFront
             data={data}
             things={things}

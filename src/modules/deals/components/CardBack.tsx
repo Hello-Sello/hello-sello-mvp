@@ -6,7 +6,8 @@
  *   - Signals: Sella's advisory per-side read (seeded in 3a, Sella-written 4d)
  *   - Logs: the REAL version history from deal_card_log (FR-D5)
  * Signals is the default tab. Cross-fades in behind the front (DealCard), so it
- * matches the front's width (390px) + min-height for clean cross-fade alignment.
+ * matches the front's box exactly (h-full inside the bounded flip layer, D1
+ * Wave 1) for clean cross-fade alignment; the tab body owns its own scroll.
  *
  * Restyled to the V3 vocabulary: white card, maroon-accented heading, hairline
  * dividers, the same dense rhythm as the front. The tab icons stay Sparkles /
@@ -29,7 +30,7 @@ export function CardBack({ data }: { data: DealCardView }) {
   const [tab, setTab] = useState<Tab>("signals");
 
   return (
-    <div className="flex min-h-[640px] w-full max-w-full flex-col overflow-hidden rounded-3xl bg-white shadow-xl ring-1 ring-black/5">
+    <div className="flex h-full w-full max-w-full flex-col overflow-hidden rounded-3xl bg-white shadow-xl ring-1 ring-black/5">
       {/* slim SHADED heading band (matches the front's V4 signature) */}
       <div
         className="rounded-t-3xl px-12 pb-4 pt-4 text-center"

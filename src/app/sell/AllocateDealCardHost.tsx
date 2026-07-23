@@ -101,7 +101,7 @@ export function AllocateDealCardHost() {
     // DealCardPanelHost - no backdrop, no blur, the page underneath stays
     // visible and interactive; only the card itself floats above it.
     <div className="fixed inset-y-2 right-2 z-50 w-full max-w-xl">
-      <div className="glass-strong h-full overflow-y-auto rounded-3xl p-3 shadow-2xl">
+      <div className="glass-strong h-full overflow-hidden rounded-3xl p-3 shadow-2xl">
         {data ? (
           <DealCard
             key={openCardId}

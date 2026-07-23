@@ -286,7 +286,10 @@ export function DealCardPanelHost() {
     >
       {/* No separate top bar - the close X now lives ON the card's own title bar
           (passed as onClose), so the panel spends no extra row on it. */}
-      <div className="min-h-0 flex-1 overflow-y-auto p-3">
+      {/* D1 (Wave 1): the host no longer scrolls - the card fills this box
+          (h-full chain) and owns its own inner paper scroll, so the card's
+          titlebar + decision zone stay pinned. */}
+      <div className="min-h-0 flex-1 overflow-hidden p-3">
         {createReq ? (
           // CREATE MODE: an empty draft card. "Send deal" mints it via handleCreate,
           // which then swaps this panel for the born card.
