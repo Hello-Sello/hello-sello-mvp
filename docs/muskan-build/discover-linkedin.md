@@ -44,7 +44,7 @@ page.tsx (SERVER) fetches ALL data:
 2. **Person accept never mints a company `relationship`.** `planRollout` **always** creates a `c2c` thread + "companies are now connected" line ([rollout.ts:62-84](../../src/modules/messaging/lib/rollout.ts)) — so the person path **must not** go through it. PG-7 is its own RPC: person edge + a company-less p2p thread + a person-framed intro. No c2c thread, no company line.
 3. **Rebuild RLS from the LIVE body + diff every predicate.** PG-3 (`person_select`) and PG-5 (inbox RLS) `create or replace`/alter existing policies. Base on the **latest-timestamp** definition, add ONLY the new branch, diff old→new to confirm nothing else moved. This is exactly how the Discover verified-caller gate was silently lost — see [[feedback-sql-replace-diff-against-live]].
 4. **Directory RPCs: SECURITY DEFINER + full gate + safe fields only.** Every discover RPC includes `public.is_caller_verified()`, `verification_status='verified'`, `deleted_at is null`, excludes own company, returns ONLY directory-safe fields (**no email, no phone**).
-5. **Visibility gate = client-side, pharmacy-only.** Hides ONLY companies/people whose *only* tag is Pharmacy from the default view; they stay name-searchable. Never widen it. Tags are already in the DB (migration `20260704090000`) — this lane changes **frontend code only** for tags.
+5. **Visibility gate = client-side, pharmacy-only.** Hides ONLY companies/people whose *only* tag is Pharmacy from the default view; they stay name-searchable. Never widen it. Tags are already in the DB (migration `20260704090000`) — this lane changes **frontend code only** for tags. ⚠️ **Coupling:** "hidden-but-searchable" only works while the whole directory is loaded client-side. The server-side-search/pagination follow-up **cannot ship without moving this gate server-side in the same change** — otherwise pharmacies leak into paginated results. They are one change, not two.
 6. **New request type touches display, not the company accept switch.** Add `connect_person` to the **display** type list (`InboxRequestType`, [connect/types.ts:21-25](../../src/modules/connect/types.ts)) so it renders/filters. Do **not** add it to `AcceptRequestType` ([messaging/types.ts:271-275](../../src/modules/messaging/types.ts)) — the person accept has its own RPC and never enters the company rollout `switch`. Clean boundary.
 7. **Reuse existing company machinery.** Company connect = existing `sendConnectRequest`; company accept/decline = existing `acceptItem`/`declineItem`. Don't reinvent them.
 8. **Behavior-preserving extraction.** Pulling `CompaniesSection` out of `DiscoverDirectory` must not change current behavior (beyond the DISC-3 tag fix).
@@ -89,7 +89,7 @@ page.tsx (SERVER) fetches ALL data:
 
 ### PG-1 — `person_connection` edge table · **S**
 Files: new migration `<ts>_person_connection.sql`. Test: pgTAP.
-- [ ] Table: `id`, `person_a_id`/`person_b_id` (both `NOT NULL → person(id)`, `CHECK (person_a_id < person_b_id)` canonical), `status` (`active` default), `initiated_by_person_id`, `created_at`, `deleted_at`. Partial unique index on `(person_a_id, person_b_id) WHERE deleted_at IS NULL`. Mirrors `relationship`'s canonical-order pattern but person-keyed.
+- [ ] Table: `id`, `person_a_id`/`person_b_id` (both `NOT NULL → person(id)`, `CHECK (person_a_id < person_b_id)` canonical), `initiated_by_person_id`, `created_at`, `deleted_at`. Partial unique index on `(person_a_id, person_b_id) WHERE deleted_at IS NULL`. Mirrors `relationship`'s canonical-order pattern but person-keyed. **No `status` column** — for pure-social a connection just exists (or is soft-deleted); "pending" lives in the inbox, not the edge. Add a status only when a real state (e.g. `blocked`) actually arrives (YAGNI).
 - [ ] RLS `person_connection_select`: `auth.uid() IN (person_a_id, person_b_id)`. `revoke all` / grant to `authenticated`.
 - **Accept (pgTAP):** two people get exactly one active edge; a third party sees zero rows; the unique index blocks a duplicate active pair.
 
@@ -177,8 +177,11 @@ Files: new `src/app/discover/DiscoverShell.tsx`, [page.tsx](../../src/app/discov
 
 ### DISC-7 — `list_discoverable_people()` RPC · **M**
 Files: new migration `<ts>_list_discoverable_people.sql`. Test: pgTAP.
-- [ ] SECURITY DEFINER, `set search_path=''`, safe fields only, mirrors the companies RPC + the verified gate. Returns `person_id, display_name, title, avatar_path, public_handle, company_id, company_name, company_logo_path, company_country, company_city, type_codes[]`. WHERE: `p.deleted_at is null and c.deleted_at is null and c.verification_status='verified' and c.id is distinct from current_company_id() and p.id is distinct from auth.uid() and public.is_caller_verified()`. `limit 200`.
-- **Accept (pgTAP):** returns people at other verified companies with safe fields + `type_codes`; excludes own company, self, unverified, soft-deleted; unverified caller gets zero; no email/phone.
+- [ ] SECURITY DEFINER, `set search_path=''`, safe fields only, mirrors the companies RPC + the verified gate. Returns `person_id, display_name, title, avatar_path, public_handle, company_id, company_name, company_logo_path, company_country, company_city, type_codes[]`, **plus `connection_state text`** (see below). WHERE: `p.deleted_at is null and c.deleted_at is null and c.verification_status='verified' and c.id is distinct from current_company_id() and p.id is distinct from auth.uid() and public.is_caller_verified()`. `limit 200`.
+- [ ] **`connection_state` per person** — mirrors the company RPC's state so the "+" knows what to render (without it, the button can't tell not-connected / requested / already-connected apart and would allow duplicate spam). Compute over the person graph: `connected` if an active `person_connection` joins caller↔person; `requested` if a pending `connect_person` I sent to them exists; `incoming` if a pending `connect_person` they sent to me exists; else `none`. (This is the person-graph analogue — do NOT reuse the company `connection_state`.)
+- **Accept (pgTAP):** returns people at other verified companies with safe fields + `type_codes` + correct `connection_state` for each of the 4 states; excludes own company, self, unverified, soft-deleted; unverified caller gets zero; no email/phone.
+
+> **Dependency note:** DISC-8 maps `connection_state` into `DiscoverPerson`; DISC-9/DISC-10 render the "+"/pending/connected button off it. So DISC-7 must land the state, and it reads `person_connection` (PG-1) + `pending_inbox_item.connect_person` (PG-4) — i.e. DISC-7 now depends on PG-1 + PG-4, not just the person table.
 
 ### DISC-8 — `people.ts` fetch + mapper · **S**
 Files: new `src/app/discover/people.ts`.
@@ -260,5 +263,5 @@ Files: `MyNetworkSection.tsx` / person card + open-thread wiring.
 ## Follow-ups (after this lane)
 - **Ladder a person connection into a company relationship** (the one commercial bridge deliberately deferred).
 - Real ad content/serving in the banner.
-- Server-side search/pagination when the directory grows.
+- Server-side search/pagination when the directory grows — **must move the pharmacy gate server-side in the same change** (invariant #5 coupling).
 - Sector (`business_category`) filter — add the join to the RPC + a facet.
