@@ -15,7 +15,7 @@
  * component for both create and edit, and DecisionBar.tsx is the ONE place a
  * held change resolves:
  *   - the PROPOSER (whoever gave the latest version) sees "Waiting for the other
- *     side to sign." + (while a change is held) a "Negotiate (withdraw change)"
+ *     side to sign." + (while a change is held) a "Withdraw changes"
  *     button — withdrawDealChange, no reason prompt.
  *   - the SIGNER (the other party) sees, while a change is held, "Negotiate"
  *     (declines the held change — confirmDealChange(decision:'decline'), an
@@ -99,7 +99,7 @@ function editPencil(page: Page) {
  * edit created a real `deal_pending_change` row.
  */
 function heldChangeButton(page: Page) {
-  return dealPanel(page).getByRole('button', { name: /negotiate \(withdraw change\)/i })
+  return dealPanel(page).getByRole('button', { name: /withdraw changes/i })
 }
 
 /**
@@ -173,7 +173,7 @@ async function openP2pChat(page: Page, who: Who) {
 test('held-not-committed + auto-accept: edit holds, live card version unchanged, proposer pre-accepted', async () => {
   await proposeChangeAsAlice(alicePage, '250')
 
-  // a held change now exists on Alice's side — "Negotiate (withdraw change)"
+  // a held change now exists on Alice's side — "Withdraw changes"
   // ONLY renders while a change is actually held (unlike the baseline "Waiting
   // for the other side to sign." text, which is also true of a fresh, unedited
   // draft and so cannot prove a change landed).
@@ -302,7 +302,7 @@ test('decline-discards: decline leaves the card unchanged, clears pending, unloc
 test('withdraw: proposer withdraws with no reason prompt, clears pending, unlocks the pencil', async () => {
   await proposeChangeAsAlice(alicePage, '250')
 
-  // Alice withdraws — "Negotiate (withdraw change)" takes back the change with
+  // Alice withdraws — "Withdraw changes" takes back the change with
   // NO reason prompt (no dialog opens, withdrawDealChange). This is Alice's own
   // action, so her side updates locally.
   await heldChangeButton(alicePage).click()
