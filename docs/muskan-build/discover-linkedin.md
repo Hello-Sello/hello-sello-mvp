@@ -85,7 +85,8 @@ page.tsx (SERVER) fetches ALL data:
 
 > **Build order:** the **directory display** (DISC-1..9,15) is independent of the person graph — it can run first / in parallel. The **person graph** (PG-*) is the critical path for the Requests/Network sections. Suggested waves at the bottom.
 
-### ─────────── Foundation · Database (PG-1 … PG-7) ───────────
+### ─────────── Foundation · Database (PG-1 … PG-7) — ✅ DONE + verified 2026-07-24 ───────────
+> **All 7 shipped TDD (red→green), verified on a fresh `supabase db reset` (clean chain + seed) with 5 new pgTAP suites green + 2 existing suites regression-green.** Commits on `claude/muskan/work`. **One build-time design refinement worth noting (→ ARCHITECTURE-NOTES at wrap):** PG-4 made `pending_inbox_item.receiver_company_id` **nullable** and added four per-type CHECKs so exactly one of `receiver_person_id` / `receiver_company_id` is set. Reason: a `connect_person` request must carry NO company target, else the existing `inbox_select` company branch would surface a *personal* request to all the target's colleagues. This keeps person requests strictly person-scoped. The inbox is Ayush's base lane — flagged in sync for his eyes.
 
 ### PG-1 — `person_connection` edge table · **S**
 Files: new migration `<ts>_person_connection.sql`. Test: pgTAP.
