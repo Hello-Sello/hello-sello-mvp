@@ -297,87 +297,6 @@ export type Database = {
         }
         Relationships: []
       }
-      buyer_resale_price: {
-        Row: {
-          buyer_company_id: string
-          created_at: string
-          created_by: string | null
-          gross: number | null
-          id: string
-          net: number | null
-          product_id: string | null
-          product_name: string
-          supplier_company_id: string | null
-          supplier_name: string
-          updated_at: string
-          updated_by: string | null
-        }
-        Insert: {
-          buyer_company_id: string
-          created_at?: string
-          created_by?: string | null
-          gross?: number | null
-          id?: string
-          net?: number | null
-          product_id?: string | null
-          product_name: string
-          supplier_company_id?: string | null
-          supplier_name: string
-          updated_at?: string
-          updated_by?: string | null
-        }
-        Update: {
-          buyer_company_id?: string
-          created_at?: string
-          created_by?: string | null
-          gross?: number | null
-          id?: string
-          net?: number | null
-          product_id?: string | null
-          product_name?: string
-          supplier_company_id?: string | null
-          supplier_name?: string
-          updated_at?: string
-          updated_by?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "buyer_resale_price_buyer_company_id_fkey"
-            columns: ["buyer_company_id"]
-            isOneToOne: false
-            referencedRelation: "company"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "buyer_resale_price_created_by_fkey"
-            columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "person"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "buyer_resale_price_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
-            referencedRelation: "product"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "buyer_resale_price_supplier_company_id_fkey"
-            columns: ["supplier_company_id"]
-            isOneToOne: false
-            referencedRelation: "company"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "buyer_resale_price_updated_by_fkey"
-            columns: ["updated_by"]
-            isOneToOne: false
-            referencedRelation: "person"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       chat_message: {
         Row: {
           body: string
@@ -2758,7 +2677,8 @@ export type Database = {
           id: string
           metadata: Json
           note: string | null
-          receiver_company_id: string
+          receiver_company_id: string | null
+          receiver_person_id: string | null
           sender_company_id: string
           sender_person_id: string
           status: string
@@ -2775,7 +2695,8 @@ export type Database = {
           id?: string
           metadata?: Json
           note?: string | null
-          receiver_company_id: string
+          receiver_company_id?: string | null
+          receiver_person_id?: string | null
           sender_company_id: string
           sender_person_id: string
           status?: string
@@ -2792,7 +2713,8 @@ export type Database = {
           id?: string
           metadata?: Json
           note?: string | null
-          receiver_company_id?: string
+          receiver_company_id?: string | null
+          receiver_person_id?: string | null
           sender_company_id?: string
           sender_person_id?: string
           status?: string
@@ -2826,6 +2748,13 @@ export type Database = {
             columns: ["receiver_company_id"]
             isOneToOne: false
             referencedRelation: "company"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pending_inbox_item_receiver_person_id_fkey"
+            columns: ["receiver_person_id"]
+            isOneToOne: false
+            referencedRelation: "person"
             referencedColumns: ["id"]
           },
           {
@@ -3018,6 +2947,55 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "company"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      person_connection: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          id: string
+          initiated_by_person_id: string
+          person_a_id: string
+          person_b_id: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          initiated_by_person_id: string
+          person_a_id: string
+          person_b_id: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          initiated_by_person_id?: string
+          person_a_id?: string
+          person_b_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "person_connection_initiated_by_person_id_fkey"
+            columns: ["initiated_by_person_id"]
+            isOneToOne: false
+            referencedRelation: "person"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "person_connection_person_a_id_fkey"
+            columns: ["person_a_id"]
+            isOneToOne: false
+            referencedRelation: "person"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "person_connection_person_b_id_fkey"
+            columns: ["person_b_id"]
+            isOneToOne: false
+            referencedRelation: "person"
             referencedColumns: ["id"]
           },
         ]
@@ -3811,70 +3789,6 @@ export type Database = {
         }
         Relationships: []
       }
-      purchase_history_import: {
-        Row: {
-          buyer_company_id: string
-          created_at: string
-          created_by: string | null
-          currency: string
-          id: string
-          product_name: string
-          purchase_date: string
-          quantity: number
-          supplier_name: string
-          unit: string
-          unit_price: number
-        }
-        Insert: {
-          buyer_company_id: string
-          created_at?: string
-          created_by?: string | null
-          currency?: string
-          id?: string
-          product_name: string
-          purchase_date: string
-          quantity: number
-          supplier_name: string
-          unit: string
-          unit_price: number
-        }
-        Update: {
-          buyer_company_id?: string
-          created_at?: string
-          created_by?: string | null
-          currency?: string
-          id?: string
-          product_name?: string
-          purchase_date?: string
-          quantity?: number
-          supplier_name?: string
-          unit?: string
-          unit_price?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "purchase_history_import_buyer_company_id_fkey"
-            columns: ["buyer_company_id"]
-            isOneToOne: false
-            referencedRelation: "company"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "purchase_history_import_created_by_fkey"
-            columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "person"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "purchase_history_import_unit_fkey"
-            columns: ["unit"]
-            isOneToOne: false
-            referencedRelation: "deal_line_unit"
-            referencedColumns: ["code"]
-          },
-        ]
-      }
       relationship: {
         Row: {
           company_a_id: string
@@ -4631,6 +4545,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      accept_person_connection: { Args: { p_item_id: string }; Returns: string }
       approve_company: { Args: { p_company_id: string }; Returns: undefined }
       approve_join_request: {
         Args: { p_request_id: string; p_role?: string }
@@ -4656,6 +4571,7 @@ export type Database = {
         Args: { p_person_id: string; p_role: string }
         Returns: undefined
       }
+      claim_deal_ticket: { Args: { p_deal_card_id: string }; Returns: string }
       confirm_deal_change: {
         Args: { p_deal_card_id: string; p_decision: string; p_reason: string }
         Returns: number
@@ -4696,6 +4612,7 @@ export type Database = {
       current_superadmin_group_id: { Args: never; Returns: string }
       deactivate_account: { Args: never; Returns: undefined }
       deactivate_company: { Args: never; Returns: undefined }
+      deliver_deal: { Args: { p_deal_card_id: string }; Returns: undefined }
       edit_deal_draft: {
         Args: {
           p_currency: string
