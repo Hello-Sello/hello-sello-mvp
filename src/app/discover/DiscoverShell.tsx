@@ -1,19 +1,24 @@
+"use client";
+
 /**
- * Discover — closed, tagged company directory. The companies list (search +
- * filters + rows + Connect CTA) is now CompaniesSection (DISC-5, behavior-
- * preserving extraction); this keeps the page hero + outer layout. It is
- * superseded by DiscoverShell (DISC-6) once the ads banner + people / requests /
- * network sections stack in.
+ * DiscoverShell — the one scrolling Discover page (DISC-6). Stacks the sections
+ * top-to-bottom per Variant D: ads banner → (Requests → My Network → New People
+ * added in DISC-9/12/14) → Companies. Client component so it can later coordinate
+ * cross-section state; its data is server-fetched in page.tsx and passed as props
+ * (one paint, no loading flash).
  */
 import { Lock } from "lucide-react";
 import type { DiscoverCompany } from "./companies";
+import { DiscoverAdsBanner } from "./DiscoverAdsBanner";
 import { CompaniesSection } from "./sections/CompaniesSection";
 
-export function DiscoverDirectory({ companies }: { companies: DiscoverCompany[] }) {
+export function DiscoverShell({ companies }: { companies: DiscoverCompany[] }) {
   return (
     <div className="mx-auto h-full w-full max-w-6xl overflow-auto px-4 py-8 sm:px-6">
-      {/* CENTER zone: closed-network badge + title + intro */}
-      <div className="text-center">
+      <DiscoverAdsBanner />
+
+      {/* Companies section hero (other sections stack above it in DISC-9/12/14). */}
+      <div className="mt-8 text-center">
         <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-soft/50 px-3 py-1 text-xs font-semibold text-brand-deep">
           <Lock size={13} /> Closed network
         </span>
@@ -24,6 +29,7 @@ export function DiscoverDirectory({ companies }: { companies: DiscoverCompany[] 
           Search the directory, then request entry. Shops stay private until you&apos;re let in.
         </p>
       </div>
+
       <CompaniesSection companies={companies} />
     </div>
   );
