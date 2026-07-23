@@ -26,14 +26,14 @@ import type { DiscoverCompany, ConnectionState } from "./companies";
 import { COUNTRIES } from "@/shared/geo/countries";
 import { sendConnectRequest } from "./actions";
 import { VerifiedBadge } from "@/shared/ui/VerifiedBadge";
+import { SELLER_TYPE_LABELS, isListedCompany } from "./taxonomy";
 
-// Seller-side types only — no Pharmacy filter (D-12 Instagram model).
-const SELLER_TYPES = ["Cultivator", "Wholesaler", "Importer"] as const;
+// The non-pharmacy activity labels drive the type facets (post-taxonomy migration).
+const SELLER_TYPES = SELLER_TYPE_LABELS;
 
-// A company is listed by default if it has a seller-side type (listed even if
-// also a Pharmacy). Pharmacy-only companies fail this and are search-only.
-const isListed = (c: DiscoverCompany) =>
-  c.categories.some((t) => SELLER_TYPES.includes(t as (typeof SELLER_TYPES)[number]));
+// A company is listed by default unless it is pharmacy-ONLY; pharmacy-only
+// companies are hidden and search-only (DISC-3).
+const isListed = (c: DiscoverCompany) => isListedCompany(c.categories);
 
 const initials = (name: string) =>
   name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();

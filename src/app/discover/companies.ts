@@ -1,5 +1,6 @@
 import { createClient } from "@/shared/db/server";
 import { countryName } from "@/shared/geo/countries";
+import { categoryLabel } from "./taxonomy";
 
 /**
  * Discover directory data (Track 1, slice 1). Reads the real verified-company
@@ -25,17 +26,6 @@ export type DiscoverCompany = {
   logoUrl: string | null;
   connectionState: ConnectionState;
 };
-
-// Live data stores lowercase type codes + ISO-2 country codes; map to display labels.
-const CATEGORY_LABELS: Record<string, string> = {
-  cultivator: "Cultivator",
-  wholesaler: "Wholesaler",
-  importer: "Importer",
-  pharmacy: "Pharmacy",
-};
-
-const categoryLabel = (code: string) =>
-  CATEGORY_LABELS[code] ?? code.charAt(0).toUpperCase() + code.slice(1);
 
 // Row shape from the RPC. Typed locally — the function isn't in the generated
 // database.types, same pattern the codebase uses for get_public_profile / create_deal_draft.
