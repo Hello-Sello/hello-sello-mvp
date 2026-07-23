@@ -229,6 +229,7 @@ Files: new `src/app/discover/sections/MyNetworkSection.tsx`; wire into shell + p
 - **Accept:** your active company connections AND person connections both render; layout matches the prototype.
 
 ### ─────────── Person-to-person DM (PG-12 … PG-13) ───────────
+> **PG-12 ✅ DONE + verified 2026-07-24** — `getConversations` company-less p2p fallback shipped (pure helper `companylessP2pDisplay` + a `relationship_id == null` branch in Ayush's `store.ts`, sync-locked; anchored paths byte-unchanged; unit 3/3, full suite 202 green). **PG-13 folded into DISC-14** (see note): a connected person's "Message" button is only mountable on the My Network person row, AND opening a company-less p2p needs two more pieces — (a) `list_my_person_connections` must also return the p2p `thread_id`, and (b) `ChatView`'s deep-link (today `?relationship=`) must accept `?thread=<id>` since a company-less DM has no relationship (SHARED ChatView — sync-lock). Building it with DISC-14 avoids an orphan component + batches the ChatView touch.
 
 ### PG-12 — `getConversations` company-less p2p fallback · **S**
 Files: [store.ts](../../src/modules/messaging/supabase/store.ts). ⚠️ shared `messaging` — **sync-lock first**. Test: unit.
