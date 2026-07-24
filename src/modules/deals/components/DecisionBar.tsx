@@ -7,7 +7,10 @@
  * states, never the 8-part body (the user's rule).
  *
  * Lifecycle (single-sign, the user's flow):
- *   - DRAFT: the party who did NOT give the latest version SIGNS (direct, NO reason)
+ *   - UNSENT (private draft, Phase-12 D-12): only the creator's company can see the
+ *     card (RLS), and the ONE action is "Send deal" - the card's Send button is the
+ *     only send path in the app; sending flips the deal into negotiation.
+ *   - NEGOTIATION: the party who did NOT give the latest version SIGNS (direct, NO reason)
  *     or Negotiates; the giver waits + can withdraw a held change. Either may Decline
  *     (= close the deal). "Give" = send a change (proposer) or, on a fresh draft with
  *     no change, create it (the initiator).
@@ -20,12 +23,13 @@
  * reason string in the RPC (REAS-01), so an AUTO reason is passed silently.
  */
 import { useRef, useState, type ChangeEvent, type ReactNode } from "react";
-import { Pencil, PenLine, Ticket, Upload, X } from "lucide-react";
+import { Pencil, PenLine, Send, Ticket, Upload, X } from "lucide-react";
 import {
   confirmDealChange,
   declineDeal,
   finalizeDeal,
   reopenTicket,
+  sendDeal,
   signDeal,
   withdrawDealChange,
 } from "../actions";
@@ -48,11 +52,15 @@ export function DecisionBar({
   const status = data.card.status;
   const change = data.pendingChange;
   const isSeller = data.viewerSide === "seller";
-  // the deal's INITIATOR (who gave the first version): the seller for an 'offer',
-  // the buyer for an 'order'. Tells us who signs a fresh draft with no held change.
-  const dealType = (data.card as { deal_type?: string }).deal_type;
-  const iInitiated =
-    (dealType === "offer" && isSeller) || (dealType === "order" && !isSeller);
+  // the deal's INITIATOR (who gave the first version) - the STORED fact (D-10):
+  // `initiating_company_id`, selected by getDealCard, compared against the
+  // viewer's company. The view carries no viewer company id, but sellerCompanyId
+  // + viewerSide pin it without a new read: the initiator sits on the seller
+  // side iff initiating_company_id === sellerCompanyId, and the viewer initiated
+  // iff that side is their own. Tells us who signs a fresh deal with no held change.
+  const initiatorSide =
+    data.card.initiating_company_id === data.sellerCompanyId ? "seller" : "buyer";
+  const iInitiated = data.viewerSide != null && initiatorSide === data.viewerSide;
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -126,6 +134,25 @@ export function DecisionBar({
     </button>
   );
 
+  // ---- UNSENT (private draft, D-12): the card's Send button is THE one send
+  // path in the app. RLS hides an unsent card from the counterparty entirely, so
+  // every viewer who can reach this branch is on the initiating company's side
+  // (iInitiated is true by construction) - no non-initiator empty state needed.
+  // The negotiation-era Sign/Decline never render here (and their RPCs guard on
+  // 'negotiation' server-side anyway).
+  if (status === "unsent") {
+    return shell(
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => void run(() => sendDeal(dealCardId))}
+        className="dc-btn-sign flex w-full items-center justify-center gap-1.5 rounded-full px-3 py-2.5 text-[13px] font-bold disabled:opacity-50"
+      >
+        <Send className="h-3.5 w-3.5" /> {busy ? "Sending…" : "Send deal"}
+      </button>,
+    );
+  }
+
   // ---- DONE (executed): the single "Open a ticket" button ----
   if (status === "done") {
     return shell(
@@ -197,7 +224,7 @@ export function DecisionBar({
     );
   }
 
-  // ---- DRAFT (negotiation / initial): the sign / negotiate / decline stage ----
+  // ---- NEGOTIATION (sent, bargaining): the sign / negotiate / decline stage ----
   // who signs? the party who did NOT give the latest version.
   const iGaveLatest = change ? change.iProposed : iInitiated;
   if (iGaveLatest) {

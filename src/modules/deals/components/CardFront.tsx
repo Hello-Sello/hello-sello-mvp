@@ -141,6 +141,28 @@ function lineTotalOf(l: EditLine): number | null {
   return lineValueOf(l.quantity, l.unit, l.unitPrice) * Math.max(1, l.units);
 }
 
+/** EditLine -> DraftLineInput: the ONE payload mapping shared by birth (Save
+ *  draft / auto-save-on-close, D-13) and negotiation changes. `units` is a
+ *  frontend-only mock and never enters the payload. */
+function toDraftLine(l: EditLine): DraftLineInput {
+  return {
+    productId: l.productId,
+    lineItemId: l.lineItemId ?? undefined,
+    productName: l.productName,
+    quantity: l.quantity,
+    unit: l.unit,
+    unitPrice: l.unitPrice,
+    currency: l.currency,
+    cultivar: l.cultivar,
+    pzn: l.pzn,
+    thcPercent: l.thcPercent,
+    cbdPercent: l.cbdPercent,
+    batchId: l.batchId,
+    batchNumber: l.batchNumber,
+    ownInput: l.ownInput,
+  };
+}
+
 /* FRONTEND-ONLY mock option lists (chj/07-08) - the edit dropdowns for batch +
    unit size. No backend yet; the current value is always merged in so it stays
    selectable. Ported from the chat-flipdoc prototype. */
@@ -221,6 +243,8 @@ export function CardFront({
   viewerCompanyId,
   createMode = false,
   onCreate,
+  onCloseCreate,
+  registerCloseRequest,
   onExitEdit,
   registerExitRequest,
 }: {
@@ -244,14 +268,29 @@ export function CardFront({
    *  no X (e.g. the workspace/inline mounts that have no panel to close). */
   onClose?: () => void;
   /**
-   * CREATE MODE (chj/07-08): the card is a NOT-yet-born draft. Edit mode is forced
-   * on, the id-bound sections (promotion / Open Items / margin) are hidden, and the
-   * footer becomes "Send deal" instead of "Send change". Pressing it hands the
-   * assembled draft up via `onCreate`; the strip runs `createDeal` + opens the born
-   * card. This replaced the old CreateDealForm.
+   * CREATE MODE (chj/07-08, reshaped Phase-12 D-12/D-13): the card is a NOT-yet-
+   * born draft. Edit mode is forced on, the id-bound sections (promotion / Things
+   * to do / margin) are hidden, and the footer becomes "Save draft" instead of
+   * "Send change". Pressing it hands the assembled draft up via `onCreate`; the
+   * host runs `createDeal` (birth only - NO delivery) and keeps the born 'unsent'
+   * card open, where the DecisionBar owns the one "Send deal" button. This
+   * replaced the old CreateDealForm.
    */
   createMode?: boolean;
   onCreate?: (input: CardCreateInput) => Promise<void>;
+  /**
+   * CREATE MODE close (D-13): called INSTEAD of onClose when the user dismisses
+   * the not-yet-born draft (X / Cancel). Hands up the assembled draft when the
+   * form has content (the host births it silently - never lose work), or null
+   * when the card is empty (discard - the locked C5 rule). Absent -> plain onClose.
+   */
+  onCloseCreate?: (input: CardCreateInput | null) => void;
+  /**
+   * CREATE MODE: the card registers its D-13 close rule here so the HOST can
+   * route its own dismiss doors (Escape, opening another card) through the same
+   * content-check - mirrors registerExitRequest's ref pattern.
+   */
+  registerCloseRequest?: (fn: () => void) => void;
   /** leave edit mode - called after a successful "Send changes" so the diff shows.
    *  Owned by DealCard (which holds editMode). */
   onExitEdit?: () => void;
@@ -408,39 +447,60 @@ export function CardFront({
     setLines((cur) => cur.map((l) => (l.key === key ? { ...lineFromCatalog(p), key } : l)));
   }
 
-  // CREATE MODE (chj/07-08): "Send deal" on a not-yet-born draft. Same line
-  // mapping as onSendChange, but it hands the draft UP via onCreate (the strip
-  // runs createDeal + opens the born card) instead of proposeDealChange. No
-  // change reason - a first draft is not a negotiation.
+  // CREATE MODE (chj/07-08, D-13): "Save draft" on a not-yet-born draft. Same
+  // line mapping as doSendChange, but it hands the draft UP via onCreate (the
+  // host runs createDeal + keeps the born 'unsent' card open) instead of
+  // proposeDealChange. Birth only - no delivery; sending is the born card's
+  // DecisionBar "Send deal" button (D-12). No change reason - a first draft is
+  // not a negotiation.
+  // the assembled CardCreateInput from the working form state - used by the
+  // Save-draft button AND the auto-save-on-close path (D-13).
+  function assembleCreateInput(): CardCreateInput {
+    return {
+      lines: lines.map(toDraftLine),
+      freeDelivery: editFreeDelivery,
+      dueDate: editDueDate || null,
+      paymentTermsCode: editPaymentCode || null,
+      note: editNote || null,
+    };
+  }
+
+  // D-13 'has content': anything the birth would PERSIST - at least one line
+  // item, a note, a due date, payment terms, or free delivery flipped on. The
+  // expiry field is a frontend-only mock (never persisted) and does NOT count -
+  // birthing on it alone would save an empty card.
+  const hasCreateContent =
+    lines.length > 0 ||
+    !!(editNote && editNote.trim()) ||
+    !!editDueDate ||
+    !!editPaymentCode ||
+    editFreeDelivery;
+
+  // D-13 close rule (create mode): closing WITH content hands the draft up for a
+  // silent auto-birth (never lose work); an EMPTY card discards (locked C5 rule).
+  // The host owns the actual birth + panel close via onCloseCreate.
+  function requestCloseCreate() {
+    if (!onCloseCreate) {
+      onClose?.();
+      return;
+    }
+    onCloseCreate(hasCreateContent ? assembleCreateInput() : null);
+  }
+
+  // hand the HOST the same close rule for its own dismiss doors (Escape /
+  // opening another card) - a fresh closure every render so it always sees the
+  // latest form state, mirroring registerExitRequest below.
+  useEffect(() => {
+    if (createMode) registerCloseRequest?.(() => requestCloseCreate());
+  });
+
   async function onSendCreate() {
     if (sendBusy || !onCreate || lines.length === 0) return;
     setSendBusy(true);
     setSendError(null);
     try {
-      const payloadLines: DraftLineInput[] = lines.map((l) => ({
-        productId: l.productId,
-        lineItemId: l.lineItemId ?? undefined,
-        productName: l.productName,
-        quantity: l.quantity,
-        unit: l.unit,
-        unitPrice: l.unitPrice,
-        currency: l.currency,
-        cultivar: l.cultivar,
-        pzn: l.pzn,
-        thcPercent: l.thcPercent,
-        cbdPercent: l.cbdPercent,
-        batchId: l.batchId,
-        batchNumber: l.batchNumber,
-        ownInput: l.ownInput,
-      }));
-      await onCreate({
-        lines: payloadLines,
-        freeDelivery: editFreeDelivery,
-        dueDate: editDueDate || null,
-        paymentTermsCode: editPaymentCode || null,
-        note: editNote || null,
-      });
-      // the strip dispatches hs:open-deal-card + closes this create panel on success.
+      await onCreate(assembleCreateInput());
+      // the host swaps this create panel for the born 'unsent' card on success.
     } catch (e) {
       setSendError(e instanceof Error ? e.message : "Could not create the deal.");
     } finally {
@@ -498,25 +558,9 @@ export function CardFront({
     setSendBusy(true);
     setSendError(null);
     try {
-      const payloadLines: DraftLineInput[] = lines.map((l) => ({
-        productId: l.productId,
-        lineItemId: l.lineItemId ?? undefined,
-        productName: l.productName,
-        quantity: l.quantity,
-        unit: l.unit,
-        unitPrice: l.unitPrice,
-        currency: l.currency,
-        cultivar: l.cultivar,
-        pzn: l.pzn,
-        thcPercent: l.thcPercent,
-        cbdPercent: l.cbdPercent,
-        batchId: l.batchId,
-        batchNumber: l.batchNumber,
-        ownInput: l.ownInput,
-      }));
       await proposeDealChange({
         dealCardId: cardId,
-        lines: payloadLines,
+        lines: lines.map(toDraftLine),
         freeDelivery: editFreeDelivery,
         dueDate: editDueDate || null,
         paymentTermsCode: editPaymentCode || null,
@@ -575,11 +619,13 @@ export function CardFront({
              D1 shell, so it stays PINNED while the paper scrolls. ---- */}
       <div className="dc-titlebar flex items-center gap-2 py-2.5 pl-12 pr-12">
         {/* close the panel - lives ON the title bar now (no separate strip above),
-            so the X shares this line instead of costing its own row. */}
+            so the X shares this line instead of costing its own row. In create
+            mode it routes through the D-13 close rule (auto-save with content,
+            discard when empty) instead of a plain close. */}
         {onClose && (
           <button
             type="button"
-            onClick={onClose}
+            onClick={createMode ? requestCloseCreate : onClose}
             aria-label="Close deal card"
             title="Close"
             className="dc-tb-btn grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full"
@@ -1181,8 +1227,9 @@ export function CardFront({
       </Sec>
 
       {/* ---- owner margin (private, "only you" - prototype .private-box) ----
-             hidden in create mode: the margin rolls up from born line-private rows
-             that do not exist yet. */}
+             hidden ONLY in create mode: the margin rolls up from born line-private
+             rows that do not exist yet. A born 'unsent' draft passes this gate
+             (D-17) - the private rows exist from birth, no extra plumbing. */}
       {!createMode && (
         <Sec>
           <div className="dc-private flex items-center gap-2 rounded-2xl px-3 py-2.5 text-[12px]">
@@ -1198,8 +1245,12 @@ export function CardFront({
         </Sec>
       )}
 
-      {/* ---- 6 · OPEN ITEMS (flat, D-15) ---- hidden in create mode: Open Items
-             live on the deal_workspace that is born with the card. */}
+      {/* ---- 6 · "Things to do" (the user-facing name; the component stays
+             OpenItems - flat, D-15) ---- hidden ONLY in create mode: the list
+             lives on the deal_workspace that is born WITH the card, so a born
+             'unsent' draft passes this gate too (D-17) - things created here
+             default private and stay invisible to the counterparty until Send
+             (RLS draft privacy). */}
       {!createMode && (
         <Sec>
           <OpenItems
@@ -1251,21 +1302,25 @@ export function CardFront({
              to send (edit mode) or a held change to Negotiate / Sign. ---- */}
       {editMode ? (
         createMode ? (
-          /* CREATE MODE footer (chj/07-08): a brand-new draft is not a
-             negotiation, so there is no change-reason box. "Send deal" hands the
-             draft up + the strip births it via createDeal.*/
+          /* CREATE MODE footer (chj/07-08, D-13): a brand-new draft is not a
+             negotiation, so there is no change-reason box. "Save draft" hands the
+             draft up + the host births it via createDeal - a private 'unsent'
+             card; the born card's DecisionBar owns "Send deal" (D-12). */
           <div className="dc-decision px-4 pb-3.5 pt-3">
             <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--dc-ink-38)]">
-              Send this deal
+              Save this draft
             </div>
             <p className="mb-2 text-[11px] text-[color:var(--dc-ink-55)]">
-              Add your products, conditions and a note, then send it straight into the chat.
+              Add your products, conditions and a note. Saving keeps it as a private
+              draft - you send it from the card once it is ready.
             </p>
             {sendError && <p className="mt-1 text-[11px] text-danger">{sendError}</p>}
             <div className="mt-2 flex items-center justify-end gap-2">
+              {/* Cancel = a close door too (D-13): with content it silently saves
+                  the draft, empty it discards - never a lost card. */}
               <button
                 type="button"
-                onClick={() => onClose?.()}
+                onClick={requestCloseCreate}
                 className="rounded-full px-3 py-1.5 text-[12px] font-semibold text-[color:var(--dc-ink-55)] ring-1 ring-black/10 transition hover:bg-black/5"
               >
                 Cancel
@@ -1276,7 +1331,7 @@ export function CardFront({
                 onClick={() => void onSendCreate()}
                 className="rounded-full bg-[color:var(--dc-pink)] px-4 py-1.5 text-[12px] font-bold text-white transition hover:bg-[color:var(--dc-pink-deep)] disabled:opacity-50"
               >
-                {sendBusy ? "Sending…" : "Send deal"}
+                {sendBusy ? "Saving…" : "Save draft"}
               </button>
             </div>
           </div>
