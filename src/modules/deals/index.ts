@@ -54,6 +54,8 @@ export {
 
 export { promotionSavings } from "./lib/promotion";
 
+export { canProposerEdit } from "./lib/draftEdit";
+
 export { dealChatUrl } from "./lib/dealChatUrl";
 
 export {

@@ -46,6 +46,7 @@ import {
 } from "../supabase/reads";
 import { confirmDetectedDeal } from "../actions";
 import { formatMoney } from "../lib/derive";
+import { canProposerEdit } from "../lib/draftEdit";
 import { DealCard } from "./DealCard";
 import type {
   DealCardStatus,
@@ -819,9 +820,11 @@ export function DealPin({
       {/* the stream. 04C: the card no longer floats inside the thread - in the chat
           variant it opens as a LEAFLET over the conversation rail (portaled into the
           rail slot below). The workspace variant has no rail, so it keeps the inline
-          right-floated overlay. PENCIL LOCK (DCHG-03): while a change is held, pass no
-          onEdit so the Edit pencil disappears on both sides (the DB unique index is the
-          real lock; this is the UX half). */}
+          right-floated overlay. PENCIL LOCK (DCHG-03, Wave 3b canProposerEdit): the
+          pencil shows only when the viewer may edit - an unsent draft, or a live deal
+          with no held change or the viewer's OWN held change (their replace-pencil);
+          the OTHER side's held change and any settled status hide it (the DB unique
+          index is the real lock; this is the UX half, consistent across every mount). */}
       <div className="relative min-h-0 flex-1">
         {children}
         {data && open && variant === "workspace" && (
@@ -829,7 +832,15 @@ export function DealPin({
             <div className="pointer-events-auto w-[390px] max-w-full self-start">
               <DealCard
                 data={data}
-                onEdit={data.pendingChange ? undefined : ALLOW_EDIT}
+                onEdit={
+                  canProposerEdit(
+                    data.card.status,
+                    data.pendingChange,
+                    data.pendingChange?.iProposed ?? false,
+                  )
+                    ? ALLOW_EDIT
+                    : undefined
+                }
               />
             </div>
           </div>
@@ -847,7 +858,15 @@ export function DealPin({
             <div className="min-h-0 flex-1 overflow-y-auto p-3">
               <DealCard
                 data={data}
-                onEdit={data.pendingChange ? undefined : ALLOW_EDIT}
+                onEdit={
+                  canProposerEdit(
+                    data.card.status,
+                    data.pendingChange,
+                    data.pendingChange?.iProposed ?? false,
+                  )
+                    ? ALLOW_EDIT
+                    : undefined
+                }
               />
             </div>
           </div>,

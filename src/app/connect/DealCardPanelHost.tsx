@@ -7,6 +7,7 @@ import {
   getThings,
   getDealPeople,
   createDeal,
+  canProposerEdit,
   DealCard,
   type DealCardView,
   type CardCreateInput,
@@ -351,14 +352,19 @@ export function DealCardPanelHost() {
             viewerPersonId={viewerPersonId}
             viewerCompanyId={viewerCompanyId}
             onClose={closePanel}
-            // Editing is allowed ONLY on a live open card with no held change
-            // (chj/07-08): unsent (a creator edits their private draft) or
-            // negotiation (today's edit flow, Phase-12). Once signed (confirmed),
-            // declined (cancelled), or executed (done) the card is locked; while
-            // a change is held the responder uses the DecisionBar.
+            // Editing gate (Wave 3b, canProposerEdit): an 'unsent' private draft
+            // is always editable in place (CR-02); a live 'negotiation' card is
+            // editable when there is no held change OR the held change is the
+            // viewer's OWN (they may replace it - withdraw + re-propose). The
+            // OTHER side's held change, and any settled status (confirmed /
+            // cancelled / done), lock the pencil; a held change the responder
+            // must act on routes through the DecisionBar instead.
             onEdit={
-              (data.card.status === "unsent" || data.card.status === "negotiation") &&
-              !data.pendingChange
+              canProposerEdit(
+                data.card.status,
+                data.pendingChange,
+                data.pendingChange?.iProposed ?? false,
+              )
                 ? ALLOW_EDIT
                 : undefined
             }

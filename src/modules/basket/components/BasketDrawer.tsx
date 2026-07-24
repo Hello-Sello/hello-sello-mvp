@@ -193,6 +193,9 @@ function Group({
     group.isOwnCompany ? null : (group.relationshipId ? { relationshipId: group.relationshipId, counterpartyPersonId: null } : null),
   );
   const [creating, setCreating] = useState(false);
+  // Mirrors DecisionBar.run(): a local error line so a failed birth surfaces in
+  // the panel instead of vanishing into an unhandled rejection (WR-06).
+  const [error, setError] = useState<string | null>(null);
 
   // Births the PRIVATE draft (status 'unsent'), then lands the viewer on the
   // born card - the drawer never sends (D-12: delivery is send_deal's alone,
@@ -205,6 +208,7 @@ function Group({
   async function draft() {
     if (!recipient) return;
     setCreating(true);
+    setError(null);
     try {
       const { dealCardId } = await createBasketDraft(group, {
         relationshipId: recipient.relationshipId,
@@ -217,6 +221,8 @@ function Group({
       await onChanged();
       onDrafted();
       router.push(dealChatUrl(recipient.relationshipId, dealCardId));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Something went wrong.");
     } finally {
       setCreating(false);
     }
@@ -261,6 +267,8 @@ function Group({
           <RecipientPicker onPick={setRecipient} />
         </div>
       )}
+
+      {error && <p className="mt-2 text-[11px] text-danger">{error}</p>}
 
       <button
         disabled={!recipient || creating}
