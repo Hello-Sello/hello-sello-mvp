@@ -92,6 +92,25 @@ always have an RPC path before the raw door closes).
 - **Migration before code** - the Wave-2 app code (thin RPC actions, sendDeal, the rename sweep)
   errors on cloud without these live (dropped RPCs + renamed statuses + the revoke).
 
+### Wave 3 addendum (2026-07-24, board Wave 3) - 3 NEW + 3 edited-in-place, same batch
+
+Wave 3 (DecisionBar fixed roles + the Phase-12 review fixes) edits three of the 10 above IN PLACE
+(still local-only, so the edits ride the same push) and adds three new migrations. **Push all 13 as
+ONE batch, in timestamp order, together with the app code.**
+
+| # | Migration file | What Wave 3 changed |
+|---|----------------|---------------------|
+| 2* | `20260724120100_confirm_deal_change_negotiation_membership.sql` | + WR-03 card-lock-before-pending-lock (deadlock fix); + IN-01 metadata MERGE instead of replace (keeps `counterparty_person_id` on commit) |
+| 7* | `20260724120600_deal_transition_rpcs.sql` | + WR-02 `decline_deal` negotiation-only guard (`unsent` raises, `confirmed`->`cancelled` dropped, `cancelled`/`done` idempotent); + WR-04 `finalize_deal` membership check moved ABOVE the `done` early-return (closes the status oracle) |
+| 10* | `20260724120900_revoke_deal_card_status_writes.sql` | CR-01 widened: `REVOKE INSERT, UPDATE, DELETE` (was UPDATE only) - closes the forged-born-`confirmed` INSERT door + the DELETE door |
+| 11 | `20260724121000_revoke_deliver_deal_execute.sql` | WR-01 `REVOKE EXECUTE ON deliver_deal FROM public, authenticated, anon`. `deliver_deal` is ALREADY ON CLOUD, so this is a NEW forward migration (an in-place edit would never reach prod). ⚠️ **`FROM public` is load-bearing** - a plain `authenticated, anon` revoke leaves PUBLIC's default EXECUTE grant intact. Nested `send_deal`/`confirm_detected_deal` callers run as owner, unaffected. |
+| 12 | `20260724121100_update_deal_draft.sql` | CR-02 NEW `update_deal_draft` RPC (initiator-only, `unsent`-only, rewrites v1 in place, no version bump, no pending row). ⚠️ deletes+reinserts v1 `deal_line_item` -> the ON-DELETE-CASCADE drops per-line `deal_line_item_private`; the app caller re-writes them after (same as `createDeal` after birth). |
+| 13 | `20260724121200_chat_message_type_pills_seed.sql` | E1 seed 2 pill types: `deal_change_proposed` + `deal_negotiation_requested` (additive, `on conflict do nothing`). |
+
+- **Proven LOCAL 2026-07-24:** `supabase db reset` green; 8 new/extended SQL suites PASS from a clean reset (`rls_isolation`, `deliver_deal`, `decline_deal`, `finalize_deal`, `confirm_deal_change_lock_order`, `confirm_deal_change_metadata_merge`, `update_deal_draft`, `chat_message_type_pills_seed`). Deal e2e 19 pass / 5 skip; 221/221 unit; `next build` clean.
+- **CR-01 (#10*) MUST be in this push** - it closes a real forged-signature hole. It is included above.
+- **Same-deploy rule still holds:** DB batch (13) + the Wave-2/3 app code ship as ONE unit; the pre-push `SELECT status, count(*) FROM deal_card GROUP BY 1` insurance query above still applies.
+
 ---
 
 ## ⚠️ PENDING (2026-07-10, Muskan) — 1 migration: person.company_id self-write lockdown (SECURITY)

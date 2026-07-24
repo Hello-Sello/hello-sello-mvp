@@ -1431,3 +1431,14 @@ Locked with Ayush 2026-07-22 in the deal-card problem-board session (21 code-ver
 
 (Source: the 2026-07-22 problem-board session with Ayush; per-item file:line evidence in Ayush's local `_workshop/notes/2026-07-22-deal-card-problems.md` - ask if you want the full board. Build order locked there too: docs first, then card shell + button labels, then the status machine (persisted private Draft, `negotiation` rename, `sendDeal`, RLS draft privacy, server-side fixed signer, pre-send Open Items - board codes A1-A3 + C2), then the decision bar, then diff/payload coverage, then the buyer door; the chat-module track runs parallel.)
 
+---
+
+## 2026-07-24 - Wave 3 built: decline only from `negotiation`; `deliver_deal` revoke must include `PUBLIC`
+
+Board Wave 3 (DecisionBar fixed roles B6/B1/B3/E1 + the Phase-12 review fixes CR-01/CR-02/WR-01..04/WR-06 + Infos) built and green on `claude/ayush/work` (all 8 backend SQL suites green from a clean `db reset`; 221/221 unit; deal e2e 19 pass / 5 skip; `next build` clean). Built test-first through a plan -> adversarial-verify -> build -> verify loop. Two decisions worth recording:
+
+- **A deal can be DECLINED only while in `negotiation`.** `decline_deal` now raises on an `unsent` private draft (declining it would flip it to `cancelled`, and the D-08 privacy predicate `status <> 'unsent'` would then un-hide it to the counterparty - a private draft is discarded, never declined) and rejects `confirmed`/`ticket_*` (a signed deal is not declinable); `cancelled`/`done` stay idempotent no-ops. *Why:* WR-02 - the guard ported byte-for-byte from the old action let a private draft OR a signed deal be cancelled via a direct PostgREST call; the state machine only intends decline from negotiation.
+- **Revoking `deliver_deal` EXECUTE must include `PUBLIC`, not just `authenticated`/`anon`.** Postgres grants function EXECUTE to `PUBLIC` by default, so a plain `REVOKE ... FROM authenticated, anon` leaves the client roles inheriting it through PUBLIC. The migration revokes `FROM public, authenticated, anon` (`service_role` keeps its own direct grant; nested SECURITY DEFINER callers run as owner and are unaffected). *Why:* WR-01 - red-first testing caught that the naive revoke did NOT close the door.
+
+Known residual (deferred, low impact): the replace-a-proposal path reverts a changed *term* (payment/delivery/free-delivery/note) to base because `getPendingChange` does not yet surface held terms - a `reads.ts` follow-up; the called-out LINE data-loss is fixed. IN-04 (the `unsent` label in `allocate/status.ts`) is parked for Muskan's vocab call.
+
