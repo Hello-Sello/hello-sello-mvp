@@ -59,6 +59,7 @@ export { dealChatUrl } from "./lib/dealChatUrl";
 export {
   getDealCard,
   getCurrentDealCardId,
+  getMyDraftDeals,
   getOwnCatalog,
   getWorkspace,
   getThings,
@@ -67,6 +68,7 @@ export {
   getPromotion,
   resolveP2pRecipient,
 } from "./supabase/reads";
+export type { DraftDealRow } from "./supabase/reads";
 export {
   toggleThingStatus,
   createThing,

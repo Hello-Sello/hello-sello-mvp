@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Minus, Plus, Trash2, FileText } from "lucide-react";
 import { useBasket } from "../BasketProvider";
 import { updateBasketLinePackCount, removeBasketLine } from "../supabase/writes";
 import { createBasketDraft } from "../actions";
 import { RecipientPicker } from "./RecipientPicker";
-import { dealChatUrl } from "@/modules/deals";
+import { dealChatUrl, getMyDraftDeals, type DraftDealRow } from "@/modules/deals";
 import type { BasketGroup } from "../types";
 
 /**
@@ -19,9 +19,35 @@ import type { BasketGroup } from "../types";
  * backdrop (mirrors ConversationList's `NewMenu`, the closest existing analog
  * for "small anchored dropdown under a trigger button"); this component only
  * renders the panel and returns null while closed.
+ *
+ * D-14: the drawer has TWO sides - Product Basket (the existing persistent
+ * products, no recipient needed) | Deal Basket (unsent draft deal cards from
+ * BOTH doors). The toggle lives fully inside this panel, so TopBar's trigger
+ * needed no change.
  */
 export function BasketDrawer() {
   const { view, open, setOpen, refresh } = useBasket();
+  // The active side + the Deal Basket rows. Hooks sit ABOVE the early return
+  // (rules of hooks); the drafts fetch only runs while the Deal Basket side is
+  // actually showing. null = not yet loaded (vs [] = loaded, empty).
+  const [side, setSide] = useState<"products" | "deals">("products");
+  const [drafts, setDrafts] = useState<DraftDealRow[] | null>(null);
+
+  useEffect(() => {
+    if (!open || side !== "deals") return;
+    let alive = true;
+    getMyDraftDeals()
+      .then((rows) => {
+        if (alive) setDrafts(rows);
+      })
+      .catch((e) => {
+        console.error("deal basket: drafts fetch failed", e);
+        if (alive) setDrafts([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [open, side]);
 
   if (!open) return null;
 
@@ -41,26 +67,115 @@ export function BasketDrawer() {
 
       <div className="mb-2 flex items-center gap-1.5 px-0.5">
         <h2 className="text-sm font-bold text-ink">Your basket</h2>
-        <span className="text-xs text-ink/50">
-          · {view.groups.length} {view.groups.length === 1 ? "shop" : "shops"}
-        </span>
+        {side === "products" && (
+          <span className="text-xs text-ink/50">
+            · {view.groups.length} {view.groups.length === 1 ? "shop" : "shops"}
+          </span>
+        )}
+      </div>
+
+      {/* D-14: the two-side toggle - a quiet segmented control */}
+      <div className="mb-2 flex rounded-lg bg-ink/5 p-0.5" role="tablist" aria-label="Basket sides">
+        <button
+          role="tab"
+          aria-selected={side === "products"}
+          onClick={() => setSide("products")}
+          className={`flex-1 rounded-md px-2 py-1 text-[11px] font-bold transition ${side === "products" ? "bg-white text-ink shadow-sm" : "text-ink/50"}`}
+        >
+          Product Basket
+        </button>
+        <button
+          role="tab"
+          aria-selected={side === "deals"}
+          onClick={() => setSide("deals")}
+          className={`flex-1 rounded-md px-2 py-1 text-[11px] font-bold transition ${side === "deals" ? "bg-white text-ink shadow-sm" : "text-ink/50"}`}
+        >
+          Deal Basket
+        </button>
       </div>
 
       <div className="max-h-[360px] overflow-y-auto">
-        {view.groups.length === 0 ? (
-          <p className="py-8 text-center text-xs text-ink/45">Your basket is empty.</p>
+        {side === "products" ? (
+          view.groups.length === 0 ? (
+            <p className="py-8 text-center text-xs text-ink/45">Your basket is empty.</p>
+          ) : (
+            view.groups.map((g) => (
+              <Group
+                key={g.sellerCompanyId}
+                group={g}
+                onChanged={refresh}
+                onDrafted={() => setOpen(false)}
+              />
+            ))
+          )
         ) : (
-          view.groups.map((g) => (
-            <Group
-              key={g.sellerCompanyId}
-              group={g}
-              onChanged={refresh}
-              onDrafted={() => setOpen(false)}
-            />
-          ))
+          <DraftList drafts={drafts} onOpened={() => setOpen(false)} />
         )}
       </div>
     </div>
+  );
+}
+
+/** A short "Updated 3d ago" hint from an ISO timestamp (mirrors DealPin's). */
+function timeAgo(iso: string): string {
+  const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.round(hrs / 24)}d ago`;
+}
+
+/**
+ * The Deal Basket side (D-14, deliberately MINIMAL per the deferred-ideas
+ * rule - richer tab features land with the deals-on-Home pass): the viewer's
+ * unsent drafts, RLS-scoped by the D-08 narrow so the list is always "my
+ * company's drafts" with no app-side filter. Clicking a row opens the born
+ * card the SAME way the create flow does (dealChatUrl -> ChatView re-fires
+ * hs:open-deal-card for the routed card).
+ */
+function DraftList({
+  drafts,
+  onOpened,
+}: {
+  drafts: DraftDealRow[] | null;
+  onOpened: () => void;
+}) {
+  const router = useRouter();
+
+  if (drafts === null) {
+    return <p className="py-8 text-center text-xs text-ink/45">Loading drafts…</p>;
+  }
+  if (drafts.length === 0) {
+    return <p className="py-8 text-center text-xs text-ink/45">No drafts yet.</p>;
+  }
+  return (
+    <>
+      {drafts.map((d) => (
+        <button
+          key={d.id}
+          onClick={() => {
+            onOpened();
+            router.push(dealChatUrl(d.relationshipId, d.id));
+          }}
+          className="flex w-full items-center gap-2 border-b border-ink/10 py-2.5 text-left last:border-0"
+        >
+          <FileText size={14} className="shrink-0 text-brand" />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[13px] font-semibold text-ink">
+              {d.counterpartyName ?? "Unknown company"}
+            </span>
+            <span className="block text-[10px] text-ink/50">
+              {d.dealType === "offer" ? "Offer" : "Order"} · Updated {timeAgo(d.updatedAt)}
+            </span>
+          </span>
+          {/* the grey private-draft badge - same shape as DealPin's (D-15) */}
+          <span className="shrink-0 rounded-full bg-ink/10 px-2 py-0.5 text-[10px] font-semibold text-ink/50">
+            Draft
+          </span>
+        </button>
+      ))}
+    </>
   );
 }
 
