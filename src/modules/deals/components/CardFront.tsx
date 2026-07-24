@@ -46,10 +46,13 @@ import {
 } from "lucide-react";
 import { averageMarginOf, formatMoney, lineValueOf, sumLineValue } from "../lib/derive";
 import { paymentTermLabel } from "../lib/paymentTerms";
+import { createClient } from "@/shared/db/client";
 import { getOwnCatalog, getPromotion } from "../supabase/reads";
-import { proposeDealChange } from "../actions";
+import { proposeDealChange, updateDealDraft, withdrawDealChange } from "../actions";
+import { resendAction } from "../lib/draftEdit";
 import { pairDealDiff, proposedLinesTotal, proposedLineTotal } from "./NegotiationDiff";
 import { DecisionBar } from "./DecisionBar";
+import { NegotiationStrip } from "./NegotiationStrip";
 import { PromotionTrack } from "./PromotionTrack";
 import { OpenItems } from "./OpenItems";
 import type {
@@ -133,6 +136,46 @@ function seedLines(data: DealCardView): EditLine[] {
     cbdPercent: li.cbdPercent,
     ownInput: marginByLineId.get(li.id) ?? null,
   }));
+}
+
+/**
+ * Seed the editable set from the viewer's OWN held draft (C3 data-loss fix).
+ *
+ * When a PROPOSER re-opens the card to edit their own held change, the working
+ * copy must start from what they PROPOSED, not the committed base version - else
+ * editing one line and re-sending drops the other lines they had proposed. The
+ * held `ProposalLineView` carries the SHARED shape only (name/qty/unit/price +
+ * productId); batch, measured THC/CBD and the private margin are carried across
+ * from the matching base line by product key (held drafts never see them).
+ */
+function seedLinesFromHeld(base: DealCardView): EditLine[] {
+  const held = base.pendingChange;
+  if (!held) return seedLines(base);
+  const baseByKey = new Map(
+    base.lineItems.map((li) => [li.productId ?? li.productName, li]),
+  );
+  const marginByLineId = new Map(base.lineMargins.map((m) => [m.lineItemId, m.ownInput]));
+  return held.lines.map((hl, i) => {
+    const match = baseByKey.get(hl.productId ?? hl.name);
+    return {
+      key: match?.id ?? `held-${i}`,
+      lineItemId: match?.id ?? null,
+      productId: hl.productId,
+      productName: hl.name,
+      quantity: hl.quantity,
+      unit: hl.unit,
+      units: 1,
+      unitPrice: hl.unitPrice,
+      currency: hl.currency,
+      cultivar: match?.cultivar ?? null,
+      pzn: match?.pzn ?? null,
+      batchId: match?.batchId ?? null,
+      batchNumber: match?.batchNumber ?? null,
+      thcPercent: match?.thcPercent ?? null,
+      cbdPercent: match?.cbdPercent ?? null,
+      ownInput: match ? marginByLineId.get(match.id) ?? null : null,
+    };
+  });
 }
 
 /** One line's total: the canonical per-gram value x the (mock) pack count. */
@@ -361,8 +404,14 @@ export function CardFront({
   // change commits or is declined. Gated on `!editMode` so a live edit (or a
   // realtime change mid-edit) never clobbers what the user is typing; create mode
   // seeds once (its empty draft never changes server-side).
+  // C3: the sig folds in the held draft's LINE SHAPE (not just version+summary),
+  // so a proposer's re-proposed change (same summary, changed quantities/price)
+  // still re-seeds the working copy from the fresh held draft on re-entry.
   const changeSig = data.pendingChange
-    ? `${data.pendingChange.baseVersion}:${data.pendingChange.summary}`
+    ? `${data.pendingChange.baseVersion}:${data.pendingChange.summary}:` +
+      data.pendingChange.lines
+        .map((l) => `${l.productId ?? l.name}:${l.quantity}:${l.unit}:${l.unitPrice}`)
+        .join(",")
     : "";
   const dataSig = createMode
     ? "new"
@@ -373,7 +422,9 @@ export function CardFront({
   const [seededFor, setSeededFor] = useState<string | null>(null);
   if (seededFor !== dataSig && (createMode || !editMode)) {
     setSeededFor(dataSig);
-    setLines(seedLines(data));
+    // C3: a proposer editing their OWN held change seeds from the held draft, so
+    // re-editing one line keeps the other lines they proposed (see seedLinesFromHeld).
+    setLines(data.pendingChange?.iProposed ? seedLinesFromHeld(data) : seedLines(data));
     setEditRowKey(null);
     setEditFreeDelivery(freeDeliveryStored);
     setEditDueDate(card.delivery_date_target ? card.delivery_date_target.slice(0, 10) : "");
@@ -518,8 +569,68 @@ export function CardFront({
   //   - the header ✓ via registerExitRequest (fromExit): a no-op simply leaves
   //     edit mode; a real change is SENT (never dropped) — on failure the card
   //     STAYS in edit mode with the error, so unsent work is never lost.
+  // CR-02: after update_deal_draft DELETE+reinserts the draft's lines, its ON
+  // DELETE CASCADE drops the per-line margin rows (deal_line_item_private). Re-
+  // write the viewer's OWN per-line margin exactly as createDeal re-writes it
+  // after birth: read the new line ids back (sort_order = input index) and upsert
+  // by (deal_line_item_id, company_id). Owner-only RLS (dli_private_all)
+  // authorizes the browser client to write its OWN company's rows; the company is
+  // the viewer's own side (never shared input), so no seller/buyer leak.
+  async function rewriteDraftLinePrivate() {
+    if (!lines.some((l) => l.ownInput != null)) return;
+    const companyId = viewerCompanyId ?? (isSeller ? data.sellerCompanyId : null);
+    if (!companyId) return;
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data: bornLines } = await supabase
+      .from("deal_line_item")
+      .select("id, sort_order")
+      .eq("deal_card_id", cardId)
+      .eq("version", card.version);
+    const idBySort = new Map((bornLines ?? []).map((r) => [r.sort_order, r.id]));
+    for (let i = 0; i < lines.length; i++) {
+      const l = lines[i];
+      if (l.ownInput == null) continue;
+      const lineId = idBySort.get(i);
+      if (!lineId) continue;
+      await supabase.from("deal_line_item_private").upsert(
+        {
+          deal_line_item_id: lineId,
+          company_id: companyId,
+          seller_margin: isSeller ? l.ownInput : null,
+          buyer_metric: isSeller ? null : l.ownInput,
+          created_by: user.id,
+        },
+        { onConflict: "deal_line_item_id,company_id" },
+      );
+    }
+  }
+
   async function doSendChange(opts?: { fromExit?: boolean }) {
     if (createMode || cardId === "new" || sendBusy || lines.length === 0) return;
+
+    // Which commit path this Send takes (Region C, draftEdit): an 'unsent' draft
+    // edits IN PLACE (updateDealDraft); a live deal with no held change proposes;
+    // my OWN held change is REPLACED (withdraw + re-propose); the OTHER side's
+    // held change BLOCKS editing.
+    const path = resendAction(
+      card.status,
+      data.pendingChange,
+      data.pendingChange?.iProposed ?? false,
+    );
+
+    // BLOCKED: the other side holds the change - the proposer cannot edit it.
+    // (canProposerEdit already hides the pencil across mounts; this is the
+    // belt-and-braces half in case a stale mount reaches here.)
+    if (path === "blocked") {
+      setSendError(
+        "The other side proposed this change - you cannot edit it. Sign, Negotiate, or wait.",
+      );
+      return;
+    }
 
     // change detection vs the server card. `units` is a frontend-only mock and never
     // enters the payload, so a units-only bump correctly does NOT propose.
@@ -555,18 +666,50 @@ export function CardFront({
       return;
     }
 
+    // the propose/replace payload - the SAME shared shape create/edit hand off
+    // (lines + the 4 terms + the auto reason). update_deal_draft takes the same
+    // shape minus the reason (a draft edit is not a negotiation).
+    const proposePayload = {
+      dealCardId: cardId,
+      lines: lines.map(toDraftLine),
+      freeDelivery: editFreeDelivery,
+      dueDate: editDueDate || null,
+      paymentTermsCode: editPaymentCode || null,
+      note: editNote || null,
+      reason: "Updated the deal on the card",
+    };
+
     setSendBusy(true);
     setSendError(null);
     try {
-      await proposeDealChange({
-        dealCardId: cardId,
-        lines: lines.map(toDraftLine),
-        freeDelivery: editFreeDelivery,
-        dueDate: editDueDate || null,
-        paymentTermsCode: editPaymentCode || null,
-        note: editNote || null,
-        reason: "Updated the deal on the card",
-      });
+      if (path === "draft-update") {
+        // CR-02: edit the private 'unsent' draft in place, then re-write the
+        // per-line margin the RPC's CASCADE dropped.
+        await updateDealDraft({
+          dealCardId: cardId,
+          lines: proposePayload.lines,
+          freeDelivery: proposePayload.freeDelivery,
+          dueDate: proposePayload.dueDate,
+          paymentTermsCode: proposePayload.paymentTermsCode,
+          note: proposePayload.note,
+        });
+        await rewriteDraftLinePrivate();
+      } else if (path === "replace") {
+        // my OWN held change: withdraw it, then re-propose the working copy
+        // (Negotiate never discards - the proposer takes their own change back
+        // explicitly). On a HALF-failure (withdraw ok, propose fails) the old
+        // proposal is gone, so ask for a re-send rather than losing it silently.
+        await withdrawDealChange({ dealCardId: cardId });
+        try {
+          await proposeDealChange(proposePayload);
+        } catch {
+          setSendError("Your previous proposal was withdrawn - please re-send.");
+          return;
+        }
+      } else {
+        // "propose" - stage a new held change (the existing path, verbatim).
+        await proposeDealChange(proposePayload);
+      }
       window.dispatchEvent(
         new CustomEvent("hs:deal-updated", { detail: { dealCardId: cardId } }),
       );
@@ -665,6 +808,9 @@ export function CardFront({
              It holds the torn paper slip; the titlebar above and the decision
              zone below are flex siblings, so they stay pinned. ---- */}
       <div className="min-h-0 flex-1 overflow-y-auto">
+      {/* B1: the "In negotiation" strip pins to the TOP of the scroll region while
+             a change is held on a live deal (renders null otherwise). */}
+      <NegotiationStrip status={card.status} hasHeldChange={!!data.pendingChange} />
       {/* ---- The torn white paper slip: it holds parts 2–7 (the deal facts). ---- */}
       <div className="dc-paper-wrap mx-3.5 mb-4 mt-3">
         <TearTop />

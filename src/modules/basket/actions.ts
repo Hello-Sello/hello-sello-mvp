@@ -31,12 +31,20 @@ export async function createBasketDraft(
 
   // Clear the drafted group's lines from the cart (RLS: only my own rows) -
   // the products now live on the draft card.
+  //
+  // WR-06 (retry-safety): the draft is ALREADY born above, so it is now the
+  // source of truth. If this cleanup fails we LOG-AND-CONTINUE rather than throw:
+  // a throw would make the caller retry the whole flow and mint a DUPLICATE
+  // draft. A stray basket line left behind is a cosmetic follow-up (the user can
+  // clear it), never a reason to re-birth the card.
   const supabase = await createClient();
   const { error } = await supabase
     .from("product_basket_line")
     .delete()
     .in("product_id", group.lines.map((l) => l.productId));
-  if (error) throw error;
+  if (error) {
+    console.error("createBasketDraft: draft born but basket cleanup failed", error);
+  }
 
   return result;
 }

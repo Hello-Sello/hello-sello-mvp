@@ -23,6 +23,8 @@ const DEAL_SIGNAL_TYPES = new Set<string>([
   "deal_signed",
   "deal_card_updated",
   "deal_change_declined",
+  "deal_change_proposed",
+  "deal_negotiation_requested",
 ]);
 
 export function MessageBubble({ message }: MessageBubbleProps) {
@@ -31,7 +33,9 @@ export function MessageBubble({ message }: MessageBubbleProps) {
   // passive status artifact with a timestamp, never a party's speech bubble —
   // and one pattern for all of them, per Agentation feedback 2026-07-22):
   // sent (deal_card) · declined (deal_cancelled) · signed (deal_signed) ·
-  // change committed (deal_card_updated) · change declined (deal_change_declined).
+  // change committed (deal_card_updated) · change declined (deal_change_declined) ·
+  // change proposed (deal_change_proposed) · negotiate requested
+  // (deal_negotiation_requested).
   // Each carries metadata.deal_card_id, so the pill is CLICKABLE and opens the
   // card in the side panel via the existing window event (acyclic:
   // DealCardPanelHost owns the panel).

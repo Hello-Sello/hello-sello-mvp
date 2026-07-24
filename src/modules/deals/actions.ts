@@ -223,6 +223,64 @@ export async function createDeal(input: CreateDealInput): Promise<CreateDealResu
   return { dealCardId: newCardId };
 }
 
+/**
+ * The in-place edit payload for an 'unsent' draft (CR-02). Mirrors the create
+ * content shape (lines + the 4 terms + note); `valueNet`/`currency` are optional
+ * because the wrapper derives them from the lines when omitted (same defaults as
+ * createDeal). Consumed by the DecisionBar draft-edit flow (Region C).
+ */
+export interface UpdateDealDraftInput {
+  dealCardId: string;
+  lines: CreateDealInput["lines"];
+  freeDelivery: boolean;
+  dueDate: string | null;
+  paymentTermsCode: string | null;
+  note: string | null;
+  valueNet?: number | null;
+  currency?: string;
+}
+
+/**
+ * Update an 'unsent' draft IN PLACE (CR-02) - the REAL edit path for a private
+ * draft, consumed by the DecisionBar edit flow (Region C). The old pencil routed
+ * draft edits through `proposeDealChange`, which stages a held change that can
+ * NEVER commit before Send (a private draft has no counterparty to cast the
+ * second D-02 vote) - so the edit was lost and the card wedged. `update_deal_draft`
+ * rewrites the draft like a re-birth of the SAME card: no version bump, no
+ * `deal_pending_change`, locked to the creating company while 'unsent' - all
+ * enforced inside the SECURITY DEFINER RPC.
+ *
+ * ⚠️ CASCADE (per the migration header): the RPC DELETEs + reinserts the lines,
+ * and `deal_line_item_private` cascades off `deal_line_item` - so the per-line
+ * margin rows are dropped. The CALLER (Region C) MUST re-write
+ * `deal_line_item_private` after this returns, exactly as createDeal re-writes it
+ * after create_deal_draft returns the new line ids. This wrapper does NOT touch
+ * the private rows.
+ *
+ * update_deal_draft is hand-added to database.types.ts, so no `as never` cast.
+ */
+export async function updateDealDraft(input: UpdateDealDraftInput): Promise<void> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("updateDealDraft: no authenticated user");
+
+  const currency = input.currency ?? input.lines[0]?.currency ?? "EUR";
+
+  const { error } = await supabase.rpc("update_deal_draft", {
+    p_deal_card_id: input.dealCardId,
+    p_value_net: input.valueNet ?? sumValueNet(input.lines),
+    p_currency: currency,
+    p_due_date: input.dueDate ?? null,
+    p_payment_terms_code: input.paymentTermsCode ?? null,
+    p_free_delivery: input.freeDelivery ?? false,
+    p_lines: rpcLines(input.lines),
+    p_note: input.note ?? null,
+  });
+  if (error) throw new Error((error as { message: string }).message);
+}
+
 /** A short human label for a proposal, from its lines (drives the message body). */
 function draftSummary(lines: CreateDealInput["lines"]): string {
   if (!lines.length) return "a deal";
@@ -389,7 +447,7 @@ export async function proposeDealChange(
 
   const { data: cardRow, error: cardErr } = await supabase
     .from("deal_card")
-    .select("initiating_company_id, deal_type, relationship_id")
+    .select("initiating_company_id, deal_type, relationship_id, status")
     .eq("id", input.dealCardId)
     .single();
   if (cardErr) throw cardErr;
@@ -488,6 +546,21 @@ export async function proposeDealChange(
     actorPersonId: user.id,
   });
 
+  // E1: a change proposed on a LIVE deal projects a chat pill so the
+  // counterparty sees it in the stream (DEV-33). GATED on status ===
+  // 'negotiation': a still-PRIVATE 'unsent' draft's edit must never leak to the
+  // other side (D-08) - proposeDealChange can also run before Send.
+  if (cardRow.status === "negotiation") {
+    const actorName = await resolveActorName(supabase, user.id);
+    await announceDealEvent(
+      supabase,
+      input.dealCardId,
+      cardRow.relationship_id,
+      "deal_change_proposed",
+      `${actorName} proposed a change`,
+    );
+  }
+
   return { pendingId: newPendingId };
 }
 
@@ -495,7 +568,7 @@ export async function proposeDealChange(
  * Respond to a held change (4.5.4) - the OTHER side's Accept/Decline from the
  * strip pop-up, with the REQUIRED reason (REAS-01). Wraps `confirm_deal_change`:
  * it records this side's vote and, the instant BOTH companies have accepted,
- * commits the change to base+1 (status stays `draft`, D-06) and returns the new
+ * commits the change to base+1 (status stays `negotiation`, D-03) and returns the new
  * version; a first accept (still waiting) or a decline returns null (the decline
  * discards the held change). The reason is required (the RPC also enforces it).
  *
@@ -584,7 +657,11 @@ async function announceDealEvent(
   supabase: Awaited<ReturnType<typeof createClient>>,
   dealCardId: string,
   relationshipId: string,
-  type: "deal_cancelled" | "deal_signed",
+  type:
+    | "deal_cancelled"
+    | "deal_signed"
+    | "deal_change_proposed"
+    | "deal_negotiation_requested",
   body: string,
 ): Promise<void> {
   try {
@@ -612,6 +689,25 @@ async function announceDealEvent(
   } catch (e) {
     console.error("deal event announcement failed", e);
   }
+}
+
+/**
+ * Resolve a person's display name (first + last) for a chat-projection body.
+ * Falls back to "A teammate" when the row carries no name - the SAME shape the
+ * logs read uses (reads.ts). Shared by the two projection-only actions
+ * (proposeDealChange's E1 pill, requestNegotiation's B1 pill).
+ */
+async function resolveActorName(
+  supabase: ServerClient,
+  personId: string,
+): Promise<string> {
+  const { data: person } = await supabase
+    .from("person")
+    .select("first_name, last_name")
+    .eq("id", personId)
+    .single();
+  const name = [person?.first_name, person?.last_name].filter(Boolean).join(" ").trim();
+  return name || "A teammate";
 }
 
 /**
@@ -649,6 +745,17 @@ export async function declineDeal(args: { dealCardId: string }): Promise<void> {
     p_deal_card_id: args.dealCardId,
   });
   if (error) throw new Error((error as { message: string }).message);
+
+  // B3: a decline is an END - clear any still-HELD change so a stale
+  // `deal_pending_change` row can't leave a ghost diff on the now-closed card.
+  // FAIL-SOFT: the decline already committed in the RPC above, so a failed
+  // cleanup must NEVER turn a successful decline into a thrown error, and must
+  // NEVER skip the audit + announce below - log and move on.
+  const { error: clearErr } = await supabase
+    .from("deal_pending_change")
+    .delete()
+    .eq("deal_card_id", args.dealCardId);
+  if (clearErr) console.error("declineDeal: held-change cleanup failed", clearErr);
 
   await writeAudit({
     actorType: "user",
@@ -718,6 +825,42 @@ export async function signDeal({
     "Deal signed - the deal is confirmed.",
   );
   return { cardStatus: "confirmed" };
+}
+
+/**
+ * Request to negotiate (B1) - the "Negotiate" affordance on the DecisionBar that
+ * opens the door to bargaining WITHOUT discarding any held proposal (Negotiate
+ * NEVER discards). Projection-ONLY: it writes NO status and NO audit - it just
+ * announces a chat pill so the counterparty sees the ask in the stream (DEV-33),
+ * fail-soft like the decline/sign announcements. The actual terms change still
+ * rides the propose/confirm path; this only signals intent.
+ */
+export async function requestNegotiation({
+  dealCardId,
+}: {
+  dealCardId: string;
+}): Promise<void> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("requestNegotiation: no authenticated user");
+
+  const { data: card, error: cardErr } = await supabase
+    .from("deal_card")
+    .select("relationship_id")
+    .eq("id", dealCardId)
+    .single();
+  if (cardErr) throw cardErr;
+
+  const actorName = await resolveActorName(supabase, user.id);
+  await announceDealEvent(
+    supabase,
+    dealCardId,
+    card.relationship_id,
+    "deal_negotiation_requested",
+    `${actorName} wants to negotiate`,
+  );
 }
 
 /* -------------------------------------------------------------------------- */

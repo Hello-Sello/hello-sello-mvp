@@ -4942,6 +4942,19 @@ export type Database = {
         Args: { p_line_item_id: string; p_new_product_id: string }
         Returns: undefined
       }
+      update_deal_draft: {
+        Args: {
+          p_currency: string
+          p_deal_card_id: string
+          p_due_date: string | null
+          p_free_delivery: boolean
+          p_lines: Json
+          p_note: string | null
+          p_payment_terms_code: string | null
+          p_value_net: number | null
+        }
+        Returns: undefined
+      }
       withdraw_deal_change: {
         Args: { p_deal_card_id: string }
         Returns: undefined
