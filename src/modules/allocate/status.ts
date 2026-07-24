@@ -174,7 +174,7 @@ export function formatOrderDate(iso: string): string {
  * Key-Account classification (feeds the Orders "Top accounts first" sort and
  * the Batches "Type" column, DEV-151) — derived, never a stored tier column.
  * `orderedTotalsByCompany` maps buyer company id → summed `value_net` across
- * that buyer's LIVE (`done`/`confirmed`/`amended`) deal_cards with this seller
+ * that buyer's LIVE (`done`/`confirmed`) deal_cards with this seller
  * (the caller assembles that map; this function only classifies one buyer
  * against it). A buyer is a Key Account when their total sits in the top half
  * of all buyers in the map, ties broken toward `true` (the buyer AT the

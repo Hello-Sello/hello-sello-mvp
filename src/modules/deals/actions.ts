@@ -203,7 +203,7 @@ export async function confirmDeal(args: {
  *     must BE the seller (derived from the card + relationship). A buyer-session
  *     finalize call is rejected before the gate.
  *   - INVOICE TRIGGER: the gate (`canFinalizeByInvoice`, pure/unit-tested) requires
- *     an AGREED status (`confirmed`/`amended`) AND a `deal_artifact(category=
+ *     the AGREED status (`confirmed`) AND a `deal_artifact(category=
  *     'invoice')` whose `uploaded_by_company_id` is the SELLER company. The
  *     uploader identity is stamped from the session at upload time
  *     (uploadDealInvoice), so a buyer-uploaded or forged invoice cannot satisfy it.
