@@ -159,9 +159,12 @@ begin
       -- the counterparty co-owner joins the born workspace (mirrors what the
       -- OLD birth RPC did and the slim one no longer does) - idempotent on the
       -- ACTIVE row, matching uq_deal_member_active
-      select id into v_ws
-      from public.deal_workspace
-      where deal_card_id = v_card and deleted_at is null;
+      -- dw alias: the OUT param is also named deal_card_id, so the column
+      -- reference MUST be qualified (unqualified it is ambiguous and errors
+      -- at runtime under plpgsql variable_conflict=error, the default)
+      select dw.id into v_ws
+      from public.deal_workspace dw
+      where dw.deal_card_id = v_card and dw.deleted_at is null;
       insert into public.deal_member (deal_workspace_id, person_id, role, added_by_person_id)
       select v_ws, v_cp, 'owner', v_uid
       where not exists (
