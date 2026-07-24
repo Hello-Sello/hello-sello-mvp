@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Run the confirm_deal_change lock-order proof (WR-03) against the LOCAL Supabase
+# stack. Prefers host psql; falls back to the stack's DB container.
+#
+# ⚠️  RED-FIRST: EXITS NON-ZERO before the WR-03 fix — confirm_deal_change never
+# locks the deal_card row, so the card-lock needle is absent. GREEN once the card
+# lock ships in 20260724120100_confirm_deal_change_negotiation_membership.sql.
+set -uo pipefail
+
+TEST_FILE="supabase/tests/confirm_deal_change_lock_order_test.sql"
+
+if command -v psql >/dev/null 2>&1; then
+  DB_URL="$(supabase status -o env 2>/dev/null | grep '^DB_URL=' | cut -d= -f2- | tr -d '"')"
+  exec psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$TEST_FILE"
+fi
+
+DBC="$(docker ps --format '{{.Names}}' | grep '^supabase_db_' | head -1)"
+if [ -z "$DBC" ]; then
+  echo "ERROR: no host psql and no running supabase_db_* container" >&2
+  exit 1
+fi
+exec docker exec -i "$DBC" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f - < "$TEST_FILE"

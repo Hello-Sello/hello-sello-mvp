@@ -75,9 +75,27 @@ begin
     raise exception 'decline_deal: Only a party to this deal can decline it.';
   end if;
 
+  -- WR-02 status matrix: decline is a NEGOTIATION-only verb.
+  --   · unsent          -> a PRIVATE draft; it is DISCARDED, never declined
+  --                        (declining would un-hide a draft the counterparty
+  --                        was never meant to see) — raises;
+  --   · cancelled/done  -> idempotent no-op (an already-closed deal);
+  --   · confirmed / ticket_* / anything else -> not declinable.
+  -- Order matters: 'unsent' raises BEFORE the idempotent return (it is not yet
+  -- closed), and cancelled/done still short-circuit before the negotiation-only
+  -- gate so re-declining a closed deal stays a silent no-op.
+  if v_card.status = 'unsent' then
+    raise exception 'decline_deal: a private draft cannot be declined - discard it instead';
+  end if;
+
   -- idempotent: an already-closed deal does not get a second write.
   if v_card.status in ('cancelled', 'done') then
     return;
+  end if;
+
+  -- only a live negotiation can be declined (confirmed -> cancelled is unsupported).
+  if v_card.status <> 'negotiation' then
+    raise exception 'decline_deal: only a deal in negotiation can be declined';
   end if;
 
   update public.deal_card
@@ -130,18 +148,30 @@ begin
     raise exception 'finalize_deal: deal not found';
   end if;
 
-  -- idempotency guard: if already done, do NOT write again.
-  if v_card.status = 'done' then
-    return;
-  end if;
-
-  -- derive the SELLER company from the card's issuer facts + the relationship
-  -- pair (sellerCompanyId, derive.ts:48-55, ported exactly).
+  -- WR-04: resolve the relationship pair + gate on PARTY MEMBERSHIP first, BEFORE
+  -- the idempotent 'done' early-return. Before this a NON-PARTY calling finalize
+  -- on an already-'done' card got a silent void (the early-return fired ahead of
+  -- any authorization) instead of the seller rejection. A non-party is certainly
+  -- not the seller, so it shares the seller-only error text.
   select company_a_id, company_b_id into v_a, v_b
   from public.relationship where id = v_card.relationship_id;
   if v_a is null then
     raise exception 'finalize_deal: relationship not found';
   end if;
+  if v_company is distinct from v_a and v_company is distinct from v_b then
+    raise exception 'finalize_deal: Only the seller can finalize this deal.';
+  end if;
+
+  -- idempotency guard: if already done, do NOT write again (a party re-finalizing
+  -- a closed deal is a no-op — now BELOW the membership gate so a non-party can
+  -- never receive a silent success).
+  if v_card.status = 'done' then
+    return;
+  end if;
+
+  -- derive the SELLER company from the card's issuer facts + the relationship
+  -- pair (sellerCompanyId, derive.ts:48-55, ported exactly; reuses v_a/v_b
+  -- resolved just above).
   v_seller := case
     when v_card.deal_type = 'offer' then v_card.initiating_company_id
     when v_card.initiating_company_id = v_a then v_b

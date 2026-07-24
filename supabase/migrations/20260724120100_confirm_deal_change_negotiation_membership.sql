@@ -76,6 +76,13 @@ begin
     raise exception 'confirm_deal_change: caller has no company';
   end if;
 
+  -- WR-03: lock the deal_card row FIRST, before the pending row — the SAME
+  -- order sign_deal uses (it locks the card, then nests this function). Without
+  -- a uniform order two concurrent paths could take the card and pending locks
+  -- in opposite orders and deadlock. When called nested from sign_deal the card
+  -- lock is already held, so this re-lock is a harmless no-op.
+  perform 1 from public.deal_card where id = p_deal_card_id for update;
+
   -- lock the held row (Pitfall 6: prevents a double-commit to base+2)
   select base_version, votes, draft, proposed_by_company, proposed_by_person, proposer_reason
     into v_base, v_votes, v_draft, v_proposer_co, v_proposer_pn, v_proposer_rsn
@@ -197,7 +204,10 @@ begin
       -- is never touched by this commit.
       note_company_a = case when v_proposer_co = v_ca then v_draft->>'note' else note_company_a end,
       note_company_b = case when v_proposer_co = v_cb then v_draft->>'note' else note_company_b end,
-      metadata = case when (v_draft->>'free_delivery')::boolean
+      -- IN-01: MERGE, don't replace. Rebuilding to just {"free_delivery":…}
+      -- blew away counterparty_person_id (the from-birth routing fact send_deal
+      -- reads) and any other key. Strip only the key we own, then re-set it.
+      metadata = (metadata - 'free_delivery') || case when (v_draft->>'free_delivery')::boolean
                    then '{"free_delivery":true}'::jsonb else '{}'::jsonb end,
       updated_by = v_uid,
       updated_at = now()

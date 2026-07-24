@@ -57,6 +57,10 @@ BEGIN
   END IF;
 END $$;
 
+-- CR-01: the INSERT probe below runs as `authenticated` and needs to read the
+-- runtime-resolved relationship id from this temp fixture.
+GRANT SELECT ON _rel TO authenticated;
+
 -- C1: the D-08 arm card — born 'unsent' (private to GreenLeaf until the flip)
 INSERT INTO deal_card (id, relationship_id, status, deal_type, initiating_company_id, created_by)
 SELECT 'cccccccc-cccc-cccc-cccc-cccccccccccc',
@@ -119,6 +123,16 @@ VALUES ('99999999-9999-9999-9999-999999999999','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaa
 INSERT INTO deal_line_item_private (deal_line_item_id, company_id, buyer_metric)
 VALUES ('99999999-9999-9999-9999-999999999999','bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',0.10);
 
+-- C3: a CHILDLESS 'negotiation' card (no workspace/thing/member/line/log) — the
+-- CR-01 DELETE probe targets it so the probe hits the grant check, never an FK
+-- 23503 from a child row.
+INSERT INTO deal_card (id, relationship_id, status, deal_type, initiating_company_id, created_by)
+SELECT 'c3c3c3c3-c3c3-c3c3-c3c3-c3c3c3c3c3c3',
+       rel, 'negotiation', 'offer',
+       'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+       '11111111-1111-1111-1111-111111111111'
+FROM _rel;
+
 -- ── ALICE (GreenLeaf) — the initiator sees her own unsent draft ─────────────
 SELECT set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', true);
 SELECT set_config('request.jwt.claims', '{"sub":"11111111-1111-1111-1111-111111111111","role":"authenticated"}', true);
@@ -156,6 +170,24 @@ BEGIN
       WHERE id = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
     RAISE EXCEPTION 'LEAK: Alice raw-updated deal_card status (D-09 revoke missing)';
   EXCEPTION WHEN insufficient_privilege THEN NULL;  -- expected: no UPDATE grant
+  END;
+  -- CR-01: the grant-layer revoke must ALSO block INSERT (a FORGED birth — a
+  -- client-born 'confirmed' card is a forged signature) and DELETE. card_all's
+  -- WITH CHECK / USING both pass for a relationship member, so ONLY the missing
+  -- grant blocks these writes.
+  BEGIN
+    INSERT INTO deal_card (relationship_id, status, deal_type, initiating_company_id, created_by)
+    SELECT rel, 'confirmed', 'offer',
+           'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+           '11111111-1111-1111-1111-111111111111'
+    FROM _rel;
+    RAISE EXCEPTION 'LEAK: Alice INSERTed a deal_card (CR-01 INSERT revoke missing)';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;  -- expected: no INSERT grant
+  END;
+  BEGIN
+    DELETE FROM deal_card WHERE id = 'c3c3c3c3-c3c3-c3c3-c3c3-c3c3c3c3c3c3';
+    RAISE EXCEPTION 'LEAK: Alice DELETEd a deal_card (CR-01 DELETE revoke missing)';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;  -- expected: no DELETE grant
   END;
 END $$;
 RESET ROLE;

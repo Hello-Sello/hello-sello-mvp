@@ -127,13 +127,11 @@ BEGIN
   END IF;
 END $$;
 
--- ── (2a) IDEMPOTENT: delivering the SAME card again adds nothing. ──
-SELECT set_config('request.jwt.claim.sub', (SELECT alice FROM _fix)::text, true);
-SELECT set_config('request.jwt.claims',
-       json_build_object('sub', (SELECT alice FROM _fix), 'role', 'authenticated')::text, true);
-SET LOCAL ROLE authenticated;
-SELECT public.deliver_deal((SELECT id FROM _cards WHERE kind = 'c2c'));
+-- ── (2a) IDEMPOTENT: delivering the SAME card again adds nothing. WR-01: the
+-- direct deliver_deal call is now a PRIVILEGED (postgres) call — authenticated
+-- lost EXECUTE (probe 2c below), so the idempotency check runs as the owner. ──
 RESET ROLE;
+SELECT public.deliver_deal((SELECT id FROM _cards WHERE kind = 'c2c'));
 DO $$
 DECLARE
   v_n int;
@@ -144,6 +142,24 @@ BEGIN
     RAISE EXCEPTION 'A2-2a FAIL: deliver_deal is not idempotent — % tickets', v_n;
   END IF;
 END $$;
+
+-- ── (2c / WR-01) EXECUTE REVOKED: authenticated may NOT call deliver_deal
+-- directly — only the nested definer calls from send_deal/confirm_detected_deal
+-- may (they run as the function owner). As Alice, a direct call is blocked at
+-- the grant layer (insufficient_privilege). ──
+SELECT set_config('request.jwt.claim.sub', (SELECT alice FROM _fix)::text, true);
+SELECT set_config('request.jwt.claims',
+       json_build_object('sub', (SELECT alice FROM _fix), 'role', 'authenticated')::text, true);
+SET LOCAL ROLE authenticated;
+DO $$
+BEGIN
+  BEGIN
+    PERFORM public.deliver_deal((SELECT id FROM _cards WHERE kind = 'c2c'));
+    RAISE EXCEPTION 'WR-01 LEAK: authenticated executed deliver_deal directly';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;  -- expected: EXECUTE revoked
+  END;
+END $$;
+RESET ROLE;
 
 -- ── (2b) DOUBLE-SEND GUARD (T-12-05): a second send_deal must be rejected —
 -- the card is no longer 'unsent'. ──
