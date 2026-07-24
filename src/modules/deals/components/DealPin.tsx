@@ -6,9 +6,11 @@
  *
  * It has three states (build plan 4.5 §3):
  *   - A · no deal, no proposal → a dashed "Start a deal" (p2p only).
- *   - B · a PROPOSAL is pending → the pre-card object. The other side accepts
- *         here (the loud pill → confirm_detected_deal → atomic birth); the
- *         proposer sees "waiting". This is the ONLY place a card is born now.
+ *   - B · a SELLA-DETECTED proposal is pending → the pre-card object. Each side
+ *         accepts here (the loud pill → confirm_detected_deal → atomic birth);
+ *         after my accept I see "waiting". Sella-only since Phase 12 (D-18): the
+ *         manual propose_deal era is retired - people start deals via the
+ *         create card instead.
  *   - C · a live deal is selected → the two-tier strip: identity on top, the
  *         [Deal Room | Deal Card] toggle + the // Sella mark + a translate glyph.
  *
@@ -645,17 +647,12 @@ export function DealPin({
         </div>
       )}
 
-      {/* State B - a proposal is pending (the pre-card object, the new heart) */}
+      {/* State B - a Sella-detected proposal is pending (the pre-card object).
+          Sella-only since Phase 12 (D-18): the manual propose_deal half is gone. */}
       {variant === "chat" && showProposal && (
         <div className={rowCls}>
           <span className="min-w-0 flex-1 truncate text-xs text-ink/70">
-            <span className="font-semibold text-ink/85">
-              {proposal!.iProposed
-                ? "You proposed a deal"
-                : proposal!.source === "sella"
-                  ? "Sella spotted a deal"
-                  : `${counterpartyName ?? "They"} proposed a deal`}
-            </span>
+            <span className="font-semibold text-ink/85">Sella spotted a deal</span>
             <span className="text-ink/45"> · {proposal!.summary}</span>
           </span>
 
@@ -688,12 +685,10 @@ export function DealPin({
                       <div className="min-w-0 flex-1 p-3">
                         <div className="mb-0.5 flex items-center gap-1.5 text-[11px] font-semibold text-brand-deep">
                           <Sparkles size={12} strokeWidth={2} />
-                          {proposal!.source === "sella" ? "Sella spotted a deal" : "Deal proposal"}
+                          Sella spotted a deal
                         </div>
                         <p className="mb-2 text-[11px] text-ink/50">
-                          {proposal!.iProposed
-                            ? "Your proposal"
-                            : `From ${counterpartyName ?? "your contact"}`}
+                          From {counterpartyName ?? "your contact"}
                         </p>
 
                         <ul className="space-y-1.5">
