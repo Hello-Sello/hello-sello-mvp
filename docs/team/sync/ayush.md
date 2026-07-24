@@ -5,9 +5,9 @@
 
 ---
 
-**Last updated:** 2026-07-24 09:37 CEST
-**Branch:** claude/ayush/work - Phase 12 (deal status machine, board Wave 2) COMPLETE, merging to `dev` now.
-**Status:** idle (wrapping the Phase-12 merge).
+**Last updated:** 2026-07-24 09:55 CEST
+**Branch:** claude/ayush/work - flush with `origin/dev` (Phase 12 / board Wave 2 merged via PR #156).
+**Status:** offline (session closed; next session = board Wave 3: DecisionBar fixed-roles cluster + the Phase-12 review fixes - the deal_card INSERT/DELETE revoke lands BEFORE any cloud push).
 **Linear issue in progress:** none
 **Shared files locked:** none - all Phase-12 locks RELEASED (the status-rename wave is merged; see the note below for what changed in your lane).
 
