@@ -2,19 +2,20 @@
  * A5 — person delivery: a deal sent to a PERSON lands as a clickable
  * "[Sender] has sent a deal" message in that person's chat.
  *
- * The routing spine (deliver_deal) makes a birth WITH a counterparty co-owner
- * person-target: NO inbox ticket — the delivery is a chat_message of type
- * 'deal_card' posted by the SEND layer (the create-card host / basket send),
- * never by SQL (which would double-deliver the Sella-detection door) and never
- * by deals/ (module cycle).
+ * Phase 12 (D-06): delivery happens at SEND, not at birth, and it is written
+ * ONCE — inside the `send_deal` definer RPC. A person-target send (the
+ * counterparty person was picked at create time and stored on the card) posts
+ * the 'deal_card' chat pill into the p2p thread and writes NO inbox ticket;
+ * the old app-side fail-soft delivery blocks are deleted. Birth alone
+ * ("Save draft") leaves the card a private `unsent` draft Bob cannot see.
  *
  * Drives the chat door end-to-end over the seeded Alice (GreenLeaf) ↔ Bob
- * (StonePharm) p2p thread:
- *   1. Alice births a draft from Bob's chat (the existing create-mode card) —
- *      the door now carries Bob as counterparty co-owner;
+ * (StonePharm) p2p thread (the fixture births AND sends):
+ *   1. Alice births a draft from Bob's chat, then sends it from the card —
+ *      the send makes Bob a counterparty co-owner;
  *   2. the "has sent a deal" bubble appears in Alice's chat, and in Bob's;
  *   3. clicking the bubble opens the deal card in the side panel;
- *   4. DB: the born card has ZERO pending_inbox_item rows (person-target).
+ *   4. DB: the sent card has ZERO pending_inbox_item rows (person-target).
  *
  * NOT covered here (and why): the "no chat yet → a new p2p conversation opens"
  * arm rides openOrCreateP2pThread (existing, already exercised by the accept
@@ -57,7 +58,8 @@ test.afterEach(async () => {
 })
 
 test('sending a deal from a p2p chat drops the clickable bubble on both sides, no inbox ticket', async () => {
-  // Alice births from Bob's chat (the fixture drives the create-mode card door)
+  // Alice births from Bob's chat, then SENDS from the born card (the fixture
+  // drives both steps — the bubble below only exists because of the send)
   await createDraftDealAsAlice(alicePage)
 
   // 1 · the sender's own chat shows the delivery bubble (the BUBBLE button —
@@ -67,7 +69,7 @@ test('sending a deal from a p2p chat drops the clickable bubble on both sides, n
     alicePage.getByRole('button', { name: /click to open the deal card/i }).first(),
   ).toBeVisible({ timeout: 15000 })
 
-  // 2 · person-target birth → NO company inbox ticket
+  // 2 · person-target send → NO company inbox ticket
   const cardId = resolveDealCardIdForRelationship()
   expect(countTicketsForCard(cardId)).toBe(0)
 
@@ -188,9 +190,13 @@ test('a SECOND deal can be started from the same p2p chat — button visible, co
     .filter({ has: alicePage.getByRole('button', { name: /done editing this line/i }) })
   await row.locator('select').nth(2).selectOption('100')
   await row.locator('input[type="number"]').fill('7.50')
-  await dealPanel(alicePage).getByRole('button', { name: /^send deal$/i }).click()
+  // "Save draft" births the second card (Phase 12: the composer door only
+  // BIRTHS — this test proves the door works, so the private draft is enough;
+  // the born-card pencil is the birth signal, exactly as in the fixture)
+  await dealPanel(alicePage).getByRole('button', { name: /^save draft$/i }).click()
   await dealPanel(alicePage).getByRole('button', { name: /edit deal/i }).waitFor({ timeout: 15000 })
 
-  // a genuinely NEW card (2 on the relationship), person-target like the first
+  // a genuinely NEW card was born (2 on the relationship — the fixture's sent
+  // deal + this private draft)
   await expect.poll(() => countDealCardsForRelationship(), { timeout: 15000 }).toBe(2)
 })
