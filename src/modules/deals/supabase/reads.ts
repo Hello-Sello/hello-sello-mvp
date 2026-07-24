@@ -122,6 +122,103 @@ export async function listRelationshipDeals(
   }));
 }
 
+/** One unsent draft for the Deal Basket list (12-10, D-14) - just enough to
+ * label a row (counterparty, type, freshness); clicking opens the born card. */
+export interface DraftDealRow {
+  id: string;
+  relationshipId: string;
+  dealType: DealType;
+  /** the OTHER company on the draft's relationship - the future recipient;
+   *  null only if the relationship/company row failed to resolve */
+  counterpartyName: string | null;
+  /** updated_at, falling back to created_at - drives the "Updated …" hint */
+  updatedAt: string;
+}
+
+/**
+ * My company's unsent drafts, newest first - the Deal Basket side of the
+ * basket drawer (D-14). Drafts from BOTH doors land here (basket-born and
+ * card-born), because both birth a `status='unsent'` row.
+ *
+ * Deliberately NO company/initiator filter in app code: the D-08 RLS narrow
+ * (20260724120700_draft_privacy_rls) is the ONLY scoping - unsent rows return
+ * for the CREATOR company alone, the counterparty gets none. An app-side
+ * filter here would just mask an RLS bug instead of surfacing it (T-12-30);
+ * RLS is the filter, never app code.
+ *
+ * Counterparty names are display data resolved AFTER the scoped read (viewer
+ * company -> `otherOf` on each relationship pair -> one company-name fetch,
+ * the house stitch-in-JS discipline) - never part of the scoping.
+ */
+export async function getMyDraftDeals(): Promise<DraftDealRow[]> {
+  const supabase = createClient();
+
+  const { data, error } = await supabase
+    .from("deal_card")
+    .select("id, relationship_id, deal_type, updated_at, created_at")
+    .eq("status", "unsent")
+    .is("deleted_at", null)
+    .order("updated_at", { ascending: false })
+    .limit(50);
+  if (error) throw error;
+  const rows = data ?? [];
+  if (rows.length === 0) return [];
+
+  // viewer's company - the "me" anchor for the counterparty subtraction
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  let viewerCompanyId: string | null = null;
+  if (user) {
+    const { data: viewerPerson } = await supabase
+      .from("person")
+      .select("company_id")
+      .eq("id", user.id)
+      .single();
+    viewerCompanyId = viewerPerson?.company_id ?? null;
+  }
+
+  // relationship pairs -> the OTHER company of each (otherOf = the single
+  // "other side" math owner) -> names, two flat fetches stitched in JS
+  const relIds = Array.from(new Set(rows.map((r) => r.relationship_id)));
+  const { data: rels, error: relErr } = await supabase
+    .from("relationship")
+    .select("id, company_a_id, company_b_id")
+    .in("id", relIds);
+  if (relErr) throw relErr;
+  const relById = new Map((rels ?? []).map((r) => [r.id, r] as const));
+
+  const otherIdOf = (relationshipId: string): string | null => {
+    const rel = relById.get(relationshipId);
+    return rel && viewerCompanyId
+      ? otherOf(viewerCompanyId, rel.company_a_id, rel.company_b_id)
+      : null;
+  };
+
+  const otherIds = Array.from(
+    new Set(relIds.map(otherIdOf).filter((x): x is string => !!x)),
+  );
+  const nameById = new Map<string, string>();
+  if (otherIds.length) {
+    const { data: cos } = await supabase
+      .from("company")
+      .select("id, name")
+      .in("id", otherIds);
+    for (const c of cos ?? []) nameById.set(c.id, c.name);
+  }
+
+  return rows.map((r) => {
+    const otherId = otherIdOf(r.relationship_id);
+    return {
+      id: r.id,
+      relationshipId: r.relationship_id,
+      dealType: r.deal_type as DealType,
+      counterpartyName: (otherId && nameById.get(otherId)) || null,
+      updatedAt: (r.updated_at ?? r.created_at) as string,
+    };
+  });
+}
+
 /**
  * The pending PROPOSAL for a p2p thread (4.5.2), resolved for the viewer - or
  * null when there is none. A proposal is a `deal_detected` chat message whose
