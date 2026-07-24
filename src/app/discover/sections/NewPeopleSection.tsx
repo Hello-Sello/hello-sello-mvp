@@ -6,15 +6,18 @@
  * company → a state-aware "+ Connect"). The card "+" fires the real
  * sendPersonConnectRequest (DISC-10) with optimistic pending off connection_state.
  *
- * Pharmacy gate: a person whose company is pharmacy-ONLY is hidden (there is no
- * people search in Variant D, so this section simply omits them — companies keep
- * the search-only reveal).
+ * Suggestions only: this grid shows people you could still connect with. Omitted
+ * here — already-connected people (they live in My Network) and people who've
+ * requested YOU (they live in Connection requests). The pharmacy gate also hides a
+ * person whose company is pharmacy-ONLY (there is no people search in Variant D, so
+ * this section simply omits them — companies keep the search-only reveal).
  */
 import { useState } from "react";
-import { Plus, Check, Users } from "lucide-react";
+import { Plus, Check } from "lucide-react";
 import type { DiscoverPerson } from "../people";
 import { sendPersonConnectRequest } from "../personActions";
 import { isListedCompany } from "../taxonomy";
+import { SectionCard } from "./SectionCard";
 
 const TINTS = ["#34b233", "#6c7bd9", "#e30b5d", "#f59e0b", "#0ea5e9", "#8b5cf6",
   "#ef4444", "#14b8a6", "#ec4899", "#22c55e", "#a855f7", "#64748b"];
@@ -100,7 +103,7 @@ function PersonConnectButton({ person }: { person: DiscoverPerson }) {
 function PersonCard({ person }: { person: DiscoverPerson }) {
   const subtitle = [person.title, person.companyName].filter(Boolean).join(" · ");
   return (
-    <div className="glass relative flex flex-col overflow-hidden rounded-xl transition hover:-translate-y-0.5 hover:bg-white/90">
+    <div className="relative flex flex-col overflow-hidden rounded-xl border border-black/[0.07] bg-white/55 transition hover:-translate-y-0.5 hover:bg-white hover:shadow-md">
       <div
         className="h-14"
         style={{ background: `linear-gradient(120deg, ${tintFor(person.companyName ?? person.name)}22, ${tintFor(person.name)}33)` }}
@@ -109,9 +112,6 @@ function PersonCard({ person }: { person: DiscoverPerson }) {
         <Avatar person={person} />
         <div className="mt-2 font-bold leading-tight text-ink">{person.name}</div>
         <div className="mt-0.5 min-h-[32px] text-[12.5px] leading-snug text-ink-muted">{subtitle}</div>
-        <div className="mt-1.5 flex items-center gap-1 text-[11.5px] text-ink-muted/70">
-          <Users size={12} /> New to Hello Sello
-        </div>
         <div className="mt-auto w-full">
           <PersonConnectButton person={person} />
         </div>
@@ -121,21 +121,24 @@ function PersonCard({ person }: { person: DiscoverPerson }) {
 }
 
 export function NewPeopleSection({ people }: { people: DiscoverPerson[] }) {
-  // Pharmacy gate: a person at a pharmacy-only company is hidden.
-  const visible = people.filter((p) => isListedCompany(p.categories));
+  // Suggestions only: people you could still connect with. Hide those already
+  // connected (they're in My Network) and those who've requested YOU (they're in
+  // Connection requests); the pharmacy gate hides anyone at a pharmacy-only company.
+  const visible = people.filter(
+    (p) =>
+      p.connectionState !== "connected" &&
+      p.connectionState !== "incoming" &&
+      isListedCompany(p.categories),
+  );
   if (visible.length === 0) return null;
 
   return (
-    <section className="mt-10">
-      <div className="mb-3 flex items-center gap-2">
-        <h2 className="text-lg font-bold text-ink">People you may know</h2>
-        <span className="rounded-full bg-black/5 px-2 py-0.5 text-xs font-bold text-ink-muted">{visible.length}</span>
-      </div>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+    <SectionCard title="People you may know" count={visible.length}>
+      <div className="grid grid-cols-2 gap-4 pt-1 sm:grid-cols-3 lg:grid-cols-4">
         {visible.map((p) => (
           <PersonCard key={p.personId} person={p} />
         ))}
       </div>
-    </section>
+    </SectionCard>
   );
 }

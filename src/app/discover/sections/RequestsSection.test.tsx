@@ -1,8 +1,10 @@
 /**
- * Render smoke test for <RequestsSection> (Lane B, DISC-12). One section, two
- * labelled groups (Company requests / People), each with Accept/Decline. Accept/
- * decline wiring (browser acceptItem/declineItem for company; personActions for
- * people) needs a browser — flagged as owed. Empty → renders nothing.
+ * Render smoke test for <RequestsSection> (Lane B, DISC-12). One "Connection
+ * requests" box holds two kinds with genuinely different accept paths (company +
+ * person) shown as a single list — a square avatar is a company, a circle a person.
+ * Accept/decline wiring (browser acceptItem/declineItem for company; personActions
+ * for people) needs a browser — flagged as owed. Empty → an empty-state card (the
+ * box lives in the duo, so it holds its column rather than vanishing).
  */
 import { describe, it, expect } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
@@ -21,22 +23,21 @@ const personReq: DiscoverPersonRequest = {
 }
 
 describe('<RequestsSection> (DISC-12)', () => {
-  it('renders both labelled groups with their items + Accept/Decline', () => {
+  it('renders company + person requests in one list with Accept/Decline', () => {
     const html = renderToStaticMarkup(
       <RequestsSection companyRequests={[companyReq]} personRequests={[personReq]} />,
     )
-    expect(html).toContain('Company requests')
-    expect(html).toContain('People')
-    expect(html).toContain('Green Leaf Labs')
-    expect(html).toContain('Sam Sender')
+    expect(html).toContain('Connection requests') // section title
+    expect(html).toContain('Green Leaf Labs') // company request
+    expect(html).toContain('Sam Sender') // person request
     expect(html).toContain('Accept')
     expect(html).toContain('Decline')
   })
 
-  it('renders nothing when there are no requests', () => {
+  it('shows an empty state (not nothing) when there are no requests', () => {
     const html = renderToStaticMarkup(
       <RequestsSection companyRequests={[]} personRequests={[]} />,
     )
-    expect(html).toBe('')
+    expect(html).toContain('No pending requests')
   })
 })

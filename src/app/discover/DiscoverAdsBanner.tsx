@@ -1,26 +1,25 @@
 /**
- * Discover ads banner — a static, horizontally-scrollable placeholder strip at
- * the top of Discover (DISC-4). No data and no ad serving yet; it just reserves
- * the space and shows empty slots. Real ad content/serving is a follow-up.
+ * Discover ads banner — a full-width "leaderboard" placeholder at the top of
+ * Discover (DISC-4, Variant D). It holds the space and shape of a real sponsored
+ * banner (glass panel, ~112px tall, "Sponsored" tag) but carries no ad content:
+ * v0 ships one honest empty slot until real ad serving exists — no fake creatives.
  */
-
-const SLOTS = [0, 1, 2, 3, 4];
+import { Megaphone } from "lucide-react";
 
 export function DiscoverAdsBanner() {
   return (
     <div
-      className="flex gap-3 overflow-x-auto pb-2"
       role="region"
       aria-label="Sponsored"
+      className="glass-strong relative flex h-28 items-center justify-center overflow-hidden rounded-[20px]"
     >
-      {SLOTS.map((i) => (
-        <div
-          key={i}
-          data-ad-slot={i}
-          aria-hidden
-          className="h-24 w-64 shrink-0 rounded-xl border border-dashed border-black/10 bg-black/[0.02]"
-        />
-      ))}
+      <span className="absolute right-3 top-2.5 text-[10px] font-bold uppercase tracking-[0.06em] text-ink-muted/60">
+        Sponsored
+      </span>
+      <div className="flex flex-col items-center gap-1.5 text-center text-ink-muted">
+        <Megaphone size={20} className="text-ink-muted/50" />
+        <span className="text-sm font-semibold">Your ad could be here</span>
+      </div>
     </div>
   );
 }

@@ -1,8 +1,8 @@
 /**
  * Render smoke test for <MyNetworkSection> (Lane B, DISC-14). Two parts:
  * connected companies + connected people (each person has a Message link to their
- * company-less DM via ?thread=). Empty → renders nothing. Interactive expand /
- * navigation needs a browser — flagged as owed.
+ * company-less DM via ?thread=). Empty → an empty-state card (the box lives in the
+ * duo, so it holds its column). Interactive expand / navigation needs a browser.
  */
 import { describe, it, expect } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
@@ -29,8 +29,8 @@ describe('<MyNetworkSection> (DISC-14)', () => {
     expect(html).toContain('/connect/chat?thread=th1')
   })
 
-  it('renders nothing when the network is empty', () => {
+  it('shows an empty state (not nothing) when the network is empty', () => {
     const html = renderToStaticMarkup(<MyNetworkSection companies={[]} people={[]} />)
-    expect(html).toBe('')
+    expect(html).toContain('No connections yet')
   })
 })

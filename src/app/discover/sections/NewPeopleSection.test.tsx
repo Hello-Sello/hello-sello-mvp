@@ -26,11 +26,19 @@ describe('<NewPeopleSection> (DISC-9/10)', () => {
     expect(html).toContain('Connect')
   })
 
-  it('shows Connected (not Connect) for an already-connected person', () => {
+  it('hides connected + incoming-request people (they live in My Network / Requests), keeps the rest', () => {
     const html = renderToStaticMarkup(
-      <NewPeopleSection people={[person({ name: 'Ann Connected', connectionState: 'connected' })]} />,
+      <NewPeopleSection
+        people={[
+          person({ personId: 'a', name: 'Nora New', connectionState: 'none' }),
+          person({ personId: 'b', name: 'Cora Connected', connectionState: 'connected' }),
+          person({ personId: 'c', name: 'Ivan Incoming', connectionState: 'incoming' }),
+        ]}
+      />,
     )
-    expect(html).toContain('Connected')
+    expect(html).toContain('Nora New')
+    expect(html).not.toContain('Cora Connected')
+    expect(html).not.toContain('Ivan Incoming')
   })
 
   it('hides a person whose company is pharmacy-only (people pharmacy gate)', () => {
