@@ -244,11 +244,13 @@ export function CardFront({
    *  no X (e.g. the workspace/inline mounts that have no panel to close). */
   onClose?: () => void;
   /**
-   * CREATE MODE (chj/07-08): the card is a NOT-yet-born draft. Edit mode is forced
-   * on, the id-bound sections (promotion / Open Items / margin) are hidden, and the
-   * footer becomes "Send deal" instead of "Send change". Pressing it hands the
-   * assembled draft up via `onCreate`; the strip runs `createDeal` + opens the born
-   * card. This replaced the old CreateDealForm.
+   * CREATE MODE (chj/07-08, reshaped Phase-12 D-12/D-13): the card is a NOT-yet-
+   * born draft. Edit mode is forced on, the id-bound sections (promotion / Things
+   * to do / margin) are hidden, and the footer becomes "Save draft" instead of
+   * "Send change". Pressing it hands the assembled draft up via `onCreate`; the
+   * host runs `createDeal` (birth only - NO delivery) and keeps the born 'unsent'
+   * card open, where the DecisionBar owns the one "Send deal" button. This
+   * replaced the old CreateDealForm.
    */
   createMode?: boolean;
   onCreate?: (input: CardCreateInput) => Promise<void>;
@@ -408,10 +410,12 @@ export function CardFront({
     setLines((cur) => cur.map((l) => (l.key === key ? { ...lineFromCatalog(p), key } : l)));
   }
 
-  // CREATE MODE (chj/07-08): "Send deal" on a not-yet-born draft. Same line
-  // mapping as onSendChange, but it hands the draft UP via onCreate (the strip
-  // runs createDeal + opens the born card) instead of proposeDealChange. No
-  // change reason - a first draft is not a negotiation.
+  // CREATE MODE (chj/07-08, D-13): "Save draft" on a not-yet-born draft. Same
+  // line mapping as doSendChange, but it hands the draft UP via onCreate (the
+  // host runs createDeal + keeps the born 'unsent' card open) instead of
+  // proposeDealChange. Birth only - no delivery; sending is the born card's
+  // DecisionBar "Send deal" button (D-12). No change reason - a first draft is
+  // not a negotiation.
   async function onSendCreate() {
     if (sendBusy || !onCreate || lines.length === 0) return;
     setSendBusy(true);
@@ -1181,8 +1185,9 @@ export function CardFront({
       </Sec>
 
       {/* ---- owner margin (private, "only you" - prototype .private-box) ----
-             hidden in create mode: the margin rolls up from born line-private rows
-             that do not exist yet. */}
+             hidden ONLY in create mode: the margin rolls up from born line-private
+             rows that do not exist yet. A born 'unsent' draft passes this gate
+             (D-17) - the private rows exist from birth, no extra plumbing. */}
       {!createMode && (
         <Sec>
           <div className="dc-private flex items-center gap-2 rounded-2xl px-3 py-2.5 text-[12px]">
@@ -1198,8 +1203,12 @@ export function CardFront({
         </Sec>
       )}
 
-      {/* ---- 6 · OPEN ITEMS (flat, D-15) ---- hidden in create mode: Open Items
-             live on the deal_workspace that is born with the card. */}
+      {/* ---- 6 · "Things to do" (the user-facing name; the component stays
+             OpenItems - flat, D-15) ---- hidden ONLY in create mode: the list
+             lives on the deal_workspace that is born WITH the card, so a born
+             'unsent' draft passes this gate too (D-17) - things created here
+             default private and stay invisible to the counterparty until Send
+             (RLS draft privacy). */}
       {!createMode && (
         <Sec>
           <OpenItems
@@ -1251,15 +1260,17 @@ export function CardFront({
              to send (edit mode) or a held change to Negotiate / Sign. ---- */}
       {editMode ? (
         createMode ? (
-          /* CREATE MODE footer (chj/07-08): a brand-new draft is not a
-             negotiation, so there is no change-reason box. "Send deal" hands the
-             draft up + the strip births it via createDeal.*/
+          /* CREATE MODE footer (chj/07-08, D-13): a brand-new draft is not a
+             negotiation, so there is no change-reason box. "Save draft" hands the
+             draft up + the host births it via createDeal - a private 'unsent'
+             card; the born card's DecisionBar owns "Send deal" (D-12). */
           <div className="dc-decision px-4 pb-3.5 pt-3">
             <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--dc-ink-38)]">
-              Send this deal
+              Save this draft
             </div>
             <p className="mb-2 text-[11px] text-[color:var(--dc-ink-55)]">
-              Add your products, conditions and a note, then send it straight into the chat.
+              Add your products, conditions and a note. Saving keeps it as a private
+              draft - you send it from the card once it is ready.
             </p>
             {sendError && <p className="mt-1 text-[11px] text-danger">{sendError}</p>}
             <div className="mt-2 flex items-center justify-end gap-2">
@@ -1276,7 +1287,7 @@ export function CardFront({
                 onClick={() => void onSendCreate()}
                 className="rounded-full bg-[color:var(--dc-pink)] px-4 py-1.5 text-[12px] font-bold text-white transition hover:bg-[color:var(--dc-pink-deep)] disabled:opacity-50"
               >
-                {sendBusy ? "Sending…" : "Send deal"}
+                {sendBusy ? "Saving…" : "Save draft"}
               </button>
             </div>
           </div>
