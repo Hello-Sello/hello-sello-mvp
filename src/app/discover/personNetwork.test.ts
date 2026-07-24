@@ -25,6 +25,7 @@ const fullRow = {
   company_logo_path: 'logos/bloom.png',
   company_country: 'DE',
   company_city: 'Berlin',
+  thread_id: 'thread-1',
 }
 
 describe('mapPersonConnectionRow (PG-10)', () => {
@@ -35,6 +36,7 @@ describe('mapPersonConnectionRow (PG-10)', () => {
     expect(out.avatarUrl).toBe('https://cdn.test/avatars/avatars/jane.png')
     expect(out.companyLogoUrl).toBe('https://cdn.test/shop-media/logos/bloom.png')
     expect(out.companyCountryName).toBe('Germany')
+    expect(out.threadId).toBe('thread-1')
   })
 
   it('null avatar / company paths resolve to null, not a broken URL', () => {

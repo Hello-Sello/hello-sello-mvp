@@ -23,6 +23,8 @@ export type DiscoverPersonConnection = {
   companyCountryCode: string | null;
   companyCountryName: string | null;
   companyCity: string | null;
+  /** the company-less p2p DM thread with this person (PG-13, for the Message button) */
+  threadId: string | null;
 };
 
 // Row shape from the RPC (typed locally — not in generated database.types, same
@@ -38,6 +40,7 @@ type Row = {
   company_logo_path: string | null;
   company_country: string | null;
   company_city: string | null;
+  thread_id: string | null;
 };
 
 /** Pure row → view mapper. `urlFor(bucket, path)` resolves a public storage URL. */
@@ -57,6 +60,7 @@ export function mapPersonConnectionRow(
     companyCountryCode: r.company_country,
     companyCountryName: r.company_country ? countryName(r.company_country) : null,
     companyCity: r.company_city,
+    threadId: r.thread_id,
   };
 }
 

@@ -4802,6 +4802,7 @@ export type Database = {
           display_name: string
           person_id: string
           public_handle: string
+          thread_id: string
           title: string
         }[]
       }

@@ -48,6 +48,11 @@ INSERT INTO public.person_connection (person_a_id, person_b_id, initiated_by_per
 VALUES ('ca111111-1111-1111-1111-111111111111', 'ca222222-2222-2222-2222-222222222222',
         'ca111111-1111-1111-1111-111111111111');
 
+-- The company-less p2p DM thread for the pair (as accept_person_connection makes),
+-- so MPC-07 can assert the RPC returns its thread_id for the Message button.
+INSERT INTO public.chat_thread (relationship_id, type, person_a_id, person_b_id)
+VALUES (NULL, 'p2p', 'ca111111-1111-1111-1111-111111111111', 'ca222222-2222-2222-2222-222222222222');
+
 -- ── MPC-04: output columns exclude email/phone (schema-level check) ─────────
 DO $$
 DECLARE v_bad integer;
@@ -65,16 +70,19 @@ END $$;
 SELECT set_config('request.jwt.claims', '{"sub":"ca111111-1111-1111-1111-111111111111","role":"authenticated"}', true);
 SET LOCAL ROLE authenticated;
 DO $$
-DECLARE v_n integer; v_pid uuid; v_cname text;
+DECLARE v_n integer; v_pid uuid; v_cname text; v_tid uuid;
 BEGIN
   SELECT count(*) INTO v_n FROM public.list_my_person_connections();
   IF v_n <> 1 THEN RAISE EXCEPTION 'MPC-01 FAIL: P has % connections, expected 1', v_n; END IF;
 
-  SELECT person_id, company_name INTO v_pid, v_cname FROM public.list_my_person_connections();
+  SELECT person_id, company_name, thread_id INTO v_pid, v_cname, v_tid FROM public.list_my_person_connections();
   IF v_pid <> 'ca222222-2222-2222-2222-222222222222'
     THEN RAISE EXCEPTION 'MPC-03 FAIL: returned person % , expected T', v_pid; END IF;
   IF v_cname IS NULL OR v_cname = ''
     THEN RAISE EXCEPTION 'MPC-02 FAIL: connected person''s company_name not resolved'; END IF;
+  -- MPC-07: the p2p DM thread_id is returned (for the Message button, PG-13)
+  IF v_tid IS NULL
+    THEN RAISE EXCEPTION 'MPC-07 FAIL: thread_id not returned for a connection with a p2p thread'; END IF;
 END $$;
 RESET ROLE;
 
