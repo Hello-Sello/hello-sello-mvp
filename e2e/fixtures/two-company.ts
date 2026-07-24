@@ -111,11 +111,14 @@ DELETE FROM deal_card WHERE id IN (SELECT id FROM _cards);
 -- above with the card), but the p2p thread PERSISTS across serial tests. So a prior
 -- test's accept/decline announcement (sender='sella'/'system', type 'deal_card_updated' /
 -- 'deal_change_declined') would otherwise leak into the next test's p2p chat and make
--- a getByText assertion match the stale bubble. Widen this delete to clear all three
--- projection types from the relationship's p2p thread.
+-- a getByText assertion match the stale bubble. Widen this delete to clear all
+-- projection types from the relationship's p2p thread - including the two Wave 3b
+-- pills (E1 'deal_change_proposed' / B1 'deal_negotiation_requested'), which also
+-- persist on the p2p thread across serial tests.
 DELETE FROM chat_message
   WHERE type IN ('deal_detected', 'deal_card_updated', 'deal_change_declined',
-                 'deal_card', 'deal_cancelled', 'deal_signed')
+                 'deal_card', 'deal_cancelled', 'deal_signed',
+                 'deal_change_proposed', 'deal_negotiation_requested')
   AND thread_id IN (SELECT id FROM chat_thread WHERE relationship_id = :'rel');
 DELETE FROM sella_detection
   WHERE thread_id IN (SELECT id FROM chat_thread WHERE relationship_id = :'rel');
@@ -252,6 +255,29 @@ export function countDealChangeInputForCard(dealCardId: string): number {
 }
 
 /**
+ * Count the live `deal_pending_change` rows for ONE deal card (B3). A decline is
+ * an END: after `declineDeal` runs, no HELD change may survive on the now-closed
+ * card - a stale row would leave a ghost diff. Mirrors
+ * `countDealChangeInputForCard`'s shape exactly; the card id is passed in by the
+ * caller, resolved at RUNTIME from the freshly-born card (NEVER hardcoded - the
+ * seed regenerates ids on every `supabase db reset`).
+ */
+export function countPendingChangesForCard(dealCardId: string): number {
+  const bin = psqlBin()
+  const out = execFileSync(
+    bin,
+    [
+      DB_URL,
+      '-At',
+      '-c',
+      `select count(*) from public.deal_pending_change where deal_card_id = '${dealCardId}'`,
+    ],
+    { encoding: 'utf8' },
+  ).trim()
+  return Number(out)
+}
+
+/**
  * Count the live `deal_member` rows across ONE card's workspace (A1). A deal
  * born from a c2c COMPANY chat has no counterparty person, so its creator must
  * be the SOLE owner — that absence is the company-target routing key the
@@ -336,6 +362,35 @@ export function pendingChangeNote(dealCardId: string): string | null {
     { encoding: 'utf8' },
   ).trim()
   return out || null
+}
+
+/**
+ * The sorted line quantities of a card's currently-HELD change draft (C3). The
+ * held draft's `draft->line_items[]` carry the SHARED proposed shape; this
+ * returns each line's `quantity` ascending, so a test can prove BOTH proposed
+ * values SURVIVED a replace (withdraw + re-propose) - the C3 data-loss guard.
+ * A held note renders nowhere in the UI while only held, and neither does a held
+ * LINE (the read view shows the base + a diff, not the held draft's own array),
+ * so this DB read is the honest signal. Empty when no change is held. Card id
+ * resolved at RUNTIME by the caller (never hardcoded - the seed regenerates ids
+ * on every `supabase db reset`).
+ */
+export function pendingChangeLineQuantities(dealCardId: string): number[] {
+  const bin = psqlBin()
+  const out = execFileSync(
+    bin,
+    [
+      DB_URL,
+      '-At',
+      '-c',
+      `select coalesce(string_agg((li->>'quantity'), ',' order by (li->>'quantity')::numeric), '') ` +
+        `from public.deal_pending_change dpc, ` +
+        `lateral jsonb_array_elements(dpc.draft->'line_items') li ` +
+        `where dpc.deal_card_id = '${dealCardId}'`,
+    ],
+    { encoding: 'utf8' },
+  ).trim()
+  return out ? out.split(',').map(Number) : []
 }
 
 const CREDENTIALS: Record<Who, { email: string; password: string }> = {
@@ -457,6 +512,40 @@ export async function createDraftDealAsAlice(
   alicePage: Page,
   opts?: { note?: string },
 ): Promise<void> {
+  // steps 1-6: birth the private 'unsent' draft (the card is born but Bob still
+  // sees NOTHING - RLS, D-08).
+  await birthDraftDealAsAlice(alicePage, opts)
+
+  // 7. SEND it (Phase 12 D-06/D-12: the born card's DecisionBar owns the ONE
+  //    "Send deal" path — birth alone leaves the card invisible to Bob, D-08).
+  //    Wait on a NEGOTIATION-unique signal before returning: the initiator's
+  //    "Waiting for the other side to sign." line renders ONLY in DecisionBar's
+  //    negotiation branch (an unsent card shows the "Send deal" button
+  //    instead), so its appearance proves the send flip landed server-side —
+  //    callers must only ever receive a DELIVERED deal.
+  await dealPanel(alicePage).getByRole('button', { name: /^send deal$/i }).click()
+  await dealPanel(alicePage).getByText(/waiting for the other side to sign/i).waitFor({
+    timeout: 15000,
+  })
+}
+
+/**
+ * Birth a PRIVATE `unsent` draft deal as Alice, WITHOUT sending it — steps 1-6
+ * of the create flow only (the Phase-12 birth half, D-13). Drives the create
+ * card through "Save draft" and stops the instant the born 'unsent' card swaps
+ * into the panel (the "Edit deal" pencil is the born-card-only signal). The card
+ * is left OPEN on Alice's panel in READ mode with the DecisionBar showing "Send
+ * deal"; the counterparty sees nothing yet (RLS, D-08).
+ *
+ * Used by `createDraftDealAsAlice` (which then presses Send) AND by the CR-02
+ * draft-edit test, which edits the still-`unsent` draft IN PLACE (update_deal_draft)
+ * and must never send it — the pre-Send state cannot be reached from the shared
+ * beforeEach card (that one is already a sent 'negotiation' deal).
+ */
+export async function birthDraftDealAsAlice(
+  alicePage: Page,
+  opts?: { note?: string },
+): Promise<void> {
   // 1. land in Connect and open the StonePharm conversation.
   await alicePage.goto('/connect/chat')
   await alicePage
@@ -469,10 +558,9 @@ export async function createDraftDealAsAlice(
   //    same words (strict-mode would match both).
   await alicePage.getByRole('button', { name: 'Start a deal', exact: true }).click()
 
-  // 3. pick a real product from Alice's own catalogue. The select's only rendered
-  //    while no line is open yet, so it is the single `<select>` in the panel at
-  //    this point; `selectOption` fires a real change event, which CardFront's
-  //    addFromCatalog turns into a fresh, auto-opened line.
+  // 3. pick a real product from Alice's own catalogue. `selectOption` fires a real
+  //    change event, which CardFront's addFromCatalog turns into a fresh,
+  //    auto-opened line.
   const addProductSelect = dealPanel(alicePage)
     .locator('select')
     .filter({ hasText: /add product from your shop/i })
@@ -506,14 +594,43 @@ export async function createDraftDealAsAlice(
   await dealPanel(alicePage).getByRole('button', { name: /edit deal/i }).waitFor({
     timeout: 15000,
   })
+}
 
-  // 7. SEND it (Phase 12 D-06/D-12: the born card's DecisionBar owns the ONE
-  //    "Send deal" path — birth alone leaves the card invisible to Bob, D-08).
-  //    Wait on a NEGOTIATION-unique signal before returning: the initiator's
-  //    "Waiting for the other side to sign." line renders ONLY in DecisionBar's
-  //    negotiation branch (an unsent card shows the "Send deal" button
-  //    instead), so its appearance proves the send flip landed server-side —
-  //    callers must only ever receive a DELIVERED deal.
+/**
+ * Birth AND SEND a TWO-line deal as Alice (C3 substrate). Same create flow as
+ * `createDraftDealAsAlice`, but adds a SECOND catalogue product (San Raf 29/1 PNK,
+ * seed.sql section 6, GreenLeaf AUR-1C) before "Save draft", so the born + sent
+ * deal carries two `deal_line_item` rows — what the replace-keeps-both-lines test
+ * needs. Both lines birth at 100 g; the test proposes/re-proposes over them.
+ */
+export async function createTwoLineDraftDealAsAlice(alicePage: Page): Promise<void> {
+  await alicePage.goto('/connect/chat')
+  await alicePage.getByText(COUNTERPARTY_NAME.alice, { exact: false }).first().click()
+  await alicePage.getByRole('button', { name: 'Start a deal', exact: true }).click()
+  const addProductSelect = dealPanel(alicePage)
+    .locator('select')
+    .filter({ hasText: /add product from your shop/i })
+  await addProductSelect.waitFor()
+
+  // line 1: Pedanios 31/1 COS-CA @ 100 g / 5.00 (auto-opens the row).
+  await addProductSelect.selectOption({ label: 'Pedanios 31/1 COS-CA' })
+  const row1 = openRowLocator(alicePage)
+  await row1.locator('select').nth(2).selectOption('100')
+  await row1.locator('input[type="number"]').fill('5.00')
+
+  // line 2: San Raf 29/1 PNK @ 100 g / 4.00. Adding it auto-opens the new row and
+  // collapses line 1 (its 100 g/5.00 stay in the working copy). The add-select
+  // stays reachable (it renders in edit mode regardless of the open row).
+  await addProductSelect.selectOption({ label: 'San Raf 29/1 PNK' })
+  const row2 = openRowLocator(alicePage)
+  await row2.locator('select').nth(2).selectOption('100')
+  await row2.locator('input[type="number"]').fill('4.00')
+
+  // birth ("Save draft") then send — same waits as createDraftDealAsAlice.
+  await dealPanel(alicePage).getByRole('button', { name: /^save draft$/i }).click()
+  await dealPanel(alicePage)
+    .getByRole('button', { name: /edit deal/i })
+    .waitFor({ timeout: 15000 })
   await dealPanel(alicePage).getByRole('button', { name: /^send deal$/i }).click()
   await dealPanel(alicePage).getByText(/waiting for the other side to sign/i).waitFor({
     timeout: 15000,
@@ -591,17 +708,24 @@ export async function openDealInChat(page: Page, who: Who): Promise<void> {
  * counterparty chat, and re-open the card panel. The strip then reflects the
  * CURRENT server state (the held change appeared / cleared, the lock flipped).
  *
- * WHY this is needed (KNOWN APP BUG, see the spec header): DealPin.tsx subscribes
- * to postgres_changes on `deal_pending_change`, but that table was never added to
- * the `supabase_realtime` publication (only chat_message + chat_thread are — see
- * supabase/migrations/20260616120000_deal_pending_change.sql, which omits the
- * `alter publication supabase_realtime add table deal_pending_change`). So the
- * pencil-lock / DecisionBar content DOES NOT update live on the OTHER side — the
- * user must refresh. This helper performs exactly that refresh, so the tests can
- * still verify the real success criteria (both sides locked, the two-sided sign /
- * negotiate resolution) on the correct server state without depending on the
- * broken live transport. It does NOT weaken any assertion — it only re-reads the
- * state the missing realtime event would have delivered.
+ * WHY this deterministic re-read (rather than waiting on a live update):
+ * DealPin.tsx subscribes to postgres_changes on `deal_pending_change`, and in
+ * these tests the OTHER side's pencil-lock / DecisionBar content sometimes does
+ * not reflect a change until a refresh.
+ *
+ * VERIFIED FACT: both `deal_pending_change` (migration 20260617130000) and
+ * `deal_card` (migration 20260618120010) ARE members of the `supabase_realtime`
+ * publication — guarded by supabase/tests/realtime_publication_test.sql. The
+ * earlier "never added to supabase_realtime" claim was FALSE (it predated
+ * 20260617130000). So a missing publication is NOT the cause.
+ *
+ * HYPOTHESIS (not verified — confirm with a live probe before asserting it):
+ * whatever makes the update not arrive live on the other side is something else
+ * — candidates are the client's realtime auth token, RLS on the receiving
+ * subscription, or test timing. Until a probe pins it down, this helper simply
+ * re-reads the authoritative server state directly, so the tests still verify the
+ * real success criteria (both sides locked, the two-sided sign / negotiate
+ * resolution). It does NOT weaken any assertion — it only re-reads server state.
  */
 export async function refreshDealView(page: Page, who: Who): Promise<void> {
   await openDealInChat(page, who)
