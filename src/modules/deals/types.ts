@@ -207,44 +207,9 @@ export interface SignalView {
 }
 
 /**
- * deal_confirmation_status.code - one party's stance on the current version
- * (`deal_confirmation.status`). A missing row reads as `pending` (the seat
- * exists - both companies always have a seat - even before anyone acts).
- */
-export type ConfirmationStatus = "pending" | "confirmed" | "rejected";
-
-/**
- * One seat in the two-sided confirm gate (3d) - a company's stance on the
- * current card version. The `ConfirmBar` renders the two seats and knows
- * nothing about `deal_confirmation`; this view is its only input (so 3.5 can
- * feed the same bar from the per-change accept source - "same face, engine swap").
- */
-export interface ConfirmSeat {
-  side: PartySide;
-  companyId: string;
-  companyName: string;
-  status: ConfirmationStatus;
-  /** the person who responded (for "confirmed · Alice"); null while pending */
-  byName: string | null;
-  /** ISO timestamp of the response; null while pending */
-  respondedAt: string | null;
-}
-
-/** What a party can do at the gate (3d server action input). */
-export type ConfirmDecision = "confirm" | "decline" | "withdraw";
-
-/** Result of a `confirmDeal` action - a fast hint; the client re-reads the card. */
-export interface ConfirmResult {
-  /** the card status AFTER the action */
-  cardStatus: DealCardStatus;
-  /** true only when this action was the second confirm that flipped the gate */
-  bothConfirmed: boolean;
-}
-
-/**
  * Result of a `finalizeDeal` action (D-16) - a fast hint; the client re-reads
- * the card and the golden skin follows the DB status. Modelled on
- * `ConfirmResult`; the status after a successful finalize is always 'done'.
+ * the card and the golden skin follows the DB status. The status after a
+ * successful finalize is always 'done'.
  */
 export interface FinalizeDealResult {
   /** the card status AFTER finalization (always 'done' on success) */
@@ -254,8 +219,7 @@ export interface FinalizeDealResult {
 /**
  * The whole card, ready to render. One `getDealCard(id)` read assembles this:
  * the card (narrowed), the current-version line items, my-side per-line margins,
- * the seeded signals for my side, the full version log, and the two confirm
- * seats for the current version (3d).
+ * the seeded signals for my side, and the full version log.
  */
 export interface DealCardView {
   card: DealCard;
@@ -278,8 +242,6 @@ export interface DealCardView {
   log: LogEntry[];
   /** which side the viewer is on (seller/buyer); null if the viewer has no company */
   viewerSide: PartySide | null;
-  /** the two confirm seats for the current version (3d); seller first, then buyer */
-  confirmations: ConfirmSeat[];
   /**
    * The HELD pending change on this deal (4.5.4), resolved for the viewer - or
    * `null` when no change is in flight. This is the LOCK flag: when present, a
@@ -684,26 +646,6 @@ export interface PendingProposalView {
  */
 export interface ConfirmDetectedResult {
   bornCardId: string | null;
-}
-
-/**
- * The edit-form payload handed to `editDeal` (3.5b). Same shape as create but on
- * an existing card, and the `note` is MANDATORY - every change carries a human
- * "why" (D2). Pressing Update bumps the version and resets the confirm gate.
- */
-export interface EditDealInput {
-  dealCardId: string;
-  lines: DraftLineInput[];
-  freeDelivery?: boolean;
-  dueDate?: string | null;
-  paymentTermsCode?: string | null;
-  /** REQUIRED on an edit (unlike create, where it is optional at draft). */
-  note: string;
-}
-
-/** Result of `editDeal` - the new version number the card was bumped to. */
-export interface EditDealResult {
-  version: number;
 }
 
 /* -------------------------------------------------------------------------- */

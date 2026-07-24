@@ -177,8 +177,8 @@ export function DealCard({
         </div>
 
         {/* BACK - fills the box, pre-rotated 180deg so it faces forward when flipped.
-            Not mounted in create mode: the back reads signals/log/confirmations that
-            a not-yet-born draft does not have. */}
+            Not mounted in create mode: the back reads signals/log that a
+            not-yet-born draft does not have. */}
         {!createMode && (
           <div
             className="absolute inset-0"

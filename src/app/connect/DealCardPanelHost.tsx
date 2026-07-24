@@ -41,7 +41,6 @@ function emptyDraftView(buyerName: string): DealCardView {
     signals: [],
     log: [],
     viewerSide: "seller",
-    confirmations: [],
     pendingChange: null,
     myNote: null,
     theirNote: null,

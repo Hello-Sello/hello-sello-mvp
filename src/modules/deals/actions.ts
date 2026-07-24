@@ -3,28 +3,26 @@
 /**
  * Deals module - server actions.
  *
- * The confirm/decline/withdraw decisions and the create run on the SERVER (not
- * the client): writing rows, deriving the viewer's company from the SESSION
- * (never the caller), and `writeAudit` are server-only. The session-derived
- * company is the guardrail - a person can only act as their OWN side.
+ * Phase 12 (D-09): this file is the THIN, AUDITED caller layer. Every status
+ * transition lives in a SECURITY DEFINER RPC (send_deal, sign_deal,
+ * decline_deal, finalize_deal, reopen_deal_ticket, close_deal_ticket) - the
+ * app physically cannot write deal_card.status (REVOKEd in 12-04/12-05).
+ * Actions run on the SERVER: deriving the viewer's company from the SESSION
+ * (never the caller) and `writeAudit` are server-only. The session-derived
+ * identity is the guardrail - a person can only act as their OWN side.
  */
 import { createClient } from "@/shared/db/server";
 import { getCurrentCompanyId } from "@/shared/auth";
 import { writeAudit } from "@/shared/audit";
 import { createDealRpcArgs } from "./lib/createDealArgs";
 import { buyerCompanyId, sellerCompanyId, viewerSide } from "./lib/derive";
-import { canFinalizeByInvoice } from "./lib/finalize";
 import type {
   ConfirmDealChangeInput,
   ConfirmDealChangeResult,
-  ConfirmDecision,
   ConfirmDetectedResult,
-  ConfirmResult,
   CreateDealInput,
   CreateDealResult,
   DealCardStatus,
-  EditDealInput,
-  EditDealResult,
   FinalizeDealResult,
   OfferPromotionInput,
   OfferPromotionResult,
@@ -61,156 +59,14 @@ function sumValueNet(lines: CreateDealInput["lines"]): number | null {
     : null;
 }
 
-export async function confirmDeal(args: {
-  dealCardId: string;
-  version: number;
-  decision: ConfirmDecision;
-}): Promise<ConfirmResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("confirmDeal: no authenticated user");
-
-  const companyId = await getCurrentCompanyId();
-  if (!companyId) throw new Error("confirmDeal: no company in session");
-
-  // the card + its relationship pair (to know what "both sides" means)
-  const { data: card, error: cardErr } = await supabase
-    .from("deal_card")
-    .select("id, relationship_id, status, initiating_company_id")
-    .eq("id", args.dealCardId)
-    .single();
-  if (cardErr) throw cardErr;
-
-  const { data: rel, error: relErr } = await supabase
-    .from("relationship")
-    .select("company_a_id, company_b_id")
-    .eq("id", card.relationship_id)
-    .single();
-  if (relErr) throw relErr;
-  const otherCompanyId =
-    companyId === rel.company_a_id ? rel.company_b_id : rel.company_a_id;
-
-  const now = new Date().toISOString();
-
-  // ---- withdraw: initiator only, and only before the other side confirms ----
-  if (args.decision === "withdraw") {
-    if (companyId !== card.initiating_company_id) {
-      throw new Error("Only the initiating side can withdraw this draft.");
-    }
-    const { data: otherRow } = await supabase
-      .from("deal_confirmation")
-      .select("status")
-      .eq("deal_card_id", card.id)
-      .eq("version", args.version)
-      .eq("company_id", otherCompanyId)
-      .maybeSingle();
-    if (otherRow?.status === "confirmed") {
-      throw new Error("The other side already confirmed - the draft cannot be withdrawn.");
-    }
-    // Phase-12: 'withdrawn' is retired (D-18) - a withdraw lands on 'cancelled'
-    // (the backfill mapping). This whole path dies structurally in 12-07.
-    await updateStatus(supabase, card.id, "cancelled");
-    await logLine(supabase, card.id, args.version, user.id, "Draft withdrawn by the initiating side.");
-    await writeAudit({
-      actorType: "user",
-      action: "deal.withdrawn",
-      contentType: "deal_card",
-      contentId: card.id,
-      actorPersonId: user.id,
-    });
-    return { cardStatus: "cancelled", bothConfirmed: false };
-  }
-
-  // ---- confirm / decline: upsert THIS side's row -----------------------------
-  const myStatus = args.decision === "confirm" ? "confirmed" : "rejected";
-  const { error: upErr } = await supabase
-    .from("deal_confirmation")
-    .upsert(
-      {
-        deal_card_id: card.id,
-        version: args.version,
-        company_id: companyId,
-        status: myStatus,
-        responding_person_id: user.id,
-        responded_at: now,
-      },
-      { onConflict: "deal_card_id,version,company_id" },
-    );
-  if (upErr) throw upErr;
-
-  if (args.decision === "decline") {
-    // the deal stays Draft and returns to negotiation; the row records the no
-    await writeAudit({
-      actorType: "user",
-      action: "deal.declined",
-      contentType: "deal_card",
-      contentId: card.id,
-      actorPersonId: user.id,
-    });
-    return { cardStatus: card.status as DealCardStatus, bothConfirmed: false };
-  }
-
-  // confirm: audit this party's yes, then check whether BOTH sides are in
-  await writeAudit({
-    actorType: "user",
-    action: "deal.party_confirmed",
-    contentType: "deal_card",
-    contentId: card.id,
-    actorPersonId: user.id,
-  });
-
-  const { data: rows, error: rowsErr } = await supabase
-    .from("deal_confirmation")
-    .select("company_id, status")
-    .eq("deal_card_id", card.id)
-    .eq("version", args.version);
-  if (rowsErr) throw rowsErr;
-
-  const confirmed = new Set(
-    (rows ?? []).filter((r) => r.status === "confirmed").map((r) => r.company_id),
-  );
-  const bothConfirmed = confirmed.has(rel.company_a_id) && confirmed.has(rel.company_b_id);
-
-  if (bothConfirmed && card.status === "negotiation") {
-    await updateStatus(supabase, card.id, "confirmed");
-    await logLine(supabase, card.id, args.version, user.id, "Deal confirmed by both sides.");
-    await writeAudit({
-      actorType: "user",
-      action: "deal.confirmed",
-      contentType: "deal_card",
-      contentId: card.id,
-      actorPersonId: user.id,
-    });
-    return { cardStatus: "confirmed", bothConfirmed: true };
-  }
-
-  return { cardStatus: card.status as DealCardStatus, bothConfirmed: false };
-}
-
 /**
- * Finalize a deal (Phase 7, D-27/D-28) - the invoice close that moves the card to
- * Done (Deal Executed).
- *
- * D-27 makes ONE thing the close trigger: the SELLER uploading a real invoice PDF.
- * There is no buyer confirm-receipt gate, and the Stages finalize gate (D-15) is
- * retired. DocumentsTab calls this right after the seller's upload, so the upload
- * itself closes the deal.
- *
- * Guardrails:
- *   - SELLER-ONLY (ASVS V4): the caller's company is derived from the SESSION and
- *     must BE the seller (derived from the card + relationship). A buyer-session
- *     finalize call is rejected before the gate.
- *   - INVOICE TRIGGER: the gate (`canFinalizeByInvoice`, pure/unit-tested) requires
- *     the AGREED status (`confirmed`) AND a `deal_artifact(category=
- *     'invoice')` whose `uploaded_by_company_id` is the SELLER company. The
- *     uploader identity is stamped from the session at upload time
- *     (uploadDealInvoice), so a buyer-uploaded or forged invoice cannot satisfy it.
- *   - IDEMPOTENCY: an already-`done` card returns WITHOUT a second write.
- *
- * On pass: flip status -> done, log the invoice-close event to `deal_card_log`
- * (D-28 version history), and `writeAudit('deal.finalized')`.
+ * Finalize a deal (Phase 7, D-27/D-28) - the invoice close that moves the card
+ * to Done (Deal Executed). Thin RPC caller (12-07, D-09): the seller
+ * derivation, the seller-invoice trigger, and the confirmed-status gate all
+ * live in the `finalize_deal` SECURITY DEFINER RPC now - the app can no
+ * longer write deal_card.status (REVOKEd in 12-04/12-05). DocumentsTab calls
+ * this right after the seller's upload, so the upload itself closes the deal.
+ * The RPC's error sentences surface verbatim in the UI banner.
  */
 export async function finalizeDeal(args: {
   dealCardId: string;
@@ -221,90 +77,32 @@ export async function finalizeDeal(args: {
   } = await supabase.auth.getUser();
   if (!user) throw new Error("finalizeDeal: no authenticated user");
 
-  const companyId = await getCurrentCompanyId();
-  if (!companyId) throw new Error("finalizeDeal: no company in session");
-
-  // the card: status drives the idempotency guard + the gate; deal_type +
-  // initiating_company_id + relationship_id derive the seller.
+  // IDEMPOTENCY parity (read-only): the RPC silently no-ops on an already-done
+  // card; returning here as well keeps a repeat call from stamping a second
+  // 'deal.finalized' row into the hash-chained audit log.
   const { data: card, error: cardErr } = await supabase
     .from("deal_card")
-    .select("id, status, version, deal_type, initiating_company_id, relationship_id")
+    .select("status")
     .eq("id", args.dealCardId)
     .single();
   if (cardErr) throw cardErr;
-
-  // idempotency guard: if already done, do NOT write again.
   if (card.status === "done") {
     return { cardStatus: "done" };
   }
 
-  // derive the SELLER company from the card's issuer facts + the relationship pair.
-  const { data: rel, error: relErr } = await supabase
-    .from("relationship")
-    .select("company_a_id, company_b_id")
-    .eq("id", card.relationship_id)
-    .single();
-  if (relErr) throw relErr;
-  const seller = sellerCompanyId(
-    {
-      deal_type: card.deal_type as "offer" | "order",
-      initiating_company_id: card.initiating_company_id,
-    },
-    rel.company_a_id,
-    rel.company_b_id,
-  );
+  // Call supabase.rpc DIRECTLY (not via a detached const) so its `this` stays
+  // bound. finalize_deal is hand-added to database.types.ts (12-07 Task 1), so
+  // no `as never` cast is needed.
+  const { error } = await supabase.rpc("finalize_deal", {
+    p_deal_card_id: args.dealCardId,
+  });
+  if (error) throw new Error((error as { message: string }).message);
 
-  // SELLER-ONLY guard (ASVS V4): only the seller side may close the deal. A
-  // buyer-session finalize call is rejected here, before the gate.
-  if (companyId !== seller) {
-    throw new Error("Only the seller can finalize this deal.");
-  }
-
-  // the workspace this card belongs to (the invoice artifact hangs off it).
-  const { data: ws, error: wsErr } = await supabase
-    .from("deal_workspace")
-    .select("id")
-    .eq("deal_card_id", card.id)
-    .is("deleted_at", null)
-    .single();
-  if (wsErr) throw wsErr;
-
-  // TRIGGER: a SELLER-uploaded invoice must exist. Requiring
-  // uploaded_by_company_id = the seller company rejects a buyer-uploaded or forged
-  // invoice (ASVS V4). deal_artifact + its columns ARE in the generated types.
-  const { data: invoices, error: invErr } = await supabase
-    .from("deal_artifact")
-    .select("id")
-    .eq("deal_workspace_id", ws.id)
-    .eq("category", "invoice")
-    .eq("uploaded_by_company_id", seller)
-    .is("deleted_at", null)
-    .limit(1);
-  if (invErr) throw invErr;
-  const hasSellerInvoice = (invoices?.length ?? 0) > 0;
-
-  // GATE (D-27): agreed status + a seller invoice. Pure, unit-tested.
-  if (!canFinalizeByInvoice(card.status as DealCardStatus, hasSellerInvoice)) {
-    throw new Error(
-      "A confirmed deal with the seller's invoice is required to finalize.",
-    );
-  }
-
-  // flip status -> done (Deal Executed) and record the close in the card's version
-  // history (D-28) + the audit chain.
-  await updateStatus(supabase, card.id, "done");
-  await logLine(
-    supabase,
-    card.id,
-    card.version,
-    user.id,
-    "Deal Executed - the seller uploaded the invoice.",
-  );
   await writeAudit({
     actorType: "user",
     action: "deal.finalized",
     contentType: "deal_card",
-    contentId: card.id,
+    contentId: args.dealCardId,
     actorPersonId: user.id,
   });
 
@@ -499,69 +297,44 @@ export async function confirmDetectedDeal(args: {
 }
 
 /**
- * Edit a deal into a NEW version (3.5b). The human-pressed commit for a change:
- * one atomic `edit_deal_draft` RPC bumps the version, snapshots the new lines
- * (old version stays frozen), drops the card back to `draft` (so 3d's gate
- * re-runs), and records the MANDATORY note. The note is required (the RPC also
- * enforces it). Audit = `deal.amended`. Per-line margin is NOT carried here -
- * it lives in deal_line_item_private now (D-09); editDeal is the dormant path.
+ * Send a deal (12-07, A1/D-06) - the ONE app-side send caller. The whole
+ * delivery moment lives in the `send_deal` SECURITY DEFINER RPC, in ONE
+ * transaction: the 'unsent' -> 'negotiation' flip, the counterparty co-owner
+ * insert, deliver_deal's company-ticket half, the p2p thread + clickable deal
+ * pill, and the "Deal sent." log line. The card knows its recipient
+ * (metadata.counterparty_person_id, persisted at birth) - no client input
+ * beyond the card id (T-12-07). Returns the p2p thread id (null when
+ * company-target) so the host can navigate to the conversation.
  */
-export async function editDeal(input: EditDealInput): Promise<EditDealResult> {
+export async function sendDeal(dealCardId: string): Promise<{ threadId: string | null }> {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) throw new Error("editDeal: no authenticated user");
-  if (!input.note || !input.note.trim()) {
-    throw new Error("editDeal: a note is required for every change");
-  }
+  if (!user) throw new Error("sendDeal: no authenticated user");
 
-  const currency = input.lines[0]?.currency ?? "EUR";
-
-  const { data: newVersion, error } = await supabase.rpc("edit_deal_draft" as never, {
-    p_deal_card_id: input.dealCardId,
-    p_value_net: sumValueNet(input.lines),
-    p_currency: currency,
-    p_due_date: input.dueDate ?? null,
-    p_payment_terms_code: input.paymentTermsCode ?? null,
-    p_free_delivery: input.freeDelivery ?? false,
-    p_lines: rpcLines(input.lines),
-    // EditDealInput no longer carries a private value (the per-line margin moved
-    // to deal_line_item_private, D-09). editDeal is the dormant instant path
-    // (4.5.4 routes edits through proposeDealChange); pass null to keep it
-    // compiling without changing its behaviour.
-    p_private_value: null,
-    p_note: input.note.trim(),
-  } as never);
+  // Call supabase.rpc DIRECTLY (not via a detached const) so its `this` stays
+  // bound. send_deal is hand-added to database.types.ts (12-07 Task 1), so no
+  // `as never` cast is needed.
+  const { data, error } = await supabase.rpc("send_deal", {
+    p_deal_card_id: dealCardId,
+  });
   if (error) throw new Error((error as { message: string }).message);
-  const version = (newVersion as number) ?? 0;
 
   await writeAudit({
     actorType: "user",
-    action: "deal.amended",
+    action: "deal.sent",
     contentType: "deal_card",
-    contentId: input.dealCardId,
+    contentId: dealCardId,
     actorPersonId: user.id,
   });
 
-  // 4d: Sella explains WHY the deal changed (person-waiting -> inline, per the
-  // placement rule). The Bedrock call lives in the sella-summarize edge fn so the key
-  // stays in Supabase (Path A); this only triggers it. FAIL-SOFT: a summary failure
-  // must NOT fail the edit - the new version already committed.
-  try {
-    await supabase.functions.invoke("sella-summarize", {
-      body: { deal_card_id: input.dealCardId, version },
-    });
-  } catch {
-    // Sella down -> no summary line; the edit + deal are unaffected.
-  }
-
-  return { version };
+  return { threadId: (data as string | null) ?? null };
 }
 
 /**
  * Propose a HELD two-sided change to a deal (4.5.4) - the human-pressed Send
- * that replaces the instant `editDeal` for SHARED terms. This does NOT bump the
+ * that replaced the old instant-edit action for SHARED terms. This does NOT bump the
  * live card; it INSERTs one held `deal_pending_change` row (via the
  * `propose_deal_change` RPC) with the proposer's own side pre-voted `accept`.
  * The card moves to base+1 only when the OTHER side accepts, inside
@@ -848,11 +621,11 @@ async function announceDealEvent(
  * editing). It is distinct from Negotiate (`confirmDealChange({decision:'decline'})`,
  * which only discards a held change and keeps bargaining).
  *
- * Guardrails: the caller's company is derived from the SESSION and must be a party
- * to the deal's relationship (no trusted company id). Idempotent - an already-closed
- * (`cancelled`/`done`) deal returns without a second write. Any held pending change
- * is left in place; the `cancelled` status hides the DecisionBar, so it cannot be
- * acted on.
+ * Thin RPC caller (12-07, D-09): the membership guard, the flip, and the log
+ * line live in the `decline_deal` SECURITY DEFINER RPC. The single read below
+ * serves two purposes: the relationship id feeds the fail-soft chat
+ * announcement, and the status check mirrors the RPC's idempotent
+ * early-return so an already-closed deal gets no second audit stamp.
  */
 export async function declineDeal(args: { dealCardId: string }): Promise<void> {
   const supabase = await createClient();
@@ -861,49 +634,33 @@ export async function declineDeal(args: { dealCardId: string }): Promise<void> {
   } = await supabase.auth.getUser();
   if (!user) throw new Error("declineDeal: no authenticated user");
 
-  const companyId = await getCurrentCompanyId();
-  if (!companyId) throw new Error("declineDeal: no company in session");
-
   const { data: card, error: cardErr } = await supabase
     .from("deal_card")
-    .select("id, status, version, relationship_id")
+    .select("status, relationship_id")
     .eq("id", args.dealCardId)
     .single();
   if (cardErr) throw cardErr;
 
-  // membership guard: the caller's company must be a party to this deal.
-  const { data: rel, error: relErr } = await supabase
-    .from("relationship")
-    .select("company_a_id, company_b_id")
-    .eq("id", card.relationship_id)
-    .single();
-  if (relErr) throw relErr;
-  if (companyId !== rel.company_a_id && companyId !== rel.company_b_id) {
-    throw new Error("Only a party to this deal can decline it.");
-  }
-
-  // idempotent: an already-closed deal does not get a second write.
+  // idempotent: an already-closed deal does not get a second write (the RPC
+  // would no-op anyway; skipping here also skips a duplicate audit row).
   if (card.status === "cancelled" || card.status === "done") return;
 
-  await updateStatus(supabase, card.id, "cancelled");
-  await logLine(
-    supabase,
-    card.id,
-    card.version,
-    user.id,
-    "Deal declined - the deal is closed.",
-  );
+  const { error } = await supabase.rpc("decline_deal", {
+    p_deal_card_id: args.dealCardId,
+  });
+  if (error) throw new Error((error as { message: string }).message);
+
   await writeAudit({
     actorType: "user",
     action: "deal.declined",
     contentType: "deal_card",
-    contentId: card.id,
+    contentId: args.dealCardId,
     actorPersonId: user.id,
   });
   // DEV-33: project the decline into the chat stream (thin system line)
   await announceDealEvent(
     supabase,
-    card.id,
+    args.dealCardId,
     card.relationship_id,
     "deal_cancelled",
     "Deal declined - the deal is closed.",
@@ -911,17 +668,15 @@ export async function declineDeal(args: { dealCardId: string }): Promise<void> {
 }
 
 /**
- * Sign a deal (chj/07-08) - the single-sign accept. The party who did NOT send the
- * latest version signs; NO note, NO reason (the user's flow: sign is a direct
- * button). If a change is held, it is committed first (confirm_deal_change accept,
- * auto reason) so the signed version is the proposed one; then the card flips to
- * `confirmed` - the AGREED state that locks editing and lets the SELLER upload the
- * invoice (finalizeDeal's gate).
- *
- * Guardrails: the caller's company comes from the SESSION and must be a party;
- * idempotent (a non-draft deal returns unchanged). This flips the status DIRECTLY
- * and does NOT write `deal_confirmation`, keeping confirm_deal_change out of the
- * seal gate (the prior regression: confirm writes leaked into that gate).
+ * Sign a deal (chj/07-08) - the single-sign accept. Thin RPC caller (12-07,
+ * A3/D-10): the whole verb is ONE `sign_deal` SECURITY DEFINER transaction -
+ * membership, the negotiation-only gate, the FIXED-SIGNER rule (the
+ * initiating company can never sign its own deal), the own-held-change
+ * rejection, the atomic held-change commit (nested confirm_deal_change) and
+ * the flip to `confirmed`. The RPC's error sentences surface verbatim in the
+ * UI banner. Audit + the chat announcement stay app-side (fail-soft, as
+ * before). Still no `deal_confirmation` write - the Seal stays deferred
+ * (D-11).
  */
 export async function signDeal({
   dealCardId,
@@ -934,49 +689,19 @@ export async function signDeal({
   } = await supabase.auth.getUser();
   if (!user) throw new Error("signDeal: no authenticated user");
 
-  const companyId = await getCurrentCompanyId();
-  if (!companyId) throw new Error("signDeal: no company in session");
-
+  // one read-only fetch: the relationship id feeds the fail-soft announcement.
   const { data: card, error: cardErr } = await supabase
     .from("deal_card")
-    .select("id, status, version, relationship_id")
+    .select("relationship_id")
     .eq("id", dealCardId)
     .single();
   if (cardErr) throw cardErr;
 
-  const { data: rel, error: relErr } = await supabase
-    .from("relationship")
-    .select("company_a_id, company_b_id")
-    .eq("id", card.relationship_id)
-    .single();
-  if (relErr) throw relErr;
-  if (companyId !== rel.company_a_id && companyId !== rel.company_b_id) {
-    throw new Error("Only a party to this deal can sign it.");
-  }
+  const { error } = await supabase.rpc("sign_deal", {
+    p_deal_card_id: dealCardId,
+  });
+  if (error) throw new Error((error as { message: string }).message);
 
-  // idempotent: only a live negotiation (sent, bargaining) can be signed.
-  if (card.status !== "negotiation") return { cardStatus: card.status as DealCardStatus };
-
-  // if a change is held, COMMIT it first so the signed version is the proposed one.
-  // confirm_deal_change (accept) is responder-only + enforces that in the RPC; the
-  // reason is auto (no note UI). Per D-20 the proposer's yes is implicit, so a
-  // responder accept commits the change (never a still-waiting first accept).
-  const { data: held } = await supabase
-    .from("deal_pending_change" as never)
-    .select("deal_card_id")
-    .eq("deal_card_id", dealCardId)
-    .maybeSingle();
-  if (held) {
-    const { error: cErr } = await supabase.rpc("confirm_deal_change" as never, {
-      p_deal_card_id: dealCardId,
-      p_decision: "accept",
-      p_reason: "Signed the deal",
-    } as never);
-    if (cErr) throw new Error((cErr as { message: string }).message);
-  }
-
-  await updateStatus(supabase, dealCardId, "confirmed");
-  await logLine(supabase, dealCardId, card.version, user.id, "Deal signed.");
   await writeAudit({
     actorType: "user",
     action: "deal.confirmed",
@@ -1229,10 +954,11 @@ export async function declinePromotion({
 /* -------------------------------------------------------------------------- */
 
 /**
- * Reopen a closed deal into a ticket (07-06). Allowed for EITHER deal party (the
- * session company must be a member), and only from a closed deal (`done`). Moves
- * the status to `ticket_created` and appends the reopen (+ optional note) to the
- * card log. NEVER changes the sealed terms (T-07-06-03).
+ * Reopen a closed deal into a ticket (07-06). Thin RPC caller (12-07, D-09):
+ * the either-party membership guard, the done-only gate (D-29), the flip to
+ * `ticket_created`, and the log line (+ optional note) live in the
+ * `reopen_deal_ticket` SECURITY DEFINER RPC. NEVER changes the sealed terms
+ * (T-07-06-03).
  */
 export async function reopenTicket({
   dealCardId,
@@ -1247,30 +973,14 @@ export async function reopenTicket({
   } = await supabase.auth.getUser();
   if (!user) throw new Error("reopenTicket: no authenticated user");
 
-  const companyId = await getCurrentCompanyId();
-  if (!companyId) throw new Error("reopenTicket: no company in session");
+  // the RPC trims the note and composes the log line exactly as this action
+  // used to ("Reopen ticket opened - <note>" / "Reopen ticket opened.").
+  const { error } = await supabase.rpc("reopen_deal_ticket", {
+    p_deal_card_id: dealCardId,
+    ...(note != null ? { p_note: note } : {}),
+  });
+  if (error) throw new Error((error as { message: string }).message);
 
-  const { version, status, sellerId, buyerId } = await dealSides(supabase, dealCardId);
-  // EITHER party may reopen - the session company must be one of the two sides.
-  if (companyId !== sellerId && companyId !== buyerId) {
-    throw new Error("Only a deal party can reopen this deal.");
-  }
-  // D-29: the ONLY path back is from a closed deal.
-  if (status !== "done") {
-    throw new Error("Only a closed (executed) deal can be reopened.");
-  }
-
-  await updateStatus(supabase, dealCardId, "ticket_created");
-  const trimmed = note?.trim();
-  await logLine(
-    supabase,
-    dealCardId,
-    version,
-    user.id,
-    trimmed
-      ? `Reopen ticket opened - ${trimmed}`
-      : "Reopen ticket opened.",
-  );
   await writeAudit({
     actorType: "user",
     action: "deal.reopened",
@@ -1281,9 +991,11 @@ export async function reopenTicket({
 }
 
 /**
- * Close a reopen ticket (07-06). Allowed for EITHER deal party, only from
- * `ticket_created`; moves the status to `ticket_closed` and logs it. Like
- * `reopenTicket`, it never touches the sealed terms (T-07-06-03).
+ * Close a reopen ticket (07-06). Thin RPC caller (12-07, D-09): the
+ * either-party membership guard, the ticket_created-only gate, the flip to
+ * `ticket_closed`, and the log line live in the `close_deal_ticket` SECURITY
+ * DEFINER RPC. Like `reopenTicket`, it never touches the sealed terms
+ * (T-07-06-03).
  */
 export async function closeTicket({
   dealCardId,
@@ -1296,19 +1008,11 @@ export async function closeTicket({
   } = await supabase.auth.getUser();
   if (!user) throw new Error("closeTicket: no authenticated user");
 
-  const companyId = await getCurrentCompanyId();
-  if (!companyId) throw new Error("closeTicket: no company in session");
+  const { error } = await supabase.rpc("close_deal_ticket", {
+    p_deal_card_id: dealCardId,
+  });
+  if (error) throw new Error((error as { message: string }).message);
 
-  const { version, status, sellerId, buyerId } = await dealSides(supabase, dealCardId);
-  if (companyId !== sellerId && companyId !== buyerId) {
-    throw new Error("Only a deal party can close this ticket.");
-  }
-  if (status !== "ticket_created") {
-    throw new Error("Only an open reopen ticket can be closed.");
-  }
-
-  await updateStatus(supabase, dealCardId, "ticket_closed");
-  await logLine(supabase, dealCardId, version, user.id, "Reopen ticket closed.");
   await writeAudit({
     actorType: "user",
     action: "deal.ticket_closed",
@@ -1362,14 +1066,6 @@ async function dealSides(
     sellerId: sellerCompanyId(facts, rel.company_a_id, rel.company_b_id),
     buyerId: buyerCompanyId(facts, rel.company_a_id, rel.company_b_id),
   };
-}
-
-async function updateStatus(supabase: ServerClient, cardId: string, status: DealCardStatus) {
-  const { error } = await supabase
-    .from("deal_card")
-    .update({ status, updated_at: new Date().toISOString() })
-    .eq("id", cardId);
-  if (error) throw error;
 }
 
 async function logLine(

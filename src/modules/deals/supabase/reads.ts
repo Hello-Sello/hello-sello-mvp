@@ -32,12 +32,9 @@ import type {
   LineMarginView,
   LogAuthor,
   ChangeOrigin,
-  ConfirmationStatus,
-  ConfirmSeat,
   LogEntry,
   MemberRole,
   MemberView,
-  PartySide,
   ProductBatchView,
   PendingChangeView,
   PendingProposalView,
@@ -565,7 +562,7 @@ export async function getDealCard(cardId: string): Promise<DealCardView> {
     .single();
   if (relErr) throw relErr;
 
-  const [cosRes, linesRes, logRes, confRes] = await Promise.all([
+  const [cosRes, linesRes, logRes] = await Promise.all([
     supabase.from("company").select("id, name").in("id", [rel.company_a_id, rel.company_b_id]),
     supabase
       .from("deal_line_item")
@@ -584,15 +581,8 @@ export async function getDealCard(cardId: string): Promise<DealCardView> {
       .select("id, version, change_summary, origin, changed_by, changed_by_person_id, created_at")
       .eq("deal_card_id", card.id)
       .order("version", { ascending: false }),
-    // the two-sided confirm gate for the CURRENT version (3d). RLS = relationship
-    // member, so both sides' rows return; a missing row reads as `pending`.
-    supabase
-      .from("deal_confirmation")
-      .select("company_id, status, responding_person_id, responded_at")
-      .eq("deal_card_id", card.id)
-      .eq("version", card.version),
   ]);
-  for (const r of [cosRes, linesRes, logRes, confRes]) {
+  for (const r of [cosRes, linesRes, logRes]) {
     if (r.error) throw r.error;
   }
 
@@ -647,13 +637,12 @@ export async function getDealCard(cardId: string): Promise<DealCardView> {
     };
   });
 
-  // resolve person names for log authors AND confirmation responders (one fetch)
+  // resolve person names for log authors (one fetch)
   const personIds = Array.from(
     new Set(
-      [
-        ...(logRes.data ?? []).map((r) => r.changed_by_person_id),
-        ...(confRes.data ?? []).map((r) => r.responding_person_id),
-      ].filter((x): x is string => !!x),
+      (logRes.data ?? [])
+        .map((r) => r.changed_by_person_id)
+        .filter((x): x is string => !!x),
     ),
   );
   const nameById = new Map<string, string>();
@@ -729,26 +718,6 @@ export async function getDealCard(cardId: string): Promise<DealCardView> {
   // The strip reads the resolved view; the pencil reads only whether it is null.
   const pendingChange = await getPendingChange(card.id);
 
-  // the two confirm seats (3d), seller first then buyer. A missing row = pending.
-  const confByCompany = new Map(
-    (confRes.data ?? []).map((r) => [r.company_id, r] as const),
-  );
-  const seatFor = (sideKind: PartySide, companyId: string, companyName: string): ConfirmSeat => {
-    const row = confByCompany.get(companyId);
-    return {
-      side: sideKind,
-      companyId,
-      companyName,
-      status: (row?.status as ConfirmationStatus) ?? "pending",
-      byName: row?.responding_person_id ? (nameById.get(row.responding_person_id) ?? null) : null,
-      respondedAt: row?.responded_at ?? null,
-    };
-  };
-  const confirmations: ConfirmSeat[] = [
-    seatFor("seller", sellerId, sellerName),
-    seatFor("buyer", buyerId, buyerName),
-  ];
-
   return {
     card,
     sellerName,
@@ -760,7 +729,6 @@ export async function getDealCard(cardId: string): Promise<DealCardView> {
     signals: side ? seededSignals(side) : [],
     log,
     viewerSide: side,
-    confirmations,
     pendingChange,
     myNote,
     theirNote,
