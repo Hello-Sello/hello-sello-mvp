@@ -12,27 +12,36 @@ import type { DiscoverCompany } from "./companies";
 import type { DiscoverPerson } from "./people";
 import type { DiscoverCompanyRequest } from "./companyRequests";
 import type { DiscoverPersonRequest } from "./incomingPersonRequests";
+import type { DiscoverPersonConnection } from "./personNetwork";
+import type { ConnectedCompany } from "@/modules/messaging/types";
 import { DiscoverAdsBanner } from "./DiscoverAdsBanner";
 import { CompaniesSection } from "./sections/CompaniesSection";
 import { NewPeopleSection } from "./sections/NewPeopleSection";
 import { RequestsSection } from "./sections/RequestsSection";
+import { MyNetworkSection } from "./sections/MyNetworkSection";
 
 export function DiscoverShell({
   companies,
   people = [],
   companyRequests = [],
   personRequests = [],
+  networkCompanies = [],
+  networkPeople = [],
 }: {
   companies: DiscoverCompany[];
   people?: DiscoverPerson[];
   companyRequests?: DiscoverCompanyRequest[];
   personRequests?: DiscoverPersonRequest[];
+  networkCompanies?: ConnectedCompany[];
+  networkPeople?: DiscoverPersonConnection[];
 }) {
   return (
     <div className="mx-auto h-full w-full max-w-6xl overflow-auto px-4 py-8 sm:px-6">
       <DiscoverAdsBanner />
 
       <RequestsSection companyRequests={companyRequests} personRequests={personRequests} />
+
+      <MyNetworkSection companies={networkCompanies} people={networkPeople} />
 
       <NewPeopleSection people={people} />
 
