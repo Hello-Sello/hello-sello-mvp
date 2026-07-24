@@ -81,10 +81,9 @@ export {
   uploadDealInvoice,
 } from "./supabase/writes";
 export {
-  confirmDeal,
   createDeal,
+  sendDeal,
   declineDeal,
-  editDeal,
   finalizeDeal,
   signDeal,
   offerPromotion,
