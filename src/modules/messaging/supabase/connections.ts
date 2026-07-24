@@ -71,8 +71,13 @@ function roleFromMetadata(metadata: unknown): string | null {
  * count, connected-since date, city, and open-deal count. Newest-connected
  * first. RLS-scoped: only the viewer's own connections are returned.
  */
-export async function getMyConnections(): Promise<MyConnectionsView> {
-  const supabase = createClient();
+export async function getMyConnections(
+  client?: SupabaseBrowserClient,
+): Promise<MyConnectionsView> {
+  // Accept an injected client (DISC-13) so a server component can call this with
+  // the server client; existing browser callers pass nothing → unchanged. Both
+  // clients are SupabaseClient<Database>; the read rides entirely on RLS either way.
+  const supabase = client ?? createClient();
   const viewer = await getViewer(supabase);
 
   // Flat, RLS-scoped fetches; stitched in JS (mirrors getConversations).
