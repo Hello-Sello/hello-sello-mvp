@@ -493,16 +493,16 @@ where product_batch.company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid
 --     the demo-2d relationship/chat pattern in section 5 above).
 --
 --     Variety matrix (see 260707-0ob-PLAN-1.md):
---       01 GL<->StonePharm  offer  draft     hello_sello  --      all pending
---       02 GL<->Rheinland   order  draft     hello_sello  --      all pending
+--       01 GL<->StonePharm  offer  negotiation hello_sello --     all pending
+--       02 GL<->Rheinland   order  negotiation hello_sello --     all pending
 --       03 GL<->StonePharm  order  confirmed email        --      1 supply(locked) + 1 pending
 --       04 GL<->Rheinland   offer  done      hello_sello  --      all supply (locked)
---       05 GL<->StonePharm  offer  amended   hello_sello  --      1 decline(locked) + 1 pending
+--       05 GL<->StonePharm  offer  confirmed hello_sello  --      1 decline(locked) + 1 pending
 --       06 GL<->Rheinland   order  confirmed fax          open    all pending
 --       07 GL<->StonePharm  offer  done      email        closed  all supply (locked)
 -- ----------------------------------------------------------------------------
 
--- ALLOC-SEED-01 — GreenLeaf <-> StonePharm, offer, draft, hello_sello, all pending
+-- ALLOC-SEED-01 — GreenLeaf <-> StonePharm, offer, negotiation, hello_sello, all pending
 with ids as (
   select
     (select r.id from public.relationship r
@@ -515,7 +515,7 @@ card as (
   insert into public.deal_card (
     relationship_id, version, status, deal_type, initiating_company_id,
     currency, ordered_via, ticket_status, seller_so_number, created_by, updated_by, metadata)
-  select ids.rel_id, 1, 'draft', 'offer', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid,
+  select ids.rel_id, 1, 'negotiation', 'offer', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid,
     'EUR', 'hello_sello', null, 'ALLOC-SEED-01',
     '11111111-1111-1111-1111-111111111111'::uuid, '11111111-1111-1111-1111-111111111111'::uuid,
     jsonb_build_object('seed', 'allocate-seed')
@@ -566,7 +566,7 @@ join public.product_batch pb
   on pb.company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid
  and pb.batch_number = v.batch_number and pb.deleted_at is null;
 
--- ALLOC-SEED-02 — GreenLeaf <-> Rheinland, order, draft, hello_sello, all pending
+-- ALLOC-SEED-02 — GreenLeaf <-> Rheinland, order, negotiation, hello_sello, all pending
 with ids as (
   select
     (select id from public.company where name = 'Rheinland Apotheke GmbH') as cp,
@@ -583,7 +583,7 @@ card as (
   insert into public.deal_card (
     relationship_id, version, status, deal_type, initiating_company_id,
     currency, ordered_via, ticket_status, seller_so_number, created_by, updated_by, metadata)
-  select ids.rel_id, 1, 'draft', 'order', ids.cp,
+  select ids.rel_id, 1, 'negotiation', 'order', ids.cp,
     'EUR', 'hello_sello', null, 'ALLOC-SEED-02',
     ids.cp_founder, ids.cp_founder,
     jsonb_build_object('seed', 'allocate-seed')
@@ -767,7 +767,7 @@ join public.product_batch pb
   on pb.company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid
  and pb.batch_number = v.batch_number and pb.deleted_at is null;
 
--- ALLOC-SEED-05 — GreenLeaf <-> StonePharm, offer, amended, hello_sello, 1 decline(locked) + 1 pending
+-- ALLOC-SEED-05 — GreenLeaf <-> StonePharm, offer, confirmed, hello_sello, 1 decline(locked) + 1 pending
 with ids as (
   select
     (select r.id from public.relationship r
@@ -780,7 +780,7 @@ card as (
   insert into public.deal_card (
     relationship_id, version, status, deal_type, initiating_company_id,
     currency, ordered_via, ticket_status, seller_so_number, created_by, updated_by, metadata)
-  select ids.rel_id, 1, 'amended', 'offer', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid,
+  select ids.rel_id, 1, 'confirmed', 'offer', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid,
     'EUR', 'hello_sello', null, 'ALLOC-SEED-05',
     '11111111-1111-1111-1111-111111111111'::uuid, '11111111-1111-1111-1111-111111111111'::uuid,
     jsonb_build_object('seed', 'allocate-seed')

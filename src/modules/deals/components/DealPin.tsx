@@ -6,9 +6,11 @@
  *
  * It has three states (build plan 4.5 §3):
  *   - A · no deal, no proposal → a dashed "Start a deal" (p2p only).
- *   - B · a PROPOSAL is pending → the pre-card object. The other side accepts
- *         here (the loud pill → confirm_detected_deal → atomic birth); the
- *         proposer sees "waiting". This is the ONLY place a card is born now.
+ *   - B · a SELLA-DETECTED proposal is pending → the pre-card object. Each side
+ *         accepts here (the loud pill → confirm_detected_deal → atomic birth);
+ *         after my accept I see "waiting". Sella-only since Phase 12 (D-18): the
+ *         manual propose_deal era is retired - people start deals via the
+ *         create card instead.
  *   - C · a live deal is selected → the two-tier strip: identity on top, the
  *         [Deal Room | Deal Card] toggle + the // Sella mark + a translate glyph.
  *
@@ -17,8 +19,9 @@
  *
  * Self-contained: it lists the relationship's deals, loads the selected card,
  * AND reads the thread's pending proposal - and refreshes itself live on its own
- * realtime channel (a new proposal = a chat_message insert; a birth = a new deal
- * chat_thread insert). The realtime is INLINED on the shared db client on
+ * realtime channel (a new proposal = a chat_message insert; a deal arriving or
+ * changing = a deal_card INSERT/UPDATE, D-05 re-key - birth no longer creates a
+ * chat thread). The realtime is INLINED on the shared db client on
  * purpose: importing messaging's hook would make deals ↔ messaging a cycle
  * (messaging already renders this component).
  */
@@ -50,16 +53,19 @@ import type {
   PendingProposalView,
 } from "../types";
 
-/** Statuses still "live" (not terminal) - the preferred default selection. */
-const LIVE_STATUSES = new Set<DealCardStatus>(["draft", "confirmed", "amended"]);
+/** Statuses still "live" (not terminal) - the preferred default selection.
+ * `unsent` is live for the CREATOR (A5: own drafts show in the strip); the
+ * counterparty never receives unsent rows - RLS hides them (D-08). */
+const LIVE_STATUSES = new Set<DealCardStatus>(["unsent", "negotiation", "confirmed"]);
 
-/** Status → badge label + colour. Pink for in-progress, gold for confirmed. */
+/** Status → badge label + colour. Grey for private drafts (D-15), pink for
+ * in-progress negotiation, gold for confirmed. */
 const STATUS_BADGE: Record<DealCardStatus, { label: string; cls: string }> = {
-  draft: { label: "Draft", cls: "bg-brand-soft/70 text-brand-deep" },
-  amended: { label: "Amended", cls: "bg-brand-soft/70 text-brand-deep" },
+  // Private draft - user-facing label stays "Draft", grey (D-15).
+  unsent: { label: "Draft", cls: "bg-ink/10 text-ink/50" },
+  negotiation: { label: "Negotiation", cls: "bg-brand-soft/70 text-brand-deep" },
   confirmed: { label: "Confirmed", cls: "bg-amber-100 text-amber-700" },
   done: { label: "Done", cls: "bg-success/15 text-success" },
-  withdrawn: { label: "Withdrawn", cls: "bg-ink/10 text-ink/50" },
   cancelled: { label: "Cancelled", cls: "bg-ink/10 text-ink/50" },
   // 07-06 reopen-ticket states (D-30 colours: blue / dark-green). The badge UI
   // itself is deferred (D-17); these keep the exhaustive record complete.
@@ -68,7 +74,7 @@ const STATUS_BADGE: Record<DealCardStatus, { label: string; cls: string }> = {
 };
 
 function StatusBadge({ status }: { status: DealCardStatus }) {
-  const s = STATUS_BADGE[status] ?? STATUS_BADGE.draft;
+  const s = STATUS_BADGE[status] ?? STATUS_BADGE.unsent;
   return (
     <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${s.cls}`}>
       {s.label}
@@ -285,8 +291,8 @@ export function DealPin({
 
   // 4.5.2 - live refresh on the strip's OWN channel so BOTH screens stay current:
   // a new proposal arrives (chat_message insert in this thread) → re-read the
-  // proposal; a deal is born (a new deal chat_thread insert) → re-read deals +
-  // proposal (the proposal is now born → it clears; the new card appears). The
+  // proposal; a deal arrives or flips (deal_card INSERT/UPDATE, D-05 re-key -
+  // birth no longer creates a chat thread) → re-read deals + proposal/card. The
   // re-reads only setState from fresh server data, so no stale-closure risk.
   useEffect(() => {
     if (!canPropose || !threadId) return;
@@ -346,12 +352,30 @@ export function DealPin({
             if ((payload.new as { thread_id?: string }).thread_id === threadId) reloadProposal();
           },
         )
+        // D-05 re-key: the arrival signal rides deal_card events (the table is in
+        // supabase_realtime; Supabase authorizes EVERY event against EACH
+        // subscriber's RLS, so the counterparty hears nothing for 'unsent' rows -
+        // the send flip's UPDATE is literally their first event, T-12-25). The
+        // relationship_id check below is UX scoping only, NEVER the privacy
+        // layer. No DELETE subscription - DELETE events are not RLS-filtered.
         .on(
           "postgres_changes",
-          { event: "INSERT", schema: "public", table: "chat_thread" },
-          () => {
-            reloadDeals();
-            reloadProposal();
+          { event: "INSERT", schema: "public", table: "deal_card" },
+          (payload) => {
+            if ((payload.new as { relationship_id?: string }).relationship_id === relationshipId) {
+              reloadDeals();
+              reloadProposal();
+            }
+          },
+        )
+        .on(
+          "postgres_changes",
+          { event: "UPDATE", schema: "public", table: "deal_card" },
+          (payload) => {
+            if ((payload.new as { relationship_id?: string }).relationship_id === relationshipId) {
+              reloadDeals();
+              reloadCard();
+            }
           },
         )
         // 4.5.4 - a held change was proposed (INSERT) or resolved (DELETE on every
@@ -432,7 +456,7 @@ export function DealPin({
   }
 
   const selectedDeal = deals.find((d) => d.id === selectedId) ?? null;
-  const chipStatus: DealCardStatus = selectedDeal?.status ?? data?.card.status ?? "draft";
+  const chipStatus: DealCardStatus = selectedDeal?.status ?? data?.card.status ?? "negotiation";
   const hasDeal = deals.length > 0 && !!selectedId;
 
   // State B applies while a proposal is pending and the viewer has not declined
@@ -623,17 +647,12 @@ export function DealPin({
         </div>
       )}
 
-      {/* State B - a proposal is pending (the pre-card object, the new heart) */}
+      {/* State B - a Sella-detected proposal is pending (the pre-card object).
+          Sella-only since Phase 12 (D-18): the manual propose_deal half is gone. */}
       {variant === "chat" && showProposal && (
         <div className={rowCls}>
           <span className="min-w-0 flex-1 truncate text-xs text-ink/70">
-            <span className="font-semibold text-ink/85">
-              {proposal!.iProposed
-                ? "You proposed a deal"
-                : proposal!.source === "sella"
-                  ? "Sella spotted a deal"
-                  : `${counterpartyName ?? "They"} proposed a deal`}
-            </span>
+            <span className="font-semibold text-ink/85">Sella spotted a deal</span>
             <span className="text-ink/45"> · {proposal!.summary}</span>
           </span>
 
@@ -666,12 +685,10 @@ export function DealPin({
                       <div className="min-w-0 flex-1 p-3">
                         <div className="mb-0.5 flex items-center gap-1.5 text-[11px] font-semibold text-brand-deep">
                           <Sparkles size={12} strokeWidth={2} />
-                          {proposal!.source === "sella" ? "Sella spotted a deal" : "Deal proposal"}
+                          Sella spotted a deal
                         </div>
                         <p className="mb-2 text-[11px] text-ink/50">
-                          {proposal!.iProposed
-                            ? "Your proposal"
-                            : `From ${counterpartyName ?? "your contact"}`}
+                          From {counterpartyName ?? "your contact"}
                         </p>
 
                         <ul className="space-y-1.5">

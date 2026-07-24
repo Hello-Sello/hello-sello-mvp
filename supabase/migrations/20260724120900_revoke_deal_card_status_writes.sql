@@ -1,0 +1,22 @@
+-- ============================================================================
+-- Migration - the Door-2 lock: no raw client UPDATE on deal_card (D-09)
+-- ----------------------------------------------------------------------------
+-- Grants are checked BEFORE RLS, so this single REVOKE makes status
+-- transitions unforgeable from PostgREST regardless of any policy: the client
+-- roles (authenticated, anon) lose UPDATE at the grant layer itself.
+--
+-- SECURITY DEFINER RPCs run as their owner (postgres, the table owner), so
+-- every transition RPC keeps writing. The service role and the postgres owner
+-- keep their grants - seeds and admin tooling are untouched. Never widen this
+-- REVOKE to those roles (Pitfall 10).
+--
+-- The only client-side writer in src/ is updateStatus (actions.ts), which
+-- plan 12-07 deletes in the same wave/PR.
+--
+-- ORDERING (Pitfall 3): this file carries the wave's LAST timestamp so
+-- decline/sign/finalize/reopen/close always have their RPC path
+-- (20260724120600_deal_transition_rpcs.sql) before the raw door closes -
+-- there is never a window where transitions have no path.
+-- ============================================================================
+
+REVOKE UPDATE ON public.deal_card FROM authenticated, anon;

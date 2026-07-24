@@ -101,13 +101,18 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-function dealBadge(bucket: DealSummaryView["bucket"]) {
+function dealBadge(deal: Pick<DealSummaryView, "status" | "bucket">) {
   const map = {
     active: ["Active", "bg-success/10 text-success"],
     old: ["Done", "bg-ink/5 text-ink/50"],
     cancelled: ["Cancelled", "bg-ink/5 text-ink/35"],
   } as const;
-  const [label, cls] = map[bucket];
+  // D-15 - a private 'unsent' draft badges grey "Draft" (same shape as DealPin's
+  // STATUS_BADGE unsent row), overriding its 'active' bucket colour. Only the
+  // CREATOR ever gets these rows - RLS (D-08) hides unsent cards from the
+  // counterparty, so the tab's read never filters them out app-side.
+  const [label, cls] =
+    deal.status === "unsent" ? (["Draft", "bg-ink/10 text-ink/50"] as const) : map[deal.bucket];
   return (
     <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${cls}`}>{label}</span>
   );
@@ -247,7 +252,7 @@ function DealsTab({ deals }: { deals: DealSummaryView[] }) {
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="truncate text-sm font-medium text-ink">{d.title}</span>
-                  {dealBadge(d.bucket)}
+                  {dealBadge(d)}
                 </div>
                 <div className="text-[11px] text-ink/40">
                   {d.hsNumber ?? "—"} · {fmtDate(d.createdAt)}

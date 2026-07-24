@@ -1,5 +1,6 @@
 -- ============================================================================
--- claim_deal_ticket_test.sql — deal-ticket pickup (Lane A / A3)
+-- claim_deal_ticket_test.sql — deal-ticket pickup (Lane A / A3, re-timed for
+-- Phase 12: the ticket is written by send_deal, no longer at birth)
 -- ----------------------------------------------------------------------------
 -- Proves the pickup half of the company-delivery spine: a member of the
 -- RECEIVING company claims a delivered 'deal_card' ticket and becomes a
@@ -9,13 +10,11 @@
 -- this bootstrap (the claimer is not yet a workspace member), hence the
 -- SECURITY DEFINER RPC — same pattern as create_deal_draft.
 --
--- Depends on the A2 spine: the c2c birth below writes the ticket via
--- deliver_deal inside create_deal_draft.
+-- Phase-12 re-time (D-04/D-06): birth is PRIVATE and writes no ticket; the
+-- fixture below births, proves the ticket is absent, then SENDS (send_deal is
+-- the one delivery writer) and proves the ticket appears before claiming.
 --
 -- Run:  bash supabase/tests/run_claim_deal_ticket_test.sh
---
--- ⚠️  RED-FIRST: EXPECTED TO FAIL before the A3 migration lands — the first
--- claim errors on the missing public.claim_deal_ticket.
 -- ============================================================================
 
 BEGIN;
@@ -48,7 +47,8 @@ BEGIN
 END $$;
 
 -- ── Fixture: Alice births a COMPANY-TARGET deal (no counterparty person) —
--- the A2 spine delivers the StonePharm ticket inside the birth RPC. ──
+-- birth writes NO ticket (D-04); Alice then SENDS, and send_deal delivers the
+-- StonePharm ticket (D-06). ──
 SELECT set_config('request.jwt.claim.sub', (SELECT alice FROM _fix)::text, true);
 SELECT set_config('request.jwt.claims',
        json_build_object('sub', (SELECT alice FROM _fix), 'role', 'authenticated')::text, true);
@@ -64,6 +64,40 @@ BEGIN
   INSERT INTO _card VALUES (v_card);
 END $$;
 RESET ROLE;
+
+DO $$
+DECLARE
+  v_n int;
+BEGIN
+  SELECT count(*) INTO v_n FROM pending_inbox_item
+  WHERE deal_card_id = (SELECT id FROM _card) AND deleted_at IS NULL;
+  IF v_n <> 0 THEN
+    RAISE EXCEPTION 'A3-0 FAIL: birth must not deliver a ticket (D-04), got %', v_n;
+  END IF;
+END $$;
+
+SELECT set_config('request.jwt.claim.sub', (SELECT alice FROM _fix)::text, true);
+SELECT set_config('request.jwt.claims',
+       json_build_object('sub', (SELECT alice FROM _fix), 'role', 'authenticated')::text, true);
+SET LOCAL ROLE authenticated;
+SELECT public.send_deal((SELECT id FROM _card));
+RESET ROLE;
+
+DO $$
+DECLARE
+  v_n int;
+BEGIN
+  SELECT count(*) INTO v_n
+  FROM pending_inbox_item p, _fix f
+  WHERE p.deal_card_id = (SELECT id FROM _card)
+    AND p.type = 'deal_card'
+    AND p.receiver_company_id = f.stonepharm
+    AND p.status = 'pending'
+    AND p.deleted_at IS NULL;
+  IF v_n <> 1 THEN
+    RAISE EXCEPTION 'A3-0 FAIL: expected exactly 1 claimable ticket after send, got %', v_n;
+  END IF;
+END $$;
 
 -- ── (1) SENDER-SIDE CLAIM DENIED: Alice's company holds no ticket — the claim
 -- must raise, and she must NOT gain a second membership by any other route. ──
@@ -139,8 +173,9 @@ BEGIN
   END IF;
 END $$;
 
--- ── (4) NO TICKET, NO CLAIM: a deal with no pending ticket (person-target
--- birth) cannot be claimed by anyone. ──
+-- ── (4) NO TICKET, NO CLAIM: a person-target deal (counterparty picked at
+-- birth, co-owner joins at SEND, person delivery = the chat pill) never gets
+-- a company ticket — so it cannot be claimed by anyone. ──
 SELECT set_config('request.jwt.claim.sub', (SELECT alice FROM _fix)::text, true);
 SELECT set_config('request.jwt.claims',
        json_build_object('sub', (SELECT alice FROM _fix), 'role', 'authenticated')::text, true);
@@ -154,7 +189,8 @@ BEGIN
     (SELECT rel FROM _rel), 'offer', 50, 'EUR', NULL, NULL, false,
     '[{"productName":"Probe Flower","quantity":"10","unit":"g","unitPrice":"5"}]'::jsonb,
     NULL, NULL, (SELECT bob FROM _fix));
-  -- Bob is already co-owner (person-target birth); no ticket exists.
+  -- send it: Bob becomes co-owner HERE; the company half no-ops (no ticket).
+  PERFORM public.send_deal(v_card);
   BEGIN
     PERFORM public.claim_deal_ticket(v_card);
   EXCEPTION WHEN OTHERS THEN

@@ -43,6 +43,8 @@ export function DealCard({
   viewerCompanyId,
   createMode = false,
   onCreate,
+  onCloseCreate,
+  registerCloseRequest,
 }: {
   data: DealCardView;
   /**
@@ -63,12 +65,20 @@ export function DealCard({
   viewerPersonId?: string | null;
   viewerCompanyId?: string | null;
   /**
-   * CREATE MODE (chj/07-08): render a not-yet-born draft. Edit mode starts ON and
-   * stays on (no pencil, no flip, no back face), and the front's footer becomes
-   * "Send deal" which calls `onCreate`. Used by the chat "+ Create a deal" door.
+   * CREATE MODE (chj/07-08, Phase-12 D-12/D-13): render a not-yet-born draft.
+   * Edit mode starts ON and stays on (no pencil, no flip, no back face), and the
+   * front's footer becomes "Save draft" which calls `onCreate` (birth only - the
+   * born card's DecisionBar owns "Send deal"). Used by the chat "+ Create a deal" door.
    */
   createMode?: boolean;
   onCreate?: (input: CardCreateInput) => Promise<void>;
+  /** CREATE MODE close (D-13) - forwarded to CardFront: called instead of onClose
+   *  on dismiss, with the assembled draft (content -> auto-birth) or null (empty
+   *  -> discard). */
+  onCloseCreate?: (input: CardCreateInput | null) => void;
+  /** CREATE MODE - forwarded to CardFront: registers the card's D-13 close rule
+   *  so the host can route its own dismiss doors (Escape etc.) through it. */
+  registerCloseRequest?: (fn: () => void) => void;
 }) {
   const [flipped, setFlipped] = useState(false);
   // create mode is always-editing: seed edit mode ON so the empty draft is fillable.
@@ -77,9 +87,11 @@ export function DealCard({
   // routes through it so unsent edits are SENT, never silently discarded.
   const exitRequestRef = useRef<(() => void) | null>(null);
 
-  // Any non-draft deal is locked (chj/07-08): once signed (confirmed), declined
-  // (cancelled), executed (done) or ticketed, the pencil becomes a lock - no editing.
-  const isClosed = data.card.status !== "draft";
+  // Any decided deal is locked (chj/07-08): once signed (confirmed), declined
+  // (cancelled), executed (done) or ticketed, the pencil becomes a lock - no
+  // editing. Open states (Phase-12): unsent (private draft) + negotiation (sent).
+  const isClosed =
+    data.card.status !== "unsent" && data.card.status !== "negotiation";
   // the pencil shows only when editing is allowed AND the deal is open.
   const canEdit = !!onEdit && !isClosed;
 
@@ -167,6 +179,8 @@ export function DealCard({
             onClose={onClose}
             createMode={createMode}
             onCreate={onCreate}
+            onCloseCreate={onCloseCreate}
+            registerCloseRequest={registerCloseRequest}
             onExitEdit={() => setEditMode(false)}
             registerExitRequest={(fn) => {
               exitRequestRef.current = fn;
@@ -175,8 +189,8 @@ export function DealCard({
         </div>
 
         {/* BACK - fills the box, pre-rotated 180deg so it faces forward when flipped.
-            Not mounted in create mode: the back reads signals/log/confirmations that
-            a not-yet-born draft does not have. */}
+            Not mounted in create mode: the back reads signals/log that a
+            not-yet-born draft does not have. */}
         {!createMode && (
           <div
             className="absolute inset-0"

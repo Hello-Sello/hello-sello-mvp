@@ -4,12 +4,12 @@
  * callers that need to show their result use this - the basket popover
  * (Task 8a) and the chat "Create Deal" button (Task 8c):
  *
- *   const { dealCardId } = await sendBasketGroup(group, input);
+ *   const { dealCardId } = await createBasketDraft(group, input);
  *   router.push(dealChatUrl(input.relationshipId, dealCardId));
  *
  * Investigation finding (see task-8b-report.md): DealPin needs NO new
  * selection logic. Its mount effect already defaults `selectedId` to the
- * newest live (draft/confirmed/amended) deal for the relationship, and
+ * newest live (unsent/negotiation/confirmed) deal for the relationship, and
  * `listRelationshipDeals` orders newest-first - so a just-created draft is
  * already first in that list by construction. The one real gap was that
  * NOTHING today lets you deep-link INTO a specific relationship's chat at

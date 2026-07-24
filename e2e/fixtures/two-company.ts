@@ -8,22 +8,24 @@
  *   2. `openTwoContexts(browser)`  — two independent browser contexts so Alice
  *                                    and Bob hold separate sessions (required to
  *                                    test the two-sided sign / negotiate gate).
- *   3. `createDraftDealAsAlice(p)` — drive the in-app deal-CREATE flow to birth a
- *                                    live draft card both sides can act on
- *                                    (the LOCAL DB has no seeded cloud card, so
- *                                    every test mints its own).
+ *   3. `createDraftDealAsAlice(p)` — drive the in-app deal-CREATE flow to birth
+ *                                    AND SEND a live deal card both sides can
+ *                                    act on (the LOCAL DB has no seeded cloud
+ *                                    card, so every test mints its own).
  *
- * THE CURRENT (chj/07-08 "living deal card") flow, driven here:
+ * THE CURRENT (Phase 12 birth/send split) flow, driven here:
  *   DealPin.tsx's "Start a deal" button dispatches `hs:create-deal-card`, which
  *   `DealCardPanelHost` (src/app/connect/DealCardPanelHost.tsx) turns into an
  *   empty CREATE-mode card in the SAME 50/50 side panel a real card uses — the
  *   real `CardFront`/`DealCard` component, permanently in edit mode, seeded via
- *   `emptyDraftView(buyerName)`. There is no more modal, no product search box,
- *   no "Send proposal" chat message, and no accept step for the other side:
- *   pressing "Send deal" calls `createDeal(...)` directly and the card is REAL
- *   the instant that resolves (D-32: no navigation, the panel swaps in place).
- *   `acceptBirthAsBob` (the old propose->accept birth door) no longer exists —
- *   there is nothing left for the other side to accept.
+ *   `emptyDraftView(buyerName)`. Birth and delivery are now TWO steps (D-13 /
+ *   D-06): the create footer's "Save draft" births a PRIVATE `unsent` card
+ *   (createDeal — the counterparty sees NOTHING yet, RLS D-08) and the panel
+ *   swaps to the born card in place; the born card's DecisionBar then owns the
+ *   ONE "Send deal" button (sendDeal -> the send_deal RPC), which delivers the
+ *   deal and flips it to `negotiation` — only then does the other side see it.
+ *   There is no accept step for the other side; `acceptBirthAsBob` (the old
+ *   propose->accept birth door) no longer exists.
  *
  * Selectors mirror the real components as read this session:
  *   - login form (src/app/(auth)/login/page.tsx + AuthCard.tsx):
@@ -33,8 +35,11 @@
  *   - the create-mode card (CardFront.tsx): a `+ Add product from your shop…`
  *     `<select>` (seller-only, only rendered when the catalogue is non-empty),
  *     per-row Batch/Unit-size `<select>`s (MOCK options, no real batch data),
- *     a Price `<input type="number">`, a Note `<textarea>`, and a "Send deal"
+ *     a Price `<input type="number">`, a Note `<textarea>`, and a "Save draft"
  *     button (disabled until at least one product line exists).
+ *   - the born card (DecisionBar.tsx): "Send deal" while `unsent`; after the
+ *     send flip the initiator's bar reads "Waiting for the other side to
+ *     sign." — the negotiation-unique signal the fixtures wait on.
  *
  * Local stack: app on http://localhost:3000 (Playwright baseURL), Supabase on
  * 127.0.0.1:54321. Seeded logins: alice@greenleaf.test / bob@stonepharm.test,
@@ -420,8 +425,10 @@ export async function openFirstLineForEdit(page: Page): Promise<void> {
 }
 
 /**
- * Drive the NEW in-app deal-CREATE flow as Alice to mint a fresh, REAL DRAFT deal
- * card with StonePharm — direct birth, no proposal/accept (see the module header).
+ * Drive the in-app deal-CREATE flow as Alice to mint a fresh, DELIVERED deal
+ * card with StonePharm — birth as a private draft, then the explicit Send
+ * (Phase 12 birth/send split, see the module header). Callers only ever
+ * receive a deal Bob can see and act on (status `negotiation`).
  *
  * Flow:
  *   1. open the Connect chat with StonePharm (the p2p thread DealPin proposes
@@ -436,8 +443,12 @@ export async function openFirstLineForEdit(page: Page): Promise<void> {
  *      assert against.
  *   5. optionally seed the create-time note (CardFront's note textarea — no
  *      label, placeholder "A note the other side will see on your behalf…").
- *   6. click "Send deal" — calls `createDeal(...)` for real and swaps the panel
- *      to the born card in place (no navigation).
+ *   6. click "Save draft" — births a PRIVATE `unsent` card (`createDeal`) and
+ *      swaps the panel to the born card in place (no navigation). Bob sees
+ *      nothing yet (RLS, D-08).
+ *   7. click the born card's DecisionBar "Send deal" — `sendDeal` -> the
+ *      `send_deal` RPC delivers the deal (p2p pill / inbox ticket) and flips
+ *      it to `negotiation`.
  *
  * Deterministic product: "Pedanios 31/1 COS-CA" (seed.sql section 6, GreenLeaf's
  * AUR-1A) — always present in Alice's catalogue on a fresh `supabase db reset`.
@@ -483,14 +494,28 @@ export async function createDraftDealAsAlice(
       .fill(opts.note)
   }
 
-  // 6. birth it for real. Wait for a signal UNIQUE to the BORN card: the
-  //    "Edit deal" pencil (a fresh draft with no held change always has it).
+  // 6. birth it for real — "Save draft" (Phase 12 D-13: the create footer only
+  //    births; delivery moved to the card's own Send). Wait for a signal UNIQUE
+  //    to the BORN card: the "Edit deal" pencil (hidden in create mode, always
+  //    present on a fresh draft with no held change).
   //    ⚠️ NOT "Talk about this deal" — the CREATE-mode card shows that pill
   //    too, so it can resolve while the birth roundtrip is still in flight;
   //    a caller that keeps driving the panel then races handleCreate's
   //    completion (which closes any create session and swaps the born card in).
-  await dealPanel(alicePage).getByRole('button', { name: /^send deal$/i }).click()
+  await dealPanel(alicePage).getByRole('button', { name: /^save draft$/i }).click()
   await dealPanel(alicePage).getByRole('button', { name: /edit deal/i }).waitFor({
+    timeout: 15000,
+  })
+
+  // 7. SEND it (Phase 12 D-06/D-12: the born card's DecisionBar owns the ONE
+  //    "Send deal" path — birth alone leaves the card invisible to Bob, D-08).
+  //    Wait on a NEGOTIATION-unique signal before returning: the initiator's
+  //    "Waiting for the other side to sign." line renders ONLY in DecisionBar's
+  //    negotiation branch (an unsent card shows the "Send deal" button
+  //    instead), so its appearance proves the send flip landed server-side —
+  //    callers must only ever receive a DELIVERED deal.
+  await dealPanel(alicePage).getByRole('button', { name: /^send deal$/i }).click()
+  await dealPanel(alicePage).getByText(/waiting for the other side to sign/i).waitFor({
     timeout: 15000,
   })
 }
@@ -499,10 +524,12 @@ export async function createDraftDealAsAlice(
  * Drive the c2c (COMPANY chat) deal-create flow as Alice (Lane A): open the
  * GreenLeaf<->StonePharm company channel (found by its fixed "Company chat
  * (C2C)" subtitle after narrowing the list by search — the p2p row subtitles
- * the company name instead), press its "Start a deal" door, and birth the same
- * deterministic Pedanios draft as createDraftDealAsAlice. No counterparty
- * person exists in a company chat, so the birth is COMPANY-target: deliver_deal
- * writes the claimable inbox ticket for StonePharm at birth.
+ * the company name instead), press its "Start a deal" door, and birth + SEND
+ * the same deterministic Pedanios deal as createDraftDealAsAlice. No
+ * counterparty person exists in a company chat, so the deal is COMPANY-target:
+ * the claimable inbox ticket for StonePharm now mints at SEND (Phase 12 D-06 —
+ * `send_deal` calls deliver_deal; birth writes no ticket), so any
+ * ticket-existence assertion belongs AFTER this fixture returns.
  */
 export async function createC2cDealAsAlice(alicePage: Page): Promise<void> {
   await alicePage.goto('/connect/chat')
@@ -517,12 +544,20 @@ export async function createC2cDealAsAlice(alicePage: Page): Promise<void> {
   const row = openRowLocator(alicePage)
   await row.locator('select').nth(2).selectOption('100')
   await row.locator('input[type="number"]').fill('5.00')
-  // wait on the BORN-card-only pencil, not "Talk about this deal" (the create
-  // card shows that too — see createDraftDealAsAlice's note on the race)
-  await dealPanel(alicePage).getByRole('button', { name: /^send deal$/i }).click()
+  // birth ("Save draft") — wait on the BORN-card-only pencil, not "Talk about
+  // this deal" (the create card shows that too — see createDraftDealAsAlice's
+  // note on the race)
+  await dealPanel(alicePage).getByRole('button', { name: /^save draft$/i }).click()
   await dealPanel(alicePage)
     .getByRole('button', { name: /edit deal/i })
     .waitFor({ timeout: 15000 })
+  // the explicit Send (company-target: this is the moment the StonePharm inbox
+  // ticket mints) — wait on the negotiation-unique DecisionBar signal, exactly
+  // as createDraftDealAsAlice does.
+  await dealPanel(alicePage).getByRole('button', { name: /^send deal$/i }).click()
+  await dealPanel(alicePage).getByText(/waiting for the other side to sign/i).waitFor({
+    timeout: 15000,
+  })
 }
 
 /**
@@ -573,11 +608,12 @@ export async function refreshDealView(page: Page, who: Who): Promise<void> {
 }
 
 /**
- * Full two-sided setup the negotiate/sign tests need: Alice creates + births a
- * real draft card (direct birth — no proposal/accept anymore), then BOTH sides
- * open the card panel from a fresh navigation so each starts from a known,
- * server-read state. After this each page shows the live draft card with the
- * Edit pencil reachable (no held change yet).
+ * Full two-sided setup the negotiate/sign tests need: Alice creates, births AND
+ * SENDS a real deal card (the Phase-12 two-step — Bob can only see the card
+ * once it is sent), then BOTH sides open the card panel from a fresh navigation
+ * so each starts from a known, server-read state. After this each page shows
+ * the live `negotiation` card with the Edit pencil reachable (no held change
+ * yet).
  */
 export async function birthAndOpenDeal(
   alicePage: Page,

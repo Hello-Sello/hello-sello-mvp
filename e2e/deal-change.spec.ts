@@ -5,7 +5,10 @@
  * Two-company, two-context: Alice (GreenLeaf, the deal's initiator/seller on the
  * default 'offer' create path) and Bob (StonePharm, buyer) hold separate sessions
  * via openTwoContexts, because a held change is resolved by BOTH sides. A fresh
- * draft card is minted in-app at setup (the local DB has no seeded cloud card).
+ * deal is minted in-app at setup (the local DB has no seeded cloud card) via the
+ * Phase-12 two-step: "Save draft" births a private `unsent` card, then the
+ * card's "Send deal" delivers it and flips it to `negotiation` — the fixture
+ * does both, so every test here starts on a sent, two-side-actionable card.
  *
  * REWRITTEN for the living-deal-card rework (this cleanup pass): the OLD flow
  * this file drove (CreateDealForm / EditDealForm modal, a strip "Review change"
@@ -231,18 +234,16 @@ test('reason-required: accept and decline are disabled until a reason is typed',
  * clears on both screens and the version history carries the "Deal updated to
  * v2" log entry on both screens.
  *
- * JUDGMENT CALL — the ORIGINAL title/assertion said "status stays draft" (D-06).
- * That is no longer true: DecisionBar's only responder action that resolves an
- * ACCEPT is "Sign the deal" (signDeal), which commits the held change via
- * confirm_deal_change AND immediately flips the card to `confirmed` in the SAME
- * click — there is no more "commit but keep negotiating" step. The RPC itself
- * still writes `status = 'draft'` as part of its own update (confirmed by
- * reading 20260707130300_deal_event_system_voice.sql:168), but signDeal's very
- * next statement overwrites it to `confirmed` before the UI ever re-renders, so
- * a user can never observe the intermediate draft state. This test now asserts
- * the NEW true invariant (confirmed, evidenced by the seller's invoice-upload
- * prompt) instead of the retired one — flagged in the cleanup report as a
- * product-redesign discovery, not silently patched over.
+ * JUDGMENT CALL — the ORIGINAL title/assertion said "status stays draft" (D-06,
+ * the pre-Phase-12 vocabulary). That is no longer true: DecisionBar's only
+ * responder action that resolves an ACCEPT is "Sign the deal" (signDeal -> the
+ * `sign_deal` definer RPC, Phase 12), which commits the held change AND flips
+ * the card to `confirmed` in ONE atomic server-side transaction — there is no
+ * more "commit but keep negotiating" step, and no intermediate status is ever
+ * observable. This test asserts the true invariant (confirmed, evidenced by
+ * the seller's invoice-upload prompt) instead of the retired one — flagged in
+ * the cleanup report as a product-redesign discovery, not silently patched
+ * over.
  */
 test('two-sided-commit: signing commits to base+1 and signs the deal, pending clears', async () => {
   await proposeChangeAsAlice(alicePage, '250')
@@ -260,7 +261,7 @@ test('two-sided-commit: signing commits to base+1 and signs the deal, pending cl
   await expect(heldChangeButton(alicePage)).toHaveCount(0)
 
   // status is now CONFIRMED (signed) — the seller-only "Upload the invoice PDF"
-  // prompt only renders in DecisionBar's confirmed/amended branch, so its
+  // prompt only renders in DecisionBar's confirmed branch, so its
   // presence is direct proof of the new status (Alice is the seller here).
   await expect(alicePage.getByRole('button', { name: /upload the invoice pdf/i })).toBeVisible()
 
@@ -578,9 +579,10 @@ test('note-decline: a decline discards the note change — the note stays as it 
 
 /**
  * D-08: a deal born WITH a create-time note shows that note on the card FACE
- * for BOTH sides from birth — no edit/accept cycle needed. This is a fresh
- * birth (NOT the shared beforeEach card, which has no note), so it re-runs
- * resetDealData + birthAndOpenDeal with a note seeded at create time.
+ * for BOTH sides — no edit/accept cycle needed (Bob sees the card, note
+ * included, once the fixture's Send delivers it). This is a fresh mint (NOT
+ * the shared beforeEach card, which has no note), so it re-runs resetDealData
+ * + birthAndOpenDeal with a note seeded at create time.
  */
 test('note-on-face: a create-time note shows on the card face for both sides from birth', async () => {
   const birthNote = 'Seeded straight from creation — visible to both, no edit needed'

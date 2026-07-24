@@ -26,7 +26,7 @@ export interface BasketView {
   totalLineCount: number;
 }
 
-/** Input to sendBasketGroup — the recipient chosen for ONE seller-group. */
+/** Input to createBasketDraft - the recipient chosen for ONE seller-group. */
 export interface SendGroupInput {
   relationshipId: string;
   /** the chosen person on the other side (own-company offer path); null → company-addressed */

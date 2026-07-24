@@ -4656,6 +4656,10 @@ export type Database = {
         Args: { p_person_id: string; p_role: string }
         Returns: undefined
       }
+      close_deal_ticket: {
+        Args: { p_deal_card_id: string }
+        Returns: undefined
+      }
       confirm_deal_change: {
         Args: { p_deal_card_id: string; p_decision: string; p_reason: string }
         Returns: number
@@ -4696,19 +4700,13 @@ export type Database = {
       current_superadmin_group_id: { Args: never; Returns: string }
       deactivate_account: { Args: never; Returns: undefined }
       deactivate_company: { Args: never; Returns: undefined }
-      edit_deal_draft: {
-        Args: {
-          p_currency: string
-          p_deal_card_id: string
-          p_due_date: string
-          p_free_delivery: boolean
-          p_lines: Json
-          p_note: string
-          p_payment_terms_code: string
-          p_private_value: string
-          p_value_net: number
-        }
-        Returns: number
+      decline_deal: {
+        Args: { p_deal_card_id: string }
+        Returns: undefined
+      }
+      finalize_deal: {
+        Args: { p_deal_card_id: string }
+        Returns: undefined
       }
       get_company_licences: {
         Args: { p_company_id: string }
@@ -4875,10 +4873,6 @@ export type Database = {
       owns_group: { Args: { p_group_id: string }; Returns: boolean }
       owns_pricelist: { Args: { p_pricelist_id: string }; Returns: boolean }
       owns_product_batch: { Args: { p_batch_id: string }; Returns: boolean }
-      propose_deal: {
-        Args: { p_draft: Json; p_thread_id: string }
-        Returns: string
-      }
       propose_deal_change: {
         Args: { p_deal_card_id: string; p_draft: Json; p_reason: string }
         Returns: string
@@ -4898,6 +4892,10 @@ export type Database = {
         Returns: undefined
       }
       remove_member: { Args: { p_person_id: string }; Returns: undefined }
+      reopen_deal_ticket: {
+        Args: { p_deal_card_id: string; p_note?: string }
+        Returns: undefined
+      }
       request_account_deletion: { Args: never; Returns: undefined }
       request_to_join: {
         Args: { p_company_id: string; p_note: string }
@@ -4919,6 +4917,10 @@ export type Database = {
         Returns: string
       }
       sella_detect_worker: { Args: never; Returns: undefined }
+      send_deal: {
+        Args: { p_deal_card_id: string }
+        Returns: string | null
+      }
       set_line_allocation: {
         Args: {
           p_batch_id?: string
@@ -4931,6 +4933,10 @@ export type Database = {
       shares_connection_with_company: {
         Args: { p_company_id: string }
         Returns: boolean
+      }
+      sign_deal: {
+        Args: { p_deal_card_id: string }
+        Returns: number | null
       }
       substitute_line_product: {
         Args: { p_line_item_id: string; p_new_product_id: string }

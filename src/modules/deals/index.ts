@@ -21,10 +21,6 @@ export type {
   ThingStatus,
   ThingView,
   ArtifactView,
-  ConfirmationStatus,
-  ConfirmSeat,
-  ConfirmDecision,
-  ConfirmResult,
   FinalizeDealResult,
   CatalogProduct,
   DraftLineInput,
@@ -36,8 +32,6 @@ export type {
   CreateDealInput,
   CreateDealResult,
   CardCreateInput,
-  EditDealInput,
-  EditDealResult,
   PromotionState,
   PromotionLineDelta,
   PromotionConditionDelta,
@@ -65,6 +59,7 @@ export { dealChatUrl } from "./lib/dealChatUrl";
 export {
   getDealCard,
   getCurrentDealCardId,
+  getMyDraftDeals,
   getOwnCatalog,
   getWorkspace,
   getThings,
@@ -73,6 +68,7 @@ export {
   getPromotion,
   resolveP2pRecipient,
 } from "./supabase/reads";
+export type { DraftDealRow } from "./supabase/reads";
 export {
   toggleThingStatus,
   createThing,
@@ -81,10 +77,9 @@ export {
   uploadDealInvoice,
 } from "./supabase/writes";
 export {
-  confirmDeal,
   createDeal,
+  sendDeal,
   declineDeal,
-  editDeal,
   finalizeDeal,
   signDeal,
   offerPromotion,
