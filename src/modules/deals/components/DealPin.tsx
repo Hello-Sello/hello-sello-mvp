@@ -50,16 +50,19 @@ import type {
   PendingProposalView,
 } from "../types";
 
-/** Statuses still "live" (not terminal) - the preferred default selection. */
-const LIVE_STATUSES = new Set<DealCardStatus>(["draft", "confirmed", "amended"]);
+/** Statuses still "live" (not terminal) - the preferred default selection.
+ * `unsent` is live for the CREATOR (A5: own drafts show in the strip); the
+ * counterparty never receives unsent rows - RLS hides them (D-08). */
+const LIVE_STATUSES = new Set<DealCardStatus>(["unsent", "negotiation", "confirmed"]);
 
-/** Status → badge label + colour. Pink for in-progress, gold for confirmed. */
+/** Status → badge label + colour. Grey for private drafts (D-15), pink for
+ * in-progress negotiation, gold for confirmed. */
 const STATUS_BADGE: Record<DealCardStatus, { label: string; cls: string }> = {
-  draft: { label: "Draft", cls: "bg-brand-soft/70 text-brand-deep" },
-  amended: { label: "Amended", cls: "bg-brand-soft/70 text-brand-deep" },
+  // Private draft - user-facing label stays "Draft", grey (D-15).
+  unsent: { label: "Draft", cls: "bg-ink/10 text-ink/50" },
+  negotiation: { label: "Negotiation", cls: "bg-brand-soft/70 text-brand-deep" },
   confirmed: { label: "Confirmed", cls: "bg-amber-100 text-amber-700" },
   done: { label: "Done", cls: "bg-success/15 text-success" },
-  withdrawn: { label: "Withdrawn", cls: "bg-ink/10 text-ink/50" },
   cancelled: { label: "Cancelled", cls: "bg-ink/10 text-ink/50" },
   // 07-06 reopen-ticket states (D-30 colours: blue / dark-green). The badge UI
   // itself is deferred (D-17); these keep the exhaustive record complete.
@@ -68,7 +71,7 @@ const STATUS_BADGE: Record<DealCardStatus, { label: string; cls: string }> = {
 };
 
 function StatusBadge({ status }: { status: DealCardStatus }) {
-  const s = STATUS_BADGE[status] ?? STATUS_BADGE.draft;
+  const s = STATUS_BADGE[status] ?? STATUS_BADGE.unsent;
   return (
     <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${s.cls}`}>
       {s.label}
@@ -432,7 +435,7 @@ export function DealPin({
   }
 
   const selectedDeal = deals.find((d) => d.id === selectedId) ?? null;
-  const chipStatus: DealCardStatus = selectedDeal?.status ?? data?.card.status ?? "draft";
+  const chipStatus: DealCardStatus = selectedDeal?.status ?? data?.card.status ?? "negotiation";
   const hasDeal = deals.length > 0 && !!selectedId;
 
   // State B applies while a proposal is pending and the viewer has not declined

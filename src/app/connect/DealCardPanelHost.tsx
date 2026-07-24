@@ -26,7 +26,7 @@ function emptyDraftView(buyerName: string): DealCardView {
   return {
     card: {
       id: "new",
-      status: "draft",
+      status: "unsent",
       currency: "EUR",
       payment_terms_code: null,
       delivery_date_target: null,
@@ -309,11 +309,16 @@ export function DealCardPanelHost() {
             viewerPersonId={viewerPersonId}
             viewerCompanyId={viewerCompanyId}
             onClose={closePanel}
-            // Editing is allowed ONLY on a live draft with no held change (chj/07-08).
-            // Once signed (confirmed), declined (cancelled), or executed (done) the
-            // card is locked; while a change is held the responder uses the DecisionBar.
+            // Editing is allowed ONLY on a live open card with no held change
+            // (chj/07-08): unsent (a creator edits their private draft) or
+            // negotiation (today's edit flow, Phase-12). Once signed (confirmed),
+            // declined (cancelled), or executed (done) the card is locked; while
+            // a change is held the responder uses the DecisionBar.
             onEdit={
-              data.card.status === "draft" && !data.pendingChange ? ALLOW_EDIT : undefined
+              (data.card.status === "unsent" || data.card.status === "negotiation") &&
+              !data.pendingChange
+                ? ALLOW_EDIT
+                : undefined
             }
           />
         ) : (

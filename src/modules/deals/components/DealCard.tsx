@@ -77,9 +77,11 @@ export function DealCard({
   // routes through it so unsent edits are SENT, never silently discarded.
   const exitRequestRef = useRef<(() => void) | null>(null);
 
-  // Any non-draft deal is locked (chj/07-08): once signed (confirmed), declined
-  // (cancelled), executed (done) or ticketed, the pencil becomes a lock - no editing.
-  const isClosed = data.card.status !== "draft";
+  // Any decided deal is locked (chj/07-08): once signed (confirmed), declined
+  // (cancelled), executed (done) or ticketed, the pencil becomes a lock - no
+  // editing. Open states (Phase-12): unsent (private draft) + negotiation (sent).
+  const isClosed =
+    data.card.status !== "unsent" && data.card.status !== "negotiation";
   // the pencil shows only when editing is allowed AND the deal is open.
   const canEdit = !!onEdit && !isClosed;
 

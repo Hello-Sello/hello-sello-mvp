@@ -62,7 +62,7 @@ const str = (m: Meta, k: string): string | null => {
 };
 
 /** Statuses that are still "live" (not a terminal end state) - preferred as the current deal. */
-const LIVE_STATUSES = new Set<DealCardStatus>(["draft", "confirmed", "amended"]);
+const LIVE_STATUSES = new Set<DealCardStatus>(["unsent", "negotiation", "confirmed"]);
 
 /**
  * The current deal card id for a relationship - the one the chat's "Talking
