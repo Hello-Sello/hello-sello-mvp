@@ -1438,3 +1438,14 @@ Follows from moving Connection Requests out of the Connect inbox into Discover: 
 - **The Connect "Deal tickets" lens retires** (proposed — pending Muskan's final confirm) so a deal has ONE home. *Why:* DRY — one authoritative pickup surface, not two.
 - **Home board = 2 zones (Incoming-to-claim / In-progress)** — detailed design is its own prototype-first pass (deferred). Build shape on top of today's claim model: release/reassign, claim collision-safety, and an aging/escalation backstop (so hard deals don't rot). *Why:* the research's standard hardening for a pull-to-claim queue.
 - Supersedes the interim "deal tickets live in the Connect inbox lens" placement (2026-07-20 Lane A). Pull-to-claim + company-wide receiver visibility (locked in the Lane A entry) is unchanged — only the SURFACE moves.
+
+---
+
+## 2026-07-24 — Discover connections are person↔person (pure social), NOT company-gated (locked with Ayush)
+
+Settled at the start of the Discover Lane B build (with Ayush), superseding the plan's earlier "bolt the person '+' onto the existing company-connect machinery" assumption (DISC-10 open question resolved).
+
+- **Any user can connect to any other user, person-to-person — WITHOUT their companies being connected.** This introduces a **second, independent relationship graph** (`person_connection`) beside the existing company↔company `relationship` graph — modelled on LinkedIn (a social graph next to the commercial one). *Why:* Discover is a networking surface; requiring a company relationship to know a person defeats the point, and Marcel's DEV-142 ("no company connection, only person connection") points the same way.
+- **Pure social — the commercial layer is untouched.** A person connection grants **profile visibility + a person-to-person DM only**. Deals, pricing, and shops stay **company-scoped**. A person's DM thread is a `chat_thread` with **no relationship** (`relationship_id = NULL`), reusing the group-chat company-less pattern. *Why:* keeps the blast radius bounded and the B2B commercial model intact; you trade as a company, not as an individual.
+- **"Ladder a person connection up into a company relationship" (for commerce) is a deliberate follow-up**, not this sprint. *Why:* the social graph is valuable on its own; the bridge to commerce is a separate design once the graph exists.
+- **We build the foundation in-lane (not handed to Ayush)** — but it touches his base tables (`pending_inbox_item`, inbox RLS, `chat_thread`, `person_select`), so those go through sync-lock + rebuild-from-live + **his review before cloud**. Built end-to-end session 69 (see [`docs/muskan-build/discover-linkedin.md`](../muskan-build/discover-linkedin.md) + the person-graph entry in `ARCHITECTURE-NOTES.md`). ⚠️ **Built UI diverges from the Variant D prototype — a visual rework is owed before ship.**
