@@ -156,8 +156,8 @@ export function DecisionBar({
     );
   }
 
-  // ---- CONFIRMED / AMENDED (signed): seller uploads the invoice, buyer waits ----
-  if (status === "confirmed" || status === "amended") {
+  // ---- CONFIRMED (signed): seller uploads the invoice, buyer waits ----
+  if (status === "confirmed") {
     if (!isSeller) {
       return shell(
         <p className="text-center text-[12px] font-medium text-ink/55">

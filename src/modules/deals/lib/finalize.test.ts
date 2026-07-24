@@ -15,9 +15,14 @@ import { canFinalizeByInvoice } from "./finalize";
 import type { DealCardStatus } from "../types";
 
 describe("canFinalizeByInvoice (the D-27 invoice close gate)", () => {
-  it("BLOCKS a non-agreed deal even with an invoice (never close a draft)", () => {
-    // a draft was never confirmed by both sides - an invoice must not skip the gate.
-    expect(canFinalizeByInvoice("draft", true)).toBe(false);
+  it("BLOCKS a non-agreed deal even with an invoice (never close an unsent draft)", () => {
+    // an unsent private draft was never even sent - an invoice must not skip the gate.
+    expect(canFinalizeByInvoice("unsent", true)).toBe(false);
+  });
+
+  it("BLOCKS a negotiation deal even with an invoice (sent but never agreed)", () => {
+    // negotiation = sent and bargaining, not yet signed by both sides.
+    expect(canFinalizeByInvoice("negotiation", true)).toBe(false);
   });
 
   it("BLOCKS an agreed deal with NO seller invoice", () => {
@@ -29,17 +34,12 @@ describe("canFinalizeByInvoice (the D-27 invoice close gate)", () => {
     expect(canFinalizeByInvoice("confirmed", true)).toBe(true);
   });
 
-  it("ALLOWS an amended deal with a seller invoice", () => {
-    // `amended` is the other live agreed state (a committed two-sided change).
-    expect(canFinalizeByInvoice("amended", true)).toBe(true);
-  });
-
   it("BLOCKS a deal that is already done (terminal; idempotency handled upstream)", () => {
     expect(canFinalizeByInvoice("done", true)).toBe(false);
   });
 
-  it("BLOCKS a dead deal (withdrawn / cancelled) even with an invoice", () => {
-    const dead: DealCardStatus[] = ["withdrawn", "cancelled"];
+  it("BLOCKS a dead deal (cancelled) even with an invoice", () => {
+    const dead: DealCardStatus[] = ["cancelled"];
     for (const status of dead) {
       expect(canFinalizeByInvoice(status, true)).toBe(false);
     }

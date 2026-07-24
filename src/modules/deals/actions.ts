@@ -109,7 +109,9 @@ export async function confirmDeal(args: {
     if (otherRow?.status === "confirmed") {
       throw new Error("The other side already confirmed - the draft cannot be withdrawn.");
     }
-    await updateStatus(supabase, card.id, "withdrawn");
+    // Phase-12: 'withdrawn' is retired (D-18) - a withdraw lands on 'cancelled'
+    // (the backfill mapping). This whole path dies structurally in 12-07.
+    await updateStatus(supabase, card.id, "cancelled");
     await logLine(supabase, card.id, args.version, user.id, "Draft withdrawn by the initiating side.");
     await writeAudit({
       actorType: "user",
@@ -118,7 +120,7 @@ export async function confirmDeal(args: {
       contentId: card.id,
       actorPersonId: user.id,
     });
-    return { cardStatus: "withdrawn", bothConfirmed: false };
+    return { cardStatus: "cancelled", bothConfirmed: false };
   }
 
   // ---- confirm / decline: upsert THIS side's row -----------------------------
@@ -171,7 +173,7 @@ export async function confirmDeal(args: {
   );
   const bothConfirmed = confirmed.has(rel.company_a_id) && confirmed.has(rel.company_b_id);
 
-  if (bothConfirmed && card.status === "draft") {
+  if (bothConfirmed && card.status === "negotiation") {
     await updateStatus(supabase, card.id, "confirmed");
     await logLine(supabase, card.id, args.version, user.id, "Deal confirmed by both sides.");
     await writeAudit({
@@ -201,7 +203,7 @@ export async function confirmDeal(args: {
  *     must BE the seller (derived from the card + relationship). A buyer-session
  *     finalize call is rejected before the gate.
  *   - INVOICE TRIGGER: the gate (`canFinalizeByInvoice`, pure/unit-tested) requires
- *     an AGREED status (`confirmed`/`amended`) AND a `deal_artifact(category=
+ *     the AGREED status (`confirmed`) AND a `deal_artifact(category=
  *     'invoice')` whose `uploaded_by_company_id` is the SELLER company. The
  *     uploader identity is stamped from the session at upload time
  *     (uploadDealInvoice), so a buyer-uploaded or forged invoice cannot satisfy it.
@@ -952,8 +954,8 @@ export async function signDeal({
     throw new Error("Only a party to this deal can sign it.");
   }
 
-  // idempotent: only a live draft can be signed.
-  if (card.status !== "draft") return { cardStatus: card.status as DealCardStatus };
+  // idempotent: only a live negotiation (sent, bargaining) can be signed.
+  if (card.status !== "negotiation") return { cardStatus: card.status as DealCardStatus };
 
   // if a change is held, COMMIT it first so the signed version is the proposed one.
   // confirm_deal_change (accept) is responder-only + enforces that in the RPC; the

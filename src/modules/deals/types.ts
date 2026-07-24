@@ -40,17 +40,17 @@ export type DealType = "offer" | "order";
 
 /**
  * deal_card_status.code - the deal's life (`deal_card.status`).
- * 3a only writes `draft`; the rest are reached by later units (3d confirm,
- * fulfilment) and the 2e seeded history. `ticket_created`/`ticket_closed` are the
- * post-close reopen-ticket states (07-06, D-29/D-30): after `done`, either party
- * may reopen (`ticket_created` blue) and close (`ticket_closed` dark-green) the
- * ticket - the sealed deal terms never change.
+ * Phase-12 vocabulary (D-01): `unsent` = the private draft (user-facing label
+ * stays "Draft"; RLS hides it from the counterparty), `negotiation` = sent and
+ * bargaining. `ticket_created`/`ticket_closed` are the post-close reopen-ticket
+ * states (07-06, D-29/D-30): after `done`, either party may reopen
+ * (`ticket_created` blue) and close (`ticket_closed` dark-green) the ticket -
+ * the sealed deal terms never change.
  */
 export type DealCardStatus =
-  | "draft"
-  | "withdrawn"
+  | "unsent"
+  | "negotiation"
   | "confirmed"
-  | "amended"
   | "done"
   | "cancelled"
   | "ticket_created"

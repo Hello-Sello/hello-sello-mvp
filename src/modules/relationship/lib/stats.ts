@@ -25,14 +25,17 @@ export function companyInitials(name: string): string {
 
 /**
  * The prototype's three filter buckets, derived from deal_card status:
- *   Active = draft / confirmed / amended (live, in-flight, or reopened)
+ *   Active = unsent / negotiation / confirmed / ticket_* (live, in-flight, or
+ *            reopened; `unsent` is creator-only - RLS hides drafts from the
+ *            counterparty, so this bucket never leaks them across)
  *   Old    = done (fully delivered)
- *   Cancelled = cancelled / withdrawn (never completed)
+ *   Cancelled = cancelled (never completed; retired `withdrawn` rows were
+ *            backfilled to `cancelled` - Phase-12, D-18)
  */
 export function bucketOf(status: DealStatus): "active" | "old" | "cancelled" {
   if (status === "done") return "old";
-  if (status === "cancelled" || status === "withdrawn") return "cancelled";
-  return "active"; // draft / confirmed / amended
+  if (status === "cancelled") return "cancelled";
+  return "active"; // unsent / negotiation / confirmed / ticket_*
 }
 
 /** Money formatting matching the prototype (€1,234, no decimals). */

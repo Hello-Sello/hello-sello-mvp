@@ -12,9 +12,9 @@
  */
 import type { DealType, DealCardStatus } from "@/modules/deals";
 
-/** The 7 locked vocabulary codes, plus the `cancelled` edge case (withdrawn/
- *  cancelled deal_cards are outside the 7-state lock — DEV-151 — so they get a
- *  neutral 8th code rather than being forced into one of the 7 colours). */
+/** The 7 locked vocabulary codes, plus the `cancelled` edge case (cancelled
+ *  and unsent deal_cards are outside the 7-state lock — DEV-151 — so they get
+ *  a neutral 8th code rather than being forced into one of the 7 colours). */
 export type OrderStatusCode =
   | "sales_offer"
   | "purchase_order"
@@ -40,9 +40,12 @@ export type TicketStatus = "open" | "closed" | null;
  * whatever the base status is (a ticket can be raised on a confirmed or done
  * deal without changing its underlying lifecycle status).
  *
- * `withdrawn`/`cancelled` sit outside the locked 7-vocab; they map to a
- * neutral 8th `cancelled` code so the UI never has to fabricate one of the 7
- * real colours for a state that isn't part of the lock.
+ * `unsent`/`cancelled` sit outside the locked 7-vocab; they map to a neutral
+ * 8th `cancelled` code so the UI never has to fabricate one of the 7 real
+ * colours for a state that isn't part of the lock. `unsent` private drafts are
+ * NOT committed demand (D-16 / Open Q5: excluded) - they never colour the
+ * calendar or orders; upstream fetches already filter them out, this mapping is
+ * the defensive backstop.
  */
 export function statusOf(input: {
   status: DealCardStatus;
@@ -54,16 +57,16 @@ export function statusOf(input: {
   if (ticketStatus === "open") return { code: "ticket", label: "Ticket created" };
   if (ticketStatus === "closed") return { code: "ticket_closed", label: "Ticket closed" };
 
-  if (status === "draft") {
+  if (status === "negotiation") {
     return dealType === "offer"
       ? { code: "sales_offer", label: "Sales offer" }
       : { code: "purchase_order", label: "Purchase order" };
   }
   if (status === "confirmed") return { code: "accepted", label: "Deal accepted" };
   if (status === "done") return { code: "executed", label: "Deal executed" };
-  if (status === "amended") return { code: "update", label: "Deal update" };
 
-  // withdrawn | cancelled — the documented edge case outside the 7-vocab.
+  // unsent | cancelled — the documented edge cases outside the 7-vocab (a
+  // private draft never colours the calendar/orders; D-16 / Open Q5).
   return { code: "cancelled", label: "Cancelled" };
 }
 
@@ -171,7 +174,7 @@ export function formatOrderDate(iso: string): string {
  * Key-Account classification (feeds the Orders "Top accounts first" sort and
  * the Batches "Type" column, DEV-151) — derived, never a stored tier column.
  * `orderedTotalsByCompany` maps buyer company id → summed `value_net` across
- * that buyer's LIVE (`done`/`confirmed`/`amended`) deal_cards with this seller
+ * that buyer's LIVE (`done`/`confirmed`) deal_cards with this seller
  * (the caller assembles that map; this function only classifies one buyer
  * against it). A buyer is a Key Account when their total sits in the top half
  * of all buyers in the map, ties broken toward `true` (the buyer AT the

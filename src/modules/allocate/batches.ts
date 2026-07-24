@@ -28,10 +28,13 @@ import type { AllocationRow } from "./lib/batchStock";
 export type { AllocationRow } from "./lib/batchStock";
 export { computeBatchStock } from "./lib/batchStock";
 
-/** Statuses whose lines can still need an allocation decision - mirrors deals'
- *  own `LIVE_STATUSES` (src/modules/deals/supabase/reads.ts): done/cancelled/
- *  withdrawn orders need no further allocation work. */
-const LIVE_CARD_STATUSES = new Set<DealCardStatus>(["draft", "confirmed", "amended"]);
+/** Statuses whose lines can still need an allocation decision: done/cancelled
+ *  orders need no further allocation work, and `unsent` private drafts are NOT
+ *  committed demand (D-16 / Open Q5: excluded from the worklist). This array
+ *  feeds a DB-side `.in('status', ...)` filter that fails SILENTLY on unknown
+ *  codes - it MUST ship in the same deploy as the status-rename migration
+ *  (Phase-12 same-deploy rule). */
+const LIVE_CARD_STATUSES = new Set<DealCardStatus>(["negotiation", "confirmed"]);
 
 /** Grams-only scope (DEV-157 #4) - see module doc. */
 const GRAMS_UNITS = new Set(["g", "kg"]);
