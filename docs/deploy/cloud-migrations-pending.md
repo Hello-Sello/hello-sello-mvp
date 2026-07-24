@@ -167,6 +167,7 @@ in the correct final state; the intermediate version is never used mid-push.
 | 8 | `20260724100700_list_my_person_connections.sql` | `list_my_person_connections()` SECURITY DEFINER — My Network people (safe fields + verified gate). |
 | 9 | `20260724100800_list_incoming_person_requests.sql` | `list_incoming_person_requests()` SECURITY DEFINER — incoming person requests (sender safe fields + verified gate). |
 | 10 | `20260724100900_list_discoverable_companies_reinstate_verified_gate.sql` | Restore the SEC-01 `is_caller_verified()` gate on `list_discoverable_companies` (security regression — unverified callers could read the directory since 2026-06-17). |
+| 11 | `20260724101000_list_discoverable_people.sql` | `list_discoverable_people()` SECURITY DEFINER — People directory (safe fields + type_codes + per-person connection_state + verified gate). |
 
 - **Status:** local-first; applied via `supabase db reset` (GREEN chain + seed) + 5 new pgTAP suites green + 2 existing suites (`join_request_isolation`, `person_company_lockdown`) regression-green (session 2026-07-24). **Not pushed to cloud.** No `database.types.ts` regen needed yet (app-layer reads land next).
 - **⚠️ Touches Ayush's base lane** (`pending_inbox_item` schema + inbox RLS, `chat_thread` index). Rebuilt inbox RLS from the LIVE body per the create-or-replace lesson; sync-locked while editing. The `receiver_company_id`-nullable + polymorphic-target call is flagged for his review in `docs/team/sync/muskan.md`.
