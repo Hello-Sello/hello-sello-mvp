@@ -17,8 +17,9 @@
  *
  * Self-contained: it lists the relationship's deals, loads the selected card,
  * AND reads the thread's pending proposal - and refreshes itself live on its own
- * realtime channel (a new proposal = a chat_message insert; a birth = a new deal
- * chat_thread insert). The realtime is INLINED on the shared db client on
+ * realtime channel (a new proposal = a chat_message insert; a deal arriving or
+ * changing = a deal_card INSERT/UPDATE, D-05 re-key - birth no longer creates a
+ * chat thread). The realtime is INLINED on the shared db client on
  * purpose: importing messaging's hook would make deals ↔ messaging a cycle
  * (messaging already renders this component).
  */
@@ -288,8 +289,8 @@ export function DealPin({
 
   // 4.5.2 - live refresh on the strip's OWN channel so BOTH screens stay current:
   // a new proposal arrives (chat_message insert in this thread) → re-read the
-  // proposal; a deal is born (a new deal chat_thread insert) → re-read deals +
-  // proposal (the proposal is now born → it clears; the new card appears). The
+  // proposal; a deal arrives or flips (deal_card INSERT/UPDATE, D-05 re-key -
+  // birth no longer creates a chat thread) → re-read deals + proposal/card. The
   // re-reads only setState from fresh server data, so no stale-closure risk.
   useEffect(() => {
     if (!canPropose || !threadId) return;
@@ -349,12 +350,30 @@ export function DealPin({
             if ((payload.new as { thread_id?: string }).thread_id === threadId) reloadProposal();
           },
         )
+        // D-05 re-key: the arrival signal rides deal_card events (the table is in
+        // supabase_realtime; Supabase authorizes EVERY event against EACH
+        // subscriber's RLS, so the counterparty hears nothing for 'unsent' rows -
+        // the send flip's UPDATE is literally their first event, T-12-25). The
+        // relationship_id check below is UX scoping only, NEVER the privacy
+        // layer. No DELETE subscription - DELETE events are not RLS-filtered.
         .on(
           "postgres_changes",
-          { event: "INSERT", schema: "public", table: "chat_thread" },
-          () => {
-            reloadDeals();
-            reloadProposal();
+          { event: "INSERT", schema: "public", table: "deal_card" },
+          (payload) => {
+            if ((payload.new as { relationship_id?: string }).relationship_id === relationshipId) {
+              reloadDeals();
+              reloadProposal();
+            }
+          },
+        )
+        .on(
+          "postgres_changes",
+          { event: "UPDATE", schema: "public", table: "deal_card" },
+          (payload) => {
+            if ((payload.new as { relationship_id?: string }).relationship_id === relationshipId) {
+              reloadDeals();
+              reloadCard();
+            }
           },
         )
         // 4.5.4 - a held change was proposed (INSERT) or resolved (DELETE on every
