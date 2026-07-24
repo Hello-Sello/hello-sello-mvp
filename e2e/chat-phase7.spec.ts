@@ -186,15 +186,16 @@ const CID = { alice: '', bob: '' }
 
 test.beforeAll(async ({ browser }) => {
   // clean the relationship to the "no deal" state, then mint ONE live card through
-  // the real app: Alice's "Start a deal" -> CardFront create-mode -> "Send deal"
-  // now births the card DIRECTLY (createDeal), no propose/accept door anymore (the
-  // living-deal-card rework, chj/07-08, retired CreateDealForm + the accept-a-
-  // proposal birth path). createDeal itself stamps the deal.created audit row this
-  // spec asserts (AUDIT-01) - the same audit action confirmDetectedDeal used to
-  // stamp on the old accept-a-proposal path. We deliberately do NOT open the card
-  // panel here - all assertions run against the DB/RPC layer, so the spec is
-  // independent of the card-open UI. Only Alice's browser is needed (there is no
-  // more accept step for Bob).
+  // the real app: Alice's "Start a deal" -> CardFront create-mode -> "Save draft"
+  // births the card (createDeal), then the fixture clicks the card's "Send deal"
+  // (Phase 12 birth/send split) - so the card here is a SENT `negotiation` deal.
+  // The send matters for this spec: confirm_deal_change's commit keeps the card
+  // in 'negotiation', and OBS-3's narration lands in the p2p thread the send
+  // resolves/creates. createDeal itself stamps the deal.created audit row this
+  // spec asserts (AUDIT-01). We deliberately do NOT open the card panel here -
+  // all assertions run against the DB/RPC layer, so the spec is independent of
+  // the card-open UI. Only Alice's browser is needed (there is no accept step
+  // for Bob).
   resetDealData()
   const aliceContext = await browser.newContext()
   const alicePage = await aliceContext.newPage()
@@ -399,12 +400,18 @@ test('OBS-3/SELL-01: a committed change resolves via the engine and narrates as 
   expect(sql(`select version from public.deal_card where id = '${dealCardId}'`)).toBe(
     String(newVersion),
   )
-  // OBS-3: the commit is narrated into the deal thread by the System voice, not Sella.
+  // OBS-3: the commit is narrated by the System voice, not Sella. Phase 12:
+  // post-split cards have NO 'deal' chat_thread (birth no longer creates one —
+  // 20260724120200; confirm_deal_change's deal-thread hook guard-skips by
+  // design), so the narration lands in the relationship's P2P thread. The
+  // announcement rows are card-scoped via metadata.deal_card_id.
   const senders = sql(
     `select distinct m.sender from public.chat_message m
        join public.chat_thread t on t.id = m.thread_id
-      where t.deal_card_id = '${dealCardId}' and t.type = 'deal'
-        and m.type = 'deal_card_updated' and m.metadata->>'version' = '${newVersion}'`,
+      where t.type = 'p2p'
+        and m.type = 'deal_card_updated'
+        and m.metadata->>'deal_card_id' = '${dealCardId}'
+        and m.metadata->>'version' = '${newVersion}'`,
   )
   expect(senders).toBe('system')
 })
