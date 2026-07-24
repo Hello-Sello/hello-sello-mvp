@@ -6,9 +6,11 @@
  *
  * It has three states (build plan 4.5 §3):
  *   - A · no deal, no proposal → a dashed "Start a deal" (p2p only).
- *   - B · a PROPOSAL is pending → the pre-card object. The other side accepts
- *         here (the loud pill → confirm_detected_deal → atomic birth); the
- *         proposer sees "waiting". This is the ONLY place a card is born now.
+ *   - B · a SELLA-DETECTED proposal is pending → the pre-card object. Each side
+ *         accepts here (the loud pill → confirm_detected_deal → atomic birth);
+ *         after my accept I see "waiting". Sella-only since Phase 12 (D-18): the
+ *         manual propose_deal era is retired - people start deals via the
+ *         create card instead.
  *   - C · a live deal is selected → the two-tier strip: identity on top, the
  *         [Deal Room | Deal Card] toggle + the // Sella mark + a translate glyph.
  *
@@ -17,8 +19,9 @@
  *
  * Self-contained: it lists the relationship's deals, loads the selected card,
  * AND reads the thread's pending proposal - and refreshes itself live on its own
- * realtime channel (a new proposal = a chat_message insert; a birth = a new deal
- * chat_thread insert). The realtime is INLINED on the shared db client on
+ * realtime channel (a new proposal = a chat_message insert; a deal arriving or
+ * changing = a deal_card INSERT/UPDATE, D-05 re-key - birth no longer creates a
+ * chat thread). The realtime is INLINED on the shared db client on
  * purpose: importing messaging's hook would make deals ↔ messaging a cycle
  * (messaging already renders this component).
  */
@@ -288,8 +291,8 @@ export function DealPin({
 
   // 4.5.2 - live refresh on the strip's OWN channel so BOTH screens stay current:
   // a new proposal arrives (chat_message insert in this thread) → re-read the
-  // proposal; a deal is born (a new deal chat_thread insert) → re-read deals +
-  // proposal (the proposal is now born → it clears; the new card appears). The
+  // proposal; a deal arrives or flips (deal_card INSERT/UPDATE, D-05 re-key -
+  // birth no longer creates a chat thread) → re-read deals + proposal/card. The
   // re-reads only setState from fresh server data, so no stale-closure risk.
   useEffect(() => {
     if (!canPropose || !threadId) return;
@@ -349,12 +352,30 @@ export function DealPin({
             if ((payload.new as { thread_id?: string }).thread_id === threadId) reloadProposal();
           },
         )
+        // D-05 re-key: the arrival signal rides deal_card events (the table is in
+        // supabase_realtime; Supabase authorizes EVERY event against EACH
+        // subscriber's RLS, so the counterparty hears nothing for 'unsent' rows -
+        // the send flip's UPDATE is literally their first event, T-12-25). The
+        // relationship_id check below is UX scoping only, NEVER the privacy
+        // layer. No DELETE subscription - DELETE events are not RLS-filtered.
         .on(
           "postgres_changes",
-          { event: "INSERT", schema: "public", table: "chat_thread" },
-          () => {
-            reloadDeals();
-            reloadProposal();
+          { event: "INSERT", schema: "public", table: "deal_card" },
+          (payload) => {
+            if ((payload.new as { relationship_id?: string }).relationship_id === relationshipId) {
+              reloadDeals();
+              reloadProposal();
+            }
+          },
+        )
+        .on(
+          "postgres_changes",
+          { event: "UPDATE", schema: "public", table: "deal_card" },
+          (payload) => {
+            if ((payload.new as { relationship_id?: string }).relationship_id === relationshipId) {
+              reloadDeals();
+              reloadCard();
+            }
           },
         )
         // 4.5.4 - a held change was proposed (INSERT) or resolved (DELETE on every
@@ -626,17 +647,12 @@ export function DealPin({
         </div>
       )}
 
-      {/* State B - a proposal is pending (the pre-card object, the new heart) */}
+      {/* State B - a Sella-detected proposal is pending (the pre-card object).
+          Sella-only since Phase 12 (D-18): the manual propose_deal half is gone. */}
       {variant === "chat" && showProposal && (
         <div className={rowCls}>
           <span className="min-w-0 flex-1 truncate text-xs text-ink/70">
-            <span className="font-semibold text-ink/85">
-              {proposal!.iProposed
-                ? "You proposed a deal"
-                : proposal!.source === "sella"
-                  ? "Sella spotted a deal"
-                  : `${counterpartyName ?? "They"} proposed a deal`}
-            </span>
+            <span className="font-semibold text-ink/85">Sella spotted a deal</span>
             <span className="text-ink/45"> · {proposal!.summary}</span>
           </span>
 
@@ -669,12 +685,10 @@ export function DealPin({
                       <div className="min-w-0 flex-1 p-3">
                         <div className="mb-0.5 flex items-center gap-1.5 text-[11px] font-semibold text-brand-deep">
                           <Sparkles size={12} strokeWidth={2} />
-                          {proposal!.source === "sella" ? "Sella spotted a deal" : "Deal proposal"}
+                          Sella spotted a deal
                         </div>
                         <p className="mb-2 text-[11px] text-ink/50">
-                          {proposal!.iProposed
-                            ? "Your proposal"
-                            : `From ${counterpartyName ?? "your contact"}`}
+                          From {counterpartyName ?? "your contact"}
                         </p>
 
                         <ul className="space-y-1.5">
