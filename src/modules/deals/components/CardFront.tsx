@@ -141,6 +141,28 @@ function lineTotalOf(l: EditLine): number | null {
   return lineValueOf(l.quantity, l.unit, l.unitPrice) * Math.max(1, l.units);
 }
 
+/** EditLine -> DraftLineInput: the ONE payload mapping shared by birth (Save
+ *  draft / auto-save-on-close, D-13) and negotiation changes. `units` is a
+ *  frontend-only mock and never enters the payload. */
+function toDraftLine(l: EditLine): DraftLineInput {
+  return {
+    productId: l.productId,
+    lineItemId: l.lineItemId ?? undefined,
+    productName: l.productName,
+    quantity: l.quantity,
+    unit: l.unit,
+    unitPrice: l.unitPrice,
+    currency: l.currency,
+    cultivar: l.cultivar,
+    pzn: l.pzn,
+    thcPercent: l.thcPercent,
+    cbdPercent: l.cbdPercent,
+    batchId: l.batchId,
+    batchNumber: l.batchNumber,
+    ownInput: l.ownInput,
+  };
+}
+
 /* FRONTEND-ONLY mock option lists (chj/07-08) - the edit dropdowns for batch +
    unit size. No backend yet; the current value is always merged in so it stays
    selectable. Ported from the chat-flipdoc prototype. */
@@ -221,6 +243,8 @@ export function CardFront({
   viewerCompanyId,
   createMode = false,
   onCreate,
+  onCloseCreate,
+  registerCloseRequest,
   onExitEdit,
   registerExitRequest,
 }: {
@@ -254,6 +278,19 @@ export function CardFront({
    */
   createMode?: boolean;
   onCreate?: (input: CardCreateInput) => Promise<void>;
+  /**
+   * CREATE MODE close (D-13): called INSTEAD of onClose when the user dismisses
+   * the not-yet-born draft (X / Cancel). Hands up the assembled draft when the
+   * form has content (the host births it silently - never lose work), or null
+   * when the card is empty (discard - the locked C5 rule). Absent -> plain onClose.
+   */
+  onCloseCreate?: (input: CardCreateInput | null) => void;
+  /**
+   * CREATE MODE: the card registers its D-13 close rule here so the HOST can
+   * route its own dismiss doors (Escape, opening another card) through the same
+   * content-check - mirrors registerExitRequest's ref pattern.
+   */
+  registerCloseRequest?: (fn: () => void) => void;
   /** leave edit mode - called after a successful "Send changes" so the diff shows.
    *  Owned by DealCard (which holds editMode). */
   onExitEdit?: () => void;
@@ -416,35 +453,54 @@ export function CardFront({
   // proposeDealChange. Birth only - no delivery; sending is the born card's
   // DecisionBar "Send deal" button (D-12). No change reason - a first draft is
   // not a negotiation.
+  // the assembled CardCreateInput from the working form state - used by the
+  // Save-draft button AND the auto-save-on-close path (D-13).
+  function assembleCreateInput(): CardCreateInput {
+    return {
+      lines: lines.map(toDraftLine),
+      freeDelivery: editFreeDelivery,
+      dueDate: editDueDate || null,
+      paymentTermsCode: editPaymentCode || null,
+      note: editNote || null,
+    };
+  }
+
+  // D-13 'has content': anything the birth would PERSIST - at least one line
+  // item, a note, a due date, payment terms, or free delivery flipped on. The
+  // expiry field is a frontend-only mock (never persisted) and does NOT count -
+  // birthing on it alone would save an empty card.
+  const hasCreateContent =
+    lines.length > 0 ||
+    !!(editNote && editNote.trim()) ||
+    !!editDueDate ||
+    !!editPaymentCode ||
+    editFreeDelivery;
+
+  // D-13 close rule (create mode): closing WITH content hands the draft up for a
+  // silent auto-birth (never lose work); an EMPTY card discards (locked C5 rule).
+  // The host owns the actual birth + panel close via onCloseCreate.
+  function requestCloseCreate() {
+    if (!onCloseCreate) {
+      onClose?.();
+      return;
+    }
+    onCloseCreate(hasCreateContent ? assembleCreateInput() : null);
+  }
+
+  // hand the HOST the same close rule for its own dismiss doors (Escape /
+  // opening another card) - a fresh closure every render so it always sees the
+  // latest form state, mirroring registerExitRequest below.
+  useEffect(() => {
+    if (createMode) registerCloseRequest?.(() => requestCloseCreate());
+  });
+
   async function onSendCreate() {
     if (sendBusy || !onCreate || lines.length === 0) return;
     setSendBusy(true);
     setSendError(null);
     try {
-      const payloadLines: DraftLineInput[] = lines.map((l) => ({
-        productId: l.productId,
-        lineItemId: l.lineItemId ?? undefined,
-        productName: l.productName,
-        quantity: l.quantity,
-        unit: l.unit,
-        unitPrice: l.unitPrice,
-        currency: l.currency,
-        cultivar: l.cultivar,
-        pzn: l.pzn,
-        thcPercent: l.thcPercent,
-        cbdPercent: l.cbdPercent,
-        batchId: l.batchId,
-        batchNumber: l.batchNumber,
-        ownInput: l.ownInput,
-      }));
-      await onCreate({
-        lines: payloadLines,
-        freeDelivery: editFreeDelivery,
-        dueDate: editDueDate || null,
-        paymentTermsCode: editPaymentCode || null,
-        note: editNote || null,
-      });
-      // the strip dispatches hs:open-deal-card + closes this create panel on success.
+      await onCreate(assembleCreateInput());
+      // the host swaps this create panel for the born 'unsent' card on success.
     } catch (e) {
       setSendError(e instanceof Error ? e.message : "Could not create the deal.");
     } finally {
@@ -502,25 +558,9 @@ export function CardFront({
     setSendBusy(true);
     setSendError(null);
     try {
-      const payloadLines: DraftLineInput[] = lines.map((l) => ({
-        productId: l.productId,
-        lineItemId: l.lineItemId ?? undefined,
-        productName: l.productName,
-        quantity: l.quantity,
-        unit: l.unit,
-        unitPrice: l.unitPrice,
-        currency: l.currency,
-        cultivar: l.cultivar,
-        pzn: l.pzn,
-        thcPercent: l.thcPercent,
-        cbdPercent: l.cbdPercent,
-        batchId: l.batchId,
-        batchNumber: l.batchNumber,
-        ownInput: l.ownInput,
-      }));
       await proposeDealChange({
         dealCardId: cardId,
-        lines: payloadLines,
+        lines: lines.map(toDraftLine),
         freeDelivery: editFreeDelivery,
         dueDate: editDueDate || null,
         paymentTermsCode: editPaymentCode || null,
@@ -579,11 +619,13 @@ export function CardFront({
              D1 shell, so it stays PINNED while the paper scrolls. ---- */}
       <div className="dc-titlebar flex items-center gap-2 py-2.5 pl-12 pr-12">
         {/* close the panel - lives ON the title bar now (no separate strip above),
-            so the X shares this line instead of costing its own row. */}
+            so the X shares this line instead of costing its own row. In create
+            mode it routes through the D-13 close rule (auto-save with content,
+            discard when empty) instead of a plain close. */}
         {onClose && (
           <button
             type="button"
-            onClick={onClose}
+            onClick={createMode ? requestCloseCreate : onClose}
             aria-label="Close deal card"
             title="Close"
             className="dc-tb-btn grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full"
@@ -1274,9 +1316,11 @@ export function CardFront({
             </p>
             {sendError && <p className="mt-1 text-[11px] text-danger">{sendError}</p>}
             <div className="mt-2 flex items-center justify-end gap-2">
+              {/* Cancel = a close door too (D-13): with content it silently saves
+                  the draft, empty it discards - never a lost card. */}
               <button
                 type="button"
-                onClick={() => onClose?.()}
+                onClick={requestCloseCreate}
                 className="rounded-full px-3 py-1.5 text-[12px] font-semibold text-[color:var(--dc-ink-55)] ring-1 ring-black/10 transition hover:bg-black/5"
               >
                 Cancel
