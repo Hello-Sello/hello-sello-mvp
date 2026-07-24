@@ -9,15 +9,25 @@
  */
 import { Lock } from "lucide-react";
 import type { DiscoverCompany } from "./companies";
+import type { DiscoverPerson } from "./people";
 import { DiscoverAdsBanner } from "./DiscoverAdsBanner";
 import { CompaniesSection } from "./sections/CompaniesSection";
+import { NewPeopleSection } from "./sections/NewPeopleSection";
 
-export function DiscoverShell({ companies }: { companies: DiscoverCompany[] }) {
+export function DiscoverShell({
+  companies,
+  people = [],
+}: {
+  companies: DiscoverCompany[];
+  people?: DiscoverPerson[];
+}) {
   return (
     <div className="mx-auto h-full w-full max-w-6xl overflow-auto px-4 py-8 sm:px-6">
       <DiscoverAdsBanner />
 
-      {/* Companies section hero (other sections stack above it in DISC-9/12/14). */}
+      <NewPeopleSection people={people} />
+
+      {/* Companies section hero (Requests / My Network stack above in DISC-12/14). */}
       <div className="mt-8 text-center">
         <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-soft/50 px-3 py-1 text-xs font-semibold text-brand-deep">
           <Lock size={13} /> Closed network
