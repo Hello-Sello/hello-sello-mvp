@@ -10,20 +10,29 @@
 import { Lock } from "lucide-react";
 import type { DiscoverCompany } from "./companies";
 import type { DiscoverPerson } from "./people";
+import type { DiscoverCompanyRequest } from "./companyRequests";
+import type { DiscoverPersonRequest } from "./incomingPersonRequests";
 import { DiscoverAdsBanner } from "./DiscoverAdsBanner";
 import { CompaniesSection } from "./sections/CompaniesSection";
 import { NewPeopleSection } from "./sections/NewPeopleSection";
+import { RequestsSection } from "./sections/RequestsSection";
 
 export function DiscoverShell({
   companies,
   people = [],
+  companyRequests = [],
+  personRequests = [],
 }: {
   companies: DiscoverCompany[];
   people?: DiscoverPerson[];
+  companyRequests?: DiscoverCompanyRequest[];
+  personRequests?: DiscoverPersonRequest[];
 }) {
   return (
     <div className="mx-auto h-full w-full max-w-6xl overflow-auto px-4 py-8 sm:px-6">
       <DiscoverAdsBanner />
+
+      <RequestsSection companyRequests={companyRequests} personRequests={personRequests} />
 
       <NewPeopleSection people={people} />
 
