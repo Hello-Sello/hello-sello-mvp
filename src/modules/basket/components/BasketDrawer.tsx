@@ -5,10 +5,9 @@ import { useRouter } from "next/navigation";
 import { Minus, Plus, Trash2, FileText } from "lucide-react";
 import { useBasket } from "../BasketProvider";
 import { updateBasketLinePackCount, removeBasketLine } from "../supabase/writes";
-import { sendBasketGroup } from "../actions";
+import { createBasketDraft } from "../actions";
 import { RecipientPicker } from "./RecipientPicker";
 import { dealChatUrl } from "@/modules/deals";
-import { openOrCreateP2pThread, postDealMessage } from "@/modules/messaging";
 import type { BasketGroup } from "../types";
 
 /**
@@ -78,40 +77,33 @@ function Group({
   const [recipient, setRecipient] = useState<{ relationshipId: string; counterpartyPersonId: string | null } | null>(
     group.isOwnCompany ? null : (group.relationshipId ? { relationshipId: group.relationshipId, counterpartyPersonId: null } : null),
   );
-  const [sending, setSending] = useState(false);
+  const [creating, setCreating] = useState(false);
 
-  // Drafts the deal, then hands the viewer off to the relationship's chat
-  // where the new card now lives (Task 8b's dealChatUrl contract) - replaces
-  // the old drawer's static "✓ sent" row entirely.
+  // Births the PRIVATE draft (status 'unsent'), then lands the viewer on the
+  // born card - the drawer never sends (D-12: delivery is send_deal's alone,
+  // fired later from the card's DecisionBar). The RecipientPicker still runs
+  // BEFORE birth: the picked person persists in deal_card.metadata via the
+  // slim birth RPC and routes the eventual send. Card open reuses the same
+  // mechanism as the connect host: hs:deal-updated refreshes any mounted deal
+  // UI, then dealChatUrl lands on the relationship's chat where ChatView
+  // re-fires hs:open-deal-card for the born card.
   async function draft() {
     if (!recipient) return;
-    setSending(true);
+    setCreating(true);
     try {
-      const { dealCardId } = await sendBasketGroup(group, {
+      const { dealCardId } = await createBasketDraft(group, {
         relationshipId: recipient.relationshipId,
         counterpartyPersonId: recipient.counterpartyPersonId,
         note: null,
       });
-      // Person delivery (Lane A): when a PERSON was picked, drop the
-      // "[Sender] has sent a deal" bubble into their chat. Company-target
-      // sends (no person picked) deliver as an inbox ticket at birth instead.
-      // Fail-soft: the deal is already born — a delivery hiccup never blocks.
-      if (recipient.counterpartyPersonId) {
-        try {
-          const tid = await openOrCreateP2pThread(
-            recipient.relationshipId,
-            recipient.counterpartyPersonId,
-          );
-          await postDealMessage(tid, dealCardId);
-        } catch (e) {
-          console.error("deal delivery message failed", e);
-        }
-      }
+      window.dispatchEvent(
+        new CustomEvent("hs:deal-updated", { detail: { dealCardId } }),
+      );
       await onChanged();
       onDrafted();
       router.push(dealChatUrl(recipient.relationshipId, dealCardId));
     } finally {
-      setSending(false);
+      setCreating(false);
     }
   }
 
@@ -156,11 +148,11 @@ function Group({
       )}
 
       <button
-        disabled={!recipient || sending}
+        disabled={!recipient || creating}
         onClick={draft}
         className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg bg-brand py-2 text-xs font-bold text-white hover:bg-brand-deep disabled:opacity-40"
       >
-        <FileText size={13} /> Draft deal
+        <FileText size={13} /> Create a draft deal
       </button>
     </div>
   );

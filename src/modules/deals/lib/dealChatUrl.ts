@@ -4,7 +4,7 @@
  * callers that need to show their result use this - the basket popover
  * (Task 8a) and the chat "Create Deal" button (Task 8c):
  *
- *   const { dealCardId } = await sendBasketGroup(group, input);
+ *   const { dealCardId } = await createBasketDraft(group, input);
  *   router.push(dealChatUrl(input.relationshipId, dealCardId));
  *
  * Investigation finding (see task-8b-report.md): DealPin needs NO new
