@@ -55,6 +55,45 @@ harmless `erase-expired-accounts` 3am cron. Details in the 2026-07-07 APPLIED en
 
 ---
 
+## ⚠️ PENDING (2026-07-24, Ayush) - 10 migrations - Phase 12 deal status machine
+
+The whole board-Wave-2 status machine: birth/send split, status vocabulary rename, server-side
+transition authority, draft privacy RLS, and the client status-write revoke. Applied LOCAL via
+`supabase db reset` (green, 2026-07-24) + proven by the re-timed SQL harness (`rls_isolation` /
+`deliver_deal` / `claim_deal_ticket`, all PASSED). **Push all 10 together, in timestamp order** -
+they are one chain (lookup rows before RPCs that write them; the REVOKE sorts last so transitions
+always have an RPC path before the raw door closes).
+
+| # | Migration file | What it does |
+|---|----------------|--------------|
+| 1 | `20260724120000_status_vocab_unsent_negotiation.sql` | Lookup rows `unsent` + `negotiation`, 3-line backfill (`draft`->`negotiation`, `amended`->`confirmed`, `withdrawn`->`cancelled`), default flip to `'unsent'`, retired-code delete, `deal.sent` audit rider |
+| 2 | `20260724120100_confirm_deal_change_negotiation_membership.sql` | `confirm_deal_change` re-emit: commit writes `negotiation`; adds the missing relationship-membership guard (closes the foreign-decline forge hole) |
+| 3 | `20260724120200_create_deal_draft_private_birth.sql` | Slim `create_deal_draft`: births PRIVATE `'unsent'`, no delivery/co-owner/birth thread; persists the picked counterparty in `metadata.counterparty_person_id` |
+| 4 | `20260724120300_send_deal.sql` | NEW `send_deal(uuid)` - the ONE delivery writer: guards + flip to `negotiation` + co-owner + `deliver_deal` + p2p deal pill + log, in one transaction |
+| 5 | `20260724120400_confirm_detected_deal_births_negotiation.sql` | Sella double-accept door births straight into `negotiation` (delivered-by-construction; never routes through `send_deal`) |
+| 6 | `20260724120500_sign_deal.sql` | `sign_deal(uuid)`: fixed-signer guard (initiator can never sign) + own-held-change guard + atomic nested change-commit + flip to `confirmed` |
+| 7 | `20260724120600_deal_transition_rpcs.sql` | `decline_deal` / `finalize_deal` / `reopen_deal_ticket` / `close_deal_ticket` definers with the ported action guards |
+| 8 | `20260724120700_draft_privacy_rls.sql` | D-08 helper narrow (`card_relationship_member`: `unsent` visible to the initiating company only) + `card_all` re-create + `deal_confirmation` SELECT-only |
+| 9 | `20260724120800_drop_propose_edit_rpcs.sql` | Drops the dead two-sided-confirm era `propose_deal` + `edit_deal_draft` |
+| 10 | `20260724120900_revoke_deal_card_status_writes.sql` | `REVOKE UPDATE ON deal_card FROM authenticated, anon` - all client status writes go through the RPCs (sorts LAST deliberately) |
+
+- **⚠️ SAME-DEPLOY RULE (agreed board Wave 0):** the cloud push of this wave MUST ship in the
+  same deploy as the app-side rename sweep AND Muskan's `statusOf` / `batches.ts` /
+  `connections-shape.ts` / seed edits. Her `.in('status', ...)` filters keyed on the old codes
+  return **empty silently** against the renamed vocabulary - no error, just missing calendar
+  pills/worklist rows. DB half + app half are one unit.
+- **Pre-push insurance (RESEARCH A1):** run `SELECT status, count(*) FROM deal_card GROUP BY 1`
+  on CLOUD first. The backfill covers `draft`/`amended`/`withdrawn`; any UNKNOWN status code
+  left behind would FK-fail the retired-lookup delete loudly mid-push. Know the answer before
+  pushing, not during.
+- **Before/after push, run the harness:** `supabase/tests/rls_isolation_test.sql`,
+  `bash supabase/tests/run_deliver_deal_test.sh`, `bash supabase/tests/run_claim_deal_ticket_test.sh`
+  (all three re-timed to the birth/send split; PASSED locally 2026-07-24).
+- **Migration before code** - the Wave-2 app code (thin RPC actions, sendDeal, the rename sweep)
+  errors on cloud without these live (dropped RPCs + renamed statuses + the revoke).
+
+---
+
 ## ⚠️ PENDING (2026-07-10, Muskan) — 1 migration: person.company_id self-write lockdown (SECURITY)
 
 - **`20260710120000_person_company_id_lockdown.sql`** — closes the cross-tenant self-join hole
