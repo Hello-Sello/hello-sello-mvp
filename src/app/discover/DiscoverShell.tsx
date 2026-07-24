@@ -12,6 +12,7 @@
  * component so it can later coordinate cross-section state; its data is
  * server-fetched in page.tsx and passed as props (one paint, no loading flash).
  */
+import { useRouter } from "next/navigation";
 import type { DiscoverCompany } from "./companies";
 import type { DiscoverPerson } from "./people";
 import type { DiscoverCompanyRequest } from "./companyRequests";
@@ -23,6 +24,7 @@ import { CompaniesSection } from "./sections/CompaniesSection";
 import { NewPeopleSection } from "./sections/NewPeopleSection";
 import { RequestsSection } from "./sections/RequestsSection";
 import { MyNetworkSection } from "./sections/MyNetworkSection";
+import { useDiscoverRealtime } from "./useDiscoverRealtime";
 
 export function DiscoverShell({
   companies,
@@ -39,6 +41,11 @@ export function DiscoverShell({
   networkCompanies?: ConnectedCompany[];
   networkPeople?: DiscoverPersonConnection[];
 }) {
+  const router = useRouter();
+  // Live person graph: a request sent to me (INSERT) or one of my requests
+  // accepted (UPDATE) refreshes the page so the right section updates instantly.
+  useDiscoverRealtime(() => router.refresh());
+
   return (
     <div className="mx-auto h-full w-full max-w-6xl overflow-auto px-4 py-8 sm:px-6">
       <div className="flex flex-col gap-[22px]">

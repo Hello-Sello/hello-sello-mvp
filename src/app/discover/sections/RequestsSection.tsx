@@ -85,15 +85,18 @@ export function RequestsSection({
   companyRequests: DiscoverCompanyRequest[];
   personRequests: DiscoverPersonRequest[];
 }) {
-  const [company, setCompany] = useState(companyRequests);
-  const [people, setPeople] = useState(personRequests);
+  // The lists are DERIVED from props (so a realtime router.refresh brings in new
+  // incoming requests live) minus the items handled locally this session — an
+  // accepted/declined item stays gone even before the server refresh catches up.
+  const [handled, setHandled] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState<string | null>(null);
+  const markHandled = (id: string) => setHandled((h) => new Set(h).add(id));
 
   async function handleCompany(id: string, action: "accept" | "decline") {
     setBusy(id);
     try {
       await (action === "accept" ? acceptItem(id) : declineItem(id));
-      setCompany((cs) => cs.filter((c) => c.itemId !== id));
+      markHandled(id);
     } finally {
       setBusy(null);
     }
@@ -103,9 +106,11 @@ export function RequestsSection({
     setBusy(id);
     const res = await (action === "accept" ? acceptPersonRequest(id) : declinePersonRequest(id));
     setBusy(null);
-    if (!("error" in res)) setPeople((ps) => ps.filter((p) => p.itemId !== id));
+    if (!("error" in res)) markHandled(id);
   }
 
+  const company = companyRequests.filter((c) => !handled.has(c.itemId));
+  const people = personRequests.filter((p) => !handled.has(p.itemId));
   const total = company.length + people.length;
 
   return (
