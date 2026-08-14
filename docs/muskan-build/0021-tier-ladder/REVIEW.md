@@ -50,11 +50,10 @@ Both plans came back REVISE; all findings accepted and folded into the plans:
    `published_at`+`created_at` picks nondeterministically. Faithful port of the live
    RPC (inherited, not introduced); the one soft spot in "every reader picks the same
    row". *(critic, :234)*
-3. `plit_public_select` lacks `is_caller_verified()` — an authenticated-but-pending
-   caller can read public ladders via direct table read (view + RPC both gate it; the
-   table door doesn't). Matches parent-policy parity per ADR §4, but the policy is new
-   and could ship the gate. **Candidate one-line tightening for G4 decision.**
-   *(security, :68-83)*
+3. ~~`plit_public_select` lacks `is_caller_verified()`~~ **RESOLVED at G4
+   (Muskan: yes, 2026-08-14):** the gate is in the policy; the pgTAP suite now also
+   probes the direct table door as an unverified caller (0 rows). All three doors —
+   table, view, RPC — now agree. *(security, :68-83)*
 4. Owner arm of the view returns price rows for soft-deleted products
    (`p.deleted_at` only in the public arm — matches ADR literal text; T03 readers
    inherit it). *(security, :222-227)*

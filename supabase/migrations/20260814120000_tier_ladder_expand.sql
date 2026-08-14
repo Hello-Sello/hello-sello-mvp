@@ -64,11 +64,15 @@ CREATE POLICY plit_all ON public.pricelist_item_tier FOR ALL TO authenticated
   WITH CHECK (public.owns_pricelist_item(pricelist_item_id));
 
 -- Public read mirrors pricelist_item_public_select (20260614180000) but inlines
--- the visibility window too — defense in depth, matches the view's public arm.
+-- the visibility window AND the verified-caller gate — the full set of the view's
+-- public-arm conjuncts (G4 decision, 2026-08-14: tighter than parent-policy parity;
+-- an authenticated-but-unverified company must not read ladders via direct table
+-- reads when the view and RPC both deny it).
 CREATE POLICY plit_public_select ON public.pricelist_item_tier
   FOR SELECT TO authenticated
   USING (
     deleted_at IS NULL
+    AND public.is_caller_verified()
     AND EXISTS (
       SELECT 1 FROM public.pricelist_item pli
       JOIN public.product p ON p.id = pli.product_id

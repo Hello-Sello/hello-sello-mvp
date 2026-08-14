@@ -368,6 +368,12 @@ BEGIN
   IF (SELECT count(*) FROM public.current_pricelist_item
       WHERE product_id = (SELECT view_product FROM _fix)) <> 0
     THEN RAISE EXCEPTION 'LEAK: an UNVERIFIED caller sees price rows through the view''s public arm'; END IF;
+  -- table door too (G4 decision): plit_public_select carries is_caller_verified(),
+  -- so the DIRECT table read must also return nothing for an unverified caller.
+  IF (SELECT count(*) FROM public.pricelist_item_tier t
+      WHERE t.pricelist_item_id = (SELECT view_item FROM _fix)
+        AND t.deleted_at IS NULL) <> 0
+    THEN RAISE EXCEPTION 'LEAK: an UNVERIFIED caller reads rungs via a direct table SELECT'; END IF;
 END $$;
 RESET ROLE;
 
