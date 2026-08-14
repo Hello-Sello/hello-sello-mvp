@@ -606,13 +606,16 @@ export function ProductCard({
                   inline pink-tinted box, one row per ladderRows entry; the
                   applied row is tinted; the base row has no Choose. */}
               {pricesOpen && priceShown && p.tiers.length > 0 && (
-                <div className="mb-2 rounded-xl border border-brand/25 bg-brand-soft/20 p-1.5">
+                /* Compact rows so base + 3 rungs fit the fixed-height footer
+                   (G4 feedback); max-h + scroll is the backstop for a direct
+                   4th rung (the 3-cap is advisory). */
+                <div className="mb-2 max-h-[128px] overflow-y-auto rounded-xl border border-brand/25 bg-brand-soft/20 p-1.5">
                   {ladderRows(p.price_per_gram, p.tiers, currentGrams).map((row, i) => {
                     const min = row.minGrams;
                     return (
                       <div
                         key={min ?? "base"}
-                        className={`flex items-center gap-2 rounded-lg px-1.5 py-1 text-[11.5px] ${
+                        className={`flex items-center gap-2 rounded-lg px-1.5 py-0.5 text-[11.5px] ${
                           row.isApplied ? "bg-brand/10" : ""
                         } ${i > 0 ? "border-t border-dashed border-brand/20" : ""}`}
                       >
@@ -666,33 +669,37 @@ export function ProductCard({
                   )
                 )}
               </div>
-              <div className="flex gap-2">
-                <div className="flex items-center rounded-full bg-white shadow-[inset_0_0_0_1px_rgba(20,10,16,0.15)]">
+              {/* Buy row — read mode only. In edit mode it was dead chrome (Add
+                  was rendered disabled) and its ~48px is exactly what the tier
+                  editor needs inside the fixed-height footer (G4 feedback). */}
+              {!editing && (
+                <div className="flex gap-2">
+                  <div className="flex items-center rounded-full bg-white shadow-[inset_0_0_0_1px_rgba(20,10,16,0.15)]">
+                    <button
+                      type="button" aria-label="Decrease quantity"
+                      onClick={() => setQty((q) => Math.max(1, q - 1))}
+                      className="grid h-[30px] w-[30px] place-items-center rounded-full text-brand-deep hover:bg-brand/10"
+                    >
+                      <Minus size={14} />
+                    </button>
+                    <span className="min-w-[30px] text-center text-[13px] font-bold tabular-nums">{qty}</span>
+                    <button
+                      type="button" aria-label="Increase quantity"
+                      onClick={() => setQty((q) => q + 1)}
+                      className="grid h-[30px] w-[30px] place-items-center rounded-full text-brand-deep hover:bg-brand/10"
+                    >
+                      <Plus size={14} />
+                    </button>
+                  </div>
                   <button
-                    type="button" aria-label="Decrease quantity"
-                    onClick={() => setQty((q) => Math.max(1, q - 1))}
-                    className="grid h-[30px] w-[30px] place-items-center rounded-full text-brand-deep hover:bg-brand/10"
+                    type="button"
+                    onClick={() => onAddToBasket?.(p.id, qty, pack)}
+                    className="flex flex-1 items-center justify-center gap-1.5 rounded-full bg-brand py-2 text-[12.5px] font-bold text-white hover:bg-brand-deep"
                   >
-                    <Minus size={14} />
-                  </button>
-                  <span className="min-w-[30px] text-center text-[13px] font-bold tabular-nums">{qty}</span>
-                  <button
-                    type="button" aria-label="Increase quantity"
-                    onClick={() => setQty((q) => q + 1)}
-                    className="grid h-[30px] w-[30px] place-items-center rounded-full text-brand-deep hover:bg-brand/10"
-                  >
-                    <Plus size={14} />
+                    <ShoppingCart size={14} /> Add to basket
                   </button>
                 </div>
-                <button
-                  type="button"
-                  disabled={editing}
-                  onClick={() => onAddToBasket?.(p.id, qty, pack)}
-                  className="flex flex-1 items-center justify-center gap-1.5 rounded-full bg-brand py-2 text-[12.5px] font-bold text-white hover:bg-brand-deep disabled:opacity-40"
-                >
-                  <ShoppingCart size={14} /> Add to basket
-                </button>
-              </div>
+              )}
               {/* Batch selection lives in the footer, beside Add-to-basket — not
                   inside the scrollable spec list above (feedback: it was easy to
                   miss buried in the scroll). Owner-only, view mode. */}
@@ -931,7 +938,10 @@ function TierLadderEditor({
       <div className="mb-1 px-0.5 text-[10px] font-bold uppercase tracking-wide text-ink/45">
         Volume price tiers <span className="font-semibold normal-case text-ink/40">(max 3)</span>
       </div>
-      <div className="flex flex-col gap-1">
+      {/* Rows scroll inside the fixed-height footer (G4 feedback: 3 rows +
+          messages exceed the card's spare height); + Add tier stays pinned
+          below the scroll area so it is always reachable. */}
+      <div className="flex max-h-[118px] flex-col gap-1 overflow-y-auto pr-0.5">
         {rows.map((row, i) => {
           const v = validation.rows[i];
           const invalid = v.minInvalid || v.priceInvalid;
@@ -974,17 +984,17 @@ function TierLadderEditor({
             </div>
           );
         })}
-        <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            disabled={full}
-            onClick={() => onRows([...rows, { min: "", price: "" }])}
-            className="flex items-center gap-1 self-start rounded-md border border-dashed border-brand/50 px-2 py-1 text-[11px] font-bold text-brand-deep hover:bg-brand/10 disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent"
-          >
-            <Plus size={12} /> Add tier
-          </button>
-          {full && <span className="text-[10px] font-semibold text-ink/40">ladder is full</span>}
-        </div>
+      </div>
+      <div className="mt-1 flex items-center gap-1.5">
+        <button
+          type="button"
+          disabled={full}
+          onClick={() => onRows([...rows, { min: "", price: "" }])}
+          className="flex items-center gap-1 self-start rounded-md border border-dashed border-brand/50 px-2 py-1 text-[11px] font-bold text-brand-deep hover:bg-brand/10 disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent"
+        >
+          <Plus size={12} /> Add tier
+        </button>
+        {full && <span className="text-[10px] font-semibold text-ink/40">ladder is full</span>}
       </div>
     </div>
   );
