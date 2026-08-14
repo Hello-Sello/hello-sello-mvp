@@ -368,6 +368,7 @@ folder instead of a file.
 | Spec | `docs/PRD/NNNN-<slug>.md` | `0007-pricelist.md` |
 | ADR | `docs/architecture/adr/ADR-NNN-<slug>.md` | already the convention — keep it |
 | Build folder | `docs/muskan-build/NNNN-<slug>/` | `0007-pricelist/` — same number as its spec |
+| Prototype | `prototypes/NNNN-<slug>-prototype/` | `0007-pricelist-prototype/` — same number (added 2026-08-14, dry-run) |
 
 Zero-padded, sequential, **never reused** — a number is an identity, not a position. The
 spec and its build folder share one number, so you can walk from either to the other.
