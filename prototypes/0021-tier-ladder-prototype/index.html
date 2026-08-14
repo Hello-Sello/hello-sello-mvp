@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>0021 · Tier ladder — prototype</title>
+<style>
+  /* ============ theme tokens copied from src/app/globals.css ============ */
+  :root{
+    --brand:#e30b5d; --brand-soft:#ffb7d5; --brand-deep:#7a1638;
+    --ink:#1f2020; --ink-muted:#6b6470; --success:#34b233;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  body{background:#faf7f8;color:var(--ink);min-height:100vh;padding:24px 16px 80px}
+
+  /* ============ page chrome (not part of the card design) ============ */
+  .page-head{max-width:1080px;margin:0 auto 18px}
+  .page-head h1{font-size:18px;font-weight:800;color:var(--brand-deep)}
+  .page-head p{font-size:12.5px;color:var(--ink-muted);margin-top:4px;max-width:640px}
+  .tabs{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+  .tab{border:1px solid rgba(31,32,32,.15);background:#fff;border-radius:999px;padding:7px 16px;
+       font-size:12.5px;font-weight:700;cursor:pointer;color:var(--ink)}
+  .tab.active{background:var(--brand);border-color:var(--brand);color:#fff}
+  .variant-tabs{display:none;gap:8px;margin-top:10px}
+  .variant-tabs.show{display:flex}
+  .vtab{border:1px dashed rgba(31,32,32,.25);background:#fff;border-radius:10px;padding:6px 12px;
+        font-size:11.5px;font-weight:700;cursor:pointer;color:var(--ink-muted)}
+  .vtab.active{border:2px solid var(--brand);color:var(--brand-deep)}
+  .stage{max-width:1080px;margin:22px auto 0;display:flex;gap:32px;align-items:flex-start;flex-wrap:wrap}
+  .explain{flex:1;min-width:260px;max-width:340px;font-size:12.5px;line-height:1.55;color:var(--ink-muted);
+           background:#fff;border:1px solid rgba(31,32,32,.08);border-radius:16px;padding:16px}
+  .explain b{color:var(--brand-deep)}
+  .explain ul{padding-left:16px;margin-top:6px}
+  .explain li{margin-top:4px}
+
+  /* ============ the product card — replica of ProductCard.tsx ============ */
+  .card{width:300px;height:640px;border-radius:24px;background:#fff;overflow:hidden;
+        box-shadow:0 10px 15px -3px rgba(0,0,0,.1),0 4px 6px -4px rgba(0,0,0,.1);
+        outline:1px solid rgba(255,255,255,.6);display:flex;flex-direction:column;flex-shrink:0}
+  .photo{position:relative;height:250px;flex-shrink:0;background:rgba(255,183,213,.4);
+         display:flex;align-items:center;justify-content:center}
+  .photo .ph-name{font-size:14px;font-weight:600;color:rgba(122,22,56,.7)}
+  .heart{position:absolute;right:10px;top:10px;width:32px;height:32px;border-radius:999px;background:rgba(255,255,255,.9);
+         border:none;display:grid;place-items:center;color:var(--brand);font-size:15px;cursor:pointer}
+  .docs-pill{position:absolute;right:10px;bottom:10px;background:rgba(31,32,32,.55);color:#fff;border:none;
+             border-radius:999px;padding:6px 12px;font-size:11px;font-weight:600;cursor:default;backdrop-filter:blur(4px)}
+  .edit-tools{position:absolute;left:8px;right:8px;top:8px;display:flex;gap:6px;align-items:center}
+  .edit-tools .grip{width:28px;height:28px;border-radius:8px;background:rgba(31,32,32,.6);color:#fff;display:grid;place-items:center;font-size:12px;cursor:grab}
+  .edit-tools .tool{background:rgba(255,255,255,.95);border:none;border-radius:8px;padding:4px 8px;font-size:10px;
+                    font-weight:800;color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08);cursor:pointer}
+  .edit-tools .del{margin-left:auto;width:28px;height:28px;border-radius:8px;display:grid;place-items:center;color:#e11d48}
+
+  .name-row{display:flex;align-items:flex-start;gap:8px;padding:10px 14px 0}
+  .name-row .nm{font-size:16px;font-weight:800;line-height:1.2;color:var(--brand-deep)}
+  .name-row .cv{font-size:12px;color:var(--ink-muted);margin-top:2px}
+  .name-row .pzn{font-size:11px;color:rgba(31,32,32,.45);margin-top:2px}
+  .name-row .flag{margin-left:auto;font-size:18px;line-height:1}
+
+  .strip{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;padding:8px 14px 0}
+  .strip .cell{border:1px solid rgba(31,32,32,.1);background:rgba(227,11,93,.025);border-radius:6px;
+               padding:4px 2px;text-align:center}
+  .strip b{display:block;font-size:12.5px;font-weight:800;color:var(--brand-deep);font-variant-numeric:tabular-nums;line-height:1}
+  .strip small{font-size:7px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:rgba(31,32,32,.45)}
+
+  .specs{flex:1;min-height:80px;overflow-y:auto;margin-top:6px;padding:0 14px;position:relative}
+  .spec-row{display:flex;gap:8px;align-items:flex-start;border-bottom:1px solid rgba(31,32,32,.1);
+            padding:6px 0;font-size:12px}
+  .spec-row .lb{width:78px;flex-shrink:0;font-weight:500;color:var(--ink-muted)}
+  .spec-row .vl{font-weight:600;line-height:1.35}
+
+  .footer{border-top:1px solid rgba(31,32,32,.1);background:#fff;padding:10px 14px 12px;flex-shrink:0;position:relative}
+  .foot-top{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;margin-bottom:8px}
+  .packs{display:flex;gap:5px;flex-wrap:wrap}
+  .pack{border:1px solid rgba(31,32,32,.18);background:#fff;border-radius:999px;padding:5px 10px;
+        font-size:11px;font-weight:700;cursor:pointer;color:var(--ink)}
+  .pack.sel{background:var(--brand);border-color:var(--brand);color:#fff}
+  .price-blk{display:flex;flex-direction:column;align-items:flex-end;flex-shrink:0}
+  .price-blk .approx{font-size:10.5px;font-weight:600;color:var(--ink-muted);margin-bottom:-1px}
+  .price-blk .val{font-size:17px;font-weight:800;color:var(--brand-deep);font-variant-numeric:tabular-nums}
+  .price-blk .val span{font-size:12px}
+  .avail{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:var(--success);margin-bottom:8px}
+  .avail i{width:6px;height:6px;border-radius:999px;background:currentColor}
+  .buy-row{display:flex;gap:8px}
+  .stepper{display:flex;align-items:center;border-radius:999px;background:#fff;
+           box-shadow:inset 0 0 0 1px rgba(20,10,16,.15)}
+  .stepper button{width:30px;height:30px;border:none;background:none;border-radius:999px;color:var(--brand-deep);
+                  font-size:15px;font-weight:700;cursor:pointer}
+  .stepper button:hover{background:rgba(227,11,93,.1)}
+  .stepper .q{min-width:30px;text-align:center;font-size:13px;font-weight:700;font-variant-numeric:tabular-nums}
+  .add-btn{flex:1;border:none;border-radius:999px;background:var(--brand);color:#fff;padding:8px 0;
+           font-size:12.5px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px}
+  .add-btn:hover{background:var(--brand-deep)}
+  .grams-note{margin-top:6px;font-size:10.5px;color:var(--ink-muted);text-align:right;font-variant-numeric:tabular-nums}
+  .grams-note b{color:var(--brand-deep)}
+
+  /* ---- tier chip: which rung is applied right now ---- */
+  .tier-chip{display:inline-flex;align-items:center;gap:5px;border-radius:999px;background:rgba(52,178,51,.12);
+             color:#1d7a1c;font-size:10px;font-weight:800;padding:3px 9px;margin-left:8px;
+             transition:transform .15s}
+  .tier-chip.base{background:rgba(31,32,32,.07);color:var(--ink-muted)}
+  .tier-chip.bump{transform:scale(1.12)}
+
+  /* ============ VARIANT A — select-style dropdown beside price ============ */
+  .va-select{position:relative}
+  .va-btn{border:1px solid rgba(31,32,32,.2);background:#fff;border-radius:10px;padding:5px 26px 5px 9px;
+          font-size:11px;font-weight:700;color:var(--brand-deep);cursor:pointer;position:relative;text-align:left}
+  .va-btn::after{content:"▾";position:absolute;right:8px;top:50%;transform:translateY(-50%);color:var(--ink-muted);font-size:10px}
+  .va-menu{position:absolute;bottom:calc(100% + 6px);right:0;width:196px;background:#fff;border-radius:14px;
+           box-shadow:0 10px 24px rgba(0,0,0,.16);border:1px solid rgba(31,32,32,.08);padding:5px;display:none;z-index:30}
+  .va-menu.open{display:block}
+  .va-opt{display:flex;justify-content:space-between;align-items:center;gap:8px;width:100%;border:none;background:none;
+          border-radius:9px;padding:8px 9px;font-size:11.5px;cursor:pointer;text-align:left}
+  .va-opt:hover{background:rgba(227,11,93,.07)}
+  .va-opt .l{font-weight:700;color:var(--ink)}
+  .va-opt .r{font-weight:800;color:var(--brand-deep);font-variant-numeric:tabular-nums}
+  .va-opt.on{background:rgba(227,11,93,.1)}
+  .va-opt .save{display:block;font-size:9.5px;font-weight:700;color:#1d7a1c}
+
+  /* ============ VARIANT B — "See all prices" expanding panel ============ */
+  .vb-link{border:none;background:none;font-size:10.5px;font-weight:700;color:var(--brand);cursor:pointer;
+           text-decoration:underline;text-underline-offset:2px;padding:0}
+  .vb-panel{display:none;margin:0 0 8px;border:1px solid rgba(227,11,93,.25);background:rgba(255,183,213,.12);
+            border-radius:12px;padding:6px}
+  .vb-panel.open{display:block}
+  .vb-row{display:flex;align-items:center;gap:8px;padding:5px 6px;font-size:11.5px;border-radius:8px}
+  .vb-row+.vb-row{border-top:1px dashed rgba(227,11,93,.2)}
+  .vb-row .l{font-weight:700;flex:1}
+  .vb-row .p{font-weight:800;color:var(--brand-deep);font-variant-numeric:tabular-nums}
+  .vb-row .go{border:1px solid var(--brand);background:#fff;color:var(--brand);border-radius:999px;
+              padding:2px 9px;font-size:10px;font-weight:800;cursor:pointer}
+  .vb-row .go:hover{background:var(--brand);color:#fff}
+  .vb-row.on{background:rgba(227,11,93,.1)}
+
+  /* ============ VARIANT C — price itself is the trigger ============ */
+  .vc-price{border:none;background:none;cursor:pointer;display:flex;flex-direction:column;align-items:flex-end;padding:0}
+  .vc-price .approx{font-size:10.5px;font-weight:600;color:var(--ink-muted)}
+  .vc-price .val{font-size:17px;font-weight:800;color:var(--brand-deep);font-variant-numeric:tabular-nums;
+                 border-bottom:2px dotted rgba(227,11,93,.5)}
+  .vc-price .val span{font-size:12px}
+  .vc-price .hint{font-size:9px;font-weight:700;color:var(--brand);margin-top:1px}
+
+  /* ============ SELLER EDIT — footer price area ============ */
+  .ed-price-row{display:flex;align-items:center;gap:5px;font-size:13px;font-weight:800;color:var(--brand-deep);justify-content:flex-end}
+  .ed-price-row input{width:64px;border:1px solid rgba(31,32,32,.2);border-radius:6px;padding:3px 5px;text-align:right;
+                      font-size:13px;font-weight:800;color:var(--brand-deep);font-variant-numeric:tabular-nums}
+  .ed-price-row input:focus{outline:none;border-color:var(--brand)}
+  .ed-show{display:flex;align-items:center;gap:5px;font-size:10px;font-weight:600;color:var(--ink-muted);justify-content:flex-end;margin-top:4px}
+  .tier-editor{margin-top:8px;border-top:1px dashed rgba(31,32,32,.15);padding-top:8px}
+  .tier-editor .hd{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-muted);margin-bottom:6px}
+  .tier-line{display:flex;align-items:center;gap:5px;background:rgba(255,255,255,.7);border:1px solid rgba(31,32,32,.08);
+             border-radius:10px;padding:4px 6px;margin-bottom:5px;font-size:11px}
+  .tier-line .from{font-weight:600;color:var(--ink-muted)}
+  .tier-line input{border:1px solid rgba(31,32,32,.15);border-radius:5px;padding:2px 4px;font-size:11px;width:52px;
+                   text-align:right;font-variant-numeric:tabular-nums}
+  .tier-line input:focus{outline:none;border-color:var(--brand)}
+  .tier-line .x{margin-left:auto;border:none;background:none;color:#e11d48;font-weight:800;cursor:pointer;font-size:12px}
+  .tier-line.bad input.min{border-color:#e11d48;background:rgba(225,29,72,.06)}
+  .tier-err{font-size:10px;color:#e11d48;font-weight:700;margin:2px 0 5px;display:none}
+  .tier-err.show{display:block}
+  .add-tier{border:1px dashed rgba(227,11,93,.5);background:none;color:var(--brand);border-radius:8px;
+            padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer}
+  .add-tier:disabled{opacity:.35;cursor:not-allowed}
+  .cap-note{font-size:9.5px;color:var(--ink-muted);margin-left:6px}
+  .save-bar{margin-top:10px;display:flex;gap:8px}
+  .save-bar .save{flex:1;border:none;border-radius:999px;background:var(--brand);color:#fff;padding:8px 0;
+                  font-size:12.5px;font-weight:700;cursor:pointer}
+  .save-bar .save:disabled{opacity:.4}
+  .saved-flash{position:absolute;inset:auto 14px 14px 14px;background:#1d7a1c;color:#fff;border-radius:12px;
+               padding:10px;font-size:12px;font-weight:700;text-align:center;display:none;z-index:40}
+</style>
+</head>
+<body>
+
+<div class="page-head">
+  <h1>0021 · Tier ladder — prototype (G2)</h1>
+  <p>The real product card, with the 3-tier price ladder added. Pick a buyer-dropdown variant.
+     Everything is fake data and throwaway code — only the <b>design</b> gets kept.</p>
+  <div class="tabs">
+    <button class="tab active" data-view="buyer">Buyer / seller view</button>
+    <button class="tab" data-view="edit">Seller edit</button>
+  </div>
+  <div class="variant-tabs show" id="variantTabs">
+    <button class="vtab active" data-var="A">A · dropdown beside price</button>
+    <button class="vtab" data-var="B">B · "See all prices" panel</button>
+    <button class="vtab" data-var="C">C · price is the dropdown</button>
+  </div>
+</div>
+
+<div class="stage">
+  <!-- ==================== THE CARD ==================== -->
+  <div class="card" id="card">
+    <div class="photo">
+      <span class="ph-name">Pink Kush</span>
+      <div class="edit-tools" id="editTools" style="display:none">
+        <span class="grip">⋮⋮</span>
+        <button class="tool">👁 Visible</button>
+        <button class="tool">✎ Edit details</button>
+        <button class="tool del">🗑</button>
+      </div>
+      <button class="heart" id="heartBtn">♥</button>
+      <button class="docs-pill">⟳ Docs &amp; media</button>
+    </div>
+
+    <div class="name-row">
+      <div>
+        <div class="nm">CC 28/1 PK</div>
+        <div class="cv">Pink Kush</div>
+        <div class="pzn">PZN19077622</div>
+      </div>
+      <span class="flag">🇨🇦</span>
+    </div>
+
+    <div class="strip">
+      <div class="cell"><b>28</b><small>THC%</small></div>
+      <div class="cell"><b>1</b><small>CBD%</small></div>
+      <div class="cell"><b>n.a.</b><small>CBG%</small></div>
+      <div class="cell"><b>n.a.</b><small>CBN%</small></div>
+      <div class="cell"><b>2.1</b><small>Terp%</small></div>
+    </div>
+
+    <div class="specs">
+      <div class="spec-row"><span class="lb">Dominance</span><span class="vl">Indica</span></div>
+      <div class="spec-row"><span class="lb">Cultivator</span><span class="vl">Canadian Craft</span></div>
+      <div class="spec-row"><span class="lb">Origin</span><span class="vl">Canada</span></div>
+      <div class="spec-row"><span class="lb">Irradiation</span><span class="vl">Non-irradiated</span></div>
+      <div class="spec-row"><span class="lb">Packaging</span><span class="vl">Mylar bag</span></div>
+      <div class="spec-row"><span class="lb">Resealable</span><span class="vl">Yes</span></div>
+    </div>
+
+    <!-- ==================== FOOTER (all the new stuff lives here) ==================== -->
+    <div class="footer" id="footer"><!-- filled by JS --></div>
+  </div>
+
+  <!-- ==================== SIDE EXPLAINER ==================== -->
+  <div class="explain" id="explain"></div>
+</div>
+
+<script>
+/* ---------------- state ---------------- */
+const BASE = 4.50;
+let tiers = [                       // the ladder (sorted ascending by min)
+  {min: 500,  price: 4.20},
+  {min: 1000, price: 3.90},
+  {min: 2000, price: 3.50},
+];
+const PACKS = [10, 25, 50];
+let state = {
+  view: 'buyer',        // buyer | edit
+  variant: 'A',         // A | B | C
+  pack: 50,             // selected pack size (grams)
+  qty: 1,               // number of packs
+  menuOpen: false,      // A/C dropdown, B panel
+  editTiers: null,      // working copy while editing
+  saved: false,
+};
+
+/* ---------------- pricing (the resolver the real build will own) ---------------- */
+function grams(){ return state.pack * state.qty; }
+function resolve(g){
+  let hit = null;
+  for (const t of tiers) if (g >= t.min) hit = t;   // >= : N qualifies
+  return hit;  // null = base price
+}
+function eur(n){ return '€' + n.toFixed(2); }
+
+/* ---------------- shared footer pieces ---------------- */
+function packsHtml(){
+  return `<div class="packs">` + PACKS.map(p =>
+    `<button class="pack ${p===state.pack?'sel':''}" onclick="setPack(${p})">${p}g</button>`).join('') + `</div>`;
+}
+function chipHtml(rung){
+  return rung
+    ? `<span class="tier-chip" id="chip">from ${rung.min}g applied</span>`
+    : `<span class="tier-chip base" id="chip">base price</span>`;
+}
+function buyRow(){
+  const rung = resolve(grams());
+  const px = rung ? rung.price : BASE;
+  return `
+    <div class="avail"><i></i> Available ${chipHtml(rung)}</div>
+    <div class="buy-row">
+      <div class="stepper">
+        <button onclick="bumpQty(-1)">−</button>
+        <span class="q">${state.qty}</span>
+        <button onclick="bumpQty(1)">+</button>
+      </div>
+      <button class="add-btn">🛒 Add to basket</button>
+    </div>
+    <div class="grams-note">${state.qty} × ${state.pack}g = <b>${grams()}g</b> at <b>${eur(px)}/g</b> → <b>${eur(grams()*px)}</b></div>`;
+}
+
+/* ---------------- buyer footer, per variant ---------------- */
+function ladderOptions(){
+  const rung = resolve(grams());
+  const rows = [{min:null, price:BASE, label:'Base price'}]
+    .concat(tiers.map(t => ({min:t.min, price:t.price, label:`from ${t.min}g`})));
+  return rows.map(r => {
+    const on = (r.min===null && !rung) || (rung && rung.min===r.min);
+    const save = r.min ? Math.round((1 - r.price/BASE)*100) : 0;
+    return {...r, on, save};
+  });
+}
+
+function footerBuyerA(){
+  const opts = ladderOptions();
+  const cur = opts.find(o=>o.on);
+  return `
+    <div class="foot-top">
+      ${packsHtml()}
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+        <div class="price-blk">
+          <span class="approx">Approx.</span>
+          <span class="val">${eur(cur.price)}<span>/g</span></span>
+        </div>
+        <div class="va-select">
+          <button class="va-btn" onclick="toggleMenu(event)">${cur.min ? 'from '+cur.min+'g' : 'Volume prices'}</button>
+          <div class="va-menu ${state.menuOpen?'open':''}">
+            ${opts.map(o=>`
+              <button class="va-opt ${o.on?'on':''}" onclick="pickRung(${o.min ?? 'null'})">
+                <span class="l">${o.label}${o.save?`<span class="save">save ${o.save}%</span>`:''}</span>
+                <span class="r">${eur(o.price)}/g</span>
+              </button>`).join('')}
+          </div>
+        </div>
+      </div>
+    </div>
+    ${buyRow()}`;
+}
+
+function footerBuyerB(){
+  const opts = ladderOptions();
+  const cur = opts.find(o=>o.on);
+  return `
+    <div class="foot-top">
+      ${packsHtml()}
+      <div class="price-blk">
+        <span class="approx">Approx.</span>
+        <span class="val">${eur(cur.price)}<span>/g</span></span>
+        <button class="vb-link" onclick="toggleMenu(event)">${state.menuOpen?'Hide prices':'See all prices'}</button>
+      </div>
+    </div>
+    <div class="vb-panel ${state.menuOpen?'open':''}">
+      ${opts.map(o=>`
+        <div class="vb-row ${o.on?'on':''}">
+          <span class="l">${o.label}${o.save?` · <span style="color:#1d7a1c">−${o.save}%</span>`:''}</span>
+          <span class="p">${eur(o.price)}/g</span>
+          ${o.min?`<button class="go" onclick="pickRung(${o.min})">Choose</button>`:''}
+        </div>`).join('')}
+    </div>
+    ${buyRow()}`;
+}
+
+function footerBuyerC(){
+  const opts = ladderOptions();
+  const cur = opts.find(o=>o.on);
+  return `
+    <div class="foot-top">
+      ${packsHtml()}
+      <div class="va-select">
+        <button class="vc-price" onclick="toggleMenu(event)">
+          <span class="approx">Approx.</span>
+          <span class="val">${eur(cur.price)}<span>/g</span></span>
+          <span class="hint">▾ volume prices</span>
+        </button>
+        <div class="va-menu ${state.menuOpen?'open':''}">
+          ${opts.map(o=>`
+            <button class="va-opt ${o.on?'on':''}" onclick="pickRung(${o.min ?? 'null'})">
+              <span class="l">${o.label}${o.save?`<span class="save">save ${o.save}%</span>`:''}</span>
+              <span class="r">${eur(o.price)}/g</span>
+            </button>`).join('')}
+        </div>
+      </div>
+    </div>
+    ${buyRow()}`;
+}
+
+/* ---------------- seller edit footer ---------------- */
+function footerEdit(){
+  const T = state.editTiers;
+  // ascending check: each min must be > the previous
+  const bad = T.map((t,i)=> i>0 && Number(t.min) <= Number(T[i-1].min));
+  const anyBad = bad.some(Boolean);
+  return `
+    <div class="foot-top">
+      ${packsHtml()}
+      <div>
+        <div class="ed-price-row"><input value="${BASE.toFixed(2)}" aria-label="Base price"> <span style="font-size:11px">€/g</span></div>
+        <div class="ed-show"><input type="checkbox" checked> Show price</div>
+      </div>
+    </div>
+    <div class="tier-editor">
+      <div class="hd">Volume price tiers <span class="cap-note">(max 3)</span></div>
+      ${T.map((t,i)=>`
+        <div class="tier-line ${bad[i]?'bad':''}">
+          <span class="from">from</span>
+          <input class="min" value="${t.min}" oninput="editTier(${i},'min',this.value)"> <span class="from">g →</span>
+          <input value="${t.price}" oninput="editTier(${i},'price',this.value)"> <span class="from">€/g</span>
+          <button class="x" onclick="removeTier(${i})">✕</button>
+        </div>
+        ${bad[i]?`<div class="tier-err show">Must be higher than the tier above (${T[i-1].min}g)</div>`:''}`).join('')}
+      <button class="add-tier" onclick="addTier()" ${T.length>=3?'disabled':''}>+ Add tier</button>
+      ${T.length>=3?`<span class="cap-note">ladder is full</span>`:''}
+      <div class="save-bar">
+        <button class="save" onclick="saveTiers()" ${anyBad?'disabled':''}>Save</button>
+      </div>
+    </div>
+    <div class="saved-flash" id="savedFlash">✓ Saved — buyers now see this ladder</div>`;
+}
+
+/* ---------------- explainer panel ---------------- */
+const EXPLAIN = {
+  A: `<b>Variant A — dropdown beside the price.</b>
+      <ul><li>A small "Volume prices" dropdown sits under the price.</li>
+      <li>Picking a rung <b>pre-fills the quantity</b> (packs × size ≥ the rung) and the price updates.</li>
+      <li>Then play with the +/− stepper: cross 500g / 1000g / 2000g and watch the price and the green chip <b>re-resolve on their own</b> — that's spec rule 6.</li></ul>`,
+  B: `<b>Variant B — "See all prices" panel.</b>
+      <ul><li>A text link under the price expands the full ladder inline — nothing floats over the card.</li>
+      <li>Each rung has a <b>Choose</b> button → pre-fills quantity.</li>
+      <li>Stepper still re-resolves automatically. Most explicit, takes the most vertical space.</li></ul>`,
+  C: `<b>Variant C — the price itself is the dropdown.</b>
+      <ul><li>No extra control: the price carries a dotted underline + "▾ volume prices" hint and opens the ladder.</li>
+      <li>Cleanest footer, but the affordance is subtler — per your rule, no hidden-until-hover: the hint text is always visible.</li></ul>`,
+  edit: `<b>Seller edit mode.</b>
+      <ul><li>Base price stays exactly where it is today (the €/g field + "Show price").</li>
+      <li>New: the tier list — <b>from N g → €/g</b> rows, styled like the existing lot rows.</li>
+      <li>Try typing a minimum lower than the row above: the row goes red and <b>Save disables</b> (ascending rule).</li>
+      <li>At 3 tiers, "+ Add tier" disables (UI cap).</li>
+      <li>Hit <b>Save</b> → flips to the read view with the dropdown — the seller sees exactly what the buyer sees (spec rule 3a).</li></ul>`,
+};
+
+/* ---------------- actions ---------------- */
+function render(){
+  const f = document.getElementById('footer');
+  document.getElementById('editTools').style.display = state.view==='edit' ? 'flex' : 'none';
+  document.getElementById('heartBtn').style.display  = state.view==='edit' ? 'none' : 'grid';
+  document.getElementById('variantTabs').classList.toggle('show', state.view==='buyer');
+  if (state.view==='edit'){
+    if (!state.editTiers) state.editTiers = tiers.map(t=>({...t}));
+    f.innerHTML = footerEdit();
+    document.getElementById('explain').innerHTML = EXPLAIN.edit;
+  } else {
+    f.innerHTML = {A:footerBuyerA, B:footerBuyerB, C:footerBuyerC}[state.variant]();
+    document.getElementById('explain').innerHTML = EXPLAIN[state.variant];
+  }
+}
+function setPack(p){ state.pack=p; render(); }
+function bumpQty(d){
+  state.qty = Math.max(1, state.qty+d);
+  const before = document.getElementById('chip')?.textContent;
+  render();
+  const chip = document.getElementById('chip');
+  if (chip && chip.textContent !== before){ chip.classList.add('bump'); setTimeout(()=>chip.classList.remove('bump'),200); }
+}
+function toggleMenu(e){ e.stopPropagation(); state.menuOpen=!state.menuOpen; render(); }
+function pickRung(min){
+  state.menuOpen=false;
+  if (min!==null){ state.qty = Math.ceil(min/state.pack); }   // pre-fill quantity to reach the rung
+  render();
+  const chip=document.getElementById('chip');
+  if(chip){ chip.classList.add('bump'); setTimeout(()=>chip.classList.remove('bump'),250); }
+}
+function editTier(i,k,v){ state.editTiers[i][k]=v; render(); }
+function removeTier(i){ state.editTiers.splice(i,1); render(); }
+function addTier(){ if(state.editTiers.length<3) state.editTiers.push({min:'',price:''}); render(); }
+function saveTiers(){
+  tiers = state.editTiers.filter(t=>t.min&&t.price).map(t=>({min:+t.min, price:+t.price}))
+                         .sort((a,b)=>a.min-b.min);
+  state.editTiers=null;
+  const fl=document.getElementById('savedFlash'); fl.style.display='block';
+  setTimeout(()=>{ state.view='buyer'; document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.view==='buyer')); render(); },700);
+}
+document.addEventListener('click',()=>{ if(state.menuOpen){ state.menuOpen=false; render(); }});
+document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
+  state.view=t.dataset.view; state.menuOpen=false;
+  document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x===t));
+  render();
+}));
+document.querySelectorAll('.vtab').forEach(t=>t.addEventListener('click',()=>{
+  state.variant=t.dataset.var; state.menuOpen=false;
+  document.querySelectorAll('.vtab').forEach(x=>x.classList.toggle('active',x===t));
+  render();
+}));
+render();
+</script>
+</body>
+</html>
