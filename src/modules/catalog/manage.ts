@@ -21,6 +21,7 @@ import type { TablesUpdate } from "@/types/database.types";
 import { isAllowedVideoUrl } from "./mediaLinks";
 import { DOMINANCE_CODES, IRRADIATION_CODES } from "./template";
 import { validateLocations } from "./locations";
+import { ladderErrorMessage, lookupStandardPriceRow } from "./pricelist";
 
 export type ManageResult = { ok: true } | { error: string };
 
@@ -312,10 +313,10 @@ export async function setProductLocation(
 // it here on the ONE pink Save. Each action is session-scoped (RLS on product /
 // product_batch / pricelist_item), takes no companyId param, and never touches
 // cost/COGS. Numerics are validated before persist (T-07-17); price is routed to
-// the product's standard pricelist_item (the row getMyShop reads).
+// the product's standard price row — the one the current-price view resolves.
 
 /** The product fields the card edits inline. `price_per_gram` is routed to the
- *  pricelist_item (not the product); the rest land on the product row. Omitted
+ *  standard price row (not the product); the rest land on the product row. Omitted
  *  keys are left unchanged; cost/COGS is deliberately not representable here.
  *  F-05 adds the other spec-row fields (Cluster F): free text (cultivator,
  *  origin, region, lineage, packaging, supplier code), enum codes (dominance,
@@ -427,11 +428,14 @@ export async function updateProductFields(
   return { ok: true };
 }
 
-/** Route a public price to the product's standard pricelist_item.price_per_gram —
- *  the row getMyShop reads. Update the existing (oldest live) item, else create one
- *  under the company's standard pricelist, mirroring the import_products RPC
- *  (reuse the oldest live pricelist, else insert a fresh 'Standard'). price_per_gram
- *  is NOT NULL, so a null price is a no-op — hide a price via price_public=false. */
+/** Route a public price to the product's standard price row — the one the
+ *  current-price view resolves (`lookupStandardPriceRow`), so the write target
+ *  is always the row every read surfaces. No live row → create one under the
+ *  company's standard pricelist, mirroring the import_products RPC (reuse the
+ *  oldest live pricelist, else insert a fresh 'Standard'). price_per_gram is
+ *  NOT NULL, so a null price is a no-op — hide a price via price_public=false.
+ *  A base edit under a ladder can trip the DB shape trigger; its rejection is
+ *  surfaced through `ladderErrorMessage`. */
 async function writeStandardPrice(
   supabase: Db,
   companyId: string,
@@ -441,20 +445,13 @@ async function writeStandardPrice(
   if (price === null) return { ok: true };
   if (!Number.isFinite(price) || price < 0) return { error: "Invalid price." };
 
-  const { data: existing } = await supabase
-    .from("pricelist_item")
-    .select("id")
-    .eq("product_id", productId)
-    .is("deleted_at", null)
-    .order("created_at", { ascending: true })
-    .limit(1);
-  const itemId = existing?.[0]?.id;
+  const itemId = await lookupStandardPriceRow(supabase, productId);
   if (itemId) {
     const { error } = await supabase
       .from("pricelist_item")
       .update({ price_per_gram: price })
       .eq("id", itemId);
-    return error ? { error: error.message } : { ok: true };
+    return error ? { error: ladderErrorMessage(error.message) } : { ok: true };
   }
 
   const { data: lists } = await supabase

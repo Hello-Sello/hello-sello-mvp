@@ -7,6 +7,8 @@
 // next/headers, so a value re-export would drag server-only code into any client
 // component that imports a UI component from this barrel. The server page imports
 // getMyShop directly from "./shop"; client surfaces get the types + actions + UI.
+// Client-safe price reads live behind the sibling door `index.client.ts`
+// (two-door convention, ADR-0004 §4) — this barrel stays server-tainted.
 export type * from "./shop";
 export * from "./manage";
 export * from "./components";

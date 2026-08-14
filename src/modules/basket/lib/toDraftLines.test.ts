@@ -7,10 +7,10 @@ const group: BasketGroup = {
   lines: [
     { id: "1", productId: "p1", productName: "Amnesia", cultivar: "Sativa", unit: "g",
       packCount: 3, packSizeGrams: 50, pricePerGram: 4.5, currency: "EUR", pzn: "PZN1",
-      sellerCompanyId: "co-a", sellerCompanyName: "Alpha" },
+      sellerCompanyId: "co-a", sellerCompanyName: "Alpha", tiers: [] },
     { id: "2", productId: "p2", productName: "Custom", cultivar: null, unit: "g",
       packCount: 2, packSizeGrams: null, pricePerGram: null, currency: "EUR", pzn: null,
-      sellerCompanyId: "co-a", sellerCompanyName: "Alpha" },
+      sellerCompanyId: "co-a", sellerCompanyName: "Alpha", tiers: [] },
   ],
 };
 
