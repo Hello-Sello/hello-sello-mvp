@@ -224,3 +224,53 @@ test("T04 · a seeded rung pre-populates the tier editor (AUR-1A)", async ({ pag
   await expect(card.getByLabel("Tier 1 minimum grams")).toHaveValue("2000");
   await expect(card.getByLabel("Tier 1 price per gram")).toHaveValue("6.5");
 });
+
+// ── 0021 T05 — buyer "See all prices" panel (Variant B) ──────────────────────
+// AUR-1A read mode (base 8.00, seeded rung 2000 g → 6.50, pack size 1000 g):
+// reveal → base + rung rows → Choose pre-fills the rung's bubble (2000g+) with
+// qty 1 → the availability chip flips to "from 2000g applied" → add to basket
+// → the drawer line prices the rung (6,5 € — formatMoney's NBSP, the drawer's
+// own convention; the card shows 6,50€ — deliberate delta, PLAN-T05 am. 5).
+
+test("T05 · reveal → Choose a rung → chip applies → drawer prices the rung (AUR-1A)", async ({ page }) => {
+  await gotoShop(page);
+  let card = page.getByTestId("product-card").filter({ hasText: "Pedanios 31/1 COS-CA" });
+
+  // Seed ships price_public=false — the reveal must be absent until the seller
+  // opts the price in (criterion 4's negative space, driven the real way).
+  await expect(card.getByRole("button", { name: "See all prices" })).toHaveCount(0);
+  await page.getByTestId("present-banner").getByRole("button", { name: /manage shop/i }).click();
+  await expect(page.getByTestId("shop-surface")).toHaveAttribute("data-edit", "on");
+  await card.getByLabel("Show price to buyers").check();
+  await page.getByTestId("save-changes-btn").click();
+  await expect(page.getByTestId("shop-surface")).toHaveAttribute("data-edit", "off");
+  await page.goto("/present"); // already signed in — plain re-navigation to read mode
+  await expect(page.getByTestId("product-card").first()).toBeVisible();
+  card = page.getByTestId("product-card").filter({ hasText: "Pedanios 31/1 COS-CA" });
+
+  // Closed by default; the reveal opens the panel with base + rung rows.
+  const reveal = card.getByRole("button", { name: "See all prices" });
+  await expect(reveal).toBeVisible();
+  await reveal.click();
+  await expect(card.getByText("Base price", { exact: true })).toBeVisible();
+  // The rung row's label embeds the savings ("from 2000g · −19%") — assert the
+  // row via its unambiguous Choose button instead of the composed label text.
+  await expect(card.getByRole("button", { name: "Choose from 2000g" })).toBeVisible();
+
+  // Choose the rung: panel closes, the rung bubble is selected at qty 1, the
+  // chip applies, and the headline shows the rung price.
+  await card.getByRole("button", { name: "Choose from 2000g" }).click();
+  await expect(card.getByText("Base price", { exact: true })).toHaveCount(0); // panel closed
+  await expect(card.getByRole("button", { name: "2000g+" })).toHaveAttribute("aria-pressed", "true");
+  await expect(card.getByText("from 2000g applied")).toBeVisible();
+  await expect(card.getByText("6,50€")).toBeVisible();
+
+  // Add to basket → open the drawer from the TopBar icon; no testids in the
+  // drawer — locate it by its visible structure/text (PLAN-T05 amendment 8).
+  await card.getByRole("button", { name: /add to basket/i }).click();
+  await page.getByRole("button", { name: "Basket", exact: true }).click();
+  const drawer = page.getByRole("menu", { name: "Your basket" });
+  await expect(drawer.getByText("Pedanios 31/1 COS-CA")).toBeVisible();
+  // The rung price in the line row: formatMoney = "6,5" + NBSP + "€".
+  await expect(drawer.getByText("6,5\u00a0€/g")).toBeVisible();
+});

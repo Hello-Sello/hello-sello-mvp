@@ -25,6 +25,8 @@ import {
   GripVertical, Trash2, ChevronLeft, ChevronRight, ChevronDown, X, Pencil,
 } from "lucide-react";
 import type { ShopProduct } from "../shop";
+import { packSizes, resolveTierPrice } from "../pricing";
+import { ladderRows } from "../ladderPanel";
 import { draftFromTiers, draftNumber, validateLadder } from "../ladderDraft";
 import type { LadderRowDraft } from "../ladderDraft";
 import { PackSizeSelector } from "./PackSizeSelector";
@@ -155,19 +157,6 @@ function countryFlag(country: string | null): string {
   return String.fromCodePoint(...[...code].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65));
 }
 
-/** The pack sizes offered for a product: its own pack size, plus the bundle tier
- *  when one is priced. v0 has one price/g — the bubbles select intent, not price. */
-function packLabels(p: ShopProduct): string[] {
-  // Discrete pack-size options — the product's own size plus any extra sizes
-  // the seller added (p.packSizes, v0 metadata list), deduped + sorted so the
-  // buyer picks a size like choosing a T-shirt size before adding to basket.
-  const sizes = new Set<number>(p.packSizes);
-  if (p.pack_size_grams != null) sizes.add(p.pack_size_grams);
-  const labels = [...sizes].sort((a, b) => a - b).map((g) => `${g}g`);
-  if (p.bundle_threshold_grams != null) labels.push(`${p.bundle_threshold_grams}g+`);
-  return labels;
-}
-
 export function ProductCard({
   product: p,
   companyId,
@@ -209,6 +198,8 @@ export function ProductCard({
   const [reorderOver, setReorderOver] = useState(false);
   const [pack, setPack] = useState(0);
   const [qty, setQty] = useState(1);
+  // Buyer "See all prices" panel (T05, Variant B) — local reveal state.
+  const [pricesOpen, setPricesOpen] = useState(false);
   const [liked, setLiked] = useState(false);
   // Carousel index over p.images (wraps); busy guards the immediate actions.
   const [imgIdx, setImgIdx] = useState(0);
@@ -266,7 +257,28 @@ export function ProductCard({
   const idx = hasImages ? ((imgIdx % images.length) + images.length) % images.length : 0;
   const cover = hasImages ? mediaUrl(images[idx].path) : null;
 
-  const packs = packLabels(p);
+  // The ONE size array (ADR-0004 §5): the same `packSizes()` output ShopView
+  // resolves the reported index against — bubbles, Choose picks, and the
+  // basket resolver can never disagree. `pack` indexes into THIS array.
+  const sizes = packSizes(p, p.tiers);
+  // The ONE currentGrams owner (T05 amendment 4): feeds the availability chip,
+  // the headline price, and the panel's applied-row highlight. Guarded against
+  // a stale `pack` index (sizes can shrink under an unchanged index).
+  const gramsPerPack = sizes[pack]?.grams ?? null;
+  const currentGrams = gramsPerPack == null ? null : gramsPerPack * qty;
+  const resolved = resolveTierPrice(p.price_per_gram, p.tiers, currentGrams, "g");
+
+  /** Choose a rung from the panel: pre-fill the basket controls to exactly the
+   *  rung (its packSizes entry × qty 1 — every rung emits an entry), close. */
+  function chooseRung(minGrams: number) {
+    const i = sizes.findIndex((s) => s.grams === minGrams);
+    if (i >= 0) {
+      setPack(i);
+      setQty(1);
+    }
+    setPricesOpen(false);
+  }
+
   const specRows: SpecRowDef[] = [
     {
       kind: "enum", key: "dominance_code", label: "Dominance", codes: DOMINANCE_CODES, labelMap: DOMINANCE_LABEL,
@@ -531,7 +543,7 @@ export function ProductCard({
             {/* footer: pack bubbles + price, then availability + stepper + Add */}
             <div className="relative z-[5] shrink-0 border-t border-ink/10 bg-white px-3.5 pb-3 pt-2.5">
               <div className="mb-2 flex items-end justify-between gap-2.5">
-                <PackSizeSelector sizes={packs} selected={pack} onSelect={setPack} />
+                <PackSizeSelector sizes={sizes.map((s) => s.label)} selected={pack} onSelect={setPack} />
                 <div className="flex shrink-0 flex-col items-end">
                   {editing ? (
                     <div className="flex flex-col items-end gap-1">
@@ -556,10 +568,25 @@ export function ProductCard({
                       </label>
                     </div>
                   ) : priceShown ? (
-                    <span className="text-right text-[17px] font-extrabold text-brand-deep tabular-nums">
-                      <small className="-mb-0.5 block text-[10.5px] font-semibold text-ink-muted">Approx.</small>
-                      {eur(p.price_per_gram as number)}<span className="text-xs">/g</span>
-                    </span>
+                    <>
+                      <span className="text-right text-[17px] font-extrabold text-brand-deep tabular-nums">
+                        <small className="-mb-0.5 block text-[10.5px] font-semibold text-ink-muted">Approx.</small>
+                        {/* The APPLIED price at the current pack × qty (T05
+                            amendment 3) — always agrees with the chip and the
+                            panel highlight; falls back to base. */}
+                        {eur(resolved.pricePerGram ?? (p.price_per_gram as number))}<span className="text-xs">/g</span>
+                      </span>
+                      {p.tiers.length > 0 && (
+                        <button
+                          type="button"
+                          aria-expanded={pricesOpen}
+                          onClick={() => setPricesOpen((v) => !v)}
+                          className="text-[10.5px] font-bold text-brand underline underline-offset-2"
+                        >
+                          {pricesOpen ? "Hide prices" : "See all prices"}
+                        </button>
+                      )}
+                    </>
                   ) : (
                     <span className="rounded-full bg-brand/10 px-3 py-1.5 text-xs font-bold text-brand-deep">Price on request</span>
                   )}
@@ -575,10 +602,69 @@ export function ProductCard({
                   onRows={(rows) => onEditField?.(p.id, { tiers: rows })}
                 />
               )}
+              {/* "See all prices" panel (T05, Variant B — prototype vb-panel):
+                  inline pink-tinted box, one row per ladderRows entry; the
+                  applied row is tinted; the base row has no Choose. */}
+              {pricesOpen && priceShown && p.tiers.length > 0 && (
+                <div className="mb-2 rounded-xl border border-brand/25 bg-brand-soft/20 p-1.5">
+                  {ladderRows(p.price_per_gram, p.tiers, currentGrams).map((row, i) => {
+                    const min = row.minGrams;
+                    return (
+                      <div
+                        key={min ?? "base"}
+                        className={`flex items-center gap-2 rounded-lg px-1.5 py-1 text-[11.5px] ${
+                          row.isApplied ? "bg-brand/10" : ""
+                        } ${i > 0 ? "border-t border-dashed border-brand/20" : ""}`}
+                      >
+                        <span className="flex-1 font-bold text-ink">
+                          {row.label}
+                          {row.savingPercent > 0 && (
+                            <>
+                              {" · "}
+                              <span style={{ color: "#1d7a1c" }}>−{row.savingPercent}%</span>
+                            </>
+                          )}
+                        </span>
+                        <span className="font-extrabold text-brand-deep tabular-nums">
+                          {eur(row.pricePerGram)}<span className="text-[10px]">/g</span>
+                        </span>
+                        {min != null && (
+                          <button
+                            type="button"
+                            aria-label={`Choose from ${min}g`}
+                            onClick={() => chooseRung(min)}
+                            className="rounded-full border border-brand bg-white px-2.5 py-0.5 text-[10px] font-extrabold text-brand hover:bg-brand hover:text-white"
+                          >
+                            Choose
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
               {/* static availability indicator — a stock/availability field is a later
-                  data-model addition; the shop currently has no per-product stock. */}
-              <div className="mb-2 inline-flex items-center gap-1.5 text-[11px] font-bold text-success">
-                <span className="h-1.5 w-1.5 rounded-full bg-current" /> Available
+                  data-model addition; the shop currently has no per-product stock.
+                  The chip beside it (T05 amendment 1, T06/T07 treatment) is gated
+                  exactly like the reveal: hidden price ⇒ no chip either. */}
+              <div className="mb-2 flex items-center gap-1.5">
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-success">
+                  <span className="h-1.5 w-1.5 rounded-full bg-current" /> Available
+                </span>
+                {priceShown && p.tiers.length > 0 && (
+                  resolved.appliedMin != null ? (
+                    <span
+                      className="rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                      style={{ color: "#1d7a1c", background: "rgba(52,178,51,.12)" }}
+                    >
+                      from {resolved.appliedMin}g applied
+                    </span>
+                  ) : (
+                    <span className="rounded-full bg-ink/10 px-2 py-0.5 text-[10px] font-semibold text-ink/50">
+                      base price
+                    </span>
+                  )
+                )}
               </div>
               <div className="flex gap-2">
                 <div className="flex items-center rounded-full bg-white shadow-[inset_0_0_0_1px_rgba(20,10,16,0.15)]">
@@ -722,7 +808,7 @@ function ProductDetailsDialog({
             </label>
           ))}
 
-          {/* Extra sellable pack sizes (v0 — see packLabels/manage.ts): the
+          {/* Extra sellable pack sizes (v0 — see packSizes/pricing.ts): the
               buyer picks one of these beside the price, like choosing a
               T-shirt size. p.pack_size_grams (the required CSV field) is
               always included automatically; add more here. */}

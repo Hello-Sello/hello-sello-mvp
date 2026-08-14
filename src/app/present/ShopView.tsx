@@ -39,6 +39,7 @@ import {
 } from "@/modules/catalog/manage";
 import type { ProductFieldPatch, ProductBatchPatch } from "@/modules/catalog/manage";
 import { tiersFromDraft, validateLadder } from "@/modules/catalog/ladderDraft";
+import { packSizes } from "@/modules/catalog/index.client";
 import { saveCompanyProfile } from "@/app/account/actions";
 import { createClient } from "@/shared/db/client";
 import { addToBasket, useBasket } from "@/modules/basket";
@@ -551,30 +552,14 @@ export function ShopView({ shop, canEditBranding = false, viewerCanManage = true
     setProductOrder((prev) => ({ ...prev, [location]: next }));
   }
 
-  // ProductCard reports the selected pack-size INDEX (not grams) — resolve it
-  // against the EXACT SAME bubble list ProductCard's own packLabels() renders
-  // (see components/ProductCard.tsx), so the index lines up 1:1 with what the
-  // buyer actually clicked:
-  //   1. the product's own pack_size_grams + any extra v0 sizes (packSizes),
-  //      deduped + sorted ascending — these are the plain "Ng" bubbles;
-  //   2. THEN, only when the pricelist priced a bundle tier, one more bubble
-  //      appended LAST for bundle_threshold_grams (the "Ng+" bubble) — a
-  //      PackSizeSelector option like any other, fully selectable.
-  // Skipping step 2 here made a bundle-tier pick silently resolve to the base
-  // pack size instead of the threshold the buyer chose (fixed after review).
-  // Then persist the line and refresh the shared basket context (TopBar badge +
-  // drawer). Available to every viewer, owner or buyer — adding to basket is not
-  // owner-only chrome.
+  // ProductCard reports the selected pack-size INDEX — resolved against the
+  // SAME packSizes() array the card's bubbles render (ADR-0004 §5, one owner).
+  // Available to every viewer, owner or buyer — not owner-only chrome.
   async function handleAddToBasket(productId: string, packCount: number, packIndex: number) {
     const product = products.find((p) => p.id === productId);
-    const numericSizes = [...new Set([
-      ...(product?.packSizes ?? []),
-      ...(product?.pack_size_grams != null ? [product.pack_size_grams] : []),
-    ])].sort((a, b) => a - b);
-    const sizes = product?.bundle_threshold_grams != null
-      ? [...numericSizes, product.bundle_threshold_grams]
-      : numericSizes;
-    const packSizeGrams = sizes[packIndex] ?? product?.pack_size_grams ?? null;
+    const packSizeGrams = product
+      ? packSizes(product, product.tiers)[packIndex]?.grams ?? product.pack_size_grams ?? null
+      : null;
     await addToBasket(productId, packCount, packSizeGrams);
     await refreshBasket();
   }
