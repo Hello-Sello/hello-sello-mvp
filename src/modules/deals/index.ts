@@ -49,6 +49,7 @@ export {
   computeGross,
   formatMoney,
   lineTotalOf,
+  lineValueOf,
   DEMO_VAT_RATE,
 } from "./lib/derive";
 
