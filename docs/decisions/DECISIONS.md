@@ -1442,3 +1442,8 @@ Board Wave 3 (DecisionBar fixed roles B6/B1/B3/E1 + the Phase-12 review fixes CR
 
 Known residual (deferred, low impact): the replace-a-proposal path reverts a changed *term* (payment/delivery/free-delivery/note) to base because `getPendingChange` does not yet surface held terms - a `reads.ts` follow-up; the called-out LINE data-loss is fixed. IN-04 (the `unsent` label in `allocate/status.ts`) is parked for Muskan's vocab call.
 
+---
+
+## 2026-08-14 — Volume pricing = the tier ladder (build amendment to the dry-run design lock)
+
+- **Volume pricing is now the tier ladder: child rows of `pricelist_item` (`pricelist_item_tier`), up to 3 rungs in the UI, unbounded in schema, REPLACING the single bundle bracket columns** (`bundle_threshold_grams` / `bundle_price_per_gram` — dropped by held Migration C only after the tiers-reading deploy is verified live; Migration E backfills well-formed brackets to rungs, rescues malformed ones to `metadata.legacy_bundle`). Base price stays on `pricelist_item`. *Why:* one mechanism for N volume prices instead of a special-cased single bracket; ref ADR-0004 (rev 8) + PRD 0021.

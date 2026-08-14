@@ -1,3 +1,103 @@
+# REVIEW — T01–T07 (build rounds, 2026-08-14)
+
+## T04 (HEL-49) · T06 (HEL-51) · T07 (HEL-52) — built in parallel
+
+**Verdicts:** all suites green (323 unit · 11/11 e2e incl. 3 new tier cases · tsc ·
+eslint · SQL+race suites re-verified on fresh reset). Blocking found and fixed same
+round: T04 ×3 (see below), T06 ×1, T07 0.
+
+**Blocking (fixed):**
+- T04: unpriced product + drafted rungs passed the Save gate then failed mid-flush;
+  clearing a ladder with a blank price field silently no-opped; **security — the
+  price-row create-branch could insert a `pricelist_item` referencing ANOTHER
+  company's product** (cross-tenant pollution; ownership check added to the shared
+  helper, both doors).
+- T06: `toDraftLines`' fallback wrote `pack`/`mL` into `deal_line_item.unit` (FK
+  `g/kg/unit`) → createDeal FK failure for pack-unit products with unknown pack
+  size. **Pre-existing bug surfaced by review**; fallback now writes `"unit"`.
+
+**Diff-introduced conformance (fixed by orchestrator call):** T06 server-rejected
+pack-size writes left the rejected value in the DOM (silent-swap violation);
+T07 hint pill hardcoded `€x/g` beside `formatMoney` cells + read-row chip lacked the
+explicit seller guard (D-12 made structural).
+
+**Prototype deviations (G4 ledger — T04):** per-editor Save + "✓ Saved" flash
+dropped in favor of the card's one-pink-Save contract (ladder rides the draft flow,
+atomic via the one RPC); one invalid ladder blocks the whole shop Save with a
+message; whole-row red kept per prototype.
+
+**T07 criterion 7 (snapshot) — verified, not built:** existing lines read
+`deal_line_item.unit_price` at `card.version`; the catalog fetch is
+`editMode && isSeller` gated; the render-time tier back-fill never writes
+`unitPrice`; no auto-reprice path exists (decision B holds).
+
+**Standing notes (tracked, not fixed):**
+1. T04: `parseNum`/`draftNumber` byte-identical twins (ShopView/ladderDraft) — one
+   exported helper would prevent drift. Flush routing covered by e2e only.
+2. T06: `pack`/`mL` products resolve as grams-as-is by design; no test pins the
+   reachable non-g units (kg fixtures pin unreachable ones). Stepper/remove
+   callbacks still throw unhandled (pre-existing asymmetry made visible).
+   Null-pack-size line label reads "{count} g" for a pack count.
+3. T06: criterion 5a (commit/revert parsing) has no automated coverage — node env
+   can't drive the input; covered by the G4/G5 live walk.
+4. T07: `suggestedMin` exported but unconsumed; empty-tiers+current==base returns
+   `matchesLadder:true` (guarded by the consumer today — second consumer would
+   mislabel); price-less line with catalog base shows the hint (declared
+   over-trigger, no test).
+5. Security: `lookupStandardPriceRow` isn't owner-filtered — the ladder write's
+   tenant boundary rests on Postgres applying UPDATE-policy USING to
+   `SELECT … FOR UPDATE` (correct, but single-point); the RLS rejection surfaces
+   the victim's item UUID via the error message.
+6. Security (pre-existing): `updateProductFields` never verifies product ownership —
+   relies on RLS 0-row updates returning ok. Same class as the fixed create-branch.
+7. e2e `present-card-edit.spec.ts` requires a fresh `db reset` per run (F-05
+   persistence pollutes re-runs — pre-existing, now documented).
+
+---
+
+# REVIEW — T01–T03 (build rounds, 2026-08-14)
+
+## T03 (HEL-48) — single-owner reads
+
+**Verdict:** built green (262/262 unit · 13 new pricelist tests · grep-guard live ·
+tsc/eslint clean · SQL suites re-verified) — 1 blocking, fixed same round.
+
+**Plan-checker (REVISE, folded in):** guard regex tripped on two manage.ts comments
+(reworded); two test files with exhaustive type literals broke tsc (added to fence —
+builder found a third, `toDraftLines.test.ts`, same fix class, accepted);
+`@supabase/supabase-js` confirmed a direct dep; coalescing rules pinned; named the
+real behavior changes (view-arm tightening on basket reads, row-pick unification,
+bridge display window) instead of "keeps behavior".
+
+**Blocking (fixed):** `getMyShop` would hard-fail the seller's own page on a price
+read error where the old embed degraded to a priceless shop — degrade restored.
+
+**Diff-introduced conformance (note-tagged by reviewers, fixed by orchestrator call
+since this diff added them):** a new getOwnCatalog docstring claimed a company scope
+that doesn't exist (reworded to state the known unscoped-picker bug — Ayush's lane);
+`index.client.ts` blanket-exported the ladder WRITE through the client door where ADR
+§4 defines the door as pricing + reads (narrowed to named read exports; README +
+barrel comments aligned).
+
+**Standing notes (not fixed, tracked):**
+1. `pricePerGram` from the view lacks the sibling readers' `Number()` coercion —
+   if PostgREST ever returns NUMERIC as string, arithmetic silently changes. *(critic)*
+2. Guard has no `pricelist_item_tier` pattern — a future direct child-table read
+   bypasses the single owner unseen; 80-char regex window can be padded past. *(critic)*
+3. `ProductPrice.pricelistId/updatedAt` have zero consumers — speculative surface.
+   *(critic)*
+4. **Pre-existing, cross-lane (Ayush):** `getOwnCatalog`'s product query has no
+   company filter → the create-form picker lists every company's visible products,
+   now with their tier ladders attached. ADR blast-radius already flags it. *(security)*
+5. **Follow-up migration candidate:** parent `pricelist_item` public policy still
+   lacks the verified gate + window the child/view have — an authed caller can read a
+   base price directly on an expired product but not its rungs. Asymmetry, parent's
+   fix is T08/C-adjacent or its own ticket. *(security)*
+6. `ladderErrorMessage`'s generic path passes raw Postgres text (constraint names)
+   to the seller UI — low impact, owner-only surface. *(security)*
+
+---
+
 # REVIEW — T01 + T02 (build round 1, 2026-08-14)
 
 Pipeline run: plan → plan-checker (fresh) → test-writer (fresh) → builder → test-runner
