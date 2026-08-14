@@ -47,6 +47,18 @@ export async function updateBasketLinePackCount(lineId: string, packCount: numbe
   if (error) throw error;
 }
 
+export async function updateBasketLinePackSize(lineId: string, packSizeGrams: number): Promise<void> {
+  if (!Number.isFinite(packSizeGrams) || packSizeGrams <= 0) {
+    throw new Error("basket: pack size must be a positive number of grams");
+  }
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("product_basket_line")
+    .update({ pack_size_grams: packSizeGrams, updated_at: new Date().toISOString() })
+    .eq("id", lineId);
+  if (error) throw error;
+}
+
 export async function removeBasketLine(lineId: string): Promise<void> {
   const supabase = createClient();
   const { error } = await supabase.from("product_basket_line").delete().eq("id", lineId);
