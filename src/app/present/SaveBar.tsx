@@ -24,6 +24,7 @@ export function SaveBar({
   dirty,
   busy = false,
   error,
+  invalid,
   onSave,
   onDiscard,
   onAddProducts,
@@ -31,6 +32,10 @@ export function SaveBar({
   dirty: boolean;
   busy?: boolean;
   error?: string | null;
+  /** A draft-validation block (e.g. a malformed tier ladder): Save ALONE is
+   *  disabled with this message shown — Exit and "+ Add products" stay usable,
+   *  unlike `busy`, which locks the whole bar during a commit. */
+  invalid?: string | null;
   onSave: () => void;
   onDiscard: () => void;
   onAddProducts?: () => void;
@@ -48,9 +53,9 @@ export function SaveBar({
           <Plus size={16} /> Add products
         </button>
       )}
-      {error && (
+      {(error || invalid) && (
         <span className="rounded-full bg-rose-50 px-3 py-1 text-sm font-semibold text-rose-600">
-          {error}
+          {error ?? invalid}
         </span>
       )}
       <button
@@ -64,7 +69,7 @@ export function SaveBar({
       <button
         type="button"
         onClick={onSave}
-        disabled={busy}
+        disabled={busy || Boolean(invalid)}
         data-dirty={dirty ? "true" : "false"}
         data-testid="save-changes-btn"
         className={`hs-save-btn flex items-center gap-1.5 rounded-full bg-brand px-5 py-2 text-sm font-bold text-white hover:bg-brand-deep disabled:opacity-40 ${

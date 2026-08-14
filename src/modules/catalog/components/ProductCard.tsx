@@ -25,6 +25,8 @@ import {
   GripVertical, Trash2, ChevronLeft, ChevronRight, ChevronDown, X, Pencil,
 } from "lucide-react";
 import type { ShopProduct } from "../shop";
+import { draftFromTiers, draftNumber, validateLadder } from "../ladderDraft";
+import type { LadderRowDraft } from "../ladderDraft";
 import { PackSizeSelector } from "./PackSizeSelector";
 import { MediaManager } from "./MediaManager";
 import { softDeleteProduct, setProductProfileVisible } from "../manage";
@@ -81,6 +83,10 @@ export type ProductFieldDraft = {
   /** Raw comma-separated grams (e.g. "10, 20, 50") — parsed to number[] at
    *  flush, same raw-string-until-Save contract as the rest of this draft. */
   pack_sizes?: string;
+  /** The FULL tier-row draft (0021, T04) — every keystroke reports the whole
+   *  array (shallow-merge safe). Undefined = ladder untouched → flush skips it;
+   *  ShopView routes a present draft through saveLadder, never toFieldPatch. */
+  tiers?: LadderRowDraft[];
 };
 /** The per-product pending overlay ShopView flushes on Save. */
 export type ProductDraft = {
@@ -247,6 +253,12 @@ export function ProductCard({
   const nameVal = fields.name ?? p.name;
   const numVal = (k: NumFieldKey, fallback: number | null) => fields[k] ?? numStr(fallback);
   const pricePublic = fields.price_public ?? p.price_public;
+  // Tier-ladder draft rows (T04): the drafted array, else the live rungs — the
+  // same lazy-init pattern as numVal/nameVal. Validation runs against the base
+  // the flush will use (drafted price when present, else the live price).
+  const tierRows = fields.tiers ?? draftFromTiers(p.tiers);
+  const ladderBase =
+    fields.price_per_gram !== undefined ? draftNumber(fields.price_per_gram) : p.price_per_gram;
 
   // Carousel: current cover, wrapping through p.images (placeholder when empty).
   const images = p.images;
@@ -553,6 +565,16 @@ export function ProductCard({
                   )}
                 </div>
               </div>
+              {/* Tier-ladder editor (T04): edit-only, below the price block. Rows
+                  edit into the draft like every other card field — the ONE pink
+                  Save flushes them (no per-editor Save; G4-recorded deviation). */}
+              {editing && (
+                <TierLadderEditor
+                  rows={tierRows}
+                  base={ladderBase}
+                  onRows={(rows) => onEditField?.(p.id, { tiers: rows })}
+                />
+              )}
               {/* static availability indicator — a stock/availability field is a later
                   data-model addition; the shop currently has no per-product stock. */}
               <div className="mb-2 inline-flex items-center gap-1.5 text-[11px] font-bold text-success">
@@ -793,6 +815,91 @@ function SpecFieldEditor({
         onChange={(e) => onChange({ lineage_parent_b: e.target.value })}
         className={`${specField} w-1/2`}
       />
+    </div>
+  );
+}
+
+// ── Tier-ladder editor (edit mode, 0021 T04) ──────────────────────────────────
+// The prototype's footerEdit adapted to the card's pending-draft contract: rows
+// are `from [min] g → [price] €/g ✕` (lot-row register), the whole row reds when
+// invalid with the message line under it, `+ Add tier` is an advisory cap at 3
+// (a direct 4th rung still renders; Add stays dead). Every change reports the
+// FULL row array up — this component writes nothing itself.
+function TierLadderEditor({
+  rows,
+  base,
+  onRows,
+}: {
+  rows: LadderRowDraft[];
+  base: number | null;
+  onRows: (rows: LadderRowDraft[]) => void;
+}) {
+  const validation = validateLadder(rows, base);
+  const full = rows.length >= 3;
+
+  const editRow = (i: number, patch: Partial<LadderRowDraft>) =>
+    onRows(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+
+  return (
+    <div className="mb-2 rounded-xl bg-brand/[0.03] p-1.5">
+      <div className="mb-1 px-0.5 text-[10px] font-bold uppercase tracking-wide text-ink/45">
+        Volume price tiers <span className="font-semibold normal-case text-ink/40">(max 3)</span>
+      </div>
+      <div className="flex flex-col gap-1">
+        {rows.map((row, i) => {
+          const v = validation.rows[i];
+          const invalid = v.minInvalid || v.priceInvalid;
+          return (
+            <div key={i}>
+              <div
+                className={`flex flex-wrap items-center gap-1 rounded-lg p-1 ${
+                  invalid ? "bg-rose-50 ring-1 ring-rose-300" : "bg-white/70"
+                }`}
+              >
+                <span className="text-[10px] font-semibold text-ink/50">from</span>
+                <input
+                  aria-label={`Tier ${i + 1} minimum grams`}
+                  inputMode="decimal"
+                  value={row.min}
+                  onChange={(e) => editRow(i, { min: e.target.value })}
+                  className={`${lotField} w-14`}
+                />
+                <span className="text-[10px] font-semibold text-ink/50">g →</span>
+                <input
+                  aria-label={`Tier ${i + 1} price per gram`}
+                  inputMode="decimal"
+                  value={row.price}
+                  onChange={(e) => editRow(i, { price: e.target.value })}
+                  className={`${lotField} w-14`}
+                />
+                <span className="text-[10px] font-semibold text-ink/50">€/g</span>
+                <button
+                  type="button"
+                  aria-label={`Remove tier ${i + 1}`}
+                  onClick={() => onRows(rows.filter((_, j) => j !== i))}
+                  className="ml-auto grid h-6 w-6 shrink-0 place-items-center rounded text-rose-500 hover:bg-rose-50"
+                >
+                  <X size={13} />
+                </button>
+              </div>
+              {v.message && (
+                <div className="px-1.5 pt-0.5 text-[10px] font-semibold text-rose-600">{v.message}</div>
+              )}
+            </div>
+          );
+        })}
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            disabled={full}
+            onClick={() => onRows([...rows, { min: "", price: "" }])}
+            className="flex items-center gap-1 self-start rounded-md border border-dashed border-brand/50 px-2 py-1 text-[11px] font-bold text-brand-deep hover:bg-brand/10 disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent"
+          >
+            <Plus size={12} /> Add tier
+          </button>
+          {full && <span className="text-[10px] font-semibold text-ink/40">ladder is full</span>}
+        </div>
+      </div>
     </div>
   );
 }

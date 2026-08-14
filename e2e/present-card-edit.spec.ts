@@ -154,3 +154,73 @@ test("F-05 · Dominance and Irradiation spec rows render as selects, not free te
   await expect(card.getByLabel("Dominance")).toHaveJSProperty("tagName", "SELECT");
   await expect(card.getByLabel("Irradiation")).toHaveJSProperty("tagName", "SELECT");
 });
+
+// ── 0021 T04 — seller tier editor (edit-mode ladder → the ONE pink Save) ─────
+// Tier rows join the SAME pending-edit tree as every other card field; Save
+// flushes them atomically per product via saveLadder. Cards are located by
+// product NAME (not .first()) — the ladder cases target specific seed rows:
+//   AUR-1B "Pedanios 31/1 PND-CA" (base 6.00, no seeded rungs — the blank slate;
+//     the first case PERSISTS a 2-rung ladder on it, which the invalid case
+//     then reuses as its pre-populated starting state), and
+//   AUR-1A "Pedanios 31/1 COS-CA" (base 8.00, one seeded rung 2000 g → 6.50).
+// Aria-labels are 1-based (`Tier 1 minimum grams`).
+
+/** AUR-1B's card — the seeded no-rungs product the ladder cases build on. */
+function aur1b(page: Page) {
+  return page.getByTestId("product-card").filter({ hasText: "Pedanios 31/1 PND-CA" });
+}
+
+test("T04 · tier rows save through the ONE pink Save and round-trip a reload", async ({ page }) => {
+  await manageShop(page);
+  const card = aur1b(page);
+  // Blank slate: AUR-1B has no seeded rungs.
+  await expect(card.getByText("Volume price tiers")).toBeVisible();
+  await expect(card.getByLabel("Tier 1 minimum grams")).toHaveCount(0);
+
+  // Build the ladder under the 6.00 base: 500 g → 5, 1000 g → 4.5.
+  await card.getByRole("button", { name: /add tier/i }).click();
+  await card.getByLabel("Tier 1 minimum grams").fill("500");
+  await card.getByLabel("Tier 1 price per gram").fill("5");
+  await card.getByRole("button", { name: /add tier/i }).click();
+  await card.getByLabel("Tier 2 minimum grams").fill("1000");
+  await card.getByLabel("Tier 2 price per gram").fill("4.5");
+  await expect(page.getByTestId("save-changes-btn")).toHaveAttribute("data-dirty", "true");
+
+  await page.getByTestId("save-changes-btn").click();
+  await expect(page.getByTestId("shop-surface")).toHaveAttribute("data-edit", "off");
+
+  // Round-trip: the saved rungs come back from the DB into the editor.
+  await page.reload();
+  await page.getByTestId("present-banner").getByRole("button", { name: /manage shop/i }).click();
+  await expect(page.getByTestId("shop-surface")).toHaveAttribute("data-edit", "on");
+  await expect(card.getByLabel("Tier 1 minimum grams")).toHaveValue("500");
+  await expect(card.getByLabel("Tier 1 price per gram")).toHaveValue("5");
+  await expect(card.getByLabel("Tier 2 minimum grams")).toHaveValue("1000");
+  await expect(card.getByLabel("Tier 2 price per gram")).toHaveValue("4.5");
+});
+
+test("T04 · an invalid rung reds the row and disables Save; fixing re-enables it", async ({ page }) => {
+  await manageShop(page);
+  const card = aur1b(page);
+  // Pre-populated from the previous case's persisted ladder (500 / 1000).
+  await expect(card.getByLabel("Tier 2 minimum grams")).toHaveValue("1000");
+
+  // Break the ascending rule: 400 is not above the 500 g tier.
+  await card.getByLabel("Tier 2 minimum grams").fill("400");
+  await expect(card.getByText("Must be higher than the tier above (500g)")).toBeVisible();
+  await expect(page.getByTestId("save-changes-btn")).toBeDisabled();
+  await expect(page.getByText("Fix the highlighted price tiers first.")).toBeVisible();
+  // Exit stays usable while Save is blocked (only Save is disabled).
+  await expect(page.getByRole("button", { name: /exit/i })).toBeEnabled();
+
+  // Fix it → Save re-enables.
+  await card.getByLabel("Tier 2 minimum grams").fill("1000");
+  await expect(page.getByTestId("save-changes-btn")).toBeEnabled();
+});
+
+test("T04 · a seeded rung pre-populates the tier editor (AUR-1A)", async ({ page }) => {
+  await manageShop(page);
+  const card = page.getByTestId("product-card").filter({ hasText: "Pedanios 31/1 COS-CA" });
+  await expect(card.getByLabel("Tier 1 minimum grams")).toHaveValue("2000");
+  await expect(card.getByLabel("Tier 1 price per gram")).toHaveValue("6.5");
+});
