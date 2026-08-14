@@ -25,7 +25,9 @@ types regen + one seeded bracket row. Everything in ADR §1–§3 E-steps 0–5.
 
 ## T02 — Resolver + packSizes (pure functions) · **S** · depends on: —
 
-**Files:** `src/modules/catalog/pricing.ts` + unit tests. Nothing else.
+**Files:** `src/modules/catalog/pricing.ts` + unit tests, plus ONE export line in
+`src/modules/deals/index.ts` (`lineValueOf` — the agreement test needs the real
+import; plan-checker amendment 2026-08-14, no parallel-ticket collision).
 
 - When quantity×units (normalized: kg×1000, other units as-is) reaches a rung's
   `min_grams`, `resolveTierPrice` shall return that rung's price and `appliedMin`.
@@ -106,8 +108,11 @@ types regen + one seeded bracket row. Everything in ADR §1–§3 E-steps 0–5.
 moved into `supabase/migrations/` with fresh timestamp ONLY after the tiers deploy is
 verified live), `docs/deploy/cloud-migrations-pending.md` (two entries, C marked HELD),
 `SCHEMA.md`, `SCHEMA-DRAFT.md`, `data-model.html`, `catalogue-ingestion-DESIGN.md`,
-`CONTEXT.md` (vocab), `DECISIONS.md` (dated amendment), repair of `20260618120100`'s
-missing anon revoke, `buy_schema` orphan repair (E precondition, verify done).
+`CONTEXT.md` (vocab), `DECISIONS.md` (dated amendment),
+`supabase/seed/seed.sql` (strip the bracket columns C drops; keep the rung row —
+added by T01's plan-checker 2026-08-14), `buy_schema` orphan repair (E precondition,
+verify done). C also drops `backfill_bundle_to_tiers()` (T01 ships it test-callable).
+~~repair of `20260618120100`'s missing anon revoke~~ → done in T01's migration.
 
 - When C runs (post-deploy only), the two bundle columns shall be gone, both RPCs
   tiers-only, view re-created + re-granted, types regenerated.

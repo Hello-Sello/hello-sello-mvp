@@ -1,7 +1,7 @@
 # 0021 tier-ladder — work order
 lane:   FULL
-stage:  triage ✅ → spec ✅ (G1) → prototype ✅ (G2) → design → **G3 (next: Muskan reads ADR rev 8 + tickets)**
-branch: feature/tier-ladder   (cut from latest dev at first /build)
+stage:  triage ✅ → spec ✅ (G1) → prototype ✅ (G2) → design ✅ (G3) → build T01+T02 ✅ → **G4 (next: Muskan reviews REVIEW.md; then T03)**
+branch: feature/tier-ladder   (cut from origin/dev 337f112, 2026-08-14)
 seed:   "Create 3 price tiers per product with dropdown." — Marcel, verbatim
 
 > ⚠️ This slug is ALSO the pipeline's manual dry-run (`docs/agents/DRY-RUN-tier-ladder.md`
@@ -33,12 +33,17 @@ seed:   "Create 3 price tiers per product with dropdown." — Marcel, verbatim
 - Price-change audit wiring (seed row exists, inert — G3 follow-up ticket candidate)
 
 ## Attempts   three separate budgets — see PIPELINE §10
-T01–T08  tests 0/2 · blocking-findings 0/2 · G4 rounds 0
+T01  tests 0/2 · blocking-findings 0/2 · G4 rounds 0
+T02  tests 0/2 · blocking-findings 1/2 (packSizes field shape — fixed) · G4 rounds 0
+T03–T08  tests 0/2 · blocking-findings 0/2 · G4 rounds 0
 
 ## Gate log
 - G1 spec — passed 2026-08-14 (2 question rounds; dropdown-as-order-tool amendment)
 - G2 prototype — passed 2026-08-14 (Variant B, no changes)
-- G3 design — **pending**
+- G3 design — **passed 2026-08-14** (Muskan accepted all 5 sign-offs, plain-English walkthrough)
+- G4 T01+T02 — **pending** (built + all suites green + reviewed; REVIEW.md is the gate packet.
+  ⚠️ REVIEW.md escalation 1: live cloud defect found — `list_discoverable_companies()`
+  missing its verified-caller gate on prod until E is pushed)
 
 ## For Muskan — G3 sign-offs bundled in the ADR
 1. Visibility-window tightening: out-of-window products leave Discover entirely (§3.3)
