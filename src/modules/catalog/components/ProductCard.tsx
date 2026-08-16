@@ -19,7 +19,8 @@
  * The away-facing face is pointer-events:none so it never intercepts clicks on the
  * visible face (the prototype's "back-to-front" bug).
  */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Heart, RotateCw, Minus, Plus, ShoppingCart, EyeOff, Eye,
   GripVertical, Trash2, ChevronLeft, ChevronRight, ChevronDown, X, Pencil,
@@ -198,8 +199,45 @@ export function ProductCard({
   const [reorderOver, setReorderOver] = useState(false);
   const [pack, setPack] = useState(0);
   const [qty, setQty] = useState(1);
-  // Buyer "See all prices" panel (T05, Variant B) — local reveal state.
+  // Buyer "See all prices" popover (T05) — a floating layer portaled to the
+  // body, anchored under the toggle link (G4 round 2). Closes on Choose, the
+  // toggle, outside click, or Esc; on scroll/resize it FOLLOWS the link (it
+  // may poke below the fold, so closing on scroll would fight the user's
+  // attempt to bring it into view).
   const [pricesOpen, setPricesOpen] = useState(false);
+  const [panelPos, setPanelPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const toggleRef = useRef<HTMLButtonElement>(null);
+  const repositionPanel = () => {
+    const link = toggleRef.current;
+    const cardEl = link?.closest('[data-testid="product-card"]');
+    if (!link || !cardEl) return;
+    const l = link.getBoundingClientRect();
+    const c = cardEl.getBoundingClientRect();
+    setPanelPos({ top: l.bottom + 4, left: c.left + 14, width: c.width - 28 });
+  };
+  useEffect(() => {
+    if (!pricesOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      const t = e.target as Element | null;
+      // The toggle runs its own close — reacting here too would reopen it.
+      if (t?.closest("[data-prices-toggle]") || panelRef.current?.contains(t as Node)) return;
+      setPricesOpen(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPricesOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    window.addEventListener("scroll", repositionPanel, true);
+    window.addEventListener("resize", repositionPanel);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("scroll", repositionPanel, true);
+      window.removeEventListener("resize", repositionPanel);
+    };
+  }, [pricesOpen]);
   const [liked, setLiked] = useState(false);
   // Carousel index over p.images (wraps); busy guards the immediate actions.
   const [imgIdx, setImgIdx] = useState(0);
@@ -311,6 +349,9 @@ export function ProductCard({
     ["Terp%", "terpene_percent", p.terpPercent],
   ];
   const priceShown = !editing && pricePublic && p.price_per_gram != null;
+  // The open prices panel swaps in for the availability + buy rows (see the
+  // footer) — one flag so the panel and the rows it replaces can't disagree.
+  const panelShowing = pricesOpen && priceShown && p.tiers.length > 0;
   const flag = countryFlag(p.country_of_origin);
 
   return (
@@ -500,12 +541,15 @@ export function ProductCard({
                 row becomes a controlled input/select, batched the same way as the
                 strip above; lineage clamped to 2 lines in the read view. The batch
                 editor (edit) / picker (view) live here so the card keeps its fixed
-                height. min-h-[120px] is a hard floor (not min-h-0) — without it,
+                height. min-h-[80px] is a hard floor (not min-h-0) — without it,
                 a tall footer (e.g. edit mode's stacked price fields, or the batch
                 picker) can flex-shrink this area to a sliver, hiding freshly
-                edited/saved fields entirely (reported bug, 2026-07-07). The bottom
-                fade + chevron cue that the list still scrolls past that floor. */}
-            <div className="relative mt-1.5 flex min-h-[120px] flex-1 flex-col">
+                edited/saved fields entirely (reported bug, 2026-07-07). 80px is
+                the prototype's floor — the footer needs the rest so the tier
+                editor's Add button and the open prices panel stay inside the
+                fixed-height card (G4 round 2). The bottom fade cues that the
+                list still scrolls past that floor. */}
+            <div className="relative mt-1.5 flex min-h-[80px] flex-1 flex-col">
               <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3.5">
                 {specRows.map((row) => (
                   <div key={row.label} className="flex items-start gap-2 border-b border-ink/10 py-1.5 text-xs">
@@ -540,8 +584,16 @@ export function ProductCard({
               <div className="pointer-events-none absolute inset-x-0 bottom-0 h-5 bg-gradient-to-t from-white via-white/70 to-transparent" />
             </div>
 
-            {/* footer: pack bubbles + price, then availability + stepper + Add */}
-            <div className="relative z-[5] shrink-0 border-t border-ink/10 bg-white px-3.5 pb-3 pt-2.5">
+            {/* footer: pack bubbles + price, then availability + stepper + Add.
+                Read mode is sized to always fit (shrink-0); edit mode's stacked
+                price fields + tier editor can exceed the card's spare height,
+                so the whole edit footer scrolls instead of clipping its tail —
+                "+ Add tier" stays reachable at any row/error count (G4 rd 2). */}
+            <div
+              className={`relative z-[5] border-t border-ink/10 bg-white px-3.5 pb-3 pt-2.5 ${
+                editing ? "min-h-0 overflow-y-auto" : "shrink-0"
+              }`}
+            >
               <div className="mb-2 flex items-end justify-between gap-2.5">
                 <PackSizeSelector sizes={sizes.map((s) => s.label)} selected={pack} onSelect={setPack} />
                 <div className="flex shrink-0 flex-col items-end">
@@ -573,14 +625,29 @@ export function ProductCard({
                         <small className="-mb-0.5 block text-[10.5px] font-semibold text-ink-muted">Approx.</small>
                         {/* The APPLIED price at the current pack × qty (T05
                             amendment 3) — always agrees with the chip and the
-                            panel highlight; falls back to base. */}
+                            panel highlight; falls back to base. With a rung
+                            applied, the base price anchors above it struck
+                            through (marketplace was/now pattern, G4 round 2);
+                            the sr-only text carries what the strikethrough
+                            alone doesn't announce. */}
+                        {resolved.appliedMin != null && (
+                          <s className="block text-xs font-semibold text-ink-muted/70">
+                            <span className="sr-only">Base price </span>
+                            {eur(p.price_per_gram as number)}
+                          </s>
+                        )}
                         {eur(resolved.pricePerGram ?? (p.price_per_gram as number))}<span className="text-xs">/g</span>
                       </span>
                       {p.tiers.length > 0 && (
                         <button
                           type="button"
+                          ref={toggleRef}
+                          data-prices-toggle
                           aria-expanded={pricesOpen}
-                          onClick={() => setPricesOpen((v) => !v)}
+                          onClick={() => {
+                            if (!pricesOpen) repositionPanel();
+                            setPricesOpen((v) => !v);
+                          }}
                           className="text-[10.5px] font-bold text-brand underline underline-offset-2"
                         >
                           {pricesOpen ? "Hide prices" : "See all prices"}
@@ -602,14 +669,24 @@ export function ProductCard({
                   onRows={(rows) => onEditField?.(p.id, { tiers: rows })}
                 />
               )}
-              {/* "See all prices" panel (T05, Variant B — prototype vb-panel):
-                  inline pink-tinted box, one row per ladderRows entry; the
-                  applied row is tinted; the base row has no Choose. */}
-              {pricesOpen && priceShown && p.tiers.length > 0 && (
-                /* Compact rows so base + 3 rungs fit the fixed-height footer
-                   (G4 feedback); max-h + scroll is the backstop for a direct
-                   4th rung (the 3-cap is advisory). */
-                <div className="mb-2 max-h-[128px] overflow-y-auto rounded-xl border border-brand/25 bg-brand-soft/20 p-1.5">
+              {/* "See all prices" panel (T05): one row per ladderRows entry;
+                  the applied row is tinted; the base row has no Choose. */}
+              {panelShowing && panelPos && createPortal(
+                /* A PORTALED POPOVER (G4 round 2, Muskan's call): it opens
+                   BELOW the "Hide prices" link, and only ~100px of card
+                   remain there — so it renders at document.body and may poke
+                   past the card's bottom edge (the card face's overflow-hidden
+                   would clip it in-tree). Nothing in the card moves; it stays
+                   until Choose / "Hide prices" / outside click / Esc, and any
+                   scroll closes it (its viewport position is captured at open,
+                   not tracked). Solid background — it floats over the page. */
+                <div
+                  ref={panelRef}
+                  role="dialog"
+                  aria-label="Volume prices"
+                  style={{ position: "fixed", top: panelPos.top, left: panelPos.left, width: panelPos.width }}
+                  className="z-50 rounded-xl border border-brand/25 bg-white p-1.5 shadow-xl"
+                >
                   {ladderRows(p.price_per_gram, p.tiers, currentGrams).map((row, i) => {
                     const min = row.minGrams;
                     return (
@@ -619,7 +696,9 @@ export function ProductCard({
                           row.isApplied ? "bg-brand/10" : ""
                         } ${i > 0 ? "border-t border-dashed border-brand/20" : ""}`}
                       >
-                        <span className="flex-1 font-bold text-ink">
+                        {/* nowrap — a wrapped label multiplies the row height
+                            and re-clips the panel on narrow cards (G4 rd 2). */}
+                        <span className="min-w-0 flex-1 truncate whitespace-nowrap font-bold text-ink">
                           {row.label}
                           {row.savingPercent > 0 && (
                             <>
@@ -644,7 +723,8 @@ export function ProductCard({
                       </div>
                     );
                   })}
-                </div>
+                </div>,
+                document.body,
               )}
               {/* static availability indicator — a stock/availability field is a later
                   data-model addition; the shop currently has no per-product stock.
@@ -938,10 +1018,9 @@ function TierLadderEditor({
       <div className="mb-1 px-0.5 text-[10px] font-bold uppercase tracking-wide text-ink/45">
         Volume price tiers <span className="font-semibold normal-case text-ink/40">(max 3)</span>
       </div>
-      {/* Rows scroll inside the fixed-height footer (G4 feedback: 3 rows +
-          messages exceed the card's spare height); + Add tier stays pinned
-          below the scroll area so it is always reachable. */}
-      <div className="flex max-h-[118px] flex-col gap-1 overflow-y-auto pr-0.5">
+      {/* No inner scroll — the edit footer as a whole scrolls (G4 round 2),
+          so rows and + Add tier flow naturally and stay reachable. */}
+      <div className="flex flex-col gap-1 pr-0.5">
         {rows.map((row, i) => {
           const v = validation.rows[i];
           const invalid = v.minInvalid || v.priceInvalid;

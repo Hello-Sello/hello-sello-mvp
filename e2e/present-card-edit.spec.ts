@@ -248,19 +248,23 @@ test("T05 · reveal → Choose a rung → chip applies → drawer prices the run
   await expect(page.getByTestId("product-card").first()).toBeVisible();
   card = page.getByTestId("product-card").filter({ hasText: "Pedanios 31/1 COS-CA" });
 
-  // Closed by default; the reveal opens the panel with base + rung rows.
+  // Closed by default; the reveal opens the popover with base + rung rows.
+  // The popover is PORTALED to document.body (it opens below the link and may
+  // poke past the card's bottom edge), so it is located page-wide by its
+  // dialog role — NOT inside the card's subtree.
   const reveal = card.getByRole("button", { name: "See all prices" });
   await expect(reveal).toBeVisible();
   await reveal.click();
-  await expect(card.getByText("Base price", { exact: true })).toBeVisible();
+  const panel = page.getByRole("dialog", { name: "Volume prices" });
+  await expect(panel.getByText("Base price", { exact: true })).toBeVisible();
   // The rung row's label embeds the savings ("from 2000g · −19%") — assert the
   // row via its unambiguous Choose button instead of the composed label text.
-  await expect(card.getByRole("button", { name: "Choose from 2000g" })).toBeVisible();
+  await expect(panel.getByRole("button", { name: "Choose from 2000g" })).toBeVisible();
 
   // Choose the rung: panel closes, the rung bubble is selected at qty 1, the
   // chip applies, and the headline shows the rung price.
-  await card.getByRole("button", { name: "Choose from 2000g" }).click();
-  await expect(card.getByText("Base price", { exact: true })).toHaveCount(0); // panel closed
+  await panel.getByRole("button", { name: "Choose from 2000g" }).click();
+  await expect(panel).toHaveCount(0); // panel closed
   await expect(card.getByRole("button", { name: "2000g+" })).toHaveAttribute("aria-pressed", "true");
   await expect(card.getByText("from 2000g applied")).toBeVisible();
   await expect(card.getByText("6,50€")).toBeVisible();
