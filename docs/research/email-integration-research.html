@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Email Integration Research — Hello Sello</title>
+<style>
+  :root {
+    --ink: #1a1a2e; --muted: #5c5c70; --line: #e4e4ec;
+    --accent: #c2185b; --accent-soft: #fdf0f5;
+    --good: #1b7a4b; --good-soft: #ecf8f1;
+    --warn: #b3541e; --warn-soft: #fdf3ec;
+    --card: #fafafc;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: var(--ink); margin: 0; background: #fff; line-height: 1.55;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 48px 32px 96px; }
+  header { border-bottom: 3px solid var(--accent); padding-bottom: 20px; margin-bottom: 36px; }
+  h1 { font-size: 1.9rem; margin: 0 0 6px; }
+  .meta { color: var(--muted); font-size: .9rem; }
+  h2 { font-size: 1.3rem; margin: 44px 0 12px; padding-top: 8px; }
+  h2 .num { color: var(--accent); margin-right: 8px; }
+  h3 { font-size: 1.02rem; margin: 24px 0 8px; }
+  p { margin: 10px 0; }
+  table { border-collapse: collapse; width: 100%; font-size: .88rem; margin: 14px 0; }
+  th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--card); font-weight: 600; }
+  .table-scroll { overflow-x: auto; }
+  .pill { display: inline-block; padding: 1px 9px; border-radius: 99px; font-size: .78rem; font-weight: 600; white-space: nowrap; }
+  .pill.good { background: var(--good-soft); color: var(--good); }
+  .pill.warn { background: var(--warn-soft); color: var(--warn); }
+  .pill.pick { background: var(--accent-soft); color: var(--accent); }
+  .callout { border-left: 4px solid var(--accent); background: var(--accent-soft); padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 16px 0; }
+  .callout.good { border-color: var(--good); background: var(--good-soft); }
+  .callout.warn { border-color: var(--warn); background: var(--warn-soft); }
+  .flow { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 14px 18px; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: .84rem; overflow-x: auto; white-space: pre; margin: 14px 0; }
+  ul, ol { margin: 8px 0; padding-left: 24px; }
+  li { margin: 5px 0; }
+  .small { font-size: .84rem; color: var(--muted); }
+  code { background: var(--card); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; font-size: .85em; }
+  .decision { background: var(--good-soft); border: 1px solid #bfe3cf; border-radius: 10px; padding: 18px 22px; margin: 18px 0; }
+  .decision h3 { margin-top: 0; color: var(--good); }
+  footer { margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--line); }
+  @media (prefers-color-scheme: dark) {
+    :root { --ink: #e8e8f0; --muted: #a0a0b4; --line: #33334a; --card: #1d1d2e;
+      --accent-soft: #3a1226; --good-soft: #102a1c; --warn-soft: #2e1c0e; }
+    body { background: #12121e; }
+    .decision { background: #102a1c; border-color: #1f4a33; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Email Integration — Research &amp; Decision</h1>
+  <div class="meta">Hello Sello · researched 2026-07-13 · owner: Muskan · status: <strong>proposed</strong> (pending Marcel + Ayush review, Unipile sales call)</div>
+</header>
+
+<h2><span class="num">1.</span>The problem we are solving</h2>
+<p><strong>Cold start + the core pitch.</strong> A user who joins Hello Sello today lands on an empty platform: no contacts, no conversations, no network. But our founding pitch is <em>"buyers &amp; sellers manage mails, fax and chat messages in one place"</em> — email <em>is</em> the product, not an add-on.</p>
+<p><strong>Concrete September case:</strong> Canadian Craft (Marcel) onboards with ~25 pharmacy partners who are <em>not</em> on the platform and may never join. All of that business runs on email today. Without email integration, Marcel gets an empty tool; with it, his real business flows in from day one — and every pharmacy that emails him becomes a contact and a future signup lead.</p>
+<div class="callout">
+<strong>Target experience ("email-as-chat"):</strong> user connects their real inbox once → incoming emails appear in Hello Sello as chat conversations → replies typed in Hello Sello go out as normal emails <em>from the user's own address, in the same thread</em>. The counterparty never knows Hello Sello exists. Sella reads the stream and turns conversations into deals.
+</div>
+
+<h2><span class="num">2.</span>How it can be solved (end-to-end shape)</h2>
+<div class="flow">[Pharmacy mailbox] ←→ [Outlook / Gmail / IMAP servers] ←→ [Email provider layer] ←→ [Hello Sello + Supabase]
+
+Connect (once):  user clicks "Connect inbox" → OAuth login → provider layer stores tokens,
+                 returns account_id → we store only the account_id next to the person row
+Inbound (always): new email → webhook POST to our server (clean JSON: from, subject, body,
+                 thread id, attachments) → map sender→contact/company, thread→conversation
+                 → store as chat message → Sella reads it like any chat
+Outbound:        reply typed in chat → send API call → goes out through the USER'S own
+                 mailbox → normal threaded email; also lands in their "Sent" folder
+Backfill (opt.): one-time history import at connect time (we choose default window,
+                 user picks: 3 mo / 12 mo / none — doubles as GDPR consent)</div>
+<p><strong>What we build:</strong> connect button + callback, one webhook handler, thread↔chat + sender↔contact mapping, send call, filtering (newsletters/no-reply ≠ chats), privacy defaults (imported mail follows the existing "personal chats never company-visible" lock). <strong>What the provider layer owns:</strong> OAuth tokens + refresh, provider differences, webhook subscription renewals, (depending on choice) Google's security review.</p>
+
+<h2><span class="num">3.</span>The gatekeepers (why this isn't just code)</h2>
+<div class="table-scroll"><table>
+<tr><th></th><th>Google (Gmail)</th><th>Microsoft (Outlook / M365)</th></tr>
+<tr><td><strong>Requirement</strong></td><td>Reading mail = "restricted scope": OAuth verification <strong>+ paid annual CASA security audit</strong> (Google-approved labs). Send-only is lighter (no audit).</td><td><strong>Publisher verification</strong> — paperwork via a Microsoft partner account, no audit. Effectively mandatory (unverified apps are blocked from mail-scope consent by default since Nov 2020).</td></tr>
+<tr><td><strong>Timeline / cost</strong></td><td>"Several weeks" per Google, often longer; audit ≈ low €1000s/yr (labs quote privately — unverified).</td><td>Days. Free.</td></tr>
+<tr><td><strong>Escape hatches</strong></td><td>&lt;100 connected Gmail accounts → no verification needed (users see a click-through warning). Workspace org admins can allowlist the app. Testing mode exempt.</td><td>Work-account reality: the customer's IT admin usually approves the app once per company — normal B2B onboarding step, plan for it.</td></tr>
+</table></div>
+<p class="small">German-market note: many SMEs/pharmacies use IONOS, T-Online, GMX — no modern API at all; only IMAP reaches them. <strong>Ask Marcel what providers the pharmacies actually use</strong> — it decides how much IMAP matters.</p>
+
+<h2><span class="num">4.</span>The options</h2>
+<div class="table-scroll"><table>
+<tr><th>Option</th><th>What it is</th><th>Pricing</th><th>Build time</th><th>Key pro</th><th>Key con</th><th>Fit for Sept</th></tr>
+<tr>
+  <td><strong>Unipile</strong> 🇫🇷</td><td>Rented "one API for all inboxes" (Gmail, Outlook, IMAP + WhatsApp/LinkedIn)</td><td>€49/mo min (≤10 accounts), then ~€5/account/mo</td><td>~1–2 wks pipe</td><td>EU vendor; claims their pre-verified Google app covers us (no CASA) <em>by default</em>; IMAP included</td><td>Exemption claim is vendor-marketing only — <strong>must be confirmed on a sales call</strong></td><td><span class="pill pick">CHOSEN</span></td>
+</tr>
+<tr>
+  <td><strong>Nylas</strong> 🇺🇸</td><td>Same model, bigger/older US company</td><td>$15/mo + $2/account</td><td>~1–2 wks pipe</td><td>Mature; verification-skip exists ("Shared GCP App") and is corroborated</td><td>That skip is enterprise-contract-only, unpriced; US company = weaker GDPR story</td><td><span class="pill good">Backup</span></td>
+</tr>
+<tr>
+  <td><strong>EmailEngine</strong></td><td>Self-hosted sync middleware</td><td>$995/<strong>yr</strong> flat, unlimited accounts</td><td>~3–5 wks</td><td>Cheapest at scale; data stays on our servers; native IMAP</td><td>We run the ops <em>and</em> carry Google verification + CASA ourselves</td><td><span class="pill warn">Later (migration target)</span></td>
+</tr>
+<tr>
+  <td><strong>Build direct</strong></td><td>Gmail API + Microsoft Graph ourselves</td><td>~€0 + CASA €1000s/yr</td><td>~6–10 wks</td><td>No vendor fees, no lock-in, our branding on consent screens</td><td>Hardest plumbing (tokens, renewals, two providers); audit on us; no IMAP unless built too</td><td><span class="pill warn">Later, if ever</span></td>
+</tr>
+<tr>
+  <td><strong>Forwarding address</strong></td><td>User sets one auto-forward rule; we receive via inbound-parse (Postmark/SendGrid)</td><td>~€10–50/mo total</td><td><strong>~1 wk</strong></td><td>No OAuth, no audits, works with any provider</td><td>One-way: replies can't come from the user's real address; manual setup; no history import</td><td><span class="pill warn">Break-glass fallback only</span></td>
+</tr>
+</table></div>
+
+<h2><span class="num">5.</span>Pricing &amp; scalability (Unipile path)</h2>
+<div class="table-scroll"><table>
+<tr><th>Stage</th><th>Connected inboxes</th><th>Monthly cost</th><th>Note</th></tr>
+<tr><td>September pilot</td><td>≤10</td><td><strong>€49 flat</strong></td><td>Marcel + first pharmacies</td></tr>
+<tr><td>Early traction</td><td>50</td><td>≈ €250</td><td>€5/account tier</td></tr>
+<tr><td>Growth</td><td>51+</td><td>negotiated discounts</td><td>ask for the curve on the sales call</td></tr>
+<tr><td>Scale</td><td>~500</td><td>≈ €1,500–2,500</td><td>→ the point where migrating to EmailEngine / direct build wins</td></tr>
+</table></div>
+<ul>
+  <li>Billing is per <em>connected inbox</em>, not per app user or per message — predictable; users who never connect cost nothing.</li>
+  <li>Treat it as <strong>cost-of-goods</strong>: ~€5/user/mo for the entire communication backbone is a healthy slice of a B2B subscription. Watch out if a free tier lets people connect inboxes — every free connection has real marginal cost.</li>
+  <li><strong>Exit ramp is planned, not hoped for:</strong> rent now → own the plumbing (EmailEngine ≈ "build direct with a head start") once volume justifies the CASA audit + ops. By then there's revenue to fund it.</li>
+</ul>
+<div class="callout good">
+<strong>Architecture rule that keeps the exit cheap:</strong> all Unipile specifics live inside ONE adapter module (<code>email-channel</code>: <code>connectInbox()</code>, <code>onMessageReceived()</code>, <code>sendReply()</code>). The rest of the codebase never mentions Unipile. Migrating later = rewriting one module, not the product.
+</div>
+
+<h2><span class="num">6.</span>Trade-offs as decided for our use case &amp; timeline</h2>
+<div class="table-scroll"><table>
+<tr><th>Decision point</th><th>Call</th><th>Why</th></tr>
+<tr><td>Rent vs build</td><td><strong>Rent</strong> (2-dev team, Sept deadline)</td><td>Google's audit alone can eat the runway; renting turns a compliance project into a subscription</td></tr>
+<tr><td>Rent from whom</td><td><strong>EU providers preferred</strong> → Unipile (FR). Nylas (US) only as fallback</td><td>Regulated German market: EU processor + DPA is a materially easier GDPR/trust story</td></tr>
+<tr><td>Old emails vs future-only</td><td>Future-only by default + <strong>user-chosen backfill window</strong> (3/12 mo/none) at connect</td><td>Data minimization; the choice doubles as consent; imports become searchable archive, not 500 dead chats</td></tr>
+<tr><td>Personal vs business mail</td><td>3 layers: which inbox they connect → domain rules (own domain = colleague; counterparty domain = deal chat; no-reply = filtered) → Sella classifies the rest</td><td>No magic needed; existing account-vs-company chat structure + the "personal chats never company-visible" lock absorb email cleanly</td></tr>
+<tr><td>WhatsApp now?</td><td><strong>NO unofficial bridge for users</strong> (Unipile's QR bridge risks account bans — unacceptable for pharmacy businesses). WhatsApp later via <em>official</em> Business API (360dialog 🇩🇪 or Meta direct)</td><td>Asymmetric risk: small convenience vs. catastrophic "your integration banned my number". Official API = new business number, no history import — accepted</td></tr>
+<tr><td>Fax</td><td>Stays post-MVP (existing locked decision, unchanged)</td><td>Email + chat carry the launch; fax OCR infra doesn't pay back yet</td></tr>
+</table></div>
+
+<h2><span class="num">7.</span>Recommendation</h2>
+<div class="decision">
+<h3>✅ What we choose and why</h3>
+<ol>
+  <li><strong>Email-as-chat via Unipile, email channel only.</strong> Fastest legitimate path to the core product for a 2-dev team before September: ~1–2 wks pipe + 3–6 wks product work (mapping, filtering, privacy, backfill UX, Sella wiring). EU vendor fits our market.</li>
+  <li><strong>Microsoft first-class from day one</strong> (Marcel's market is Outlook-heavy; publisher verification is cheap paperwork). Gmail works at pilot scale regardless (&lt;100-account exemption).</li>
+  <li><strong>One adapter module</strong> so the scale-time migration (EmailEngine / direct) stays a module swap.</li>
+  <li><strong>WhatsApp deferred</strong> to official-API route post-launch. Fax stays post-MVP.</li>
+</ol>
+</div>
+
+<h3>Before committing — the sales call checklist (Unipile)</h3>
+<ol>
+  <li><strong>The make-or-break question, in writing:</strong> "Using your default hosted auth, do we ever need our own Google restricted-scope verification or CASA audit — yes/no, contractually?"</li>
+  <li>Does the pre-verified credential cover full-inbox <em>reading</em> (restricted scope), not just send?</li>
+  <li>DPA + exactly where mail data is processed/stored (EU?).</li>
+  <li>If a user connects email <em>and</em> (later) another channel — one billed account or two?</li>
+  <li>Rate limits / fair-use caps on bulk historical backfill.</li>
+  <li>Volume-discount curve above 50 accounts.</li>
+</ol>
+<h3>And one question for Marcel</h3>
+<p><strong>"Which email providers do Canadian Craft and the pharmacies actually use?"</strong> (Outlook/M365? Gmail? IONOS/T-Online/GMX?) — confirms the Microsoft-first bet and tells us how much IMAP matters at launch.</p>
+
+<h2><span class="num">8.</span>Honest caveats</h2>
+<ul>
+  <li>Unipile's "you skip Google verification" claim is <strong>only their own marketing</strong> — no independent corroboration found (Nylas's equivalent IS corroborated, but enterprise-gated). Hence the sales call before any commitment.</li>
+  <li>No verified CASA lab prices exist publicly; "low €1000s/yr" is an estimate from third-party mentions.</li>
+  <li>How Front/Missive/HubSpot actually architected their sync: no reliable engineering write-ups survived fact-checking — the "everyone rents vs builds" split is inferred, not documented.</li>
+  <li>All vendor pricing verified July 2026 — re-confirm at contract time (Nylas restructured pricing in 2025; these things move).</li>
+</ul>
+
+<footer class="small">
+Sources: two adversarially-verified deep-research passes (2026-07-13/16) over Google restricted-scope docs (updated June 2026), Microsoft Learn (2025–26), Nylas/Unipile/EmailEngine pricing pages (fetched live), Nylas community forum. Related: <code>docs/product/layers/LAYER-5-INPUTS-AND-OUTPUTS.md</code> (§2.2 email, §2.5 fax), DEV-57, DEV-60, DEV-3, DEV-99 (Outlook #1 login). Full research JSON in session transcripts.
+</footer>
+
+</div>
+</body>
+</html>

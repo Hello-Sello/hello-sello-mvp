@@ -1,0 +1,367 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1700" viewBox="0 0 1600 1700" font-family="-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="ah" markerWidth="10" markerHeight="10" refX="7" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,3.5 L0,7 z" fill="#67c6d6"/></marker>
+    <style>
+      .card{fill:#474e5c;stroke:#5a616f;stroke-width:1.5;rx:12}
+      .ttl{fill:#e8eaee;font-size:15px;font-weight:700}
+      .who{font-size:10px;font-weight:700;letter-spacing:.06em}
+      .d{fill:#c3c8d1;font-size:11.5px}
+      .s{fill:#aab0bb;font-size:11px}
+      .band{fill:#8f96a3;font-size:12px;font-weight:700;letter-spacing:.09em}
+      .arw{stroke:#67c6d6;stroke-width:1.8;fill:none;marker-end:url(#ah)}
+      .gtxt{fill:#f5c86b;font-size:11px;font-weight:700}
+      .mono{fill:#8fb8c4;font-size:10.5px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+      .colh{font-size:10px;font-weight:700;letter-spacing:.1em}
+      .div{stroke:#5a616f;stroke-width:1}
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1600" height="1700" fill="#3a414e"/>
+
+  <text x="800" y="42" text-anchor="middle" fill="#e8eaee" font-size="27" font-weight="700">Hello Sello — the Build Pipeline</text>
+  <text x="800" y="67" text-anchor="middle" fill="#aab0bb" font-size="14.5">You type 5 commands. You stop at 5 gates. Everything in between runs on its own.</text>
+
+  <rect x="60" y="86" width="13" height="13" rx="4" fill="#b39ddb"/>
+  <text class="d" x="80" y="97" fill="#e8eaee"><tspan font-weight="700">SKILL</tspan> — a command you type</text>
+  <rect x="292" y="86" width="13" height="13" rx="4" fill="#67c6d6"/>
+  <text class="d" x="312" y="97" fill="#e8eaee"><tspan font-weight="700">AGENT</tspan> — a worker with its own memory. Does one job, hands back one file, then forgets everything</text>
+  <rect x="1000" y="86" width="13" height="13" rx="4" fill="#ef8a7f"/>
+  <text class="d" x="1020" y="97" fill="#e8eaee"><tspan font-weight="700">REVIEWER</tspan> — can read but never write</text>
+  <rect x="1310" y="86" width="13" height="13" rx="4" fill="#f0b429"/>
+  <text class="d" x="1330" y="97" fill="#e8eaee"><tspan font-weight="700">🚦 GATE</tspan> — you decide</text>
+
+  <!-- ══════════ LEVEL 1 ══════════ -->
+  <text class="band" x="60" y="132">LEVEL 1 — THE WHOLE THING AT A GLANCE</text>
+
+  <rect class="card" x="60" y="144" width="176" height="96" fill="#414855"/>
+  <rect x="60" y="144" width="5" height="96" fill="#7fd6c0" rx="2.5"/>
+  <text class="ttl" x="76" y="170">/triage</text>
+  <text class="s" x="76" y="192">6 questions to decide</text>
+  <text class="s" x="76" y="208">how careful to be</text>
+  <text class="s" x="76" y="230" fill="#8f96a3">no gate — it just routes</text>
+
+  <path class="arw" d="M240,192 L258,192"/>
+
+  <rect class="card" x="262" y="144" width="238" height="96"/>
+  <rect x="262" y="144" width="5" height="96" fill="#b39ddb" rx="2.5"/>
+  <rect x="424" y="153" width="60" height="19" rx="6" fill="#5c4a1f" stroke="#f0b429" stroke-width="1.2"/>
+  <text class="gtxt" x="454" y="166" text-anchor="middle">🚦 G1</text>
+  <text class="ttl" x="280" y="170">/spec</text>
+  <text class="s" x="280" y="192" fill="#e8eaee">What are we building, and</text>
+  <text class="s" x="280" y="208" fill="#e8eaee">how will we know it works?</text>
+  <text class="s" x="280" y="230" fill="#8f96a3">Plain words. No technology.</text>
+
+  <path class="arw" d="M504,192 L518,192"/>
+
+  <rect class="card" x="522" y="144" width="238" height="96" stroke-dasharray="6 4"/>
+  <rect x="522" y="144" width="5" height="96" fill="#e59ac0" rx="2.5"/>
+  <rect x="684" y="153" width="60" height="19" rx="6" fill="#5c4a1f" stroke="#f0b429" stroke-width="1.2"/>
+  <text class="gtxt" x="714" y="166" text-anchor="middle">🚦 G2</text>
+  <text class="ttl" x="540" y="170">/prototype</text>
+  <text class="s" x="540" y="192" fill="#e8eaee">What should it look like?</text>
+  <text class="s" x="540" y="208" fill="#8f96a3">screens only — skipped for</text>
+  <text class="s" x="540" y="224" fill="#8f96a3">backend work</text>
+
+  <path class="arw" d="M764,192 L778,192"/>
+
+  <rect class="card" x="782" y="144" width="238" height="96"/>
+  <rect x="782" y="144" width="5" height="96" fill="#b39ddb" rx="2.5"/>
+  <rect x="944" y="153" width="60" height="19" rx="6" fill="#5c4a1f" stroke="#f0b429" stroke-width="1.2"/>
+  <text class="gtxt" x="974" y="166" text-anchor="middle">🚦 G3</text>
+  <text class="ttl" x="800" y="170">/design</text>
+  <text class="s" x="800" y="192" fill="#e8eaee">How should we build it?</text>
+  <text class="s" x="800" y="208" fill="#e8eaee">Options, trade-offs, a choice.</text>
+  <text class="s" x="800" y="230" fill="#8f96a3">Then split into tickets.</text>
+
+  <path class="arw" d="M1024,192 L1038,192"/>
+
+  <rect class="card" x="1042" y="144" width="238" height="96" fill="#544c33" stroke="#f0b429" stroke-width="2"/>
+  <rect x="1042" y="144" width="5" height="96" fill="#f0b429" rx="2.5"/>
+  <rect x="1204" y="153" width="60" height="19" rx="6" fill="#3a414e" stroke="#f0b429" stroke-width="1.2"/>
+  <text class="gtxt" x="1234" y="166" text-anchor="middle">🚦 G4</text>
+  <text class="ttl" x="1060" y="170">/build</text>
+  <text class="s" x="1060" y="192" fill="#e8eaee">Write it, test it, review it,</text>
+  <text class="s" x="1060" y="208" fill="#e8eaee">then show you it running.</text>
+  <text class="s" x="1060" y="230" fill="#f5c86b">one command, seven steps</text>
+
+  <path class="arw" d="M1284,192 L1298,192"/>
+
+  <rect class="card" x="1302" y="144" width="238" height="96"/>
+  <rect x="1302" y="144" width="5" height="96" fill="#b39ddb" rx="2.5"/>
+  <rect x="1464" y="153" width="60" height="19" rx="6" fill="#5c4a1f" stroke="#f0b429" stroke-width="1.2"/>
+  <text class="gtxt" x="1494" y="166" text-anchor="middle">🚦 G5</text>
+  <text class="ttl" x="1320" y="170">/ship</text>
+  <text class="s" x="1320" y="192" fill="#e8eaee">Merge, re-test, deploy, then</text>
+  <text class="s" x="1320" y="208" fill="#e8eaee">check it on the real site.</text>
+  <text class="s" x="1320" y="230" fill="#8f96a3">only then is it done</text>
+
+  <rect class="card" x="60" y="256" width="1480" height="92" fill="#414855"/>
+  <text class="who" x="80" y="276" fill="#7fd6c0">HOW CAREFUL TO BE — four lanes, same five blocks, joined at different points</text>
+  <text class="d" x="80" y="299" fill="#e8eaee"><tspan fill="#7fd6c0" font-weight="700">FULL</tspan>  something new  →  /spec → /prototype → /design → /build ×N → /ship</text>
+  <text class="d" x="80" y="320" fill="#e8eaee"><tspan fill="#7fd6c0" font-weight="700">STANDARD</tspan>  changing something that exists  →  /spec --amend <tspan fill="#8f96a3">(one paragraph)</tspan> → /build ×N → /ship</text>
+  <text class="d" x="80" y="341" fill="#e8eaee"><tspan fill="#7fd6c0" font-weight="700">TRIVIAL</tspan>  wording, spacing, colour  →  /build → /ship</text>
+  <text class="d" x="820" y="299" fill="#e8eaee"><tspan fill="#ef8a7f" font-weight="700">BUG</tspan>  something is broken  →  <tspan fill="#ef8a7f">/diagnose</tspan> → /build → /ship</text>
+  <text class="s" x="820" y="322" fill="#f5c86b">If the change shows on a screen, G4 is compulsory — even for TRIVIAL.</text>
+  <text class="s" x="820" y="341" fill="#ef8a7f">And a safety net: if a TRIVIAL change turns out to touch the database or</text>
+  <text class="s" x="820" y="358" fill="#ef8a7f">login, a hook blocks it and makes you re-triage. Triage guesses; the hook checks.</text>
+
+  <!-- ══════════ LEVEL 2 ══════════ -->
+  <text class="band" x="60" y="392">LEVEL 2 — WHAT EACH BLOCK READS, DOES, AND WRITES</text>
+
+  <!-- ─────── /spec ─────── -->
+  <rect class="card" x="60" y="404" width="1480" height="140"/>
+  <rect x="60" y="404" width="5" height="140" fill="#b39ddb" rx="2.5"/>
+  <line class="div" x1="310" y1="404" x2="310" y2="544"/>
+  <line class="div" x1="690" y1="404" x2="690" y2="544"/>
+  <line class="div" x1="1150" y1="404" x2="1150" y2="544"/>
+  <text class="ttl" x="80" y="432">/spec  &lt;slug&gt;</text>
+  <text class="s" x="80" y="454" fill="#8f96a3">a <tspan fill="#e8eaee">slug</tspan> is a short nickname —</text>
+  <text class="s" x="80" y="470" fill="#8f96a3">"pricelist". It names every file</text>
+  <text class="s" x="80" y="486" fill="#8f96a3">and the branch, so nothing drifts.</text>
+  <text class="gtxt" x="80" y="512">ends at 🚦 G1 — you read it</text>
+  <text class="s" x="80" y="532" fill="#7fd6c0">FULL · STANDARD (--amend)</text>
+
+  <text class="colh" x="328" y="428" fill="#67c6d6">READS</text>
+  <text class="s" x="328" y="450" fill="#e8eaee">Your one line — "build the pricelist"</text>
+  <text class="s" x="328" y="470">Everything already written on it:</text>
+  <text class="s" x="328" y="487">surfaces · PRDs · DECISIONS ·</text>
+  <text class="s" x="328" y="504">Linear · old session logs · the code</text>
+  <text class="s" x="328" y="528" fill="#8f96a3">That's all it needs to start.</text>
+
+  <text class="colh" x="708" y="428" fill="#f5c86b">WHAT RUNS — no stopping</text>
+  <text class="s" x="708" y="450" fill="#e8eaee"><tspan fill="#67c6d6" font-weight="700">1</tspan>  the <tspan font-weight="700">researcher</tspan> agent gathers everything already decided</text>
+  <text class="s" x="708" y="470" fill="#e8eaee"><tspan fill="#f0b429" font-weight="700">2</tspan>  it shows you that, so your scope cut is informed</text>
+  <text class="s" x="708" y="490" fill="#e8eaee"><tspan fill="#f0b429" font-weight="700">3</tspan>  <tspan font-weight="700">one conversation</tspan>: what's IN and OUT for v1 first,</text>
+  <text class="s" x="708" y="507" fill="#e8eaee">    then what happens at the edges, then how we'll know it works</text>
+  <text class="s" x="708" y="529" fill="#8f96a3">You describe what you want in plain words. Tables, migrations and how it's stored are NOT your problem here — that's /design, two stages later.</text>
+
+  <text class="colh" x="1168" y="428" fill="#8fd68f">WRITES</text>
+  <text class="mono" x="1168" y="450">research/&lt;slug&gt;-existing.md</text>
+  <text class="mono" x="1168" y="468">PRD/&lt;slug&gt;.md</text>
+  <text class="s" x="1168" y="492" fill="#f5c86b">The acceptance criteria in there</text>
+  <text class="s" x="1168" y="508" fill="#f5c86b">become the tests, and what G4</text>
+  <text class="s" x="1168" y="524" fill="#f5c86b">and G5 both check against.</text>
+
+  <!-- ─────── /prototype ─────── -->
+  <rect class="card" x="60" y="556" width="1480" height="112" stroke-dasharray="6 4"/>
+  <rect x="60" y="556" width="5" height="112" fill="#e59ac0" rx="2.5"/>
+  <line class="div" x1="310" y1="556" x2="310" y2="668"/>
+  <line class="div" x1="690" y1="556" x2="690" y2="668"/>
+  <line class="div" x1="1150" y1="556" x2="1150" y2="668"/>
+  <text class="ttl" x="80" y="584">/prototype &lt;slug&gt;</text>
+  <text class="s" x="80" y="606" fill="#8f96a3">screens only. Backend work</text>
+  <text class="s" x="80" y="622" fill="#8f96a3">skips this entirely.</text>
+  <text class="gtxt" x="80" y="648">ends at 🚦 G2 — you pick one</text>
+
+  <text class="colh" x="328" y="580" fill="#67c6d6">READS</text>
+  <text class="s" x="328" y="602" fill="#e8eaee">The spec — especially the</text>
+  <text class="s" x="328" y="619" fill="#e8eaee">IN / OUT for v1 list</text>
+  <text class="s" x="328" y="643" fill="#8f96a3">The fence is already up.</text>
+
+  <text class="colh" x="708" y="580" fill="#f5c86b">WHAT RUNS — no stopping</text>
+  <text class="s" x="708" y="602" fill="#e8eaee"><tspan fill="#f0b429" font-weight="700">1</tspan>  builds 2–3 versions that look genuinely different, plain HTML</text>
+  <text class="s" x="708" y="622" fill="#e8eaee"><tspan fill="#f0b429" font-weight="700">2</tspan>  you open them and choose. Never the agent — this is taste</text>
+  <text class="s" x="708" y="646" fill="#f5c86b">Spec first, always. A prototype with no scope cut grows the feature —</text>
+  <text class="s" x="708" y="662" fill="#f5c86b">one thing leads to another. Inside the fence, it can only explore.</text>
+
+  <text class="colh" x="1168" y="580" fill="#8fd68f">WRITES</text>
+  <text class="mono" x="1168" y="602">prototypes/&lt;slug&gt;-prototype/</text>
+  <text class="s" x="1168" y="626" fill="#f5c86b">The one you approve becomes</text>
+  <text class="s" x="1168" y="642" fill="#f5c86b">the picture G4 compares the</text>
+  <text class="s" x="1168" y="658" fill="#f5c86b">real, built page against.</text>
+
+  <!-- ─────── /design ─────── -->
+  <rect class="card" x="60" y="680" width="1480" height="160"/>
+  <rect x="60" y="680" width="5" height="160" fill="#b39ddb" rx="2.5"/>
+  <line class="div" x1="310" y1="680" x2="310" y2="840"/>
+  <line class="div" x1="690" y1="680" x2="690" y2="840"/>
+  <line class="div" x1="1150" y1="680" x2="1150" y2="840"/>
+  <text class="ttl" x="80" y="708">/design &lt;slug&gt;</text>
+  <text class="s" x="80" y="730" fill="#8f96a3">The only place technology</text>
+  <text class="s" x="80" y="746" fill="#8f96a3">gets named. Tables, migrations,</text>
+  <text class="s" x="80" y="762" fill="#8f96a3">how data is stored — all here.</text>
+  <text class="gtxt" x="80" y="788">ends at 🚦 G3 — you choose</text>
+  <text class="s" x="80" y="812" fill="#7fd6c0">FULL only</text>
+
+  <text class="colh" x="328" y="704" fill="#67c6d6">READS</text>
+  <text class="s" x="328" y="726" fill="#e8eaee">The spec + the approved prototype</text>
+  <text class="s" x="328" y="746" fill="#e8eaee"><tspan font-weight="700">ADR-INDEX.md</tspan> — one line per past</text>
+  <text class="s" x="328" y="762" fill="#e8eaee">decision, then only the ones that overlap</text>
+  <text class="s" x="328" y="786" fill="#8f96a3">An <tspan fill="#e8eaee">ADR</tspan> is a written-down decision:</text>
+  <text class="s" x="328" y="802" fill="#8f96a3">what we chose, what we turned</text>
+  <text class="s" x="328" y="818" fill="#8f96a3">down, and why.</text>
+
+  <text class="colh" x="708" y="704" fill="#f5c86b">WHAT RUNS — no stopping</text>
+  <text class="s" x="708" y="726" fill="#e8eaee"><tspan fill="#67c6d6" font-weight="700">1</tspan>  <tspan font-weight="700">researcher</tspan> — which approaches exist, what each one costs</text>
+  <text class="s" x="708" y="746" fill="#e8eaee"><tspan fill="#f0b429" font-weight="700">2</tspan>  writes the decision, <tspan fill="#f5c86b" font-weight="700">opening in plain English</tspan>: what each</text>
+  <text class="s" x="708" y="763" fill="#e8eaee">    option means for the product · what it costs to undo later ·</text>
+  <text class="s" x="708" y="780" fill="#e8eaee">    how the industry normally does it · one recommendation</text>
+  <text class="s" x="708" y="800" fill="#e8eaee"><tspan fill="#67c6d6" font-weight="700">3</tspan>  <tspan font-weight="700">adr-checker</tspan> — does it meet the spec? a better option missed?</text>
+  <text class="s" x="708" y="817" fill="#e8eaee">    <tspan fill="#f5c86b">does it contradict a decision we made months ago?</tspan></text>
+  <text class="s" x="708" y="834" fill="#e8eaee"><tspan fill="#f0b429" font-weight="700">4</tspan>  tickets — INVEST-checked, sized <tspan font-weight="700">S/M/XS</tspan> (&gt;M → split), EARS criteria, <tspan font-weight="700">each saying what it waits on</tspan></text>
+
+  <text class="colh" x="1168" y="704" fill="#8fd68f">WRITES</text>
+  <text class="mono" x="1168" y="726">research/&lt;slug&gt;-approach.md</text>
+  <text class="mono" x="1168" y="744">architecture/adr/ADR-NNN-&lt;slug&gt;.md</text>
+  <text class="mono" x="1168" y="762">build/&lt;slug&gt;/TICKETS.md</text>
+  <text class="s" x="1168" y="786" fill="#f5c86b"><tspan font-weight="700">Invariants</tspan> — rules that must never</text>
+  <text class="s" x="1168" y="802" fill="#f5c86b">break, e.g. "a buyer can never see</text>
+  <text class="s" x="1168" y="818" fill="#f5c86b">another buyer's list". If a machine</text>
+  <text class="s" x="1168" y="834" fill="#f5c86b">can check it, it becomes a test.</text>
+
+  <!-- ─────── /build ─────── -->
+  <rect class="card" x="60" y="852" width="1480" height="220" fill="#4d4f52" stroke="#f0b429" stroke-width="2"/>
+  <rect x="60" y="852" width="5" height="220" fill="#f0b429" rx="2.5"/>
+  <line class="div" x1="310" y1="852" x2="310" y2="1088"/>
+  <line class="div" x1="690" y1="852" x2="690" y2="1088"/>
+  <line class="div" x1="1150" y1="852" x2="1150" y2="1088"/>
+  <text class="ttl" x="80" y="880">/build &lt;ticket&gt;</text>
+  <text class="s" x="80" y="902" fill="#f5c86b">One command replaces four.</text>
+  <text class="s" x="80" y="922" fill="#8f96a3">Run it once per ticket.</text>
+  <text class="s" x="80" y="946" fill="#8f96a3">Only ONE of the ten agents can</text>
+  <text class="s" x="80" y="962" fill="#8f96a3">write code: the builder. The rest</text>
+  <text class="s" x="80" y="978" fill="#8f96a3">can only read — enforced by the</text>
+  <text class="s" x="80" y="994" fill="#8f96a3">tools they're given, not by asking.</text>
+  <text class="gtxt" x="80" y="1020">ends at 🚦 G4 — you see it run</text>
+
+  <text class="colh" x="328" y="876" fill="#67c6d6">READS</text>
+  <text class="s" x="328" y="898" fill="#e8eaee">One ticket</text>
+  <text class="s" x="328" y="918" fill="#e8eaee">The spec's acceptance criteria</text>
+  <text class="s" x="328" y="938" fill="#e8eaee">The ADR's invariants</text>
+  <text class="s" x="328" y="958" fill="#e8eaee">STATE.md — where we got to</text>
+  <text class="s" x="328" y="984" fill="#8f96a3">Never the conversation. Agents</text>
+  <text class="s" x="328" y="1000" fill="#8f96a3">get file paths and one question.</text>
+
+  <text class="colh" x="708" y="876" fill="#f5c86b">WHAT RUNS — no stopping</text>
+  <text class="s" x="708" y="898" fill="#e8eaee"><tspan fill="#8fd68f" font-weight="700">1</tspan>  <tspan font-weight="700">plan</tspan> — exactly which files, which function names, real test code</text>
+  <text class="s" x="708" y="918" fill="#e8eaee"><tspan fill="#67c6d6" font-weight="700">2</tspan>  <tspan font-weight="700">plan-checker</tspan> — will this plan actually get there? <tspan fill="#8f96a3">cheapest check</tspan></text>
+  <text class="s" x="708" y="938" fill="#e8eaee"><tspan fill="#67c6d6" font-weight="700">3</tspan>  <tspan font-weight="700">test-writer</tspan> — failing tests, written from the SPEC, never the code</text>
+  <text class="s" x="708" y="958" fill="#e8eaee"><tspan fill="#67c6d6" font-weight="700">4</tspan>  <tspan font-weight="700">builder</tspan> — writes the code until the tests pass</text>
+  <text class="s" x="708" y="978" fill="#e8eaee"><tspan fill="#67c6d6" font-weight="700">5</tspan>  <tspan font-weight="700">test-runner</tspan> — runs them. <tspan fill="#8f96a3">Can't edit, so it can't "fix" a test</tspan></text>
+  <text class="s" x="708" y="996" fill="#e8eaee"><tspan fill="#ef8a7f" font-weight="700">6</tspan>  <tspan font-weight="700">reviewers</tspan>, all at once — <tspan font-weight="700">critic</tspan> always · <tspan font-weight="700">security</tspan> if it touches the</text>
+  <text class="s" x="708" y="1012" fill="#e8eaee">    database or login · <tspan fill="#f5c86b" font-weight="700">consistency</tspan> if a new component or pattern</text>
+  <text class="s" x="708" y="1028" fill="#e8eaee">    appeared — <tspan fill="#f5c86b">"did it reuse ours, or invent and patch?"</tspan></text>
+  <text class="s" x="708" y="1042" fill="#e8eaee"><tspan fill="#f0b429" font-weight="700">7</tspan>  <tspan font-weight="700">visual-verifier</tspan> — opens the real page and photographs it</text>
+
+  <text class="colh" x="1168" y="876" fill="#8fd68f">WRITES</text>
+  <text class="mono" x="1168" y="898">the code + the tests</text>
+  <text class="mono" x="1168" y="916">build/&lt;slug&gt;/plan-T01.md</text>
+  <text class="mono" x="1168" y="934">build/&lt;slug&gt;/review-T01.md</text>
+  <text class="mono" x="1168" y="952">build/&lt;slug&gt;/visual-T01.md</text>
+  <text class="s" x="1168" y="974" fill="#ef8a7f"><tspan font-weight="700">If it gets stuck:</tspan> 2 tries on failing</text>
+  <text class="s" x="1168" y="990" fill="#ef8a7f">tests, 2 on serious findings, counted</text>
+  <text class="s" x="1168" y="1006" fill="#ef8a7f">separately. Then it stops and says what</text>
+  <text class="s" x="1168" y="1022" fill="#ef8a7f">it thinks is wrong with the instruction.</text>
+  <text class="s" x="1168" y="1044" fill="#f5c86b"><tspan font-weight="700">The builder can disagree.</tspan> It may refuse</text>
+  <text class="s" x="1168" y="1060" fill="#f5c86b">a finding <tspan font-weight="700">in writing</tspan> — you settle it at G4.</text>
+
+  <!-- ─────── /ship ─────── -->
+  <rect class="card" x="60" y="1084" width="1480" height="140"/>
+  <rect x="60" y="1084" width="5" height="140" fill="#b39ddb" rx="2.5"/>
+  <line class="div" x1="310" y1="1084" x2="310" y2="1224"/>
+  <line class="div" x1="690" y1="1084" x2="690" y2="1224"/>
+  <line class="div" x1="1150" y1="1084" x2="1150" y2="1224"/>
+  <text class="ttl" x="80" y="1112">/ship &lt;slug&gt;</text>
+  <text class="s" x="80" y="1134" fill="#8f96a3">"the suite" = every automated</text>
+  <text class="s" x="80" y="1150" fill="#8f96a3">test in the project.</text>
+  <text class="s" x="80" y="1166" fill="#8f96a3">"re-run" = run them all again.</text>
+  <text class="gtxt" x="80" y="1192">ends at 🚦 G5 — on the real site</text>
+  <text class="s" x="80" y="1214" fill="#7fd6c0">all four lanes</text>
+
+  <text class="colh" x="328" y="1108" fill="#67c6d6">READS</text>
+  <text class="s" x="328" y="1130" fill="#e8eaee">Everything that passed G4</text>
+  <text class="s" x="328" y="1150" fill="#e8eaee">The same acceptance criteria,</text>
+  <text class="s" x="328" y="1167" fill="#e8eaee">one more time</text>
+  <text class="s" x="328" y="1192" fill="#8f96a3">Merged is not shipped.</text>
+
+  <text class="colh" x="708" y="1108" fill="#f5c86b">WHAT RUNS — no stopping</text>
+  <text class="s" x="708" y="1128" fill="#e8eaee"><tspan fill="#ef8a7f" font-weight="700">1</tspan>  <tspan fill="#f5c86b" font-weight="700">rebase onto dev FIRST</tspan> — pull in Ayush's work before verifying,</text>
+  <text class="s" x="708" y="1144" fill="#e8eaee">    instead of verifying your branch and hoping nothing moves</text>
+  <text class="s" x="708" y="1164" fill="#e8eaee"><tspan fill="#ef8a7f" font-weight="700">2</tspan>  re-run the whole suite on the rebased code. Touched a tested</text>
+  <text class="s" x="708" y="1180" fill="#e8eaee">    or visible file? → <tspan fill="#f5c86b">back to G4</tspan> · <tspan fill="#ef8a7f">2 rounds max, then it stops</tspan></text>
+  <text class="s" x="708" y="1200" fill="#e8eaee"><tspan fill="#f0b429" font-weight="700">3</tspan>  PR → merge <tspan font-weight="700">promptly</tspan> → deploy</text>
+  <text class="s" x="708" y="1218" fill="#e8eaee"><tspan fill="#f0b429" font-weight="700">4</tspan>  walk every criterion on the live URL yourself</text>
+
+  <text class="colh" x="1168" y="1108" fill="#8fd68f">WRITES</text>
+  <text class="mono" x="1168" y="1130">the PR · the closed ticket</text>
+  <text class="s" x="1168" y="1154" fill="#ef8a7f">Buy and Sales Calendar were both</text>
+  <text class="s" x="1168" y="1170" fill="#ef8a7f">recorded ✅ done, then found NOT</text>
+  <text class="s" x="1168" y="1186" fill="#ef8a7f">done. A ticket closes on live</text>
+  <text class="s" x="1168" y="1202" fill="#ef8a7f">evidence, or it does not close.</text>
+
+  <!-- ─────── /diagnose ─────── -->
+  <rect class="card" x="60" y="1236" width="1480" height="112" fill="#57454a" stroke="#ef8a7f"/>
+  <rect x="60" y="1236" width="5" height="112" fill="#ef8a7f" rx="2.5"/>
+  <line class="div" x1="310" y1="1236" x2="310" y2="1348"/>
+  <line class="div" x1="690" y1="1236" x2="690" y2="1348"/>
+  <line class="div" x1="1150" y1="1236" x2="1150" y2="1348"/>
+  <text class="ttl" x="80" y="1264">/diagnose &lt;bug&gt;</text>
+  <text class="s" x="80" y="1286" fill="#ef8a7f">Only on the BUG lane.</text>
+  <text class="s" x="80" y="1306" fill="#8f96a3">Already built — you have this</text>
+  <text class="s" x="80" y="1322" fill="#8f96a3">skill installed today.</text>
+  <text class="s" x="80" y="1342" fill="#8f96a3">No gate — it hands to /build.</text>
+
+  <text class="colh" x="328" y="1260" fill="#67c6d6">READS</text>
+  <text class="s" x="328" y="1282" fill="#e8eaee">What's broken, in your words</text>
+  <text class="s" x="328" y="1302" fill="#e8eaee">The code around it</text>
+  <text class="s" x="328" y="1328" fill="#8f96a3">Most weeks are bugs — this</text>
+  <text class="s" x="328" y="1344" fill="#8f96a3">is not the rare path.</text>
+
+  <text class="colh" x="708" y="1260" fill="#f5c86b">WHAT RUNS — no stopping</text>
+  <text class="s" x="708" y="1282" fill="#e8eaee"><tspan fill="#f0b429" font-weight="700">1</tspan>  make it happen again on purpose — from facts, not guesses</text>
+  <text class="s" x="708" y="1302" fill="#e8eaee"><tspan fill="#67c6d6" font-weight="700">2</tspan>  <tspan font-weight="700">test-writer</tspan> writes a test that <tspan fill="#f5c86b">fails for exactly that reason</tspan></text>
+  <text class="s" x="708" y="1322" fill="#e8eaee"><tspan fill="#f0b429" font-weight="700">3</tspan>  hand it to /build, which makes that test pass</text>
+  <text class="s" x="708" y="1342" fill="#8f96a3">A fix with no failing test first is a guess that happened to compile.</text>
+
+  <text class="colh" x="1168" y="1260" fill="#8fd68f">WRITES</text>
+  <text class="mono" x="1168" y="1282">the failing test — kept forever</text>
+  <text class="s" x="1168" y="1306" fill="#f5c86b">That test is what stops the same</text>
+  <text class="s" x="1168" y="1322" fill="#f5c86b">bug coming back in six months,</text>
+  <text class="s" x="1168" y="1338" fill="#f5c86b">long after everyone forgot it.</text>
+
+  <!-- ══════════ LEVEL 3 ══════════ -->
+  <text class="band" x="60" y="1388">LEVEL 3 — WHERE EVERYTHING IS KEPT          <tspan fill="#7fd6c0">FITS THE FOLDERS THAT ALREADY EXIST — no renames, no new tree (R7: "fit it, don't replace it")</tspan></text>
+
+  <rect class="card" x="60" y="1400" width="700" height="238" fill="#414855"/>
+  <text class="who" x="80" y="1422" fill="#8fd68f">ONE NICKNAME NAMES EVERYTHING — here, "pricelist"</text>
+  <text class="mono" x="80" y="1446" fill="#c3c8d1">docs/</text>
+  <text class="mono" x="80" y="1464" fill="#c3c8d1">├─ research/  pricelist-existing.md   <tspan fill="#8f96a3">what already exists</tspan></text>
+  <text class="mono" x="80" y="1482" fill="#c3c8d1">│             pricelist-approach.md   <tspan fill="#8f96a3">the options</tspan></text>
+  <text class="mono" x="80" y="1500" fill="#c3c8d1">├─ PRD/       0007-pricelist.md       <tspan fill="#f5c86b">permanent · the WHAT · numbered</tspan></text>
+  <text class="mono" x="80" y="1518" fill="#c3c8d1">├─ architecture/adr/  ADR-INDEX.md    <tspan fill="#f5c86b">one line per decision</tspan></text>
+  <text class="mono" x="80" y="1536" fill="#c3c8d1">│                     ADR-014-pricelist.md  <tspan fill="#f5c86b">permanent · the DECISION</tspan></text>
+  <text class="mono" x="80" y="1554" fill="#c3c8d1">└─ muskan-build/0007-pricelist/       <tspan fill="#8f96a3">throwaway — archive when shipped · same number as its spec</tspan></text>
+  <text class="mono" x="80" y="1572" fill="#c3c8d1">       STATE.md · TICKETS.md</text>
+  <text class="mono" x="80" y="1590" fill="#c3c8d1">       plan-T01.md · review-T01.md · visual-T01.md</text>
+  <text class="mono" x="80" y="1614" fill="#c3c8d1">prototypes/pricelist-prototype/index.html</text>
+  <text class="mono" x="80" y="1636" fill="#c3c8d1">.claude/skills/  ·  .claude/agents/  ·  .claude/settings.json</text>
+
+  <rect class="card" x="780" y="1400" width="380" height="238" fill="#464260" stroke="#b39ddb"/>
+  <rect x="780" y="1400" width="5" height="238" fill="#b39ddb" rx="2.5"/>
+  <text class="who" x="798" y="1422" fill="#b39ddb">STATE.md — THE HANDOVER NOTE</text>
+  <text class="s" x="798" y="1446" fill="#e8eaee">When you type /design tomorrow,</text>
+  <text class="s" x="798" y="1463" fill="#e8eaee">that command has <tspan font-weight="700">no memory</tspan> of</text>
+  <text class="s" x="798" y="1480" fill="#e8eaee">today's /spec conversation.</text>
+  <text class="s" x="798" y="1504" fill="#e8eaee">It opens this file instead.</text>
+  <text class="mono" x="798" y="1530" fill="#c9b8e8">which lane · which stage · branch</text>
+  <text class="mono" x="798" y="1566" fill="#c9b8e8">what each stage wrote, and where</text>
+  <text class="mono" x="798" y="1584" fill="#c9b8e8">rules that must not break</text>
+  <text class="mono" x="798" y="1602" fill="#c9b8e8">what we agreed NOT to build</text>
+  <text class="mono" x="798" y="1620" fill="#c9b8e8">how many tries are left</text>
+  <text class="s" x="798" y="1642" fill="#f5c86b">Committed to git — otherwise it is lost in a worktree.</text>
+
+  <rect class="card" x="1180" y="1400" width="360" height="238" fill="#414855"/>
+  <text class="who" x="1198" y="1422" fill="#f5c86b">THE THREE DOCUMENTS</text>
+  <text class="s" x="1198" y="1446" fill="#e8eaee"><tspan font-weight="700">SPEC</tspan> — what we want and how we'll</text>
+  <text class="s" x="1198" y="1462" fill="#aab0bb">know it works. No technology named.</text>
+  <text class="s" x="1198" y="1478" fill="#8f96a3">Permanent. Later features cite it.</text>
+  <text class="s" x="1198" y="1504" fill="#e8eaee"><tspan font-weight="700">ADR</tspan> — which approach we chose,</text>
+  <text class="s" x="1198" y="1520" fill="#aab0bb">what we rejected, and the rules that</text>
+  <text class="s" x="1198" y="1554" fill="#aab0bb">must never break afterwards.</text>
+  <text class="s" x="1198" y="1570" fill="#8f96a3">Permanent. Later ADRs cite it.</text>
+  <text class="s" x="1198" y="1596" fill="#e8eaee"><tspan font-weight="700">PLAN</tspan> — for one ticket: which files,</text>
+  <text class="s" x="1198" y="1612" fill="#aab0bb">which function names, which steps.</text>
+  <text class="s" x="1198" y="1628" fill="#8f96a3">Throwaway. Dies with the ticket.</text>
+  <text class="s" x="1198" y="1648" fill="#ef8a7f">Merging any two is the mistake.</text>
+</svg>

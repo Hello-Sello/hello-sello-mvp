@@ -141,7 +141,7 @@ export async function getInbox(): Promise<InboxItemView[]> {
   const { data, error } = await supabase
     .from("pending_inbox_item")
     .select(
-      `id, type, status, note, sender_company_id, sender_person_id, receiver_company_id,
+      `id, type, status, note, sender_company_id, sender_person_id, receiver_company_id, receiver_person_id,
        assigned_to, assigned_by, assigned_at, deal_card_id, metadata, created_at, updated_at, deleted_at,
        sender:company!pending_inbox_item_sender_company_id_fkey ( name ),
        assignee:person!pending_inbox_item_assigned_to_fkey ( id, first_name, last_name ),
@@ -165,6 +165,7 @@ export async function getInbox(): Promise<InboxItemView[]> {
       sender_company_id: row.sender_company_id,
       sender_person_id: row.sender_person_id,
       receiver_company_id: row.receiver_company_id,
+      receiver_person_id: row.receiver_person_id,
       assigned_to: row.assigned_to,
       assigned_by: row.assigned_by,
       assigned_at: row.assigned_at,

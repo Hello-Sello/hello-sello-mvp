@@ -284,6 +284,34 @@ in the correct final state; the intermediate version is never used mid-push.
 
 ## PENDING (local only — NOT on cloud yet)
 
+### 2026-07-24 (Muskan) — Discover person↔person social graph (Lane B, PG-1..7) — ✅ APPLIED 2026-08-16 (Release 2)
+
+| # | Migration | What it does |
+|---|-----------|--------------|
+| 1 | `20260724100000_person_connection.sql` | New `person_connection` edge table (person↔person social graph, independent of company `relationship`) + canonical-order CHECK + one-active-edge partial unique index + SELECT-only RLS. |
+| 2 | `20260724100100_inbox_person_target.sql` | `pending_inbox_item` gains `receiver_person_id` + `connect_person` type; **`receiver_company_id` made NULLABLE** + 4 per-type CHECKs (exactly one of person/company target). |
+| 3 | `20260724100200_inbox_person_rls.sql` | `inbox_select`/`inbox_update` rebuilt from live, adding ONLY `OR receiver_person_id = auth.uid()`. |
+| 4 | `20260724100300_p2p_companyless_dedup.sql` | Partial unique index `uq_chat_thread_p2p_companyless` — one company-less p2p DM thread per pair. |
+| 5 | `20260724100400_accept_person_connection.sql` | `accept_person_connection(uuid)` SECURITY DEFINER — edge + company-less p2p thread + intro, no `relationship`, no `planRollout`. |
+| 6 | `20260724100500_is_person_connected.sql` | `is_person_connected(uuid)` SECURITY DEFINER visibility helper. |
+| 7 | `20260724100600_person_select_person_branch.sql` | `person_select` rebuilt from live + `is_person_connected(id)` branch (see a person you're personally connected to). |
+| 8 | `20260724100700_list_my_person_connections.sql` | `list_my_person_connections()` SECURITY DEFINER — My Network people (safe fields + verified gate). |
+| 9 | `20260724100800_list_incoming_person_requests.sql` | `list_incoming_person_requests()` SECURITY DEFINER — incoming person requests (sender safe fields + verified gate). |
+| 10 | `20260724100900_list_discoverable_companies_reinstate_verified_gate.sql` | Restore the SEC-01 `is_caller_verified()` gate on `list_discoverable_companies` (security regression — unverified callers could read the directory since 2026-06-17). |
+| 11 | `20260724101000_list_discoverable_people.sql` | `list_discoverable_people()` SECURITY DEFINER — People directory (safe fields + type_codes + per-person connection_state + verified gate). |
+| 12 | `20260724101100_list_my_person_connections_thread_id.sql` | Add the p2p DM `thread_id` to `list_my_person_connections` (the My Network Message button; rebuilt from live + LEFT JOIN, DROP+CREATE for the new OUT column). |
+| 13 | `20260724101200_realtime_discover_connections.sql` | Add `pending_inbox_item`, `person_connection`, `relationship` to the `supabase_realtime` publication so Discover requests + accepts reflect instantly on both sides (live change-capture, same pattern as chat). Publication membership only — no schema/RLS change. |
+
+| 14 | `20260816210000_person_graph_rpc_anon_revoke.sql` | **Follow-up fix, authored during the Release 2 push.** Explicit `REVOKE EXECUTE ... FROM anon` on the 5 person-graph RPCs. The originals only did `REVOKE ALL FROM public`, which does NOT strip `anon` — on Supabase `anon` gets EXECUTE via ALTER DEFAULT PRIVILEGES, so all 5 were callable unauthenticated (database linter 0028). No data was exposed (bodies gate on `auth.uid()` + `is_caller_verified()`; probed on prod as `anon` → 0 rows, `accept_person_connection` raised before any write), but this restores the standard `20260814120000` set. Grants only — no body touched. |
+
+- **Status:** ✅ **LIVE ON PRODUCTION 2026-08-16** (Release 2). All 13 applied via MCP `apply_migration` in filename order, then `schema_migrations.version` repaired to the local filenames (13 rows, no duplicates, no leftover call-time stamps) — same protocol as Release 1. Row 14 applied + stamped immediately after.
+- **Pre-flight (out-of-order apply).** These 13 are timestamped EARLIER than migrations already live (the Phase-12 wave `202607241200*` and the tier ladder), so each was checked for the stale-redeclare class before applying: (a) prod state queried directly — `person_connection`, `receiver_person_id`, all 5 functions and all 3 publication rows confirmed ABSENT, so nothing to overwrite; (b) the 3 shared-table policies (`inbox_select`, `inbox_update`, `person_select`) diffed predicate-by-predicate against their LIVE text — all are strict supersets, no live predicate dropped; (c) `list_discoverable_companies` verified byte-identical to live (migration E already carried the gate) — a true no-op, and `CREATE OR REPLACE` was proven locally NOT to reset grants, so E's `anon` revoke survived (re-verified on prod after apply); (d) confirmed none of the 13 reference anything the later migrations dropped.
+- **Verified after apply:** table/column/index/constraints/type-row all present, `list_my_person_connections` carries `thread_id`, 3 realtime publication rows, `chat_message_type` has the `intro` row `accept_person_connection` needs at runtime, and the security linter shows no anon-executable person-graph RPC (post row 14).
+- Local gate before the push: fresh `supabase db reset` green, tsc clean, 375 unit, **31/31 SQL suites**, Discover e2e 4/4.
+- **⚠️ Touches Ayush's base lane** (`pending_inbox_item` schema + inbox RLS, `chat_thread` index). Rebuilt inbox RLS from the LIVE body per the create-or-replace lesson; sync-locked while editing. The `receiver_company_id`-nullable + polymorphic-target call is flagged for his review in `docs/team/sync/muskan.md`.
+- **Migration before code** — the Discover person-connect actions/reads (PG-8+) call `accept_person_connection` + read `person_connection`; shipping the app without these 5 breaks person connect on cloud. Push the whole set together, in timestamp order.
+- **Realtime (row 13)** — live change-capture for the connection lifecycle; verified live in-browser (instant send + accept across two sessions). Publication membership only, no schema/RLS change. Two of the three tables it publishes (`pending_inbox_item`, `relationship`) are Ayush's — flagged for him in the sync file. On cloud, Realtime picks up the new publication tables automatically at apply time.
+
 ### 2026-07-07 (Muskan) — Allocate/Sell schema (DEV-76) — ✅ APPLIED 2026-07-07 (see APPLIED TO CLOUD)
 
 | # | Migration | What it does |

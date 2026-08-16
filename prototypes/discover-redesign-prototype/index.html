@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<!-- PROTOTYPE — throwaway. DEV-78 Discover redesign (round 3 — real app theme). variant=A|B. Not production; not React. -->
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Discover redesign — prototype v3 (DEV-78)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  // EXACT Hello Sello design tokens (src/app/globals.css, locked 2026-06-07)
+  tailwind.config = { theme: { extend: {
+    colors: {
+      brand:'#e30b5d', 'brand-soft':'#ffb7d5', 'brand-deep':'#76002d',
+      ink:'#1f2020', 'ink-muted':'#6b6470',
+      success:'#34b233', info:'#6c7bd9', danger:'#dc2626',
+    },
+    fontFamily: { sans:['Inter','-apple-system','BlinkMacSystemFont','Segoe UI','sans-serif'] },
+  } } };
+</script>
+<style>
+  /* ===== mirrors src/app/globals.css exactly ===== */
+  :root {
+    --bg-from:#ffffff; --bg-to:#fff1f7;
+    --glass-bg:rgba(255,255,255,0.62); --glass-bg-strong:rgba(255,255,255,0.78);
+    --glass-border:rgba(255,255,255,0.65); --glass-shadow:0 10px 34px -12px rgba(118,0,45,0.18);
+  }
+  html,body { height:100%; }
+  body {
+    color:#1f2020; font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    -webkit-font-smoothing:antialiased;
+    background:
+      radial-gradient(60rem 60rem at 10% -12%, rgba(255,183,213,0.55), transparent 60%),
+      radial-gradient(46rem 46rem at 108% 6%, rgba(227,11,93,0.10), transparent 55%),
+      linear-gradient(160deg, var(--bg-from) 0%, var(--bg-to) 100%);
+    background-attachment:fixed;
+  }
+  .glass { background:var(--glass-bg); backdrop-filter:blur(20px) saturate(140%); -webkit-backdrop-filter:blur(20px) saturate(140%);
+    border:1px solid var(--glass-border); box-shadow:var(--glass-shadow); }
+  .glass-strong { background:var(--glass-bg-strong); backdrop-filter:blur(24px) saturate(160%); -webkit-backdrop-filter:blur(24px) saturate(160%);
+    border:1px solid var(--glass-border); box-shadow:var(--glass-shadow); }
+  .pop { transition:transform .14s cubic-bezier(.2,.8,.3,1), background .14s ease, color .14s ease, box-shadow .14s ease; }
+  .pop:active { transform:scale(.96); }
+  @keyframes popin { 0%{transform:scale(.6);opacity:0} 100%{transform:scale(1);opacity:1} }
+  .animpop { animation:popin .18s cubic-bezier(.2,1.4,.4,1); }
+  ::-webkit-scrollbar { width:8px; height:8px; } ::-webkit-scrollbar-thumb { background:rgba(118,0,45,.16); border-radius:99px; }
+</style>
+</head>
+<body>
+<div id="app" class="min-h-screen"></div>
+<div id="switcher"></div>
+
+<script>
+/* ============================ ICONS (lucide-ish) ============================ */
+function ic(name, s=18){
+  const a=`xmlns="http://www.w3.org/2000/svg" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"`;
+  const P={
+    search:'<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
+    lock:'<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+    check:'<path d="M20 6 9 17l-5-5"/>', chevron:'<path d="m6 9 6 6 6-6"/>',
+    pin:'<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>',
+    x:'<path d="M18 6 6 18M6 6l12 12"/>', arrow:'<path d="M5 12h14M13 5l7 7-7 7"/>',
+    sparkle:'<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18"/>',
+  };
+  return `<svg ${a}>${P[name]||''}</svg>`;
+}
+
+/* ============================ SEED DATA ============================ */
+const SELLER_TYPES = ["Cultivator","Wholesaler","Importer"];   // no Pharmacy filter (Instagram model)
+// Full country list (searchable dropdown shows them all; in prod drive from canonical ISO-3166).
+const CODE = {
+  Germany:"DE", Austria:"AT", Switzerland:"CH", Netherlands:"NL", Spain:"ES", Portugal:"PT",
+  France:"FR", Italy:"IT", Belgium:"BE", Denmark:"DK", Poland:"PL", Czechia:"CZ", Sweden:"SE",
+  "United Kingdom":"GB", Ireland:"IE", Norway:"NO", Finland:"FI", Greece:"GR", Luxembourg:"LU",
+  Croatia:"HR", Slovenia:"SI", Slovakia:"SK", Hungary:"HU", Romania:"RO", Bulgaria:"BG",
+  Estonia:"EE", Latvia:"LV", Lithuania:"LT", Malta:"MT", Cyprus:"CY", Iceland:"IS", Liechtenstein:"LI",
+  Canada:"CA", "United States":"US", Australia:"AU", "New Zealand":"NZ", Israel:"IL",
+  "South Africa":"ZA", Colombia:"CO", Uruguay:"UY", Thailand:"TH", Serbia:"RS", "North Macedonia":"MK",
+  Albania:"AL", Turkey:"TR", Morocco:"MA", Lesotho:"LS", Jamaica:"JM",
+};
+const COUNTRIES = Object.keys(CODE).sort();
+const COMPANIES = [
+  { id:"1", name:"Aurora Deutschland GmbH", city:"Berlin",    country:"Germany",     tags:["Cultivator","Wholesaler"], state:"connected" },
+  { id:"3", name:"San Rafael Cultivos",     city:"Barcelona", country:"Spain",       tags:["Cultivator"],              state:"requested" },
+  { id:"4", name:"Superseed Imports",       city:"Amsterdam", country:"Netherlands", tags:["Importer","Wholesaler"],   state:"incoming" },
+  { id:"5", name:"Alpenkraut AG",           city:"Zurich",    country:"Switzerland", tags:["Cultivator","Importer"],   state:"none" },
+  { id:"7", name:"ViennaGrow",              city:"Vienna",    country:"Austria",     tags:["Cultivator"],              state:"connected" },
+  { id:"8", name:"PortoCanna Lda",          city:"Porto",     country:"Portugal",    tags:["Cultivator","Wholesaler"], state:"none" },
+  { id:"9", name:"RheinPharma",             city:"Cologne",   country:"Germany",     tags:["Wholesaler"],              state:"requested" },
+  { id:"11",name:"Hanseatic Cultivars",     city:"Hamburg",   country:"Germany",     tags:["Cultivator","Importer"],   state:"none" },
+  { id:"12",name:"Iberia Green Supply",     city:"Madrid",    country:"Spain",       tags:["Wholesaler","Importer"],   state:"none" },
+  { id:"2", name:"GreenLeaf Pharma",        city:"Munich",    country:"Germany",     tags:["Pharmacy"],                state:"none" },  // hidden
+  { id:"6", name:"Nordmedis Apotheke",      city:"Hamburg",   country:"Germany",     tags:["Pharmacy"],                state:"none" },  // hidden
+];
+const TINTS = ["#34b233","#6c7bd9","#e30b5d","#f59e0b","#0ea5e9","#8b5cf6","#ef4444","#14b8a6","#ec4899","#22c55e"];
+const tintFor = (n)=>{ let h=0; for(let i=0;i<n.length;i++) h=(h*31+n.charCodeAt(i))>>>0; return TINTS[h%TINTS.length]; };
+const initials = (n)=> n.split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0]).join("").toUpperCase();
+const isListed = (c)=> c.tags.some(t=>SELLER_TYPES.includes(t));
+
+/* ============================ STATE ============================ */
+const params=new URLSearchParams(location.search);
+const state={ variant:(params.get("variant")||"A").toUpperCase(), q:"", types:new Set(), countries:new Set(), requested:new Set(), ctyOpen:false, ctyQ:"" };
+function visible(){
+  const q=state.q.trim().toLowerCase();
+  return COMPANIES.filter(c=>{
+    const nameOk=q===""||c.name.toLowerCase().includes(q);
+    if(!nameOk) return false;
+    if(!isListed(c)) return q!=="";                       // hidden pharmacies → name search only
+    const typeOk=state.types.size===0||c.tags.some(t=>state.types.has(t));
+    const countryOk=state.countries.size===0||state.countries.has(c.country);
+    return typeOk&&countryOk;
+  });
+}
+const countOfType=(t)=>COMPANIES.filter(c=>isListed(c)&&c.tags.includes(t)).length;
+
+/* ============================ SHARED PIECES (real-app classes) ============================ */
+function logo(c,size){
+  return `<span class="flex shrink-0 items-center justify-center rounded-2xl font-bold text-white shadow-sm ring-1 ring-black/5"
+    style="width:${size}px;height:${size}px;font-size:${size*0.34}px;background:linear-gradient(140deg,rgba(255,255,255,.28),transparent 55%),${tintFor(c.name)}">${initials(c.name)}</span>`;
+}
+const tagChip=(t)=>`<span class="rounded-full bg-white/70 px-2.5 py-0.5 text-xs font-medium text-ink-muted ring-1 ring-black/5">${t}</span>`;
+const codeChip=(cc)=>`<span class="inline-flex h-5 min-w-[26px] items-center justify-center rounded-md bg-brand-soft/40 px-1 text-[10px] font-bold tracking-wide text-brand-deep">${cc}</span>`;
+
+const effState=(c)=> c.state==="none"&&state.requested.has(c.id) ? "requested" : c.state;
+function requestBtn(c){
+  const s=effState(c);
+  if(s==="connected") return `<span class="inline-flex items-center gap-1.5 rounded-full bg-success/15 px-4 py-2 text-sm font-bold text-success">${ic('check',15)} Connected</span>`;
+  if(s==="incoming")  return `<a href="#" class="inline-flex items-center gap-1.5 rounded-full bg-brand-soft/60 px-4 py-2 text-sm font-semibold text-brand-deep hover:bg-brand-soft">Wants to connect ${ic('arrow',14)}</a>`;
+  if(s==="requested") return `<span class="inline-flex items-center gap-1.5 rounded-full bg-success/15 px-4 py-2 text-sm font-semibold text-success">${ic('check',15)} Requested</span>`;
+  // premium "Connect" button — subtle top highlight + soft brand shadow + ring, no toy lock icon
+  return `<button data-req="${c.id}" class="pop inline-flex items-center gap-1.5 rounded-full bg-brand px-5 py-2 text-sm font-semibold text-white shadow-sm shadow-brand/30 ring-1 ring-brand-deep/20 hover:bg-brand-deep"
+    style="background-image:linear-gradient(180deg,rgba(255,255,255,.18),transparent 60%)">Connect ${ic('arrow',15)}</button>`;
+}
+const TITLE="Find a company to connect with";
+const SUB="Search the directory, then request entry. Shops stay private until you’re let in.";
+
+function typePill(t,big){
+  const on=state.types.has(t);
+  const size=big?"px-4 py-2 text-sm":"px-3.5 py-1.5 text-[13px]";
+  const cls=on?"bg-brand text-white hover:bg-brand-deep":"bg-white/70 text-ink-muted ring-1 ring-black/5 hover:bg-white/90";
+  const cnt=`<span class="ml-1 rounded-full ${on?'bg-white/25 text-white':'bg-black/5 text-ink-muted'} px-1.5 py-px text-[10px] font-bold">${countOfType(t)}</span>`;
+  return `<button data-type="${t}" class="pop inline-flex items-center rounded-full ${size} ${cls} font-semibold">${t}${cnt}${on?`<span class="ml-1.5">${ic('check',13)}</span>`:''}</button>`;
+}
+
+// searchable multi-select country dropdown
+function countryDropdown(){
+  const n=state.countries.size;
+  const label=n===0?"All countries":`${n} ${n===1?'country':'countries'}`;
+  const q=state.ctyQ.toLowerCase();
+  const opts=COUNTRIES.filter(c=>c.toLowerCase().includes(q)).map(c=>{
+    const on=state.countries.has(c);
+    return `<button data-cty="${c}" class="flex w-full items-center gap-2.5 rounded-xl px-2 py-2 text-left text-sm hover:bg-brand-soft/25">
+      <span class="flex h-4 w-4 items-center justify-center rounded border ${on?'border-brand bg-brand text-white':'border-black/15 bg-white text-transparent'}">${ic('check',12)}</span>
+      ${codeChip(CODE[c])}<span class="font-medium text-ink">${c}</span></button>`;
+  }).join("") || `<p class="px-2 py-3 text-sm text-ink-muted">No match.</p>`;
+  const toggleCls=n?"bg-brand text-white hover:bg-brand-deep":"bg-white/70 text-ink-muted ring-1 ring-black/5 hover:bg-white/90";
+  return `
+  <div class="relative" data-cty-wrap>
+    <button data-cty-toggle class="pop inline-flex w-full items-center justify-between gap-2 rounded-full ${toggleCls} px-4 py-2 text-sm font-semibold">
+      <span class="inline-flex items-center gap-1.5">${ic('pin',15)} ${label}</span> ${ic('chevron',16)}</button>
+    ${state.ctyOpen?`
+    <div class="glass-strong animpop absolute right-0 z-30 mt-2 w-64 rounded-2xl p-2">
+      <div class="mb-1 flex items-center gap-2 rounded-xl bg-white/70 px-2.5 py-1.5 text-ink-muted ring-1 ring-black/5">${ic('search',15)}
+        <input id="ctySearch" value="${state.ctyQ}" placeholder="Search country…" class="w-full bg-transparent text-sm text-ink focus:outline-none"/></div>
+      <div class="max-h-60 overflow-auto">${opts}</div>
+      ${n?`<button data-cty-clear class="mt-1 w-full rounded-xl px-2 py-1.5 text-left text-xs font-semibold text-brand hover:bg-brand-soft/30">Clear ${n} selected</button>`:''}
+    </div>`:''}
+  </div>`;
+}
+
+function activeBar(){
+  const chips=[];
+  state.types.forEach(t=>chips.push(`<button data-type="${t}" class="pop inline-flex items-center gap-1 rounded-full bg-brand px-3 py-1 text-xs font-semibold text-white hover:bg-brand-deep">${t} ${ic('x',12)}</button>`));
+  state.countries.forEach(c=>chips.push(`<button data-cty="${c}" class="pop inline-flex items-center gap-1 rounded-full bg-brand px-3 py-1 text-xs font-semibold text-white hover:bg-brand-deep">${codeChip(CODE[c])} ${c} ${ic('x',12)}</button>`));
+  if(!chips.length) return "";
+  return `<div class="mt-4 flex flex-wrap items-center gap-2">
+    <span class="text-xs font-semibold uppercase tracking-wide text-ink-muted">Active</span>${chips.join("")}
+    <button data-clear-all class="ml-1 text-xs font-semibold text-ink-muted underline-offset-2 hover:text-ink hover:underline">Clear all</button></div>`;
+}
+
+function row(c,big){
+  const hidden=!isListed(c); const pad=big?"p-3.5":"px-4 py-3";
+  return `<div class="glass ${big?'rounded-3xl':'rounded-2xl'} grid grid-cols-[auto_1fr_auto] items-center gap-4 ${pad} transition hover:bg-white/80 sm:grid-cols-[auto_minmax(0,2.2fr)_minmax(0,1.5fr)_minmax(0,1.9fr)_auto]">
+    ${logo(c,big?54:48)}
+    <div class="min-w-0">
+      <div class="flex items-center gap-2"><span class="truncate font-bold text-ink">${c.name}</span>
+        ${hidden?`<span class="shrink-0 rounded-full bg-brand-soft/40 px-2 py-0.5 text-[10px] font-bold text-brand-deep ring-1 ring-brand-soft">Found by search · not listed</span>`:''}</div>
+      <div class="mt-0.5 flex items-center gap-1.5 text-sm text-ink-muted sm:hidden">${ic('pin',13)} ${c.city}, ${c.country} · ${c.tags.join(", ")}</div>
+    </div>
+    <div class="hidden items-center gap-1.5 text-sm text-ink-muted sm:flex">${ic('pin',14)} ${c.city}, ${c.country}</div>
+    <div class="hidden flex-wrap gap-1.5 sm:flex">${c.tags.map(tagChip).join("")}</div>
+    ${requestBtn(c)}</div>`;
+}
+const matchLine=(list)=>`<span class="font-bold text-ink">${list.length}</span> <span class="text-ink-muted">${list.length===1?'company':'companies'}</span>`;
+
+/* ============================ VARIANT A — Editorial (in real theme) ============================ */
+function variantA(){
+  const list=visible();
+  return `
+  <div class="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
+    <div class="text-center">
+      <span class="inline-flex items-center gap-1.5 rounded-full bg-brand-soft/50 px-3 py-1 text-xs font-semibold text-brand-deep">${ic('lock',13)} Closed network</span>
+      <h1 class="mt-4 text-[30px] font-bold leading-tight tracking-tight text-ink sm:text-4xl">${TITLE}</h1>
+      <p class="mx-auto mt-2 max-w-md text-[15px] text-ink-muted">${SUB}</p>
+      <div class="glass mx-auto mt-5 flex max-w-xl items-center gap-2.5 rounded-full px-4 py-1.5">
+        <span class="text-ink-muted">${ic('search',18)}</span>
+        <input id="search" value="${state.q}" placeholder="Search companies by name…" class="w-full bg-transparent py-2.5 text-[15px] focus:outline-none"/></div>
+    </div>
+    <div class="mt-7 flex flex-col items-stretch gap-3 border-t border-white/60 pt-5 sm:flex-row sm:items-center sm:justify-between">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="mr-1 text-xs font-semibold uppercase tracking-wide text-ink-muted">Company type</span>
+        ${SELLER_TYPES.map(t=>typePill(t,false)).join("")}
+      </div>
+      <div class="sm:w-56">${countryDropdown()}</div>
+    </div>
+    ${activeBar()}
+    <div class="mt-6 mb-3 px-0.5 text-sm">${matchLine(list)}</div>
+    <div class="flex flex-col gap-2.5">${list.map(c=>row(c,false)).join("") || empty()}</div>
+  </div>`;
+}
+
+/* ============================ VARIANT B — Gamified (in real theme) ============================ */
+function variantB(){
+  const list=visible(); const af=state.types.size+state.countries.size;
+  return `
+  <div class="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6">
+    <div class="text-center">
+      <span class="inline-flex items-center gap-1.5 rounded-full bg-brand-soft/50 px-3 py-1 text-xs font-bold uppercase tracking-wide text-brand-deep">${ic('sparkle',13)} Closed network</span>
+      <h1 class="mt-4 text-4xl font-bold leading-[1.05] tracking-tight text-ink sm:text-5xl">${TITLE}</h1>
+      <p class="mx-auto mt-3 max-w-lg text-[15px] text-ink-muted">${SUB}</p>
+      <div class="glass mx-auto mt-6 flex max-w-2xl items-center gap-3 rounded-full px-5 py-2">
+        <span class="text-brand">${ic('search',20)}</span>
+        <input id="search" value="${state.q}" placeholder="Search the directory…" class="w-full bg-transparent py-2.5 text-lg focus:outline-none"/></div>
+    </div>
+    <div class="mt-8 flex flex-col items-center gap-4">
+      <div class="flex flex-wrap items-center justify-center gap-2.5">
+        ${SELLER_TYPES.map(t=>typePill(t,true)).join("")}
+        <div class="w-48">${countryDropdown()}</div>
+      </div>
+      ${af?`<div class="flex items-center gap-2 text-xs font-medium text-ink-muted">
+        <span class="flex items-center gap-1 text-brand">${ic('sparkle',13)} ${af} filter${af>1?'s':''} on</span>
+        <span class="h-1 w-1 rounded-full bg-ink-muted/40"></span><span>narrowing your view</span></div>`:''}
+    </div>
+    <div class="mx-auto mt-2 max-w-3xl">${activeBar()}</div>
+    <div class="mx-auto mt-7 mb-4 flex max-w-3xl items-center justify-between px-1 text-sm">${matchLine(list)} <span class="text-ink-muted">match</span></div>
+    <div class="mx-auto flex max-w-3xl flex-col gap-3">${list.map(c=>row(c,true)).join("") || empty()}</div>
+  </div>`;
+}
+
+function empty(){
+  const searching=state.q.trim()!=="";
+  return `<div class="glass rounded-2xl py-12 text-center">
+    <p class="text-sm font-semibold text-ink">No companies match.</p>
+    <p class="mt-1 text-sm text-ink-muted">${searching?'Pharmacies & buyers are found by exact name search.':'Try fewer filters, or search a name — pharmacies are search-only.'}</p></div>`;
+}
+
+/* ============================ SWITCHER + RENDER ============================ */
+const VARIANTS={ A:{fn:variantA,name:"Editorial (restrained)"}, B:{fn:variantB,name:"Gamified (motion)"} };
+function renderSwitcher(){
+  const keys=Object.keys(VARIANTS), cur=state.variant, idx=keys.indexOf(cur);
+  document.getElementById("switcher").innerHTML=`
+    <div class="glass-strong fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 items-center gap-1 rounded-full px-2 py-1.5 text-ink shadow-2xl">
+      <button id="prev" class="rounded-full px-3 py-1.5 text-lg hover:bg-brand-soft/30">‹</button>
+      <span class="min-w-[210px] text-center text-sm font-semibold">${cur} — ${VARIANTS[cur].name}</span>
+      <button id="next" class="rounded-full px-3 py-1.5 text-lg hover:bg-brand-soft/30">›</button>
+      <span class="ml-1 hidden rounded-full bg-brand-soft/40 px-2 py-1 text-[11px] text-brand-deep lg:inline">resize → mobile · try “GreenLeaf”</span></div>`;
+  const go=(d)=>{ state.variant=keys[(idx+d+keys.length)%keys.length]; state.ctyOpen=false;
+    const u=new URL(location); u.searchParams.set("variant",state.variant); history.replaceState({},"",u); render(); };
+  document.getElementById("prev").onclick=()=>go(-1); document.getElementById("next").onclick=()=>go(1);
+}
+function render(){
+  document.getElementById("app").innerHTML=(VARIANTS[state.variant]||VARIANTS.A).fn();
+  document.querySelectorAll("[data-type]").forEach(b=>b.onclick=()=>{ const t=b.dataset.type; state.types.has(t)?state.types.delete(t):state.types.add(t); render(); });
+  const tgl=document.querySelector("[data-cty-toggle]"); if(tgl) tgl.onclick=(e)=>{ e.stopPropagation(); state.ctyOpen=!state.ctyOpen; state.ctyQ=""; render(); };
+  document.querySelectorAll("[data-cty]").forEach(b=>b.onclick=()=>{ const c=b.dataset.cty; state.countries.has(c)?state.countries.delete(c):state.countries.add(c); render(); });
+  const cc=document.querySelector("[data-cty-clear]"); if(cc) cc.onclick=()=>{ state.countries.clear(); render(); };
+  const cs=document.getElementById("ctySearch"); if(cs){ cs.oninput=(e)=>{ state.ctyQ=e.target.value; const p=e.target.selectionStart; render(); const n=document.getElementById("ctySearch"); if(n){n.focus(); n.setSelectionRange(p,p);} }; setTimeout(()=>cs.focus(),0); }
+  const ca=document.querySelector("[data-clear-all]"); if(ca) ca.onclick=()=>{ state.types.clear(); state.countries.clear(); render(); };
+  document.querySelectorAll("[data-req]").forEach(b=>b.onclick=()=>{ state.requested.add(b.dataset.req); render(); });
+  const s=document.getElementById("search"); if(s){ s.oninput=(e)=>{ state.q=e.target.value; const p=e.target.selectionStart; render(); const n=document.getElementById("search"); if(n){n.focus(); n.setSelectionRange(p,p);} }; }
+  renderSwitcher();
+}
+document.addEventListener("click",(e)=>{ if(state.ctyOpen && !e.target.closest("[data-cty-wrap]")){ state.ctyOpen=false; render(); } });
+document.addEventListener("keydown",(e)=>{ const t=(document.activeElement?.tagName||"").toLowerCase(); if(t==="input"||t==="textarea") return;
+  if(e.key==="ArrowLeft") document.getElementById("prev")?.click(); if(e.key==="ArrowRight") document.getElementById("next")?.click(); });
+render();
+</script>
+</body>
+</html>

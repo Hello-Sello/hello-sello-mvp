@@ -1,198 +1,272 @@
-# Discover — LinkedIn-style directory (Lane B)
-**Status:** 📋 Planned (scope-lock pending) · **Size:** L (15 tickets) · **Owner:** Muskan
+# Discover — LinkedIn-style directory + person-to-person connections (Lane B)
+**Status:** ✅ **BUILT 2026-07-24** (all PG-1..13 + DISC-1..15) — verified on a fresh `db reset`: 10/10 person-graph/discover pgTAP suites + 225 unit + tsc + eslint clean. **12 migrations, LOCAL only (cloud-pending, ledger).** · **Size:** XL · **Owner:** Muskan (foundation built in-lane, not handed to Ayush).
+> **⚠️ Owed before final ship (2 items):** (1) a **live-browser pass** on the interactive sections (DISC-5/6/9/12/14 — the node vitest env has no jsdom, so they're gated by tsc + eslint + `renderToStaticMarkup` smoke tests only; drive `/discover` as Alice/Bob against the fresh seed). (2) the **cloud push** of the 12 migrations (with Ayush's review of the 4 that touch his base tables — `pending_inbox_item` schema+RLS, `chat_thread` index, `person_select`). Everything else is done + verified.
 
 ## Goal
-Turn Discover into an open, LinkedIn-style directory where **everyone is visible by their tag except pharmacies** (hidden from the page, still searchable). One scrolling page, top-to-bottom:
+Turn Discover into an open, LinkedIn-style directory where **everyone is visible by their tag except pharmacies** (hidden from the page, still searchable), AND where **any user can connect to any other user person-to-person — without their companies being connected.** One scrolling page, top-to-bottom:
 
 **Ads banner → Connection Requests → My Network → New People → Companies.**
 
 - **Companies** — the existing directory (rows), fixed to show the migrated tags correctly.
 - **New People** — people across Hello Sello as square cards, to connect + network (net-new).
-- **My Network** — your existing connections as rows.
-- **Connection Requests** — incoming requests, moved here from Connect (in-page section).
+- **My Network** — your connections, **both** connected companies **and** connected people.
+- **Connection Requests** — incoming requests, **both** company requests **and** person requests, in one section as **two labelled groups** ("Company requests" / "People").
 - **Ads banner** — empty horizontal-scroll placeholder for future ads.
 
-## Architecture — one page, server-fetched (Wave 1)
+## The model change — "pure social" person graph (locked 2026-07-24, w/ Ayush)
+Hello Sello has always had **one** relationship graph: **company ↔ company** (commercial — deals, pricing, shops). We are adding a **second, independent graph: person ↔ person** (social — connect + DM), modelled on LinkedIn.
+
+**What changes:** a new person-connection edge + the visibility/request/accept/network flows become person-aware.
+**What stays exactly as-is (pure social):** deals, pricing, shops, and the whole commercial layer remain **company-scoped and untouched.** A person connection gets you *visibility + a DM* — nothing commercial. "Ladder a person connection up into a company relationship for trading" is an explicit **follow-up**, not this sprint.
+
+### The pleasant surprise — the hard part is already built
+The group-chat feature already solved "a chat with no company behind it." We **extend that proven pattern**, we don't invent one:
+- `chat_thread.relationship_id` is **already nullable** ([20260707120000:34](../../supabase/migrations/20260707120000_chat_thread_member.sql)).
+- `chat_thread_member` is a **person-level** membership table ([20260707120000:48-65](../../supabase/migrations/20260707120000_chat_thread_member.sql)); `is_group_member()` is a person-scoped RLS helper with **zero** company dependency ([:77-85](../../supabase/migrations/20260707120000_chat_thread_member.sql)).
+- p2p thread RLS **already** keys on the two people, not the company — `thread_all` p2p branch + `can_access_thread` p2p branch check `auth.uid() IN (person_a_id, person_b_id)` with **no** relationship check ([20260707120100:28-43,52-68](../../supabase/migrations/20260707120100_group_thread_rls.sql)). **So two people can already read/write a DM without connected companies.**
+- `create_group_thread` already inserts a company-less, `relationship_id`-NULL thread ([20260707120200:93-94](../../supabase/migrations/20260707120200_create_group_thread_rpc.sql)) — a live precedent for the NULL-relationship insert. ⚠️ That RPC makes a `type='group'` thread using the `chat_thread_member` + `is_group_member` model; PG-7 instead makes a **`type='p2p'`** thread using the `person_a/b` slots + the existing p2p person-slot RLS (Claim 2). So copy only the "insert `relationship_id = NULL`" idea, not the group membership machinery.
+
+## Architecture — one page, server-fetched (Wave pattern preserved)
 ```
 page.tsx (SERVER) fetches ALL data:
-  companies · people · incoming requests · my network
+  companies · people · incoming requests (company + person) · my network (companies + people)
         │  passes as props ▼
   DiscoverShell (client)
     ├─ AdsBanner            (static, no data)
-    ├─ RequestsSection      (props; Accept/Decline via server actions)
-    ├─ MyNetworkSection     (props)
-    ├─ NewPeopleSection     (props; "+" connect)
-    └─ CompaniesSection     (props; existing search/filter/rows)
+    ├─ RequestsSection      (props; two groups — company via acceptItem, person via accept_person_connection)
+    ├─ MyNetworkSection     (props; companies + people)
+    ├─ NewPeopleSection     (props; "+" person-connect)
+    └─ CompaniesSection     (props; existing search/filter/rows; company "Connect" unchanged)
 ```
-**Everything loads with the page (one paint, no loading-flash).** Sections are client components only for their *buttons* (accept, connect, filter) — their data is server-fetched and handed down. This avoids the browser-only reader problem (`getInbox`/`getMyConnections` were written for the browser client — we add server-callable reads instead of self-fetching).
+**Everything loads with the page (one paint, no loading-flash).** Sections are client components only for their *buttons*; their data is server-fetched and handed down (avoids the browser-only-reader / loading-flash problem).
 
 ## Invariants — never break these (anti-deviation guardrails)
-1. **Visibility gate = client-side, pharmacy-only.** The gate hides ONLY companies/people whose *only* tag is Pharmacy, from the default view; they remain name-searchable. Every other tag is visible. Never widen the gate to hide other tags. The tags are **already in the DB** (migration `20260704090000`) — this lane changes **frontend code only** for tags.
-2. **Server-fetch all data in `page.tsx`.** Sections receive data as props. Do NOT self-fetch inside sections (that reintroduces the browser-only / loading-flash problem).
-3. **Directory RPCs: SECURITY DEFINER + full gate + safe fields only.** Every discover RPC must include `public.is_caller_verified()`, `verification_status='verified'`, `deleted_at is null`, exclude own company, and return ONLY directory-safe fields (**no email, no phone**). When editing an existing RPC, base the replacement on the **LIVE (latest-timestamp) body** and diff every predicate/grant — see the create-or-replace lesson (a dropped guard is how the caller-verified gate was lost).
-4. **Reuse existing reads/actions.** Connection accept/decline = existing `acceptItem`/`declineItem`. Company connect = existing `sendConnectRequest`. Don't reinvent them.
-5. **Behavior-preserving extraction.** Pulling `CompaniesSection` out of `DiscoverDirectory` must not change the current directory behavior (beyond the T-3 tag fix).
+1. **Pure social. Deals/pricing/shops stay company-scoped.** A person connection grants **visibility + DM only**. Never let a person connection read a company's shop/pricing or open a deal — that's the company graph, untouched. Any such "ladder" is a separate follow-up.
+2. **Person accept never mints a company `relationship`.** `planRollout` **always** creates a `c2c` thread + "companies are now connected" line ([rollout.ts:62-84](../../src/modules/messaging/lib/rollout.ts)) — so the person path **must not** go through it. PG-7 is its own RPC: person edge + a company-less p2p thread + a person-framed intro. No c2c thread, no company line.
+3. **Rebuild RLS from the LIVE body + diff every predicate.** PG-3 (`person_select`) and PG-5 (inbox RLS) `create or replace`/alter existing policies. Base on the **latest-timestamp** definition, add ONLY the new branch, diff old→new to confirm nothing else moved. This is exactly how the Discover verified-caller gate was silently lost — see [[feedback-sql-replace-diff-against-live]].
+4. **Directory RPCs: SECURITY DEFINER + full gate + safe fields only.** Every discover RPC includes `public.is_caller_verified()`, `verification_status='verified'`, `deleted_at is null`, excludes own company, returns ONLY directory-safe fields (**no email, no phone**).
+5. **Visibility gate = client-side, pharmacy-only.** Hides ONLY companies/people whose *only* tag is Pharmacy from the default view; they stay name-searchable. Never widen it. Tags are already in the DB (migration `20260704090000`) — this lane changes **frontend code only** for tags. ⚠️ **Coupling:** "hidden-but-searchable" only works while the whole directory is loaded client-side. The server-side-search/pagination follow-up **cannot ship without moving this gate server-side in the same change** — otherwise pharmacies leak into paginated results. They are one change, not two.
+6. **New request type touches display, not the company accept switch.** Add `connect_person` to the **display** type list (`InboxRequestType`, [connect/types.ts:21-25](../../src/modules/connect/types.ts)) so it renders/filters. Do **not** add it to `AcceptRequestType` ([messaging/types.ts:271-275](../../src/modules/messaging/types.ts)) — the person accept has its own RPC and never enters the company rollout `switch`. Clean boundary.
+7. **Reuse existing company machinery.** Company connect = existing `sendConnectRequest`; company accept/decline = existing `acceptItem`/`declineItem`. Don't reinvent them.
+8. **Behavior-preserving extraction.** Pulling `CompaniesSection` out of `DiscoverDirectory` must not change current behavior (beyond the DISC-3 tag fix).
 
 ## Scope — in / out
-**In:** the ads-banner placeholder + the 4 sections + the tag fix + the people-directory RPC + the security-gate restore + a connect-to-a-person function (research-gated) + a demo seed.
-**Out (deferred):** real ad content/serving; server-side pagination/search (small directory for now); making pharmacy-hidden a *server* boundary (stays client-side, documented); sector (`business_category`) filtering — the RPC doesn't expose it, add later if wanted.
+**In:** ads-banner placeholder · the 4 sections · the tag fix · the people-directory RPC · the security-gate restore · **the full person-graph foundation (edge + visibility + person request/accept + person network) · person-to-person DM** · demo seed. Requests + My Network surface **both** company and person.
+**Out (deferred):** real ad content/serving; server-side pagination/search (small directory for now); making pharmacy-hidden a *server* boundary (stays client-side, documented); sector (`business_category`) filtering; **laddering a person connection into a company relationship / any commercial capability** (pure social this sprint).
 
-## Research notes — verified against LIVE code (3 sub-agent traces + direct reads; **re-verified first-hand 2026-07-20 post-Lane-A** — see the ⟳ notes)
+---
 
-### Companies / visibility
-- **Live RPC = [list_discoverable_companies (20260618120100)](../../supabase/migrations/20260618120100_list_discoverable_companies_city.sql).** Returns `id, name, country, city, logo_path, type_codes[], connection_state`. WHERE = `deleted_at is null AND verification_status='verified' AND id is distinct from current_company_id()`, `limit 200`. **Returns ALL verified companies incl. pharmacies** — no server-side type filter. So "everyone except pharmacy" is purely client-side. `business_category` is NOT exposed (would need a join to add).
-- **⚠️ Security regression:** the live body **dropped** the SEC-01 `is_caller_verified()` caller gate — SEC-01 ([20260617090000](../../supabase/migrations/20260617090000_sec01_caller_verified_discover_gate.sql)) added it, then `20260617150000` + `20260618120100` did create-or-replace from a pre-SEC-01 body and lost it. Live since 2026-06-17. → **DISC-2** restores it.
-- **The stale frontend gate (the T-3 bug):**
-  - `SELLER_TYPES = ["Cultivator","Wholesaler","Importer"]` — [DiscoverDirectory.tsx:31](../../src/app/discover/DiscoverDirectory.tsx).
-  - `isListed = c => c.categories.some(t => SELLER_TYPES.includes(t))` — [:35-36](../../src/app/discover/DiscoverDirectory.tsx). After the taxonomy migration, suppliers are tagged `gacp_cultivator` / `eu_gmp_cultivator` / `tga_gmp_cultivator` / `manufacturer_pharma` — none match the 3 old labels → **wrongly hidden as if pharmacy-only.**
-  - Filter short-circuit `if (!isListed(c)) return query !== "";` — [:193](../../src/app/discover/DiscoverDirectory.tsx) (the pharmacy-searchable rule). "Found by search · not listed" badge at [:360,:375-379](../../src/app/discover/DiscoverDirectory.tsx).
-  - `CATEGORY_LABELS` (only 4 codes) — [companies.ts:30-35](../../src/app/discover/companies.ts); new codes fall through to a title-case fallback → render as `"Gacp_cultivator"`.
-- **The 8 activity codes** (migration [20260704090000](../../supabase/migrations/20260704090000_business_category_taxonomy.sql)): `pharmacy, wholesaler, importer, gacp_cultivator, eu_gmp_cultivator, tga_gmp_cultivator, manufacturer_pharma, other` (legacy `cultivator` remapped→`eu_gmp_cultivator` + deleted).
-- `ConnectButton` branches on `connection_state` (`none`/`requested`/`incoming`/`connected`) — [:101-152](../../src/app/discover/DiscoverDirectory.tsx); `none` fires `sendConnectRequest(company.id, "")` ([actions.ts](../../src/app/discover/actions.ts)).
+## Research notes — verified against LIVE code (3 sub-agent traces + first-hand reads, 2026-07-24)
 
-### People directory (greenfield)
-- **`person` card fields:** `id`, `display_name` (canonical since [20260620120000](../../supabase/migrations/20260620120000_canonical_display_name.sql); fallback `coalesce(display_name, first_name||' '||last_name)`), `title`, `avatar_path`, `public_handle`, `company_id` — profile cols from [20260615120000:24-31](../../supabase/migrations/20260615120000_profile_qr_foundation.sql).
-- **No cross-company people read exists.** `person_select` RLS ([20260609183000:55-62](../../supabase/migrations/20260609183000_rls_connect_counterparty_visibility.sql)) limits a naive query to self / own company / connected. `list_company_members` (own-company + `team.manage`-gated) and `get_public_profile` (single row by handle) are both wrong-shaped. → need a new SECURITY DEFINER RPC.
-- **Avatar** → public `avatars` bucket ([20260615120000:42-59](../../supabase/migrations/20260615120000_profile_qr_foundation.sql), `public=true`): `supabase.storage.from('avatars').getPublicUrl(avatar_path)` (pattern: [profile/index.ts:108](../../src/modules/profile/index.ts)). **Company logo** → different bucket `shop-media` ([companies.ts:69](../../src/app/discover/companies.ts)).
+### The person-graph gaps (what's missing vs. the group-chat precedent above)
+- **No place to store "Jane and I are connected."** `relationship` is company-only: `company_a_id`/`company_b_id` NOT NULL, `CHECK (company_a_id < company_b_id)`, unique on the company pair ([20260607090003:17-37](../../supabase/migrations/20260607090003_phase2_deal.sql)). No person party column exists. → **PG-1** new `person_connection` table.
+- **You can't even SEE a non-company-connected person.** `person_select` allows self / own company / HS team / `can_see_person` — LIVE body [20260609183000:33-62](../../supabase/migrations/20260609183000_rls_connect_counterparty_visibility.sql). `can_see_person` is company-link-scoped via `shares_connection_with_company`, plus one narrow person branch (the specific `sender_person_id` of an inbox request *addressed to my company*). There is **no free-standing person-to-person visibility** — a person you're personally connected to but whose company you don't trade with still reads as "Unknown". **This is the primary blocker.** → **PG-2/PG-3**.
+- **The request has no person target.** `pending_inbox_item` has `sender_person_id`, `sender_company_id`, `receiver_company_id` — **no `receiver_person_id`** ([20260607090002:191-212](../../supabase/migrations/20260607090002_phase1_core.sql)). Inbox RLS routes to the *company*: `inbox_select`/`inbox_update` key on `current_company_id()`, never `auth.uid()` ([20260607170000:231-237](../../supabase/migrations/20260607170000_rls_policies.sql)). → **PG-4/PG-5**.
+- **Accept forces a company relationship.** `acceptItem` ([inbox.ts:257](../../src/modules/connect/supabase/inbox.ts)) → `acceptInbox` ([store.ts:507](../../src/modules/messaging/supabase/store.ts)) mints a `relationship` row (L545-563) + `planRollout` (L565-596) which ALWAYS opens a c2c thread + company line. → **PG-7** new RPC.
+- **p2p dedup index is relationship-keyed.** `uq_chat_thread_p2p` on `(relationship_id, person_a_id, person_b_id)` ([20260607090003:141-143](../../supabase/migrations/20260607090003_phase2_deal.sql)) — with `relationship_id = NULL`, Postgres treats NULLs as distinct, so duplicate company-less DM threads slip through. → **PG-6** partial unique index.
+- **`getMyConnections` is company-first.** Iterates `relationship` rows; people appear only nested under a connected company ([connections.ts:74-171](../../src/modules/messaging/supabase/connections.ts), types [messaging/types.ts:184-240](../../src/modules/messaging/types.ts)). Can't express "people I'm personally connected to". → **PG-10** new read (company read `getMyConnections` stays for the companies group, DISC-13).
+- **`getConversations` shows "Unknown company" for a company-less p2p.** Counterparty company derived from `relationship_id` ([store.ts:153-239](../../src/modules/messaging/supabase/store.ts)); the group branch (L181-214) already shows the members-based fallback to copy. → **PG-12**.
 
-### Connection Requests + My Network
-- **`getInbox` returns EVERYTHING** — no status/type filter; RLS is sender-OR-receiver ([rls_policies:231-232](../../supabase/migrations/20260607170000_rls_policies.sql)), so it includes your own *outgoing* requests, all statuses, all types (`connect`/`connect_message`/`pricelist_request`/`deal_card`). → a NEW server read filters to **incoming + pending + connect-type**. `acceptItem`/`declineItem` UPDATEs are RLS-gated to the receiver ([:235-237](../../supabase/migrations/20260607170000_rls_policies.sql)) — outgoing rows are non-actionable anyway.
-- **⟳ Lane A update (re-verified 2026-07-20):** `getInbox` now already resolves the viewer's `company_id` and stamps **`viewerIsReceiver`** on every row ([inbox.ts:137-140,193](../../src/modules/connect/supabase/inbox.ts)), and joins `deal_card` → a `dealCard` preview. So the incoming filter is simply `viewerIsReceiver && status==='pending' && type in ('connect','connect_message')` — **the company lookup already exists (reuse the pattern), no new one needed.** `acceptItem` now branches on `type==='deal_card'` ([inbox.ts:279-314](../../src/modules/connect/supabase/inbox.ts)); the **connect path is unchanged** → safe to reuse. `InboxItemView` gained `dealCard` + `viewerIsReceiver`.
-- **`getMyConnections()`** ([messaging/connections.ts:74](../../src/modules/messaging/supabase/connections.ts), barrel-exported) → `MyConnectionsView { companies: ConnectedCompany[] }`. `ConnectedCompany` = `{ companyId, relationshipId, name, city, initials, contactsCount, connectedAt, openDealCount, people: ConnectedPerson[] }`; `ConnectedPerson` = `{ personId, name, initials, role }` ([messaging/types.ts:199-243](../../src/modules/messaging/types.ts)). Written for the **browser** client → needs a server-callable path for Wave-1.
-- **Page shell:** [layout.tsx](../../src/app/discover/layout.tsx) = the `requireVerified()` gate (keep). [page.tsx](../../src/app/discover/page.tsx) (server) fetches `getDiscoverableCompanies()` → renders `DiscoverDirectory`. `DiscoverDirectory` is **one big client monolith** ([:154](../../src/app/discover/DiscoverDirectory.tsx), wrapper `mx-auto ... overflow-auto` [:215](../../src/app/discover/DiscoverDirectory.tsx)) → extract a `CompaniesSection`.
+### Companies / visibility (carried from prior research — still valid)
+- **Live RPC = [list_discoverable_companies (20260618120100)](../../supabase/migrations/20260618120100_list_discoverable_companies_city.sql).** Returns `id, name, country, city, logo_path, type_codes[], connection_state`; `deleted_at is null AND verification_status='verified' AND id is distinct from current_company_id()`, `limit 200`. Returns ALL verified companies incl. pharmacies (no server-side type filter) → "everyone except pharmacy" is purely client-side. `business_category` not exposed.
+- **⚠️ Security regression:** the live body **dropped** the SEC-01 `is_caller_verified()` caller gate (added [20260617090000](../../supabase/migrations/20260617090000_sec01_caller_verified_discover_gate.sql), lost by later create-or-replace). Live since 2026-06-17. → **DISC-2** restores it.
+- **The stale frontend gate (the T-3 bug):** `SELLER_TYPES = ["Cultivator","Wholesaler","Importer"]` ([DiscoverDirectory.tsx:31](../../src/app/discover/DiscoverDirectory.tsx)); `isListed` ([:35-36](../../src/app/discover/DiscoverDirectory.tsx)) → after the taxonomy migration suppliers are tagged `gacp_cultivator`/`eu_gmp_cultivator`/`tga_gmp_cultivator`/`manufacturer_pharma` — none match → wrongly hidden. `CATEGORY_LABELS` has only 4 codes ([companies.ts:30-35](../../src/app/discover/companies.ts)).
+- **The 8 activity codes** ([20260704090000](../../supabase/migrations/20260704090000_business_category_taxonomy.sql)): `pharmacy, wholesaler, importer, gacp_cultivator, eu_gmp_cultivator, tga_gmp_cultivator, manufacturer_pharma, other`.
 
-## Task checklist (build — after scope-lock). Ordered; each ends testable.
+### People directory (greenfield — carried, still valid)
+- **`person` card fields:** `id`, `display_name` (canonical; fallback `coalesce(display_name, first_name||' '||last_name)`), `title`, `avatar_path`, `public_handle`, `company_id` ([20260615120000:24-31](../../supabase/migrations/20260615120000_profile_qr_foundation.sql)).
+- **Avatar** → public `avatars` bucket (`getPublicUrl`, pattern [profile/index.ts:108](../../src/modules/profile/index.ts)). **Company logo** → `shop-media` bucket ([companies.ts:69](../../src/app/discover/companies.ts)).
 
-### DISC-1 — Prototype the LinkedIn Discover · **M**
-Files: `prototypes/discover-linkedin-prototype/index.html` (+ NOTES.md).
-- [ ] Standalone HTML mock: ads banner (horizontal scroll) + the 4 sections, incl. the **New People square cards** and the final **facet-pill set** for Companies. Review → lock the visual before any React. *(prototype-first rule)*
-- **Accept:** opens in a browser; layout + section order + people-card + pill set agreed.
+### Company requests + company network (carried — still needed for the company groups)
+- **⟳ Lane A:** `getInbox` already resolves the viewer's `company_id` + stamps `viewerIsReceiver`, and joins a `dealCard` preview ([inbox.ts:130-196](../../src/modules/connect/supabase/inbox.ts)). Company incoming-request filter = `viewerIsReceiver && status==='pending' && type in ('connect','connect_message')`. `acceptItem`/`declineItem` reused unchanged (connect path untouched by the deal branch).
 
-### DISC-2 — Restore the verified-caller gate on the companies RPC (security) · **S**
+---
+
+## Task checklist (build). Ordered by dependency; each ends testable.
+
+> **Build order:** the **directory display** (DISC-1..9,15) is independent of the person graph — it can run first / in parallel. The **person graph** (PG-*) is the critical path for the Requests/Network sections. Suggested waves at the bottom.
+
+### ─────────── Foundation · Database (PG-1 … PG-7) — ✅ DONE + verified 2026-07-24 ───────────
+> **All 7 shipped TDD (red→green), verified on a fresh `supabase db reset` (clean chain + seed) with 5 new pgTAP suites green + 2 existing suites regression-green.** Commits on `claude/muskan/work`. **One build-time design refinement worth noting (→ ARCHITECTURE-NOTES at wrap):** PG-4 made `pending_inbox_item.receiver_company_id` **nullable** and added four per-type CHECKs so exactly one of `receiver_person_id` / `receiver_company_id` is set. Reason: a `connect_person` request must carry NO company target, else the existing `inbox_select` company branch would surface a *personal* request to all the target's colleagues. This keeps person requests strictly person-scoped. The inbox is Ayush's base lane — flagged in sync for his eyes.
+
+### PG-1 — `person_connection` edge table · **S**
+Files: new migration `<ts>_person_connection.sql`. Test: pgTAP.
+- [ ] Table: `id`, `person_a_id`/`person_b_id` (both `NOT NULL → person(id)`, `CHECK (person_a_id < person_b_id)` canonical), `initiated_by_person_id`, `created_at`, `deleted_at`. Partial unique index on `(person_a_id, person_b_id) WHERE deleted_at IS NULL`. Mirrors `relationship`'s canonical-order pattern but person-keyed. **No `status` column** — for pure-social a connection just exists (or is soft-deleted); "pending" lives in the inbox, not the edge. Add a status only when a real state (e.g. `blocked`) actually arrives (YAGNI).
+- [ ] RLS `person_connection_select`: `auth.uid() IN (person_a_id, person_b_id)`. `revoke all` / grant to `authenticated`.
+- **Accept (pgTAP):** two people get exactly one active edge; a third party sees zero rows; the unique index blocks a duplicate active pair.
+
+### PG-2 — `is_person_connected()` helper · **S**
+Files: same or new migration. Test: pgTAP.
+- [ ] `create function public.is_person_connected(p_other uuid) returns boolean language sql stable security definer set search_path='' ` — true if an active `person_connection` joins `auth.uid()` and `p_other` (canonical-order aware). Grant to `authenticated`.
+- **Accept (pgTAP):** returns true for a connected pair (either direction), false for strangers.
+
+### PG-3 — `person_select` + person branch · **S · REBUILD FROM LIVE**
+Files: new migration `<ts>_person_select_person_connection.sql`. Test: pgTAP.
+- [ ] `create or replace policy person_select` from the **LIVE body** ([20260609183000:57-62](../../supabase/migrations/20260609183000_rls_connect_counterparty_visibility.sql)), adding **only** `or public.is_person_connected(id)`. Diff old→new: the four existing branches (self / own company / HS team / `can_see_person`) unchanged.
+- **Accept (pgTAP):** a person you're person-connected to (but NOT company-connected) is now SELECT-visible; a stranger still returns zero; the four existing branches still pass.
+
+### PG-4 — `pending_inbox_item` person target · **S**
+Files: new migration `<ts>_inbox_receiver_person.sql`. Test: pgTAP.
+- [ ] Add `receiver_person_id UUID NULL → person(id)` + index. Seed `inbox_request_type` value `connect_person`. CHECK (mirrors the `deal_card` pattern [20260607090002:207-208](../../supabase/migrations/20260607090002_phase1_core.sql)): `receiver_person_id IS NOT NULL` when `type='connect_person'`, else the person path is off. `sender_company_id` stays NOT NULL (the sender always has a company — fine).
+- **Accept (pgTAP):** a `connect_person` row requires `receiver_person_id`; existing types unaffected; column + type + index exist.
+
+### PG-5 — Inbox RLS person branch · **S · REBUILD FROM LIVE**
+Files: same migration as PG-4 or a sibling. Test: pgTAP.
+- [ ] Rebuild `inbox_select` + `inbox_update` from the **LIVE body** ([20260607170000:231-237](../../supabase/migrations/20260607170000_rls_policies.sql)), adding `OR receiver_person_id = auth.uid()` to each USING (and `inbox_update` WITH CHECK). `inbox_insert` unchanged (still sender-company-scoped). Diff old→new.
+- **Accept (pgTAP):** the targeted person can SELECT + UPDATE their `connect_person` row; a non-target person cannot; the company branches still pass.
+
+### PG-6 — p2p company-less dedup index · **XS**
+Files: new migration `<ts>_p2p_companyless_dedup.sql`. Test: pgTAP.
+- [ ] Partial unique index on `chat_thread(person_a_id, person_b_id) WHERE type='p2p' AND relationship_id IS NULL AND deleted_at IS NULL`. Closes the NULL-relationship duplicate-thread gap.
+- **Accept (pgTAP):** a second company-less p2p thread for the same person pair is rejected; a company-anchored p2p (non-null relationship) is unaffected.
+
+### PG-7 — `accept_person_connection()` RPC · **M**
+Files: new migration `<ts>_accept_person_connection.sql`. Test: pgTAP.
+- [ ] SECURITY DEFINER, `set search_path=''`. Given a pending `connect_person` inbox item addressed to `auth.uid()`: (1) create the `person_connection` edge (canonical order); (2) create a **company-less `type='p2p'`** `chat_thread` (`relationship_id = NULL`, canonical `person_a/b` slots — access flows through the existing p2p person-slot RLS, NOT `chat_thread_member`; copy only the NULL-relationship insert idea from [create_group_thread_rpc:93-94](../../supabase/migrations/20260707120200_create_group_thread_rpc.sql)); (3) seed ONE person-framed intro line (no c2c thread, no "companies connected" line — invariant #2); (4) flip the item to `accepted`. Idempotent (re-accept is a no-op). Order edge/thread BEFORE the status flip so a failure leaves it retryable (mirror `acceptInbox`). PG-6's index enforces one p2p thread per pair.
+- **Accept (pgTAP):** accepting creates exactly one edge + one company-less p2p thread + one intro; NO relationship row and NO c2c thread are created; re-running is a no-op; a non-target caller is rejected.
+
+### ─────────── Foundation · App reads/actions (PG-8 … PG-11) — ✅ DONE + verified 2026-07-24 ───────────
+> **All shipped TDD.** PG-8/9 = `personActions.ts` (send/accept/decline, UUID-guarded, unit 3/3). PG-10/11 = **backed by NEW SECURITY DEFINER RPCs** `list_my_person_connections` + `list_incoming_person_requests` (migrations 8–9) — needed because a personally-connected person's company isn't company-visible under `company_select`, so a plain join would hide their name/logo; the RPCs return safe fields + the verified gate, mirroring `list_discoverable_people`. Thin TS reads + pure mappers (unit-tested). Also caught + fixed a skipped-ticket gap: **PG-2/PG-3 (`is_person_connected` + `person_select` branch) had been missed in the first DB pass** — built + verified here (the primary visibility blocker). Whole foundation re-verified on a fresh `db reset`: 8/8 pgTAP + 199 unit + tsc clean.
+
+### PG-8 — `sendPersonConnectRequest()` action · **S**
+Files: new server action in `src/app/discover/actions.ts` (or a person-actions file). Test: unit/integration.
+- [ ] `requireVerified()` guard (like `sendConnectRequest`). Insert a `connect_person` item: `sender_person_id=uid`, `sender_company_id`, `receiver_person_id=<target>`. Dedup keyed on `(sender_person_id, receiver_person_id, pending, connect_person)`. Reject self-target.
+- **Accept:** creates a pending `connect_person` request to the target person; a duplicate is a silent no-op; unverified caller blocked.
+
+### PG-9 — Person accept/decline server actions · **S**
+Files: same actions file. Test: unit/integration.
+- [ ] `acceptPersonRequest(itemId)` → calls PG-7 RPC. `declinePersonRequest(itemId)` → reuse the existing decline UPDATE (RLS now lets the person act, PG-5). `revalidatePath('/discover')`.
+- **Accept:** accept establishes the person connection + DM thread; decline rejects; both refresh Discover.
+
+### PG-10 — `getMyPersonConnections()` read · **S**
+Files: new server read in `src/app/discover/`. Test: unit/integration.
+- [ ] Server client. Return the people you have an active `person_connection` with — a flat person list (`personId, name, title, avatar, company name/logo`), resolved via the person + company + avatar/logo buckets. Independent of company connection.
+- **Accept:** returns your person connections; excludes company-only relationships; safe fields only.
+
+### PG-11 — `getIncomingPersonRequests()` read · **S**
+Files: new server read in `src/app/discover/`. Test: unit/integration.
+- [ ] Server client. Return pending `connect_person` items where `receiver_person_id = auth.uid()`. Light row: sender person name/avatar + sender company name + note + created_at + id.
+- **Accept:** returns only incoming pending person requests aimed at you; excludes company requests, outgoing, non-pending.
+
+### ─────────── Discover surface · directory display (DISC-1 … DISC-9, DISC-15) ───────────
+*Independent of the person graph — the directory just renders. Can run first / in parallel.*
+> **Progress 2026-07-24:** ✅ DISC-1..6 (prototype, verified gate, taxonomy, ads banner, CompaniesSection extract, DiscoverShell). ✅ **DISC-7** (`list_discoverable_people` RPC w/ connection_state, pgTAP DP-01..05), ✅ **DISC-8** (people read + mapper, unit 2/2), ✅ **DISC-9/10** (NewPeopleSection cards + person Connect "+", render 3/3) — the People side is live end-to-end (RPC → read → cards → connect). ✅ **DISC-11** (company requests read), ✅ **DISC-12** (two-group RequestsSection), ✅ **DISC-13** (getMyConnections server-callable, connections.ts sync-locked), ✅ **DISC-14 + PG-13** (two-group MyNetworkSection; p2p thread_id on list_my_person_connections; ChatView `?thread=` deep-link, sync-locked; Message → /connect/chat?thread=), ✅ **DISC-15** (person-graph demo seed). **ALL DISC + PG tickets DONE.** Final verify passed (10/10 pgTAP + 225 unit + tsc/eslint on fresh reset). Remaining = the two owed items in the status banner (live-browser pass + cloud push). ⚠️ **Verification note:** DISC-5/6/9/12/14 are interactive client components; the node vitest env has no jsdom, so they're gated by tsc + eslint + `renderToStaticMarkup` smoke tests only. **A live browser pass (or Discover e2e specs) is owed before final ship** — the loop can't drive a browser. Flagging per the prototype-first rule.
+
+### DISC-1 — Prototype the LinkedIn Discover · **M** — ✅ DONE (Variant D, `prototypes/discover-linkedin-prototype/`, approved 2026-07-23)
+
+### DISC-2 — Restore the verified-caller gate on the companies RPC · **S**
 Files: new migration `<ts>_list_discoverable_companies_reinstate_verified_gate.sql`. Test: pgTAP.
-- [ ] `create or replace` `list_discoverable_companies` **from the LIVE body** ([20260618120100](../../supabase/migrations/20260618120100_list_discoverable_companies_city.sql)), adding `and public.is_caller_verified()` to the WHERE (the only change). Diff old→new to confirm nothing else moved.
-- **Accept (pgTAP):** a verified caller gets the directory; an unverified caller gets zero rows. `db reset` green.
+- [ ] `create or replace list_discoverable_companies` from the LIVE body ([20260618120100](../../supabase/migrations/20260618120100_list_discoverable_companies_city.sql)) adding `and public.is_caller_verified()` (the only change). Diff to confirm.
+- **Accept (pgTAP):** verified caller gets the directory; unverified gets zero rows; `db reset` green.
 
 ### DISC-3 — Sync the Discover frontend to the migrated taxonomy · **S**
 Files: [companies.ts](../../src/app/discover/companies.ts), [DiscoverDirectory.tsx](../../src/app/discover/DiscoverDirectory.tsx). Test: unit.
-- [ ] `CATEGORY_LABELS` (companies.ts:30-35) — add the missing codes, drop dead `cultivator`:
-  ```ts
-  const CATEGORY_LABELS: Record<string, string> = {
-    wholesaler: "Wholesaler", importer: "Importer", pharmacy: "Pharmacy",
-    gacp_cultivator: "GACP Cultivator", eu_gmp_cultivator: "EU-GMP Cultivator",
-    tga_gmp_cultivator: "TGA-GMP Cultivator", manufacturer_pharma: "Manufacturer Pharma",
-    other: "Other",
-  };
-  ```
-- [ ] `isListed` (DiscoverDirectory.tsx:35-36) — hide only pharmacy-only companies:
-  ```ts
-  const isListed = (c: DiscoverCompany) => c.categories.some((t) => t !== "Pharmacy");
-  ```
-- [ ] `SELLER_TYPES` (:31) — repoint to the **facet-pill** labels finalized in DISC-1 (the non-pharmacy supplier labels). It now drives only the pills + `countOfType` (:181,:244), NOT the listing gate.
-- **Accept:** every non-pharmacy tag renders visible + correctly labelled; a pharmacy-only company stays hidden until name-searched; filter pills show the agreed set; unit test covers `isListed` for each of the 8 codes.
+- [ ] `CATEGORY_LABELS` — add the 8 codes, drop dead `cultivator`. `isListed` → `c.categories.some((t) => t !== "Pharmacy")`. `SELLER_TYPES` → repoint to the DISC-1 facet-pill labels (drives pills + `countOfType` only, NOT the listing gate).
+- **Accept:** every non-pharmacy tag visible + labelled; pharmacy-only hidden until name-searched; pills show the agreed set; unit covers `isListed` for all 8 codes.
 
 ### DISC-4 — Ads banner placeholder · **S**
 Files: new `src/app/discover/DiscoverAdsBanner.tsx`.
-- [ ] Static horizontal-scroll strip (`flex gap overflow-x-auto`), empty placeholder slots, no data.
-- **Accept:** renders a scrollable empty banner; no console errors.
+- [ ] Static horizontal-scroll strip, empty placeholder slots, no data.
+- **Accept:** scrollable empty banner; no console errors.
 
 ### DISC-5 — Extract `CompaniesSection` (behavior-preserving) · **S**
 Files: [DiscoverDirectory.tsx](../../src/app/discover/DiscoverDirectory.tsx) → new `src/app/discover/sections/CompaniesSection.tsx`.
-- [ ] Move the search + filter band + row list + `ConnectButton` into `CompaniesSection` (takes `companies: DiscoverCompany[]` as a prop). No behavior change beyond DISC-3.
-- **Accept:** the companies directory behaves exactly as before the extraction (+ the DISC-3 fix); tsc/eslint clean.
+- [ ] Move search + filter band + row list + `ConnectButton` into `CompaniesSection(companies: DiscoverCompany[])`. No behavior change beyond DISC-3.
+- **Accept:** company directory behaves as before (+ DISC-3); tsc/eslint clean.
 
 ### DISC-6 — `DiscoverShell` + page wiring (companies-only first) · **S**
 Files: new `src/app/discover/DiscoverShell.tsx`, [page.tsx](../../src/app/discover/page.tsx).
-- [ ] `DiscoverShell` (client) stacks: `<AdsBanner/>` + `<CompaniesSection companies={...}/>` (other sections added later). page.tsx keeps server-fetching companies, renders `<DiscoverShell companies={...}/>`.
-- **Accept:** Discover renders banner + companies section as one scrolling page; identical company behavior.
+- [ ] `DiscoverShell` stacks `<AdsBanner/>` + `<CompaniesSection/>` (other sections added later). page.tsx keeps server-fetching companies.
+- **Accept:** Discover renders banner + companies as one scrolling page; identical company behavior.
 
 ### DISC-7 — `list_discoverable_people()` RPC · **M**
 Files: new migration `<ts>_list_discoverable_people.sql`. Test: pgTAP.
-- [ ] SECURITY DEFINER, `set search_path=''`, safe fields only, mirrors the companies RPC + re-adds the verified gate:
-  ```sql
-  create or replace function public.list_discoverable_people()
-  returns table (person_id uuid, display_name text, title text, avatar_path text,
-    public_handle text, company_id uuid, company_name text, company_logo_path text,
-    company_country text, company_city text, type_codes text[])
-  language sql stable security definer set search_path to '' as $$
-    select p.id, coalesce(p.display_name, concat_ws(' ', p.first_name, p.last_name))::text,
-      p.title::text, p.avatar_path::text, p.public_handle::text,
-      c.id, c.name::text, c.logo_path::text, c.country::text, c.city::text,
-      coalesce(array_agg(distinct cta.company_type_code::text)
-        filter (where cta.company_type_code is not null), '{}')
-    from public.person p
-    join public.company c on c.id = p.company_id
-    left join public.company_type_assignment cta on cta.company_id = c.id and cta.deleted_at is null
-    where p.deleted_at is null and c.deleted_at is null
-      and c.verification_status = 'verified'
-      and c.id is distinct from public.current_company_id()
-      and p.id is distinct from auth.uid()
-      and public.is_caller_verified()
-    group by p.id, p.display_name, p.first_name, p.last_name, p.title,
-             p.avatar_path, p.public_handle, c.id, c.name, c.logo_path, c.country, c.city
-    order by coalesce(p.display_name, concat_ws(' ', p.first_name, p.last_name)), p.id
-    limit 200;
-  $$;
-  revoke all on function public.list_discoverable_people() from public;
-  grant execute on function public.list_discoverable_people() to authenticated;
-  ```
-- **Accept (pgTAP):** returns people at *other* verified companies with safe fields + `type_codes`; excludes own company, self, unverified companies, soft-deleted; an unverified caller gets zero rows; no email/phone in the output.
+- [ ] SECURITY DEFINER, `set search_path=''`, safe fields only, mirrors the companies RPC + the verified gate. Returns `person_id, display_name, title, avatar_path, public_handle, company_id, company_name, company_logo_path, company_country, company_city, type_codes[]`, **plus `connection_state text`** (see below). WHERE: `p.deleted_at is null and c.deleted_at is null and c.verification_status='verified' and c.id is distinct from current_company_id() and p.id is distinct from auth.uid() and public.is_caller_verified()`. `limit 200`.
+- [ ] **`connection_state` per person** — mirrors the company RPC's state so the "+" knows what to render (without it, the button can't tell not-connected / requested / already-connected apart and would allow duplicate spam). Compute over the person graph: `connected` if an active `person_connection` joins caller↔person; `requested` if a pending `connect_person` I sent to them exists; `incoming` if a pending `connect_person` they sent to me exists; else `none`. (This is the person-graph analogue — do NOT reuse the company `connection_state`.)
+- **Accept (pgTAP):** returns people at other verified companies with safe fields + `type_codes` + correct `connection_state` for each of the 4 states; excludes own company, self, unverified, soft-deleted; unverified caller gets zero; no email/phone.
+
+> **Dependency note:** DISC-8 maps `connection_state` into `DiscoverPerson`; DISC-9/DISC-10 render the "+"/pending/connected button off it. So DISC-7 must land the state, and it reads `person_connection` (PG-1) + `pending_inbox_item.connect_person` (PG-4) — i.e. DISC-7 now depends on PG-1 + PG-4, not just the person table.
 
 ### DISC-8 — `people.ts` fetch + mapper · **S**
 Files: new `src/app/discover/people.ts`.
-- [ ] `DiscoverPerson` type + `getDiscoverablePeople()` (server client) calling the RPC; resolve `avatar_path` via the `avatars` bucket and `company_logo_path` via `shop-media`; map `type_codes` → labels (reuse `CATEGORY_LABELS`).
-- **Accept:** returns typed `DiscoverPerson[]` with resolved avatar + company logo URLs.
+- [ ] `DiscoverPerson` type + `getDiscoverablePeople()` (server client); resolve `avatar_path` via `avatars`, `company_logo_path` via `shop-media`; map `type_codes` → labels (reuse `CATEGORY_LABELS`).
+- **Accept:** typed `DiscoverPerson[]` with resolved avatar + company logo URLs.
 
 ### DISC-9 — `NewPeopleSection` square-card grid · **M**
-Files: new `src/app/discover/sections/NewPeopleSection.tsx`; wire into `DiscoverShell` + page fetch.
-- [ ] Square cards (avatar/name/title + company logo/name + a "+" connect). Apply the SAME pharmacy gate (a person whose company is pharmacy-only is hidden unless searched — reuse the `isListed`/query rule). page.tsx fetches `getDiscoverablePeople()` server-side, passes down.
+Files: new `src/app/discover/sections/NewPeopleSection.tsx`; wire into shell + page fetch.
+- [ ] Square cards (avatar/name/title + company logo/name + a "+" connect). Apply the SAME pharmacy gate (person at a pharmacy-only company hidden unless searched). page.tsx fetches `getDiscoverablePeople()` server-side.
 - **Accept:** people render as squares; pharmacy-company people hidden until searched; layout matches the prototype. (The "+" wiring lands in DISC-10.)
 
-### DISC-10 — Connect-to-a-person function (the "+") · **M · RESEARCH FIRST**
-Files: TBD after research. 
-- [ ] **Research step (do before building):** does the data model support a person-level connection, or is a company→company request the only mechanism (see `sendConnectRequest` + `pending_inbox_item`, and Marcel's DEV-142 "person connection")? Decide: new person-targeted request (possible new schema) vs. company connect noting the person.
-- [ ] Build the chosen function; wire it to the "+" on the people squares (with the same optimistic/`connection_state`-style feedback the company Connect button uses).
-- **Accept:** clicking "+" on a person sends the intended person-level connect; the card reflects the pending state.
+### DISC-15 — Mockup companies + people seed · **S**
+Files: `supabase/seed/`. 
+- [ ] Seed realistic demo companies (real names/logos, [DEV-100](https://linear.app/hellosello/issue/DEV-100)) across the taxonomy incl. a pharmacy or two, plus **several people per company** (to exercise the People directory + person connect). Seed one or two **existing person connections** + one **pending person request** so My Network / Requests render on a fresh reset.
+- **Accept:** Discover shows a realistic directory on a fresh `db reset`; pharmacy hidden-but-searchable; at least one person connection + one pending person request visible.
 
-### DISC-11 — `getIncomingConnectionRequests()` server read · **S**
-Files: new read in `src/app/discover/` (server client). Test: unit/integration.
-- [ ] Server read returning only incoming pending connect requests. **Reuse the pattern `getInbox` already uses** ([inbox.ts:130-196](../../src/modules/connect/supabase/inbox.ts)): resolve the viewer's `company_id` (the `person.company_id` lookup getInbox does), then query `pending_inbox_item` filtered to `status='pending'` AND `receiver_company_id = <viewer company>` (i.e. `viewerIsReceiver`) AND `type in ('connect','connect_message')`. Return a light row shape (sender company name/initials, note, created_at, id) — **no `deal_card` join needed** (that's the deal-ticket path, out of scope here).
-- **Accept:** returns only incoming pending connect requests; excludes outgoing, non-pending, and pricing/deal-ticket types.
+### ─────────── Discover surface · Requests + Network (DISC-10 … DISC-14) ───────────
+*Consume the person graph (PG-*) + the reused company reads.*
 
-### DISC-12 — `RequestsSection` (in-page) · **M**
-Files: new `src/app/discover/sections/RequestsSection.tsx`; server actions `acceptConnectionRequest`/`declineConnectionRequest` wrapping existing `acceptItem`/`declineItem`; wire into shell + page fetch.
-- [ ] Client component receiving the server-fetched list; light rows (avatar/company + note + **Accept / Decline**). Accept/Decline call the server actions (which reuse the existing accept/decline logic — accept creates the relationship/threads + Sella intro, as today), then refresh. **⟳ `acceptItem` now branches on `deal_card` ([inbox.ts:279-314](../../src/modules/connect/supabase/inbox.ts)) — the connect path is unchanged and this section filters to connect types, so it never hits the deal branch.**
-- **Accept:** incoming requests render as a top section; Accept establishes the connection; Decline rejects; the section empties as items are handled.
+### DISC-10 — Wire the person card "+" · **S**
+Files: `NewPeopleSection.tsx` + person-card button.
+- [ ] "+" calls `sendPersonConnectRequest` (PG-8) with optimistic pending state (mirror the company `ConnectButton` `connection_state` feel). The company "Connect" on company rows is unchanged (existing `sendConnectRequest`).
+- **Accept:** clicking "+" sends a person request; the card reflects pending; no double-send.
 
-### DISC-13 — My Network server read · **S**
-Files: server-callable network read (refactor `getMyConnections` to accept a client, or a small server mirror in `src/app/discover/`).
-- [ ] Provide a server-callable path returning `MyConnectionsView` (`ConnectedCompany[]`) for Wave-1 fetch. Prefer refactoring `getMyConnections` to accept a supabase client (DRY) — ⚠️ shared `messaging` file, sync-lock first.
-- **Accept:** the server can fetch your active connections; shape unchanged.
+### DISC-11 — `getIncomingConnectionRequests()` (company) read · **S**
+Files: new server read in `src/app/discover/`. Test: unit/integration.
+- [ ] Reuse the `getInbox` pattern ([inbox.ts:130-196](../../src/modules/connect/supabase/inbox.ts)): incoming pending **company** connect requests — `viewerIsReceiver && status='pending' && type in ('connect','connect_message')`. Light row (sender company name/initials, note, created_at, id). No deal-card join.
+- **Accept:** returns only incoming pending company connect requests; excludes outgoing, non-pending, pricing/deal types.
 
-### DISC-14 — `MyNetworkSection` · **M**
+### DISC-12 — `RequestsSection` — two labelled groups · **M**
+Files: new `src/app/discover/sections/RequestsSection.tsx`; server actions wrap existing `acceptItem`/`declineItem` (company) + PG-9 (person); wire into shell + page fetch.
+- [ ] One section, **two labelled groups**: **"Company requests"** (from DISC-11; Accept/Decline via existing `acceptItem`/`declineItem` — accept creates the relationship/threads + Sella intro, as today) and **"People"** (from PG-11; Accept/Decline via PG-9). Each group empties as items are handled. Different accept behavior is visible by grouping (invariant: not a blended list).
+- **Accept:** both groups render with correct per-type accept/decline; company accept establishes a company relationship; person accept establishes a person connection + DM thread; each group empties independently.
+
+### DISC-13 — `getMyConnections()` server-callable (company) read · **S**
+Files: server-callable path for the companies group. ⚠️ shared `messaging/connections.ts` — **sync-lock first**.
+- [ ] Provide a server-callable `MyConnectionsView` (`ConnectedCompany[]`) for Wave-1 fetch. Prefer refactoring `getMyConnections` to accept a supabase client (DRY).
+- **Accept:** the server can fetch your active **company** connections; shape unchanged.
+
+### DISC-14 — `MyNetworkSection` — companies + people · **M**
 Files: new `src/app/discover/sections/MyNetworkSection.tsx`; wire into shell + page fetch.
-- [ ] Rows for your connected companies (name + initials + city + `contactsCount` + `openDealCount`); their `people` shown/expandable. Data from page props.
-- **Accept:** your active connections render as rows in the My Network section, matching the prototype.
+- [ ] Two parts: connected **companies** (from DISC-13 — name/initials/city/`contactsCount`/`openDealCount`, people expandable) and connected **people** (from PG-10 — person rows with a Message affordance, see PG-13). Data from page props.
+- **Accept:** your active company connections AND person connections both render; layout matches the prototype.
 
-### DISC-15 — Mockup companies seed · **S**
-Files: `supabase/seed/` (or the seed file). 
-- [ ] Seed realistic demo companies (real names/logos, per [DEV-100](https://linear.app/hellosello/issue/DEV-100)), tagged across the taxonomy incl. a pharmacy or two (to exercise the search-only rule).
-- **Accept:** Discover shows a realistic directory on a fresh `db reset`; pharmacy seed is hidden-but-searchable.
+### ─────────── Person-to-person DM (PG-12 … PG-13) ───────────
+> **PG-12 ✅ DONE + verified 2026-07-24** — `getConversations` company-less p2p fallback shipped (pure helper `companylessP2pDisplay` + a `relationship_id == null` branch in Ayush's `store.ts`, sync-locked; anchored paths byte-unchanged; unit 3/3, full suite 202 green). **PG-13 folded into DISC-14** (see note): a connected person's "Message" button is only mountable on the My Network person row, AND opening a company-less p2p needs two more pieces — (a) `list_my_person_connections` must also return the p2p `thread_id`, and (b) `ChatView`'s deep-link (today `?relationship=`) must accept `?thread=<id>` since a company-less DM has no relationship (SHARED ChatView — sync-lock). Building it with DISC-14 avoids an orphan component + batches the ChatView touch.
+
+### PG-12 — `getConversations` company-less p2p fallback · **S**
+Files: [store.ts](../../src/modules/messaging/supabase/store.ts). ⚠️ shared `messaging` — **sync-lock first**. Test: unit.
+- [ ] For a p2p thread with `relationship_id IS NULL`, resolve the counterparty from the two person slots (not the relationship) — copy the group-branch pattern ([store.ts:181-214](../../src/modules/messaging/supabase/store.ts)). Show the person's name, not "Unknown company".
+- **Accept:** a company-less p2p thread lists with the connected person's name; company-anchored p2p unchanged.
+
+### PG-13 — "Message" a connected person · **S**
+Files: `MyNetworkSection.tsx` / person card + open-thread wiring.
+- [ ] A "Message" affordance on a connected person opens the existing p2p thread (created at accept, PG-7). No open-or-create with a relationship arg — the thread already exists; navigate to it.
+- **Accept:** clicking Message on a connected person opens the DM; messages send/receive (RLS already permits the two people).
+
+---
+
+## Suggested build waves
+1. **Directory display (parallel-safe):** DISC-2, DISC-3, DISC-4, DISC-5, DISC-6, DISC-7, DISC-8, DISC-9, DISC-15.
+2. **Person-graph DB:** PG-1 → PG-2 → PG-3; PG-4 → PG-5; PG-6; then PG-7.
+3. **Person-graph app:** PG-8, PG-9, PG-10, PG-11.
+4. **Requests + Network surface:** DISC-10, DISC-11, DISC-12, DISC-13, DISC-14.
+5. **DM:** PG-12, PG-13.
 
 ## Cross-lane / risks
-- **Overlap with Lane A — VERIFIED 2026-07-20, Lane A is IN:** `getInbox` now stamps `viewerIsReceiver` + joins a `dealCard` preview, and `acceptItem` branches on `deal_card` — **all confirmed compatible** (connect path unchanged; the requests section filters to connect types). `connect/types.ts` `InboxItemView` now carries `dealCard` + `viewerIsReceiver`. No file collision (Lane B builds new components + a new server read).
-- **DISC-13 touches shared `messaging/connections.ts`** — sync-lock in `docs/team/sync/muskan.md` first (Ayush's lane).
-- **Pharmacy-hidden stays client-side** (documented tradeoff): a direct RPC caller still receives pharmacy rows. Fine (safe fields, verified peers); flag if it must become a real boundary.
+- **We build the foundation (not Ayush)** — but PG-3, PG-4/5, DISC-13, and PG-12 edit files Ayush also touches (`person_select`, `pending_inbox_item` + its RLS, `messaging/connections.ts`, `messaging/store.ts`). **Sync-lock each in `docs/team/sync/muskan.md` before editing + give him a heads-up** (we're changing RLS on his tables). Rebuild-from-live + diff (invariant #3) is doubly important here.
+- **Pharmacy-hidden stays client-side** (documented tradeoff): a direct RPC caller still receives pharmacy rows. Fine (safe fields, verified peers).
+- **Reconcile with Marcel's [DEV-142](https://linear.app/hellosello/issue/DEV-142) ("only person connection") + DEV-141 ("Networking in Connect").** This lane implements DEV-142's person-connection intent, pure-social. Confirm the Connect-vs-Discover placement with Marcel.
 
 ## Done criteria
-- Discover renders one scrolling page: ads banner → Connection Requests → My Network → New People → Companies, all loaded with the page (no flash).
+- Discover renders one scrolling page: ads banner → Requests (company + person, two groups) → My Network (companies + people) → New People → Companies, all loaded with the page (no flash).
 - Everyone visible except pharmacies (hidden-but-searchable), tags correctly labelled + filterable; the companies RPC verified-caller gate restored.
-- New People shows discoverable people as squares with a working "+"; Connection Requests accept/decline works; My Network lists your connections.
-- pgTAP (people RPC, verified gate) + unit + e2e green; tsc + eslint clean; live-verified on a fresh `db reset`.
-- ARCHITECTURE-NOTES entry (Wave-1 server-fetch pattern + the client-side pharmacy gate). Status → ✅.
+- New People shows discoverable people as squares with a working person "+"; person requests accept/decline works and never mints a company relationship; My Network lists both connected companies and connected people; a connected person can be DM'd.
+- Deals/pricing/shops untouched (pure social verified).
+- pgTAP (person_connection, is_person_connected, person_select, inbox person RLS, accept_person_connection, people RPC, verified gate) + unit + e2e green; tsc + eslint clean; live-verified on a fresh `db reset`.
+- ARCHITECTURE-NOTES entry (the person-graph = a second, independent social graph; the group-chat company-less pattern reused; the client-side pharmacy gate).
 
 ## Follow-ups (after this lane)
+- **Ladder a person connection into a company relationship** (the one commercial bridge deliberately deferred).
 - Real ad content/serving in the banner.
-- Server-side search/pagination when the directory grows (Flowz shadow profiles).
+- Server-side search/pagination when the directory grows — **must move the pharmacy gate server-side in the same change** (invariant #5 coupling).
 - Sector (`business_category`) filter — add the join to the RPC + a facet.
-- Reconcile with Marcel's DEV-141 "Networking in Connect" (we located it in Discover — his call to confirm).

@@ -1,0 +1,215 @@
+<!doctype html>
+<!--
+  THROWAWAY PROTOTYPE — answers ONE question:
+  "Does a compact 'match the following' panel (small product cards left, named
+  location bins right, drag to assign) feel better than the current free-text
+  add-location input + drag-grip-on-the-full-card mechanism in ShopView/LocationGroup?"
+
+  Time-boxed spike (Cluster I, 07-FIDELITY-CONTEXT.md). No persistence — mock data
+  only, resets on reload. See NOTES.md next to this file for the question + verdict
+  placeholder. Delete this whole folder once the decision is captured there.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>PROTOTYPE — location assign panel</title>
+<style>
+  :root{
+    --brand:#e30b5d; --brand-soft:#ffb7d5; --brand-deep:#76002d;
+    --ink:rgba(20,10,16,.92); --ink-muted:rgba(20,10,16,.55); --ink-faint:rgba(20,10,16,.35);
+    --success:#34b233;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; padding:32px; min-height:100vh;
+    background:#f4f1f2; color:var(--ink);
+    font:14px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    display:flex; align-items:flex-start; justify-content:center;
+  }
+  .banner{
+    position:fixed; top:0; left:0; right:0; z-index:50;
+    background:var(--brand-deep); color:#fff; text-align:center;
+    font-size:11px; font-weight:700; letter-spacing:.04em; padding:6px;
+  }
+  /* the compact panel this spike is testing — NOT full-page */
+  .panel{
+    margin-top:34px; width:100%; max-width:760px;
+    background:#fff; border-radius:20px; box-shadow:0 12px 32px rgba(20,10,16,.14);
+    overflow:hidden;
+  }
+  .phead{
+    display:flex; align-items:center; gap:10px;
+    padding:16px 20px; border-bottom:1px solid rgba(20,10,16,.08);
+  }
+  .phead b{font-size:15px}
+  .phead small{color:var(--ink-muted); font-weight:600}
+  .pbody{display:grid; grid-template-columns:1fr 1fr; gap:0; min-height:360px}
+  .col{padding:14px 16px}
+  .col + .col{border-left:1px solid rgba(20,10,16,.08)}
+  .colhead{
+    font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.06em;
+    color:var(--ink-faint); margin-bottom:10px;
+  }
+
+  /* left — compact draggable product chips */
+  .chip{
+    display:flex; align-items:center; gap:8px;
+    padding:7px 9px; border-radius:12px; margin-bottom:6px;
+    background:rgba(227,11,93,.04); border:1px solid rgba(227,11,93,.12);
+    cursor:grab; user-select:none;
+  }
+  .chip.dragging{opacity:.35}
+  .chip .thumb{
+    width:30px; height:30px; border-radius:8px; flex:none;
+    background:linear-gradient(135deg,var(--brand-soft),var(--brand));
+  }
+  .chip .name{font-weight:700; font-size:12.5px}
+  .chip .loc{font-size:10px; color:var(--ink-muted)}
+
+  /* right — named location bins (drop targets) */
+  .bin{
+    border:1.5px dashed rgba(20,10,16,.16); border-radius:14px;
+    padding:10px 12px; margin-bottom:8px; min-height:52px;
+    transition:background .12s,border-color .12s;
+  }
+  .bin.hi{background:rgba(227,11,93,.06); border-color:var(--brand)}
+  .bin .bhead{display:flex; align-items:center; gap:6px; margin-bottom:6px}
+  .bin .bhead b{font-size:12.5px}
+  .bin .bhead .count{
+    margin-left:auto; font-size:10px; font-weight:800; color:var(--ink-muted);
+    background:rgba(20,10,16,.06); border-radius:999px; padding:1px 7px;
+  }
+  .bin .contents{display:flex; flex-wrap:wrap; gap:4px}
+  .bin .tag{
+    font-size:10.5px; font-weight:700; color:var(--brand-deep);
+    background:var(--brand-soft); border-radius:8px; padding:2px 7px;
+  }
+  .bin .empty{font-size:11px; color:var(--ink-faint); font-style:italic}
+  .addbin{
+    display:flex; gap:6px; margin-top:8px;
+  }
+  .addbin input{
+    flex:1; border:1px solid rgba(20,10,16,.15); border-radius:10px;
+    padding:6px 9px; font-size:12px;
+  }
+  .addbin button{
+    border:none; border-radius:10px; background:var(--brand); color:#fff;
+    font-weight:700; font-size:12px; padding:6px 12px; cursor:pointer;
+  }
+  .pfoot{
+    padding:10px 20px; border-top:1px solid rgba(20,10,16,.08);
+    font-size:11px; color:var(--ink-muted); display:flex; justify-content:space-between;
+  }
+  .pfoot b{color:var(--success)}
+</style>
+</head>
+<body>
+<div class="banner">PROTOTYPE — throwaway — answers one question, see NOTES.md</div>
+
+<div class="panel">
+  <div class="phead">
+    <b>Assign products to locations</b>
+    <small>· drag a product onto a location</small>
+  </div>
+  <div class="pbody">
+    <div class="col">
+      <div class="colhead">Products</div>
+      <div id="products"></div>
+    </div>
+    <div class="col">
+      <div class="colhead">Locations</div>
+      <div id="bins"></div>
+      <div class="addbin">
+        <input id="newBinInput" placeholder="Add a location (e.g. Vienna, AT)" />
+        <button id="addBinBtn">Add</button>
+      </div>
+    </div>
+  </div>
+  <div class="pfoot">
+    <span>State updates live below — this is the thing being judged.</span>
+    <span>Last move: <b id="lastMove">—</b></span>
+  </div>
+</div>
+
+<script>
+  // ── mock state (in-memory only — resets on reload) ─────────────────────
+  let PRODUCTS = [
+    { id: 'p1', name: 'GL Indica 22/1', loc: 'Berlin' },
+    { id: 'p2', name: 'Sativa Dream 18/0.5', loc: 'Berlin' },
+    { id: 'p3', name: 'CBD Balance 4/12', loc: 'Frankfurt' },
+    { id: 'p4', name: 'Hybrid Sunset 20/1', loc: null },
+    { id: 'p5', name: 'Northern Lights XJ-13', loc: null },
+  ];
+  let LOCATIONS = ['Berlin', 'Frankfurt'];
+
+  const $products = document.getElementById('products');
+  const $bins = document.getElementById('bins');
+  const $lastMove = document.getElementById('lastMove');
+
+  function render() {
+    // left: every product as a small draggable chip
+    $products.innerHTML = PRODUCTS.map(p => `
+      <div class="chip" draggable="true" data-id="${p.id}">
+        <div class="thumb"></div>
+        <div>
+          <div class="name">${p.name}</div>
+          <div class="loc">${p.loc ?? 'Unassigned'}</div>
+        </div>
+      </div>
+    `).join('');
+
+    // right: one bin per location + an "Unassigned" bin
+    const order = [...LOCATIONS, null];
+    $bins.innerHTML = order.map(loc => {
+      const items = PRODUCTS.filter(p => p.loc === loc);
+      const label = loc ?? 'Unassigned';
+      return `
+        <div class="bin" data-loc="${loc ?? ''}">
+          <div class="bhead"><b>${label}</b><span class="count">${items.length}</span></div>
+          <div class="contents">
+            ${items.length
+              ? items.map(p => `<span class="tag">${p.name}</span>`).join('')
+              : `<span class="empty">drop a product here</span>`}
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    // wire drag handlers (re-bind after every render since DOM is rebuilt)
+    document.querySelectorAll('.chip').forEach(chip => {
+      chip.addEventListener('dragstart', e => {
+        e.dataTransfer.setData('text/plain', chip.dataset.id);
+        chip.classList.add('dragging');
+      });
+      chip.addEventListener('dragend', () => chip.classList.remove('dragging'));
+    });
+    document.querySelectorAll('.bin').forEach(bin => {
+      bin.addEventListener('dragover', e => { e.preventDefault(); bin.classList.add('hi'); });
+      bin.addEventListener('dragleave', () => bin.classList.remove('hi'));
+      bin.addEventListener('drop', e => {
+        e.preventDefault();
+        bin.classList.remove('hi');
+        const id = e.dataTransfer.getData('text/plain');
+        const product = PRODUCTS.find(p => p.id === id);
+        const loc = bin.dataset.loc || null;
+        if (!product || product.loc === loc) return;
+        product.loc = loc;
+        $lastMove.textContent = `${product.name} → ${loc ?? 'Unassigned'}`;
+        render();
+      });
+    });
+  }
+
+  document.getElementById('addBinBtn').addEventListener('click', () => {
+    const input = document.getElementById('newBinInput');
+    const val = input.value.trim();
+    if (!val || LOCATIONS.includes(val)) return;
+    LOCATIONS.push(val);
+    input.value = '';
+    render();
+  });
+
+  render();
+</script>
+</body>
+</html>

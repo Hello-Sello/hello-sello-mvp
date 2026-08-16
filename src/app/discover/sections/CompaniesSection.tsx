@@ -1,39 +1,28 @@
 "use client";
 
 /**
- * Discover — a CLOSED, TAGGED company directory (NON-marketplace), redesigned to
- * Marcel's spec (Variant A "Editorial", D-01/03/04/12/13/14/15). Full-width
- * 3-zone band over an unstacked row list. Filtering is multi-select and
- * client-side over the fetched set (OR within a group, AND across groups); it
- * moves server-side when the directory grows.
- *
- * D-12 PHARMACY LISTING GATE — CLIENT-SIDE v1 (conscious tradeoff, T-06-08):
- * "Listed" = the company has a seller-side type (Cultivator / Wholesaler /
- * Importer). Pharmacy-ONLY companies are HIDDEN from the default list and shown
- * only when the exact-name search matches, badged "Found by search · not listed".
- * This gate is presentation-only — the `list_discoverable_companies` RPC returns
- * all verified peers, so a caller reading the RPC directly still sees pharmacy-only
- * rows. ACCEPTABLE for v1: every returned company is a verified peer in the same
- * closed network and the exposed fields are directory-safe (name/logo/country/
- * city/type); shop + pricing stay behind `get_discoverable_shop`'s server gate.
- * HARDENING FOLLOW-UP = push the listing gate + name-search server-side (folds
- * into the deferred server-side-filter + keyset-pagination item). See companies.ts.
+ * CompaniesSection — the company directory (search + type/country filters + the
+ * unstacked row list + the state-aware Connect CTA). Extracted verbatim from
+ * DiscoverDirectory (DISC-5, behavior-preserving); takes the server-fetched
+ * `companies` as a prop and owns its own client-side filter state. The listing
+ * taxonomy (labels, the pharmacy gate) lives in ../taxonomy.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { MapPin, Search, Check, ChevronDown, ArrowRight, X, Lock } from "lucide-react";
-import type { DiscoverCompany, ConnectionState } from "./companies";
+import { MapPin, Search, Check, ChevronDown, ArrowRight, X } from "lucide-react";
+import type { DiscoverCompany, ConnectionState } from "../companies";
 import { COUNTRIES } from "@/shared/geo/countries";
-import { sendConnectRequest } from "./actions";
+import { sendConnectRequest } from "../actions";
 import { VerifiedBadge } from "@/shared/ui/VerifiedBadge";
+import { SELLER_TYPE_LABELS, isListedCompany } from "../taxonomy";
+import { SectionCard } from "./SectionCard";
 
-// Seller-side types only — no Pharmacy filter (D-12 Instagram model).
-const SELLER_TYPES = ["Cultivator", "Wholesaler", "Importer"] as const;
+// The non-pharmacy activity labels drive the type facets (post-taxonomy migration).
+const SELLER_TYPES = SELLER_TYPE_LABELS;
 
-// A company is listed by default if it has a seller-side type (listed even if
-// also a Pharmacy). Pharmacy-only companies fail this and are search-only.
-const isListed = (c: DiscoverCompany) =>
-  c.categories.some((t) => SELLER_TYPES.includes(t as (typeof SELLER_TYPES)[number]));
+// A company is listed by default unless it is pharmacy-ONLY; pharmacy-only
+// companies are hidden and search-only (DISC-3).
+const isListed = (c: DiscoverCompany) => isListedCompany(c.categories);
 
 const initials = (name: string) =>
   name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
@@ -47,11 +36,8 @@ function tintFor(name: string): string {
   return TINTS[h % TINTS.length];
 }
 
-// Real logo if the company uploaded one; otherwise a tinted initials tile.
-// The outer span is `relative` so the form-G verified tick anchors to the logo
-// corner. The tick is UNCONDITIONAL — the Discover RPC hard-filters
-// `verification_status='verified'`, so every row is verified by construction
-// (do NOT thread a status field through DiscoverCompany — see RESEARCH Anti-Pattern).
+// Real logo if the company uploaded one; otherwise a tinted initials tile. The
+// verified tick is UNCONDITIONAL — the Discover RPC hard-filters verified.
 function Logo({ company, size = 48 }: { company: DiscoverCompany; size?: number }) {
   return (
     <span className="relative inline-flex shrink-0" style={{ width: size, height: size }}>
@@ -93,10 +79,9 @@ const tagChip = (t: string) => (
 );
 
 /**
- * State-aware Connect CTA (D-15): copy "Connect", no lock icon, premium styling.
- * Four states preserved: connected / incoming "Wants to connect" / requested / none.
- * `none` fires the REAL `sendConnectRequest` server action (creates a `connect`
- * inbox item) with an optimistic flip + rollback on error.
+ * State-aware Connect CTA (D-15): four states preserved — connected / incoming
+ * "Wants to connect" / requested / none. `none` fires the REAL sendConnectRequest
+ * server action (creates a `connect` inbox item) with an optimistic flip + rollback.
  */
 function ConnectButton({ company }: { company: DiscoverCompany }) {
   const [optimistic, setOptimistic] = useState(false);
@@ -151,23 +136,27 @@ function ConnectButton({ company }: { company: DiscoverCompany }) {
   );
 }
 
-export function DiscoverDirectory({ companies }: { companies: DiscoverCompany[] }) {
+export function CompaniesSection({ companies }: { companies: DiscoverCompany[] }) {
   const [q, setQ] = useState("");
   const [types, setTypes] = useState<Set<string>>(new Set());
   const [countries, setCountries] = useState<Set<string>>(new Set()); // ISO codes
   const [ctyOpen, setCtyOpen] = useState(false);
+  const [typeOpen, setTypeOpen] = useState(false);
   const [ctyQ, setCtyQ] = useState("");
   const ctyWrap = useRef<HTMLDivElement>(null);
+  const typeWrap = useRef<HTMLDivElement>(null);
 
-  // Close the country dropdown on outside click.
+  // Close whichever filter dropdown is open on outside click.
   useEffect(() => {
-    if (!ctyOpen) return;
+    if (!ctyOpen && !typeOpen) return;
     const onDown = (e: MouseEvent) => {
-      if (ctyWrap.current && !ctyWrap.current.contains(e.target as Node)) setCtyOpen(false);
+      const target = e.target as Node;
+      if (ctyWrap.current && !ctyWrap.current.contains(target)) setCtyOpen(false);
+      if (typeWrap.current && !typeWrap.current.contains(target)) setTypeOpen(false);
     };
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
-  }, [ctyOpen]);
+  }, [ctyOpen, typeOpen]);
 
   const toggle = (set: Set<string>, key: string) => {
     const next = new Set(set);
@@ -175,7 +164,7 @@ export function DiscoverDirectory({ companies }: { companies: DiscoverCompany[] 
     return next;
   };
 
-  // Count of listed companies per seller-side type (badge on each type pill).
+  // Count of listed companies per seller-side type (shown on each dropdown option).
   const countOfType = useMemo(() => {
     const m: Record<string, number> = {};
     for (const t of SELLER_TYPES)
@@ -212,72 +201,81 @@ export function DiscoverDirectory({ companies }: { companies: DiscoverCompany[] 
   const hasActive = types.size > 0 || countries.size > 0;
 
   return (
-    <div className="mx-auto h-full w-full max-w-6xl overflow-auto px-4 py-8 sm:px-6">
-      {/* CENTER zone: closed-network badge + title + intro + search */}
-      <div className="text-center">
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-soft/50 px-3 py-1 text-xs font-semibold text-brand-deep">
-          <Lock size={13} /> Closed network
-        </span>
-        <h1 className="mt-4 text-[30px] font-bold leading-tight tracking-tight text-ink sm:text-4xl">
-          Find a company to connect with
-        </h1>
-        <p className="mx-auto mt-2 max-w-md text-[15px] text-ink-muted">
-          Search the directory, then request entry. Shops stay private until you&apos;re let in.
-        </p>
-        <div className="glass mx-auto mt-5 flex max-w-xl items-center gap-2.5 rounded-full px-4 py-1.5">
-          <Search size={18} className="text-ink-muted" />
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search companies by name…"
-            className="w-full bg-transparent py-2.5 text-[15px] focus:outline-none"
-          />
-        </div>
+    <SectionCard title="Companies">
+      <div className="glass flex items-center gap-2.5 rounded-full px-4 py-1.5">
+        <Search size={18} className="text-ink-muted" />
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search companies by name…"
+          className="w-full bg-transparent py-2.5 text-[15px] focus:outline-none"
+        />
       </div>
 
-      {/* FILTER band: LEFT type-bubbles · RIGHT country multi-select */}
-      <div className="mt-7 flex flex-col items-stretch gap-3 border-t border-white/60 pt-5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="mr-1 text-xs font-semibold uppercase tracking-wide text-ink-muted">
-            Company type
-          </span>
-          {SELLER_TYPES.map((t) => {
-            const on = types.has(t);
-            return (
-              <button
-                key={t}
-                onClick={() => setTypes((s) => toggle(s, t))}
-                className={`inline-flex items-center rounded-full px-3.5 py-1.5 text-[13px] font-semibold transition ${
-                  on ? "bg-brand text-white hover:bg-brand-deep"
-                     : "bg-white/70 text-ink-muted ring-1 ring-black/5 hover:bg-white/90"
-                }`}
-              >
-                {t}
-                <span className={`ml-1 rounded-full px-1.5 py-px text-[10px] font-bold ${
-                  on ? "bg-white/25 text-white" : "bg-black/5 text-ink-muted"
-                }`}>
-                  {countOfType[t]}
-                </span>
-                {on && <Check size={13} className="ml-1.5" />}
-              </button>
-            );
-          })}
+      {/* FILTER band: Company-type + Country multi-select dropdowns (both live-filter). */}
+      <div className="mt-6 flex flex-wrap items-center gap-2.5">
+        <span className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Filter</span>
+
+        {/* Company type — multi-select dropdown (7 options; per-type counts kept). */}
+        <div className="relative" ref={typeWrap}>
+          <button
+            onClick={() => { setCtyOpen(false); setTypeOpen((o) => !o); }}
+            className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-[13px] font-semibold transition ${
+              types.size ? "bg-brand text-white hover:bg-brand-deep"
+                         : "bg-white/70 text-ink-muted ring-1 ring-black/5 hover:bg-white/90"
+            }`}
+          >
+            {types.size === 0 ? "Company type" : `${types.size} selected`}
+            <ChevronDown size={16} />
+          </button>
+          {typeOpen && (
+            <div className="glass-strong absolute left-0 z-30 mt-2 w-64 rounded-2xl p-2">
+              <div className="max-h-72 overflow-auto">
+                {SELLER_TYPES.map((t) => {
+                  const on = types.has(t);
+                  return (
+                    <button
+                      key={t}
+                      onClick={() => setTypes((s) => toggle(s, t))}
+                      className="flex w-full items-center gap-2.5 rounded-xl px-2 py-2 text-left text-sm hover:bg-brand-soft/25"
+                    >
+                      <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                        on ? "border-brand bg-brand text-white" : "border-black/15 bg-white text-transparent"
+                      }`}>
+                        <Check size={12} />
+                      </span>
+                      <span className="flex-1 font-medium text-ink">{t}</span>
+                      <span className="text-xs font-semibold text-ink-muted">{countOfType[t]}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              {types.size > 0 && (
+                <button
+                  onClick={() => setTypes(new Set())}
+                  className="mt-1 w-full rounded-xl px-2 py-1.5 text-left text-xs font-semibold text-brand hover:bg-brand-soft/30"
+                >
+                  Clear {types.size} selected
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* RIGHT zone: searchable multi-select country dropdown */}
-        <div className="relative sm:w-56" ref={ctyWrap}>
+        {/* Country — searchable multi-select dropdown (canonical ISO list). */}
+        <div className="relative" ref={ctyWrap}>
           <button
-            onClick={() => setCtyOpen((o) => !o)}
-            className={`inline-flex w-full items-center justify-between gap-2 rounded-full px-4 py-2 text-sm font-semibold transition ${
+            onClick={() => { setTypeOpen(false); setCtyOpen((o) => !o); }}
+            className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-[13px] font-semibold transition ${
               countries.size ? "bg-brand text-white hover:bg-brand-deep"
                              : "bg-white/70 text-ink-muted ring-1 ring-black/5 hover:bg-white/90"
             }`}
           >
-            <span className="inline-flex items-center gap-1.5"><MapPin size={15} /> {ctyLabel}</span>
+            <MapPin size={15} /> {ctyLabel}
             <ChevronDown size={16} />
           </button>
           {ctyOpen && (
-            <div className="glass-strong absolute right-0 z-30 mt-2 w-64 rounded-2xl p-2">
+            <div className="glass-strong absolute left-0 z-30 mt-2 w-64 rounded-2xl p-2">
               <div className="mb-1 flex items-center gap-2 rounded-xl bg-white/70 px-2.5 py-1.5 text-ink-muted ring-1 ring-black/5">
                 <Search size={15} />
                 <input
@@ -346,6 +344,12 @@ export function DiscoverDirectory({ companies }: { companies: DiscoverCompany[] 
               <CodeChip code={code} /> {COUNTRIES[code] ?? code} <X size={12} />
             </button>
           ))}
+          <button
+            onClick={() => { setTypes(new Set()); setCountries(new Set()); }}
+            className="rounded-full px-2.5 py-1 text-xs font-semibold text-brand hover:bg-brand-soft/30"
+          >
+            Clear all
+          </button>
         </div>
       )}
 
@@ -362,7 +366,7 @@ export function DiscoverDirectory({ companies }: { companies: DiscoverCompany[] 
           return (
             <div
               key={c.id}
-              className="glass grid grid-cols-[auto_1fr_auto] items-center gap-4 rounded-2xl px-4 py-3 transition hover:bg-white/80 sm:grid-cols-[auto_minmax(0,2.2fr)_minmax(0,1.5fr)_minmax(0,1.9fr)_auto]"
+              className="grid grid-cols-[auto_1fr_auto] items-center gap-4 rounded-2xl px-4 py-3 transition hover:bg-white/70 sm:grid-cols-[auto_minmax(0,2.2fr)_minmax(0,1.5fr)_minmax(0,1.9fr)_auto]"
             >
               <Link href={`/discover/${c.id}`} className="shrink-0">
                 <Logo company={c} />
@@ -401,6 +405,6 @@ export function DiscoverDirectory({ companies }: { companies: DiscoverCompany[] 
           </p>
         )}
       </div>
-    </div>
+    </SectionCard>
   );
 }

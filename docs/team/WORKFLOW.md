@@ -54,6 +54,42 @@ Either of us can pick up either area when the queue calls for it.
 
 ---
 
+## Ticket format — build tickets vs. product decisions
+
+Two separate Linear **teams**, not one:
+
+- **Development (`DEV-`)** — product decisions, design questions, PRD-level items. Don't add build tickets here.
+- **Codebase Development Tickets (`HEL-`)** — implementation tickets for a locked build (post-G3 design). One issue per ticket from the item's `TICKETS.md`.
+
+**Template for every `HEL-` issue** (locked 2026-08-14, tier-ladder T01–T08 is the reference example):
+
+```
+Title: T0X — <short name from TICKETS.md>
+
+**Source:** `docs/muskan-build/<slug>/TICKETS.md` · <ADR ref>
+**Size:** XS/S/M/L · **Depends on:** T0X, T0Y (or —)
+
+<one-line summary, only if the ticket needs one beyond the title>
+
+**Files:**
+- `path/one`
+- `path/two`
+
+**Acceptance criteria (EARS):**
+- [ ] When <trigger>, the system shall <behavior>.
+- [ ] ...
+
+**Parallel lanes:** <the same lane diagram from TICKETS.md, verbatim, on every ticket in the batch>
+```
+
+**Rules:**
+- Use real Linear `blockedBy` links for the `Depends on` line — don't leave dependencies as text only. Create dependency-free tickets first, capture their IDs, then link forward.
+- ⚠️ notes (sync ritual, shared-file locks, deploy-order holds) go as a bold line directly under the Source/Size/Depends-on line, not buried in the body.
+- Label `Feature` unless it's clearly a `Bug` or `Improvement`.
+- `TICKETS.md` in the slug folder stays the spec of record; Linear owns pick-up/status/close (per the 2026-08-14 tier-ladder session).
+
+---
+
 ## Issue closure — capture architecture implications
 
 Before moving any Linear issue to `Done`, scan the locked decision for architecture implications:
