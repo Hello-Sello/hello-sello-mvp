@@ -1473,3 +1473,13 @@ Ticket switched from the originally-proposed Discover migration batch to the tie
 - **Tracking split locked:** `TICKETS.md` (in the build folder) stays the spec of record — EARS criteria, file lists, dependency graph; Linear gets one issue per ticket for pick-up/close tracking. *Why:* the team already tracks work as DEV-XX in Linear; splitting into GitHub issues too would fragment tracking for no gain. **Blocked this session:** Linear MCP auth did not complete (`/mcp` retried, still unauthorized) — first task of the next session, per `docs/agents/PIPELINE.md` open decision #1.
 
 Full trail — every prediction, every stage log, all 7 checker transcripts, the convergence table: `docs/agents/DRY-RUN-tier-ladder.md`.
+
+---
+
+## 2026-08-16 — Pipeline dry-run COMPLETE — verdict: build the Tier-1 roster; checker rules confirmed end-to-end
+
+The tier-ladder slug finished every stage (G1→G5 + contract migration C live on prod), closing the dry run the 2026-08-14 entry opened. Final verdicts, written into `docs/agents/PIPELINE.md` (canonical) + the filled stage table in `docs/agents/DRY-RUN-tier-ladder.md`:
+
+- **`adr-checker` is Tier 1 — CONFIRMED at completion** (not just at G3): its three operating rules (fresh separate-context agent every round · 2-round budget, stop on zero NEW blockers · simplification bias on fixes) held through build and ship and are now locked in PIPELINE.md's `/design` section.
+- **`plan-checker` stays Tier 2, on watch** — its headline predicted catch (missed call sites) was pre-empted by the ADR before any plan existed; no decisive independent catch in T01–T08. Not cut; earns Tier 1 (or the axe) on future slugs. `consistency` likewise: no evidence either way this slug.
+- **Build decision: GO on the Tier-1 set as real skills/agents** (/triage + STATE.md · spec/design with adr-checker · test-writer/runner · visual-verifier + G4 · /ship). /ship must bake in two dry-run-discovered steps: the diff-against-live re-declare protocol, and the fact that **prod data-writes require a human-granted permission rule** (the classifier correctly blocks the agent). Do NOT build plan-checker/consistency as agents yet. *Why:* the dry-run's own rule — a Tier-2 agent that catches nothing gets cut before it's built; automating unproven checkers is the GSD failure mode the pipeline was designed against.
