@@ -1418,6 +1418,29 @@ Researched first (CRM Lead→Opportunity is the standard pattern for "I don't kn
 
 ---
 
+## 2026-07-23 — Discover → open LinkedIn-style directory of companies + people (supersedes the 2026-06-11 closed model + ad-cut)
+
+Discover Lane B design session (prototype-first; no code). Reverses the two most restrictive parts of the 2026-06-11 lock while keeping the shop gated.
+
+- **Discover becomes an OPEN, LinkedIn-style directory of BOTH companies and people.** Everyone on the selling side is visible by their tag; the directory is browsable, not a search-only lobby. *Why:* Discover should drive real networking + supplier discovery for onboarding/testing, not just a closed "ask to enter" lobby. The **shop/catalogue stays gated** (soft-openness, 2026-06-14) — "open directory" ≠ "open catalog", so the NON-marketplace concern for the *shop* is untouched.
+- **Pharmacies stay hidden-but-searchable — the asymmetric-listing lock survives, now applied to PEOPLE too.** A pharmacy-only company (and a pharmacy-only person) is hidden from the default view, reachable only by exact-name search; every other tag is visible. *Why:* buyers still don't want to be cold-listed; the rule is unchanged, just extended to the new people directory (uniform gate — Muskan's call).
+- **Ads banner reinstated** as a full-width top leaderboard placeholder (reverses the 2026-06-11 "ad/social feed = CUT"). *Why:* a top ad unit ≠ a social feed; Marcel's FLOWZ reference shows the expected placement.
+- **Page = one scrolling surface, Variant D layout** (chosen from a 4-variant prototype): Ads → [Connection Requests | My Network, side-by-side, bounded height, expand-scrolls-within] → New People (cards) → Companies (rows). Company-type + Country are **multi-select dropdown filters** (scale to any platform tag). Connection Requests **move from Connect into Discover** (connect-type items only; deal tickets stay in Connect — see the deals-on-Home entry).
+- **⚠️ Reverses Marcel's 2026-06-10 "closed, non-marketplace, no ads" directive** — Muskan's (product) call; worth confirming with Marcel. Prototype: `prototypes/discover-linkedin-prototype/`. Build plan: [`docs/muskan-build/discover-linkedin.md`](../muskan-build/discover-linkedin.md).
+
+---
+
+## 2026-07-23 — Incoming company-wide deals surface on Home (not a Connect-inbox lens)
+
+Follows from moving Connection Requests out of the Connect inbox into Discover: the incoming-DEAL workflow shouldn't stay orphaned as a lens. Grounded in a research pass (Salesforce lead queues, Zendesk Play, Linear Triage, Front shared inbox).
+
+- **An inbound deal addressed to a company surfaces on the HOME dashboard**, in a shared company-wide "up-for-grabs" area; any team member **claims** it (pull-to-claim, keeps the built `claim_deal_ticket` → `deal_member` owner model). *Why:* enterprise tools converge on a dedicated shared queue + pull-to-claim for inbound-to-a-company where reps aren't fungible; Home is a dummy dashboard today, so this gives it a real job.
+- **The Connect "Deal tickets" lens retires** (proposed — pending Muskan's final confirm) so a deal has ONE home. *Why:* DRY — one authoritative pickup surface, not two.
+- **Home board = 2 zones (Incoming-to-claim / In-progress)** — detailed design is its own prototype-first pass (deferred). Build shape on top of today's claim model: release/reassign, claim collision-safety, and an aging/escalation backstop (so hard deals don't rot). *Why:* the research's standard hardening for a pull-to-claim queue.
+- Supersedes the interim "deal tickets live in the Connect inbox lens" placement (2026-07-20 Lane A). Pull-to-claim + company-wide receiver visibility (locked in the Lane A entry) is unchanged — only the SURFACE moves.
+
+---
+
 ## 2026-07-23 - Deal card single-sign lifecycle LOCKED: private Draft → Send → Negotiation → Sign by the FIXED receiver; Negotiate = talk; buyer door decided
 
 Locked with Ayush 2026-07-22 in the deal-card problem-board session (21 code-verified open items; the build runs step-by-step from this model, status machine first). Recorded BEFORE any code moves so nobody plans against the old assumptions. ⚠️ Muskan: the `order` deal_type derivation and the buyer create-door (bullet 5) plus the calendar/basket touchpoints with timing (last bullet) land in your lanes - please read those three.
@@ -1433,6 +1456,26 @@ Locked with Ayush 2026-07-22 in the deal-card problem-board session (21 code-ver
 
 ---
 
+## 2026-07-24 — Discover connections are person↔person (pure social), NOT company-gated (locked with Ayush)
+
+Settled at the start of the Discover Lane B build (with Ayush), superseding the plan's earlier "bolt the person '+' onto the existing company-connect machinery" assumption (DISC-10 open question resolved).
+
+- **Any user can connect to any other user, person-to-person — WITHOUT their companies being connected.** This introduces a **second, independent relationship graph** (`person_connection`) beside the existing company↔company `relationship` graph — modelled on LinkedIn (a social graph next to the commercial one). *Why:* Discover is a networking surface; requiring a company relationship to know a person defeats the point, and Marcel's DEV-142 ("no company connection, only person connection") points the same way.
+- **Pure social — the commercial layer is untouched.** A person connection grants **profile visibility + a person-to-person DM only**. Deals, pricing, and shops stay **company-scoped**. A person's DM thread is a `chat_thread` with **no relationship** (`relationship_id = NULL`), reusing the group-chat company-less pattern. *Why:* keeps the blast radius bounded and the B2B commercial model intact; you trade as a company, not as an individual.
+- **"Ladder a person connection up into a company relationship" (for commerce) is a deliberate follow-up**, not this sprint. *Why:* the social graph is valuable on its own; the bridge to commerce is a separate design once the graph exists.
+- **We build the foundation in-lane (not handed to Ayush)** — but it touches his base tables (`pending_inbox_item`, inbox RLS, `chat_thread`, `person_select`), so those go through sync-lock + rebuild-from-live + **his review before cloud**. Built end-to-end session 69 (see [`docs/muskan-build/discover-linkedin.md`](../muskan-build/discover-linkedin.md) + the person-graph entry in `ARCHITECTURE-NOTES.md`). ⚠️ **Built UI diverges from the Variant D prototype — a visual rework is owed before ship.**
+
+### Discover — UI rework + realtime (2026-07-24, session 70)
+
+- **Discover UI now matches the Variant D prototype** (`prototypes/discover-linkedin-prototype/`): Requests | My Network side-by-side duo, one reusable `SectionCard`, ads leaderboard placeholder, verified-tick network logos. *Why:* the session-69 build was functionally correct but visually off (node vitest has no jsdom → structure-only smoke tests); the prototype is the signed-off design contract (prototype-first rule).
+- **Companies type filter = multi-select DROPDOWN** (beside the country dropdown), not pills; per-type counts kept inside the options. *Why:* realigns the build to the already-locked NOTES.md sub-decision.
+- **"People you may know" shows ONLY people you're not connected to** — connected → My Network, incoming request → Connection requests; a person appears in exactly one place. *Why:* Muskan, live feedback — the suggestions list is for people you could still connect with.
+- **Ads banner v0 = one empty full-width leaderboard placeholder** ("Sponsored", no fake creatives). *Why:* the prototype's branded creatives were mocked; shipping fake ads in a real product misleads. Real ad serving + an admin surface to place ads is a deferred follow-up.
+- **Connection requests + accepts are INSTANT via live change-capture (Supabase `postgres_changes`), NOT a broadcast shortcut.** A reusable `useRealtimeRefresh` hook subscribes to the connection tables → `router.refresh()`; the migration publishes `pending_inbox_item` + `person_connection` + `relationship`. *Why:* Muskan — build how real platforms work (scalable, maintainable, consistent with chat's pattern); don't weight build cost or table "ownership" — it's one project. See ARCHITECTURE-NOTES.
+- **Unit tests stay colocated in `src/`** (not moved to a separate `test/` tree). *Why:* the vitest config scopes to `src/**` by deliberate design; colocation is a mainstream valid pattern; a repo-wide move would churn ~29 shared/Ayush test files for no clear gain.
+
+---
+
 ## 2026-07-24 - Wave 3 built: decline only from `negotiation`; `deliver_deal` revoke must include `PUBLIC`
 
 Board Wave 3 (DecisionBar fixed roles B6/B1/B3/E1 + the Phase-12 review fixes CR-01/CR-02/WR-01..04/WR-06 + Infos) built and green on `claude/ayush/work` (all 8 backend SQL suites green from a clean `db reset`; 221/221 unit; deal e2e 19 pass / 5 skip; `next build` clean). Built test-first through a plan -> adversarial-verify -> build -> verify loop. Two decisions worth recording:
@@ -1444,6 +1487,31 @@ Known residual (deferred, low impact): the replace-a-proposal path reverts a cha
 
 ---
 
+## 2026-08-14 — Pipeline dry-run executed on the tier ladder — G1+G2 passed; ADR-0004 rev 8 parked at G3
+
+Ticket switched from the originally-proposed Discover migration batch to the tier ladder — the migration batch only exercises `/ship` and the security reviewer; the tier ladder is FULL-lane and hits every gate (G1–G5), which is what a dry run of the whole pipeline needs.
+
+- **Product locked at spec (0021-tier-ladder, G1-approved):** up to 3 volume price tiers per product (Marcel, verbatim: "Create 3 price tiers per product with dropdown"), repeatable rows UI-capped at 3 — **not** fixed columns, so a 4th tier later is a row not a migration. **REPLACES** the existing single bundle bracket (`bundle_threshold_grams`/`bundle_price_per_gram`) — one source of truth, per the existing "prices: one source of truth" lock. Base price stays exactly where it is (`pricelist_item.price_per_gram`), untouched, not folded into the ladder. The buyer-facing dropdown is an **order tool**, not a label — picking a rung pre-fills that quantity into the basket; from there basket quantity alone decides the price, live, up or down. Per-customer pricing stays a separate deferred system (per Marcel) — not related to this ladder.
+- **Design locked at prototype (G2, Variant B):** the buyer/seller price reveal is an inline "See all prices" panel (not a dropdown-beside-price or price-as-trigger variant) — built directly on the real `ProductCard.tsx` design, not an invented mockup.
+- **Decision B (G3, negotiation ownership):** once a basket becomes a deal draft, prices stop moving automatically. A quantity edit on the deal card never silently re-prices the line; instead it shows a hint ("qualifies for €X/g") that, when clicked, **proposes** the new rung as a held change through the existing propose/accept flow — never a direct write. *Why:* the deal card already has a locked rule (ADR-0001: a pending change locks the deal; ADR-0002: line prices are shared/held fields) — an early ADR draft would have silently broken both by writing the resolved price directly.
+- **Decision A (G3, basket UX):** the basket line gains a grams/pack-size editor. *Why:* acceptance criterion 5a ("buyer edits the basket down to 700g → re-prices to the 500g rung") turned out to be unbuildable on the existing basket UI, which only steps whole pack counts. Renegotiating the criterion into pack-count arithmetic was considered and rejected — buyers think in grams and the ladder itself speaks in grams; forcing pack math would be confusing, not simpler.
+- **Pipeline process locks, from 7 adversarial ADR-checker rounds (11+15+15+14+15+14+12 findings; ~70 total, never zero):** `adr-checker` graduates from Tier-2 hypothesis to Tier-1 evidence-backed — it must run as a genuinely **fresh, separate-context, read-only agent**, never the ADR's own author re-reading his own work (this was the single highest-value process change of the session: round 1 alone caught a security-gate regression, a missed CSV-import writer, and 3 divergent "which price row" pickers that no single review would have found). The checker loop is **budgeted, not exhaustive** — run 2 rounds, ship to the human gate on the first round with **zero NEW blocking findings**, never wait for zero findings total (severity fell every round; count never did). Revisions must carry a **simplification bias**: prefer the fix that removes a mechanism over one that adds one — rev 6 added a `SECURITY DEFINER` RPC to fix a save-ordering problem and that addition itself introduced a live "any user can rewrite any seller's prices" hole; rev 7 fixed it by removing the DEFINER (switching to `SECURITY INVOKER`, letting RLS enforce ownership for free) and introduced zero new findings. Checkers can also be wrong about each other — round 6 flagged "RLS policies would be silently inert" with a wrong rationale (the repo already has an `rls_auto_enable()` event trigger); round 5 corrected it. **PIPELINE.md §6b amended:** prototypes now get the same NNNN numbering as specs/builds (`prototypes/NNNN-<slug>-prototype/`).
+- **Tracking split locked:** `TICKETS.md` (in the build folder) stays the spec of record — EARS criteria, file lists, dependency graph; Linear gets one issue per ticket for pick-up/close tracking. *Why:* the team already tracks work as DEV-XX in Linear; splitting into GitHub issues too would fragment tracking for no gain. **Blocked this session:** Linear MCP auth did not complete (`/mcp` retried, still unauthorized) — first task of the next session, per `docs/agents/PIPELINE.md` open decision #1.
+
+Full trail — every prediction, every stage log, all 7 checker transcripts, the convergence table: `docs/agents/DRY-RUN-tier-ladder.md`.
+
+---
+
 ## 2026-08-14 — Volume pricing = the tier ladder (build amendment to the dry-run design lock)
 
 - **Volume pricing is now the tier ladder: child rows of `pricelist_item` (`pricelist_item_tier`), up to 3 rungs in the UI, unbounded in schema, REPLACING the single bundle bracket columns** (`bundle_threshold_grams` / `bundle_price_per_gram` — dropped by held Migration C only after the tiers-reading deploy is verified live; Migration E backfills well-formed brackets to rungs, rescues malformed ones to `metadata.legacy_bundle`). Base price stays on `pricelist_item`. *Why:* one mechanism for N volume prices instead of a special-cased single bracket; ref ADR-0004 (rev 8) + PRD 0021.
+
+---
+
+## 2026-08-16 — Pipeline dry-run COMPLETE — verdict: build the Tier-1 roster; checker rules confirmed end-to-end
+
+The tier-ladder slug finished every stage (G1→G5 + contract migration C live on prod), closing the dry run the 2026-08-14 entry opened. Final verdicts, written into `docs/agents/PIPELINE.md` (canonical) + the filled stage table in `docs/agents/DRY-RUN-tier-ladder.md`:
+
+- **`adr-checker` is Tier 1 — CONFIRMED at completion** (not just at G3): its three operating rules (fresh separate-context agent every round · 2-round budget, stop on zero NEW blockers · simplification bias on fixes) held through build and ship and are now locked in PIPELINE.md's `/design` section.
+- **`plan-checker` stays Tier 2, on watch** — its headline predicted catch (missed call sites) was pre-empted by the ADR before any plan existed; no decisive independent catch in T01–T08. Not cut; earns Tier 1 (or the axe) on future slugs. `consistency` likewise: no evidence either way this slug.
+- **Build decision: GO on the Tier-1 set as real skills/agents** (/triage + STATE.md · spec/design with adr-checker · test-writer/runner · visual-verifier + G4 · /ship). /ship must bake in two dry-run-discovered steps: the diff-against-live re-declare protocol, and the fact that **prod data-writes require a human-granted permission rule** (the classifier correctly blocks the agent). Do NOT build plan-checker/consistency as agents yet. *Why:* the dry-run's own rule — a Tier-2 agent that catches nothing gets cut before it's built; automating unproven checkers is the GSD failure mode the pipeline was designed against.

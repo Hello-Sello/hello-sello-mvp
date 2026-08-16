@@ -39,4 +39,4 @@ The connection flow (send → box → accept → connect) **already works today*
 3. Build per the plan's tickets; gate (tsc/eslint/pgTAP/unit/e2e) + live-verify on a fresh `supabase db reset`.
 
 ## Still to create
-- **Timeline table for ALL priorities** (from the July sprint sheet) so Marcel + devs see finish dates — needs the priority order confirmed.
+- ✅ **Timeline table for ALL priorities — DONE (session 67, 2026-07-22).** Dates live in Muskan's Google Sheet (July-sprint tab): loop + full Discover by Fri 24 · Present cluster Sat 25–Wed 29 · heavy/design-first items (cross-product bundle, Phase 15/16 full, Buy 💗, Allocate By-Batch/Product, Home) → Aug. Sequence + owners + AI-hour sizing in CLAUDE.md "What's next" / session-log session 67.

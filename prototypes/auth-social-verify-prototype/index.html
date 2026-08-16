@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PROTOTYPE — Social Sign-In & Email Verification</title>
+<!--
+  THROWAWAY PROTOTYPE — Phase 6.1 (Social Sign-In & Email Verification).
+  Question it answers: "What should the new auth screens look like with
+  Google/Outlook buttons + a real 'check your inbox' verify state?"
+  Faithful to the real app's brand tokens (src/app/globals.css) and the
+  AuthCard / VerifyEmailCard layout. No real auth — design preview only.
+  Switch screens with the floating bar at the bottom.
+-->
+<style>
+  :root {
+    --color-brand: #e30b5d;
+    --color-brand-soft: #ffb7d5;
+    --color-brand-deep: #76002d;
+    --color-ink: #1f2020;
+    --color-ink-muted: #6b6470;
+    --color-success: #34b233;
+    --color-danger: #dc2626;
+    --bg-from: #ffffff;
+    --bg-to: #ffe6f0;
+    --glass-bg-strong: rgba(255, 255, 255, 0.78);
+    --glass-border: rgba(255, 255, 255, 0.65);
+    --glass-shadow: 0 10px 34px -12px rgba(118, 0, 45, 0.18);
+    /* field border strength — toggled live by the control bottom-right */
+    --field-border: rgba(31,32,32,0.30);
+    --field-border-hover: rgba(31,32,32,0.45);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    min-height: 100vh;
+    color: var(--color-ink);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background:
+      radial-gradient(60rem 60rem at 10% -12%, rgba(255, 183, 213, 0.55), transparent 60%),
+      radial-gradient(46rem 46rem at 108% 6%, rgba(227, 11, 93, 0.10), transparent 55%),
+      linear-gradient(160deg, var(--bg-from) 0%, var(--bg-to) 100%);
+    background-attachment: fixed;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    padding-bottom: 96px;
+  }
+
+  .card {
+    width: 100%;
+    max-width: 384px;
+    background: var(--glass-bg-strong);
+    backdrop-filter: blur(24px) saturate(160%);
+    -webkit-backdrop-filter: blur(24px) saturate(160%);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+    border-radius: 24px;
+    padding: 32px;
+  }
+
+  .brand-head { display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; margin-bottom: 24px; }
+  .logo { height: 40px; object-contain: contain; }
+  .logo-fallback { font-weight: 800; font-size: 22px; letter-spacing: -0.5px; }
+  .logo-fallback .hi { color: var(--color-ink); }
+  .logo-fallback .sello { color: var(--color-brand); }
+  h1 { font-size: 18px; font-weight: 600; color: var(--color-ink); }
+  .subtitle { margin-top: 4px; font-size: 14px; color: var(--color-ink-muted); }
+
+  .highlights { list-style: none; display: flex; flex-direction: column; gap: 10px; margin-bottom: 24px; }
+  .highlights li { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--color-ink); }
+  .highlights svg { flex-shrink: 0; color: var(--color-brand); }
+
+  /* social buttons */
+  .social { display: flex; flex-direction: column; gap: 10px; }
+  .social-btn {
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    width: 100%; padding: 10px 16px; border-radius: 12px;
+    border: 1px solid rgba(31,32,32,0.12); background: rgba(255,255,255,0.85);
+    font-size: 14px; font-weight: 600; color: var(--color-ink);
+    cursor: pointer; transition: background .15s, border-color .15s, box-shadow .15s;
+  }
+  .social-btn:hover { background: #fff; border-color: rgba(31,32,32,0.22); box-shadow: 0 2px 10px -4px rgba(118,0,45,0.18); }
+  .social-btn svg { width: 18px; height: 18px; }
+
+  /* divider */
+  .divider { display: flex; align-items: center; gap: 12px; margin: 18px 0; color: var(--color-ink-muted); font-size: 12px; }
+  .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: rgba(31,32,32,0.12); }
+
+  /* form */
+  form { display: flex; flex-direction: column; gap: 12px; }
+  .row { display: flex; gap: 12px; }
+  label { display: flex; flex-direction: column; gap: 4px; font-size: 14px; flex: 1; }
+  label span { color: var(--color-ink-muted); }
+  input {
+    width: 100%; border-radius: 12px; border: 1px solid var(--field-border);
+    background: rgba(255,255,255,0.9); padding: 8px 12px; font-size: 14px; color: var(--color-ink);
+    outline: none; transition: border-color .15s, box-shadow .15s;
+  }
+  input::placeholder { color: rgba(107,100,112,0.55); }
+  input:hover { border-color: var(--field-border-hover); }
+  input:focus { border-color: var(--color-brand); box-shadow: 0 0 0 2px var(--color-brand-soft); }
+
+  .primary-btn {
+    margin-top: 8px; border: none; border-radius: 12px; background: var(--color-brand);
+    padding: 10px 16px; font-size: 14px; font-weight: 600; color: #fff; cursor: pointer;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1); transition: background .15s;
+  }
+  .primary-btn:hover { background: var(--color-brand-deep); }
+
+  .footer { margin-top: 24px; text-align: center; font-size: 14px; color: var(--color-ink-muted); }
+  .footer a { color: var(--color-brand); font-weight: 600; text-decoration: none; cursor: pointer; }
+
+  /* verify screen */
+  .verify { text-align: center; }
+  .verify .icon-wrap { display: inline-flex; height: 48px; width: 48px; align-items: center; justify-content: center; border-radius: 16px; background: rgba(255,183,213,0.4); margin-bottom: 8px; }
+  .verify .icon-wrap svg { color: var(--color-brand); }
+  .verify .email { font-weight: 500; color: var(--color-ink); }
+  .verify .waiting { display: inline-flex; align-items: center; gap: 8px; margin-top: 20px; font-size: 13px; color: var(--color-ink-muted); }
+  .spinner { width: 14px; height: 14px; border: 2px solid var(--color-brand-soft); border-top-color: var(--color-brand); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .resend { margin-top: 22px; font-size: 13px; color: var(--color-ink-muted); }
+  .resend a { color: var(--color-ink); font-weight: 600; text-decoration: underline; cursor: pointer; }
+  .resend .cooldown { color: var(--color-ink-muted); opacity: 0.7; text-decoration: none; font-weight: 400; cursor: default; }
+  .auto-note { margin-top: 16px; font-size: 11px; color: var(--color-ink-muted); opacity: 0.8; }
+
+  /* screen switcher */
+  .switcher {
+    position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 4px; padding: 5px; border-radius: 14px;
+    background: rgba(31,32,32,0.85); backdrop-filter: blur(8px); z-index: 100;
+    box-shadow: 0 8px 24px -8px rgba(0,0,0,0.4);
+  }
+  .switcher button {
+    border: none; background: transparent; color: rgba(255,255,255,0.7);
+    font-size: 12px; font-weight: 600; padding: 7px 14px; border-radius: 10px; cursor: pointer;
+  }
+  .switcher button.active { background: var(--color-brand); color: #fff; }
+  .switcher .label { color: rgba(255,255,255,0.4); font-size: 10px; align-self: center; padding-left: 8px; padding-right: 4px; letter-spacing: 0.5px; }
+
+  .screen { display: none; width: 100%; justify-content: center; }
+  .screen.active { display: flex; }
+</style>
+</head>
+<body>
+
+<!-- ============ LOGIN ============ -->
+<div class="screen" id="screen-login">
+  <div class="card">
+    <div class="brand-head">
+      <img class="logo" src="../../public/hello-sello-logo.png" alt="Hello Sello"
+           onerror="this.outerHTML='&lt;div class=&quot;logo-fallback&quot;&gt;&lt;span class=&quot;hi&quot;&gt;Hello &lt;/span&gt;&lt;span class=&quot;sello&quot;&gt;Sello&lt;/span&gt;&lt;/div&gt;'" />
+      <div>
+        <h1>Welcome back</h1>
+        <p class="subtitle">Sign in to Hello Sello</p>
+      </div>
+    </div>
+
+    <div class="social">
+      <button class="social-btn" type="button">
+        <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.76h3.56c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.56-2.76c-.98.66-2.23 1.06-3.72 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A11 11 0 0 0 12 23z"/><path fill="#FBBC05" d="M5.84 14.09a6.6 6.6 0 0 1 0-4.18V7.07H2.18a11 11 0 0 0 0 9.86l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1A11 11 0 0 0 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+        Continue with Google
+      </button>
+      <button class="social-btn" type="button">
+        <svg viewBox="0 0 24 24"><path fill="#0078D4" d="M13 3h8a1 1 0 0 1 1 1v6h-9V3z"/><path fill="#0078D4" d="M22 14v6a1 1 0 0 1-1 1h-8v-7h9z" opacity=".9"/><path fill="#28A8EA" d="M2 6.5 11 5v14l-9-1.5v-11z"/><circle fill="#fff" cx="6.5" cy="12" r="2.6"/><path fill="#0078D4" d="M6.5 10.4c.9 0 1.4.7 1.4 1.6s-.5 1.6-1.4 1.6-1.4-.7-1.4-1.6.5-1.6 1.4-1.6z"/></svg>
+        Continue with Outlook
+      </button>
+    </div>
+
+    <div class="divider">or</div>
+
+    <form onsubmit="return false">
+      <label><span>Email</span><input type="email" placeholder="you@company.com" /></label>
+      <label><span>Password</span><input type="password" placeholder="••••••••" /></label>
+      <button class="primary-btn" type="submit">Sign in</button>
+    </form>
+
+    <div class="footer">No account? <a onclick="show('signup')">Sign up</a></div>
+  </div>
+</div>
+
+<!-- ============ SIGNUP ============ -->
+<div class="screen" id="screen-signup">
+  <div class="card">
+    <div class="brand-head">
+      <img class="logo" src="../../public/hello-sello-logo.png" alt="Hello Sello"
+           onerror="this.outerHTML='&lt;div class=&quot;logo-fallback&quot;&gt;&lt;span class=&quot;hi&quot;&gt;Hello &lt;/span&gt;&lt;span class=&quot;sello&quot;&gt;Sello&lt;/span&gt;&lt;/div&gt;'" />
+      <div>
+        <h1>Create your Hello Sello account</h1>
+      </div>
+    </div>
+
+    <ul class="highlights">
+      <li><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>Register to get a QR code business card</li>
+      <li><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>Enter a network to buy and sell B2B</li>
+    </ul>
+
+    <div class="social">
+      <button class="social-btn" type="button">
+        <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.76h3.56c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.56-2.76c-.98.66-2.23 1.06-3.72 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A11 11 0 0 0 12 23z"/><path fill="#FBBC05" d="M5.84 14.09a6.6 6.6 0 0 1 0-4.18V7.07H2.18a11 11 0 0 0 0 9.86l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1A11 11 0 0 0 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+        Continue with Google
+      </button>
+      <button class="social-btn" type="button">
+        <svg viewBox="0 0 24 24"><path fill="#0078D4" d="M13 3h8a1 1 0 0 1 1 1v6h-9V3z"/><path fill="#0078D4" d="M22 14v6a1 1 0 0 1-1 1h-8v-7h9z" opacity=".9"/><path fill="#28A8EA" d="M2 6.5 11 5v14l-9-1.5v-11z"/><circle fill="#fff" cx="6.5" cy="12" r="2.6"/><path fill="#0078D4" d="M6.5 10.4c.9 0 1.4.7 1.4 1.6s-.5 1.6-1.4 1.6-1.4-.7-1.4-1.6.5-1.6 1.4-1.6z"/></svg>
+        Continue with Outlook
+      </button>
+    </div>
+
+    <div class="divider">or sign up with email</div>
+
+    <form onsubmit="show('verify'); return false">
+      <label><span>Full name</span><input type="text" placeholder="e.g. Muskan" /></label>
+      <label><span>Email</span><input type="email" placeholder="you@company.com" /></label>
+      <label><span>Password</span><input type="password" placeholder="••••••••" /></label>
+      <button class="primary-btn" type="submit">Create account</button>
+    </form>
+
+    <div class="footer">Already have an account? <a onclick="show('login')">Sign in</a></div>
+  </div>
+</div>
+
+<!-- ============ VERIFY EMAIL ============ -->
+<div class="screen" id="screen-verify">
+  <div class="card verify">
+    <div class="brand-head">
+      <img class="logo" src="../../public/hello-sello-logo.png" alt="Hello Sello"
+           onerror="this.outerHTML='&lt;div class=&quot;logo-fallback&quot;&gt;&lt;span class=&quot;hi&quot;&gt;Hello &lt;/span&gt;&lt;span class=&quot;sello&quot;&gt;Sello&lt;/span&gt;&lt;/div&gt;'" />
+      <span class="icon-wrap">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 13V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8"/><path d="m22 7-10 5L2 7"/><path d="m16 19 2 2 4-4"/></svg>
+      </span>
+    </div>
+
+    <h1>Check your inbox</h1>
+    <p class="subtitle">We sent a confirmation link to <span class="email">muskan@hello-sello.com</span>. Open it to finish creating your account.</p>
+
+    <div class="waiting"><span class="spinner"></span> Waiting for you to confirm…</div>
+
+    <p class="resend">Didn’t get it? <a id="resend-link" onclick="startCooldown()">Resend email</a></p>
+
+    <p class="auto-note">This page continues automatically once you click the link.</p>
+  </div>
+</div>
+
+<!-- ============ SCREEN SWITCHER ============ -->
+<div class="switcher">
+  <span class="label">PROTOTYPE</span>
+  <button id="btn-login" onclick="show('login')">Login</button>
+  <button id="btn-signup" onclick="show('signup')">Sign up</button>
+  <button id="btn-verify" onclick="show('verify')">Verify email</button>
+</div>
+
+<script>
+  function show(name) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.querySelectorAll('.switcher button').forEach(b => b.classList.remove('active'));
+    document.getElementById('screen-' + name).classList.add('active');
+    document.getElementById('btn-' + name).classList.add('active');
+    history.replaceState(null, '', '?screen=' + name);
+  }
+
+  let cooling = false;
+  function startCooldown() {
+    if (cooling) return;
+    cooling = true;
+    const link = document.getElementById('resend-link');
+    let secs = 30;
+    link.outerHTML = '<span class="cooldown" id="resend-link">Sent — you can resend in ' + secs + 's</span>';
+    const tick = setInterval(() => {
+      secs--;
+      const el = document.getElementById('resend-link');
+      if (secs <= 0) {
+        clearInterval(tick);
+        cooling = false;
+        el.outerHTML = '<a id="resend-link" onclick="startCooldown()">Resend email</a>';
+      } else {
+        el.textContent = 'Sent — you can resend in ' + secs + 's';
+      }
+    }, 1000);
+  }
+
+  // open to whatever ?screen= says, default login
+  const start = new URLSearchParams(location.search).get('screen') || 'login';
+  show(['login','signup','verify'].includes(start) ? start : 'login');
+</script>
+</body>
+</html>

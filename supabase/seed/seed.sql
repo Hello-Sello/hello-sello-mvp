@@ -1021,3 +1021,49 @@ from (values
   ('ALLOC-SEED-07', timestamptz '2026-07-27 10:00+00')
 ) as d(so, dt)
 where public.deal_card.seller_so_number = d.so;
+
+-- ============================================================================
+-- 7. Discover person-graph demo (Lane B) — a person↔person connection + its DM
+--    thread + a pending person request, all involving Alice (alice@greenleaf.test,
+--    11111111…), so Discover's My Network (People) and Requests (People) render on
+--    a fresh reset. Idempotent. Alice is verified (GreenLeaf), so the
+--    is_caller_verified() gate passes for her. David/Clara/companies come from
+--    section 5 (demo-2d). Cleanup: delete the rows referencing these demo people.
+-- ----------------------------------------------------------------------------
+
+-- 7a) Alice ↔ David active connection (canonical person_a < person_b).
+insert into public.person_connection (person_a_id, person_b_id, initiated_by_person_id)
+select least('11111111-1111-1111-1111-111111111111'::uuid, d.id),
+       greatest('11111111-1111-1111-1111-111111111111'::uuid, d.id),
+       d.id
+from auth.users d
+where d.email = 'david@nordcanna.test'
+on conflict do nothing;
+
+-- 7b) their company-less p2p DM thread, so the My Network "Message" button appears.
+insert into public.chat_thread (relationship_id, type, person_a_id, person_b_id)
+select null, 'p2p',
+       least('11111111-1111-1111-1111-111111111111'::uuid, d.id),
+       greatest('11111111-1111-1111-1111-111111111111'::uuid, d.id)
+from auth.users d
+where d.email = 'david@nordcanna.test'
+on conflict do nothing;
+
+-- 7c) a pending person→person request from Clara to Alice (Requests: People group).
+insert into public.pending_inbox_item
+  (type, sender_person_id, sender_company_id, receiver_person_id, receiver_company_id, note, status, metadata)
+select 'connect_person', c.id, p.company_id,
+       '11111111-1111-1111-1111-111111111111'::uuid, null,
+       'Hi Alice — would love to connect on Hello Sello.', 'pending',
+       jsonb_build_object('seed','discover-people')
+from auth.users c
+join public.person p on p.id = c.id
+where c.email = 'clara@rheinland.test'
+  and p.company_id is not null
+  and not exists (
+    select 1 from public.pending_inbox_item i
+    where i.type = 'connect_person'
+      and i.sender_person_id = c.id
+      and i.receiver_person_id = '11111111-1111-1111-1111-111111111111'::uuid
+      and i.status = 'pending' and i.deleted_at is null
+  );

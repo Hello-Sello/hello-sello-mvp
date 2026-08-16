@@ -127,6 +127,23 @@ export function ChatView() {
     };
   }, [searchParams]);
 
+  // PG-13: deep-link straight to a thread id. A company-less person↔person DM
+  // (Discover "Message") has no relationship to resolve, so `?thread=<id>` selects
+  // the thread directly. Refresh the list first so the DM is present, then select.
+  useEffect(() => {
+    const threadId = searchParams.get("thread");
+    if (!threadId) return;
+    let alive = true;
+    void getConversations().then((list) => {
+      if (!alive) return;
+      setConversations(list);
+      setSelectedThreadId(threadId);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [searchParams]);
+
   // load the stream whenever the selected thread changes. The clear-on-switch
   // lives in handleSelect (an event handler) so we never setState synchronously
   // inside the effect - the effect only ever syncs *from* the store.

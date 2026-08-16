@@ -1,0 +1,583 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>HS Admin · Company Verification (prototype)</title>
+<!--
+  PROTOTYPE — throwaway. Phase 3: Admin Verification Surface (/admin/verifications).
+  Question being answered: "What should the HS-team verification queue + review view look like?"
+  3 radically different layouts, switchable via the floating bottom bar (?variant=A|B|C, or ← / → keys).
+  All data is in-memory; mutations are stubs. No download path on licences (locked D-02). Delete once a layout wins.
+-->
+<style>
+  :root{
+    --brand:#e30b5d; --brand-soft:#ffb7d5; --brand-deep:#76002d;
+    --ink:#1f2020; --ink-muted:#6b6470; --ink-faint:#9a93a0;
+    --success:#1f9d2b; --success-soft:#e7f6e8; --danger:#dc2626; --danger-soft:#fdeaea;
+    --warn:#b8860b; --warn-soft:#fbf3da;
+    --paper:#ffffff; --panel:#fbfafc; --line:rgba(31,32,32,.10); --line-strong:rgba(31,32,32,.16);
+    --shadow:0 10px 34px -14px rgba(118,0,45,.22);
+  }
+  *{box-sizing:border-box} html,body{margin:0}
+  body{
+    font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    color:var(--ink); background:#f4f1f5; min-height:100vh; padding-bottom:74px;
+  }
+  .muted{color:var(--ink-muted)} .faint{color:var(--ink-faint)}
+  button{font:inherit;cursor:pointer}
+
+  /* ---- App shell (shared) ---- */
+  .topbar{display:flex;align-items:center;gap:12px;padding:12px 20px;background:var(--paper);
+          border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:800}
+  .brand .mark{width:26px;height:26px;border-radius:8px;background:var(--brand);color:#fff;
+               display:grid;place-items:center;font-size:13px}
+  .topbar .sep{color:var(--line-strong)}
+  .topbar h1{font-size:14px;margin:0;font-weight:700}
+  .topbar .who{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-muted)}
+  .topbar .who .av{width:26px;height:26px;border-radius:50%;background:var(--brand-soft);color:var(--brand-deep);
+                   display:grid;place-items:center;font-weight:800;font-size:11px}
+
+  .stage{max-width:1180px;margin:0 auto;padding:18px 20px}
+
+  /* ---- shared atoms ---- */
+  .tabs{display:inline-flex;gap:4px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:4px}
+  .tabs button{border:0;background:transparent;border-radius:9px;padding:7px 14px;font-weight:700;font-size:12.5px;color:var(--ink-muted)}
+  .tabs button.on{background:var(--brand);color:#fff}
+  .tabs .ct{display:inline-block;margin-left:6px;font-size:11px;opacity:.8}
+
+  .badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;border-radius:999px;padding:3px 9px;white-space:nowrap}
+  .b-lic{background:var(--success-soft);color:var(--success)}
+  .b-nolic{background:var(--warn-soft);color:var(--warn)}
+  .b-pending{background:#eee9f1;color:#6b5b7a}
+  .b-verified{background:var(--success-soft);color:var(--success)}
+  .b-rejected{background:var(--danger-soft);color:var(--danger)}
+  .dot{width:7px;height:7px;border-radius:50%;display:inline-block}
+
+  .pill{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;color:var(--ink-muted);
+        background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:4px 10px}
+  .age{font-variant-numeric:tabular-nums}
+  .age.warm{color:var(--warn)} .age.hot{color:var(--danger)}
+
+  .btn{border:0;border-radius:12px;padding:10px 16px;font-weight:800;font-size:13px;display:inline-flex;
+       align-items:center;justify-content:center;gap:7px}
+  .btn-approve{background:var(--success);color:#fff}
+  .btn-reject{background:var(--paper);color:var(--danger);border:1.5px solid var(--danger-soft)}
+  .btn-ghost{background:var(--panel);color:var(--ink);border:1px solid var(--line)}
+  .btn-primary{background:var(--brand);color:#fff}
+  .btn[disabled]{opacity:.45;cursor:not-allowed}
+
+  .card{background:var(--paper);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow)}
+
+  /* meta rows in detail */
+  .kv{display:grid;grid-template-columns:120px 1fr;gap:6px 14px;font-size:13px}
+  .kv dt{color:var(--ink-muted)} .kv dd{margin:0;font-weight:600}
+  .seg-title{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);margin:0 0 10px}
+
+  /* licence viewer tiles */
+  .lic-row{display:flex;gap:10px;flex-wrap:wrap}
+  .lic-tile{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:12px;padding:9px 12px;background:var(--panel)}
+  .lic-tile .ic{width:34px;height:40px;border-radius:5px;background:linear-gradient(160deg,#fff,#ece6f0);
+                border:1px solid var(--line-strong);display:grid;place-items:center;font-size:15px}
+  .lic-tile .nm{font-weight:700;font-size:12.5px} .lic-tile .vw{font-size:11px;color:var(--brand);font-weight:700}
+  .empty-lic{display:flex;align-items:center;gap:10px;border:1px dashed var(--line-strong);border-radius:12px;
+             padding:12px 14px;background:#fff;color:var(--warn);font-weight:600;font-size:12.5px}
+
+  /* ============ VARIANT A — Inbox triage (two-pane) ============ */
+  .vA{display:grid;grid-template-columns:340px 1fr;gap:16px;align-items:start}
+  .vA .rail{background:var(--paper);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+  .vA .rail .railhead{padding:12px;border-bottom:1px solid var(--line)}
+  .vA .qrow{display:block;width:100%;text-align:left;border:0;background:transparent;border-bottom:1px solid var(--line);
+            padding:12px;display:flex;gap:10px;align-items:flex-start}
+  .vA .qrow:hover{background:var(--panel)} .vA .qrow.sel{background:#fdeef4;box-shadow:inset 3px 0 0 var(--brand)}
+  .vA .qrow .nm{font-weight:800;font-size:13px}
+  .vA .qrow .sub{font-size:11.5px;color:var(--ink-muted);margin-top:2px}
+  .vA .qrow .rt{margin-left:auto;text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:5px}
+  .vA .detail{min-height:420px}
+  .placeholder{display:grid;place-items:center;min-height:420px;color:var(--ink-faint);text-align:center;
+               background:var(--paper);border:1px solid var(--line);border-radius:16px}
+
+  /* ============ VARIANT B — Table + drill-in page ============ */
+  .vB table{width:100%;border-collapse:collapse;background:var(--paper);border:1px solid var(--line);
+            border-radius:16px;overflow:hidden}
+  .vB thead th{font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-faint);text-align:left;
+               padding:11px 16px;border-bottom:1px solid var(--line);font-weight:800}
+  .vB tbody td{padding:13px 16px;border-bottom:1px solid var(--line);font-size:13px}
+  .vB tbody tr{cursor:pointer} .vB tbody tr:hover{background:var(--panel)}
+  .vB tbody tr:last-child td{border-bottom:0}
+  .vB .nm{font-weight:800} .vB .arrow{color:var(--ink-faint);font-weight:800}
+  .vB .backbar{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+  .vB .detail-page{display:grid;grid-template-columns:1fr 360px;gap:16px;align-items:start}
+
+  /* ============ VARIANT C — Review feed (expandable cards) ============ */
+  .vC{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+  .vC .fcard{background:var(--paper);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);overflow:hidden}
+  .vC .fhead{display:flex;gap:14px;align-items:center;padding:15px 16px}
+  .vC .fhead .logo{width:46px;height:46px;border-radius:12px;background:var(--brand-soft);color:var(--brand-deep);
+                   display:grid;place-items:center;font-weight:800;font-size:16px;flex:none}
+  .vC .fhead .nm{font-weight:800;font-size:15px}
+  .vC .fhead .sub{font-size:12px;color:var(--ink-muted);margin-top:2px}
+  .vC .fhead .rt{margin-left:auto;display:flex;align-items:center;gap:10px}
+  .vC .fbody{border-top:1px solid var(--line);padding:16px;display:grid;grid-template-columns:1fr 300px;gap:18px}
+  .vC .chev{transition:transform .15s;color:var(--ink-faint)}
+  .vC .fcard.open .chev{transform:rotate(180deg)}
+
+  .actionbar{display:flex;gap:10px;margin-top:16px}
+
+  /* ---- decided detail (read-only audit echo) ---- */
+  .auditbox{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:12.5px}
+  .auditbox .row{display:flex;justify-content:space-between;gap:12px;padding:3px 0}
+  .auditbox .row b{font-weight:700}
+
+  /* ---- toast ---- */
+  #toasts{position:fixed;right:18px;bottom:84px;display:flex;flex-direction:column;gap:9px;z-index:60}
+  .toast{min-width:240px;max-width:340px;padding:12px 14px;border-radius:12px;color:#fff;font-weight:700;font-size:13px;
+         box-shadow:0 12px 30px -8px rgba(0,0,0,.3);display:flex;gap:10px;align-items:center;animation:slideIn .18s ease}
+  .toast.ok{background:var(--success)} .toast.err{background:var(--danger)}
+  @keyframes slideIn{from{transform:translateY(8px);opacity:0}to{transform:none;opacity:1}}
+
+  /* ---- modal ---- */
+  .scrim{position:fixed;inset:0;background:rgba(31,18,28,.45);display:grid;place-items:center;z-index:50;padding:20px}
+  .modal{background:var(--paper);border-radius:18px;max-width:440px;width:100%;box-shadow:0 30px 70px -20px rgba(0,0,0,.4);overflow:hidden}
+  .modal.wide{max-width:620px}
+  .modal .mhead{padding:16px 18px;border-bottom:1px solid var(--line);font-weight:800;font-size:15px;display:flex;align-items:center;gap:9px}
+  .modal .mbody{padding:18px}
+  .modal .mfoot{padding:14px 18px;border-top:1px solid var(--line);display:flex;gap:10px;justify-content:flex-end}
+  .reasons{display:flex;flex-direction:column;gap:8px;margin:4px 0 14px}
+  .reasons label{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:11px;padding:10px 12px;font-weight:600;font-size:13px}
+  .reasons label:hover{background:var(--panel)} .reasons label.on{border-color:var(--brand);background:#fdeef4}
+  .reasons input{accent-color:var(--brand)}
+  textarea.note{width:100%;border:1px solid var(--line);border-radius:11px;padding:10px;font:inherit;resize:vertical;min-height:64px}
+  /* licence doc viewer (view-only — no download affordance, on purpose) */
+  .doc{position:relative;background:repeating-linear-gradient(0deg,#fff,#fff 26px,#faf7fb 27px);border:1px solid var(--line-strong);
+       border-radius:8px;height:300px;padding:22px;overflow:hidden}
+  .doc .wm{position:absolute;inset:0;display:grid;place-items:center;font-size:30px;font-weight:900;color:rgba(227,11,93,.10);
+           transform:rotate(-18deg);letter-spacing:.1em;pointer-events:none}
+  .doc h4{margin:0 0 8px;font-size:14px} .doc p{margin:0 0 8px;font-size:12px;color:var(--ink-muted);max-width:80%}
+  .viewonly{font-size:11.5px;color:var(--ink-muted);margin-top:10px;display:flex;align-items:center;gap:6px}
+
+  /* ---- floating prototype switcher (chrome — not part of the design) ---- */
+  #switch{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:80;display:flex;align-items:center;gap:4px;
+          background:#1f1320;color:#fff;border-radius:999px;padding:6px 8px;box-shadow:0 14px 34px -10px rgba(0,0,0,.5)}
+  #switch button{background:rgba(255,255,255,.12);color:#fff;border:0;width:30px;height:30px;border-radius:50%;font-size:15px;font-weight:800}
+  #switch button:hover{background:rgba(255,255,255,.24)}
+  #switch .lbl{font-size:12px;font-weight:700;padding:0 12px;min-width:172px;text-align:center}
+  #switch .lbl small{display:block;font-weight:500;opacity:.6;font-size:10px}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand"><span class="mark">HS</span> Hello&nbsp;Sello</div>
+  <span class="sep">/</span>
+  <h1>Admin · Company Verification</h1>
+  <div class="who">
+    <label class="pill" style="cursor:pointer"><input type="checkbox" id="failSim" style="accent-color:var(--brand)"> simulate save failure</label>
+    <span class="av">MV</span> Maya · HS-team
+  </div>
+</div>
+
+<div class="stage" id="app"></div>
+
+<div id="toasts"></div>
+<div id="modalRoot"></div>
+
+<div id="switch">
+  <button id="prev" title="Previous layout (←)">‹</button>
+  <div class="lbl" id="switchLbl">A<small>Inbox triage</small></div>
+  <button id="next" title="Next layout (→)">›</button>
+</div>
+
+<script>
+/* ============================================================
+   SEED DATA (in-memory only — this is a mockup)
+   ============================================================ */
+const TODAY = new Date('2026-06-17T10:00:00');
+function daysAgo(n){ const d=new Date(TODAY); d.setDate(d.getDate()-n); return d; }
+function fmt(d){ return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}); }
+function ageDays(d){ return Math.round((TODAY-d)/86400000); }
+
+let companies = [
+  { id:'c1', name:'Rheinland Cannabis Vertrieb GmbH', type:'Distributor', country:'DE', city:'Köln',
+    submitted:daysAgo(6), reg:'HRB 84212 · Köln', contact:'Dr. K. Brandt', email:'k.brandt@rcv.de',
+    desc:'Wholesale distribution of medical cannabis flower & extracts to German pharmacies. BfArM licence attached.',
+    licences:[{name:'BfArM_Großhandel.pdf',kind:'pdf'},{name:'GDP_certificate.pdf',kind:'pdf'}], status:'pending' },
+  { id:'c2', name:'GrünPharma Import AG', type:'Importer', country:'AT', city:'Wien',
+    submitted:daysAgo(4), reg:'FN 312880x', contact:'M. Huber', email:'huber@gruenpharma.at',
+    desc:'Importer for the DACH region. Two import authorisations included.',
+    licences:[{name:'Einfuhrgenehmigung.pdf',kind:'pdf'}], status:'pending' },
+  { id:'c3', name:'MediHanf Cultivation', type:'Cultivator', country:'CH', city:'Basel',
+    submitted:daysAgo(3), reg:'CHE-114.402.118', contact:'S. Frei', email:'frei@medihanf.ch',
+    desc:'Indoor cultivation. Licence upload was skipped during onboarding.',
+    licences:[], status:'pending' },
+  { id:'c4', name:'Berlin Therapeutics Apotheke', type:'Pharmacy', country:'DE', city:'Berlin',
+    submitted:daysAgo(1), reg:'HRB 220019 · Berlin', contact:'A. Vogel', email:'vogel@bt-apo.de',
+    desc:'Dispensing pharmacy specialising in cannabinoid therapy.',
+    licences:[{name:'Apothekenbetriebserlaubnis.pdf',kind:'pdf'}], status:'pending' },
+  { id:'c5', name:'Nordlicht Med Supply', type:'Distributor', country:'DE', city:'Hamburg',
+    submitted:daysAgo(0), reg:'HRB 159003 · Hamburg', contact:'T. Petersen', email:'t.p@nordlicht.de',
+    desc:'New distributor, awaiting first catalogue upload.',
+    licences:[{name:'Großhandelserlaubnis.pdf',kind:'pdf'}], status:'pending' },
+  // already-decided (read-only history)
+  { id:'c6', name:'Aurora Apotheke', type:'Pharmacy', country:'DE', city:'München',
+    submitted:daysAgo(12), reg:'HRB 77310 · München', contact:'L. Maier', email:'maier@aurora-apo.de',
+    desc:'Established cannabinoid pharmacy.', licences:[{name:'Betriebserlaubnis.pdf',kind:'pdf'}],
+    status:'verified', decided:{by:'Maya (HS-team)', at:daysAgo(9), outcome:'verified', reason:null, preset:null} },
+  { id:'c7', name:'QuickGrow Test UG', type:'Cultivator', country:'DE', city:'Leipzig',
+    submitted:daysAgo(11), reg:'—', contact:'unknown', email:'info@quickgrow.test',
+    desc:'', licences:[], status:'rejected',
+    decided:{by:'Maya (HS-team)', at:daysAgo(10), outcome:'rejected', reason:'No valid wholesale licence on file; details unverifiable.', preset:'Invalid licence'} },
+  { id:'c8', name:'Hansa Cannabis Handel', type:'Distributor', country:'DE', city:'Bremen',
+    submitted:daysAgo(14), reg:'HRB 30551 · Bremen', contact:'J. Albers', email:'albers@hansa-ch.de',
+    desc:'Duplicate of an existing verified account.', licences:[{name:'GH-Erlaubnis.pdf',kind:'pdf'}],
+    status:'rejected', decided:{by:'Maya (HS-team)', at:daysAgo(8), outcome:'rejected', reason:'Same Handelsregister entry as an already-verified company.', preset:'Duplicate company'} },
+];
+
+const REJECT_PRESETS = ['Invalid licence','Licence expired','Details don’t match','Duplicate company','Other'];
+
+/* ============================================================
+   UI STATE
+   ============================================================ */
+const state = { variant:'A', tab:'pending', selectedId:null, expandedId:null };
+const VARIANTS = { A:'Inbox triage', B:'Table + drill-in', C:'Review feed' };
+
+const pending  = () => companies.filter(c=>c.status==='pending').sort((a,b)=>a.submitted-b.submitted); // oldest-first
+const decided  = () => companies.filter(c=>c.status!=='pending').sort((a,b)=>(b.decided?.at)-(a.decided?.at));
+const byId      = id => companies.find(c=>c.id===id);
+const list      = () => state.tab==='pending' ? pending() : decided();
+
+/* ============================================================
+   SHARED BITS
+   ============================================================ */
+function toast(kind,msg){
+  const t=document.createElement('div'); t.className='toast '+kind;
+  t.innerHTML=(kind==='ok'?'✓':'⚠')+' <span>'+msg+'</span>';
+  document.getElementById('toasts').appendChild(t);
+  setTimeout(()=>{t.style.opacity='0';t.style.transition='opacity .25s';setTimeout(()=>t.remove(),260);},3200);
+}
+const failOn = () => document.getElementById('failSim').checked;
+
+function ageBadge(c){
+  const a=ageDays(c.submitted); const cls=a>=5?'hot':a>=3?'warm':'';
+  return `<span class="age ${cls}">${a===0?'today':a+'d'} in queue</span>`;
+}
+function licBadge(c){
+  return c.licences.length
+    ? `<span class="badge b-lic">● licence ×${c.licences.length}</span>`
+    : `<span class="badge b-nolic">● no licence</span>`;
+}
+function statusBadge(c){
+  if(c.status==='verified') return '<span class="badge b-verified">verified</span>';
+  if(c.status==='rejected') return '<span class="badge b-rejected">rejected</span>';
+  return '<span class="badge b-pending">pending</span>';
+}
+
+/* ---- detail / review content (shared; each variant frames it differently) ---- */
+function detailContent(c){
+  const decidedBlock = c.status!=='pending' ? `
+    <div style="margin-top:16px">
+      <p class="seg-title">Audit record (VERIF-04)</p>
+      <div class="auditbox">
+        <div class="row"><span class="muted">Outcome</span> <b>${c.decided.outcome}</b></div>
+        <div class="row"><span class="muted">Decided by</span> <b>${c.decided.by}</b></div>
+        <div class="row"><span class="muted">When</span> <b>${fmt(c.decided.at)}</b></div>
+        ${c.decided.preset?`<div class="row"><span class="muted">Reason (preset)</span> <b>${c.decided.preset}</b></div>`:''}
+        ${c.decided.reason?`<div class="row"><span class="muted">Note</span> <b style="text-align:right;max-width:60%">${c.decided.reason}</b></div>`:''}
+      </div>
+    </div>` : '';
+
+  const actions = c.status==='pending' ? `
+    <div class="actionbar">
+      <button class="btn btn-approve" onclick="askApprove('${c.id}')">Approve</button>
+      <button class="btn btn-reject" onclick="askReject('${c.id}')">Reject…</button>
+    </div>` : '';
+
+  return `
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+      <div style="flex:1">
+        <div style="font-weight:800;font-size:17px">${c.name}</div>
+        <div class="muted" style="font-size:12.5px;margin-top:3px">${c.type} · ${c.city}, ${c.country} · submitted ${fmt(c.submitted)}</div>
+      </div>
+      ${statusBadge(c)}
+    </div>
+
+    <p class="seg-title">Company</p>
+    <dl class="kv">
+      <dt>Type</dt><dd>${c.type}</dd>
+      <dt>Country</dt><dd>${c.city}, ${c.country}</dd>
+      <dt>Register</dt><dd>${c.reg}</dd>
+      <dt>Contact</dt><dd>${c.contact}</dd>
+      <dt>Email</dt><dd>${c.email}</dd>
+    </dl>
+
+    <p class="seg-title" style="margin-top:16px">Seller description</p>
+    <div style="font-size:13px;color:${c.desc?'var(--ink)':'var(--ink-faint)'}">${c.desc||'— none provided —'}</div>
+
+    <p class="seg-title" style="margin-top:16px">Licence ${c.licences.length?'document(s)':''} <span class="faint" style="font-weight:600;text-transform:none;letter-spacing:0">· view-only</span></p>
+    ${c.licences.length
+      ? `<div class="lic-row">${c.licences.map(f=>`
+          <button class="lic-tile" onclick="viewLicence('${c.id}','${f.name}')">
+            <span class="ic">📄</span>
+            <span><span class="nm">${f.name}</span><br><span class="vw">View in-platform ›</span></span>
+          </button>`).join('')}</div>`
+      : `<div class="empty-lic">⚠ No licence file uploaded — reviewer applies judgment (upload was env-gated in onboarding).</div>`}
+
+    ${actions}
+    ${decidedBlock}
+  `;
+}
+
+/* ============================================================
+   RENDER DISPATCH
+   ============================================================ */
+function render(){
+  const app=document.getElementById('app');
+  app.className='stage';
+  if(state.variant==='A') app.innerHTML=renderInbox();
+  else if(state.variant==='B') app.innerHTML=renderTable();
+  else app.innerHTML=renderFeed();
+}
+
+function tabBar(){
+  return `<div class="tabs" style="margin-bottom:16px">
+    <button class="${state.tab==='pending'?'on':''}" onclick="setTab('pending')">Pending<span class="ct">${pending().length}</span></button>
+    <button class="${state.tab==='decided'?'on':''}" onclick="setTab('decided')">Decided<span class="ct">${decided().length}</span></button>
+  </div>`;
+}
+
+/* ---------- VARIANT A: two-pane inbox ---------- */
+function renderInbox(){
+  const rows=list().map(c=>{
+    const sel=c.id===state.selectedId?'sel':'';
+    return `<button class="qrow ${sel}" onclick="selectCo('${c.id}')">
+      <div style="flex:1">
+        <div class="nm">${c.name}</div>
+        <div class="sub">${c.type} · ${c.country}</div>
+      </div>
+      <div class="rt">
+        ${state.tab==='pending'?licBadge(c):statusBadge(c)}
+        <span class="faint" style="font-size:11px">${state.tab==='pending'?ageDays(c.submitted)+'d':fmt(c.decided.at)}</span>
+      </div>
+    </button>`;
+  }).join('') || `<div style="padding:30px;text-align:center" class="faint">Nothing here.</div>`;
+
+  const sel=byId(state.selectedId);
+  const detail = sel
+    ? `<div class="card detail" style="padding:20px">${detailContent(sel)}</div>`
+    : `<div class="placeholder"><div><div style="font-size:30px">📋</div><div style="margin-top:8px;font-weight:700">Select a company</div><div style="font-size:12.5px;margin-top:4px">Review details, then approve or reject from here.</div></div></div>`;
+
+  return `${tabBar()}
+    <div class="vA">
+      <div class="rail">
+        <div class="railhead muted" style="font-size:11.5px;font-weight:700">${state.tab==='pending'?'Oldest first':'Most recent decision first'}</div>
+        ${rows}
+      </div>
+      ${detail}
+    </div>`;
+}
+
+/* ---------- VARIANT B: full table → drill-in ---------- */
+function renderTable(){
+  const sel=byId(state.selectedId);
+  if(sel){
+    return `<div class="vB">
+      <div class="backbar">
+        <button class="btn btn-ghost" onclick="selectCo(null)">‹ Back to queue</button>
+        <span class="faint">Reviewing ${state.tab==='pending'?'pending':'decided'} company</span>
+      </div>
+      <div class="detail-page">
+        <div class="card" style="padding:22px">${detailContent(sel)}</div>
+        <div class="card" style="padding:16px">
+          <p class="seg-title">Queue position</p>
+          <div class="muted" style="font-size:12.5px">This company is item
+            <b>${(state.tab==='pending'?pending():decided()).findIndex(x=>x.id===sel.id)+1}</b>
+            of <b>${(state.tab==='pending'?pending():decided()).length}</b> ${state.tab==='pending'?'in the pending queue (oldest-first).':'in the decided list.'}</div>
+          <div style="margin-top:14px">${state.tab==='pending'?licBadge(sel):statusBadge(sel)} &nbsp; ${state.tab==='pending'?ageBadge(sel):''}</div>
+        </div>
+      </div>
+    </div>`;
+  }
+  const rows=list().map(c=>`
+    <tr onclick="selectCo('${c.id}')">
+      <td class="nm">${c.name}</td>
+      <td>${c.type}</td>
+      <td>${c.country} · ${c.city}</td>
+      <td class="muted">${fmt(c.submitted)}</td>
+      <td>${state.tab==='pending'?licBadge(c):statusBadge(c)}</td>
+      <td class="age ${ageDays(c.submitted)>=5?'hot':ageDays(c.submitted)>=3?'warm':''}">${state.tab==='pending'?(ageDays(c.submitted)===0?'today':ageDays(c.submitted)+'d'):fmt(c.decided.at)}</td>
+      <td class="arrow">›</td>
+    </tr>`).join('') || `<tr><td colspan="7" style="text-align:center;padding:30px" class="faint">Nothing here.</td></tr>`;
+
+  return `${tabBar()}
+    <div class="vB">
+      <table>
+        <thead><tr>
+          <th>Company</th><th>Type</th><th>Location</th><th>Submitted</th>
+          <th>${state.tab==='pending'?'Licence':'Status'}</th><th>${state.tab==='pending'?'In queue':'Decided'}</th><th></th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
+/* ---------- VARIANT C: expandable review feed ---------- */
+function renderFeed(){
+  const cards=list().map(c=>{
+    const open=c.id===state.expandedId;
+    return `<div class="fcard ${open?'open':''}">
+      <div class="fhead" onclick="toggleCard('${c.id}')">
+        <div class="logo">${c.name.split(' ').map(w=>w[0]).slice(0,2).join('')}</div>
+        <div>
+          <div class="nm">${c.name}</div>
+          <div class="sub">${c.type} · ${c.city}, ${c.country} · submitted ${fmt(c.submitted)}</div>
+        </div>
+        <div class="rt">
+          ${state.tab==='pending'?licBadge(c):statusBadge(c)}
+          ${state.tab==='pending'?`<span class="pill age ${ageDays(c.submitted)>=5?'hot':ageDays(c.submitted)>=3?'warm':''}">${ageDays(c.submitted)===0?'today':ageDays(c.submitted)+'d'}</span>`:''}
+          <span class="chev">▾</span>
+        </div>
+      </div>
+      ${open?`<div class="fbody">
+        <div>${detailContent(c)}</div>
+        <div>
+          <p class="seg-title">At a glance</p>
+          <div class="auditbox">
+            <div class="row"><span class="muted">Register</span><b>${c.reg}</b></div>
+            <div class="row"><span class="muted">Contact</span><b>${c.contact}</b></div>
+            <div class="row"><span class="muted">Licence files</span><b>${c.licences.length||'none'}</b></div>
+          </div>
+        </div>
+      </div>`:''}
+    </div>`;
+  }).join('') || `<div class="card" style="padding:30px;text-align:center" class="faint">Nothing here.</div>`;
+
+  return `<div style="display:flex;justify-content:center;margin-bottom:16px">${tabBar()}</div>
+    <div class="vC">${cards}</div>`;
+}
+
+/* ============================================================
+   INTERACTIONS (shared, locked by CONTEXT.md)
+   ============================================================ */
+function setTab(t){ state.tab=t; state.selectedId=null; state.expandedId=null; render(); }
+function selectCo(id){ state.selectedId=id; render(); }
+function toggleCard(id){ state.expandedId = state.expandedId===id?null:id; render(); }
+
+/* licence viewer — view-only, NO download button anywhere (locked D-02). Logs license_viewed. */
+function viewLicence(coId,fname){
+  console.log('[audit] company.license_viewed', {company:coId, file:fname, by:'Maya (HS-team)'});
+  openModal(`
+    <div class="modal wide">
+      <div class="mhead">📄 ${fname} <span class="faint" style="margin-left:auto;font-weight:600;font-size:12px">view-only</span></div>
+      <div class="mbody">
+        <div class="doc">
+          <div class="wm">LICENCE · VIEW ONLY</div>
+          <h4>Erlaubnis nach §3 BtMG / Großhandelserlaubnis</h4>
+          <p>Issued to: ${byId(coId).name}</p>
+          <p>Register: ${byId(coId).reg}</p>
+          <p>Valid through: 31 Dec 2027</p>
+          <p style="margin-top:24px" class="faint">— rendered in-platform; no download path (GDPR data-minimisation) —</p>
+        </div>
+        <div class="viewonly">🔒 Viewing is audit-logged (<code>company.license_viewed</code>). There is intentionally no download.</div>
+      </div>
+      <div class="mfoot"><button class="btn btn-ghost" onclick="closeModal()">Close</button></div>
+    </div>`);
+}
+
+/* approve — one-click confirm (D-09) */
+function askApprove(id){
+  const c=byId(id);
+  openModal(`
+    <div class="modal">
+      <div class="mhead">Approve ${c.name}?</div>
+      <div class="mbody">
+        <p style="margin:0;font-size:13.5px">They'll be marked <b>verified</b>, enter Discover and become connectable to other companies.</p>
+      </div>
+      <div class="mfoot">
+        <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-approve" onclick="doApprove('${id}')">Approve</button>
+      </div>
+    </div>`);
+}
+function doApprove(id){
+  const c=byId(id); closeModal();
+  if(failOn()){ toast('err',`Couldn't approve ${c.name} — try again.`); return; } // D-11: status unchanged, retryable
+  c.status='verified';
+  c.decided={by:'Maya (HS-team)', at:TODAY, outcome:'verified', reason:null, preset:null};
+  console.log('[audit] company.verify_approved',{company:c.id,by:c.decided.by});
+  toast('ok',`${c.name} approved`);
+  if(state.selectedId===id) state.selectedId=null;       // row leaves pending list (D-10)
+  if(state.expandedId===id) state.expandedId=null;
+  render();
+}
+
+/* reject — preset reason (required) + optional note (D-05/06) */
+function askReject(id){
+  const c=byId(id);
+  openModal(`
+    <div class="modal">
+      <div class="mhead">Reject ${c.name}</div>
+      <div class="mbody">
+        <p class="seg-title">Reason (required)</p>
+        <div class="reasons" id="reasons">
+          ${REJECT_PRESETS.map((r,i)=>`<label id="rl${i}"><input type="radio" name="reason" value="${r}" onchange="pickReason(${i})"> ${r}</label>`).join('')}
+        </div>
+        <p class="seg-title">Note (optional)</p>
+        <textarea class="note" id="rnote" placeholder="Add context for the audit log…"></textarea>
+      </div>
+      <div class="mfoot">
+        <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-reject" id="rejectBtn" disabled onclick="doReject('${id}')">Reject company</button>
+      </div>
+    </div>`);
+}
+let pickedReason=null;
+function pickReason(i){
+  pickedReason=REJECT_PRESETS[i];
+  document.querySelectorAll('#reasons label').forEach(l=>l.classList.remove('on'));
+  document.getElementById('rl'+i).classList.add('on');
+  document.getElementById('rejectBtn').disabled=false;
+}
+function doReject(id){
+  const c=byId(id); const note=document.getElementById('rnote').value.trim(); const preset=pickedReason;
+  closeModal();
+  if(failOn()){ toast('err',`Couldn't reject ${c.name} — try again.`); pickedReason=null; return; }
+  c.status='rejected';
+  c.decided={by:'Maya (HS-team)', at:TODAY, outcome:'rejected', reason:note||null, preset};
+  console.log('[audit] company.verify_rejected',{company:c.id,by:c.decided.by,preset,note});
+  toast('ok',`${c.name} rejected`);
+  if(state.selectedId===id) state.selectedId=null;
+  if(state.expandedId===id) state.expandedId=null;
+  pickedReason=null;
+  render();
+}
+
+/* ---- modal plumbing ---- */
+function openModal(html){ document.getElementById('modalRoot').innerHTML=`<div class="scrim" onclick="if(event.target===this)closeModal()">${html}</div>`; }
+function closeModal(){ document.getElementById('modalRoot').innerHTML=''; }
+
+/* ============================================================
+   VARIANT SWITCHER (prototype chrome)
+   ============================================================ */
+const order=['A','B','C'];
+function setVariant(v){
+  state.variant=v; state.selectedId=null; state.expandedId=null;
+  const u=new URL(location.href); u.searchParams.set('variant',v); history.replaceState({},'',u);
+  document.getElementById('switchLbl').innerHTML=`${v}<small>${VARIANTS[v]}</small>`;
+  render();
+}
+function cycle(dir){ const i=order.indexOf(state.variant); setVariant(order[(i+dir+order.length)%order.length]); }
+document.getElementById('prev').onclick=()=>cycle(-1);
+document.getElementById('next').onclick=()=>cycle(1);
+document.addEventListener('keydown',e=>{
+  const t=e.target.tagName; if(t==='INPUT'||t==='TEXTAREA'||e.target.isContentEditable) return;
+  if(e.key==='ArrowLeft') cycle(-1); if(e.key==='ArrowRight') cycle(1);
+  if(e.key==='Escape') closeModal();
+});
+
+/* boot — honour ?variant= for reload-stable / shareable links */
+const startV=(new URL(location.href)).searchParams.get('variant');
+setVariant(order.includes(startV)?startV:'A');
+</script>
+</body>
+</html>
