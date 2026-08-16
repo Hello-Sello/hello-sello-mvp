@@ -42,13 +42,22 @@ T07  tests 0/2 · blocking 0/2 · T08  authoring only · G4 rounds 0 (gate not y
 - G1 spec — passed 2026-08-14 (2 question rounds; dropdown-as-order-tool amendment)
 - G2 prototype — passed 2026-08-14 (Variant B, no changes)
 - G3 design — passed 2026-08-14 (Muskan accepted all 5 sign-offs, plain-English walkthrough)
-- G4 — **PENDING, Muskan's gate**: visual walk vs `prototypes/0021-tier-ladder-prototype/`
-  + REVIEW.md (T01–T07 sections; prototype-deviation ledger inside). All machine gates
-  green: 342 unit · 12/12 e2e (present-card-edit) · pgTAP + race + lockdown on fresh
-  reset · tsc/eslint. Linear: HEL-46..52 Done; HEL-53 open (C is HELD by design).
-- G5 /ship — after G4: rebase onto dev → re-run suite → PR → merge → **cloud push of E
-  (URGENT: carries the live `list_discoverable_companies` security repair) after the
-  one-line buy_schema history repair (Muskan runs it — ledger has the SQL)** → live walk.
+- G4 — **PASSED 2026-08-16** (3 Agentation feedback rounds, sessions `dry_run` cont.):
+  round 2 = was/now strikethrough price + scrollable edit footer + spec-floor 80px;
+  round 3 = **the "See all prices" panel became a floating POPOVER below the link**
+  (portaled past the fixed card, follows scroll; Muskan's design call — recorded as a
+  prototype DEVIATION in REVIEW.md top section). Muskan: "perfect". 2 ARCHITECTURE-NOTES
+  entries written (one-price-door + stale-redeclare incident).
+- G5 /ship — **IN PROGRESS 2026-08-16**: rebased onto dev clean → full gate green
+  (342 unit · 102/102 e2e incl. F-02 on fresh reset · tier SQL + race + BOTH lockdown
+  suites · tsc/eslint) → **PR #158 merged to dev** → **migration E LIVE on production**
+  (security repair verified; ledger APPLIED entry 2026-08-16; buy_schema orphan cleared
+  by Muskan). **REMAINING:** (1) push the 13-migration Phase-12 status-machine wave
+  (blocked once on the permission classifier — add `mcp__claude_ai_Supabase__apply_migration`
+  to `.claude/settings.local.json` allow first; insurance query already run: 22 cards /
+  5 statuses, vocab migration covers all), (2) **IMMEDIATELY** merge dev→main (the wave
+  revokes old-app status writes — push and deploy must be back-to-back), (3) live walk
+  = the real G5. Then migration C (re-diff `.hold` vs live at move time) closes HEL-53.
 
 ## For Muskan — G3 sign-offs bundled in the ADR
 1. Visibility-window tightening: out-of-window products leave Discover entirely (§3.3)
