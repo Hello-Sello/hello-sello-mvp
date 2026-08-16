@@ -95,7 +95,29 @@ Sequence + verification record:
 
 ---
 
-## ⚠️ PENDING (2026-07-24, Ayush) - 10 migrations - Phase 12 deal status machine
+## ✅ APPLIED 2026-08-16 — Phase-12 deal status machine, 13 migrations (Ayush's wave, pushed by Muskan)
+
+**LIVE on production 2026-08-16** — all 13 applied via `mcp apply_migration` in filename order
+(review-skip = Muskan's explicit call, solo-owner / DEV-88 precedent), then **dev→main merged and
+Vercel deploy READY back-to-back** (commit `714d738`) per the same-deploy rule — no window where
+the old app wrote against the revoked door. Record:
+
+1. **Pre-push insurance re-run:** 22 cards / 5 statuses (draft 13, cancelled 3, confirmed 2,
+   done 2, withdrawn 2) — matched the recorded run; no unknown codes, backfill covered all.
+2. **Post-apply state:** negotiation 13 · cancelled 5 · confirmed 2 · done 2; the three retired
+   lookup rows deleted; default now `'unsent'`.
+3. **Grants verified live:** `deal_card` INSERT/UPDATE/DELETE revoked from authenticated+anon
+   (CR-01); `deliver_deal` EXECUTE revoked incl. PUBLIC (WR-01 — ACL now postgres+service_role
+   only); all 8 new/replaced RPCs present with authenticated EXECUTE.
+4. **History stamps repaired** to `20260724120000`–`20260724121200` (2026-07-22 reconcile
+   convention; verified all 13 rows).
+5. **Bodies live == local files byte-for-byte** (`confirm_deal_change` re-emitted verbatim after
+   an initial comment-trimmed apply — zero functional delta; diff-against-live stays clean).
+6. **Not re-run on prod:** the SQL harness (rls_isolation / deliver_deal / claim_deal_ticket) —
+   those suites write fixtures and are local-only; live verification was done via the grant +
+   status checks above instead. Local runs PASSED 2026-07-24 from a clean reset.
+
+*(Original batch documentation kept below for reference.)*
 
 The whole board-Wave-2 status machine: birth/send split, status vocabulary rename, server-side
 transition authority, draft privacy RLS, and the client status-write revoke. Applied LOCAL via
