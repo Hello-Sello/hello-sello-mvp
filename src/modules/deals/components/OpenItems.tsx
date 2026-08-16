@@ -101,7 +101,10 @@ export function OpenItems({
   const [items, setItems] = useState<ThingView[]>(things);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
-  const [addPrivate, setAddPrivate] = useState(false);
+  // D-17: a new thing starts PRIVATE ("only you") - flipping it to shared is the
+  // explicit act (T-12-28). On an unsent draft nothing leaks either way: the
+  // counterparty cannot reach the draft workspace at all until Send (RLS, D-08).
+  const [addPrivate, setAddPrivate] = useState(true);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [assignOpenId, setAssignOpenId] = useState<string | null>(null);
   // local (front-end only) uploaded files, by thing id -> object URL + name.

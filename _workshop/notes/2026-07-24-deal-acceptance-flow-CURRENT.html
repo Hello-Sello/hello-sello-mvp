@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Deal Acceptance Flow - CURRENT (as built)</title>
+<style>
+  :root{
+    --pink:#ec4899; --pink-deep:#db2777; --maroon:#76002d;
+    --ink:#1e293b; --ash:#64748b; --line:#e2e8f0; --bg:#fdf7fa;
+    --ok:#16924a; --ok-tint:#e8f6ee;
+    --warn:#b45309; --warn-tint:#fdf1e3;
+    --danger:#b3203f; --danger-tint:#fdecef;
+    --seller:#0f766e; --seller-tint:#e6f4f2;   /* teal  = SELLER */
+    --buyer:#b45309;  --buyer-tint:#fdf1e3;     /* amber = BUYER  */
+    --nego:#b45309;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    font-size:15px;line-height:1.55;}
+  .wrap{max-width:1040px;margin:0 auto;padding:32px 22px 90px;}
+  header.top{border-bottom:3px solid var(--maroon);padding-bottom:16px;margin-bottom:8px;}
+  header.top h1{margin:0 0 6px;font-size:25px;color:var(--maroon);}
+  header.top .sub{color:var(--ash);font-size:13.5px;}
+  .tag{display:inline-block;border-radius:999px;padding:2px 10px;font-size:11px;font-weight:800;letter-spacing:.4px;}
+  .tag.built{background:var(--ok);color:#fff;}
+  .tag.signer{background:var(--maroon);color:#fff;}
+  .tag.sender{background:#eef2f7;color:var(--ash);border:1px solid var(--line);}
+  .tag.seller{background:var(--seller-tint);color:var(--seller);}
+  .tag.buyer{background:var(--buyer-tint);color:var(--buyer);}
+
+  /* legend / reading guide */
+  .guide{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin:22px 0 30px;}
+  .guide h3{margin:0 0 10px;font-size:12px;letter-spacing:1px;text-transform:uppercase;color:var(--maroon);}
+  .guide .row{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;font-size:13px;}
+  .rules{margin:12px 0 0;padding-left:18px;font-size:13.5px;}
+  .rules li{margin:5px 0;}
+
+  h2{font-size:19px;color:#fff;margin:40px 0 6px;padding:10px 16px;border-radius:12px 12px 0 0;}
+  h2.A{background:linear-gradient(90deg,var(--seller),#0b5c56);}
+  h2.B{background:linear-gradient(90deg,var(--buyer),#8a3f07);}
+  .scenote{background:#fff;border:1px solid var(--line);border-top:none;border-radius:0 0 12px 12px;
+    padding:12px 16px;margin:0 0 18px;font-size:13.5px;color:var(--ash);}
+  .scenote b{color:var(--ink);}
+
+  .pathlabel{font-size:13px;font-weight:800;color:var(--maroon);margin:22px 0 8px;
+    text-transform:uppercase;letter-spacing:.6px;}
+
+  /* a step */
+  .step{background:#fff;border:1px solid var(--line);border-radius:14px;margin:12px 0;
+    box-shadow:0 1px 4px rgba(118,0,45,.05);overflow:hidden;}
+  .step > .head{display:flex;align-items:center;gap:10px;padding:11px 15px;border-bottom:1px solid var(--line);
+    background:#faf3f7;font-size:14px;}
+  .step > .head .num{background:var(--maroon);color:#fff;font-weight:800;border-radius:8px;
+    width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center;font-size:13px;flex:none;}
+  .step > .head .act{font-weight:600;}
+  .step > .head .act code{background:#fff;border:1px solid var(--line);border-radius:6px;padding:1px 6px;font-size:12.5px;}
+
+  .sides{display:grid;grid-template-columns:1fr 1fr;gap:0;}
+  .side{padding:13px 15px;}
+  .side.seller{background:var(--seller-tint);}
+  .side.buyer{background:var(--buyer-tint);}
+  .side + .side{border-left:1px solid var(--line);}
+  .side .who{display:flex;align-items:center;gap:7px;font-weight:800;font-size:13px;margin-bottom:9px;}
+  .side .bar{display:flex;flex-direction:column;gap:7px;}
+
+  /* buttons (mirror the app: filled = primary Sign/Accept, outline = Negotiate/Withdraw) */
+  .btn{border-radius:999px;padding:7px 12px;font-size:12.5px;font-weight:700;text-align:center;border:1.5px solid transparent;}
+  .btn.primary{background:var(--maroon);color:#fff;}
+  .btn.outline{background:#fff;border-color:var(--line);color:var(--ink);}
+  .btn.disabled{background:#f1f5f9;color:#94a3b8;border-color:#e2e8f0;font-style:italic;}
+  .btn.decline{background:transparent;color:var(--danger);border-color:transparent;font-weight:700;font-size:11.5px;padding:3px;}
+  .waitline{font-size:12px;color:var(--ash);font-style:italic;padding:5px 2px;}
+
+  /* result strip */
+  .result{display:flex;align-items:center;gap:10px;padding:10px 15px;border-top:1px solid var(--line);font-size:13px;background:#fff;}
+  .status{border-radius:999px;padding:3px 11px;font-size:11px;font-weight:800;letter-spacing:.4px;flex:none;}
+  .status.draft{background:#eef2f7;color:var(--ash);}
+  .status.nego{background:var(--warn-tint);color:var(--warn);}
+  .status.confirmed{background:var(--ok-tint);color:var(--ok);}
+  .status.done{background:var(--ok);color:#fff;}
+  .status.cancelled{background:var(--danger-tint);color:var(--danger);}
+  .result .txt{color:var(--ink);}
+
+  .check{background:var(--warn-tint);border:1px solid #f4d9b0;border-left:4px solid var(--warn);
+    border-radius:0 12px 12px 0;padding:11px 15px;margin:10px 0;font-size:13.5px;}
+  .check b{color:var(--warn);}
+  .arrow{text-align:center;color:var(--ash);font-size:18px;margin:-2px 0;}
+
+  footer{margin-top:46px;color:var(--ash);font-size:12.5px;border-top:1px solid var(--line);padding-top:14px;}
+  @media(max-width:640px){.sides{grid-template-columns:1fr;} .side+.side{border-left:none;border-top:1px solid var(--line);}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <h1>Deal acceptance &amp; negotiation - the CURRENT flow</h1>
+    <div class="sub">
+      2026-07-24 &middot; <span class="tag built">AS BUILT ON DEV (after Wave 3)</span><br/>
+      This is exactly what the deal card does <b>right now</b> - drawn from the live
+      <code>decisionBar.ts</code> matrix + <code>sign_deal</code> / <code>confirm_deal_change</code> RPCs.
+      Read each step and check: <b>is the button on the correct side? Is the round order right?</b>
+      The yellow <b>&#10067; CHECK</b> boxes mark places worth a second look.
+    </div>
+  </header>
+
+  <div class="guide">
+    <h3>How to read this</h3>
+    <div class="row">
+      <span><span class="btn primary" style="display:inline-block;padding:4px 12px">Sign the deal / Accept changes</span> = primary (filled)</span>
+      <span><span class="btn outline" style="display:inline-block;padding:4px 12px">Negotiate / Withdraw</span> = secondary (outline)</span>
+      <span><span class="btn disabled" style="display:inline-block;padding:4px 12px">disabled Sign</span> = shown but greyed</span>
+      <span><span class="btn decline" style="display:inline-block">Decline deal</span> = always there (both sides)</span>
+    </div>
+    <div class="row" style="margin-top:10px;">
+      <span><span class="tag signer">SIGNER</span> = the FIXED signer = the side that did NOT send the deal</span>
+      <span><span class="tag sender">SENDER</span> = the side that sent the deal</span>
+      <span><span class="tag seller">SELLER</span> owns prices</span>
+      <span><span class="tag buyer">BUYER</span></span>
+    </div>
+    <ul class="rules">
+      <li><b>The signer is fixed for the deal's whole life</b> - it is the receiver (the side that did NOT press Send). A mid-deal change never flips it.</li>
+      <li><b>Send = an implicit "yes"</b> at both levels (sending the deal, and sending a change).</li>
+      <li><b>The signer never signs their own un-accepted change</b> - their Sign shows but is disabled ("Waiting for [them]'s acceptance") until the sender presses <b>Accept changes</b>.</li>
+      <li><b>Negotiate never deletes anything</b> - it jumps to chat, posts a "wants to negotiate" pill + an "In negotiation" strip; the held change stays on the table.</li>
+      <li>A <b>change</b> is proposed with the <b>pencil</b> (edit the card &rarr; "Send changes"), not a bar button. The proposer can <b>Withdraw</b> or edit-and-re-send (replace).</li>
+      <li>After <b>Confirmed</b> (signed), the seller uploads an invoice &rarr; the deal goes to <b>Done</b>.</li>
+    </ul>
+  </div>
+
+  <!-- ============ SCENARIO A ============ -->
+  <h2 class="A">Scenario A &nbsp;&middot;&nbsp; the SELLER sends the deal (an Offer)</h2>
+  <div class="scenote">Fixed signer = <span class="tag signer">BUYER</span>. The seller already owns the prices, so the buyer can usually just sign. <b>Two paths:</b> the fast one (buyer signs), and the one with a buyer counter.</div>
+
+  <div class="pathlabel">Path A1 - buyer agrees, no change (the fast path: 2 clicks)</div>
+
+  <div class="step">
+    <div class="head"><span class="num">1</span><span class="act"><span class="tag seller">SELLER</span> builds the card, presses <code>Send deal</code></span></div>
+    <div class="sides">
+      <div class="side seller"><div class="who"><span class="tag seller">SELLER</span><span class="tag sender">SENDER</span></div>
+        <div class="bar"><div class="waitline">Waiting for the other side to sign.</div><div class="btn decline">Decline deal</div></div></div>
+      <div class="side buyer"><div class="who"><span class="tag buyer">BUYER</span><span class="tag signer">SIGNER</span></div>
+        <div class="bar"><div class="btn outline">Negotiate</div><div class="btn primary">Sign the deal</div><div class="btn decline">Decline deal</div></div></div>
+    </div>
+    <div class="result"><span class="status nego">NEGOTIATION</span><span class="txt">Card delivered to the buyer. Seller's Send was the implicit yes.</span></div>
+  </div>
+  <div class="arrow">&#8595;</div>
+  <div class="step">
+    <div class="head"><span class="num">2</span><span class="act"><span class="tag buyer">BUYER</span> presses <code>Sign the deal</code></span></div>
+    <div class="sides">
+      <div class="side seller"><div class="who"><span class="tag seller">SELLER</span></div>
+        <div class="bar"><div class="waitline">Signed. Waiting for the seller to upload the invoice.</div></div></div>
+      <div class="side buyer"><div class="who"><span class="tag buyer">BUYER</span></div>
+        <div class="bar"><div class="waitline">Signed &#10003;</div></div></div>
+    </div>
+    <div class="result"><span class="status confirmed">CONFIRMED</span><span class="txt">Buyer's Sign = accept + sign in one. Next: seller invoice &rarr; <span class="status done">DONE</span></span></div>
+  </div>
+
+  <div class="pathlabel">Path A2 - buyer counters first (2-3 rounds)</div>
+
+  <div class="step">
+    <div class="head"><span class="num">1</span><span class="act"><span class="tag seller">SELLER</span> presses <code>Send deal</code> &nbsp;(same as A1 step 1)</span></div>
+    <div class="sides">
+      <div class="side seller"><div class="who"><span class="tag seller">SELLER</span><span class="tag sender">SENDER</span></div>
+        <div class="bar"><div class="waitline">Waiting for the other side to sign.</div><div class="btn decline">Decline deal</div></div></div>
+      <div class="side buyer"><div class="who"><span class="tag buyer">BUYER</span><span class="tag signer">SIGNER</span></div>
+        <div class="bar"><div class="btn outline">Negotiate</div><div class="btn primary">Sign the deal</div><div class="btn decline">Decline deal</div></div></div>
+    </div>
+    <div class="result"><span class="status nego">NEGOTIATION</span><span class="txt">Buyer wants a change instead of signing.</span></div>
+  </div>
+  <div class="arrow">&#8595;</div>
+  <div class="step">
+    <div class="head"><span class="num">2</span><span class="act"><span class="tag buyer">BUYER</span> picks up the <b>pencil</b>, edits, presses <code>Send changes</code></span></div>
+    <div class="sides">
+      <div class="side seller"><div class="who"><span class="tag seller">SELLER</span><span class="tag sender">SENDER</span></div>
+        <div class="bar"><div class="btn outline">Negotiate</div><div class="btn primary">Accept changes</div><div class="btn decline">Decline deal</div></div></div>
+      <div class="side buyer"><div class="who"><span class="tag buyer">BUYER</span><span class="tag signer">SIGNER</span> <span style="font-size:11px;color:var(--ash)">(holds own change)</span></div>
+        <div class="bar"><div class="btn outline">Withdraw changes</div><div class="btn disabled">&#9998; Waiting for Seller&rsquo;s acceptance</div><div class="btn decline">Decline deal</div></div></div>
+    </div>
+    <div class="result"><span class="status nego">NEGOTIATION</span><span class="txt">A held change (buyer's version) sits on the table. Buyer can't sign their own un-accepted change.</span></div>
+  </div>
+  <div class="arrow">&#8595;</div>
+  <div class="step">
+    <div class="head"><span class="num">3</span><span class="act"><span class="tag seller">SELLER</span> presses <code>Accept changes</code></span></div>
+    <div class="sides">
+      <div class="side seller"><div class="who"><span class="tag seller">SELLER</span><span class="tag sender">SENDER</span></div>
+        <div class="bar"><div class="waitline">Waiting for the other side to sign.</div><div class="btn decline">Decline deal</div></div></div>
+      <div class="side buyer"><div class="who"><span class="tag buyer">BUYER</span><span class="tag signer">SIGNER</span></div>
+        <div class="bar"><div class="btn outline">Negotiate</div><div class="btn primary">Sign the deal</div><div class="btn decline">Decline deal</div></div></div>
+    </div>
+    <div class="result"><span class="status nego">NEGOTIATION</span><span class="txt">Seller committed the buyer's version (no signature). Back to the buyer to sign.</span></div>
+  </div>
+  <div class="arrow">&#8595;</div>
+  <div class="step">
+    <div class="head"><span class="num">4</span><span class="act"><span class="tag buyer">BUYER</span> presses <code>Sign the deal</code></span></div>
+    <div class="sides">
+      <div class="side seller"><div class="who"><span class="tag seller">SELLER</span></div><div class="bar"><div class="waitline">Signed. Waiting for the seller to upload the invoice.</div></div></div>
+      <div class="side buyer"><div class="who"><span class="tag buyer">BUYER</span></div><div class="bar"><div class="waitline">Signed &#10003;</div></div></div>
+    </div>
+    <div class="result"><span class="status confirmed">CONFIRMED</span><span class="txt">seller invoice &rarr; <span class="status done">DONE</span></span></div>
+  </div>
+
+  <div class="check"><b>&#10067; CHECK A:</b> The <span class="tag sender">SENDER</span> (seller) has NO "Negotiate" button while waiting - only Decline + the wait line. To talk, the seller uses the pinned "Talk about this deal" toolbar button. Is that what you want, or should the sender also have a Negotiate button on the bar?</div>
+
+  <!-- ============ SCENARIO B ============ -->
+  <h2 class="B">Scenario B &nbsp;&middot;&nbsp; the BUYER sends the deal (an Order)</h2>
+  <div class="scenote">Fixed signer = <span class="tag signer">SELLER</span>. Prices are seller-owned, so an order arrives needing the seller's priced version - it <b>always</b> takes the extra step (seller prices &rarr; buyer accepts &rarr; seller signs).</div>
+
+  <div class="pathlabel">Path B - the standard order (3 rounds)</div>
+
+  <div class="step">
+    <div class="head"><span class="num">1</span><span class="act"><span class="tag buyer">BUYER</span> builds the order (prices may be empty), presses <code>Send deal</code></span></div>
+    <div class="sides">
+      <div class="side seller"><div class="who"><span class="tag seller">SELLER</span><span class="tag signer">SIGNER</span></div>
+        <div class="bar"><div class="btn outline">Negotiate</div><div class="btn primary">Sign the deal</div><div class="btn decline">Decline deal</div></div></div>
+      <div class="side buyer"><div class="who"><span class="tag buyer">BUYER</span><span class="tag sender">SENDER</span></div>
+        <div class="bar"><div class="waitline">Waiting for the other side to sign.</div><div class="btn decline">Decline deal</div></div></div>
+    </div>
+    <div class="result"><span class="status nego">NEGOTIATION</span><span class="txt">Order delivered to the seller. It still needs seller pricing.</span></div>
+  </div>
+
+  <div class="check"><b>&#10067; CHECK B:</b> At step 1 the seller's <b>Sign the deal</b> is fully enabled - the seller <i>could</i> sign the order <b>before pricing it</b> (there is no "must price first" gate). In practice the seller edits first, but is an unpriced-Sign something we should block?</div>
+
+  <div class="arrow">&#8595;</div>
+  <div class="step">
+    <div class="head"><span class="num">2</span><span class="act"><span class="tag seller">SELLER</span> picks up the <b>pencil</b>, fills prices, presses <code>Send changes</code></span></div>
+    <div class="sides">
+      <div class="side seller"><div class="who"><span class="tag seller">SELLER</span><span class="tag signer">SIGNER</span> <span style="font-size:11px;color:var(--ash)">(holds own change)</span></div>
+        <div class="bar"><div class="btn outline">Withdraw changes</div><div class="btn disabled">&#9998; Waiting for Buyer&rsquo;s acceptance</div><div class="btn decline">Decline deal</div></div></div>
+      <div class="side buyer"><div class="who"><span class="tag buyer">BUYER</span><span class="tag sender">SENDER</span></div>
+        <div class="bar"><div class="btn outline">Negotiate</div><div class="btn primary">Accept changes</div><div class="btn decline">Decline deal</div></div></div>
+    </div>
+    <div class="result"><span class="status nego">NEGOTIATION</span><span class="txt">Seller's priced version is the held change. Seller can't sign their own un-accepted change.</span></div>
+  </div>
+
+  <div class="check"><b>&#10067; CHECK B2 (optional negotiation round):</b> instead of accepting, the buyer can press <b>Negotiate</b> (chat about the price). The held price stays on the table; the seller can <b>Withdraw</b> + re-price and <code>Send changes</code> again. That loop is your "2-3 rounds" - it repeats step 2 until the buyer accepts.</div>
+
+  <div class="arrow">&#8595;</div>
+  <div class="step">
+    <div class="head"><span class="num">3</span><span class="act"><span class="tag buyer">BUYER</span> presses <code>Accept changes</code></span></div>
+    <div class="sides">
+      <div class="side seller"><div class="who"><span class="tag seller">SELLER</span><span class="tag signer">SIGNER</span></div>
+        <div class="bar"><div class="btn outline">Negotiate</div><div class="btn primary">Sign the deal</div><div class="btn decline">Decline deal</div></div></div>
+      <div class="side buyer"><div class="who"><span class="tag buyer">BUYER</span><span class="tag sender">SENDER</span></div>
+        <div class="bar"><div class="waitline">Waiting for the other side to sign.</div><div class="btn decline">Decline deal</div></div></div>
+    </div>
+    <div class="result"><span class="status nego">NEGOTIATION</span><span class="txt">Buyer committed the seller's priced version (no signature). Now the seller signs.</span></div>
+  </div>
+  <div class="arrow">&#8595;</div>
+  <div class="step">
+    <div class="head"><span class="num">4</span><span class="act"><span class="tag seller">SELLER</span> presses <code>Sign the deal</code></span></div>
+    <div class="sides">
+      <div class="side seller"><div class="who"><span class="tag seller">SELLER</span></div><div class="bar"><div class="waitline">Signed &#10003; (seller then uploads the invoice)</div></div></div>
+      <div class="side buyer"><div class="who"><span class="tag buyer">BUYER</span></div><div class="bar"><div class="waitline">Signed by the seller.</div></div></div>
+    </div>
+    <div class="result"><span class="status confirmed">CONFIRMED</span><span class="txt">seller invoice &rarr; <span class="status done">DONE</span></span></div>
+  </div>
+
+  <!-- Shared exits -->
+  <h2 class="A" style="background:linear-gradient(90deg,var(--ash),#475569);">Exits available in every round (both scenarios)</h2>
+  <div class="scenote">
+    <b>Decline deal</b> (either side, any round) &rarr; a two-click confirm &rarr; <span class="status cancelled">CANCELLED</span> (a close, not a delete).<br/>
+    <b>Withdraw changes</b> (only the proposer of the held change) &rarr; removes their held change; the deal returns to the last agreed version.<br/>
+    <b>Negotiate</b> (only the signer's bar) &rarr; opens the chat, posts a "wants to negotiate" pill + an "In negotiation" strip; <b>nothing on the card is discarded.</b>
+  </div>
+
+  <footer>
+    Source of truth for this drawing: <code>src/modules/deals/lib/decisionBar.ts</code> (the negotiation matrix),
+    <code>DecisionBar.tsx</code> (labels), and the <code>sign_deal</code> / <code>confirm_deal_change</code> RPCs.
+    This is the CURRENT built behaviour on <code>dev</code> (after board Wave 3). Tell me which steps look wrong and I'll
+    make a "PROPOSED" twin of this file with the corrected flow.
+  </footer>
+
+</div>
+</body>
+</html>

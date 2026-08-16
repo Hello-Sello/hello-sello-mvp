@@ -35,9 +35,11 @@ import type {
 } from "@/modules/catalog";
 import {
   updateShopProfile, updateProductFields, addProductBatch, updateProductBatch,
-  softDeleteProductBatch,
+  softDeleteProductBatch, saveLadder,
 } from "@/modules/catalog/manage";
 import type { ProductFieldPatch, ProductBatchPatch } from "@/modules/catalog/manage";
+import { tiersFromDraft, validateLadder } from "@/modules/catalog/ladderDraft";
+import { packSizes } from "@/modules/catalog/index.client";
 import { saveCompanyProfile } from "@/app/account/actions";
 import { createClient } from "@/shared/db/client";
 import { addToBasket, useBasket } from "@/modules/basket";
@@ -282,6 +284,31 @@ export function ShopView({ shop, canEditBranding = false, viewerCanManage = true
     });
   }
 
+  // The base price a drafted ladder saves against (T04): the drafted price when
+  // the seller edited it this session, else the product's live price. Used both
+  // to validate drafts (Save disable below) and by the flush's saveLadder call,
+  // so the seller is blocked/allowed against exactly what would be written.
+  function ladderBase(productId: string, f: ProductFieldDraft): number | null {
+    if (f.price_per_gram !== undefined) return parseNum(f.price_per_gram);
+    return products.find((p) => p.id === productId)?.price_per_gram ?? null;
+  }
+
+  // Any drafted ladder failing validation blocks the WHOLE shop Save (EARS 3) —
+  // Save alone disables with a message; Exit / + Add products stay usable.
+  // Rungs without a resolvable base are a block too (validateLadder's null-base
+  // mode deliberately skips the base check for row-level marks, but the flush
+  // would refuse them mid-loop — catch it here, before anything commits).
+  const ladderBlock = (() => {
+    for (const [productId, d] of Object.entries(pendingProductEdits)) {
+      const rows = d.fields.tiers;
+      if (rows === undefined) continue;
+      const base = ladderBase(productId, d.fields);
+      if (!validateLadder(rows, base).canSave) return "Fix the highlighted price tiers first.";
+      if (base === null && tiersFromDraft(rows).length > 0) return "Set a base price first.";
+    }
+    return null;
+  })();
+
   function addLocation(label: string) {
     const value = label.trim();
     if (!value) return; // empty labels do not persist (D-05 / Cluster D)
@@ -415,10 +442,23 @@ export function ShopView({ shop, canEditBranding = false, viewerCanManage = true
 
     // Flush the per-product pending tree (F-02) AFTER the chrome commit — the field
     // patch, then batch inserts / edits / soft-deletes, all under this one Save.
+    // A drafted ladder (T04) routes through saveLadder INSTEAD of the plain price
+    // write: the base is stripped from the field patch (one atomic base+rungs
+    // write — a lone base write could trip the DB shape trigger against old
+    // rungs) and saved with the rungs in the one save_price_ladder RPC.
     for (const [productId, d] of Object.entries(pendingProductEdits)) {
       const fieldPatch = toFieldPatch(d.fields);
+      if (d.fields.tiers !== undefined) delete fieldPatch.price_per_gram;
       if (Object.keys(fieldPatch).length > 0) {
         const r = await updateProductFields(productId, fieldPatch);
+        if ("error" in r) { setError(r.error); setBusy(false); return; }
+      }
+      if (d.fields.tiers !== undefined) {
+        const r = await saveLadder(
+          productId,
+          ladderBase(productId, d.fields),
+          tiersFromDraft(d.fields.tiers),
+        );
         if ("error" in r) { setError(r.error); setBusy(false); return; }
       }
       for (const nb of d.batchInserts) {
@@ -512,30 +552,14 @@ export function ShopView({ shop, canEditBranding = false, viewerCanManage = true
     setProductOrder((prev) => ({ ...prev, [location]: next }));
   }
 
-  // ProductCard reports the selected pack-size INDEX (not grams) — resolve it
-  // against the EXACT SAME bubble list ProductCard's own packLabels() renders
-  // (see components/ProductCard.tsx), so the index lines up 1:1 with what the
-  // buyer actually clicked:
-  //   1. the product's own pack_size_grams + any extra v0 sizes (packSizes),
-  //      deduped + sorted ascending — these are the plain "Ng" bubbles;
-  //   2. THEN, only when the pricelist priced a bundle tier, one more bubble
-  //      appended LAST for bundle_threshold_grams (the "Ng+" bubble) — a
-  //      PackSizeSelector option like any other, fully selectable.
-  // Skipping step 2 here made a bundle-tier pick silently resolve to the base
-  // pack size instead of the threshold the buyer chose (fixed after review).
-  // Then persist the line and refresh the shared basket context (TopBar badge +
-  // drawer). Available to every viewer, owner or buyer — adding to basket is not
-  // owner-only chrome.
+  // ProductCard reports the selected pack-size INDEX — resolved against the
+  // SAME packSizes() array the card's bubbles render (ADR-0004 §5, one owner).
+  // Available to every viewer, owner or buyer — not owner-only chrome.
   async function handleAddToBasket(productId: string, packCount: number, packIndex: number) {
     const product = products.find((p) => p.id === productId);
-    const numericSizes = [...new Set([
-      ...(product?.packSizes ?? []),
-      ...(product?.pack_size_grams != null ? [product.pack_size_grams] : []),
-    ])].sort((a, b) => a - b);
-    const sizes = product?.bundle_threshold_grams != null
-      ? [...numericSizes, product.bundle_threshold_grams]
-      : numericSizes;
-    const packSizeGrams = sizes[packIndex] ?? product?.pack_size_grams ?? null;
+    const packSizeGrams = product
+      ? packSizes(product, product.tiers)[packIndex]?.grams ?? product.pack_size_grams ?? null
+      : null;
     await addToBasket(productId, packCount, packSizeGrams);
     await refreshBasket();
   }
@@ -547,7 +571,15 @@ export function ShopView({ shop, canEditBranding = false, viewerCanManage = true
           the banner below. (Never both edit and present at once — enterPresent()
           clears edit mode.) */}
       {viewerCanManage && editing && (
-        <SaveBar dirty={dirty} busy={busy} error={error} onSave={save} onDiscard={discard} onAddProducts={() => setDrawerOpen(true)} />
+        <SaveBar
+          dirty={dirty}
+          busy={busy}
+          error={error}
+          invalid={ladderBlock}
+          onSave={save}
+          onDiscard={discard}
+          onAddProducts={() => setDrawerOpen(true)}
+        />
       )}
 
       <PresentBanner

@@ -1,32 +1,35 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   getDealCard,
   getWorkspace,
   getThings,
   getDealPeople,
   createDeal,
+  canProposerEdit,
   DealCard,
   type DealCardView,
   type CardCreateInput,
   type MemberView,
   type ThingView,
 } from "@/modules/deals";
-import { openOrCreateP2pThread, postDealMessage } from "@/modules/messaging";
 
 /**
- * A not-yet-born draft view for CREATE mode (chj/07-08). The card renders it
- * empty, seller = me, buyer = the recipient DealPin passed. `id: "new"` never
- * reaches the DB - "Send deal" calls createDeal, which mints the real card. The
- * cast fills the DealCard DB columns the create front never reads (Muskan's
- * localized-cast pattern); the create card hides the id-bound sections.
+ * A not-yet-born draft view for CREATE mode (chj/07-08) - the PRE-BIRTH empty
+ * paper ONLY (Phase-12 D-13: a saved draft is a REAL born card with status
+ * 'unsent' and real workspace/line ids; this fake never represents one). The
+ * card renders it empty, seller = me, buyer = the recipient DealPin passed.
+ * `id: "new"` never reaches the DB - "Save draft" calls createDeal, which mints
+ * the real card. The cast fills the DealCard DB columns the create front never
+ * reads (Muskan's localized-cast pattern); the create card hides the id-bound
+ * sections.
  */
 function emptyDraftView(buyerName: string): DealCardView {
   return {
     card: {
       id: "new",
-      status: "draft",
+      status: "unsent",
       currency: "EUR",
       payment_terms_code: null,
       delivery_date_target: null,
@@ -41,7 +44,6 @@ function emptyDraftView(buyerName: string): DealCardView {
     signals: [],
     log: [],
     viewerSide: "seller",
-    confirmations: [],
     pendingChange: null,
     myNote: null,
     theirNote: null,
@@ -97,16 +99,26 @@ export function DealCardPanelHost() {
 
   // CREATE MODE (chj/07-08): a not-yet-born draft opened in the SAME 50/50 panel as
   // a real card. DealPin (which knows the relationship) fires `hs:create-deal-card`
-  // with the recipient; we render an empty createMode card here, and on "Send deal"
-  // mint it + swap to the born card. Null = not creating.
+  // with the recipient; we render an empty createMode card here, and on "Save draft"
+  // mint it + swap to the born 'unsent' card. Null = not creating.
   const [createReq, setCreateReq] = useState<{
     relationshipId: string;
     buyerName: string;
-    /** Lane A: present when the door is a p2p chat — the born deal gets this
-     *  person as counterparty co-owner (person-target routing) and the
-     *  delivery bubble is posted into their chat after birth. */
+    /** Lane A: present when the door is a p2p chat — the person persists on the
+     *  born card (metadata.counterparty_person_id), so the LATER send_deal
+     *  delivers person-target (chat bubble) instead of a company inbox ticket. */
     counterpartyPersonId?: string;
   } | null>(null);
+
+  // D-13: the create card registers its close rule here (via registerCloseRequest)
+  // so the host's OWN dismiss doors (Escape, opening another card) route through
+  // the same content-check - auto-save a filled draft, discard an empty one.
+  const createCloseRef = useRef<(() => void) | null>(null);
+  // the ref only holds a rule while a create card is mounted - clear it when the
+  // create panel goes away so a later dismiss cannot fire a stale closure.
+  useEffect(() => {
+    if (!createReq) createCloseRef.current = null;
+  }, [createReq]);
 
   // bumped on `hs:deal-updated` to re-run the card fetch (chj/07-08). This is how
   // the open panel refreshes LIVE after a change is proposed / signed / declined -
@@ -119,7 +131,10 @@ export function DealCardPanelHost() {
     function onOpen(e: Event) {
       const id = (e as CustomEvent<{ dealCardId?: string }>).detail?.dealCardId;
       if (id) {
-        setCreateReq(null); // opening a real card cancels any pending create
+        // opening a real card dismisses any pending create - through the D-13
+        // close rule (a filled draft auto-saves), never a blind discard.
+        if (createCloseRef.current) createCloseRef.current();
+        else setCreateReq(null);
         setOpenCardId(id);
       }
     }
@@ -164,37 +179,54 @@ export function DealCardPanelHost() {
     return () => window.removeEventListener("hs:deal-updated", onUpdated);
   }, [openCardId]);
 
-  // CREATE (chj/07-08): the create card handed up the assembled draft. Mint it via
-  // createDeal (direct birth, no proposal/accept), tell siblings it changed, then
-  // swap the create panel for the born card in the SAME slot.
+  // SAVE DRAFT (chj/07-08, reshaped Phase-12 D-13): the create card handed up
+  // the assembled draft. Mint it via createDeal - a PRIVATE 'unsent' birth with
+  // NO app-side delivery (D-06: delivery is written once, in send_deal, when the
+  // user presses Send on the born card) - tell siblings it changed, then swap
+  // the create panel for the born draft in the SAME slot: the user lands on
+  // their persisted card, reloaded through the normal born-card read path, with
+  // the DecisionBar showing "Send deal".
   async function handleCreate(input: CardCreateInput) {
     if (!createReq) return;
     const { dealCardId } = await createDeal({
       relationshipId: createReq.relationshipId,
-      // Lane A routing key: a p2p door names the counterparty co-owner, so the
-      // birth is person-target (no company inbox ticket from deliver_deal)
+      // Lane A routing key: a p2p door names the counterparty - persisted on
+      // the card (metadata.counterparty_person_id) so the LATER send_deal
+      // delivers person-target (chat bubble), not a company inbox ticket.
       counterpartyPersonId: createReq.counterpartyPersonId ?? null,
       ...input,
     });
-    // Person delivery (Lane A): the SEND layer posts the "[Sender] has sent a
-    // deal" bubble into the recipient's chat. Fail-soft: a delivery hiccup
-    // must not lose the just-born deal — the panel still swaps to the card.
-    if (createReq.counterpartyPersonId) {
-      try {
-        const tid = await openOrCreateP2pThread(
-          createReq.relationshipId,
-          createReq.counterpartyPersonId,
-        );
-        await postDealMessage(tid, dealCardId);
-      } catch (e) {
-        console.error("deal delivery message failed", e);
-      }
-    }
     window.dispatchEvent(
       new CustomEvent("hs:deal-updated", { detail: { dealCardId } }),
     );
     setCreateReq(null);
     setOpenCardId(dealCardId);
+  }
+
+  // D-13 close rule, host half: the create card handed up its content on dismiss.
+  // Content -> silent auto-birth (the draft lands in the DB as a private 'unsent'
+  // card; the panel closes - the Deals tab shows it as a grey Draft). Null (an
+  // empty card) -> plain discard (the locked C5 rule). A birth failure keeps the
+  // panel open so the user's work is never thrown away.
+  async function handleCloseCreate(input: CardCreateInput | null) {
+    if (!createReq) return;
+    if (!input) {
+      setCreateReq(null);
+      return;
+    }
+    try {
+      const { dealCardId } = await createDeal({
+        relationshipId: createReq.relationshipId,
+        counterpartyPersonId: createReq.counterpartyPersonId ?? null,
+        ...input,
+      });
+      window.dispatchEvent(
+        new CustomEvent("hs:deal-updated", { detail: { dealCardId } }),
+      );
+      setCreateReq(null);
+    } catch (err) {
+      console.error("auto-saving the draft on close failed", err);
+    }
   }
 
   // fetch the card view when a deal is opened (RLS-scoped; same fetch DealPin uses).
@@ -261,7 +293,11 @@ export function DealCardPanelHost() {
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
         setOpenCardId(null);
-        setCreateReq(null);
+        // D-13: dismissing the create panel goes through the card's close rule
+        // (a filled draft auto-saves, an empty one discards) - never a blind
+        // discard of typed work.
+        if (createCloseRef.current) createCloseRef.current();
+        else setCreateReq(null);
       }
     }
     window.addEventListener("keydown", onKey);
@@ -286,14 +322,24 @@ export function DealCardPanelHost() {
     >
       {/* No separate top bar - the close X now lives ON the card's own title bar
           (passed as onClose), so the panel spends no extra row on it. */}
-      <div className="min-h-0 flex-1 overflow-y-auto p-3">
+      {/* D1 (Wave 1): the host no longer scrolls - the card fills this box
+          (h-full chain) and owns its own inner paper scroll, so the card's
+          titlebar + decision zone stay pinned. */}
+      <div className="min-h-0 flex-1 overflow-hidden p-3">
         {createReq ? (
-          // CREATE MODE: an empty draft card. "Send deal" mints it via handleCreate,
-          // which then swaps this panel for the born card.
+          // CREATE MODE: an empty draft card. "Save draft" births it via
+          // handleCreate (which swaps this panel for the born 'unsent' card);
+          // dismissing routes through handleCloseCreate (D-13: content
+          // auto-saves as a draft, an empty card discards). onClose stays as
+          // the render gate for the title-bar X + a fallback plain close.
           <DealCard
             data={emptyDraftView(createReq.buyerName)}
             createMode
             onClose={() => setCreateReq(null)}
+            onCloseCreate={handleCloseCreate}
+            registerCloseRequest={(fn) => {
+              createCloseRef.current = fn;
+            }}
             onCreate={handleCreate}
           />
         ) : data ? (
@@ -306,11 +352,21 @@ export function DealCardPanelHost() {
             viewerPersonId={viewerPersonId}
             viewerCompanyId={viewerCompanyId}
             onClose={closePanel}
-            // Editing is allowed ONLY on a live draft with no held change (chj/07-08).
-            // Once signed (confirmed), declined (cancelled), or executed (done) the
-            // card is locked; while a change is held the responder uses the DecisionBar.
+            // Editing gate (Wave 3b, canProposerEdit): an 'unsent' private draft
+            // is always editable in place (CR-02); a live 'negotiation' card is
+            // editable when there is no held change OR the held change is the
+            // viewer's OWN (they may replace it - withdraw + re-propose). The
+            // OTHER side's held change, and any settled status (confirmed /
+            // cancelled / done), lock the pencil; a held change the responder
+            // must act on routes through the DecisionBar instead.
             onEdit={
-              data.card.status === "draft" && !data.pendingChange ? ALLOW_EDIT : undefined
+              canProposerEdit(
+                data.card.status,
+                data.pendingChange,
+                data.pendingChange?.iProposed ?? false,
+              )
+                ? ALLOW_EDIT
+                : undefined
             }
           />
         ) : (

@@ -11,9 +11,9 @@ import type { DealCardStatus } from "../types";
 
 /**
  * True when the deal may close on the invoice trigger (D-27):
- *   1. STATUS precondition - the deal must be in a live AGREED state, `confirmed`
- *      (both sides sealed the current version) or `amended` (a committed two-sided
- *      change). Every other status - `draft` (never agreed), `withdrawn`,
+ *   1. STATUS precondition - the deal must be in the live AGREED state,
+ *      `confirmed` (both sides sealed the current version). Every other status -
+ *      `unsent` (private draft, never agreed), `negotiation` (sent, not agreed),
  *      `cancelled` (dead), and `done` (already terminal; the idempotency
  *      early-return in finalizeDeal handles it) - must NOT close, or a
  *      never-agreed deal could be driven straight to `done`.
@@ -29,6 +29,6 @@ export function canFinalizeByInvoice(
   status: DealCardStatus,
   hasSellerInvoice: boolean,
 ): boolean {
-  if (status !== "confirmed" && status !== "amended") return false;
+  if (status !== "confirmed") return false;
   return hasSellerInvoice;
 }

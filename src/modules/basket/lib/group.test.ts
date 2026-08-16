@@ -6,7 +6,7 @@ function line(id: string, sellerId: string, sellerName: string): BasketLine {
   return {
     id, productId: `p-${id}`, productName: `Product ${id}`, cultivar: null,
     unit: "g", packCount: 1, packSizeGrams: 50, pricePerGram: 4.5, currency: "EUR",
-    pzn: null, sellerCompanyId: sellerId, sellerCompanyName: sellerName,
+    pzn: null, sellerCompanyId: sellerId, sellerCompanyName: sellerName, tiers: [],
   };
 }
 

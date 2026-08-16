@@ -7,10 +7,14 @@
  * states, never the 8-part body (the user's rule).
  *
  * Lifecycle (single-sign, the user's flow):
- *   - DRAFT: the party who did NOT give the latest version SIGNS (direct, NO reason)
- *     or Negotiates; the giver waits + can withdraw a held change. Either may Decline
- *     (= close the deal). "Give" = send a change (proposer) or, on a fresh draft with
- *     no change, create it (the initiator).
+ *   - UNSENT (private draft, Phase-12 D-12): only the creator's company can see the
+ *     card (RLS), and the ONE action is "Send deal" - the card's Send button is the
+ *     only send path in the app; sending flips the deal into negotiation.
+ *   - NEGOTIATION: the FIXED signer (the NON-initiating company, D-10) SIGNS (direct,
+ *     NO reason) or Negotiates; the sender waits, accepts the signer's counter, or
+ *     withdraws its own held change. Either may Decline (= close the deal). The
+ *     signer never flips with the latest version - the same side signs for life
+ *     (the pure B6 matrix lives in lib/decisionBar.negotiationDecision).
  *   - CONFIRMED (signed): editing is locked everywhere; the SELLER uploads the invoice
  *     PDF (which closes the deal), the buyer waits.
  *   - DONE (executed): one button - Open a ticket.
@@ -20,16 +24,21 @@
  * reason string in the RPC (REAS-01), so an AUTO reason is passed silently.
  */
 import { useRef, useState, type ChangeEvent, type ReactNode } from "react";
-import { Pencil, PenLine, Ticket, Upload, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Check, Pencil, PenLine, Send, Ticket, Upload, X } from "lucide-react";
 import {
   confirmDealChange,
   declineDeal,
   finalizeDeal,
   reopenTicket,
+  requestNegotiation,
+  sendDeal,
   signDeal,
   withdrawDealChange,
 } from "../actions";
 import { uploadDealInvoice } from "../supabase/writes";
+import { dealChatUrl } from "../lib/dealChatUrl";
+import { negotiationDecision, unsentButtons, type DecisionButton } from "../lib/decisionBar";
 import type { DealCardView } from "../types";
 
 // confirm_deal_change requires a non-empty reason (REAS-01); the user wants no note
@@ -48,12 +57,20 @@ export function DecisionBar({
   const status = data.card.status;
   const change = data.pendingChange;
   const isSeller = data.viewerSide === "seller";
-  // the deal's INITIATOR (who gave the first version): the seller for an 'offer',
-  // the buyer for an 'order'. Tells us who signs a fresh draft with no held change.
-  const dealType = (data.card as { deal_type?: string }).deal_type;
-  const iInitiated =
-    (dealType === "offer" && isSeller) || (dealType === "order" && !isSeller);
+  // the OTHER company's name, for the "Waiting for <them>'s acceptance" line.
+  const otherName = isSeller ? data.buyerName : data.sellerName;
+  // the deal's INITIATOR (who gave the first version) - the STORED fact (D-10):
+  // `initiating_company_id`, selected by getDealCard, compared against the
+  // viewer's company. The view carries no viewer company id, but sellerCompanyId
+  // + viewerSide pin it without a new read: the initiator sits on the seller
+  // side iff initiating_company_id === sellerCompanyId.
+  const initiatorSide =
+    data.card.initiating_company_id === data.sellerCompanyId ? "seller" : "buyer";
+  // the FIXED signer is the NON-initiating company (D-10) - it never flips with
+  // the latest version, so the same side signs for the deal's whole life.
+  const iAmSigner = data.viewerSide != null && initiatorSide !== data.viewerSide;
 
+  const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmDecline, setConfirmDecline] = useState(false);
@@ -126,6 +143,40 @@ export function DecisionBar({
     </button>
   );
 
+  // ---- UNSENT (private draft, D-08/D-12): the card's Send button is THE one send
+  // path in the app. RLS hides an unsent card from the counterparty entirely, so
+  // every viewer who can reach this branch is on the initiating (draft-owning)
+  // side. Send is always offered; a stray held change also gets a Withdraw
+  // (unsentButtons) so a wedged draft can be cleared - a private draft normally
+  // carries no held change (edits go through update_deal_draft, not propose). The
+  // negotiation-era Sign/Decline never render here (their RPCs guard on
+  // 'negotiation' server-side anyway).
+  if (status === "unsent") {
+    const intents = unsentButtons(change != null);
+    return shell(
+      <>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void run(() => sendDeal(dealCardId))}
+          className="dc-btn-sign flex w-full items-center justify-center gap-1.5 rounded-full px-3 py-2.5 text-[13px] font-bold disabled:opacity-50"
+        >
+          <Send className="h-3.5 w-3.5" /> {busy ? "Sending…" : "Send deal"}
+        </button>
+        {intents.includes("withdraw") && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void run(() => withdrawDealChange({ dealCardId }))}
+            className="dc-btn-negotiate w-full rounded-full px-3 py-2.5 text-[13px] font-bold disabled:opacity-50"
+          >
+            {busy ? "Withdrawing…" : "Withdraw changes"}
+          </button>
+        )}
+      </>,
+    );
+  }
+
   // ---- DONE (executed): the single "Open a ticket" button ----
   if (status === "done") {
     return shell(
@@ -156,8 +207,8 @@ export function DecisionBar({
     );
   }
 
-  // ---- CONFIRMED / AMENDED (signed): seller uploads the invoice, buyer waits ----
-  if (status === "confirmed" || status === "amended") {
+  // ---- CONFIRMED (signed): seller uploads the invoice, buyer waits ----
+  if (status === "confirmed") {
     if (!isSeller) {
       return shell(
         <p className="text-center text-[12px] font-medium text-ink/55">
@@ -197,46 +248,35 @@ export function DecisionBar({
     );
   }
 
-  // ---- DRAFT (negotiation / initial): the sign / negotiate / decline stage ----
-  // who signs? the party who did NOT give the latest version.
-  const iGaveLatest = change ? change.iProposed : iInitiated;
-  if (iGaveLatest) {
-    // I gave it -> I wait. I can withdraw a held change (Negotiate) or Decline.
-    return shell(
-      <>
-        <p className="text-[11px] text-ink/55">Waiting for the other side to sign.</p>
-        {change && (
+  // ---- NEGOTIATION (sent, bargaining): the B6 fixed-signer decision (D-10) ----
+  // The signer is the NON-initiating company; the button matrix (who may Sign, who
+  // Accepts a counter, who only waits) is the pure `negotiationDecision` - here we
+  // only RENDER it. Negotiate NEVER discards a held change: it announces intent +
+  // opens the chat, it does not decline.
+  const decision = negotiationDecision({
+    iAmSigner,
+    heldChange: change ? { proposedByMe: change.iProposed } : null,
+  });
+
+  // Render one matrix button. Kept local so it can close over busy/run/router.
+  function renderButton(b: DecisionButton): ReactNode {
+    if (b.intent === "sign") {
+      if (!b.enabled) {
+        // my own change is held: I cannot sign it myself - wait for the sender.
+        return (
           <button
+            key="sign"
             type="button"
-            disabled={busy}
-            onClick={() => void run(() => withdrawDealChange({ dealCardId }))}
-            className="dc-btn-negotiate w-full rounded-full px-3 py-2.5 text-[13px] font-bold disabled:opacity-50"
+            disabled
+            className="dc-btn-sign flex flex-1 items-center justify-center gap-1.5 rounded-full px-3 py-2.5 text-[13px] font-bold opacity-50"
           >
-            {busy ? "Withdrawing…" : "Negotiate (withdraw change)"}
+            <PenLine className="h-3.5 w-3.5" /> Waiting for {otherName}&rsquo;s acceptance
           </button>
-        )}
-        {declineControl}
-      </>,
-    );
-  }
-  // I'm the signer: Sign (direct, NO reason). If a change is held, Negotiate discards
-  // it (back to editable). Either way, Decline closes the deal.
-  return shell(
-    <>
-      <div className="flex items-center gap-2">
-        {change && (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() =>
-              void run(() => confirmDealChange({ dealCardId, decision: "decline", reason: AUTO_REASON }))
-            }
-            className="dc-btn-negotiate flex flex-1 items-center justify-center gap-1.5 rounded-full px-3 py-2.5 text-[13px] font-bold disabled:opacity-50"
-          >
-            <Pencil className="h-3.5 w-3.5" /> Negotiate
-          </button>
-        )}
+        );
+      }
+      return (
         <button
+          key="sign"
           type="button"
           disabled={busy}
           onClick={() => void run(() => signDeal({ dealCardId }))}
@@ -244,7 +284,67 @@ export function DecisionBar({
         >
           <PenLine className="h-3.5 w-3.5" /> {busy ? "Signing…" : "Sign the deal"}
         </button>
-      </div>
+      );
+    }
+    if (b.intent === "accept-changes") {
+      // the sender accepts the signer's counter - a two-sided commit (D-02).
+      return (
+        <button
+          key="accept-changes"
+          type="button"
+          disabled={busy}
+          onClick={() =>
+            void run(() =>
+              confirmDealChange({ dealCardId, decision: "accept", reason: AUTO_REASON }),
+            )
+          }
+          className="dc-btn-sign flex flex-1 items-center justify-center gap-1.5 rounded-full px-3 py-2.5 text-[13px] font-bold disabled:opacity-50"
+        >
+          <Check className="h-3.5 w-3.5" /> Accept changes
+        </button>
+      );
+    }
+    if (b.intent === "withdraw") {
+      return (
+        <button
+          key="withdraw"
+          type="button"
+          disabled={busy}
+          onClick={() => void run(() => withdrawDealChange({ dealCardId }))}
+          className="dc-btn-negotiate flex flex-1 items-center justify-center gap-1.5 rounded-full px-3 py-2.5 text-[13px] font-bold disabled:opacity-50"
+        >
+          {busy ? "Withdrawing…" : "Withdraw changes"}
+        </button>
+      );
+    }
+    // negotiate: announce the intent (fail-soft) then open the deal chat. It NEVER
+    // discards a held change - no confirmDealChange(decline) here (D-03).
+    return (
+      <button
+        key="negotiate"
+        type="button"
+        disabled={busy}
+        onClick={() =>
+          void run(async () => {
+            await requestNegotiation({ dealCardId });
+            router.push(dealChatUrl(data.card.relationship_id, dealCardId));
+          })
+        }
+        className="dc-btn-negotiate flex flex-1 items-center justify-center gap-1.5 rounded-full px-3 py-2.5 text-[13px] font-bold disabled:opacity-50"
+      >
+        <Pencil className="h-3.5 w-3.5" /> Negotiate
+      </button>
+    );
+  }
+
+  return shell(
+    <>
+      {decision.showWaitingToSignLine && (
+        <p className="text-[11px] text-ink/55">Waiting for the other side to sign.</p>
+      )}
+      {decision.buttons.length > 0 && (
+        <div className="flex items-center gap-2">{decision.buttons.map(renderButton)}</div>
+      )}
       {declineControl}
     </>,
   );

@@ -82,27 +82,38 @@ describe("relativeDayLabel (D-03 - Today / N days ago)", () => {
 });
 
 describe("countOpenDealsByRelationship (D-06 - truthful open-deal count)", () => {
-  it("counts only OPEN statuses (draft/confirmed/amended) per relationship", () => {
+  it("counts only OPEN statuses (negotiation/confirmed) per relationship", () => {
     const cards = [
-      { relationship_id: "r1", status: "draft" },
+      { relationship_id: "r1", status: "negotiation" },
       { relationship_id: "r1", status: "confirmed" },
-      { relationship_id: "r1", status: "amended" },
-      { relationship_id: "r2", status: "draft" },
+      { relationship_id: "r2", status: "negotiation" },
     ];
     const counts = countOpenDealsByRelationship(cards);
-    expect(counts.get("r1")).toBe(3);
+    expect(counts.get("r1")).toBe(2);
     expect(counts.get("r2")).toBe(1);
   });
 
   it("excludes terminal/other statuses from the count", () => {
     const cards = [
-      { relationship_id: "r1", status: "draft" },
+      { relationship_id: "r1", status: "negotiation" },
       { relationship_id: "r1", status: "cancelled" },
       { relationship_id: "r1", status: "closed" },
       { relationship_id: "r1", status: "rejected" },
     ];
     const counts = countOpenDealsByRelationship(cards);
     expect(counts.get("r1")).toBe(1);
+  });
+
+  it("excludes 'unsent' private drafts - they never count toward the open-deal badge (D-16)", () => {
+    // the badge is counterparty-meaningful; a private draft must not move it.
+    const cards = [
+      { relationship_id: "r1", status: "unsent" },
+      { relationship_id: "r1", status: "negotiation" },
+      { relationship_id: "r2", status: "unsent" },
+    ];
+    const counts = countOpenDealsByRelationship(cards);
+    expect(counts.get("r1")).toBe(1); // only the negotiation card
+    expect(counts.has("r2")).toBe(false); // an unsent-only relationship has NO badge
   });
 
   it("omits a relationship with zero open deals (no key)", () => {

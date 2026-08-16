@@ -1374,7 +1374,7 @@ The marketable product as the **supplier** defines it. Stable catalog identity +
 - `INDEX(company_id)` — RLS / tenant filter
 - `INDEX(company_id, cultivar)` — catalog browse/filter
 
-**Sell prices are NOT here** — `price_per_gram` + bundle live on `pricelist_item` (one source of truth). `product` holds only the **intrinsic** money facts: `cogs` (seller's private cost) + `rrp_per_gram` (a reference).
+**Sell prices are NOT here** — the base `price_per_gram` lives on `pricelist_item` and the volume rungs on its child `pricelist_item_tier` (one source of truth, read together via the `current_pricelist_item` view). `product` holds only the **intrinsic** money facts: `cogs` (seller's private cost) + `rrp_per_gram` (a reference).
 
 ---
 
@@ -1504,8 +1504,8 @@ One product's pricing on a pricelist.
 | `pricelist_id` | UUID | NOT NULL, REFERENCES `pricelist(id)` | |
 | `product_id` | UUID | NOT NULL, REFERENCES `product(id)` | |
 | `price_per_gram` | NUMERIC(15, 4) | NOT NULL | "Basic Price / g" |
-| `bundle_threshold_grams` | NUMERIC(12, 2) | NULL | Min qty to unlock bundle price ("Bundle Deal" — 2000) |
-| `bundle_price_per_gram` | NUMERIC(15, 4) | NULL | "Bundle Deal Price / g" |
+| `bundle_threshold_grams` | NUMERIC(12, 2) | NULL | **Legacy** single bracket — superseded by `pricelist_item_tier` (ADR-0004); remains until Migration C (held) |
+| `bundle_price_per_gram` | NUMERIC(15, 4) | NULL | **Legacy** single bracket — superseded by `pricelist_item_tier` (ADR-0004); remains until Migration C (held) |
 | `currency` | CHAR(3) | NOT NULL DEFAULT `'EUR'` | Matches `pricelist.currency` |
 | `metadata` | JSONB | NOT NULL DEFAULT `'{}'` | |
 | `created_by` | UUID | NULL, REFERENCES `person(id)` | |
@@ -1522,6 +1522,22 @@ One product's pricing on a pricelist.
 - `INDEX(pricelist_id)`
 
 **Snapshot link:** `deal_line_item.unit_price` is a frozen copy of `pricelist_item.price_per_gram` at deal time — changing the list later never rewrites past deals (same pattern as `relationship_term` → `deal_card`).
+
+---
+
+### `pricelist_item_tier` (volume-tier rungs — ADR-0004, 2026-08-14)
+
+One rung of a price row's **tier ladder**: *from `min_grams` → `price_per_gram`*. Up to 3 rungs in the UI, unbounded in schema. A DB trigger enforces the ladder shape (every rung below the base price, strictly descending as `min_grams` rises); writes go through the `save_price_ladder` RPC, reads through the `current_pricelist_item` view (base + rungs in one shape). Replaces the legacy single bundle bracket above.
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | UUID | PK, NOT NULL, DEFAULT `gen_random_uuid()` | |
+| `pricelist_item_id` | UUID | NOT NULL, REFERENCES `pricelist_item(id)` | Parent price row |
+| `min_grams` | NUMERIC(12, 2) | NOT NULL, CHECK `> 0` | "from N g" threshold |
+| `price_per_gram` | NUMERIC(15, 4) | NOT NULL, CHECK `> 0` | Rung price — below base, descending (trigger-enforced) |
+| house columns | | | `created_by` / `updated_by` / timestamps / soft delete, same shape as `pricelist_item` |
+
+**Constraints:** `UNIQUE(pricelist_item_id, min_grams) WHERE deleted_at IS NULL` · **Indexes:** `INDEX(pricelist_item_id)`
 
 ---
 

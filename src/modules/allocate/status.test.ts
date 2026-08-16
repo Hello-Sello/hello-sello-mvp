@@ -7,15 +7,15 @@ import { describe, it, expect } from "vitest";
 import { statusOf, orderNumberOf, formatOrderDate, isKeyAccount } from "./status";
 
 describe("statusOf — the 7-state order-status vocabulary (DEV-151)", () => {
-  it("draft + offer → Sales offer", () => {
-    expect(statusOf({ status: "draft", dealType: "offer", ticketStatus: null })).toEqual({
+  it("negotiation + offer → Sales offer", () => {
+    expect(statusOf({ status: "negotiation", dealType: "offer", ticketStatus: null })).toEqual({
       code: "sales_offer",
       label: "Sales offer",
     });
   });
 
-  it("draft + order → Purchase order", () => {
-    expect(statusOf({ status: "draft", dealType: "order", ticketStatus: null })).toEqual({
+  it("negotiation + order → Purchase order", () => {
+    expect(statusOf({ status: "negotiation", dealType: "order", ticketStatus: null })).toEqual({
       code: "purchase_order",
       label: "Purchase order",
     });
@@ -35,13 +35,6 @@ describe("statusOf — the 7-state order-status vocabulary (DEV-151)", () => {
     });
   });
 
-  it("amended → Deal update", () => {
-    expect(statusOf({ status: "amended", dealType: "offer", ticketStatus: null })).toEqual({
-      code: "update",
-      label: "Deal update",
-    });
-  });
-
   it("ticketStatus 'open' overrides the base status → Ticket created", () => {
     expect(statusOf({ status: "confirmed", dealType: "order", ticketStatus: "open" })).toEqual({
       code: "ticket",
@@ -56,12 +49,21 @@ describe("statusOf — the 7-state order-status vocabulary (DEV-151)", () => {
     });
   });
 
-  it("withdrawn/cancelled — the documented edge case outside the 7-vocab", () => {
-    expect(statusOf({ status: "withdrawn", dealType: "offer", ticketStatus: null })).toEqual({
+  it("cancelled — the documented edge case outside the 7-vocab", () => {
+    expect(statusOf({ status: "cancelled", dealType: "order", ticketStatus: null })).toEqual({
       code: "cancelled",
       label: "Cancelled",
     });
-    expect(statusOf({ status: "cancelled", dealType: "order", ticketStatus: null })).toEqual({
+  });
+
+  it("unsent (private draft) → the neutral/excluded 8th code, never a real colour (D-16 / Open Q5)", () => {
+    // drafts are not committed demand - statusOf must never give them one of
+    // the 7 real colours, so an unsent card can never colour calendar/orders.
+    expect(statusOf({ status: "unsent", dealType: "offer", ticketStatus: null })).toEqual({
+      code: "cancelled",
+      label: "Cancelled",
+    });
+    expect(statusOf({ status: "unsent", dealType: "order", ticketStatus: null })).toEqual({
       code: "cancelled",
       label: "Cancelled",
     });

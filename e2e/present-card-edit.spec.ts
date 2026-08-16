@@ -154,3 +154,127 @@ test("F-05 · Dominance and Irradiation spec rows render as selects, not free te
   await expect(card.getByLabel("Dominance")).toHaveJSProperty("tagName", "SELECT");
   await expect(card.getByLabel("Irradiation")).toHaveJSProperty("tagName", "SELECT");
 });
+
+// ── 0021 T04 — seller tier editor (edit-mode ladder → the ONE pink Save) ─────
+// Tier rows join the SAME pending-edit tree as every other card field; Save
+// flushes them atomically per product via saveLadder. Cards are located by
+// product NAME (not .first()) — the ladder cases target specific seed rows:
+//   AUR-1B "Pedanios 31/1 PND-CA" (base 6.00, no seeded rungs — the blank slate;
+//     the first case PERSISTS a 2-rung ladder on it, which the invalid case
+//     then reuses as its pre-populated starting state), and
+//   AUR-1A "Pedanios 31/1 COS-CA" (base 8.00, one seeded rung 2000 g → 6.50).
+// Aria-labels are 1-based (`Tier 1 minimum grams`).
+
+/** AUR-1B's card — the seeded no-rungs product the ladder cases build on. */
+function aur1b(page: Page) {
+  return page.getByTestId("product-card").filter({ hasText: "Pedanios 31/1 PND-CA" });
+}
+
+test("T04 · tier rows save through the ONE pink Save and round-trip a reload", async ({ page }) => {
+  await manageShop(page);
+  const card = aur1b(page);
+  // Blank slate: AUR-1B has no seeded rungs.
+  await expect(card.getByText("Volume price tiers")).toBeVisible();
+  await expect(card.getByLabel("Tier 1 minimum grams")).toHaveCount(0);
+
+  // Build the ladder under the 6.00 base: 500 g → 5, 1000 g → 4.5.
+  await card.getByRole("button", { name: /add tier/i }).click();
+  await card.getByLabel("Tier 1 minimum grams").fill("500");
+  await card.getByLabel("Tier 1 price per gram").fill("5");
+  await card.getByRole("button", { name: /add tier/i }).click();
+  await card.getByLabel("Tier 2 minimum grams").fill("1000");
+  await card.getByLabel("Tier 2 price per gram").fill("4.5");
+  await expect(page.getByTestId("save-changes-btn")).toHaveAttribute("data-dirty", "true");
+
+  await page.getByTestId("save-changes-btn").click();
+  await expect(page.getByTestId("shop-surface")).toHaveAttribute("data-edit", "off");
+
+  // Round-trip: the saved rungs come back from the DB into the editor.
+  await page.reload();
+  await page.getByTestId("present-banner").getByRole("button", { name: /manage shop/i }).click();
+  await expect(page.getByTestId("shop-surface")).toHaveAttribute("data-edit", "on");
+  await expect(card.getByLabel("Tier 1 minimum grams")).toHaveValue("500");
+  await expect(card.getByLabel("Tier 1 price per gram")).toHaveValue("5");
+  await expect(card.getByLabel("Tier 2 minimum grams")).toHaveValue("1000");
+  await expect(card.getByLabel("Tier 2 price per gram")).toHaveValue("4.5");
+});
+
+test("T04 · an invalid rung reds the row and disables Save; fixing re-enables it", async ({ page }) => {
+  await manageShop(page);
+  const card = aur1b(page);
+  // Pre-populated from the previous case's persisted ladder (500 / 1000).
+  await expect(card.getByLabel("Tier 2 minimum grams")).toHaveValue("1000");
+
+  // Break the ascending rule: 400 is not above the 500 g tier.
+  await card.getByLabel("Tier 2 minimum grams").fill("400");
+  await expect(card.getByText("Must be higher than the tier above (500g)")).toBeVisible();
+  await expect(page.getByTestId("save-changes-btn")).toBeDisabled();
+  await expect(page.getByText("Fix the highlighted price tiers first.")).toBeVisible();
+  // Exit stays usable while Save is blocked (only Save is disabled).
+  await expect(page.getByRole("button", { name: /exit/i })).toBeEnabled();
+
+  // Fix it → Save re-enables.
+  await card.getByLabel("Tier 2 minimum grams").fill("1000");
+  await expect(page.getByTestId("save-changes-btn")).toBeEnabled();
+});
+
+test("T04 · a seeded rung pre-populates the tier editor (AUR-1A)", async ({ page }) => {
+  await manageShop(page);
+  const card = page.getByTestId("product-card").filter({ hasText: "Pedanios 31/1 COS-CA" });
+  await expect(card.getByLabel("Tier 1 minimum grams")).toHaveValue("2000");
+  await expect(card.getByLabel("Tier 1 price per gram")).toHaveValue("6.5");
+});
+
+// ── 0021 T05 — buyer "See all prices" panel (Variant B) ──────────────────────
+// AUR-1A read mode (base 8.00, seeded rung 2000 g → 6.50, pack size 1000 g):
+// reveal → base + rung rows → Choose pre-fills the rung's bubble (2000g+) with
+// qty 1 → the availability chip flips to "from 2000g applied" → add to basket
+// → the drawer line prices the rung (6,5 € — formatMoney's NBSP, the drawer's
+// own convention; the card shows 6,50€ — deliberate delta, PLAN-T05 am. 5).
+
+test("T05 · reveal → Choose a rung → chip applies → drawer prices the rung (AUR-1A)", async ({ page }) => {
+  await gotoShop(page);
+  let card = page.getByTestId("product-card").filter({ hasText: "Pedanios 31/1 COS-CA" });
+
+  // Seed ships price_public=false — the reveal must be absent until the seller
+  // opts the price in (criterion 4's negative space, driven the real way).
+  await expect(card.getByRole("button", { name: "See all prices" })).toHaveCount(0);
+  await page.getByTestId("present-banner").getByRole("button", { name: /manage shop/i }).click();
+  await expect(page.getByTestId("shop-surface")).toHaveAttribute("data-edit", "on");
+  await card.getByLabel("Show price to buyers").check();
+  await page.getByTestId("save-changes-btn").click();
+  await expect(page.getByTestId("shop-surface")).toHaveAttribute("data-edit", "off");
+  await page.goto("/present"); // already signed in — plain re-navigation to read mode
+  await expect(page.getByTestId("product-card").first()).toBeVisible();
+  card = page.getByTestId("product-card").filter({ hasText: "Pedanios 31/1 COS-CA" });
+
+  // Closed by default; the reveal opens the popover with base + rung rows.
+  // The popover is PORTALED to document.body (it opens below the link and may
+  // poke past the card's bottom edge), so it is located page-wide by its
+  // dialog role — NOT inside the card's subtree.
+  const reveal = card.getByRole("button", { name: "See all prices" });
+  await expect(reveal).toBeVisible();
+  await reveal.click();
+  const panel = page.getByRole("dialog", { name: "Volume prices" });
+  await expect(panel.getByText("Base price", { exact: true })).toBeVisible();
+  // The rung row's label embeds the savings ("from 2000g · −19%") — assert the
+  // row via its unambiguous Choose button instead of the composed label text.
+  await expect(panel.getByRole("button", { name: "Choose from 2000g" })).toBeVisible();
+
+  // Choose the rung: panel closes, the rung bubble is selected at qty 1, the
+  // chip applies, and the headline shows the rung price.
+  await panel.getByRole("button", { name: "Choose from 2000g" }).click();
+  await expect(panel).toHaveCount(0); // panel closed
+  await expect(card.getByRole("button", { name: "2000g+" })).toHaveAttribute("aria-pressed", "true");
+  await expect(card.getByText("from 2000g applied")).toBeVisible();
+  await expect(card.getByText("6,50€")).toBeVisible();
+
+  // Add to basket → open the drawer from the TopBar icon; no testids in the
+  // drawer — locate it by its visible structure/text (PLAN-T05 amendment 8).
+  await card.getByRole("button", { name: /add to basket/i }).click();
+  await page.getByRole("button", { name: "Basket", exact: true }).click();
+  const drawer = page.getByRole("menu", { name: "Your basket" });
+  await expect(drawer.getByText("Pedanios 31/1 COS-CA")).toBeVisible();
+  // The rung price in the line row: formatMoney = "6,5" + NBSP + "€".
+  await expect(drawer.getByText("6,5\u00a0€/g")).toBeVisible();
+});

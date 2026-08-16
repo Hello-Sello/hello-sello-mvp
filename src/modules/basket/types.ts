@@ -1,3 +1,5 @@
+import type { PriceTier } from "@/modules/catalog/index.client";
+
 export interface BasketLine {
   id: string;
   productId: string;
@@ -11,6 +13,8 @@ export interface BasketLine {
   pzn: string | null;
   sellerCompanyId: string;
   sellerCompanyName: string;
+  /** The product's tier ladder (ADR-0004): [] when no rungs exist. */
+  tiers: PriceTier[];
 }
 
 export interface BasketGroup {
@@ -26,7 +30,7 @@ export interface BasketView {
   totalLineCount: number;
 }
 
-/** Input to sendBasketGroup — the recipient chosen for ONE seller-group. */
+/** Input to createBasketDraft - the recipient chosen for ONE seller-group. */
 export interface SendGroupInput {
   relationshipId: string;
   /** the chosen person on the other side (own-company offer path); null → company-addressed */

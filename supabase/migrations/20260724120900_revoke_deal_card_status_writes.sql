@@ -1,0 +1,33 @@
+-- ============================================================================
+-- Migration - the Door-2 lock: no raw client WRITE on deal_card (D-09 / CR-01)
+-- ----------------------------------------------------------------------------
+-- Grants are checked BEFORE RLS, so this single REVOKE makes the WHOLE card
+-- write path unforgeable from PostgREST regardless of any policy: the client
+-- roles (authenticated, anon) lose INSERT, UPDATE and DELETE at the grant layer
+-- itself.
+--
+--   · UPDATE - status transitions are unforgeable (they go through the definer
+--     RPCs only);
+--   · INSERT (CR-01) - a deal is BORN only through create_deal_draft /
+--     confirm_detected_deal (both SECURITY DEFINER). card_all's WITH CHECK
+--     passes for any relationship member, so without this a client could INSERT
+--     a card born straight into 'confirmed' - a forged signature. The revoke is
+--     the only thing that closes that birth door;
+--   · DELETE - a member could otherwise raw-delete a card the RPCs never
+--     expose a delete verb for.
+--
+-- SECURITY DEFINER RPCs run as their owner (postgres, the table owner), so
+-- every transition RPC (and create_deal_draft's INSERT) keeps writing. The
+-- service role and the postgres owner keep their grants - seeds and admin
+-- tooling are untouched. Never widen this REVOKE to those roles (Pitfall 10).
+--
+-- The only client-side writer in src/ is updateStatus (actions.ts), which
+-- plan 12-07 deletes in the same wave/PR.
+--
+-- ORDERING (Pitfall 3): this file carries the wave's LAST timestamp so
+-- decline/sign/finalize/reopen/close always have their RPC path
+-- (20260724120600_deal_transition_rpcs.sql) before the raw door closes -
+-- there is never a window where transitions have no path.
+-- ============================================================================
+
+REVOKE INSERT, UPDATE, DELETE ON public.deal_card FROM authenticated, anon;

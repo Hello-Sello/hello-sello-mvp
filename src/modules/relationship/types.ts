@@ -64,17 +64,19 @@ export type ArtifactCategory =
 export type ScanStatus = "pending" | "clean" | "infected" | "scan_error";
 
 /**
- * deal_card_status.code - full seeded union. The Deals tab buckets these into
- * the prototype's filter: Active = draft/confirmed/amended · Old = done ·
- * Cancelled = cancelled/withdrawn.
+ * deal_card_status.code - full union (Phase-12 vocabulary, D-01).
+ * `unsent` = the private draft (label "Draft"; RLS hides it from the
+ * counterparty) · `negotiation` = sent/bargaining. The Deals tab buckets:
+ * Active = unsent/negotiation/confirmed · Old = done · Cancelled = cancelled.
  */
 export type DealStatus =
-  | "draft"
-  | "withdrawn"
+  | "unsent"
+  | "negotiation"
   | "confirmed"
-  | "amended"
   | "done"
-  | "cancelled";
+  | "cancelled"
+  | "ticket_created"
+  | "ticket_closed";
 
 /* -------------------------------------------------------------------------- */
 /* Narrowed rows - identical shape to the DB row, lookup columns tightened    */

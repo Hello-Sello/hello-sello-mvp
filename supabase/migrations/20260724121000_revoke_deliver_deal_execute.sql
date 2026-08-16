@@ -1,0 +1,30 @@
+-- ============================================================================
+-- WR-01 · revoke deliver_deal EXECUTE from the client roles
+-- (Ayush, 2026-07-24 · Wave 3a)
+-- ----------------------------------------------------------------------------
+-- WHY: public.deliver_deal(uuid) is the deal-delivery routing primitive
+-- (20260720095000). It is SECURITY DEFINER and derives the receiver company
+-- from card facts alone, so a direct authenticated caller could re-run the
+-- routing (and, before the birth/send split, force a company ticket) for ANY
+-- card id — it trusts no client input but is not a verb the client is meant to
+-- invoke on its own. It is only ever reached NESTED, from send_deal (birth/send
+-- split) and the detection door; those run as the function owner and are
+-- unaffected by this revoke.
+--
+-- NEW FILE (not an in-place edit of 20260720095000): deliver_deal already
+-- shipped to cloud, so its privilege change must be a forward migration.
+--
+-- Client roles only (authenticated, anon). service_role / postgres keep
+-- EXECUTE — seeds, admin tooling, and the nested definer calls all still work.
+--
+-- PUBLIC MUST be in the revoke list: Postgres grants EXECUTE to PUBLIC on every
+-- new function by default (the `=X/postgres` ACL entry), and authenticated/anon
+-- inherit EXECUTE through PUBLIC even after their DIRECT grant is dropped —
+-- revoking from `authenticated, anon` alone leaves the door open. service_role
+-- carries its OWN direct grant (`service_role=X`), so pulling PUBLIC does not
+-- touch it; postgres is the owner. Proven by the WR-01 probe in
+-- deliver_deal_test.sql (still RED with a PUBLIC-only leak, GREEN once PUBLIC
+-- is revoked here).
+-- ============================================================================
+
+REVOKE EXECUTE ON FUNCTION public.deliver_deal(uuid) FROM public, authenticated, anon;

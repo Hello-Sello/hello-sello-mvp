@@ -297,87 +297,6 @@ export type Database = {
         }
         Relationships: []
       }
-      buyer_resale_price: {
-        Row: {
-          buyer_company_id: string
-          created_at: string
-          created_by: string | null
-          gross: number | null
-          id: string
-          net: number | null
-          product_id: string | null
-          product_name: string
-          supplier_company_id: string | null
-          supplier_name: string
-          updated_at: string
-          updated_by: string | null
-        }
-        Insert: {
-          buyer_company_id: string
-          created_at?: string
-          created_by?: string | null
-          gross?: number | null
-          id?: string
-          net?: number | null
-          product_id?: string | null
-          product_name: string
-          supplier_company_id?: string | null
-          supplier_name: string
-          updated_at?: string
-          updated_by?: string | null
-        }
-        Update: {
-          buyer_company_id?: string
-          created_at?: string
-          created_by?: string | null
-          gross?: number | null
-          id?: string
-          net?: number | null
-          product_id?: string | null
-          product_name?: string
-          supplier_company_id?: string | null
-          supplier_name?: string
-          updated_at?: string
-          updated_by?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "buyer_resale_price_buyer_company_id_fkey"
-            columns: ["buyer_company_id"]
-            isOneToOne: false
-            referencedRelation: "company"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "buyer_resale_price_created_by_fkey"
-            columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "person"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "buyer_resale_price_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
-            referencedRelation: "product"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "buyer_resale_price_supplier_company_id_fkey"
-            columns: ["supplier_company_id"]
-            isOneToOne: false
-            referencedRelation: "company"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "buyer_resale_price_updated_by_fkey"
-            columns: ["updated_by"]
-            isOneToOne: false
-            referencedRelation: "person"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       chat_message: {
         Row: {
           body: string
@@ -3235,6 +3154,81 @@ export type Database = {
           },
         ]
       }
+      pricelist_item_tier: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          deleted_by: string | null
+          id: string
+          min_grams: number
+          price_per_gram: number
+          pricelist_item_id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          id?: string
+          min_grams: number
+          price_per_gram: number
+          pricelist_item_id: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          id?: string
+          min_grams?: number
+          price_per_gram?: number
+          pricelist_item_id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pricelist_item_tier_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "person"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pricelist_item_tier_deleted_by_fkey"
+            columns: ["deleted_by"]
+            isOneToOne: false
+            referencedRelation: "person"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pricelist_item_tier_pricelist_item_id_fkey"
+            columns: ["pricelist_item_id"]
+            isOneToOne: false
+            referencedRelation: "current_pricelist_item"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pricelist_item_tier_pricelist_item_id_fkey"
+            columns: ["pricelist_item_id"]
+            isOneToOne: false
+            referencedRelation: "pricelist_item"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pricelist_item_tier_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "person"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pricelist_status: {
         Row: {
           code: string
@@ -3810,70 +3804,6 @@ export type Database = {
           sort_order?: number
         }
         Relationships: []
-      }
-      purchase_history_import: {
-        Row: {
-          buyer_company_id: string
-          created_at: string
-          created_by: string | null
-          currency: string
-          id: string
-          product_name: string
-          purchase_date: string
-          quantity: number
-          supplier_name: string
-          unit: string
-          unit_price: number
-        }
-        Insert: {
-          buyer_company_id: string
-          created_at?: string
-          created_by?: string | null
-          currency?: string
-          id?: string
-          product_name: string
-          purchase_date: string
-          quantity: number
-          supplier_name: string
-          unit: string
-          unit_price: number
-        }
-        Update: {
-          buyer_company_id?: string
-          created_at?: string
-          created_by?: string | null
-          currency?: string
-          id?: string
-          product_name?: string
-          purchase_date?: string
-          quantity?: number
-          supplier_name?: string
-          unit?: string
-          unit_price?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "purchase_history_import_buyer_company_id_fkey"
-            columns: ["buyer_company_id"]
-            isOneToOne: false
-            referencedRelation: "company"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "purchase_history_import_created_by_fkey"
-            columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "person"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "purchase_history_import_unit_fkey"
-            columns: ["unit"]
-            isOneToOne: false
-            referencedRelation: "deal_line_unit"
-            referencedColumns: ["code"]
-          },
-        ]
       }
       relationship: {
         Row: {
@@ -4628,7 +4558,33 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      current_pricelist_item: {
+        Row: {
+          currency: string | null
+          id: string | null
+          price_per_gram: number | null
+          pricelist_id: string | null
+          product_id: string | null
+          tiers: Json | null
+          updated_at: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pricelist_item_pricelist_id_fkey"
+            columns: ["pricelist_id"]
+            isOneToOne: false
+            referencedRelation: "pricelist"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pricelist_item_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "product"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       approve_company: { Args: { p_company_id: string }; Returns: undefined }
@@ -4637,6 +4593,13 @@ export type Database = {
         Returns: undefined
       }
       audit_person_scrub: { Args: { p_person_id: string }; Returns: undefined }
+      backfill_bundle_to_tiers: {
+        Args: never
+        Returns: {
+          migrated: number
+          rescued: number
+        }[]
+      }
       can_access_thread: { Args: { p_thread_id: string }; Returns: boolean }
       can_access_workspace: { Args: { p_ws_id: string }; Returns: boolean }
       can_see_person: {
@@ -4654,6 +4617,11 @@ export type Database = {
       }
       change_member_role: {
         Args: { p_person_id: string; p_role: string }
+        Returns: undefined
+      }
+      claim_deal_ticket: { Args: { p_deal_card_id: string }; Returns: string }
+      close_deal_ticket: {
+        Args: { p_deal_card_id: string }
         Returns: undefined
       }
       confirm_deal_change: {
@@ -4696,20 +4664,9 @@ export type Database = {
       current_superadmin_group_id: { Args: never; Returns: string }
       deactivate_account: { Args: never; Returns: undefined }
       deactivate_company: { Args: never; Returns: undefined }
-      edit_deal_draft: {
-        Args: {
-          p_currency: string
-          p_deal_card_id: string
-          p_due_date: string
-          p_free_delivery: boolean
-          p_lines: Json
-          p_note: string
-          p_payment_terms_code: string
-          p_private_value: string
-          p_value_net: number
-        }
-        Returns: number
-      }
+      decline_deal: { Args: { p_deal_card_id: string }; Returns: undefined }
+      deliver_deal: { Args: { p_deal_card_id: string }; Returns: undefined }
+      finalize_deal: { Args: { p_deal_card_id: string }; Returns: undefined }
       get_company_licences: {
         Args: { p_company_id: string }
         Returns: {
@@ -4755,6 +4712,7 @@ export type Database = {
           price_public: boolean
           region: string
           thc_percent: number
+          tiers: Json
           unit_code: string
         }[]
       }
@@ -4874,11 +4832,11 @@ export type Database = {
       }
       owns_group: { Args: { p_group_id: string }; Returns: boolean }
       owns_pricelist: { Args: { p_pricelist_id: string }; Returns: boolean }
-      owns_product_batch: { Args: { p_batch_id: string }; Returns: boolean }
-      propose_deal: {
-        Args: { p_draft: Json; p_thread_id: string }
-        Returns: string
+      owns_pricelist_item: {
+        Args: { p_pricelist_item_id: string }
+        Returns: boolean
       }
+      owns_product_batch: { Args: { p_batch_id: string }; Returns: boolean }
       propose_deal_change: {
         Args: { p_deal_card_id: string; p_draft: Json; p_reason: string }
         Returns: string
@@ -4898,12 +4856,20 @@ export type Database = {
         Returns: undefined
       }
       remove_member: { Args: { p_person_id: string }; Returns: undefined }
+      reopen_deal_ticket: {
+        Args: { p_deal_card_id: string; p_note?: string }
+        Returns: undefined
+      }
       request_account_deletion: { Args: never; Returns: undefined }
       request_to_join: {
         Args: { p_company_id: string; p_note: string }
         Returns: string
       }
       run_scheduled_erasures: { Args: never; Returns: undefined }
+      save_price_ladder: {
+        Args: { p_base: number; p_pricelist_item_id: string; p_tiers: Json }
+        Returns: undefined
+      }
       scrub_person_pii: { Args: { p_id: string }; Returns: undefined }
       search_joinable_companies: {
         Args: { p_term: string }
@@ -4919,6 +4885,7 @@ export type Database = {
         Returns: string
       }
       sella_detect_worker: { Args: never; Returns: undefined }
+      send_deal: { Args: { p_deal_card_id: string }; Returns: string }
       set_line_allocation: {
         Args: {
           p_batch_id?: string
@@ -4932,8 +4899,22 @@ export type Database = {
         Args: { p_company_id: string }
         Returns: boolean
       }
+      sign_deal: { Args: { p_deal_card_id: string }; Returns: number }
       substitute_line_product: {
         Args: { p_line_item_id: string; p_new_product_id: string }
+        Returns: undefined
+      }
+      update_deal_draft: {
+        Args: {
+          p_currency: string
+          p_deal_card_id: string
+          p_due_date: string | null
+          p_free_delivery: boolean
+          p_lines: Json
+          p_note: string | null
+          p_payment_terms_code: string | null
+          p_value_net: number | null
+        }
         Returns: undefined
       }
       withdraw_deal_change: {
