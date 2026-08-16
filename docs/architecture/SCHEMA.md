@@ -360,6 +360,7 @@ erDiagram
     product ||--o{ product_buyer_code : "buyer codes"
     relationship ||--o{ product_buyer_code : "scoped to"
     pricelist ||--o{ pricelist_item : "contains"
+    pricelist_item ||--o{ pricelist_item_tier : "tier ladder"
     product ||--o{ pricelist_item : "priced as"
     product ||--o{ deal_line_item : "ordered as"
 
@@ -405,12 +406,18 @@ erDiagram
         uuid id PK
         uuid pricelist_id FK
         uuid product_id FK
-        numeric price_per_gram
-        numeric bundle_price_per_gram
+        numeric price_per_gram "base price"
+    }
+    pricelist_item_tier {
+        uuid id PK
+        uuid pricelist_item_id FK
+        numeric min_grams "from N g"
+        numeric price_per_gram "rung price, below base"
     }
 ```
 
-**Two things to remember:**
+**Things to remember:**
+- **Volume price = the tier ladder** (ADR-0004): rungs are child rows in `pricelist_item_tier` ("from N g → €/g", DB-enforced descent below base); readers get base + rungs in one shape via the `current_pricelist_item` view. The legacy single-bracket columns (`bundle_threshold_grams` / `bundle_price_per_gram`) were dropped by Migration C (`20260816190000`, live 2026-08-16).
 - **Label vs measured:** `product.thc_percent` = advertised; `product_batch.thc_percent` = lab-measured per lot (can differ a lot). Terpene profiles vary per batch, so they're a child table (`batch_terpene`), not fixed columns.
 - **Price snapshot:** when a deal is made, `deal_line_item.unit_price` is a *frozen copy* of `pricelist_item.price_per_gram` — editing the list later never rewrites past deals.
 

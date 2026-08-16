@@ -46,10 +46,15 @@ import {
 } from "lucide-react";
 import { averageMarginOf, formatMoney, lineValueOf, sumLineValue } from "../lib/derive";
 import { paymentTermLabel } from "../lib/paymentTerms";
+import { resolveTierPrice, type PriceTier } from "@/modules/catalog/index.client";
+import { tierStateFor } from "../lib/tierHint";
+import { createClient } from "@/shared/db/client";
 import { getOwnCatalog, getPromotion } from "../supabase/reads";
-import { proposeDealChange } from "../actions";
+import { proposeDealChange, updateDealDraft, withdrawDealChange } from "../actions";
+import { resendAction } from "../lib/draftEdit";
 import { pairDealDiff, proposedLinesTotal, proposedLineTotal } from "./NegotiationDiff";
 import { DecisionBar } from "./DecisionBar";
+import { NegotiationStrip } from "./NegotiationStrip";
 import { PromotionTrack } from "./PromotionTrack";
 import { OpenItems } from "./OpenItems";
 import type {
@@ -78,6 +83,15 @@ interface EditLine {
    * It is NOT persisted (today's demo is frontend-only).
    */
   units: number;
+  /**
+   * The product's tier ladder + its base €/g (T07, ADR-0004 §4 decision B) -
+   * FRONTEND-ONLY like `units`: they power the applied-rung chip + the
+   * "qualifies" hint and NEVER enter the payload (toDraftLine stays untouched).
+   * Seeded lines carry []/null; the edit view derives their ladder from the
+   * fetched catalog at render instead.
+   */
+  tiers: PriceTier[];
+  basePricePerGram: number | null;
   unitPrice: number | null;
   currency: string;
   cultivar: string | null;
@@ -123,6 +137,8 @@ function seedLines(data: DealCardView): EditLine[] {
     quantity: li.quantity,
     unit: li.unit,
     units: 1,
+    tiers: [],
+    basePricePerGram: null,
     unitPrice: li.unitPrice,
     currency: li.currency,
     cultivar: li.cultivar,
@@ -135,10 +151,74 @@ function seedLines(data: DealCardView): EditLine[] {
   }));
 }
 
+/**
+ * Seed the editable set from the viewer's OWN held draft (C3 data-loss fix).
+ *
+ * When a PROPOSER re-opens the card to edit their own held change, the working
+ * copy must start from what they PROPOSED, not the committed base version - else
+ * editing one line and re-sending drops the other lines they had proposed. The
+ * held `ProposalLineView` carries the SHARED shape only (name/qty/unit/price +
+ * productId); batch, measured THC/CBD and the private margin are carried across
+ * from the matching base line by product key (held drafts never see them).
+ */
+function seedLinesFromHeld(base: DealCardView): EditLine[] {
+  const held = base.pendingChange;
+  if (!held) return seedLines(base);
+  const baseByKey = new Map(
+    base.lineItems.map((li) => [li.productId ?? li.productName, li]),
+  );
+  const marginByLineId = new Map(base.lineMargins.map((m) => [m.lineItemId, m.ownInput]));
+  return held.lines.map((hl, i) => {
+    const match = baseByKey.get(hl.productId ?? hl.name);
+    return {
+      key: match?.id ?? `held-${i}`,
+      lineItemId: match?.id ?? null,
+      productId: hl.productId,
+      productName: hl.name,
+      quantity: hl.quantity,
+      unit: hl.unit,
+      units: 1,
+      tiers: [],
+      basePricePerGram: null,
+      unitPrice: hl.unitPrice,
+      currency: hl.currency,
+      cultivar: match?.cultivar ?? null,
+      pzn: match?.pzn ?? null,
+      batchId: match?.batchId ?? null,
+      batchNumber: match?.batchNumber ?? null,
+      thcPercent: match?.thcPercent ?? null,
+      cbdPercent: match?.cbdPercent ?? null,
+      ownInput: match ? marginByLineId.get(match.id) ?? null : null,
+    };
+  });
+}
+
 /** One line's total: the canonical per-gram value x the (mock) pack count. */
 function lineTotalOf(l: EditLine): number | null {
   if (l.unitPrice == null) return null;
   return lineValueOf(l.quantity, l.unit, l.unitPrice) * Math.max(1, l.units);
+}
+
+/** EditLine -> DraftLineInput: the ONE payload mapping shared by birth (Save
+ *  draft / auto-save-on-close, D-13) and negotiation changes. `units` is a
+ *  frontend-only mock and never enters the payload. */
+function toDraftLine(l: EditLine): DraftLineInput {
+  return {
+    productId: l.productId,
+    lineItemId: l.lineItemId ?? undefined,
+    productName: l.productName,
+    quantity: l.quantity,
+    unit: l.unit,
+    unitPrice: l.unitPrice,
+    currency: l.currency,
+    cultivar: l.cultivar,
+    pzn: l.pzn,
+    thcPercent: l.thcPercent,
+    cbdPercent: l.cbdPercent,
+    batchId: l.batchId,
+    batchNumber: l.batchNumber,
+    ownInput: l.ownInput,
+  };
 }
 
 /* FRONTEND-ONLY mock option lists (chj/07-08) - the edit dropdowns for batch +
@@ -221,6 +301,8 @@ export function CardFront({
   viewerCompanyId,
   createMode = false,
   onCreate,
+  onCloseCreate,
+  registerCloseRequest,
   onExitEdit,
   registerExitRequest,
 }: {
@@ -244,14 +326,29 @@ export function CardFront({
    *  no X (e.g. the workspace/inline mounts that have no panel to close). */
   onClose?: () => void;
   /**
-   * CREATE MODE (chj/07-08): the card is a NOT-yet-born draft. Edit mode is forced
-   * on, the id-bound sections (promotion / Open Items / margin) are hidden, and the
-   * footer becomes "Send deal" instead of "Send change". Pressing it hands the
-   * assembled draft up via `onCreate`; the strip runs `createDeal` + opens the born
-   * card. This replaced the old CreateDealForm.
+   * CREATE MODE (chj/07-08, reshaped Phase-12 D-12/D-13): the card is a NOT-yet-
+   * born draft. Edit mode is forced on, the id-bound sections (promotion / Things
+   * to do / margin) are hidden, and the footer becomes "Save draft" instead of
+   * "Send change". Pressing it hands the assembled draft up via `onCreate`; the
+   * host runs `createDeal` (birth only - NO delivery) and keeps the born 'unsent'
+   * card open, where the DecisionBar owns the one "Send deal" button. This
+   * replaced the old CreateDealForm.
    */
   createMode?: boolean;
   onCreate?: (input: CardCreateInput) => Promise<void>;
+  /**
+   * CREATE MODE close (D-13): called INSTEAD of onClose when the user dismisses
+   * the not-yet-born draft (X / Cancel). Hands up the assembled draft when the
+   * form has content (the host births it silently - never lose work), or null
+   * when the card is empty (discard - the locked C5 rule). Absent -> plain onClose.
+   */
+  onCloseCreate?: (input: CardCreateInput | null) => void;
+  /**
+   * CREATE MODE: the card registers its D-13 close rule here so the HOST can
+   * route its own dismiss doors (Escape, opening another card) through the same
+   * content-check - mirrors registerExitRequest's ref pattern.
+   */
+  registerCloseRequest?: (fn: () => void) => void;
   /** leave edit mode - called after a successful "Send changes" so the diff shows.
    *  Owned by DealCard (which holds editMode). */
   onExitEdit?: () => void;
@@ -322,8 +419,14 @@ export function CardFront({
   // change commits or is declined. Gated on `!editMode` so a live edit (or a
   // realtime change mid-edit) never clobbers what the user is typing; create mode
   // seeds once (its empty draft never changes server-side).
+  // C3: the sig folds in the held draft's LINE SHAPE (not just version+summary),
+  // so a proposer's re-proposed change (same summary, changed quantities/price)
+  // still re-seeds the working copy from the fresh held draft on re-entry.
   const changeSig = data.pendingChange
-    ? `${data.pendingChange.baseVersion}:${data.pendingChange.summary}`
+    ? `${data.pendingChange.baseVersion}:${data.pendingChange.summary}:` +
+      data.pendingChange.lines
+        .map((l) => `${l.productId ?? l.name}:${l.quantity}:${l.unit}:${l.unitPrice}`)
+        .join(",")
     : "";
   const dataSig = createMode
     ? "new"
@@ -334,7 +437,9 @@ export function CardFront({
   const [seededFor, setSeededFor] = useState<string | null>(null);
   if (seededFor !== dataSig && (createMode || !editMode)) {
     setSeededFor(dataSig);
-    setLines(seedLines(data));
+    // C3: a proposer editing their OWN held change seeds from the held draft, so
+    // re-editing one line keeps the other lines they proposed (see seedLinesFromHeld).
+    setLines(data.pendingChange?.iProposed ? seedLinesFromHeld(data) : seedLines(data));
     setEditRowKey(null);
     setEditFreeDelivery(freeDeliveryStored);
     setEditDueDate(card.delivery_date_target ? card.delivery_date_target.slice(0, 10) : "");
@@ -373,15 +478,22 @@ export function CardFront({
     setEditRowKey((k) => (k === key ? null : k));
   }
   function lineFromCatalog(p: CatalogProduct): EditLine {
+    // T07 (EARS 1): a catalog add lands already priced at its seed quantity -
+    // one pack at units = 1, resolved against the product's tier ladder.
+    const seedQty = p.packSizeGrams ?? 1;
     return {
       key: crypto.randomUUID(),
       lineItemId: null,
       productId: p.id,
       productName: p.name,
-      quantity: p.packSizeGrams ?? 1,
+      quantity: seedQty,
       unit: p.unit,
       units: 1,
-      unitPrice: p.unitPrice,
+      tiers: p.tiers,
+      basePricePerGram: p.unitPrice,
+      unitPrice:
+        resolveTierPrice(p.unitPrice, p.tiers, seedQty, p.unit).pricePerGram ??
+        p.unitPrice,
       currency: p.currency,
       cultivar: p.cultivar,
       pzn: p.pzn,
@@ -408,39 +520,60 @@ export function CardFront({
     setLines((cur) => cur.map((l) => (l.key === key ? { ...lineFromCatalog(p), key } : l)));
   }
 
-  // CREATE MODE (chj/07-08): "Send deal" on a not-yet-born draft. Same line
-  // mapping as onSendChange, but it hands the draft UP via onCreate (the strip
-  // runs createDeal + opens the born card) instead of proposeDealChange. No
-  // change reason - a first draft is not a negotiation.
+  // CREATE MODE (chj/07-08, D-13): "Save draft" on a not-yet-born draft. Same
+  // line mapping as doSendChange, but it hands the draft UP via onCreate (the
+  // host runs createDeal + keeps the born 'unsent' card open) instead of
+  // proposeDealChange. Birth only - no delivery; sending is the born card's
+  // DecisionBar "Send deal" button (D-12). No change reason - a first draft is
+  // not a negotiation.
+  // the assembled CardCreateInput from the working form state - used by the
+  // Save-draft button AND the auto-save-on-close path (D-13).
+  function assembleCreateInput(): CardCreateInput {
+    return {
+      lines: lines.map(toDraftLine),
+      freeDelivery: editFreeDelivery,
+      dueDate: editDueDate || null,
+      paymentTermsCode: editPaymentCode || null,
+      note: editNote || null,
+    };
+  }
+
+  // D-13 'has content': anything the birth would PERSIST - at least one line
+  // item, a note, a due date, payment terms, or free delivery flipped on. The
+  // expiry field is a frontend-only mock (never persisted) and does NOT count -
+  // birthing on it alone would save an empty card.
+  const hasCreateContent =
+    lines.length > 0 ||
+    !!(editNote && editNote.trim()) ||
+    !!editDueDate ||
+    !!editPaymentCode ||
+    editFreeDelivery;
+
+  // D-13 close rule (create mode): closing WITH content hands the draft up for a
+  // silent auto-birth (never lose work); an EMPTY card discards (locked C5 rule).
+  // The host owns the actual birth + panel close via onCloseCreate.
+  function requestCloseCreate() {
+    if (!onCloseCreate) {
+      onClose?.();
+      return;
+    }
+    onCloseCreate(hasCreateContent ? assembleCreateInput() : null);
+  }
+
+  // hand the HOST the same close rule for its own dismiss doors (Escape /
+  // opening another card) - a fresh closure every render so it always sees the
+  // latest form state, mirroring registerExitRequest below.
+  useEffect(() => {
+    if (createMode) registerCloseRequest?.(() => requestCloseCreate());
+  });
+
   async function onSendCreate() {
     if (sendBusy || !onCreate || lines.length === 0) return;
     setSendBusy(true);
     setSendError(null);
     try {
-      const payloadLines: DraftLineInput[] = lines.map((l) => ({
-        productId: l.productId,
-        lineItemId: l.lineItemId ?? undefined,
-        productName: l.productName,
-        quantity: l.quantity,
-        unit: l.unit,
-        unitPrice: l.unitPrice,
-        currency: l.currency,
-        cultivar: l.cultivar,
-        pzn: l.pzn,
-        thcPercent: l.thcPercent,
-        cbdPercent: l.cbdPercent,
-        batchId: l.batchId,
-        batchNumber: l.batchNumber,
-        ownInput: l.ownInput,
-      }));
-      await onCreate({
-        lines: payloadLines,
-        freeDelivery: editFreeDelivery,
-        dueDate: editDueDate || null,
-        paymentTermsCode: editPaymentCode || null,
-        note: editNote || null,
-      });
-      // the strip dispatches hs:open-deal-card + closes this create panel on success.
+      await onCreate(assembleCreateInput());
+      // the host swaps this create panel for the born 'unsent' card on success.
     } catch (e) {
       setSendError(e instanceof Error ? e.message : "Could not create the deal.");
     } finally {
@@ -458,15 +591,81 @@ export function CardFront({
   //   - the header ✓ via registerExitRequest (fromExit): a no-op simply leaves
   //     edit mode; a real change is SENT (never dropped) — on failure the card
   //     STAYS in edit mode with the error, so unsent work is never lost.
-  async function doSendChange(opts?: { fromExit?: boolean }) {
-    if (createMode || cardId === "new" || sendBusy || lines.length === 0) return;
+  // CR-02: after update_deal_draft DELETE+reinserts the draft's lines, its ON
+  // DELETE CASCADE drops the per-line margin rows (deal_line_item_private). Re-
+  // write the viewer's OWN per-line margin exactly as createDeal re-writes it
+  // after birth: read the new line ids back (sort_order = input index) and upsert
+  // by (deal_line_item_id, company_id). Owner-only RLS (dli_private_all)
+  // authorizes the browser client to write its OWN company's rows; the company is
+  // the viewer's own side (never shared input), so no seller/buyer leak.
+  async function rewriteDraftLinePrivate() {
+    if (!lines.some((l) => l.ownInput != null)) return;
+    const companyId = viewerCompanyId ?? (isSeller ? data.sellerCompanyId : null);
+    if (!companyId) return;
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data: bornLines } = await supabase
+      .from("deal_line_item")
+      .select("id, sort_order")
+      .eq("deal_card_id", cardId)
+      .eq("version", card.version);
+    const idBySort = new Map((bornLines ?? []).map((r) => [r.sort_order, r.id]));
+    for (let i = 0; i < lines.length; i++) {
+      const l = lines[i];
+      if (l.ownInput == null) continue;
+      const lineId = idBySort.get(i);
+      if (!lineId) continue;
+      await supabase.from("deal_line_item_private").upsert(
+        {
+          deal_line_item_id: lineId,
+          company_id: companyId,
+          seller_margin: isSeller ? l.ownInput : null,
+          buyer_metric: isSeller ? null : l.ownInput,
+          created_by: user.id,
+        },
+        { onConflict: "deal_line_item_id,company_id" },
+      );
+    }
+  }
+
+  async function doSendChange(opts?: { fromExit?: boolean; linesOverride?: EditLine[] }) {
+    // T07: the tier hint applies a price and sends in ONE click - setLines has
+    // not re-rendered yet, so the click passes the fresh copy as linesOverride
+    // (the stale-state trap). Every `lines` read below goes through `effective`;
+    // rewriteDraftLinePrivate deliberately stays on `lines` (it reads index +
+    // ownInput only, both identical across the override).
+    const effective = opts?.linesOverride ?? lines;
+    if (createMode || cardId === "new" || sendBusy || effective.length === 0) return;
+
+    // Which commit path this Send takes (Region C, draftEdit): an 'unsent' draft
+    // edits IN PLACE (updateDealDraft); a live deal with no held change proposes;
+    // my OWN held change is REPLACED (withdraw + re-propose); the OTHER side's
+    // held change BLOCKS editing.
+    const path = resendAction(
+      card.status,
+      data.pendingChange,
+      data.pendingChange?.iProposed ?? false,
+    );
+
+    // BLOCKED: the other side holds the change - the proposer cannot edit it.
+    // (canProposerEdit already hides the pencil across mounts; this is the
+    // belt-and-braces half in case a stale mount reaches here.)
+    if (path === "blocked") {
+      setSendError(
+        "The other side proposed this change - you cannot edit it. Sign, Negotiate, or wait.",
+      );
+      return;
+    }
 
     // change detection vs the server card. `units` is a frontend-only mock and never
     // enters the payload, so a units-only bump correctly does NOT propose.
     const norm = (s: string | null) => (s && s.trim() ? s.trim() : null);
     const shape = (key: string, q: number, u: string, p: number | null) =>
       `${key}|${q}|${u}|${p ?? ""}`;
-    const workingLines = lines
+    const workingLines = effective
       .map((l) => shape(l.productId ?? l.productName.toLowerCase().trim(), l.quantity, l.unit, l.unitPrice))
       .sort()
       .join(",");
@@ -495,34 +694,50 @@ export function CardFront({
       return;
     }
 
+    // the propose/replace payload - the SAME shared shape create/edit hand off
+    // (lines + the 4 terms + the auto reason). update_deal_draft takes the same
+    // shape minus the reason (a draft edit is not a negotiation).
+    const proposePayload = {
+      dealCardId: cardId,
+      lines: effective.map(toDraftLine),
+      freeDelivery: editFreeDelivery,
+      dueDate: editDueDate || null,
+      paymentTermsCode: editPaymentCode || null,
+      note: editNote || null,
+      reason: "Updated the deal on the card",
+    };
+
     setSendBusy(true);
     setSendError(null);
     try {
-      const payloadLines: DraftLineInput[] = lines.map((l) => ({
-        productId: l.productId,
-        lineItemId: l.lineItemId ?? undefined,
-        productName: l.productName,
-        quantity: l.quantity,
-        unit: l.unit,
-        unitPrice: l.unitPrice,
-        currency: l.currency,
-        cultivar: l.cultivar,
-        pzn: l.pzn,
-        thcPercent: l.thcPercent,
-        cbdPercent: l.cbdPercent,
-        batchId: l.batchId,
-        batchNumber: l.batchNumber,
-        ownInput: l.ownInput,
-      }));
-      await proposeDealChange({
-        dealCardId: cardId,
-        lines: payloadLines,
-        freeDelivery: editFreeDelivery,
-        dueDate: editDueDate || null,
-        paymentTermsCode: editPaymentCode || null,
-        note: editNote || null,
-        reason: "Updated the deal on the card",
-      });
+      if (path === "draft-update") {
+        // CR-02: edit the private 'unsent' draft in place, then re-write the
+        // per-line margin the RPC's CASCADE dropped.
+        await updateDealDraft({
+          dealCardId: cardId,
+          lines: proposePayload.lines,
+          freeDelivery: proposePayload.freeDelivery,
+          dueDate: proposePayload.dueDate,
+          paymentTermsCode: proposePayload.paymentTermsCode,
+          note: proposePayload.note,
+        });
+        await rewriteDraftLinePrivate();
+      } else if (path === "replace") {
+        // my OWN held change: withdraw it, then re-propose the working copy
+        // (Negotiate never discards - the proposer takes their own change back
+        // explicitly). On a HALF-failure (withdraw ok, propose fails) the old
+        // proposal is gone, so ask for a re-send rather than losing it silently.
+        await withdrawDealChange({ dealCardId: cardId });
+        try {
+          await proposeDealChange(proposePayload);
+        } catch {
+          setSendError("Your previous proposal was withdrawn - please re-send.");
+          return;
+        }
+      } else {
+        // "propose" - stage a new held change (the existing path, verbatim).
+        await proposeDealChange(proposePayload);
+      }
       window.dispatchEvent(
         new CustomEvent("hs:deal-updated", { detail: { dealCardId: cardId } }),
       );
@@ -568,17 +783,20 @@ export function CardFront({
   const conditionRewards = promotion?.conditionDeltas ?? [];
 
   return (
-    <div className="dealcard w-full max-w-full">
-      {/* ---- 1 · TITLE BAR — frosted control strip. The flip + edit/lock circles
+    <div className="dealcard flex h-full w-full max-w-full flex-col">
+      {/* ---- 1 · TITLE BAR - frosted control strip. The flip + edit/lock circles
              (DealCard) float into the pl-12 / pr-12 gutters, so they read as the
-             left-most and right-most controls of this bar. (fixed) ---- */}
+             left-most and right-most controls of this bar. First flex child of the
+             D1 shell, so it stays PINNED while the paper scrolls. ---- */}
       <div className="dc-titlebar flex items-center gap-2 py-2.5 pl-12 pr-12">
         {/* close the panel - lives ON the title bar now (no separate strip above),
-            so the X shares this line instead of costing its own row. */}
+            so the X shares this line instead of costing its own row. In create
+            mode it routes through the D-13 close rule (auto-save with content,
+            discard when empty) instead of a plain close. */}
         {onClose && (
           <button
             type="button"
-            onClick={onClose}
+            onClick={createMode ? requestCloseCreate : onClose}
             aria-label="Close deal card"
             title="Close"
             className="dc-tb-btn grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full"
@@ -614,6 +832,13 @@ export function CardFront({
         {/* reopen moved to the single bottom decision bar ("Open a ticket", chj/07-08) */}
       </div>
 
+      {/* ---- SCROLL REGION (D1, Wave 1): the ONLY scrolling part of the card.
+             It holds the torn paper slip; the titlebar above and the decision
+             zone below are flex siblings, so they stay pinned. ---- */}
+      <div className="min-h-0 flex-1 overflow-y-auto">
+      {/* B1: the "In negotiation" strip pins to the TOP of the scroll region while
+             a change is held on a live deal (renders null otherwise). */}
+      <NegotiationStrip status={card.status} hasHeldChange={!!data.pendingChange} />
       {/* ---- The torn white paper slip: it holds parts 2–7 (the deal facts). ---- */}
       <div className="dc-paper-wrap mx-3.5 mb-4 mt-3">
         <TearTop />
@@ -783,6 +1008,38 @@ export function CardFront({
                           l.unitPrice != null
                             ? `${formatMoney(l.unitPrice, l.currency)}/${l.unit}`
                             : "—";
+                        // T07: live tier state, derived at RENDER (never stored,
+                        // never touching unitPrice - seeded prices are the
+                        // snapshot; only an explicit user action reprices).
+                        // Seeded lines carry no ladder, so fall back to the
+                        // catalog (fetched only when editMode && isSeller -
+                        // buyer + read mode get no chip/hint, silently).
+                        const cat =
+                          editMode && isSeller
+                            ? catalog.find((c) => c.id === l.productId)
+                            : undefined;
+                        const tierLadder = l.tiers.length > 0 ? l.tiers : cat?.tiers ?? [];
+                        const tierBase = l.basePricePerGram ?? cat?.unitPrice ?? null;
+                        const tierState =
+                          tierBase != null && tierLadder.length > 0
+                            ? tierStateFor(tierBase, tierLadder, l.unitPrice, l.quantity, l.unit, l.units)
+                            : null;
+                        // the applied-rung chip (seller edit view, open + closed
+                        // rows - each render site guards isSeller, D-12): only an
+                        // ON-LADDER price gets one - a negotiated off-ladder
+                        // price shows no chip (never a "base price" mislabel).
+                        const tierChip =
+                          tierState?.matchesLadder ? (
+                            tierState.appliedMin != null ? (
+                              <span className="dc-badge-change ml-1.5 inline-block rounded-md px-1.5 py-0.5 text-[8px] font-extrabold">
+                                from {tierState.appliedMin}g applied
+                              </span>
+                            ) : (
+                              <span className="ml-1.5 inline-block rounded-md px-1.5 py-0.5 text-[8px] font-bold text-ink/45 ring-1 ring-black/10">
+                                base price
+                              </span>
+                            )
+                          ) : null;
                         if (editMode && editRowKey === l.key) {
                           /* ---- the OPEN, editable row ---- */
                           return (
@@ -877,23 +1134,55 @@ export function CardFront({
                               {/* price: SELLER edits; BUYER locked */}
                               <td className="py-1.5 pr-1 text-right">
                                 {isSeller ? (
-                                  <span className="inline-flex items-center gap-0.5">
-                                    <input
-                                      type="number"
-                                      min={0}
-                                      step="0.01"
-                                      value={l.unitPrice ?? ""}
-                                      placeholder="0"
-                                      onChange={(e) =>
-                                        updateLine(l.key, {
-                                          unitPrice:
-                                            e.target.value === "" ? null : Number(e.target.value),
-                                        })
-                                      }
-                                      className="w-12 rounded-md bg-white px-1 py-1 text-right tabular-nums ring-1 ring-black/10 focus:outline-none focus:ring-2 focus:ring-brand/30"
-                                    />
-                                    <span className="text-ink/45">€/{l.unit}</span>
-                                  </span>
+                                  <>
+                                    <span className="inline-flex items-center gap-0.5">
+                                      <input
+                                        type="number"
+                                        min={0}
+                                        step="0.01"
+                                        value={l.unitPrice ?? ""}
+                                        placeholder="0"
+                                        onChange={(e) =>
+                                          updateLine(l.key, {
+                                            unitPrice:
+                                              e.target.value === "" ? null : Number(e.target.value),
+                                          })
+                                        }
+                                        className="w-12 rounded-md bg-white px-1 py-1 text-right tabular-nums ring-1 ring-black/10 focus:outline-none focus:ring-2 focus:ring-brand/30"
+                                      />
+                                      <span className="text-ink/45">€/{l.unit}</span>
+                                    </span>
+                                    {tierChip}
+                                    {/* T07 tier hint (EARS 2): apply-and-send in ONE
+                                        click, riding the existing propose/accept
+                                        funnel via doSendChange - never a direct
+                                        write. Gated on units === 1: `units` never
+                                        enters the payload, so a bulk-resolved
+                                        price would misprice a single-pack line. */}
+                                    {l.units === 1 && tierState?.suggestedPricePerGram != null && (
+                                      <button
+                                        type="button"
+                                        aria-label="Apply tier price"
+                                        disabled={data.pendingChange != null}
+                                        title={
+                                          data.pendingChange != null
+                                            ? "A change is already pending"
+                                            : undefined
+                                        }
+                                        onClick={() => {
+                                          const suggested = tierState.suggestedPricePerGram;
+                                          const next = lines.map((x) =>
+                                            x.key === l.key ? { ...x, unitPrice: suggested } : x,
+                                          );
+                                          setLines(next);
+                                          void doSendChange({ linesOverride: next });
+                                        }}
+                                        className="mt-1 inline-flex items-center rounded-full bg-[color:var(--dc-green-soft)] px-2 py-0.5 text-[10px] font-bold dc-text-green ring-1 ring-[color:var(--dc-green)]/30 transition hover:bg-[color:var(--dc-green)]/20 disabled:cursor-not-allowed disabled:opacity-50"
+                                      >
+                                        Qualifies for {formatMoney(tierState.suggestedPricePerGram, l.currency)}/g — apply
+                                      </button>
+                                    )}
+                                  </>
                                 ) : (
                                   <span className="inline-flex items-center gap-1 tabular-nums text-ink/55">
                                     <Lock className="h-3 w-3" />
@@ -933,6 +1222,7 @@ export function CardFront({
                             </td>
                             <td className="py-1.5 pr-1 text-right tabular-nums text-ink/80">
                               {priceLabel}
+                              {isSeller && tierChip}
                             </td>
                             <td className="py-1.5 pr-1 text-right font-mono tabular-nums">
                               {totalLabel}
@@ -1176,8 +1466,9 @@ export function CardFront({
       </Sec>
 
       {/* ---- owner margin (private, "only you" - prototype .private-box) ----
-             hidden in create mode: the margin rolls up from born line-private rows
-             that do not exist yet. */}
+             hidden ONLY in create mode: the margin rolls up from born line-private
+             rows that do not exist yet. A born 'unsent' draft passes this gate
+             (D-17) - the private rows exist from birth, no extra plumbing. */}
       {!createMode && (
         <Sec>
           <div className="dc-private flex items-center gap-2 rounded-2xl px-3 py-2.5 text-[12px]">
@@ -1193,8 +1484,12 @@ export function CardFront({
         </Sec>
       )}
 
-      {/* ---- 6 · OPEN ITEMS (flat, D-15) ---- hidden in create mode: Open Items
-             live on the deal_workspace that is born with the card. */}
+      {/* ---- 6 · "Things to do" (the user-facing name; the component stays
+             OpenItems - flat, D-15) ---- hidden ONLY in create mode: the list
+             lives on the deal_workspace that is born WITH the card, so a born
+             'unsent' draft passes this gate too (D-17) - things created here
+             default private and stay invisible to the counterparty until Send
+             (RLS draft privacy). */}
       {!createMode && (
         <Sec>
           <OpenItems
@@ -1237,27 +1532,34 @@ export function CardFront({
         <TearBottom />
       </div>
       {/* ---- /paper slip ---- */}
+      </div>
+      {/* ---- /scroll region (D1) ---- */}
 
       {/* ---- 8 · DECISION - the footer sitting on the glass, below the paper.
+             A flex sibling AFTER the scroll region, so it stays PINNED (D1).
              It only appears when there is something to act on: a proposed change
              to send (edit mode) or a held change to Negotiate / Sign. ---- */}
       {editMode ? (
         createMode ? (
-          /* CREATE MODE footer (chj/07-08): a brand-new draft is not a
-             negotiation, so there is no change-reason box. "Send deal" hands the
-             draft up + the strip births it via createDeal.*/
+          /* CREATE MODE footer (chj/07-08, D-13): a brand-new draft is not a
+             negotiation, so there is no change-reason box. "Save draft" hands the
+             draft up + the host births it via createDeal - a private 'unsent'
+             card; the born card's DecisionBar owns "Send deal" (D-12). */
           <div className="dc-decision px-4 pb-3.5 pt-3">
             <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--dc-ink-38)]">
-              Send this deal
+              Save this draft
             </div>
             <p className="mb-2 text-[11px] text-[color:var(--dc-ink-55)]">
-              Add your products, conditions and a note, then send it straight into the chat.
+              Add your products, conditions and a note. Saving keeps it as a private
+              draft - you send it from the card once it is ready.
             </p>
             {sendError && <p className="mt-1 text-[11px] text-danger">{sendError}</p>}
             <div className="mt-2 flex items-center justify-end gap-2">
+              {/* Cancel = a close door too (D-13): with content it silently saves
+                  the draft, empty it discards - never a lost card. */}
               <button
                 type="button"
-                onClick={() => onClose?.()}
+                onClick={requestCloseCreate}
                 className="rounded-full px-3 py-1.5 text-[12px] font-semibold text-[color:var(--dc-ink-55)] ring-1 ring-black/10 transition hover:bg-black/5"
               >
                 Cancel
@@ -1268,7 +1570,7 @@ export function CardFront({
                 onClick={() => void onSendCreate()}
                 className="rounded-full bg-[color:var(--dc-pink)] px-4 py-1.5 text-[12px] font-bold text-white transition hover:bg-[color:var(--dc-pink-deep)] disabled:opacity-50"
               >
-                {sendBusy ? "Sending…" : "Send deal"}
+                {sendBusy ? "Saving…" : "Save draft"}
               </button>
             </div>
           </div>
@@ -1276,9 +1578,8 @@ export function CardFront({
           /* EDIT MODE, existing deal (chj/07-08): ONE explicit "Send changes" button.
              No reason box, no permission step - a single click stages the edits as a
              negotiation change; the other side then sees a red/green diff to sign.
-             (A sticky footer is blocked by the card shell: .dealcard is
-             overflow-hidden inside the flip transform — the header ✓ sending
-             unsent edits is the guard against off-screen-save loss.) */
+             (Pinned by the flex shell since D1, Wave 1 - always on screen; the
+             header ✓ sending unsent edits stays as belt-and-braces.) */
           <div className="dc-decision px-4 pb-3.5 pt-3">
             {sendError && <p className="mb-2 text-[11px] font-medium text-danger">{sendError}</p>}
             <button

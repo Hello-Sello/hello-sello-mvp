@@ -34,6 +34,8 @@ supabase/
 
 A module talks to another **only through its public `index.ts`** - never reach into another module's internals. Surfaces (Connect / Present / Buy / Sell / Discover / Grow) are **routes in `app/`** that compose modules; a new surface = a new route + reuse of existing modules. Auth and audit are cross-cutting (`shared/`), not domain modules.
 
+One extension (ADR-0004): a module whose main `index.ts` is server-tainted (re-exports `"use server"` actions) may expose a second, client-safe door `index.client.ts` — catalog is the first (`pricing` + `pricelist` reads). Client modules import through that door; deep paths stay forbidden either way.
+
 ## June 11 demo slice
 
 The Connect demo touches: `shared/auth` (Identity), `modules/connections`, `modules/messaging`, `modules/deals` (Deal Workspace), `modules/sella` (Deal-Sella), `shared/audit`. Deferred: `modules/catalog` (Present + pricelists, Phase 2).

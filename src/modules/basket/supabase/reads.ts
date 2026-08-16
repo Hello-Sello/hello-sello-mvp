@@ -8,6 +8,7 @@
  * relationship map lets the drawer resolve where an other-company offer goes.
  */
 import { createClient } from "@/shared/db/client";
+import { readCurrentPrices, type ProductPrice } from "@/modules/catalog/index.client";
 import { groupBySeller } from "../lib/group";
 import type { BasketLine, BasketView } from "../types";
 
@@ -22,22 +23,17 @@ export async function getMyBasket(): Promise<BasketView> {
   if (personError) throw personError;
   const viewerCompanyId = viewerPerson?.company_id ?? "";
 
-  // RLS-scoped: only my lines. Join the product + its owning company + list price.
-  // pricelist_item is a many-to-one embed (a product can have more than one
-  // pricelist row); order most-recently-updated first so repeated reads are
-  // deterministic, with id as a final tie-break for equal timestamps. This is
-  // a pragmatic choice, not full price-list resolution (no is_active/is_default
-  // flag exists on pricelist_item to prefer instead).
+  // RLS-scoped: only my lines. Join the product + its owning company; prices
+  // come from the single owner (current-price view — one row per product, so
+  // the old embed-ordering hack is gone), stitched by product id.
   const { data: rows, error } = await supabase
     .from("product_basket_line")
     .select(
       "id, pack_count, pack_size_grams, " +
       "product:product_id(id, name, cultivar, unit_code, local_code_pzn, company_id, " +
-      "company:company_id(id, name), pricelist_item(price_per_gram))",
+      "company:company_id(id, name))",
     )
-    .order("created_at", { ascending: true })
-    .order("updated_at", { referencedTable: "product.pricelist_item", ascending: false })
-    .order("id", { referencedTable: "product.pricelist_item", ascending: false });
+    .order("created_at", { ascending: true });
   if (error) throw error;
 
   const typedRows = rows as unknown as Array<{
@@ -48,19 +44,18 @@ export async function getMyBasket(): Promise<BasketView> {
       id: string; name: string; cultivar: string | null; unit_code: string | null;
       local_code_pzn: string | null; company_id: string;
       company: { id: string; name: string } | null;
-      pricelist_item: { price_per_gram: number | null }[] | { price_per_gram: number | null } | null;
     };
   }>;
 
+  const productIds = [...new Set((typedRows ?? []).map((r) => r.product.id))];
+  const prices = productIds.length
+    ? await readCurrentPrices(supabase, productIds)
+    : new Map<string, ProductPrice>();
+
   const lines: BasketLine[] = (typedRows ?? []).map((r) => {
     // Supabase nests joined rows; the FK joins here are to-one.
-    const p = r.product as unknown as {
-      id: string; name: string; cultivar: string | null; unit_code: string | null;
-      local_code_pzn: string | null; company_id: string;
-      company: { id: string; name: string } | null;
-      pricelist_item: { price_per_gram: number | null }[] | { price_per_gram: number | null } | null;
-    };
-    const price = Array.isArray(p.pricelist_item) ? p.pricelist_item[0] : p.pricelist_item;
+    const p = r.product;
+    const price = prices.get(p.id);
     return {
       id: r.id,
       productId: p.id,
@@ -69,11 +64,12 @@ export async function getMyBasket(): Promise<BasketView> {
       unit: p.unit_code ?? "g",
       packCount: Number(r.pack_count),
       packSizeGrams: r.pack_size_grams == null ? null : Number(r.pack_size_grams),
-      pricePerGram: price?.price_per_gram ?? null,
+      pricePerGram: price?.pricePerGram ?? null,
       currency: "EUR",
       pzn: p.local_code_pzn,
       sellerCompanyId: p.company_id,
       sellerCompanyName: p.company?.name ?? "Unknown company",
+      tiers: price?.tiers ?? [],
     };
   });
 

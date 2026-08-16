@@ -28,6 +28,7 @@ function product(partial: Partial<CatalogProduct> = {}): CatalogProduct {
     thcPercent: null,
     cbdPercent: null,
     pzn: null,
+    tiers: [],
     ...partial,
   };
 }

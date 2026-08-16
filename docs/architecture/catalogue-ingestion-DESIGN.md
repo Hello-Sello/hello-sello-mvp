@@ -68,6 +68,8 @@ never shown to buyers) · `image_filenames` · `price_public` · `visibility_sta
 `visibility_end` · `status` (Active/Discontinued/Coming soon/Hidden) · `note`
 *(Buyer Product Code was removed. "More columns per company" → a future `metadata` bag.)*
 
+> **Tier ladder (ADR-0004, 2026-08-14):** the CSV's single `bundle_min_grams` / `bundle_price_per_gram` bracket now lands as **rung 1 of the tier ladder** (`pricelist_item_tier`) post-Migration E; the legacy `pricelist_item` bundle columns were dropped by Migration C (`20260816190000`, live 2026-08-16).
+
 > **Open:** Marcel's sheet carries TWO cannabinoid levels on the product — a headline
 > `THC/CBD` (the "28/1" in the name) and a fuller `THC/CBD/CBG/CBN` profile — plus the
 > batch's own lab-tested values (3 layers total). Resolve headline-vs-profile before build.

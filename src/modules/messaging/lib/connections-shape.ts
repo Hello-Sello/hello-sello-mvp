@@ -66,12 +66,14 @@ export function relativeDayLabel(iso: string, now: Date | number): string {
 }
 
 /**
- * The deal statuses that count as "open" for the row badge (D-06). Mirrors the
- * deals module's `LIVE_STATUSES` (draft / confirmed / amended) - re-declared
- * locally (it is private to deals/reads.ts) so this module does not cross-import
- * a deals internal (RESEARCH Pitfall 3).
+ * The deal statuses that count as "open" for the row badge (D-06). Close to the
+ * deals module's `LIVE_STATUSES` but deliberately NOT identical: `unsent` is
+ * EXCLUDED here (D-16 - the open-deal badge is counterparty-meaningful; a
+ * private draft must never count toward it). Re-declared locally (LIVE_STATUSES
+ * is private to deals/reads.ts) so this module does not cross-import a deals
+ * internal (RESEARCH Pitfall 3).
  */
-const OPEN_DEAL_STATUSES = new Set<string>(["draft", "confirmed", "amended"]);
+const OPEN_DEAL_STATUSES = new Set<string>(["negotiation", "confirmed"]);
 
 /**
  * Count OPEN deal cards per relationship. Given RLS-scoped `deal_card` rows

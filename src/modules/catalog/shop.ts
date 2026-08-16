@@ -10,6 +10,8 @@ import { createClient } from "@/shared/db/server";
 import { getCurrentUser } from "@/shared/auth";
 import { pickRepresentativeBatch, deriveTerpPercent } from "./shopMap";
 import { deriveInitialLocations, type WarehouseLocation } from "./locations";
+import { readCurrentPrices, type ProductPrice } from "./pricelist";
+import type { PriceTier } from "./pricing";
 
 export type { WarehouseLocation };
 
@@ -70,8 +72,13 @@ export type ShopProduct = {
   profile_visible: boolean;
   price_public: boolean;
   price_per_gram: number | null;
+  /** BRIDGE (retired by T04/T05, columns dropped in C): rung 1 of `tiers`
+   *  surfaced under the old single-bracket names so the current bubble UI keeps
+   *  rendering — post-backfill rung 1 IS the old bracket. */
   bundle_threshold_grams: number | null;
   bundle_price_per_gram: number | null;
+  /** The full tier ladder, camelCase, from the current-price view. */
+  tiers: PriceTier[];
   /** Extra sellable pack sizes beyond the product's own `pack_size_grams` — a
    *  lightweight v0 (stored in `product.metadata.pack_sizes`, no schema change)
    *  ahead of a proper `product_pack_size` table in a later phase. */
@@ -161,14 +168,26 @@ export async function getMyShop(): Promise<Shop | null> {
   const { data: rows } = await supabase
     .from("product")
     .select(
-      "id, name, cultivar, thc_percent, cbd_percent, cbg_percent, cbn_percent, terpene_percent, cultivator, lineage_parent_a, lineage_parent_b, irradiation_code, supplier_product_code, packaging_material, resealable, location, pack_size_grams, unit_code, local_code_pzn, dominance_code, country_of_origin, region, profile_visible, price_public, metadata, product_image(id, image_path, position), product_media(id, kind, path, url, label, position), product_batch(id, batch_number, ready_for_sale_date, expiry_date, thc_percent, cbd_percent, created_at, deleted_at, batch_terpene(percent)), pricelist_item(price_per_gram, bundle_threshold_grams, bundle_price_per_gram)",
+      "id, name, cultivar, thc_percent, cbd_percent, cbg_percent, cbn_percent, terpene_percent, cultivator, lineage_parent_a, lineage_parent_b, irradiation_code, supplier_product_code, packaging_material, resealable, location, pack_size_grams, unit_code, local_code_pzn, dominance_code, country_of_origin, region, profile_visible, price_public, metadata, product_image(id, image_path, position), product_media(id, kind, path, url, label, position), product_batch(id, batch_number, ready_for_sale_date, expiry_date, thc_percent, cbd_percent, created_at, deleted_at, batch_terpene(percent))",
     )
     .eq("company_id", companyId)
     .is("deleted_at", null)
     .order("name");
 
+  // Prices come from the single owner (current-price view), stitched by id.
+  // Degrade contract: a failed price read yields a priceless shop (null
+  // price, empty tiers) — never a broken /present page.
+  let prices = new Map<string, ProductPrice>();
+  if (rows?.length) {
+    try {
+      prices = await readCurrentPrices(supabase, rows.map((r) => r.id));
+    } catch {
+      // priceless, not broken — see the degrade contract above
+    }
+  }
+
   const products: ShopProduct[] = (rows ?? []).map((r) => {
-    const price = Array.isArray(r.pricelist_item) ? r.pricelist_item[0] : r.pricelist_item;
+    const price = prices.get(r.id);
     const images: ProductImage[] = (r.product_image ?? [])
       .slice()
       .sort((a, b) => a.position - b.position)
@@ -222,9 +241,11 @@ export async function getMyShop(): Promise<Shop | null> {
       terpPercent: r.terpene_percent ?? deriveTerpPercent(repBatch),
       profile_visible: r.profile_visible,
       price_public: r.price_public,
-      price_per_gram: price?.price_per_gram ?? null,
-      bundle_threshold_grams: price?.bundle_threshold_grams ?? null,
-      bundle_price_per_gram: price?.bundle_price_per_gram ?? null,
+      price_per_gram: price?.pricePerGram ?? null,
+      // Bridge fields = rung 1 (see ShopProduct — T04/T05 retire the consumers).
+      bundle_threshold_grams: price?.tiers[0]?.minGrams ?? null,
+      bundle_price_per_gram: price?.tiers[0]?.pricePerGram ?? null,
+      tiers: price?.tiers ?? [],
       packSizes: parsePackSizes(r.metadata),
     };
   });

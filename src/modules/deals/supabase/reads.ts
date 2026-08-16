@@ -15,6 +15,7 @@
  * product. We fetch only the CURRENT version's lines (deal_card.version).
  */
 import { createClient } from "@/shared/db/client";
+import { readCurrentPrices } from "@/modules/catalog/index.client";
 import { sellerCompanyId, viewerSide, lineTotalOf, lineMarginOf } from "../lib/derive";
 import { promotionSavings } from "../lib/promotion";
 import { otherOf } from "../lib/recipient";
@@ -32,12 +33,9 @@ import type {
   LineMarginView,
   LogAuthor,
   ChangeOrigin,
-  ConfirmationStatus,
-  ConfirmSeat,
   LogEntry,
   MemberRole,
   MemberView,
-  PartySide,
   ProductBatchView,
   PendingChangeView,
   PendingProposalView,
@@ -62,7 +60,7 @@ const str = (m: Meta, k: string): string | null => {
 };
 
 /** Statuses that are still "live" (not a terminal end state) - preferred as the current deal. */
-const LIVE_STATUSES = new Set<DealCardStatus>(["draft", "confirmed", "amended"]);
+const LIVE_STATUSES = new Set<DealCardStatus>(["unsent", "negotiation", "confirmed"]);
 
 /**
  * The current deal card id for a relationship - the one the chat's "Talking
@@ -123,6 +121,103 @@ export async function listRelationshipDeals(
     hsNumber: r.hs_deal_number,
     updatedAt: (r.updated_at ?? r.created_at) as string,
   }));
+}
+
+/** One unsent draft for the Deal Basket list (12-10, D-14) - just enough to
+ * label a row (counterparty, type, freshness); clicking opens the born card. */
+export interface DraftDealRow {
+  id: string;
+  relationshipId: string;
+  dealType: DealType;
+  /** the OTHER company on the draft's relationship - the future recipient;
+   *  null only if the relationship/company row failed to resolve */
+  counterpartyName: string | null;
+  /** updated_at, falling back to created_at - drives the "Updated …" hint */
+  updatedAt: string;
+}
+
+/**
+ * My company's unsent drafts, newest first - the Deal Basket side of the
+ * basket drawer (D-14). Drafts from BOTH doors land here (basket-born and
+ * card-born), because both birth a `status='unsent'` row.
+ *
+ * Deliberately NO company/initiator filter in app code: the D-08 RLS narrow
+ * (20260724120700_draft_privacy_rls) is the ONLY scoping - unsent rows return
+ * for the CREATOR company alone, the counterparty gets none. An app-side
+ * filter here would just mask an RLS bug instead of surfacing it (T-12-30);
+ * RLS is the filter, never app code.
+ *
+ * Counterparty names are display data resolved AFTER the scoped read (viewer
+ * company -> `otherOf` on each relationship pair -> one company-name fetch,
+ * the house stitch-in-JS discipline) - never part of the scoping.
+ */
+export async function getMyDraftDeals(): Promise<DraftDealRow[]> {
+  const supabase = createClient();
+
+  const { data, error } = await supabase
+    .from("deal_card")
+    .select("id, relationship_id, deal_type, updated_at, created_at")
+    .eq("status", "unsent")
+    .is("deleted_at", null)
+    .order("updated_at", { ascending: false })
+    .limit(50);
+  if (error) throw error;
+  const rows = data ?? [];
+  if (rows.length === 0) return [];
+
+  // viewer's company - the "me" anchor for the counterparty subtraction
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  let viewerCompanyId: string | null = null;
+  if (user) {
+    const { data: viewerPerson } = await supabase
+      .from("person")
+      .select("company_id")
+      .eq("id", user.id)
+      .single();
+    viewerCompanyId = viewerPerson?.company_id ?? null;
+  }
+
+  // relationship pairs -> the OTHER company of each (otherOf = the single
+  // "other side" math owner) -> names, two flat fetches stitched in JS
+  const relIds = Array.from(new Set(rows.map((r) => r.relationship_id)));
+  const { data: rels, error: relErr } = await supabase
+    .from("relationship")
+    .select("id, company_a_id, company_b_id")
+    .in("id", relIds);
+  if (relErr) throw relErr;
+  const relById = new Map((rels ?? []).map((r) => [r.id, r] as const));
+
+  const otherIdOf = (relationshipId: string): string | null => {
+    const rel = relById.get(relationshipId);
+    return rel && viewerCompanyId
+      ? otherOf(viewerCompanyId, rel.company_a_id, rel.company_b_id)
+      : null;
+  };
+
+  const otherIds = Array.from(
+    new Set(relIds.map(otherIdOf).filter((x): x is string => !!x)),
+  );
+  const nameById = new Map<string, string>();
+  if (otherIds.length) {
+    const { data: cos } = await supabase
+      .from("company")
+      .select("id, name")
+      .in("id", otherIds);
+    for (const c of cos ?? []) nameById.set(c.id, c.name);
+  }
+
+  return rows.map((r) => {
+    const otherId = otherIdOf(r.relationship_id);
+    return {
+      id: r.id,
+      relationshipId: r.relationship_id,
+      dealType: r.deal_type as DealType,
+      counterpartyName: (otherId && nameById.get(otherId)) || null,
+      updatedAt: (r.updated_at ?? r.created_at) as string,
+    };
+  });
 }
 
 /**
@@ -427,12 +522,15 @@ export async function getPromotion(dealCardId: string): Promise<PromotionView | 
 }
 
 /**
- * The create-form product picker source: the viewer's OWN catalogue (3.5a).
- * RLS limits `product` + `pricelist_item` to the caller's company, so this is
- * always "my products" - which is exactly the seller's catalogue, since the
- * creator of an offer is the seller. A product with no live pricelist item
- * comes back with `unitPrice = null` (a price-less line is allowed, D3).
- * Two flat fetches stitched in JS (same discipline as the other reads).
+ * The create-form product picker source: the viewer's OWN catalogue (3.5a) —
+ * in intent. In reality the product query has no company filter and
+ * `product_public_select` is unscoped, so the picker currently returns EVERY
+ * company's visible products (known issue, Ayush's lane — flagged, not fixed
+ * here); prices/tiers ride along per the current-price view's public arm.
+ * A product with no current price comes back with `unitPrice = null` (a
+ * price-less line is allowed, D3). Two flat fetches stitched in JS (same
+ * discipline as the other reads); prices come from the single owner
+ * (`readCurrentPrices`, ADR-0004 §4).
  */
 export async function getOwnCatalog(): Promise<CatalogProduct[]> {
   const supabase = createClient();
@@ -446,30 +544,22 @@ export async function getOwnCatalog(): Promise<CatalogProduct[]> {
   const rows = products ?? [];
   if (rows.length === 0) return [];
 
-  const { data: items, error: iErr } = await supabase
-    .from("pricelist_item")
-    .select("product_id, price_per_gram, currency")
-    .in(
-      "product_id",
-      rows.map((p) => p.id),
-    )
-    .is("deleted_at", null);
-  if (iErr) throw iErr;
-  const priceBy = new Map((items ?? []).map((i) => [i.product_id, i] as const));
+  const prices = await readCurrentPrices(supabase, rows.map((p) => p.id));
 
   return rows.map((p) => {
-    const item = priceBy.get(p.id);
+    const price = prices.get(p.id);
     return {
       id: p.id,
       name: p.name,
       cultivar: p.cultivar,
       unit: p.unit_code,
       packSizeGrams: p.pack_size_grams != null ? Number(p.pack_size_grams) : null,
-      unitPrice: item ? Number(item.price_per_gram) : null,
-      currency: item?.currency ?? "EUR",
+      unitPrice: price?.pricePerGram ?? null,
+      currency: price?.currency ?? "EUR",
       thcPercent: p.thc_percent,
       cbdPercent: p.cbd_percent,
       pzn: p.local_code_pzn,
+      tiers: price?.tiers ?? [],
     };
   });
 }
@@ -565,7 +655,7 @@ export async function getDealCard(cardId: string): Promise<DealCardView> {
     .single();
   if (relErr) throw relErr;
 
-  const [cosRes, linesRes, logRes, confRes] = await Promise.all([
+  const [cosRes, linesRes, logRes] = await Promise.all([
     supabase.from("company").select("id, name").in("id", [rel.company_a_id, rel.company_b_id]),
     supabase
       .from("deal_line_item")
@@ -584,15 +674,8 @@ export async function getDealCard(cardId: string): Promise<DealCardView> {
       .select("id, version, change_summary, origin, changed_by, changed_by_person_id, created_at")
       .eq("deal_card_id", card.id)
       .order("version", { ascending: false }),
-    // the two-sided confirm gate for the CURRENT version (3d). RLS = relationship
-    // member, so both sides' rows return; a missing row reads as `pending`.
-    supabase
-      .from("deal_confirmation")
-      .select("company_id, status, responding_person_id, responded_at")
-      .eq("deal_card_id", card.id)
-      .eq("version", card.version),
   ]);
-  for (const r of [cosRes, linesRes, logRes, confRes]) {
+  for (const r of [cosRes, linesRes, logRes]) {
     if (r.error) throw r.error;
   }
 
@@ -647,13 +730,12 @@ export async function getDealCard(cardId: string): Promise<DealCardView> {
     };
   });
 
-  // resolve person names for log authors AND confirmation responders (one fetch)
+  // resolve person names for log authors (one fetch)
   const personIds = Array.from(
     new Set(
-      [
-        ...(logRes.data ?? []).map((r) => r.changed_by_person_id),
-        ...(confRes.data ?? []).map((r) => r.responding_person_id),
-      ].filter((x): x is string => !!x),
+      (logRes.data ?? [])
+        .map((r) => r.changed_by_person_id)
+        .filter((x): x is string => !!x),
     ),
   );
   const nameById = new Map<string, string>();
@@ -729,26 +811,6 @@ export async function getDealCard(cardId: string): Promise<DealCardView> {
   // The strip reads the resolved view; the pencil reads only whether it is null.
   const pendingChange = await getPendingChange(card.id);
 
-  // the two confirm seats (3d), seller first then buyer. A missing row = pending.
-  const confByCompany = new Map(
-    (confRes.data ?? []).map((r) => [r.company_id, r] as const),
-  );
-  const seatFor = (sideKind: PartySide, companyId: string, companyName: string): ConfirmSeat => {
-    const row = confByCompany.get(companyId);
-    return {
-      side: sideKind,
-      companyId,
-      companyName,
-      status: (row?.status as ConfirmationStatus) ?? "pending",
-      byName: row?.responding_person_id ? (nameById.get(row.responding_person_id) ?? null) : null,
-      respondedAt: row?.responded_at ?? null,
-    };
-  };
-  const confirmations: ConfirmSeat[] = [
-    seatFor("seller", sellerId, sellerName),
-    seatFor("buyer", buyerId, buyerName),
-  ];
-
   return {
     card,
     sellerName,
@@ -760,7 +822,6 @@ export async function getDealCard(cardId: string): Promise<DealCardView> {
     signals: side ? seededSignals(side) : [],
     log,
     viewerSide: side,
-    confirmations,
     pendingChange,
     myNote,
     theirNote,

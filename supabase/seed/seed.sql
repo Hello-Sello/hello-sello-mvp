@@ -404,10 +404,17 @@ select '3fe179d5-c0e7-4eff-9726-f707c04572f9'::uuid, 'aaaaaaaa-aaaa-aaaa-aaaa-aa
        'Standard', 'published', 'EUR', now(), '11111111-1111-1111-1111-111111111111'
 where not exists (select 1 from public.pricelist where id = '3fe179d5-c0e7-4eff-9726-f707c04572f9');
 
--- 6c) pricelist items (price per gram) → the picker shows live prices
+-- 6c) pricelist items (price per gram) → the picker shows live prices.
+--     (Migration C, 20260816190000, dropped the legacy bundle columns; AUR-1A's
+--     ladder demo lives in §6c-2's rung row.)
 insert into public.pricelist_item (pricelist_id, product_id, price_per_gram, currency)
 select '3fe179d5-c0e7-4eff-9726-f707c04572f9'::uuid, p.id, v.price, 'EUR'
-from (values ('AUR-1A', 8.00),('AUR-1B', 6.00),('AUR-1C', 4.00),('AUR-1D', 5.00)) as v(code, price)
+from (values
+  ('AUR-1A', 8.00),
+  ('AUR-1B', 6.00),
+  ('AUR-1C', 4.00),
+  ('AUR-1D', 5.00)
+) as v(code, price)
 join public.product p
   on p.company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid
  and p.supplier_product_code = v.code and p.deleted_at is null
@@ -415,6 +422,22 @@ where not exists (
   select 1 from public.pricelist_item pi
   where pi.pricelist_id = '3fe179d5-c0e7-4eff-9726-f707c04572f9'::uuid and pi.product_id = p.id and pi.deleted_at is null
 );
+
+-- 6c-2) AUR-1A's demo tier rung (2000 g → 6.50, mirrors its bracket) so the
+--       ladder is visible on a fresh reset. Guarded on "no live rungs yet";
+--       6.50 < 8.00 base satisfies the ladder-shape trigger.
+insert into public.pricelist_item_tier (pricelist_item_id, min_grams, price_per_gram)
+select pi.id, 2000, 6.50
+from public.pricelist_item pi
+join public.product p on p.id = pi.product_id
+where pi.pricelist_id = '3fe179d5-c0e7-4eff-9726-f707c04572f9'::uuid
+  and p.company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid
+  and p.supplier_product_code = 'AUR-1A'
+  and p.deleted_at is null and pi.deleted_at is null
+  and not exists (
+    select 1 from public.pricelist_item_tier t
+    where t.pricelist_item_id = pi.id and t.deleted_at is null
+  );
 
 -- ----------------------------------------------------------------------------
 -- 7. GreenLeaf demo batches (BTCH-01 / Phase 3f) — each of the 4 products gets
@@ -493,16 +516,16 @@ where product_batch.company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid
 --     the demo-2d relationship/chat pattern in section 5 above).
 --
 --     Variety matrix (see 260707-0ob-PLAN-1.md):
---       01 GL<->StonePharm  offer  draft     hello_sello  --      all pending
---       02 GL<->Rheinland   order  draft     hello_sello  --      all pending
+--       01 GL<->StonePharm  offer  negotiation hello_sello --     all pending
+--       02 GL<->Rheinland   order  negotiation hello_sello --     all pending
 --       03 GL<->StonePharm  order  confirmed email        --      1 supply(locked) + 1 pending
 --       04 GL<->Rheinland   offer  done      hello_sello  --      all supply (locked)
---       05 GL<->StonePharm  offer  amended   hello_sello  --      1 decline(locked) + 1 pending
+--       05 GL<->StonePharm  offer  confirmed hello_sello  --      1 decline(locked) + 1 pending
 --       06 GL<->Rheinland   order  confirmed fax          open    all pending
 --       07 GL<->StonePharm  offer  done      email        closed  all supply (locked)
 -- ----------------------------------------------------------------------------
 
--- ALLOC-SEED-01 — GreenLeaf <-> StonePharm, offer, draft, hello_sello, all pending
+-- ALLOC-SEED-01 — GreenLeaf <-> StonePharm, offer, negotiation, hello_sello, all pending
 with ids as (
   select
     (select r.id from public.relationship r
@@ -515,7 +538,7 @@ card as (
   insert into public.deal_card (
     relationship_id, version, status, deal_type, initiating_company_id,
     currency, ordered_via, ticket_status, seller_so_number, created_by, updated_by, metadata)
-  select ids.rel_id, 1, 'draft', 'offer', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid,
+  select ids.rel_id, 1, 'negotiation', 'offer', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid,
     'EUR', 'hello_sello', null, 'ALLOC-SEED-01',
     '11111111-1111-1111-1111-111111111111'::uuid, '11111111-1111-1111-1111-111111111111'::uuid,
     jsonb_build_object('seed', 'allocate-seed')
@@ -566,7 +589,7 @@ join public.product_batch pb
   on pb.company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid
  and pb.batch_number = v.batch_number and pb.deleted_at is null;
 
--- ALLOC-SEED-02 — GreenLeaf <-> Rheinland, order, draft, hello_sello, all pending
+-- ALLOC-SEED-02 — GreenLeaf <-> Rheinland, order, negotiation, hello_sello, all pending
 with ids as (
   select
     (select id from public.company where name = 'Rheinland Apotheke GmbH') as cp,
@@ -583,7 +606,7 @@ card as (
   insert into public.deal_card (
     relationship_id, version, status, deal_type, initiating_company_id,
     currency, ordered_via, ticket_status, seller_so_number, created_by, updated_by, metadata)
-  select ids.rel_id, 1, 'draft', 'order', ids.cp,
+  select ids.rel_id, 1, 'negotiation', 'order', ids.cp,
     'EUR', 'hello_sello', null, 'ALLOC-SEED-02',
     ids.cp_founder, ids.cp_founder,
     jsonb_build_object('seed', 'allocate-seed')
@@ -767,7 +790,7 @@ join public.product_batch pb
   on pb.company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid
  and pb.batch_number = v.batch_number and pb.deleted_at is null;
 
--- ALLOC-SEED-05 — GreenLeaf <-> StonePharm, offer, amended, hello_sello, 1 decline(locked) + 1 pending
+-- ALLOC-SEED-05 — GreenLeaf <-> StonePharm, offer, confirmed, hello_sello, 1 decline(locked) + 1 pending
 with ids as (
   select
     (select r.id from public.relationship r
@@ -780,7 +803,7 @@ card as (
   insert into public.deal_card (
     relationship_id, version, status, deal_type, initiating_company_id,
     currency, ordered_via, ticket_status, seller_so_number, created_by, updated_by, metadata)
-  select ids.rel_id, 1, 'amended', 'offer', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid,
+  select ids.rel_id, 1, 'confirmed', 'offer', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid,
     'EUR', 'hello_sello', null, 'ALLOC-SEED-05',
     '11111111-1111-1111-1111-111111111111'::uuid, '11111111-1111-1111-1111-111111111111'::uuid,
     jsonb_build_object('seed', 'allocate-seed')

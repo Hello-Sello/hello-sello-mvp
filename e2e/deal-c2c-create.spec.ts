@@ -1,6 +1,7 @@
 /**
  * Lane A — deal creation from the c2c (company) chat + the company-delivery
- * spine (birth → inbox ticket → claim).
+ * spine (birth → SEND → inbox ticket → claim; Phase 12 moved the ticket mint
+ * from birth to the explicit Send — `send_deal` calls deliver_deal).
  *
  * Before this lane the c2c chat rendered DealPin's State A as just "No deal
  * yet": the "Start a deal" button + the `hs:create-deal` listener were gated on
@@ -9,19 +10,21 @@
  * way to create a deal, and a born deal had no visible c2c surface.
  *
  * What this file proves, in order:
- *   1. the c2c chat offers "Start a deal"; the birth has the CREATOR AS SOLE
- *      OWNER (no counterparty person exists in a company chat — that absence
- *      is deliver_deal's company-target routing key);
+ *   1. the c2c chat offers "Start a deal"; through birth AND send the CREATOR
+ *      stays the SOLE OWNER (no counterparty person exists in a company chat —
+ *      that absence is deliver_deal's company-target routing key; only a CLAIM
+ *      adds a second member);
  *   2. the born deal's row appears in the c2c chat LIVE (hs:deal-updated —
- *      the c2c strip has no p2p thread, so realtime never covers it);
+ *      the creator sees own drafts/deals in the strip);
  *   3. the row survives a fresh navigation and opens the card panel;
- *   4. the full company delivery: the ticket lands in the OTHER company's
- *      "Deal tickets" inbox lens with a real card preview, "Accept & connect"
- *      makes the claimer a deal_member owner on the SAME deal (no new
- *      relationship), and the deal then opens from the claimer's own c2c chat.
+ *   4. the full company delivery: after the fixture's Send the ticket lands in
+ *      the OTHER company's "Deal tickets" inbox lens with a real card preview,
+ *      "Pick up deal" makes the claimer a deal_member owner on the SAME deal
+ *      (no new relationship), and the deal then opens from the claimer's own
+ *      c2c chat.
  *
  * Selectors mirror fixtures/two-company.ts (createC2cDealAsAlice drives the
- * create flow; the panel is `<aside aria-label="Deal card">`).
+ * create + send flow; the panel is `<aside aria-label="Deal card">`).
  */
 import { test, expect, type Page } from '@playwright/test'
 import {
@@ -63,7 +66,8 @@ test('c2c chat offers "Start a deal" and births a draft with the creator as sole
   await createC2cDealAsAlice(page)
 
   // no counterparty person exists in a company chat → the creator is the SOLE
-  // deal_member owner (this absence is deliver_deal's company-target routing key)
+  // deal_member owner through birth AND send (this absence is deliver_deal's
+  // company-target routing key at send time; only a claim adds a member)
   const cardId = resolveDealCardIdForRelationship()
   expect(countDealMembersForCard(cardId)).toBe(1)
 })
@@ -124,7 +128,9 @@ test('a SECOND deal can be started from the same c2c chat — the button stays v
     .filter({ has: page.getByRole('button', { name: /done editing this line/i }) })
   await row.locator('select').nth(2).selectOption('100')
   await row.locator('input[type="number"]').fill('7.50')
-  await dealPanel(page).getByRole('button', { name: /^send deal$/i }).click()
+  // "Save draft" births the second card (Phase 12: this test proves the DOOR
+  // works, so the private draft is enough — no Send needed for the count)
+  await dealPanel(page).getByRole('button', { name: /^save draft$/i }).click()
   // BORN-card-only signal (the create card also shows "Talk about this deal")
   await dealPanel(page).getByRole('button', { name: /edit deal/i }).waitFor({ timeout: 15000 })
 
