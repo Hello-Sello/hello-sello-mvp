@@ -245,6 +245,25 @@ asks three things nothing else asks:
 Its output is short — *agree / disagree / what I would push back on* — in plain English, on
 top of the ADR. **It does not replace your gate. It feeds it.**
 
+> **Dry-run verdict (2026-08-16): `adr-checker` is promoted Tier 2 → Tier 1.** On the
+> tier-ladder ADR (0021) it ran 7 genuinely fresh separate-context rounds and caught ~70
+> findings across security / schema / deploy-ordering / cross-ADR classes — never
+> converging to zero (11+15+15+14+15+14+12), including a live security hole that one of
+> the fix revisions itself introduced. Full trail: `docs/agents/DRY-RUN-tier-ladder.md`.
+
+**Three operating rules, locked by the dry-run:**
+
+1. **Fresh context, every round.** The checker must be a genuinely fresh separate-context
+   agent — never the ADR's author re-checking their own work. The author defends; only a
+   stranger attacks. (Every one of the 7 rounds that caught something was a stranger.)
+2. **The loop is budgeted: 2 rounds, stop on zero NEW blockers.** Stop at the first round
+   that raises no *new blocking* findings — never wait for zero findings total, which the
+   dry-run showed does not converge (7 rounds, never zero). More rounds are Muskan's
+   explicit call per ADR, not the default.
+3. **Fixes carry a simplification bias.** Prefer removing a mechanism over adding one. The
+   single round that made the ADR *worse* was the one revision that answered a finding by
+   adding a new RPC instead of deleting the problem (rev 6's hole, removed in rev 7).
+
 **It reads an index, not every ADR.** "Read every ADR we have ever written" is fine at 3 and
 useless at 40 — and question 3 gets *harder* as the corpus grows, which is backwards. So
 `/design` maintains one line per ADR:
@@ -461,6 +480,16 @@ independent evidence behind it today. Tier 2 is hypothesis — each of those age
 because of an argument, not an observed catch. **The manual dry-run is the trial:** any
 Tier 2 agent that catches nothing a Tier 1 agent or Muskan would have caught gets cut
 before it is ever built.
+
+> **Dry-run result (2026-08-16):** `adr-checker` passed the trial and is **Tier 1** — ~70
+> observed catches across 7 fresh-context rounds on the tier-ladder ADR, including classes
+> (cross-ADR contradiction, deploy-ordering, a fix-introduced security hole) that neither
+> Muskan nor a Tier 1 agent had caught. Its operating rules are locked in the `/design`
+> section above. `plan-checker`'s headline predicted catch (missed call sites —
+> `template.ts`, `get_discoverable_shop`) was pre-empted at design time: the ADR already
+> carried both re-declares before any plan existed. No decisive independent catch was
+> recorded in the T01–T08 sprint — it stays **Tier 2, on watch** for the next slugs
+> rather than cut outright.
 
 `researcher` is custom rather than the built-in Explore because it needs to know *your*
 corpus: `docs/product/surfaces/`, PRDs, `DECISIONS.md`, `ARCHITECTURE-NOTES.md`, Linear,
