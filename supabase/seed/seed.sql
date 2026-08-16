@@ -405,18 +405,16 @@ select '3fe179d5-c0e7-4eff-9726-f707c04572f9'::uuid, 'aaaaaaaa-aaaa-aaaa-aaaa-aa
 where not exists (select 1 from public.pricelist where id = '3fe179d5-c0e7-4eff-9726-f707c04572f9');
 
 -- 6c) pricelist items (price per gram) → the picker shows live prices.
---     AUR-1A also carries a well-formed legacy bundle bracket (2000 g → 6.50,
---     below its 8.00 base) so the legacy dual-shape path stays demo-walkable
---     (tier-ladder Migration E, 20260814120000).
-insert into public.pricelist_item (pricelist_id, product_id, price_per_gram,
-                                   bundle_threshold_grams, bundle_price_per_gram, currency)
-select '3fe179d5-c0e7-4eff-9726-f707c04572f9'::uuid, p.id, v.price, v.thr, v.bpg, 'EUR'
+--     (Migration C, 20260816190000, dropped the legacy bundle columns; AUR-1A's
+--     ladder demo lives in §6c-2's rung row.)
+insert into public.pricelist_item (pricelist_id, product_id, price_per_gram, currency)
+select '3fe179d5-c0e7-4eff-9726-f707c04572f9'::uuid, p.id, v.price, 'EUR'
 from (values
-  ('AUR-1A', 8.00, 2000::numeric, 6.50::numeric),
-  ('AUR-1B', 6.00, null,          null),
-  ('AUR-1C', 4.00, null,          null),
-  ('AUR-1D', 5.00, null,          null)
-) as v(code, price, thr, bpg)
+  ('AUR-1A', 8.00),
+  ('AUR-1B', 6.00),
+  ('AUR-1C', 4.00),
+  ('AUR-1D', 5.00)
+) as v(code, price)
 join public.product p
   on p.company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid
  and p.supplier_product_code = v.code and p.deleted_at is null

@@ -3069,8 +3069,6 @@ export type Database = {
       }
       pricelist_item: {
         Row: {
-          bundle_price_per_gram: number | null
-          bundle_threshold_grams: number | null
           created_at: string
           created_by: string | null
           currency: string
@@ -3085,8 +3083,6 @@ export type Database = {
           updated_by: string | null
         }
         Insert: {
-          bundle_price_per_gram?: number | null
-          bundle_threshold_grams?: number | null
           created_at?: string
           created_by?: string | null
           currency?: string
@@ -3101,8 +3097,6 @@ export type Database = {
           updated_by?: string | null
         }
         Update: {
-          bundle_price_per_gram?: number | null
-          bundle_threshold_grams?: number | null
           created_at?: string
           created_by?: string | null
           currency?: string
@@ -4593,13 +4587,6 @@ export type Database = {
         Returns: undefined
       }
       audit_person_scrub: { Args: { p_person_id: string }; Returns: undefined }
-      backfill_bundle_to_tiers: {
-        Args: never
-        Returns: {
-          migrated: number
-          rescued: number
-        }[]
-      }
       can_access_thread: { Args: { p_thread_id: string }; Returns: boolean }
       can_access_workspace: { Args: { p_ws_id: string }; Returns: boolean }
       can_see_person: {
@@ -4697,8 +4684,6 @@ export type Database = {
       get_discoverable_shop: {
         Args: { p_company_id: string }
         Returns: {
-          bundle_price_per_gram: number
-          bundle_threshold_grams: number
           cbd_percent: number
           country_of_origin: string
           cultivar: string

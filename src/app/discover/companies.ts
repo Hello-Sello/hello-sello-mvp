@@ -158,8 +158,6 @@ export type DiscoverProduct = {
   images: string[]; // ordered public URLs (cover first)
   pricePublic: boolean;
   pricePerGram: number | null;
-  bundleThresholdGrams: number | null;
-  bundlePricePerGram: number | null;
 };
 
 type ShopRow = {
@@ -177,8 +175,6 @@ type ShopRow = {
   images: { id: string; path: string; position: number }[] | null;
   price_public: boolean;
   price_per_gram: number | null;
-  bundle_threshold_grams: number | null;
-  bundle_price_per_gram: number | null;
 };
 
 /**
@@ -217,7 +213,5 @@ export async function getDiscoverableShop(companyId: string): Promise<DiscoverPr
       .map((im) => imageUrl(im.path)),
     pricePublic: r.price_public,
     pricePerGram: r.price_per_gram,
-    bundleThresholdGrams: r.bundle_threshold_grams,
-    bundlePricePerGram: r.bundle_price_per_gram,
   }));
 }

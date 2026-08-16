@@ -1,11 +1,12 @@
 -- ============================================================================
--- pricelist_item_tier_test.sql — T01 (tier-ladder Migration E) contract proof
+-- pricelist_item_tier_test.sql — tier-ladder contract proof (Migrations E + C)
 -- ----------------------------------------------------------------------------
--- Proves the pricelist_item_tier table + doors, the shipped backfill function,
--- the save_price_ladder RPC, the current_pricelist_item view (owner + public
--- arms, visibility window, verified gate), the get_discoverable_shop dual
--- shape (legacy bundle columns AND tiers), and the ladder-shape constraint
--- triggers on direct writes. Contract: ADR-0004 rev 8 / PLAN-T01.md.
+-- Proves the pricelist_item_tier table + doors, the save_price_ladder RPC, the
+-- current_pricelist_item view (owner + public arms, visibility window,
+-- verified gate), get_discoverable_shop's tiers column, and the ladder-shape
+-- constraint triggers on direct writes. Contract: ADR-0004 rev 8 / PLAN-T01.md.
+-- (Migration C, 20260816190000, dropped the legacy bundle columns + the
+-- one-shot backfill fn — their E-era test sections were retired with them.)
 --
 -- Mirrors cross_tenant_lockdown_test.sql: one BEGIN…ROLLBACK transaction that
 -- creates ephemeral fixtures, impersonates each caller, asserts, and leaves NO
@@ -18,8 +19,8 @@
 --       (that runner also drives the two-session race proof — phase 2 —
 --        which needs real committed transactions and cannot live in here)
 --
--- ⚠️  RED-FIRST: this file is EXPECTED to FAIL until Migration E
--- (20260814120000_tier_ladder_expand.sql) lands — that failure is the proof it
+-- ⚠️  RED-FIRST: this file is EXPECTED to FAIL until Migrations E + C
+-- (20260814120000 + 20260816190000) land — that failure is the proof it
 -- genuinely exercises the new objects. Do NOT "fix" it green here.
 --
 -- Personas (seeded; resolve products by supplier_product_code, never by UUID —
@@ -34,38 +35,26 @@ BEGIN;
 
 -- ── Fixtures (privileged role; rolled back) ──────────────────────────────────
 -- Own fixture products/items instead of mutating the seeded AUR-1A..1D rows
--- (AUR-1A carries the seeded demo bracket + rung; touching it would couple this
+-- (AUR-1A carries the seeded demo rung; touching it would couple this
 -- test to seed drift). NOT NULL floor on product: company_id + name.
 INSERT INTO public.product (company_id, name, supplier_product_code)
 VALUES
-  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Tier Test Backfill Wellformed', 'TIER-BF1'),
-  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Tier Test Backfill Halffilled', 'TIER-BF2'),
-  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Tier Test Backfill Nondiscount', 'TIER-BF3'),
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Tier Test RPC Target', 'TIER-RPC'),
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Tier Test View Target', 'TIER-VIEW');
 
 INSERT INTO public.pricelist_item
-  (pricelist_id, product_id, price_per_gram, bundle_threshold_grams, bundle_price_per_gram, currency)
-SELECT '3fe179d5-c0e7-4eff-9726-f707c04572f9', p.id, v.base, v.thr, v.bpg, 'EUR'
+  (pricelist_id, product_id, price_per_gram, currency)
+SELECT '3fe179d5-c0e7-4eff-9726-f707c04572f9', p.id, v.base, 'EUR'
 FROM (VALUES
-  ('TIER-BF1',  8.00, 2000::numeric, 6.50::numeric),  -- well-formed bracket → 1 rung
-  ('TIER-BF2',  8.00, 1500,          NULL),           -- half-filled → rescue, 0 rungs
-  ('TIER-BF3',  8.00, 1000,          9.00),           -- non-discount → rescue, 0 rungs
-  ('TIER-RPC', 10.00, NULL,          NULL),           -- save_price_ladder target
-  ('TIER-VIEW',12.00, NULL,          NULL)            -- view / shop-RPC target
-) AS v(code, base, thr, bpg)
+  ('TIER-RPC', 10.00),          -- save_price_ladder target
+  ('TIER-VIEW',12.00)           -- view / shop-RPC target
+) AS v(code, base)
 JOIN public.product p
   ON p.company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
  AND p.supplier_product_code = v.code AND p.deleted_at IS NULL;
 
 CREATE TEMP TABLE _fix ON COMMIT DROP AS
 SELECT
-  (SELECT pli.id FROM public.pricelist_item pli JOIN public.product p ON p.id = pli.product_id
-    WHERE p.supplier_product_code = 'TIER-BF1'  AND p.company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' AND pli.deleted_at IS NULL) AS bf1_item,
-  (SELECT pli.id FROM public.pricelist_item pli JOIN public.product p ON p.id = pli.product_id
-    WHERE p.supplier_product_code = 'TIER-BF2'  AND p.company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' AND pli.deleted_at IS NULL) AS bf2_item,
-  (SELECT pli.id FROM public.pricelist_item pli JOIN public.product p ON p.id = pli.product_id
-    WHERE p.supplier_product_code = 'TIER-BF3'  AND p.company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' AND pli.deleted_at IS NULL) AS bf3_item,
   (SELECT pli.id FROM public.pricelist_item pli JOIN public.product p ON p.id = pli.product_id
     WHERE p.supplier_product_code = 'TIER-RPC'  AND p.company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' AND pli.deleted_at IS NULL) AS rpc_item,
   (SELECT pli.id FROM public.pricelist_item pli JOIN public.product p ON p.id = pli.product_id
@@ -76,8 +65,8 @@ GRANT SELECT ON _fix TO authenticated;
 
 DO $$
 BEGIN
-  IF (SELECT count(*) FROM _fix WHERE bf1_item IS NULL OR bf2_item IS NULL OR bf3_item IS NULL
-        OR rpc_item IS NULL OR view_item IS NULL OR view_product IS NULL) <> 0
+  IF (SELECT count(*) FROM _fix
+      WHERE rpc_item IS NULL OR view_item IS NULL OR view_product IS NULL) <> 0
     THEN RAISE EXCEPTION 'FIXTURE: tier-test fixtures failed to resolve — run supabase db reset'; END IF;
 END $$;
 
@@ -120,57 +109,8 @@ BEGIN
     THEN RAISE EXCEPTION 'SCHEMA: anon still GRANTed EXECUTE on owns_pricelist_item(uuid)'; END IF;
 END $$;
 
--- ── (2) Backfill semantics — the SHIPPED backfill_bundle_to_tiers(), not a copy ──
--- Runs as the privileged role (all grants on the function are revoked; only a
--- superuser session — migration or this test — may call it). Counts are exact:
--- the migration already ran the backfill before seed, and the seeded AUR-1A
--- bracket is skipped by the idempotency guard (its rung row is seeded), so only
--- this test's three fixtures are candidates.
-DO $$
-DECLARE
-  v_migrated int; v_rescued int; v_migrated2 int;
-BEGIN
-  SELECT migrated, rescued INTO v_migrated, v_rescued FROM public.backfill_bundle_to_tiers();
-  IF v_migrated <> 1
-    THEN RAISE EXCEPTION 'BACKFILL: expected migrated=1 (well-formed fixture), function reported %', v_migrated; END IF;
-  IF v_rescued <> 2
-    THEN RAISE EXCEPTION 'BACKFILL: expected rescued=2 (half-filled + non-discount fixtures), function reported %', v_rescued; END IF;
-
-  -- well-formed bracket → exactly one live rung carrying the bracket's values
-  IF (SELECT count(*) FROM public.pricelist_item_tier t
-      WHERE t.pricelist_item_id = (SELECT bf1_item FROM _fix) AND t.deleted_at IS NULL) <> 1
-    THEN RAISE EXCEPTION 'BACKFILL: well-formed bracket did not become exactly 1 rung'; END IF;
-  IF NOT EXISTS (SELECT 1 FROM public.pricelist_item_tier t
-      WHERE t.pricelist_item_id = (SELECT bf1_item FROM _fix) AND t.deleted_at IS NULL
-        AND t.min_grams = 2000 AND t.price_per_gram = 6.50)
-    THEN RAISE EXCEPTION 'BACKFILL: migrated rung does not carry (2000 g, 6.50)'; END IF;
-  IF (SELECT metadata ? 'legacy_bundle' FROM public.pricelist_item WHERE id = (SELECT bf1_item FROM _fix))
-    THEN RAISE EXCEPTION 'BACKFILL: well-formed bracket was wrongly stamped legacy_bundle'; END IF;
-
-  -- malformed brackets → 0 rungs, rescued into metadata.legacy_bundle
-  IF (SELECT count(*) FROM public.pricelist_item_tier t
-      WHERE t.pricelist_item_id IN (SELECT bf2_item FROM _fix UNION SELECT bf3_item FROM _fix)) <> 0
-    THEN RAISE EXCEPTION 'BACKFILL: a malformed bracket became a rung'; END IF;
-  IF (SELECT metadata->'legacy_bundle' FROM public.pricelist_item WHERE id = (SELECT bf2_item FROM _fix)) IS NULL
-    THEN RAISE EXCEPTION 'BACKFILL: half-filled bracket was not rescued to legacy_bundle'; END IF;
-  IF (SELECT (metadata->'legacy_bundle'->>'threshold')::numeric FROM public.pricelist_item
-      WHERE id = (SELECT bf2_item FROM _fix)) <> 1500
-     OR (SELECT metadata->'legacy_bundle'->>'price' FROM public.pricelist_item
-      WHERE id = (SELECT bf2_item FROM _fix)) IS NOT NULL
-    THEN RAISE EXCEPTION 'BACKFILL: half-filled legacy_bundle payload wrong (want threshold 1500, price null)'; END IF;
-  IF (SELECT metadata->'legacy_bundle' FROM public.pricelist_item WHERE id = (SELECT bf3_item FROM _fix)) IS NULL
-     OR (SELECT (metadata->'legacy_bundle'->>'price')::numeric FROM public.pricelist_item
-      WHERE id = (SELECT bf3_item FROM _fix)) <> 9.00
-    THEN RAISE EXCEPTION 'BACKFILL: non-discount bracket was not rescued to legacy_bundle intact'; END IF;
-
-  -- idempotency: a second run migrates nothing and does not duplicate rungs
-  SELECT migrated INTO v_migrated2 FROM public.backfill_bundle_to_tiers();
-  IF v_migrated2 <> 0
-    THEN RAISE EXCEPTION 'BACKFILL: second run migrated % rows — not idempotent', v_migrated2; END IF;
-  IF (SELECT count(*) FROM public.pricelist_item_tier t
-      WHERE t.pricelist_item_id = (SELECT bf1_item FROM _fix) AND t.deleted_at IS NULL) <> 1
-    THEN RAISE EXCEPTION 'BACKFILL: second run duplicated the migrated rung'; END IF;
-END $$;
+-- ── (2) — RETIRED by Migration C: backfill_bundle_to_tiers() is dropped; its
+--          semantics were proven while E was the live contract. ─────────────
 
 -- ── (3) save_price_ladder — owner writes, shape gate, RLS wall, last-save-wins ──
 SELECT set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', true);
@@ -381,12 +321,8 @@ RESET ROLE;
 UPDATE public.company SET verification_status = 'verified'
   WHERE id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
 
--- ── (5) get_discoverable_shop — dual shape (legacy bundle cols + tiers) + window ──
--- Give the view target a legacy bracket too, so ONE row proves both shapes.
-UPDATE public.pricelist_item
-  SET bundle_threshold_grams = 3000, bundle_price_per_gram = 9.00
-  WHERE id = (SELECT view_item FROM _fix);
-
+-- ── (5) get_discoverable_shop — tiers column + window (post-C: tiers-only,
+--        the legacy bundle OUT columns are gone) ─────────────────────────────
 SELECT set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', true);
 SELECT set_config('request.jwt.claims', '{"sub":"11111111-1111-1111-1111-111111111111","role":"authenticated"}', true);
 SET LOCAL ROLE authenticated;
@@ -400,10 +336,6 @@ BEGIN
     THEN RAISE EXCEPTION 'SHOP: public rung-carrying product missing from get_discoverable_shop'; END IF;
   IF r.tiers IS NULL OR jsonb_array_length(r.tiers) <> 2
     THEN RAISE EXCEPTION 'SHOP: tiers column is not a 2-rung jsonb array: %', r.tiers; END IF;
-  -- dual shape: the legacy bundle columns are still in the OUT row and pass through
-  IF r.bundle_threshold_grams <> 3000 OR r.bundle_price_per_gram <> 9.00
-    THEN RAISE EXCEPTION 'SHOP: legacy bundle columns missing/wrong in dual-shape output (got %, %)',
-      r.bundle_threshold_grams, r.bundle_price_per_gram; END IF;
 END $$;
 RESET ROLE;
 

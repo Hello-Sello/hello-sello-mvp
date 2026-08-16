@@ -1,37 +1,23 @@
 -- ============================================================================
--- ██████████████████████████████████████████████████████████████████████████
--- ██  HELD — Tier ladder Migration C (contract). DO NOT MOVE THIS FILE.   ██
--- ██████████████████████████████████████████████████████████████████████████
---
--- ADR-0004 rev 8 §3 · PRD 0021 · ticket T08.
---
--- This file lives OUTSIDE supabase/migrations/ ON PURPOSE. `supabase db push`
--- applies EVERY file in migrations/ — a prose "don't push C yet" cannot hold
--- it back, so the hold IS the file's location (ADR §3). Moving it early would
--- drop the two bundle columns the pre-tiers app still selects by name
--- (shop.ts's PostgREST select → 400 on every shop read in production).
---
--- Move it into supabase/migrations/ ONLY when ALL THREE hold:
---
---   (a) the tiers-reading app deploy (T03–T07) is verified LIVE on
---       production — not merged, LIVE (Vercel deploy confirmed serving).
---
---   (b) every CREATE OR REPLACE / DROP+CREATE body below — BOTH RPCs AND the
---       view's re-CREATE — has been RE-DIFFED against the LIVE cloud
---       definition (pg_get_functiondef / pg_get_viewdef) at move time. The
---       repo's diff-against-live rule: the hold window is open-ended and
---       cross-lane, so THIS FILE'S TEXT MAY BE STALE by the time it moves.
---       Replacing a function from a stale copy is how the repo once silently
---       lost a verified-caller gate. Never apply unverified.
---
---   (c) it gets a FRESH timestamp filename at move time — a 2026-08-14 stamp
---       would sort before migrations that landed during the hold.
+-- Tier ladder Migration C (contract) — ADR-0004 rev 8 §3 · PRD 0021 · T08.
+-- ----------------------------------------------------------------------------
+-- Held at docs/muskan-build/0021-tier-ladder/contract-migration.sql.hold until
+-- all three move conditions passed (2026-08-16):
+--   (a) tiers-reading app (T03–T07) verified LIVE on production (Vercel deploy
+--       READY `714d738` + Muskan's G5 live walk);
+--   (b) every body below RE-DIFFED against the LIVE cloud definitions
+--       (pg_get_viewdef / pg_get_functiondef) at move time — ZERO drift found:
+--       live == hold-file text except exactly the two documented deltas
+--       (get_discoverable_shop loses the legacy OUT columns + pli2 join;
+--       import_products stops naming the dropped columns in its insert);
+--       only the three handles below reference the columns, no blocking views;
+--   (c) fresh timestamp filename (this file; authored 2026-08-14).
 --
 -- What C does, in order: DROP VIEW → drop the two legacy bundle columns →
 -- re-CREATE the view + re-grants (the view never projected the columns; the
 -- drop/create dance keeps C dependency-proof) → both RPCs re-declared
 -- tiers-only with full grant rituals → drop the one-shot backfill fn.
--- Seed strip + types regen ride the same PR (trailing comment at the bottom).
+-- Seed §6c strip + types regen ride the same PR.
 -- ============================================================================
 
 -- ----------------------------------------------------------------------------
@@ -49,11 +35,11 @@ ALTER TABLE public.pricelist_item DROP COLUMN bundle_threshold_grams;
 ALTER TABLE public.pricelist_item DROP COLUMN bundle_price_per_gram;
 
 -- ----------------------------------------------------------------------------
--- 3. Re-create current_pricelist_item + re-grants. Definition copied from E
---    (20260814120000 §6) — ⚠️ re-diff against the LIVE pg_get_viewdef at move
---    time (hold condition b). Owner-rights (NOT security_invoker) is
---    deliberate (ADR §4); security_definer_view advisor finding is accepted,
---    pre-declared in the ADR. Deliberately NO status_code filter.
+-- 3. Re-create current_pricelist_item + re-grants. Re-diffed against the LIVE
+--    pg_get_viewdef 2026-08-16 (identical). Owner-rights (NOT
+--    security_invoker) is deliberate (ADR §4); the security_definer_view
+--    advisor finding is accepted, pre-declared in the ADR. Deliberately NO
+--    status_code filter.
 -- ----------------------------------------------------------------------------
 CREATE VIEW public.current_pricelist_item
 WITH (security_barrier = true) AS
@@ -88,9 +74,8 @@ REVOKE ALL ON public.current_pricelist_item FROM anon;
 -- ----------------------------------------------------------------------------
 -- 4. get_discoverable_shop — tiers-only. DROP + CREATE (the OUT column list
 --    changes: the two legacy bundle columns are GONE, and with them the pli2
---    join E needed to read them). Base body = E's (20260814120000 §8) —
---    ⚠️ re-diff against the LIVE pg_get_functiondef at move time (hold
---    condition b).
+--    join E needed to read them). Base body re-diffed against the LIVE
+--    pg_get_functiondef 2026-08-16 (identical apart from those deltas).
 -- ----------------------------------------------------------------------------
 drop function if exists public.get_discoverable_shop(uuid);
 
@@ -169,14 +154,13 @@ grant  execute on function public.get_discoverable_shop(uuid) to authenticated;
 revoke execute on function public.get_discoverable_shop(uuid) from anon;
 
 -- ----------------------------------------------------------------------------
--- 5. import_products — stops writing the dropped columns. Base body = E's
---    (20260814120000 §9) — ⚠️ re-diff against the LIVE pg_get_functiondef at
---    move time (hold condition b). Post-C the CSV's single bracket lands as
---    RUNG 1 directly when well-formed (thr > 0, price > 0, price < base);
---    anything malformed with a value present is stamped
---    metadata.legacy_bundle (guard on the EXTRACTED VALUES, not key
---    presence). Only diff from E: the pricelist_item insert no longer names
---    the two dropped columns.
+-- 5. import_products — stops writing the dropped columns. Base body re-diffed
+--    against the LIVE pg_get_functiondef 2026-08-16 (identical apart from the
+--    insert delta). Post-C the CSV's single bracket lands as RUNG 1 directly
+--    when well-formed (thr > 0, price > 0, price < base); anything malformed
+--    with a value present is stamped metadata.legacy_bundle (guard on the
+--    EXTRACTED VALUES, not key presence). Only diff from E: the pricelist_item
+--    insert no longer names the two dropped columns.
 -- ----------------------------------------------------------------------------
 create or replace function public.import_products(p_rows jsonb)
 returns jsonb
@@ -315,15 +299,3 @@ grant execute on function public.import_products(jsonb) to authenticated;
 --    done its job and its body names the dropped columns — retire it.
 -- ----------------------------------------------------------------------------
 DROP FUNCTION public.backfill_bundle_to_tiers();
-
--- ----------------------------------------------------------------------------
--- Ride-alongs — SAME PR as the move of this file (not SQL, listed so the
--- mover can't miss them):
--- * supabase/seed/seed.sql §6c: strip the bundle_threshold_grams /
---   bundle_price_per_gram columns (+ their thr/bpg VALUES) from the
---   pricelist_item seed insert — a fresh `db reset` would otherwise fail on
---   the dropped columns. The §6c-2 AUR-1A rung row STAYS: it is the ladder's
---   demo data.
--- * Regenerate src/types/database.types.ts after apply (two dropped columns
---   + both RPC shapes change).
--- ----------------------------------------------------------------------------
