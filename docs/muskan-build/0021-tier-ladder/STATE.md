@@ -1,6 +1,6 @@
 # 0021 tier-ladder — work order
 lane:   FULL
-stage:  triage ✅ → spec ✅ (G1) → prototype ✅ (G2) → design ✅ (G3) → build T01–T07 ✅ + T08 authored → G4 ✅ → **/ship ✅ (G5, 2026-08-16)** — only migration C (`.hold`) remains → closes HEL-53
+stage:  triage ✅ → spec ✅ (G1) → prototype ✅ (G2) → design ✅ (G3) → build T01–T08 ✅ → G4 ✅ → /ship ✅ (G5) → **migration C LIVE 2026-08-16 — SLUG COMPLETE (close HEL-53)**
 branch: feature/tier-ladder   (cut from origin/dev 337f112, 2026-08-14; merged via PR #158, branch deleted 2026-08-16)
 seed:   "Create 3 price tiers per product with dropdown." — Marcel, verbatim
 
@@ -55,8 +55,13 @@ T07  tests 0/2 · blocking 0/2 · T08  authoring only · G4 rounds 0 (gate not y
   by Muskan) → **13-migration Phase-12 wave applied to prod** (filename order, stamps
   repaired, grants + backfill verified live) → dev→main merged back-to-back, Vercel
   deploy READY (`714d738`) → **Muskan's live walk on prod: fine.** Ledger APPLIED entry
-  written; stale branches cleaned (local+remote). REMAINING for this slug: migration C
-  (re-diff `.hold` vs live at move time, fresh timestamp, push, regen types) closes HEL-53.
+  written; stale branches cleaned (local+remote).
+- Migration C — **LIVE 2026-08-16** (`20260816190000_tier_ladder_contract.sql`, commit
+  `6f4f317`): all bodies re-diffed vs live (zero drift), fresh timestamp, applied + stamp
+  repaired + verified (columns/backfill gone, tiers-only shop RPC, anon blocked, verified
+  gate intact). Ride-alongs: seed strip, post-C tier suite (PASS + race proof), types regen
+  from LOCAL, dead Discover bundle fields removed. Gate: tsc clean · 342 unit · e2e failures
+  A/B-proven pre-existing (auth/keys class, loose end (b)). **Slug complete → HEL-53.**
 
 ## For Muskan — G3 sign-offs bundled in the ADR
 1. Visibility-window tightening: out-of-window products leave Discover entirely (§3.3)

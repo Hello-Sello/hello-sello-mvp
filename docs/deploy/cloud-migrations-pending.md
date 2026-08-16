@@ -81,14 +81,25 @@ Sequence + verification record:
   now would silently DROP the local-only Discover-batch tables from the types. Regen from cloud
   only after the Discover batch ships.
 
-**Still HELD:**
+**✅ Migration C APPLIED 2026-08-16 — `20260816190000_tier_ladder_contract.sql` LIVE on production.**
 
-| — | `contract-migration.sql.hold` | **Migration C (contract) — HELD, file deliberately NOT in `supabase/migrations/`.** Lives at `docs/muskan-build/0021-tier-ladder/contract-migration.sql.hold`. Drops the two bundle columns + re-declares view/RPCs tiers-only + drops the backfill fn. |
-- **Migration C stays HELD until BOTH:** (1) the tiers-reading app deploy (T03–T07) is verified
-  LIVE on production — C drops columns the pre-tiers app selects by name (`shop.ts` PostgREST
-  400); (2) every RPC body + the view re-CREATE in the `.hold` file is **re-diffed against the
-  LIVE cloud definitions at move time** (the file's text may be stale by then — diff-against-live
-  rule). At move time it gets a **fresh timestamp filename**, never its authored date.
+Both hold conditions were met the same day: (1) the tiers-reading app went LIVE via the
+Phase-12/dev→main deploy (`714d738`, G5 walk passed); (2) all three bodies (view,
+`get_discoverable_shop`, `import_products`) re-diffed against the live `pg_get_viewdef` /
+`pg_get_functiondef` — **zero drift**, only the two documented C deltas. Fresh timestamp per
+condition (3); `.hold` file moved into `supabase/migrations/` (git rename). Record:
+- **Verified live post-apply:** both bundle columns gone, `backfill_bundle_to_tiers` gone,
+  `get_discoverable_shop` OUT row tiers-only, anon blocked on view + shop fn,
+  `is_caller_verified()` present in the shop fn body. History stamp repaired to
+  `20260816190000`.
+- **Ride-alongs shipped same commit (`6f4f317`):** seed §6c stripped; tier SQL suite updated to
+  the post-C contract (backfill + dual-shape sections retired) — suite + race proof PASS from a
+  fresh reset; `database.types.ts` regenerated from LOCAL (update_deal_draft nullable-args
+  hand-fix retained); dead `bundle*` fields removed from `src/app/discover/companies.ts`
+  (zero consumers).
+- **Known pre-existing e2e failures (NOT C):** 15 auth/team/email-class tests fail on dev with
+  or without C (A/B-verified on a no-C reset) — the documented `sb_secret_`/GoTrue admin-API
+  deferral (CLAUDE.md loose end (b)). Deals/pricing/tier/discover e2e all pass.
 - ~~**⚠️ PRE-PUSH PRECONDITION**~~ **CLEARED 2026-08-16:** the orphan `20260708155722
   buy_schema` history row was deleted manually by Muskan (see the APPLIED record above).
   Plain `supabase db push` is no longer blocked by it.
