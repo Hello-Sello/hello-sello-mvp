@@ -1,3 +1,42 @@
+# REVIEW — G4 rounds 2–3 (Muskan's visual walk, 2026-08-14 → 16)
+
+Driven entirely by Muskan's Agentation feedback on `/present`; fixes in `3dacd90`
+(round 1's layout fixes were `8fb84d7`).
+
+**⚠️ Prototype DEVIATION (G4 ledger — T05, Muskan's call 2026-08-16):** the
+"See all prices" panel is NO LONGER Variant B's inline expansion. It is a
+**floating popover** — portaled to `document.body`, opening BELOW the
+"See all/Hide prices" link, allowed to poke past the card's bottom edge; it
+follows the link on scroll and closes on Choose / the toggle / outside click /
+Esc. Rationale: the fixed-height (640px) card cannot host the full ladder
+in-flow — three successive fitting attempts (row cap + inner scroll → hiding
+the availability/buy rows while open → shrinking the photo to 140px) each
+either re-clipped at some card width or were rejected on the walk. The
+prototype's "nothing floats over the card" differentiator is superseded by
+this decision; everything else about the panel (row model, tinted applied row,
+Choose semantics) is unchanged. T05's e2e now locates the panel page-wide by
+its `dialog` role ("Volume prices") since it left the card's DOM subtree.
+
+**Other G4 round-2/3 changes (in-prototype-spirit):**
+- **Was/now price (T05 extension, Muskan's ask):** with a rung applied, the
+  base price renders struck-through and muted above the applied price
+  (standard marketplace anchor pattern; sr-only "Base price" label carries it
+  for screen readers).
+- **Edit footer scrolls as a whole** when its content exceeds the card's spare
+  height (replaces round 1's fixed pixel budgeting; the tier editor's inner
+  118px row scroll was removed) — "+ Add tier" is reachable at any row/error
+  count.
+- Spec-list floor relaxed 120px → 80px (the prototype's own value).
+- Panel rows are single-line (`truncate`) — a wrapped label multiplied the row
+  height and re-clipped narrow cards.
+
+**Standing note:** local-DB test data from the walk — PND-CA gained a 3rd tier
+(from 2000g → 4 €/g) + `price_public=true`; cleared by any `supabase db reset`.
+The F-02 cover e2e fails on drifted local DBs (old uploaded images on the first
+card) independent of all of the above.
+
+---
+
 # REVIEW — T01–T07 (build rounds, 2026-08-14)
 
 ## T04 (HEL-49) · T06 (HEL-51) · T07 (HEL-52) — built in parallel
