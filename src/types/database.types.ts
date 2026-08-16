@@ -2677,7 +2677,8 @@ export type Database = {
           id: string
           metadata: Json
           note: string | null
-          receiver_company_id: string
+          receiver_company_id: string | null
+          receiver_person_id: string | null
           sender_company_id: string
           sender_person_id: string
           status: string
@@ -2694,7 +2695,8 @@ export type Database = {
           id?: string
           metadata?: Json
           note?: string | null
-          receiver_company_id: string
+          receiver_company_id?: string | null
+          receiver_person_id?: string | null
           sender_company_id: string
           sender_person_id: string
           status?: string
@@ -2711,7 +2713,8 @@ export type Database = {
           id?: string
           metadata?: Json
           note?: string | null
-          receiver_company_id?: string
+          receiver_company_id?: string | null
+          receiver_person_id?: string | null
           sender_company_id?: string
           sender_person_id?: string
           status?: string
@@ -2745,6 +2748,13 @@ export type Database = {
             columns: ["receiver_company_id"]
             isOneToOne: false
             referencedRelation: "company"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pending_inbox_item_receiver_person_id_fkey"
+            columns: ["receiver_person_id"]
+            isOneToOne: false
+            referencedRelation: "person"
             referencedColumns: ["id"]
           },
           {
@@ -2937,6 +2947,55 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "company"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      person_connection: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          id: string
+          initiated_by_person_id: string
+          person_a_id: string
+          person_b_id: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          initiated_by_person_id: string
+          person_a_id: string
+          person_b_id: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          initiated_by_person_id?: string
+          person_a_id?: string
+          person_b_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "person_connection_initiated_by_person_id_fkey"
+            columns: ["initiated_by_person_id"]
+            isOneToOne: false
+            referencedRelation: "person"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "person_connection_person_a_id_fkey"
+            columns: ["person_a_id"]
+            isOneToOne: false
+            referencedRelation: "person"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "person_connection_person_b_id_fkey"
+            columns: ["person_b_id"]
+            isOneToOne: false
+            referencedRelation: "person"
             referencedColumns: ["id"]
           },
         ]
@@ -4581,6 +4640,7 @@ export type Database = {
       }
     }
     Functions: {
+      accept_person_connection: { Args: { p_item_id: string }; Returns: string }
       approve_company: { Args: { p_company_id: string }; Returns: undefined }
       approve_join_request: {
         Args: { p_request_id: string; p_role?: string }
@@ -4740,6 +4800,7 @@ export type Database = {
       is_caller_verified: { Args: never; Returns: boolean }
       is_group_member: { Args: { p_thread_id: string }; Returns: boolean }
       is_hs_team: { Args: never; Returns: boolean }
+      is_person_connected: { Args: { p_other: string }; Returns: boolean }
       is_relationship_member: { Args: { p_rel_id: string }; Returns: boolean }
       is_workspace_member: { Args: { p_ws_id: string }; Returns: boolean }
       line_seller_company_id: {
@@ -4781,6 +4842,54 @@ export type Database = {
           logo_path: string
           name: string
           type_codes: string[]
+        }[]
+      }
+      list_discoverable_people: {
+        Args: never
+        Returns: {
+          avatar_path: string
+          company_city: string
+          company_country: string
+          company_id: string
+          company_logo_path: string
+          company_name: string
+          connection_state: string
+          display_name: string
+          person_id: string
+          public_handle: string
+          title: string
+          type_codes: string[]
+        }[]
+      }
+      list_incoming_person_requests: {
+        Args: never
+        Returns: {
+          created_at: string
+          item_id: string
+          note: string
+          sender_avatar_path: string
+          sender_company_id: string
+          sender_company_logo_path: string
+          sender_company_name: string
+          sender_display_name: string
+          sender_person_id: string
+          sender_title: string
+        }[]
+      }
+      list_my_person_connections: {
+        Args: never
+        Returns: {
+          avatar_path: string
+          company_city: string
+          company_country: string
+          company_id: string
+          company_logo_path: string
+          company_name: string
+          display_name: string
+          person_id: string
+          public_handle: string
+          thread_id: string
+          title: string
         }[]
       }
       list_pending_join_requests: {
