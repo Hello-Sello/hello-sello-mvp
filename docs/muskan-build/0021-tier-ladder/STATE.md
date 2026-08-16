@@ -1,7 +1,7 @@
 # 0021 tier-ladder — work order
 lane:   FULL
-stage:  triage ✅ → spec ✅ (G1) → prototype ✅ (G2) → design ✅ (G3) → build T01–T07 ✅ + T08 authored (C HELD) → **G4 (next: Muskan's visual walk vs the Variant B prototype + REVIEW.md read)** → then /ship (G5)
-branch: feature/tier-ladder   (cut from origin/dev 337f112, 2026-08-14)
+stage:  triage ✅ → spec ✅ (G1) → prototype ✅ (G2) → design ✅ (G3) → build T01–T07 ✅ + T08 authored → G4 ✅ → **/ship ✅ (G5, 2026-08-16)** — only migration C (`.hold`) remains → closes HEL-53
+branch: feature/tier-ladder   (cut from origin/dev 337f112, 2026-08-14; merged via PR #158, branch deleted 2026-08-16)
 seed:   "Create 3 price tiers per product with dropdown." — Marcel, verbatim
 
 > ⚠️ This slug is ALSO the pipeline's manual dry-run (`docs/agents/DRY-RUN-tier-ladder.md`
@@ -48,16 +48,15 @@ T07  tests 0/2 · blocking 0/2 · T08  authoring only · G4 rounds 0 (gate not y
   (portaled past the fixed card, follows scroll; Muskan's design call — recorded as a
   prototype DEVIATION in REVIEW.md top section). Muskan: "perfect". 2 ARCHITECTURE-NOTES
   entries written (one-price-door + stale-redeclare incident).
-- G5 /ship — **IN PROGRESS 2026-08-16**: rebased onto dev clean → full gate green
+- G5 /ship — **PASSED 2026-08-16**: rebased onto dev clean → full gate green
   (342 unit · 102/102 e2e incl. F-02 on fresh reset · tier SQL + race + BOTH lockdown
   suites · tsc/eslint) → **PR #158 merged to dev** → **migration E LIVE on production**
   (security repair verified; ledger APPLIED entry 2026-08-16; buy_schema orphan cleared
-  by Muskan). **REMAINING:** (1) push the 13-migration Phase-12 status-machine wave
-  (blocked once on the permission classifier — add `mcp__claude_ai_Supabase__apply_migration`
-  to `.claude/settings.local.json` allow first; insurance query already run: 22 cards /
-  5 statuses, vocab migration covers all), (2) **IMMEDIATELY** merge dev→main (the wave
-  revokes old-app status writes — push and deploy must be back-to-back), (3) live walk
-  = the real G5. Then migration C (re-diff `.hold` vs live at move time) closes HEL-53.
+  by Muskan) → **13-migration Phase-12 wave applied to prod** (filename order, stamps
+  repaired, grants + backfill verified live) → dev→main merged back-to-back, Vercel
+  deploy READY (`714d738`) → **Muskan's live walk on prod: fine.** Ledger APPLIED entry
+  written; stale branches cleaned (local+remote). REMAINING for this slug: migration C
+  (re-diff `.hold` vs live at move time, fresh timestamp, push, regen types) closes HEL-53.
 
 ## For Muskan — G3 sign-offs bundled in the ADR
 1. Visibility-window tightening: out-of-window products leave Discover entirely (§3.3)
