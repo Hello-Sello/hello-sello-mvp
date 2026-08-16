@@ -153,4 +153,11 @@ Consumed by Matt Pocock's `grill-with-docs` and `improve-codebase-architecture` 
 | **DB1** | *Deckungsbeitrag 1* / contribution margin 1 — the Buy-page's buyer-side economics metric, mirroring the seller's COGS-margin concept. `DB1 total = (net − wap) × qty`; `DB1/unit = net − wap`; `margin % = DB1 / revenue`. |
 | **Buyer resale price (net / gross)** | The buyer's own price to the end customer/patient, entered per (partner, product) on the Buy Analytics sheet. **v0: fully independent** of the existing per-deal **Private price (per side)** field on `deal_line_item` — no auto-fill or snapshot link between them yet (may unify later via the **Standing agreement vs frozen snapshot** pattern above). |
 
+## Volume pricing — tier ladder (2026-08-14)
+
+| Term | Definition |
+|------|-----------|
+| **Volume tier / rung** | One child row of a price row (`pricelist_item_tier` under `pricelist_item`): *from N g → €/g*. Buying at least `min_grams` unlocks that per-gram price. |
+| **Tier ladder** | A product's ordered set of rungs — prices strictly descend below the base price as `min_grams` rises (DB-enforced by the ladder-shape trigger; up to 3 rungs in the UI, unbounded in schema). The ladder **REPLACES** the old single bundle bracket (`bundle_threshold_grams` / `bundle_price_per_gram`); base price stays on `pricelist_item`. (ADR-0004.) |
+
 *Maintained by `grill-with-docs` (proposes additions during grilling — humans confirm) and direct edits. Add new terms when they're locked in Layer docs or surface during code review.*

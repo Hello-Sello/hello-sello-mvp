@@ -13,6 +13,7 @@
  *              supabase/migrations/20260610130000_deal_party_field.sql  (Phase 1)
  */
 import type { Database } from "@/types/database.types";
+import type { PriceTier } from "@/modules/catalog/index.client";
 
 type Tables = Database["public"]["Tables"];
 
@@ -396,13 +397,15 @@ export interface CatalogProduct {
    * default gram step). Pricing stays per-gram (CARD-02).
    */
   packSizeGrams: number | null;
-  /** pricelist_item.price_per_gram; null when the product has no live price */
+  /** the current base price per gram; null when the product has no live price */
   unitPrice: number | null;
   currency: string;
   thcPercent: number | null;
   cbdPercent: number | null;
   /** local_code_pzn (German PZN) */
   pzn: string | null;
+  /** The product's tier ladder (ADR-0004): [] when no rungs exist. */
+  tiers: PriceTier[];
 }
 
 /**

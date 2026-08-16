@@ -46,6 +46,8 @@ import {
 } from "lucide-react";
 import { averageMarginOf, formatMoney, lineValueOf, sumLineValue } from "../lib/derive";
 import { paymentTermLabel } from "../lib/paymentTerms";
+import { resolveTierPrice, type PriceTier } from "@/modules/catalog/index.client";
+import { tierStateFor } from "../lib/tierHint";
 import { createClient } from "@/shared/db/client";
 import { getOwnCatalog, getPromotion } from "../supabase/reads";
 import { proposeDealChange, updateDealDraft, withdrawDealChange } from "../actions";
@@ -81,6 +83,15 @@ interface EditLine {
    * It is NOT persisted (today's demo is frontend-only).
    */
   units: number;
+  /**
+   * The product's tier ladder + its base €/g (T07, ADR-0004 §4 decision B) -
+   * FRONTEND-ONLY like `units`: they power the applied-rung chip + the
+   * "qualifies" hint and NEVER enter the payload (toDraftLine stays untouched).
+   * Seeded lines carry []/null; the edit view derives their ladder from the
+   * fetched catalog at render instead.
+   */
+  tiers: PriceTier[];
+  basePricePerGram: number | null;
   unitPrice: number | null;
   currency: string;
   cultivar: string | null;
@@ -126,6 +137,8 @@ function seedLines(data: DealCardView): EditLine[] {
     quantity: li.quantity,
     unit: li.unit,
     units: 1,
+    tiers: [],
+    basePricePerGram: null,
     unitPrice: li.unitPrice,
     currency: li.currency,
     cultivar: li.cultivar,
@@ -165,6 +178,8 @@ function seedLinesFromHeld(base: DealCardView): EditLine[] {
       quantity: hl.quantity,
       unit: hl.unit,
       units: 1,
+      tiers: [],
+      basePricePerGram: null,
       unitPrice: hl.unitPrice,
       currency: hl.currency,
       cultivar: match?.cultivar ?? null,
@@ -463,15 +478,22 @@ export function CardFront({
     setEditRowKey((k) => (k === key ? null : k));
   }
   function lineFromCatalog(p: CatalogProduct): EditLine {
+    // T07 (EARS 1): a catalog add lands already priced at its seed quantity -
+    // one pack at units = 1, resolved against the product's tier ladder.
+    const seedQty = p.packSizeGrams ?? 1;
     return {
       key: crypto.randomUUID(),
       lineItemId: null,
       productId: p.id,
       productName: p.name,
-      quantity: p.packSizeGrams ?? 1,
+      quantity: seedQty,
       unit: p.unit,
       units: 1,
-      unitPrice: p.unitPrice,
+      tiers: p.tiers,
+      basePricePerGram: p.unitPrice,
+      unitPrice:
+        resolveTierPrice(p.unitPrice, p.tiers, seedQty, p.unit).pricePerGram ??
+        p.unitPrice,
       currency: p.currency,
       cultivar: p.cultivar,
       pzn: p.pzn,
@@ -609,8 +631,14 @@ export function CardFront({
     }
   }
 
-  async function doSendChange(opts?: { fromExit?: boolean }) {
-    if (createMode || cardId === "new" || sendBusy || lines.length === 0) return;
+  async function doSendChange(opts?: { fromExit?: boolean; linesOverride?: EditLine[] }) {
+    // T07: the tier hint applies a price and sends in ONE click - setLines has
+    // not re-rendered yet, so the click passes the fresh copy as linesOverride
+    // (the stale-state trap). Every `lines` read below goes through `effective`;
+    // rewriteDraftLinePrivate deliberately stays on `lines` (it reads index +
+    // ownInput only, both identical across the override).
+    const effective = opts?.linesOverride ?? lines;
+    if (createMode || cardId === "new" || sendBusy || effective.length === 0) return;
 
     // Which commit path this Send takes (Region C, draftEdit): an 'unsent' draft
     // edits IN PLACE (updateDealDraft); a live deal with no held change proposes;
@@ -637,7 +665,7 @@ export function CardFront({
     const norm = (s: string | null) => (s && s.trim() ? s.trim() : null);
     const shape = (key: string, q: number, u: string, p: number | null) =>
       `${key}|${q}|${u}|${p ?? ""}`;
-    const workingLines = lines
+    const workingLines = effective
       .map((l) => shape(l.productId ?? l.productName.toLowerCase().trim(), l.quantity, l.unit, l.unitPrice))
       .sort()
       .join(",");
@@ -671,7 +699,7 @@ export function CardFront({
     // shape minus the reason (a draft edit is not a negotiation).
     const proposePayload = {
       dealCardId: cardId,
-      lines: lines.map(toDraftLine),
+      lines: effective.map(toDraftLine),
       freeDelivery: editFreeDelivery,
       dueDate: editDueDate || null,
       paymentTermsCode: editPaymentCode || null,
@@ -980,6 +1008,38 @@ export function CardFront({
                           l.unitPrice != null
                             ? `${formatMoney(l.unitPrice, l.currency)}/${l.unit}`
                             : "—";
+                        // T07: live tier state, derived at RENDER (never stored,
+                        // never touching unitPrice - seeded prices are the
+                        // snapshot; only an explicit user action reprices).
+                        // Seeded lines carry no ladder, so fall back to the
+                        // catalog (fetched only when editMode && isSeller -
+                        // buyer + read mode get no chip/hint, silently).
+                        const cat =
+                          editMode && isSeller
+                            ? catalog.find((c) => c.id === l.productId)
+                            : undefined;
+                        const tierLadder = l.tiers.length > 0 ? l.tiers : cat?.tiers ?? [];
+                        const tierBase = l.basePricePerGram ?? cat?.unitPrice ?? null;
+                        const tierState =
+                          tierBase != null && tierLadder.length > 0
+                            ? tierStateFor(tierBase, tierLadder, l.unitPrice, l.quantity, l.unit, l.units)
+                            : null;
+                        // the applied-rung chip (seller edit view, open + closed
+                        // rows - each render site guards isSeller, D-12): only an
+                        // ON-LADDER price gets one - a negotiated off-ladder
+                        // price shows no chip (never a "base price" mislabel).
+                        const tierChip =
+                          tierState?.matchesLadder ? (
+                            tierState.appliedMin != null ? (
+                              <span className="dc-badge-change ml-1.5 inline-block rounded-md px-1.5 py-0.5 text-[8px] font-extrabold">
+                                from {tierState.appliedMin}g applied
+                              </span>
+                            ) : (
+                              <span className="ml-1.5 inline-block rounded-md px-1.5 py-0.5 text-[8px] font-bold text-ink/45 ring-1 ring-black/10">
+                                base price
+                              </span>
+                            )
+                          ) : null;
                         if (editMode && editRowKey === l.key) {
                           /* ---- the OPEN, editable row ---- */
                           return (
@@ -1074,23 +1134,55 @@ export function CardFront({
                               {/* price: SELLER edits; BUYER locked */}
                               <td className="py-1.5 pr-1 text-right">
                                 {isSeller ? (
-                                  <span className="inline-flex items-center gap-0.5">
-                                    <input
-                                      type="number"
-                                      min={0}
-                                      step="0.01"
-                                      value={l.unitPrice ?? ""}
-                                      placeholder="0"
-                                      onChange={(e) =>
-                                        updateLine(l.key, {
-                                          unitPrice:
-                                            e.target.value === "" ? null : Number(e.target.value),
-                                        })
-                                      }
-                                      className="w-12 rounded-md bg-white px-1 py-1 text-right tabular-nums ring-1 ring-black/10 focus:outline-none focus:ring-2 focus:ring-brand/30"
-                                    />
-                                    <span className="text-ink/45">€/{l.unit}</span>
-                                  </span>
+                                  <>
+                                    <span className="inline-flex items-center gap-0.5">
+                                      <input
+                                        type="number"
+                                        min={0}
+                                        step="0.01"
+                                        value={l.unitPrice ?? ""}
+                                        placeholder="0"
+                                        onChange={(e) =>
+                                          updateLine(l.key, {
+                                            unitPrice:
+                                              e.target.value === "" ? null : Number(e.target.value),
+                                          })
+                                        }
+                                        className="w-12 rounded-md bg-white px-1 py-1 text-right tabular-nums ring-1 ring-black/10 focus:outline-none focus:ring-2 focus:ring-brand/30"
+                                      />
+                                      <span className="text-ink/45">€/{l.unit}</span>
+                                    </span>
+                                    {tierChip}
+                                    {/* T07 tier hint (EARS 2): apply-and-send in ONE
+                                        click, riding the existing propose/accept
+                                        funnel via doSendChange - never a direct
+                                        write. Gated on units === 1: `units` never
+                                        enters the payload, so a bulk-resolved
+                                        price would misprice a single-pack line. */}
+                                    {l.units === 1 && tierState?.suggestedPricePerGram != null && (
+                                      <button
+                                        type="button"
+                                        aria-label="Apply tier price"
+                                        disabled={data.pendingChange != null}
+                                        title={
+                                          data.pendingChange != null
+                                            ? "A change is already pending"
+                                            : undefined
+                                        }
+                                        onClick={() => {
+                                          const suggested = tierState.suggestedPricePerGram;
+                                          const next = lines.map((x) =>
+                                            x.key === l.key ? { ...x, unitPrice: suggested } : x,
+                                          );
+                                          setLines(next);
+                                          void doSendChange({ linesOverride: next });
+                                        }}
+                                        className="mt-1 inline-flex items-center rounded-full bg-[color:var(--dc-green-soft)] px-2 py-0.5 text-[10px] font-bold dc-text-green ring-1 ring-[color:var(--dc-green)]/30 transition hover:bg-[color:var(--dc-green)]/20 disabled:cursor-not-allowed disabled:opacity-50"
+                                      >
+                                        Qualifies for {formatMoney(tierState.suggestedPricePerGram, l.currency)}/g — apply
+                                      </button>
+                                    )}
+                                  </>
                                 ) : (
                                   <span className="inline-flex items-center gap-1 tabular-nums text-ink/55">
                                     <Lock className="h-3 w-3" />
@@ -1130,6 +1222,7 @@ export function CardFront({
                             </td>
                             <td className="py-1.5 pr-1 text-right tabular-nums text-ink/80">
                               {priceLabel}
+                              {isSeller && tierChip}
                             </td>
                             <td className="py-1.5 pr-1 text-right font-mono tabular-nums">
                               {totalLabel}

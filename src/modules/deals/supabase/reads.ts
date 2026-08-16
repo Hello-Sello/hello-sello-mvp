@@ -15,6 +15,7 @@
  * product. We fetch only the CURRENT version's lines (deal_card.version).
  */
 import { createClient } from "@/shared/db/client";
+import { readCurrentPrices } from "@/modules/catalog/index.client";
 import { sellerCompanyId, viewerSide, lineTotalOf, lineMarginOf } from "../lib/derive";
 import { promotionSavings } from "../lib/promotion";
 import { otherOf } from "../lib/recipient";
@@ -521,12 +522,15 @@ export async function getPromotion(dealCardId: string): Promise<PromotionView | 
 }
 
 /**
- * The create-form product picker source: the viewer's OWN catalogue (3.5a).
- * RLS limits `product` + `pricelist_item` to the caller's company, so this is
- * always "my products" - which is exactly the seller's catalogue, since the
- * creator of an offer is the seller. A product with no live pricelist item
- * comes back with `unitPrice = null` (a price-less line is allowed, D3).
- * Two flat fetches stitched in JS (same discipline as the other reads).
+ * The create-form product picker source: the viewer's OWN catalogue (3.5a) —
+ * in intent. In reality the product query has no company filter and
+ * `product_public_select` is unscoped, so the picker currently returns EVERY
+ * company's visible products (known issue, Ayush's lane — flagged, not fixed
+ * here); prices/tiers ride along per the current-price view's public arm.
+ * A product with no current price comes back with `unitPrice = null` (a
+ * price-less line is allowed, D3). Two flat fetches stitched in JS (same
+ * discipline as the other reads); prices come from the single owner
+ * (`readCurrentPrices`, ADR-0004 §4).
  */
 export async function getOwnCatalog(): Promise<CatalogProduct[]> {
   const supabase = createClient();
@@ -540,30 +544,22 @@ export async function getOwnCatalog(): Promise<CatalogProduct[]> {
   const rows = products ?? [];
   if (rows.length === 0) return [];
 
-  const { data: items, error: iErr } = await supabase
-    .from("pricelist_item")
-    .select("product_id, price_per_gram, currency")
-    .in(
-      "product_id",
-      rows.map((p) => p.id),
-    )
-    .is("deleted_at", null);
-  if (iErr) throw iErr;
-  const priceBy = new Map((items ?? []).map((i) => [i.product_id, i] as const));
+  const prices = await readCurrentPrices(supabase, rows.map((p) => p.id));
 
   return rows.map((p) => {
-    const item = priceBy.get(p.id);
+    const price = prices.get(p.id);
     return {
       id: p.id,
       name: p.name,
       cultivar: p.cultivar,
       unit: p.unit_code,
       packSizeGrams: p.pack_size_grams != null ? Number(p.pack_size_grams) : null,
-      unitPrice: item ? Number(item.price_per_gram) : null,
-      currency: item?.currency ?? "EUR",
+      unitPrice: price?.pricePerGram ?? null,
+      currency: price?.currency ?? "EUR",
       thcPercent: p.thc_percent,
       cbdPercent: p.cbd_percent,
       pzn: p.local_code_pzn,
+      tiers: price?.tiers ?? [],
     };
   });
 }

@@ -4,11 +4,16 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Minus, Plus, Trash2, FileText } from "lucide-react";
 import { useBasket } from "../BasketProvider";
-import { updateBasketLinePackCount, removeBasketLine } from "../supabase/writes";
+import {
+  updateBasketLinePackCount,
+  updateBasketLinePackSize,
+  removeBasketLine,
+} from "../supabase/writes";
 import { createBasketDraft } from "../actions";
 import { RecipientPicker } from "./RecipientPicker";
-import { dealChatUrl, getMyDraftDeals, type DraftDealRow } from "@/modules/deals";
-import type { BasketGroup } from "../types";
+import { dealChatUrl, formatMoney, getMyDraftDeals, type DraftDealRow } from "@/modules/deals";
+import { resolveBasketLine, type ResolvedBasketLine } from "../lib/pack";
+import type { BasketGroup, BasketLine } from "../types";
 
 /**
  * The compact dropdown that replaced the full-height slide-in drawer (locked
@@ -196,6 +201,12 @@ function Group({
   // Mirrors DecisionBar.run(): a local error line so a failed birth surfaces in
   // the panel instead of vanishing into an unhandled rejection (WR-06).
   const [error, setError] = useState<string | null>(null);
+  // Per-line fail nonces for the pack-size editor: a SERVER-rejected write
+  // leaves the stored value unchanged, so the input's remount key would not
+  // change and the rejected value would sit in the DOM (a silent lie). Bumping
+  // the line's nonce in the catch rides into the input's key → it snaps back
+  // to the stored value alongside the error line.
+  const [packSizeFails, setPackSizeFails] = useState<Record<string, number>>({});
 
   // Births the PRIVATE draft (status 'unsent'), then lands the viewer on the
   // born card - the drawer never sends (D-12: delivery is send_deal's alone,
@@ -237,29 +248,31 @@ function Group({
       </div>
 
       {group.lines.map((l) => (
-        <div key={l.id} className="flex items-center gap-2 py-1.5">
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[13px] font-semibold text-ink">{l.productName}</p>
-            <p className="text-[10px] text-ink/50">
-              {[l.cultivar, l.packSizeGrams ? `${l.packSizeGrams}g pack` : null].filter(Boolean).join(" · ")}
-            </p>
-          </div>
-          <div className="flex items-center rounded-full bg-white shadow-[inset_0_0_0_1px_rgba(20,10,16,0.15)]">
-            <button aria-label="Decrease" className="grid h-6 w-6 place-items-center text-brand-deep"
-              onClick={async () => { await updateBasketLinePackCount(l.id, Math.max(1, l.packCount - 1)); await onChanged(); }}>
-              <Minus size={12} />
-            </button>
-            <span className="min-w-8 text-center text-[11px] font-bold tabular-nums">{l.packCount}</span>
-            <button aria-label="Increase" className="grid h-6 w-6 place-items-center text-brand-deep"
-              onClick={async () => { await updateBasketLinePackCount(l.id, l.packCount + 1); await onChanged(); }}>
-              <Plus size={12} />
-            </button>
-          </div>
-          <button aria-label="Remove" className="text-ink/40 hover:text-rose-600"
-            onClick={async () => { await removeBasketLine(l.id); await onChanged(); }}>
-            <Trash2 size={14} />
-          </button>
-        </div>
+        <BasketLineRow
+          key={l.id}
+          line={l}
+          resolved={resolveBasketLine(l)}
+          onPackCountChange={async (packCount) => {
+            await updateBasketLinePackCount(l.id, packCount);
+            await onChanged();
+          }}
+          packSizeResetNonce={packSizeFails[l.id] ?? 0}
+          onPackSizeCommit={async (grams) => {
+            // Amendment 3: the writer throws (like the pack-count writer); a
+            // failed edit surfaces on the group's existing error line.
+            try {
+              await updateBasketLinePackSize(l.id, grams);
+              await onChanged();
+            } catch (e) {
+              setError(e instanceof Error ? e.message : "Something went wrong.");
+              setPackSizeFails((m) => ({ ...m, [l.id]: (m[l.id] ?? 0) + 1 }));
+            }
+          }}
+          onRemove={async () => {
+            await removeBasketLine(l.id);
+            await onChanged();
+          }}
+        />
       ))}
 
       {group.isOwnCompany && (
@@ -277,6 +290,126 @@ function Group({
       >
         <FileText size={13} /> Create a draft deal
       </button>
+    </div>
+  );
+}
+
+/**
+ * One basket line: name, the grams/pack-size editor (decision A), the resolved
+ * price note + tier chip, the pack-count stepper, and remove. PRESENTATIONAL
+ * ONLY (PLAN-T06 amendment 1) — props in, callbacks out, no hooks, no supabase;
+ * every number comes from the `resolved` prop (`resolveBasketLine`), so this
+ * component does NO price math and the render contract stays testable under
+ * `renderToStaticMarkup`.
+ *
+ * The pack-size input is uncontrolled (`defaultValue`, keyed on the stored
+ * value so a committed edit re-mounts it fresh): Enter blurs, blur commits.
+ * Invalid input (empty/NaN/≤0) reverts to the stored value without a write.
+ * `packSizeResetNonce` rides into the same key: the owner bumps it when a
+ * write FAILS server-side (stored value unchanged → key otherwise static), so
+ * the input snaps back instead of silently showing the rejected value.
+ */
+export function BasketLineRow({
+  line,
+  resolved,
+  packSizeResetNonce = 0,
+  onPackCountChange,
+  onPackSizeCommit,
+  onRemove,
+}: {
+  line: BasketLine;
+  resolved: ResolvedBasketLine;
+  packSizeResetNonce?: number;
+  onPackCountChange: (packCount: number) => void;
+  onPackSizeCommit: (grams: number) => void;
+  onRemove: () => void;
+}) {
+  const stored = line.packSizeGrams;
+
+  function commitPackSize(e: React.FocusEvent<HTMLInputElement>) {
+    const parsed = Number(e.currentTarget.value.trim().replace(",", "."));
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      e.currentTarget.value = stored == null ? "" : String(stored);
+      return;
+    }
+    if (parsed === stored) return;
+    onPackSizeCommit(parsed);
+  }
+
+  return (
+    <div className="py-1.5">
+      <div className="flex items-center gap-2">
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[13px] font-semibold text-ink">{line.productName}</p>
+          <p className="flex items-center gap-1 text-[10px] text-ink/50">
+            {line.cultivar && <span className="truncate">{line.cultivar} ·</span>}
+            <input
+              key={`${stored ?? "unset"}:${packSizeResetNonce}`}
+              type="text"
+              inputMode="decimal"
+              aria-label="Pack size in grams"
+              defaultValue={stored ?? ""}
+              placeholder="g"
+              className="w-14 rounded border border-ink/15 bg-white px-1 py-px text-[10px] tabular-nums text-ink"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") e.currentTarget.blur();
+              }}
+              onBlur={commitPackSize}
+            />
+            <span className="shrink-0">g pack</span>
+          </p>
+        </div>
+        <div className="flex items-center rounded-full bg-white shadow-[inset_0_0_0_1px_rgba(20,10,16,0.15)]">
+          <button aria-label="Decrease" className="grid h-6 w-6 place-items-center text-brand-deep"
+            onClick={() => onPackCountChange(Math.max(1, line.packCount - 1))}>
+            <Minus size={12} />
+          </button>
+          <span className="min-w-8 text-center text-[11px] font-bold tabular-nums">{line.packCount}</span>
+          <button aria-label="Increase" className="grid h-6 w-6 place-items-center text-brand-deep"
+            onClick={() => onPackCountChange(line.packCount + 1)}>
+            <Plus size={12} />
+          </button>
+        </div>
+        <button aria-label="Remove" className="text-ink/40 hover:text-rose-600" onClick={onRemove}>
+          <Trash2 size={14} />
+        </button>
+      </div>
+
+      {resolved.pricePerGram != null && (
+        <p className="mt-1 flex items-center justify-end gap-1.5 text-right text-[10px] tabular-nums text-ink/60">
+          <span>
+            {resolved.grams != null ? (
+              <>
+                {line.packCount} × {line.packSizeGrams}g = <strong>{resolved.grams}g</strong>
+              </>
+            ) : (
+              <>
+                {line.packCount} {line.unit}
+              </>
+            )}
+            {" at "}
+            <strong>{formatMoney(resolved.pricePerGram, line.currency)}/g</strong>
+            {resolved.lineTotal != null && (
+              <>
+                {" → "}
+                <strong>{formatMoney(resolved.lineTotal, line.currency)}</strong>
+              </>
+            )}
+          </span>
+          {resolved.appliedMin != null ? (
+            <span
+              className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold"
+              style={{ color: "#1d7a1c", background: "rgba(52,178,51,.12)" }}
+            >
+              from {resolved.appliedMin}g applied
+            </span>
+          ) : line.tiers.length > 0 ? (
+            <span className="shrink-0 rounded-full bg-ink/10 px-2 py-0.5 text-[10px] font-semibold text-ink/50">
+              base price
+            </span>
+          ) : null}
+        </p>
+      )}
     </div>
   );
 }

@@ -404,10 +404,19 @@ select '3fe179d5-c0e7-4eff-9726-f707c04572f9'::uuid, 'aaaaaaaa-aaaa-aaaa-aaaa-aa
        'Standard', 'published', 'EUR', now(), '11111111-1111-1111-1111-111111111111'
 where not exists (select 1 from public.pricelist where id = '3fe179d5-c0e7-4eff-9726-f707c04572f9');
 
--- 6c) pricelist items (price per gram) → the picker shows live prices
-insert into public.pricelist_item (pricelist_id, product_id, price_per_gram, currency)
-select '3fe179d5-c0e7-4eff-9726-f707c04572f9'::uuid, p.id, v.price, 'EUR'
-from (values ('AUR-1A', 8.00),('AUR-1B', 6.00),('AUR-1C', 4.00),('AUR-1D', 5.00)) as v(code, price)
+-- 6c) pricelist items (price per gram) → the picker shows live prices.
+--     AUR-1A also carries a well-formed legacy bundle bracket (2000 g → 6.50,
+--     below its 8.00 base) so the legacy dual-shape path stays demo-walkable
+--     (tier-ladder Migration E, 20260814120000).
+insert into public.pricelist_item (pricelist_id, product_id, price_per_gram,
+                                   bundle_threshold_grams, bundle_price_per_gram, currency)
+select '3fe179d5-c0e7-4eff-9726-f707c04572f9'::uuid, p.id, v.price, v.thr, v.bpg, 'EUR'
+from (values
+  ('AUR-1A', 8.00, 2000::numeric, 6.50::numeric),
+  ('AUR-1B', 6.00, null,          null),
+  ('AUR-1C', 4.00, null,          null),
+  ('AUR-1D', 5.00, null,          null)
+) as v(code, price, thr, bpg)
 join public.product p
   on p.company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid
  and p.supplier_product_code = v.code and p.deleted_at is null
@@ -415,6 +424,22 @@ where not exists (
   select 1 from public.pricelist_item pi
   where pi.pricelist_id = '3fe179d5-c0e7-4eff-9726-f707c04572f9'::uuid and pi.product_id = p.id and pi.deleted_at is null
 );
+
+-- 6c-2) AUR-1A's demo tier rung (2000 g → 6.50, mirrors its bracket) so the
+--       ladder is visible on a fresh reset. Guarded on "no live rungs yet";
+--       6.50 < 8.00 base satisfies the ladder-shape trigger.
+insert into public.pricelist_item_tier (pricelist_item_id, min_grams, price_per_gram)
+select pi.id, 2000, 6.50
+from public.pricelist_item pi
+join public.product p on p.id = pi.product_id
+where pi.pricelist_id = '3fe179d5-c0e7-4eff-9726-f707c04572f9'::uuid
+  and p.company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid
+  and p.supplier_product_code = 'AUR-1A'
+  and p.deleted_at is null and pi.deleted_at is null
+  and not exists (
+    select 1 from public.pricelist_item_tier t
+    where t.pricelist_item_id = pi.id and t.deleted_at is null
+  );
 
 -- ----------------------------------------------------------------------------
 -- 7. GreenLeaf demo batches (BTCH-01 / Phase 3f) — each of the 4 products gets

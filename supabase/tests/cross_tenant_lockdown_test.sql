@@ -68,6 +68,10 @@ BEGIN
     IF (SELECT count(*) FROM product_image) <> 0
       THEN RAISE EXCEPTION 'LEAK: anon read % product_image rows', (SELECT count(*) FROM product_image); END IF;
   EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN
+    IF (SELECT count(*) FROM pricelist_item_tier) <> 0
+      THEN RAISE EXCEPTION 'LEAK: anon read % pricelist_item_tier rows', (SELECT count(*) FROM pricelist_item_tier); END IF;
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
 
   -- grant door (tables): anon must hold no SELECT privilege
   IF has_table_privilege('anon', 'public.product', 'SELECT')
@@ -76,6 +80,10 @@ BEGIN
     THEN RAISE EXCEPTION 'LEAK: anon still GRANTed SELECT on pricelist_item'; END IF;
   IF has_table_privilege('anon', 'public.product_image', 'SELECT')
     THEN RAISE EXCEPTION 'LEAK: anon still GRANTed SELECT on product_image'; END IF;
+  IF has_table_privilege('anon', 'public.pricelist_item_tier', 'SELECT')
+    THEN RAISE EXCEPTION 'LEAK: anon still GRANTed SELECT on pricelist_item_tier'; END IF;
+  IF has_table_privilege('anon', 'public.current_pricelist_item', 'SELECT')
+    THEN RAISE EXCEPTION 'LEAK: anon still GRANTed SELECT on current_pricelist_item'; END IF;
 
   -- grant door (RPCs, GAP-1): anon must hold no EXECUTE on the Discover RPCs
   IF has_function_privilege('anon', 'public.list_discoverable_companies()', 'EXECUTE')
@@ -84,6 +92,8 @@ BEGIN
     THEN RAISE EXCEPTION 'LEAK: anon still GRANTed EXECUTE on get_discoverable_company(uuid)'; END IF;
   IF has_function_privilege('anon', 'public.get_discoverable_shop(uuid)', 'EXECUTE')
     THEN RAISE EXCEPTION 'LEAK: anon still GRANTed EXECUTE on get_discoverable_shop(uuid)'; END IF;
+  IF has_function_privilege('anon', 'public.save_price_ladder(uuid,numeric,jsonb)', 'EXECUTE')
+    THEN RAISE EXCEPTION 'LEAK: anon still GRANTed EXECUTE on save_price_ladder(uuid,numeric,jsonb)'; END IF;
 END $$;
 RESET ROLE;
 

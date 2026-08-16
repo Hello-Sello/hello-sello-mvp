@@ -21,6 +21,11 @@ import type { TablesUpdate } from "@/types/database.types";
 import { isAllowedVideoUrl } from "./mediaLinks";
 import { DOMINANCE_CODES, IRRADIATION_CODES } from "./template";
 import { validateLocations } from "./locations";
+import {
+  ladderErrorMessage, lookupStandardPriceRow, readCurrentPrices, savePriceLadder,
+} from "./pricelist";
+import { validateTiers } from "./ladderDraft";
+import type { PriceTier } from "./pricing";
 
 export type ManageResult = { ok: true } | { error: string };
 
@@ -312,10 +317,10 @@ export async function setProductLocation(
 // it here on the ONE pink Save. Each action is session-scoped (RLS on product /
 // product_batch / pricelist_item), takes no companyId param, and never touches
 // cost/COGS. Numerics are validated before persist (T-07-17); price is routed to
-// the product's standard pricelist_item (the row getMyShop reads).
+// the product's standard price row — the one the current-price view resolves.
 
 /** The product fields the card edits inline. `price_per_gram` is routed to the
- *  pricelist_item (not the product); the rest land on the product row. Omitted
+ *  standard price row (not the product); the rest land on the product row. Omitted
  *  keys are left unchanged; cost/COGS is deliberately not representable here.
  *  F-05 adds the other spec-row fields (Cluster F): free text (cultivator,
  *  origin, region, lineage, packaging, supplier code), enum codes (dominance,
@@ -427,11 +432,14 @@ export async function updateProductFields(
   return { ok: true };
 }
 
-/** Route a public price to the product's standard pricelist_item.price_per_gram —
- *  the row getMyShop reads. Update the existing (oldest live) item, else create one
- *  under the company's standard pricelist, mirroring the import_products RPC
- *  (reuse the oldest live pricelist, else insert a fresh 'Standard'). price_per_gram
- *  is NOT NULL, so a null price is a no-op — hide a price via price_public=false. */
+/** Route a public price to the product's standard price row — the one the
+ *  current-price view resolves (`lookupStandardPriceRow`), so the write target
+ *  is always the row every read surfaces. No live row → create one under the
+ *  company's standard pricelist, mirroring the import_products RPC (reuse the
+ *  oldest live pricelist, else insert a fresh 'Standard'). price_per_gram is
+ *  NOT NULL, so a null price is a no-op — hide a price via price_public=false.
+ *  A base edit under a ladder can trip the DB shape trigger; its rejection is
+ *  surfaced through `ladderErrorMessage`. */
 async function writeStandardPrice(
   supabase: Db,
   companyId: string,
@@ -441,21 +449,39 @@ async function writeStandardPrice(
   if (price === null) return { ok: true };
   if (!Number.isFinite(price) || price < 0) return { error: "Invalid price." };
 
-  const { data: existing } = await supabase
-    .from("pricelist_item")
-    .select("id")
-    .eq("product_id", productId)
-    .is("deleted_at", null)
-    .order("created_at", { ascending: true })
-    .limit(1);
-  const itemId = existing?.[0]?.id;
+  const itemId = await lookupStandardPriceRow(supabase, productId);
   if (itemId) {
     const { error } = await supabase
       .from("pricelist_item")
       .update({ price_per_gram: price })
       .eq("id", itemId);
-    return error ? { error: error.message } : { ok: true };
+    return error ? { error: ladderErrorMessage(error.message) } : { ok: true };
   }
+
+  return createStandardPriceRow(supabase, companyId, productId, price);
+}
+
+/** Create the product's standard price row under the company's standard
+ *  pricelist (reuse the oldest live one, else insert a fresh 'Standard'),
+ *  mirroring the import_products RPC. The insert never reads the new row back —
+ *  a caller that needs its id RE-looks it up via lookupStandardPriceRow, the
+ *  one id authority (the read guard bans selecting the table directly). */
+async function createStandardPriceRow(
+  supabase: Db,
+  companyId: string,
+  productId: string,
+  price: number,
+): Promise<ManageResult> {
+  // Ownership gate: RLS scopes the PRICELIST side to the caller, but nothing
+  // else ties the caller-supplied productId to their company — without this
+  // check a caller could attach a price row (under their own pricelist) to
+  // another tenant's product. Both write doors share this helper, so both get it.
+  const { data: product } = await supabase
+    .from("product")
+    .select("company_id")
+    .eq("id", productId)
+    .single();
+  if (!product || product.company_id !== companyId) return { error: "Product not found." };
 
   const { data: lists } = await supabase
     .from("pricelist")
@@ -488,6 +514,58 @@ async function writeStandardPrice(
     currency: "EUR",
   });
   return error ? { error: error.message } : { ok: true };
+}
+
+/**
+ * The ONE server door for a product's base price + tier ladder (0021, T04).
+ * Auth via the session company; `validateTiers` re-checked server-side (the
+ * client mirror can be bypassed — the DB trigger stays the real enforcement);
+ * the write target resolves via `lookupStandardPriceRow`, creating the standard
+ * row when absent and RE-looking-up for its id; the write itself is the atomic
+ * `save_price_ladder` RPC (`savePriceLadder`). Clearing a ladder on an unpriced
+ * product is a `{ ok: true }` no-op — never fail a Save for clearing nothing.
+ */
+export async function saveLadder(
+  productId: string,
+  base: number | null,
+  tiers: PriceTier[],
+): Promise<ManageResult> {
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) return { error: "No company in session." };
+
+  const shapeError = validateTiers(tiers, base);
+  if (shapeError) return { error: shapeError };
+  if (base !== null && (!Number.isFinite(base) || base < 0)) return { error: "Invalid price." };
+
+  const supabase = await createClient();
+  let itemId = await lookupStandardPriceRow(supabase, productId);
+
+  // A blank price field means "base UNCHANGED", never "unset": resolve it from
+  // the live row so a rung save/clear on a priced product still commits with
+  // the base it already has. Only when no base exists ANYWHERE do we refuse
+  // rungs — and treat an empty ladder as a no-op (clearing a ladder on an
+  // unpriced product must never fail a Save).
+  let writeBase = base;
+  if (writeBase === null && itemId !== null) {
+    const prices = await readCurrentPrices(supabase, [productId]);
+    writeBase = prices.get(productId)?.pricePerGram ?? null;
+  }
+  if (writeBase === null) {
+    if (tiers.length > 0) return { error: "Set a base price first." };
+    return { ok: true };
+  }
+
+  if (itemId === null) {
+    const created = await createStandardPriceRow(supabase, companyId, productId, writeBase);
+    if ("error" in created) return created;
+    itemId = await lookupStandardPriceRow(supabase, productId);
+    if (itemId === null) return { error: "Price row could not be created." };
+  }
+
+  const res = await savePriceLadder(supabase, itemId, writeBase, tiers);
+  if ("error" in res) return res;
+  revalidatePath("/present");
+  return res;
 }
 
 /** A new lot to add to a product (measured CoA values only — no cost). */
