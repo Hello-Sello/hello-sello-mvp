@@ -55,38 +55,43 @@ harmless `erase-expired-accounts` 3am cron. Details in the 2026-07-07 APPLIED en
 
 ---
 
-## ⚠️ PENDING (2026-08-14, Muskan) — tier-ladder batch: 1 migration to push + 1 HELD
+## ✅ APPLIED 2026-08-16 — tier-ladder Migration E (1 migration; Migration C still HELD below)
 
-| # | Migration file | What it does |
-|---|----------------|--------------|
-| 1 | `20260814120000_tier_ladder_expand.sql` | **Migration E (expand), ADR-0004.** New `pricelist_item_tier` child table (volume-tier rungs) + RLS doors + ladder-shape triggers + `save_price_ladder` RPC + `current_pricelist_item` view + one-shot bundle→tier backfill + dual-shape `get_discoverable_shop` (DROP+CREATE) and `import_products` re-declares. Additive — legacy bundle columns untouched. |
+**`20260814120000_tier_ladder_expand.sql` is LIVE on production** (applied 2026-08-16 via
+`mcp apply_migration`, file content byte-diffed against the local file before sending; history row
+repaired from the call-time stamp to `20260814120000` per the 2026-07-22 reconcile convention).
+Sequence + verification record:
+
+1. **Precondition cleared by Muskan (manual, 2026-08-16):** the orphan `20260708155722 buy_schema`
+   history row deleted (history-table-only; verified gone — 115 rows remained, none matching).
+2. **Diff-against-live honored** for all 3 function re-declares before apply:
+   `list_discoverable_companies` = live body verbatim + exactly the restored
+   `is_caller_verified()` predicate + full 3-statement grant ritual; `import_products` = live
+   body + the documented dual-write only; `get_discoverable_shop` = DROP+CREATE off the live
+   sec01 base (+ view join, visibility window, tiers — all G3-signed).
+3. **Post-apply verification (all green):** the 🚨 security repair is CONFIRMED live —
+   `list_discoverable_companies()` body now contains `is_caller_verified()`, anon has NO
+   EXECUTE on it, anon has NO SELECT on `pricelist_item_tier`, RLS enabled on the tier table.
+   Backfill: **0 migrated / 0 rescued** (production had no bundle brackets set — clean no-op).
+4. **Advisors:** exactly 1 ERROR — `security_definer_view` on `current_pricelist_item`,
+   **pre-declared and accepted in ADR-0004 §4** (owner-rights view is the design) — plus the
+   same 126 benign WARNs as every prior batch.
+- **Types: NO cloud regen needed (supersedes the earlier note).** `database.types.ts` already
+  carries the tier table/view shapes (regenerated from LOCAL in T01); regenerating from cloud
+  now would silently DROP the local-only Discover-batch tables from the types. Regen from cloud
+  only after the Discover batch ships.
+
+**Still HELD:**
+
 | — | `contract-migration.sql.hold` | **Migration C (contract) — HELD, file deliberately NOT in `supabase/migrations/`.** Lives at `docs/muskan-build/0021-tier-ladder/contract-migration.sql.hold`. Drops the two bundle columns + re-declares view/RPCs tiers-only + drops the backfill fn. |
-
-- **🚨 URGENT — E also repairs a LIVE security defect:** `list_discoverable_companies()` on
-  production is missing its verified-caller gate (`is_caller_verified()` — sec01 added it,
-  `20260617150000` re-declared from a pre-sec01 copy and silently dropped it; `20260618120100`
-  carried the gap forward AND re-opened the anon EXECUTE door). An UNVERIFIED authenticated
-  caller can browse the whole verified directory **until E is pushed**. E restores the body
-  gate + re-issues the full 3-statement grant ritual.
-- **Regenerate `database.types.ts` from cloud after the E push** (new table/view/RPC shapes).
 - **Migration C stays HELD until BOTH:** (1) the tiers-reading app deploy (T03–T07) is verified
   LIVE on production — C drops columns the pre-tiers app selects by name (`shop.ts` PostgREST
   400); (2) every RPC body + the view re-CREATE in the `.hold` file is **re-diffed against the
   LIVE cloud definitions at move time** (the file's text may be stale by then — diff-against-live
   rule). At move time it gets a **fresh timestamp filename**, never its authored date.
-- **⚠️ PRE-PUSH PRECONDITION (blocks ANY `db push`, E included):** the cloud history still
-  carries the orphan `20260708155722 buy_schema` row — no local file exists (stripped in
-  session 64; its tables were already dropped by `20260716120000_drop_buy_orphaned_tables`).
-  Verified still present 2026-08-14 via MCP. A plain `supabase db push` fails on it
-  ("remote migration version not found locally") until the row is removed:
-
-  ```sql
-  delete from supabase_migrations.schema_migrations where version = '20260708155722';
-  ```
-
-  History-table-only, no schema/data change. **Run manually, with Muskan's explicit go** —
-  an automated attempt on 2026-08-14 was permission-blocked (correctly; this is a
-  human-gated production write).
+- ~~**⚠️ PRE-PUSH PRECONDITION**~~ **CLEARED 2026-08-16:** the orphan `20260708155722
+  buy_schema` history row was deleted manually by Muskan (see the APPLIED record above).
+  Plain `supabase db push` is no longer blocked by it.
 
 ---
 
