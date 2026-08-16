@@ -1504,8 +1504,6 @@ One product's pricing on a pricelist.
 | `pricelist_id` | UUID | NOT NULL, REFERENCES `pricelist(id)` | |
 | `product_id` | UUID | NOT NULL, REFERENCES `product(id)` | |
 | `price_per_gram` | NUMERIC(15, 4) | NOT NULL | "Basic Price / g" |
-| `bundle_threshold_grams` | NUMERIC(12, 2) | NULL | **Legacy** single bracket — superseded by `pricelist_item_tier` (ADR-0004); remains until Migration C (held) |
-| `bundle_price_per_gram` | NUMERIC(15, 4) | NULL | **Legacy** single bracket — superseded by `pricelist_item_tier` (ADR-0004); remains until Migration C (held) |
 | `currency` | CHAR(3) | NOT NULL DEFAULT `'EUR'` | Matches `pricelist.currency` |
 | `metadata` | JSONB | NOT NULL DEFAULT `'{}'` | |
 | `created_by` | UUID | NULL, REFERENCES `person(id)` | |

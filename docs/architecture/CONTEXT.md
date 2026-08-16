@@ -106,7 +106,7 @@ Consumed by Matt Pocock's `grill-with-docs` and `improve-codebase-architecture` 
 | **PZN (Pharmazentralnummer)** | German national pharmacy product number — the `local_code_pzn`. |
 | **Irradiation** | Sterilisation treatment of cannabis flower (beta / gamma / un-irradiated). |
 | **Buyer product code** | The buyer's *own* internal code for a supplier's product — **per-buyer** (relationship-scoped), not shared on the product master. |
-| **Pricelist / Pricelist item** | A supplier's standard company-wide price list (header) + its per-product price rows (basic + bundle). v0 = one standard list per company; per-customer override deferred. |
+| **Pricelist / Pricelist item** | A supplier's standard company-wide price list (header) + its per-product price rows (base price + tier ladder). v0 = one standard list per company; per-customer override deferred. |
 
 ## Deal change flow (2026-06-16)
 
