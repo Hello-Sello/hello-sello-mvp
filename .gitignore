@@ -37,7 +37,9 @@ CLAUDE.md
 .claude/worktrees/
 
 # Personal parallel-worktree coordination (per-engineer; never committed)
-.claude/hooks/
+.claude/hooks/*
+!.claude/hooks/state-advance.sh
+!.claude/hooks/shared-file-lock.sh
 .worktreeinclude
 
 # Product-thinking workspace - now shared with the team (build-plans, pov, notes, prototypes)

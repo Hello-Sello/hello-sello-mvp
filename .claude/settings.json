@@ -7,5 +7,28 @@
   },
   "worktree": {
     "baseRef": "head"
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/state-advance.sh"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/shared-file-lock.sh"
+          }
+        ]
+      }
+    ]
   }
 }
