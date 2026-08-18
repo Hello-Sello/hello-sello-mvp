@@ -834,9 +834,13 @@ memory.
 
 ## 13. Build order
 
-1. **Hooks** — independent of everything, some already exist. `STATE.md`-advance and
-   shared-file-lock first.
-2. **The reviewers** — `critic`, `security`, `consistency`. Highest evidence of any piece
+> **Status 2026-08-18: steps 1–8 are ALL BUILT** — 5 skills (`.claude/skills/`), 11 agents
+> (`.claude/agents/`), 3 hooks + the ask-rule gate (`.claude/hooks/`, `settings.json`).
+> The first real slug through the front door is the proving run.
+
+1. **Hooks** ✅ — `state-advance` · `shared-file-lock` (dormant) · `lane-vs-diff` +
+   the ask-rule prod gate.
+2. **The reviewers** ✅ — `critic`, `security`, `consistency`. Highest evidence of any piece
    here: a reviewer agent has already been observed catching an implementer breaking a rule
    that was written in `CLAUDE.md`, and `consistency` is R7's #6 — the blind spot Muskan
    cannot self-serve, with its inputs already written (`.planning/codebase/`, R8).
@@ -844,15 +848,15 @@ memory.
    class, including a live production defect **and** a cross-tenant insert at T04);
    `consistency` produced T02's only blocking finding (camelCase vs snake `pack_size_grams`).
    Build all three — none is on watch.
-3. **`test-writer` + `test-runner`** — spec-not-code is the second-highest-value idea.
-4. **`visual-verifier` + G4** — the gate that would have caught session 69, and R5's
+3. **`test-writer` + `test-runner`** ✅ — spec-not-code is the second-highest-value idea.
+4. **`visual-verifier` + G4** ✅ — the gate that would have caught session 69, and R5's
    "self-verifying visual prototype loop" (high value, low cost — Playwright is already in
    the repo).
-5. **`/triage` + `STATE.md`** — cheap, and everything reads it.
-6. **`/spec`, `/design`, `/build`, `plan-checker`, `adr-checker`** — the front half.
+5. **`/triage` + `STATE.md`** ✅ — cheap, and everything reads it.
+6. **`/spec`, `/design`, `/build`, `plan-checker`, `adr-checker`** ✅ — the front half.
    Slowest to get right.
-7. **`/ship`** deploy + live verify — closes the loop.
-8. **`rollup`** — the eleventh agent. Before a slug can close, a **fresh context** reads its
+7. **`/ship`** ✅ deploy + live verify — closes the loop.
+8. **`rollup`** ✅ — the eleventh agent. Before a slug can close, a **fresh context** reads its
    `REVIEW.md` + `STATE.md` and writes the per-stage verdicts **quoting them.** Cheap to
    build, and the dry-run proved it is not optional — it is the only reason two agents were
    not wrongly cut. See §16.
