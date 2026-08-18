@@ -1,11 +1,15 @@
 # Build Pipeline — how work gets done
 
-> **Status: DESIGN FINAL (2026-08-14). Nothing built yet — the manual dry-run comes first.**
+> **Status: DESIGN FINAL (2026-08-14) · DRY-RUN COMPLETE (2026-08-16) · verdict GO — what remains is building the Tier 1 files.**
 >
-> Four rounds of CTO critique + a research-conformance pass applied. What remains before any code: run the whole thing
-> **manually, by hand, on one real ticket.** If the manual pass does not visibly beat how
-> you would have done it anyway, the design is wrong — and you find out in a day instead
-> of a month.
+> Four rounds of CTO critique + a research-conformance pass, and then the whole pipeline was
+> run **manually, by hand, on one real feature** — the tier ladder (`0021`), triage through
+> live contract migration on production. Every stage and every gate was exercised. It beat
+> the unaided baseline, so the design stands, with the amendments the run forced written
+> into §5, §9, §10, §11 and §13 below.
+>
+> Record: [`DRY-RUN-tier-ladder.md`](./DRY-RUN-tier-ladder.md) — per-stage keep/cut/change
+> table, the seven checker rounds, the predictions-vs-outcome comparison.
 >
 > Diagram: [`pipeline.svg`](./pipeline.svg) — two levels: the five blocks, then what runs
 > inside each.
@@ -32,7 +36,7 @@ distance from one gate to the next and does not stop in between.
 | `/prototype <slug>` | read the spec → build 2–3 variants → you pick | 🚦 **G2** *(frontend only)* |
 | `/design <slug>` | `researcher` (approaches) → ADR + invariants → `adr-checker` → breakdown → tickets | 🚦 **G3** |
 | `/build <ticket>` | plan → `plan-checker` → `test-writer` → `builder` → `test-runner` → reviewers → `visual-verifier` | 🚦 **G4** |
-| `/ship <slug>` | **rebase onto `dev`** → re-run the suite → PR → merge → deploy → walk the criteria on the live URL | 🚦 **G5** |
+| `/ship <slug>` | **rebase onto `dev`** → re-run the suite → PR → merge → deploy → walk the criteria on the live URL · **stops for a human-granted allow rule when the wave writes prod data** (§9) | 🚦 **G5** |
 | `/diagnose <bug>` | reproduce → write the failing regression test | *hands to `/build`* |
 
 A FULL feature is **five or six things you type**, not eight. `/build` alone replaces four
@@ -245,6 +249,26 @@ asks three things nothing else asks:
 Its output is short — *agree / disagree / what I would push back on* — in plain English, on
 top of the ADR. **It does not replace your gate. It feeds it.**
 
+**The nine categories it must sweep — derived from the dry-run, not invented.** The three
+questions above are the *shape* of the review; these are its *surface*. One pass is not one
+perspective, so the agent's prompt enumerates them as an explicit checklist:
+
+| # | Category | What it actually catches |
+|---|---|---|
+| 1 | **Citation truth** | A claim attributed to a file or line that the file does not say |
+| 2 | **Security doors** | RLS enabled · policies present · grants · `anon` · `SECURITY DEFINER` re-grants |
+| 3 | **Postgres semantics** | Every statement quoted verbatim actually does what the ADR claims it does |
+| 4 | **Deploy-window + ops-ritual reality** | Migration order, same-deploy rules, what is live versus local |
+| 5 | **Call-site truth** | **Writers, not just readers** — and quantities actually present in the code |
+| 6 | **Cross-ADR contradictions** | Via `ADR-INDEX.md` — the accumulating-corpus problem |
+| 7 | **Data loss at migrations** | What a `DROP` / `UPDATE` / backfill destroys that nothing restores |
+| 8 | **Enforceability of every invariant** | An invariant nothing can enforce is a wish, not an invariant |
+| 9 | **Unit / null contracts** | Grams versus packs, nullable versus absent — where two functions disagree |
+
+Category 2 has the best observed record: it produced the reinstated `is_caller_verified()`
+arm *and* surfaced a live production defect (`list_discoverable_companies` had lost its
+verified gate). Category 5 is why reader-only reviews miss writers.
+
 > **Dry-run verdict (2026-08-16): `adr-checker` is promoted Tier 2 → Tier 1.** On the
 > tier-ladder ADR (0021) it ran 7 genuinely fresh separate-context rounds and caught ~70
 > findings across security / schema / deploy-ordering / cross-ADR classes — never
@@ -263,6 +287,11 @@ top of the ADR. **It does not replace your gate. It feeds it.**
 3. **Fixes carry a simplification bias.** Prefer removing a mechanism over adding one. The
    single round that made the ADR *worse* was the one revision that answered a finding by
    adding a new RPC instead of deleting the problem (rev 6's hole, removed in rev 7).
+4. **Its output is claims to spot-verify, not verdicts.** Round 5 overturned two of the
+   checker's own earlier findings — the round-2 *"policies silently inert"* rationale was
+   wrong (an `rls_auto_enable` event trigger exists, `ARCHITECTURE-NOTES:231`), and a rev-4
+   blast-radius flag described a change that could not happen. **Checkers err; only repo
+   evidence settles it.** Tier 1 buys this agent a seat at the gate, not the last word.
 
 **It reads an index, not every ADR.** "Read every ADR we have ever written" is fine at 3 and
 useless at 40 — and question 3 gets *harder* as the corpus grows, which is backwards. So
@@ -476,10 +505,10 @@ should be the checker roles."* A checker runs once, returns a verdict, and dies.
 compound.
 
 But the count still gets earned, not assumed: **the agents are tiered in §13.** Tier 1 has
-independent evidence behind it today. Tier 2 is hypothesis — each of those agents exists
-because of an argument, not an observed catch. **The manual dry-run is the trial:** any
-Tier 2 agent that catches nothing a Tier 1 agent or Muskan would have caught gets cut
-before it is ever built.
+independent observed evidence. Tier 2 started as hypothesis — an argument rather than an
+observed catch. **The manual dry-run was the trial, and it has run:** any Tier 2 agent that
+catches nothing a Tier 1 agent or Muskan would have caught gets cut before it is ever built.
+Two are still on watch rather than cut — see the tiering table in §13.
 
 > **Dry-run result (2026-08-16):** `adr-checker` passed the trial and is **Tier 1** — ~70
 > observed catches across 7 fresh-context rounds on the tier-ladder ADR, including classes
@@ -645,6 +674,20 @@ instead of verifying your branch and hoping the world stays still. The window wh
 else's work can slip in shrinks from "however long the PR sits" to "however long the merge
 takes".
 
+### G5 has a hard stop the design did not predict: prod data-writes
+
+Found in the dry-run. Additive DDL applied autonomously without friction. The vocab
+migration — which `UPDATE`s production rows and `DELETE`s lookup rows — was **blocked by the
+permission classifier**, and self-editing `settings.local.json` to unblock it was blocked
+too. **Both refusals were correct.**
+
+> **A wave that writes production data cannot be applied autonomously.** `/ship` classifies
+> the wave first — additive DDL versus data-write — and where it writes data it stops and
+> asks Muskan to grant the `apply_migration` allow rule, or to run the SQL herself.
+
+Budget this as a **scheduled stop, not a failure.** The dry-run's 13-migration wave paused
+here for one session and then finished in a single pass once the rule was granted.
+
 If the merge still lands on something tested — it happens — G4 fires again, **capped at 2
 rounds.** Then it stops and escalates rather than looping.
 
@@ -671,7 +714,7 @@ going red once will make `/build` escalate to you over a naming nit.
 | Finding marked `note` | written to `REVIEW.md`, surfaced at G4 | **never retried** |
 | Builder rejects a finding | written to `REVIEW.md`, **you** adjudicate at G4 | **costs no attempt** |
 | Either budget blown | **you**, with the disagreement in `blocked.md` | — |
-| G4 says it does not match | back into `/build` — **a new round: both counters reset**, `G4 rounds` +1 | **`G4 rounds` 2**, then STOP |
+| G4 says it does not match | back into `/build` — **a new round: both counters reset**, `G4 rounds` +1 | **`G4 rounds` 2**, then STOP — *one named exception below* |
 | The approach itself was wrong | re-open G3, rewrite the ADR | — |
 
 `G4 rounds` was a counter with no limit, which is how `/ship` could bounce forever: merge →
@@ -683,6 +726,23 @@ down *what it thinks is wrong with the instruction* and hands it over.
 
 `/build` must never refuse to start because a previous round's counters are spent. A
 re-entry after G4 is new work, not a continuation.
+
+### The one named exception — redesign at the gate
+
+The cap counts **iterative fixing.** It does not count the human deciding the approach
+itself is wrong.
+
+On the tier ladder, G4 ran **three** rounds and that was correct. Rounds 1–2 were fixes.
+Round 3 established that three successive in-card fitting attempts — row cap plus scroll,
+hiding buy rows while open, shrinking the photo — had each failed or been rejected on the
+walk: the fixed-height card cannot host the ladder in flow. Muskan designed the replacement
+herself, a floating popover portaled to body, recorded as a prototype DEVIATION in
+`REVIEW.md`.
+
+> **G4 is where the human redesigns, not just approves.** When a round produces a *new
+> design* rather than another fix, it does not consume the budget — log it as a DEVIATION
+> and continue. The cap exists to stop a fix-loop spinning, not to stop Muskan changing the
+> design.
 
 The counter lives in `STATE.md`. In conversation it is worthless: one context reset and it
 silently returns to zero, which is the exact loop it exists to stop.
@@ -698,6 +758,7 @@ silently returns to zero, which is the exact loop it exists to stop.
 | **Shared-file lock** | Editing a file locked in the other engineer's sync |
 | **Invariant lint rules** | Whatever `/design` sorted into the mechanical bucket — import boundaries first |
 | Supabase MCP schema guard | DDL via MCP with no committed `.sql` — already happened once (`get_public_profile`, R8) |
+| **Prod data-write gate** | `apply_migration` carrying `UPDATE` / `DELETE` / `INSERT` against production → **block, require a human-granted allow rule.** Observed in the dry-run; a skill may **not** self-grant it by editing `settings.local.json` |
 | Destructive command guard | `reset --hard`, `checkout .`, `clean -fd`, `git add -u/.`, `rm -rf` |
 | Module boundary | `@/modules/X/internals` imported from module Y |
 | **Stale-map** | A new directory in `src/modules/` absent from `src/README.md` → flag. **Six modules documented, twelve exist today** (R8) — docs drifting from code is observed, not hypothetical |
@@ -716,7 +777,7 @@ lane whether or not he adopts any of this. Your sync ritual, as a hook, not a me
 |---|---|
 | **G4 — serialised on you being at a screen** | The agent hands you **one page** with everything on it, never a conversation |
 | **G1 — the spec interview is human-paced** | Accept it. Cheapest place to be slow |
-| **Cloud migrations wait on Ayush** — 13 pending today | Nothing here fixes it. Name it in every plan that depends on one |
+| **Prod data-write waves stop for a human** | Observed, not hypothetical: the classifier blocks `apply_migration` on data writes, and blocks self-granting the rule. Plan it into `/ship` as a scheduled stop (§9) |
 | **Review throughput, not build throughput** | Batch G4 across tickets |
 
 ---
@@ -729,6 +790,9 @@ lane whether or not he adopts any of this. Your sync ritual, as a hook, not a me
    here: a reviewer agent has already been observed catching an implementer breaking a rule
    that was written in `CLAUDE.md`, and `consistency` is R7's #6 — the blind spot Muskan
    cannot self-serve, with its inputs already written (`.planning/codebase/`, R8).
+   **The dry-run split them:** `security` won its headline bet (the verified-gate class,
+   including a live production defect); `consistency` recorded no catch on that slug. Build
+   `critic` + `security` first, `consistency` on watch.
 3. **`test-writer` + `test-runner`** — spec-not-code is the second-highest-value idea.
 4. **`visual-verifier` + G4** — the gate that would have caught session 69, and R5's
    "self-verifying visual prototype loop" (high value, low cost — Playwright is already in
@@ -738,22 +802,45 @@ lane whether or not he adopts any of this. Your sync ritual, as a hook, not a me
    Slowest to get right.
 7. **`/ship`** deploy + live verify — closes the loop.
 
-**Steps 1–5 are Tier 1 — evidence-backed today.** Steps 6–7's checker agents
-(`plan-checker`, `adr-checker`, `researcher`-as-custom-agent) are **Tier 2 — hypotheses.**
-Each exists because of an argument, not an observed catch. The dry-run decides: a Tier 2
-agent that catches nothing Muskan or a Tier 1 agent would have caught gets cut before it
-is built. That is the "smallest graph" rule applied to our own roster, not just to GSD's.
+**Tiering after the dry-run — this is now results, not hypotheses.**
 
-**Before any of it: the manual dry-run.** Candidate ticket — the **Discover cloud-migration
-batch**. It exercises the security reviewer, the crossing-into-Ayush's-lane hook, and the
-live verification gate at once.
+| Piece | Tier | Evidence |
+|---|---|---|
+| Steps 1–5 — hooks · reviewers · `test-writer`/`test-runner` · `visual-verifier` + G4 · `/triage` | **Tier 1** | Evidence-backed before the dry-run, unchanged by it |
+| `adr-checker` | **Tier 1 — promoted** | ~70 catches over 7 fresh-context rounds, in classes nothing else caught |
+| `researcher` | **Tier 1 — kept, humbled** | Its headline prediction was a wrong target and Muskan overruled it. The human-overrule path is part of the design, and it worked |
+| `plan-checker` | **Tier 2 — on watch** | Its predicted catch was pre-empted at design time; no decisive independent catch across T01–T08. Not cut — watched on the next slugs |
+| `consistency` | **Tier 2 — watch** | Its evidence is R7, not this slug: no separately recorded catch (the tier editor grew inside `ProductCard`'s existing patterns). No evidence either way |
+
+The rule that produced this table still governs the next slug: **an agent that catches
+nothing Muskan or a Tier 1 agent would have caught gets cut before it is built.** That is
+the "smallest graph" rule applied to our own roster, not just to GSD's.
+
+**The manual dry-run is DONE — 2026-08-16. Verdict: GO.** It ran on the **tier ladder
+(`0021`)**, not the Discover batch: a real feature carried triage → spec → prototype →
+design → eight tickets built → ship → live contract migration on production. Predictions
+were written down before the run and compared afterwards, per the rule that governed it:
 
 > **Write down what you expect the pipeline to catch — before you start.** Then compare.
 > If it catches nothing you would not have caught yourself, that is the signal to **cut
 > stages, not add them.**
 
-This is the only honest way to test a process. Everything above is a hypothesis until that
-comparison exists.
+That comparison exists now — [`DRY-RUN-tier-ladder.md`](./DRY-RUN-tier-ladder.md) — and two
+of its findings changed this document: the prod data-write gate (§9, §11) and the G4
+redesign exception (§10).
+
+**What is actually next: build the Tier 1 set as real skill, agent and hook files.**
+
+1. `/triage` + `STATE.md`
+2. `/spec` and `/design`, with `adr-checker` under its **four** locked rules and the
+   nine-category checklist (§5)
+3. `test-writer` + `test-runner`
+4. `visual-verifier` + G4
+5. `/ship` — carrying the diff-against-live protocol **and** the prod data-write
+   permission stop
+
+**Do not build `plan-checker` or `consistency` as agents yet.** Both are Tier 2 on watch;
+they earn a build on the next slugs or they get cut.
 
 ---
 
