@@ -565,6 +565,13 @@ confidently wrong `critic` makes `builder` introduce a real bug to satisfy it.
 
 Never silent compliance. Never silent dismissal. Both are how a review theatre forms.
 
+> **⚠️ Both mechanisms are unproven.** Across the dry-run's eight tickets, `builder`
+> rejections numbered **zero** — every blocking finding was accepted and fixed — and no
+> ticket ever blew a budget (all landed 0/2 or 1/2). So the right-to-reject and §10's
+> escalation path have **no observed evidence either way.** They are still the right shape
+> on the argument above; they are simply not yet evidence-backed, and this document should
+> not pretend otherwise.
+
 ---
 
 ## 8. Two mechanics that make the chain actually run
@@ -809,6 +816,9 @@ memory.
 6. **`/spec`, `/design`, `/build`, `plan-checker`, `adr-checker`** — the front half.
    Slowest to get right.
 7. **`/ship`** deploy + live verify — closes the loop.
+8. **The roll-up.** Before a slug can close, read its `REVIEW.md` + `STATE.md` and write the
+   per-stage verdicts **from those artifacts, quoting them.** Cheap to build, and the dry-run
+   proved it is not optional — see §16.
 
 **Tiering after the dry-run — this is now results, not hypotheses.**
 
@@ -817,8 +827,8 @@ memory.
 | Steps 1–5 — hooks · reviewers · `test-writer`/`test-runner` · `visual-verifier` + G4 · `/triage` | **Tier 1** | Evidence-backed before the dry-run, unchanged by it |
 | `adr-checker` | **Tier 1 — promoted** | ~70 catches over 7 fresh-context rounds, in classes nothing else caught |
 | `researcher` | **Tier 1 — kept, humbled** | Its headline prediction was a wrong target and Muskan overruled it. The human-overrule path is part of the design, and it worked |
-| `plan-checker` | **Tier 2 — on watch** | Its predicted catch was pre-empted at design time; no decisive independent catch across T01–T08. Not cut — watched on the next slugs |
-| `consistency` | **Tier 2 — watch** | Its evidence is R7, not this slug: no separately recorded catch (the tier editor grew inside `ProductCard`'s existing patterns). No evidence either way |
+| `plan-checker` | **Tier 1 — promoted** | REVISE on all three plans it ran on. Headline catch: the backfill's `NOT(a AND b AND c)` excluded the main malformed case from the rescue path — a prod data-correctness bug caught before any code existed |
+| `consistency` | **Tier 1 — promoted** | T02's one and only blocking finding was its: camelCase `packSizeGrams` vs the real snake `pack_size_grams`, which would have forced two hand-built adapters |
 
 The rule that produced this table still governs the next slug: **an agent that catches
 nothing Muskan or a Tier 1 agent would have caught gets cut before it is built.** That is
@@ -847,8 +857,10 @@ redesign exception (§10).
 5. `/ship` — carrying the diff-against-live protocol **and** the prod data-write
    permission stop
 
-**Do not build `plan-checker` or `consistency` as agents yet.** Both are Tier 2 on watch;
-they earn a build on the next slugs or they get cut.
+**Build `plan-checker` and `consistency` too — both were promoted on 2026-08-18.** An
+earlier reading of this dry-run marked them Tier 2 on watch; re-reading the slug's own
+`REVIEW.md` showed both had decisive recorded catches. **All ten agents are now Tier 1 or
+better-evidenced than when this document was designed** — nothing on the roster gets cut.
 
 ---
 
@@ -871,7 +883,39 @@ they earn a build on the next slugs or they get cut.
 - **A skill orchestrates; agents work.** Autonomy is fewer commands, not fewer checks.
 - **The writer is never the checker.** Enforced by `tools:`, not by asking.
 - **Every step writes a file.** Artifacts survive compaction; conversations do not.
+- **Every file gets read back.** Writing evidence nobody reads is how a verdict comes out
+  wrong while sounding confident — see §16.
 - **Tests come from the spec, not the code.** The code may be wrong. The spec is right.
 - **Gates go where mistakes get expensive**, and each is priced so you know what a no costs.
+- **A checker's output is claims to spot-verify, not verdicts.** Checkers err too.
 - **Prompts are 98%, hooks are 100%.**
 - **Smallest graph that improves quality.** Draw it before automating it.
+
+---
+
+## 16. The roll-up — the step the dry-run proved was missing
+
+**The failure, stated plainly.** The dry-run slug wrote ten artifacts, all correct, all
+committed: `STATE.md`, `TICKETS.md`, seven plans, and a 14 KB `REVIEW.md` attributing every
+build finding to the agent that made it. Then the per-stage verdicts were written **from
+memory**, and two came out wrong — `plan-checker` and `consistency` were both recorded as
+having caught nothing decisive, when `REVIEW.md` showed each had. Both were nearly cut.
+
+**Every stage in this pipeline writes. No stage read anything back.**
+
+> **The rule: a slug cannot close until its own artifacts have been read back.** `/ship`'s
+> last act is to open that slug's `REVIEW.md` and `STATE.md` and write the per-stage verdicts
+> **from them, quoting them** — agent name, finding, file, line. A verdict with no quotation
+> behind it is not a verdict.
+
+Three things make this cheap rather than ceremonial:
+
+| Requirement | Why |
+|---|---|
+| **Attribute every finding to an agent at the time it is written** | `REVIEW.md` already does this (*"(consistency)"*, *"(critic, migration:192)"*) — and that attribution is the only reason the two wrong verdicts were recoverable at all |
+| **Score each agent twice: did its prediction land, and did it catch anything decisive** | Collapsing these into one column is exactly what hid two Tier 1 agents. A prediction can miss while the agent still earns its place |
+| **Record what got *no* workout** | `builder` rejections and the budget-blow path fired zero times across eight tickets. "No evidence either way" is a real result and must be written down as one, not left blank |
+
+**This is also the honest limit of the whole design.** The pipeline is very good at generating
+evidence. Until step 8 exists, it has no memory of its own findings — which means it cannot
+improve itself, which was the entire purpose of running the dry-run. Build it early.

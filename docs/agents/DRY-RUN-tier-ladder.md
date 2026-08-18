@@ -1,5 +1,28 @@
 # Dry run — the tier ladder
 
+> ## ✅ COMPLETE — 2026-08-16. Verdict: **GO**, with nine amendments.
+>
+> The pipeline in [`PIPELINE.md`](./PIPELINE.md) was walked by hand, end to end, on one real
+> feature — the tier ladder (`0021`) — from triage through a live contract migration on
+> production. Every stage and every gate ran. The feature shipped.
+>
+> **Reviewer's guide.** Read [§ What the dry run changed](#what-the-dry-run-changed--nine-amendments)
+> first; it is the whole point of the exercise. Everything below it is the evidence that
+> produced it, in the order it happened. The per-stage keep/cut/change verdicts are in
+> [§ Stage verdicts](#stage-verdicts--keep-cut-or-change).
+>
+> **Where the rest of the evidence lives.** This file is the *process* record. The
+> engineering record for the same slug is in `docs/muskan-build/0021-tier-ladder/` — in
+> particular **`REVIEW.md`** (all four build rounds + the G4 walk, with every finding
+> attributed to the agent that made it) and **`STATE.md`** (the work order, budgets spent,
+> and the full gate log). **Two verdicts in this file were revised on 2026-08-18 after
+> reading `REVIEW.md` properly** — see amendment A1.
+>
+> **What is NOT here.** No code. The feature's code shipped via PR #158; the ADR is
+> `docs/architecture/adr/0004-tier-ladder.md` (rev 8).
+
+---
+
 > **What this is.** The build pipeline in `PIPELINE.md` is design-final and **nothing has
 > been built.** Before writing a single skill or agent, we run the whole pipeline **by
 > hand** on one real ticket, playing every role ourselves.
@@ -14,6 +37,76 @@
 > design — untested. The tier ladder is FULL-lane and hits every stage.
 >
 > **Sealed:** 2026-08-14, before any stage was walked.
+
+---
+
+## What the dry run changed — nine amendments
+
+*Written 2026-08-18, after reading the slug's own `REVIEW.md` end to end. This is what a
+reviewer should argue with.*
+
+### The finding that nearly cost us the others
+
+**A1 — the pipeline has no roll-up step, and that is how two verdicts came out wrong.**
+
+Every stage wrote its artifact in the right place. The slug produced **ten files** —
+`STATE.md`, `TICKETS.md`, seven `PLAN-T0N.md`, and a 14 KB `REVIEW.md` carrying every build
+finding attributed to the agent that made it. All committed. Nothing was lost.
+
+But **nothing in the pipeline reads them back.** The stage verdicts in this document were
+written from memory at the end of the run, and two of them contradict `REVIEW.md`:
+
+| Verdict as first written | What `REVIEW.md` actually records |
+|---|---|
+| `plan-checker` — *"no decisive independent catch recorded T01–T08"* → Tier 2 | **REVISE on all three plans it ran on.** T01: the backfill's `NOT(a AND b AND c)` excluded half-filled brackets — *the main malformed case* — from the rescue path. A data-correctness bug in a production backfill, caught before a line of code existed. Also forced the backfill into a test-callable function so pgTAP proves the real statement, and forced a two-session race proof. T02: `packSizes` must read both size sources *"or every index-based pick shifts."* T03: three tsc breaks, a guard-regex false trip, and the real behavior changes named instead of *"keeps behavior"* |
+| `consistency` — *"no separately recorded catch… no evidence either way"* → watch | **T02's one and only blocking finding was its.** camelCase `packSizeGrams` vs the real snake `pack_size_grams` — *"would have forced both T05 call sites into hand-built adapter objects."* Exactly the invent-and-patch class the agent exists for |
+
+**The fix — a roll-up is a pipeline step, not a good intention.** Before a slug can close,
+`/ship` reads that slug's `REVIEW.md` + `STATE.md` and writes the per-stage verdicts **from
+the artifacts, quoting them.** A verdict written from memory is not evidence, and this run
+proves it can be flatly wrong while sounding confident.
+
+**A2 — score an agent on what it caught, not on whether its prediction landed.**
+
+Both mis-scored agents had their *sealed prediction* pre-empted — `plan-checker`'s missed
+call sites (`template.ts`, `get_discoverable_shop`) were already in the ADR, and
+`consistency`'s `LotRow` reuse happened by itself. Scoring stopped there. But an agent whose
+prediction misses can still earn its place on a different catch, and both did. **The
+scorecard needs two independent questions:** did the prediction land, *and* did the agent
+catch anything decisive at all. One column could not express that, so it hid two Tier 1
+agents.
+
+### Tier changes
+
+| Agent | Was | Now | On what evidence |
+|---|---|---|---|
+| `adr-checker` | Tier 2 (hypothesis) | **Tier 1** | ~70 findings over 7 fresh-context rounds; classes nothing else caught (cross-ADR, deploy-ordering, and a security hole one of its own fix revisions introduced) |
+| `plan-checker` | Tier 2 → *"on watch"* | **Tier 1 — revised A1** | 3-for-3 REVISE with substantive catches, incl. the backfill NULL-logic hole |
+| `consistency` | *"no evidence either way"* | **Tier 1 — revised A1** | T02's only blocking finding, in its own class |
+| `security` | Tier 1 | **Tier 1, headline bet won** | The verified-gate class reinstated `is_caller_verified()`, surfaced a **live production defect** (`list_discoverable_companies` had lost its gate), and in T04 caught a create-branch that could insert a `pricelist_item` against **another company's product** |
+| `researcher` | Tier 1 | **Tier 1, humbled** | Its headline prediction was a wrong target; Muskan overruled it. The human-overrule path is part of the design and it worked |
+
+### New rules the run forced
+
+| # | Amendment | Where it now lives |
+|---|---|---|
+| **A3** | `adr-checker` runs a **9-category checklist** (citation truth · security doors · Postgres semantics · deploy-window reality · call-site truth incl. *writers* · cross-ADR · data loss · invariant enforceability · unit/null contracts) under **four** locked rules — fresh context every round · 2-round budget stopping on zero *new* blockers · simplification bias on fixes · **its output is claims to spot-verify, not verdicts** (round 5 overturned two of its own earlier findings) | `PIPELINE.md` §5 |
+| **A4** | **Production data-writes cannot be applied autonomously.** The permission classifier correctly blocked `apply_migration` on a migration that `UPDATE`s and `DELETE`s prod rows, and correctly blocked self-granting the rule. `/ship` classifies the wave first and stops for a human-granted allow rule. Budget it as a *scheduled* stop | `PIPELINE.md` §9, §11 |
+| **A5** | **G4's 2-round cap has one named exception: redesign.** G4 ran three rounds here and that was right — round 3 established that the fixed-height card cannot host the ladder in flow, and Muskan designed the replacement herself. A round that produces a *new design* rather than another fix does not consume the budget; it is logged as a DEVIATION | `PIPELINE.md` §10 |
+| **A6** | **A standalone prototype cannot prove fit inside the real container.** G2 approved Variant B, and the constraint that later forced a redesign — the card's fixed 640px height — was invisible to a prototype living on its own page. Either G2 includes a fit check against the real component, or G4 must expect redesign rather than treat it as failure | *open — see §14 candidate* |
+| **A7** | **Two mechanisms shipped untested. Do not claim they work.** `builder` rejections across the whole slug: **none** — every blocking finding was accepted. And no ticket ever blew a budget (all 0/2 or 1/2). So §7's right-to-reject and §10's escalation path have **zero** observed evidence either way | *flagged here; unchanged in `PIPELINE.md`* |
+
+### What the run confirms about the design as a whole
+
+The shape held. Gates caught things in the order the design predicted they would, and the
+one gate that did not exist before this design (**G4**) is the one that produced the
+feature's biggest change — a redesign no automated stage would ever have proposed. The
+`security` reviewer's headline bet won outright, including a live production defect that had
+been sitting on prod undetected. Tests-first held: every ticket ran 0/2 on its test budget.
+
+**The honest weakness is not a stage — it is the absence of a feedback loop.** The pipeline
+is very good at producing evidence and had no step that reads it. A1 is the fix, and it is
+the amendment most worth a reviewer's attention.
 
 ---
 
@@ -43,18 +136,25 @@ was applied.
 
 ## Sealed predictions — what the pipeline will catch
 
-| # | Stage | Predicted catch | Would Muskan have caught it? |
-|---|---|---|---|
-| 1 | triage | Migration ⇒ **FULL** lane, not TRIVIAL. "Price tier" is also a concept absent from `CONTEXT.md` | *(fill after)* |
-| 2 | `/spec` G1 | Ambiguities: does the ladder **replace** `bundle_*` or sit beside it? `>=` or `>` at the threshold? Does the buyer see all rungs or only reachable ones? | |
-| 3 | `researcher` | ~~Phase 15 (per-customer pricing) already claims `pricelist.relationship_id` — the tier table must not collide with it~~ **WRONG TARGET — overruled by Muskan, see stage log** | No — she caught the pipeline, not the reverse |
-| 4 | `/prototype` G2 | The "See all prices" reveal gets eyeballed **before** it is built — session 69's lesson | |
-| 5 | `/design` G3 ADR | The real invariant: rungs non-overlapping, ascending `min_grams`, exactly one base price. Enforced in the **DB** or the app? | |
-| 6 | `plan-checker` | The plan misses call sites. `template.ts` (CSV import) and the `get_discoverable_shop` RPC are the two easiest to forget | |
-| 7 | **`security`** | The new table needs RLS **and** the `price_public` gate mirrored in `get_discoverable_shop()`. Miss it ⇒ any verified user reads a rival's tier pricing | |
-| 8 | `consistency` | The tier editor should reuse the `LotRow` pattern at `ProductCard.tsx:878`, not invent a new one | |
-| 9 | `test-writer` | Resolver boundary cases: exactly at a threshold, below the lowest rung, above the highest | |
-| 10 | `/ship` G5 | This makes **14** cloud-pending migrations, not 13 | |
+*Scored 2026-08-18 against `REVIEW.md` and `STATE.md`. Predictions themselves are unedited
+per rule 1 — only the empty scoring column is filled. Read the two columns independently:
+**a prediction can miss while the stage still earns its keep** (see amendment A2).*
+
+| # | Stage | Predicted catch | Landed? | Would Muskan have caught it? |
+|---|---|---|---|---|
+| 1 | triage | Migration ⇒ **FULL** lane, not TRIVIAL. "Price tier" is also a concept absent from `CONTEXT.md` | ✅ **Yes** — routed FULL; "price tier / rung / ladder" entered `CONTEXT.md` | **Likely** — migration ⇒ FULL is mechanical. Kept for being cheap, not for being clever |
+| 2 | `/spec` G1 | Ambiguities: does the ladder **replace** `bundle_*` or sit beside it? `>=` or `>` at the threshold? Does the buyer see all rungs or only reachable ones? | ✅ **Yes, right in kind.** Locked: REPLACES | **Partly** — the gate *surfaced* the list; the dropdown-as-order-tool amendment was her call, not the pipeline's |
+| 3 | `researcher` | ~~Phase 15 (per-customer pricing) already claims `pricelist.relationship_id` — the tier table must not collide with it~~ **WRONG TARGET — overruled by Muskan, see stage log** | ❌ **No — wrong target** | No — she caught the pipeline, not the reverse |
+| 4 | `/prototype` G2 | The "See all prices" reveal gets eyeballed **before** it is built — session 69's lesson | ✅ **Yes** — Variant B chosen pre-build | **No** — but see A6: the prototype could not expose the fixed-height-card constraint that later forced the G4 redesign |
+| 5 | `/design` G3 ADR | The real invariant: rungs non-overlapping, ascending `min_grams`, exactly one base price. Enforced in the **DB** or the app? | ✅ **Yes, and undershot.** Answered: **DB**-enforced via constraint trigger | **No** — the ADR rounds went far past the predicted question |
+| 6 | `plan-checker` | The plan misses call sites. `template.ts` (CSV import) and the `get_discoverable_shop` RPC are the two easiest to forget | ❌ **No — pre-empted.** The ADR already carried both re-declares before any plan existed | **But the agent still earned Tier 1 on other catches** — REVISE on all 3 plans, incl. the backfill `NOT(a AND b AND c)` hole excluding the main malformed case. **No**, she would not have caught that. See A1/A2 |
+| 7 | **`security`** | The new table needs RLS **and** the `price_public` gate mirrored in `get_discoverable_shop()`. Miss it ⇒ any verified user reads a rival's tier pricing | ✅ **Yes — the headline bet won outright.** Plus two catches beyond it: a **live prod defect** (`list_discoverable_companies` had lost its gate) and T04's cross-tenant `pricelist_item` insert | **No** — the least likely unaided catch, exactly as predicted |
+| 8 | `consistency` | The tier editor should reuse the `LotRow` pattern at `ProductCard.tsx:878`, not invent a new one | ➖ **Moot** — the editor grew inside `ProductCard`'s existing patterns anyway | **But the agent still earned Tier 1 on a different catch** — T02's only blocking finding (camelCase vs snake `pack_size_grams`, which would have forced two hand-built adapters). See A1/A2 |
+| 9 | `test-writer` | Resolver boundary cases: exactly at a threshold, below the lowest rung, above the highest | ✅ **Yes** — `pricing.test.ts`, pack tests, a two-session race proof | **Partly.** Gap left open: hostile input (NaN → base, Infinity → top rung, negative → base) is benign-by-construction but **untested** |
+| 10 | `/ship` G5 | This makes **14** cloud-pending migrations, not 13 | ➖ **Structurally wrong — the batch never existed.** The ladder's migrations shipped as **three separate pushes**: E ahead of the wave, then the 13-migration Phase-12 wave, then C on its own timestamp | The concern behind it — ledger count discipline — was the right thing to watch, and it held: every push got an APPLIED entry and its history stamp repaired |
+
+**Scoreboard: 6 landed · 2 missed · 2 moot — and the two misses (#6, #8) belong to agents
+that earned Tier 1 anyway.** That gap is amendment A2.
 
 **The headline bet is #7.** It is the catch least likely to be made unaided, and the only
 one on this list where being wrong leaks another company's data.
@@ -359,7 +459,95 @@ the anon re-revoke — a live defect found incidentally, repair in this ticket).
 Never zero. The pipeline's checker loop MUST be budgeted (2 rounds + simplification
 bias on fixes) and closed by the human gate, not by exhaustion.
 
+---
+
+### Stage 5 — `/build` · T01–T08 · 2026-08-14 → 16
+
+> **Primary record: `docs/muskan-build/0021-tier-ladder/REVIEW.md`** (four build rounds, every
+> finding attributed to the agent that made it) and **`STATE.md`** (budgets, gate log).
+> Written 2026-08-18 — this section was missing from the dry-run record until then, which is
+> amendment **A1**.
+
+**The chain ran per ticket, every checker a genuinely separate-context agent:**
+
+```
+plan → plan-checker (fresh) → test-writer (fresh) → builder
+     → test-runner (fresh, read-only) → reviewers (fresh, parallel)
+```
+
+**Eight tickets. Budgets never blew — every one landed at 0/2 on tests:**
+
+| Ticket | Blocking | Outcome |
+|---|---|---|
+| T01 (HEL-46) migration E | 0 | green, independently re-verified |
+| T02 (HEL-47) resolver | 1 → fixed same round | *the blocking finding was `consistency`'s* |
+| T03 (HEL-48) single-owner reads | 1 → fixed | `getMyShop` would hard-fail the seller's own page where the old embed degraded to a priceless shop |
+| T04 (HEL-49) ladder editor | 3 → fixed, one round | includes the cross-tenant hole below |
+| T05 (HEL-50) buyer panel | 2 → fixed | e2e locators |
+| T06 (HEL-51) basket | 1 → fixed | a **pre-existing** bug, surfaced by review |
+| T07 (HEL-52) deal card | 0 | criterion 7 verified-not-built (decision B holds) |
+| T08 (HEL-53) migration C | authoring only | applied live 2026-08-16 |
+
+**The four catches that decide whether this stage lives:**
+
+1. **`plan-checker`, T01 — the backfill NULL-logic hole.** `NOT(a AND b AND c)` excluded
+   half-filled brackets — *the main malformed case* — from the rescue path. A silent
+   data-correctness bug in a production backfill, caught **before any code was written.** It
+   also forced the backfill into a shipped, test-callable function so pgTAP proves the real
+   statement rather than a copy of it, and forced the race criterion into a genuine
+   two-psql-session proof. **REVISE on all three plans it saw** (T01, T02, T03).
+   ⇒ *This is the evidence that overturns the original Tier 2 verdict.*
+2. **`security`, T04 — cross-tenant write.** The price-row create-branch could insert a
+   `pricelist_item` referencing **another company's product.** Ownership check added to the
+   shared helper, both doors. This is a second cross-tenant class on top of the live
+   `list_discoverable_companies` defect the same reviewer found at T01.
+3. **`consistency`, T02 — the round's only blocking finding.** Param field was camelCase
+   `packSizeGrams`; the real `ShopProduct` is snake `pack_size_grams`. Left alone it *"would
+   have forced both T05 call sites into hand-built adapter objects."*
+   ⇒ *This is the evidence that overturns the original "no evidence either way" verdict.*
+4. **`critic`, T06 — a pre-existing bug the diff merely walked past.** `toDraftLines`'
+   fallback wrote `pack`/`mL` into `deal_line_item.unit`, whose FK only accepts
+   `g`/`kg`/`unit` → `createDeal` FK failure for pack-unit products with an unknown pack
+   size. Not introduced by this work; found because someone read the neighbourhood.
+
+**Two mechanisms got no workout at all — amendment A7:**
+
+- **`builder` rejections: none.** Every blocking finding across eight tickets was accepted
+  and fixed. §7's right-to-reject is unexercised — no evidence it works *or* that it is
+  needed.
+- **No budget ever blew.** Every ticket sat at 0/2 or 1/2, so §10's escalate-to-human path
+  never fired.
+
+**Roughly twenty standing notes were tracked and deliberately not fixed** — surfaced at G4
+per the severity rule rather than pulled into scope. Two deserve follow-up tickets of their
+own: `updateProductFields` never verifies product ownership (same class as T04's fixed
+create-branch), and `getOwnCatalog`'s product query has no company filter, so the create-form
+picker lists every company's visible products — now with tier ladders attached.
+
+**Final gate on the slug:** 342 unit · 102/102 e2e on a fresh reset · tier SQL + race + both
+lockdown suites · tsc/eslint clean.
+
+---
+
+### G4 — the visual gate · 3 rounds · passed 2026-08-16
+
+Round 1 was layout fixes (`8fb84d7`). Rounds 2–3 (`3dacd90`) are logged in the
+`REVIEW.md` top section and in `cont. 2` below. **Round 3 is the one that matters to the
+pipeline design:** three successive attempts to fit the ladder inside the card — row cap plus
+inner scroll, hiding the availability/buy rows, shrinking the photo to 140px — each either
+re-clipped at some card width or were rejected on the walk. **The fixed-height 640px card
+simply cannot host the ladder in flow.** Muskan designed the replacement herself: a floating
+popover portaled to `document.body`. Recorded as a prototype DEVIATION.
+
+This is the origin of amendments **A5** (redesign is not a failed fix round) and **A6** (a
+standalone prototype cannot prove fit inside the real container).
+
+---
+
+## Stage verdicts — keep, cut, or change
+
 *Filled 2026-08-16, slug complete. One row per stage: **keep**, **cut**, or **change**.*
+*`plan-checker` and `consistency` **revised 2026-08-18** against `REVIEW.md` — see A1.*
 
 | Stage | Caught | Muskan would have caught it anyway? | Verdict |
 |---|---|---|---|
@@ -368,9 +556,9 @@ bias on fixes) and closed by the human gate, not by exhaustion.
 | `researcher` | Prediction #3 was a WRONG TARGET — Muskan overruled it | She caught the pipeline, not the reverse | **keep, humbled** — the human-overrule path is part of the design and it worked |
 | `/prototype` G2 | Variant B chosen before build (session-69's lesson held) — but the prototype did NOT expose the fixed-height-card constraint that later forced the G4 popover redesign | — | **keep** — with the recorded limit: a standalone prototype can't prove fit inside the real card |
 | `/design` G3 · `adr-checker` | ~70 findings / 7 fresh-context rounds — security, schema, deploy-ordering, cross-ADR, one fix-introduced hole, one unbuildable acceptance criterion (5a) | **No** — the checker classes (cross-ADR, deploy-ordering, rev-6's own hole) are exactly what unaided review misses | **KEEP — promoted Tier 2 → Tier 1.** Rules locked: fresh context each round · 2-round budget, stop on zero NEW blockers · simplification bias on fixes |
-| `plan-checker` | Its headline predicted catch (missed call sites: `template.ts`, `get_discoverable_shop`) was pre-empted — the ADR carried both re-declares before any plan existed; no decisive independent catch recorded T01–T08 | — | **change: stays Tier 2, on watch** for the next slugs |
+| `plan-checker` | **REVISED 2026-08-18.** Its *predicted* catch (missed call sites: `template.ts`, `get_discoverable_shop`) was pre-empted — the ADR carried both re-declares. But `REVIEW.md` records **REVISE on all three plans it ran on**: T01's backfill `NOT(a AND b AND c)` hole excluding the main malformed case from the rescue path (a prod data-correctness bug, caught pre-code), the backfill restructured into a test-callable function so pgTAP proves the real statement, a genuine two-session race proof; T02's both-size-sources requirement; T03's three tsc breaks + guard-regex false trip | **No** — a boolean-logic hole in a backfill `WHERE` clause is exactly the class unaided review misses | **KEEP — promoted Tier 2 → Tier 1.** The original "no decisive catch" verdict was written from memory without reading `REVIEW.md`; that error is amendment **A1** |
 | `security` (headline bet #7) | **The bet won.** The verified-gate class produced the reinstated `is_caller_verified()` on the view's public arm AND surfaced the LIVE prod defect (`list_discoverable_companies` missing its gate → repaired via E) | **No** — the least likely unaided catch, exactly as predicted | **keep** |
-| `consistency` | No separately recorded catch (tier editor grew inside `ProductCard`'s existing patterns) | not separately recorded | **watch** — no evidence either way this slug |
+| `consistency` | **REVISED 2026-08-18.** Its *predicted* catch (reuse `LotRow`) was moot — the editor grew inside `ProductCard`'s patterns anyway. But `REVIEW.md` attributes **T02's one and only blocking finding** to it: camelCase `packSizeGrams` vs the real snake `pack_size_grams`, which *"would have forced both T05 call sites into hand-built adapter objects"* | **No** — she would have met it later as friction, not caught it upfront | **KEEP — promoted to Tier 1.** A decisive catch in precisely its own invent-and-patch class. Original "no evidence either way" was the same memory error — **A1** |
 | `test-writer` / `test-runner` | Boundary-case suites materialized (`pricing.test.ts`, pack tests, race proof); the whole T-series ran 0/2 on test budgets — tests-first held | Partially | **keep** |
 | `/ship` G5 | Ledger discipline carried the count; real catches: the stale-redeclare class (diff-against-live protocol), the prod-data-write permission fact, same-deploy rule executed back-to-back | No — the stale-redeclare class had already bitten the repo once unaided | **keep** |
 
@@ -388,7 +576,7 @@ body, follows scroll, closes on Choose/outside/Esc). Recorded as a prototype
 DEVIATION in REVIEW.md. Pipeline lesson: G4 is where the human redesigns, not just
 approves — the budgeted-rounds counter (2) was exceeded (3) and that was correct.
 
-**/ship (G5, in progress).** Rebase onto dev clean → full gate (342 unit · 102/102
+**/ship (G5 — completed in `cont. 3` below).** Rebase onto dev clean → full gate (342 unit · 102/102
 e2e on fresh reset — F-02 turned out to be local-DB drift, not code · tier SQL +
 race + both lockdowns · tsc/eslint) → PR #158 merged. Two tooling traps found:
 (1) the lockdown runner .sh files silently no-op on this machine (the psql shim
@@ -426,7 +614,16 @@ documented auth-keys class). **HEL-53 → Done. The slug — and with it the dry
 complete: every stage and every gate of PIPELINE.md was exercised on a real feature,
 triage through live contract migration.**
 
-**Verdicts written back:** the stage table above is filled; `adr-checker`'s Tier-1
-promotion + the three locked checker rules + `plan-checker`'s on-watch status are now in
-`docs/agents/PIPELINE.md` itself (edited on `claude/muskan/work`, where the file lives —
-it reaches `dev` with Release 2).
+**Verdicts written back — updated 2026-08-18.** `PIPELINE.md` now carries all nine
+amendments: `adr-checker` Tier 1 with its 9-category checklist and **four** locked rules
+(§5), the prod data-write permission stop (§9, §11), the G4 redesign exception (§10), and the
+tiering table (§13) — including `plan-checker` and `consistency` **promoted to Tier 1**, which
+reverses what this document originally recorded.
+
+**Why the reversal happened, and the amendment it produced.** The first pass wrote its
+verdicts from memory instead of from the slug's own `REVIEW.md`, and got two of them wrong in
+the *pessimistic* direction — nearly cutting two agents that had earned their place. The
+pipeline produced the evidence correctly and had no step that read it back. That is
+amendment **A1**, and it is the single most important output of this dry run.
+
+Release 2 has shipped, so this file and `PIPELINE.md` are both live on `dev` and `main`.
