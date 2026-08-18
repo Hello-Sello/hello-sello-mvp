@@ -6,7 +6,7 @@
 > run **manually, by hand, on one real feature** — the tier ladder (`0021`), triage through
 > live contract migration on production. Every stage and every gate was exercised. It beat
 > the unaided baseline, so the design stands, with the amendments the run forced written
-> into §5, §9, §10, §11 and §13 below.
+> into §5, §7, §9, §10, §11, §13, §14 and §16 below.
 >
 > Record: [`DRY-RUN-tier-ladder.md`](./DRY-RUN-tier-ladder.md) — per-stage keep/cut/change
 > table, the seven checker rounds, the predictions-vs-outcome comparison.
@@ -256,7 +256,7 @@ perspective, so the agent's prompt enumerates them as an explicit checklist:
 | # | Category | What it actually catches |
 |---|---|---|
 | 1 | **Citation truth** | A claim attributed to a file or line that the file does not say |
-| 2 | **Security doors** | RLS enabled · policies present · grants · `anon` · `SECURITY DEFINER` re-grants |
+| 2 | **Security doors** | RLS enabled · policies present · grants · **both `anon` AND `authenticated`** · `SECURITY DEFINER` re-grants — the concrete checks are [`SECURITY-CHECKLIST.md`](./SECURITY-CHECKLIST.md), S1–S8 |
 | 3 | **Postgres semantics** | Every statement quoted verbatim actually does what the ADR claims it does |
 | 4 | **Deploy-window + ops-ritual reality** | Migration order, same-deploy rules, what is live versus local |
 | 5 | **Call-site truth** | **Writers, not just readers** — and quantities actually present in the code |
@@ -492,7 +492,7 @@ ships.
 | `test-runner` | Run and report | read + bash, **no edit** |
 | `critic` | Correct? Scope creep? Breaks an invariant? | read-only |
 | `consistency` | Reused ours, or invented and patched? | read-only |
-| `security` | RLS · tenant isolation · exposed data | read-only |
+| `security` | RLS · tenant isolation · exposed data · grants on **both** client roles | read-only; runs [`SECURITY-CHECKLIST.md`](./SECURITY-CHECKLIST.md) |
 | `visual-verifier` | Does it match what we approved? | browser + screenshots |
 | `rollup` | What did each stage actually catch, per the artifacts? | read-only (**fresh context — see §16**) |
 
@@ -599,7 +599,7 @@ run does not stall on a permission prompt mid-chain. It is also a real safety bo
 
 ⚠️ **Do not put `context: fork` on the orchestrator skills.** A forked skill becomes a
 subagent itself — and a subagent cannot spawn its own subagents. `/build` would lose the
-ability to call any of the nine.
+ability to call any of its agents.
 
 ### `/build` in full
 
