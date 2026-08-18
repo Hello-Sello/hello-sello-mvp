@@ -35,8 +35,8 @@ distance from one gate to the next and does not stop in between.
 | `/spec <slug>` | `researcher` (prior-art sweep) → interview → write the spec | 🚦 **G1** |
 | `/prototype <slug>` | read the spec → build 2–3 variants → you pick | 🚦 **G2** *(frontend only)* |
 | `/design <slug>` | `researcher` (approaches) → ADR + invariants → `adr-checker` → breakdown → tickets | 🚦 **G3** |
-| `/build <ticket>` | plan → `plan-checker` → `test-writer` → `builder` → `test-runner` → reviewers → `visual-verifier` | 🚦 **G4** |
-| `/ship <slug>` | **rebase onto `dev`** → re-run the suite → PR → merge → deploy → walk the criteria on the live URL · **stops for a human-granted allow rule when the wave writes prod data** (§9) | 🚦 **G5** |
+| `/build <ticket>` | **base-freshness check** (fetch, report commits-behind-`dev` — non-blocking) → plan → `plan-checker` → `test-writer` → `builder` → `test-runner` → reviewers → `visual-verifier` | 🚦 **G4** |
+| `/ship <slug>` | **rebase onto `dev`** → re-run the suite → **Claude Security plugin "scan changes"** → PR → merge → deploy → walk the criteria on the live URL · **stops at the ask rule when the wave writes prod data** (§9) | 🚦 **G5** |
 | `/diagnose <bug>` | reproduce → write the failing regression test | *hands to `/build`* |
 
 A FULL feature is **five or six things you type**, not eight. `/build` alone replaces four
@@ -341,6 +341,11 @@ T02 and T03 can run at the same time. T04 cannot start until both land.
 **Hard rule: anything running in parallel must touch different files.** Two builders
 editing one file concurrently produces a merge to untangle, not speed — which is a cost,
 not a saving.
+
+> **Worktree base is solved (Aug-2026):** `worktree.baseRef: "head"` in the checked-in
+> `.claude/settings.json` makes every worktree — including `/build`'s parallel builders —
+> branch from the **current checkout**, not a stale `main`. The June manual workaround
+> (pre-create off `origin/dev`) is retired.
 
 ---
 
@@ -700,6 +705,16 @@ instead of verifying your branch and hoping the world stays still. The window wh
 else's work can slip in shrinks from "however long the PR sits" to "however long the merge
 takes".
 
+### /ship runs the Security plugin before the PR
+
+The **Claude Security plugin** (whole-repo six-phase scan: injection, authz, crypto,
+exposure, with an adversarial 3-voter panel) runs in "scan changes" mode on the rebased
+branch, before the PR opens. It **complements, never replaces, the `security` agent** — that
+one stays a per-ticket diff reviewer running [`SECURITY-CHECKLIST.md`](./SECURITY-CHECKLIST.md)'s
+Supabase-specific S1–S8 (grants on both client roles, `pg_policies`, RLS), which a generic
+scanner won't do. Two different altitudes: per-ticket catalog checks during `/build`,
+whole-branch generic scan at `/ship`.
+
 ### G5 has a hard stop the design did not predict: prod data-writes
 
 Found in the dry-run. Additive DDL applied autonomously without friction. The vocab
@@ -789,7 +804,7 @@ silently returns to zero, which is the exact loop it exists to stop.
 | **Shared-file lock** | Editing a file locked in another active session's sync file — **own parallel worktrees included** |
 | **Invariant lint rules** | Whatever `/design` sorted into the mechanical bucket — import boundaries first |
 | Supabase MCP schema guard | DDL via MCP with no committed `.sql` — already happened once (`get_public_profile`, R8) |
-| **Prod data-write gate** | `apply_migration` carrying `UPDATE` / `DELETE` / `INSERT` against production → **block, require a human-granted allow rule.** Observed in the dry-run; a skill may **not** self-grant it by editing `settings.local.json` |
+| **Prod data-write gate** | ✅ **Built 2026-08-18 — as an ASK RULE, not a hook** (Aug-2026 permissions research): `ask` on `apply_migration` + `execute_sql` in the checked-in `.claude/settings.json`. Ask rules beat allow rules AND hook allow-decisions, so a skill cannot self-grant — the exact property the dry-run demanded, with zero custom code. An SQL-inspecting hook stays an optional refinement if prompting gets noisy |
 | Destructive command guard | `reset --hard`, `checkout .`, `clean -fd`, `git add -u/.`, `rm -rf` |
 | Module boundary | `@/modules/X/internals` imported from module Y |
 | **Stale-map** | A new directory in `src/modules/` absent from `src/README.md` → flag. **Six modules documented, twelve exist today** (R8) — docs drifting from code is observed, not hypothetical |
