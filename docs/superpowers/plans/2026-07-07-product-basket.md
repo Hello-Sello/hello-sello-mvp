@@ -4,7 +4,7 @@
 
 **Goal:** A real, persistent, per-person Product Basket ("the cart") that a seller fills from their own shop and a buyer fills from connected companies' shops, grouped by seller company, that on Send hands each seller-group to the existing `createDeal()` to become a Deal Card.
 
-**Architecture:** A new isolated module `src/modules/basket/` owns the cart (a `product_basket_line` table, its reads/writes, pure helpers, and UI). It depends on the deals domain through exactly ONE public seam — importing `createDeal` and its types from `@/modules/deals`. The buyer's cross-company shop view reuses the existing `ShopView` + `ProductCard`, fed by a new SECURITY DEFINER RPC (`get_connected_shop`) because base RLS forbids reading another company's `product` rows directly.
+**Architecture:** A new isolated module `src/modules/basket/` owns the cart (a `product_basket_line` table, its reads/writes, pure helpers, and UI). It depends on the deals domain through exactly ONE public seam — importing `createDeal` and its types from `@/modules/deals`. The buyer's cross-company shop view reuses the existing `ShopView` + `ProductCard`, fed by a new SECURITY DEFINER RPC (`get_connected_shop`) because base RLS forbids reading another company's `product` rows directly. ⛔ **This last sentence is DEAD as of 2026-08-19** — the buyer shop view is slug `0022-buyer-shop-view` and widens the *existing* shop read path rather than adding a second RPC. See the banner above Task 9.
 
 **Tech Stack:** Next.js 16 (App Router, RSC + server actions), Supabase (Postgres + RLS + SECURITY DEFINER RPCs), TypeScript, Vitest (unit), Playwright (E2E), Tailwind v4, lucide-react icons.
 
@@ -1380,6 +1380,32 @@ Do NOT delete `CreateDealForm.tsx`/`proposeDeal`/`confirmDetectedDeal` — they 
 Typecheck + lint + unit: `npm run test:unit && npx tsc --noEmit && npm run lint`. Manually verify: click "Create Deal" in a real chat, confirm an empty draft card opens immediately (no popup, no waiting for the other side), confirm role-based editing still works. Commit.
 
 > **Checkpoint after Round 2:** re-verify the full seller+chat flow end-to-end (Present → Draft deal → picks customer → card opens in their chat; Chat → Create Deal → empty card opens immediately; both editable per role) before touching the original Task 9 (buyer RPC) below, which is unrelated, independent work.
+
+---
+
+> # ⛔ TASKS 9–11 ARE DEAD — SUPERSEDED 2026-08-19
+>
+> **Do not build anything below this line.** The buyer-reads-a-connected-shop capability is
+> now owned by **slug `0022-buyer-shop-view`** → `docs/PRD/0022-buyer-shop-view.md`
+> (approved at G1, 2026-08-19). Tasks 1–8 above SHIPPED and stay as the record; Tasks 9–11
+> were never built and must not be.
+>
+> **Why they are wrong, not merely superseded:**
+> 1. **Wrong gate.** Task 9 requires an active `relationship`. The shipped model gates on
+>    caller verification + per-product `price_public` / `profile_visible`, and 0022's G1
+>    added *connection overrides visibility, never price* (`DECISIONS.md` 2026-08-19).
+>    Building this would create a **second, inconsistent door** onto the same data.
+> 2. **Wrong door, full stop.** A new `get_connected_shop` RPC violates the one-read-door
+>    rule — *"any new feature that needs a price must read through that same door"*
+>    (`ARCHITECTURE-NOTES.md:423`). 0022 widens the existing shop read path instead.
+> 3. **Stale columns.** The returns list `bundle_threshold_grams` / `bundle_price_per_gram`.
+>    Migration C **dropped both** from `pricelist_item` on 2026-08-16 (tier ladder, ADR-0004).
+>    This code cannot compile against the live schema.
+> 4. **Wrong route.** A child route `/discover/[companyId]/shop`. 0022 rebuilds
+>    `/discover/[companyId]` in place — no second page, no split CTAs.
+>
+> **Task 12 below:** its seller/chat half stands; its buyer half is replaced by 0022's
+> acceptance criteria (PRD §8).
 
 ---
 
