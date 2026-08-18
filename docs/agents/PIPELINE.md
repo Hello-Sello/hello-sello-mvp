@@ -15,7 +15,7 @@
 > inside each.
 > Owner: Muskan.
 
-Idea → **live and verified**. Five commands, five gates. Everything between a gate and the
+Idea → **live and verified**. Seven skills — five staged (`/spec` `/prototype` `/design` `/build` `/ship`) plus `/triage` in front and `/diagnose` for the BUG lane — and five gates. Everything between a gate and the
 next one runs without you.
 
 ---
