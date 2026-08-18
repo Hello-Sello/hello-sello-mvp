@@ -1,12 +1,18 @@
 # 0022 buyer-shop-view — work order
 lane:   FULL
 stage:  triage ✅ → spec (next, G1)
-branch: feature/buyer-shop-view   (cut from **claude/muskan/work**, NOT dev)
->  Muskan caught this at triage: `claude/muskan/work` is 26 commits ahead of
->  `origin/dev`, and `origin/dev` carries only `.claude/skills/track-doubt/` — none
->  of the pipeline skills. A branch cut from dev could not run `/spec` or `/build`.
->  (0021 cut from dev because the work branch had just merged there via Release 1/2;
->  sessions 77–78 have since pushed it ahead again. Check the delta before cutting.)
+branch: **claude/muskan/work** — no feature branch (Muskan's call, 2026-08-18)
+>  No cut: this slug is frontend-heavy with no expected migration, so a feature branch
+>  would only add a merge step. `/ship` still rebases onto `dev` and PRs from here.
+>  ⚠️ **If /spec or /design turns up a migration or an RLS change, revisit this** — that
+>  is what earned 0021 its own branch.
+>
+>  Base-branch trap, recorded so the next slug doesn't hit it: a feature branch here must
+>  cut from `claude/muskan/work`, **never `origin/dev`**. At triage the work branch was 26
+>  commits ahead, and `origin/dev` carried only `.claude/skills/track-doubt/` — none of the
+>  pipeline skills. A branch cut from dev could not run `/spec` or `/build` at all. (0021
+>  cut from dev legitimately: the work branch had just merged there via Release 1/2.
+>  Always re-check the delta before cutting.)
 seed:   "wehave to build the august_mvp what dhould be the next thing to build?" — Muskan, verbatim
 
 > Routed to `docs/muskan-build/august-mvp.md` **item 2** — the only unbuilt item on the
