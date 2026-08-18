@@ -75,7 +75,7 @@ Six questions. **Any YES pushes the lane up.**
 | 2 | Touches a migration, RLS, an RPC, or auth? | FULL |
 | 3 | Introduces a concept not already in `CONTEXT.md`? | FULL |
 | 4 | **Changes what the product *does*** — a rule, a condition, who sees what? | STANDARD |
-| 5 | Touches a file in the other engineer's lane? | STANDARD + sync ritual |
+| 5 | Touches a file another active session has locked? | STANDARD + sync ritual |
 | 6 | More than one ticket of work? | STANDARD |
 
 All NO → **TRIVIAL**.
@@ -236,7 +236,7 @@ that is `/design`'s failure, not yours.
 | Section | Says | Who reads it |
 |---|---|---|
 | **Reused** | *Already built — we feed it, don't touch.* What this work builds on and must not modify | `consistency` checks the diff against it; `builder` gets it as a fence |
-| **Blast-radius** | What else this could break, traced — every caller, every cross-lane surface, Ayush's RPCs | `security` + the reviewers; it is the risk map for the whole ticket set |
+| **Blast-radius** | What else this could break, traced — every caller, every cross-surface dependency, **every RPC and base table you did not write** | `security` + the reviewers; it is the risk map for the whole ticket set |
 
 **Fix two — `adr-checker`.** Read-only, runs after the ADR is drafted and before G3. It
 asks three things nothing else asks:
@@ -449,8 +449,8 @@ docs/
        blocked.md                 ← only exists if a retry budget blew
                                     ("the how, one file per item" — this
                                     folder's declared purpose, now a folder
-                                    per item.  Ayush's equivalent lane is
-                                    _workshop/build-plans/)
+                                    per item.  The earlier parallel lane,
+                                    _workshop/build-plans/, is history now)
 
 prototypes/
 └─ pricelist-prototype/
@@ -651,8 +651,13 @@ Bash but no Edit or Write — so it structurally cannot "fix" the test instead o
 ### G4 approves your branch. Something else deploys.
 
 G4 passes on `feature/pricelist`. Then `/ship` opens a PR, merges to `dev`, and deploys.
-**Between those two, Ayush's work lands.** The thing G4 approved is not necessarily the
-thing that ships.
+**Between those two, `dev` can move.** The thing G4 approved is not necessarily the thing
+that ships.
+
+The original cause was a second engineer's branch landing in that window. With a single
+owner the window is narrower but **not closed** — parallel worktree sessions merge into the
+same `dev`, and the repo still carries plenty of code you did not write. The failure mode
+does not need a second person; it only needs `dev` to change after you verified.
 
 This is not hypothetical — it is most of the session log: migration timestamp collisions,
 RPCs rebuilt from live because the local base was stale, *"diffed every `create or replace`
@@ -718,7 +723,7 @@ going red once will make `/build` escalate to you over a naming nit.
 | The approach itself was wrong | re-open G3, rewrite the ADR | — |
 
 `G4 rounds` was a counter with no limit, which is how `/ship` could bounce forever: merge →
-back to G4 → fix → merge → Ayush's work lands again → back to G4. **Two rounds, then stop
+back to G4 → fix → merge → `dev` moved again → back to G4. **Two rounds, then stop
 and escalate**, same as everything else.
 
 Two attempts, not five. When a budget blows, the agent does not try harder — it writes
@@ -755,7 +760,7 @@ silently returns to zero, which is the exact loop it exists to stop.
 |---|---|
 | **Lane vs. diff** | `lane: TRIVIAL` while the diff touches `supabase/migrations/`, RLS, auth, or a server action → **block, force re-triage** |
 | **STATE.md advance** | A skill finishing without advancing `stage` |
-| **Shared-file lock** | Editing a file locked in the other engineer's sync |
+| **Shared-file lock** | Editing a file locked in another active session's sync file — **own parallel worktrees included** |
 | **Invariant lint rules** | Whatever `/design` sorted into the mechanical bucket — import boundaries first |
 | Supabase MCP schema guard | DDL via MCP with no committed `.sql` — already happened once (`get_public_profile`, R8) |
 | **Prod data-write gate** | `apply_migration` carrying `UPDATE` / `DELETE` / `INSERT` against production → **block, require a human-granted allow rule.** Observed in the dry-run; a skill may **not** self-grant it by editing `settings.local.json` |
@@ -766,8 +771,11 @@ silently returns to zero, which is the exact loop it exists to stop.
 | Conventional commits | Non-conforming commit messages |
 | Main-branch write block | Writes on `main`/`master` — ✅ already installed |
 
-The **shared-file lock** matters more than it looks: it guards the boundary with Ayush's
-lane whether or not he adopts any of this. Your sync ritual, as a hook, not a memory.
+The **shared-file lock** is now a *dormant* guard rather than a daily one — with a single
+owner there is no second engineer's sync file to collide with. Keep it built anyway: it is
+cheap, it still catches **your own parallel worktree sessions** editing one file, and it
+reactivates unchanged the day the team grows again. Your sync ritual, as a hook, not a
+memory.
 
 ---
 
@@ -852,7 +860,7 @@ they earn a build on the next slugs or they get cut.
 | 2 | ~~Collapse into new `specs/` + `adr/` + `build/` tree?~~ **Answered — no.** The pipeline maps onto the existing taxonomy (§6b, per R7): `docs/PRD/` = specs, `docs/architecture/adr/` = ADRs, `docs/muskan-build/<slug>/` = build workspace. Only residue: whether `docs/superpowers/` folds away |
 | 3 | `SCHEMA.md` vs `SCHEMA-DRAFT.md` — one must die |
 | 4 | **`CLAUDE.md` 32 KB + `AGENTS.md` 39 KB load in full every session.** Only a skill's *name and description* load until it is used — so most of this belongs in skills. Biggest context win available, and cheap |
-| 5 | ~~Does Ayush adopt this?~~ **Deferred by Muskan.** The shared-file-lock hook guards the boundary regardless |
+| 5 | ~~Does Ayush adopt this?~~ **Moot — single owner.** The shared-file-lock hook stays built but dormant: it guards parallel worktree sessions today, and reactivates unchanged if the team grows |
 | 6 | ~~Have commands and skills merged?~~ **Answered — yes.** Current docs: *"Custom commands have been merged into skills."* We build `.claude/skills/<name>/SKILL.md` only |
 | 7 | **Docs cleanup (Muskan, own session):** number the existing `docs/muskan-build/` files, tidy the scattered `docs/architecture/` root (loose files beside `adr/` + `diagrams/`), apply the NNNN scheme going forward |
 
