@@ -11,6 +11,41 @@
 
 ---
 
+## ✅ APPLIED 2026-08-17 — anon/PUBLIC execute lockdown + `ensure_rls` drift capture (2 migrations)
+
+Pushed with **`supabase db push`** (not MCP), so cloud `schema_migrations` took the filename
+timestamps directly — **no history repair needed**, a first for this project. `migration list --linked`
+confirms local and remote columns match on both rows.
+
+- `20260817120000_anon_execute_lockdown.sql` — 61 functions lose `EXECUTE` from **PUBLIC *and* anon**
+  (both grants are needed; revoking either alone leaves the other — see ARCHITECTURE-NOTES 2026-08-17).
+  `seed_company_superadmin` + `sella_detect_worker` also lose `authenticated`. Narrows
+  `ALTER DEFAULT PRIVILEGES` for anon, and installs the `revoke_anon_execute_on_new_function`
+  event trigger that strips PUBLIC + anon at `CREATE FUNCTION` time.
+- `20260817130000_capture_ensure_rls_drift.sql` — captures `rls_auto_enable()` + the `ensure_rls`
+  event trigger, which existed on cloud but in no migration. Body diffed **byte-identical** against
+  prod's live `pg_get_functiondef()` first → a proven no-op on cloud, a real creation locally.
+
+**Grants only — no function body, table, or row touched.** `get_public_profile` deliberately keeps
+`anon` (the public `/c/<handle>` QR page).
+
+**Verified on production after the push:** database linter `0028_anon_security_definer_function_executable`
+went **65 → 1** (only `get_public_profile`); `seed_company_superadmin` and `sella_detect_worker` no longer
+appear in the advisor at all, confirming their `authenticated` grants are gone.
+
+**Pre-flight baseline recorded:** 63 anon-executable · 81 authenticated-executable · 92/92 tables RLS on ·
+7 event triggers · 144 migrations.
+
+**Gate before push:** fresh `supabase db reset` green · 36/38 SQL suites (the 2 failures —
+`announcement_projection`, `onboard_company_categories` — A/B-proven pre-existing against a reset
+*without* these migrations) · tsc clean · 375/375 unit · both new guard tests proven RED-first.
+
+**Open, not fixed:** `public.sella_detection` has RLS enabled with no policies (linter INFO). For a table
+written only by SECURITY DEFINER functions that is the correct secure shape — worth one conscious
+confirmation, not assumed to be a bug.
+
+---
+
 ## ✅ APPLIED 2026-07-22 — Lane A (deal creation & delivery) + Ayush's group-thread gate drop, 6 migrations
 
 Pushed to production ahead of the `dev` → `main` merge (Muskan's explicit call, PR review skipped for
