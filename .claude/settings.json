@@ -28,6 +28,15 @@
             "command": "bash .claude/hooks/shared-file-lock.sh"
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/lane-vs-diff.sh"
+          }
+        ]
       }
     ]
   }
