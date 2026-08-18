@@ -94,6 +94,19 @@ message; whole-row red kept per prototype.
 
 ---
 
+# REVIEW — T05 (HEL-50, buyer panel) · recorded retroactively 2026-08-18
+
+**Record gap.** T05's build round was the only one never written into this file — found
+by the 2026-08-18 fresh-eyes review, reconstructed from STATE.md and the dry-run's
+ticket table. What the records carry: `tests 0/2 · blocking 2/2` (two fix rounds, the
+budget's cap, the closest any ticket came to the escalation path), both findings in the
+e2e-locator class, both fixed. Finding-level detail (which locators, which reviewer) was
+not captured at the time and is not recoverable. The G4 popover DEVIATION at the top of
+this file is T05's; its build-round findings are not. This gap is exactly what the §16
+roll-up exists to catch — any `rollup` verdict on T05 must cite this section's limits.
+
+---
+
 # REVIEW — T01–T03 (build rounds, 2026-08-14)
 
 ## T03 (HEL-48) — single-owner reads

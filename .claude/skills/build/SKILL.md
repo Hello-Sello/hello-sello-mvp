@@ -3,6 +3,7 @@ name: build
 description: Build one ticket end to end - plan, check, tests-first, build,
   run, review, stage G4. Runs without stopping between G3 and G4.
   Use /build <ticket>.
+allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Task, Agent
 ---
 
 # /build — one ticket, G3 to G4, no stops

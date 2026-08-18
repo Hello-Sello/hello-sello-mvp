@@ -3,6 +3,7 @@ name: spec
 description: Write the WHAT for a triaged slug - researcher sweep, interview,
   then the PRD. Stops at G1. Use /spec <slug>, or /spec --amend <slug> for
   the STANDARD lane's one-paragraph amendment.
+allowed-tools: Read, Grep, Glob, Write, Edit, Task, Agent
 ---
 
 # /spec — from seed to approved WHAT
@@ -12,9 +13,11 @@ description: Write the WHAT for a triaged slug - researcher sweep, interview,
    the existing PRD it amends, then straight to the G1 stop. Everything below
    is the FULL lane.
 
-1. **Spawn `researcher`** (Agent tool) on the seed's area. Its report — what
-   exists, what conflicts, what already claims this area — opens the
-   interview. Never sweep inline; the sweep IS the agent.
+1. **Spawn `researcher`** (Agent tool) on the seed's area. Write its report
+   to `docs/muskan-build/<slug>/RESEARCH.md` under `## What exists (spec)` —
+   what exists, what conflicts, what already claims this area, a citation per
+   claim. That file opens the interview. Never sweep inline; the sweep IS
+   the agent.
 
 2. **Interview Muskan — one question at a time, plain English.** The goal is
    the ambiguity list: what could this seed mean that she did not say?
@@ -42,4 +45,5 @@ description: Write the WHAT for a triaged slug - researcher sweep, interview,
    and any question you could not close. She approves, amends, or rejects.
    On approve, update STATE.md: `stage: spec ✅ → prototype|design (next)`
    (prototype only if the lane's path includes a frontend surface),
-   `Files so far` += the PRD path, `Gate log` += G1 passed with date.
+   `Files so far` += the PRD + RESEARCH.md paths, `Gate log` += G1 passed
+   with date.

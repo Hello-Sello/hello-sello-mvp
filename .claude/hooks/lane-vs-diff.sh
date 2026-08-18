@@ -6,7 +6,9 @@ cmd=$(cat | jq -r '.tool_input.command // empty')
 echo "$cmd" | grep -q 'git commit' || exit 0
 staged=$(git diff --cached --name-only 2>/dev/null)
 [ -z "$staged" ] && exit 0
-echo "$staged" | grep -qE '^supabase/migrations/|/actions\.ts$|^src/modules/[^/]+/server/' || exit 0
+# migrations · server actions (any *[Aa]ctions.ts, e.g. licenceActions.ts) ·
+# module server dirs · the route gate (src/proxy.ts) · the (auth) group
+echo "$staged" | grep -qE '^supabase/migrations/|[Aa]ctions\.ts$|^src/modules/[^/]+/server/|^src/proxy\.ts$|^src/app/\(auth\)/' || exit 0
 state=$(ls -t docs/muskan-build/*/STATE.md 2>/dev/null | head -1)
 [ -z "$state" ] && exit 0
 if grep -qE '^lane:[[:space:]]*TRIVIAL' "$state"; then

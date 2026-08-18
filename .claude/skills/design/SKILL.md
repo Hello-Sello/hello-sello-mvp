@@ -3,6 +3,7 @@ name: design
 description: Turn an approved spec into an ADR + checked tickets. Runs the
   adr-checker loop under its locked budget, sorts invariants, writes tickets
   to Linear. Stops at G3. Use /design <slug>.
+allowed-tools: Read, Grep, Glob, Write, Edit, Task, Agent, mcp__claude_ai_Linear__save_issue
 ---
 
 # /design — from approved WHAT to checked HOW
@@ -11,9 +12,12 @@ description: Turn an approved spec into an ADR + checked tickets. Runs the
    `prototype ✅` if the lane included one). Read the PRD in full.
 
 1. **Spawn `researcher`** on APPROACHES (not prior art this time): how is
-   this normally done, what does each option cost later.
+   this normally done, what does each option cost later. Append its report
+   to `docs/muskan-build/<slug>/RESEARCH.md` under `## Approaches (design)`.
 
-2. **Draft `docs/architecture/adr/<NNNN>-<slug>.md`:**
+2. **Draft `docs/architecture/adr/NNNN-<slug>.md`** — NNNN = the next free
+   number in `adr/` (the ADR corpus has its OWN sequence, independent of the
+   slug's number: tier-ladder is slug 0021 but ADR 0004):
    - **Opens in plain English, before any technical body:** what each option
      means for the product · what it costs later (how hard to undo in six
      months) · what breaks if we picked wrong · how the industry normally

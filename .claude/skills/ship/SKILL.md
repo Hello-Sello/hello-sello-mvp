@@ -3,6 +3,7 @@ name: ship
 description: Take a G4-approved slug live - rebase, full gate, security scan,
   PR, merge, deploy, live walk, rollup. Stops at G5 and at the prod
   data-write ask rule. Use /ship <slug>.
+allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Task, Agent
 ---
 
 # /ship — G4 to live, then close the slug

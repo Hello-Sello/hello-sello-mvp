@@ -6,9 +6,12 @@ rel=${f#"$PWD"/}
 for sync in docs/team/sync/*.md; do
   [ -e "$sync" ] || continue
   [ "$(basename "$sync")" = "muskan.md" ] && continue
-  locked=$(grep -A2 -i 'Shared files locked' "$sync" | head -3)
-  echo "$locked" | grep -qi 'none' && continue
-  if [ -n "$locked" ] && echo "$locked" | grep -qF "$(basename "$rel")"; then
+  # "none" is judged on the header line only; matching sees the full block
+  # (a lock list can run many lines). Wildcard locks (e2e/*) still don't
+  # expand — list files explicitly when locking.
+  block=$(grep -A20 -i 'Shared files locked' "$sync")
+  echo "$block" | head -2 | grep -qi 'none' && continue
+  if [ -n "$block" ] && { echo "$block" | grep -qF "$rel" || echo "$block" | grep -qF "$(basename "$rel")"; }; then
     echo "BLOCKED: $rel appears in $(basename "$sync")'s locked list. Sync ritual first (WORKFLOW.md)." >&2
     exit 2
   fi

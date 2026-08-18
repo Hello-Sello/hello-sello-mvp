@@ -3,6 +3,7 @@ name: triage
 description: Route a work seed into its lane and open the slug's STATE.md.
   Use for any new work item - "triage this", a Marcel ask, a bug report.
   No gate - it routes.
+allowed-tools: Read, Grep, Glob, Write, Edit
 ---
 
 # /triage — route the seed, open the work order

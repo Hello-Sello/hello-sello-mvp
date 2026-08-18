@@ -73,5 +73,5 @@ redesign, which per PIPELINE §10's named exception does not consume the 2-round
 1. Visibility-window tightening: out-of-window products leave Discover entirely (§3.3)
 2. `is_caller_verified()` added to the view's public arm — tightening over today's ungated table policy (§4)
 3. Decisions A + B recorded above — confirm as read
-4. Incidental defect found by checker round 8: `20260618120100` never restored its anon revoke — repaired in T08
+4. Incidental defect found by checker round 7 (rev-8 fold-in): `20260618120100` never restored its anon revoke — repaired in T08
 5. E precondition: `buy_schema` orphan row repair (T08 verifies; blocks any `db push`)

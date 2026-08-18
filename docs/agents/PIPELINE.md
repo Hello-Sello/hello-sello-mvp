@@ -110,9 +110,11 @@ Triage stays a 60-second guess — it just stops being the last word.
 Most weeks are bugs. A bug's workflow is not a feature's, and running one through the
 feature path produces a fix with no proof it fixed anything.
 
-`/diagnose` already exists as a skill. It slots in unchanged, with one addition made
-mandatory: **the reproduction becomes a permanent regression test before the fix is
-written.** Not "a test" — *the* test that fails for the reported reason and passes after.
+`/diagnose` is a **project skill** (`.claude/skills/diagnose/` — it overrides the generic
+global one inside this repo, which fixes bugs itself). The pipeline version stops earlier,
+and one thing is mandatory: **the reproduction becomes a permanent regression test before
+any fix is written.** Not "a test" — *the* test that fails for the reported reason and
+passes after.
 
 That test is what `/build` then implements against, and what stops the bug coming back.
 
@@ -270,12 +272,12 @@ arm *and* surfaced a live production defect (`list_discoverable_companies` had l
 verified gate). Category 5 is why reader-only reviews miss writers.
 
 > **Dry-run verdict (2026-08-16): `adr-checker` is promoted Tier 2 → Tier 1.** On the
-> tier-ladder ADR (0021) it ran 7 genuinely fresh separate-context rounds and caught ~70
+> tier-ladder ADR (0021) it ran 7 genuinely fresh separate-context rounds and caught 96
 > findings across security / schema / deploy-ordering / cross-ADR classes — never
 > converging to zero (11+15+15+14+15+14+12), including a live security hole that one of
 > the fix revisions itself introduced. Full trail: `docs/agents/DRY-RUN-tier-ladder.md`.
 
-**Three operating rules, locked by the dry-run:**
+**Four operating rules, locked by the dry-run:**
 
 1. **Fresh context, every round.** The checker must be a genuinely fresh separate-context
    agent — never the ADR's author re-checking their own work. The author defends; only a
@@ -298,10 +300,10 @@ useless at 40 — and question 3 gets *harder* as the corpus grows, which is bac
 `/design` maintains one line per ADR:
 
 ```
-| ADR | Decision, in one line                          | Touches                    |
-|-----|------------------------------------------------|----------------------------|
-| 006 | Deal visibility is one flag, not two layers    | deals · RLS · chat         |
-| 014 | Pricelists bind to a relationship, not a buyer  | pricing · relationship · RLS |
+| ADR  | Decision, in one line                          | Touches                    |
+|------|------------------------------------------------|----------------------------|
+| 0006 | Deal visibility is one flag, not two layers    | deals · RLS · chat         |
+| 0014 | Pricelists bind to a relationship, not a buyer  | pricing · relationship · RLS |
 ```
 
 `adr-checker` reads the index, then opens **only the ADRs whose areas overlap this one.**
@@ -358,9 +360,12 @@ gitignored, copied one-way into a worktree at creation, and getting it back is a
 `cp`. A state file that cannot survive a worktree is not a handoff contract. Because it is
 scoped per-slug, two people on different features never touch the same file.
 
-**Who writes it:** every skill, as its last step. **A hook enforces it** — if `stage` did
-not advance, the skill cannot finish. Without that hook it rots into a stale document and
-the pipeline quietly moves back into conversation, which is the thing it exists to prevent.
+**Who writes it:** every skill, as its last step. **A hook backstops it** — the Stop hook
+checks the working tree *and* the last commit for slug-folder changes with no STATE.md
+advance (skills commit as they go, so a clean tree proves nothing). A multi-commit miss
+can still slip it; the §16 roll-up is the second net. Without both, this rots into a stale
+document and the pipeline quietly moves back into conversation, which is the thing it
+exists to prevent.
 
 **Why it exists, in one sentence:** when you type `/design` tomorrow, that skill has **no
 memory of today's `/spec` conversation** — new session, cleared context, maybe a different
@@ -419,9 +424,14 @@ folder instead of a file.
 | Artifact | Pattern | Example |
 |---|---|---|
 | Spec | `docs/PRD/NNNN-<slug>.md` | `0007-pricelist.md` |
-| ADR | `docs/architecture/adr/ADR-NNN-<slug>.md` | already the convention — keep it |
+| ADR | `docs/architecture/adr/NNNN-<slug>.md` | `0004-tier-ladder.md` — the ADR corpus keeps its **own** sequence (next free number in `adr/`), independent of the slug's: a slug can produce zero or several ADRs, and the index is how you walk between them (corrected 2026-08-18 — an earlier draft claimed an `ADR-` prefix that was never the on-disk convention) |
 | Build folder | `docs/muskan-build/NNNN-<slug>/` | `0007-pricelist/` — same number as its spec |
 | Prototype | `prototypes/NNNN-<slug>-prototype/` | `0007-pricelist-prototype/` — same number (added 2026-08-14, dry-run) |
+
+Research needs no number of its own: the sweep reports land in the slug's build folder
+as `RESEARCH.md` (`/spec` writes *What exists*, `/design` appends *Approaches*) — they
+are point-in-time scaffolding and archive with the slug (decided 2026-08-18; an earlier
+draft put them in `docs/research/`, a flat pile nothing archives).
 
 Zero-padded, sequential, **never reused** — a number is an identity, not a position. The
 spec and its build folder share one number, so you can walk from either to the other.
@@ -434,19 +444,18 @@ every file below is named from it, including the git branch.
 
 ```
 docs/
-├─ research/
-│    pricelist-existing.md        ← Research A · what already exists
-│    pricelist-approach.md        ← Research B · the options + trade-offs
 ├─ PRD/
 │    0007-pricelist.md            ← the WHAT.  permanent.  ("design contracts /
 │                                    the what" — this folder's declared purpose)
 ├─ architecture/adr/
 │    ADR-INDEX.md                 ← one line per ADR + areas it touches
-│    ADR-014-pricelist.md         ← the DECISION + invariants.  permanent.
-│                                    (the 3 existing ADRs already live here)
+│    0005-pricelist.md            ← the DECISION + invariants.  permanent.
+│                                    own sequence — 0001–0004 already live here
 └─ muskan-build/
      0007-pricelist/              ← everything disposable, one folder
        STATE.md                   ← the work order.  committed
+       RESEARCH.md                ← the sweeps: What exists (/spec) +
+                                    Approaches (/design)
        TICKETS.md                 ← tickets · S/M/XS · dependency order
        PLAN-T01.md                ← one per ticket
        REVIEW.md                  ← ONE per slug, appended per round.
@@ -464,7 +473,7 @@ docs/
                                     _workshop/build-plans/, is history now)
 
 prototypes/
-└─ pricelist-prototype/
+└─ 0007-pricelist-prototype/
      index.html                   ← the approved variant.  the G4 contract
 
 .claude/
@@ -489,7 +498,7 @@ ships.
 
 | Agent | Asks | Tools |
 |---|---|---|
-| `researcher` | What exists? What are the approaches? | read + web, no write |
+| `researcher` | What exists? What are the approaches? | read + web + Linear reads, no write |
 | `adr-checker` | Does this decision hold up? Does it break an older one? | read-only |
 | `plan-checker` | Will this plan reach the goal? | read-only |
 | `test-writer` | What does the spec say correct looks like? | read + write tests |
@@ -523,7 +532,7 @@ catches nothing a Tier 1 agent or Muskan would have caught gets cut before it is
 **Nothing was cut** — the two agents first marked "on watch" were promoted on re-reading the
 evidence. See the tiering table in §13, and §16 for why the first reading got it wrong.
 
-> **Dry-run result (2026-08-16):** `adr-checker` passed the trial and is **Tier 1** — ~70
+> **Dry-run result (2026-08-16):** `adr-checker` passed the trial and is **Tier 1** — 96
 > observed catches across 7 fresh-context rounds on the tier-ladder ADR, including classes
 > (cross-ADR contradiction, deploy-ordering, a fix-introduced security hole) that neither
 > Muskan nor a Tier 1 agent had caught. Its operating rules are locked in the `/design`
@@ -549,12 +558,13 @@ nobody checked the plan. We build the checker.
 **No spec-checker.** You read the spec at G1. If that proves leaky after a few features,
 build one then.
 
-### Models are unpinned
+### Models are pinned where judgment concentrates
 
 Revised 2026-08-18 (Muskan's call, building the agents): **judgment-heavy checkers pin
-the smartest model** — `critic` and `security` run Opus; `consistency` runs Sonnet
-(pattern-matching, not deep reasoning). Everything else still inherits the session model
-until measured otherwise.
+the smartest model** — Opus on `critic`, `security`, `adr-checker`, `plan-checker`,
+`rollup`, `visual-verifier`; Sonnet on the pattern-matchers and mechanical roles —
+`consistency`, `researcher`, `test-writer`, `test-runner`. Only `builder` inherits the
+session model. Re-measure if a Sonnet role starts missing catches.
 
 ### Review routing
 
@@ -587,10 +597,11 @@ Never silent compliance. Never silent dismissal. Both are how a review theatre f
 
 > **⚠️ Both mechanisms are unproven.** Across the dry-run's eight tickets, `builder`
 > rejections numbered **zero** — every blocking finding was accepted and fixed — and no
-> ticket ever blew a budget (all landed 0/2 or 1/2). So the right-to-reject and §10's
-> escalation path have **no observed evidence either way.** They are still the right shape
-> on the argument above; they are simply not yet evidence-backed, and this document should
-> not pretend otherwise.
+> ticket ever exceeded a budget: T05 hit its cap at 2/2, everything else landed 0/2 or
+> 1/2, so the escalation path never fired. The right-to-reject and §10's escalation path
+> have **no observed evidence either way.** They are still the right shape on the
+> argument above; they are simply not yet evidence-backed, and this document should not
+> pretend otherwise.
 
 ---
 
@@ -614,7 +625,7 @@ ability to call any of its agents.
 name: build
 description: Build one ticket end to end — plan, test, implement, review, verify.
 argument-hint: <ticket-id>
-allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Task
+allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Task, Agent
 ---
 
 Build ticket $1. Read `docs/muskan-build/$1/STATE.md` first.
@@ -798,20 +809,20 @@ silently returns to zero, which is the exact loop it exists to stop.
 
 ## 11. Hooks — deterministic, 100% not 98%
 
-| Hook | Guards |
-|---|---|
-| **Lane vs. diff** | `lane: TRIVIAL` while the diff touches `supabase/migrations/`, RLS, auth, or a server action → **block, force re-triage** |
-| **STATE.md advance** | A skill finishing without advancing `stage` |
-| **Shared-file lock** | Editing a file locked in another active session's sync file — **own parallel worktrees included** |
-| **Invariant lint rules** | Whatever `/design` sorted into the mechanical bucket — import boundaries first |
-| Supabase MCP schema guard | DDL via MCP with no committed `.sql` — already happened once (`get_public_profile`, R8) |
-| **Prod data-write gate** | ✅ **Built 2026-08-18 — as an ASK RULE, not a hook** (Aug-2026 permissions research): `ask` on `apply_migration` + `execute_sql` in the checked-in `.claude/settings.json`. Ask rules beat allow rules AND hook allow-decisions, so a skill cannot self-grant — the exact property the dry-run demanded, with zero custom code. An SQL-inspecting hook stays an optional refinement if prompting gets noisy |
-| Destructive command guard | `reset --hard`, `checkout .`, `clean -fd`, `git add -u/.`, `rm -rf` |
-| Module boundary | `@/modules/X/internals` imported from module Y |
-| **Stale-map** | A new directory in `src/modules/` absent from `src/README.md` → flag. **Six modules documented, twelve exist today** (R8) — docs drifting from code is observed, not hypothetical |
-| Read-before-edit | Editing a file not yet read |
-| Conventional commits | Non-conforming commit messages |
-| Main-branch write block | Writes on `main`/`master` — ✅ already installed |
+| Hook | Status | Guards |
+|---|---|---|
+| **Lane vs. diff** | ✅ built | `lane: TRIVIAL` while the diff touches `supabase/migrations/`, any `*[Aa]ctions.ts`, a module `server/` dir, `src/proxy.ts`, or `src/app/(auth)/` → **block, force re-triage** |
+| **STATE.md advance** | ✅ built | A skill finishing without advancing `stage` — checks the working tree **and the last commit** (skills commit as they go) |
+| **Shared-file lock** | ✅ built (dormant) | Editing a file locked in another active session's sync file — **own parallel worktrees included**. Known limit: wildcard lock entries (`e2e/*`) don't expand — lock explicit paths |
+| **Prod data-write gate** | ✅ built (ask rules) | Not a hook (Aug-2026 permissions research): `ask` on `apply_migration` + `execute_sql` — **on both Supabase MCP server names** — plus `Bash(supabase db push:*)`, in the checked-in `.claude/settings.json`. Ask rules beat allow rules AND hook allow-decisions, so a skill cannot self-grant. The CLI door (`db push`) and the second MCP server were open until the 2026-08-18 review closed them |
+| Main-branch write block | ✅ user-level | Writes on `main`/`master` — installed in `~/.claude/settings.json` (not checked in; a fresh clone loses it) |
+| **Invariant lint rules** | ▢ per-slug | Whatever `/design` sorted into the mechanical bucket — import boundaries first. Created by `/design`, not pre-built |
+| Supabase MCP schema guard | ▢ not built | DDL via MCP with no committed `.sql` — already happened once (`get_public_profile`, R8) |
+| Destructive command guard | ▢ not built | `reset --hard`, `checkout .`, `clean -fd`, `git add -u/.`, `rm -rf` |
+| Module boundary | ▢ not built | `@/modules/X/internals` imported from module Y |
+| **Stale-map** | ▢ not built | A new directory in `src/modules/` absent from `src/README.md` → flag. **Six modules documented, twelve exist today** (R8) — docs drifting from code is observed, not hypothetical |
+| Read-before-edit | ▢ not built | Editing a file not yet read (the harness itself refuses Edit-without-Read; a hook would only widen coverage) |
+| Conventional commits | ▢ not built | Non-conforming commit messages |
 
 The **shared-file lock** is now a *dormant* guard rather than a daily one — with a single
 owner there is no second engineer's sync file to collide with. Keep it built anyway: it is
@@ -834,9 +845,11 @@ memory.
 
 ## 13. Build order
 
-> **Status 2026-08-18: steps 1–8 are ALL BUILT** — 5 skills (`.claude/skills/`), 11 agents
-> (`.claude/agents/`), 3 hooks + the ask-rule gate (`.claude/hooks/`, `settings.json`).
-> The first real slug through the front door is the proving run.
+> **Status 2026-08-18: steps 1–8 are ALL BUILT** — 7 skills (`.claude/skills/`, incl.
+> project-level `/prototype` (G2) and `/diagnose` (BUG lane), added at the 2026-08-18
+> review — they override the same-named generic global skills inside this repo), 11
+> agents (`.claude/agents/`), 3 hooks + the ask-rule gate (`.claude/hooks/`,
+> `settings.json`). The first real slug through the front door is the proving run.
 
 1. **Hooks** ✅ — `state-advance` · `shared-file-lock` (dormant) · `lane-vs-diff` +
    the ask-rule prod gate.
@@ -866,7 +879,7 @@ memory.
 | Piece | Tier | Evidence |
 |---|---|---|
 | Steps 1–5 — hooks · reviewers · `test-writer`/`test-runner` · `visual-verifier` + G4 · `/triage` | **Tier 1** | Evidence-backed before the dry-run, unchanged by it |
-| `adr-checker` | **Tier 1 — promoted** | ~70 catches over 7 fresh-context rounds, in classes nothing else caught |
+| `adr-checker` | **Tier 1 — promoted** | 96 catches over 7 fresh-context rounds, in classes nothing else caught |
 | `researcher` | **Tier 1 — kept, humbled** | Its headline prediction was a wrong target and Muskan overruled it. The human-overrule path is part of the design, and it worked |
 | `plan-checker` | **Tier 1 — promoted** | REVISE on all three plans it ran on. Headline catch: the backfill's `NOT(a AND b AND c)` excluded the main malformed case from the rescue path — a prod data-correctness bug caught before any code existed |
 | `consistency` | **Tier 1 — promoted** | T02's one and only blocking finding was its: camelCase `packSizeGrams` vs the real snake `pack_size_grams`, which would have forced two hand-built adapters |
@@ -909,14 +922,14 @@ better-evidenced than when this document was designed** — nothing on the roste
 
 | # | Question |
 |---|---|
-| 1 | **Authenticate Linear MCP — blocks `researcher`.** Its prior-art sweep is specified to read Linear and `/design`'s breakdown writes tickets there. Until this is done, that agent cannot do half its stated job. Highest-priority open item |
+| 1 | ~~Authenticate Linear MCP — blocks `researcher`.~~ **Answered — done.** Linear MCP is authenticated; HEL-46..53 were created and closed through it during the dry-run, and `researcher`'s tools line carries the Linear read tools (2026-08-18 review) |
 | 2 | ~~Collapse into new `specs/` + `adr/` + `build/` tree?~~ **Answered — no.** The pipeline maps onto the existing taxonomy (§6b, per R7): `docs/PRD/` = specs, `docs/architecture/adr/` = ADRs, `docs/muskan-build/<slug>/` = build workspace. Only residue: whether `docs/superpowers/` folds away |
 | 3 | `SCHEMA.md` vs `SCHEMA-DRAFT.md` — one must die |
 | 4 | **`CLAUDE.md` 32 KB + `AGENTS.md` 39 KB load in full every session.** Only a skill's *name and description* load until it is used — so most of this belongs in skills. Biggest context win available, and cheap |
 | 5 | ~~Does Ayush adopt this?~~ **Moot — single owner.** The shared-file-lock hook stays built but dormant: it guards parallel worktree sessions today, and reactivates unchanged if the team grows |
 | 6 | ~~Have commands and skills merged?~~ **Answered — yes.** Current docs: *"Custom commands have been merged into skills."* We build `.claude/skills/<name>/SKILL.md` only |
 | 7 | **Docs cleanup (Muskan, own session):** number the existing `docs/muskan-build/` files, tidy the scattered `docs/architecture/` root (loose files beside `adr/` + `diagrams/`), apply the NNNN scheme going forward |
-| 8 | **Can G2 prove *fit*, or only design?** (dry-run amendment A6.) G2 approved Variant B on a standalone prototype page. The constraint that later forced a full redesign at G4 — the product card's fixed 640px height — was invisible there: three in-card fitting attempts failed before Muskan replaced the panel with a floating popover. **Two options.** (a) G2 gains a *fit check* — the prototype must render inside a stub of the real container at real widths before it can pass, which costs prototype simplicity. (b) G2 stays a pure design gate and **G4 formally expects redesign**, which A5 already permits. Not decided; a reviewer's input is wanted. Doing neither means re-learning this at every visual slug |
+| 8 | ~~Can G2 prove *fit*, or only design?~~ **Answered — (a), 2026-08-18 (reviewer's recommendation, Muskan may veto).** The project `/prototype` skill now requires a fit check per variant: render it inside a stub of the real container at the container's real constraints before G2 can pass. Rationale: the 640px-card constraint was knowable pre-build for ~30 minutes of prototype cost; option (b) prices every future fit failure at G4's "a rebuild" rate. A5's redesign exception stays as the fallback for what a stub still can't show |
 
 ---
 
@@ -939,8 +952,9 @@ better-evidenced than when this document was designed** — nothing on the roste
 
 **The failure, stated plainly.** The dry-run slug wrote ten artifacts, all correct, all
 committed: `STATE.md`, `TICKETS.md`, seven plans, and a 14 KB `REVIEW.md` attributing every
-build finding to the agent that made it. Then the per-stage verdicts were written **from
-memory**, and two came out wrong — `plan-checker` and `consistency` were both recorded as
+build finding to the agent that made it (with one gap the 2026-08-18 review found: T05's
+round was never written into it — reconstructed retroactively, detail unrecoverable). Then
+the per-stage verdicts were written **from memory**, and two came out wrong — `plan-checker` and `consistency` were both recorded as
 having caught nothing decisive, when `REVIEW.md` showed each had. Both were nearly cut.
 
 **Every stage in this pipeline writes. No stage read anything back.**
@@ -960,7 +974,7 @@ oldest rule applied to itself:**
 
 > **The writer is never the checker.** A slug's builder is not its assessor.
 
-`rollup` is read-only — `REVIEW.md`, `STATE.md`, `TICKETS.md`, and the diff — and returns one
+`rollup` is read-only — `REVIEW.md`, `STATE.md`, `TICKETS.md` — and returns one
 artifact: the filled verdict table. It cannot write code, and it never sees the conversation
 that produced the work.
 
