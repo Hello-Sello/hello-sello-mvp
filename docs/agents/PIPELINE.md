@@ -929,7 +929,7 @@ better-evidenced than when this document was designed** — nothing on the roste
 | 5 | ~~Does Ayush adopt this?~~ **Moot — single owner.** The shared-file-lock hook stays built but dormant: it guards parallel worktree sessions today, and reactivates unchanged if the team grows |
 | 6 | ~~Have commands and skills merged?~~ **Answered — yes.** Current docs: *"Custom commands have been merged into skills."* We build `.claude/skills/<name>/SKILL.md` only |
 | 7 | **Docs cleanup (Muskan, own session):** number the existing `docs/muskan-build/` files, tidy the scattered `docs/architecture/` root (loose files beside `adr/` + `diagrams/`), apply the NNNN scheme going forward |
-| 8 | ~~Can G2 prove *fit*, or only design?~~ **Answered — (a), 2026-08-18 (reviewer's recommendation, Muskan may veto).** The project `/prototype` skill now requires a fit check per variant: render it inside a stub of the real container at the container's real constraints before G2 can pass. Rationale: the 640px-card constraint was knowable pre-build for ~30 minutes of prototype cost; option (b) prices every future fit failure at G4's "a rebuild" rate. A5's redesign exception stays as the fallback for what a stub still can't show |
+| 8 | ~~Can G2 prove *fit*, or only design?~~ **Answered — (a), 2026-08-18; confirmed by Muskan same day.** The project `/prototype` skill now requires a fit check per variant: render it inside a stub of the real container at the container's real constraints before G2 can pass. Rationale: the 640px-card constraint was knowable pre-build for ~30 minutes of prototype cost; option (b) prices every future fit failure at G4's "a rebuild" rate. A5's redesign exception stays as the fallback for what a stub still can't show |
 
 ---
 
