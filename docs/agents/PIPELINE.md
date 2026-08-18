@@ -35,7 +35,7 @@ distance from one gate to the next and does not stop in between.
 | `/spec <slug>` | `researcher` (prior-art sweep) → interview → write the spec | 🚦 **G1** |
 | `/prototype <slug>` | read the spec → build 2–3 variants → you pick | 🚦 **G2** *(frontend only)* |
 | `/design <slug>` | `researcher` (approaches) → ADR + invariants → `adr-checker` → breakdown → tickets | 🚦 **G3** |
-| `/build <ticket>` | **base-freshness check** (fetch, report commits-behind-`dev` — non-blocking) → plan → `plan-checker` → `test-writer` → `builder` → `test-runner` → reviewers → `visual-verifier` | 🚦 **G4** |
+| `/build <ticket>` | **base sync** (pull own branch; behind `dev` → rebase NOW, then the base is frozen until `/ship`) → plan → `plan-checker` → `test-writer` → `builder` → `test-runner` → reviewers → `visual-verifier` | 🚦 **G4** |
 | `/ship <slug>` | **rebase onto `dev`** → re-run the suite → **Claude Security plugin "scan changes"** → PR → merge → deploy → walk the criteria on the live URL · **stops at the ask rule when the wave writes prod data** (§9) | 🚦 **G5** |
 | `/diagnose <bug>` | reproduce → write the failing regression test | *hands to `/build`* |
 
