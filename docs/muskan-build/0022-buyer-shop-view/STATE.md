@@ -1,11 +1,18 @@
 # 0022 buyer-shop-view — work order
 lane:   FULL
-stage:  triage ✅ → spec (next, G1)
+stage:  triage ✅ · spec ✅ (G1 passed 2026-08-19) → prototype (next, G2)
 branch: **claude/muskan/work** — no feature branch (Muskan's call, 2026-08-18)
 >  No cut: this slug is frontend-heavy with no expected migration, so a feature branch
 >  would only add a merge step. `/ship` still rebases onto `dev` and PRs from here.
 >  ⚠️ **If /spec or /design turns up a migration or an RLS change, revisit this** — that
 >  is what earned 0021 its own branch.
+>
+>  ✅ **CONDITION FIRED at G1 (2026-08-19), reviewed, call UNCHANGED.** Spec decision 6
+>  (an accepted relationship overrides `product.profile_visible`) is a permission-rule
+>  change, so this slug DOES carry a migration. Muskan re-confirmed no feature branch:
+>  sole owner, one migration (0021 had thirteen across eight tickets), and `/ship`
+>  rebases either way. Trade-off accepted: the migration ships only when this whole
+>  branch ships.
 >
 >  Base-branch trap, recorded so the next slug doesn't hit it: a feature branch here must
 >  cut from `claude/muskan/work`, **never `origin/dev`**. At triage the work branch was 26
@@ -67,9 +74,16 @@ one file serving every seller. No new route; its insides get rebuilt.
 |--------|-------|
 | triage | this file |
 | triage | `docs/architecture/CONTEXT.md` — added the **Buyer shop view** section: `Buyer Shop View` + `Catalogue openness (L0/L1/L2)` (2026-08-18, Muskan approved) |
+| spec   | `docs/muskan-build/0022-buyer-shop-view/RESEARCH.md` — researcher sweep; settles Q2a/Q2b with citations |
+| spec   | `docs/PRD/0022-buyer-shop-view.md` — the PRD, APPROVED at G1 |
+| spec   | `docs/architecture/CONTEXT.md` — corrected `Buyer Shop View` ("connected buyer" → any verified buyer), per-product Request-pricing CTA, **new** `Connection override (visibility only)` term |
+| spec   | `docs/decisions/DECISIONS.md` — 2026-08-19 entry: relationship overrides visibility, amends the 2026-06-14 soft-openness lock |
 
 ## Locked
-(empty until G3)
+(empty until G3 — but two G1 calls are already load-bearing on the ADR)
+- **Connection overrides `profile_visible`, never `price_public`** → the read path gains a
+  relationship arm; the price arm is untouched. (`DECISIONS.md` 2026-08-19.)
+- **One read door** — no parallel price reader for this surface (`ARCHITECTURE-NOTES.md:423`).
 
 ## Deferred — must NOT be built
 - Per-customer pricelists (Phase 15 — September; the one most likely to be confused with this)
@@ -82,12 +96,23 @@ one file serving every seller. No new route; its insides get rebuilt.
 (empty)
 
 ## Gate log
-(empty)
+| gate | date | verdict |
+|---|---|---|
+| **G1 (spec)** | 2026-08-19 | **PASSED** — Muskan approved the PRD. 11 decisions recorded in PRD §3, taken over a one-question-at-a-time interview. Two shared-doc amendments written under the sync ritual (CONTEXT.md, DECISIONS.md). No researcher claim overruled; decision 6 is a **new** call that amends a locked one. Branch condition fired and was reviewed — call unchanged. |
 
 ## For Muskan
-- Q2 came back **UNCERTAIN, not NO**. `/spec` must settle: can a buyer read a foreign
-  seller's price rows, and is the basket write gated on visibility? (negative-space check:
-  assert who should NOT be able to add.)
-- L0/L1/L2 openness already exists on this page (locked catalogue / prices-on-request /
-  open). `/spec` must say what the buyer shop view looks like at each of the three.
-- Open from `august-mvp.md`: compliance position for real pharmacies ordering — ask Marcel.
+- ✅ **Q2a SETTLED** — a verified buyer *can* read a foreign seller's prices where
+  `price_public` is on, connected or not; `anon` is revoked outright. Evidence:
+  `RESEARCH.md` § Backend reality, and `DECISIONS.md:114`'s connection-gated rule is
+  superseded twice over (`:116`, `:1010`).
+- ✅ **Q2b SETTLED — the gap is real.** The basket table is owner-scoped only and never
+  checks whether the buyer may *see* the product. Spec closes it server-side (PRD §4.7,
+  AC 10).
+- ✅ **L0/L1/L2 answered for all three** — PRD §3 decisions 3–7, AC 2–6.
+- ⚠️ **Owed, not blocking:** `docs/superpowers/plans/2026-07-07-product-basket.md`
+  Tasks 9–11 needs a dead marker (superseded by this PRD), and project `CLAUDE.md`'s
+  "Loose ends" still lists it as live work.
+- ⚠️ **Still open, ask Marcel:** compliance position for real pharmacies ordering
+  (`august-mvp.md:99-100`) — a before-launch question, not a build blocker.
+- ⚠️ **DEV-113** (Backlog, unowned) — which shop/location a buyer is shown at connect
+  time. Decision 9 takes "all the seller's location tabs" *for now*.

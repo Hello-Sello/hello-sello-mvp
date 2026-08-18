@@ -1522,3 +1522,57 @@ The tier-ladder slug finished every stage (G1→G5 + contract migration C live o
 - **`adr-checker` is Tier 1 — CONFIRMED at completion** (not just at G3): its three operating rules (fresh separate-context agent every round · 2-round budget, stop on zero NEW blockers · simplification bias on fixes) held through build and ship and are now locked in PIPELINE.md's `/design` section.
 - **`plan-checker` stays Tier 2, on watch** — its headline predicted catch (missed call sites) was pre-empted by the ADR before any plan existed; no decisive independent catch in T01–T08. Not cut; earns Tier 1 (or the axe) on future slugs. `consistency` likewise: no evidence either way this slug.
 - **Build decision: GO on the Tier-1 set as real skills/agents** (/triage + STATE.md · spec/design with adr-checker · test-writer/runner · visual-verifier + G4 · /ship). /ship must bake in two dry-run-discovered steps: the diff-against-live re-declare protocol, and the fact that **prod data-writes require a human-granted permission rule** (the classifier correctly blocks the agent). Do NOT build plan-checker/consistency as agents yet. *Why:* the dry-run's own rule — a Tier-2 agent that catches nothing gets cut before it's built; automating unproven checkers is the GSD failure mode the pipeline was designed against.
+
+---
+
+## 2026-08-19 (session `buyer_shop_view`) — Buyer shop view: an accepted relationship overrides product visibility (AMENDS the 2026-06-14 soft-openness lock)
+
+Locked at **G1 of slug `0022-buyer-shop-view`** (`docs/PRD/0022-buyer-shop-view.md`), which
+rebuilds the catalogue on `/discover/[companyId]` into the buyer's view of the seller's shop.
+Muskan's call, spec interview 2026-08-18/19.
+
+**What changes.** The 2026-06-14 soft-openness lock made catalogue openness deliberately
+**connection-independent**: openness = `product.profile_visible` × `product.price_public`,
+audience-scoped to logged-in **verified members**, with no relationship in the gate. That
+holds for strangers. It no longer holds for partners:
+
+- **An accepted company relationship overrides `product.profile_visible`.** A connected buyer
+  sees the seller's whole catalogue, hidden products included. `profile_visible` therefore
+  means *"visible to companies I am **not** connected to"* — not *"visible to anyone"*.
+  Muskan, verbatim: *"connected companies can always see shops, that means only if someone
+  is not connected they cannot see shop if seller has made it private."*
+- **`price_public` is NOT overridden.** Connection reveals products, never prices. A connected
+  buyer looking at a price-hidden product still gets **Request pricing**, same as a stranger.
+  *Why:* price is a deliberate per-product choice, and customised pricing for a specific buyer
+  is **Phase 15's** job (per-customer pricelists, September) — not something a connection flag
+  should quietly do in August.
+- **Caller verification is unchanged** in both arms. The wider door is *verified **and**
+  connected*, which is **narrower** than the public arm beside it — so the German **HWG**
+  reasoning behind the 2026-06-14 lock is not weakened, only re-scoped.
+
+**Consequences.** This is a permission-rule change, not a UI change: the shop read path gates
+on caller verification alone today, so it gains a relationship arm (migration). Slug 0022
+therefore carries a migration despite triaging as frontend-only; Muskan re-confirmed the
+no-feature-branch call anyway (sole owner, one migration, `/ship` rebases regardless).
+
+**Also locked at the same gate** (detail in the PRD, §3):
+- **Request pricing is per-product, not shop-level** — the ask names the product; the answer
+  happens in chat. *Why:* the seller cannot price what they cannot identify.
+- **A price-hidden product cannot be added to a basket at all.** Muskan: *"no buyer would add
+  or send order without knowing price."* Read-only card + Request pricing instead.
+- **Basket admission is enforced server-side** on the same permission rule as the read path —
+  the basket table is owner-scoped only today and never checks whether the buyer was allowed
+  to *see* the product.
+- **Ordering without a connection is allowed**: Send delivers the order **and** a connection
+  request, announced to the buyer before they commit. Both reach the seller together, but the
+  order **cannot be opened or acted on until the connection request is accepted**.
+
+**Supersedes / amends:** the 2026-06-14 soft-openness entry (visibility arm only; its price
+arm and its audience-scoping stand). Note for readers: the much older *"Shop prices: visible
+only to connected companies"* line in Layer 1 was already superseded on 2026-05-14 and again
+on 2026-06-10 — it is **not** the basis for this amendment.
+
+**Also superseded by 0022:** `docs/superpowers/plans/2026-07-07-product-basket.md` Tasks 9–11
+(a never-built rival design for the same capability — different route, a second read door, and
+a connection-*required* gate; also stale, returning two price columns migration C dropped).
+It needs a dead marker so it stops reading as live intent.
