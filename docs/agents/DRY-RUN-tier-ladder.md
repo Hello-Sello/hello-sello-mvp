@@ -61,10 +61,17 @@ written from memory at the end of the run, and two of them contradict `REVIEW.md
 | `plan-checker` — *"no decisive independent catch recorded T01–T08"* → Tier 2 | **REVISE on all three plans it ran on.** T01: the backfill's `NOT(a AND b AND c)` excluded half-filled brackets — *the main malformed case* — from the rescue path. A data-correctness bug in a production backfill, caught before a line of code existed. Also forced the backfill into a test-callable function so pgTAP proves the real statement, and forced a two-session race proof. T02: `packSizes` must read both size sources *"or every index-based pick shifts."* T03: three tsc breaks, a guard-regex false trip, and the real behavior changes named instead of *"keeps behavior"* |
 | `consistency` — *"no separately recorded catch… no evidence either way"* → watch | **T02's one and only blocking finding was its.** camelCase `packSizeGrams` vs the real snake `pack_size_grams` — *"would have forced both T05 call sites into hand-built adapter objects."* Exactly the invent-and-patch class the agent exists for |
 
-**The fix — a roll-up is a pipeline step, not a good intention.** Before a slug can close,
-`/ship` reads that slug's `REVIEW.md` + `STATE.md` and writes the per-stage verdicts **from
-the artifacts, quoting them.** A verdict written from memory is not evidence, and this run
-proves it can be flatly wrong while sounding confident.
+**The fix — a roll-up is an agent, not a good intention.** Before a slug can close, a
+**fresh context** reads that slug's `REVIEW.md` + `STATE.md` and writes the per-stage verdicts
+**quoting them.** Not `/ship`'s last paragraph — a **stranger**, `rollup`, agent eleven,
+read-only, with no memory of the build.
+
+**Why a stranger and not the same session** *(reviewer's amendment, 2026-08-18)*: the session
+that did the work already believes it knows what happened, so it scores from memory and its own
+artifacts become decoration. That is exactly what happened here — the very context that had
+**written** `REVIEW.md` then recorded that two of its agents caught nothing decisive, because
+it never re-opened the file. This is the pipeline's oldest rule turned on itself: **the writer
+is never the checker.** A slug's builder is not its assessor.
 
 **A2 — score an agent on what it caught, not on whether its prediction landed.**
 
@@ -93,8 +100,8 @@ agents.
 | **A3** | `adr-checker` runs a **9-category checklist** (citation truth · security doors · Postgres semantics · deploy-window reality · call-site truth incl. *writers* · cross-ADR · data loss · invariant enforceability · unit/null contracts) under **four** locked rules — fresh context every round · 2-round budget stopping on zero *new* blockers · simplification bias on fixes · **its output is claims to spot-verify, not verdicts** (round 5 overturned two of its own earlier findings) | `PIPELINE.md` §5 |
 | **A4** | **Production data-writes cannot be applied autonomously.** The permission classifier correctly blocked `apply_migration` on a migration that `UPDATE`s and `DELETE`s prod rows, and correctly blocked self-granting the rule. `/ship` classifies the wave first and stops for a human-granted allow rule. Budget it as a *scheduled* stop | `PIPELINE.md` §9, §11 |
 | **A5** | **G4's 2-round cap has one named exception: redesign.** G4 ran three rounds here and that was right — round 3 established that the fixed-height card cannot host the ladder in flow, and Muskan designed the replacement herself. A round that produces a *new design* rather than another fix does not consume the budget; it is logged as a DEVIATION | `PIPELINE.md` §10 |
-| **A6** | **A standalone prototype cannot prove fit inside the real container.** G2 approved Variant B, and the constraint that later forced a redesign — the card's fixed 640px height — was invisible to a prototype living on its own page. Either G2 includes a fit check against the real component, or G4 must expect redesign rather than treat it as failure | *open — see §14 candidate* |
-| **A7** | **Two mechanisms shipped untested. Do not claim they work.** `builder` rejections across the whole slug: **none** — every blocking finding was accepted. And no ticket ever blew a budget (all 0/2 or 1/2). So §7's right-to-reject and §10's escalation path have **zero** observed evidence either way | *flagged here; unchanged in `PIPELINE.md`* |
+| **A6** | **A standalone prototype cannot prove fit inside the real container.** G2 approved Variant B, and the constraint that later forced a redesign — the card's fixed 640px height — was invisible to a prototype living on its own page. Either G2 includes a fit check against the real component, or G4 must expect redesign rather than treat it as failure | **`PIPELINE.md` §14 #8 — open, wants a decision** |
+| **A7** | **Two mechanisms shipped untested. Do not claim they work.** *(now recorded in `PIPELINE.md` §7.)* `builder` rejections across the whole slug: **none** — every blocking finding was accepted. And no ticket ever blew a budget (all 0/2 or 1/2). So §7's right-to-reject and §10's escalation path have **zero** observed evidence either way | *flagged here; unchanged in `PIPELINE.md`* |
 
 ### What the run confirms about the design as a whole
 

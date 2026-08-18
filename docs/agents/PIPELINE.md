@@ -443,9 +443,15 @@ docs/
      0007-pricelist/              ← everything disposable, one folder
        STATE.md                   ← the work order.  committed
        TICKETS.md                 ← tickets · S/M/XS · dependency order
-       plan-T01.md                ← one per ticket
-       review-T01.md              ← findings: blocking / note / rejected
-       visual-T01.md              ← G4 screenshots + criteria walk
+       PLAN-T01.md                ← one per ticket
+       REVIEW.md                  ← ONE per slug, appended per round.
+                                    every finding tagged blocking / note /
+                                    rejected AND attributed to the agent
+                                    that made it — "(consistency)",
+                                    "(critic, migration:192)".  the G4
+                                    visual walk + prototype DEVIATIONs
+                                    append here too.  that attribution is
+                                    what makes the §16 roll-up possible
        blocked.md                 ← only exists if a retry budget blew
                                     ("the how, one file per item" — this
                                     folder's declared purpose, now a folder
@@ -458,7 +464,7 @@ prototypes/
 
 .claude/
 ├─ skills/<name>/SKILL.md         ← the 7 things you type
-├─ agents/<name>.md               ← the 10 workers
+├─ agents/<name>.md               ← the 11 workers
 └─ settings.json                  ← the hooks
 
 supabase/migrations/              ← unchanged, existing convention
@@ -472,7 +478,7 @@ ships.
 
 ---
 
-## 7. Agents — ten workers
+## 7. Agents — eleven workers
 
 `.claude/agents/<name>.md`. Fresh context, returns one artifact, then dies.
 
@@ -488,18 +494,19 @@ ships.
 | `consistency` | Reused ours, or invented and patched? | read-only |
 | `security` | RLS · tenant isolation · exposed data | read-only |
 | `visual-verifier` | Does it match what we approved? | browser + screenshots |
+| `rollup` | What did each stage actually catch, per the artifacts? | read-only (**fresh context — see §16**) |
 
-**Exactly one of the ten can write source code: `builder`.** Everything else is scoped by
+**Exactly one of the eleven can write source code: `builder`.** Everything else is scoped by
 its `tools:` line — structurally, not by asking nicely.
 
-### Why ten is not GSD's thirty-three
+### Why eleven is not GSD's thirty-three
 
 R6 explicitly rejected "a separate agent per SDLC role (8 agents) — that's GSD's mistake."
-Ten is more than eight, so the tension has to be answered, not ignored.
+Eleven is more than eight, so the tension has to be answered, not ignored.
 
 The difference is **shape, not count.** GSD's fleet was writers and orchestrators — a
 planner writing plans, executors writing code, coordinators coordinating — each adding its
-own output to the pile. Ours is **one writer and nine read-only checkers**, which is the
+own output to the pile. Ours is **one writer and ten read-only checkers**, which is the
 shape note 09 endorses: *"built-ins already cover explore and plan; our custom agents
 should be the checker roles."* A checker runs once, returns a verdict, and dies. It cannot
 compound.
@@ -508,7 +515,8 @@ But the count still gets earned, not assumed: **the agents are tiered in §13.**
 independent observed evidence. Tier 2 started as hypothesis — an argument rather than an
 observed catch. **The manual dry-run was the trial, and it has run:** any Tier 2 agent that
 catches nothing a Tier 1 agent or Muskan would have caught gets cut before it is ever built.
-Two are still on watch rather than cut — see the tiering table in §13.
+**Nothing was cut** — the two agents first marked "on watch" were promoted on re-reading the
+evidence. See the tiering table in §13, and §16 for why the first reading got it wrong.
 
 > **Dry-run result (2026-08-16):** `adr-checker` passed the trial and is **Tier 1** — ~70
 > observed catches across 7 fresh-context rounds on the tier-ladder ADR, including classes
@@ -517,8 +525,14 @@ Two are still on watch rather than cut — see the tiering table in §13.
 > section above. `plan-checker`'s headline predicted catch (missed call sites —
 > `template.ts`, `get_discoverable_shop`) was pre-empted at design time: the ADR already
 > carried both re-declares before any plan existed. No decisive independent catch was
-> recorded in the T01–T08 sprint — it stays **Tier 2, on watch** for the next slugs
-> rather than cut outright.
+> recorded in the T01–T08 sprint — so it was first marked Tier 2, on watch.
+>
+> **Corrected 2026-08-18: `plan-checker` is Tier 1, and so is `consistency`.** That first
+> reading scored both agents only on whether their *predicted* catch landed, without reading
+> the slug's `REVIEW.md` — which records `plan-checker` returning REVISE on all three plans it
+> saw (headline: a backfill `NOT(a AND b AND c)` hole excluding the main malformed case from
+> the rescue path) and attributes T02's only blocking finding to `consistency`. Neither was
+> cut, and neither should have been on watch. See §16.
 
 `researcher` is custom rather than the built-in Explore because it needs to know *your*
 corpus: `docs/product/surfaces/`, PRDs, `DECISIONS.md`, `ARCHITECTURE-NOTES.md`, Linear,
@@ -722,7 +736,7 @@ going red once will make `/build` escalate to you over a naming nit.
 | Trigger | Goes to | Budget |
 |---|---|---|
 | Tests stay red | builder retries | **`tests` 2/2**, then STOP |
-| Finding marked `blocking` | builder fixes | **`blocking-findings` 2/2**, then STOP |
+| Finding marked `blocking` | builder fixes | **`blocking-findings` 2/2**, then STOP — *counts fix **rounds**, not findings* |
 | Finding marked `note` | written to `REVIEW.md`, surfaced at G4 | **never retried** |
 | Builder rejects a finding | written to `REVIEW.md`, **you** adjudicate at G4 | **costs no attempt** |
 | Either budget blown | **you**, with the disagreement in `blocked.md` | — |
@@ -732,6 +746,11 @@ going red once will make `/build` escalate to you over a naming nit.
 `G4 rounds` was a counter with no limit, which is how `/ship` could bounce forever: merge →
 back to G4 → fix → merge → `dev` moved again → back to G4. **Two rounds, then stop
 and escalate**, same as everything else.
+
+**The `blocking-findings` budget counts fix ROUNDS, not findings.** Three blocking findings
+fixed in one pass is **one** attempt, not three — T04 hit exactly this and the tally briefly
+read "3/2" before being corrected. A round is one build-review cycle, however many findings it
+carried.
 
 Two attempts, not five. When a budget blows, the agent does not try harder — it writes
 down *what it thinks is wrong with the instruction* and hands it over.
@@ -805,9 +824,10 @@ memory.
    here: a reviewer agent has already been observed catching an implementer breaking a rule
    that was written in `CLAUDE.md`, and `consistency` is R7's #6 — the blind spot Muskan
    cannot self-serve, with its inputs already written (`.planning/codebase/`, R8).
-   **The dry-run split them:** `security` won its headline bet (the verified-gate class,
-   including a live production defect); `consistency` recorded no catch on that slug. Build
-   `critic` + `security` first, `consistency` on watch.
+   **The dry-run confirmed all three.** `security` won its headline bet (the verified-gate
+   class, including a live production defect **and** a cross-tenant insert at T04);
+   `consistency` produced T02's only blocking finding (camelCase vs snake `pack_size_grams`).
+   Build all three — none is on watch.
 3. **`test-writer` + `test-runner`** — spec-not-code is the second-highest-value idea.
 4. **`visual-verifier` + G4** — the gate that would have caught session 69, and R5's
    "self-verifying visual prototype loop" (high value, low cost — Playwright is already in
@@ -816,9 +836,10 @@ memory.
 6. **`/spec`, `/design`, `/build`, `plan-checker`, `adr-checker`** — the front half.
    Slowest to get right.
 7. **`/ship`** deploy + live verify — closes the loop.
-8. **The roll-up.** Before a slug can close, read its `REVIEW.md` + `STATE.md` and write the
-   per-stage verdicts **from those artifacts, quoting them.** Cheap to build, and the dry-run
-   proved it is not optional — see §16.
+8. **`rollup`** — the eleventh agent. Before a slug can close, a **fresh context** reads its
+   `REVIEW.md` + `STATE.md` and writes the per-stage verdicts **quoting them.** Cheap to
+   build, and the dry-run proved it is not optional — it is the only reason two agents were
+   not wrongly cut. See §16.
 
 **Tiering after the dry-run — this is now results, not hypotheses.**
 
@@ -859,7 +880,7 @@ redesign exception (§10).
 
 **Build `plan-checker` and `consistency` too — both were promoted on 2026-08-18.** An
 earlier reading of this dry-run marked them Tier 2 on watch; re-reading the slug's own
-`REVIEW.md` showed both had decisive recorded catches. **All ten agents are now Tier 1 or
+`REVIEW.md` showed both had decisive recorded catches. **All eleven agents are now Tier 1 or
 better-evidenced than when this document was designed** — nothing on the roster gets cut.
 
 ---
@@ -875,6 +896,7 @@ better-evidenced than when this document was designed** — nothing on the roste
 | 5 | ~~Does Ayush adopt this?~~ **Moot — single owner.** The shared-file-lock hook stays built but dormant: it guards parallel worktree sessions today, and reactivates unchanged if the team grows |
 | 6 | ~~Have commands and skills merged?~~ **Answered — yes.** Current docs: *"Custom commands have been merged into skills."* We build `.claude/skills/<name>/SKILL.md` only |
 | 7 | **Docs cleanup (Muskan, own session):** number the existing `docs/muskan-build/` files, tidy the scattered `docs/architecture/` root (loose files beside `adr/` + `diagrams/`), apply the NNNN scheme going forward |
+| 8 | **Can G2 prove *fit*, or only design?** (dry-run amendment A6.) G2 approved Variant B on a standalone prototype page. The constraint that later forced a full redesign at G4 — the product card's fixed 640px height — was invisible there: three in-card fitting attempts failed before Muskan replaced the panel with a floating popover. **Two options.** (a) G2 gains a *fit check* — the prototype must render inside a stub of the real container at real widths before it can pass, which costs prototype simplicity. (b) G2 stays a pure design gate and **G4 formally expects redesign**, which A5 already permits. Not decided; a reviewer's input is wanted. Doing neither means re-learning this at every visual slug |
 
 ---
 
@@ -903,10 +925,24 @@ having caught nothing decisive, when `REVIEW.md` showed each had. Both were near
 
 **Every stage in this pipeline writes. No stage read anything back.**
 
-> **The rule: a slug cannot close until its own artifacts have been read back.** `/ship`'s
-> last act is to open that slug's `REVIEW.md` and `STATE.md` and write the per-stage verdicts
-> **from them, quoting them** — agent name, finding, file, line. A verdict with no quotation
-> behind it is not a verdict.
+> **The rule: a slug cannot close until a FRESH CONTEXT has read its artifacts back.** The
+> roll-up is an **agent — `rollup`, agent eleven** — not `/ship`'s last paragraph. It is
+> spawned with no memory of the build, reads only that slug's `REVIEW.md` + `STATE.md` +
+> `TICKETS.md`, and writes the per-stage verdicts **quoting them** — agent name, finding, file,
+> line. A verdict with no quotation behind it is not a verdict.
+
+**Why it must be a stranger, and not the session that did the work.** The session that built
+the slug already believes it knows what happened, so it scores from memory and its artifacts
+become decoration. That is not a hypothesis — it is precisely what happened here: the same
+context that had *written* `REVIEW.md` then recorded that `plan-checker` and `consistency`
+caught nothing decisive, because it never re-opened the file. **This is the pipeline's own
+oldest rule applied to itself:**
+
+> **The writer is never the checker.** A slug's builder is not its assessor.
+
+`rollup` is read-only — `REVIEW.md`, `STATE.md`, `TICKETS.md`, and the diff — and returns one
+artifact: the filled verdict table. It cannot write code, and it never sees the conversation
+that produced the work.
 
 Three things make this cheap rather than ceremonial:
 
