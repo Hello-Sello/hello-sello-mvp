@@ -160,4 +160,11 @@ Consumed by Matt Pocock's `grill-with-docs` and `improve-codebase-architecture` 
 | **Volume tier / rung** | One child row of a price row (`pricelist_item_tier` under `pricelist_item`): *from N g → €/g*. Buying at least `min_grams` unlocks that per-gram price. |
 | **Tier ladder** | A product's ordered set of rungs — prices strictly descend below the base price as `min_grams` rises (DB-enforced by the ladder-shape trigger; up to 3 rungs in the UI, unbounded in schema). The ladder **REPLACES** the old single bundle bracket (`bundle_threshold_grams` / `bundle_price_per_gram`); base price stays on `pricelist_item`. (ADR-0004.) |
 
+## Buyer shop view (2026-08-18)
+
+| Term | Definition |
+|------|-----------|
+| **Buyer Shop View** | The seller's Present shop as a connected buyer sees it, rendered at `/discover/[companyId]`. Same shop, same product cards, **no edit affordances**; adds the buyer-only controls — quantity, pack size, the tier-ladder reveal, and add-to-basket. Not a separate shop: one catalogue, two viewers. (Slug `0022-buyer-shop-view`.) |
+| **Catalogue openness (L0 / L1 / L2)** | Not one dial — a **level that emerges from two per-product booleans**, `product.profile_visible` (does it appear off-profile at all) × `product.price_public` (is its price shown). **L0** = no visible products → catalogue locked, "connect to view". **L1** = visible products whose price is hidden → card renders with "Price on request" + the shop-level Request-pricing CTA. **L2** = visible products with a public price → card renders the price. Levels are **per product**, so one shop routinely mixes L1 and L2 rows; the shop-level chip reports the mix. (2026-06-14, `discover-connect-loop.md`.) |
+
 *Maintained by `grill-with-docs` (proposes additions during grilling — humans confirm) and direct edits. Add new terms when they're locked in Layer docs or surface during code review.*
