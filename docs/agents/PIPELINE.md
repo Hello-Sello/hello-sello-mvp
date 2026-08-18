@@ -551,9 +551,10 @@ build one then.
 
 ### Models are unpinned
 
-Earlier drafts asserted Opus here, Sonnet there. That was a guess dressed as a finding —
-the exact habit worth avoiding. **Everything inherits the session model until we have
-measured a reason to pin it.** Revisit after the manual dry-run.
+Revised 2026-08-18 (Muskan's call, building the agents): **judgment-heavy checkers pin
+the smartest model** — `critic` and `security` run Opus; `consistency` runs Sonnet
+(pattern-matching, not deep reasoning). Everything else still inherits the session model
+until measured otherwise.
 
 ### Review routing
 
