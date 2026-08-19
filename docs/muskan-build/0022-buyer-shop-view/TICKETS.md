@@ -1,6 +1,6 @@
 # 0022 · buyer-shop-view — tickets
 
-**Source:** ADR-0005 (rev 4, G3-accepted 2026-08-19) + PRD 0022 (G1) + the G2 variant-A
+**Source:** ADR-0005 (rev 5, G3-accepted 2026-08-19 — round 3 folded in) + PRD 0022 (G1) + the G2 variant-A
 contract. Sized S/M/XS, INVEST-checked, EARS criteria.
 **Hard rule:** tickets running in parallel touch different files.
 
@@ -61,7 +61,8 @@ not a style choice.**
 
 **Files:** `src/app/discover/[companyId]/BuyerShopView.tsx` (new),
 `src/app/discover/[companyId]/page.tsx`, `src/app/present/ShopView.tsx` (**stale comment
-only**, ADR §1), delete `src/app/prototype-0022-buyer-shop/`
+only**, ADR §1), `src/modules/basket/components/BasketDrawer.tsx`,
+delete `src/app/prototype-0022-buyer-shop/`
 
 - When a verified buyer opens `/discover/[companyId]`, the system shall render the seller's
   shop through `ShopView` with `viewerCanManage={false}`, at Present's 1400px container.
@@ -72,6 +73,11 @@ only**, ADR §1), delete `src/app/prototype-0022-buyer-shop/`
 - When the seller may see no products at all, the system shall still render banner, info and
   links, and pass the locked-catalogue panel with its Connect action to the `emptyState` slot
   (AC 4).
+- When a **non-connected** buyer opens the basket drawer, the system shall state that
+  connecting comes first and offer the Connect action, rather than a Send that cannot fire —
+  `BasketDrawer.tsx:198` nulls the recipient without a relationship, so today the buyer fills
+  a basket they cannot send with no explanation (round 3, B9; the honest v1 of decision 2 now
+  that AC 9 is split out).
 - When this ticket completes, `ShopView` shall carry **no new behaviour prop** and the
   prototype route shall be gone from the tree.
 
@@ -86,8 +92,11 @@ renders Add-to-basket on price-hidden products with no price condition at all.
 - When a product's price is hidden from the viewer, the card shall render no quantity control
   and no add-to-basket, and shall render a Request-pricing action naming that product (AC 3).
 - When the viewer is the product's **owner**, the card shall render the buy row even where the
-  price is unset or not public — gate is `priceShown || viewerIsOwner`, so the seller's own
-  unpriced products keep their controls (ADR §6; the regression this replaces).
+  price is unset or not public — gate is `!editing && (priceShown || viewerIsOwner)`, so the
+  seller's own unpriced products keep their controls (ADR §6).
+- When the card is in **edit mode**, it shall render no buy row at all — the tier editor needs
+  that footer space (ADR-0004). Assert this explicitly: the owner-with-null-price case passes
+  with or without the `!editing` guard, so nothing else catches its loss.
 - When `viewerIsOwner` is not supplied, the card shall behave exactly as it does today, so
   `/present` is unchanged.
 - When `profile_visible` is absent from a product, the card shall render **no** "Hidden" badge
@@ -135,7 +144,9 @@ Decision 6. Carries the **G3-signed verification tightening**: three of the seve
 gain `is_caller_verified()` and unverified members lose reads they have today.
 
 **Files:** `supabase/migrations/<ts>_connection_visibility_override.sql`,
-`supabase/tests/` (pgTAP), `src/types/database.types.ts`
+`supabase/tests/` (pgTAP), `src/modules/deals/supabase/reads.ts` (the `getOwnCatalog`
+company filter — cross-lane, but the leak is this migration's blast radius),
+`src/types/database.types.ts`
 
 - When `is_connected_to_company(seller)` is called by a member of a company with an **active**
   relationship to that seller, it shall return true; when the relationship is absent,
@@ -146,14 +157,24 @@ gain `is_caller_verified()` and unverified members lose reads they have today.
   still return no price and no tiers (AC 6, decision 7) — connection never reveals a price.
 - When a product's visibility **window** has expired, connection shall **not** override it.
 - When a connection is **pending**, the buyer shall see only what the seller made visible.
-- When each of the five policies is rewritten, it shall first be diffed against
-  `pg_policy.polqual` on the live database — never re-typed from the migration that first
-  declared it (SECURITY-CHECKLIST S5).
+- When the rule is applied, **only `product_public_select` shall state it** — verified,
+  (`profile_visible` or connected), window. Sites 2-5 shall carry only what is locally theirs
+  (`price_public` for 2 and 5) and shall **delete** their duplicated visibility/window
+  conjuncts, inheriting instead (ADR §3, the rev-5 shape).
+- When an authenticated member of an **unverified** company reads any catalogue surface, the
+  system shall return nothing — the signed tightening, inherited from site 1.
+- When each policy is rewritten, it shall first be diffed against `pg_policy.polqual` on the
+  live database — never re-typed from the migration that first declared it (S5).
 - When the migration completes, `product_media_public_select` shall no longer list `anon`, and
   `anon` shall hold no `SELECT` on `product_media` (S4).
-- When the pgTAP suite runs, it shall assert the predicate is present at all seven sites via
-  the **live catalog** — `pg_policy.polqual` (1-5), `pg_get_viewdef` (6), `pg_get_functiondef`
-  (7).
+- When the pgTAP suite runs, it shall assert **behaviour, not substrings** (round 3, N7): for
+  each of the five doors — product, image, media, price, ladder — a connected buyer reads a
+  hidden product's row and an unverified caller reads none. A substring check for
+  `is_connected_to_company` cannot detect a missing window or a missing verified gate.
+- When the seller's deal-line product picker is opened after this migration, it shall list
+  **only the seller's own** products — `getOwnCatalog` (`deals/supabase/reads.ts:538-542`)
+  gains the `company_id` filter it always intended. Widening site 1 makes its pre-existing
+  leak strictly worse (round 3, B4).
 
 ## T07 — Server-enforced basket admission · **S** · depends on: T06
 
@@ -172,6 +193,11 @@ see the product — or afford to know its price.
 - When a buyer edits the pack count of a line they already hold for a product that has since
   become invisible to them, the system shall allow it — admission is `FOR INSERT` only, and
   the test shall exercise the **upsert** path, not only the plain update.
+- When a buyer **updates** an existing basket line, they shall be unable to change its
+  `product_id` — `UPDATE` is revoked table-wide and re-granted on `pack_count`,
+  `pack_size_grams` and `updated_at` only (the DEV-88 column-REVOKE idiom). **Without this the
+  INSERT policy is ornamental**: a buyer inserts a legal line and PATCHes it onto a hidden
+  product (round 3, B2).
 - When the migration completes, `anon` shall hold no privileges on `product_basket_line`.
 - When the server refuses an admission, `addToBasket` shall surface a user-facing refusal
   rather than an unhandled rejection.
@@ -205,6 +231,6 @@ T06's helper) · T03 → T04 (T04 wires T03's hook).
 | 6 connected still sees "Price on request" | T06 |
 | 7 full spec set, no lots | T05 |
 | 8 quantity reaches a rung → rung price | T02 (shipped resolver; walk-only) |
-| 9 order without connection | **split to its own slug** (ADR §9) |
+| 9 order without connection | **split to its own slug** (ADR §9) — carries decision 11 + decision 2's second half with it; T02 closes the dead end it leaves |
 | 10 server refuses inadmissible basket line | T07 |
 | 11 no owner chrome anywhere | T02 + T03 |
