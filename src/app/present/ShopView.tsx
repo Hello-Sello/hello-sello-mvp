@@ -786,10 +786,10 @@ function ShopInfoRow({
       ? company.tags.map((t) => (
           <span key={t} className="font-bold text-ink">#{TAG_LABEL[t] ?? titleCase(t)}</span>
         ))
-      : <span className="text-sm text-ink/40">No tags yet</span>;
+      : <span className="text-[12.5px] text-ink/40">No tags yet</span>;
 
   const links = (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-1">
       {company.website && <LinkRow icon={<Globe size={16} />} label="Website" url={company.website} />}
       {company.links.map((l, i) => (
         <LinkRow key={i} icon={linkIcon(l.platform)} label={linkLabel(l)} url={linkHref(l)} />
@@ -799,7 +799,7 @@ function ShopInfoRow({
   const hasAnyLink = Boolean(company.website) || company.links.length > 0;
 
   return (
-    <div className="grid grid-cols-1 items-stretch gap-3 lg:grid-cols-[1.4fr_1fr_1fr]">
+    <div className="grid grid-cols-1 items-stretch gap-2.5 lg:grid-cols-3">
       {/* About + description */}
       <InfoBox
         testId="info-card-about"
@@ -808,16 +808,17 @@ function ShopInfoRow({
           editing ? (
             <DescriptionEditor value={edits.description} onChange={(v) => onEdit("description", v)} />
           ) : company.description ? (
-            <p className="line-clamp-4 text-sm leading-relaxed text-ink/70">“{company.description}”</p>
+            <p className="line-clamp-2 text-[12.5px] leading-relaxed text-ink/70">“{company.description}”</p>
           ) : (
-            <span className="text-sm text-ink/40">No description yet</span>
+            <span className="text-[12.5px] text-ink/40">No description yet</span>
           )
         }
         more={
           !editing && company.description ? (
-            <p className="text-sm leading-relaxed text-ink/75">“{company.description}”</p>
+            <p className="text-[12.5px] leading-relaxed text-ink/75">“{company.description}”</p>
           ) : undefined
         }
+        moreOnOverflow
       />
 
       {/* Location: Headquarter (unchanged, read-only) + a small named Warehouse
@@ -827,7 +828,7 @@ function ShopInfoRow({
         testId="info-card-warehouse"
         title="Location"
         preview={
-          <div className="space-y-2 text-sm">
+          <div className="space-y-1 text-[12.5px]">
             <div className="flex flex-col gap-0.5">{tagRows}</div>
             <div>
               <div className="font-bold text-ink">Headquarter:</div>
@@ -836,7 +837,7 @@ function ShopInfoRow({
           </div>
         }
         more={
-          <div className="text-sm">
+          <div className="text-[12.5px]">
             <div className="mb-1 font-bold text-ink">Warehouses:</div>
             {editing ? (
               <LocationsEditor
@@ -870,7 +871,7 @@ function ShopInfoRow({
           ) : hasAnyLink ? (
             links
           ) : (
-            <span className="text-sm text-ink/40">No links yet</span>
+            <span className="text-[12.5px] text-ink/40">No links yet</span>
           )
         }
       />
@@ -968,7 +969,7 @@ function linkLabel(l: ShopLink) {
 function LinkRow({ icon, label, url }: { icon: React.ReactNode; label: string; url: string }) {
   return (
     <a href={url} target="_blank" rel="noreferrer"
-       className="flex items-center gap-2 font-bold text-ink hover:text-brand">
+       className="flex items-center gap-1.5 text-[12.5px] font-bold text-ink hover:text-brand">
       {icon} {label}
     </a>
   );
