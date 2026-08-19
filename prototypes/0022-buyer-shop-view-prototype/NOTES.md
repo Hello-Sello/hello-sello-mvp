@@ -87,10 +87,37 @@ the fit bar is the evidence for the container decision.
 - **Reuse `ShopView` + `ProductCard`. A new card component is a failure, not a style choice.**
 - The `consistency` agent's single question — *reuse, or invent and patch?* — applies here.
 
-**Still open at G2:** Muskan has not yet walked the in-app route. G2 is **not passed** until
-she does.
+**G2 PASSED — 2026-08-19.** Muskan walked the in-app route and confirmed the seller's
+`/present` after the shared-component changes below.
 
-**Decided:** _(pending in-app walk)_
+### What the walk changed (all in the REAL components, all with 375 unit tests green)
+
+Four defects and two shape changes came out of actually rendering buyer mode. The first
+three are the same root cause: **`viewerCanManage={false}` had no caller, so buyer mode had
+never once run.**
+
+| # | Found | Fix |
+|---|---|---|
+| 1 | **"Manage shop" and "Present mode" rendered for a buyer.** `ShopView` neutered `onManage` with a no-op (a dead button) and did not gate `onPresent` **at all** — a buyer could enter Present mode on someone else's shop | `PresentBanner` gains `canManage` (default `true`); `false` hides the whole owner row. Breaks PRD **AC 11** otherwise |
+| 2 | **`EmptyShop`'s heading was hardcoded "Your shop is empty"** — a buyer was told a stranger's shop was theirs. Only the paragraph varied | Heading varies by audience |
+| 3 | **A locked catalogue rendered as an empty one** — no Connect action, wrong message | `emptyState` slot; the buyer page passes the locked panel (**AC 4**) |
+| 4 | **Info boxes were far too tall.** Cause was `mt-auto` on the `More` control: in an equal-height row it pinned the button to the bottom of the tallest box, opening dead space under short content | Compact row, equal thirds (was `1.4fr/1fr/1fr`), app's own text styles at smaller sizes |
+| 5 | `More` offered on text that did not overflow | About clamps to 2 lines and offers `More` **only when measured as clipped** (`ResizeObserver`). Location keeps its expander unconditionally — its `more` is the warehouse list, i.e. different content, not clipped text |
+| 6 | Location box carried company **tags**, which are identity, not location; Links stacked vertically | Location shows one `·`-joined row; Links inline; tags move under the company name in About, for **both** viewers |
+
+### ⚠️ The ADR must decide this — do not let it default
+
+Buyer mode is currently expressed as **knobs on the seller's component**:
+`viewerCanManage`, `buyerContext`, `emptyState`. A fourth (`showLocationFilter`) was added
+and then deleted when Muskan clarified the filter stays.
+
+Three is tolerable; the trend is not. **`/design` should decide between a `BuyerShopView`
+wrapper that owns the buyer's version, and continuing to grow `ShopView`.** Every new buyer
+difference currently costs one more prop on a component the seller also depends on — which
+is change amplification on a shipped surface, and the reason a shared component drifts.
+
+**Decided:** 2026-08-19 — variant A, in-app, walked and confirmed on both the buyer route
+and the seller's `/present`.
 
 > The chosen variant becomes the **G4 visual contract**: `/build` is verified against it, and
 > `visual-verifier` stages the live page beside it. Record the pick here before this prototype

@@ -1,6 +1,6 @@
 # 0022 buyer-shop-view — work order
 lane:   FULL
-stage:  triage ✅ · spec ✅ (G1 passed 2026-08-19) → prototype (next, G2)
+stage:  triage ✅ · spec ✅ (G1 2026-08-19) · prototype ✅ (G2 2026-08-19) → design (next, G3)
 branch: **claude/muskan/work** — no feature branch (Muskan's call, 2026-08-18)
 >  No cut: this slug is frontend-heavy with no expected migration, so a feature branch
 >  would only add a merge step. `/ship` still rebases onto `dev` and PRs from here.
@@ -78,12 +78,20 @@ one file serving every seller. No new route; its insides get rebuilt.
 | spec   | `docs/PRD/0022-buyer-shop-view.md` — the PRD, APPROVED at G1 |
 | spec   | `docs/architecture/CONTEXT.md` — corrected `Buyer Shop View` ("connected buyer" → any verified buyer), per-product Request-pricing CTA, **new** `Connection override (visibility only)` term |
 | spec   | `docs/decisions/DECISIONS.md` — 2026-08-19 entry: relationship overrides visibility, amends the 2026-06-14 soft-openness lock |
+| spec   | `docs/superpowers/plans/2026-07-07-product-basket.md` — Tasks 9–11 marked DEAD (superseded); project `CLAUDE.md` loose end updated |
+| prototype | `prototypes/0022-buyer-shop-view-prototype/` — `index.html` (variants A/B/C + the fit check) + `NOTES.md` (the G2 verdict) |
+| prototype | `src/app/prototype-0022-buyer-shop/page.tsx` — **the chosen contract**: real AppShell + ShopView + ProductCard, hardcoded data. ⚠️ THROWAWAY — delete at `/build` |
+| prototype | `src/app/present/PresentBanner.tsx`, `ShopView.tsx`, `InfoBox.tsx` — **real component fixes** the walk surfaced (see NOTES.md table) |
 
 ## Locked
 (empty until G3 — but two G1 calls are already load-bearing on the ADR)
 - **Connection overrides `profile_visible`, never `price_public`** → the read path gains a
   relationship arm; the price arm is untouched. (`DECISIONS.md` 2026-08-19.)
 - **One read door** — no parallel price reader for this surface (`ARCHITECTURE-NOTES.md:423`).
+- **G2: variant A** — the buyer view REUSES `ShopView` + `ProductCard`. **A new card
+  component is a build failure, not a style choice** (the `consistency` agent's question).
+- **G2: buyer mode shows no owner chrome anywhere** — Manage shop, Present mode, SaveBar,
+  banner/logo edit. PRD AC 11.
 
 ## Deferred — must NOT be built
 - Per-customer pricelists (Phase 15 — September; the one most likely to be confused with this)
@@ -99,6 +107,7 @@ one file serving every seller. No new route; its insides get rebuilt.
 | gate | date | verdict |
 |---|---|---|
 | **G1 (spec)** | 2026-08-19 | **PASSED** — Muskan approved the PRD. 11 decisions recorded in PRD §3, taken over a one-question-at-a-time interview. Two shared-doc amendments written under the sync ritual (CONTEXT.md, DECISIONS.md). No researcher claim overruled; decision 6 is a **new** call that amends a locked one. Branch condition fired and was reviewed — call unchanged. |
+| **G2 (prototype)** | 2026-08-19 | **PASSED** — variant **A (full shop)**. Contract is the in-app route, not the HTML: Muskan's objection — *"if I confirm this html variant then maybe the builder will build this same thing and not follow my real app frontend"* — is correct, and variant A's claim ("reuse the seller's shop") cannot be proven by a mock. Walked on the buyer route **and** on the seller's `/present`. The walk found 4 defects + 2 shape changes in shipped components (NOTES.md). |
 
 ## For Muskan
 - ✅ **Q2a SETTLED** — a verified buyer *can* read a foreign seller's prices where
@@ -116,3 +125,19 @@ one file serving every seller. No new route; its insides get rebuilt.
   (`august-mvp.md:99-100`) — a before-launch question, not a build blocker.
 - ⚠️ **DEV-113** (Backlog, unowned) — which shop/location a buyer is shown at connect
   time. Decision 9 takes "all the seller's location tabs" *for now*.
+
+### ▶ Carried into `/design` (G3)
+1. **⚠️ THE ADR MUST DECIDE: `BuyerShopView` wrapper vs more knobs on `ShopView`.** Buyer
+   mode currently rides three props on the seller's component (`viewerCanManage`,
+   `buyerContext`, `emptyState`); a fourth was added and withdrawn during G2. Each new buyer
+   difference costs another prop on a **shipped** surface the seller depends on. Do not let
+   this default by accretion.
+2. **The migration** — decision 6's relationship arm on the catalogue read path
+   (`DECISIONS.md` 2026-08-19). Still unwritten; the slug carries it despite triaging
+   frontend-only.
+3. **Basket admission must be enforced server-side** (PRD §4.7 / AC 10) — `product_basket_line`
+   is owner-scoped only and never checks whether the buyer may *see* the product.
+4. **Where the buyer strip finally belongs.** It renders above the info boxes via a slot;
+   the HTML put it under the tagline inside the banner. Cosmetic, but it is item 1's problem
+   in miniature.
+5. **Delete `src/app/prototype-0022-buyer-shop/` at `/build`.**
