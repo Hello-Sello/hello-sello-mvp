@@ -193,7 +193,6 @@ export function ShopView({
   viewerCanManage = true,
   buyerContext,
   emptyState,
-  showLocationFilter = true,
 }: {
   shop: Shop;
   canEditBranding?: boolean;
@@ -201,10 +200,6 @@ export function ShopView({
    *  connection state, Connect. The owner surface passes nothing (a seller is
    *  never "connected" to their own shop), so /present is unchanged. */
   buyerContext?: React.ReactNode;
-  /** Buyer view drops the "All locations" filter and keeps only the per-location
-   *  group headings — the filter reads as a contradiction there ("All locations"
-   *  selected while the first heading says "Vancouver"). The owner keeps it. */
-  showLocationFilter?: boolean;
   /** Replaces the built-in empty state. A buyer's empty shop is not the owner's:
    *  it may be empty because the catalogue is PRIVATE to them, which is a
    *  different message and carries a Connect action. */
@@ -619,14 +614,14 @@ export function ShopView({
         onPresent={enterPresent}
       />
 
+      {buyerContext}
+
       <ShopInfoRow
         company={company}
         editing={editing}
         edits={edits}
         onEdit={updateEdit}
       />
-
-      {buyerContext}
 
       {products.length === 0 ? (
         emptyState ?? <EmptyShop onAdd={() => setDrawerOpen(true)} canManage={viewerCanManage} />
@@ -636,9 +631,7 @@ export function ShopView({
               a new shop label; "Assign products to shop" opens the two-pane drag
               dialog (fast placement without scrolling the live grid). */}
           <div className="flex flex-wrap items-center gap-2">
-            {showLocationFilter && (
-              <LocationTabs products={products} active={loc} onSelect={setLoc} />
-            )}
+            <LocationTabs products={products} active={loc} onSelect={setLoc} />
             {viewerCanManage && editing && (
               <>
                 <AddShopButton onAdd={addLocation} />
@@ -781,15 +774,9 @@ function ShopInfoRow({
   onEdit: <K extends keyof ChromeEdits>(k: K, v: ChromeEdits[K]) => void;
 }) {
   const hq = company.address || company.country || "—";
-  const tagRows =
-    company.tags.length > 0
-      ? company.tags.map((t) => (
-          <span key={t} className="font-bold text-ink">#{TAG_LABEL[t] ?? titleCase(t)}</span>
-        ))
-      : <span className="text-[12.5px] text-ink/40">No tags yet</span>;
 
   const links = (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
       {company.website && <LinkRow icon={<Globe size={16} />} label="Website" url={company.website} />}
       {company.links.map((l, i) => (
         <LinkRow key={i} icon={linkIcon(l.platform)} label={linkLabel(l)} url={linkHref(l)} />
@@ -804,6 +791,18 @@ function ShopInfoRow({
       <InfoBox
         testId="info-card-about"
         title={editing ? edits.name : company.name}
+        subtitle={
+          /* Company tags are IDENTITY (#Cultivator, #Wholesale) — they used to
+             sit in the Location box, which is not what they describe. They ride
+             the company name instead, in both the owner and buyer views. */
+          company.tags.length > 0 ? (
+            <div className="mt-0.5 flex flex-wrap gap-x-2 text-[12px] font-bold text-ink/70">
+              {company.tags.map((t) => (
+                <span key={t}>#{TAG_LABEL[t] ?? titleCase(t)}</span>
+              ))}
+            </div>
+          ) : undefined
+        }
         preview={
           editing ? (
             <DescriptionEditor value={edits.description} onChange={(v) => onEdit("description", v)} />
@@ -828,34 +827,25 @@ function ShopInfoRow({
         testId="info-card-warehouse"
         title="Location"
         preview={
-          <div className="space-y-1 text-[12.5px]">
-            <div className="flex flex-col gap-0.5">{tagRows}</div>
-            <div>
-              <div className="font-bold text-ink">Headquarter:</div>
-              <div className="text-ink/70">{hq}</div>
-            </div>
+          <div className="text-[12.5px] text-ink/70">
+            {/* One horizontal row, "·"-joined: Headquarter first, then the named
+                warehouses. Company TAGS used to live in this box — they are
+                identity, not location, and now ride the buyer context strip. */}
+            {[hq, ...company.locations.map((l) => l.label)]
+              .filter(Boolean)
+              .join(" · ")}
           </div>
         }
         more={
-          <div className="text-[12.5px]">
-            <div className="mb-1 font-bold text-ink">Warehouses:</div>
-            {editing ? (
+          editing ? (
+            <div className="text-[12.5px]">
+              <div className="mb-1 font-bold text-ink">Warehouses:</div>
               <LocationsEditor
                 locations={edits.locations}
                 onChange={(next) => onEdit("locations", next)}
               />
-            ) : company.locations.length > 0 ? (
-              <div className="flex flex-col gap-1">
-                {company.locations.map((l, i) => (
-                  <div key={i} className="text-ink/70">
-                    <span className="font-semibold text-ink">{l.label}:</span> {l.value}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-ink/70">Not set</div>
-            )}
-          </div>
+            </div>
+          ) : undefined
         }
       />
 

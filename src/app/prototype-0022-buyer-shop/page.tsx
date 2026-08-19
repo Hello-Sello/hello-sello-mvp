@@ -150,13 +150,15 @@ export default function Prototype0022() {
         canEditBranding={false}
         buyerContext={<BuyerContext connected={connected} />}
         emptyState={locked ? <LockedCatalogue /> : undefined}
-        showLocationFilter={false}
       />
     </div>
   );
 }
 
 /** The buyer's half of the header — verification, connection state, Connect.
+ *  Company TAGS are deliberately NOT here: they are identity, shown with the
+ *  company name in the About box for every viewer. This strip carries only what
+ *  is true of the RELATIONSHIP between the two companies.
  *  Present's banner has no concept of either: a seller is never connected to
  *  their own shop. Rendered through ShopView's `buyerContext` slot so it lands
  *  beneath the info boxes rather than floating above the banner. */
@@ -169,11 +171,6 @@ function BuyerContext({ connected }: { connected: boolean }) {
       <span className="rounded-full bg-info/15 px-3 py-1 text-[11px] font-extrabold text-[#3c48a0]">
         {connected ? "Connected" : "Not connected"}
       </span>
-      {COMPANY.tags.map((t) => (
-        <span key={t} className="rounded-full bg-brand/10 px-3 py-1 text-[11px] font-extrabold text-brand-deep">
-          {t}
-        </span>
-      ))}
       {!connected && (
         <button className="rounded-full border border-brand/35 bg-white px-4 py-1 text-[11px] font-extrabold text-brand-deep">
           Connect
