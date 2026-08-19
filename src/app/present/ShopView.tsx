@@ -193,6 +193,7 @@ export function ShopView({
   viewerCanManage = true,
   buyerContext,
   emptyState,
+  showLocationFilter = true,
 }: {
   shop: Shop;
   canEditBranding?: boolean;
@@ -200,6 +201,10 @@ export function ShopView({
    *  connection state, Connect. The owner surface passes nothing (a seller is
    *  never "connected" to their own shop), so /present is unchanged. */
   buyerContext?: React.ReactNode;
+  /** Buyer view drops the "All locations" filter and keeps only the per-location
+   *  group headings — the filter reads as a contradiction there ("All locations"
+   *  selected while the first heading says "Vancouver"). The owner keeps it. */
+  showLocationFilter?: boolean;
   /** Replaces the built-in empty state. A buyer's empty shop is not the owner's:
    *  it may be empty because the catalogue is PRIVATE to them, which is a
    *  different message and carries a Connect action. */
@@ -631,7 +636,9 @@ export function ShopView({
               a new shop label; "Assign products to shop" opens the two-pane drag
               dialog (fast placement without scrolling the live grid). */}
           <div className="flex flex-wrap items-center gap-2">
-            <LocationTabs products={products} active={loc} onSelect={setLoc} />
+            {showLocationFilter && (
+              <LocationTabs products={products} active={loc} onSelect={setLoc} />
+            )}
             {viewerCanManage && editing && (
               <>
                 <AddShopButton onAdd={addLocation} />

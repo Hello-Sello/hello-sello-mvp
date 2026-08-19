@@ -150,6 +150,7 @@ export default function Prototype0022() {
         canEditBranding={false}
         buyerContext={<BuyerContext connected={connected} />}
         emptyState={locked ? <LockedCatalogue /> : undefined}
+        showLocationFilter={false}
       />
     </div>
   );
