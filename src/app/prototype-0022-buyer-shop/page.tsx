@@ -141,36 +141,43 @@ export default function Prototype0022() {
         </span>
       </div>
 
-      {/* BUYER CONTEXT STRIP — new UI for this slug. Present's banner has no
-          concept of "verified" or "connected" (a seller is never connected to
-          themselves), so this is the buyer's half of the header. Matches the
-          HTML prototype's chip row. Its FINAL home is under the tagline inside
-          the banner block; rendering it above is a prototype limitation —
-          ShopView has no slot for it yet (an ADR question for /design). */}
-      <div className="mx-auto mb-2 flex max-w-[1400px] flex-wrap items-center gap-2 px-6 sm:px-8">
-        <span className="rounded-full bg-success/15 px-3 py-1 text-[11px] font-extrabold text-[#1d7a1c]">
-          ✓ Verified
-        </span>
-        <span className="rounded-full bg-info/15 px-3 py-1 text-[11px] font-extrabold text-[#3c48a0]">
-          {connected ? "Connected" : "Not connected"}
-        </span>
-        {COMPANY.tags.map((t) => (
-          <span key={t} className="rounded-full bg-brand/10 px-3 py-1 text-[11px] font-extrabold text-brand-deep">
-            {t}
-          </span>
-        ))}
-        {!connected && (
-          <button className="rounded-full border border-brand/35 bg-white px-4 py-1 text-[11px] font-extrabold text-brand-deep">
-            Connect
-          </button>
-        )}
-      </div>
-
-      {locked ? <LockedCatalogue /> : null}
 
       {/* viewerCanManage={false} is the buyer mode. It has NO caller in the app
           today — this prototype is its first real exercise. */}
-      <ShopView shop={shop} viewerCanManage={false} canEditBranding={false} />
+      <ShopView
+        shop={shop}
+        viewerCanManage={false}
+        canEditBranding={false}
+        buyerContext={<BuyerContext connected={connected} />}
+        emptyState={locked ? <LockedCatalogue /> : undefined}
+      />
+    </div>
+  );
+}
+
+/** The buyer's half of the header — verification, connection state, Connect.
+ *  Present's banner has no concept of either: a seller is never connected to
+ *  their own shop. Rendered through ShopView's `buyerContext` slot so it lands
+ *  beneath the info boxes rather than floating above the banner. */
+function BuyerContext({ connected }: { connected: boolean }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="rounded-full bg-success/15 px-3 py-1 text-[11px] font-extrabold text-[#1d7a1c]">
+        ✓ Verified
+      </span>
+      <span className="rounded-full bg-info/15 px-3 py-1 text-[11px] font-extrabold text-[#3c48a0]">
+        {connected ? "Connected" : "Not connected"}
+      </span>
+      {COMPANY.tags.map((t) => (
+        <span key={t} className="rounded-full bg-brand/10 px-3 py-1 text-[11px] font-extrabold text-brand-deep">
+          {t}
+        </span>
+      ))}
+      {!connected && (
+        <button className="rounded-full border border-brand/35 bg-white px-4 py-1 text-[11px] font-extrabold text-brand-deep">
+          Connect
+        </button>
+      )}
     </div>
   );
 }
@@ -178,8 +185,8 @@ export default function Prototype0022() {
 /** AC 4 — the L0 state. This is the one genuinely NEW piece of UI on the page. */
 function LockedCatalogue() {
   return (
-    <div className="mx-auto my-4 max-w-[1400px] px-6 sm:px-8">
-      <div className="rounded-3xl border border-dashed border-brand-deep/25 bg-white/70 p-8 text-center backdrop-blur">
+    <div className="mt-2">
+      <div className="rounded-3xl border border-dashed border-brand-deep/25 bg-white/70 p-12 text-center backdrop-blur">
         <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-brand/10 text-xl">🔒</div>
         <h3 className="text-base font-extrabold">This catalogue is private</h3>
         <p className="mx-auto mt-1 max-w-sm text-[13px] text-ink-muted">

@@ -187,9 +187,23 @@ const emptyDraft = (): ProductDraft => ({
   fields: {}, batchInserts: [], batchEdits: {}, batchDeletes: [],
 });
 
-export function ShopView({ shop, canEditBranding = false, viewerCanManage = true }: {
+export function ShopView({
+  shop,
+  canEditBranding = false,
+  viewerCanManage = true,
+  buyerContext,
+  emptyState,
+}: {
   shop: Shop;
   canEditBranding?: boolean;
+  /** Buyer-side context rendered directly beneath the info boxes — verification,
+   *  connection state, Connect. The owner surface passes nothing (a seller is
+   *  never "connected" to their own shop), so /present is unchanged. */
+  buyerContext?: React.ReactNode;
+  /** Replaces the built-in empty state. A buyer's empty shop is not the owner's:
+   *  it may be empty because the catalogue is PRIVATE to them, which is a
+   *  different message and carries a Connect action. */
+  emptyState?: React.ReactNode;
   /** Whether the viewer may manage this shop — enter edit mode, add/assign
    *  products, edit the banner/logo. /present is always the caller's OWN shop
    *  (default true); the visitor route (/present/[companyId]) passes false so a
@@ -607,8 +621,10 @@ export function ShopView({ shop, canEditBranding = false, viewerCanManage = true
         onEdit={updateEdit}
       />
 
+      {buyerContext}
+
       {products.length === 0 ? (
-        <EmptyShop onAdd={() => setDrawerOpen(true)} canManage={viewerCanManage} />
+        emptyState ?? <EmptyShop onAdd={() => setDrawerOpen(true)} canManage={viewerCanManage} />
       ) : (
         <>
           {/* Location filter + the two edit-mode shop controls. "+ Add shop" stages
@@ -1221,7 +1237,11 @@ function EmptyShop({ onAdd, canManage }: { onAdd: () => void; canManage: boolean
       <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-brand-soft/50 text-brand-deep">
         <UploadCloud size={30} />
       </div>
-      <h2 className="text-xl font-bold text-ink">Your shop is empty</h2>
+      {/* "Your" is the OWNER's voice. A visitor is not the owner — the heading
+          has to change with the audience, not just the paragraph under it. */}
+      <h2 className="text-xl font-bold text-ink">
+        {canManage ? "Your shop is empty" : "This shop is empty"}
+      </h2>
       <p className="mt-1 max-w-sm text-sm text-ink/55">
         {canManage
           ? "Upload your product list as a CSV, or add a product manually. Then attach photos and your shop goes live."
