@@ -3,6 +3,7 @@
 **Source:** ADR-0005 (rev 6, G3-accepted 2026-08-19 — four checker rounds folded in) + PRD 0022 (G1) + the G2 variant-A
 contract. Sized S/M/XS, INVEST-checked, EARS criteria.
 **Hard rule:** tickets running in parallel touch different files.
+**Linear:** HEL-54 … HEL-62, team *Codebase Development Tickets*, all Backlog (created 2026-08-19).
 
 **Slices** (ADR Consequences): all three land as three PRs against **one** deploy — no slice
 is independently walkable, and `supabase db push` applies every migration file regardless of
@@ -19,7 +20,7 @@ prose ordering. G4 walks the union.
 
 ---
 
-## T00 — Seed products across the visibility × price matrix · **XS** · depends on: —
+## T00 — Seed products across the visibility × price matrix · **XS** · depends on: —  · [HEL-54](https://linear.app/hellosello/issue/HEL-54)
 
 All four local products are `profile_visible = false, price_public = false`, so **zero**
 products are visible to any buyer today. AC 1-4 are unwalkable and the pgTAP matrix
@@ -35,7 +36,7 @@ verified against it.
 - When the seed runs, at least one seller shall have two distinct `product.location` values,
   so the location tabs render more than "All".
 
-## T01 — `get_discoverable_company` gains the shop chrome · **M** · depends on: T00
+## T01 — `get_discoverable_company` gains the shop chrome · **M** · depends on: T00  · [HEL-55](https://linear.app/hellosello/issue/HEL-55)
 
 The links row, tags, address and warehouse line — AC 1 surface. **Not** the location tabs:
 those come from `product.location` in T05 (ADR §5, corrected).
@@ -54,7 +55,7 @@ those come from `product.location` in T05 (ADR §5, corrected).
 - When the company mapper runs, it shall reuse `parseLinks` and `deriveInitialLocations` so
   buyer and seller parse identical data identically.
 
-## T02 — `BuyerShopView` + the page at variant-A width · **M** · depends on: T01
+## T02 — `BuyerShopView` + the page at variant-A width · **M** · depends on: T01  · [HEL-56](https://linear.app/hellosello/issue/HEL-56)
 
 The G2 contract: reuse `ShopView` + `ProductCard`. **A new card component is a build failure,
 not a style choice.**
@@ -92,7 +93,7 @@ delete `src/app/prototype-0022-buyer-shop/`
 - When this ticket completes, `ShopView` shall carry **no new state and no new branch** — one
   prop pass-through and one comment — and the prototype route shall be gone from the tree.
 
-## T03 — `ProductCard`: the price gate and the request-pricing hook · **S** · depends on: —
+## T03 — `ProductCard`: the price gate and the request-pricing hook · **S** · depends on: —  · [HEL-57](https://linear.app/hellosello/issue/HEL-57)
 
 Runs parallel to T01/T02 — different files. Fixes a **live defect**: the card currently
 renders Add-to-basket on price-hidden products with no price condition at all.
@@ -114,7 +115,7 @@ renders Add-to-basket on price-hidden products with no price condition at all.
 - When `profile_visible` is absent from a product, the card shall render **no** "Hidden" badge
   — seller state never renders in buyer mode.
 
-## T04 — Per-product request pricing; retire the shop-level CTA · **S** · depends on: T03
+## T04 — Per-product request pricing; retire the shop-level CTA · **S** · depends on: T03  · [HEL-58](https://linear.app/hellosello/issue/HEL-58)
 
 **Files:** `src/app/discover/actions.ts`,
 `src/app/discover/[companyId]/RequestPricingActions.tsx` (retired),
@@ -131,7 +132,7 @@ renders Add-to-basket on price-hidden products with no price condition at all.
   shall create a second ask — the dup-guard is per-ask **per-product**, never per-pair.
 - When this ticket completes, the shop-level Request-pricing CTA shall no longer render.
 
-## T05 — `get_discoverable_shop` gains the specification set · **M** · depends on: T01
+## T05 — `get_discoverable_shop` gains the specification set · **M** · depends on: T01  · [HEL-59](https://linear.app/hellosello/issue/HEL-59)
 
 AC 7 in full, plus `product.location` — which is what actually produces the location tabs.
 
@@ -156,7 +157,7 @@ AC 7 in full, plus `product.location` — which is what actually produces the lo
 - When the mapper builds a product, it shall derive `bundle_threshold_grams` /
   `bundle_price_per_gram` from `tiers[0]`, as `shop.ts:246-247` does.
 
-## T06 — The connection override, written once and applied at all seven sites · **M** · depends on: T00
+## T06 — The connection override, written once and applied at all seven sites · **M** · depends on: T00  · [HEL-60](https://linear.app/hellosello/issue/HEL-60)
 
 Decision 6. Carries the **G3-signed verification tightening**: three of the seven policies
 gain `is_caller_verified()` and unverified members lose reads they have today.
@@ -198,7 +199,7 @@ company filter — cross-lane, but the leak is this migration's blast radius),
   gains the `company_id` filter it always intended. Widening site 1 makes its pre-existing
   leak strictly worse (round 3, B4).
 
-## T07 — Server-enforced basket admission · **S** · depends on: T06
+## T07 — Server-enforced basket admission · **S** · depends on: T06  · [HEL-61](https://linear.app/hellosello/issue/HEL-61)
 
 AC 10. `product_basket_line` is owner-scoped only today and never checks whether the buyer may
 see the product — or afford to know its price.
@@ -229,7 +230,7 @@ see the product — or afford to know its price.
 - When the server refuses an admission, `addToBasket` shall surface a user-facing refusal
   rather than an unhandled rejection.
 
-## T08 — Ops housekeeping the ADR surfaced · **XS** · depends on: —
+## T08 — Ops housekeeping the ADR surfaced · **XS** · depends on: —  · [HEL-62](https://linear.app/hellosello/issue/HEL-62)
 
 Two items the ADR flagged that no other ticket owns (round 4, N10). Neither is buyer-facing;
 both are the kind of thing that rots quietly.

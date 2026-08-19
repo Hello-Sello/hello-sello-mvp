@@ -85,6 +85,7 @@ one file serving every seller. No new route; its insides get rebuilt.
 | design | `docs/muskan-build/0022-buyer-shop-view/RESEARCH.md` — `## Approaches (design)` + 2 orchestrator corrections that made the slug bigger |
 | design | `docs/architecture/adr/0005-buyer-shop-view.md` — **the ADR, rev 6, G3-accepted**. 4 checker rounds: 6 → 8 → 9 → 9 blocking |
 | design | `docs/muskan-build/0022-buyer-shop-view/TICKETS.md` — **T00–T08**, INVEST + EARS, 3 slices + ops housekeeping |
+| design | **Linear HEL-54 … HEL-62** — T00–T08 created 2026-08-19, team *Codebase Development Tickets*, all Backlog |
 | design | `docs/architecture/adr/ADR-INDEX.md` — ADR-0005's line |
 
 ## Locked
