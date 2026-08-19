@@ -593,7 +593,8 @@ export function ShopView({ shop, canEditBranding = false, viewerCanManage = true
         onNameChange={(v) => updateEdit("name", v)}
         onTaglineChange={(v) => updateEdit("tagline", v)}
         onPickCover={(f) => { setCoverFile(f); setDirty(true); }}
-        onManage={viewerCanManage ? enterEdit : () => {}}
+        onManage={enterEdit}
+        canManage={viewerCanManage}
         canEditLogo={viewerCanManage && canEditBranding}
         onPickLogo={(f) => { setLogoFile(f); setDirty(true); }}
         onPresent={enterPresent}
