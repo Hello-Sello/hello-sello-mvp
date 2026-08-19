@@ -1,6 +1,6 @@
 # 0022 buyer-shop-view — work order
 lane:   FULL
-stage:  triage ✅ · spec ✅ (G1 2026-08-19) · prototype ✅ (G2 2026-08-19) → design (next, G3)
+stage:  triage ✅ · spec ✅ (G1) · prototype ✅ (G2) · design ✅ (G3 2026-08-19) → build (next)
 branch: **claude/muskan/work** — no feature branch (Muskan's call, 2026-08-18)
 >  No cut: this slug is frontend-heavy with no expected migration, so a feature branch
 >  would only add a merge step. `/ship` still rebases onto `dev` and PRs from here.
@@ -82,9 +82,12 @@ one file serving every seller. No new route; its insides get rebuilt.
 | prototype | `prototypes/0022-buyer-shop-view-prototype/` — `index.html` (variants A/B/C + the fit check) + `NOTES.md` (the G2 verdict) |
 | prototype | `src/app/prototype-0022-buyer-shop/page.tsx` — **the chosen contract**: real AppShell + ShopView + ProductCard, hardcoded data. ⚠️ THROWAWAY — delete at `/build` |
 | prototype | `src/app/present/PresentBanner.tsx`, `ShopView.tsx`, `InfoBox.tsx` — **real component fixes** the walk surfaced (see NOTES.md table) |
+| design | `docs/muskan-build/0022-buyer-shop-view/RESEARCH.md` — `## Approaches (design)` + 2 orchestrator corrections that made the slug bigger |
+| design | `docs/architecture/adr/0005-buyer-shop-view.md` — **the ADR, rev 4, G3-accepted**. 3 checker rounds |
+| design | `docs/muskan-build/0022-buyer-shop-view/TICKETS.md` — T00–T07, INVEST + EARS, 3 slices |
+| design | `docs/architecture/adr/ADR-INDEX.md` — ADR-0005's line |
 
 ## Locked
-(empty until G3 — but two G1 calls are already load-bearing on the ADR)
 - **Connection overrides `profile_visible`, never `price_public`** → the read path gains a
   relationship arm; the price arm is untouched. (`DECISIONS.md` 2026-08-19.)
 - **One read door** — no parallel price reader for this surface (`ARCHITECTURE-NOTES.md:423`).
@@ -92,8 +95,38 @@ one file serving every seller. No new route; its insides get rebuilt.
   component is a build failure, not a style choice** (the `consistency` agent's question).
 - **G2: buyer mode shows no owner chrome anywhere** — Manage shop, Present mode, SaveBar,
   banner/logo edit. PRD AC 11.
+- **G3 · a `BuyerShopView` wrapper, NOT a 4th prop on `ShopView`** (ADR §1). `ShopView` gains
+  no behaviour prop. Split trigger written down: a third consumer, or a 4th
+  `viewerCanManage`-shaped boolean. Slots don't count.
+- **G3 · the connection rule is written ONCE** (`is_connected_to_company`, `SECURITY INVOKER`
+  — the first INVOKER policy helper in the tree, a deliberate departure) **and applied at ALL
+  SEVEN gate sites** (ADR §2, §3). The one-helper-instead-of-five-policies alternative was
+  weighed and rejected: a rule that means one thing through the RPC and another through the
+  base table gets inherited wrong.
+- **G3 · the verification tightening is SIGNED** — three policies gain `is_caller_verified()`;
+  authenticated members of UNVERIFIED companies lose catalogue/image/media reads they have
+  today. Deliberate; belongs in the G4 walk.
+- **G3 · basket admission = one RESTRICTIVE `FOR INSERT` policy**, carrying the owner arm and
+  the **price** rule (decision 3 is server-side per PRD §6.5). The shipped owner policy is
+  untouched. An RPC was rejected: it leaves the table's direct-write door open — the DEV-88
+  class (ADR §7).
+- **G3 · AC 3 AMENDED** — "opens a conversation" → "sends the seller a request naming that
+  product; the conversation happens in chat once connected". Non-connected → inbox item;
+  connected → chat. **The shop-level Request-pricing CTA is retired.**
+- **G3 · `supplier_product_code` is NOT shown to buyers** (confidentiality; AC 7 omits it).
+- **G3 · the card's buy row gates on `priceShown || viewerIsOwner`** — never on
+  `price_per_gram != null` alone, which would break the seller's own unpriced products.
 
 ## Deferred — must NOT be built
+- **AC 9 — ordering without a connection.** Split to its own slug at G3. Buildable as Muskan
+  sequenced it (accept the connection first, then the order lands in chat), but it is the only
+  part of the spec off Marcel's demo path. Its three real costs are recorded in ADR §9 — it is
+  a slug, not a footnote.
+- **A "deactivate / unavailable" product control.** Owed *because of* decision 6: repurposing
+  `profile_visible` leaves the seller no switch that hides a product from **everyone**. The
+  visibility-window columns survive un-overridden but have no UI and are the wrong shape for
+  out-of-stock. Decide then whether delisted and out-of-stock are one concept or two.
+  (Muskan, 2026-08-19.)
 - Per-customer pricelists (Phase 15 — September; the one most likely to be confused with this)
 - Cross-product bundles (September)
 - Threshold nudge ("add 20g more and pay €7/g")
@@ -107,6 +140,7 @@ one file serving every seller. No new route; its insides get rebuilt.
 | gate | date | verdict |
 |---|---|---|
 | **G1 (spec)** | 2026-08-19 | **PASSED** — Muskan approved the PRD. 11 decisions recorded in PRD §3, taken over a one-question-at-a-time interview. Two shared-doc amendments written under the sync ritual (CONTEXT.md, DECISIONS.md). No researcher claim overruled; decision 6 is a **new** call that amends a locked one. Branch condition fired and was reviewed — call unchanged. |
+| **G3 (design)** | 2026-08-19 | **PASSED** — ADR-0005 rev 4 accepted; 5 sign-offs answered (see Locked). **⚠️ The checker loop did NOT converge**: budget is 2 rounds; r1 = 6 blocking + 16 non-blocking, r2 = 8 **new** blocking + 15; a 3rd ran at Muskan's explicit call. r2 caught 3 real defects in the draft — a price gate that would have broken the seller's own shop, a basket rule that skipped the G1-locked price check, and a `metadata` projection that would have shipped sellers' private notes to buyers. Two researcher claims were overruled on spot-verification (the rule lives in **7** places, not 3; `get_discoverable_shop` could not satisfy AC 7). |
 | **G2 (prototype)** | 2026-08-19 | **PASSED** — variant **A (full shop)**. Contract is the in-app route, not the HTML: Muskan's objection — *"if I confirm this html variant then maybe the builder will build this same thing and not follow my real app frontend"* — is correct, and variant A's claim ("reuse the seller's shop") cannot be proven by a mock. Walked on the buyer route **and** on the seller's `/present`. The walk found 4 defects + 2 shape changes in shipped components (NOTES.md). |
 
 ## For Muskan
