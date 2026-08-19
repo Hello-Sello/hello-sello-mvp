@@ -1,9 +1,11 @@
 ---
-status: accepted   # G3 PASSED 2026-08-19 (Muskan) · rev 5 — all of round 3 folded in.
-                   # ⚠️ No round 4 was run: the 2-round budget was exhausted at rev 3 and
-                   # rounds 1→2→3 produced 6→8→9 blocking findings, i.e. the loop is
-                   # empirically non-convergent. rev 5's fixes are therefore UNCHECKED by a
-                   # fresh agent — `critic` and `security` carry them at build time instead.
+status: accepted   # G3 PASSED 2026-08-19 (Muskan) · rev 6 — four checker rounds folded in.
+                   # Rounds 1→2→3→4 gave 6→8→9→9 blocking. The loop never converged; what
+                   # ended it was round 4 finding that FOUR OF THE SEVEN SITES ARE NOT ON
+                   # THE BUYER'S READ PATH AT ALL. rev 6 drops them → scope went 7 sites → 3,
+                   # which dissolves ~half the accumulated findings outright.
+                   # rev 6's own edits are UNCHECKED by a fresh agent; `critic` + `security`
+                   # carry them at build, against real code rather than prose.
                    # All five G3 sign-offs answered — see "G3 decisions" below.
                    # r1: 6 blocking + 16 non-blocking · r2: 8 blocking + 15 non-blocking
                    # ⚠️ THE LOOP DID NOT CONVERGE. Budget is 2 rounds (PIPELINE.md §5);
@@ -81,6 +83,52 @@ blocking finding is folded in at its section.
 
 ---
 
+## ⚠️ Round 4 — the finding that ended the loop
+
+Muskan authorised a fourth round. It found 9 blocking, two of them real-world breakages
+(below) — but its most valuable finding was **strategic, and it shrinks this ADR**:
+
+> The buyer page reads through `get_discoverable_shop`, a `SECURITY DEFINER` function running
+> as `postgres` with RLS bypassed. **Sites 2-5 are not on the buyer's read path at all.**
+> Site 1 is needed (§7's basket predicate leans on it). Sites 6 and 7 are needed. Sites 2-5
+> are pure housekeeping — and they carried the slug's widest live behaviour change.
+
+**rev 6 drops sites 2-5 from this slug.** Scope goes from seven sites to **three**, and that
+single cut resolves, with no further argument:
+
+- **the ADR-0004 contradiction** (round 4, B5) — `plit_public_select`'s inlined gate was
+  ADR-0004's deliberate *"defense in depth for future direct reads"*
+  (`0004-tier-ladder.md:122-127`, a recorded G4 decision). rev 5 deleted exactly that. rev 6
+  does not touch it.
+- **the four-versus-three miscount** (round 3, B1) — it stops existing; only site 1 changes.
+- **the unsatisfiable drift invariant** (round 4, B3), the site-5 self-contradiction (N5),
+  and the child-table performance multiplier (N4).
+- **most of the behaviour change** — unverified members keep their reads of images, media,
+  prices and ladders; only the `product` door tightens.
+
+**What rev 6 still changes, each load-bearing:**
+
+| Site | Why it cannot be dropped |
+|---|---|
+| **1** `product_public_select` | §7's basket admission reads `product` under the buyer's own RLS. Without site 1 the buyer cannot add the very products decision 6 reveals |
+| **6** `current_pricelist_item` | owner-rights view — bypasses RLS, so it must state the rule itself or a connected buyer's hidden-but-priced product returns a NULL price |
+| **7** `get_discoverable_shop` | `SECURITY DEFINER` — bypasses RLS; this IS the buyer's read path |
+
+**The two real-world breakages, both verified in code, both fixed below:**
+
+- **B1 — the column-REVOKE breaks the shipped basket.** `addToBasket` is a PostgREST upsert
+  whose payload includes `owner_person_id` and `product_id`
+  (`src/modules/basket/supabase/writes.ts:28-34`); `ON CONFLICT DO UPDATE` generates a `SET`
+  list over **every payload column**, and Postgres checks UPDATE privilege against it
+  statically. rev 5's `revoke update … grant update (pack_count, …)` would make every *re-add*
+  of an already-basketed product fail `42501`. Fixed in §7 — and the fix is a removal.
+- **B2 — nothing wires `viewerIsOwner`.** `ShopView.tsx:660-673` passes no such prop to
+  `ProductCard`, and rev 5 insisted `ShopView` gets "zero behavioural change". The gate would
+  default to owner in buyer mode and **never fire** — AC 3 silently failing while every T03
+  component test passed. Fixed in §6.
+
+---
+
 ## Plain English — the options, and why the winner wins
 
 **What we are building.** A buyer opens a seller from Discover and gets the seller's real
@@ -124,20 +172,20 @@ Today the rule is *"a product is visible if the seller ticked 'visible' and the 
 looking is from a verified company."* G1 decision 6 adds one word: **or connected.** A
 seller's "visible" tick now means *"visible to companies I am **not** connected to."*
 
-That sentence is written out **seven times** in the database. The choice is whether to edit
-seven copies or write it once and call it seven times. We write it once — a small named
-function — the same *shape* this project uses seven times over, though deliberately a
-different security mode (§2). Editing copies by
-hand is how this project lost Discover's security gate once already: a copy was re-declared
-from a stale source and the gate silently vanished.
+That sentence is written out **seven times** in the database — but only **three** of those
+are on the buyer's path (§3, and the round-4 note above). We change those three, write the new
+condition **once** as a small named function, and leave the other four alone.
 
-**Round 1's correction, and why the ADR got simpler.** rev 1 applied the new rule to only
-**two** of the seven places and argued the other five were off the path. The checker proved
-that wrong empirically: the basket's permission check reads the product table under the
-buyer's *own* permissions, so it would have refused exactly the products decision 6 exists to
-reveal. **rev 2 applies the rule uniformly to all seven.** That is more edits and less
-design: one rule, one function, no place where it half-applies, and no "why not here"
-paragraph to maintain. It also removes a divergence from ADR-0004 that rev 1 had created.
+Editing copies by hand is how this project lost Discover's security gate once already: a copy
+was re-declared from a stale source and the gate silently vanished. That is why the condition
+is a function rather than three more copies — and why the four untouched sites are better left
+untouched than "made consistent" for its own sake.
+
+**How the scope moved, honestly.** rev 1 changed two sites and argued the rest were off the
+path. That was wrong in one specific way — the basket's permission check reads `product` under
+the buyer's own permissions, so site 1 was needed too. rev 2-5 over-corrected to all seven.
+Round 4 established the accurate line: **three**. Site 1 because the basket depends on it;
+sites 6 and 7 because they bypass permissions and must speak for themselves.
 
 **Cost later:** a named function is the cheapest thing here to change — the rule moves by
 editing one body. Seven inline copies means the next change updates six and nobody notices
@@ -286,23 +334,19 @@ Every current enforcement site, each read at its *latest* declaration:
 | 6 | `current_pricelist_item` public arm | view (owner-rights) | `20260816190000:62` |
 | 7 | `get_discoverable_shop` WHERE | `SECURITY DEFINER` RPC | `20260816190000:143` |
 
-**Why the rule is stated three times, not seven — round 3's insight, and the shape rev 5 takes.**
+**Three sites change. Four do not. Here is the whole map.**
 
-A policy's `EXISTS` subquery is **itself RLS-filtered**. So a policy on `product_image` that
-asks *"does a product row exist with this id?"* has already applied `product`'s own rule — the
-extra `profile_visible` and window conjuncts inside it are a **duplicate that can go stale**,
-not a second lock. rev 4 proposed widening those duplicates with an `OR`. rev 5 **deletes
-them.** Strictly less predicate, and they can never drift again.
+| # | Object | On the buyer's path? | rev 6 |
+|---|---|---|---|
+| 1 | `product_public_select` (RLS on `product`) | **yes, via the basket** | **CHANGED** |
+| 2 | `pricelist_item_public_select` | no — prices reach the buyer through the view | untouched |
+| 3 | `product_image_public_select` | no — images ride the RPC | untouched |
+| 4 | `product_media_public_select` | no — media rides the RPC | untouched |
+| 5 | `plit_public_select` | no — ladders reach the buyer through the view. **ADR-0004 keeps this deliberately** (`0004-tier-ladder.md:122-127`) | untouched |
+| 6 | `current_pricelist_item` public arm (view) | **yes** — bypasses RLS | **CHANGED** |
+| 7 | `get_discoverable_shop` WHERE (RPC) | **yes** — bypasses RLS; this *is* the read path | **CHANGED** |
 
-That splits the seven sites into three honest roles:
-
-| Role | Sites | What it carries |
-|---|---|---|
-| **States the rule** | 1 `product_public_select` | verified · (`profile_visible` **or** connected) · window |
-| **Inherits it** | 2 `pricelist_item_public_select` · 3 `product_image_public_select` · 4 `product_media_public_select` · 5 `plit_public_select` | only what is *locally* theirs — for 2 and 5, `price_public`. Nothing else |
-| **Must restate it** | 6 `current_pricelist_item` (owner-rights view) · 7 `get_discoverable_shop` (`SECURITY DEFINER`) | both bypass RLS by construction, so inheritance is unavailable to them |
-
-Site 1, the single statement of the rule:
+**Site 1** — the one base-table change, and the only place verification tightens:
 
 ```sql
 drop policy if exists product_public_select on public.product;
@@ -317,50 +361,39 @@ create policy product_public_select on public.product
   );
 ```
 
-Sites 2-5 keep only their local concern. `pricelist_item_public_select` becomes:
+**Why site 1 at all, when the buyer reads through the RPC?** Because §7's basket admission
+deliberately does **not** restate the visibility rule — it reads `product` and lets RLS
+answer. That is the thin-predicate design, and it only works if site 1 is the truth. This is
+the one dependency that survived every round.
 
-```sql
-create policy pricelist_item_public_select on public.pricelist_item
-  for select to authenticated
-  using (deleted_at is null
-         and exists (select 1 from public.product p
-                     where p.id = pricelist_item.product_id
-                       and p.price_public));      -- the price dial is genuinely local;
-                                                  -- visibility/window/verified INHERIT
-```
+**✅ G3, Muskan 2026-08-19 — the tightening is SIGNED, and rev 6 narrows what it costs.**
+`is_caller_verified()` lands on site 1 only. Every one of the five catalogue tables also
+carries an **owner policy** — `product_all` (`20260607170000:331-333`),
+`product_image_all`, `product_media_all` (`20260705120100:39-41`), `pli_all`
+(`20260607170000:346`), `plit_all` (`20260814120000:62`) — each scoped
+`company_id = current_company_id()` and **none verification-gated**. Permissive policies OR
+together, so:
 
-`product_image_public_select` and `product_media_public_select` reduce to the bare existence
-check. `plit_public_select` inherits through `pricelist_item` the same way.
+- **A seller reading their own catalogue is unaffected**, hidden products included, even
+  before their company is verified. They keep managing their shop throughout onboarding.
+- **What changes:** an authenticated member of an **unverified** company loses direct reads of
+  **other companies'** `product` rows. Images, media, prices and ladders are untouched by
+  rev 6.
 
-**This is what makes B1 stop mattering.** Round 3 found **four** sites lacking
-`is_caller_verified()` where rev 4 said three — the fourth being
-`pricelist_item_public_select` (`20260617090100:36-44`), which also lacks the window. Under
-inheritance the count is no longer something to get right: three of those four stop stating
-the rule at all, and site 1 states it once for everyone.
+That is the HWG "verified members only" posture, already true of the view and the RPC. Still a
+live behaviour change, and it belongs in the G4 walk.
 
-**✅ G3, Muskan 2026-08-19 — the tightening is SIGNED, on the corrected inventory.**
-`is_caller_verified()` lands on **site 1** and everything downstream inherits it. **Cost,
-stated plainly for the G4 walk:** an authenticated member of an **unverified** company loses
-catalogue, image, document, price and ladder reads it has today. That is the intended posture
-— already true of the view, the RPC and the ladder policy, and it is the HWG "verified members
-only" position — but it is a live behaviour change and belongs in the walk.
+**Site 1 is diffed against `pg_policy.polqual` on the live database before it is rewritten** —
+never re-typed from the migration that first declared it (SECURITY-CHECKLIST S5). Three
+separate stale-copy slips happened inside this ADR's own drafting; the rule exists because
+this repo lost Discover's verified gate exactly that way.
 
-**Each policy is diffed against `pg_policy.polqual` on the live database before it is
-rewritten** — never re-typed from the migration that first declared it (SECURITY-CHECKLIST
-S5). Two sites were cited from stale copies during this ADR's own drafting, and B1 is a third
-instance of the same slip; the rule exists because this repo lost Discover's verified gate
-exactly this way.
-
-**Site 4 is `anon`-facing and needs the S4 scan.** `product_media_public_select` is granted
-`TO anon, authenticated`, and `anon` still holds `SELECT` on `product_media`. The migration
-revokes that `SELECT` and drops `anon` from the policy's role list, matching what
-`20260617090100` did for the other catalogue tables.
-
-**Both 6 and 7 are separately necessary.** A connected buyer looking at a product the seller
-hid but priced (`profile_visible = false`, `price_public = true`) must see the product *and*
-its price. Site 7 returns the product; the price arrives via a `LEFT JOIN` onto the view,
-whose public arm still demands `profile_visible` — so patching 7 without 6 yields a visible
-product with a silently NULL price. At both, the override widens `profile_visible` **only**:
+**Sites 6 and 7** must restate the rule because both bypass RLS by construction. Both are
+needed: a connected buyer looking at a product the seller hid but priced
+(`profile_visible = false`, `price_public = true`) must see the product *and* its price. Site 7
+returns the product; the price arrives via a `LEFT JOIN` onto the view, whose public arm still
+demands `profile_visible` — so patching 7 without 6 yields a visible product with a silently
+NULL price. At both, the override widens `profile_visible` **only**:
 
 ```sql
   AND (p.profile_visible OR public.is_connected_to_company(p.company_id))   -- widened
@@ -375,6 +408,12 @@ connection never reveals a price), the window (an expired window is not overridd
 `is_caller_verified()` (§4.2). **The HWG argument is untouched:** the audience only ever
 widens to a company that is both verified *and* in an accepted relationship — narrower than
 the public arm beside it, not broader.
+
+**Grant ritual on the view.** `current_pricelist_item` changes via `CREATE OR REPLACE VIEW`
+(the column list is unchanged). If anything ever forces `DROP … CREATE`, the migration **must**
+re-issue `GRANT SELECT … TO authenticated; REVOKE ALL … FROM anon` — Supabase's default ACL
+still hands `anon` everything on new *relations* (session 77's event trigger covers functions
+only), so a drop-and-recreate silently re-opens the anon door.
 
 **Round 3, N1 — one of rev 4's three reasons was unsound and is withdrawn.** rev 4 argued that
 widening site 6 without site 5 would make the view admit a ladder `plit_public_select` denies.
@@ -402,7 +441,7 @@ functions only), so a drop-and-recreate silently re-opens the anon door.
 | `packSizes` | **add** — PRD §4.4, the pack bubbles |
 | `media` | **add** — card-back "Documents & Media"; absent → the section renders empty |
 | `supplier_product_code` | **OMIT — ✅ G3, Muskan 2026-08-19.** The seller's own supplier code; AC 7 does not list it, and showing it to buyers is a commercial-confidentiality call. Non-optional on `ShopProduct`, so the buyer mapper emits `null` |
-| `profile_visible` | **add, and the mapper must force it `true`** — see below |
+| `profile_visible` | **OMIT from the payload; the field becomes optional on `ShopProduct`** — see below |
 | `batches` | **omit, return `[]`** — AC 7 forbids a batch or lot list |
 | `bundle_threshold_grams`, `bundle_price_per_gram` | **not returned by the RPC; still emitted by the mapper**, derived from `tiers[0]` exactly as `shop.ts:246-247` does. They are non-optional on `ShopProduct` (`shop.ts:78-79`), so "omit" would not typecheck (round 2, N14). Migration C dropped the underlying columns |
 
@@ -515,9 +554,16 @@ the buy row back into the space ADR-0004's tier editor now occupies. The invaria
 passes under **both** forms — so the component test must assert the edit-mode case explicitly,
 or nothing catches this.
 
-`viewerIsOwner` is known inside `ShopView` (it is `viewerCanManage`) and rides down as an
-optional card prop defaulting to the current behaviour, so `/present` is unchanged and the
-buyer surface gets the gate. Request-pricing renders on the complement **only where the seller
+`viewerIsOwner` is known inside `ShopView` — it is `viewerCanManage` — and **`ShopView` must
+pass it down. Round 4 (B2) caught that rev 5 both required this prop and forbade the change
+that supplies it**: `ShopView.tsx:660-673` passes no such prop, so with a default of `true`
+the gate would never fire in buyer mode and AC 3 would fail silently while every component
+test passed.
+
+**So `ShopView` gains exactly one line — `viewerIsOwner={viewerCanManage}` on the
+`ProductCard` call — and this ADR's "no behavioural change to `ShopView`" claim is corrected
+to "one prop pass-through, no new state, no new branch."** The prop defaults to `true`, so
+`/present` behaviour is unchanged and no other caller is affected. Request-pricing renders on the complement **only where the seller
 has hidden the price** — never on merely unpriced products.
 
 **The request-pricing slot.** `ProductCard`'s props (`:174-186`) carry no request-pricing hook.
@@ -559,16 +605,28 @@ create policy basket_line_admission on public.product_basket_line
   );
 
 revoke all on public.product_basket_line from anon;   -- never closed at birth
-
--- ⚠️ ROUND 3, B2 — the policy above is FOR INSERT, so it never fires on UPDATE, and
--- `authenticated` holds table-wide UPDATE with no column restriction. Without the two
--- statements below a buyer inserts a legal line and then PATCHes its product_id to a
--- hidden or price-hidden product: admission by another verb. This is the DEV-88 idiom
--- (20260710120000_person_company_id_lockdown.sql) — a REMOVAL, not a new mechanism.
-revoke update on public.product_basket_line from authenticated;
-grant  update (pack_count, pack_size_grams, updated_at)
-  on public.product_basket_line to authenticated;
 ```
+
+**The policy is `FOR ALL`, not `FOR INSERT` — and that is rev 6 removing a mechanism, not
+adding one.** Round 3 correctly found that an INSERT-only rule is ornamental: `authenticated`
+holds table-wide UPDATE, so a buyer inserts a legal line and then PATCHes its `product_id`
+onto a hidden product — admission by another verb. rev 5 answered with a column-REVOKE
+(the DEV-88 idiom). **Round 4 proved that breaks the shipped basket** (B1): `addToBasket` is a
+PostgREST upsert whose payload includes `owner_person_id` and `product_id`
+(`writes.ts:28-34`); `ON CONFLICT DO UPDATE` generates a `SET` list over every payload column
+and Postgres checks UPDATE privilege against it **statically**, so re-adding an
+already-basketed product would fail `42501` — and the new error translation would report it to
+the user as "you may not add this product".
+
+Scoping the restrictive policy to `FOR ALL` closes the same hole with **no privilege
+surgery**: the upsert keeps its grants, and the `WITH CHECK` runs on both the insert and the
+conflict-update path, so a `product_id` that fails admission is rejected either way.
+
+**What it costs, and why the PRD already accepted it:** a buyer holding a line for a product
+that later becomes invisible to them can no longer edit that line's pack count. PRD §7 puts
+exactly this case **out of scope for v1** (*"the price simply resolves as unavailable"*), so
+this is the spec's own trade, not a new one. The line remains readable and deletable —
+`USING` is untouched.
 
 - **The predicate is deliberately thin — and shrank again in rev 3 (round 2, N6).** rev 2
   re-inlined `profile_visible`, both window conjuncts *and* `is_caller_verified()` here,
@@ -584,17 +642,10 @@ grant  update (pack_count, pack_size_grams, updated_at)
   conjunct meets the spec; there is no reason to argue for a narrower reading.
 - **The owner arm is load-bearing, not defensive** — without it a seller cannot add their own
   hidden **or unpriced** product to their own basket, breaking a shipped flow.
-- **`AS RESTRICTIVE FOR INSERT`** — restrictive policies AND with the permissive one, so this
-  genuinely tightens; a second *permissive* policy would have OR'd and tightened nothing.
-  **The carve-out that makes "existing lines stay editable" true must be stated, or the test
-  will be written against the wrong statement (round 2, N5):** `addToBasket` is an
-  `INSERT … ON CONFLICT DO UPDATE` (`writes.ts:26-37`), and an INSERT `WITH CHECK` is applied
-  only to rows the INSERT path actually appends. So the pgTAP "update-after-hide" case must
-  exercise **the upsert path**, not only `updateBasketLinePackCount`.
-- **`product_id` becomes unwritable after insert (round 3, B2).** The admission rule is only
-  as strong as the columns it governs; leaving `product_id` updatable made the policy
-  ornamental. Re-granting UPDATE column-by-column is how DEV-88 closed the identical hole on
-  `person.company_id` — it removes a privilege rather than adding a guard.
+- **`AS RESTRICTIVE`** — restrictive policies AND with the permissive one, so this genuinely
+  tightens; a second *permissive* policy would have OR'd and tightened nothing. The pgTAP
+  cases must exercise **the upsert path** (`addToBasket`), not only the plain updaters —
+  the upsert is the statement every real add goes through.
 - **`revoke … from anon`** closes a door never closed at birth: `anon` still holds full DML on
   `product_basket_line` (`20260707100000` issues no revoke). Not exploitable today — the
   policy is `TO authenticated` — but the ADR asserts an anon invariant over this table, so the
@@ -628,7 +679,24 @@ that gives two arms — and the pre-connection arm is exactly how Connect alread
 | Viewer | The ask lands as | Why |
 |---|---|---|
 | **Not connected** | an inbox item on Discover, naming the product | no relationship exists, so no thread can exist. `createPairInboxItem` already allows a pricing ask to coexist with a pending connect (`actions.ts:15-17`) |
-| **Connected** | a message in the real chat thread, naming the product | the relationship exists; this is the conversation decision 4 means |
+| **Connected** | **also an inbox item, naming the product** | see below — rev 6 collapses this to one mechanism |
+
+**⚠️ rev 6 collapses both arms to the inbox (round 4, B8).** rev 5 specified the connected arm
+as *"post the ask into the existing chat thread"* — and then gave it no design at all: no
+thread lookup, no `chat_message` insert, no message type, no file, in a ticket sized **S**,
+under a section headed *"no new table, no new type… no migration"*. It was unbuildable as
+written.
+
+**One mechanism serves both arms.** The ask lands in the seller's inbox naming the product,
+connected or not. Once the two companies are connected, the conversation continues in chat
+because they are connected — which is Muskan's own sequencing (*"when connected, relationship
+can be formed and the order can come in chat"*) applied to pricing. Decision 4's requirement
+that *the seller must know which product is being asked about* is fully met; what defers is
+only **which surface the reply is typed into**.
+
+**Deferred with the messaging slice, recorded so it is not lost:** a pricing ask from a
+connected buyer posting directly into the existing thread. It is a genuine improvement and it
+needs the design rev 5 skipped.
 
 **✅ G3, Muskan 2026-08-19 — AC 3 is AMENDED.** G4 walks acceptance criteria verbatim, so the
 words move with her sign-off rather than being reinterpreted at walk time:
@@ -764,7 +832,7 @@ outcome touching nothing.
 | Connection **never** reveals a price — `price_public` governs alone | **DB test** (pgTAP: connected + `price_public=false` → price and tiers NULL) |
 | A pending connection is not a connection | **DB test** (pgTAP: `pending_inbox_item` present, no `relationship` row → hidden products stay hidden) |
 | No basket line may be **inserted** for a product its owner may not see **or whose price is hidden from them**; the **seller may always add their own**, including unpriced ones; existing lines stay editable | **DB test** (pgTAP: both arms, a price-hidden refusal (decision 3), and an update-after-hide case exercised **on the upsert path** — round 2, N5) |
-| Every one of the seven sites carries the same predicate — none drifts | **Test** (pgTAP over the **live catalog**: `pg_policy.polqual` for sites 1-5, **`pg_get_viewdef`** for site 6 — it is a view, so `pg_get_functiondef` does not apply (round 2, N7) — and `pg_get_functiondef` for site 7; each must contain `is_connected_to_company`). *Round 1, N3: the rev-1 grep over `supabase/migrations/` was unsatisfiable — the clause legitimately appears 9× in append-only history. The live catalog is the only honest surface.* |
+| The three changed doors agree — a connected buyer sees a hidden product through **each**, an unverified caller through **none** | **DB test** (pgTAP asserting *behaviour*, not substrings: a direct `product` read for site 1, a view read for site 6, an RPC call for site 7. *Round 4, B3: a "must contain `is_connected_to_company`" grep is unsatisfiable by design now — four sites deliberately will not contain it. Round 3, N7: a substring check could never detect a missing window or verified gate anyway.*) |
 | `anon` reads nothing new; every new/redeclared function carries the 3-statement ritual, every recreated **view** re-issues its grants | **Test** (`anon_execute_lockdown_test.sql`, extended to relations — round 1, N1) |
 | Buyer and seller derive `terpPercent`, `packSizes` and links from the **same** rule | **Test** (unit: RPC-shaped fixture through the buyer mapper vs `getMyShop`'s mapper, same output) |
 | No owner chrome renders in buyer mode — no save, manage, present, or banner/logo edit | **Test** (component test on `BuyerShopView`: AC 11 as assertions) |
@@ -774,7 +842,7 @@ outcome touching nothing.
 | The buyer surface renders `ProductCard`, not a second card component | **Judgment** — `consistency` agent's brief |
 | Buyer mode gains no 4th `viewerCanManage`-shaped boolean on `ShopView`; slots don't count | **Judgment** — `critic`'s brief, with §1's split trigger as the test |
 | The buyer never receives batch/lot data, including as terpene-derivation input | **Judgment** — `critic`'s brief (the RPC derives `terpPercent`; `batches` returns `[]`) |
-| Seller-private state never renders in buyer mode (the "Hidden" badge is the known instance) | **Judgment** — `critic`'s brief; the mapper's `profile_visible: true` is the mechanism |
+| Seller-private state never renders in buyer mode (the "Hidden" badge is the known instance) | **Judgment** — `critic`'s brief; the mechanism is that `profile_visible` is optional on `ShopProduct` and the buyer mapper omits it |
 
 ## Consequences
 
@@ -806,12 +874,13 @@ outcome touching nothing.
   in fact written at G1 — the ADR must not imply they are still owed.
 - **One AC amendment (⚠️ G3, §8):** AC 3's *"opens a conversation"* → *"sends the seller a
   request naming that product; the conversation happens in chat once connected."*
-- **Spec edge case with no home (round 2, N9):** PRD §7 says a member of the **seller's own**
-  company "sees their own shop". `get_discoverable_shop` has no owner arm, and
-  `is_connected_to_company(ownCompanyId)` is false by construction (`least`/`greatest` of one
-  id cannot match a pair row). So an own-company member browsing from Discover sees a partial
-  catalogue. Off the demo path; either add an owner arm to site 7 or record the edge case as
-  deferred. **Recommended: add the owner arm** — one conjunct, and it mirrors the view.
+- **✅ Spec edge case, now DECIDED (round 4, B7 — an unresolved recommendation is not a
+  decision).** PRD §7 says a member of the **seller's own** company "sees their own shop".
+  `get_discoverable_shop` has no owner arm, and `is_connected_to_company(ownCompanyId)` is
+  false by construction: `relationship_canonical_order CHECK (company_a_id < company_b_id)`
+  makes a self-pair row impossible. **Decision: add the owner arm to site 7** —
+  `or p.company_id = public.current_company_id()` — mirroring what the view already does. One
+  conjunct, satisfies a PRD row, costs nothing. Built in **T05**.
 - **Slice ordering is a review convenience, not a deploy gate (round 2, N13):** `supabase db
   push` applies every file in `supabase/migrations/`, so prose cannot hold one back (ADR-0004
   §3 needed a `.hold` file for exactly this). Here the DB-first order is harmless — each
