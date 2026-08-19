@@ -1,5 +1,8 @@
 ---
-status: accepted   # G3 PASSED 2026-08-19 (Muskan) · rev 4 — after adr-checker rounds 1 and 2
+status: proposed   # ⚠️ G3 RE-OPENED 2026-08-19 — rev 4 was accepted, then round 3 landed
+                   # 9 more blocking findings incl. a SECURITY HOLE (B2) and a wrong
+                   # inventory underneath a signed decision (B1). See "Round 3" below.
+                   # rev 5 must land before this is accepted again.
                    # All five G3 sign-offs answered — see "G3 decisions" below.
                    # r1: 6 blocking + 16 non-blocking · r2: 8 blocking + 15 non-blocking
                    # ⚠️ THE LOOP DID NOT CONVERGE. Budget is 2 rounds (PIPELINE.md §5);
@@ -24,6 +27,51 @@ status: accepted   # G3 PASSED 2026-08-19 (Muskan) · rev 4 — after adr-checke
 **Spec:** `docs/PRD/0022-buyer-shop-view.md` (G1-approved 2026-08-19) ·
 **Prototype:** variant A, contract = `src/app/prototype-0022-buyer-shop/page.tsx` (G2 2026-08-19) ·
 **Research:** `docs/muskan-build/0022-buyer-shop-view/RESEARCH.md` (spec sweep + `## Approaches (design)`)
+
+## ⚠️ Round 3 — why this ADR went back to `proposed`
+
+Muskan called a third checker round past the 2-round budget, *"just to see what happens"*.
+It found **9 blocking findings**, which settles the convergence question empirically: this
+loop does not converge, and rounds 1→2→3 produced 6, 8 and 9 blocking findings respectively.
+Two of the three are load-bearing enough to reverse the gate.
+
+**The two that reverse it:**
+
+- **A security hole (B2).** §7's admission policy is `AS RESTRICTIVE FOR INSERT`, so it never
+  fires on UPDATE — and `authenticated` holds table-wide UPDATE on `product_basket_line` with
+  no column restriction. A buyer can insert a legal line, then `PATCH` its `product_id` to a
+  hidden or price-hidden product. **That is admission by another verb, and it defeats AC 10
+  and PRD §6.5 — the one rule the spec insists must be server-side.** The repo already owns
+  the fix and it is a *removal*, not a mechanism: the column-REVOKE idiom from
+  `20260710120000_person_company_id_lockdown.sql` (DEV-88).
+- **A signed decision resting on a wrong count (B1).** §3 says three sites lack
+  `is_caller_verified()`. **Four do** — `pricelist_item_public_select`
+  (`20260617090100:36-44`) has neither the verified gate nor the visibility window. Muskan
+  signed the tightening against that inventory, so the sign-off must be re-taken on the true
+  one. Worse: this policy was read verbatim during this ADR's own drafting and still written
+  down wrong.
+
+**Also blocking, all verified:** the price gate drops `!editing` and would put the buy row
+back into the tier editor's footer (B3) · the blast radius omits `getOwnCatalog`
+(`deals/supabase/reads.ts:526-542`), a `product` reader with **no company filter**, which
+after §3 gains every connected company's hidden products (B4) · three internal
+contradictions where a round-2 fix landed in one section and not the other (B5, B6, B7) ·
+a mis-cited ledger line (B8) · and the AC 9 split silently carries **decision 11 and half of
+decision 2** with it, leaving a non-connected buyer full basket controls and no way to send
+(B9).
+
+**The better option round 3 surfaced, and it is a removal.** §7 argues — correctly — that a
+policy's subquery is itself RLS-filtered, so visibility need not be restated. That same fact
+means sites 2, 3 and 4 could have their duplicated `profile_visible`/window conjuncts
+**deleted** rather than widened with an `OR`. Strictly less predicate, permanently
+drift-proof, and it is exactly the bias this document claims to apply. The ADR weighed "one
+helper vs five rewrites" and never weighed "five rewrites vs three deletions".
+
+**Corrected on the record:** round 3 confirmed the seven-site inventory is exactly complete,
+the §4 metadata-leak catch, the §6 `writeStandardPrice` catch and the §5 location-tabs
+correction are all true, and ADR-0004 is not contradicted.
+
+---
 
 ## Plain English — the options, and why the winner wins
 
