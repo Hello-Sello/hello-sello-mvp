@@ -83,8 +83,8 @@ one file serving every seller. No new route; its insides get rebuilt.
 | prototype | `src/app/prototype-0022-buyer-shop/page.tsx` — **the chosen contract**: real AppShell + ShopView + ProductCard, hardcoded data. ⚠️ THROWAWAY — delete at `/build` |
 | prototype | `src/app/present/PresentBanner.tsx`, `ShopView.tsx`, `InfoBox.tsx` — **real component fixes** the walk surfaced (see NOTES.md table) |
 | design | `docs/muskan-build/0022-buyer-shop-view/RESEARCH.md` — `## Approaches (design)` + 2 orchestrator corrections that made the slug bigger |
-| design | `docs/architecture/adr/0005-buyer-shop-view.md` — **the ADR, rev 4, G3-accepted**. 3 checker rounds |
-| design | `docs/muskan-build/0022-buyer-shop-view/TICKETS.md` — T00–T07, INVEST + EARS, 3 slices |
+| design | `docs/architecture/adr/0005-buyer-shop-view.md` — **the ADR, rev 6, G3-accepted**. 4 checker rounds: 6 → 8 → 9 → 9 blocking |
+| design | `docs/muskan-build/0022-buyer-shop-view/TICKETS.md` — **T00–T08**, INVEST + EARS, 3 slices + ops housekeeping |
 | design | `docs/architecture/adr/ADR-INDEX.md` — ADR-0005's line |
 
 ## Locked
@@ -99,23 +99,45 @@ one file serving every seller. No new route; its insides get rebuilt.
   no behaviour prop. Split trigger written down: a third consumer, or a 4th
   `viewerCanManage`-shaped boolean. Slots don't count.
 - **G3 · the connection rule is written ONCE** (`is_connected_to_company`, `SECURITY INVOKER`
-  — the first INVOKER policy helper in the tree, a deliberate departure) **and applied at ALL
-  SEVEN gate sites** (ADR §2, §3). The one-helper-instead-of-five-policies alternative was
-  weighed and rejected: a rule that means one thing through the RPC and another through the
-  base table gets inherited wrong.
-- **G3 · the verification tightening is SIGNED** — three policies gain `is_caller_verified()`;
-  authenticated members of UNVERIFIED companies lose catalogue/image/media reads they have
-  today. Deliberate; belongs in the G4 walk.
-- **G3 · basket admission = one RESTRICTIVE `FOR INSERT` policy**, carrying the owner arm and
-  the **price** rule (decision 3 is server-side per PRD §6.5). The shipped owner policy is
-  untouched. An RPC was rejected: it leaves the table's direct-write door open — the DEV-88
-  class (ADR §7).
+  — the first INVOKER policy helper in the tree, a deliberate departure) **and applied at
+  exactly THREE of the seven gate sites** (ADR §3, rev 6): `product_public_select` (the basket
+  reads `product` under the buyer's own RLS), the `current_pricelist_item` public arm, and
+  `get_discoverable_shop`. **The other four are NOT touched** — the RPC and the view bypass
+  RLS, so those policies are off the buyer's read path, and `plit_public_select`'s inlined gate
+  is ADR-0004's deliberate defense-in-depth. *(rev 2-5 applied it to all seven; round 4 found
+  four of them off-path. The cut resolved the ADR-0004 contradiction, the four-vs-three
+  miscount, and most of the behaviour change at once.)*
+- **G3 · the verification tightening is SIGNED — and rev 6 narrowed it to one policy.**
+  `is_caller_verified()` lands on `product_public_select` only. **Sellers are unaffected**: all
+  five `*_all` owner policies are owner-scoped and NOT verification-gated, so a seller manages
+  their own shop, hidden products included, before verification. What changes: an unverified
+  company can no longer read *other* companies' `product` rows directly. Belongs in the walk.
+- **G3 · basket admission = one RESTRICTIVE `FOR ALL` policy**, carrying the owner arm and the
+  **price** rule (decision 3 is server-side per PRD §6.5). The shipped owner policy is
+  untouched. Two mechanisms were tried and rejected: an **RPC** (leaves the table's
+  direct-write door open — the DEV-88 class) and a **column-REVOKE on `product_id`** (round 4:
+  breaks `addToBasket`, whose upsert payload carries `product_id`, so every re-add would fail
+  `42501`). `FOR ALL` closes the hole with no privilege surgery. Accepted cost, already out of
+  scope in PRD §7: a line whose product later goes invisible can no longer be pack-count edited.
 - **G3 · AC 3 AMENDED** — "opens a conversation" → "sends the seller a request naming that
   product; the conversation happens in chat once connected". Non-connected → inbox item;
   connected → chat. **The shop-level Request-pricing CTA is retired.**
 - **G3 · `supplier_product_code` is NOT shown to buyers** (confidentiality; AC 7 omits it).
-- **G3 · the card's buy row gates on `priceShown || viewerIsOwner`** — never on
-  `price_per_gram != null` alone, which would break the seller's own unpriced products.
+- **G3 · the card's buy row gates on `!editing && (priceShown || viewerIsOwner)`** — never on
+  `price_per_gram != null` alone (breaks the seller's own unpriced products), and never without
+  `!editing` (returns dead chrome to the space ADR-0004's tier editor needs). **`ShopView` must
+  pass `viewerIsOwner={viewerCanManage}`** — round 4 found rev 5 required the prop and forbade
+  the change that supplies it, so the gate would never have fired in buyer mode, with all tests
+  green.
+- **G3 · request pricing = ONE mechanism for both arms** — an inbox item naming the product,
+  connected or not. rev 5 specified a chat-thread arm for connected buyers and gave it no design
+  at all (no thread lookup, no message insert, no file, sized S); posting into an existing
+  thread defers with the messaging slice. Decision 4's real requirement — the seller knows
+  *which product* — is met either way.
+- **G3 · site 7 gains an owner arm** (`or p.company_id = current_company_id()`) so a member of
+  the seller's own company sees their whole catalogue from Discover — PRD §7 requires it and
+  `is_connected_to_company` cannot supply it (a self-pair row is impossible under the
+  canonical-order CHECK).
 
 ## Deferred — must NOT be built
 - **AC 9 — ordering without a connection.** Split to its own slug at G3. Buildable as Muskan
@@ -140,7 +162,8 @@ one file serving every seller. No new route; its insides get rebuilt.
 | gate | date | verdict |
 |---|---|---|
 | **G1 (spec)** | 2026-08-19 | **PASSED** — Muskan approved the PRD. 11 decisions recorded in PRD §3, taken over a one-question-at-a-time interview. Two shared-doc amendments written under the sync ritual (CONTEXT.md, DECISIONS.md). No researcher claim overruled; decision 6 is a **new** call that amends a locked one. Branch condition fired and was reviewed — call unchanged. |
-| **G3 (design)** | 2026-08-19 | **PASSED at rev 5** — re-opened once. rev 4 was accepted, then a 3rd checker round (Muskan's call, past the 2-round budget) found **9 more blocking**, incl. a real security hole (basket `product_id` stayed writable after insert, so the admission policy was ornamental — closed with the DEV-88 column-REVOKE) and a **wrong inventory under a signed decision** (four sites lacked the verified gate, not three — and that policy had been read verbatim during drafting). Muskan then took round 3's *removal* option: **one rule states visibility, four inherit it, two restate it because they bypass RLS** — which dissolves the miscount instead of patching it. Convergence answered empirically: rounds 1→2→3 gave 6→8→9 blocking. **rev 5's own fixes are unchecked by a fresh agent**; `critic` + `security` carry them at build. |
+| **G3 (design)** | 2026-08-19 | **PASSED at rev 6** — a 4th round (Muskan: *"one last check and move to tickets"*) found 9 more blocking, incl. **two live breakages**: the rev-5 column-REVOKE would have broken `addToBasket`'s upsert, and nothing wired `viewerIsOwner`, so AC 3's gate would never have fired — with every test green. Its best finding was structural: **four of the seven permission sites are not on the buyer's read path at all** → scope cut 7 → 3, dissolving the ADR-0004 contradiction, the four-vs-three miscount and most of the behaviour change together. **Convergence answered: 6 → 8 → 9 → 9 blocking across four rounds — the loop never converged; a scope cut ended it, not a clean round.** rev 6's own edits are unchecked by a fresh agent; `critic` + `security` carry them at build. |
+| ~~G3 (rev 5)~~ | 2026-08-19 | superseded — **PASSED at rev 5** — re-opened once. rev 4 was accepted, then a 3rd checker round (Muskan's call, past the 2-round budget) found **9 more blocking**, incl. a real security hole (basket `product_id` stayed writable after insert, so the admission policy was ornamental — closed with the DEV-88 column-REVOKE) and a **wrong inventory under a signed decision** (four sites lacked the verified gate, not three — and that policy had been read verbatim during drafting). Muskan then took round 3's *removal* option: **one rule states visibility, four inherit it, two restate it because they bypass RLS** — which dissolves the miscount instead of patching it. Convergence answered empirically: rounds 1→2→3 gave 6→8→9 blocking. **rev 5's own fixes are unchecked by a fresh agent**; `critic` + `security` carry them at build. |
 | ~~G3 (rev 4)~~ | 2026-08-19 | superseded — **PASSED** — ADR-0005 rev 4 accepted; 5 sign-offs answered (see Locked). **⚠️ The checker loop did NOT converge**: budget is 2 rounds; r1 = 6 blocking + 16 non-blocking, r2 = 8 **new** blocking + 15; a 3rd ran at Muskan's explicit call. r2 caught 3 real defects in the draft — a price gate that would have broken the seller's own shop, a basket rule that skipped the G1-locked price check, and a `metadata` projection that would have shipped sellers' private notes to buyers. Two researcher claims were overruled on spot-verification (the rule lives in **7** places, not 3; `get_discoverable_shop` could not satisfy AC 7). |
 | **G2 (prototype)** | 2026-08-19 | **PASSED** — variant **A (full shop)**. Contract is the in-app route, not the HTML: Muskan's objection — *"if I confirm this html variant then maybe the builder will build this same thing and not follow my real app frontend"* — is correct, and variant A's claim ("reuse the seller's shop") cannot be proven by a mock. Walked on the buyer route **and** on the seller's `/present`. The walk found 4 defects + 2 shape changes in shipped components (NOTES.md). |
 
