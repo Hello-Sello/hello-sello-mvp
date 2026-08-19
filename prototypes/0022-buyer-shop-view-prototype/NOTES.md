@@ -47,12 +47,50 @@ nudges, batch/lot selection, any seller edit affordance.
 
 ## Verdict — G2
 
-**Chosen variant:** _(pending — Muskan picks in the browser)_
+**Chosen variant: A · Full shop** — Muskan, 2026-08-19. `/discover/[companyId]` adopts
+Present's container; the buyer view reuses the seller's shop rather than restyling it.
 
-**Change requests:**
-- _(pending)_
+**Change request that followed the pick — and why this prototype moved into the app:**
 
-**Decided:** _(date)_
+> *"can you try to use the current app shell we have so I can see how it would actually look
+> in app, and we also have basket created at top so use that"* … *"I just don't want that if I
+> confirm this html variant then maybe the builder will build this same thing and not follow
+> my real app frontend?"*
+
+That objection is correct and it is the reason variant A cannot be contracted from an HTML
+mock. The chosen variant becomes the **G4 visual contract**; `visual-verifier` stages the live
+page against it and `builder` builds toward it. Variant A's claim is *"reuse the seller's shop
+unchanged"* — a hand-drawn card cannot prove that claim, and could actively teach a builder to
+reproduce a **new** card that merely looks right. So variant A's contract is the real
+components, not a drawing of them.
+
+**→ The live contract is now the in-app route, not this file:**
+`src/app/prototype-0022-buyer-shop/page.tsx` — real `AppShell` (IconRail + TopBar + the basket
+popover), real `ShopView`, real `ProductCard`, hardcoded products, no database.
+**Throwaway: delete it at `/build`.** Requires being logged in (the auth guard was
+deliberately not weakened for a prototype).
+
+This HTML file stays as the record of **why A won** — B and C are still switchable in it, and
+the fit bar is the evidence for the container decision.
+
+**Findings this rebuild produced (carry into `/design`):**
+1. `ShopView` already supports the buyer mode via `viewerCanManage={false}` — but **that prop
+   has no caller anywhere in the app**. Its own doc comment cites a `/present/[companyId]`
+   visitor route that **does not exist** (`shop.ts:6` calls it "comes later"). The buyer mode
+   is therefore **untested in practice**; this prototype is its first real exercise.
+2. The real shell costs horizontal room: `IconRail` + `main`'s `p-3` mean the nominal 1400px
+   is never fully available. Variant A must be judged at real laptop width, not in isolation.
+3. `handleAddToBasket` is wired to the **real** server action, so it fails on fake product ids.
+   Expected, and it usefully proves the wiring is genuinely the shipped one.
+
+**Guardrails to put on the build ticket regardless (agreed with Muskan):**
+- **Reuse `ShopView` + `ProductCard`. A new card component is a failure, not a style choice.**
+- The `consistency` agent's single question — *reuse, or invent and patch?* — applies here.
+
+**Still open at G2:** Muskan has not yet walked the in-app route. G2 is **not passed** until
+she does.
+
+**Decided:** _(pending in-app walk)_
 
 > The chosen variant becomes the **G4 visual contract**: `/build` is verified against it, and
 > `visual-verifier` stages the live page beside it. Record the pick here before this prototype
