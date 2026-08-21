@@ -4729,15 +4729,20 @@ export type Database = {
         Args: { p_company_id: string }
         Returns: {
           about: string
+          address: string
           connection_state: string
           country: string
           cover_path: string
           id: string
+          links: Json
+          locations: Json
           logo_path: string
           name: string
           pricing_requested: boolean
           tagline: string
           type_codes: string[]
+          updated_at: string
+          warehouse_location: string
           website: string
         }[]
       }
