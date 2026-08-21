@@ -11,6 +11,39 @@
 
 ---
 
+## ⚠️ PENDING (2026-08-20, Muskan) — slug 0022 buyer-shop-view · 1 migration so far
+
+`20260820090000_discoverable_company_shop_chrome.sql` — **T01 / HEL-55.** DROP + CREATE of
+`public.get_discoverable_company(uuid)`, adding five projections (`address`,
+`warehouse_location`, `updated_at`, `metadata->'links'`, `metadata->'locations'`) so the buyer's
+shop can render the seller's chrome. LOCAL only.
+
+**⚠️ SAME-DEPLOY with the app code.** The RPC's return shape changes; an old client against the
+new function is fine, but the new `companies.ts` mapper against the OLD function returns
+`undefined` for five fields. Ship the migration and the branch together (ADR-0005 blast-radius
+table).
+
+**Pre-flight for this one:**
+- `DROP` discards the ACL. The migration re-issues the three-statement ritual
+  (`revoke all … from public` · `grant execute … to authenticated` · `revoke execute … from anon`).
+  **Verify on cloud after applying:** `proacl` must read `postgres=X, authenticated=X,
+  service_role=X` — no PUBLIC entry, no `anon` entry.
+- The body was built from `20260617090000_sec01_caller_verified_discover_gate.sql:112-183`,
+  verified byte-identical to the then-live function. **Re-diff against the CLOUD body before
+  applying** — this is the class that once stripped `list_discoverable_companies()`'s verified
+  gate on production.
+- After applying, confirm `public.is_caller_verified()` and `c.id = p_company_id` are both still
+  in the live body. Losing either is silent and severe.
+- Advisor 0028 should stay at its single allowlisted finding (`get_public_profile`) — the
+  function was already `SECURITY DEFINER` and already anon-revoked.
+
+**More migrations from this slug will land here** (T06 carries the connection-override permission
+change). Push the slug as one batch, in timestamp order — the slug ships as a unit (G4/T00
+condition: T00 reaching `dev` without T06 would put every seller's catalogue into every other
+seller's deal-line picker).
+
+---
+
 ## ✅ APPLIED 2026-08-17 — anon/PUBLIC execute lockdown + `ensure_rls` drift capture (2 migrations)
 
 Pushed with **`supabase db push`** (not MCP), so cloud `schema_migrations` took the filename

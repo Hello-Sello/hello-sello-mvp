@@ -45,8 +45,14 @@ those come from `product.location` in T05 (ADR §5, corrected).
 `src/app/discover/companies.ts` (company mapper only), `src/types/database.types.ts`
 
 - When a verified buyer calls `get_discoverable_company` for a verified seller, the system
-  shall return `links`, `locations`, `tags`, `address`, `warehouse_location` and `updated_at`
+  shall return `links`, `locations`, `address`, `warehouse_location` and `updated_at`
   alongside the existing eleven columns.
+  > ⚠️ **AMENDED at /build T01 (2026-08-20): `tags` is NOT a new column.** It already ships as
+  > `type_codes` — `array_agg(distinct cta.company_type_code)`, the identical source the seller's
+  > shop reads (`shop.ts:276`). `ShopView.tsx:798-801` renders **raw** codes, so routing buyer
+  > tags through `categoryLabel` (the existing `categories` field) would double-label. The
+  > mapper supplies `Shop.company.tags` from `type_codes`; adding a column would put one fact in
+  > two places. **Five new columns, not six.** Muskan adjudicates at G4.
 - When the RPC projects `company.metadata`, it shall project the **named keys only**
   (`links`, `locations`) and never the whole object (ADR §4 leak rule).
 - When the function is re-created, the migration shall re-issue the full three-statement grant
@@ -66,7 +72,7 @@ not a style choice.**
 which needs `ShopProduct[]`; T01 scopes `companies.ts` to the *company* mapper only and T05's
 column work is slice 2, so without this the mapper had no owner), `src/app/present/ShopView.tsx`
 (**two lines: the stale comment, plus `viewerIsOwner={viewerCanManage}` on the `ProductCard`
-call** — round 4, B2), `src/modules/basket/components/BasketDrawer.tsx`,
+call** — round 4, B2 — **plus one render conditional, fence amended at G4, see below**), `src/modules/basket/components/BasketDrawer.tsx`,
 delete `src/app/prototype-0022-buyer-shop/`
 
 > ⚠️ **T02 and T05 both write `companies.ts`** — they are sequential, not parallel.
@@ -79,6 +85,14 @@ delete `src/app/prototype-0022-buyer-shop/`
   no Present-mode control and no banner/logo edit control anywhere on the page (AC 11).
 - When the page renders, `ConnectActions` shall occupy `ShopView`'s existing `buyerContext`
   slot rather than a hand-built page layout.
+- When the product mapper builds a `ShopProduct` for a buyer, it shall forward the seller's real
+  `price_public` (`DiscoverProduct.pricePublic`, `companies.ts:166,204`) and **never hardcode it
+  `true`**. T03's Request-pricing gates on `pricePublic` directly, because the DB keeps
+  "price on request" and "price not set yet" as distinct states on purpose
+  (`20260816190000:96-97`) and ADR-0005 `:566-567` forbids the ask on merely-unpriced products.
+  Hardcoding it would make that distinction unrepresentable and silently kill Request-pricing for
+  every buyer, with every component test still green. *(Added at T03's plan check, 2026-08-19 —
+  the premise was load-bearing and unowned by any ticket.)*
 - When the seller may see no products at all, the system shall still render banner, info and
   links, and pass the locked-catalogue panel with its Connect action to the `emptyState` slot
   (AC 4).
@@ -90,8 +104,21 @@ delete `src/app/prototype-0022-buyer-shop/`
 - When `ShopView` renders a `ProductCard`, it shall pass `viewerIsOwner={viewerCanManage}` —
   without it T03's price gate defaults to owner and never fires in buyer mode, failing AC 3
   while every component test passes (round 4, B2).
-- When this ticket completes, `ShopView` shall carry **no new state and no new branch** — one
-  prop pass-through and one comment — and the prototype route shall be gone from the tree.
+- When a single **named** location is the active filter, the per-location group header shall not
+  render — the dropdown already names it and there is exactly one group, so today the name
+  appears twice one line apart. In the **"All locations"** view the header still renders: there
+  it is the divider between locations, which is its actual job. *(G4 2026-08-19, Muskan: the
+  duplication "bothered me". Only reachable since T00 — before it no product carried a
+  `location`, so no named group header ever rendered.)*
+- When this ticket completes, `ShopView` shall carry **no new state, and exactly one new
+  branch** — the render conditional above — plus one prop pass-through and one comment; and the
+  prototype route shall be gone from the tree.
+  **Fence amended at G4 (2026-08-19), deliberately and narrowly.** The original read *"no new
+  state and no new branch"*. Its purpose is to stop `ShopView` accreting buyer-mode knobs, and a
+  conditional that hides a redundant header in the seller's own view is not that. The amendment
+  buys exactly one branch, driven by state `ShopView` already owns (the active location filter);
+  it does **not** relax ADR §1's rule that `ShopView` gains no behaviour prop, which stands
+  untouched.
 
 ## T03 — `ProductCard`: the price gate and the request-pricing hook · **S** · depends on: —  · [HEL-57](https://linear.app/hellosello/issue/HEL-57)
 
@@ -102,8 +129,17 @@ renders Add-to-basket on price-hidden products with no price condition at all.
 `src/modules/catalog/shop.ts` (make `profile_visible` optional)
 *(the `ShopView` prop that feeds this gate is T02's line — see round 4, B2)*
 
-- When a product's price is hidden from the viewer, the card shall render no quantity control
-  and no add-to-basket, and shall render a Request-pricing action naming that product (AC 3).
+- When the **seller has hidden a product's price** (`price_public = false`) from a non-owner, the
+  card shall render no quantity control and no add-to-basket, and shall render a Request-pricing
+  action naming that product (AC 3). **A merely unpriced public product (`price_public = true`,
+  `price_per_gram` null) is OUT of scope** — ADR-0005 `:566-567` forbids the ask there, and the DB
+  keeps the two states distinct on purpose (`20260816190000:96-97`: `price_public` exists *"so the
+  UI can tell 'price on request' from 'price not set yet'"*).
+  *(Re-scoped 2026-08-19 at T03's plan check. The original read "price is hidden from the viewer",
+  which literally means `priceShown === false` and therefore demands the ask in exactly the cell
+  the ADR forbids. `test-writer` reads this file, not the plan — so the loose wording would have
+  produced a test that can never go green, and a builder fixing that test would re-introduce the
+  collapse this check exists to prevent.)*
 - When the viewer is the product's **owner**, the card shall render the buy row even where the
   price is unset or not public — gate is `!editing && (priceShown || viewerIsOwner)`, so the
   seller's own unpriced products keep their controls (ADR §6).
@@ -115,7 +151,7 @@ renders Add-to-basket on price-hidden products with no price condition at all.
 - When `profile_visible` is absent from a product, the card shall render **no** "Hidden" badge
   — seller state never renders in buyer mode.
 
-## T04 — Per-product request pricing; retire the shop-level CTA · **S** · depends on: T03  · [HEL-58](https://linear.app/hellosello/issue/HEL-58)
+## T04 — Per-product request pricing; retire the shop-level CTA · **S** · depends on: T03 **+ T02**  · [HEL-58](https://linear.app/hellosello/issue/HEL-58)
 
 **Files:** `src/app/discover/actions.ts`,
 `src/app/discover/[companyId]/RequestPricingActions.tsx` (retired),
@@ -133,6 +169,16 @@ renders Add-to-basket on price-hidden products with no price condition at all.
 - When this ticket completes, the shop-level Request-pricing CTA shall no longer render.
 
 ## T05 — `get_discoverable_shop` gains the specification set · **M** · depends on: T01  · [HEL-59](https://linear.app/hellosello/issue/HEL-59)
+
+> ⚠️ **`database.types.ts` is NOT reproducible from `supabase gen types` — found at T01 (2026-08-20).**
+> The file carries an **undocumented hand-edit**: `update_deal_draft`'s four `Args` are the ONLY
+> ones in the ~5000-line file with `| null` (`:5010,5013,5014,5015`), and the generator does not
+> emit them that way. `src/modules/deals/actions.ts:275-279` passes `?? null` for all four, so a
+> straight regeneration **breaks `tsc`** — and committing it silently breaks `updateDealDraft`.
+> **Before committing any regeneration: `git diff -U0 src/types/database.types.ts` and confirm the
+> only hunks are your own ticket's columns.** Any other hunk is pre-existing drift to surface, not
+> a ride-along. T01 hit this and reverted the `update_deal_draft` hunk by hand.
+
 
 AC 7 in full, plus `product.location` — which is what actually produces the location tabs.
 
@@ -156,8 +202,23 @@ AC 7 in full, plus `product.location` — which is what actually produces the lo
   ritual.
 - When the mapper builds a product, it shall derive `bundle_threshold_grams` /
   `bundle_price_per_gram` from `tiers[0]`, as `shop.ts:246-247` does.
+- When T05 rewrites the product mapper, it shall **keep forwarding the seller's real
+  `price_public`** (T02's criterion). T05 declares the same `companies.ts` product mapper in its
+  Files, so it can silently undo that forward with every T02 test still green. The durable guard
+  is a **mapper unit test both tickets run**, not a criterion in one of them.
+  *(Added 2026-08-19 at T03's plan check.)*
 
 ## T06 — The connection override, written once and applied at all seven sites · **M** · depends on: T00  · [HEL-60](https://linear.app/hellosello/issue/HEL-60)
+
+> ⚠️ **`database.types.ts` is NOT reproducible from `supabase gen types` — found at T01 (2026-08-20).**
+> The file carries an **undocumented hand-edit**: `update_deal_draft`'s four `Args` are the ONLY
+> ones in the ~5000-line file with `| null` (`:5010,5013,5014,5015`), and the generator does not
+> emit them that way. `src/modules/deals/actions.ts:275-279` passes `?? null` for all four, so a
+> straight regeneration **breaks `tsc`** — and committing it silently breaks `updateDealDraft`.
+> **Before committing any regeneration: `git diff -U0 src/types/database.types.ts` and confirm the
+> only hunks are your own ticket's columns.** Any other hunk is pre-existing drift to surface, not
+> a ride-along. T01 hit this and reverted the `update_deal_draft` hunk by hand.
+
 
 Decision 6. Carries the **G3-signed verification tightening**: three of the seven policies
 gain `is_caller_verified()` and unverified members lose reads they have today.
@@ -257,10 +318,29 @@ both are the kind of thing that rots quietly.
 | **S**mall | XS | M | M | S | S | M | M | S | XS |
 | **T**estable | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
-**Parallel-safe pairs** (no shared files): T03 ∥ T01 · T06 ∥ T02 · T06 ∥ T03 · T06 ∥ T01.
+**Parallel-safe pairs** (no shared files): T03 ∥ T01 · T06 ∥ T02 · T06 ∥ T03.
+~~T06 ∥ T01~~ — **struck 2026-08-19 at /build.** Both declare
+`src/types/database.types.ts`, as does T05. Three tickets regenerate the same generated
+file, so they conflict on merge even from separate worktrees. Generated files are shared
+state even when the tickets are logically independent.
+
 **Forced sequential:** T01 → **T02** → T05 (all three write `companies.ts` — round 4, B9) ·
 T06 → T07 (T07's policy calls T06's helper) · T03 → T04 (T04 wires T03's hook) ·
-T03 → T02 (T02 passes the prop T03's gate consumes).
+T03 → T02 (T02 passes the prop T03's gate consumes) ·
+**T02 → T04** (added 2026-08-19 at /build: T04's declared Files include
+`BuyerShopView.tsx` "(handler wiring)" — the file **T02 creates**. T04 listed only T03) ·
+T01 / T05 / T06 share `database.types.ts` (see above).
+
+**⚠️ Worktrees do NOT buy parallelism for most of these.** `supabase/config.toml` pins
+`project_id = "hello-sello-design"` on fixed ports (54321/54322), so **every worktree shares
+one Docker Supabase stack** — a `supabase db reset` in one wipes the other's data mid-run.
+A ticket is only worktree-safe if it needs no local DB. On that test: **T03** (pure-node
+`renderToStaticMarkup`, no jsdom, no DB) and **T08** (docs only) are worktree-safe; T00, T01,
+T02, T04, T05, T06 and T07 all queue on the one stack. T03's *tests* are DB-free but its G4
+visual walk is not — that returns to the main tree.
+Worktree base: cut from **`claude/muskan/work`**, never `origin/main` (what `claude
+--worktree` defaults to) or `origin/dev` — neither carries the pipeline skills (STATE.md's
+base-branch trap).
 
 ## Traceability — every acceptance criterion has a home
 

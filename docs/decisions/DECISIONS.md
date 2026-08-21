@@ -1576,3 +1576,21 @@ on 2026-06-10 — it is **not** the basis for this amendment.
 (a never-built rival design for the same capability — different route, a second read door, and
 a connection-*required* gate; also stale, returning two price columns migration C dropped).
 It needs a dead marker so it stops reading as live intent.
+
+## 2026-08-20 — Repair broken test harness on discovery, even mid-ticket
+
+**Decided:** when a build turns up that a *guard* cannot execute, fix it in that session rather
+than filing it — even though it expands the ticket's diff. Applied at slug 0022 T01: 22 SQL
+runners repaired mid-ticket (Muskan: *"fix first"*).
+
+**Why:** `/ship` leans on these suites to prove a slug is safe. Shipping while they're inert makes
+the proof theatre. The cost is a wider diff for one ticket; the alternative is a security guard set
+that everyone believes is running and isn't. **Scope discipline protects review quality — it should
+not protect a broken check from being fixed.**
+
+**Scope of the rule:** this covers checks that cannot *run* (a broken runner, a suite that exits 0
+while failing, a test that passes vacuously). It does **not** license fixing every unrelated defect
+a build walks past — those still get recorded and filed. The distinguishing question is whether the
+thing is *claiming to verify something it isn't*.
+
+**See:** `ARCHITECTURE-NOTES.md` 2026-08-20 (the stdin rule) · `docs/agents/LEARNINGS.md` L-013.
