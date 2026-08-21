@@ -1,0 +1,521 @@
+# Pipeline learnings — the self-correction log
+
+**What this is:** one entry per mistake *I* made running the pipeline, written as a rule I
+can apply next time. Not a diary and not a changelog — if an entry doesn't change a future
+decision, it doesn't belong here.
+
+**Read this when:** starting any `/spec`, `/design`, `/build` or `/ship` run. Scan the
+**Trigger** lines only; open the entry when one matches what you're about to do.
+
+**Write here when:** a checker, a test, or Muskan catches something I authored or asserted.
+The entry is written at the moment of the catch, not at wrap — by then the root cause has
+been rationalised away.
+
+**Entry rule:** *Why it was wrong* must name the reasoning error, not restate the mistake.
+"I used the wrong agent" is a restatement. "I treated a similar name as satisfying an
+instruction that named a ruleset" is a root cause.
+
+---
+
+## L-001 · A named agent that doesn't resolve is a blocker, not a gap to fill
+
+**2026-08-19 · slug 0022 · `/build` step 3 · caught by Muskan, mid-run**
+
+**Trigger** — a skill names a specific agent / script / skill / MCP server, and it isn't in
+the available list, but something *similar* is.
+
+**What I did** — `/build` step 3 says spawn `plan-checker`. It wasn't registered. I saw
+`gsd-plan-checker` in the list, used it, and said nothing. Muskan asked why. It turned out
+`.claude/agents/plan-checker.md` exists, is committed (`e0c6217`), and has frontmatter
+byte-identical in shape to `critic` and `adr-checker` — both of which *do* resolve. It is
+the only one of our 11 agents that doesn't.
+
+**Why it was wrong** — two compounding errors:
+1. I treated **name similarity as ruleset equivalence.** The skill named `plan-checker`
+   because of what its ruleset does (NULL truth tables, call-site truth, "keeps behavior"
+   is banned, out-of-scope files are automatically a finding). `gsd-plan-checker` shares a
+   noun, not a ruleset.
+2. The deeper one: `/build` says *"no stops between G3 and G4"*, and I let that pressure me
+   into not surfacing a blocker. **"No stops" governs decisions, not missing machinery.**
+   A skill that can't run its own step has failed, and silently degrading it hides that
+   failure exactly where it costs most — on the run meant to prove the pipeline works.
+
+**The rule** — if a named piece of machinery doesn't resolve: say so in one line, state the
+substitute and what it costs, then proceed. Never substitute silently. If a substitute is
+needed, prefer **running the real ruleset in a generic agent** (paste the agent file's
+instructions into a `general-purpose` prompt) over using a different agent's ruleset — the
+ruleset is the thing being invoked; the agent name is just the address.
+
+**Still open** — root cause of the non-registration is unconfirmed. Prime suspect: a name
+collision with the globally-installed `~/.claude/agents/gsd-plan-checker.md`; every other
+pipeline agent has a name with no GSD twin. Not chased mid-build.
+
+---
+
+## L-002 · Grep the reader's vocabulary, not the writer's
+
+**2026-08-19 · slug 0022 · `/build` T00 plan rev 1 · caught by the plan-checker**
+
+**Trigger** — changing **seed or fixture data**, and building the "what depends on this?" list.
+
+**What I did** — my blast-radius table was built from `grep "profile_visible|price_public"`
+across `e2e/`, `supabase/tests/` and `src/`. It found the SQL-layer consumers and I called
+the sweep complete. It missed `e2e/present-card-edit.spec.ts:239`, which asserts the string
+`"See all prices"` is absent from a specific card *because* seed ships that product
+`price_public = false` — then drives the dial on itself. My matrix set that product's price
+public. The file is `mode: "serial"`, so it would have cascaded through the rest of the file.
+
+**Why it was wrong** — I searched using **the writer's vocabulary** (the column names I was
+changing). Tests don't mention columns. They mention **the reader's vocabulary**: product
+names, button labels, aria-labels, visible copy. The two vocabularies never intersect, so a
+column-name grep returns a confident, empty, wrong answer.
+
+**The rule** — when changing data, grep for the row's *user-visible identifiers* as well as
+its column names: the product name, the label, the button text, the test-id. For a seeded
+row, grep its natural key (`AUR-1B`) **and** its display name (`Pedanios 31/1 PND-CA`) —
+tests select by one and comment by the other.
+
+---
+
+## L-003 · Verify the checker's remedy, not just its finding
+
+**2026-08-19 · slug 0022 · `/build` T00 plan rev 2 · caught by our own re-grep**
+
+**Trigger** — a checker returns REVISE **and** proposes a specific fix.
+
+**What I did** — the checker found pin 1 (AUR-1A must stay `price_public = false`) and
+offered two remedies, the first being "re-point the corners: AUR-1A → L1, AUR-1B → L2".
+I started folding it in. Running L-002's rule on the *remedy* first surfaced a **second**
+pin the checker never looked for: `e2e/present-card-edit.spec.ts:162,176` uses AUR-1B as
+"the blank slate — no seeded rungs" and asserts zero tiers on it. The proposed fix needed
+AUR-1B to carry a ladder. Both offered remedies broke one pin or the other.
+
+**Why it was wrong** — I was treating the checker's finding and the checker's fix as one
+verified unit. They aren't. A checker that stops at the first blocker has, by construction,
+**stopped looking** — so its remedy is drafted against an incomplete picture of the
+constraints. The finding is evidence; the remedy is a hypothesis.
+
+**The rule** — spot-verify a proposed remedy with the same rigour as the finding, and
+specifically re-run the search that produced the finding *against the remedy's new targets*.
+The fix lands in code; the finding doesn't.
+
+---
+
+## L-004 · "Parallel-safe" is a computed intersection plus a shared-resource check
+
+**2026-08-19 · slug 0022 · authored at `/design`, caught at `/build`**
+
+**Trigger** — writing or trusting a "these tickets can run in parallel / in worktrees" claim.
+
+**What I did** — `TICKETS.md` shipped `**Parallel-safe pairs** (no shared files): … T06 ∥ T01`.
+Both tickets declare `src/types/database.types.ts` in their own Files lists, as does T05.
+I'd derived the pairs by reading the file lists as prose instead of intersecting them as sets,
+and I never considered resources outside the file system at all.
+
+**Why it was wrong** — two blind spots:
+1. **Generated files are shared state.** `database.types.ts` is regenerated wholesale, so two
+   tickets that are logically independent still collide there. Logical independence ≠ file
+   independence.
+2. **The file system isn't the only shared resource.** `supabase/config.toml` pins
+   `project_id = "hello-sello-design"` on fixed ports, so *every worktree shares one Docker
+   Supabase stack* — a `db reset` in one wipes the other's data mid-run. That makes most of
+   this slug's tickets un-parallelisable no matter how disjoint their files are.
+
+**The rule** — a parallel-safety claim needs three passes, in order: (a) intersect the declared
+Files as sets, mechanically; (b) add generated/derived artifacts as implicit members of every
+set that regenerates them; (c) check shared *resources* — the local DB, fixed ports, seed
+state, any singleton the tests touch. Only what survives all three is worktree-safe. State the
+DB constraint explicitly whenever worktrees are proposed; it is the binding one here.
+
+---
+
+## L-005 · Sweep once per field the diff writes, not once per ticket
+
+**2026-08-19 · slug 0022 · `/build` T00 plan rev 2 · caught by `plan-checker`**
+
+**Trigger** — a change writes **more than one** field, column or flag, especially when one of
+them was added late in planning.
+
+**What I did** — rev 2 changed two things: the visibility/price dials, and two tier rungs added
+to AUR-1C. I ran a consumer sweep for the dials (twice, after L-002) and **zero** sweeps for
+`tiers`. Adding rungs to AUR-1C would have silently moved the seller's deal-line prefill from
+4.00 to 3.20 — `CardFront.tsx:483` seeds quantity from `packSizeGrams` (1000 for AUR-1C) and
+`:494-496` resolves it through `resolveTierPrice`, which picks the highest reached rung
+(`pricing.ts:47-54`). It also adds a rung chip, an "apply" button, and a `500g+` pack option.
+Two deal fixtures use AUR-1C and were never examined.
+
+**Why it was wrong** — I scoped the sweep to the ticket's **headline** ("the visibility × price
+matrix") instead of to the **diff**. The rungs entered as a step-3 afterthought to close an
+acceptance-criteria gap, and an afterthought never gets its own sweep — it inherits the sweep
+done before it existed.
+
+**The rule** — before verification, list the fields the diff actually writes and run a separate
+consumer sweep per field. The field added last in planning is the one most likely to have been
+swept **zero** times. And prefer a **new** row over mutating a row that fixtures already use:
+a new row has no dependents by construction, which is why rev 3 moved the ladder onto a fifth
+product instead.
+
+---
+
+## L-006 · A comment on the read path is not a contract for the write path
+
+**2026-08-19 · slug 0022 · `/build` T00 plan rev 2 · caught by `plan-checker`**
+
+**Trigger** — citing a comment, docstring or existing behaviour as licence for a change, when
+the change is on the **other** side of the read/write boundary.
+
+**What I did** — rev 2 deleted a seeded price row, justified by
+`src/modules/deals/supabase/reads.ts:531`: *"A product with no current price comes back with
+`unitPrice = null` (a price-less line is allowed, D3)."* That is a **reader's** tolerance.
+The write path is `deal_line_item.unit_price NUMERIC(15,4) **NOT NULL**`
+(`20260607090003_phase2_deal.sql:235`), reached through `create_deal_draft`'s
+`nullif(v_line->>'unitPrice','')::numeric` with Save-draft gated only on `lines.length === 0`.
+Adding that product from the shop dropdown and saving raises `23502` — on the demo path. A
+seed-only ticket would have shipped a live break.
+
+**Why it was wrong** — "the system tolerates null here" is a statement about **one direction**.
+I read a reader's null-tolerance as a system-wide invariant, which is the same error as reading
+a nullable column as an unconstrained one.
+
+**The rule** — when a claim licenses a **write**, verify it at the **constraint** — the DDL, the
+`NOT NULL`, the CHECK, the trigger — never at a comment on a reader. Comments describe intent
+at one call site; constraints describe what the database will actually accept.
+
+---
+
+## L-007 · "The tool lied" is the last hypothesis, not the first
+
+**2026-08-19 · slug 0022 · `/build` T00 step 6 · caught by the orchestrator re-running it**
+
+**Trigger** — an agent reports that a tool, hook, reporter or harness gave a **wrong result** —
+especially a false GREEN.
+
+**What happened** — `test-runner` reported that the `rtk` hook summarised a Playwright run as
+`PASS (14) FAIL (0)` while a real failure existed, and classified it *"tooling bug in the rtk
+hook's summarizer — do not trust rtk-filtered playwright summaries"*. Re-running the same spec
+twice on one DB state, once through the hook and once through `rtk proxy`, gave `PASS (2)` and
+`2 passed` — agreement. The summarizer was fine.
+
+The real mechanism was in the agent's **own report**: `e2e/present-card-edit.spec.ts` mutates
+seed data, so its first run polluted the DB and the second run failed legitimately. It
+discovered that pollution mechanism itself, wrote it up correctly as a separate finding — and
+still left the tooling-bug attribution standing next to it.
+
+**Why it was wrong** — between the two runs, **the agent had changed the database** by running
+a seed-mutating spec. That is the variable that moved. Blaming the reporter requires inventing
+a new defect; blaming the state it just mutated explains everything with defects already known.
+Preferring the former is picking the explanation with the larger surface area.
+
+**The rule** — when two runs disagree, name what changed between them **before** blaming the
+observer. A tooling-defect claim needs a same-state A/B: run the tool and its bypass against an
+identical starting state and diff the output. Until that exists, it is a hypothesis, not a
+finding. This matters beyond correctness — a false "don't trust the test output" alarm
+discredits the whole gate, and everything a green run is supposed to license goes with it.
+
+**Corollary for relaying** — do not pass an agent's tooling-defect claim up to Muskan
+unverified. It is the single least verifiable thing an agent reports and the most expensive to
+be wrong about.
+
+---
+
+## L-008 · A stalled builder leaves the tree mid-implementation, and nothing announces it
+
+**2026-08-19 · slug 0022 · `/build` T03 step 5 · caught by inspecting the tree after the failure**
+
+**Trigger** — any agent that writes source dies without returning: watchdog stall, terminal API
+error, user skip.
+
+**What happened** — `builder` was killed by the stream watchdog after 600s with no output, its
+last line *"Now the footer slot: swap the buy-row gate and add the ask branch."* It had completed
+4 of 5 plan steps — `shop.ts`, the props, the gate group, the buy-row swap, the badge guard — and
+left the fifth unwritten. The working tree held a **half-implemented component**: new props
+accepted, one gate wired, the other gate computed but never rendered. The failure notification
+says only that the agent stalled; it says nothing about what landed.
+
+**Why it matters** — this is the most dangerous state in the pipeline. The diff looks like work.
+It type-checks. `tsc` passes, most tests pass, and the only thing standing between it and a
+"green" claim is a test suite that happened to be written first. **On a ticket with weaker tests
+it would have read as complete.** The `/build` skill has no recovery step for a dead writer — it
+budgets `tests` and `blocking-findings` retries, but assumes agents return.
+
+**The rule** — when a source-writing agent dies, the first move is **never** to respawn it and
+never to assume nothing landed. Diff the tree against the plan's step list and establish exactly
+which steps completed, then decide: finish the remainder directly if it is small and
+well-specified (one JSX block, one guard), or respawn with an explicit "steps 1-4 are already
+applied, verify then do step 5" brief. Respawning a fresh agent on the original prompt invites it
+to redo completed work — and to make different choices than its predecessor in the parts it
+redoes, which is how a file ends up with two half-designs in it.
+
+**Corollary** — this is the case tests-first actually pays for. The red contract was written
+before any source existed, so recovery was a matter of reading `3 failed / 29 passed` and finding
+the one gate with no render site. Without it, "what did the dead agent finish?" has no cheap
+answer.
+
+---
+
+## The loop — and its weak link
+
+The honest limit: **a log nobody reads is not a loop.** Three hooks make it one, in
+descending reliability:
+
+| hook | status | reliability |
+|---|---|---|
+| memory pointer (auto-loads every session) | ✅ wired 2026-08-19 | high — no discipline required |
+| `/build` `/design` `/spec` `/ship` step 0 scans the Trigger lines | ✅ wired 2026-08-19 | high — fires on the runs that matter |
+| "I'll remember to check it" | — | zero |
+
+Both hooks read; both also carry the **write** half — an entry is written at the catch, not
+at wrap. That ordering is the load-bearing part: by wrap the root cause has been rationalised
+into "a small mix-up", which is exactly the entry that teaches nothing.
+
+If a hook is ever removed, this file is documentation, not a mechanism. Say so rather than
+assuming it still works.
+
+---
+
+## L-009 · Grep the existing suites for the symbol before planning a new one
+
+**2026-08-20 · slug 0022 · `/build` T01 plan rev 1 · caught by `plan-checker` (B3)**
+
+**Trigger** — planning a new test file, suite, or assertion for a function, RPC, policy or
+route. Before writing it: grep the *existing* suites for that symbol's name.
+
+**What I did** — PLAN-T01 rev 1 proposed a new SQL suite whose assertions included "an
+unverified caller gets zero rows" and "`anon` cannot execute". Both already ship in
+`supabase/tests/cross_tenant_lockdown_test.sql` — `:111-113` and `:92-93` — naming
+`get_discoverable_company` explicitly, with `ON_ERROR_STOP=1` in its runner so they are not
+false-green. The plan then did not run that suite in its verification step. So rev 1 would have
+**rewritten the guard it needed while leaving the real one untriggered.**
+
+**Why it was wrong** — I searched the *migrations* for prior art on the function and never
+searched the *tests*. A migration search answers "what does this do"; only a test search answers
+"what already protects this". Duplicated assertions are worse than missing ones: two guards drift,
+and the stale one gets trusted.
+
+**The rule** — `grep -rn "<symbol>" supabase/tests/ src/**/*.test.ts` is part of writing the plan,
+not part of reviewing it. Any new suite must state what the existing ones *don't* cover.
+
+---
+
+## L-010 · A security mechanism you changed recently is the one you are most likely to mis-cite
+
+**2026-08-20 · slug 0022 · `/build` T01 plan rev 1 · caught by `plan-checker` (N1)**
+
+**Trigger** — writing a rationale that says "without X, `anon`/PUBLIC would regain Y" or any
+claim about what the database does *by default*.
+
+**What I did** — rev 1 justified the grant ritual with: "without it the function returns to
+PUBLIC-executable default and `anon` regains it." That was true until **three days earlier**.
+`20260817120000_anon_execute_lockdown.sql` — written in this project, by me, in session 77 —
+set `ALTER DEFAULT PRIVILEGES … REVOKE EXECUTE ON FUNCTIONS FROM anon` (`:8-9`) and installed the
+`revoke_anon_execute_on_new_function` event trigger firing at `ddl_command_end` (`:46,:57`). A
+newly created function is now *born* correctly. The consequence was not cosmetic: rev 1's
+verification step grepped `proacl` to prove criterion 3, and under the new default that grep
+passes **whether or not the ritual is in the file**. A real false-green, in the verification of a
+grant.
+
+**Why it was wrong** — recent work is recalled as intent ("I hardened anon execute") rather than
+as mechanism ("a default-privileges narrowing plus an event trigger, which changes what a fresh
+`CREATE FUNCTION` inherits"). Intent doesn't tell you which downstream assumptions it invalidated.
+
+**The rule** — when a plan's rationale rests on default/inherited behaviour, verify it against the
+**current** DDL, not memory — and check whether the check you planned still *distinguishes* pass
+from fail once that default changed. A verification step that passes unconditionally is not a
+verification step.
+
+---
+
+## L-011 · When enumerating invariants, you will remember the security ones and drop the functional ones
+
+**2026-08-20 · slug 0022 · `/build` T01 plan rev 2 · caught by `plan-checker` round 2 (B3, B4)**
+
+**Trigger** — writing a "these must survive" checklist for a re-created function, policy, or
+migration — especially when the ticket's *risk* is framed as security.
+
+**What I did** — PLAN-T01's invariant table listed seven items: the verified-caller gate, the
+`verification_status` check, the soft-delete check, the header flags, the join's `deleted_at`, the
+connection-state arms, and the ACL. Every one a **security** predicate. It omitted
+`where c.id = p_company_id` — the function's **primary filter**. Lose that line and a
+`SECURITY DEFINER` function grouped on `c.id` returns *every verified company, one row each*, to
+any verified caller. Step 2's "grep I1–I7 individually" would have passed. The shipped guard would
+have passed too — it asserts row-count for an **unverified** caller only. Also missed: the
+`left join`'s LEFT-ness (an inner join returns zero rows for a company with no type assignment)
+and the `coalesce(… filter (where … is not null), '{}')` that a deviation had just promoted to the
+source of a user-visible field.
+
+**Why it was wrong** — the ticket's framing was "don't lose the security gate", so I enumerated
+against that frame. An invariant list built from the *risk narrative* inherits the narrative's
+blind spots. The correct frame is the **body**: every clause in it is an invariant until proven
+otherwise.
+
+**The rule** — enumerate invariants by walking the actual statement clause by clause — `select`
+list, `from`, every `join` and its type, every `where` conjunct, `group by`, the signature — not
+by recalling what the ticket said was risky. Then ask of each: *would any planned check notice if
+this vanished?* A check that passes under the failure is not a check.
+
+---
+
+## L-012 · "As seeded" is a claim about data — grep the seed before asserting against it
+
+**2026-08-20 · slug 0022 · `/build` T01 plan rev 2 · caught by `plan-checker` round 2 (B2)**
+
+**Trigger** — planning any assertion phrased "returns X as seeded / as fixtured / as configured".
+
+**What I did** — rev 2's SQL suite asserted a verified buyer "gets all five new columns populated
+as seeded". The seed populates **none** of them: zero `warehouse_location`, zero `links`; company
+`metadata` is only `jsonb_build_object('seed','demo-2d')`. Four of five return NULL on a fresh
+`db reset`. So the assertion was unsatisfiable — and worse, **the failure it existed to catch was
+invisible to every planned check**: transpose `address` and `warehouse_location` in the projection
+and `tsc` can't see it (both typed `string`), the SQL suite can't see it (NULL = NULL), the unit
+test can't see it (hand-typed fixture). The plan's stated purpose — "join the two halves of
+criterion 1" — was defeated by data I never looked at.
+
+**Why it was wrong** — I wrote T00, which *is* the seed ticket, and carried an impression of the
+seed as "rich now" into a claim about columns T00 never touched. Recency of authorship is not
+knowledge of content.
+
+**The rule** — a test that asserts against fixture data must either grep the fixture and cite the
+line, or **plant its own row with distinct sentinel values per column**. Distinct is the point:
+identical sentinels pass a transposition, which is the commonest projection bug.
+
+---
+
+## L-013 · Run the runner, not just the test — a green suite proves nothing if its harness never fired
+
+**2026-08-20 · slug 0022 · `/build` T01 step 4 · caught by the orchestrator executing what `test-writer` had only inspected**
+
+**Trigger** — accepting any "the tests fail correctly / pass correctly" claim that was reached by
+**reading** rather than **running**; and writing or copying a shell runner for a test suite.
+
+**What happened** — `test-writer` reported the RED state "confirmed by inspection rather than
+execution (per my no-run mandate)". Executing it surfaced a defect its inspection could not:
+`run_discoverable_company_chrome_test.sh` — copied from T00's shipped
+`run_seed_visibility_matrix_test.sh`, which **I** wrote — invokes `psql … -f "$TEST_FILE"`. On this
+machine `psql` is a shim (`~/.local/bin/psql`) that `exec docker exec`s psql **inside** the
+`supabase_db_*` container, where a host-relative path does not exist. The primary branch therefore
+fails with `No such file or directory` **whenever `command -v psql` succeeds — which is always**.
+The fallback branch (`-f -` on stdin) was the only one that ever worked, and it is unreachable.
+Fixed both runners to feed the file on stdin, which is correct for a real psql and for the shim.
+
+**Why it matters beyond the bug** — this is the *third* harness defect in one slug, after the
+`ON_ERROR_STOP` false-green and the seed-pollution trap. The pattern: **test infrastructure is
+written once, glanced at, and then trusted forever**, while the tests it runs get reviewed line by
+line. A broken runner is strictly worse than no runner — it occupies the slot where a check should be.
+
+**The rule** — a test artifact is not delivered until its **runner** has been executed and shown to
+(a) fail on the unbuilt feature, with the *expected message*, and (b) pass on something known-good.
+Both halves. An agent forbidden from running tests can write them but cannot verify them; the
+orchestrator owes that execution and must not relay an inspection as a result.
+
+---
+
+## L-014 · Before believing a sweep, prove the sweep works on a known-good case
+
+**2026-08-20 · slug 0022 · `/build` T01 · caught by the orchestrator's own sanity check**
+
+**Trigger** — running a loop/sweep over many targets and getting a **uniform** result, especially
+uniform failure. Also: any `wc -l` on a filtered command's output.
+
+**What I did** — swept all SQL runners with `for r in …; do out=$(timeout 90 bash "$r"); done` and
+got **35/35 FAIL, exit 127**. Two of those runners I had personally watched pass minutes earlier.
+`timeout` is GNU coreutils and **does not exist on macOS** — every invocation was
+"command not found". Nothing was wrong with any runner. Separately, `ls … | wc -l` reported 37
+runners where the shell glob reports 35: `ls` is rewritten by the rtk hook, which appends summary
+lines that `wc` happily counted. I had published "22 of 37" on that basis.
+
+**Why it was wrong** — a uniform result is evidence about the *harness*, not the targets. Real
+defects are lumpy. And a count taken through a filtering wrapper is a count of the wrapper's
+output, not of the thing.
+
+**The rule** — every sweep needs a **control**: include at least one target known to pass and one
+known to fail, and if the control comes back wrong, disbelieve the sweep before disbelieving the
+targets. Count files with a shell glob (`printf '%s\n' pat*`), never through a wrapped `ls`. This is
+L-007 ("the tool lied is the last hypothesis") pointed at my own scaffolding rather than an agent's.
+
+---
+
+## L-015 · Two representations of one thing, both `string | null` — the compiler cannot help you
+
+**2026-08-21 · slug 0022 · `/build` T02 plan rev 1 · caught by `plan-checker` (B2)**
+
+**Trigger** — feeding one module's output into another module's input where the two describe the
+*same concept* in different representations: a storage **path** vs a resolved **URL**, an id vs a
+slug, cents vs euros, UTC vs local. Especially when both sides type as `string`.
+
+**What I did** — planned to hand T01's `DiscoverCompanyProfile` to `ShopView`. T01's mapper returns
+`logoUrl`/`coverUrl` — **resolved public URLs**. `ShopView` expects `Shop["company"].logo_path` /
+`cover_path` — **storage paths** — and builds the src itself via
+`mediaUrl(path) = ${SUPABASE_URL}/storage/v1/object/public/shop-media/${path}`
+(`ShopView.tsx:57-60,512-520`). The result would have been
+`…/shop-media/https://…` — **a broken banner and logo on the ticket's headline surface** — and
+because both sides are `string | null`, `tsc` is green and every unit test passes. Rev 1 had no
+mapper between them at all; **no ticket in the slug owned one.**
+
+**Why it was wrong** — I checked that the *types* lined up and concluded the *values* did. A type
+name describes a shape, not a unit or an encoding. Where a concept has two representations, the
+type system is exactly as blind as it is for `string` money or `string` dates.
+
+**The rule** — whenever data crosses a module boundary, ask what the receiving side will **do**
+with the value, not just what it is typed as. If either side transforms it (prefixes, parses,
+formats, resolves), the boundary needs a **named mapper and a unit test asserting the
+representation** — e.g. `expect(out.cover_path).not.toMatch(/^https?:/)`. Cheap, and it is the only
+thing that catches this class.
+
+---
+
+## L-016 · When a mapper is unimplementable, look one layer up before adding a layer
+
+**2026-08-21 · slug 0022 · `/build` T02 plan rev 1 · caught by `plan-checker` (B3)**
+
+**Trigger** — a planned mapper cannot produce a required field because the source type has already
+discarded the data.
+
+**What I did** — planned `DiscoverProduct → ShopProduct`. `ShopProduct.images` needs `{id, path}`;
+`DiscoverProduct.images` is `string[]` of resolved URLs with id and path **already thrown away**
+(`companies.ts:253-257`). The mapper was unimplementable as specified. The instinct is to widen
+`DiscoverProduct` — add the ids back, keep both shapes, map downstream.
+
+**What was right instead** — `DiscoverProduct` had **exactly one consumer**: the very file this
+ticket rewrites. So the fix was to **delete the type** and map from the row (`ShopRow`, which still
+carries `{id, path, position}`) straight to `ShopProduct`. One type gone, one layer gone, bug fixed
+at source instead of patched downstream.
+
+**The rule** — when a mapper can't be written because its input is already lossy, the question is
+not "what do I add to the input?" but **"who else actually uses this input?"** Run the grep first.
+A type with one consumer is not an interface, it is an intermediate — and an intermediate that
+loses data has earned deletion. *(This is the simplification bias made concrete: the round that
+made things worse in the last slug was the one that added a mechanism instead of removing the
+problem.)*
+
+---
+
+## L-017 · An exception added to a criterion is a deviation — never a "correct reading"
+
+**2026-08-21 · slug 0022 · `/build` T02 plan rev 2 · caught by `plan-checker` round 2 (B1)**
+
+**Trigger** — you are about to widen, soften, or add an "unless…" to an acceptance criterion,
+a fence, or a locked decision, because implementing it literally looks like it would break
+something.
+
+**What I did** — the criterion: *"When a single **named** location is the active filter, the
+per-location group header shall not render."* No exception. I wrote
+`showHeader={loc === "All" || editing}` and justified it: suppressing the header while editing
+would cost the seller the drag-to-regroup affordance.
+
+**The justification was false, and one grep would have shown it.** Under a named filter
+`filterByLocation` returns only products whose `location === loc`, so there is exactly **one**
+group; `handleDrop` early-returns when `from === targetLocation`, so every visible card is already
+in that group and no drop can do anything; and the drop target is the `<section>`, not the header,
+so it survives `showHeader={false}` anyway. Nothing functional was at stake — a label, a count
+badge, and a hint for an impossible drop.
+
+**Why it was wrong, twice over.** First: I reasoned about the affordance from the component's
+*shape* (a draggable header exists → suppressing it must cost something) instead of tracing whether
+the path was reachable in that state. Second, and worse: I wrote the exception into the plan as
+though it were what the criterion meant. A reviewer skimming rev 2 would have seen a considered
+reading, not a change. **Presenting a deviation as an interpretation is more dangerous than the
+deviation** — it removes the human's chance to rule on it.
+
+**The rule** — when literal compliance looks wrong: (1) prove the harm is *reachable* before
+believing it; (2) if it is real, file it as an explicit deviation for the gate, in the deviations
+table, in the requester's words — never by re-describing what the criterion "really" says.

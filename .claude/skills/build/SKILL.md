@@ -13,6 +13,11 @@ allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Task, Agent
    round:** reset `tests` and `blocking-findings` counters, `G4 rounds` +1.
    Never refuse to start because a previous round's counters are spent.
 
+   **Then scan `docs/agents/LEARNINGS.md` — Trigger lines only**; open an entry
+   when its trigger matches what this run is about to do. The moment a checker, a
+   test, or Muskan catches something you authored, write the new entry there —
+   at the catch, not at wrap.
+
 1. **Base sync — once, at the start, then frozen:**
    - `git pull --rebase` the current branch (another session may have pushed)
    - checkout the branch STATE.md names

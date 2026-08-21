@@ -10,12 +10,19 @@ allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Task, Agent
 
 0. `docs/muskan-build/<slug>/STATE.md`: G4 must be passed for every ticket.
 
+   **Then scan `docs/agents/LEARNINGS.md` — Trigger lines only**; open an entry
+   when its trigger matches what this run is about to do. The moment a checker, a
+   test, or Muskan catches something you authored, write the new entry there —
+   at the catch, not at wrap.
+
 1. **Final rebase onto `origin/dev`.** A conflict touching tested or
    rendered files → back to G4 (capped at 2 rounds, then escalate).
 
 2. **Full gate on the rebased code, naming every suite explicitly:**
    `npm run test:unit` (vitest) · `npm test` (playwright e2e, fresh
-   `supabase db reset` first) · SQL suites via stdin (`psql -f - < file`) ·
+   `supabase db reset` first) · SQL suites via stdin, **always with
+   `-v ON_ERROR_STOP=1`** (`psql -v ON_ERROR_STOP=1 -f - < file`) — without it a suite
+   that raises still prints its trailing `SELECT '… PASSED'` and exits 0 ·
    `tsc` · eslint. Compare against the known baseline (15 e2e = the
    `sb_secret_` key class); anything NEW → A/B prove it pre-existing or stop.
 

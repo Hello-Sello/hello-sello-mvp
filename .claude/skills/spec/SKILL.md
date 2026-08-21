@@ -13,6 +13,11 @@ allowed-tools: Read, Grep, Glob, Write, Edit, Task, Agent
    the existing PRD it amends, then straight to the G1 stop. Everything below
    is the FULL lane.
 
+   **Then scan `docs/agents/LEARNINGS.md` — Trigger lines only**; open an entry
+   when its trigger matches what this run is about to do. The moment a checker, a
+   test, or Muskan catches something you authored, write the new entry there —
+   at the catch, not at wrap.
+
 1. **Spawn `researcher`** (Agent tool) on the seed's area. Write its report
    to `docs/muskan-build/<slug>/RESEARCH.md` under `## What exists (spec)` —
    what exists, what conflicts, what already claims this area, a citation per

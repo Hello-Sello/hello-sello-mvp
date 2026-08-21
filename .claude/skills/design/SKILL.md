@@ -11,6 +11,11 @@ allowed-tools: Read, Grep, Glob, Write, Edit, Task, Agent, mcp__claude_ai_Linear
 0. `docs/muskan-build/<slug>/STATE.md`: stage must be `spec ✅` (and
    `prototype ✅` if the lane included one). Read the PRD in full.
 
+   **Then scan `docs/agents/LEARNINGS.md` — Trigger lines only**; open an entry
+   when its trigger matches what this run is about to do. The moment a checker, a
+   test, or Muskan catches something you authored, write the new entry there —
+   at the catch, not at wrap.
+
 1. **Spawn `researcher`** on APPROACHES (not prior art this time): how is
    this normally done, what does each option cost later. Append its report
    to `docs/muskan-build/<slug>/RESEARCH.md` under `## Approaches (design)`.
