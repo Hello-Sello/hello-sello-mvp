@@ -519,3 +519,89 @@ deviation** — it removes the human's chance to rule on it.
 **The rule** — when literal compliance looks wrong: (1) prove the harm is *reachable* before
 believing it; (2) if it is real, file it as an explicit deviation for the gate, in the deviations
 table, in the requester's words — never by re-describing what the criterion "really" says.
+
+---
+
+## L-018 · Plan the test surface against the runner that exists, not the one you assume
+
+**2026-08-21 · slug 0022 · `/build` T04 plan rev 1 · caught by `plan-checker` round 1 (B1)**
+
+**Trigger** — you are about to specify a test that asserts an interaction or a state *change*
+(a click, a re-render, "after X the button becomes Y"), in any repo whose test setup you have
+not just read.
+
+**What I did** — the plan asked for three assertions in `ProductCard.gate.test.tsx`: clicking
+fires the handler, a resolved `{ok:true}` swaps the button for a confirmation, an `{error}` leaves
+it clickable. All three are unwritable here. `vitest.config.ts:34` is `environment: "node"`, and
+`package.json` has no jsdom, no happy-dom, no testing-library. Every card suite renders through
+`renderToStaticMarkup` — an HTML **string**. There is no DOM, no event dispatch, no second render.
+
+**The file I told the agent to extend says so in its own header** (`:18-20`): *"no jsdom, initial
+paint only — `pricesOpen` etc. are local state and out of scope here."* I had read that file to
+find the helper I wanted to reuse and did not read its preamble.
+
+**Why it matters more than a wasted test** — `test-writer` reads the plan, not the runner config.
+Three tests that can never go green would have gone into the tree, and the pressure at that point
+is to add jsdom mid-ticket (a real dependency decision) or to quietly delete the criterion they
+were protecting. Both are worse than planning honestly: the plan now states that the behaviour is
+proven by e2e alone, and says why.
+
+**The rule** — before writing any test into a plan, open the runner config and one existing suite
+for the same file. Ask what the harness can physically express. If it cannot express the assertion,
+say so **in the plan** and name where the proof actually lives — do not let the gap surface as a
+red test someone will "fix" by weakening the criterion.
+
+---
+
+## L-019 · A test that changes identity needs a way OUT of the first one
+
+**2026-08-21 · slug 0022 · `/build` T04 plan rev 2 · caught by `plan-checker` round 2 (B2/B3)**
+
+**Trigger** — designing any test where actor A does something and actor B must then observe it:
+"then sign in as the seller and check her inbox."
+
+**What I did** — rev 2's proof for three of the four criteria was: buyer clicks, then sign in as
+the seller and count the rows in her inbox UI. Not executable. `proxy.ts:77-82` redirects a
+signed-in user away from `/login`, and there is **no sign-out helper anywhere in `e2e/`** — so the
+switch hangs on a `page.fill` against a page that never rendered a form. It was also unsound:
+`playwright.config.ts` runs one worker against one database, so an earlier test's row lands in the
+same inbox and a bare count reads high.
+
+**The repo already had the answer, one file away.** `chat-phase7.spec.ts:99-101` shells out to
+`psql` as superuser precisely for *"the assertions a tenant-scoped client can NOT see"*, and
+`e2e/fixtures/two-company.ts` exports a whole `countX()` family built on it. Asserting the row
+directly is strictly stronger than the UI route — it can see `metadata->>'product_id'`, which no
+screen renders — and it made the identity switch unnecessary.
+
+**Two rules.** (1) Before designing a cross-actor test, grep for the mechanism that switches actors
+and confirm it exists; "sign in as someone else" is an assumption, not a primitive. (2) When the
+thing you want to prove is a **row**, prove the row. Reaching for the UI to observe a database fact
+adds an identity problem, a rendering problem and a cross-test-pollution problem to a question SQL
+answers directly.
+
+---
+
+## L-020 · Assert the field the code writes, not the label a human reads
+
+**2026-08-21 · slug 0022 · `/build` T04 plan rev 3 · caught by `test-writer`, which refused the instruction**
+
+**Trigger** — writing an expected string into a plan or a test ("the note will contain X") where
+X is something you read off a screen, a prototype, or a seed row.
+
+**What I did** — the plan said the inbox note would contain *"Cosmic Cream"*. That is AUR-1A's
+**`cultivar`**. Its `name` is `Pedanios 31/1 COS-CA` (`seed.sql:391`), the two are separate columns
+kept separate by `mapDiscoverShopRow` (`companies.ts:292`), and the note is built from `name` —
+which is also what the shipped `aria-label` uses (`ProductCard.tsx:824`). The assertion would have
+been **permanently red against a correct implementation**.
+
+**Both fields render on the card** (`:541` name headline, `:543` cultivar subtitle), which is
+exactly why reading the label off a screenshot is unsafe: two different columns are both visible
+and either looks like "the product name".
+
+**The catch is the lesson.** `test-writer` was told to assert *"Cosmic Cream"*, traced it to the
+wrong column, and **flagged it instead of complying** — L-001's disposition applied to a spec
+rather than to a missing agent. An agent that quietly obeys a wrong instruction produces a red test
+and an hour of debugging; one that refuses produces a one-line correction.
+
+**The rule** — when a plan names an expected value, cite the column and the line that produces it,
+not the rendering. If you cannot name the field, you are guessing at a label.
