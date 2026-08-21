@@ -24,7 +24,7 @@ import { createPortal } from "react-dom";
 import {
   Heart, RotateCw, Minus, Plus, ShoppingCart, EyeOff, Eye,
   GripVertical, Trash2, ChevronLeft, ChevronRight, ChevronDown, X, Pencil,
-  MessageSquareQuote,
+  MessageSquareQuote, Check,
 } from "lucide-react";
 import type { ShopProduct } from "../shop";
 import { packSizes, resolveTierPrice } from "../pricing";
@@ -204,8 +204,14 @@ export function ProductCard({
    *  forgets the prop gets owner behaviour with every test green. */
   viewerIsOwner?: boolean;
   /** Buyer asks the seller for a price on THIS product (price_public = false).
-   *  The card only reports the intent; the handler lives with the caller. */
-  onRequestPricing?: (productId: string) => void;
+   *  The card only reports the intent; the WRITE lives with the caller — this
+   *  card owns no server action. The caller MUST return the outcome, so the card
+   *  can tell "landed" from "failed" and render the right thing in the ask's
+   *  slot. Fire-and-forget is deliberately not expressible: a caller returning
+   *  nothing would leave the card no choice but to assume "landed", which is a
+   *  green confirmation for an ask that may never have landed — the exact defect
+   *  this feedback exists to prevent. */
+  onRequestPricing?: (productId: string) => Promise<{ ok: true } | { error: string }>;
 }) {
   const [flipped, setFlipped] = useState(false);
   // Highlights this card as the drop target while a sibling from the same shop is
@@ -260,6 +266,35 @@ export function ProductCard({
   // list, laid out full-size — feedback was that the cramped inline inputs are
   // hard to see/use. Reuses the same onEditField draft, not a second write path.
   const [detailsOpen, setDetailsOpen] = useState(false);
+  // The pricing ask's outcome, card-local like `flipped` / `qty` / `pricesOpen`.
+  // Nothing on the server re-derives it, so a reload restores the button — which
+  // is correct: the dup-guard is server-side, and a second ask is refused there
+  // rather than by the client hiding a control.
+  const [asked, setAsked] = useState(false);
+  const [asking, setAsking] = useState(false);
+  const [askError, setAskError] = useState<string | null>(null);
+
+  async function askForPricing() {
+    if (!onRequestPricing) return;
+    setAsking(true);
+    setAskError(null);
+    try {
+      const res = await onRequestPricing(p.id);
+      if ("error" in res) {
+        setAskError(res.error);
+        return;
+      }
+      setAsked(true);
+    } catch {
+      // A REJECTED promise — transport failure, a 500 out of the Server Action,
+      // a throw inside the caller. Without this the button would stay disabled
+      // with no message: a permanently dead control.
+      setAskError("We couldn't send that request. Please try again.");
+    } finally {
+      // In `finally` so every path re-enables the button, including the throw.
+      setAsking(false);
+    }
+  }
 
   async function toggleVisible() {
     setBusy(true);
@@ -815,19 +850,39 @@ export function ProductCard({
                   same footer slot the buy row would. NOT the buy row's strict
                   complement — see `canAsk`: a merely-unpriced public product
                   renders neither, on purpose (ADR-0005 §6). The accessible name
-                  carries the product name so the ask names its subject (AC 3);
-                  T04 wires the handler. */}
-              {canAsk && (
-                <button
-                  type="button"
-                  data-testid="request-pricing"
-                  aria-label={`Request pricing for ${p.name}`}
-                  onClick={() => onRequestPricing?.(p.id)}
-                  className="flex w-full items-center justify-center gap-1.5 rounded-full bg-white py-2 text-[12.5px] font-bold text-brand-deep shadow-[inset_0_0_0_1px_rgba(20,10,16,0.15)] hover:bg-brand/5"
-                >
-                  <MessageSquareQuote size={14} /> Request pricing
-                </button>
-              )}
+                  carries the product name so the ask names its subject (AC 3).
+                  The handler is wired — `ShopView` passes `onRequestPricing`. */}
+              {canAsk &&
+                (asked ? (
+                  /* The ask landed. A non-interactive confirmation takes the
+                     button's own slot — there is nothing left to click, and
+                     there is no toast primitive in src/shared/ui/ to invent
+                     one for. */
+                  <div
+                    data-testid="pricing-requested"
+                    className="flex w-full items-center justify-center gap-1.5 rounded-full bg-success/15 py-2 text-[12.5px] font-bold text-success"
+                  >
+                    <Check size={14} /> Pricing requested
+                  </div>
+                ) : (
+                  <div>
+                    <button
+                      type="button"
+                      data-testid="request-pricing"
+                      aria-label={`Request pricing for ${p.name}`}
+                      onClick={askForPricing}
+                      disabled={asking}
+                      className="flex w-full items-center justify-center gap-1.5 rounded-full bg-white py-2 text-[12.5px] font-bold text-brand-deep shadow-[inset_0_0_0_1px_rgba(20,10,16,0.15)] hover:bg-brand/5 disabled:opacity-60"
+                    >
+                      <MessageSquareQuote size={14} /> Request pricing
+                    </button>
+                    {/* The ask failed. The button stays above, still clickable —
+                        a retry is the only useful next move. */}
+                    {askError && (
+                      <p className="mt-1 text-center text-[11px] font-medium text-danger">{askError}</p>
+                    )}
+                  </div>
+                ))}
               {/* Batch selection lives in the footer, beside Add-to-basket — not
                   inside the scrollable spec list above (feedback: it was easy to
                   miss buried in the scroll). View mode only. NOT owner-gated,

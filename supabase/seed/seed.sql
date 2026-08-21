@@ -397,7 +397,16 @@ from (values
   -- AUR-1A/1B are pinned by e2e/present-card-edit.spec.ts and AUR-1C is used by the
   -- deal fixtures. Its name sorts LAST of the five, so the grid's `.first()` (which
   -- several /present specs rely on) does not move.
-  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid, 'Tantalus 24/1 BLB-CA',  'Blue Blaze',   'AUR-1E', '38395011', 1000, 24, 1, 7.50, 'Tantalus Labs', 'Vancouver')
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid, 'Tantalus 24/1 BLB-CA',  'Blue Blaze',   'AUR-1E', '38395011', 1000, 24, 1, 7.50, 'Tantalus Labs', 'Vancouver'),
+  -- AUR-1F is the SECOND visible, price-hidden product (the same L1 corner as
+  -- AUR-1A). It exists so the per-product pricing-request dup-guard can be
+  -- proven per-PRODUCT rather than per-pair: with one such product, "ask about
+  -- A, then ask about B" is not walkable at all. Its name sorts LAST of the six
+  -- ('Z…'), so the grid's `.first()` — pinned by several /present specs — does
+  -- not move, and its `location` MUST stay 'Toronto Warehouse' (§6a-2): the
+  -- matrix suite asserts count(DISTINCT location) = 2 across ALL GreenLeaf
+  -- products, so a new location name (or NULL) fails it.
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid, 'Zephyr 24/1 ZPH-CA',    'Zephyr Haze',  'AUR-1F', '38396120', 1000, 24, 1, 8.00, 'Aurora Inc',    'Toronto')
 ) as v(company_id, name, cultivar, code, pzn, pack, thc, cbd, rrp, cultivator, region)
 where not exists (
   select 1 from public.product p
@@ -425,7 +434,11 @@ update public.product p
     ('AUR-1B', true,  true,  'Toronto Warehouse'),
     ('AUR-1C', false, true,  'Montreal Warehouse'),
     ('AUR-1D', false, false, 'Montreal Warehouse'),
-    ('AUR-1E', true,  true,  'Toronto Warehouse')
+    ('AUR-1E', true,  true,  'Toronto Warehouse'),
+    -- AUR-1F re-occupies the L1 corner (visible, price hidden) so the buyer's
+    -- shop carries TWO Request-pricing cards. Toronto is a fence, not a
+    -- preference — see the note on its product row above.
+    ('AUR-1F', true,  false, 'Toronto Warehouse')
   ) as v(code, visible, priced, loc)
  where p.company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid
    and p.supplier_product_code = v.code
@@ -450,7 +463,11 @@ from (values
   ('AUR-1B', 6.00),
   ('AUR-1C', 4.00),
   ('AUR-1D', 5.00),
-  ('AUR-1E', 6.00)
+  ('AUR-1E', 6.00),
+  -- AUR-1F mirrors AUR-1A's live price. The price is HIDDEN from buyers
+  -- (price_public = false), not absent: "price on request" and "price not set
+  -- yet" are different states, and only the first renders Request-pricing.
+  ('AUR-1F', 8.00)
 ) as v(code, price)
 join public.product p
   on p.company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid

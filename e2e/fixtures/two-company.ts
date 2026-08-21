@@ -393,6 +393,78 @@ export function pendingChangeLineQuantities(dealCardId: string): number[] {
   return out ? out.split(',').map(Number) : []
 }
 
+/**
+ * Count the live `pending_inbox_item` rows for ONE per-product pricing ask
+ * (0022 T04, HEL-58's dup-guard proof): type 'pricelist_request', status
+ * pending, not soft-deleted, sent BY the named company, carrying the id of
+ * the product with the given `supplier_product_code` — always looked up on
+ * GreenLeaf (the seller every T04 e2e test asks against), by NAME, never a
+ * hardcoded company id, same rule as `resolveRelationshipId` above.
+ *
+ * Scoped by BOTH sender company name AND product code so two tests asking
+ * about different products (or from different senders) never collide on one
+ * count — mirrors `countTicketsForCard`'s per-card scoping.
+ *
+ * CALLER CONTRACT: `senderCompanyName` and `productCode` are interpolated raw
+ * into single-quoted SQL literals — no escaping, no parameter binding. Pass
+ * LITERAL CONSTANTS written in the spec file. Never pass a name read back out
+ * of the DB, scraped off the page, or otherwise derived at runtime: company
+ * names are user-authored in this product, and one apostrophe would break the
+ * query out of its literal. (Today's callers all pass fixed strings.)
+ */
+export function countPricingRequests(senderCompanyName: string, productCode: string): number {
+  const bin = psqlBin()
+  const out = execFileSync(
+    bin,
+    [
+      DB_URL,
+      '-At',
+      '-c',
+      `select count(*) from public.pending_inbox_item pi ` +
+        `join public.company sc on sc.id = pi.sender_company_id ` +
+        `join public.company gl on gl.name = 'GreenLeaf Cultivation' ` +
+        `join public.product p on p.company_id = gl.id and p.supplier_product_code = '${productCode}' ` +
+        `where sc.name = '${senderCompanyName}' and pi.type = 'pricelist_request' ` +
+        `and pi.status = 'pending' and pi.deleted_at is null ` +
+        `and pi.metadata->>'product_id' = p.id::text`,
+    ],
+    { encoding: 'utf8' },
+  ).trim()
+  return Number(out)
+}
+
+/**
+ * The `note` of the ONE live per-product pricing ask a company sent GreenLeaf
+ * about a product (by `supplier_product_code`), or null if none exists.
+ * `countPricingRequests` proves the ROW exists; this proves what it SAYS —
+ * D3's note must name the product, which is what makes T04's criterion 2 true
+ * "to the seller's eye" (the note renders in InboxRow / InboxDetail; a bare
+ * `metadata` key renders nowhere). Same scoping — and the same CALLER CONTRACT
+ * as the counter above: both parameters are interpolated raw into single-quoted
+ * SQL literals, so callers must pass literal constants, never runtime-derived
+ * names.
+ */
+export function pricingRequestNote(senderCompanyName: string, productCode: string): string | null {
+  const bin = psqlBin()
+  const out = execFileSync(
+    bin,
+    [
+      DB_URL,
+      '-At',
+      '-c',
+      `select pi.note from public.pending_inbox_item pi ` +
+        `join public.company sc on sc.id = pi.sender_company_id ` +
+        `join public.company gl on gl.name = 'GreenLeaf Cultivation' ` +
+        `join public.product p on p.company_id = gl.id and p.supplier_product_code = '${productCode}' ` +
+        `where sc.name = '${senderCompanyName}' and pi.type = 'pricelist_request' ` +
+        `and pi.status = 'pending' and pi.deleted_at is null ` +
+        `and pi.metadata->>'product_id' = p.id::text limit 1`,
+    ],
+    { encoding: 'utf8' },
+  ).trim()
+  return out || null
+}
+
 const CREDENTIALS: Record<Who, { email: string; password: string }> = {
   alice: { email: 'alice@greenleaf.test', password: 'password123' },
   bob: { email: 'bob@stonepharm.test', password: 'password123' },

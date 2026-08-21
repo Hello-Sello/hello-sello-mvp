@@ -9,8 +9,9 @@
  * edit) turned off. Products render as the redesigned square 4-up grid, grouped
  * under a per-location divider header, with a location dropdown that re-contexts
  * the grid to one location. The card itself is the reusable ProductCard from the
- * catalog module — its Add-to-basket button is NOT owner-only chrome, it works
- * for every viewer via handleAddToBasket below.
+ * catalog module — two of its actions are NOT owner-only chrome and work for
+ * every viewer: Add-to-basket via handleAddToBasket, and the per-product
+ * Request-pricing ask via handleRequestPricing, both below.
  *
  * The shop CHROME (07-05 + F-01) is fully in-place editable behind ONE "Manage
  * shop" entry: the whole surface takes a calm grey wash (data-edit), PresentBanner
@@ -41,6 +42,7 @@ import type { ProductFieldPatch, ProductBatchPatch } from "@/modules/catalog/man
 import { tiersFromDraft, validateLadder } from "@/modules/catalog/ladderDraft";
 import { packSizes } from "@/modules/catalog/index.client";
 import { saveCompanyProfile } from "@/app/account/actions";
+import { requestProductPricing } from "@/app/discover/actions";
 import { createClient } from "@/shared/db/client";
 import { addToBasket, useBasket } from "@/modules/basket";
 import { AddProductsDrawer } from "./AddProductsDrawer";
@@ -578,6 +580,23 @@ export function ShopView({
     await refreshBasket();
   }
 
+  // Ask this shop's owner for a hidden price on ONE product. Owned here for the
+  // same reason handleAddToBasket is — it is not owner-only chrome, so threading
+  // it as a prop would put a behaviour knob on a component the ADR says gains
+  // none. The card only renders the ask when `!viewerIsOwner`, so on /present
+  // (viewerCanManage true) this is unreachable. It is NOT unreachable for an
+  // owner generally: a seller opening /discover/<her own company id> gets
+  // viewerIsOwner={false} on her own catalogue (neither get_discoverable_company
+  // nor get_discoverable_shop self-excludes, and PRD §7 supports that view), so
+  // she can click Request-pricing on her own price-hidden product. The server
+  // refuses it — actions.ts returns "That's your own company." — which is why
+  // the card must render the refusal rather than assume a click landed.
+  // The result is RETURNED, not swallowed — the card needs it to distinguish
+  // "landed" from "failed".
+  async function handleRequestPricing(productId: string) {
+    return requestProductPricing(company.id, productId);
+  }
+
   const surface = (
     <>
       {/* Sticky pulsing Save appears only while editing; it also carries "+ Add
@@ -684,6 +703,7 @@ export function ShopView({
                   onBatchRemove={removeBatch}
                   onReorder={(draggedId, targetId) => reorderProduct(g.location, draggedId, targetId)}
                   onAddToBasket={handleAddToBasket}
+                  onRequestPricing={handleRequestPricing}
                   viewerIsOwner={viewerCanManage}
                 />
               ))}

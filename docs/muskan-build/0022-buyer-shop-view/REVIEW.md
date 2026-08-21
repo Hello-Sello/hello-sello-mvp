@@ -553,3 +553,130 @@ every control. `supplier_product_code` correctly suppressed to `n.a.`
 | **P13** | **`test-writer` had no Bash and said so** rather than claiming a run — L-013 working one ticket after it was written. The orchestrator executed all five artifacts and confirmed each was RED **for the right reason**. |
 | **P14** | **`test-writer` solved an obstacle better than the plan did.** The plan offered two options for the module-private `Group`, both needing a source change; it took neither — mocked `useBasket()` and rendered the exported `BasketDrawer`. Zero source changes, and it exercises the real drawer→group integration. |
 | **P15** | **Seed pollution struck twice more.** `visual-verifier` found the DB **stale on arrival** (AUR-1A flipped to `price_public=t` by an earlier e2e run) and reset before capturing — otherwise shot 3 would have been the wrong card. The orchestrator hit the same trap re-running the buyer e2e. **The earlier "present-grid ↔ present-card-edit interfere" finding is now REFUTED**: 17/17 pass in one invocation on a clean DB. The cause was always a dirty DB, never cross-spec interference. |
+
+---
+
+# T04 (HEL-58) — per-product request pricing
+
+## plan-checker — 2 rounds, budget SPENT, did NOT converge
+r1: **5 blocking + 10 notes**. r2: **5 blocking (ALL NEW, all defects in r1's own fold-ins)
++ 11 notes.** Third ticket on this slug to spend the budget without converging (T01, T02, T04).
+`plan-checker` is still **not registered** in this harness (REVIEW.md P1); both rounds ran its
+ruleset verbatim inside a `general-purpose` agent, the precedent set at T00.
+
+Headline catches, r1:
+- **(B1) Three planned unit assertions were unwritable.** `vitest.config.ts:34` is
+  `environment: "node"`; no jsdom, no testing-library. Card suites render to an HTML *string*
+  via `renderToStaticMarkup`, so clicks and re-renders are inexpressible. Dropped; D6 now rests
+  on e2e alone.
+- **(B2) Criterion 3 was untestable on the seed** — only one product occupied the
+  visible + price-hidden corner, so "ask about A then B" had no B. Fixed by seeding **AUR-1F**.
+- **(B3/B4) The row was never asserted, and criterion 1 was uncovered** — it is scoped to a
+  NON-connected buyer and every planned test used Bob, whom the seed connects.
+
+Headline catches, r2 (all against r1's replacements):
+- **(B2/B3) The "sign in as the seller and count her inbox" design was not executable**:
+  `proxy.ts:77-82` bounces a signed-in user off `/login` and there is **no sign-out helper in
+  `e2e/`**; one worker + one DB also meant a bare count read high. Replaced with direct SQL row
+  assertions via `psql`, the idiom `chat-phase7.spec.ts:99-101` already uses — strictly stronger,
+  since it can see `metadata->>'product_id'`, which no screen renders.
+- **(B5) The seed dependents table was right by luck and wrong by mechanism.** It claimed
+  `.first()` is safe because `shop.ts:183` orders by name; rendered order is **group** order
+  (`locationFilter.ts:37-53`, named locations first-seen, `Unassigned` last), so the first group
+  is Montreal and `.first()` is AUR-1D. It also missed the live fence:
+  `seed_visibility_matrix_test.sql:136-140` asserts `count(DISTINCT location) = 2`, which makes
+  AUR-1F's Toronto location mandatory rather than a preference.
+
+## test-writer — 1 defect found in the plan, refused rather than copied
+rev 3's test surface said the inbox note would contain *"Cosmic Cream"*. That is AUR-1A's
+**cultivar**; its `name` is `Pedanios 31/1 COS-CA` (`seed.sql:391`), the fields are separate in
+`mapDiscoverShopRow` (`companies.ts:292`), and D3 builds the note from `name` — which is also what
+the shipped `aria-label` uses (`ProductCard.tsx:824`). Asserting it would have been permanently red
+against a correct implementation. It flagged instead of complying (L-001's disposition applied to a
+spec). It also could not execute anything (no Bash in its session) and **said so** rather than
+claiming a green run; the orchestrator ran the suite and confirmed the RED reason.
+
+**Orchestrator edit to test files (declared):** `test-writer` left a private `psqlBin()`, a `DB_URL`
+and a second query helper inside `discover-shop.spec.ts`, duplicating plumbing
+`e2e/fixtures/two-company.ts` owns. `pricingRequestNote` was moved there beside
+`countPricingRequests`; the spec imports both.
+
+## test-runner — GREEN, first pass, no retry (tests 0/2)
+`tsc` clean · eslint 6 errors **all pre-existing, 0 new** · unit **445/445** (440 + exactly the 5
+planned) · **37/37** SQL suites, each with a real "ALL … PASSED" marker · `discover-shop.spec.ts`
+**6/6** · the four at-risk dependents **23/23** · full e2e 105 pass / 22 fail, **all 22 pre-existing**.
+
+Two things it did right rather than conveniently: it caught **itself** in a false signal (a raw
+`npx playwright test` run bypassing `PLAYWRIGHT_FORCE_ASYNC_LOADER=1` produced 29 bogus failures)
+and reported it instead of burying it; and it **A/B-proved 9 undocumented failures pre-existing**
+against the base commit via stash + reset.
+
+**Baseline drift, not T04's:** project `CLAUDE.md` records the e2e baseline as 16 failures. It is
+**22**. The extra 9 (deal-c2c-create ×1, present-edit-model ×3, present-info ×4, public-profile ×1)
+are A/B-proven pre-existing. The recorded figure is stale and masks signal.
+
+## critic — 2 blocking, 8 notes
+- **(B1, blocking — ADR fence)** ADR-0005 `Reused` says `ShopView` takes *"no behavioural
+  modification"*, and the G3 amendment licenses **exactly one line**, which T02 spent. T04 adds an
+  import, a 10-line handler and a call-site prop. The design is sound (the ticket's Files list is
+  not buildable) but the fence text still says "none" — **needs an explicit G4 ruling, not
+  inheritance from T02's.** Same for the widened prop signature vs ADR §6:571.
+- **(B2, blocking — and it corrected the plan)** D8 claimed DEV-83 fires on the **second** accept.
+  For an **already-connected** buyer it fires on the **first** — and Bob, criterion 2's own
+  identity, is seeded connected. **Proven empirically** in a rolled-back transaction:
+  `SQLSTATE 23505` on `uq_relationship_pair_active`. The seeded relationship carries
+  `inbox_item_id = NULL`, so `acceptInbox`'s probe (`store.ts:538`) can never match it. The throw
+  is **uncaught** — `InboxView.tsx:137` is `void refreshWith(acceptItem(id))`, `RequestsSection.tsx:98`
+  is try/finally with no catch — so the seller clicks Accept, nothing happens, no error, and the item
+  stays `pending` forever while the buyer cannot re-ask (the guard keys on `pending`).
+  T04 does not create this, but between T02 and T04 no connected buyer could send one at all.
+  **Not fixed here: `acceptInbox` serves every accept flow. Muskan's ruling.**
+- Notes fixed: N2 (no `catch` → permanently dead button), N3 (dead `void` arm removed — narrows the
+  type instead of documenting a lie), N4 (false unreachability comment — owner-on-Discover IS
+  reachable, server-refused), N5 (fail-open dup-guard), N7 (stale narration ×4).
+- Notes recorded, not fixed: **N1** (server accepts asks on price-public products — the client gate
+  is decoration; one line closes it, but it is a behaviour change awaiting a ruling), **N6** (the
+  product name is dropped from the chat seed on accept — `rollout.ts:131`; and
+  `REQUEST_TYPE_BLURB.pricelist_request` is now stale vocabulary), **N8** (fixtures docstring).
+- **Scope: clean.** Every hunk traces to a plan step or a declared deviation. `BuyerShopView.tsx`
+  and `companies.ts` genuinely untouched; no drive-by refactor.
+
+## security — no blocking, 7 notes
+Closed the question that mattered: **cross-company forgery is impossible**, and not because of the
+TypeScript. It dumped the live function body and found the decisive predicate
+`c.id = p.company_id AND c.id = p_company_id` — a product of company X can never resolve when the
+receiver is Y. Unverified / pending / soft-deleted targets are excluded by the same join, and
+`is_caller_verified()` still carries its full body (no repeat of the lost-gate class).
+`anon` is **false** on all four RPCs on the path. The PostgREST filter is **not injectable** (the
+value is DB-derived by the time it is used, and `URLSearchParams` encodes the reserved characters).
+Seed re-confirmed unable to reach production.
+
+- **(finding 1, folded into the docstring)** My plan overclaimed. *"A crafted call cannot put an
+  arbitrary string in front of the seller"* is true of **this action** and false of the **endpoint
+  set**: `authenticated` holds INSERT on all 16 columns of `pending_inbox_item` with no validating
+  trigger. Pre-existing and **not widened** by T04 — the deleted action deliberately let buyers type
+  280 free-text characters. Recorded as a guarantee it would have become a false premise for whoever
+  next renders `metadata`. Wording corrected.
+- **(finding 3)** Abuse surface: the pending-row ceiling per buyer/seller pair went from 1 to the
+  size of the catalogue. Bounded by needing a verified company; worth a cap when Connect is next
+  touched.
+
+## consistency — no blocking
+**Reuse, not invention** — and it corrected the plan in the ticket's favour: D7 called
+`pricingRequest.ts` a pattern with "no local precedent", but `src/app/discover/taxonomy.ts` is
+exactly that precedent (same directory, plain module, constant + pure functions, own test file, not
+folded into `companies.ts`). Deviation 3 is weaker than declared. The seed row, the e2e helpers and
+the error rendering all match their neighbours.
+- **note:** `ProductCard`'s sent-state uses three independent primitives where `ConnectActions.tsx:25`
+  models the identical shape as one `"idle" | "sending" | "sent"` union. No invalid combination is
+  reachable today, but the type no longer prevents `asked && asking` or a stale error surviving a
+  success. Recorded, not retried, per the `note` rule.
+- **note:** the PostgREST JSON-path filter is a first for `src/` — where `metadata` lookups matter
+  elsewhere, the codebase promoted the field to a real column (`chat_thread.deal_card_id`). Fine as
+  one inspectable line; a second one should go into an RPC or a shared helper.
+
+## Gate after the fix pass
+`tsc` clean · unit **445/445**. **e2e could NOT be re-run — see `blocked.md`.** The local Supabase
+stack now yields a database where `authenticated` has SELECT on 1 of 92 tables, so the app 403s on
+its own `person` row and every gated route bounces. Proven not to be T04 (zero migrations touched;
+all 147 applied).

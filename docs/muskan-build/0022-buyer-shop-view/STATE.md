@@ -1,8 +1,9 @@
 # 0022 buyer-shop-view — work order
 lane:   FULL
 stage:  triage ✅ · spec ✅ (G1) · prototype ✅ (G2) · design ✅ (G3 2026-08-19) ·
-        build: **T00 ✅** · **T03 ✅** · **T01 ✅** · **T02 ✅ (G4 2026-08-21)** → build (T04 next)
-        **▶ REMAINING: T04 · T05 · T06 · T07 · T08.**
+        build: **T00 ✅** · **T03 ✅** · **T01 ✅** · **T02 ✅ (G4 2026-08-21)** ·
+        **T04 ✅ (G4 2026-08-21 — accepted, 2 items owed: e2e re-run + visual pass)**
+        **▶ REMAINING: env repair · DEV-83 · price gate · ADR amend · T05 · T06 · T07 · T08.**
 branch: **claude/muskan/work** — no feature branch (Muskan's call, 2026-08-18)
 >  No cut: this slug is frontend-heavy with no expected migration, so a feature branch
 >  would only add a merge step. `/ship` still rebases onto `dev` and PRs from here.
@@ -163,6 +164,77 @@ one file serving every seller. No new route; its insides get rebuilt.
 - Person-to-person deals (deals require a company `relationship`)
 - Seller-side edit affordances on this surface — buyer view is READ + BUY only
 
+## ✅ G4 · T04 — MUSKAN RULED 2026-08-21: all three ACCEPTED, execute in the order below
+
+Muskan: *"I want you to do all of these, in the priority of building and shipping and
+dangerous stuff."* All three rulings from `G4-T04.md` are **approved**. T04 itself is
+**accepted at G4** with two things explicitly still owed (e2e re-run + visual pass), because
+both are blocked by the environment, not by the ticket.
+
+**▶ EXECUTION ORDER for the next session — highest first:**
+
+**1 · REPAIR THE LOCAL STACK.** Blocks every e2e and every visual pass, for every ticket, so
+nothing else can be *verified* until it is done. Full write-up + candidate fixes:
+`docs/muskan-build/local-stack-grants-regression.md`. **Run the production-grants check FIRST**
+(the SQL is in that file) — the entire fix premise is "prod is fine, local drifted", and if prod
+also lacks `arwd` this becomes far more urgent than an environment bug.
+⚠️ **Do NOT blanket-GRANT** — `supabase/policies/*.sql` runs AFTER migrations, so it would
+re-open DEV-88's deliberate `person.company_id` revoke and make the lockdown suites lie.
+Open question for Muskan, unanswered: which Supabase CLI version last worked? If unknown,
+bisect releases. Currently unpinned at 10.9.7.
+
+**2 · FIX DEV-83 — its own ticket, before this slug ships.** *Dangerous: silent failure on
+Marcel's demo path.* A connected buyer's pricing ask can never be accepted — the seller clicks
+Accept, **nothing happens, no error**, the item stays `pending` forever and the buyer cannot
+re-ask. Proven: `SQLSTATE 23505` on `uq_relationship_pair_active`, rolled-back transaction. The
+seeded relationship carries `inbox_item_id = NULL`, so `acceptInbox`'s probe (`store.ts:538`)
+never matches and falls through to the INSERT; the throw is uncaught at `InboxView.tsx:137`
+(`void refreshWith(...)`) and `RequestsSection.tsx:98` (try/finally, no catch).
+Remedy ~6 lines — before inserting, look up an existing active relationship **for the pair** and
+adopt it (returning its id + threads); `relationship` is per-pair by construction, so that is the
+correct semantic regardless. **Muskan's call: NOT folded into T04** — `acceptInbox` serves every
+accept flow (connect, message, pricing, deal card), so it gets its own tests. **`/ship` for slug
+0022 is BLOCKED on this.**
+
+**3 · ADD THE PRICE-PUBLIC GATE.** One line at `src/app/discover/actions.ts:141`:
+`if (product.price_public) return { error: … }`. ADR §7 already pushed the identical predicate
+server-side for basket admission; leaving the client gate as decoration is the inconsistency.
+Needs a test (the server currently accepts an ask the UI would never offer).
+
+**4 · AMEND THE ADR FENCE.** `docs/architecture/adr/0005-buyer-shop-view.md` — `Reused` section
+and §6:575-577. Change *"`ShopView` … no behavioural modification"* → **"`ShopView` gains no new
+props; internal handlers are allowed."** Rationale to record: the prop is what costs (every buyer
+difference becomes a knob on the seller's shipped component); a private handler beside
+`handleAddToBasket` is already that file's own pattern. This retires deviations 1 and 7.
+
+**5 · THEN the owed T04 verification**, once step 1 lands: re-run `e2e/discover-shop.spec.ts`
+(6 tests) + the four dependents, and run `visual-verifier` for the **owed visual G4** — the
+button→confirmation swap and the inline error state have never been seen. Muskan has NOT waived it.
+
+**6 · THEN resume the slug: T05 · T06 · T07 · T08.**
+
+## ⛔ ENVIRONMENT BLOCKER — read before running ANY e2e
+
+**`supabase db reset` currently yields a database the app cannot read.** Role `authenticated`
+holds SELECT on **1 of 92** public tables, so `/rest/v1/person` 403s, `requireVerified()` fails
+closed, and every gated route bounces to `/home`. Root cause located: `pg_default_acl` for role
+`postgres` in schema `public` reads `anon=Dxtm authenticated=Dxtm service_role=Dxtm` — `arwd`
+stripped — while the `supabase_admin` row beside it still has the full set.
+
+**Proven NOT caused by slug 0022:** zero migrations changed, all 147 applied, the only
+`ALTER DEFAULT PRIVILEGES` in the tree targets FUNCTIONS. Suspected trigger: the Supabase CLI is
+unpinned (now 10.9.7).
+
+**⚠️ Do NOT "fix" it with a blanket GRANT.** `supabase/policies/*.sql` runs AFTER migrations, so a
+blanket grant re-opens **DEV-88's** deliberate `person.company_id` revoke and makes the lockdown
+suites assert against a state no real environment has.
+
+Full write-up + candidate fixes: `docs/muskan-build/local-stack-grants-regression.md`.
+Ticket-level record: `docs/muskan-build/0022-buyer-shop-view/blocked.md`.
+
+**e2e baseline is also stale** — project `CLAUDE.md` says 16 failures; it is **22**. The extra 9
+are A/B-proven pre-existing.
+
 ## ▶ NEXT SESSION — start here
 
 **Working agreement changed 2026-08-21 (Muskan's call): run the remaining tickets CONTINUOUSLY.**
@@ -238,6 +310,7 @@ None of it lives in T03's two files, and 0022 is the buyer's read surface.
 | **T00** | **2 rounds** (rev 2 → 5 blocking · rev 3 → 2 blocking; 13 findings folded across rev 2-4) | **0 / 2** — green on the first `test-runner` pass, no retry | **0 / 2** — `critic` and `security` returned **no blocking** on T00's own diff | **1** — passed |
 | **T03** | **1 round** (rev 1 → 4 blocking, all folded; rev 2 OK) | **0 / 2** — no retry needed | **0 / 2** — `critic` and `consistency` both returned **no blocking** | **1** — passed |
 | **T02** | **2 rounds, budget SPENT, did NOT converge** (rev 1 → **9 blocking** · rev 2 → **8 blocking, all new, FIVE attacking rev 1's own fold-ins**) | **0 / 2** — green on the first pass | **0 / 2** — `consistency` no blocking; `critic` **2 blocking**, both fixed by the orchestrator | **1** — passed |
+| **T04** | **2 rounds, budget SPENT, did NOT converge** (rev 1 → 5 blocking · rev 2 → **5 blocking, ALL NEW, all defects in rev 1's own fold-ins**; 21 notes folded across rev 2-4) | **0 / 2** — green on the first `test-runner` pass | **1 / 2** — `critic` 2 blocking (both scope rulings, escalated NOT fixed) · `security` + `consistency` no blocking; 7 notes fixed in one pass | staged, not yet ruled |
 | **T01** | **2 rounds, budget SPENT, did NOT converge** (rev 1 → 4 blocking · rev 2 → 4 blocking, **all new**, **two of them defects in rev 1's own fold-ins**) | **0 / 2** — green on the first `test-runner` pass | **0 / 2** — `critic` and `security` both returned **no blocking** | **1** — passed |
 
 **T03 notes:** `builder` **stalled mid-ticket**, having completed 4 of its 5 plan steps and left a
@@ -258,6 +331,7 @@ rounds ran its ruleset verbatim inside a `general-purpose` agent.
 ## Gate log
 | gate | date | verdict |
 |---|---|---|
+| **G4 · T04** | 2026-08-21 | **PASSED — accepted with two items OWED.** Muskan ruled all three staged questions ACCEPTED (ADR fence → amend to "no new props"; DEV-83 → own ticket, blocks `/ship`; price-public gate → add the line). All four EARS criteria verified in shipped code by `critic`, walked one at a time. Gate before the fix pass: `tsc` · eslint 6 pre-existing/**0 new** · **445/445** unit (440 + exactly the 5 planned) · **37/37** SQL suites each with a real PASSED marker · **6/6** `discover-shop.spec.ts` · **23/23** dependents · full e2e 105/22 all pre-existing. `plan-checker` **2 rounds, budget SPENT, did NOT converge** — r2's 5 blocking were ALL NEW and ALL defects in r1's own fold-ins (third ticket on this slug to do this). `security` + `consistency` **no blocking**; `critic` 2 blocking, both scope rulings escalated rather than fixed; **7 notes fixed in one pass**. Best catches: r1 killed three unit tests that **could never go green** (no DOM env) and found criterion 3 untestable on the seed (one product in the visible+price-hidden corner → no "product B" → seeded AUR-1F); r2 killed the whole "sign in as the seller and count her inbox" design (`proxy.ts` bounces a signed-in user off `/login`, **no sign-out helper exists in `e2e/`**, and one worker + one DB made counts read high) → replaced with direct SQL row assertions, strictly stronger since they see `metadata->>'product_id'`, which no screen renders. `test-writer` **refused an instruction and was right**: the plan asserted the note contains *"Cosmic Cream"*, which is the **cultivar**, not `name`. `security` closed cross-company forgery at the SQL level (`c.id = p.company_id AND c.id = p_company_id`) and proved the PostgREST filter non-injectable. `consistency` **corrected the plan in the ticket's favour** — `taxonomy.ts` is exactly the precedent D7 claimed didn't exist. Two corrections I owed: D8 said DEV-83 needs a *second* accept (it fires on the **first**, proven `23505`), and D2 claimed a guarantee that is true of the action but false of the endpoint set (`authenticated` holds INSERT on all 16 columns of `pending_inbox_item`). **⚠️ OWED: the post-fix e2e re-run and the visual G4 — both blocked by the local-stack grants regression, NOT by this ticket (zero migrations changed, all 147 applied). Muskan has not waived the visual pass.** |
 | **G4 · T02** | 2026-08-21 | **PASSED** — Muskan: *"all good"*. **The G2 contract is proven, not asserted:** `consistency` returned **REUSE, not a lookalike** (the real `VerifiedBadge` + `ConnectActions` imported, the prototype's hand-rolled pill and button discarded, shared parsers reused, and **the lookalike retired rather than kept alongside**); `visual-verifier` then **measured** it — buyer and seller grids byte-identical at `289px × 4 tracks`, grid `1204px`, card `289×640`, owner chrome `0` on the buyer DOM. Gate: 60/60 files · 440 unit · `tsc` clean · **17/17 e2e** on a clean reset. **Three defects found AFTER the first green run, all fixed with e2e guards added** (none had one): AC 4's Connect action missing from the locked panel *(with a factually wrong comment excusing it)*; the buyer seeing seller shelf vocabulary — an **"Unassigned"** divider and a one-option "Shop location" dropdown; and owner authoring copy on the card back (*"Drag to re-sort · ✕ to remove"* — `MediaManager` gates 16 affordances on `canEdit`, this hint was the one that wasn't). **Then the double scrollbar was fixed too** — `<main>` had been overflowing a constant 48px because the Back link sat above an `h-full` child; re-measured **overflow=0**, one scroll container. Deviations accepted: a **5th `ShopView` edit region** (`LocationTabs` self-hides with no named locations — declared, not reinterpreted, per L-017), plus edits to `LocationGroup.tsx` and `MediaManager.tsx` outside the declared Files list, dead `_urlFor` kept (removing it is TS2554 against a test builder may not edit), and the ticket's "1400px container" criterion **knowingly waived** (that width exists once in all of `src/`, inside the Present-mode overlay; `/present` and the approved prototype both have none). **⚠️ Unverified, stated as a gap:** the banner/logo have **never rendered from storage** — no seeded company has a logo, so no `shop-media` request fires. The double-URL *bug class* is proven absent by injecting paths and comparing rendered `<img src>` on both surfaces; real pixels are unproven. |
 | **G4 · T01** | 2026-08-21 | **PASSED** — Muskan: *"pass"*. The re-create class did **not** bite: `critic` and `security` independently diffed the new body against the verified-live base and `security`'s normalised diff came back as **one character** — the comma appending the new projections. All 11 invariants held; grants came out **stronger** (the prior migration issued 2 statements, this one adds the explicit `revoke … from anon`). Gates proven behaviourally in rolled-back transactions: `anon` → denied; companyless/unverified/target-pending/target-deleted → 0 rows. Chrome suite PASS · 411/411 unit · `tsc` clean · 3 SQL guards PASS · `present-grid` 2/2 · `present-card-edit` 12/12. Adjudicated: **D4** — `export` added to `parseLinks`, which sits in the ADR's *"don't touch"* list, but ADR §5 itself mandates reusing it (impossible across modules without the export); **D1** widening two columns, forced by the pre-written spec; **4 notes fixed not filed**, two of them defects in T01's own tests (an assertion passing vacuously on zero rows; zero coverage for the 11 fields the extraction moved — the added transposition guard was **mutation-tested**). ⚠️ **Carried hazard: `database.types.ts` is NOT reproducible from `supabase gen types`** — an undocumented hand-edit for `update_deal_draft`; T05 and T06 both declare that file and now carry an in-place warning. **Scope expansion taken on Muskan's call:** 22 of 35 SQL runners could not execute (host-path `-f` under the psql shim) — all repaired, **all 35 suites now pass on a clean reset**. |
 | **G4 · T03** | 2026-08-20 | **PASSED** — Muskan: *"pass"*. Fixes a **live defect**: the card's buy row gated on `!editing` alone, with no price condition anywhere — invisible only because no product had ever been buyer-visible, which T00 changed. 32/32 gate tests (a 16-cell `editing × viewerIsOwner × price_public × price_per_gram` grid) · 407/407 unit · `tsc` clean · `present-card-edit` **12/12** and `present-grid` **2/2** on a clean `db reset`. No blocking findings from `critic` or `consistency`. **The e2e pin was staged as unverified and is now proven** — three earlier attempts failed at three *different* points, every one a timeout and never an assertion, under macOS `peopled` at 75% CPU; re-run on an idle machine, green in 15.5s. Adjudicated: the orchestrator finishing `builder`'s last step by hand, and the six out-of-scope test-file fixes — both accepted. **Known and accepted:** between T02 and T04 a buyer sees a Request-pricing button that does nothing (`critic` K7) — a consequence of the ticket split, not this diff. No visual staging: `viewerIsOwner` defaults to owner, so the new control is unreachable in the running app until T02 supplies the prop; its first visual check belongs at T02's G4. |
