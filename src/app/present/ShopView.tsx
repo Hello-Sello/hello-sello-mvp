@@ -3,7 +3,7 @@
 /**
  * The seller storefront, with an owner edit mode. /present is always the caller's
  * OWN shop (getMyShop), so "Manage shop" is always available here (viewerCanManage
- * defaults true); the visitor view (/present/[companyId], Task 11) passes
+ * defaults true); the BUYER view (/discover/[companyId], via BuyerShopView) passes
  * viewerCanManage={false} to render the same grid + info boxes with every
  * owner-only control (Manage shop, SaveBar, add/assign products, banner/logo
  * edit) turned off. Products render as the redesigned square 4-up grid, grouped
@@ -206,7 +206,7 @@ export function ShopView({
   emptyState?: React.ReactNode;
   /** Whether the viewer may manage this shop — enter edit mode, add/assign
    *  products, edit the banner/logo. /present is always the caller's OWN shop
-   *  (default true); the visitor route (/present/[companyId]) passes false so a
+   *  (default true); the buyer route (/discover/[companyId]) passes false so a
    *  buyer sees the product grid + info boxes with none of the owner chrome. */
   viewerCanManage?: boolean;
 }) {
@@ -652,6 +652,20 @@ export function ShopView({
               location={g.location}
               targetLocation={g.location === UNASSIGNED ? null : g.location}
               count={g.products.length}
+              // Under a NAMED location there is exactly one group, and the
+              // dropdown one line above already shows its name — a divider
+              // between one thing divides nothing. Only "All" keeps the header.
+              showHeader={
+                loc === "All" &&
+                // ...and NOT when the only group is the `Unassigned` sentinel.
+                // "Unassigned" is shelf vocabulary, not a place: with one group
+                // it divides nothing, and on the BUYER surface every product is
+                // unassigned (the shop RPC returns no `location` until T05), so
+                // without this the buyer's catalogue sits under a header reading
+                // "Unassigned" — seller-private state, which ADR-0005 forbids
+                // rendering in buyer mode.
+                !(renderGroups.length === 1 && renderGroups[0]?.location === UNASSIGNED)
+              }
               editing={editing}
               onChanged={() => router.refresh()}
               onReorder={reorderGroups}
@@ -670,6 +684,7 @@ export function ShopView({
                   onBatchRemove={removeBatch}
                   onReorder={(draggedId, targetId) => reorderProduct(g.location, draggedId, targetId)}
                   onAddToBasket={handleAddToBasket}
+                  viewerIsOwner={viewerCanManage}
                 />
               ))}
               {/* "+ Add product" tile — edit mode only. Opens the EXISTING manual-add
@@ -887,6 +902,12 @@ function LocationTabs({
   }, []);
   const options = ["All", ...named];
   const count = (loc: string) => filterByLocation(products, loc).length;
+
+  // No named locations => the only option is "All", and a filter with one option
+  // filters nothing. Reachable for a seller who has never named a location, and
+  // ALWAYS true on the buyer surface (the shop RPC returns no `location` until
+  // T05), where a "Shop location" dropdown is seller chrome besides.
+  if (named.length === 0) return null;
 
   return (
     <div className="relative w-fit">

@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Minus, Plus, Trash2, FileText } from "lucide-react";
+import { Minus, Plus, Trash2, FileText, UserPlus } from "lucide-react";
 import { useBasket } from "../BasketProvider";
 import {
   updateBasketLinePackCount,
@@ -191,6 +192,9 @@ function Group({
 }: {
   group: BasketGroup;
   onChanged: () => Promise<void>;
+  /** Close the drawer. Named for its first caller (a born draft), and reused by
+   *  the Connect link below — every navigation out of this popover closes it
+   *  first, or the panel sits over the destination. */
   onDrafted: () => void;
 }) {
   const router = useRouter();
@@ -207,6 +211,11 @@ function Group({
   // the line's nonce in the catch rides into the input's key → it snaps back
   // to the stored value alongside the error line.
   const [packSizeFails, setPackSizeFails] = useState<Record<string, number>>({});
+  // A FOREIGN seller with no relationship: nothing can be sent to them yet, and
+  // the recipient can never be filled in from this panel. `isOwnCompany` is
+  // load-bearing — the seller's own group also carries a null relationshipId
+  // (basket/lib/group.ts:24) and drafts fine through RecipientPicker.
+  const needsConnection = !group.isOwnCompany && group.relationshipId === null;
 
   // Births the PRIVATE draft (status 'unsent'), then lands the viewer on the
   // born card - the drawer never sends (D-12: delivery is send_deal's alone,
@@ -283,13 +292,35 @@ function Group({
 
       {error && <p className="mt-2 text-[11px] text-danger">{error}</p>}
 
-      <button
-        disabled={!recipient || creating}
-        onClick={draft}
-        className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg bg-brand py-2 text-xs font-bold text-white hover:bg-brand-deep disabled:opacity-40"
-      >
-        <FileText size={13} /> Create a draft deal
-      </button>
+      {needsConnection ? (
+        <div className="mt-2 rounded-lg bg-ink/5 p-2.5">
+          <p className="text-[11px] leading-snug text-ink/60">
+            A deal rides on a connection, so connecting comes first — then you can send
+            this basket to {group.sellerCompanyName}.
+          </p>
+          {/* A real <Link>, so the shop page is a normal navigable href — but
+              the drawer is a popover anchored to TopBar, so it must CLOSE
+              first or it sits over the destination (the same close-then-go
+              order onDrafted/onOpened already use). Next calls this onClick
+              before it navigates. Landing on the page you are already on is
+              the likeliest case; the close still has to happen. */}
+          <Link
+            href={`/discover/${group.sellerCompanyId}`}
+            onClick={onDrafted}
+            className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg bg-brand py-2 text-xs font-bold text-white hover:bg-brand-deep"
+          >
+            <UserPlus size={13} /> Connect with {group.sellerCompanyName}
+          </Link>
+        </div>
+      ) : (
+        <button
+          disabled={!recipient || creating}
+          onClick={draft}
+          className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg bg-brand py-2 text-xs font-bold text-white hover:bg-brand-deep disabled:opacity-40"
+        >
+          <FileText size={13} /> Create a draft deal
+        </button>
+      )}
     </div>
   );
 }
