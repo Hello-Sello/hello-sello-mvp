@@ -1649,3 +1649,25 @@ defensive rather than live — `/present` reads `getMyShop`, not this RPC, so a 
 caller of that read would arrive ungated. Same treatment ADR-0005 §6's owner criterion got.
 
 **Surfaced by:** slug 0022 T05's G4 walk (`REVIEW.md` rows 15-16).
+
+---
+
+## 2026-08-22 — Close the write door before a gate ships
+
+**Decided:** when a build turns an existing column, row or table into a permission gate, the **write
+path to that gate's input** is in scope for that build. If the input is self-writable, the gate does
+not ship until the write door is closed. Splitting the lockdown into its own ticket is fine — T06
+blocks on T09 rather than absorbing it — but shipping the gate *beside* the hole is not.
+
+**Why:** the gate is otherwise ornamental, and ornamental gates are worse than absent ones — they
+pass review, pass tests, and get relied upon. T06 was correct, green, reviewed and defeated by a
+single `INSERT` that nobody had to be granted: `connected=false, hidden=0` → one row → `connected=true,
+hidden=2`, leaking two products with their `rrp`. **"Pre-existing, not caused by this ticket" is not
+a reason to ship past it** — severity is set by what the gate protects, and T06 is precisely what
+converted a bookkeeping-integrity bug into a catalogue-confidentiality hole. The cost objection
+did not survive measurement either: `relationship` has exactly one write call site in all of `src/`
+and `company.verification_status` has one, so the close is small every time it has been done
+(DEV-88, ADR-0005 round 5, T09).
+
+**Surfaced by:** slug 0022 T06's G4 (Muskan's ruling, 2026-08-22). Engineering form of the same rule:
+[`ARCHITECTURE-NOTES.md` — a permission gate is only as strong as the write path to its input](../architecture/ARCHITECTURE-NOTES.md); `docs/agents/LEARNINGS.md` L-027.
