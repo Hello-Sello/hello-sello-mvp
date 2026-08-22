@@ -17,7 +17,21 @@ export type PendingInboxItemRow =
 /** inbox_status.code - seeded values. `accepted` + `rejected` are terminal. */
 export type InboxStatus = "pending" | "accepted" | "rejected";
 
-/** inbox_request_type.code - seeded values. */
+/**
+ * The request types the COMPANY inbox handles - a deliberate SUBSET of
+ * `inbox_request_type.code`, not a mirror of it.
+ *
+ * `connect_person` is the one the DB has and this union does not: a
+ * person-to-person connection request is addressed to a PERSON, not to the
+ * company, and it is answered on Discover (`RequestsSection`, backed by
+ * `list_incoming_person_requests()` + `acceptPersonRequest`). It has no claim,
+ * assign, or accept path here and must never reach this inbox - `getInbox`
+ * filters on exactly these codes.
+ *
+ * Adding a code here therefore ADMITS it to the company inbox; it must gain a
+ * `REQUEST_TYPE_META` entry in the same change (the filter is derived from that
+ * map's keys) and an `acceptInbox` rollout that means something for it.
+ */
 export type InboxRequestType =
   | "connect"
   | "connect_message"
