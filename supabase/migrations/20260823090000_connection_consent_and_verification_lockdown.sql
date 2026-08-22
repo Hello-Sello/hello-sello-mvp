@@ -57,11 +57,16 @@
 -- call site in src/, and no function writes the table), so the whole DML grant
 -- goes and the one legitimate writer moves into a SECURITY DEFINER RPC.
 --
--- WHY `anon` IS REVOKED TOO: `anon` holds the same table-wide grants. Today
--- those writes happen to be blocked because `current_company_id()` is NULL for
--- a signed-out visitor — that is a coincidence of the policy expression, not a
--- design. Revoking from PUBLIC alone does NOT revoke `anon`; both must be named
--- (the 2026-08-17 rule).
+-- WHY `anon` IS REVOKED TOO: `anon` holds the same table-wide grants, and the
+-- policy expression does not cover all of them. It blocks INSERT/UPDATE/DELETE
+-- only — `current_company_id()` is NULL for a signed-out visitor, so every
+-- USING/WITH CHECK evaluates false. It does NOT block TRUNCATE: RLS never
+-- applies to TRUNCATE, so that verb was reachable for exactly as long as the
+-- grant existed. Proven with real rows on a table carrying the identical
+-- `anon` grant shape — 3 rows seeded, `SET ROLE anon; TRUNCATE …;` → 0 rows.
+-- Nothing but a REVOKE can close TRUNCATE, which is why these statements are
+-- grant changes and not policy changes. Revoking from PUBLIC alone does NOT
+-- revoke `anon`; both must be named (the 2026-08-17 rule).
 --
 -- ⚠️  MAINTENANCE CAVEAT: because the `company` and `pending_inbox_item` grants
 -- are now per-column allowlists, a FUTURE `ALTER TABLE … ADD COLUMN` on either
@@ -94,7 +99,7 @@ CREATE OR REPLACE FUNCTION public.accept_connection_request(p_inbox_item_id uuid
 RETURNS uuid
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = ''
 AS $$
 DECLARE
   v_uid        uuid := auth.uid();
@@ -232,7 +237,7 @@ CREATE OR REPLACE FUNCTION public.resubmit_company_verification()
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = ''
 AS $$
 DECLARE
   v_uid     uuid := auth.uid();

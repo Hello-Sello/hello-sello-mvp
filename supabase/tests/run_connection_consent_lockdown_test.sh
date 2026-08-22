@@ -9,7 +9,7 @@
 # attempt (that success IS the hole each proves), and blocks 4/5/6/8/9/11
 # fail with 42883 because accept_connection_request / resubmit_company_
 # verification do not exist yet. It goes GREEN once
-# 20260822110000_connection_consent_and_verification_lockdown.sql lands.
+# 20260823090000_connection_consent_and_verification_lockdown.sql lands.
 set -uo pipefail
 
 TEST_FILE="supabase/tests/connection_consent_lockdown_test.sql"

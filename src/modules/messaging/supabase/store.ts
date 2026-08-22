@@ -585,12 +585,11 @@ export async function acceptInbox(
   // caller's company, and ADOPTS an existing active pair rather than minting a
   // second one (`uq_relationship_pair_active`). It does not flip the item's
   // status - connect.acceptItem still owns that.
-  const { data: relId, error: relErr } = await supabase.rpc(
+  const { data: relationshipId, error: relErr } = await supabase.rpc(
     "accept_connection_request",
     { p_inbox_item_id: input.inboxItemId },
   );
   if (relErr) throw relErr;
-  const relationshipId = relId;
 
   // threads + seed lines from the (pure) rollout plan - ENSURED, not inserted.
   // `uq_chat_thread_c2c` (one per relationship) and `uq_chat_thread_p2p` (one

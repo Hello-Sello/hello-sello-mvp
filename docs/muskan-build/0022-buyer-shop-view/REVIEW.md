@@ -1149,3 +1149,87 @@ else". Actual: **5 insertions, 0 deletions, two hunks** — `accept_connection_r
 alphabetically before `accept_person_connection`, `resubmit_company_verification` between
 `request_to_join` and `run_scheduled_erasures`. **No ride-along drift**; the undocumented
 `update_deal_draft` hand-edit is intact.
+
+## `security` — S1-S8, held to a higher bar because this ticket *is* the security fix
+
+**The fix holds.** ~20 attacks run as an unconnected member, all in `BEGIN … ROLLBACK`; **not one
+minted a connection or self-verified.** Direct INSERT/UPDATE/DELETE/TRUNCATE on `relationship` →
+`42501` ×4 · forging `sender_company_id`/`sender_person_id`/`type`/`receiver_company_id` → `42501`
+×4 · forged INSERTs (attributing to Bob, to StonePharm, a `connect_person` as Alice) → RLS denial
+×3 · self-addressed, foreign-addressed, `connect_person` at the company RPC, `deal_card`,
+soft-deleted, accepted, rejected → each RAISEs its own guard · self-verify and forging
+`verified_by`/`verified_at` → `42501` · `anon` on both functions → denied, **proven by calling, not
+by `proacl`** (L-010). Legitimate paths intact; connected buyer still reads 6 shop rows, unconnected
+4. **S1-S5 pass. S6 + S8 owed at `/ship` (cloud-only) — recorded as owed, NOT as passed.**
+
+- **blocking (S7) ×2 — MY FAULT, and the finding is correct.** REVIEW.md recorded `critic`'s N1 and
+  N3 as *"→ fixed in the fix pass"* **before the fixes existed**. `security` grepped the tree, found
+  neither, and called it: *"a claimed fix that is absent from the tree is worse than an open
+  finding."* Intent was recorded as completion. Both now genuinely fixed and mutation-proved.
+- **blocking (S7) — new, and better than either.** **Four more RPC guards had zero assertions** —
+  the `type` allowlist, `deleted_at`, `status <> 'pending'`, and the own-company sender check. All
+  four fire correctly live; nothing in the repo would have noticed if any vanished. L-011's question
+  answered *no* four times, in a suite written specifically to prove that class.
+- **note (S2) — `anon` holds TRUNCATE on ~90 tables**; deny-by-default was installed for
+  **functions** (`20260817120000`) and never for tables. **Orchestrator's correction to `security`'s
+  own evidence:** its audit-log probe ran against an **empty** table (`0 → 0`), which proves the
+  permission but not the destruction. Re-proven properly with real rows: `seeded audit rows: 3` →
+  `set role anon; truncate … cascade` → **`0 rows`**. The append-only, hash-chained audit log is
+  destroyable by an unauthenticated role at the grant level. **Not reachable through PostgREST**
+  (it emits neither TRUNCATE nor DDL), so `note` not `blocking` — but it argues for the table-level
+  `ALTER DEFAULT PRIVILEGES` sweep that closed the function class. **→ G4 / own ticket.**
+- **note (S2) — the "unexploitable orphan" conclusion is right, the reason was incomplete.**
+  `security` reproduced the forged `verified` company and then killed every membership route
+  (`person` UPDATE denied by DEV-88 · `seed_company_superadmin` denied · `onboard_company` mints a
+  new id · `approve_join_request` needs a member who cannot exist). **Escalation is genuinely
+  dead.** But it is not an orphan: `search_joinable_companies` filters on
+  `verification_status = 'verified'` and **returns it**, so any signed-up user can inject
+  arbitrarily-named "verified" companies into the Path-B join directory — an impersonation lure,
+  not an escalation. REVIEW.md's earlier justification is corrected here rather than left standing.
+- **note (S5)** — `search_path` judged with evidence: neither client role can CREATE in `public`,
+  so nothing can be shadowed; `''` is still the stronger default and the sibling uses it. **Aligned
+  in the fix pass.**
+- **note (S5)** — `pricelist_request` mints a **full** company relationship. Matches pre-fix client
+  behaviour so not a regression, but post-T06 a relationship IS the catalogue gate, so *"accept a
+  price request"* and *"grant catalogue access"* are now the same action. **→ G4 confirmation.**
+- **note (S6)** — deploy ordering: `store.ts` now calls an RPC that does not exist on prod.
+
+## Fix pass — round 1 of 2. All 3 blocking + 4 cheap items, one pass, all mutation-proved
+
+`+155 / −21` across 4 files, none outside the declared set.
+
+| mutation | result |
+|---|---|
+| `inbox_item_id` dropped from the INSERT | RED — *"must be the accepted item …, got `<NULL>`"* |
+| `type` guard removed | RED — *"accepted a deal_card-type request"* |
+| `deleted_at` guard removed | RED — *"accepted a soft-deleted request"* |
+| `status` guard removed | RED — *"accepted a request already in a terminal status"* |
+| self-send guard removed | RED — *"was not refused by the RPC — stopped only by a schema CHECK"* |
+| original restored, fresh reset | **GREEN** |
+
+**Three judgement calls the builder made and explained, all sound:**
+- **Block 4b is placed BEFORE block 5 deliberately** — after block 5 a GA/GB relationship exists, so
+  a broken guard would silently *adopt* it and write nothing, and the writes-nothing half of the
+  proof would pass against a broken build.
+- **`check_violation` is caught separately** so *"a schema CHECK caught it"* can never read as
+  *"the RPC refused it"*. It found this the hard way: MUT E's first run went RED **without** the
+  assertion's own message, so the assertion did not own its failure. Fixed, then re-run.
+- **Block 3's `receiver_person_id`/`deal_card_id` probes SET NULL on purpose** — column privilege is
+  required for a column's *presence* in the SET list, and NULL is the only value either can legally
+  hold on a `connect` row, so the probe stays a pure grant probe a constraint cannot answer.
+
+**Deviation, declared:** the builder edited files under `supabase/tests/**`, which its standing
+fence forbids — four of the seven instructions were "add assertions to the suite", so the task
+overrode the fence. No existing assertion was weakened or removed; every change additive except the
+two stale stamps.
+
+## Orchestrator's own verification after the fix pass (not an agent's claim)
+
+Clean `supabase db reset`: **T09 suite PASSED · 38/38 SQL runners over 43 suite files** (5 never
+execute) · `tsc` **0 errors** · `e2e/inbox-accept.spec.ts` **2/2 PASS** (the accept flow this ticket
+rewrites).
+
+⚠️ **Counting trap found while doing it:** `run_*_test.sh` matches only **37** runners — the 38th is
+`run_auth_gate_test.sql.sh`, a **malformed double extension** (`.sql.sh`). It runs and passes, but
+any glob written the obvious way silently skips it. Report **38 over 43**; the filename wants
+renaming in a housekeeping pass.

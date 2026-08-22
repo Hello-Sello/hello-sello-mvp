@@ -16,14 +16,19 @@
 --     of that company (self-verify), which combined with Hole 1 lets an
 --     unverified attacker unlock a connected seller's hidden catalogue.
 --
--- 11 blocks (PLAN-T09 rev 3 §5), one per row of that table, run in order:
+-- 12 blocks (PLAN-T09 rev 3 §5 + the T09 review's blocking S7 gaps), run in
+-- order:
 --   1  direct INSERT on relationship                       → 42501 (grant gone)
 --   2  direct UPDATE + DELETE on relationship               → 42501
---   3  forge sender_company_id on an own-received item (UPDATE) → 42501 (§0b)
+--   3  forge any of the 6 omitted identity columns on an own-received item
+--      (UPDATE) → 42501 (§0b)
 --   3b INSERT an inbox item with a spoofed sender_person_id  → denied by inbox_insert (§0c)
 --   3c the §0c accept_person_connection repro, re-run        → now fails at the INSERT
 --   4  accept_connection_request for an item addressed elsewhere → RAISEs, writes nothing
---   5  accept_connection_request on a legitimate pending item → mints one row correctly
+--   4b the other four RPC guards (wrong type / deleted / not pending / sent by
+--      the caller's own company) → each RAISEs, none writes a relationship row
+--   5  accept_connection_request on a legitimate pending item → mints one row
+--      correctly, INCLUDING inbox_item_id (acceptInbox's idempotency probe)
 --   6  same call twice + an already-connected pair            → adopts, not re-mints
 --   7  direct UPDATE of company.verification_status           → 42501
 --   8  resubmit_company_verification on a rejected company     → pending
@@ -41,12 +46,12 @@
 --
 -- ⚠️  RED-FIRST: blocks 1, 3, 3b, 3c and 7 are EXPECTED TO FAIL against the
 -- pre-fix schema — the direct writes/forgeries in each currently SUCCEED
--- (that success IS the hole each proves). Blocks 4, 5, 6, 8, 9 and 11 will
+-- (that success IS the hole each proves). Blocks 4, 4b, 5, 6, 8, 9 and 11 will
 -- fail with 42883 (undefined_function) until the migration creates
 -- accept_connection_request / resubmit_company_verification — that is the
 -- ordinary "function doesn't exist yet" red, not a hole-proof, per L-023's
 -- "wrong red" caution. Do NOT "fix" any of this green here — RED is the
--- correct state until 20260822110000_connection_consent_and_verification_
+-- correct state until 20260823090000_connection_consent_and_verification_
 -- lockdown.sql ships.
 --
 -- ⚠️  Two blocks fall outside both lists above, deliberately, and it's worth
@@ -93,6 +98,11 @@
 --     Item1 (legit, GA→GB, type='connect')          = 6a000001-…
 --     Item5 (legit, GA→GB, type='pricelist_request') = 6a000005-… (block 6's
 --       second-pending-item-same-pair fixture)
+--     Block 4b's four, each addressed to GB and wrong in exactly one way:
+--       Item2 = 6a000002-…  GA→GB, type='deal_card'      (wrong type)
+--       Item3 = 6a000003-…  GA→GB, 'connect', deleted_at set (soft-deleted)
+--       Item4 = 6a000004-…  GA→GB, 'connect', status='accepted' (terminal)
+--       Item6 = 6a000006-…  GB→GB, 'connect'             (self-sent)
 --   Pre-existing relationship (GC↔GD, minted directly as postgres, block 2's
 --   target row) = 6b000002-…
 -- ============================================================================
@@ -150,6 +160,30 @@ INSERT INTO public.pending_inbox_item (id, type, sender_person_id, sender_compan
   ('6a000005-0000-0000-0000-000000000000', 'pricelist_request',
    '61111111-1111-1111-1111-111111111111', '60000001-0000-0000-0000-000000000000',
    '60000002-0000-0000-0000-000000000000', 'A second, independent pending item, same pair');
+
+-- ── Fixtures: block 4b's four guard items. Each is legitimate in every respect
+-- EXCEPT the one thing its guard exists to catch, so a firing guard can only be
+-- attributed to that one property. All are addressed to GB (P2 is block 4b's
+-- caller), so the "addressed elsewhere" guard block 4 already covers can never
+-- be what fires here. ──
+INSERT INTO public.pending_inbox_item
+  (id, type, sender_person_id, sender_company_id, receiver_company_id, status, deleted_at, note) VALUES
+  -- wrong type: a deal_card ticket is claimed by claim_deal_ticket, never here
+  ('6a000002-0000-0000-0000-000000000000', 'deal_card',
+   '61111111-1111-1111-1111-111111111111', '60000001-0000-0000-0000-000000000000',
+   '60000002-0000-0000-0000-000000000000', 'pending', NULL, 'wrong type'),
+  -- soft-deleted
+  ('6a000003-0000-0000-0000-000000000000', 'connect',
+   '61111111-1111-1111-1111-111111111111', '60000001-0000-0000-0000-000000000000',
+   '60000002-0000-0000-0000-000000000000', 'pending', NOW(), 'soft-deleted'),
+  -- terminal status
+  ('6a000004-0000-0000-0000-000000000000', 'connect',
+   '61111111-1111-1111-1111-111111111111', '60000001-0000-0000-0000-000000000000',
+   '60000002-0000-0000-0000-000000000000', 'accepted', NULL, 'already accepted'),
+  -- self-sent: GB asking GB, so "consent" would be the caller's own
+  ('6a000006-0000-0000-0000-000000000000', 'connect',
+   '62222222-2222-2222-2222-222222222222', '60000002-0000-0000-0000-000000000000',
+   '60000002-0000-0000-0000-000000000000', 'pending', NULL, 'self-sent');
 
 -- ── Fixtures: a pre-existing ACTIVE relationship between GC and GD, minted
 -- directly as the privileged role — block 2's target row. Deliberately a
@@ -224,12 +258,20 @@ END $$;
 RESET ROLE;
 
 -- ════════════════════════════════════════════════════════════════════════════
--- (3) forge sender_company_id on an own-received inbox item (UPDATE) → 42501.
--- The exact §0b attack, inverted to a probe: P4 @ GD legitimately inserts a
--- SELF-addressed item (sender = GD, receiver = GD — legal both pre- and
--- post-fix), then attempts to UPDATE sender_company_id onto GB, forging "GB
+-- (3) forge an omitted identity column on an own-received inbox item (UPDATE)
+-- → 42501. The exact §0b attack, inverted to a probe: P4 @ GD legitimately
+-- inserts a SELF-addressed item (sender = GD, receiver = GD — legal both pre-
+-- and post-fix), then attempts to UPDATE sender_company_id onto GB, forging "GB
 -- asked to connect to GD". Only a column-level grant revoke on the identity
--- columns can stop this — inbox_update's WITH CHECK never re-validates it. ──
+-- columns can stop this — inbox_update's WITH CHECK never re-validates it.
+--
+-- The migration's re-GRANT omits SIX columns, and a typo re-granting any one of
+-- them ships silently, so all six are probed, not just the one the §0b repro
+-- used. The two nullable ones are SET to NULL: a column privilege is required
+-- for a column's PRESENCE in the SET list whatever the value, and NULL is the
+-- only value either can legally hold on a 'connect' row (their CHECKs pin them
+-- to deal_card / connect_person items), so the probe stays a pure grant probe
+-- and can never be answered by a constraint instead. ──
 -- ════════════════════════════════════════════════════════════════════════════
 SELECT set_config('request.jwt.claim.sub', '64444444-4444-4444-4444-444444444444', true);
 SELECT set_config('request.jwt.claims', '{"sub":"64444444-4444-4444-4444-444444444444","role":"authenticated"}', true);
@@ -238,6 +280,7 @@ DO $$
 DECLARE
   v_item_id uuid := '6c000003-0000-0000-0000-000000000000';
   v_denied boolean := false;
+  v_set    text;
 BEGIN
   -- The legitimate self-addressed insert MUST succeed (it satisfies every
   -- INSERT-side check, old and new alike) — a failure here is a fixture bug,
@@ -257,6 +300,25 @@ BEGIN
   IF NOT v_denied THEN
     RAISE EXCEPTION 'BLOCK 3 FAIL: authenticated could rewrite sender_company_id on an inbox item it owns (§0b forge)';
   END IF;
+
+  -- The other five omitted columns, same probe.
+  FOREACH v_set IN ARRAY ARRAY[
+    'type = ''connect_message''',
+    'sender_person_id = ''61111111-1111-1111-1111-111111111111''::uuid',
+    'receiver_company_id = ''60000002-0000-0000-0000-000000000000''::uuid',
+    'receiver_person_id = NULL',
+    'deal_card_id = NULL'
+  ] LOOP
+    v_denied := false;
+    BEGIN
+      EXECUTE format('UPDATE public.pending_inbox_item SET %s WHERE id = %L', v_set, v_item_id);
+    EXCEPTION WHEN insufficient_privilege THEN
+      v_denied := true;
+    END;
+    IF NOT v_denied THEN
+      RAISE EXCEPTION 'BLOCK 3 FAIL: authenticated could write an omitted identity column on an inbox item it owns — "%" succeeded (§0b forge)', v_set;
+    END IF;
+  END LOOP;
 END $$;
 RESET ROLE;
 
@@ -367,9 +429,75 @@ END $$;
 RESET ROLE;
 
 -- ════════════════════════════════════════════════════════════════════════════
+-- (4b) the RPC's other four guards — wrong type, soft-deleted, not pending, and
+-- sent by the caller's OWN company — each RAISEs and writes no relationship
+-- row. P2 @ GB is the caller and every fixture is addressed to GB, so block 4's
+-- "addressed elsewhere" guard can never be what fires instead.
+--
+-- Runs BEFORE block 5 deliberately: once GA/GB are connected, a guard that
+-- failed to fire would ADOPT that live row and write nothing, so the
+-- writes-nothing half of this proof would pass against a broken guard. Before
+-- block 5 there is no GA/GB row, so a missed guard MUST mint one.
+--
+-- The total relationship count is the witness rather than a per-pair count, so
+-- a write to any pair at all is caught.
+--
+-- `check_violation` is caught SEPARATELY and reported as its own failure, never
+-- folded into "denied": if the self-sent guard were removed the mint would
+-- become GB/GB and die on the relationship_canonical_order CHECK, and "a schema
+-- CHECK happened to catch it" is not the same result as "the RPC refused it".
+-- Nothing else is caught — an unexpected error class must still surface raw. ──
+-- ════════════════════════════════════════════════════════════════════════════
+SELECT set_config('request.jwt.claim.sub', '62222222-2222-2222-2222-222222222222', true);
+SELECT set_config('request.jwt.claims', '{"sub":"62222222-2222-2222-2222-222222222222","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE
+  v_before integer;
+  v_after  integer;
+  v_raised boolean;
+  v_id     uuid;
+  v_label  text;
+  i        integer;
+  v_cases  text[][] := ARRAY[
+    ['6a000002-0000-0000-0000-000000000000', 'deal_card-type request (claimed by claim_deal_ticket, never here)'],
+    ['6a000003-0000-0000-0000-000000000000', 'soft-deleted request'],
+    ['6a000004-0000-0000-0000-000000000000', 'request already in a terminal status (accepted)'],
+    ['6a000006-0000-0000-0000-000000000000', 'request sent by the caller''s OWN company (self-consent)']
+  ];
+BEGIN
+  SELECT count(*) INTO v_before FROM public.relationship;
+
+  FOR i IN 1 .. array_length(v_cases, 1) LOOP
+    v_id    := v_cases[i][1]::uuid;
+    v_label := v_cases[i][2];
+
+    v_raised := false;
+    BEGIN
+      PERFORM public.accept_connection_request(v_id);
+    EXCEPTION
+      WHEN raise_exception THEN
+        v_raised := true;
+      WHEN check_violation THEN
+        RAISE EXCEPTION 'BLOCK 4b FAIL: a % was not refused by the RPC — it reached the INSERT and was stopped only by a schema CHECK (%)', v_label, SQLERRM;
+    END;
+    IF NOT v_raised THEN
+      RAISE EXCEPTION 'BLOCK 4b FAIL: accept_connection_request accepted a % — that guard did not fire', v_label;
+    END IF;
+
+    SELECT count(*) INTO v_after FROM public.relationship;
+    IF v_after <> v_before THEN
+      RAISE EXCEPTION 'BLOCK 4b FAIL: the refused accept (%) still wrote a relationship row (% before, % after)', v_label, v_before, v_after;
+    END IF;
+  END LOOP;
+END $$;
+RESET ROLE;
+
+-- ════════════════════════════════════════════════════════════════════════════
 -- (5) accept_connection_request on a legitimate pending item → mints one row:
--- canonical order, initiated_by = sender (GA), created_by = updated_by = the
--- ACCEPTING person (P2), neither NULL (B3, round 2). P2 @ GB accepts Item1. ──
+-- canonical order, initiated_by = sender (GA), inbox_item_id = the accepted
+-- item, created_by = updated_by = the ACCEPTING person (P2), neither NULL
+-- (B3, round 2). P2 @ GB accepts Item1. ──
 -- ════════════════════════════════════════════════════════════════════════════
 SELECT set_config('request.jwt.claim.sub', '62222222-2222-2222-2222-222222222222', true);
 SELECT set_config('request.jwt.claims', '{"sub":"62222222-2222-2222-2222-222222222222","role":"authenticated"}', true);
@@ -398,6 +526,13 @@ BEGIN
   END IF;
   IF v_row.status <> 'active' THEN
     RAISE EXCEPTION 'BLOCK 5 FAIL: status must be active, got %', v_row.status;
+  END IF;
+  -- Load-bearing, not decorative: acceptInbox's idempotency probe
+  -- (messaging/supabase/store.ts) looks a relationship up BY this column, so a
+  -- mint that leaves it NULL makes every re-accept miss and fall through to a
+  -- second rollout.
+  IF v_row.inbox_item_id IS DISTINCT FROM '6a000001-0000-0000-0000-000000000000'::uuid THEN
+    RAISE EXCEPTION 'BLOCK 5 FAIL: inbox_item_id must be the accepted item 6a000001-…, got % — acceptInbox''s idempotency probe reads this column', v_row.inbox_item_id;
   END IF;
   IF v_row.created_by IS NULL OR v_row.updated_by IS NULL THEN
     RAISE EXCEPTION 'BLOCK 5 FAIL: created_by/updated_by must not be NULL (created_by=%, updated_by=%)', v_row.created_by, v_row.updated_by;
