@@ -794,3 +794,72 @@ actually break, the same way you would prove the guard itself — and if you can
 reason is a guess. When a wrong reason is found after the fact, **record the correction** next to
 the entry rather than silently swapping it: the fact that a justification was wrong once is itself
 information for whoever revisits the clause.
+
+## L-027 · A permission gate is only as strong as the write path to its input
+
+**2026-08-22 · slug 0022 · T06 G4 · caught by `security`, reproduced by the orchestrator**
+
+**Trigger** — any change that makes an existing column, row or table *mean something new*: a status
+field that starts gating reads, a join table that becomes a permission edge, a boolean that starts
+deciding visibility. Also any migration whose comments argue carefully about the **values** a gate
+column can hold.
+
+**What happened** — T06 made `relationship` the confidentiality gate for hidden catalogue data, and
+the migration reasoned at length about `status = 'active'`, `deleted_at is null`, and why a *pending*
+connection must not count. All correct. All irrelevant: `authenticated` holds a direct INSERT grant
+on `relationship`, and the policy's `WITH CHECK` only requires the caller's **own** company be one
+side of the pair. Nobody has to consent to being connected to.
+
+```
+BEFORE  connected=false  hidden_products_visible=0
+INSERT 0 1                          ← one row, the other company never agreed
+AFTER   connected=true   hidden_products_visible=2
+```
+
+The attacker never has to defeat the `status` logic. They write `'active'`.
+
+**The tell:** the plan, two checker rounds, the builder and I all analysed the gate's **read** side
+exhaustively — predicates, NULL semantics, which door each mutation reddens — and not one of us
+asked *who can write the row it reads*. The question never appeared because the table already
+existed and looked like settled infrastructure.
+
+**Rule.** When a change gives an existing table a new job as a permission input, run one query
+before anything else:
+
+```sql
+select grantee, privilege_type from information_schema.role_table_grants where table_name = '<t>';
+select policyname, with_check from pg_policies where tablename = '<t>';
+```
+
+If `authenticated` can write it and the `WITH CHECK` does not require the *counterparty's* consent,
+the gate is ornamental no matter how precise its read predicate is. Same finding shape as DEV-88
+(`person.company_id`) and ADR-0005 round 5 (basket `product_id` — *"the admission policy was
+ornamental"*). Remedy is the same each time: revoke the direct grant, re-grant every other column,
+route the one legitimate writer through a `SECURITY DEFINER` RPC that checks consent.
+
+## L-028 · A declared Files list can hide a defect from the agent best placed to find it
+
+**2026-08-22 · slug 0022 · T06 · caught by `test-runner`, missed by the builder**
+
+**Trigger** — any ticket with a declared file list, at the moment a fix is applied to one file for a
+reason that is about **data or behaviour**, not about that file.
+
+**What happened** — T06 changes what a *connected* buyer sees. The plan correctly predicted this
+breaks T05's SQL suite, because the seeded buyer's company is actively connected to the seller, and
+the builder fixed it there. The **identical assumption**, using the same two seeded companies, sat in
+`e2e/discover-shop.spec.ts` — and was missed, because that file was not in T06's declared Files
+list. The builder had already understood the bug class and still did not look, since looking meant
+leaving its declared scope.
+
+Cost: the builder reported "everything green" and it was not. `test-runner` caught it only because
+it re-ran independently and **A/B-proved** the failure (24/24 without the diff, 23/24 with) instead
+of accepting the summary.
+
+**Rule.** When a fix is applied because *the data now means something different*, grep the whole
+repo for the other places that encode the old meaning — before declaring the ticket's files. Search
+by the **fixture** (`StonePharm`, `AUR-1C`), not by the module. A scope boundary is a review aid, not
+evidence of where a defect lives; the fixture travels further than the ticket does.
+
+**Corollary, worth its own line:** a builder's green claim is not verification. This one was sincere,
+tested, and wrong. `test-runner` exists because the agent that wrote the change is the worst-placed
+agent to bound it.
