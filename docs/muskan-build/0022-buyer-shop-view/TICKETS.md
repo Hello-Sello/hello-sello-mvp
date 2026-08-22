@@ -185,6 +185,33 @@ AC 7 in full, plus `product.location` — which is what actually produces the lo
 **Files:** `supabase/migrations/<ts>_discoverable_shop_spec_columns.sql`,
 `src/app/discover/companies.ts` (product mapper), `src/types/database.types.ts`
 
+> ⚠️ **AMENDED — the Files line above is NOT what T05 shipped (2026-08-22).** Written after the
+> fact, at Muskan's G4 ruling on item F, because T01 and T02 recorded their drift inline and T05
+> did not. Every edit below had written authority; none was taken off-book. The point of the
+> record is that the Files line is what a reviewer reads to size a ticket's blast radius, so
+> unrecorded drift quietly makes that boundary untrue.
+>
+> **At `/build` (commit `731faf7`) — 6 files beyond the 3 declared:**
+> - `e2e/discover-shop.spec.ts`, `supabase/tests/discoverable_shop_spec_columns_test.sql`,
+>   `supabase/tests/run_discoverable_shop_spec_columns_test.sh` — the ticket's own tests. The
+>   Files line simply never listed test files; T00–T04 have the same omission.
+> - `src/modules/catalog/shop.ts` — the terpene derivation the RPC reproduces (`:249`) lives
+>   here; the plan names it as the source of truth the SQL must match edge for edge.
+> - `src/app/present/ShopView.tsx` — the location rule. Declared in the plan, not the ticket.
+> - `src/app/discover/companies.test.ts` — the mapper's unit tests, same class as the tests above.
+>
+> **After G4, from Muskan's rulings on items A–D (2026-08-22) — 2 further files:**
+> - `src/modules/catalog/components/ProductCard.tsx` — item C (the `Supplier code` row goes
+>   owner-only) and item D (the spec list's bottom padding + one-row fade).
+> - `src/app/globals.css` — item D's `.speclist-scroll` class.
+> - plus re-edits of the migration, the SQL suite, `discover-shop.spec.ts` and `ShopView.tsx`
+>   already listed above.
+>
+> **Gap this exposes in the pipeline, not yet written into `PIPELINE.md`:** the amend-the-ticket
+> convention covers `/build` only. Nothing said what to do when a G4 *ruling* changes the diff,
+> which is how items A–D landed outside every declared boundary with no place to record it.
+> Muskan chose the amendment; the rule change was offered and not taken.
+
 - When a verified buyer opens a visible product's detail face, the system shall show CBG, CBN,
   terpene percentage, cultivator, lineage, irradiation code, packaging material and resealable
   (AC 7).
