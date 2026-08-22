@@ -5,7 +5,8 @@ stage:  triage ✅ · spec ✅ (G1) · prototype ✅ (G2) · design ✅ (G3 2026
         **T04 ✅ (G4 2026-08-21 — accepted; e2e re-run ✅ + VISUAL PASS DONE 2026-08-22)**
         post-G4 ruling: env repair ✅ · DEV-83 ✅ · price gate ✅ · ADR amend ✅ (all 2026-08-22)
         **T05 ✅ G4 PASSED 2026-08-22 — all six items ruled (A-D built + mutation-proved, E dropped, F recorded)**
-        **▶ T06 BLOCKED at G4 on new ticket T09 (Muskan, 2026-08-22) · then T07 · T08.**
+        **▶ T09 IN FLIGHT (2026-08-22) — plan rev 1 written, `plan-checker` round 1 running.**
+        **T06 BLOCKED at G4 on T09 (Muskan, 2026-08-22) · then T07 · T08.**
 branch: **claude/muskan/work** — no feature branch (Muskan's call, 2026-08-18)
 >  No cut: this slug is frontend-heavy with no expected migration, so a feature branch
 >  would only add a merge step. `/ship` still rebases onto `dev` and PRs from here.
@@ -411,6 +412,34 @@ None of it lives in T03's two files, and 0022 is the buyer's read surface.
 | **T01** | **2 rounds, budget SPENT, did NOT converge** (rev 1 → 4 blocking · rev 2 → 4 blocking, **all new**, **two of them defects in rev 1's own fold-ins**) | **0 / 2** — green on the first `test-runner` pass | **0 / 2** — `critic` and `security` both returned **no blocking** | **1** — passed |
 
 | **T06** | **round 1 done → 7 blocking, 11 non-blocking, ALL folded into rev 2** (3 changed the design; every blocking finding spot-verified against the live DB before acceptance). **round 2 → 3 blocking + 7 non-blocking, ALL NEW, TWO of them defects in round 1's own fold-ins. Budget SPENT, did NOT converge — the 5th ticket on this slug.** All folded into rev 3 | — | — | — |
+
+| **T09** | round 1 running | — | — | — |
+
+**T09 notes (in flight, 2026-08-22):** base synced and frozen — **0 behind `origin/dev`, 93 ahead**,
+clean tree, no rebase needed. Plan at `PLAN-T09.md` rev 1. `plan-checker` is **still unregistered in
+this harness** (T00's REVIEW.md P1) — its ruleset is running verbatim inside a `general-purpose`
+agent, the precedent set on this slug. Every claim in the plan's ground-truth table was **queried,
+not recalled** (grants, policies, `pg_proc`, all `src/` call sites).
+
+**🔴 Scope amendment found BEFORE any code — the ticket's own remedy is defeated one level down.**
+T09 as filed routes the connection mint through a `SECURITY DEFINER` RPC that reads consent from
+`pending_inbox_item`. **That row is forgeable by the attacker.** `inbox_insert`'s `WITH CHECK` pins
+`sender_company_id = current_company_id()`, but `inbox_update`'s pins only `receiver_company_id` — it
+never re-checks *who sent* the request, and `authenticated` holds table-wide UPDATE. Reproduced as
+Eva/Bavaria inside `BEGIN … ROLLBACK`: insert a legal self-addressed request → `UPDATE … SET
+sender_company_id = GreenLeaf` → `FORGED: 1 row(s) now claim GreenLeaf asked to connect to Bavaria`.
+The RPC's *"is it addressed to me? is it pending?"* check then passes. **This is L-027 recursing: the
+consent evidence is itself a permission input, so its write path is in scope.** The plan adds
+`pending_inbox_item`'s six identity columns (`type`, `sender_person_id`, `sender_company_id`,
+`receiver_company_id`, `receiver_person_id`, `deal_card_id`) to T09's scope as a declared
+`⚠️ AMENDED` block — all 7 client UPDATE sites write only `status`/`assigned_*`, so the allowlist
+costs nothing. **Muskan adjudicates at G4.**
+
+**Two more deviations declared in the plan, not silently taken:** the `company` lockdown covers the
+verification **triple** (`verification_status`, `verified_at`, `verified_by`) rather than the one
+column the criterion names — three columns, one fact, and leaving two writable lets a member forge
+the verification audit trail while the status is locked. And recorded-not-fixed: `authenticated`
+still holds UPDATE on `company.id`/`created_at`/`created_by`/`deleted_at`/`deleted_by`.
 
 **T06 notes (in flight, 2026-08-22):** base synced and frozen — **0 behind `origin/dev`, 79 ahead**,
 no rebase needed. Plan at `PLAN-T06.md` rev 1; `plan-checker` round 1 running.
