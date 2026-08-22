@@ -414,14 +414,62 @@ BEGIN
 END $$;
 RESET ROLE;
 
-SELECT set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', true);
-SELECT set_config('request.jwt.claims', '{"sub":"22222222-2222-2222-2222-222222222222","role":"authenticated"}', true);
+-- T06/PLAN-T06.md rev 3, B-1: the negative arm can no longer use Bob/StonePharm.
+-- StonePharm carries an ACTIVE relationship to GreenLeaf (seed §5d), so under
+-- T06 (HEL-60) Bob is a CONNECTED buyer and MUST see this hidden product —
+-- asserting 0 for Bob here would pin the exact invariant T06 is chartered to
+-- break. Repointed at Eva / Bavaria Medical Cannabis GmbH: verified, a real
+-- member, and with NO relationship row to GreenLeaf at all (seed only gives
+-- her company a PENDING pending_inbox_item, never a relationship — §5f).
+-- Resolved by company/email NAME, never a hardcoded uuid — Bavaria's id
+-- regenerates on every db reset, unlike the four fixed seed ids this file
+-- otherwise uses. Guarded so the negative assertion cannot pass vacuously:
+-- the persona must (1) resolve to a real company member, (2) that company
+-- must be verified, (3) it must hold NO relationship row with GreenLeaf, and
+-- (4) the SAME persona must see a NON-ZERO shop in the same call (the
+-- control) — otherwise "sees 0" could just mean "sees nothing at all".
+DO $$
+DECLARE
+  v_persona_id uuid;
+  v_company_id uuid;
+  v_verified   boolean;
+  v_connected  boolean;
+BEGIN
+  SELECT u.id, p.company_id, (c.verification_status = 'verified')
+    INTO v_persona_id, v_company_id, v_verified
+  FROM auth.users u
+  JOIN public.person p ON p.id = u.id
+  JOIN public.company c ON c.id = p.company_id
+  WHERE u.email = 'eva@bavaria.test' AND c.name = 'Bavaria Medical Cannabis GmbH';
+
+  IF v_persona_id IS NULL OR v_company_id IS NULL
+    THEN RAISE EXCEPTION 'GUARD/TEST7: Eva/Bavaria persona did not resolve — seed changed?'; END IF;
+  IF NOT v_verified
+    THEN RAISE EXCEPTION 'GUARD/TEST7: Bavaria Medical Cannabis GmbH is not verified — cannot stand in for "a plain verified non-owner"'; END IF;
+
+  SELECT EXISTS (
+    SELECT 1 FROM public.relationship r
+    WHERE r.company_a_id = least(v_company_id, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid)
+      AND r.company_b_id = greatest(v_company_id, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid)
+  ) INTO v_connected;
+  IF v_connected
+    THEN RAISE EXCEPTION 'GUARD/TEST7: Bavaria Medical Cannabis GmbH now has a relationship row with GreenLeaf — no longer a valid unconnected persona, pick another'; END IF;
+END $$;
+
+SELECT set_config('request.jwt.claim.sub', (SELECT id::text FROM auth.users WHERE email = 'eva@bavaria.test'), true);
+SELECT set_config('request.jwt.claims',
+  '{"sub":"' || (SELECT id::text FROM auth.users WHERE email = 'eva@bavaria.test') || '","role":"authenticated"}',
+  true);
 SET LOCAL ROLE authenticated;
 DO $$
 BEGIN
   IF (SELECT count(*) FROM public.get_discoverable_shop('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid) s
        WHERE s.id = (SELECT owner_hidden_id FROM _fix)) <> 0
-    THEN RAISE EXCEPTION 'LEAK/TEST7: Bob (StonePharm, verified non-owner) saw a hidden (profile_visible=false) product through the owner arm'; END IF;
+    THEN RAISE EXCEPTION 'LEAK/TEST7: Eva (Bavaria, verified, UNCONNECTED to GreenLeaf) saw a hidden (profile_visible=false) product through the owner arm'; END IF;
+  -- control: the SAME buyer must see a NON-ZERO shop in the SAME call, or the
+  -- assertion above proves only that the shop returned nothing at all.
+  IF (SELECT count(*) FROM public.get_discoverable_shop('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid)) = 0
+    THEN RAISE EXCEPTION 'GUARD/TEST7: Eva sees ZERO products from GreenLeaf''s shop at all — the negative assertion above is vacuous'; END IF;
 END $$;
 RESET ROLE;
 

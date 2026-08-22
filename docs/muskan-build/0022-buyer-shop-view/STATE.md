@@ -521,6 +521,36 @@ what saves it) · **no RLS recursion** — nothing in `relationship`'s policy ch
 `alter policy … to authenticated` is valid on PG 17.6 and provably predicate-preserving
 (`qual_identical|true`) · omitting **any one** of the three sites is caught by the three-doors matrix.
 
+**T06 · tests-first (2026-08-22) — RED verified by the orchestrator, per-assertion:**
+`test-writer` **refused a wrong instruction in my plan and was right** (2nd agent this session to
+push back correctly). Rev 3's mutation table claimed removing `is_caller_verified()` from **site 1**
+reddens doors (a) **and (c)**. It does not. Verified live: `product.relforcerowsecurity = false`,
+`get_discoverable_shop.prosecdef = true` owned by `postgres`, and `FORCE ROW LEVEL SECURITY` appears
+**nowhere** in `supabase/`. **RLS is bypassed inside the RPC** — the policy being edited never runs
+there; door (c) is gated by the RPC's own inline `is_caller_verified()`. The same holds for door
+(b): `current_pricelist_item` has `security_barrier` but **not** `security_invoker`, so it too runs
+as owner. **Each of the three doors has its OWN independent verification gate; no single mutation
+reddens all three.** Complying would have produced a test that passes against a broken build.
+Corrected as plan **rev 4**. The cascade is real only for **direct table reads**, where the nested
+`EXISTS (… FROM product …)` in a *policy* IS evaluated as the calling role.
+
+**A test that does not RUN is not a RED test.** `reads.getOwnCatalog.test.ts` first landed with a
+`vi.mock` hoisting error — module-scope `const`s referenced inside a hoisted factory, TDZ, file
+crashed at load: **0 tests executed**. vitest reports that as `status: "failed"`, which is
+indistinguishable from a passing RED if you read only the exit code. Sent back to its author; fixed
+to `manage.ladder.test.ts`'s pattern (factory creates its own `vi.fn()`, reached later via
+`vi.mocked`). **I required a per-assertion prediction with the fix and checked reasons, not just the
+pass/fail column** — all five matched:
+`5 total · 3 failed · 2 passed` — (1) `expected [] to deep equally contain ['company_id','company-A']`
+(no `.eq` exists) · (2) `expected ['product'] to include 'person'` (viewer company never resolved) ·
+(3) `expected ['product'] to not include 'product'` (no null-company guard) · (4)+(5) stable-shape
+mapping guards, untouched by T06.
+
+SQL suite RED verified for the right reason — `ERROR: function public.is_connected_to_company(uuid)
+does not exist`. **T05's suite re-verified GREEN pre-T06** with TEST7's negative arm repointed to
+Eva / Bavaria Medical Cannabis GmbH, resolved by name and guarded four ways (resolves · verified ·
+unconnected · sees a non-zero shop) so it cannot pass vacuously.
+
 **T05 notes (in flight, 2026-08-22):** base synced and frozen — 0 behind `origin/dev`, 60 ahead.
 Plan at `PLAN-T05.md` rev 1. Its invariant table was built by **walking the live function body
 clause by clause** (`20260816190000:82-154`), not from the ticket's risk framing — L-011 is exactly

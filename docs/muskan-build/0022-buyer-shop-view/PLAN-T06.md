@@ -3,7 +3,8 @@
 Ticket: **T06 · [HEL-60](https://linear.app/hellosello/issue/HEL-60)** · size **M** · depends on T00
 ADR: `docs/architecture/adr/0005-buyer-shop-view.md` decision 6 + 7 · PRD §4 (2), §7 · slug `0022-buyer-shop-view`
 
-> **Rev 3** — folds `plan-checker` round 2 (3 blocking, 7 non-blocking). **Budget SPENT, did NOT
+> **Rev 4** — corrects the mutation table's door mapping after `test-writer` refused a wrong
+> instruction (see §8). **Rev 3** — folds `plan-checker` round 2 (3 blocking, 7 non-blocking). **Budget SPENT, did NOT
 > converge** — round 2's blocking findings were all NEW and two were defects in round 1's own
 > fold-ins, the 5th ticket on this slug to do this. Rev 2 folded round 1 (7 blocking, 11 non-blocking; every blocking finding
 > spot-verified against the live DB before acceptance). Base frozen at `claude/muskan/work` (0 behind `origin/dev`, 79 ahead) — no rebase mid-build.
@@ -488,11 +489,31 @@ unverified are ephemeral fixtures inside `BEGIN … ROLLBACK`, mirroring
 
 | mutation | goes red on |
 |---|---|
-| drop `is_caller_verified()` from **site 1** | doors a + c |
+| drop `is_caller_verified()` from **site 1** | ⚠️ **door (a) + the cascade tables ONLY — NOT door (c).** Corrected at rev 4; see below |
 | drop `is_caller_verified()` from **site 2** | door b only — **added at rev 3 (B-2)** |
 | drop the **owner arm** from site 2 | door b, owner cell — **added at rev 3 (B-2)** |
 | move the **window** inside the override parenthesis | doors a + c (`cell_expired_*|VISIBLE`) |
 | drop `p.price_public` from **site 2** | ⚠️ **door b ONLY** — the RPC's `case when p.price_public then v.price_per_gram end` **masks** the view's leak on door c (measured: `doorB|5.0000`, `doorC|NULL`). Asserting this on door c would pass against a broken build |
+
+> 🔴 **REV 4 — `test-writer` REFUSED this row and was RIGHT.** Rev 3 said removing
+> `is_caller_verified()` from site 1 goes red on doors (a) **and (c)**. False.
+> `get_discoverable_shop` is `SECURITY DEFINER` owned by `postgres`, and `product` has
+> **`relforcerowsecurity = false`** (both verified live; `FORCE ROW LEVEL SECURITY` appears nowhere
+> in `supabase/`). **RLS is therefore bypassed inside the RPC** — `product_public_select` never runs
+> there. Door (c) is gated by the RPC's OWN inline `and public.is_caller_verified()`, a separate
+> guard that a site-1 mutation cannot touch. Asserting that mutation on door (c) would have written
+> a test that **passes against a broken build**.
+>
+> **The same applies to door (b):** `current_pricelist_item` carries `{security_barrier=true}` but
+> **not** `security_invoker`, so it also runs as its owner and bypasses `product_public_select`. Its
+> `is_caller_verified()` is likewise its own independent guard — which is exactly why B-2's site-2
+> mutation is a separate row in this table.
+>
+> **Where the cascade genuinely lives:** the four neighbouring *policies* nest
+> `EXISTS (… FROM product …)`, and a **policy subquery** IS evaluated RLS-mediated as the calling
+> role. So the cascade is real for **direct table reads** (`product_media`, `product_image`,
+> `pricelist_item`) and not for the RPC or the view. §3a's measurement is a direct-read measurement.
+> Each door has its own verification gate; **there is no single mutation that reddens all three.**
 
 A guard that has never failed proves nothing — and a mutation asserted on the wrong door is a guard
 that cannot fail.
