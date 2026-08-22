@@ -732,3 +732,65 @@ under `set local session_replication_role = replica` avoids re-firing the trigge
 verify. L-013 was a runner that printed PASSED while failing; L-023 was an agent that could not run
 its own suite; this is a shell builtin whose exit code lies. In each case the fix is the same —
 make the check name the thing it checked, and confirm it can fail.
+
+## L-025 · A CSS fix can be cancelled by a sibling property — measure it, don't read it
+
+**2026-08-22 · slug 0022 · T05 G4 item D · caught by probing the DOM instead of trusting the screenshot**
+
+**Trigger** — any styling change whose effect is "an element now behaves differently" rather than
+"a colour changed": scrollbars, `scroll-snap`, `scrollbar-gutter`, `overscroll-behavior`,
+`content-visibility`, container queries. Also any change verified only by looking at a screenshot.
+
+**What happened** — the spec list was given `::-webkit-scrollbar { width: 6px }` to force an
+always-visible scrollbar, alongside `scrollbar-width: thin` "for Firefox". The CSS was correct in
+isolation and looked plausible in review. It did nothing: **Chromium ignores every
+`::-webkit-scrollbar` rule the moment `scrollbar-width` or `scrollbar-color` is set on the same
+element**, and falls back to the macOS overlay scrollbar — zero width, invisible until you scroll,
+which was the exact defect being fixed. Scoping the two standard properties to
+`@supports (-moz-appearance: none)` restored the intent.
+
+Measured, not eyeballed:
+
+```
+scrollbar-width: thin  present →  offsetWidth - clientWidth = 0
+scoped to Firefox      →  offsetWidth - clientWidth = 6
+```
+
+**Two more traps in the same hour, same class.** (1) The whole CSS class was **absent from
+`document.styleSheets`** — a stale `.next` cache. The styling looked broken when it had simply
+never loaded; `rm -rf .next` and restart fixed it. Check the rule is *loaded* before debugging what
+it does. (2) **Headless Chromium does not paint scrollbars**, so the first screenshots showed no
+thumb even though the geometry was already correct. A visual claim about scrollbars needs
+`headless: false`.
+
+**Rule.** For behavioural CSS, assert a **number** from the live DOM (`offsetWidth - clientWidth`,
+`getComputedStyle(el).scrollSnapType`, `scrollHeight > clientHeight`) and put that number in a test.
+"I wrote the rule" and "the screenshot looks right" are both weaker than one measurement — and the
+measurement is what makes the regression detectable later.
+
+## L-026 · Verify the REASON for a guard as hard as the guard itself
+
+**2026-08-22 · slug 0022 · T05 G4 item E · caught by Muskan questioning an unrelated premise**
+
+**Trigger** — writing the justification for a clause, exception, or special case into a comment, an
+ADR, or DECISIONS. Especially the word "otherwise" — "otherwise X would break", "otherwise these
+rows are stranded", "otherwise the caller can't recover".
+
+**What happened** — an owner exception was added to a visibility clause and justified as: *unfiled
+rows are filed by dragging them out of the `Unassigned` pile, so withholding them from the owner
+would strand them permanently.* Plausible, specific, and **wrong**: the filing surface `/present`
+reads `getMyShop`, which queries `product` directly with no location filter, and never touches the
+RPC being changed. Nothing could ever have been stranded. The real reason was consistency with a
+PRD edge-case row — a weaker, but true, reason. It survived a whole build and landed in four files
+because it *sounded* load-bearing.
+
+**Why it matters more than a wrong comment normally would** — the next person deciding whether to
+delete that exception reads the reason, not the code path. A false "otherwise this breaks" makes a
+removable clause look untouchable, and a true-but-modest reason gets it deleted for the right
+reasons. Both outcomes depend on the sentence being accurate.
+
+**Rule.** Before writing "otherwise X", **trace X**. Name the file and the read path that would
+actually break, the same way you would prove the guard itself — and if you cannot name it, the
+reason is a guess. When a wrong reason is found after the fact, **record the correction** next to
+the entry rather than silently swapping it: the fact that a justification was wrong once is itself
+information for whoever revisits the clause.
