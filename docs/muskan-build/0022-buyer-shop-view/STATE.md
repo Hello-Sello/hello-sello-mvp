@@ -381,7 +381,7 @@ None of it lives in T03's two files, and 0022 is the buyer's read surface.
 | **T03** | **1 round** (rev 1 → 4 blocking, all folded; rev 2 OK) | **0 / 2** — no retry needed | **0 / 2** — `critic` and `consistency` both returned **no blocking** | **1** — passed |
 | **T02** | **2 rounds, budget SPENT, did NOT converge** (rev 1 → **9 blocking** · rev 2 → **8 blocking, all new, FIVE attacking rev 1's own fold-ins**) | **0 / 2** — green on the first pass | **0 / 2** — `consistency` no blocking; `critic` **2 blocking**, both fixed by the orchestrator | **1** — passed |
 | **T04** | **2 rounds, budget SPENT, did NOT converge** (rev 1 → 5 blocking · rev 2 → **5 blocking, ALL NEW, all defects in rev 1's own fold-ins**; 21 notes folded across rev 2-4) | **0 / 2** — green on the first `test-runner` pass | **1 / 2** — `critic` 2 blocking (both scope rulings, escalated NOT fixed) · `security` + `consistency` no blocking; 7 notes fixed in one pass | staged, not yet ruled |
-| **T05** | round 1 **running** (see note below) | — | — | not reached |
+| **T05** | **2 rounds, budget SPENT, did NOT converge** (rev 1 → 7 blocking · rev 2 → **9 blocking, ALL inside rev 1's own fold-ins** — the 4th ticket on this slug) | — | — | not reached |
 | **T01** | **2 rounds, budget SPENT, did NOT converge** (rev 1 → 4 blocking · rev 2 → 4 blocking, **all new**, **two of them defects in rev 1's own fold-ins**) | **0 / 2** — green on the first `test-runner` pass | **0 / 2** — `critic` and `security` both returned **no blocking** | **1** — passed |
 
 **T05 notes (in flight, 2026-08-22):** base synced and frozen — 0 behind `origin/dev`, 60 ahead.
@@ -399,6 +399,23 @@ checker to rule on (D1): whether the owner arm also lifts the **visibility windo
 **still not registered** in this harness although `.claude/agents/plan-checker.md` exists (the other
 10 all register); running its ruleset verbatim inside a `general-purpose` agent, as at T00/T04 —
 surfaced, not silently substituted.
+
+**T05 round-2 note — a fact I gave Muskan was wrong.** I told her GreenLeaf has two named
+locations that would bring the location filter back for a buyer. It does not: **Montreal is exactly
+the hidden pair** (AUR-1C/1D, `profile_visible = false`), so a buyer sees four products, all
+Toronto — ONE distinct location, verified against the live DB. Her ruling was taken on that false
+premise. Her correction on being told: **the rule is general — one location, no filter; many
+locations, filter — for every user, not designed around GreenLeaf's seed.** That reframing
+dissolved six of round 2's nine blocking findings, which were artifacts of my having framed it as a
+buyer-only rule: it is not a new branch (a changed threshold on the existing
+`if (named.length === 0) return null`, so the one-branch budget stays unspent), needs no
+discriminator, needs no seed subject, and **leaves T02's two e2e assertions exactly as shipped**.
+Three findings survived and are folded: `media` was ruled IN at rev 2 but every operational section
+still said 11 columns and excluded it (a builder would have shipped without it, all tests green,
+falsifying T06's premise); `parsePackSizes` is **not exported**, so rev 2's mandated call could not
+compile; and the render fixture had no cleanup or forbidden-column contract. Plus the subtle one:
+when the representative batch has no terpene rows but an older batch does, the answer is NULL — the
+one shape a join-then-limit body gets wrong while every other planned test passes.
 
 **T03 notes:** `builder` **stalled mid-ticket**, having completed 4 of its 5 plan steps and left a
 half-implemented component that type-checked — the orchestrator diffed the tree against the plan's
