@@ -410,7 +410,7 @@ None of it lives in T03's two files, and 0022 is the buyer's read surface.
 | **T05** | **2 rounds, budget SPENT, did NOT converge** (rev 1 → 7 blocking · rev 2 → **9 blocking, ALL inside rev 1's own fold-ins** — the 4th ticket on this slug) | **0 / 2** — green on the first `test-runner` pass, independently re-run from a clean reset | **1 / 2** — `critic` 1 blocking (fixed in one pass) · `security` **no blocking**; 9 + 6 notes, 5 fixed | **1** — PASSED 2026-08-22, all 6 staged items ruled (A-D built + mutation-proved, E dropped, F recorded) |
 | **T01** | **2 rounds, budget SPENT, did NOT converge** (rev 1 → 4 blocking · rev 2 → 4 blocking, **all new**, **two of them defects in rev 1's own fold-ins**) | **0 / 2** — green on the first `test-runner` pass | **0 / 2** — `critic` and `security` both returned **no blocking** | **1** — passed |
 
-| **T06** | rev 1 written 2026-08-22; **round 1 in flight** | — | — | — |
+| **T06** | **round 1 done → 7 blocking, 11 non-blocking, ALL folded into rev 2** (3 changed the design; every blocking finding spot-verified against the live DB before acceptance). **Round 2 in flight** — budget 2 | — | — | — |
 
 **T06 notes (in flight, 2026-08-22):** base synced and frozen — **0 behind `origin/dev`, 79 ahead**,
 no rebase needed. Plan at `PLAN-T06.md` rev 1; `plan-checker` round 1 running.
@@ -440,6 +440,44 @@ all four pulled from `pg_policies` on **both** local and production, all four **
 drift. `get_discoverable_shop` must be re-diffed immediately before site 3 is written: it was
 rewritten **twice today** (T05's build, then the G4 item-A amendment), which is exactly when a stale
 re-declare is most likely.
+
+**T06 · plan-checker round 1 — the three that changed the design (2026-08-22):**
+- **B1 — rev 1 reversed a SIGNED decision, to the LARGER privilege.** I wrote the new helper
+  `SECURITY DEFINER`. `SECURITY INVOKER` is locked at `STATE.md:112` (G3) and
+  `adr/0005-buyer-shop-view.md:282` — *"the deviation is SIGNED. INVOKER is the smaller privilege."*
+  The ADR's reasoning holds: `rel_all` already lets a member read their own `relationship` rows
+  under RLS, so **there is nothing for DEFINER to bypass**. DEFINER would also have created an S2
+  obligation the plan never discharged. Folded.
+- **B2 — `create or replace view` would have silently DROPPED `security_barrier=true`.** It is a
+  **reloption, not a predicate term**, so the S5 body-diff we rely on comes back clean while the
+  guard is gone; the planner may then push a leaky function below `is_caller_verified()` and
+  `price_public`. Reproduced on a throwaway view: `{security_barrier=true}` → `NONE`. Fixed with an
+  explicit `with (security_barrier = true)` **plus a `reloptions` assertion** — a predicate
+  assertion structurally cannot see this.
+- **B3 — the whole rev-1 test matrix went GREEN against a build with site 2 missing.** The checker
+  widened site 3 only and ran all ten cells as a connected verified buyer; every one passed,
+  including the price cell, which passed **vacuously**. Missing cell: `profile_visible = false`
+  **and** `price_public = true` → price *and* tiers must appear. Seed already has it (**AUR-1C**).
+  This is the ADR's own named failure mode (`:399-405`).
+
+**Also folded:** the tightening **cascades** — `pricelist_item_public_select`, `plit_public_select`,
+`product_image_public_select`, `product_media_public_select` each nest `EXISTS (… FROM product …)`,
+and a policy subquery is RLS-filtered as the **calling** role, so one edit to site 1 propagates to
+all four (measured: 4/1/1/2 rows → 0/0/0/0). A **companyless** caller also loses reads. Both classes
+now named in the ledger entry — this is a read-REMOVING migration, the only kind that breaks a live
+user on deploy. Plus: helper must not reuse `shares_connection_with_company` (it ignores `status`,
+ignores `deleted_at`, and counts a **pending** inbox row as connected); `alter policy … to
+authenticated` replaces a drop+create on `product_media` so "predicate unchanged" is true by
+construction; the inert NULL guard was **removed** (the canonical-order CHECK already makes the
+self-pair unsatisfiable, and §8 requires every guard be mutation-provable — that one could not fail).
+
+**⚠️ CORRECTION to earlier gate claims on this slug — "38/38 SQL suites" was not a real number.**
+Reliable census (counted in Python; `ls … | wc -l` returns **unstable** counts through this shell
+filter, same family as L-024): **41 suite files, 36 runners.** **Six suites have no runner and never
+execute** — `rls_isolation_test` (already filed as DEV-161), `auth_gate_test` (runner misnamed
+`run_auth_gate_test.sql.sh`), `announcement_projection_test`, `change_reason_log_test`,
+`onboard_company_categories_test`, `pending_change_lock_test`. Earlier "38/38" figures counted
+*runners that ran*, not suites that exist. **Report both numbers from now on; never say "all".**
 
 **T05 notes (in flight, 2026-08-22):** base synced and frozen — 0 behind `origin/dev`, 60 ahead.
 Plan at `PLAN-T05.md` rev 1. Its invariant table was built by **walking the live function body
