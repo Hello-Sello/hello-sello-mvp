@@ -410,7 +410,7 @@ None of it lives in T03's two files, and 0022 is the buyer's read surface.
 | **T05** | **2 rounds, budget SPENT, did NOT converge** (rev 1 → 7 blocking · rev 2 → **9 blocking, ALL inside rev 1's own fold-ins** — the 4th ticket on this slug) | **0 / 2** — green on the first `test-runner` pass, independently re-run from a clean reset | **1 / 2** — `critic` 1 blocking (fixed in one pass) · `security` **no blocking**; 9 + 6 notes, 5 fixed | **1** — PASSED 2026-08-22, all 6 staged items ruled (A-D built + mutation-proved, E dropped, F recorded) |
 | **T01** | **2 rounds, budget SPENT, did NOT converge** (rev 1 → 4 blocking · rev 2 → 4 blocking, **all new**, **two of them defects in rev 1's own fold-ins**) | **0 / 2** — green on the first `test-runner` pass | **0 / 2** — `critic` and `security` both returned **no blocking** | **1** — passed |
 
-| **T06** | **round 1 done → 7 blocking, 11 non-blocking, ALL folded into rev 2** (3 changed the design; every blocking finding spot-verified against the live DB before acceptance). **Round 2 in flight** — budget 2 | — | — | — |
+| **T06** | **round 1 done → 7 blocking, 11 non-blocking, ALL folded into rev 2** (3 changed the design; every blocking finding spot-verified against the live DB before acceptance). **round 2 → 3 blocking + 7 non-blocking, ALL NEW, TWO of them defects in round 1's own fold-ins. Budget SPENT, did NOT converge — the 5th ticket on this slug.** All folded into rev 3 | — | — | — |
 
 **T06 notes (in flight, 2026-08-22):** base synced and frozen — **0 behind `origin/dev`, 79 ahead**,
 no rebase needed. Plan at `PLAN-T06.md` rev 1; `plan-checker` round 1 running.
@@ -473,11 +473,53 @@ self-pair unsatisfiable, and §8 requires every guard be mutation-provable — t
 
 **⚠️ CORRECTION to earlier gate claims on this slug — "38/38 SQL suites" was not a real number.**
 Reliable census (counted in Python; `ls … | wc -l` returns **unstable** counts through this shell
-filter, same family as L-024): **41 suite files, 36 runners.** **Six suites have no runner and never
-execute** — `rls_isolation_test` (already filed as DEV-161), `auth_gate_test` (runner misnamed
-`run_auth_gate_test.sql.sh`), `announcement_projection_test`, `change_reason_log_test`,
-`onboard_company_categories_test`, `pending_change_lock_test`. Earlier "38/38" figures counted
+filter, same family as L-024): **41 suite files, 36 runners.** **FIVE suites have no runner and never
+execute** — `rls_isolation_test` (already filed as DEV-161), `announcement_projection_test`,
+`change_reason_log_test`, `onboard_company_categories_test`, `pending_change_lock_test`.
+(⚠️ corrected at round 2: I first said six and included `auth_gate_test` — its runner exists as
+`run_auth_gate_test.sql.sh`, which matches `run_*.sh`, so it does run. 41 − 36 = 5.) Earlier "38/38" figures counted
 *runners that ran*, not suites that exist. **Report both numbers from now on; never say "all".**
+
+**T06 · plan-checker round 2 — 3 blocking, all NEW, two inside round 1's own fixes (2026-08-22):**
+- **B-1 🔴 — T05's OWN SUITE GOES RED UNDER T06, AND THAT IS CORRECT.** Rev 2 told the builder the
+  T05 suite *"already asserts this, so run it"*. False. `discoverable_shop_spec_columns_test.sql`
+  TEST7 uses **Bob / StonePharm** as *"a plain verified NON-OWNER"* and asserts he sees **0** hidden
+  GreenLeaf products — but **StonePharm has an ACTIVE relationship with GreenLeaf**, so under T06 he
+  is a *connected* buyer and must see it. T05 pins the precise invariant T06 exists to break.
+  **The framing was the hazard:** a builder hitting a red security test under a plan that promises
+  green will either revert site 3 or quietly weaken TEST7. Fix = repoint TEST7's negative arm at a
+  verified persona with no relationship to GreenLeaf, **resolved by company name, never UUID** (those
+  ids regenerate on every reset). The suite is now in T06's Files, declared as expected-to-fail.
+- **B-2 — site 2 was the only site with NO S5 instruction.** Sites 1 and 3 both got explicit
+  "pull it live and diff" steps; site 2 got neither, and the plan never reproduced the full view
+  body — the builder would re-type ~20 lines from nothing. Two regressions this closes, both
+  measured, both passing every rev-2 cell: dropping `is_caller_verified()` from **site 2** leaks
+  prices to unverified AND companyless callers while doors (a)/(c) stay at 0 (every cascade cell is
+  worded about *product* rows, so nothing looks); and dropping site 2's owner arm costs Alice 4 of
+  her 6 own prices — **no rev-2 cell read the view as the owner at all.**
+- **B-3 — the cascade cells were VACUOUS.** `product_media` and `product_image` are **empty
+  repo-wide** (0 rows each), so rev 2's three cascade cells are 0-before / 0-after and pass with the
+  migration unbuilt. Same vacuity family rev 2 added B3 to kill, reintroduced one section earlier.
+  They now plant fixtures.
+
+**Two findings ESCALATED to G4, not decided at build:**
+- **N-5 · the read-ADDING side.** Site 1 hands a connected buyer the seller's **private columns** on
+  hidden products through a direct `product` read — proven:
+  `AUR-1C metadata={"note": "PRIVATE-SELLER-NOTE", …} rrp=9.9900`. In tension with the G3 lock on
+  `supplier_product_code` and with the ADR's reason for projecting `metadata -> 'pack_sizes'` only.
+  Pre-existing for *visible* products; T06 widens it to **deliberately-hidden** ones. It widens the
+  ROW set, not the column set — so narrowing columns would be new scope, not a fix. **Muskan rules.**
+- **N-6 · a real performance cliff.** The helper is **not inlined** (it appears literally in the
+  `Filter:`), so it runs per row and `idx_product_company_profile_visible` is lost to a Seq Scan.
+  Measured on 20 000 products: **1.7 ms → 1327 ms**. Removing `SET search_path` does not restore
+  inlining. Production holds 13 products, so this is a scaling cliff, not a live problem — but it is
+  the kind that arrives without warning.
+
+**Cleared by round 2** (worth recording, since these were the risky parts): `SECURITY INVOKER` works
+inside the `SECURITY DEFINER search_path = ''` RPC (the helper's own `set search_path = public` is
+what saves it) · **no RLS recursion** — nothing in `relationship`'s policy chain reads `product` ·
+`alter policy … to authenticated` is valid on PG 17.6 and provably predicate-preserving
+(`qual_identical|true`) · omitting **any one** of the three sites is caught by the three-doors matrix.
 
 **T05 notes (in flight, 2026-08-22):** base synced and frozen — 0 behind `origin/dev`, 60 ahead.
 Plan at `PLAN-T05.md` rev 1. Its invariant table was built by **walking the live function body
