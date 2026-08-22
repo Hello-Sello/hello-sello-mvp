@@ -259,6 +259,27 @@ Decision 6. Carries the **G3-signed verification tightening**.
 > one edit to `product_public_select` propagates to all four. Measured, not inferred (PLAN-T06 §3a).
 > Unverified **and companyless** callers lose reads they have today.
 
+> ⚠️ **AMENDED at /build T06 (2026-08-22) — two files beyond the list below**, recorded here as
+> item F's G4 ruling requires, at the moment it happened rather than at the gate.
+> - **`supabase/tests/discoverable_shop_spec_columns_test.sql`** — T05's suite asserts Bob
+>   (StonePharm) sees **0** hidden GreenLeaf products. StonePharm is **actively connected** to
+>   GreenLeaf, so T06 correctly breaks that. TEST7's negative arm repointed to Eva / Bavaria
+>   (verified, unconnected), resolved **by company name** and guarded four ways so it cannot pass
+>   vacuously. Declared in PLAN-T06 §7 at rev 3.
+> - **`e2e/discover-shop.spec.ts`** — 🔴 **the same class, MISSED at planning and caught only by
+>   `test-runner`.** Its AC-11 test asserted `location-menu-btn` never appears on a buyer's page —
+>   true at T02, when a buyer could only ever see one location. T06 gives connected Bob a second
+>   location (Montreal), so the dropdown correctly appears and a stale assertion fired. **The
+>   production code is right**; Muskan ruled at T05's G4 (walk row 12) that the filter follows what
+>   the *viewer* sees, not their role. Removed from the owner-chrome group, docstring corrected,
+>   **and a positive test added** — T06's own behaviour had NO e2e coverage; the only thing watching
+>   it was a test asserting the opposite. Mutation-proved (migration removed → fails
+>   `location-menu-btn / Expected: visible`; restored → 11/11).
+>
+> **Why this is worth recording rather than just fixing:** the builder had already fixed this exact
+> class in the SQL suite and still missed the e2e twin, because the declared Files list did not name
+> it. A scope boundary hid a defect from the agent best placed to see it.
+
 **Files:** `supabase/migrations/<ts>_connection_visibility_override.sql`,
 `supabase/tests/` (pgTAP), `src/modules/deals/supabase/reads.ts` (the `getOwnCatalog`
 company filter — cross-lane, but the leak is this migration's blast radius),

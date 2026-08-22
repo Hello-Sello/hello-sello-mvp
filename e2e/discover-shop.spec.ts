@@ -28,11 +28,16 @@
  *     card Request-pricing must appear on.
  *   - AUR-1B 'Pedanios 31/1 PND-CA' (seed.sql:392): profile_visible=true,
  *     price_public=true, no rungs (seed.sql:425).
- *   - AUR-1C / AUR-1D (seed.sql:393-394, seed.sql:426-427): profile_visible=
- *     false — hidden. T06 (connection override) is a SEPARATE ticket not yet
- *     built, so even a connected buyer must not see these through T02 alone;
- *     get_discoverable_shop's WHERE clause is unconditional on
- *     p.profile_visible = true (20260816190000_tier_ladder_contract.sql:143).
+ *   - AUR-1C / AUR-1D (seed.sql:393-394, seed.sql:435-436): profile_visible=
+ *     false, location 'Montreal Warehouse' — hidden from a NON-connected
+ *     buyer. UPDATED for T06 (HEL-60, PLAN-T06.md): the connection override
+ *     means a CONNECTED verified buyer — which Bob (this file's buyer
+ *     identity, seed.sql:308-323) IS — now sees both. AUR-1C carries
+ *     price_public=true (price 4.00, zero rungs); AUR-1D carries
+ *     price_public=false (connection reveals the product, never a hidden
+ *     price — decision 7). This is also what gives Bob a SECOND visible
+ *     location (Montreal, alongside every other AUR-1* product's Toronto
+ *     Warehouse) — see the T06 describe block below.
  *   - AUR-1E 'Tantalus 24/1 BLB-CA' (seed.sql:400): profile_visible=true,
  *     price_public=true, 2 rungs (seed.sql:490-502).
  *
@@ -108,7 +113,19 @@ test("AC 11: no save, manage-shop, Present-mode or banner/logo-edit control anyw
   // (critic B2, T02 — found AFTER the first green run, which is why it is
   // asserted here rather than trusted.)
   await expect(page.getByText("Unassigned", { exact: true })).toHaveCount(0);
-  await expect(page.getByTestId("location-menu-btn")).toHaveCount(0);
+
+  // location-menu-btn was REMOVED from this owner-chrome group at T06
+  // (HEL-60, PLAN-T06.md). It was bundled in here at T02 only because a
+  // buyer could then ever see exactly one location, so LocationTabs
+  // (ShopView.tsx:950, `if (named.length <= 1) return null`) never rendered
+  // for ANY buyer and the assertion happened to pass alongside the genuinely
+  // owner-only controls above. Ruled at T05's G4, walk row 12 (Muskan): "the
+  // rule is driven by what the VIEWER sees, not by role — Alice on the buyer
+  // route sees 6 products across 2 locations and DOES get the dropdown."
+  // T06's connection override gives Bob (this test's buyer) a second visible
+  // location (AUR-1C/AUR-1D, Montreal Warehouse), so the dropdown correctly
+  // appears for him now — asserting its absence here would pin the opposite
+  // of the ruled behaviour. The positive counterpart is the "T06" test below.
 
   // Owner AUTHORING copy is owner chrome too. MediaManager gates 16 affordances
   // on `canEdit`; this hint was the one that wasn't, so the buyer's card back
@@ -116,6 +133,50 @@ test("AC 11: no save, manage-shop, Present-mode or banner/logo-edit control anyw
   // not there. Only reachable since T02 put this card on a buyer's page.
   // (visual-verifier, T02 G4.)
   await expect(page.getByText("Drag to re-sort", { exact: false })).toHaveCount(0);
+});
+
+/**
+ * T06 (HEL-60, PLAN-T06.md) — the connection override widens what a
+ * CONNECTED buyer sees, and that can widen their visible LOCATIONS too. No
+ * prior e2e coverage exists for this: the only assertion that ever touched
+ * `location-menu-btn` asserted its ABSENCE (the AC-11 test above, now fixed)
+ * — this is the first positive coverage of the dropdown appearing for a
+ * buyer at all.
+ *
+ * Bob (StonePharm) is actively connected + verified to GreenLeaf (seed.sql
+ * §5d). Pre-T06 he saw only Toronto-Warehouse products (AUR-1A/1B/1E/1F, all
+ * profile_visible=true); AUR-1C/1D (Montreal Warehouse, profile_visible=
+ * false) were invisible to him same as anyone else. T06 reveals them to him
+ * specifically because he is connected — two named locations now, so
+ * LocationTabs (ShopView.tsx:950) must render, and its listbox must offer
+ * exactly "All", "Montreal Warehouse", "Toronto Warehouse" (seed.sql §6a-2 —
+ * every AUR-1* product's location is one of exactly those two names).
+ */
+test("T06: a connected verified buyer with products across two locations gets the location filter, listing both", async ({
+  page,
+}) => {
+  await signInBuyer(page);
+  await page.goto(`/discover/${GREENLEAF_ID}`);
+
+  // control — the shop rendered at all, so a missing dropdown below would be
+  // the rule, not a broken/empty page.
+  await expect(page.getByTestId("product-card").first()).toBeVisible();
+
+  const menuBtn = page.getByTestId("location-menu-btn");
+  await expect(menuBtn).toBeVisible();
+  await menuBtn.click();
+
+  const options = page.getByTestId("location-option");
+  await expect(options).toHaveCount(3);
+  await expect(
+    page.locator('[data-testid="location-option"][data-loc="All"]'),
+  ).toBeVisible();
+  await expect(
+    page.locator('[data-testid="location-option"][data-loc="Montreal Warehouse"]'),
+  ).toBeVisible();
+  await expect(
+    page.locator('[data-testid="location-option"][data-loc="Toronto Warehouse"]'),
+  ).toBeVisible();
 });
 
 test("a price_public=false card (AUR-1A) shows Request-pricing — proves ShopView actually wires viewerIsOwner={false}, not just that ProductCard accepts the prop (plan B3(i))", async ({ page }) => {

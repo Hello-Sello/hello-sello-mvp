@@ -4815,6 +4815,10 @@ export type Database = {
         Returns: undefined
       }
       is_caller_verified: { Args: never; Returns: boolean }
+      is_connected_to_company: {
+        Args: { p_company_id: string }
+        Returns: boolean
+      }
       is_group_member: { Args: { p_thread_id: string }; Returns: boolean }
       is_hs_team: { Args: never; Returns: boolean }
       is_person_connected: { Args: { p_other: string }; Returns: boolean }

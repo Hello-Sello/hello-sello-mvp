@@ -11,7 +11,14 @@
 
 ---
 
-## ⚠️ PENDING (2026-08-20, Muskan) — slug 0022 buyer-shop-view · 1 migration so far
+## ⚠️ PENDING (2026-08-20, Muskan) — slug 0022 buyer-shop-view
+
+> ⚠️ **This section is INCOMPLETE.** `20260822090000_discoverable_shop_spec_columns.sql`
+> (T05 / HEL-59 — `get_discoverable_shop` gains the specification set, the media/location
+> projections and the unfiled-product rule) is LOCAL-only and pending too, but has **no entry
+> here**. Flagged at /build T06; writing T05's entry is T05's job, not this ticket's. **Do not
+> treat the entries below as the whole batch.** Ledgered so far: `20260820090000` (T01),
+> `20260822100000` (T06).
 
 `20260820090000_discoverable_company_shop_chrome.sql` — **T01 / HEL-55.** DROP + CREATE of
 `public.get_discoverable_company(uuid)`, adding five projections (`address`,
@@ -37,10 +44,63 @@ table).
 - Advisor 0028 should stay at its single allowlisted finding (`get_public_profile`) — the
   function was already `SECURITY DEFINER` and already anon-revoked.
 
-**More migrations from this slug will land here** (T06 carries the connection-override permission
-change). Push the slug as one batch, in timestamp order — the slug ships as a unit (G4/T00
-condition: T00 reaching `dev` without T06 would put every seller's catalogue into every other
-seller's deal-line picker).
+---
+
+`20260822100000_connection_visibility_override.sql` — **T06 / HEL-60.** New helper
+`public.is_connected_to_company(uuid)` (SECURITY **INVOKER**, signed), applied at three sites:
+the `product_public_select` RLS policy, `current_pricelist_item`'s public arm, and
+`get_discoverable_shop`'s `profile_visible` term. Rides along: the G3-signed **verification
+tightening** on site 1, and the `anon` SELECT revoke on `product_media`. LOCAL only.
+
+**🔴 THIS MIGRATION REMOVES READS FROM LIVE CALLERS. Two classes, both real on production:**
+
+1. **Members of an UNVERIFIED company.** Today `product_public_select` carries no
+   `is_caller_verified()`, so *any* authenticated company member — verified or not — reads every
+   `profile_visible` product in the database. After this migration they read none of another
+   company's. **On production that is `CNG Berlin`** — the one product-holding company still
+   `pending` (4 companies hold products; 3 verified, 1 pending). Its members lose every
+   cross-company catalogue read until it is verified.
+2. **COMPANYLESS authenticated callers** (`current_company_id()` IS NULL → `is_caller_verified()`
+   is false). HS staff/reviewer accounts with no `person.company_id` are in this class. They read
+   cross-company products today; they will read none.
+
+**And it CASCADES beyond `product`.** `pricelist_item_public_select`, `plit_public_select`,
+`product_image_public_select` and `product_media_public_select` each nest
+`EXISTS (SELECT 1 FROM product p …)`, and a policy subquery is RLS-filtered **as the calling
+role** — so the site-1 edit propagates into all four with no edit to them. Both classes above
+therefore also lose direct reads of `product_image`, `product_media` and `pricelist_item`.
+Measured locally, not inferred. The *override* does **not** propagate in the other direction:
+each nested predicate restates `p.profile_visible = true` itself.
+
+**Pre-flight for this one:**
+- **Re-diff all three bodies against the CLOUD versions before applying** — `pg_policy.polqual`
+  for `product_public_select`, `pg_get_viewdef('public.current_pricelist_item', true)`, and
+  `pg_get_functiondef('public.get_discoverable_shop(uuid)')`. Local↔prod were byte-identical for
+  the policy at plan time; confirm again. This is the class that once stripped
+  `list_discoverable_companies()`'s verified gate on production.
+- **After applying, confirm `current_pricelist_item` still carries `security_barrier=true`**:
+  `select reloptions from pg_class where relname = 'current_pricelist_item'`.
+  `CREATE OR REPLACE VIEW` without a `WITH` clause silently drops the reloption and a
+  body-to-body predicate diff cannot see the loss. The migration re-states it explicitly.
+- **Confirm the visibility WINDOW is still OUTSIDE the override parenthesis** at all three sites.
+  An expired product must stay invisible to a connected buyer, and no amount of non-expiring
+  production data would reveal the mistake.
+- **Confirm `p.price_public` is still un-`or`-ed** in the view's public arm. Connection reveals
+  the product, never the price.
+- `get_discoverable_shop` uses `CREATE OR REPLACE` (grants survive); the 3-statement ritual is
+  re-issued anyway. Verify `proacl` on both it and `is_connected_to_company` reads
+  `postgres=X, authenticated=X, service_role=X` — no PUBLIC entry, no `anon` entry.
+- **`anon` must hold no SELECT on `product_media`** afterwards, and `product_media_public_select`
+  must list only `authenticated`:
+  `select has_table_privilege('anon','public.product_media','SELECT');` → `f`.
+- **Performance, named not solved:** `is_connected_to_company` is **not inlined** — it appears
+  literally in the `Filter:`, so it runs per row and `idx_product_company_profile_visible` is lost
+  to a Seq Scan. Measured on 20 000 synthetic rows: 1.7 ms → 1327 ms. Production holds 13
+  products, so this is a scaling cliff, not a live problem. Watch it if the catalogue grows.
+
+**Push the slug as one batch, in timestamp order — the slug ships as a unit** (G4/T00 condition:
+T00 reaching `dev` without T06 would put every seller's catalogue into every other seller's
+deal-line picker).
 
 ---
 
