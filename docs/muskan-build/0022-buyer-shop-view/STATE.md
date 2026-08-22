@@ -551,6 +551,57 @@ does not exist`. **T05's suite re-verified GREEN pre-T06** with TEST7's negative
 Eva / Bavaria Medical Cannabis GmbH, resolved by name and guarded four ways (resolves · verified ·
 unconnected · sees a non-zero shop) so it cannot pass vacuously.
 
+**T06 · build + verification (2026-08-22):** migration `20260822100000_connection_visibility_override.sql`.
+Committed at `c4c1486`.
+
+**⚠️ `test-runner` was right to disbelieve the builder.** The builder reported "everything green";
+it was not. One e2e failure, and `test-runner` **A/B-proved** it rather than assuming: base 24/24,
+with T06 23/24, the same test every run.
+
+`e2e/discover-shop.spec.ts:111` (AC 11) asserted `location-menu-btn` **never** appears on a buyer's
+page. T06 gives connected Bob a second visible location (Montreal), so `LocationTabs` renders the
+filter and the assertion fires. **The production code is correct** — Muskan ruled at T05's G4, walk
+row 12: *"the rule is driven by what the **viewer** sees, not by role."* The assertion was written
+at T02, when a buyer could only ever see one location, and it bundled the dropdown in with genuinely
+owner-only chrome. Stale, not a regression.
+
+**The lesson is the miss, not the fix.** This is **the same class as B-1**, which the builder had
+already found and fixed in the SQL suite — same two companies, same active relationship. It missed
+the e2e twin because **T06's declared Files list never named that file**. A scope boundary hid a
+defect from the agent best placed to see it. Both files are now recorded in TICKETS.md's inline
+`⚠️ AMENDED` block, per item F's ruling.
+
+**T06's own behaviour had NO e2e coverage** — the only thing watching "a connected buyer sees hidden
+products" was a test asserting the opposite. A positive test was added and **mutation-proved**:
+migration removed → fails on `location-menu-btn / Expected: visible`; restored → **11/11**.
+
+**Gate after the fix:** 37/37 SQL runners (42 suite files, **5 never execute** — unchanged census) ·
+**458/458** unit incl. 5 new `getOwnCatalog` assertions · `tsc` clean · eslint 6 errors **all
+pre-existing, none in touched files** · e2e `discover-shop` **11/11**, `present-card-edit` +
+`present-grid` green on a clean reset. **Mutation pass 6/6, each red on its named door** — including
+the two `plan-checker` added and the one `test-writer` corrected.
+
+**⚠️ `diff` produced a FALSE "Files are identical" again** — the builder hit it on the view and the
+policy (md5s differed); it caught the lie and redid every comparison with `difflib`. Second slug
+running. **L-024 is now proven twice; nothing in this repo may branch on `diff`.**
+
+**Builder deviations, both declared, neither silent:** (1) rewrote `getProductBatches`'s docstring —
+it cross-referenced `getOwnCatalog` as precedent for "no company filter needed", which this ticket
+makes false; (2) added a warning block to the ledger's PENDING section because **T05's migration
+`20260822090000` is local-only and has NO ledger entry**, while the section header claimed "1
+migration so far". **T05 still owes its ledger entry** — a deploy reading that checklist today would
+silently skip it. Out of T06's scope; flagged rather than silently widened.
+
+**Sync ritual note, recorded honestly:** the ledger edit was made by the build agent *before* the
+lock was taken. Ayush's lock list was empty throughout, so exclusivity held — the ritual **order**
+was broken, not the guarantee.
+
+**Still carried to G4, unsolved by design:** the read-ADDING side (a connected buyer now reads the
+seller's `metadata` private note and `rrp` on **deliberately hidden** products via a direct table
+read — widens the ROW set, not the column set, so narrowing columns would be new scope) and the
+**perf cliff** (the helper is not inlined, costs `idx_product_company_profile_visible`; 1.7 ms →
+1327 ms at 20 000 products; prod holds 13).
+
 **T05 notes (in flight, 2026-08-22):** base synced and frozen — 0 behind `origin/dev`, 60 ahead.
 Plan at `PLAN-T05.md` rev 1. Its invariant table was built by **walking the live function body
 clause by clause** (`20260816190000:82-154`), not from the ticket's risk framing — L-011 is exactly
