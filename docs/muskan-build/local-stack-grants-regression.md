@@ -1,6 +1,8 @@
 # Work item — `supabase db reset` produces a database the app cannot read
 
-**Status:** seed, not yet triaged. Route through `/triage` to get a slug number.
+**Status:** ✅ **RESOLVED 2026-08-22.** Fix taken: candidate 2 (state the defaults explicitly
+in a migration). See *Resolution* at the foot of this file. Kept as the record of the
+diagnosis; no slug needed.
 **Found:** 2026-08-21, session `buyer_shop_view`, while re-running T04's e2e (slug 0022).
 **Severity:** blocks all local e2e and all local browser work, for every developer, on the
 next `db reset`. **Production is believed unaffected — verify that first, it is the whole
@@ -110,3 +112,56 @@ local environment bug. If production has them, fix 1 or 2 restores parity and th
 ×1, `present-edit-model` ×3, `present-info` ×4, `public-profile` ×1 — were A/B-proven pre-existing
 against the base commit (stash + reset) by `test-runner` during slug 0022 T04. Not regressions
 from any recent ticket, but the stale figure masks real signal on every full run.
+
+
+---
+
+## Resolution — 2026-08-22
+
+**Fix: `supabase/migrations/20260607090000_stack_default_privileges.sql`** — candidate 2 above,
+with the ordering detail that makes it safe.
+
+**Production was checked first, as this file demanded.** It is healthy and holds the full set:
+`authenticated` SELECT on 93 tables, `pg_default_acl` for role `postgres` in schema `public`
+reading `anon=arwdDxtm authenticated=arwdDxtm service_role=arwdDxtm` on TABLES, `rwU` on
+SEQUENCES, `X` on FUNCTIONS (anon absent — the 20260817120000 lockdown). The premise held:
+prod is fine, local drifted.
+
+**The drift was wider than TABLES.** Sequences were down to `w` and functions to `postgres`
+only, which left **9 of 86 RPCs** unreachable by `authenticated` locally (prod: 80/86). Any fix
+scoped to tables alone would have left that half-broken and silent.
+
+**Why a migration timestamped *before* everything else.** `ALTER DEFAULT PRIVILEGES` only
+affects objects created after it. Running first, it hands the right grants to every object the
+147 later migrations create, while every deliberate REVOKE in those migrations still runs after
+it and still wins. That is what makes this one statement of the rule instead of a copy of every
+revoke — the DRY failure that candidate 3 would have introduced. Verified after a clean reset:
+
+- local grant counts now match production **row for row**, all three roles, all privilege types;
+  functions 80/86 on both.
+- **DEV-88 intact** — `has_column_privilege('authenticated','person','company_id','UPDATE')` =
+  `false`, `display_name` = `true`.
+- **anon function lockdown intact** — exactly one anon-executable function, `get_public_profile`
+  (session 77's 65 → 1, unchanged).
+- **35/35 SQL suites pass**, including `anon_execute_lockdown_test` and `ensure_rls_trigger_test`.
+- `e2e/discover-shop.spec.ts` **6/6** — the run this regression had blocked.
+
+It ships to production as a **verified no-op** (prod already holds these exact ACLs). `db push`
+takes a backdated migration with `--include-all`.
+
+### Correction to the "suspected trigger" above
+
+The recorded "CLI unpinned at 10.9.7" is not the Supabase CLI version. `supabase --version`
+reports differently depending on the invocation path (`10.9.7`, `2.75.0`, `2.115.0` were all
+observed in one session; `rtk` itself is 0.34.1). The exact version that first dropped the
+grants was therefore never established — which is a further argument for the fix taken:
+stating the defaults in a migration removes the dependency on stack defaults entirely, so it
+does not matter which version runs.
+
+### Related item, now measured
+
+The stale e2e baseline is corrected: **not** 105/16 and **not** 105/22. On a clean reset the
+suite is **146 tests**, and the failures are the `sb_secret_`/GoTrue admin-API key class plus a
+`present-*` / `public-profile` / `deal-c2c-create` / `deal-p2p-send` group. `deal-p2p-send` was
+missing from every earlier count and is A/B-proven pre-existing (stash the working tree, it
+fails identically).
