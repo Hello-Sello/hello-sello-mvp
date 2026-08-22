@@ -1,9 +1,10 @@
 # PLAN-T06 — The connection override, written once, applied at three sites
 
 Ticket: **T06 · [HEL-60](https://linear.app/hellosello/issue/HEL-60)** · size **M** · depends on T00
-ADR: `docs/adr/ADR-0005*` decision 6 + 7 · PRD §4 (2), §7 · slug `0022-buyer-shop-view`
+ADR: `docs/architecture/adr/0005-buyer-shop-view.md` decision 6 + 7 · PRD §4 (2), §7 · slug `0022-buyer-shop-view`
 
-> Rev 1. Base frozen at `claude/muskan/work` (0 behind `origin/dev`, 79 ahead) — no rebase mid-build.
+> **Rev 2** — folds `plan-checker` round 1 (7 blocking, 11 non-blocking; every blocking finding
+> spot-verified against the live DB before acceptance). Base frozen at `claude/muskan/work` (0 behind `origin/dev`, 79 ahead) — no rebase mid-build.
 
 ---
 
@@ -13,7 +14,7 @@ Today `product.profile_visible = false` means *nobody but the owner sees it*. Af
 means **"visible to companies I am NOT connected to"** — an accepted company relationship overrides
 the flag. Connection reveals **products, never prices**: `price_public` is untouched, so a connected
 buyer still gets no price and no tiers on a price-hidden product. Three objects carry the rule; four
-neighbouring policies deliberately do not. Two independent hardening items ride along because they
+neighbouring policies do not gain it **textually — but three of them change BEHAVIOUR anyway, see §3a.** Two independent hardening items ride along because they
 are in this migration's blast radius: a signed **verification tightening** on site 1, and an
 **`anon` revoke** on `product_media` that T05's security review found is currently closed only by
 accident.
@@ -28,6 +29,11 @@ accident.
 | `product_all` | captured | captured | byte-identical |
 | `product_media_public_select` | captured | captured | byte-identical |
 | `product_media_all` | captured | captured | byte-identical |
+
+Production column captured via the Supabase MCP `execute_sql` against project `byipusuthdlskdxoexkt`
+(`select tablename, policyname, roles::text, qual from pg_policies where tablename in
+('product','product_media')`) — noted because `plan-checker` has no production access and correctly
+flagged it as unverifiable from its seat (N8).
 
 Live `product_public_select` qual, verbatim — this is the base every edit below is a diff against:
 
@@ -80,8 +86,7 @@ create or replace function public.is_connected_to_company(p_company_id uuid)
 returns boolean
 language sql
 stable
-security definer
-set search_path = ''
+set search_path = public
 as $$
   select exists (
     select 1
@@ -94,25 +99,32 @@ as $$
 $$;
 ```
 
+> ⚠️ **REV 2 — B1. Rev 1 wrote `security definer` and that was a silent reversal of a SIGNED
+> decision, to the LARGER privilege.** `SECURITY INVOKER` is locked in two places:
+> `STATE.md:112` (`## Locked`, G3) and `adr/0005-buyer-shop-view.md:282` — *"the deviation is
+> SIGNED. INVOKER is the smaller privilege."* The ADR's own reasoning: `rel_all`
+> (`20260607170000_rls_policies.sql:263-265`) already lets a company member read their own
+> `relationship` rows under RLS, **so there is nothing for DEFINER to bypass**. The checker proved
+> INVOKER works in the policy context (Bob sees 6 GreenLeaf products; companyless caller → false).
+> DEFINER would also have created an S2 obligation ("should every logged-in user be able to call
+> this?") that INVOKER does not create at all. **Removed.**
+
 **Why `least`/`greatest` and not `in (a_id, b_id)`:** the table carries
 `CHECK (company_a_id < company_b_id)` — verified live — so the pair is canonically ordered and the
-two-column equality is exact and index-friendly. `in (…)` would also match a row pairing the caller
-with *itself*, which cannot exist under that CHECK but is a shape worth not writing.
+two-column equality is exact and index-friendly.
 
 **This is precisely why the helper cannot supply T05's owner arm** (T05's ticket says so, and the
 CHECK is the proof): a self-pair row `a < a` is impossible, so `is_connected_to_company(own company)`
 is always false. The owner arm stays `p.company_id = public.current_company_id()`, separate.
 
-**NULL safety.** `current_company_id()` is NULL for a companyless caller. `least(NULL, x)` is `x` in
-Postgres (it ignores NULLs), so the two equalities would compare against a half-formed pair rather
-than short-circuit. Guard explicitly:
-
-```sql
-  select public.current_company_id() is not null and exists ( … );
-```
-
-> ⚠️ **Write a test for exactly this cell.** A companyless caller must get `false`, not a row. This
-> is the class of bug that reads correct and is not.
+> ⚠️ **REV 2 — N1. Rev 1's explicit `current_company_id() is not null` guard is REMOVED.** The
+> premise was right (`least(NULL, x)` really is `x` in Postgres — verified) but the conclusion was
+> wrong. With a NULL caller the predicate collapses to `company_a_id = X and company_b_id = X`, and
+> the canonical-order CHECK makes that **unsatisfiable** — so the unguarded function already returns
+> `false` for a companyless caller *and* for a NULL argument (both verified live). The guard was
+> inert, and §8 requires every new guard be mutation-provable; this one **cannot be made to fail**.
+> Removing a mechanism beats keeping a comforting one. **The companyless test cell stays** — it now
+> pins the CHECK's load-bearing role rather than a guard.
 
 **Grants:** the three-statement ritual (session 76 rule — `REVOKE … FROM public` does **not** revoke
 `anon`):
@@ -173,9 +185,24 @@ hold for free. Assert it anyway; it is an invariant this migration could break b
 reveals the product, never the price. A connected buyer on a price-hidden product gets **no row**
 from this view, hence no price and no tiers.
 
-The view is re-created with `create or replace view`. Re-issue its grants explicitly — a replace
-does not reset them, but the three-statement ritual is cheap and the one time it was skipped
-(`20260618120100`) is how the anon door reopened.
+> ⚠️ **REV 2 — B2. The view MUST be re-created `with (security_barrier = true)`.** Live state:
+> `current_pricelist_item` carries `reloptions={security_barrier=true}` (verified). **`CREATE OR
+> REPLACE VIEW` without a `WITH` clause silently DROPS it** — the checker reproduced this on a
+> throwaway view: `{security_barrier=true}` → `NONE`. This is the S5 failure family one level
+> deeper than rev 1 looked: the guard is **not in the body**, so a body-to-body predicate diff comes
+> back clean while the barrier is gone. Without it the planner may push a user-supplied leaky
+> function below the view's `WHERE` — i.e. below `is_caller_verified()` and `price_public`.
+>
+> ```sql
+> create or replace view public.current_pricelist_item
+>   with (security_barrier = true) as …
+> ```
+>
+> **Assert it:** `reloptions @> '{security_barrier=true}'` in the suite. A predicate assertion
+> cannot see this, which is exactly why it needs its own.
+
+Re-issue its grants explicitly — a replace does not reset them, but the ritual is cheap and the one
+time it was skipped (`20260618120100`) is how the anon door reopened.
 
 ### Site 3 — `get_discoverable_shop`'s `profile_visible` term
 
@@ -200,25 +227,44 @@ G4 item-A amendment). Pull `pg_get_functiondef` from the live DB immediately bef
 migration and diff the new body against it — this is the class that shipped a lost verified-gate to
 production once, and the risk is highest when the base changed hours ago.
 
+**Use `CREATE OR REPLACE FUNCTION`, never `DROP … CREATE`** (N11). Grants survive a replace and the
+signature is unchanged; ADR:488 records that a drop resets them.
+
 **The unfiled clause added at item A must survive.** It is a separate `and (…)` and does not
 interact with this one. Assert its behaviour still holds after this migration — the T05 SQL suite
 already does, so **run it**, do not just re-read it.
 
-### NOT touched, and why (criterion, round 4 B5)
+### 3a. NOT touched textually — but the tightening CASCADES (REV 2, B4)
 
 `pricelist_item`, `product_image`, `product_media` and `pricelist_item_tier` policies do **not**
 gain the override: they are not on the buyer's read path (the RPC and the view both bypass RLS), and
 `plit_public_select`'s inlined gate is ADR-0004's deliberate defence-in-depth.
 
-> ⚠️ **AMBIGUITY FOR THE CHECKER — flagged, not resolved unilaterally.** The ticket says
-> *"`product_media` … policies are NOT touched"* and, four lines later, *"`product_media_public_select`
-> shall no longer list `anon`"*. Read literally these contradict. **My reading:** the first sentence
-> scopes the *override rule* (no policy there gains `is_connected_to_company`); the second is an
-> independent S4 hardening item about the **role list**, not the predicate. I implement both: the
-> predicate of `product_media_public_select` stays byte-identical, only `TO anon, authenticated`
-> becomes `TO authenticated`. If the checker reads it the other way, the anon revoke moves to T08.
-
----
+> ⚠️ **REV 2 — B4. Rev 1 said these four are simply "untouched". That was FALSE about behaviour.**
+> All four nest `EXISTS (SELECT 1 FROM product p WHERE …)` — verified live:
+> `pricelist_item_public_select`, `plit_public_select`, `product_image_public_select`,
+> `product_media_public_select`. **A policy subquery is RLS-filtered as the CALLING role**, so
+> adding `is_caller_verified()` to site 1 propagates into all four with no edit to them.
+>
+> Checker's measurement, StonePharm set to `pending`:
+> ```
+> before: product=4  product_media=1  product_image=1  pricelist_item=2
+> after : product=0  product_media=0  product_image=0  pricelist_item=0
+> ```
+>
+> **The converse is safe, and was measured too** — the *override* does NOT propagate, because each
+> nested predicate restates `p.profile_visible = true` itself:
+> ```
+> verified + connected: product = 6 (was 4)   product_media = 1  (NOT 2)
+> ```
+>
+> **Second class rev 1 never named: a COMPANYLESS authenticated caller loses reads.**
+> `current_company_id()` is NULL → `is_caller_verified()` is false → 0 rows, where today they read
+> 4. (Measured: `companyless HS Reviewer reads product = 4` today.)
+>
+> **Consequences taken:** §5's ledger entry names **both** classes explicitly, and §8 gains three
+> cascade cells. This is the difference between "adds capability" and "removes reads from live
+> users", and only the second kind can break someone on deploy.
 
 ## 4. The `anon` revoke on `product_media` (S4)
 
@@ -229,18 +275,10 @@ decision. Re-grant SELECT on `product` and it opens."*
 That is a lock that holds because of an unrelated missing grant. Close it deliberately:
 
 ```sql
--- predicate byte-identical to live; ONLY the role list changes
-drop policy if exists product_media_public_select on public.product_media;
-create policy product_media_public_select on public.product_media
-  for select to authenticated
-  using ( exists (
-    select 1 from public.product p
-    where p.id = product_media.product_id
-      and p.deleted_at is null
-      and p.profile_visible = true
-      and (p.visibility_start is null or p.visibility_start <= current_date)
-      and (p.visibility_end   is null or p.visibility_end   >= current_date)
-  ));
+-- ONLY the role list changes. ALTER POLICY makes "predicate byte-identical"
+-- true BY CONSTRUCTION rather than by inspection — a drop+create would re-type
+-- the predicate, which is the exact S5 family, for no gain (N4).
+alter policy product_media_public_select on public.product_media to authenticated;
 
 revoke select on public.product_media from anon;
 ```
@@ -256,23 +294,42 @@ has_table_privilege('anon', 'public.product_media', 'SELECT') = false
 …and assert `anon` is absent from `pg_policies.roles` for that policy. A behavioural `select` alone
 cannot tell the two failures apart, which is exactly how this was miscounted as closed.
 
+**Stated rather than left unremarked (N5), since this whole section is "incidental vs deliberate":**
+`anon` also holds INSERT/UPDATE/DELETE/TRUNCATE on `product_media`, `product` and `product_image`.
+Those are blocked by RLS with **no policy naming `anon`** — that is a real policy decision, not an
+accident, so they are left alone. Only the SELECT grant is the accidental one.
+
 ---
 
 ## 5. `docs/deploy/cloud-migrations-pending.md`
 
 Ledger entry for this migration. **Shared file → sync ritual** (lock, commit sync alone, edit,
-release). Flag in the entry that this migration **removes reads** from unverified companies — the
-one class of change that can break a live user rather than merely add capability.
+release).
+
+The entry must name **both** read-removing classes explicitly (B4), because this is the one kind of
+change that can break a live user rather than merely add capability:
+1. members of an **unverified** company lose cross-company reads of `product` **and**, via the
+   cascade, `product_image` / `product_media` / `pricelist_item`;
+2. **companyless** authenticated callers lose them too (`current_company_id()` NULL).
+
+Production check to run before shipping, not now: 4 companies hold products, 3 verified, 1 pending
+(`CNG Berlin`). Name in the entry who actually loses a read.
 
 ---
 
 ## 6. `getOwnCatalog` — the cross-lane leak this migration makes worse
 
 `src/modules/deals/supabase/reads.ts:538-542` selects from `product` with **no `company_id` filter**,
-relying on RLS. Its docstring (`:570-572`) claims the same discipline as `getProductBatches`. That
-claim is **true for `product_batch`** (`batch_all` is the only policy, company-scoped) and **false
-for `product`**, which carries `product_all` *and* `product_public_select`. So the seller's deal-line
-product picker already lists every other company's `profile_visible` products.
+relying on RLS. `product` carries `product_all` *and* `product_public_select`, so the seller's
+deal-line product picker already lists every other company's `profile_visible` products.
+
+> ⚠️ **REV 2 — B5. Rev 1 pointed at the wrong docstring.** `:570-572` is inside
+> **`getProductBatches`'s** docstring (and its claim is *correct* there — `batch_all` is the only
+> policy on `product_batch`, company-scoped). `getOwnCatalog`'s own docstring is **`:524-534`**, and
+> it already describes the leak accurately: *"the picker currently returns EVERY company's visible
+> products (known issue, Ayush's lane — **flagged, not fixed here**)"*. **This ticket fixes it, so
+> that sentence becomes false and must be rewritten** — rev 1 aimed its own "a comment asserting a
+> false safety property is worse than no comment" rule at the wrong lines.
 
 **It is already live** — T00 shipped, so buyer-visible products exist. Widening site 1 adds every
 connected seller's hidden products to that picker.
@@ -328,9 +385,39 @@ read, (c) a `get_discoverable_shop` call:
 | relationship `status <> 'active'` | hidden | not visible |
 | relationship soft-deleted | hidden | not visible |
 | unconnected verified buyer | hidden | not visible |
+| connected + verified buyer | **hidden, `price_public = true`** | product visible **AND price present AND tiers present** — **B3** |
 | **unverified** company member | any other company's product | **none** (the tightening) |
-| companyless caller | anything | none, **and** `is_connected_to_company(x)` = false |
+| unverified member | cross-company `product_image` / `product_media` / `pricelist_item` | **none** — the cascade, **B4** |
+| **companyless** authenticated caller | any other company's product | **none** — reads 4 today, **B4** |
+| companyless caller | anything | none, **and** `is_connected_to_company(x)` = false (pins the canonical-order CHECK — N1) |
+| **Alice (GreenLeaf = `company_a`)** | `is_connected_to_company(StonePharm)` | **true** — the direction cell, **B7** |
 | the **owner**, own company unverified | own hidden product | **visible** (`product_all` untouched) |
+
+> ⚠️ **REV 2 — B3, the cell that would have hidden a real bug.** The checker widened site 3 ONLY,
+> left site 2 untouched, and ran the whole rev-1 matrix as Bob (connected, verified). **Every single
+> cell passed** — including *"connected, hidden + price hidden → no price"*, which passed
+> **vacuously**. Measured:
+> ```
+> AUR-1C pv=false price_public=true  price=NULL tiers=NULL   ← the bug, invisible to rev 1
+> ```
+> A build that forgot site 2 **entirely** would have gone fully green. This is the ADR's own named
+> failure mode (`0005-buyer-shop-view.md:399-405`: *"patching 7 without 6 yields a visible product
+> with a silently NULL price"*). Seed already carries the fixture — **AUR-1C is `profile_visible =
+> false`, `price_public = true`** — so no invention needed.
+
+> ⚠️ **REV 2 — B6. The new function needs its own S1 grant assertion**, which rev 1 omitted
+> (§4's grant assertions are *table* grants on `product_media`). SECURITY-CHECKLIST S1 makes it
+> mandatory for any change adding a function or a grant:
+> `has_function_privilege('anon','public.is_connected_to_company(uuid)','EXECUTE') = false`
+> **and** `= true` for `authenticated`. Note the `revoke_anon_execute_on_new_function_trg` event
+> trigger is enabled and will fire — assert the end state anyway; the trigger is what we are
+> trusting, and S7 says a guard nobody has watched fail proves nothing.
+
+> ⚠️ **REV 2 — N3. "pending" is NOT a relationship status.** Live `relationship_status` is exactly
+> `active | suspended | ended`. Rev 1 lumped pending in with the ephemeral *relationship* fixtures;
+> a pending connection is a **`pending_inbox_item` row with NO `relationship` row at all**. Written
+> as a relationship fixture it would fail on the FK — loudly, so not blocking, but the builder must
+> write the right shape.
 
 Plus the grant assertions of §4, and a **re-run of the T05 suite** to prove the unfiled rule and the
 owner arm survive site 3's rewrite.
@@ -353,7 +440,15 @@ named assertion. A guard that has never failed proves nothing.
 2. Write the migration: helper → grants → site 1 → site 2 → site 3 → media role list → media revoke.
 3. Write the suite + runner. **Verify RED** — the orchestrator runs it, `test-writer` has no Bash (L-023).
 4. `supabase db reset`; suite GREEN.
-5. Re-run `discoverable_shop_spec_columns_test.sql` + the full 38-suite set.
+5. Re-run `discoverable_shop_spec_columns_test.sql`, then **every runner**, reporting the real
+   census — **41 suite files, 36 runners** (N7). Six suites have **no runner and never execute**:
+   `rls_isolation_test` (already filed as DEV-161), `auth_gate_test` (its runner is misnamed
+   `run_auth_gate_test.sql.sh`), `announcement_projection_test`, `change_reason_log_test`,
+   `onboard_company_categories_test`, `pending_change_lock_test`. **Rev 1 said "the full 38-suite
+   set", which does not exist** — and earlier gate claims on this slug reporting "38/38 SQL suites"
+   counted *runners that ran*, not suites that exist. Report both numbers; do not say "all".
+   ⚠️ Count with `python3 -c "import glob; …"`, **not** `ls | wc -l` — the shell filter here returns
+   unstable counts for that idiom (same family as L-024).
 6. `getOwnCatalog` filter + docstring; regenerate types with the `git diff -U0` check.
 7. Mutation pass (§8).
 8. `tsc` · eslint · unit · e2e `discover-shop` + `present-*`.
@@ -368,4 +463,7 @@ named assertion. A guard that has never failed proves nothing.
 | `least/greatest` with a NULL company | `least(NULL,x) = x` — no short-circuit | explicit `is not null` guard + its own test |
 | media revoke "already passing" | current block is an incidental privilege error | assert the **grant**, not a failed select |
 | `getOwnCatalog` unfixed | picker gains every connected seller's hidden products | in this ticket, tested |
-| tightening breaks a live user | unverified members lose reads they have today | called out in the ledger entry; prod has 4 companies with products, 3 verified |
+| tightening breaks a live user | unverified **and companyless** callers lose reads, and it **cascades** to media/images/prices | both classes in the ledger entry; 3 cascade cells in §8 |
+| `create or replace view` drops `security_barrier` | invisible to a predicate diff — the guard is a reloption, not a term | `with (security_barrier = true)` + a `reloptions` assertion |
+| site 2 forgotten entirely | rev 1's whole matrix went green with site 2 unbuilt — measured | the B3 cell (`pv=false` + `price_public=true` → price **and** tiers) |
+| helper written without `least`/`greatest` | seed only exercises one direction | the B7 direction cell (Alice → StonePharm) |

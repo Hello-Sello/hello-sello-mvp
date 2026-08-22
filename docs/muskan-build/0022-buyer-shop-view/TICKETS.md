@@ -247,8 +247,17 @@ AC 7 in full, plus `product.location` — which is what actually produces the lo
 > a ride-along. T01 hit this and reverted the `update_deal_draft` hunk by hand.
 
 
-Decision 6. Carries the **G3-signed verification tightening**: three of the seven policies
-gain `is_caller_verified()` and unverified members lose reads they have today.
+Decision 6. Carries the **G3-signed verification tightening**.
+
+> ⚠️ **CORRECTED at /build T06 (2026-08-22): the tightening is on SITE 1 ONLY, not "three of the
+> seven policies".** This header said three; its own bullet below says *"the signed tightening, on
+> site 1 only"*, and `STATE.md` rev 6 agrees. The stale count is from a superseded ADR revision —
+> rev 5's scope cut took the seven permission sites down to three. **But the effect is wider than
+> one policy anyway, for a different reason:** `pricelist_item_public_select`, `plit_public_select`,
+> `product_image_public_select` and `product_media_public_select` each nest
+> `EXISTS (SELECT 1 FROM product …)`, and a policy subquery is RLS-filtered as the calling role — so
+> one edit to `product_public_select` propagates to all four. Measured, not inferred (PLAN-T06 §3a).
+> Unverified **and companyless** callers lose reads they have today.
 
 **Files:** `supabase/migrations/<ts>_connection_visibility_override.sql`,
 `supabase/tests/` (pgTAP), `src/modules/deals/supabase/reads.ts` (the `getOwnCatalog`
