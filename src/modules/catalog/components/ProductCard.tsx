@@ -387,7 +387,14 @@ export function ProductCard({
       kind: "bool", key: "resealable", label: "Resealable",
       display: p.resealable == null ? "n.a." : p.resealable ? "Yes" : "No",
     },
-    { kind: "text", key: "supplier_product_code", label: "Supplier code", display: p.supplier_product_code ?? "n.a." },
+    // OWNER ONLY. `supplier_product_code` is seller-confidential (G3), so the
+    // buyer's RPC never projects it — leaving the row in rendered
+    // `Supplier code — n.a.` on every buyer card, making a WITHHELD field
+    // indistinguishable from an unset one. Ruled at T05's G4 (2026-08-22):
+    // a confidential field should not advertise its own existence.
+    ...(viewerIsOwner
+      ? ([{ kind: "text", key: "supplier_product_code", label: "Supplier code", display: p.supplier_product_code ?? "n.a." }] as SpecRowDef[])
+      : []),
   ];
   // The strip: label · display value · the draft key + fallback its input edits.
   const strip: [string, NumFieldKey, number | null][] = [

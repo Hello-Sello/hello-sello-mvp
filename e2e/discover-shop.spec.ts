@@ -406,6 +406,52 @@ test.describe("T05 — AC 7 full spec set renders (HEL-59)", () => {
  * renders nothing at all, so the buyer half carries a control on a FILED
  * product; the seller half proves the rule is viewer-dependent, not a delete.
  */
+/**
+ * T05 — `supplier_product_code` is owner-only, label included (G4 item C).
+ *
+ * The field is seller-confidential (G3) and the buyer's RPC never projects it,
+ * so the row was rendering `Supplier code — n.a.` on every buyer card: the data
+ * was correctly withheld, but a WITHHELD field and an UNSET one read identically.
+ * Ruled at T05's G4 — a confidential field should not advertise its existence.
+ *
+ * Both halves again. "The buyer sees no Supplier code" passes on a card that
+ * rendered no spec rows at all, so the buyer half pins a spec row that SHOULD be
+ * there; the seller half proves the row was hidden by viewer, not deleted.
+ */
+test("the Supplier code row is owner-only — hidden from a buyer, shown to the seller", async ({
+  browser,
+}) => {
+  const AUR1B_NAME = "Pedanios 31/1 PND-CA";
+  const buyerCtx = await browser.newContext();
+  const sellerCtx = await browser.newContext();
+  const buyerPage = await buyerCtx.newPage();
+  const sellerPage = await sellerCtx.newPage();
+
+  // ---- buyer: no Supplier code row, but the spec list DID render ----
+  await signInBuyer(buyerPage);
+  await buyerPage.goto(`/discover/${GREENLEAF_ID}`);
+  const buyerCard = buyerPage.getByTestId("product-card").filter({ hasText: AUR1B_NAME });
+  await expect(buyerCard).toBeVisible({ timeout: 15000 });
+  // control — a spec row the buyer IS entitled to, so the absence below is the
+  // rule rather than an empty card.
+  await expect(buyerCard.getByText("Cultivator", { exact: true })).toBeVisible();
+  await expect(buyerCard.getByText("Supplier code", { exact: true })).toHaveCount(0);
+
+  // ---- seller: the same row on their own shop ----
+  await sellerPage.goto("/login");
+  await sellerPage.fill('input[name="email"]', "alice@greenleaf.test");
+  await sellerPage.fill('input[name="password"]', PASSWORD);
+  await sellerPage.getByRole("button", { name: /sign in/i }).click();
+  await sellerPage.waitForURL((url) => !url.pathname.startsWith("/login"));
+  await sellerPage.goto("/present");
+  const sellerCard = sellerPage.getByTestId("product-card").filter({ hasText: AUR1B_NAME });
+  await expect(sellerCard).toBeVisible({ timeout: 15000 });
+  await expect(sellerCard.getByText("Supplier code", { exact: true })).toBeVisible();
+
+  await buyerCtx.close();
+  await sellerCtx.close();
+});
+
 test.describe("T05 — an unfiled product never reaches a buyer (G4 ruling)", () => {
   const THROWAWAY_CODE = "T05-NULL-LOC";
   let throwawayId: string | null = null;
