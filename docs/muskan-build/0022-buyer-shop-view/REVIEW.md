@@ -1093,3 +1093,59 @@ functions.
   `connection_consent_lockdown_test.sql:49`. The builder undercounted.
 - **The unit baseline of 453 is stale; the true count is 458.** T09 has no unit surface, so the
   diff did not move it. Flagged rather than silently reconciled — **new baseline: 458.**
+
+## `critic`
+
+**All seven criteria met in shipped code, not just apparently** — each walked against the migration
+and the client, with the eight `acceptInbox` invariants verified in code rather than in the plan's
+description of them. Two blocking, **both escalated rather than decided** (correctly — they are
+scope rulings), and 8 notes.
+
+- **blocking → MUSKAN (E1)** — `pending_inbox_item` is outside T09's seven criteria **and inside
+  ADR-0005's Reused fence** (`0005-buyer-shop-view.md:808` — *"reused via `metadata`; no new table,
+  no new type, **no migration**"*). Declared, not silent (`PLAN-T09.md:44-50`), with the reproduced
+  forge as its evidence. `critic` independently re-verified the change is **safe** — all 7 client
+  UPDATE sites write only `status`/`assigned_*`, both client INSERTs already write
+  `sender_person_id: uid` from `claims.sub`, `deliver_deal` is DEFINER/postgres. **The ruling is
+  yours.** *(By contrast the `relationship` grant change also crosses a fence line, but criterion 1
+  explicitly orders the revoke, so the ticket supersedes the ADR there — not a finding.)*
+- **blocking → MUSKAN (E2)** — the verification **triple** where criterion 4 names one column.
+  Declared at `PLAN-T09.md:174`. Reasoning sound; still a widening of a written criterion, which
+  L-017 says is a deviation for the gate.
+- **note (N1) — a real test gap.** Invariant 4 (`inbox_item_id` stamped) has **no assertion**.
+  Delete it from the migration's INSERT and every suite stays green, while `store.ts:551`'s
+  idempotency probe silently never matches again. This is L-011's question answered *no* for one of
+  eight invariants. One line in block 5 closes it. **→ fixed in the fix pass.**
+- **note (N3) — the migration repeats an error already on the owed list.** Its header says `anon`'s
+  table-wide grants are *"blocked because `current_company_id()` is NULL"* — **RLS does not apply to
+  TRUNCATE**, so that verb was never policy-blocked. Identical to the defect STATE.md already
+  records against T06's migration. Remedy right, stated reason wrong for one of four verbs (L-026).
+  **→ fixed in the fix pass.**
+- **note (N5) — an undeclared behaviour change.** Re-accepting an already-accepted item now RAISEs
+  (`:129-131`) where the DEV-83 client adopted the live pair row regardless of status. Reachable
+  from a second tab or a stale Discover list, and **neither UI entry point has a catch**
+  (`InboxView.tsx:137`, `RequestsSection.tsx:95-103`) — so it degrades to a silent no-op with an
+  unhandled rejection, the exact shape DEV-83 was. The plan declared the *onboarding* RAISE and not
+  this one. **→ escalated to G4.**
+- **note (N2)** — pre-existing, two lines above the rewrite: `store.ts:570-575` claims
+  *"`claim_deal_ticket` is not in the generated types yet"* and casts `as never`. It **is** typed
+  (`database.types.ts:4673`). The diff converted the sibling call 14 lines below to a fully typed
+  `rpc()`, so one function now holds two opposite conventions, the untyped one justified by a stale
+  claim.
+- **note (N4)** — asymmetric `anon` treatment: `relationship` gets `REVOKE ALL`, `company` and
+  `pending_inbox_item` get only `REVOKE UPDATE`, so `anon` keeps INSERT/DELETE/**TRUNCATE** on both.
+  Matches the plan, so not a builder deviation — added to the residual list.
+- **note (N6)** — the resubmit error renders the raw RPC message to the user and fires *after* the
+  licence uploads have committed, so a retry re-uploads every file. **→ G4 walk item.**
+- **note (N7)** — `20260823090000` is **not in the cloud ledger**, and neither is T05's
+  `20260822090000`, against the ledger's own *"push the slug as one batch, in timestamp order"*.
+  This migration most needs same-deploy ordering: `store.ts` now calls an RPC that does not exist on
+  prod. T08 owns ledger housekeeping.
+- **note (N8)** — trivial alias at `store.ts:593`.
+
+**The one claim `critic` could not close, closed by the orchestrator:** it had no Bash to diff the
+~5000-line `database.types.ts` and asked for confirmation of "exactly 8 added lines and nothing
+else". Actual: **5 insertions, 0 deletions, two hunks** — `accept_connection_request` placed
+alphabetically before `accept_person_connection`, `resubmit_company_verification` between
+`request_to_join` and `run_scheduled_erasures`. **No ride-along drift**; the undocumented
+`update_deal_draft` hand-edit is intact.
