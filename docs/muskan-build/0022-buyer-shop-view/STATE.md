@@ -406,9 +406,40 @@ None of it lives in T03's two files, and 0022 is the buyer's read surface.
 | **T00** | **2 rounds** (rev 2 → 5 blocking · rev 3 → 2 blocking; 13 findings folded across rev 2-4) | **0 / 2** — green on the first `test-runner` pass, no retry | **0 / 2** — `critic` and `security` returned **no blocking** on T00's own diff | **1** — passed |
 | **T03** | **1 round** (rev 1 → 4 blocking, all folded; rev 2 OK) | **0 / 2** — no retry needed | **0 / 2** — `critic` and `consistency` both returned **no blocking** | **1** — passed |
 | **T02** | **2 rounds, budget SPENT, did NOT converge** (rev 1 → **9 blocking** · rev 2 → **8 blocking, all new, FIVE attacking rev 1's own fold-ins**) | **0 / 2** — green on the first pass | **0 / 2** — `consistency` no blocking; `critic` **2 blocking**, both fixed by the orchestrator | **1** — passed |
-| **T04** | **2 rounds, budget SPENT, did NOT converge** (rev 1 → 5 blocking · rev 2 → **5 blocking, ALL NEW, all defects in rev 1's own fold-ins**; 21 notes folded across rev 2-4) | **0 / 2** — green on the first `test-runner` pass | **1 / 2** — `critic` 2 blocking (both scope rulings, escalated NOT fixed) · `security` + `consistency` no blocking; 7 notes fixed in one pass | staged, not yet ruled |
-| **T05** | **2 rounds, budget SPENT, did NOT converge** (rev 1 → 7 blocking · rev 2 → **9 blocking, ALL inside rev 1's own fold-ins** — the 4th ticket on this slug) | **0 / 2** — green on the first `test-runner` pass, independently re-run from a clean reset | **1 / 2** — `critic` 1 blocking (fixed in one pass) · `security` **no blocking**; 9 + 6 notes, 5 fixed | staged 2026-08-22, **not yet ruled** |
+| **T04** | **2 rounds, budget SPENT, did NOT converge** (rev 1 → 5 blocking · rev 2 → **5 blocking, ALL NEW, all defects in rev 1's own fold-ins**; 21 notes folded across rev 2-4) | **0 / 2** — green on the first `test-runner` pass | **1 / 2** — `critic` 2 blocking (both scope rulings, escalated NOT fixed) · `security` + `consistency` no blocking; 7 notes fixed in one pass | **1** — passed 2026-08-21; owed visual pass DONE 2026-08-22 |
+| **T05** | **2 rounds, budget SPENT, did NOT converge** (rev 1 → 7 blocking · rev 2 → **9 blocking, ALL inside rev 1's own fold-ins** — the 4th ticket on this slug) | **0 / 2** — green on the first `test-runner` pass, independently re-run from a clean reset | **1 / 2** — `critic` 1 blocking (fixed in one pass) · `security` **no blocking**; 9 + 6 notes, 5 fixed | **1** — PASSED 2026-08-22, all 6 staged items ruled (A-D built + mutation-proved, E dropped, F recorded) |
 | **T01** | **2 rounds, budget SPENT, did NOT converge** (rev 1 → 4 blocking · rev 2 → 4 blocking, **all new**, **two of them defects in rev 1's own fold-ins**) | **0 / 2** — green on the first `test-runner` pass | **0 / 2** — `critic` and `security` both returned **no blocking** | **1** — passed |
+
+| **T06** | rev 1 written 2026-08-22; **round 1 in flight** | — | — | — |
+
+**T06 notes (in flight, 2026-08-22):** base synced and frozen — **0 behind `origin/dev`, 79 ahead**,
+no rebase needed. Plan at `PLAN-T06.md` rev 1; `plan-checker` round 1 running.
+
+Three findings from planning, before any checker round:
+- **`is_connected_to_company` does not exist** — the ticket names it as if it did. Verified:
+  `function "public.is_connected_to_company(uuid)" does not exist`. T06 creates it.
+  `shares_connection_with_company` is a **lookalike that must NOT be reused**: it ignores
+  `r.status`, ignores `r.deleted_at`, and returns true for a **pending** `pending_inbox_item` —
+  that last one alone inverts the ticket's "a pending connection reveals nothing" criterion. Its
+  real job is Discover chrome (a looser question, deliberately); changing it would silently alter
+  Discover's listing contract.
+- **Site 1 has NO verification gate today.** Live `product_public_select` (local AND prod, byte-
+  identical) is `deleted_at is null AND profile_visible AND <window>` — no `is_caller_verified()`.
+  So *any* authenticated member of *any* company, verified or not, can read every visible product
+  row right now. That is what the signed tightening closes, and it means **`getOwnCatalog`'s missing
+  `company_id` filter is a LIVE leak, not a hypothetical one** (T00 already shipped buyer-visible
+  products). Widening site 1 makes it strictly worse — hence the cross-lane fix rides this ticket.
+- **The ticket contradicts itself on `product_media`** — one criterion says its policies are "NOT
+  touched", four lines later another requires `product_media_public_select` to stop listing `anon`.
+  Flagged in the plan §3 rather than resolved unilaterally; my reading is that the first scopes the
+  *override rule* and the second is an independent S4 role-list change, so both hold. Checker rules.
+
+**S5 evidence captured before planning** (never re-type a policy from the migration that declared
+it): `product_public_select`, `product_all`, `product_media_public_select`, `product_media_all` —
+all four pulled from `pg_policies` on **both** local and production, all four **byte-identical**, no
+drift. `get_discoverable_shop` must be re-diffed immediately before site 3 is written: it was
+rewritten **twice today** (T05's build, then the G4 item-A amendment), which is exactly when a stale
+re-declare is most likely.
 
 **T05 notes (in flight, 2026-08-22):** base synced and frozen — 0 behind `origin/dev`, 60 ahead.
 Plan at `PLAN-T05.md` rev 1. Its invariant table was built by **walking the live function body
