@@ -317,6 +317,73 @@ company filter — cross-lane, but the leak is this migration's blast radius),
   gains the `company_id` filter it always intended. Widening site 1 makes its pre-existing
   leak strictly worse (round 3, B4).
 
+## T09 — Connections and verification must be server-granted, not self-declared · **M** · depends on: — · **T06 DEPENDS ON THIS** · Linear: owed (MCP auth blocked)
+
+**Filed 2026-08-22 at T06's G4. Muskan's ruling: close the write door before T06 ships.**
+
+Two live self-write holes, both reproduced end-to-end in rolled-back transactions. Neither is
+caused by T06 — but T06 promotes both from bookkeeping-integrity bugs to **catalogue
+confidentiality** holes, because it makes "are we connected?" and "are we verified?" the gates
+protecting hidden products.
+
+**Hole 1 — anyone can declare themselves connected to anyone.** `relationship` is directly writable
+by `authenticated`, and `rel_all`'s `WITH CHECK` only requires the caller's **own** company be one
+side of the pair. Nothing requires the other side to consent. As a Bavaria member with no
+relationship to GreenLeaf:
+
+```
+BEFORE  connected=false  hidden_products_visible=0
+INSERT 0 1                                   ← one row, GreenLeaf never agreed
+AFTER   connected=true   hidden_products_visible=2
+LEAKED: AUR-1D | rrp=6.0000 · AUR-1C | rrp=5.0000
+```
+
+**Hole 2 — a member can self-verify.** `company_update` permits `id = current_company_id()` and
+`authenticated` holds column-level UPDATE on `company.verification_status`. `pending` → `verified`
+restores every read the T06 tightening removes. **The two compose:** self-verify, then self-connect.
+
+**The surface is far smaller than it looks — measured, not assumed:**
+- **`relationship` has exactly ONE write call site in all of `src/`** — `messaging/supabase/store.ts:609`.
+  The other ten `.from("relationship")` references are reads. **No RPC writes it at all.**
+- **`company.verification_status` has exactly ONE client write** — `onboarding/actions.ts:181`, a
+  `rejected → pending` resubmit already guarded by `.eq('verification_status','rejected')`.
+  The HS-team paths (`approve_company`, `reject_company`) are already `SECURITY DEFINER` and unaffected.
+- **The consent evidence already travels with the accept call** — the insert passes
+  `inbox_item_id: input.inboxItemId`. It simply is not *enforced* by the database.
+
+### Criteria
+
+- When `authenticated` attempts a direct INSERT, UPDATE or DELETE on `relationship`, the system
+  shall deny it — the grant is revoked, not merely policy-gated.
+- When a company member accepts a connection request **addressed to their own company**, a
+  `SECURITY DEFINER` RPC shall create the relationship, and it shall verify from the
+  `pending_inbox_item` row that the request exists, targets the caller's company, and is pending —
+  the caller shall not be able to supply the counterparty as a free parameter.
+- When a caller invokes that RPC for an inbox item **not** addressed to their company, it shall
+  raise and write nothing.
+- When `authenticated` attempts to UPDATE `company.verification_status` directly, the system shall
+  deny it — re-`GRANT UPDATE` on every other column, the **DEV-88 pattern** (`20260710120000`).
+- When a company whose verification was rejected resubmits, the system shall still succeed, through
+  a `SECURITY DEFINER` path that permits **only** `rejected → pending`.
+- When the HS team approves or rejects a company, `approve_company` / `reject_company` shall
+  continue to work unchanged.
+- When the pgTAP suite runs, it shall assert **both self-writes are denied** and **both legitimate
+  paths still succeed** — a revoke that also breaks accepting connections is not a fix.
+
+**Files:** `supabase/migrations/<ts>_connection_consent_and_verification_lockdown.sql`,
+`supabase/tests/` (pgTAP + runner), `src/modules/messaging/supabase/store.ts`,
+`src/app/onboarding/actions.ts`, `src/types/database.types.ts`
+
+**Precedent to follow:** DEV-88's `person.company_id` lockdown — `REVOKE UPDATE … FROM authenticated`
+then re-`GRANT` every column except the protected one, plus a `SECURITY DEFINER` RPC for the one
+legitimate writer. ADR-0005 round 5 applied the same reasoning to basket `product_id`
+(*"the admission policy was ornamental"*). **Three-statement grant ritual on any new function** —
+`REVOKE … FROM public` does not revoke `anon` here.
+
+⚠️ **Cross-lane:** `store.ts` is the connect/accept flow. Muskan is sole owner (2026-08-22), but this
+touches the surface DEV-83 was fixed in this session — re-run `deal-c2c-create.spec.ts` and the
+connect e2e after.
+
 ## T07 — Server-enforced basket admission · **S** · depends on: T06  · [HEL-61](https://linear.app/hellosello/issue/HEL-61)
 
 AC 10. `product_basket_line` is owner-scoped only today and never checks whether the buyer may
