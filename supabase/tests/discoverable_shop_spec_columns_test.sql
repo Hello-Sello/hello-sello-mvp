@@ -77,53 +77,60 @@ INSERT INTO public.product (
   '{"pack_sizes": [7, 12], "note": "SENT-PRIVATE-NOTE-DO-NOT-LEAK"}'::jsonb
 );
 
-INSERT INTO public.product (company_id, name, supplier_product_code, profile_visible)
-VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid, 'T05 No Image Product', 'T05-NOIMG', true);
+INSERT INTO public.product (company_id, name, supplier_product_code, profile_visible, location)
+VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid, 'T05 No Image Product', 'T05-NOIMG', true, 'T05-FIXTURE-LOC');
 
-INSERT INTO public.product (company_id, name, supplier_product_code, profile_visible, terpene_percent)
-VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid, 'T05 Terp Manual Product', 'T05-TERP-MANUAL', true, 12.34);
+INSERT INTO public.product (company_id, name, supplier_product_code, profile_visible, terpene_percent, location)
+VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid, 'T05 Terp Manual Product', 'T05-TERP-MANUAL', true, 12.34, 'T05-FIXTURE-LOC');
 
-INSERT INTO public.product (company_id, name, supplier_product_code, profile_visible)
-VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid, 'T05 Terp Fallback Product', 'T05-TERP-FALLBACK', true);
+INSERT INTO public.product (company_id, name, supplier_product_code, profile_visible, location)
+VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid, 'T05 Terp Fallback Product', 'T05-TERP-FALLBACK', true, 'T05-FIXTURE-LOC');
 
-INSERT INTO public.product (company_id, name, supplier_product_code, profile_visible)
-VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid, 'T05 Terp Rep Empty Product', 'T05-TERP-REP-EMPTY', true);
+INSERT INTO public.product (company_id, name, supplier_product_code, profile_visible, location)
+VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid, 'T05 Terp Rep Empty Product', 'T05-TERP-REP-EMPTY', true, 'T05-FIXTURE-LOC');
 
-INSERT INTO public.product (company_id, name, supplier_product_code, profile_visible)
-VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid, 'T05 Terp Softdel Product', 'T05-TERP-SOFTDEL', true);
+INSERT INTO public.product (company_id, name, supplier_product_code, profile_visible, location)
+VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid, 'T05 Terp Softdel Product', 'T05-TERP-SOFTDEL', true, 'T05-FIXTURE-LOC');
 
-INSERT INTO public.product (company_id, name, supplier_product_code, profile_visible, metadata)
-VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid, 'T05 Pack Sizes Product', 'T05-PACKSIZES', true,
+INSERT INTO public.product (company_id, name, supplier_product_code, profile_visible, location, metadata)
+VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid, 'T05 Pack Sizes Product', 'T05-PACKSIZES', true, 'T05-FIXTURE-LOC',
   '{"pack_sizes": [3, 6], "note": "SECRET-NOTE-XYZ-DO-NOT-LEAK"}'::jsonb);
 
 -- test 7: hidden (profile_visible = false) — the owner arm's whole point
-INSERT INTO public.product (company_id, name, supplier_product_code, profile_visible)
-VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid, 'T05 Owner Hidden Product', 'T05-OWNER-HIDDEN', false);
+INSERT INTO public.product (company_id, name, supplier_product_code, profile_visible, location)
+VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid, 'T05 Owner Hidden Product', 'T05-OWNER-HIDDEN', false, 'T05-FIXTURE-LOC');
 
 -- test 9 (I8): visible + price_public, but deliberately NO pricelist_item row
-INSERT INTO public.product (company_id, name, supplier_product_code, profile_visible, price_public)
-VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid, 'T05 No Price Product', 'T05-I8-NOPRICE', true, true);
+INSERT INTO public.product (company_id, name, supplier_product_code, profile_visible, price_public, location)
+VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid, 'T05 No Price Product', 'T05-I8-NOPRICE', true, true, 'T05-FIXTURE-LOC');
 
 -- I15: two products whose NAMES sort deterministically
-INSERT INTO public.product (company_id, name, supplier_product_code, profile_visible)
+INSERT INTO public.product (company_id, name, supplier_product_code, profile_visible, location)
 VALUES
-  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid, 'AAA T05 Order Test', 'T05-ORDER-A', true),
-  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid, 'ZZZ T05 Order Test', 'T05-ORDER-Z', true);
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid, 'AAA T05 Order Test', 'T05-ORDER-A', true, 'T05-FIXTURE-LOC'),
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid, 'ZZZ T05 Order Test', 'T05-ORDER-Z', true, 'T05-FIXTURE-LOC');
+
+-- (14) UNFILED — profile_visible, priced, but NO location. Withheld from a
+-- buyer, kept for the owner (DECISIONS 2026-08-22). Every OTHER fixture above
+-- carries 'T05-FIXTURE-LOC' precisely so this is the only row in the suite
+-- whose visibility turns on `location`.
+INSERT INTO public.product (company_id, name, supplier_product_code, profile_visible)
+VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid, 'T05 Unfiled Product', 'T05-UNFILED', true);
 
 -- I11: soft-deleted after the "still there" precondition check below
-INSERT INTO public.product (company_id, name, supplier_product_code, profile_visible)
-VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid, 'T05 Softdel Product', 'T05-SOFTDEL-PROD', true);
+INSERT INTO public.product (company_id, name, supplier_product_code, profile_visible, location)
+VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid, 'T05 Softdel Product', 'T05-SOFTDEL-PROD', true, 'T05-FIXTURE-LOC');
 
 -- I2: lives under the OTHER company (StonePharm) — must never leak into a
 -- get_discoverable_shop(GreenLeaf) call
-INSERT INTO public.product (company_id, name, supplier_product_code, profile_visible)
-VALUES ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'T05 I2 Other Company Product', 'T05-I2-OTHER', true);
+INSERT INTO public.product (company_id, name, supplier_product_code, profile_visible, location)
+VALUES ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'T05 I2 Other Company Product', 'T05-I2-OTHER', true, 'T05-FIXTURE-LOC');
 
 -- I3: a THROWAWAY third company, verified, with one visible product
 INSERT INTO public.company (name, country, verification_status)
 VALUES ('T05 Deleted Co', 'DE', 'verified');
-INSERT INTO public.product (company_id, name, supplier_product_code, profile_visible)
-SELECT id, 'T05 C3 Product', 'T05-C3-PROD', true FROM public.company WHERE name = 'T05 Deleted Co';
+INSERT INTO public.product (company_id, name, supplier_product_code, profile_visible, location)
+SELECT id, 'T05 C3 Product', 'T05-C3-PROD', true, 'T05-FIXTURE-LOC' FROM public.company WHERE name = 'T05 Deleted Co';
 
 CREATE TEMP TABLE _fix ON COMMIT DROP AS
 SELECT
@@ -139,6 +146,7 @@ SELECT
   (SELECT id FROM public.product WHERE supplier_product_code = 'T05-ORDER-A') AS order_a_id,
   (SELECT id FROM public.product WHERE supplier_product_code = 'T05-ORDER-Z') AS order_z_id,
   (SELECT id FROM public.product WHERE supplier_product_code = 'T05-SOFTDEL-PROD') AS softdel_prod_id,
+  (SELECT id FROM public.product WHERE supplier_product_code = 'T05-UNFILED') AS unfiled_id,
   (SELECT id FROM public.product WHERE supplier_product_code = 'T05-I2-OTHER') AS i2_other_id,
   (SELECT id FROM public.product WHERE supplier_product_code = 'T05-C3-PROD') AS c3_prod_id,
   (SELECT id FROM public.company WHERE name = 'T05 Deleted Co') AS c3_company_id;
@@ -151,6 +159,7 @@ BEGIN
          OR terp_fallback_id IS NULL OR terp_rep_empty_id IS NULL OR terp_softdel_id IS NULL
          OR packsizes_id IS NULL OR owner_hidden_id IS NULL OR i8_noprice_id IS NULL
          OR order_a_id IS NULL OR order_z_id IS NULL OR softdel_prod_id IS NULL
+         OR unfiled_id IS NULL
          OR i2_other_id IS NULL OR c3_prod_id IS NULL OR c3_company_id IS NULL) <> 0
     THEN RAISE EXCEPTION 'FIXTURE: one or more T05 product/company fixtures failed to resolve'; END IF;
 END $$;
@@ -571,6 +580,38 @@ BEGIN
   IF r.terpene_percent IS DISTINCT FROM 0 THEN
     RAISE EXCEPTION 'coalesce(percent,0): all-NULL terpene rows must derive 0, not %, matching deriveTerpPercent', r.terpene_percent;
   END IF;
+END $$;
+RESET ROLE;
+
+-- ── (14) UNFILED IS NOT A SHELF — withheld from the buyer, kept for the owner ─
+--         DECISIONS 2026-08-22. Three assertions, because two of them can each
+--         pass against a broken clause on their own: the buyer-hidden half
+--         passes if the product simply vanished for everyone, and the owner-
+--         visible half passes if the clause were dropped entirely. The control
+--         pins that the SAME buyer does see a FILED product in the same call,
+--         so "Bob sees nothing at all" cannot masquerade as a pass.
+SELECT set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', true);
+SELECT set_config('request.jwt.claims', '{"sub":"22222222-2222-2222-2222-222222222222","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM public.get_discoverable_shop('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid) s
+              WHERE s.id = (SELECT unfiled_id FROM _fix))
+    THEN RAISE EXCEPTION '(14): a product with NULL location must NOT be served to a non-owner buyer'; END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.get_discoverable_shop('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid) s
+                  WHERE s.id = (SELECT sent_id FROM _fix))
+    THEN RAISE EXCEPTION '(14) control: the same buyer must still see a FILED product — otherwise the assertion above proves only that the shop is empty'; END IF;
+END $$;
+RESET ROLE;
+
+SELECT set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', true);
+SELECT set_config('request.jwt.claims', '{"sub":"11111111-1111-1111-1111-111111111111","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM public.get_discoverable_shop('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid) s
+                  WHERE s.id = (SELECT unfiled_id FROM _fix))
+    THEN RAISE EXCEPTION '(14): the owning company must still see its own unfiled product — it is filed by dragging it out of the Unassigned pile, so hiding it strands it'; END IF;
 END $$;
 RESET ROLE;
 

@@ -383,26 +383,30 @@ test.describe("T05 — AC 7 full spec set renders (HEL-59)", () => {
 });
 
 /**
- * T05 — the buyer must never see the `Unassigned` shelf group (critic B1).
+ * T05 — an unfiled product is not served to a buyer at all (G4 ruling).
  *
- * `ShopView.tsx:689` suppresses the group header for the `UNASSIGNED` sentinel
- * when `!viewerCanManage`. Nothing guarded it: every seeded GreenLeaf product
- * carries a non-null `location` (seed.sql:428-448 — and :423-427 warns against
- * leaving one NULL), so `groupByLocation` never produces an `Unassigned` bucket
- * and the term could be deleted with the whole suite green. `Unassigned` is
- * seller shelf state, and ADR-0005 forbids rendering seller-private state in
- * buyer mode.
+ * Ruled at T05's G4 (DECISIONS 2026-08-22): a product always has a location, so
+ * "unfiled" is a legacy state and never reaches a buyer's shop. The earlier
+ * shape of this test asserted the opposite — buyer sees the product, just not
+ * the `Unassigned` label — which is the behaviour that put five cards under a
+ * divider counting four. Enforced in `get_discoverable_shop`
+ * (`20260822090000`), not on the page, so an unfiled row never leaves the
+ * database toward a buyer.
  *
- * The fixture PLANTS the missing state: a throwaway visible product with a NULL
+ * The owner exception is the other half: unfiled rows are filed by dragging
+ * them out of the `Unassigned` pile in `AssignProductsDialog.tsx`, so the
+ * owning company must keep seeing them or they are stranded forever.
+ *
+ * The fixture PLANTS the state: a throwaway visible product with a NULL
  * `location`. Safe against the two suites that pin this seed —
  * `seed_visibility_matrix_test.sql:96-99` explicitly tolerates a sixth product,
  * and its `count(DISTINCT location) = 2` check (`:134-139`) ignores NULLs.
  *
- * Both halves matter. Asserting only "the buyer sees no Unassigned" would pass
- * on a page that renders no group headers at all; the seller half proves the
- * suppression is VIEWER-dependent, which is the actual rule.
+ * Both halves matter. "The buyer sees no unfiled product" passes on a page that
+ * renders nothing at all, so the buyer half carries a control on a FILED
+ * product; the seller half proves the rule is viewer-dependent, not a delete.
  */
-test.describe("T05 — the Unassigned group is seller-only (critic B1)", () => {
+test.describe("T05 — an unfiled product never reaches a buyer (G4 ruling)", () => {
   const THROWAWAY_CODE = "T05-NULL-LOC";
   let throwawayId: string | null = null;
 
@@ -436,18 +440,21 @@ test.describe("T05 — the Unassigned group is seller-only (critic B1)", () => {
     throwawayId = null;
   });
 
-  test("a buyer never sees the Unassigned divider, but the seller does", async ({ browser }) => {
+  test("a buyer is not served an unfiled product, but the seller still is", async ({ browser }) => {
     const buyerCtx = await browser.newContext();
     const sellerCtx = await browser.newContext();
     const buyerPage = await buyerCtx.newPage();
     const sellerPage = await sellerCtx.newPage();
 
-    // ---- buyer: the unfiled product is visible, its shelf label is NOT ----
+    // ---- buyer: the unfiled product is not served at all ----
     await signInBuyer(buyerPage);
     await buyerPage.goto(`/discover/${GREENLEAF_ID}`);
+    // control FIRST — the shop rendered and this buyer can read it, so the
+    // absence asserted below is the rule and not an empty or broken page.
+    await expect(buyerPage.getByTestId("product-card").first()).toBeVisible({ timeout: 15000 });
     await expect(
       buyerPage.getByTestId("product-card").filter({ hasText: "T05 Unfiled Product" }),
-    ).toBeVisible({ timeout: 15000 });
+    ).toHaveCount(0);
     await expect(buyerPage.getByText("Unassigned", { exact: true })).toHaveCount(0);
 
     // ---- seller: the SAME product's shelf label IS shown, on their own shop ----

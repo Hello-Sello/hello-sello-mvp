@@ -35,6 +35,18 @@
 -- NULL logic: current_company_id() is NULL for a companyless person, giving
 -- `NULL or true = true` and `NULL or false = NULL` → row filtered. No half-row.
 --
+-- THE SECOND VISIBILITY CHANGE — unfiled products are not served to buyers.
+-- A product with no `location` is withheld unless the caller is a member of the
+-- owning company. Decided at T05's G4 (DECISIONS 2026-08-22): a product always
+-- has a location, so "unfiled" is a legacy state, not a shelf — the buyer's shop
+-- has no vocabulary for it, and rendering it produced a divider counting 4 above
+-- five cards. The owner exception is not symmetry for its own sake: unfiled rows
+-- are filed by dragging them out of the `Unassigned` pile in AssignProductsDialog,
+-- so withholding them from the owner too would strand them permanently.
+-- NULL logic differs from the arm above: `p.location is not null` is never NULL,
+-- so a filed product short-circuits to true for every caller, including a
+-- companyless one. Unfiled + companyless gives `false or NULL` = NULL → filtered.
+--
 -- TERPENE — reproduces src/modules/catalog/shop.ts:249 exactly, so the buyer's
 -- Terp% can never disagree with the seller's: the manual `p.terpene_percent`
 -- column wins, and the fallback is the sum of the REPRESENTATIVE batch's terpene
@@ -174,6 +186,9 @@ as $$
   where p.deleted_at is null
     -- THE OWNER ARM. Attaches to profile_visible ONLY — see the header.
     and (p.profile_visible = true or p.company_id = public.current_company_id())
+    -- UNFILED IS NOT A SHELF. Withheld from buyers; the owner keeps it so the
+    -- `Unassigned` pile stays fileable — see the header.
+    and (p.location is not null or p.company_id = public.current_company_id())
     and (p.visibility_start is null or p.visibility_start <= current_date)
     and (p.visibility_end   is null or p.visibility_end   >= current_date)
     and public.is_caller_verified()

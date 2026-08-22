@@ -683,9 +683,15 @@ export function ShopView({
                 // not a place — it names the seller's to-file pile. A seller
                 // needs to see that pile; a buyer has no shelves, and ADR-0005
                 // forbids rendering seller-private state in buyer mode.
-                // Reachable now that the shop RPC returns `location`: a seller
-                // with named locations AND unfiled products yields a real
-                // `Unassigned` group alongside the named ones.
+                //
+                // ⚠️ DEFENSIVE, NOT DEAD. Since T05's G4 ruling
+                // (DECISIONS 2026-08-22) `get_discoverable_shop` withholds
+                // unfiled products from buyers outright, so a buyer can no
+                // longer receive an `Unassigned` group through that door at
+                // all. This clause is the second lock: `ShopView` is shared
+                // with `/present`, which reads `getMyShop` instead, and any
+                // future buyer-facing caller of that read would arrive here
+                // ungated. Do not delete it as unreachable code.
                 !(g.location === UNASSIGNED && !viewerCanManage)
               }
               editing={editing}
@@ -929,14 +935,18 @@ function LocationTabs({
   // One rule for every viewer (Muskan, 2026-08-22): one location shows that
   // location and no filter; many locations show the filter.
   //
-  // ⚠️ "still filters nothing" is TRUE for a buyer and FALSE for a seller who
-  // has unfiled products: `filterByLocation` returns everything for "All" but
-  // only matches for a named location, so with one named location AND a NULL-
-  // location product, All ≠ Toronto and this early return hides a filter that
-  // would have filtered. The buyer never sees that case (the `Unassigned`
-  // group is suppressed for them one screen up), so the rule is exact there.
-  // Counting VISIBLE GROUPS rather than named locations would close it —
-  // staged for adjudication at T05's G4, not taken unilaterally.
+  // Exact for a BUYER: since T05's G4 ruling (DECISIONS 2026-08-22) an unfiled
+  // product is not served to them at all, so groups and named locations are the
+  // same count and there is never a second thing to filter to.
+  //
+  // ⚠️ Still inexact for a SELLER holding legacy unfiled rows. `filterByLocation`
+  // returns everything for "All" but only matches for a named location, so with
+  // one named location AND a NULL-location product, All ≠ Toronto and this early
+  // return hides a filter that would have filtered. Knowingly accepted at T05's
+  // G4, NOT patched here: the seller-side rule "a product may not be saved
+  // without a location" removes the state rather than counting it, and lands
+  // outside slug 0022. Counting visible groups would also close it — that is the
+  // fallback if the seller-side work slips.
   if (named.length <= 1) return null;
 
   return (

@@ -1594,3 +1594,49 @@ a build walks past — those still get recorded and filed. The distinguishing qu
 thing is *claiming to verify something it isn't*.
 
 **See:** `ARCHITECTURE-NOTES.md` 2026-08-20 (the stdin rule) · `docs/agents/LEARNINGS.md` L-013.
+
+## 2026-08-22 — A product always has a location; unfiled never reaches a buyer
+
+**Decided:** a seller may not save a product without a location, and a product with no location is
+not served to a buyer's shop. `product.location` stays **one value per product** — a
+many-locations model was considered at slug 0022's T05 G4 and dropped.
+
+**Why:** the same move as the [2026-08-19 blank-price rule](#2026-08-19) — remove the state rather
+than pick a rendering for it. "Unfiled" forced two wrong answers at once: the buyer's shop rendered
+a pile it has no vocabulary for (a `Toronto Warehouse · 4` divider with five cards under it), and
+the location filter had to choose between hiding a control that genuinely filters and showing one
+that names nothing. Both defects are arithmetic about a state that should not exist. The
+many-locations variant was dropped for cost with no matching gain: a join table plus a rewrite of
+the drag-to-file dialog, the grouping, the RPC projection and the filter, to model something no
+seller has asked for.
+
+**The buyer half is DONE** (slug 0022, T05). Enforced in `get_discoverable_shop`
+(`20260822090000`), one clause beside the owner arm it mirrors:
+
+```sql
+and (p.location is not null or p.company_id = public.current_company_id())
+```
+
+Server-side, not on the page, so an unfiled row never leaves the database toward a buyer.
+Mutation-proved: removing the clause fails `discoverable_shop_spec_columns_test.sql` block (14).
+
+**The owner exception is load-bearing, not symmetry.** Unfiled rows are filed by dragging them out
+of the `Unassigned` pile in `AssignProductsDialog.tsx:69`. Withhold them from the owning company too
+and the unfiled rows already in the database become permanently unreachable — no screen could ever
+file them again.
+
+**The seller half is OWED and ships outside slug 0022** (0022 is the buyer's read surface): the save
+path, the add-product flow, probably a `NOT NULL` constraint, and filing the 8 unfiled products that
+exist on production today. Until it ships, a seller holding legacy unfiled rows plus exactly one
+named location browses `/present` without a location filter — knowingly accepted at T05's G4 rather
+than patched, because the state is being removed rather than counted.
+
+**⚠️ At deploy:** Aurora Deutschland's only two buyer-visible products are unfiled, so its shop goes
+empty on production until someone gives them a location. Demo data (Muskan, 2026-08-22) — a
+one-minute fix in the UI, not a migration.
+
+**Also re-labelled, not deleted:** `ShopView.tsx`'s buyer-side `Unassigned` suppression is now
+defensive rather than live — `/present` reads `getMyShop`, not this RPC, so a future buyer-facing
+caller of that read would arrive ungated. Same treatment ADR-0005 §6's owner criterion got.
+
+**Surfaced by:** slug 0022 T05's G4 walk (`REVIEW.md` rows 15-16).
