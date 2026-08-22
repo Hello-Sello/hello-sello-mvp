@@ -657,3 +657,37 @@ name `test` carries no guarantee. (2) One suite against one database at a time. 
 run, confirm nothing else is already running against it, and never edit source mid-run — the Next
 dev server hot-reloads underneath, which silently changes what the remaining tests are testing
 (this is what made `deal-p2p-send` look like a new failure until the A/B settled it).
+
+---
+
+## L-023 · `test-writer` cannot run anything — the RED verification is the orchestrator's job, always
+
+**2026-08-22 · slug 0022 · `/build` T05 step 4 · caught by running what `test-writer` had to leave unrun**
+
+**Trigger** — reading any `test-writer` return, or planning a step that assumes the agent which
+wrote a test also proved it fails.
+
+**What happened** — `test-writer` delivered four files and reported, correctly, that it could not
+execute them: its tool grant is `Read, Grep, Glob, Write, Edit` (`.claude/agents/test-writer.md:6`)
+— **no Bash**. It cited L-013 and declined to paste a run it had not performed. That is the right
+call and the second time on this slug an agent has been right to refuse an instruction.
+
+**But the gap is structural, not incidental.** L-013 says "run the runner, not just the test", and
+the agent the pipeline assigns to write tests is *constitutionally incapable* of doing so. So the
+step silently degrades to "RED by inspection" unless the orchestrator picks it up.
+
+**What inspection could not have found.** Running the new SQL suite failed immediately — not on the
+missing columns, but on `ERROR: column "company_id" is of type uuid but expression is of type text`.
+**37** bare `'aaaaaaaa-…'` literals needed `::uuid`. The suite could not reach a single assertion.
+Had the orchestrator trusted the reasoning ("the columns don't exist, therefore RED"), the builder
+would have been handed a suite that errors in its fixture, and "green" would have meant nothing.
+The reasoning was even correct — the columns really are missing — and still the suite was broken.
+
+**The rule** — after `test-writer` returns, the orchestrator RUNS every suite it wrote and pastes
+the real output before spawning `builder`. A RED that is the *wrong* red (fixture error, syntax
+error, unreachable assertion) is indistinguishable from the right one in any report written by
+reading. Verify the failure message names the thing under test — here,
+`record "r" has no field "cbg_percent"`, not a type-cast error three sections earlier.
+
+**Corollary** — the same check catches the opposite: after the builder, a suite that goes green
+without ever having been able to fail is a false green. Both directions need the runner.
