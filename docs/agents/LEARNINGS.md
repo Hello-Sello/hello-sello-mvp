@@ -691,3 +691,44 @@ reading. Verify the failure message names the thing under test — here,
 
 **Corollary** — the same check catches the opposite: after the builder, a suite that goes green
 without ever having been able to fail is a false green. Both directions need the runner.
+
+---
+
+## L-024 · `diff` exits 0 on differing files here — never branch on it
+
+**2026-08-22 · slug 0022 · T05 G4 staging · caught by `visual-verifier` cross-checking a DB restore with md5**
+
+**Trigger** — any script, agent or verification step that decides something from `diff`'s **exit
+status**: `if diff a b; then echo "identical"`, `diff … && …`, or a runner that treats a zero exit
+as "no change". Also any "I restored the database / the file is unchanged" claim.
+
+**What happened** — `visual-verifier` restored seeded rows after a plant-and-photograph cycle and
+verified with `diff` on two CSV dumps. It printed a clean-looking summary. The files were **not**
+identical: `AUR-1B.updated_at` had been bumped by `trg_product_set_updated_at`. Only an md5
+cross-check, then a column-by-column compare in Python, surfaced it.
+
+**Reproduced directly.** Two one-line CSVs differing in a single character:
+
+```
+$ diff /tmp/a.csv /tmp/b.csv
+   +1 added, -1 removed, ~0 modified
+$ echo $?
+0                      # ← real diff(1) returns 1 when files differ
+$ md5 -q /tmp/a.csv /tmp/b.csv
+e5ebd4c02cefbe7955977c67ada242b7
+1919efab7e3f5c4cc7e9e96f26663db9
+```
+
+The rtk filter rewrites `diff` and does not preserve its exit contract. The **text** was right
+here; the **status** was wrong. An agent that read the output would have caught it; an agent that
+branched on the status would not — and branching is what scripts do.
+
+**Two rules.** (1) Verify byte-identity with a **hash** (`md5`, `sha256sum`), never with `diff`'s
+exit code. (2) When restoring database state, compare content AND the columns a trigger can touch
+— `updated_at` is invisible to a row-count check and to a column list that omits it. Restoring
+under `set local session_replication_role = replica` avoids re-firing the trigger at all.
+
+**Why this belongs next to L-013 and L-023.** Same family: a tool reporting success it did not
+verify. L-013 was a runner that printed PASSED while failing; L-023 was an agent that could not run
+its own suite; this is a shell builtin whose exit code lies. In each case the fix is the same —
+make the check name the thing it checked, and confirm it can fail.
