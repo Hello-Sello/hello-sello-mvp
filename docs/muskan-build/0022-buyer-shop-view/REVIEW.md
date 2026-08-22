@@ -967,3 +967,69 @@ swept** — no unscoped cross-company read remains.
   fence untouched; `getOwnCatalog` not forgeable and its docstring now true; `database.types.ts`
   hand-edit intact with **no ride-along drift**.
 - **note** — both builder deviations judged **justified**.
+
+---
+
+# T09 — Connections and verification must be server-granted
+
+## `plan-checker` (unregistered agent — ruleset run verbatim in a `general-purpose` agent, T00's precedent)
+
+**2 rounds, budget SPENT, did NOT converge — the 6th ticket on this slug.**
+Round 1 → 2 blocking + 10 notes. Round 2 → **4 blocking + 8 notes, TWO of them defects in
+round 1's own fold-ins.** Every blocking finding was spot-verified against the live DB before
+acceptance (L-003); all folded into rev 3.
+
+- **blocking** (plan-checker r1, `PLAN-T09.md:218` §7) — rev 1 dismissed `pending_inbox_item`'s
+  INSERT side as *"intra-company, no cross-company consequence."* **False** (L-026). Nothing
+  constrains `sender_person_id`. Reproduced by the orchestrator: a forged `connect_person` item
+  drives the **shipped** `accept_person_connection` into minting a non-consensual person-graph
+  edge **attributed to the victim as initiator**. Closed by one `WITH CHECK` clause.
+  - ⚠️ **Checker evidence corrected, not repeated:** its `people_visible 3 → 4 · bob_visible 0 → 1`
+    does **not** reproduce on this seed (Alice and Carla are already visible to Eva at `step0`,
+    unchanged at every step). The finding is real; the visibility delta is not claimed.
+- **blocking** (plan-checker r1) — the RED-first proof was not observable as specified: one
+  `BEGIN … ROLLBACK` under `ON_ERROR_STOP=1` can only ever prove block 1. Replaced with separate
+  pre-migration scripts (below).
+- **blocking** (plan-checker r2, **fold-in defect**) — rev 2's own fix for the above specified only
+  the `WITH CHECK` and **dropped the role list**. Live `inbox_insert` is `TO authenticated`
+  (confirmed: `roles = {authenticated}`), so the security fix would have re-created the policy as
+  **`{public}`** — S5, the dropped-role-list class ADR-0005 round 4 caught. **A security fix that
+  would have shipped a security regression.**
+- **blocking** (plan-checker r2, **fold-in defect**) — rev 2 stated the RED block list **three
+  incompatible ways**; two omitted blocks 3b/3c, the *only* evidence the new clause does anything.
+- **blocking** (plan-checker r2, new) — the RPC's INSERT omitted `created_by`/`updated_by`. Both
+  **nullable, no default**, and `relationship`'s only trigger is BEFORE **UPDATE** (verified), so
+  the RPC would have written NULL where `store.ts:615-616` writes the person — silently.
+- **blocking** (plan-checker r2, new) — the `FOR UPDATE` serialisation claim was overstated: it
+  covers two accepts of ONE item, not two *different* pending items on one pair, which take
+  different row locks and race to a raw `23505`. Guarantee is `uq_relationship_pair_active`.
+  Fixed with `ON CONFLICT DO NOTHING` + re-SELECT; **the race claim is dropped rather than
+  asserted untested** — a two-session proof is not runnable in a one-transaction harness.
+- **note** ×18 — folded into rev 3 (column allowlists enumerated not elided; `id` dropped from the
+  inbox allowlist; a `type` allowlist guard on the RPC; the `verification` triple's residual
+  writable set corrected to six columns; two e2e suites added to the walk; `Args: never` typing
+  shape; the `store.ts` deletion range corrected 583→581; `anon`'s surviving INSERT recorded).
+
+## RED-first proof — five separate single-block scripts, run BEFORE any migration existed
+
+Per L-023 this is the orchestrator's job; `test-writer` cannot run anything. Each block was
+extracted with the fixture prelude and run standalone against the **pre-fix** schema. **All five
+failed on their own assertion** — not a generic error, which is what proves each exercises a real
+live hole rather than merely erroring:
+
+```
+BLOCK 1  ERROR: BLOCK 1 FAIL: authenticated could INSERT directly into relationship (self-declared connection)
+BLOCK 3  ERROR: BLOCK 3 FAIL: authenticated could rewrite sender_company_id on an inbox item it owns (§0b forge)
+BLOCK 3b ERROR: BLOCK 3b FAIL: authenticated could INSERT an inbox item attributed to a colleague who never asked (§0c)
+BLOCK 3c ERROR: BLOCK 3c FAIL: the §0c forged connect_person request was inserted — accept_person_connection is still reachable via a forged item
+BLOCK 7  ERROR: BLOCK 7 FAIL: a member could self-verify their own company via direct UPDATE
+```
+
+## `test-writer`
+
+Wrote `supabase/tests/connection_consent_lockdown_test.sql` (13 blocks) + its runner (`-f -` on
+STDIN, the shim trap). Fixture prefix `6…`, chosen after grepping the seeds and every existing
+suite — `a/b/c/d/1/2/3/9` are the demo seed, `e`/`f` are claimed by two other lockdown suites.
+Two things it **flagged rather than silently matched** to the instruction: block 2 is the same
+grant-revoke class as block 1 (so it is not a separate hole-proof), and block 10 is a regression
+guard expected green in both states, not a RED block.
