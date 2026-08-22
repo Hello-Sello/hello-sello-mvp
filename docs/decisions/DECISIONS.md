@@ -1620,10 +1620,19 @@ and (p.location is not null or p.company_id = public.current_company_id())
 Server-side, not on the page, so an unfiled row never leaves the database toward a buyer.
 Mutation-proved: removing the clause fails `discoverable_shop_spec_columns_test.sql` block (14).
 
-**The owner exception is load-bearing, not symmetry.** Unfiled rows are filed by dragging them out
-of the `Unassigned` pile in `AssignProductsDialog.tsx:69`. Withhold them from the owning company too
-and the unfiled rows already in the database become permanently unreachable — no screen could ever
-file them again.
+**The owner exception buys consistency, not reachability.** PRD §7 row 158: a member of the seller's
+own company "sees their own shop" on this surface. `/present` reads `getMyShop`, which queries
+`product` directly with **no** location filter, so without the exception the same person would see a
+smaller catalogue at `/discover/<own company id>` than on their own shop. Nothing is stranded either
+way — filing happens on `/present` regardless. Nothing routes an owner to that URL either: the
+Discover listing self-excludes (`list_discoverable_companies`: `c.id is distinct from
+current_company_id()`), so it is a typed-URL edge case, which is what PRD §7 is a table of.
+
+> **Correction, same day.** This entry first justified the exception as "otherwise unfiled rows are
+> stranded forever, because filing happens by dragging them out of the `Unassigned` pile". That was
+> wrong — `/present` never reads this RPC. The clause is unchanged; only the reasoning is. Recorded
+> rather than silently edited because the wrong reason would have made the exception look
+> load-bearing to anyone later deciding whether to keep it.
 
 **The seller half is OWED and ships outside slug 0022** (0022 is the buyer's read surface): the save
 path, the add-product flow, probably a `NOT NULL` constraint, and filing the 8 unfiled products that

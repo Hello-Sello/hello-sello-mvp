@@ -40,9 +40,16 @@
 -- owning company. Decided at T05's G4 (DECISIONS 2026-08-22): a product always
 -- has a location, so "unfiled" is a legacy state, not a shelf — the buyer's shop
 -- has no vocabulary for it, and rendering it produced a divider counting 4 above
--- five cards. The owner exception is not symmetry for its own sake: unfiled rows
--- are filed by dragging them out of the `Unassigned` pile in AssignProductsDialog,
--- so withholding them from the owner too would strand them permanently.
+-- five cards. The owner exception exists for PRD §7 row 158 — a member of the
+-- seller's own company "sees their own shop" on this surface. `/present` reads
+-- `getMyShop`, which queries `product` directly with no location filter, so
+-- WITHOUT this exception `/discover/<own company id>` would show that member a
+-- SMALLER catalogue than their own shop does. Nothing is stranded either way
+-- (filing happens on /present regardless); the exception buys consistency, not
+-- reachability. Note that nothing ROUTES an owner here — the Discover listing
+-- self-excludes (`list_discoverable_companies`: `c.id is distinct from
+-- current_company_id()`) — so this is a typed-URL edge case, which is exactly
+-- what PRD §7 is a table of.
 -- NULL logic differs from the arm above: `p.location is not null` is never NULL,
 -- so a filed product short-circuits to true for every caller, including a
 -- companyless one. Unfiled + companyless gives `false or NULL` = NULL → filtered.

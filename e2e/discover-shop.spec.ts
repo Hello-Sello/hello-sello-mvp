@@ -393,9 +393,12 @@ test.describe("T05 — AC 7 full spec set renders (HEL-59)", () => {
  * (`20260822090000`), not on the page, so an unfiled row never leaves the
  * database toward a buyer.
  *
- * The owner exception is the other half: unfiled rows are filed by dragging
- * them out of the `Unassigned` pile in `AssignProductsDialog.tsx`, so the
- * owning company must keep seeing them or they are stranded forever.
+ * The owner exception is the other half, and it is about CONSISTENCY, not
+ * reachability: PRD §7 row 158 says a member of the seller's own company sees
+ * their own shop on this surface, and `/present` (which reads `getMyShop`, no
+ * location filter) always shows unfiled rows. Without the exception the same
+ * person would get a smaller catalogue at `/discover/<own id>` than at
+ * `/present`. Nothing is stranded either way — filing lives on `/present`.
  *
  * The fixture PLANTS the state: a throwaway visible product with a NULL
  * `location`. Safe against the two suites that pin this seed —
