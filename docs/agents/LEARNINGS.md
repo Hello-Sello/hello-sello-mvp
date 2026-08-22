@@ -605,3 +605,55 @@ and an hour of debugging; one that refuses produces a one-line correction.
 
 **The rule** — when a plan names an expected value, cite the column and the line that produces it,
 not the rendering. If you cannot name the field, you are guessing at a label.
+
+---
+
+## L-021 · A test for a crash must wait for the crash's own trigger
+
+**2026-08-22 · slug 0022 · the `/connect/inbox` `connect_person` fix · caught by my own A/B, not by a reviewer**
+
+**Trigger** — writing a regression test for a client-side crash, an error boundary, or anything
+that appears only *after* data arrives.
+
+**What I did** — asserted that the inbox rendered by waiting for its lens tab bar, then that the
+error text was absent. Both passed **against the broken code**. `InboxView` renders `LensTabs`
+immediately and fetches in a `useEffect`, so the tab bar exists during the entire in-flight
+window; the crashing row had not arrived yet. The "absence" assertion then confirmed the absence
+of an error that had not happened *yet*, and `toHaveCount(0)` on the offending row passed for the
+same reason a blank page would have passed it.
+
+**Why it nearly shipped** — the test was green, the fix was real, and the two facts together look
+like proof. Only stashing the fix and re-running exposed that the test never had an opinion.
+
+**Two rules.** (1) Anchor on a **positive post-condition that only exists after the load** — a row
+that must be present — before asserting anything about a row that must not be. (2) An assertion
+of ABSENCE is worthless without a paired assertion of PRESENCE in the same state: on a blank page,
+everything is absent. This is L-019's "prove the row" turned around: prove the page, too.
+
+**Corollary that paid out immediately** — a crash that blanks a page makes every downstream
+assertion vacuous, which is how `deal-c2c-create.spec.ts` sat in the "pre-existing failures"
+column. When a suite has a long-standing failure list, check whether one of them is a *cause*
+rather than a peer.
+
+---
+
+## L-022 · Read the script before running "the tests"
+
+**2026-08-22 · slug 0022 · post-G4 gate run · self-inflicted, twice**
+
+**Trigger** — reaching for `npm run test` / `npm test` in a repo whose scripts you have not read
+this session.
+
+**What I did** — ran `npm run test` expecting vitest. In this repo `test` is **Playwright**
+(`test:unit` is vitest). It launched a second full e2e run against the same dev server and the
+same database as one already running in the background, and I did it twice. Both runs' results
+were unusable, and the ~13 minutes spent were worse than wasted because the numbers looked real.
+
+**The second-order damage is the point.** A contaminated green is more expensive than a red: I
+briefly recorded a failure count from a run that had two Playwright workers fighting over one DB.
+
+**Two rules.** (1) `cat package.json` scripts before the first test invocation of a session — the
+name `test` carries no guarantee. (2) One suite against one database at a time. Before starting a
+run, confirm nothing else is already running against it, and never edit source mid-run — the Next
+dev server hot-reloads underneath, which silently changes what the remaining tests are testing
+(this is what made `deal-p2p-send` look like a new failure until the A/B settled it).
