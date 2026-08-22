@@ -407,6 +407,49 @@ test.describe("T05 — AC 7 full spec set renders (HEL-59)", () => {
  * product; the seller half proves the rule is viewer-dependent, not a delete.
  */
 /**
+ * T05 — the spec list scrolls honestly (G4 item D).
+ *
+ * The list is taller than the card's fixed 640px. Two things were ruled at
+ * T05's G4: the bottom row was cut through its glyphs, and a 20px fade was the
+ * only hint that more existed.
+ *
+ * Both are CSS, so this pins the two measurable invariants behind them rather
+ * than pixels: (1) the scrollbar RESERVES WIDTH — that is what distinguishes a
+ * classic always-painted scrollbar from the macOS overlay bar that stays
+ * invisible until you scroll, and it silently reverts to 0 the moment anyone
+ * re-adds `scrollbar-width` to `.speclist-scroll` (Chromium then ignores every
+ * ::-webkit-scrollbar rule); and (2) the list's bottom padding is at least as
+ * tall as the fade sitting over it, which is what holds the last row clear of
+ * the gradient at the end of the scroll instead of hiding it.
+ */
+test("the card's spec list reserves a real scrollbar and never hides its last row", async ({
+  page,
+}) => {
+  await signInBuyer(page);
+  await page.goto(`/discover/${GREENLEAF_ID}`);
+  await expect(page.getByTestId("product-card").first()).toBeVisible({ timeout: 15000 });
+
+  const geom = await page.evaluate(() => {
+    const list = document.querySelector(".speclist-scroll") as HTMLElement | null;
+    if (!list) return null;
+    const fade = list.parentElement?.querySelector<HTMLElement>(":scope > .pointer-events-none");
+    return {
+      overflows: list.scrollHeight > list.clientHeight,
+      scrollbarPx: list.offsetWidth - list.clientWidth,
+      paddingBottomPx: parseFloat(getComputedStyle(list).paddingBottom),
+      fadeHeightPx: fade ? fade.getBoundingClientRect().height : null,
+    };
+  });
+
+  expect(geom).not.toBeNull();
+  // precondition — if the list stopped overflowing the rest proves nothing
+  expect(geom!.overflows).toBe(true);
+  expect(geom!.scrollbarPx).toBeGreaterThan(0);
+  expect(geom!.fadeHeightPx).not.toBeNull();
+  expect(geom!.paddingBottomPx).toBeGreaterThanOrEqual(geom!.fadeHeightPx!);
+});
+
+/**
  * T05 — `supplier_product_code` is owner-only, label included (G4 item C).
  *
  * The field is seller-confidential (G3) and the buyer's RPC never projects it,

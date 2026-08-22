@@ -621,7 +621,7 @@ export function ProductCard({
                 fixed-height card (G4 round 2). The bottom fade cues that the
                 list still scrolls past that floor. */}
             <div className="relative mt-1.5 flex min-h-[80px] flex-1 flex-col">
-              <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3.5">
+              <div className="speclist-scroll flex min-h-0 flex-1 flex-col overflow-y-auto px-3.5 pb-7">
                 {specRows.map((row) => (
                   <div key={row.label} className="flex items-start gap-2 border-b border-ink/10 py-1.5 text-xs">
                     <span className="w-[78px] shrink-0 font-medium text-ink-muted">{row.label}</span>
@@ -649,10 +649,14 @@ export function ProductCard({
                   />
                 )}
               </div>
-              {/* Soft scroll cue — a bottom fade (no button/chevron) that hints the
-                  spec list continues below the fold. Non-interactive; the clamped
-                  lineage row is the prototype's other "there's more" signal. */}
-              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-5 bg-gradient-to-t from-white via-white/70 to-transparent" />
+              {/* Bottom fade, ONE ROW tall (G4 item D). It is not the scroll
+                  affordance — `.speclist-scroll` keeps a real scrollbar visible
+                  for that. Its job is that a partly-visible row dissolves into
+                  white instead of being cut through its glyphs, which is how the
+                  Lineage row read at rest. Pairs with the list's `pb-7`: at the
+                  end of the scroll that padding holds the last row clear of this
+                  gradient, so nothing is ever hidden by it. */}
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-7 bg-gradient-to-t from-white via-white to-transparent" />
             </div>
 
             {/* footer: pack bubbles + price, then availability + stepper + Add.
