@@ -2,8 +2,9 @@
 lane:   FULL
 stage:  triage ✅ · spec ✅ (G1) · prototype ✅ (G2) · design ✅ (G3 2026-08-19) ·
         build: **T00 ✅** · **T03 ✅** · **T01 ✅** · **T02 ✅ (G4 2026-08-21)** ·
-        **T04 ✅ (G4 2026-08-21 — accepted, 2 items owed: e2e re-run + visual pass)**
-        **▶ REMAINING: env repair · DEV-83 · price gate · ADR amend · T05 · T06 · T07 · T08.**
+        **T04 ✅ (G4 2026-08-21 — accepted; e2e re-run ✅ 2026-08-22, visual pass still OWED)**
+        post-G4 ruling: env repair ✅ · DEV-83 ✅ · price gate ✅ · ADR amend ✅ (all 2026-08-22)
+        **▶ REMAINING: T04's owed VISUAL pass · T05 · T06 · T07 · T08.**
 branch: **claude/muskan/work** — no feature branch (Muskan's call, 2026-08-18)
 >  No cut: this slug is frontend-heavy with no expected migration, so a feature branch
 >  would only add a merge step. `/ship` still rebases onto `dev` and PRs from here.
@@ -213,9 +214,25 @@ button→confirmation swap and the inline error state have never been seen. Musk
 
 **6 · THEN resume the slug: T05 · T06 · T07 · T08.**
 
-## ⛔ ENVIRONMENT BLOCKER — read before running ANY e2e
+## ✅ ENVIRONMENT BLOCKER — CLEARED 2026-08-22
 
-**`supabase db reset` currently yields a database the app cannot read.** Role `authenticated`
+**Fixed by `supabase/migrations/20260607090000_stack_default_privileges.sql`** — a migration
+timestamped BEFORE all 147 others, restoring the stack's default privileges for tables,
+sequences and functions to production's exact values. Because it runs first, later migrations
+inherit the grants and every deliberate REVOKE still runs after it and still wins — DEV-88's
+`person.company_id` revoke and the anon function lockdown were both verified intact afterwards,
+and it ships to prod as a verified no-op. Prod was checked FIRST, as the write-up demanded, and
+was healthy. Drift was wider than tables: 9 of 86 RPCs were also unreachable locally. Full
+record + a correction to the suspected trigger: `docs/muskan-build/local-stack-grants-regression.md`.
+
+**e2e baseline, re-measured on a clean reset:** 146 tests · **102 pass / 22 fail** · all 22 in
+the two documented pre-existing classes (13 `sb_secret_`/GoTrue-key, 9 `present-*` /
+`public-profile` / `deal-p2p-send`). `deal-p2p-send` was missing from every earlier count and is
+A/B-proven pre-existing. `deal-c2c-create` was NOT pre-existing — see the inbox crash below.
+
+<details><summary>Original blocker text, kept for the diagnosis</summary>
+
+**`supabase db reset` yielded a database the app could not read.** Role `authenticated`
 holds SELECT on **1 of 92** public tables, so `/rest/v1/person` 403s, `requireVerified()` fails
 closed, and every gated route bounces to `/home`. Root cause located: `pg_default_acl` for role
 `postgres` in schema `public` reads `anon=Dxtm authenticated=Dxtm service_role=Dxtm` — `arwd`
@@ -232,8 +249,60 @@ suites assert against a state no real environment has.
 Full write-up + candidate fixes: `docs/muskan-build/local-stack-grants-regression.md`.
 Ticket-level record: `docs/muskan-build/0022-buyer-shop-view/blocked.md`.
 
-**e2e baseline is also stale** — project `CLAUDE.md` says 16 failures; it is **22**. The extra 9
-are A/B-proven pre-existing.
+</details>
+
+## 🔴 FOUND + FIXED 2026-08-22 — `/connect/inbox` was DEAD, live on production
+
+Surfaced while writing DEV-83's test; **not** caused by slug 0022 or by the stack repair.
+
+Release 2's Discover person graph added a fifth `inbox_request_type` code, `connect_person`.
+The connect module never learned it: `types.ts`'s `InboxRequestType` stayed a 4-value union, so
+`REQUEST_TYPE_META[item.type]` returned `undefined` and `InboxRow.tsx:26` / `InboxDetail.tsx:72`
+threw on `.icon`. `getInbox` applied no type filter, so **one** such row replaced the entire page
+with "This page couldn't load". The seed plants exactly one (Clara → Alice), so it reproduced on
+every clean reset — and **production held a live pending row**, meaning that company's inbox was
+dead. `tsc` could not catch it: the stale thing was the union itself.
+
+**Muskan's call:** person connection requests land on **Discover**, not the inbox. So `getInbox`
+now filters to the company-inbox types, and that list is DERIVED from `REQUEST_TYPE_META`'s keys
+— one authoritative statement instead of two that drift. `types.ts` documents the union as a
+deliberate subset with the rule for adding to it. Discover's `RequestsSection` already had the
+accept/decline path; nothing was built there.
+
+**It was also masking a real failure:** `deal-c2c-create.spec.ts` (5 tests, incl. *"the ticket
+lands in the other company's Deal tickets lens; accepting joins the deal"*) had been counted as
+pre-existing and now passes.
+
+Guard: `e2e/inbox-accept.spec.ts`. ⚠️ **The first version of that test passed against the broken
+code** — `LensTabs` renders before `getInbox()` resolves, so every assertion landed in the
+pre-crash window. It now waits on a row that MUST be present before concluding anything from a
+row that must not.
+
+## ✅ POST-G4 RULING — all four items DONE 2026-08-22
+
+| # | item | outcome |
+|---|---|---|
+| 1 | local stack | ✅ migration `20260607090000`; prod parity row-for-row; DEV-88 + anon lockdown verified intact |
+| 2 | **DEV-83** | ✅ `acceptInbox` is now **ensure-shaped** — see below. Unblocks `/ship`. |
+| 3 | price-public gate | ✅ `actions.ts` refuses an ask on a price-public product; 3 unit tests, RED→GREEN proven |
+| 4 | ADR fence amend | ✅ `0005-buyer-shop-view.md` both sites — "gains no new props; internal handlers allowed"; retires deviations 1 and 7 |
+
+**DEV-83 went wider than the recorded ~6-line remedy (Muskan: *"fix it permanently"*).** The
+schema declares three uniqueness rules — `uq_relationship_pair_active`, `uq_chat_thread_c2c`,
+`uq_chat_thread_p2p` — and `acceptInbox` honoured none, deduping instead on `inbox_item_id`, a
+column nothing enforces. So it was never only the seeded pair: **any** second substantive accept
+between two already-connected companies raised `23505`. The adopt-only remedy would also have
+skipped creating the P2P a `pricelist_request` opens, moving the silent failure one step later.
+`acceptInbox` now adopts the relationship, reuses the existing C2C, and creates only what is
+missing; **seed lines are written only for threads it creates**, so a double-accept cannot
+double-post and two connected companies are never told they are "now connected" again.
+
+**Gate for all four:** `tsc` clean · unit **448/448** (445 + 3 new) · eslint **6 errors, 0 new**
+(the recorded pre-existing set) · SQL **35/35** · full e2e **102/22, zero new failures** ·
+`discover-shop` + `inbox-accept` **8/8, twice in a row with no reset** (the new spec tears down
+its own rows — `seed.sql` creates no `pricelist_request`, so every one is test residue).
+
+
 
 ## ▶ NEXT SESSION — start here
 

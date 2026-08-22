@@ -573,8 +573,9 @@ void` — rendered in the same footer slot the buy row occupies, and only when t
 gated off. Symmetric with the prop that is already there; no new component.
 
 **These three card edits (price gate, request-pricing hook, badge suppression via the mapper)
-are the only modifications to shipped shared components in this ADR.** `ShopView` still gets
-none beyond the stale-comment fix in §1.
+are the only modifications to shipped shared components in this ADR.** `ShopView` gains no new
+props (amended 2026-08-21 — see *Reused*); handlers internal to the file are allowed, and
+beyond those it keeps only the stale-comment fix in §1.
 
 ### 7. Basket admission: one restrictive INSERT policy
 
@@ -782,9 +783,13 @@ outcome touching nothing.
 
 ## Reused — already built; we feed it, don't touch
 
-- `ShopView` (`src/app/present/ShopView.tsx`) — composed; **no behavioural modification**
-  (one stale comment corrected, §1). Its `viewerCanManage` / `buyerContext` / `emptyState`
-  contract is the interface.
+- `ShopView` (`src/app/present/ShopView.tsx`) — composed; **gains no new props; internal
+  handlers are allowed** (amended 2026-08-21 at T04's G4; was "no behavioural modification").
+  The *prop* is what costs: every buyer difference expressed as one more knob turns the
+  seller's shipped component into a mode switch, and each knob is permanent. A private
+  handler beside the existing `handleAddToBasket` costs nothing outside the file and is
+  already that file's own pattern. Its `viewerCanManage` / `buyerContext` / `emptyState`
+  contract remains the interface. (This retires build deviations 1 and 7.)
 - `PresentBanner`'s `canManage` (`PresentBanner.tsx:73`) — the **real** owner-chrome gate, part
   of the buyer-mode contract (N6). Shipped at G2; consumed, not changed.
 - `EmptyShop`'s audience heading and `InfoBox` — G2 walk fixes; consumed.

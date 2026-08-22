@@ -119,12 +119,12 @@ export async function sendConnectRequest(
  *
  * Authorization and the product NAME come through the same door that rendered
  * the card — `get_discoverable_shop`, SECURITY DEFINER, applying the seller's
- * own visibility rules. That resolution answers VISIBILITY only: a product id
- * the buyer cannot see is refused. It does NOT answer the PRICE rule — the UI
- * offers the ask only when the price is hidden (`canAsk` requires
- * `!pricePublic`), but this action will accept an ask on a price-PUBLIC product
- * the buyer can see. Closing that gap is a behaviour change, not a docstring's
- * to assert.
+ * own visibility rules. That resolution answers VISIBILITY; the PRICE rule is
+ * answered below. Both arms are now server-side: the UI offers the ask only
+ * when the price is hidden (`canAsk` requires `!pricePublic`), and this action
+ * refuses one on a price-public product rather than trusting that. ADR §7
+ * already pushed the identical predicate server-side for basket admission;
+ * leaving this one as UI decoration was the inconsistency.
  *
  * The name the seller reads is resolved server-side, so no string this action
  * accepts reaches her — but that is a property of THIS action, not of the row.
@@ -150,6 +150,12 @@ export async function requestProductPricing(
   const product = (await getDiscoverableShop(receiverCompanyId)).find((p) => p.id === productId);
   if (!product)
     return { error: "We couldn't confirm that product is available from this shop. Try again." };
+
+  // There is nothing to ask for when the seller already publishes the price.
+  // `price_public` is forwarded verbatim by `getDiscoverableShop`, so this is
+  // the seller's own dial, read through the same door that authorised the read.
+  if (product.price_public)
+    return { error: "This product's price is already shown, so there's nothing to request." };
 
   return createPairInboxItem(
     "pricelist_request",
