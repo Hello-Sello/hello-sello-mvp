@@ -1,6 +1,6 @@
 # PLAN-T09 — Connections and verification must be server-granted, not self-declared
 
-**Ticket:** `TICKETS.md` T09 · **rev 1** · 2026-08-22
+**Ticket:** `TICKETS.md` T09 · **rev 2** · 2026-08-23 (`plan-checker` round 1 folded: 2 blocking + 10 notes)
 **Blocks:** T06's G4. **Depends on:** — (nothing in this slug; the two holes predate it)
 **Precedent:** DEV-88 `20260710120000_person_company_id_lockdown.sql` — read in full, followed
 statement for statement.
@@ -48,6 +48,43 @@ satisfy all five `inbox_*` CHECK constraints at once).
 > Every client `UPDATE` on this table writes only `status` / `assigned_to` / `assigned_by` /
 > `assigned_at` (7 sites, all read), so the column allowlist costs nothing. **Muskan adjudicates
 > at G4.**
+
+### 0c · 🔴 ROUND 1 FOUND A SECOND, LIVE ONE — on the **INSERT** side, against a **shipped** RPC.
+
+rev 1 wrote the INSERT side off as *"a member can attribute a request to a colleague. Intra-company,
+no cross-company consequence."* **That reason was false** (L-026 — a plausible justification that
+traces to nothing). `inbox_insert` pins `sender_company_id`; **nothing anywhere constrains
+`sender_person_id`** — no policy clause, no CHECK tying it to the company. So the sender may be a
+person at *any* company. Found by `plan-checker`, reproduced independently by the orchestrator as
+Eva/Bavaria inside `BEGIN … ROLLBACK`:
+
+```
+BEFORE  Alice-Eva edges = 0
+INSERT 0 1        ← type='connect_person', sender_person_id = Alice (GreenLeaf),
+                    sender_company_id = Bavaria (my own — the policy is satisfied),
+                    receiver_person_id = Eva (me)
+accept_person_connection(...) → a51ef75a-…              ← SHIPPED SECURITY DEFINER RPC, 20260724100400
+AFTER   Alice-Eva edges = 1 | initiated_by = 11111111-… ← Alice. She never agreed, and the row says she asked.
+```
+
+A non-consensual person-graph edge, **falsely attributed to the victim as the initiator**, plus the
+p2p DM thread the accept mints. `accept_person_connection` is not defective — it verifies the item
+is addressed to the caller and is pending, exactly as T09's own RPC would. Both RPCs read consent
+from a row the attacker wrote.
+
+> **⚠️ Correction to round 1's evidence, recorded not silently swapped:** the checker reported
+> `people_visible 3 → 4 · bob_visible 0 → 1`. That **does not reproduce** on this seed — Alice and
+> Carla are already visible to Eva before any forgery (`step0 visible: Alice,Carla,Eva`, unchanged
+> at every step). The finding is real; the visibility delta is fixture-dependent and is **not**
+> claimed. What is proven is the forged edge and the false attribution.
+
+**Remedy (verified safe before acceptance, L-003):** `inbox_insert`'s `WITH CHECK` gains
+`AND sender_person_id = auth.uid()`.
+- Both client inserts already pass it — `discover/actions.ts:77` and `discover/personActions.ts:57`
+  both write `sender_person_id: uid`. Read, not assumed.
+- The **only** function inserting into the table is `deliver_deal`, `SECURITY DEFINER` owned by
+  `postgres` (`rolbypassrls = true`), so policies do not apply to it and its legitimate
+  colleague-attributed write is unaffected. Verified by catalogue query, 1 row.
 
 ---
 
@@ -97,7 +134,11 @@ and the canonical `(a < b)` ordering are all *derived*, never supplied.
    `auth.uid()` not null → `current_company_id()` not null → `SELECT … FROM pending_inbox_item
    WHERE id = p_inbox_item_id FOR UPDATE` (serialises two accepts of one item) → not found /
    soft-deleted / `status <> 'pending'` / `receiver_company_id IS DISTINCT FROM
-   current_company_id()` / `sender_company_id = current_company_id()` each `RAISE` → canonical
+   current_company_id()` / `sender_company_id = current_company_id()` each `RAISE` → **`type NOT IN ('connect',
+   'connect_message','pricelist_request')` RAISEs (N2 — the shipped sibling
+   `accept_person_connection` checks its type explicitly at `20260724100400:49-51`; a `deal_card`
+   item reaching this function proves no hole today but the contract would be accidental)** →
+   canonical
    order → **ENSURE, not insert**: adopt the live pair row if one exists
    (`uq_relationship_pair_active`), else INSERT with `initiated_by_company_id = sender_company_id`,
    `inbox_item_id = p_inbox_item_id`, `status = 'active'`. Returns the id either way.
@@ -112,18 +153,33 @@ and the canonical `(a < b)` ordering are all *derived*, never supplied.
    > writable lets a member forge the verification audit trail while the status is locked. Three
    > columns, one concept. **Muskan adjudicates at G4.**
    > **Out of scope, recorded not fixed:** `authenticated` also holds `UPDATE` on `company.id`,
-   > `created_at`, `created_by`, `deleted_at`, `deleted_by`. Separate class, separate ticket.
+   > `created_at`, `created_by`, `updated_by`, `deleted_at`, `deleted_by` — six columns (N1).
+   > Separate class, separate ticket.
 
 4. **Migration part 4 — `resubmit_company_verification`.**
    `UPDATE company SET verification_status = 'pending', updated_at = now() WHERE id =
    current_company_id() AND verification_status = 'rejected'`; `IF NOT FOUND THEN RAISE`. The
    `rejected` predicate stays **inside** the function — it is the only transition it can perform.
 
-5. **Migration part 5 — `pending_inbox_item` identity lockdown (§0b).**
+5. **Migration part 5 — `pending_inbox_item` identity lockdown, UPDATE side (§0b).**
    `REVOKE UPDATE ON public.pending_inbox_item FROM authenticated, anon;` then re-`GRANT
-   UPDATE (id, note, status, assigned_to, assigned_at, assigned_by, metadata, created_at,
+   UPDATE (note, status, assigned_to, assigned_at, assigned_by, metadata, created_at,
    updated_at, deleted_at)`, omitting **`type`, `sender_person_id`, `sender_company_id`,
    `receiver_company_id`, `receiver_person_id`, `deal_card_id`**.
+   > **`id` dropped from the allowlist at rev 2 (N9).** DEV-88 re-granted `person.id`, but there
+   > the row is keyed to `auth.uid()`; here `inbox_update`'s `WITH CHECK` inspects only the
+   > `receiver_*` columns, so a writable `id` is actually mutable. No client update writes it.
+
+5b. **Migration part 6 — `pending_inbox_item` identity lockdown, INSERT side (§0c).**
+   `DROP POLICY inbox_insert ON public.pending_inbox_item;` then re-create it with the existing
+   clause **plus** the new one:
+   `WITH CHECK (sender_company_id = public.current_company_id() AND sender_person_id = auth.uid())`.
+   The existing clause is carried byte-identical — this is an AND, not a rewrite.
+
+   > ⚠️ **Both new column allowlists carry DEV-88's maintenance caveat in the migration header
+   > (N8):** a future `ALTER TABLE … ADD COLUMN` is **not** writable by `authenticated` until it is
+   > added to the re-GRANT. That is the documented cost of the column-grant approach, and it now
+   > applies to `company` and `pending_inbox_item` as well as `person`.
 
 6. **Client — `store.ts`.** Delete the pair probe and the INSERT (lines ~583-620); call
    `supabase.rpc("accept_connection_request", { p_inbox_item_id: input.inboxItemId })`.
@@ -153,6 +209,15 @@ and the canonical `(a < b)` ordering are all *derived*, never supplied.
 7. A `deal_card` accept returns **before** any of this (`claim_deal_ticket`) — untouched.
 8. The function does **not** flip the inbox item's status; `connect.acceptItem` owns that.
 
+9. **N3, named not waived — an inactive pair is still adopted.** `uq_relationship_pair_active`
+   is `(company_a_id, company_b_id) WHERE deleted_at IS NULL` and `relationship` has **no** status
+   CHECK (only `relationship_canonical_order`). So accepting against a `suspended`/`ended` pair
+   returns an id, `acceptItem` flips the item to `accepted`, and `is_connected_to_company()` still
+   returns false — post-T06 that reads as *"accepted, catalogue still hidden"*. **Pre-existing** in
+   `store.ts:594-605`; T06 is what changed its meaning (L-027's own trigger). Carried forward as
+   behaviour, **not** re-activated here — re-activating a deliberately suspended relationship on an
+   unrelated accept is a bigger call than T09 owns. Belongs in the G4 walk.
+
 **Grants:** every `company` column except the verification triple stays writable; every
 `pending_inbox_item` column except the six identity columns stays writable; `relationship`
 `SELECT` survives.
@@ -179,7 +244,9 @@ blocks 1, 3 and 7 must FAIL against today's schema, which is what proves they ex
 |---|---|---|
 | 1 | direct INSERT on `relationship` as `authenticated` | `42501` — the grant is gone, not merely policy-gated |
 | 2 | direct UPDATE and DELETE on `relationship` | `42501` |
-| 3 | forge `sender_company_id` on an own-received inbox item | `42501` (**§0b — the reproduced attack, inverted**) |
+| 3 | forge `sender_company_id` on an own-received inbox item (UPDATE) | `42501` (**§0b — the reproduced attack, inverted**) |
+| 3b | INSERT an inbox item whose `sender_person_id` is **not** the caller | denied by `inbox_insert` (**§0c — the person-graph forge**) |
+| 3c | `accept_person_connection` can no longer be reached from a forged item | the §0c repro, re-run, now fails at the INSERT |
 | 4 | `accept_connection_request` for an item addressed to **another** company | RAISEs **and writes nothing** (row count re-checked after) |
 | 5 | `accept_connection_request` on a legitimate pending item | mints one row, canonical order, `initiated_by` = sender |
 | 6 | the same call twice, and on an already-connected pair | adopts — exactly one active row per pair |
@@ -188,6 +255,15 @@ blocks 1, 3 and 7 must FAIL against today's schema, which is what proves they ex
 | 9 | `resubmit_company_verification` on a **verified** company | RAISEs; status unchanged (no self-verify) |
 | 10 | `approve_company` / `reject_company` as HS team | still work |
 | 11 | `anon` executes either new function | denied (the ritual, both halves) |
+
+**⚠️ B2 — the RED proof cannot be one run.** The suite is one `BEGIN … ROLLBACK` under
+`ON_ERROR_STOP=1` (the precedent runner, `run_person_company_lockdown_test.sh:20`). Against
+today's schema block 1's INSERT **succeeds**, so block 1 RAISEs, psql aborts the file, and blocks
+3/3b/7 never run — while 4/5/6/8/9/11 would fail `42883` (function does not exist), which is
+L-023's *wrong red*. **One run can only ever prove block 1.** So the RED proof is **four separate
+single-block scripts** (1, 3, 3b, 7) run **before** the migration is applied, each output pasted
+into REVIEW.md with its failure message quoted (S7's evidence rule). Per L-023 that is the
+**orchestrator's** job — `test-writer` cannot run anything.
 
 **⚠️ The `anon` assertion in block 11 must be able to fail.** Since `20260817120000` a fresh
 function is *born* without `anon` EXECUTE (default-privileges narrowing + the
@@ -202,20 +278,36 @@ the ritual is in the file (**L-010, verbatim**). Block 11 therefore asserts by *
 1. `supabase db reset` — the migration applies from committed files.
 2. `bash supabase/tests/run_connection_consent_lockdown_test.sh` — GREEN. Re-run blocks 1/3/7
    against a stashed pre-fix schema to confirm they were RED (mutation proof).
-3. All 37 SQL runners on the clean reset (**37 runners over 42 suite files — 5 never
-   execute**; report both numbers, never "all").
+3. All SQL runners on the clean reset. **Today: 37 runners over 42 suite files (5 never
+   execute). This ticket adds one of each → report 38 over 43** (N6), never "all". Count with
+   python — `ls | wc -l` is unstable through the shell filter here.
 4. `npx tsc --noEmit` · `eslint` on the touched files (6 pre-existing errors elsewhere).
 5. Unit suite — expect 453/453, unchanged (no unit surface).
 6. **e2e, on a clean `db reset` (L-022: `npm test` is Playwright here, not the unit suite):**
    `inbox-accept.spec.ts` (the accept flow this rewrites), `deal-c2c-create.spec.ts` (T09's own
-   cross-lane warning), `discover-shop.spec.ts` (T05/T06's guard).
-7. Re-query G1 and G5 after the migration — the grant lists must have actually changed.
+   cross-lane warning), `discover-shop.spec.ts` (T05/T06's guard), `discover.spec.ts`.
+   > **N4 — `acceptItem` has TWO UI entry points**, not one: `connect/components/InboxView.tsx:137`
+   > **and** `discover/sections/RequestsSection.tsx:98`. Only the inbox one has behavioural e2e
+   > cover (`discover.spec.ts` asserts layout only), so **the Discover accept surface must be
+   > walked by hand at G4**.
+   > **N5 — an unnamed behaviour change, now named (rule 4).** Today the guarded UPDATE matching
+   > zero rows returns **no error** (`onboarding/actions.ts:180-185`); the RPC's
+   > `IF NOT FOUND THEN RAISE` turns that into a user-visible *"Could not resubmit for review"* —
+   > and it fires **after** the licence files have already uploaded. No e2e covers the resubmit
+   > submit (`auth-gate.spec.ts` asserts only the redirect + banner), so blocks 8/9 prove the RPC,
+   > **not** the caller. Walk it at G4.
+7. Re-query G1, G5 and `inbox_insert`'s `WITH CHECK` after the migration — the grant lists and
+   the policy must have actually changed.
+8. **N7 — paste the `anon` blast-radius scan** rather than asserting it: `has_function_privilege`
+   over every function whose body mentions `relationship`, the view catalogue, and
+   `product_public_select`'s role list. Round 1 verified it comes back clean; the plan must show
+   the query, per the checklist's evidence rule.
 
 ## 7 · Not built
 
 - `company.id` / `created_at` / `created_by` / `deleted_at` / `deleted_by` remain
   `authenticated`-writable (step 3's recorded out-of-scope note).
-- `pending_inbox_item`'s **INSERT** side: `inbox_insert` does not pin `sender_person_id`, so a
-  member can attribute a request to a colleague. Intra-company, no cross-company consequence —
-  recorded, not fixed.
+- `anon` still holds `INSERT/UPDATE/DELETE/TRUNCATE` on `product` and `pricelist_item`, blocked
+  today only because `current_company_id()` is NULL — the same "coincidence, not a design" this
+  plan cites for `relationship`. Out of scope for T09; worth its own sweep (N10).
 - Nothing in T06, T07 or T08 is touched.

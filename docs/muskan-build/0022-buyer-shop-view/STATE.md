@@ -5,7 +5,7 @@ stage:  triage ✅ · spec ✅ (G1) · prototype ✅ (G2) · design ✅ (G3 2026
         **T04 ✅ (G4 2026-08-21 — accepted; e2e re-run ✅ + VISUAL PASS DONE 2026-08-22)**
         post-G4 ruling: env repair ✅ · DEV-83 ✅ · price gate ✅ · ADR amend ✅ (all 2026-08-22)
         **T05 ✅ G4 PASSED 2026-08-22 — all six items ruled (A-D built + mutation-proved, E dropped, F recorded)**
-        **▶ T09 IN FLIGHT (2026-08-22) — plan rev 1 written, `plan-checker` round 1 running.**
+        **▶ T09 IN FLIGHT (2026-08-23) — plan rev 2; `plan-checker` round 2 running.**
         **T06 BLOCKED at G4 on T09 (Muskan, 2026-08-22) · then T07 · T08.**
 branch: **claude/muskan/work** — no feature branch (Muskan's call, 2026-08-18)
 >  No cut: this slug is frontend-heavy with no expected migration, so a feature branch
@@ -413,7 +413,7 @@ None of it lives in T03's two files, and 0022 is the buyer's read surface.
 
 | **T06** | **round 1 done → 7 blocking, 11 non-blocking, ALL folded into rev 2** (3 changed the design; every blocking finding spot-verified against the live DB before acceptance). **round 2 → 3 blocking + 7 non-blocking, ALL NEW, TWO of them defects in round 1's own fold-ins. Budget SPENT, did NOT converge — the 5th ticket on this slug.** All folded into rev 3 | — | — | — |
 
-| **T09** | round 1 running | — | — | — |
+| **T09** | **round 1 done → 2 blocking + 10 notes, ALL folded into rev 2** (both blocking spot-verified against the live DB before acceptance; one piece of the checker's own evidence corrected). **Round 2 running.** | — | — | — |
 
 **T09 notes (in flight, 2026-08-22):** base synced and frozen — **0 behind `origin/dev`, 93 ahead**,
 clean tree, no rebase needed. Plan at `PLAN-T09.md` rev 1. `plan-checker` is **still unregistered in
@@ -434,6 +434,33 @@ consent evidence is itself a permission input, so its write path is in scope.** 
 `receiver_company_id`, `receiver_person_id`, `deal_card_id`) to T09's scope as a declared
 `⚠️ AMENDED` block — all 7 client UPDATE sites write only `status`/`assigned_*`, so the allowlist
 costs nothing. **Muskan adjudicates at G4.**
+
+**🔴 ROUND 1 FOUND A SECOND LIVE HOLE — on the INSERT side, against a SHIPPED RPC.** rev 1 wrote
+the INSERT side off as *"a member can attribute a request to a colleague — intra-company, no
+cross-company consequence."* **The reason was false** (L-026). `inbox_insert` pins
+`sender_company_id`; **nothing constrains `sender_person_id`** — no policy clause, no CHECK. So the
+claimed sender may be a person at any company. Reproduced independently by the orchestrator as
+Eva/Bavaria in `BEGIN … ROLLBACK`: insert `connect_person` with `sender_person_id = Alice
+(GreenLeaf)`, `sender_company_id = Bavaria` (own — policy satisfied), `receiver_person_id = Eva` →
+`accept_person_connection` (**shipped**, `20260724100400`) returns a real id → `Alice-Eva edges =
+1 | initiated_by = Alice`. **A non-consensual person-graph edge, falsely attributed to the victim as
+initiator**, plus the p2p DM thread the accept mints. The RPC is not defective — it checks the item
+is addressed to the caller and pending, exactly as T09's own RPC would. **Both read consent from a
+row the attacker wrote.** Closed in rev 2 by one clause on `inbox_insert`'s `WITH CHECK`
+(`AND sender_person_id = auth.uid()`), verified safe first: both client inserts already pass `uid`,
+and the only function writer (`deliver_deal`) is DEFINER owned by `postgres` (`rolbypassrls`), so
+policies never apply to it.
+
+**⚠️ One piece of round 1's evidence CORRECTED, not repeated.** The checker reported the forgery
+also moved `people_visible 3 → 4 · bob_visible 0 → 1`. **That does not reproduce on this seed** —
+Alice and Carla are already visible to Eva before any forgery, and the count is unchanged at every
+step. The finding is real; the visibility delta is fixture-dependent and is not claimed.
+
+**Round 1's other blocking finding (B2) — the RED-first proof was not observable as specified.**
+One `BEGIN … ROLLBACK` under `ON_ERROR_STOP=1` can only ever prove block 1: block 1 RAISEs, psql
+aborts, and every later block either never runs or fails `42883` (L-023's *wrong red*). rev 2
+replaces it with **four separate single-block scripts run before the migration**, outputs pasted —
+the orchestrator's job, since `test-writer` cannot run anything.
 
 **Two more deviations declared in the plan, not silently taken:** the `company` lockdown covers the
 verification **triple** (`verification_status`, `verified_at`, `verified_by`) rather than the one
