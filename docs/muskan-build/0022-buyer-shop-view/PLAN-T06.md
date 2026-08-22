@@ -3,7 +3,9 @@
 Ticket: **T06 · [HEL-60](https://linear.app/hellosello/issue/HEL-60)** · size **M** · depends on T00
 ADR: `docs/architecture/adr/0005-buyer-shop-view.md` decision 6 + 7 · PRD §4 (2), §7 · slug `0022-buyer-shop-view`
 
-> **Rev 2** — folds `plan-checker` round 1 (7 blocking, 11 non-blocking; every blocking finding
+> **Rev 3** — folds `plan-checker` round 2 (3 blocking, 7 non-blocking). **Budget SPENT, did NOT
+> converge** — round 2's blocking findings were all NEW and two were defects in round 1's own
+> fold-ins, the 5th ticket on this slug to do this. Rev 2 folded round 1 (7 blocking, 11 non-blocking; every blocking finding
 > spot-verified against the live DB before acceptance). Base frozen at `claude/muskan/work` (0 behind `origin/dev`, 79 ahead) — no rebase mid-build.
 
 ---
@@ -201,6 +203,21 @@ from this view, hence no price and no tiers.
 > **Assert it:** `reloptions @> '{security_barrier=true}'` in the suite. A predicate assertion
 > cannot see this, which is exactly why it needs its own.
 
+> ⚠️ **REV 3 — B-2. Site 2 was the ONLY site with no S5 instruction.** Site 1 got a `polqual` diff,
+> site 3 got an emphatic `pg_get_functiondef` diff — site 2 got neither, and the plan never
+> reproduces the full view body (§1 quotes only the public arm). The builder would re-type ~20 lines
+> (`DISTINCT ON`, the `tiers` sub-select, three joins, the owner arm,
+> `ORDER BY pl.published_at DESC NULLS LAST`) from nothing. **Do the same thing site 3 does:**
+> `pg_get_viewdef('public.current_pricelist_item', true)` from the live DB, diff the new body
+> against it, change only the `p.profile_visible` term.
+>
+> Two silent regressions this closes, both measured, both passing every rev-2 cell:
+> - drop `is_caller_verified()` from **site 2** → unverified reads 3 prices, **companyless reads 2**,
+>   while doors (a) and (c) stay at 0. Every cascade cell is worded about ***`product`* rows**, so
+>   none of them look. This is the gate Discover lost once.
+> - drop the `pl.company_id = current_company_id()` **owner arm** → Alice loses 4 of her 6 own
+>   prices. **No rev-2 cell reads the view as the owner at all.**
+
 Re-issue its grants explicitly — a replace does not reset them, but the ritual is cheap and the one
 time it was skipped (`20260618120100`) is how the anon door reopened.
 
@@ -229,6 +246,25 @@ production once, and the risk is highest when the base changed hours ago.
 
 **Use `CREATE OR REPLACE FUNCTION`, never `DROP … CREATE`** (N11). Grants survive a replace and the
 signature is unchanged; ADR:488 records that a drop resets them.
+
+> 🔴 **REV 3 — B-1. THE T05 SUITE WILL GO RED, AND THAT IS CORRECT.** Rev 2 said *"the T05 SQL
+> suite already asserts this, so run it"*. **False, and the framing is the hazard.**
+> `discoverable_shop_spec_columns_test.sql:417-425` (TEST7) uses **Bob / StonePharm** as *"a plain
+> verified NON-OWNER caller"* and asserts he sees **0** hidden GreenLeaf products. But
+> **StonePharm has an ACTIVE relationship with GreenLeaf** (verified live) — so under T06 Bob is a
+> *connected* buyer and **must** see it. T05 pins the exact invariant T06 is chartered to break.
+>
+> Verified by the checker running all 41 suites with the migration injected:
+> `*** BREAKS UNDER T06: discoverable_shop_spec_columns_test.sql — LEAK/TEST7`.
+>
+> **Why this had to be said out loud:** a builder who hits a red security test with a plan claiming
+> it should be green has two natural moves — revert site 3, or quietly weaken TEST7. Both are wrong.
+> **The fix:** repoint TEST7's negative arm at a verified persona with **no** relationship to
+> GreenLeaf (`Bavaria Medical Cannabis GmbH` or `NordCanna Distribution GmbH`), resolved **by
+> company name, never by UUID** — those persons' ids regenerate on every `db reset` (the suite's own
+> stated convention; the checker got caught by exactly this mid-review). Guard the new persona as
+> company'd + verified + **unconnected** + sees a non-zero shop, so the pass cannot be vacuous.
+> Proven green that way. **`supabase/tests/discoverable_shop_spec_columns_test.sql` is added to §7.**
 
 **The unfiled clause added at item A must survive.** It is a separate `and (…)` and does not
 interact with this one. Assert its behaviour still holds after this migration — the T05 SQL suite
@@ -261,6 +297,13 @@ gain the override: they are not on the buyer's read path (the RPC and the view b
 > **Second class rev 1 never named: a COMPANYLESS authenticated caller loses reads.**
 > `current_company_id()` is NULL → `is_caller_verified()` is false → 0 rows, where today they read
 > 4. (Measured: `companyless HS Reviewer reads product = 4` today.)
+>
+> 🔴 **REV 3 — B-3. `product_media` and `product_image` are EMPTY REPO-WIDE** (`0` rows each,
+> verified). So the numbers above reproduce **only against planted fixtures**, and rev 2's cascade
+> cells are **0-before / 0-after — they pass with the migration unbuilt.** That is the same vacuity
+> family rev 2 introduced B3 to kill, reintroduced one section earlier. **The cascade cells MUST
+> plant `product_media` + `product_image` rows**; §8's *"seed supports this directly, no fixture
+> invention needed"* is true for the `product` and `pricelist_item` arms only.
 >
 > **Consequences taken:** §5's ledger entry names **both** classes explicitly, and §8 gains three
 > cascade cells. This is the difference between "adds capability" and "removes reads from live
@@ -342,7 +385,9 @@ connected seller's hidden products to that picker.
 ```
 
 `companyId` comes from the caller's own `person.company_id`, the same way the other reads in this
-file resolve it — **not** from an argument (that would make it forgeable). Fix the wrong docstring
+file resolve it — **not** from an argument (that would make it forgeable). **Include the null-company
+guard its five sibling reads all use** (N-7): `if (!viewerCompanyId) return [];` —
+`.eq("company_id", null)` is not "no rows". Fix the wrong docstring
 in the same pass; a comment asserting a false safety property is worse than no comment.
 
 ---
@@ -353,6 +398,7 @@ in the same pass; a comment asserting a false safety property is worse than no c
 |---|---|
 | `supabase/migrations/<ts>_connection_visibility_override.sql` | new — helper, 3 sites, media role list, grants |
 | `supabase/tests/connection_visibility_override_test.sql` | new — behavioural suite |
+| `supabase/tests/discoverable_shop_spec_columns_test.sql` | **edit — TEST7's negative arm (B-1). Expected to go RED under this migration; that is correct, not a regression** |
 | `supabase/tests/run_connection_visibility_override_test.sh` | new — runner (stdin, **not** host-path `-f` — L-013/T01) |
 | `src/modules/deals/supabase/reads.ts` | `getOwnCatalog` company filter + docstring correction |
 | `src/types/database.types.ts` | regenerate for the new function |
@@ -385,10 +431,12 @@ read, (c) a `get_discoverable_shop` call:
 | relationship `status <> 'active'` | hidden | not visible |
 | relationship soft-deleted | hidden | not visible |
 | unconnected verified buyer | hidden | not visible |
-| connected + verified buyer | **hidden, `price_public = true`** | product visible **AND price present AND tiers present** — **B3** |
+| connected + verified buyer | **hidden, `price_public = true`** (AUR-1C) | doors b+c: **price = 4.00 AND `tiers = '[]'::jsonb`** — **B3**. ⚠️ N-1: AUR-1C has **0 rungs** (`seed_visibility_matrix_test.sql:148` pins it), so "tiers present" is unsatisfiable; assert the empty array, or plant a rung |
 | **unverified** company member | any other company's product | **none** (the tightening) |
 | unverified member | cross-company `product_image` / `product_media` / `pricelist_item` | **none** — the cascade, **B4** |
 | **companyless** authenticated caller | any other company's product | **none** — reads 4 today, **B4** |
+| unverified **and** companyless callers | **`current_pricelist_item` rows** (door b) | **0** — **B-2**; the cascade cells all say *product*, so nothing else looks here |
+| **Alice (owner)** | **`current_pricelist_item`**, her own catalogue | **all 6**, price-hidden ones included — **B-2**; no rev-2 cell read the view as owner |
 | companyless caller | anything | none, **and** `is_connected_to_company(x)` = false (pins the canonical-order CHECK — N1) |
 | **Alice (GreenLeaf = `company_a`)** | `is_connected_to_company(StonePharm)` | **true** — the direction cell, **B7** |
 | the **owner**, own company unverified | own hidden product | **visible** (`product_all` untouched) |
@@ -422,15 +470,32 @@ read, (c) a `get_discoverable_shop` call:
 Plus the grant assertions of §4, and a **re-run of the T05 suite** to prove the unfiled rule and the
 owner arm survive site 3's rewrite.
 
-Seed supports this directly — no fixture invention needed for the happy path:
+⚠️ **Which door each cell applies to (N-3).** "Three doors × the matrix" is not a well-formed grid:
+the AC-6 cell (*no price, no tiers*) is meaningless on door (a) — `product` has no price column.
+Tag every cell with its doors; do not run the grid blind.
+
+⚠️ **The media/image cascade cells need PLANTED rows (B-3)** — `product_media` and `product_image`
+are empty repo-wide, so those two cells are vacuous against the seed. `pricelist_item` and `product`
+are seeded and need nothing.
+
+Seed supports the rest directly — no fixture invention needed for the happy path:
 GreenLeaf ↔ StonePharm is `active`, both `verified`; **AUR-1C and AUR-1D are GreenLeaf products with
 `profile_visible = false`**; Bob is StonePharm. Rows for suspended / ended / soft-deleted / pending /
 unverified are ephemeral fixtures inside `BEGIN … ROLLBACK`, mirroring
 `discoverable_shop_spec_columns_test.sql`.
 
-**Mutation-prove every new guard** (three at minimum): drop `is_caller_verified()` from site 1 · move
-the window inside the override parenthesis · drop `p.price_public` from site 2. Each must fail a
-named assertion. A guard that has never failed proves nothing.
+**Mutation-prove every new guard — and name the DOOR each mutation goes red on (N-2).** Minimum five:
+
+| mutation | goes red on |
+|---|---|
+| drop `is_caller_verified()` from **site 1** | doors a + c |
+| drop `is_caller_verified()` from **site 2** | door b only — **added at rev 3 (B-2)** |
+| drop the **owner arm** from site 2 | door b, owner cell — **added at rev 3 (B-2)** |
+| move the **window** inside the override parenthesis | doors a + c (`cell_expired_*|VISIBLE`) |
+| drop `p.price_public` from **site 2** | ⚠️ **door b ONLY** — the RPC's `case when p.price_public then v.price_per_gram end` **masks** the view's leak on door c (measured: `doorB|5.0000`, `doorC|NULL`). Asserting this on door c would pass against a broken build |
+
+A guard that has never failed proves nothing — and a mutation asserted on the wrong door is a guard
+that cannot fail.
 
 ---
 
@@ -441,10 +506,11 @@ named assertion. A guard that has never failed proves nothing.
 3. Write the suite + runner. **Verify RED** — the orchestrator runs it, `test-writer` has no Bash (L-023).
 4. `supabase db reset`; suite GREEN.
 5. Re-run `discoverable_shop_spec_columns_test.sql`, then **every runner**, reporting the real
-   census — **41 suite files, 36 runners** (N7). Six suites have **no runner and never execute**:
-   `rls_isolation_test` (already filed as DEV-161), `auth_gate_test` (its runner is misnamed
-   `run_auth_gate_test.sql.sh`), `announcement_projection_test`, `change_reason_log_test`,
-   `onboard_company_categories_test`, `pending_change_lock_test`. **Rev 1 said "the full 38-suite
+   census — **41 suite files, 36 runners** (N7). **Five** suites have no runner and never execute:
+   `rls_isolation_test` (already filed as DEV-161), `announcement_projection_test`,
+   `change_reason_log_test`, `onboard_company_categories_test`, `pending_change_lock_test`.
+   ⚠️ **Rev 2 said six and named `auth_gate_test` — wrong (N-4):** its runner exists as
+   `run_auth_gate_test.sql.sh`, which matches `run_*.sh`, so it does execute. 41 − 36 = 5. **Rev 1 said "the full 38-suite
    set", which does not exist** — and earlier gate claims on this slug reporting "38/38 SQL suites"
    counted *runners that ran*, not suites that exist. Report both numbers; do not say "all".
    ⚠️ Count with `python3 -c "import glob; …"`, **not** `ls | wc -l` — the shell filter here returns
@@ -462,6 +528,8 @@ named assertion. A guard that has never failed proves nothing.
 | site 3 re-declared from a stale base | it changed twice today | `pg_get_functiondef` diff immediately before writing |
 | `least/greatest` with a NULL company | `least(NULL,x) = x` — no short-circuit | explicit `is not null` guard + its own test |
 | media revoke "already passing" | current block is an incidental privilege error | assert the **grant**, not a failed select |
+| **performance cliff (N-6)** | the helper is **not inlined** — it appears literally in the `Filter:` — so it runs per row and `idx_product_company_profile_visible` is lost to a Seq Scan. Measured on 20 000 rows: **1.7 ms → 1327 ms**. Removing `SET search_path` does **not** restore inlining. No cheap fix; prod holds 13 products today, so this is a scaling cliff, not a live problem. **Named for G4, not solved here.** |
+| **read-ADDING side unanalysed (N-5)** | site 1 hands a connected buyer the seller's **private columns** on hidden products via a direct `product` read — proven: `AUR-1C metadata={"note": "PRIVATE-SELLER-NOTE", …} rrp=9.9900`. In tension with the G3 lock on `supplier_product_code` and with the ADR's reason for projecting `metadata -> 'pack_sizes'` only. Pre-existing for *visible* products; T06 widens it to deliberately-hidden ones. **Escalate at G4 — this is a scope question, not a build decision.** |
 | `getOwnCatalog` unfixed | picker gains every connected seller's hidden products | in this ticket, tested |
 | tightening breaks a live user | unverified **and companyless** callers lose reads, and it **cascades** to media/images/prices | both classes in the ledger entry; 3 cascade cells in §8 |
 | `create or replace view` drops `security_barrier` | invisible to a predicate diff — the guard is a reloption, not a term | `with (security_barrier = true)` + a `reloptions` assertion |
