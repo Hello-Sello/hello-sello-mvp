@@ -5,7 +5,7 @@ stage:  triage ✅ · spec ✅ (G1) · prototype ✅ (G2) · design ✅ (G3 2026
         **T04 ✅ (G4 2026-08-21 — accepted; e2e re-run ✅ + VISUAL PASS DONE 2026-08-22)**
         post-G4 ruling: env repair ✅ · DEV-83 ✅ · price gate ✅ · ADR amend ✅ (all 2026-08-22)
         **T05 ✅ G4 PASSED 2026-08-22 — all six items ruled (A-D built + mutation-proved, E dropped, F recorded)**
-        **▶ T09 IN FLIGHT (2026-08-23) — plan rev 2; `plan-checker` round 2 running.**
+        **▶ T09 IN FLIGHT (2026-08-23) — plan rev 3, checker budget spent; `test-writer` next.**
         **T06 BLOCKED at G4 on T09 (Muskan, 2026-08-22) · then T07 · T08.**
 branch: **claude/muskan/work** — no feature branch (Muskan's call, 2026-08-18)
 >  No cut: this slug is frontend-heavy with no expected migration, so a feature branch
@@ -413,7 +413,7 @@ None of it lives in T03's two files, and 0022 is the buyer's read surface.
 
 | **T06** | **round 1 done → 7 blocking, 11 non-blocking, ALL folded into rev 2** (3 changed the design; every blocking finding spot-verified against the live DB before acceptance). **round 2 → 3 blocking + 7 non-blocking, ALL NEW, TWO of them defects in round 1's own fold-ins. Budget SPENT, did NOT converge — the 5th ticket on this slug.** All folded into rev 3 | — | — | — |
 
-| **T09** | **round 1 done → 2 blocking + 10 notes, ALL folded into rev 2** (both blocking spot-verified against the live DB before acceptance; one piece of the checker's own evidence corrected). **Round 2 running.** | — | — | — |
+| **T09** | **2 rounds, budget SPENT, did NOT converge — the 6th ticket on this slug** (round 1 → 2 blocking + 10 notes · round 2 → **4 blocking + 8 notes, TWO of them defects in round 1's own fold-ins**). All folded into rev 3; every blocking finding spot-verified against the live DB before acceptance | — | — | — |
 
 **T09 notes (in flight, 2026-08-22):** base synced and frozen — **0 behind `origin/dev`, 93 ahead**,
 clean tree, no rebase needed. Plan at `PLAN-T09.md` rev 1. `plan-checker` is **still unregistered in
@@ -461,6 +461,27 @@ One `BEGIN … ROLLBACK` under `ON_ERROR_STOP=1` can only ever prove block 1: bl
 aborts, and every later block either never runs or fails `42883` (L-023's *wrong red*). rev 2
 replaces it with **four separate single-block scripts run before the migration**, outputs pasted —
 the orchestrator's job, since `test-writer` cannot run anything.
+
+**Round 2's four blocking — two were defects in round 1's own fold-ins:**
+- **B1 (fold-in defect):** rev 2's `inbox_insert` re-creation specified only the `WITH CHECK` and
+  **omitted the role list**. Live is `TO authenticated` (confirmed: `roles = {authenticated}`), so
+  the fix for §0c would itself have re-created the policy as **`{public}`** — the dropped-role-list
+  class, S5, the exact mistake ADR-0005 round 4 caught. **A security fix that would have shipped a
+  security regression.**
+- **B2 (fold-in defect):** rev 2 stated the RED-first block list **three incompatible ways**, and
+  two of them omitted blocks 3b/3c — the *only* evidence that the new `sender_person_id` clause
+  does anything. The fold-in's own guard would have shipped with no RED proof.
+- **B3 (new):** the RPC's INSERT omitted `created_by`/`updated_by`. Both are **nullable with no
+  default** and the only trigger is BEFORE **UPDATE** (verified), so the RPC would have written
+  NULL where `store.ts:615-616` writes the person today — silently, with nothing planned to notice.
+- **B4 (new):** the `FOR UPDATE` serialisation claim was overstated. It covers two accepts of ONE
+  item; it does nothing for two *different* pending items on the same pair, which take different
+  row locks and race to a raw `23505`. The guarantee is `uq_relationship_pair_active`, not the
+  lock — fixed with `ON CONFLICT DO NOTHING` + re-SELECT. A true two-session proof is not runnable
+  in a one-transaction harness, so **the claim is dropped rather than asserted untested**.
+
+**rev 3's own fixes are unchecked by a fresh agent** — budget spent. `critic` + `security` carry
+them at build, the precedent set at G3 rev 5/rev 6.
 
 **Two more deviations declared in the plan, not silently taken:** the `company` lockdown covers the
 verification **triple** (`verification_status`, `verified_at`, `verified_by`) rather than the one
