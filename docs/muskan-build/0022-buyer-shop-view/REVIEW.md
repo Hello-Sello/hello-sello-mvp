@@ -680,3 +680,175 @@ the error rendering all match their neighbours.
 stack now yields a database where `authenticated` has SELECT on 1 of 92 tables, so the app 403s on
 its own `person` row and every gated route bounces. Proven not to be T04 (zero migrations touched;
 all 147 applied).
+
+---
+
+# G4 — T05 (HEL-59) · the specification set + the location rule
+
+Staged 2026-08-22 by `visual-verifier`. **I do not pass this gate.** Below is the evidence;
+the verdicts are per-row observations, not a ruling.
+
+Screenshots: `docs/muskan-build/0022-buyer-shop-view/g4/`.
+Local stack, `.env.local` → LOCAL (`http://127.0.0.1:54321`), dev server `:3000`,
+driven as the seeded users (Bob = buyer, Alice = seller) against real seed data.
+
+**Read the prototype column with this caveat.** `prototypes/0022-buyer-shop-view-prototype/index.html`
+is variant A's *record*, not its pixel contract — NOTES.md moved the contract to the in-app route
+`src/app/prototype-0022-buyer-shop/page.tsx`, which T02's build deleted by design. Chrome
+differences against the HTML (tabs vs dropdown, the "Shop" heading, the product counter) were
+adjudicated at T02's G4 on 2026-08-19 and are re-listed here only so nothing is silently carried.
+
+**Seed correction.** The staging brief said all nine AC-7 columns are NULL in the seed. Eight are.
+`cultivator` is seeded (`Aurora Inc` / `Pure Sunfarms` / `Tantalus Labs`) — which is why the
+Cultivator row is the one AC-7 field already visible in the un-planted screenshots.
+`irradiation_code` is FK-constrained to `irradiation_type(code)`, so the planted value was `gamma`
+(renders "Gamma"), not the brief's free-text sentinel.
+
+## The walk
+
+| # | criterion / differentiator | verdict | evidence |
+|---|---|---|---|
+| 1 | AC 7 — buyer sees CBG, CBN, terpene %, cultivator, lineage, irradiation, packaging, resealable | match | `03-buyer-card-AUR-1B-specs-top/bottom.png`. All 8 present with planted values: strip CBG 44,41 · CBN 55,52 · Terp% 66,63; rows Cultivator / Lineage `A × B` / Irradiation `Gamma` / Packaging / Resealable `Yes` |
+| 2 | buyer and seller agree — same `ProductCard`, same values | match, one exception (row 3) | `03-*` vs `04-*`. DOM read-back of all 9 rows + the 5-value strip is identical on both surfaces |
+| 3 | `supplier_product_code` omitted from the buyer (G3 confidentiality) | deviates | `03-buyer-…-bottom.png` vs `04-seller-…-bottom.png`. The data is correctly withheld — but the card still renders the row, so the buyer reads **"Supplier code — n.a."**. `ProductCard.tsx:388` builds that row unconditionally; a withheld field and an unset field are indistinguishable to the buyer |
+| 4 | no batch / lot list for the buyer | match | seller cards carry `Select batch (optional)` (`02b`); no buyer card does (`01b`, `03-*`) |
+| 5 | terpene derived server-side, manual column first | match for the manual path; cannot-verify for the fallback | planted manual `66.63` renders identically both sides. No seeded product has batch terpene rows, so every un-planted card reads `Terp% n.a.` on both surfaces — agreement holds, but the representative-batch fallback never produced a non-NULL value in this walk |
+| 6 | `pack_sizes` projects the one named key (no private note leak) | match | pack pills render on both surfaces (`1000g`, `10g`) with no metadata text anywhere on the buyer page |
+| 7 | `bundle_threshold_grams` / `…_per_gram` from `tiers[0]` | match | AUR-1E on both surfaces: `500g+ 1000g`, struck-through `6,00€`, `5,40€/g`, `from 500g applied`, `See all prices` |
+| 8 | T05 keeps forwarding the seller's real `price_public` | match | AUR-1A + AUR-1F → `Price on request` + Request-pricing on the buyer; AUR-1B + AUR-1E → price + Add-to-basket (`01b`) |
+| 9 | owner arm — a member of the seller's own company reads the whole catalogue from Discover | match | `05-owner-via-discover-own-catalogue.png`. Alice at `/discover/aaaa…` sees **6** products including the two `profile_visible=false` Montreal ones, with no `Hidden` badge (buyer chrome) |
+| 10 | location filter hidden for the buyer (one named location) | match | `01b` — no `location-menu-btn`; the `Toronto Warehouse · 4` divider names the shelf instead |
+| 11 | location filter still shown for the seller (two named locations) | match | `02b`, `06-seller-location-dropdown-open.png` — `All locations 6 · Montreal Warehouse 2 · Toronto Warehouse 4` |
+| 12 | the rule is driven by what the **viewer** sees, not by role | match | `05` — Alice on the *buyer* route sees 6 products across 2 locations and **does** get the dropdown |
+| 13 | `Unassigned` renders for the seller | match | `07b-seller-unassigned-group-full.png` — `Unassigned · 1` divider under Toronto, filter still present |
+| 14 | `Unassigned` never renders for the buyer | match, with a side effect (row 15) | `08b-buyer-unfiled-no-divider-full.png` — no `Unassigned` divider; the product itself is still served |
+| 15 | what the buyer sees instead of `Unassigned` | deviates | `08b` — the unfiled product renders as a fifth card on a new row directly beneath the `Toronto Warehouse · 4` divider. Header count says 4, five cards sit under it, and nothing marks the boundary. Only the header is suppressed (`ShopView.tsx:681`), not the group |
+| 16 | **the open question** — seller with ONE named location + unfiled products: two visible groups, filter hidden | cannot-verify | not reachable on seed data. GreenLeaf has two named locations, so `named.length <= 1` is false and the filter stays. Reaching it needs a `product.location` write on a seeded row, which the brief fences off. See "The open question" below |
+| 17 | fit — 1400px container, 4-up grid, card at design width | match | `01b` / `02b` — four cards per row, no horizontal overflow, no clipping at the container edge |
+| 18 | fit — the spec list inside the fixed 640px card | deviates | `03-buyer-…-top.png` — at rest the buyer sees 4½ of 9 rows; **the Lineage row is cut through the middle of its glyphs**, and 5 of AC 7's 8 fields need an in-card scroll with only a fade as the affordance. Identical on the seller (`04-…-top.png`), so it is a shared-card constraint, not a T05 regression — but T05 is what fills those rows, so it is newly consequential |
+| 19 | fit — narrow width | match | `12b-buyer-shop-narrow-900-full.png`, `13b-seller-present-narrow-900-full.png` — 2-up at 900px, info boxes stack, no clipping or overflow either side |
+| 20 | prototype differentiator — location control shape | deviates (adjudicated at T02 G4) | `00-prototype-variantA-1440.png` shows an always-visible pill tab row (`All locations · Vancouver · Toronto · Frankfurt`); live is a dropdown that hides at ≤1 named location |
+| 21 | prototype differentiator — `Shop` heading + `N products · public products only` counter | deviates (adjudicated at T02 G4) | present in `00`, absent live |
+| 22 | prototype differentiator — per-location divider bands | deviates (adjudicated at T02 G4) | the prototype has none (tabs only); live renders a pink `Toronto Warehouse · 4` band per group |
+| 23 | prototype differentiator — spec table renders in full, no scroll | deviates | `00` shows all 8 spec rows at once, right-aligned; live scrolls inside a fixed-height card (see row 18) |
+| 24 | prototype differentiator — Packaging as one row (`Glass jar · resealable`) | deviates | live splits it into `Packaging` + `Resealable Yes` (two rows of the nine) |
+| 25 | prototype differentiator — Request-pricing helper line naming the chat destination | deviates | `00` renders `Asks about OG Kush — the seller answers in chat` under the button; live renders the button alone (`01b`) |
+| 26 | prototype differentiator — Connect actions in `ShopView`'s `buyerContext` slot | match | `01b` — `Connected — go to chat` sits between the banner and the info row, where the prototype puts the Connect chip row |
+
+## The open question (row 16), stated exactly
+
+The rule as shipped is `if (named.length <= 1) return null` (`ShopView.tsx:938`), where `named` counts
+**distinct non-null `product.location` values among the products the viewer can see**.
+
+- For the **buyer** it is exact-by-construction only in the no-unfiled case. With one named location
+  plus an unfiled visible product the buyer has two *groups*, one *named location*, and no filter —
+  `08b` is that state. Nothing is lost that the buyer could have used (the second group is unlabelled),
+  but the page now shows five cards beneath a divider that counts four.
+- For the **seller** the same arithmetic would hide a filter that *would* have filtered: `filterByLocation`
+  returns everything for `All` and only matches for a named location, so `All ≠ Toronto` once an unfiled
+  product exists. **I could not photograph it.** GreenLeaf's seed gives the seller two named locations,
+  so `named.length = 2` and the filter stays (`07b`). Reproducing the one-named case needs a
+  `product.location` write on a seeded row, which the staging brief fences off (three suites pin it).
+
+So the loss is real in code and unphotographed in the app. `07b` is the nearest reachable neighbour;
+`08b` is the same arithmetic on the surface where it *is* reachable, and it is the one that looks wrong
+to me — not because the filter is missing, but because the count badge and the card count disagree.
+
+## Not on the criteria list, found while walking
+
+**Alice is offered a Connect button on her own company.** `05-owner-via-discover-own-catalogue.png`:
+`/discover/aaaa…` renders `Add a note for GreenLeaf Cultivation (optional)…` and a full-width
+**Connect** CTA to Alice, a GreenLeaf member. `ConnectActions` has no owner arm. The affordance
+predates T05 — but before T05 that page showed an owner an empty catalogue, and T05's owner arm is
+what turns it into a destination PRD §7 asks owners to use. I did not click it, so whether the write
+succeeds is untested.
+
+**AUR-1A's rung pill differs between surfaces** — seller `1000g 2000g+`, buyer `1000g` (`01b` vs `02b`).
+The product is `price_public=false`, so AC 3 requires the buyer to get no price information; the rung
+is price information. Reads correct to me, recorded because it is a buyer/seller card difference and
+row 2 claims they agree.
+
+## Database
+
+Left exactly as found, verified. `public.product` hashes to `2833de0bb2d707845c8b101e15e1caa0`
+before and after (`md5(string_agg(t::text,'|' order by supplier_product_code))`), and a full
+column-level dump of GreenLeaf's six rows is byte-identical. `cultivator` was restored to its seeded
+`Aurora Inc`, not to NULL. The plant/restore cycle bumped `AUR-1B.updated_at` via
+`trg_product_set_updated_at`; that was put back to `2026-08-22 13:15:59.839453+00` under
+`set local session_replication_role = replica` inside one transaction. Zero `T05-VIS-NULL` rows remain.
+`location`, `profile_visible` and `price_public` were never written. Sign-ins created `auth` session
+rows, which no walk can avoid.
+
+---
+
+# T05 (HEL-59) — reviewer findings
+
+## `security` — SECURITY-CHECKLIST S1-S8 · **no blocking**, 6 notes
+
+- **S5 stale-redeclare: CLEAN** *(security)* — independently pulled the live `pg_get_functiondef`
+  and confirmed all six guards survive verbatim (`c.id = p_company_id`, `c.deleted_at is null`,
+  `verification_status = 'verified'`, `p.deleted_at is null`, the window, `is_caller_verified()`).
+  Also proved only four migrations ever *define* this function; `20260820090000:122` mentions it in
+  a comment only. This is the class that once shipped a lost verified-gate to production.
+- **Owner arm: SAFE** *(security)* — `current_company_id()` takes no caller input; the NULL table
+  is enumerated; cross-company reach is structurally impossible because the join already pins
+  `p.company_id = c.id = p_company_id`. Proven live with a companyless caller: 0 rows.
+  Its integrity root holds — DEV-88's `person.company_id` revoke is intact.
+- **Grants: CORRECT, live-verified** *(security, S1/S6)* — 3 statements present;
+  `has_function_privilege('anon', …) = f`, `authenticated = t`, no PUBLIC entry.
+- `pack_sizes` projects only `metadata->'pack_sizes'`; the suite's leak check **fires** (proved by
+  read) *(security, S4)*. `supplier_product_code` absent from 27 `proargnames` *(security, S5)*.
+- **note** *(security, S1/S4)* — `anon` is blocked from `product_media` only **incidentally**: it
+  fails with *"permission denied for table product"*, a privilege error inside the policy
+  expression, not a policy decision. `product_media_public_select` is the only public-select policy
+  granted `TO anon`. Re-grant SELECT on `product` and it opens. **Close with T06's site-1 work.**
+- **note** *(security, S2)* — `shop-media` is a **public** storage bucket; COA/doc paths resolve to
+  unauthenticated URLs. T05 is the first time buyers receive those paths. Pre-existing, newly
+  reachable.
+- **note** *(security)* — `product_media` has no private/internal flag, so the projection leaks
+  nothing; the buyer's shape is narrower than the seller's (withholds `company_id`).
+- **note** *(security, S7)* — RED-first was proven for column *existence*, not per-guard.
+  **CLOSED by the orchestrator** — see the mutation table below.
+- **note** *(security, S3/S6/S8)* — event-trigger firing, `db diff --linked` and `get_advisors`
+  are owed at `/ship`.
+
+## `critic` — 1 blocking, 9 notes
+
+- **BLOCKING** *(critic, `ShopView.tsx:689`)* — the buyer/`Unassigned` suppression had **no guard**;
+  every seeded product carries a location, so the term could be deleted with the suite green. The
+  plan itself demanded a planted fixture and none was written. **FIXED** — see mutation table.
+- **note** *(critic, `20260822090000:160,166`)* — `desc nulls last`, the `created_at` tie-break and
+  `coalesce(bt.percent,0)` were unconstrained. The `coalesce` one is a real buyer/seller
+  divergence. **`coalesce` CLOSED**; the ordering clauses remain unconstrained (accepted: the
+  TS side has its own unit tests at `shopMap.test.ts:26,39`).
+- **note** *(critic, `ShopView.tsx:929`)* — the comment justifying `<= 1` was **false** in a
+  reachable configuration. **CORRECTED**, and the underlying behaviour staged for G4 (item A).
+- **note** *(critic, `20260822090000:128`)* — I4 (unverified **target**) retyped by the DROP +
+  CREATE with nothing in the tree to notice its loss. **FIXED** — see mutation table.
+- **note** *(critic)* — 3 files exceed the ticket's own Files line, each with written plan
+  authority. T01/T02 recorded such changes as inline `⚠️ AMENDED at /build` blocks in TICKETS.md;
+  T05's was never amended. **G4 adjudication (item F).**
+- **note** *(critic, `companies.ts:252`)* — stale count in a doc comment. **CORRECTED.**
+- **cleared** *(critic)* — the ADR `Reused` fence holds (no new prop, no new state, no new branch);
+  all 18 invariants verified clause-by-clause; the four self-reported deviations are as described;
+  alias hygiene under `search_path = ''` is correct.
+
+## Mutation testing — every new guard proved able to fail *(orchestrator)*
+
+Closes `security`'s S7 note. A guard that has never failed proves nothing.
+
+| guard | mutation applied | result |
+|---|---|---|
+| I4 — unverified target seller | removed `and c.verification_status = 'verified'` | **caught** |
+| `coalesce(bt.percent, 0)` | reduced to bare `sum(bt.percent)` | **caught** |
+| `Unassigned` is seller-only | replaced the term with `true` | **caught** |
+
+Real function restored after each; suite green.
+
+## Orchestrator deviations, declared
+
+1. Fixed 37 uncast uuid literals in `discoverable_shop_spec_columns_test.sql` — the suite could not
+   reach a single assertion (`test-writer` has no Bash and could not run it; see L-023).
+2. Fixed 2 `tsc` errors in `e2e/discover-shop.spec.ts` from a runtime-computed `.select()` string.
+   Builder correctly refused to edit a test file.
+3. Wrote the three guards above, plus the two comment corrections. Comment-only in source.
