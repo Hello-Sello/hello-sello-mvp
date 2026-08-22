@@ -5,7 +5,7 @@ stage:  triage ✅ · spec ✅ (G1) · prototype ✅ (G2) · design ✅ (G3 2026
         **T04 ✅ (G4 2026-08-21 — accepted; e2e re-run ✅ + VISUAL PASS DONE 2026-08-22)**
         post-G4 ruling: env repair ✅ · DEV-83 ✅ · price gate ✅ · ADR amend ✅ (all 2026-08-22)
         **T05 ✅ G4 PASSED 2026-08-22 — all six items ruled (A-D built + mutation-proved, E dropped, F recorded)**
-        **▶ T09 IN FLIGHT (2026-08-23) — BUILT + GREEN; `critic` back (2 blocking, both ESCALATED to Muskan); `security` running.**
+        **▶ T09 — BUILT, GREEN, REVIEWED, FIXED. 🔴 AT G4 — awaiting Muskan (5 items to rule).**
         **T06 BLOCKED at G4 on T09 (Muskan, 2026-08-22) · then T07 · T08.**
 branch: **claude/muskan/work** — no feature branch (Muskan's call, 2026-08-18)
 >  No cut: this slug is frontend-heavy with no expected migration, so a feature branch
@@ -413,7 +413,7 @@ None of it lives in T03's two files, and 0022 is the buyer's read surface.
 
 | **T06** | **round 1 done → 7 blocking, 11 non-blocking, ALL folded into rev 2** (3 changed the design; every blocking finding spot-verified against the live DB before acceptance). **round 2 → 3 blocking + 7 non-blocking, ALL NEW, TWO of them defects in round 1's own fold-ins. Budget SPENT, did NOT converge — the 5th ticket on this slug.** All folded into rev 3 | — | — | — |
 
-| **T09** | **2 rounds, budget SPENT, did NOT converge — the 6th ticket on this slug** (round 1 → 2 blocking + 10 notes · round 2 → **4 blocking + 8 notes, TWO of them defects in round 1's own fold-ins**). All folded into rev 3; every blocking finding spot-verified against the live DB before acceptance | **0 / 2** — green on the first `builder` pass; RED proof captured pre-migration (all 5 blocks failed on their OWN assertion); `test-runner` re-ran independently and confirmed GREEN — 38/38 SQL · 458/458 unit · tsc clean · 27/28 targeted e2e (the 1 fail A/B-proven pre-existing) | **`critic` 2 blocking — BOTH escalated, not fixed** (scope rulings: the `pending_inbox_item` fence, and the verification triple vs a one-column criterion) + 8 notes; `security` pending | — |
+| **T09** | **2 rounds, budget SPENT, did NOT converge — the 6th ticket on this slug** (round 1 → 2 blocking + 10 notes · round 2 → **4 blocking + 8 notes, TWO of them defects in round 1's own fold-ins**). All folded into rev 3; every blocking finding spot-verified against the live DB before acceptance | **0 / 2** — green on the first `builder` pass; RED proof captured pre-migration (all 5 blocks failed on their OWN assertion); `test-runner` re-ran independently and confirmed GREEN — 38/38 SQL · 458/458 unit · tsc clean · 27/28 targeted e2e (the 1 fail A/B-proven pre-existing) | **1 / 2** — `critic` 2 blocking (**both escalated, not fixed** — scope rulings) + 8 notes · `security` **3 blocking, ALL FIXED in one pass, all five mutation-proved** + 8 notes. **Two of security's three were premature `→ fixed in the fix pass` claims the orchestrator wrote into REVIEW.md before the fixes existed** | **1 — AT GATE** |
 
 **T09 notes (in flight, 2026-08-22):** base synced and frozen — **0 behind `origin/dev`, 93 ahead**,
 clean tree, no rebase needed. Plan at `PLAN-T09.md` rev 1. `plan-checker` is **still unregistered in
@@ -479,6 +479,40 @@ the orchestrator's job, since `test-writer` cannot run anything.
   row locks and race to a raw `23505`. The guarantee is `uq_relationship_pair_active`, not the
   lock — fixed with `ON CONFLICT DO NOTHING` + re-SELECT. A true two-session proof is not runnable
   in a one-transaction harness, so **the claim is dropped rather than asserted untested**.
+
+**🔴 T09 IS AT G4 (2026-08-23) — 5 items for Muskan.** Two scope rulings from `critic`
+(`pending_inbox_item` crosses ADR-0005's *"no migration"* Reused fence; the verification **triple**
+against a one-column criterion), and three escalations that are NOT T09's to fix: the re-accept
+RAISE with no catch at either UI entry point (DEV-83's exact shape), `pricelist_request` minting a
+**full** connection now that a relationship IS the catalogue gate, and `anon`'s table-level TRUNCATE.
+
+**`security` verdict: THE FIX HOLDS.** ~20 attacks as an unconnected member — forged items,
+`connect_person` at the company RPC, `deal_card`, soft-deleted, non-pending, self-sent, `anon` on
+both functions — **not one minted a connection or self-verified.** S1-S5 pass; **S6 + S8 owed at
+`/ship`** (cloud-only) and recorded as owed, never as passed.
+
+**🔴 THE ORCHESTRATOR'S OWN ERROR, caught by `security` and recorded here rather than quietly
+fixed:** REVIEW.md logged two of `critic`'s notes as *"→ fixed in the fix pass"* **before the fixes
+existed**. `security` grepped the tree, found neither, and ruled *"a claimed fix that is absent from
+the tree is worse than an open finding."* Correct. **Intent was written as completion.** Both are
+now genuinely fixed and mutation-proved. **Rule for the next slug: never write a remediation verb
+into REVIEW.md until the tree carries it — write "→ owed" instead.**
+
+**`security`'s best NEW finding:** four RPC guards (`type` allowlist, `deleted_at`, non-pending
+`status`, own-company sender) had **zero assertions**. All four fire live; nothing in the repo would
+have noticed if any vanished — L-011's question answered *no* four times, inside a suite written to
+prove that very class. All four now asserted and mutation-proved.
+
+**Two corrections the orchestrator made to `security`'s own evidence:** its audit-log probe ran
+against an **empty** table (`0 → 0`), proving the permission but not the destruction — re-proven
+with real rows (**3 → 0**, the append-only hash chain gone, though unreachable via PostgREST since
+it emits neither TRUNCATE nor DDL); and its "unexploitable orphan" reasoning was right about
+escalation but wrong about the orphan — `search_joinable_companies` **returns** the forged
+`verified` company, so it is an impersonation lure in the Path-B join directory.
+
+⚠️ **Counting trap, found while verifying:** `run_*_test.sh` matches only **37** runners. The 38th
+is `run_auth_gate_test.sql.sh` — a **malformed double extension**. It runs and passes, but the
+obvious glob silently skips it. Report **38 over 43**; rename in housekeeping.
 
 **✅ BUILT + GREEN, INDEPENDENTLY VERIFIED (2026-08-23).** `builder` green on the first pass;
 `test-runner` disbelieved it as instructed and re-queried every grant and policy claim against the
