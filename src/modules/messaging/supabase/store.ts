@@ -521,10 +521,23 @@ export async function postDealMessage(threadId: string, dealCardId: string): Pro
 }
 
 /**
- * Run the accept rollout against Supabase: mint a `relationship` (+ the C2C/P2P
- * threads and their seed lines per `planRollout`). Idempotent on
- * `inbox_item_id`, so a double-accept is a no-op. Does NOT touch the inbox item
- * status - connect owns that table (connect.acceptItem flips it).
+ * Run the accept rollout against Supabase: ENSURE a `relationship` (+ the
+ * C2C/P2P threads and their seed lines per `planRollout`) exists, creating only
+ * what is missing.
+ *
+ * Ensure, not insert, because the schema already declares these as unique and
+ * an accept is not the only thing that creates them: one active relationship
+ * per company pair (`uq_relationship_pair_active`), one C2C per relationship
+ * (`uq_chat_thread_c2c`), one P2P per person pair (`uq_chat_thread_p2p`). Two
+ * companies can already be connected when a request arrives - that is the
+ * normal case for a pricing ask - so this function adopts what is there and
+ * adds the rest. Seed lines are written only for threads it creates.
+ *
+ * Callers get the relationship id and every thread id the plan calls for,
+ * whether this call made them or found them.
+ *
+ * Does NOT touch the inbox item status - connect owns that table
+ * (connect.acceptItem flips it after this returns).
  */
 export async function acceptInbox(
   input: AcceptInput,
@@ -569,31 +582,79 @@ export async function acceptInbox(
     input.ownCompany.id < input.senderCompany.id
       ? [input.ownCompany.id, input.senderCompany.id]
       : [input.senderCompany.id, input.ownCompany.id];
-  const { data: rel, error: relErr } = await supabase
-    .from("relationship")
-    .insert({
-      company_a_id: companyA,
-      company_b_id: companyB,
-      initiated_by_company_id: input.senderCompany.id, // the requester initiated
-      inbox_item_id: input.inboxItemId,
-      status: "active",
-      created_by: input.viewerPerson.id,
-      updated_by: input.viewerPerson.id,
-    })
-    .select("id")
-    .single();
-  if (relErr) throw relErr;
 
-  // threads + seed lines from the (pure) rollout plan
+  // ADOPT, don't mint blindly. The DB declares ONE active relationship per
+  // company pair (`uq_relationship_pair_active`). The probe at the top of this
+  // function keys on `inbox_item_id` - a column nothing enforces - so it misses
+  // every relationship minted by another route (the seed, or an earlier accept
+  // from a different item). The insert below then raised `23505`, the
+  // transaction rolled back, and both call sites swallowed the throw: the item
+  // stayed `pending` forever, no error shown. This hit ANY second substantive
+  // accept between two already-connected companies, not only the seeded pair.
+  const { data: pairRel, error: pairErr } = await supabase
+    .from("relationship")
+    .select("id")
+    .eq("company_a_id", companyA)
+    .eq("company_b_id", companyB)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (pairErr) throw pairErr;
+
+  let relationshipId: string;
+  if (pairRel) {
+    relationshipId = pairRel.id;
+  } else {
+    const { data: rel, error: relErr } = await supabase
+      .from("relationship")
+      .insert({
+        company_a_id: companyA,
+        company_b_id: companyB,
+        initiated_by_company_id: input.senderCompany.id, // the requester initiated
+        inbox_item_id: input.inboxItemId,
+        status: "active",
+        created_by: input.viewerPerson.id,
+        updated_by: input.viewerPerson.id,
+      })
+      .select("id")
+      .single();
+    if (relErr) throw relErr;
+    relationshipId = rel.id;
+  }
+
+  // threads + seed lines from the (pure) rollout plan - ENSURED, not inserted.
+  // `uq_chat_thread_c2c` (one per relationship) and `uq_chat_thread_p2p` (one
+  // per person pair) tell the same story as the relationship above: on an
+  // adopted relationship the c2c already exists, so re-inserting it raises
+  // `23505`. Seed lines are written ONLY for a thread this call creates - that
+  // is what stops a double-accept from double-posting, since the inbox item's
+  // status flips only after this function returns.
   const plan = planRollout(input);
+  const { data: present, error: presentErr } = await supabase
+    .from("chat_thread")
+    .select("id, type, person_a_id, person_b_id")
+    .eq("relationship_id", relationshipId)
+    .is("deleted_at", null);
+  if (presentErr) throw presentErr;
+
   const base = Date.now();
   const threadIds: string[] = [];
   for (let ti = 0; ti < plan.threads.length; ti++) {
     const spec = plan.threads[ti];
+    const already = (present ?? []).find(
+      (t) =>
+        t.type === spec.type &&
+        (spec.type !== "p2p" ||
+          (t.person_a_id === spec.personAId &&
+            t.person_b_id === spec.personBId)),
+    );
+    if (already) {
+      threadIds.push(already.id);
+      continue;
+    }
     const { data: thread, error: tErr } = await supabase
       .from("chat_thread")
       .insert({
-        relationship_id: rel.id,
+        relationship_id: relationshipId,
         type: spec.type,
         person_a_id: spec.personAId,
         person_b_id: spec.personBId,
@@ -617,5 +678,5 @@ export async function acceptInbox(
     }
   }
 
-  return { relationshipId: rel.id, threadIds };
+  return { relationshipId, threadIds };
 }
