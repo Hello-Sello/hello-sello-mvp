@@ -5,7 +5,7 @@ stage:  triage ✅ · spec ✅ (G1) · prototype ✅ (G2) · design ✅ (G3 2026
         **T04 ✅ (G4 2026-08-21 — accepted; e2e re-run ✅ + VISUAL PASS DONE 2026-08-22)**
         post-G4 ruling: env repair ✅ · DEV-83 ✅ · price gate ✅ · ADR amend ✅ (all 2026-08-22)
         **T05 ✅ G4 PASSED 2026-08-22 — all six items ruled (A-D built + mutation-proved, E dropped, F recorded)**
-        **▶ REMAINING: T06 · T07 · T08.**
+        **▶ T06 BLOCKED at G4 on new ticket T09 (Muskan, 2026-08-22) · then T07 · T08.**
 branch: **claude/muskan/work** — no feature branch (Muskan's call, 2026-08-18)
 >  No cut: this slug is frontend-heavy with no expected migration, so a feature branch
 >  would only add a merge step. `/ship` still rebases onto `dev` and PRs from here.
@@ -601,6 +601,62 @@ seller's `metadata` private note and `rrp` on **deliberately hidden** products v
 read — widens the ROW set, not the column set, so narrowing columns would be new scope) and the
 **perf cliff** (the helper is not inlined, costs `idx_product_company_profile_visible`; 1.7 ms →
 1327 ms at 20 000 products; prod holds 13).
+
+**🔴 T06 · G4 — BLOCKED. Muskan ruled: close the write door first (2026-08-22).**
+
+`security` returned **3 blocking**; two are live privilege escalations that I reproduced myself,
+end-to-end, inside `BEGIN … ROLLBACK` before relaying them.
+
+**The gate T06 builds is ornamental as shipped.** `relationship` is directly writable by
+`authenticated`, and `rel_all`'s `WITH CHECK` only requires the caller's **own** company be one side
+of the pair — nothing requires the other side to consent. Proven as a Bavaria member with no
+relationship to GreenLeaf: `connected=false, hidden=0` → one INSERT → `connected=true, hidden=2`,
+leaking `AUR-1C`/`AUR-1D` with their `rrp`. The migration argues carefully about
+`status`/`deleted_at`/pending — **all of which the attacker simply supplies as `'active'`.**
+Compounding it: a member can **self-verify** (`company_update` permits `id = current_company_id()`
+and `authenticated` holds column-level UPDATE on `verification_status`), which undoes the very
+tightening T06 adds. Self-verify, then self-connect.
+
+**Neither hole is caused by T06** — `rel_all` and `company_update` both predate it. T06 is what
+changes their *job*: before, a self-minted row bought nothing on the catalogue; after, `relationship`
+IS the confidentiality gate for hidden products. **T06 converts a bookkeeping-integrity bug into a
+data-confidentiality hole** — which is exactly why it blocks on the fix rather than shipping beside it.
+
+**T09 filed** (`TICKETS.md`, above T07; Linear entry owed — MCP auth still blocked). The surface
+turned out **much smaller than the finding suggests**, measured not assumed: `relationship` has
+**exactly one** write call site in all of `src/` (`messaging/supabase/store.ts:609`; the other ten
+`.from("relationship")` uses are reads, and **no RPC writes it at all**), and
+`company.verification_status` has **exactly one** client write (`onboarding/actions.ts:181`, a
+`rejected → pending` resubmit already guarded in SQL). The HS-team paths are already DEFINER RPCs.
+**The consent evidence already travels with the accept call** — it passes `inbox_item_id`; the DB
+just never checks it. Remedy is the DEV-88 pattern verbatim.
+
+**`critic`'s blocking (B3) is the same column-leak I was going to bring as a weak scope question —
+and it found the precedent that reframes it.** `20260607190000_seller_only_column_split.sql` opens
+*"RLS is row-level only, so a counterparty who can see a shared row can read every column of it"*
+and moves `cogs` to a sibling table for exactly this reason. **Three columns were left behind** —
+`metadata` (the seller's private note), `rrp_per_gram`, and **`supplier_product_code`**, which
+carries a G3 signature (*"OMIT … a commercial-confidentiality call"*) enforced today only in the RPC
+projection and the UI — both of which the direct table door bypasses. The tree already contains the
+signed pattern for this problem.
+
+**Two factual errors in shipped comments, to fix when T06 resumes:** (1) the migration says `anon`'s
+INSERT/UPDATE/DELETE/**TRUNCATE** are "blocked by RLS" — **RLS does not apply to TRUNCATE**; that
+verb is gated by the table grant alone, which the same sentence says `anon` holds. Not exploitable
+(no PostgREST TRUNCATE verb) but it closes the section arguing *incidental vs deliberate* by
+misattributing a lock to the wrong mechanism. (2) the cascade list over-counts by one —
+`plit_public_select` already has its own gate, so the migration and the ledger disagree and **the
+ledger is right**. Also owed: ADR `:344`'s site-4 row says `untouched` of a policy whose role list
+was narrowed, and ADR `:298-301` is **wrong about the view** (an owner-rights view doesn't change the
+effective user id, so `rel_all` IS load-bearing at site 2) — **the shipped comment is right, the ADR
+is wrong**.
+
+**`security` CLEARED, worth recording:** S5 stale-redeclare **clean** — one hunk, confirmed against
+the live deparse, every prior guard intact including T05's unfiled clause and the window terms
+outside the override · S1 grants correct · the `product_media` revoke is now **deliberate** (`anon`
+errors on `product_media` itself, not on `product`) · all seven doors deny `anon` with no over-lock ·
+companyless → 0 rows everywhere · **the cascade is bounded and in the safe direction** (the override
+does NOT propagate) · `security_barrier` survived · every other `.from("product")` read swept.
 
 **T05 notes (in flight, 2026-08-22):** base synced and frozen — 0 behind `origin/dev`, 60 ahead.
 Plan at `PLAN-T05.md` rev 1. Its invariant table was built by **walking the live function body
