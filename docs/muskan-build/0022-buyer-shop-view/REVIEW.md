@@ -852,3 +852,118 @@ Real function restored after each; suite green.
 2. Fixed 2 `tsc` errors in `e2e/discover-shop.spec.ts` from a runtime-computed `.select()` string.
    Builder correctly refused to edit a test file.
 3. Wrote the three guards above, plus the two comment corrections. Comment-only in source.
+
+---
+
+# T06 (HEL-60) — reviewer findings
+
+## `security` — SECURITY-CHECKLIST S1-S8 · **3 BLOCKING**
+
+### 🔴 B1 (S2/S4) — the connection gate is CALLER-WRITABLE. Any verified company can self-mint a connection and read every hidden product of any other company.
+
+`relationship` is directly writable by `authenticated` (`INSERT,SELECT,UPDATE,DELETE,TRUNCATE`) and
+`rel_all`'s `WITH CHECK` only requires the caller's own company be **one side of the pair**:
+
+```
+rel_all  qual = with_check = ((current_company_id() = company_a_id) OR (current_company_id() = company_b_id))
+```
+
+Nothing requires the *other* side to consent. **Reproduced by the orchestrator** as a member of
+Bavaria Medical Cannabis (verified, no relationship to GreenLeaf), inside `BEGIN … ROLLBACK`:
+
+```
+BEFORE  connected=false  hidden_products_visible=0
+INSERT 0 1                                   ← one row, no consent from GreenLeaf
+AFTER   connected=true   hidden_products_visible=2
+LEAKED: AUR-1D | Pedanios 10/10 MBE-CA | rrp=6.0000
+LEAKED: AUR-1C | San Raf 29/1 PNK      | rrp=5.0000
+```
+
+**The migration argues at length** (`:66-87`) about `status` / `deleted_at` / pending precision —
+every one of which the attacker simply supplies as `'active'`. **The gate is ornamental.**
+
+`rel_all` predates T06. What T06 changes is its *job*: before, a self-minted row bought nothing on
+the catalogue (`profile_visible = false` was absolute); after, `relationship` **is** the
+confidentiality gate for hidden catalogue data. T06 converts a bookkeeping-integrity bug into a
+data-confidentiality hole.
+
+**Exact precedent, on this slug:** ADR-0005 round 5 found *"basket `product_id` stayed writable
+after insert, so the admission policy was ornamental — closed with the DEV-88 column-REVOKE."* Same
+shape, same remedy family.
+
+⚠️ **The fix is bigger than T06 and cross-lane:** the accept flow is a plain user-JWT `.insert()`
+(`messaging/supabase/store.ts:608`), so revoking direct write breaks accepting connections until an
+RPC replaces it. **Escalated to G4 — Muskan rules.**
+
+### 🔴 B2 (S2/S4) — a member can SELF-VERIFY, defeating the tightening this migration adds.
+
+`company_update` permits `id = current_company_id()` and `authenticated` holds column-level UPDATE on
+`company.verification_status`; the only trigger is `set_updated_at`. Proven in one rolled-back
+transaction:
+
+```
+verification_status='pending'  → is_caller_verified: f | products_visible: 0
+verification_status='verified' → is_caller_verified: t | products_visible: 4
+```
+
+Line 2 is the good news — **the tightening genuinely works.** Line 3 is the bad news: the caller
+restores it themselves. **B1 + B2 compose:** self-verify, then self-connect.
+
+### 🔴 B3 (S4) — the direct-table door returns columns the RPC deliberately withholds, now on HIDDEN products.
+
+As Bob (legitimately connected): `supplier_product_code AUR-1D`, `rrp_per_gram 6.0000` on
+`profile_visible = false` rows. `metadata` (the seller's private note) is granted too. Row access is
+granted by policy; **column access is the full 36-column grant.**
+
+`critic` independently found the decisive precedent: **`20260607190000_seller_only_column_split.sql`**
+opens *"RLS is row-level only, so a counterparty who can see a shared row can read every column of
+it"* and moves `cogs` to a sibling table for exactly this reason. **Three columns were left behind.**
+And `supplier_product_code` carries a G3 signature — *"OMIT … a commercial-confidentiality call"* —
+enforced today only in the RPC projection and the UI, both of which this door bypasses.
+
+## `security` — CLEARED (coverage, not just failures)
+
+**S5 stale-redeclare: CLEAN** — `/usr/bin/diff -u` of the T05 body vs T06's returns **exactly one
+hunk**, confirmed against the live `pg_get_functiondef`, not just the file: `c.id = p_company_id`,
+`c.deleted_at is null`, `verification_status = 'verified'`, `p.deleted_at is null`, the owner arm,
+**T05's unfiled clause**, both window terms *outside* the override, and `is_caller_verified()` — all
+intact. `SECURITY DEFINER` + `SET search_path TO ''` preserved. · **S1 grants** — helper `anon` = `f`,
+`authenticated` = `t`, no PUBLIC entry; `anon_execute_lockdown_test.sql` regression-covers the new
+helper automatically. · **The `product_media` revoke is now DELIBERATE** — `anon` errors on
+*`product_media` itself*, not on `product`; predicate byte-identical via `ALTER POLICY`. · The same
+incidental-only situation does **not** exist on `product_image` or `pricelist_item` (both doubly
+closed). · **All seven doors deny `anon`**, with no over-lock. · **Companyless** → 0 rows everywhere;
+the canonical-order CHECK is load-bearing and `convalidated = t`. · **The cascade is bounded and in
+the safe direction** — the override does NOT propagate (Bob: `hidden_imgs 0 | hidden_media 0 |
+hidden_pli 0`); only the tightening does. · `security_barrier` survived the view replace. ·
+`price_public` un-`or`-ed, proven on both AUR-1C and AUR-1D. · **Every other `.from("product")` read
+swept** — no unscoped cross-company read remains.
+
+## `critic` — 1 blocking, 11 notes
+
+- **BLOCKING** — same as `security` B3, with the `20260607190000` precedent that reframes it.
+- **note** (`…override.sql:343-346`) — the comment claims `anon`'s INSERT/UPDATE/DELETE/**TRUNCATE**
+  are "blocked by RLS". **RLS does not apply to TRUNCATE** (Postgres exempts it); that verb is gated
+  by the table grant alone, which the same sentence says `anon` holds. Not exploitable (PostgREST has
+  no TRUNCATE verb) — but it sits at the close of the section arguing *incidental vs deliberate*, and
+  misattributes one lock to the wrong mechanism.
+- **note** (`:30-31`) — the cascade list over-counts by one: `plit_public_select` already carries its
+  own `is_caller_verified()` (`20260814120000:75`), so nothing propagates there. **The migration and
+  the ledger disagree; the ledger is right.**
+- **note** (ADR `:298-301`) — the ADR's round-3 correction is itself wrong about the view: an
+  owner-rights view does not change the effective user id, so an INVOKER function in its `WHERE`
+  runs as the **caller**, and `rel_all` **is** load-bearing at site 2. **The shipped comment is right
+  and the ADR is wrong.** Test A3 covers the path behaviourally.
+- **note** (ADR `:344`) — site-4 row reads `untouched`; the role list *was* narrowed. Amend.
+- **note** — no cell asserts the **converse** (that the override must NOT propagate to the four
+  neighbours). Enforced only by inspection; an "OR" added later would go fully green.
+- **note** (`discoverable_shop_spec_columns_test.sql:450-456`) — TEST7's new unconnected guard tests
+  for **any** relationship row, ignoring `status`/`deleted_at`; a suspended row would abort the suite
+  on a non-bug. Mirror the helper.
+- **note** (TICKETS.md AC 5) — *"shall return **every** product"* now reads as failed if walked
+  verbatim: T05's ruling withholds **unfiled** hidden products. Read as amended, not failed.
+- **cleared** — every EARS bullet walked against the shipped SQL; window outside the override at all
+  three sites; `price_public` un-overridden; both base bodies true one-predicate deltas; the ADR
+  fence untouched; `getOwnCatalog` not forgeable and its docstring now true; `database.types.ts`
+  hand-edit intact with **no ride-along drift**.
+- **note** — both builder deviations judged **justified**.
