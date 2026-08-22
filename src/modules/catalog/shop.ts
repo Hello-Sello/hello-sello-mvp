@@ -139,7 +139,7 @@ export function parseLinks(metadata: unknown): ShopLink[] {
 /** Extra pack sizes stashed in `product.metadata.pack_sizes` (v0, no schema
  *  change). Tolerant of any legacy/foreign shape — returns [] rather than
  *  throwing on unexpected data. */
-function parsePackSizes(metadata: unknown): number[] {
+export function parsePackSizes(metadata: unknown): number[] {
   const raw = (metadata as { pack_sizes?: unknown } | null)?.pack_sizes;
   if (!Array.isArray(raw)) return [];
   return raw.filter((n): n is number => typeof n === "number" && Number.isFinite(n) && n > 0);

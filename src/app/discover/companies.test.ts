@@ -32,6 +32,16 @@
  * also RENAMED to `logoPath`/`coverPath` this round (rev 3, B2 — see plan
  * "(b)"), so the two tests that used to assert the old names are updated in
  * place below, not left as a second, now-contradictory pair.
+ *
+ * ⚠️ RED-FIRST, continued (T05, HEL-59, PLAN-T05.md rev 3): `fullRow` gains 12
+ * new sentinel fields (cbg_percent, cbn_percent, terpene_percent, cultivator,
+ * lineage_parent_a, lineage_parent_b, irradiation_code, packaging_material,
+ * resealable, location, pack_sizes, media) — the widening `ShopRow` (D4) and
+ * `mapDiscoverShopRow` (D2/D3a/D5) must gain to stop returning null/[] for
+ * them. Each sentinel is DISTINCT (L-012/L-020 pattern) so a transposition —
+ * two fields swapped — cannot pass silently. The two T02-era assertions that
+ * this ticket makes stale (`location` forced null; `media` forced []) are
+ * corrected in place below, not left contradicting the new tests.
  */
 import { describe, it, expect } from 'vitest'
 import { mapDiscoverCompanyRow, toShopCompany, mapDiscoverShopRow } from '@/app/discover/companies'
@@ -282,6 +292,25 @@ describe('mapDiscoverShopRow (T02, HEL-56) — ShopRow → ShopProduct', () => {
       { id: 't1', min_grams: 500, price_per_gram: 4.8 },
       { id: 't2', min_grams: 1000, price_per_gram: 4.2 },
     ],
+    // ---- T05 (HEL-59) additions — 12 new OUT columns, each a DISTINCT
+    // sentinel so a transposition (two fields swapped) cannot pass silently.
+    cbg_percent: 44,
+    cbn_percent: 55,
+    terpene_percent: 66,
+    cultivator: 'PROD-CULTIVATOR',
+    lineage_parent_a: 'PROD-LINEAGE-A',
+    lineage_parent_b: 'PROD-LINEAGE-B',
+    irradiation_code: 'PROD-IRRADIATION',
+    packaging_material: 'PROD-PACKAGING',
+    resealable: true,
+    location: 'PROD-LOCATION',
+    // finite, positive filter (D3a/B8, parsePackSizes wiring): -1 and 0 must
+    // be dropped, non-numbers ignored — only [7, 12] should survive.
+    pack_sizes: [7, -1, 12, 0, 'not-a-number'] as unknown as number[],
+    media: [
+      { id: 'm0', kind: 'video_link', path: null, url: 'https://video.test/0', label: null },
+      { id: 'm1', kind: 'coa', path: 'MEDIA-PATH-1.pdf', url: null, label: 'MEDIA-LABEL-1' },
+    ],
   }
 
   it('forwards r.price_public verbatim when false — hardcoding true would silently kill Request-pricing for every buyer', () => {
@@ -361,24 +390,49 @@ describe('mapDiscoverShopRow (T02, HEL-56) — ShopRow → ShopProduct', () => {
     expect(out.supplier_product_code).toBeNull()
   })
 
-  it('never invents location (no tabs until T05 — the RPC returns no location column)', () => {
+  it('forwards location from the row (T05, HEL-59 — the RPC now returns it; produces the location tabs)', () => {
     const out = mapDiscoverShopRow(fullRow)
-    expect(out.location).toBeNull()
+    expect(out.location).toBe('PROD-LOCATION')
   })
 
-  it('supplies null/[] — never a fabricated default — for every field the RPC does not return', () => {
+  it('still supplies null/[] for the two fields the RPC NEVER returns, even after T05: supplier_product_code (confidentiality, I18) and batches (no lot list, D5)', () => {
     const out = mapDiscoverShopRow(fullRow)
-    expect(out.cbg_percent).toBeNull()
-    expect(out.cbn_percent).toBeNull()
-    expect(out.cultivator).toBeNull()
-    expect(out.lineage_parent_a).toBeNull()
-    expect(out.lineage_parent_b).toBeNull()
-    expect(out.irradiation_code).toBeNull()
-    expect(out.packaging_material).toBeNull()
-    expect(out.resealable).toBeNull()
-    expect(out.terpPercent).toBeNull()
-    expect(out.media).toEqual([])
+    expect(out.supplier_product_code).toBeNull()
     expect(out.batches).toEqual([])
-    expect(out.packSizes).toEqual([])
+  })
+
+  // ---- T05 (HEL-59, PLAN-T05.md rev 3) — the 12-column widening ----
+  it('fills cbg_percent and cbn_percent from the row, distinctly (T05)', () => {
+    const out = mapDiscoverShopRow(fullRow)
+    expect(out.cbg_percent).toBe(44)
+    expect(out.cbn_percent).toBe(55)
+  })
+
+  it('derives terpPercent from r.terpene_percent verbatim — the RPC already applies manual-first/representative-batch-fallback server-side (D2), so the mapper is a straight passthrough, never a re-derivation', () => {
+    const out = mapDiscoverShopRow(fullRow)
+    expect(out.terpPercent).toBe(66)
+  })
+
+  it('fills cultivator, lineage_parent_a/b, irradiation_code, packaging_material, resealable from the row (T05)', () => {
+    const out = mapDiscoverShopRow(fullRow)
+    expect(out.cultivator).toBe('PROD-CULTIVATOR')
+    expect(out.lineage_parent_a).toBe('PROD-LINEAGE-A')
+    expect(out.lineage_parent_b).toBe('PROD-LINEAGE-B')
+    expect(out.irradiation_code).toBe('PROD-IRRADIATION')
+    expect(out.packaging_material).toBe('PROD-PACKAGING')
+    expect(out.resealable).toBe(true)
+  })
+
+  it('maps pack_sizes through the shared parsePackSizes wrapper — finite, positive numbers only (D3a/B8, ADR :474-476: the SAME parser the seller reads uses, never a re-implemented filter)', () => {
+    const out = mapDiscoverShopRow(fullRow)
+    expect(out.packSizes).toEqual([7, 12])
+  })
+
+  it('maps media to ProductMedia[] — no longer forced empty (B7/D5): batches stays [] (no lot list), media does not (it rides the RPC)', () => {
+    const out = mapDiscoverShopRow(fullRow)
+    expect(out.media).toEqual([
+      { id: 'm0', kind: 'video_link', path: null, url: 'https://video.test/0', label: null },
+      { id: 'm1', kind: 'coa', path: 'MEDIA-PATH-1.pdf', url: null, label: 'MEDIA-LABEL-1' },
+    ])
   })
 })

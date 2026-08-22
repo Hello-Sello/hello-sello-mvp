@@ -39,7 +39,9 @@
  * Sign-in mirrors present-grid.spec.ts / discover.spec.ts.
  */
 import { test, expect, type Page } from "@playwright/test";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { countPricingRequests, pricingRequestNote } from "./fixtures/two-company";
+import { LOCAL_SUPABASE_URL, LOCAL_SERVICE_KEY } from "./fixtures/local-supabase";
 
 const BUYER_EMAIL = "bob@stonepharm.test";
 // Eva — a THIRD company (Bavaria Medical Cannabis GmbH, seed.sql:282-285,
@@ -223,5 +225,244 @@ test.describe("T04 — per-product request pricing (HEL-58)", () => {
     await aur1f.getByTestId("request-pricing").click();
     await expect(aur1f.getByText(/pricing requested/i)).toBeVisible({ timeout: 15000 });
     expect(countPricingRequests("Bavaria Medical Cannabis GmbH", "AUR-1F")).toBe(1);
+  });
+});
+
+/**
+ * T05 (HEL-59) — AC 7's full specification set actually RENDERS on a real
+ * buyer's card (PLAN-T05.md rev 3, D7/B9).
+ *
+ * The fixture writes ONLY the 8 AC-7 facts B9 scopes it to — 9 `product`
+ * columns (lineage is 2 columns): cbg_percent, cbn_percent, terpene_percent,
+ * cultivator, lineage_parent_a, lineage_parent_b, irradiation_code,
+ * packaging_material, resealable. It NEVER touches `location`, `profile_visible`
+ * or `price_public` — all three are pinned by seed_visibility_matrix_test.sql
+ * and this file's own header comment (:26-37), and a leaked write would fail
+ * suites this ticket does not run. Target: AUR-1B ("Pedanios 31/1 PND-CA"),
+ * visible + price-public, by NAME (never a raw id — ids are non-deterministic
+ * across a `db reset`).
+ *
+ * Writes go through the service-role client (`local-supabase.ts`), which
+ * bypasses RLS and is NOT transactional — so the original (pre-fixture) values
+ * are read back BEFORE the write and restored in `afterEach`, the same
+ * teardown discipline `inbox-accept.spec.ts` now uses (module header there).
+ *
+ * ⚠️ Correction to the plan's own phrasing (D7 says "state how the card back
+ * is opened, since that is where the spec set renders"): read against
+ * `ProductCard.tsx` as it stands today (T05 does not touch that file — it is
+ * not in its Files table), the 8 AC-7 facts render on the card's FRONT face,
+ * in the always-visible 5-value strip (CBG%/CBN%/Terp%) and the scrollable
+ * spec-row list (Cultivator/Lineage/Irradiation/Packaging/Resealable) — no
+ * flip needed. "The card back" in THIS codebase's own vocabulary
+ * (`MediaManager.tsx:4`: "The Present card BACK — 'Documents & media'") is
+ * the "Docs & media" flip panel, which renders `media` only — a fact B9
+ * itself deliberately excludes from this fixture's write scope. So this test
+ * asserts the front face directly; it does not click "Docs & media" at all.
+ */
+test.describe("T05 — AC 7 full spec set renders (HEL-59)", () => {
+  const GREENLEAF_NAME = "GreenLeaf Cultivation";
+  const AUR1B_CODE = "AUR-1B";
+  const AUR1B_NAME = "Pedanios 31/1 PND-CA";
+
+  const SPEC_COLUMNS = [
+    "cbg_percent",
+    "cbn_percent",
+    "terpene_percent",
+    "cultivator",
+    "lineage_parent_a",
+    "lineage_parent_b",
+    "irradiation_code",
+    "packaging_material",
+    "resealable",
+  ] as const;
+
+  const FIXTURE_VALUES = {
+    cbg_percent: 44.41,
+    cbn_percent: 55.52,
+    terpene_percent: 66.63,
+    cultivator: "T05-E2E-CULTIVATOR",
+    lineage_parent_a: "T05-E2E-LINEAGE-A",
+    lineage_parent_b: "T05-E2E-LINEAGE-B",
+    irradiation_code: "gamma", // valid FK into irradiation_type; displays "Gamma"
+    packaging_material: "T05-E2E-PACKAGING",
+    resealable: true, // displays "Yes"
+  };
+
+  function makeAdminClient(): SupabaseClient {
+    return createClient(LOCAL_SUPABASE_URL, LOCAL_SERVICE_KEY, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+  }
+
+  let productId: string;
+  let original: Record<string, unknown> = {};
+
+  test.beforeEach(async () => {
+    const admin = makeAdminClient();
+    const { data: company, error: companyErr } = await admin
+      .from("company")
+      .select("id")
+      .eq("name", GREENLEAF_NAME)
+      .single();
+    if (companyErr || !company) throw new Error(`T05 fixture: GreenLeaf lookup failed — ${companyErr?.message}`);
+
+    const { data: product, error: productErr } = await admin
+      .from("product")
+      // A LITERAL select string, not `[...SPEC_COLUMNS].join(", ")`: a
+      // runtime-computed string makes supabase-js infer the row as
+      // `GenericStringError`, and every downstream narrowing then fails
+      // TS2352. The list must stay in step with SPEC_COLUMNS above.
+      .select("id, cbg_percent, cbn_percent, terpene_percent, cultivator, lineage_parent_a, lineage_parent_b, irradiation_code, packaging_material, resealable")
+      .eq("company_id", company.id)
+      .eq("supplier_product_code", AUR1B_CODE)
+      .single();
+    if (productErr || !product) throw new Error(`T05 fixture: AUR-1B lookup failed — ${productErr?.message}`);
+
+    productId = (product as { id: string }).id;
+    original = SPEC_COLUMNS.reduce<Record<string, unknown>>((acc, col) => {
+      acc[col] = (product as Record<string, unknown>)[col];
+      return acc;
+    }, {});
+
+    const { error: updateErr } = await admin
+      .from("product")
+      .update(FIXTURE_VALUES)
+      .eq("id", productId);
+    if (updateErr) throw new Error(`T05 fixture: AUR-1B spec-column write failed — ${updateErr.message}`);
+  });
+
+  test.afterEach(async () => {
+    if (!productId) return;
+    const admin = makeAdminClient();
+    await admin.from("product").update(original).eq("id", productId);
+  });
+
+  test("a verified buyer sees AC 7's full spec set on AUR-1B's card front — CBG, CBN, Terp%, cultivator, lineage, irradiation code, packaging material, resealable", async ({
+    page,
+  }) => {
+    await signInBuyer(page);
+    await page.goto(`/discover/${GREENLEAF_ID}`);
+
+    const card = page.getByTestId("product-card").filter({ hasText: AUR1B_NAME });
+    await expect(card).toBeVisible();
+
+    // 5-value strip (view mode: a <b> value immediately precedes its <small>
+    // label, ProductCard.tsx:586-601) — CBG%/CBN%/Terp%.
+    const cbgValue = card.getByText("CBG%", { exact: true }).locator("xpath=preceding-sibling::b[1]");
+    await expect(cbgValue).toHaveText("44,41");
+    const cbnValue = card.getByText("CBN%", { exact: true }).locator("xpath=preceding-sibling::b[1]");
+    await expect(cbnValue).toHaveText("55,52");
+    const terpValue = card.getByText("Terp%", { exact: true }).locator("xpath=preceding-sibling::b[1]");
+    await expect(terpValue).toHaveText("66,63");
+
+    // Scrollable spec-row list (view mode: a label <span> immediately precedes
+    // its value <span>, ProductCard.tsx:618-633).
+    const cultivatorValue = card
+      .getByText("Cultivator", { exact: true })
+      .locator("xpath=following-sibling::span[1]");
+    await expect(cultivatorValue).toHaveText("T05-E2E-CULTIVATOR");
+
+    const lineageValue = card.getByText("Lineage", { exact: true }).locator("xpath=following-sibling::span[1]");
+    await expect(lineageValue).toHaveText("T05-E2E-LINEAGE-A × T05-E2E-LINEAGE-B");
+
+    const irradiationValue = card
+      .getByText("Irradiation", { exact: true })
+      .locator("xpath=following-sibling::span[1]");
+    await expect(irradiationValue).toHaveText("Gamma");
+
+    const packagingValue = card
+      .getByText("Packaging", { exact: true })
+      .locator("xpath=following-sibling::span[1]");
+    await expect(packagingValue).toHaveText("T05-E2E-PACKAGING");
+
+    const resealableValue = card
+      .getByText("Resealable", { exact: true })
+      .locator("xpath=following-sibling::span[1]");
+    await expect(resealableValue).toHaveText("Yes");
+  });
+});
+
+/**
+ * T05 — the buyer must never see the `Unassigned` shelf group (critic B1).
+ *
+ * `ShopView.tsx:689` suppresses the group header for the `UNASSIGNED` sentinel
+ * when `!viewerCanManage`. Nothing guarded it: every seeded GreenLeaf product
+ * carries a non-null `location` (seed.sql:428-448 — and :423-427 warns against
+ * leaving one NULL), so `groupByLocation` never produces an `Unassigned` bucket
+ * and the term could be deleted with the whole suite green. `Unassigned` is
+ * seller shelf state, and ADR-0005 forbids rendering seller-private state in
+ * buyer mode.
+ *
+ * The fixture PLANTS the missing state: a throwaway visible product with a NULL
+ * `location`. Safe against the two suites that pin this seed —
+ * `seed_visibility_matrix_test.sql:96-99` explicitly tolerates a sixth product,
+ * and its `count(DISTINCT location) = 2` check (`:134-139`) ignores NULLs.
+ *
+ * Both halves matter. Asserting only "the buyer sees no Unassigned" would pass
+ * on a page that renders no group headers at all; the seller half proves the
+ * suppression is VIEWER-dependent, which is the actual rule.
+ */
+test.describe("T05 — the Unassigned group is seller-only (critic B1)", () => {
+  const THROWAWAY_CODE = "T05-NULL-LOC";
+  let throwawayId: string | null = null;
+
+  test.beforeEach(async () => {
+    const admin = createClient(LOCAL_SUPABASE_URL, LOCAL_SERVICE_KEY, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+    const { data: inserted, error } = await admin
+      .from("product")
+      .insert({
+        company_id: GREENLEAF_ID,
+        name: "T05 Unfiled Product",
+        supplier_product_code: THROWAWAY_CODE,
+        profile_visible: true,
+        price_public: true,
+        location: null,
+      })
+      .select("id")
+      .single();
+    if (error || !inserted) throw new Error(`T05 unfiled fixture: insert failed — ${error?.message}`);
+    throwawayId = (inserted as { id: string }).id;
+  });
+
+  test.afterEach(async () => {
+    if (!throwawayId) return;
+    const admin = createClient(LOCAL_SUPABASE_URL, LOCAL_SERVICE_KEY, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+    // hard delete, not soft — a soft-deleted row would linger in the seed
+    await admin.from("product").delete().eq("id", throwawayId);
+    throwawayId = null;
+  });
+
+  test("a buyer never sees the Unassigned divider, but the seller does", async ({ browser }) => {
+    const buyerCtx = await browser.newContext();
+    const sellerCtx = await browser.newContext();
+    const buyerPage = await buyerCtx.newPage();
+    const sellerPage = await sellerCtx.newPage();
+
+    // ---- buyer: the unfiled product is visible, its shelf label is NOT ----
+    await signInBuyer(buyerPage);
+    await buyerPage.goto(`/discover/${GREENLEAF_ID}`);
+    await expect(
+      buyerPage.getByTestId("product-card").filter({ hasText: "T05 Unfiled Product" }),
+    ).toBeVisible({ timeout: 15000 });
+    await expect(buyerPage.getByText("Unassigned", { exact: true })).toHaveCount(0);
+
+    // ---- seller: the SAME product's shelf label IS shown, on their own shop ----
+    await sellerPage.goto("/login");
+    await sellerPage.fill('input[name="email"]', "alice@greenleaf.test");
+    await sellerPage.fill('input[name="password"]', PASSWORD);
+    await sellerPage.getByRole("button", { name: /sign in/i }).click();
+    await sellerPage.waitForURL((url) => !url.pathname.startsWith("/login"));
+    await sellerPage.goto("/present");
+    await expect(
+      sellerPage.getByTestId("product-card").filter({ hasText: "T05 Unfiled Product" }),
+    ).toBeVisible({ timeout: 15000 });
+    await expect(sellerPage.getByText("Unassigned", { exact: true }).first()).toBeVisible();
+
+    await buyerCtx.close();
+    await sellerCtx.close();
   });
 });

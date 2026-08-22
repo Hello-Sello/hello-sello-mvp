@@ -3,10 +3,12 @@ import { countryName } from "@/shared/geo/countries";
 import { categoryLabel } from "./taxonomy";
 import {
   parseLinks,
+  parsePackSizes,
   type Shop,
   type ShopLink,
   type ShopProduct,
   type ProductImage,
+  type ProductMedia,
 } from "@/modules/catalog/shop";
 import { deriveInitialLocations, type WarehouseLocation } from "@/modules/catalog/locations";
 // The ONE snake→camel boundary for the tier ladder (pricelist.ts). Imported via
@@ -241,12 +243,55 @@ export function toShopCompany(profile: DiscoverCompanyProfile): Shop["company"] 
   };
 }
 
-/** One row of `get_discoverable_shop`. `tiers` is the view's jsonb ladder —
- *  `unknown` because it is unvalidated at this boundary and `mapTiers` owns
- *  narrowing it (never a cast: the jsonb is snake_case and `PriceTier` is not). */
-type ShopRow = {
-  id: string;
-  name: string;
+/**
+ * One row of `get_discoverable_shop`, derived from the generated types rather
+ * than hand-written — the same re-widen shape `ProfileRow` above uses for the
+ * sibling RPC, so a column renamed in SQL fails `tsc` here instead of arriving
+ * as `undefined` at runtime. A BARE generated row does not work: the generator
+ * emits `jsonb` as `Json` (no `.slice()`, no field access) and marks every
+ * `RETURNS TABLE` column NOT NULL, which is false for 21 of the 24 re-widened
+ * below (the other three are the two jsonb galleries and the tiers ladder).
+ *
+ * Re-widened, and why:
+ *  - `images` / `media` — `Json` → the ordered object arrays the RPC actually
+ *    builds. Both are `coalesce`d to `[]` in SQL, so neither is null in
+ *    practice; `| null` is kept as the honest boundary type.
+ *  - `tiers` / `pack_sizes` — `unknown`, deliberately. Both are unvalidated
+ *    jsonb and each has an owner that narrows it (`mapTiers`, `parsePackSizes`).
+ *    Never a cast: the tier jsonb is snake_case and `PriceTier` is not.
+ *  - every genuinely nullable column, including the T05 spec set.
+ *
+ * Do NOT collapse this back into an `as unknown as {…}` cast — that reinstates
+ * exactly the blindness this shape removes.
+ */
+type ShopRpcRow = Database["public"]["Functions"]["get_discoverable_shop"]["Returns"][number];
+type ShopRow = Omit<
+  ShopRpcRow,
+  | "cultivar"
+  | "thc_percent"
+  | "cbd_percent"
+  | "pack_size_grams"
+  | "unit_code"
+  | "local_code_pzn"
+  | "dominance_code"
+  | "country_of_origin"
+  | "region"
+  | "images"
+  | "price_per_gram"
+  | "tiers"
+  | "cbg_percent"
+  | "cbn_percent"
+  | "terpene_percent"
+  | "cultivator"
+  | "lineage_parent_a"
+  | "lineage_parent_b"
+  | "irradiation_code"
+  | "packaging_material"
+  | "resealable"
+  | "location"
+  | "pack_sizes"
+  | "media"
+> & {
   cultivar: string | null;
   thc_percent: number | null;
   cbd_percent: number | null;
@@ -257,9 +302,20 @@ type ShopRow = {
   country_of_origin: string | null;
   region: string | null;
   images: { id: string; path: string; position: number }[] | null;
-  price_public: boolean;
   price_per_gram: number | null;
   tiers: unknown;
+  cbg_percent: number | null;
+  cbn_percent: number | null;
+  terpene_percent: number | null;
+  cultivator: string | null;
+  lineage_parent_a: string | null;
+  lineage_parent_b: string | null;
+  irradiation_code: string | null;
+  packaging_material: string | null;
+  resealable: boolean | null;
+  location: string | null;
+  pack_sizes: unknown;
+  media: { id: string; kind: string; path: string | null; url: string | null; label: string | null }[] | null;
 };
 
 /**
@@ -276,9 +332,15 @@ type ShopRow = {
  *  • `tiers` goes through `mapTiers`; the RPC's jsonb is snake_case, so a cast
  *    yields `minGrams: undefined` and an empty ladder with every test green.
  *
- * Everything the RPC does not return is `null` / `[]` — never invented. That
- * includes `supplier_product_code` (buyers never see it, ADR-0005) and
- * `location` (no location column until T05, so no tabs).
+ * Two fields stay `null` / `[]` even after T05, and neither is an omission:
+ * `supplier_product_code` (the seller's internal code — buyers never see it,
+ * ADR-0005, and the RPC does not return it) and `batches` (no lot list on a
+ * buyer's card). `media` is NOT one of them — it rides the RPC.
+ *
+ * `terpPercent` is a straight passthrough of `r.terpene_percent`: the RPC
+ * already applies manual-column-first / representative-lot-sum-fallback
+ * server-side, the same derivation `shop.ts:249` runs for the seller. Deriving
+ * it again here would be a second owner of the same rule.
  */
 export function mapDiscoverShopRow(r: ShopRow): ShopProduct {
   const tiers = mapTiers(r.tiers);
@@ -286,6 +348,16 @@ export function mapDiscoverShopRow(r: ShopRow): ShopProduct {
     .slice()
     .sort((a, b) => a.position - b.position)
     .map((im) => ({ id: im.id, path: im.path }));
+  // Already position-ordered by the RPC (the jsonb_agg carries `order by
+  // pm.position`), so no re-sort — unlike `images`, whose rows carry the
+  // position and are re-sorted defensively.
+  const media: ProductMedia[] = (r.media ?? []).map((m) => ({
+    id: m.id,
+    kind: m.kind as ProductMedia["kind"],
+    path: m.path,
+    url: m.url,
+    label: m.label,
+  }));
 
   return {
     id: r.id,
@@ -293,16 +365,16 @@ export function mapDiscoverShopRow(r: ShopRow): ShopProduct {
     cultivar: r.cultivar,
     thc_percent: r.thc_percent,
     cbd_percent: r.cbd_percent,
-    cbg_percent: null,
-    cbn_percent: null,
-    cultivator: null,
-    lineage_parent_a: null,
-    lineage_parent_b: null,
-    irradiation_code: null,
+    cbg_percent: r.cbg_percent,
+    cbn_percent: r.cbn_percent,
+    cultivator: r.cultivator,
+    lineage_parent_a: r.lineage_parent_a,
+    lineage_parent_b: r.lineage_parent_b,
+    irradiation_code: r.irradiation_code,
     supplier_product_code: null,
-    packaging_material: null,
-    resealable: null,
-    location: null,
+    packaging_material: r.packaging_material,
+    resealable: r.resealable,
+    location: r.location,
     pack_size_grams: r.pack_size_grams,
     unit_code: r.unit_code,
     local_code_pzn: r.local_code_pzn,
@@ -310,9 +382,9 @@ export function mapDiscoverShopRow(r: ShopRow): ShopProduct {
     country_of_origin: r.country_of_origin,
     region: r.region,
     images,
-    media: [],
+    media,
     batches: [],
-    terpPercent: null,
+    terpPercent: r.terpene_percent,
     price_public: r.price_public,
     price_per_gram: r.price_per_gram,
     // Bridge fields = rung 1, the same derivation the seller read uses
@@ -320,7 +392,10 @@ export function mapDiscoverShopRow(r: ShopRow): ShopProduct {
     bundle_threshold_grams: tiers[0]?.minGrams ?? null,
     bundle_price_per_gram: tiers[0]?.pricePerGram ?? null,
     tiers,
-    packSizes: [],
+    // The SAME parser the seller's read uses (ADR :474-476) — the RPC returns
+    // the raw `metadata->'pack_sizes'` jsonb, so the finite-and-positive filter
+    // lives in exactly one place and the two shops cannot disagree.
+    packSizes: parsePackSizes({ pack_sizes: r.pack_sizes }),
   };
 }
 
@@ -333,11 +408,19 @@ export function mapDiscoverShopRow(r: ShopRow): ShopProduct {
 export async function getDiscoverableShop(companyId: string): Promise<ShopProduct[]> {
   const supabase = await createClient();
 
-  const res = (await supabase.rpc("get_discoverable_shop" as never, {
-    p_company_id: companyId,
-  } as never)) as unknown as { data: ShopRow[] | null; error: { message: string } | null };
+  const res = await supabase.rpc("get_discoverable_shop", { p_company_id: companyId });
 
   if (res.error || !res.data) return [];
 
-  return res.data.map(mapDiscoverShopRow);
+  // The only narrowings at this boundary: the generator types both jsonb
+  // galleries as the opaque `Json`, and neither `.slice()` nor field access
+  // exists on it. Every other column stays type-checked BY NAME — a renamed
+  // column now fails `tsc` here instead of arriving as `undefined`.
+  return res.data.map((row) =>
+    mapDiscoverShopRow({
+      ...row,
+      images: row.images as ShopRow["images"],
+      media: row.media as ShopRow["media"],
+    }),
+  );
 }

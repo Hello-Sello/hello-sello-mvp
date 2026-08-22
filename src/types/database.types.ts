@@ -4750,17 +4750,29 @@ export type Database = {
         Args: { p_company_id: string }
         Returns: {
           cbd_percent: number
+          cbg_percent: number
+          cbn_percent: number
           country_of_origin: string
           cultivar: string
+          cultivator: string
           dominance_code: string
           id: string
           images: Json
+          irradiation_code: string
+          lineage_parent_a: string
+          lineage_parent_b: string
           local_code_pzn: string
+          location: string
+          media: Json
           name: string
           pack_size_grams: number
+          pack_sizes: Json
+          packaging_material: string
           price_per_gram: number
           price_public: boolean
           region: string
+          resealable: boolean
+          terpene_percent: number
           thc_percent: number
           tiers: Json
           unit_code: string

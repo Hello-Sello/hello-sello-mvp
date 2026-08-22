@@ -676,14 +676,17 @@ export function ShopView({
               // between one thing divides nothing. Only "All" keeps the header.
               showHeader={
                 loc === "All" &&
-                // ...and NOT when the only group is the `Unassigned` sentinel.
-                // "Unassigned" is shelf vocabulary, not a place: with one group
-                // it divides nothing, and on the BUYER surface every product is
-                // unassigned (the shop RPC returns no `location` until T05), so
-                // without this the buyer's catalogue sits under a header reading
-                // "Unassigned" — seller-private state, which ADR-0005 forbids
-                // rendering in buyer mode.
-                !(renderGroups.length === 1 && renderGroups[0]?.location === UNASSIGNED)
+                // ...and NOT when the only group is the `Unassigned` sentinel:
+                // with one group it divides nothing.
+                !(renderGroups.length === 1 && renderGroups[0]?.location === UNASSIGNED) &&
+                // ...and never for a BUYER. "Unassigned" is shelf vocabulary,
+                // not a place — it names the seller's to-file pile. A seller
+                // needs to see that pile; a buyer has no shelves, and ADR-0005
+                // forbids rendering seller-private state in buyer mode.
+                // Reachable now that the shop RPC returns `location`: a seller
+                // with named locations AND unfiled products yields a real
+                // `Unassigned` group alongside the named ones.
+                !(g.location === UNASSIGNED && !viewerCanManage)
               }
               editing={editing}
               onChanged={() => router.refresh()}
@@ -923,11 +926,18 @@ function LocationTabs({
   const options = ["All", ...named];
   const count = (loc: string) => filterByLocation(products, loc).length;
 
-  // No named locations => the only option is "All", and a filter with one option
-  // filters nothing. Reachable for a seller who has never named a location, and
-  // ALWAYS true on the buyer surface (the shop RPC returns no `location` until
-  // T05), where a "Shop location" dropdown is seller chrome besides.
-  if (named.length === 0) return null;
+  // One rule for every viewer (Muskan, 2026-08-22): one location shows that
+  // location and no filter; many locations show the filter.
+  //
+  // ⚠️ "still filters nothing" is TRUE for a buyer and FALSE for a seller who
+  // has unfiled products: `filterByLocation` returns everything for "All" but
+  // only matches for a named location, so with one named location AND a NULL-
+  // location product, All ≠ Toronto and this early return hides a filter that
+  // would have filtered. The buyer never sees that case (the `Unassigned`
+  // group is suppressed for them one screen up), so the rule is exact there.
+  // Counting VISIBLE GROUPS rather than named locations would close it —
+  // staged for adjudication at T05's G4, not taken unilaterally.
+  if (named.length <= 1) return null;
 
   return (
     <div className="relative w-fit">
