@@ -4,6 +4,7 @@ stage:  triage ✅ · spec ✅ (G1) · prototype ✅ (G2) · design ✅ (G3 2026
         build: **T00 ✅** · **T03 ✅** · **T01 ✅** · **T02 ✅ (G4 2026-08-21)** ·
         **T04 ✅ (G4 2026-08-21 — accepted; e2e re-run ✅ 2026-08-22, visual pass still OWED)**
         post-G4 ruling: env repair ✅ · DEV-83 ✅ · price gate ✅ · ADR amend ✅ (all 2026-08-22)
+        **T05 ▶ IN FLIGHT** (2026-08-22 — plan written, `plan-checker` round 1 running)
         **▶ REMAINING: T04's owed VISUAL pass · T05 · T06 · T07 · T08.**
 branch: **claude/muskan/work** — no feature branch (Muskan's call, 2026-08-18)
 >  No cut: this slug is frontend-heavy with no expected migration, so a feature branch
@@ -380,7 +381,24 @@ None of it lives in T03's two files, and 0022 is the buyer's read surface.
 | **T03** | **1 round** (rev 1 → 4 blocking, all folded; rev 2 OK) | **0 / 2** — no retry needed | **0 / 2** — `critic` and `consistency` both returned **no blocking** | **1** — passed |
 | **T02** | **2 rounds, budget SPENT, did NOT converge** (rev 1 → **9 blocking** · rev 2 → **8 blocking, all new, FIVE attacking rev 1's own fold-ins**) | **0 / 2** — green on the first pass | **0 / 2** — `consistency` no blocking; `critic` **2 blocking**, both fixed by the orchestrator | **1** — passed |
 | **T04** | **2 rounds, budget SPENT, did NOT converge** (rev 1 → 5 blocking · rev 2 → **5 blocking, ALL NEW, all defects in rev 1's own fold-ins**; 21 notes folded across rev 2-4) | **0 / 2** — green on the first `test-runner` pass | **1 / 2** — `critic` 2 blocking (both scope rulings, escalated NOT fixed) · `security` + `consistency` no blocking; 7 notes fixed in one pass | staged, not yet ruled |
+| **T05** | round 1 **running** (see note below) | — | — | not reached |
 | **T01** | **2 rounds, budget SPENT, did NOT converge** (rev 1 → 4 blocking · rev 2 → 4 blocking, **all new**, **two of them defects in rev 1's own fold-ins**) | **0 / 2** — green on the first `test-runner` pass | **0 / 2** — `critic` and `security` both returned **no blocking** | **1** — passed |
+
+**T05 notes (in flight, 2026-08-22):** base synced and frozen — 0 behind `origin/dev`, 60 ahead.
+Plan at `PLAN-T05.md` rev 1. Its invariant table was built by **walking the live function body
+clause by clause** (`20260816190000:82-154`), not from the ticket's risk framing — L-011 is exactly
+that failure, on this same function, at T01. **Two invariants have no guard today** and the plan
+adds them: the primary filter `c.id = p_company_id` (lose it and this `SECURITY DEFINER` function
+returns every verified company's catalogue to any verified caller) and the LEFT-ness of the
+`current_pricelist_item` join. **The seed cannot support this ticket's assertions** — measured, not
+assumed: only `cultivator` and `location` are populated of AC 7's set, and `batch_terpene` has **0
+rows repo-wide**, so the derived-terpene fallback has no data; per L-012 the suite plants distinct
+sentinels per column rather than asserting "as seeded". One decision is deliberately left for the
+checker to rule on (D1): whether the owner arm also lifts the **visibility window**, or only
+`profile_visible` — the ticket's "their whole catalogue" reads both ways. ⚠️ `plan-checker` is
+**still not registered** in this harness although `.claude/agents/plan-checker.md` exists (the other
+10 all register); running its ruleset verbatim inside a `general-purpose` agent, as at T00/T04 —
+surfaced, not silently substituted.
 
 **T03 notes:** `builder` **stalled mid-ticket**, having completed 4 of its 5 plan steps and left a
 half-implemented component that type-checked — the orchestrator diffed the tree against the plan's
