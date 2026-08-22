@@ -1033,3 +1033,63 @@ suite — `a/b/c/d/1/2/3/9` are the demo seed, `e`/`f` are claimed by two other 
 Two things it **flagged rather than silently matched** to the instruction: block 2 is the same
 grant-revoke class as block 1 (so it is not a separate hole-proof), and block 10 is a regression
 guard expected green in both states, not a RED block.
+
+## `builder`
+
+Green on the first pass. Four deviations, **all logged, none silent**:
+
+1. **Migration filename** — plan said `20260822110000`, shipped as `20260823090000` (the session
+   rolled over midnight). The test file's header and the runner's header still cite the old stamp.
+2. **🔴 The plan's `store.ts` deletion range was wrong, and the builder caught it.** §3 step 6 said
+   delete lines 581-620; that removes the `let relationshipId: string;` declaration at 603 while
+   leaving `relationshipId = rel.id;` (621) and its closing brace orphaned — **it does not
+   compile**. Replaced 580-622 instead (leading comment through the `if (pairRel)` block's closing
+   brace). Note this range had **already been corrected once** by `plan-checker` round 2 (N-f,
+   583 → 581) and was still off. A line range written from a read is not a line range verified by
+   a compile.
+3. **`SET search_path = public`** per the plan (§2), where the newer sibling
+   `accept_person_connection` pins `search_path = ''`. Every object reference in both new bodies is
+   schema-qualified, so the two are equivalent in effect — flagged for `security` to judge as a
+   house-style deviation.
+4. e2e/unit not run — per instruction; `test-runner`'s job.
+
+**Out of scope, recorded not fixed (a third level of the same class):** `authenticated` and `anon`
+still hold table-level **INSERT** on `company`, covering the verification triple — `company_insert`'s
+`WITH CHECK` is `created_by = auth.uid() AND current_company_id() IS NULL`, so a company-less user
+can insert a *new* company row born `verified`. Judged unexploitable today: DEV-88 removed
+`person.company_id` from the UPDATE allowlist and `onboard_company` mints its own id, so the
+attacker cannot become a member of the row they forged — it is an orphan. Belongs with the six
+`company` columns already in §7's follow-up sweep.
+
+## `test-runner` — independent, and it disbelieved the builder as instructed
+
+**Verdict: GREEN.** Every grant and policy claim **re-queried against the live DB** rather than
+taken from the builder's report.
+
+| suite | result |
+|---|---|
+| T09's own SQL suite | **PASS** |
+| all SQL runners, clean reset | **38/38** (37 of 43 suite files; 5 never execute — unchanged) |
+| unit | **458/458** |
+| `tsc --noEmit` | 0 errors |
+| eslint | 6 errors / 13 warnings — **all pre-existing**, none in touched files |
+| 6 targeted e2e, clean reset | **27/28** |
+
+**The one failure is A/B-PROVEN pre-existing**, not inferred: `auth-gate.spec.ts:101` "pending
+company … pending banner". Stashed the diff → identical failure, same locator timeout, same line →
+restored, `git status` confirmed. The redirect (the actual security gate) passes; only the banner
+text fails, and that text exists in `src/` on no branch. Already the known stale test.
+
+**Re-verified independently:** `relationship` leaves `authenticated` with only
+SELECT/REFERENCES/TRIGGER and `anon` with nothing · `company` UPDATE = exactly 20 columns, the
+verification triple absent from both roles (only `service_role`/`postgres` retain it) ·
+`pending_inbox_item` UPDATE = exactly the 9 kept columns, `anon` none · **`inbox_insert` is
+`{authenticated}`, not `{public}` — round 2's B1 regression is genuinely fixed, not just described
+as fixed** · `has_function_privilege` false for `anon` and true for `authenticated` on both new
+functions.
+
+**Two corrections to what it was told:**
+- The stale-timestamp loose end appears in **two** places, not one — the runner's header **and**
+  `connection_consent_lockdown_test.sql:49`. The builder undercounted.
+- **The unit baseline of 453 is stale; the true count is 458.** T09 has no unit surface, so the
+  diff did not move it. Flagged rather than silently reconciled — **new baseline: 458.**

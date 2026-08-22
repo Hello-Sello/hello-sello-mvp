@@ -4640,6 +4640,10 @@ export type Database = {
       }
     }
     Functions: {
+      accept_connection_request: {
+        Args: { p_inbox_item_id: string }
+        Returns: string
+      }
       accept_person_connection: { Args: { p_item_id: string }; Returns: string }
       approve_company: { Args: { p_company_id: string }; Returns: undefined }
       approve_join_request: {
@@ -4980,6 +4984,7 @@ export type Database = {
         Args: { p_company_id: string; p_note: string }
         Returns: string
       }
+      resubmit_company_verification: { Args: never; Returns: undefined }
       run_scheduled_erasures: { Args: never; Returns: undefined }
       save_price_ladder: {
         Args: { p_base: number; p_pricelist_item_id: string; p_tiers: Json }

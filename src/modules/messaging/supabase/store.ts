@@ -577,49 +577,20 @@ export async function acceptInbox(
     return { relationshipId: relId as unknown as string, threadIds: [] };
   }
 
-  // relationship - canonical company order (CHECK company_a_id < company_b_id)
-  const [companyA, companyB] =
-    input.ownCompany.id < input.senderCompany.id
-      ? [input.ownCompany.id, input.senderCompany.id]
-      : [input.senderCompany.id, input.ownCompany.id];
-
-  // ADOPT, don't mint blindly. The DB declares ONE active relationship per
-  // company pair (`uq_relationship_pair_active`). The probe at the top of this
-  // function keys on `inbox_item_id` - a column nothing enforces - so it misses
-  // every relationship minted by another route (the seed, or an earlier accept
-  // from a different item). The insert below then raised `23505`, the
-  // transaction rolled back, and both call sites swallowed the throw: the item
-  // stayed `pending` forever, no error shown. This hit ANY second substantive
-  // accept between two already-connected companies, not only the seeded pair.
-  const { data: pairRel, error: pairErr } = await supabase
-    .from("relationship")
-    .select("id")
-    .eq("company_a_id", companyA)
-    .eq("company_b_id", companyB)
-    .is("deleted_at", null)
-    .maybeSingle();
-  if (pairErr) throw pairErr;
-
-  let relationshipId: string;
-  if (pairRel) {
-    relationshipId = pairRel.id;
-  } else {
-    const { data: rel, error: relErr } = await supabase
-      .from("relationship")
-      .insert({
-        company_a_id: companyA,
-        company_b_id: companyB,
-        initiated_by_company_id: input.senderCompany.id, // the requester initiated
-        inbox_item_id: input.inboxItemId,
-        status: "active",
-        created_by: input.viewerPerson.id,
-        updated_by: input.viewerPerson.id,
-      })
-      .select("id")
-      .single();
-    if (relErr) throw relErr;
-    relationshipId = rel.id;
-  }
+  // relationship - server-granted, never self-declared. `authenticated` has no
+  // write grant on the table at all: the counterparty's consent lives in the
+  // inbox item, so the item id is the ONLY thing this call may supply. The RPC
+  // derives the pair, the canonical order (CHECK company_a_id < company_b_id)
+  // and the initiator, verifies the request is pending and addressed to the
+  // caller's company, and ADOPTS an existing active pair rather than minting a
+  // second one (`uq_relationship_pair_active`). It does not flip the item's
+  // status - connect.acceptItem still owns that.
+  const { data: relId, error: relErr } = await supabase.rpc(
+    "accept_connection_request",
+    { p_inbox_item_id: input.inboxItemId },
+  );
+  if (relErr) throw relErr;
+  const relationshipId = relId;
 
   // threads + seed lines from the (pure) rollout plan - ENSURED, not inserted.
   // `uq_chat_thread_c2c` (one per relationship) and `uq_chat_thread_p2p` (one

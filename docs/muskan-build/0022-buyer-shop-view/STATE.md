@@ -5,7 +5,7 @@ stage:  triage ✅ · spec ✅ (G1) · prototype ✅ (G2) · design ✅ (G3 2026
         **T04 ✅ (G4 2026-08-21 — accepted; e2e re-run ✅ + VISUAL PASS DONE 2026-08-22)**
         post-G4 ruling: env repair ✅ · DEV-83 ✅ · price gate ✅ · ADR amend ✅ (all 2026-08-22)
         **T05 ✅ G4 PASSED 2026-08-22 — all six items ruled (A-D built + mutation-proved, E dropped, F recorded)**
-        **▶ T09 IN FLIGHT (2026-08-23) — tests written, RED proof captured on all 5 blocks; `builder` running.**
+        **▶ T09 IN FLIGHT (2026-08-23) — BUILT + GREEN (independently verified); `critic` + `security` running.**
         **T06 BLOCKED at G4 on T09 (Muskan, 2026-08-22) · then T07 · T08.**
 branch: **claude/muskan/work** — no feature branch (Muskan's call, 2026-08-18)
 >  No cut: this slug is frontend-heavy with no expected migration, so a feature branch
@@ -413,7 +413,7 @@ None of it lives in T03's two files, and 0022 is the buyer's read surface.
 
 | **T06** | **round 1 done → 7 blocking, 11 non-blocking, ALL folded into rev 2** (3 changed the design; every blocking finding spot-verified against the live DB before acceptance). **round 2 → 3 blocking + 7 non-blocking, ALL NEW, TWO of them defects in round 1's own fold-ins. Budget SPENT, did NOT converge — the 5th ticket on this slug.** All folded into rev 3 | — | — | — |
 
-| **T09** | **2 rounds, budget SPENT, did NOT converge — the 6th ticket on this slug** (round 1 → 2 blocking + 10 notes · round 2 → **4 blocking + 8 notes, TWO of them defects in round 1's own fold-ins**). All folded into rev 3; every blocking finding spot-verified against the live DB before acceptance | **RED proof DONE pre-migration — all 5 blocks failed on their OWN assertion** | — | — |
+| **T09** | **2 rounds, budget SPENT, did NOT converge — the 6th ticket on this slug** (round 1 → 2 blocking + 10 notes · round 2 → **4 blocking + 8 notes, TWO of them defects in round 1's own fold-ins**). All folded into rev 3; every blocking finding spot-verified against the live DB before acceptance | **0 / 2** — green on the first `builder` pass; RED proof captured pre-migration (all 5 blocks failed on their OWN assertion); `test-runner` re-ran independently and confirmed GREEN — 38/38 SQL · 458/458 unit · tsc clean · 27/28 targeted e2e (the 1 fail A/B-proven pre-existing) | — | — |
 
 **T09 notes (in flight, 2026-08-22):** base synced and frozen — **0 behind `origin/dev`, 93 ahead**,
 clean tree, no rebase needed. Plan at `PLAN-T09.md` rev 1. `plan-checker` is **still unregistered in
