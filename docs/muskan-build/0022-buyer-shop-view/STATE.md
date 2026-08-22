@@ -5,7 +5,7 @@ stage:  triage ✅ · spec ✅ (G1) · prototype ✅ (G2) · design ✅ (G3 2026
         **T04 ✅ (G4 2026-08-21 — accepted; e2e re-run ✅ + VISUAL PASS DONE 2026-08-22)**
         post-G4 ruling: env repair ✅ · DEV-83 ✅ · price gate ✅ · ADR amend ✅ (all 2026-08-22)
         **T05 ✅ G4 PASSED 2026-08-22 — all six items ruled (A-D built + mutation-proved, E dropped, F recorded)**
-        **▶ T09 IN FLIGHT (2026-08-23) — BUILT + GREEN (independently verified); `critic` + `security` running.**
+        **▶ T09 IN FLIGHT (2026-08-23) — BUILT + GREEN; `critic` back (2 blocking, both ESCALATED to Muskan); `security` running.**
         **T06 BLOCKED at G4 on T09 (Muskan, 2026-08-22) · then T07 · T08.**
 branch: **claude/muskan/work** — no feature branch (Muskan's call, 2026-08-18)
 >  No cut: this slug is frontend-heavy with no expected migration, so a feature branch
@@ -413,7 +413,7 @@ None of it lives in T03's two files, and 0022 is the buyer's read surface.
 
 | **T06** | **round 1 done → 7 blocking, 11 non-blocking, ALL folded into rev 2** (3 changed the design; every blocking finding spot-verified against the live DB before acceptance). **round 2 → 3 blocking + 7 non-blocking, ALL NEW, TWO of them defects in round 1's own fold-ins. Budget SPENT, did NOT converge — the 5th ticket on this slug.** All folded into rev 3 | — | — | — |
 
-| **T09** | **2 rounds, budget SPENT, did NOT converge — the 6th ticket on this slug** (round 1 → 2 blocking + 10 notes · round 2 → **4 blocking + 8 notes, TWO of them defects in round 1's own fold-ins**). All folded into rev 3; every blocking finding spot-verified against the live DB before acceptance | **0 / 2** — green on the first `builder` pass; RED proof captured pre-migration (all 5 blocks failed on their OWN assertion); `test-runner` re-ran independently and confirmed GREEN — 38/38 SQL · 458/458 unit · tsc clean · 27/28 targeted e2e (the 1 fail A/B-proven pre-existing) | — | — |
+| **T09** | **2 rounds, budget SPENT, did NOT converge — the 6th ticket on this slug** (round 1 → 2 blocking + 10 notes · round 2 → **4 blocking + 8 notes, TWO of them defects in round 1's own fold-ins**). All folded into rev 3; every blocking finding spot-verified against the live DB before acceptance | **0 / 2** — green on the first `builder` pass; RED proof captured pre-migration (all 5 blocks failed on their OWN assertion); `test-runner` re-ran independently and confirmed GREEN — 38/38 SQL · 458/458 unit · tsc clean · 27/28 targeted e2e (the 1 fail A/B-proven pre-existing) | **`critic` 2 blocking — BOTH escalated, not fixed** (scope rulings: the `pending_inbox_item` fence, and the verification triple vs a one-column criterion) + 8 notes; `security` pending | — |
 
 **T09 notes (in flight, 2026-08-22):** base synced and frozen — **0 behind `origin/dev`, 93 ahead**,
 clean tree, no rebase needed. Plan at `PLAN-T09.md` rev 1. `plan-checker` is **still unregistered in
@@ -479,6 +479,32 @@ the orchestrator's job, since `test-writer` cannot run anything.
   row locks and race to a raw `23505`. The guarantee is `uq_relationship_pair_active`, not the
   lock — fixed with `ON CONFLICT DO NOTHING` + re-SELECT. A true two-session proof is not runnable
   in a one-transaction harness, so **the claim is dropped rather than asserted untested**.
+
+**✅ BUILT + GREEN, INDEPENDENTLY VERIFIED (2026-08-23).** `builder` green on the first pass;
+`test-runner` disbelieved it as instructed and re-queried every grant and policy claim against the
+live DB rather than trusting the report. **38/38 SQL runners · 458/458 unit · tsc 0 errors ·
+27/28 targeted e2e**, the single failure **A/B-proven** pre-existing (stash → identical failure at
+`auth-gate.spec.ts:101` → restore) and already the known stale banner assertion.
+
+**The builder caught a defect in the plan's own instructions** — §3 step 6's `store.ts` deletion
+range (581-620) strands `relationshipId` and **does not compile**; it replaced 580-622 and said so.
+That range had **already been corrected once** by checker round 2 (583 → 581) and was still wrong.
+*A line range written from a read is not a line range verified by a compile.*
+
+**Two corrections `test-runner` made to what it was told:** the stale-timestamp loose end is in
+**two** places, not one (the builder undercounted), and **the 453 unit baseline is stale — the true
+count is 458**; T09 has no unit surface so the diff did not move it. **New baseline: 458.**
+
+**`critic` — all seven criteria met in SHIPPED CODE**, with the eight `acceptInbox` invariants
+checked in code rather than in the plan's prose. **2 blocking, BOTH escalated rather than decided**
+(the `pending_inbox_item` fence crossing, and the verification triple against a one-column
+criterion) + 8 notes. It also **stated a limitation instead of papering over it** — no Bash to diff
+the ~5000-line `database.types.ts` — and asked the orchestrator to close it. Closed: **5 insertions,
+0 deletions, two hunks, no ride-along drift**, hand-edit intact.
+
+**A third instance of the T06 owed error, found by `critic` (N3):** this migration's header again
+says `anon`'s writes are *"blocked because `current_company_id()` is NULL"* — **RLS does not apply
+to TRUNCATE.** Same defect STATE.md already records against T06's migration. Fixing in the fix pass.
 
 **✅ RED-FIRST PROOF — captured BEFORE any source existed (2026-08-23).** B2 established that one
 `BEGIN … ROLLBACK` under `ON_ERROR_STOP=1` can only ever prove block 1, so the five RED blocks were
