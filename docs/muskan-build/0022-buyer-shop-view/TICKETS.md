@@ -294,6 +294,15 @@ company filter — cross-lane, but the leak is this migration's blast radius),
   still return no price and no tiers (AC 6, decision 7) — connection never reveals a price.
 - When a product's visibility **window** has expired, connection shall **not** override it.
 - When a connection is **pending**, the buyer shall see only what the seller made visible.
+  > ⚠️ **AMENDED at T06's G4 (2026-08-23, Muskan: *"pass"*) — the wording, not the behaviour.**
+  > `relationship_status` seeds exactly `active | suspended | ended` (`20260607090001:326-329`);
+  > **there is no pending relationship row.** A pending *request* is a `pending_inbox_item`, so no
+  > `relationship` exists at all and `is_connected_to_company()` returns false — the override never
+  > fires. Behaviour is correct and was walked live at the gate (Eva holds a pending inbox item and
+  > sees 4 of 6 products). **Read this criterion as: while a connection request is pending, no
+  > relationship row exists, so the buyer sees only what the seller made visible.** Left in place
+  > rather than rewritten because it is a signed criterion; this note exists so the next reader does
+  > not "fix" the schema to match the sentence.
 - When the rule is applied, it shall touch **exactly three objects** — `product_public_select`,
   the `current_pricelist_item` public arm, and `get_discoverable_shop`. **`pricelist_item`,
   `product_image`, `product_media` and `pricelist_item_tier` policies are NOT touched**: they
@@ -434,6 +443,13 @@ role. Also proven: `authenticated` can `CREATE TRIGGER` on `relationship` and `c
 DDL, so **neither is reachable from the app's public surface today.** This is a grant-level hole one
 FK or one new client from mattering — T09 already met it once: `TRUNCATE company CASCADE` as `anon`
 now fails *only* because the cascade reaches `relationship`, whose TRUNCATE T09 happened to revoke.
+
+> ⚠️ **SCOPE ADDED at T06's G4 (2026-08-23, Muskan: *"pass"*).** `anon` also retains
+> **INSERT/UPDATE/DELETE/TRUNCATE on `product_media`** (and on `product` and `product_image`).
+> T06's criterion 9 asked only that `anon` lose **SELECT** on `product_media`, and it did — the
+> remaining verbs are this ticket's class, not a T06 defect. Blocked today only by RLS policies
+> that name no role for `anon`, except TRUNCATE, which RLS does not reach at all. Fold these three
+> tables into the sweep below rather than treating them separately.
 
 **Files:** `supabase/migrations/<ts>_table_privilege_lockdown.sql`, `supabase/tests/` (pgTAP + runner)
 
