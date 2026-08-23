@@ -581,7 +581,7 @@ are the only modifications to shipped shared components in this ADR.** `ShopView
 props (amended 2026-08-21 — see *Reused*); handlers internal to the file are allowed, and
 beyond those it keeps only the stale-comment fix in §1.
 
-### 7. Basket admission: one restrictive INSERT policy
+### 7. Basket admission: one restrictive `FOR ALL` policy
 
 **What rev 1 got wrong (round 1, B2 and B4).** Two separate errors:
 
@@ -597,7 +597,7 @@ beyond those it keeps only the stale-comment fix in §1.
 
 ```sql
 create policy basket_line_admission on public.product_basket_line
-  as restrictive for insert to authenticated
+  as restrictive for all to authenticated   -- NOT `for insert`: see :615
   with check (
     exists (
       select 1 from public.product p
