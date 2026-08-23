@@ -341,16 +341,21 @@ before doing anything else.**
 
 ### ▶ T06's G4 resumes here — what it already owes (recorded, do NOT re-derive)
 
-T06 was BUILT and GREEN and blocked only on T09, which has now shipped. Two factual errors in its
-**shipped comments** are owed before it passes:
-- its migration says `anon`'s **TRUNCATE** is *"blocked by RLS"* — **RLS does not apply to
-  TRUNCATE**. T09 hit this same error a third time and corrected it in its own header; **T11 now
-  carries the proof** (3 audit rows → 0 as `anon`). Fix T06's comment with that evidence.
-- its cascade list **over-counts by one** (`plit_public_select` already has its own gate) — the
-  ledger is right, the migration is wrong.
-- ADR-0005 `:344` calls a policy `untouched` whose role list was narrowed, and `:298-301` is **wrong
-  about the view** (an owner-rights view does not change the effective user id, so `rel_all` IS
-  load-bearing at site 2 — the shipped comment is right, the ADR is wrong).
+T06 was BUILT and GREEN and blocked only on T09, which has now shipped.
+
+**✅ ALL THREE OWED COMMENT FIXES ARE WRITTEN (2026-08-23).** Comment-only — `git diff` on the
+migration shows **zero non-comment lines changed**, so nothing re-tests:
+- `20260822100000:343` — the TRUNCATE sentence now says what actually gates that verb (the table
+  grant; Postgres exempts TRUNCATE from row security) and cites T11's proof (3 audit rows → 0).
+- `20260822100000:30,34` — cascade list is **three**, with one line saying why `plit_public_select`
+  is not a fourth (it already inlines `is_caller_verified()`, `20260814120000:74`).
+- ADR-0005 row 4 now reads **role list narrowed** instead of `untouched`, and the round-3 N2
+  correction at `:298-301` is itself corrected: it holds for the DEFINER RPC, **not** for the view
+  — owner rights don't change the effective user id, so `rel_all` IS load-bearing at site 2.
+
+**⚠️ ONE THING THIS FILE GOT WRONG, now fixed:** it said *"the ledger is right, the migration is
+wrong."* **The ledger repeats the same over-count** (`cloud-migrations-pending.md:67`) and was
+corrected in the same pass. Nobody had opened it. Recorded as **L-031**.
 
 **T09 changed T06's ground:** the gate T06 builds is no longer ornamental — `relationship` can no
 longer be self-minted, and a member can no longer self-verify. T06's G4 walk should re-confirm the

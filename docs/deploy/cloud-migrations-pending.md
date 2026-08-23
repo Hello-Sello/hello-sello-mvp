@@ -64,10 +64,13 @@ tightening** on site 1, and the `anon` SELECT revoke on `product_media`. LOCAL o
    is false). HS staff/reviewer accounts with no `person.company_id` are in this class. They read
    cross-company products today; they will read none.
 
-**And it CASCADES beyond `product`.** `pricelist_item_public_select`, `plit_public_select`,
+**And it CASCADES beyond `product`.** `pricelist_item_public_select`,
 `product_image_public_select` and `product_media_public_select` each nest
 `EXISTS (SELECT 1 FROM product p …)`, and a policy subquery is RLS-filtered **as the calling
-role** — so the site-1 edit propagates into all four with no edit to them. Both classes above
+role** — so the site-1 edit propagates into all three with no edit to them.
+`plit_public_select` nests the same EXISTS but is **not** a fourth: it already inlines
+`public.is_caller_verified()` itself (`20260814120000:74`), so the site-1 edit changes
+nothing for it. That is why `pricelist_item_tier` is absent from the effect list below. Both classes above
 therefore also lose direct reads of `product_image`, `product_media` and `pricelist_item`.
 Measured locally, not inferred. The *override* does **not** propagate in the other direction:
 each nested predicate restates `p.profile_visible = true` itself.

@@ -294,11 +294,15 @@ Four deliberate choices:
   RLS evaluation on `relationship` per row. ADR-0004 argued the same direction for
   `save_price_ladder`, but that is an app-called RPC, not a policy helper — the analogy is
   directional, not exact. **✅ G3, Muskan 2026-08-19 — the deviation is SIGNED.** INVOKER is the smaller privilege and
-  round 3 confirmed it returns correct results in all three calling contexts. One honest
-  correction (round 3, N2): inside the owner-rights view and the DEFINER RPC the function runs
-  as `postgres`, so RLS on `relationship` is bypassed there and `rel_all` is **not** what makes
-  those two work — only the policy-on-`product` context matches the stated model. Results
-  correct in all three; the rationale applies to one.
+  round 3 confirmed it returns correct results in all three calling contexts. One correction (round 3,
+  N2), itself **half wrong and corrected at T06's G4 (2026-08-23)**: inside the DEFINER RPC the
+  function runs as `postgres`, so RLS on `relationship` is bypassed there and `rel_all` is not
+  what makes that one work. **The view is NOT such a case.** Owner rights change whose
+  privileges the view's own table references are checked with; they do not change the effective
+  user id, and a `SECURITY INVOKER` function called from the view still executes as the session
+  user — so its query against `relationship` IS RLS-filtered and `rel_all` IS load-bearing at
+  site 2. The shipped migration comment says so and is right; this ADR was wrong. Results
+  correct in all three; the rationale applies to two.
 - **`STABLE`.**
 - **Three-statement grant ritual**, not two. A two-statement copy is how `20260618120100`
   reopened the anon door (`20260816190000:152-154` records the rule).
@@ -341,7 +345,7 @@ Every current enforcement site, each read at its *latest* declaration:
 | 1 | `product_public_select` (RLS on `product`) | **yes, via the basket** | **CHANGED** |
 | 2 | `pricelist_item_public_select` | no — prices reach the buyer through the view | untouched |
 | 3 | `product_image_public_select` | no — images ride the RPC | untouched |
-| 4 | `product_media_public_select` | no — media rides the RPC | untouched |
+| 4 | `product_media_public_select` | no — media rides the RPC | **role list narrowed** — S4 drops `anon` from it (`ALTER POLICY … TO authenticated`) and revokes `anon`'s incidental table SELECT. Predicate untouched. |
 | 5 | `plit_public_select` | no — ladders reach the buyer through the view. **ADR-0004 keeps this deliberately** (`0004-tier-ladder.md:122-127`) | untouched |
 | 6 | `current_pricelist_item` public arm (view) | **yes** — bypasses RLS | **CHANGED** |
 | 7 | `get_discoverable_shop` WHERE (RPC) | **yes** — bypasses RLS; this *is* the read path | **CHANGED** |

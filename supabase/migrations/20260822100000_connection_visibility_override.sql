@@ -27,11 +27,14 @@
 --       `profile_visible` product in the database. `is_caller_verified()` is
 --       absent from the live policy; it is added here.
 --       ⚠️ THIS REMOVES READS FROM LIVE CALLERS, in two classes, and it
---       CASCADES: `pricelist_item_public_select`, `plit_public_select`,
---       `product_image_public_select` and `product_media_public_select` each
---       nest `EXISTS (SELECT 1 FROM product p …)`, and a policy subquery is
+--       CASCADES: `pricelist_item_public_select`, `product_image_public_select`
+--       and `product_media_public_select` each nest
+--       `EXISTS (SELECT 1 FROM product p …)`, and a policy subquery is
 --       RLS-filtered as the CALLING role — so one edit here propagates into
---       all four with no edit to them. Members of an UNVERIFIED company and
+--       all three with no edit to them. `plit_public_select` nests the same
+--       EXISTS but is NOT in that set: it already inlines
+--       `public.is_caller_verified()` itself (`20260814120000:74`), so this
+--       edit changes nothing for it. The ledger states the same three. Members of an UNVERIFIED company and
 --       COMPANYLESS authenticated callers lose cross-company reads of
 --       `product`, `product_image`, `product_media` and `pricelist_item`.
 --       Both classes are named in docs/deploy/cloud-migrations-pending.md.
@@ -340,10 +343,17 @@ revoke execute on function public.get_discoverable_shop(uuid) from anon;
 -- Re-typing that nested EXISTS to change a role list would be the exact S5
 -- failure family, for no gain.
 --
--- `anon` also holds INSERT/UPDATE/DELETE/TRUNCATE on product_media, product and
+-- `anon` also holds INSERT/UPDATE/DELETE on product_media, product and
 -- product_image. Those are blocked by RLS with NO policy naming `anon` — that
 -- is a real policy decision, not an accident, and is left alone. Only the
 -- SELECT grant was the accidental one.
+--
+-- TRUNCATE is the exception and is NOT blocked by RLS: Postgres exempts that
+-- verb from row security entirely, so the table grant alone gates it — and the
+-- same grant that this comment relies on is what `anon` still holds. Not
+-- reachable through PostgREST (it emits neither TRUNCATE nor DDL), so not a
+-- live exploit; tracked as T11, which carries the proof (3 audit_log rows →
+-- `set role anon; truncate` → 0 rows).
 -- ----------------------------------------------------------------------------
 alter policy product_media_public_select on public.product_media to authenticated;
 

@@ -923,3 +923,29 @@ where a block ends.
 closing brace of the `if (pairRel)` block" — and let the implementer resolve it to numbers. If a
 plan must carry numbers, they are provisional by definition: say so, and expect the builder to
 correct them. **A builder correcting a plan's line range is the system working, not a deviation.**
+
+---
+
+## L-031 · "The other copy is right" is a claim about the other copy, and it was never opened
+
+**2026-08-23 · slug 0022 · T06 G4 follow-through · caught while executing the fix**
+
+**Trigger** — recording a discrepancy between two copies of the same fact and naming a winner:
+"the migration and the ledger disagree, the ledger is right."
+
+**What happened** — STATE.md carried that exact sentence about the site-1 cascade list, as an owed
+T06 fix. Executing it meant opening `docs/deploy/cloud-migrations-pending.md` — which carries the
+**same** over-count, listing `plit_public_select` as a fourth cascade beneficiary when it already
+inlines `is_caller_verified()` itself. The two copies never disagreed. Had the fix been applied as
+written, the migration would have been corrected to match a ledger that was equally wrong, and a
+freshly-written comment would have cited it as authority.
+
+**Why it was wrong** — the finding was real (the count *is* one too high); the attribution was
+invented. The reviewer read one copy, reasoned out the correct answer, and then assumed the other
+copy already held it. Naming a winner feels like extra rigour and is actually an extra unverified
+claim riding on a verified one.
+
+**The rule.** When you record that two sources disagree, you owe **both** line references. If you
+have only opened one, write "X is wrong; check whether Y repeats it" — and treat the second copy as
+part of the fix, not as the thing being fixed against. Same shape as L-029: a fix is not allowed to
+cite as evidence something nobody has read.
