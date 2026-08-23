@@ -1024,3 +1024,39 @@ command. Prefer a fixture the suite creates and tears down itself; where a seed 
 cite in the test *why that row is safe* ("no committed test mutates it"). And **a green suite result
 is only evidence for the database state it ran against** — when a report says "passed after a
 reset", ask what ran between the reset and the claim.
+
+---
+
+## L-034 · A migration's end state on REPLAY is not its end state on PUSH
+
+**2026-08-23 · slug 0022 · T08 · caught by `plan-checker` round 2 — after the plan had explicitly ruled it out**
+
+**Trigger** — any migration whose correctness depends on **another migration running after it**:
+`ALTER DEFAULT PRIVILEGES`, a grant later revoked, a permissive policy later narrowed, a column
+later dropped. Also: **any migration whose filename timestamp is older than the date it was
+authored.**
+
+**What happened** — `20260607090000_stack_default_privileges.sql` issues
+`alter default privileges … grant execute on functions to anon, authenticated, service_role`. Its
+own header reasoned the dependency through and cleared it: *"anon EXECUTE on functions — revoked by
+20260817120000 §3 … Granted below, revoked there; **end state = prod**."*
+
+**True locally, false on cloud.** `db reset` replays every file in timestamp order, so `090000` runs
+first and the revoke runs later and wins. But the file is *named* 2026-06-07 and was **authored
+2026-08-22** — while the revoke went live on production on **2026-08-17**. A cloud push therefore
+applies `090000` **last**, the revoke never re-runs, and the grant re-widens production's default
+with nothing left to narrow it. The measured local end state — `f | {postgres=X, authenticated=X,
+service_role=X}` — is an artifact of replay order, and every local test agreed with it.
+
+**Two things made it invisible.** The header's production check recorded privilege **letters**
+(*"functions `X`"*) and **not grantees** — so it structurally could not tell whether `anon` was among
+them. And a back-dated filename makes "runs first" read as a property of the file when it is only a
+property of `db reset`.
+
+**The rule.** A migration is only safe if it asserts the same end state **whether it replays first
+or pushes last** — write it order-independently rather than relying on a later file to correct it.
+Before pushing any batch, **diff the filename timestamps against the authoring dates** (`git log
+--diff-filter=A --format='%ad %s' -- <file>`); where they disagree, that file's ordering assumptions
+are wrong on cloud. And **any `pg_default_acl` or grant verification must name the ROLES**, never
+just the privilege letters. Fixing it costs one edit while the file is unpushed, and a compensating
+migration plus a live window afterwards.
