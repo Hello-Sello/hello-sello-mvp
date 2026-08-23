@@ -949,3 +949,14 @@ claim riding on a verified one.
 have only opened one, write "X is wrong; check whether Y repeats it" — and treat the second copy as
 part of the fix, not as the thing being fixed against. Same shape as L-029: a fix is not allowed to
 cite as evidence something nobody has read.
+
+**Re-offended the same day, by the same author, in the file that cites this entry.** PLAN-T07 rev 1
+§6 wrote *"Read `actions.ts` first: if a refusal path already exists, reuse it (L-031 — do not assume
+the other copy; open it)"* — and its own Files table had already listed `actions.ts` as *"caller
+passes the refusal up"*. `actions.ts` is **not a caller of `addToBasket`**; `grep -rn addToBasket
+src/ e2e/` returns four hits and none is in that file. `plan-checker` caught it.
+
+**What that adds to the rule:** *citing* the discipline is not *doing* it, and citing it reads
+enough like doing it to fool the author and a reviewer skimming for the reference. The check is
+mechanical and costs one command — **run the grep in the same edit that names the file.** If a plan
+names a file as playing a role, the evidence for that role belongs in the plan next to the name.
