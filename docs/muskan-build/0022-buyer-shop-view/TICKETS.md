@@ -602,3 +602,46 @@ base-branch trap).
 | 9 order without connection | **split to its own slug** (ADR §9) — carries decision 11 + decision 2's second half with it; T02 closes the dead end it leaves |
 | 10 server refuses inadmissible basket line | T07 |
 | 11 no owner chrome anywhere | T02 + T03 |
+
+## T12 — Tests must not permanently mutate the shared seed · **S** · depends on: — · Linear: owed (MCP auth blocked)
+
+**Filed 2026-08-23 at T07's G4. Muskan's ruling: own ticket, fix it properly — not urgent, does not
+block `/ship`.**
+
+**The problem.** Several committed e2e specs edit shared demo rows and never restore them, and
+`npm test` never resets. So a suite's result depends on **what ran before it**, and a green run is
+only evidence for the database state it ran against. Two agents on T07 reported **opposite results
+for the same suite on the same machine** — both honestly; the stack had changed underneath.
+
+**Proven instances** (measured, not inferred):
+- `e2e/present-card-edit.spec.ts:244` checks *"Show price to buyers"* and saves → flips
+  `AUR-1A.price_public` permanently. **It also poisons itself:** `:240` asserts
+  `price_public = false` as negative space *before* `:244` flips it, so the spec fails on any second
+  run without a reset.
+- `e2e/present-manage.spec.ts:78-84` **soft-deletes** the first product card — `AUR-1A` — made
+  deterministic by the rename test above it in the same serial file. Not flipped: gone.
+- **Two shipped SQL suites already fail because of this**, green pre-e2e and red post-e2e with no
+  reset between: `seed_visibility_matrix_test.sql` and `connection_visibility_override_test.sql`
+  (**T06's own suite**).
+- `e2e/present-grid.spec.ts:68` has already been written **around** the damage.
+- Three specs declare seed mutation in their own headers and ship **no teardown**.
+
+**Consequence to state plainly:** *"39/39 SQL runners green"* is true **only on a fresh reset**, and
+it is reported without that qualifier everywhere.
+
+**The pattern that already works, in the same suite:** `e2e/discover-shop.spec.ts:586-594` — and
+T07's own new test, which creates `T07-E2E-WITHDRAW` and hard-deletes it in `afterAll`, mutating
+**zero** seed rows.
+
+**Files:** `e2e/present-card-edit.spec.ts`, `e2e/present-manage.spec.ts`, `e2e/present-grid.spec.ts`
+
+- When a spec needs a product in a particular state, it shall **create its own** and remove it
+  afterwards, rather than editing a seeded row.
+- When a spec must use a seeded row, it shall **restore that row** in `afterAll`, and cite in a
+  comment why the row is safe to use.
+- When the full suite is run twice with no reset in between, every suite shall produce the **same
+  result both times** — the acceptance test for this ticket.
+- ⚠️ **`AUR-1A`–`AUR-1F` are each pinned by a cell of `basket_admission_test.sql`'s matrix** and by
+  `seed_visibility_matrix_test.sql`. Any spec touching them breaks SQL suites in a different file.
+
+**Recorded as L-033.** *A seed row is not a stable fixture until you grep what mutates it.*
