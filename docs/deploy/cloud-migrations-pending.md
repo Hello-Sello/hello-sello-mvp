@@ -141,10 +141,22 @@ deletable** — the policy carries `WITH CHECK` only and **deliberately no `USIN
 `SELECT`/`DELETE` have no `WITH CHECK` phase. Both client callers now surface the refusal
 instead of dropping it (`ShopView.handleAddToBasket`, `BasketDrawer`'s pack-count stepper).
 
-**It also closes one T11 instance early.** `anon` holds **TRUNCATE** on this table today
-(`has_table_privilege('anon','public.product_basket_line','TRUNCATE')` → `t`, measured). RLS
-does not reach TRUNCATE at all, so no policy stood between a signed-out caller and an emptied
-basket table. T11's sweep should not re-report this one as open.
+**It also closes one T11 instance early — in BOTH roles.** `anon` **and** `authenticated` each
+hold **TRUNCATE** on this table today (`has_table_privilege(…,'TRUNCATE')` → `t` for both,
+measured). RLS does not reach TRUNCATE at all — it is a table-level operation checked against
+the privilege alone — so no policy stood between a caller and an emptied basket table, and no
+policy that could be written on this table would change that. The `authenticated` half was
+**proven reachable with real rows at G4**: a signed-in buyer truncated a basket line belonging
+to a seller he cannot see. So the file carries a third revoke:
+
+    revoke truncate, references, trigger, maintain
+      on public.product_basket_line from authenticated;
+
+`authenticated` **keeps SELECT / INSERT / UPDATE / DELETE** — the whole basket depends on them,
+and the named-verb form (rather than `revoke all` + re-`grant`) is what keeps them out of reach
+of a re-grant list. `MAINTAIN` is PG17+; the cloud project reports `postgres_engine: 17`
+(17.6.1.127), so the bare verb parses there. T11's sweep should not re-report this table as
+open in either role.
 
 **Pre-flight for this one:**
 - **Confirm `basket_line_owner_all` is still present and unmodified on cloud AFTER applying**:
@@ -161,11 +173,16 @@ basket table. T11's sweep should not re-report this one as open.
 - **Do not answer this with a column-REVOKE on `product_id`.** `addToBasket` is a PostgREST
   upsert and `ON CONFLICT DO UPDATE` needs UPDATE privilege on every payload column — the
   revoke breaks the real add path.
-- **After applying, `anon` must hold nothing here**:
+- **After applying, check the whole ACL, not just `anon`**:
   `select relacl from pg_class where oid = 'public.product_basket_line'::regclass;`
-  → no `anon=` entry and no PUBLIC entry. Note that `relacl` carried **no PUBLIC entry before
-  this migration either** — tables get no default PUBLIC grant, so `from public` is defence in
-  depth, not a door being closed.
+  → no `anon=` entry, no PUBLIC entry, and **`authenticated=arwd/postgres` exactly** — the
+  letters render in the fixed order `arwdDxtm` (INSERT, SELECT, UPDATE, DELETE, TRUNCATE,
+  REFERENCES, TRIGGER, MAINTAIN), so `arwd` is the four kept verbs and nothing else. Anything
+  longer means a revoke did not land; anything shorter means it over-reached and the basket is
+  broken. Local reads exactly `{postgres=arwdDxtm/postgres,authenticated=arwd/postgres,
+  service_role=arwdDxtm/postgres}` after a clean `db reset`. Note that `relacl` carried **no
+  PUBLIC entry before this migration either** — tables get no default PUBLIC grant, so
+  `from public` is defence in depth, not a door being closed.
 - **This migration depends on T06 (`20260822100000`)** — the buyer arm of the EXISTS resolves
   through `product_public_select`, which T06 rewrites. Applying T07 without T06 gates the
   basket against the *old*, narrower visibility rule.

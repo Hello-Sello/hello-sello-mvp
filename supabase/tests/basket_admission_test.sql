@@ -621,7 +621,142 @@ BEGIN
   -- Without this an emptied or NULL relacl would satisfy both negatives above.
   IF NOT EXISTS (SELECT 1 FROM unnest(v_acl) a WHERE a::text LIKE 'authenticated=%') THEN
     RAISE EXCEPTION 'G1: authenticated lost its grants on product_basket_line — the revoke over-reached. relacl: %', v_show; END IF;
+  -- Tightened control (T07 G4 follow-through, HEL-61): the shipped migration's
+  -- own contract is "revoke exactly truncate/references/trigger/maintain, keep
+  -- select/insert/update/delete" (20260823100000:170-175), measured live
+  -- before that migration as `authenticated=arwdDxtm/postgres`. aclitem
+  -- privilege letters render in the fixed order arwdDxtm (INSERT,SELECT,
+  -- UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN), so the surviving set
+  -- must read exactly `arwd`. Chosen deliberately over leaving only the loose
+  -- `authenticated=%` check above: this table's ACL is a named security
+  -- contract (this migration exists because a signed-in buyer TRUNCATEd a row
+  -- he could not see), so a future grant drifting back onto this exact table
+  -- SHOULD force this assertion to be touched, not pass silently. The loose
+  -- check above stays as the structural "still has some access at all" guard;
+  -- this one pins the exact verb set.
+  IF NOT EXISTS (SELECT 1 FROM unnest(v_acl) a WHERE a::text LIKE 'authenticated=arwd/%') THEN
+    RAISE EXCEPTION 'G1: authenticated''s surviving privilege set on product_basket_line is no longer exactly arwd (select/insert/update/delete) — relacl: %', v_show; END IF;
 END $$;
+
+-- ============================================================================
+-- G1 continued [T07 G4 follow-through, HEL-61] — the behavioural half of the
+-- new `revoke truncate, references, trigger, maintain … from authenticated`
+-- line (20260823100000_basket_admission.sql:174-175). `security` proved a
+-- live hole: a signed-in buyer TRUNCATEd a basket line belonging to a seller
+-- he cannot see — RLS is never consulted for TRUNCATE (table-level,
+-- privilege-checked only), so no policy on this table could ever have
+-- stopped it.
+--
+-- Two proofs, in order:
+--   (a) TRUNCATE is refused, and the survivors (planted by cells 1-13) are
+--       still there afterward — the row-count check exists because a TRUNCATE
+--       that actually SUCCEEDED raises no exception at all, so a bare
+--       `v_refused` flag cannot catch it; only a privileged post-count can.
+--   (b) the over-reach guard, and the more important half: SELECT, INSERT,
+--       UPDATE and DELETE must ALL still work for `authenticated` — proved
+--       behaviourally (the verbs actually run, not `has_table_privilege`)
+--       because a behavioural pass also proves the two policies
+--       (`basket_line_owner_all`, `basket_line_admission`) survived the
+--       REVOKE undisturbed, not merely that the grant bits look right.
+--
+-- Reuses cell 11's line (Bob, T07-STAYS-ADMISSIBLE) rather than planting a
+-- new product: it is already unambiguously admissible under the new
+-- restrictive policy (visible + priced), already exists, and cell 11 is the
+-- file's own designated "no other cell depends on this row" fixture. Cell 11
+-- left it at pack_count=3 — asserted as a precondition below, not assumed.
+-- This is the LAST cell to touch it, so cycling it through SELECT → UPDATE →
+-- DELETE → re-INSERT here disturbs nothing downstream (only the final PASSED
+-- notice + ROLLBACK follow).
+--
+-- ⚠️ Both `request.jwt.claim.sub` and `request.jwt.claims` were blanked by
+-- cell 10 (anon) and are transaction-scoped — RESET ROLE does not clear a
+-- GUC — so Bob's claims are set again before each impersonated block below.
+-- ============================================================================
+SELECT set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', true);
+SELECT set_config('request.jwt.claims', '{"sub":"22222222-2222-2222-2222-222222222222","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE
+  v_refused boolean := false;
+  v_msg     text;
+BEGIN
+  BEGIN
+    TRUNCATE public.product_basket_line;
+  EXCEPTION WHEN insufficient_privilege THEN
+    v_refused := true;
+    v_msg := SQLERRM;
+  END;
+  IF NOT v_refused THEN
+    RAISE EXCEPTION 'G1/TRUNCATE: authenticated TRUNCATE on product_basket_line must be refused — this is the exact hole the migration closes (RLS is never consulted for TRUNCATE)';
+  END IF;
+  IF v_msg !~* 'permission denied' THEN
+    RAISE EXCEPTION 'G1/TRUNCATE: authenticated''s refusal must read ''permission denied'' — cell 10''s idiom, asserting the message not the SQLSTATE. Got: %', v_msg;
+  END IF;
+END $$;
+RESET ROLE;
+
+DO $$
+DECLARE v_rows int;
+BEGIN
+  -- Privileged (no role set), table-wide: TRUNCATE has no WHERE clause, so a
+  -- TRUNCATE that actually succeeded (raising no exception, hence invisible
+  -- to the v_refused flag above) would show up here as 0, not as a partial
+  -- loss confined to one owner.
+  SELECT count(*) INTO v_rows FROM public.product_basket_line;
+  IF v_rows = 0 THEN
+    RAISE EXCEPTION 'G1/TRUNCATE: product_basket_line has 0 rows after the TRUNCATE attempt — cells 1-13 planted several; a refusal that raised insufficient_privilege but still emptied the table is not a real refusal';
+  END IF;
+END $$;
+
+SELECT set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', true);
+SELECT set_config('request.jwt.claims', '{"sub":"22222222-2222-2222-2222-222222222222","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE
+  v_line_id    uuid;
+  v_pack_count int;
+  v_affected   int;
+BEGIN
+  -- SELECT
+  SELECT id, pack_count INTO v_line_id, v_pack_count FROM public.product_basket_line
+   WHERE owner_person_id = '22222222-2222-2222-2222-222222222222'::uuid
+     AND product_id = (SELECT staysadmissible_id FROM _fix);
+  IF v_line_id IS NULL THEN
+    RAISE EXCEPTION 'G1/CRUD: SELECT — Bob''s cell-11 line on T07-STAYS-ADMISSIBLE not found; the TRUNCATE/REFERENCES/TRIGGER/MAINTAIN revoke must not disturb SELECT';
+  END IF;
+  IF v_pack_count <> 3 THEN
+    RAISE EXCEPTION 'G1/CRUD precondition: expected cell 11''s pack_count=3 on Bob''s line, got % — fixture drift, not what this cell tests', v_pack_count;
+  END IF;
+
+  -- UPDATE
+  UPDATE public.product_basket_line SET pack_count = 7, updated_at = now() WHERE id = v_line_id;
+  GET DIAGNOSTICS v_affected = ROW_COUNT;
+  IF v_affected <> 1 THEN
+    RAISE EXCEPTION 'G1/CRUD: UPDATE on product_basket_line must still work for authenticated after the revoke — 0 rows affected';
+  END IF;
+  IF (SELECT pack_count FROM public.product_basket_line WHERE id = v_line_id) <> 7 THEN
+    RAISE EXCEPTION 'G1/CRUD: UPDATE did not persist pack_count=7 on Bob''s line';
+  END IF;
+
+  -- DELETE
+  DELETE FROM public.product_basket_line WHERE id = v_line_id;
+  GET DIAGNOSTICS v_affected = ROW_COUNT;
+  IF v_affected <> 1 THEN
+    RAISE EXCEPTION 'G1/CRUD: DELETE on product_basket_line must still work for authenticated after the revoke — 0 rows affected';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.product_basket_line WHERE id = v_line_id) THEN
+    RAISE EXCEPTION 'G1/CRUD: Bob''s line must be gone after the DELETE';
+  END IF;
+
+  -- INSERT
+  INSERT INTO public.product_basket_line (owner_person_id, product_id, pack_count)
+  VALUES ('22222222-2222-2222-2222-222222222222'::uuid, (SELECT staysadmissible_id FROM _fix), 1);
+  IF (SELECT count(*) FROM public.product_basket_line
+       WHERE owner_person_id = '22222222-2222-2222-2222-222222222222'::uuid
+         AND product_id = (SELECT staysadmissible_id FROM _fix)) <> 1
+    THEN RAISE EXCEPTION 'G1/CRUD: INSERT on product_basket_line must still work for authenticated after the revoke — the more important half of this cell, since the whole basket depends on it'; END IF;
+END $$;
+RESET ROLE;
 
 DO $$
 BEGIN

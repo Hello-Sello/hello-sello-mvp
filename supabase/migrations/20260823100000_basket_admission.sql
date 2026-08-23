@@ -113,8 +113,17 @@ comment on policy basket_line_admission on public.product_basket_line is
   'ticket''s accepted consequence.';
 
 -- ----------------------------------------------------------------------------
--- Grants: `anon` has no business here at all.
+-- Grants: `anon` has no business here at all, and `authenticated` holds four
+-- verbs it never uses — one of which is TRUNCATE.
 -- ----------------------------------------------------------------------------
+-- ⚠️ RLS DOES NOT REACH TRUNCATE. This is the whole reason a grant-level fix is
+-- the ONLY fix available here. A policy is consulted per row, on SELECT /
+-- INSERT / UPDATE / DELETE; TRUNCATE is a table-level operation and Postgres
+-- checks the TRUNCATE privilege alone. So `basket_line_owner_all` — which asks
+-- "is this MY line?" — and the new `basket_line_admission` policy above are
+-- both structurally incapable of standing in the way. No policy that could be
+-- written on this table would change that.
+--
 -- ⚠️ WHAT THIS DOES AND DOES NOT CLOSE. Tables get NO default PUBLIC grant.
 -- Live `pg_class.relacl` for this table, queried before writing this line:
 --
@@ -127,17 +136,40 @@ comment on policy basket_line_admission on public.product_basket_line is
 -- operates and where 20260822100000:102-107 applies it correctly. It does not
 -- transfer to tables.)
 --
--- ⚠️ WHAT IT DOES GENUINELY CLOSE: `anon` holds TRUNCATE on this table TODAY
--- (`has_table_privilege('anon', …, 'TRUNCATE')` → true, measured). RLS does not
--- reach TRUNCATE at all, so no policy was ever standing between a signed-out
--- caller and an emptied basket table. That is one instance of T11's class,
--- closed early here so T11's sweep does not re-report it as open.
+-- ⚠️ WHAT IT DOES GENUINELY CLOSE — IN BOTH ROLES, which is the point.
+-- `anon` AND `authenticated` each hold TRUNCATE on this table today
+-- (`has_table_privilege(…, 'TRUNCATE')` → true for both, measured). Closing
+-- only the signed-out role would have left the *reachable* one open: proven
+-- with real rows during review — a signed-in buyer truncated a basket line
+-- belonging to a seller he cannot see, because (per the note above) no policy
+-- on this table can be consulted for TRUNCATE at all.
 --
--- ENUMERATED BEFORE REVOKING (the T09 method) — nothing signed-out touches this
--- table: `reads.ts:19-21` returns `{groups: [], totalLineCount: 0}` BEFORE
--- issuing any query when there is no user, and `BasketProvider.tsx:23-25`
--- catches regardless. The only server-side toucher is `actions.ts:42`, a delete
--- inside `createBasketDraft`, which runs authenticated. The revoke breaks
--- nothing.
+-- That is session 77's shape exactly — an audit aimed at `anon` while the same
+-- grant sat one role over — so BOTH roles are closed here, which is what makes
+-- the T11 claim in the next paragraph honest.
+--
+-- The three revokes below close ONE TABLE's instance of T11's class (`anon` and
+-- `authenticated` hold TRUNCATE on ~90 tables). T11 still owns the sweep; it
+-- just will not re-report `product_basket_line` as open, in either role.
+--
+-- ENUMERATED BEFORE REVOKING (the T09 method).
+--   `anon` — nothing signed-out touches this table: `reads.ts:19-21` returns
+--     `{groups: [], totalLineCount: 0}` BEFORE issuing any query when there is
+--     no user, and `BasketProvider.tsx:23-25` catches regardless. The only
+--     server-side toucher is `actions.ts:42`, a delete inside
+--     `createBasketDraft`, which runs authenticated.
+--   `authenticated` — the app's every use of this table is SELECT / INSERT /
+--     UPDATE / DELETE (PostgREST emits nothing else; it has no TRUNCATE and no
+--     DDL verb), so those four are re-stated as KEPT and only the four unused
+--     verbs go. The named-verb form is deliberate: `revoke all` + re-`grant`
+--     would put the app's four working verbs at the mercy of a re-grant list,
+--     and a verb dropped there breaks the basket silently.
 revoke all on public.product_basket_line from anon;
 revoke all on public.product_basket_line from public;
+
+-- KEPT for `authenticated`: SELECT, INSERT, UPDATE, DELETE — the whole basket
+-- depends on them. REVOKED: the four it has never used. `MAINTAIN` is PG17+;
+-- both this stack and the cloud project run engine 17 (checked, not assumed),
+-- so the bare verb parses on both.
+revoke truncate, references, trigger, maintain
+  on public.product_basket_line from authenticated;

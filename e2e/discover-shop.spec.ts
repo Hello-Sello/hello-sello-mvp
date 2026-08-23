@@ -626,3 +626,137 @@ test.describe("T05 — an unfiled product never reaches a buyer (G4 ruling)", ()
     await sellerCtx.close();
   });
 });
+
+/**
+ * T07 (HEL-6x, PLAN-T07.md) — a basket-add refusal survives the correcting
+ * refresh (ShopView.tsx `handleAddToBasket`, ~:583-615).
+ *
+ * `basket_line_admission` (migration 20260823100000) is a new RESTRICTIVE
+ * policy on `product_basket_line`: a buyer may not add a product whose price
+ * is hidden from them. Before this fix `handleAddToBasket`'s catch set the
+ * error message but never called `router.refresh()`, so the stale card kept
+ * its live Add control and re-raised the SAME pill forever. Both halves are
+ * asserted here because either one alone is a false green: the message alone
+ * passes on the pre-fix code (it always set `addError`), and the refresh
+ * alone (with no visible message) would pass on a version that silently
+ * corrected the card without ever telling the buyer why.
+ *
+ * FIXTURE STRATEGY (L-033 — seed pollution is a live, twice-proven hazard in
+ * this suite): this test creates and deletes its OWN product rather than
+ * flipping a dial on a seeded AUR-1* row. `present-card-edit.spec.ts:244`
+ * flips AUR-1A's `price_public` and never restores it; AUR-1A/1B/1C/1D/1F are
+ * each pinned by a cell of `basket_admission_test.sql`'s own matrix, so any
+ * one of them is the highest-risk row this file could touch. Zero seed rows
+ * are mutated by this block.
+ *
+ * The price itself lives on `pricelist_item`, not `product` — GreenLeaf's
+ * seeded "Standard" pricelist carries a FIXED id (seed.sql §6b,
+ * `3fe179d5-c0e7-4eff-9726-f707c04572f9`) precisely so a new priced row can be
+ * attached to it without first re-deriving which pricelist is "the" one.
+ *
+ * `location` is set (not left null): T05's G4 ruling withholds an unfiled
+ * product from a buyer entirely (`get_discoverable_shop`'s
+ * `p.location is not null` term) — an unfiled fixture here would make the
+ * card never render at all, proving nothing about the admission refusal.
+ */
+test.describe("T07 — a basket-add refusal survives the correcting refresh", () => {
+  const PRODUCT_NAME = "T07 Withdraw Test Product";
+  const PRODUCT_CODE = "T07-E2E-WITHDRAW";
+  const GREENLEAF_PRICELIST_ID = "3fe179d5-c0e7-4eff-9726-f707c04572f9";
+  const REFUSAL_MESSAGE =
+    "The seller no longer shares this product, or its price, with you.";
+
+  function makeAdminClient(): SupabaseClient {
+    return createClient(LOCAL_SUPABASE_URL, LOCAL_SERVICE_KEY, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+  }
+
+  let productId: string | null = null;
+
+  test.beforeAll(async () => {
+    const admin = makeAdminClient();
+    const { data: product, error: productErr } = await admin
+      .from("product")
+      .insert({
+        company_id: GREENLEAF_ID,
+        name: PRODUCT_NAME,
+        supplier_product_code: PRODUCT_CODE,
+        profile_visible: true,
+        price_public: true,
+        location: "Toronto Warehouse",
+        pack_size_grams: 100,
+      })
+      .select("id")
+      .single();
+    if (productErr || !product) {
+      throw new Error(`T07 fixture: product insert failed — ${productErr?.message}`);
+    }
+    productId = (product as { id: string }).id;
+
+    const { error: priceErr } = await admin.from("pricelist_item").insert({
+      pricelist_id: GREENLEAF_PRICELIST_ID,
+      product_id: productId,
+      price_per_gram: 5.0,
+      currency: "EUR",
+    });
+    if (priceErr) {
+      throw new Error(`T07 fixture: pricelist_item insert failed — ${priceErr.message}`);
+    }
+  });
+
+  test.afterAll(async () => {
+    if (!productId) return;
+    const admin = makeAdminClient();
+    // Any basket line first (FK), then the price row, then the product itself
+    // — a fixture this test owns end to end, so a hard delete is safe.
+    await admin.from("product_basket_line").delete().eq("product_id", productId);
+    await admin.from("pricelist_item").delete().eq("product_id", productId);
+    await admin.from("product").delete().eq("id", productId);
+  });
+
+  test("clicking Add on a just-withdrawn product shows the refusal pill AND clears the stale Add control", async ({
+    page,
+  }) => {
+    await signInBuyer(page);
+    await page.goto(`/discover/${GREENLEAF_ID}`);
+
+    const card = page.getByTestId("product-card").filter({ hasText: PRODUCT_NAME });
+    await expect(card).toBeVisible({ timeout: 15000 });
+
+    // control — the live Add control this test is about to make stale.
+    const addBtn = card.getByRole("button", { name: /add to basket/i });
+    await expect(addBtn).toBeVisible();
+
+    // Withdraw ONLY the price arm (`price_public` false) — visibility
+    // (`profile_visible`) is left untouched, so the refusal below is
+    // isolated to exactly the price rule the pill's copy is about.
+    const admin = makeAdminClient();
+    const { error: withdrawErr } = await admin
+      .from("product")
+      .update({ price_public: false })
+      .eq("id", productId as string);
+    if (withdrawErr) throw new Error(`T07: withdraw write failed — ${withdrawErr.message}`);
+
+    await addBtn.click();
+
+    // (a) the refusal pill carries the exact shipped message.
+    await expect(page.getByRole("status")).toContainText(REFUSAL_MESSAGE, { timeout: 15000 });
+
+    // (b) THE HALF THAT IS NEW: router.refresh() landed, so the card is no
+    // longer stale — its Add control (and price) are gone, replaced by
+    // Request-pricing (canAsk flips true the moment price_public is false).
+    // Without this half the same click would re-raise the pill forever.
+    await expect(card.getByRole("button", { name: /add to basket/i })).toHaveCount(0);
+    await expect(card.getByTestId("request-pricing")).toBeVisible();
+
+    // The refused write never landed — no basket line exists for this
+    // product (optional per the plan, but free given the admin client).
+    const { count, error: countErr } = await admin
+      .from("product_basket_line")
+      .select("id", { count: "exact", head: true })
+      .eq("product_id", productId as string);
+    if (countErr) throw new Error(`T07: basket-line count check failed — ${countErr.message}`);
+    expect(count).toBe(0);
+  });
+});

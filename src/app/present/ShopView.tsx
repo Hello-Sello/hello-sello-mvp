@@ -596,6 +596,19 @@ export function ShopView({
       await addToBasket(productId, packCount, packSizeGrams);
     } catch (e) {
       setAddError(e instanceof Error ? e.message : "Couldn't add that to your basket.");
+      // A refusal means the screen is STALE, not that the click failed: the
+      // server refused because this viewer may no longer see the product or its
+      // price, yet the card still shows the old price and a live Add. Without
+      // this the same pill re-raises on every click, forever, and only the user
+      // guessing "reload" corrects it. `products` comes straight off the `shop`
+      // prop (no local copy), so the withdrawn card — and its Add control —
+      // disappear on the next server payload.
+      //
+      // `addError` survives the refresh: router.refresh() re-renders the server
+      // tree in place, it does not remount this client component, so the pill
+      // set one line above stays on screen through the correction. That
+      // ordering is the requirement — message first, refresh second.
+      router.refresh();
       return;
     }
     await refreshBasket();
