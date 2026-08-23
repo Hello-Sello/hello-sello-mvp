@@ -1233,3 +1233,103 @@ rewrites).
 `run_auth_gate_test.sql.sh`, a **malformed double extension** (`.sql.sh`). It runs and passes, but
 any glob written the obvious way silently skips it. Report **38 over 43**; the filename wants
 renaming in a housekeeping pass.
+
+---
+
+# T07 — G4 visual staging ([HEL-61](https://linear.app/hellosello/issue/HEL-61))
+
+Evidence only — no verdict. Signed in as `bob@stonepharm.test` (StonePharm, verified +
+actively connected to GreenLeaf), driving the live route
+`/discover/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa` at **1440 CSS px**.
+Screenshots: `docs/muskan-build/0022-buyer-shop-view/g4/`.
+
+**No e2e spec was run** (L-033 — `present-card-edit.spec.ts:244` and
+`present-manage.spec.ts:78-84` mutate this seed).
+
+**T07's whole visual surface is one thing:** the refusal pill in `ShopView.tsx:759-769`.
+
+## Stack state — before and after
+
+| check | before | after |
+|---|---|---|
+| `AUR-1A` `profile_visible \| price_public` | `t \| f` | `t \| f` |
+| full matrix `AUR-1A..1F` | `t\|f · t\|t · f\|t · f\|f · t\|t · t\|f` | identical |
+| soft-deleted products | 0 | 0 |
+| distinct locations | 2 | 2 |
+| tier rungs `1A..1F` | `1 · 0 · 0 · 0 · 2 · 0` | identical |
+| `product_basket_line` rows | 0 | 0 |
+| `pending_inbox_item` rows | 3 (all at the seed stamp) | 3 |
+| every GreenLeaf `product.updated_at` | `2026-08-23 16:42:45.268198+00` | identical |
+
+## How the pill was reached — the only path that exists
+
+The control is never the gate (decision 3): `ProductCard.tsx:407/411` withholds the Add
+button from any product that would be refused, so the pill has **no click path from a fresh
+page load**. It was reached by mutating the product **behind an already-rendered page**.
+
+Exact SQL run, in order:
+
+```sql
+-- 1. arm (page already loaded with a live Add control on AUR-1B)
+update public.product set price_public = false where supplier_product_code = 'AUR-1B';
+-- 2. …click Add on the stale page, capture, then restore
+update public.product set price_public = true  where supplier_product_code = 'AUR-1B';
+-- 3. repeat 1–2 for the 900-wide capture
+-- 4. undo the residue the BEFORE UPDATE trigger left on the row
+alter table public.product disable trigger trg_product_set_updated_at;
+update public.product set updated_at = timestamptz '2026-08-23 16:42:45.268198+00'
+ where supplier_product_code = 'AUR-1B';
+alter table public.product enable trigger trg_product_set_updated_at;
+```
+
+Step 4 exists because `trg_product_set_updated_at` moved `AUR-1B.updated_at` forward on each
+flip. It is now byte-equal to its five siblings again (table above).
+
+## The walk
+
+| # | capture | what it proves | actually rendered | verdict |
+|---|---|---|---|---|
+| 1 | `27h-T07-control-AUR-1B-add-enabled-1440.png` | the armed page: a buyer-legal Add control on `AUR-1B` before the flip | Toronto row, 4 cards. `PND-CA` (AUR-1B): `1000g` chip, "Approx. **6,00€**/g", qty stepper, **Add to basket**. Its neighbours `COS-CA`/`ZPH-CA` (price hidden) show **Request pricing** instead — the control gate behaving as T03 specced. | match |
+| 2 | `28h-T07-refusal-pill-1440.png` | the pill fires when the server refuses a stale add | Fixed pill, bottom-centre, alert red (`--color-danger #dc2626`), white bold text: **"The seller no longer shares this product, or its price, with you."** plus an `×`. 485 × 48 px, centred. | match |
+| 3 | `29h-T07-refusal-pill-zoom-dismiss-X.png` | the dismiss affordance | An `×` glyph inside the pill, right of the text. `aria-label="Dismiss"`. | match |
+| 4 | — (DB, not a shot) | **no line was created** | `select count(*) from product_basket_line where product_id = '33f7c7c2-…'` → **0**; whole-table count → **0**, before and after. | match |
+| 5 | `30h-T07-pill-dismissed-1440.png` | `×` clears it | Pill gone, page otherwise unchanged. | match |
+| 6 | `31h-T07-refusal-pill-narrow-900.png` | **fit check** — the pill at 900 px | Grid drops to 2-up. Pill wraps to **two lines**, 450 × 64 px at x 225–675. `left:225 ≥ 0`, `right:675 ≤ 900` — measured, no overflow either side. `max-w-[92vw]` never engages. | match |
+| 7 | `32h-T07-refusal-pill-narrow-900-zoom.png` | the wrapped pill up close | Two lines; the second line is the single word "you." The `×` stays vertically centred against the two-line block. | match |
+| 8 | `33h-T07-restored-AUR-1B-add-enabled-1440.png` | the seed is back | `PND-CA` again shows "Approx. 6,00€/g" + Add to basket. Identical to shot 1. | match |
+| 9 | prototype comparison | — | **The approved prototype has no refusal state.** `prototypes/0022-buyer-shop-view-prototype/index.html` renders an `Add to basket` button (`:278`) and a basket dock (`:165`) and defines `--danger:#dc2626`, but contains **no error, refusal, toast or pill markup at all** (grep: 0 hits for `refus\|pill\|toast\|error`). Nothing to compare against. | **cannot-verify** — this UI never went through G2 |
+| 10 | pill vs an open `BasketDrawer` | — | Not driven. z-index interaction between the `z-50` pill and the drawer is unverified. | **cannot-verify** |
+
+## Fit check — the pill inside its real container
+
+`ShopView`'s root is `flex h-full flex-col … overflow-auto` — an internal scroll container. The
+pill is `position:fixed`, so it escapes that container and pins to the **viewport**, not to the
+scrolled grid. Confirmed in both captures: it held its bottom-centre position with the grid
+scrolled mid-page, and no ancestor `transform` trapped it. No clipping at either width.
+
+## Things that look wrong to me
+
+| # | what | where |
+|---|---|---|
+| W1 | **The refusal does not correct the screen it refuses.** After the pill fires, `PND-CA` still displays "Approx. **6,00€**/g" and a live **Add to basket** — the sentence *"the seller no longer shares this product, or its price, with you"* sits ~40 px below the price it says is no longer shared. Clicking Add again just re-raises the same pill. `handleAddToBasket` has no `router.refresh()` on the failure path (`ShopView.tsx:597-600`), so the stale card that caused the refusal survives it. | `28h` |
+| W2 | **The dismiss button has no hit target.** `ShopView.tsx:765-767` is a bare `<button aria-label="Dismiss">` with **no `className`** — no padding, no hover state, no focus ring. The clickable area is the 15 px `<X>` icon itself, well under the 24 px minimum, and it is the only control in a pill that otherwise never goes away on its own. | `29h`, `32h` |
+| W3 | **`role="status"` for a failure.** `role="status"` implies `aria-live="polite"`, so a screen reader queues it behind whatever it is already saying. A message that means *"your click did nothing"* is conventionally `role="alert"`. | `ShopView.tsx:761` |
+| W4 | **Alert red under brand crimson.** The pill (`#dc2626`) sits directly below the Add button (`#e30b5d`). At a glance in `28h` they read as two shades of one family; the "this failed" signal is carried almost entirely by the wording. | `28h` |
+| W5 | **No auto-dismiss.** The pill clears only on `×` or on the next add attempt. It is `fixed`, so it follows the buyer down the entire shop until dismissed. | `28h` |
+| W6 | Cosmetic: the 900-px wrap leaves "you." alone on line two. | `32h` |
+
+## Method deviations — declared
+
+1. **OS-level mouse input never reached the page.** Mid-session the Chrome window went hidden
+   (`document.visibilityState === "hidden"`, `outerWidth === 0`); clicks dispatched by the
+   automation tool did not fire a single `click` event on `document` (verified with a capture
+   listener). **The Add and the Dismiss were driven with a DOM `.click()` on the real rendered
+   button**, which runs the same React `onClick` the mouse would. Every screenshot is a real
+   capture of the real render. What is *not* proved by these shots: pointer-level behaviour
+   (hover, focus ring, click target size) — see W2, which is read from the class list, not seen.
+2. **`resize_window` cannot change the viewport here** — same failure T00 recorded at its row 15.
+   The 900-px capture was taken by rendering the live route in a **same-origin 900 × 757 iframe**
+   inside the same tab; `innerWidth` inside the frame reads 900 and the media queries respond
+   (the grid drops from 4-up to 2-up). The dark band at the right of `31h` is the mask behind
+   the frame; the image is cropped to the frame.
+3. A pre-existing tab in the browser group was closed to try to recover input focus.
