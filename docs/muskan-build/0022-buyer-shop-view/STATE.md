@@ -116,6 +116,14 @@ one file serving every seller. No new route; its insides get rebuilt.
   suppresses the per-location group header when a single named location is the active filter
   (today the name renders twice, one line apart). Driven by state `ShopView` already owns. The
   rule below is **untouched**.
+- **ADR-0005's `Reused` fence AMENDED for `BasketDrawer`** (2026-08-23 at T07's G4, Muskan ruled
+  option (a)). `BasketDrawer` gains a `try/catch` around `onPackCountChange` and nothing else —
+  mirroring the sibling `onPackSizeCommit` already ten lines below, into the drawer's existing error
+  line. **WHY:** T07's policy is `FOR ALL`, so it gates the pack-count update too; without the catch
+  a buyer stepping quantity on a withdrawn product gets a silent no-op + unhandled rejection —
+  DEV-83's shape, **4th instance on this slug**, on a flow T07's own ticket calls routine. Full text
+  in `0005:828`. **Missed because the file entered `Files` without grepping the Reused list —
+  L-032.**
 - **AMENDED AGAIN at T07's plan stage** (2026-08-23, Muskan: *"amend the fence"*). Now
   **`ShopView` may carry the basket-refusal state and its render slot — one further state and
   one further branch, for this purpose only.**

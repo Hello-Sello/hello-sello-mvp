@@ -826,6 +826,23 @@ outcome touching nothing.
   > gate whose consent evidence stayed forgeable.
 - `basket_line_owner_all` — **untouched**; §7 adds a restrictive policy beside it.
 - `addToBasket` / `getMyBasket` / `BasketDrawer` — already group by foreign seller.
+  > ⚠️ **AMENDED at T07's G4 (2026-08-23, Muskan ruled — option (a), amend).** `BasketDrawer`
+  > gains **one thing**: a `try/catch` around `onPackCountChange`, mirroring the `try/catch` its
+  > sibling `onPackSizeCommit` already has ten lines below, into the error line the drawer already
+  > renders. No new state, no new prop, no new surface.
+  > **WHY it is load-bearing rather than tidy-up:** T07's policy is `FOR ALL`, so it gates the
+  > pack-count update as well as the insert. Without the catch, a buyer stepping the quantity on a
+  > line whose product the seller has since withdrawn gets a **silent no-op plus an unhandled
+  > rejection** — proven live (`UPDATE → 42501`). That is **DEV-83's shape, the fourth instance on
+  > this slug**, and T07's own ticket calls that refusal an *accepted, routine consequence*, not a
+  > fault. Shipping the policy without the catch would mean shipping a documented flow that fails
+  > invisibly.
+  > **How it got missed:** the file was added to T07's `Files` while folding a checker finding,
+  > without grepping this list. Recorded as **L-032** — a file has more than one fence around it,
+  > and clearing one is not clearing the others.
+  > **Still fenced, unchanged:** `getMyBasket` untouched; `addToBasket` keeps its existing
+  > `:659-660` carve-out and gains nothing further; `removeBasketLine` deliberately **not** wrapped
+  > (`WITH CHECK` has no DELETE phase, so 42501 there could never be an admission refusal).
 
 ## Blast-radius — what this can break, traced
 
