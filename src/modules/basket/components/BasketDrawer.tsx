@@ -262,8 +262,19 @@ function Group({
           line={l}
           resolved={resolveBasketLine(l)}
           onPackCountChange={async (packCount) => {
-            await updateBasketLinePackCount(l.id, packCount);
-            await onChanged();
+            // T07: the pack-count writer can now be REFUSED, not just fail —
+            // `basket_line_admission` gates UPDATE too, so a line whose product
+            // has since gone invisible or price-hidden throws here (the ticket's
+            // accepted consequence). The prop is `(packCount: number) => void`
+            // and the +/- onClicks drop the Promise, so without this the buyer
+            // got a silent no-op plus an unhandled rejection. Surfaces on the
+            // same error line as the sibling pack-size commit below.
+            try {
+              await updateBasketLinePackCount(l.id, packCount);
+              await onChanged();
+            } catch (e) {
+              setError(e instanceof Error ? e.message : "Something went wrong.");
+            }
           }}
           packSizeResetNonce={packSizeFails[l.id] ?? 0}
           onPackSizeCommit={async (grams) => {

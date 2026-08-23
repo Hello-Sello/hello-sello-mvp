@@ -18,7 +18,7 @@
 > projections and the unfiled-product rule) is LOCAL-only and pending too, but has **no entry
 > here**. Flagged at /build T06; writing T05's entry is T05's job, not this ticket's. **Do not
 > treat the entries below as the whole batch.** Ledgered so far: `20260820090000` (T01),
-> `20260822100000` (T06).
+> `20260822100000` (T06), `20260823100000` (T07).
 
 `20260820090000_discoverable_company_shop_chrome.sql` — **T01 / HEL-55.** DROP + CREATE of
 `public.get_discoverable_company(uuid)`, adding five projections (`address`,
@@ -104,6 +104,62 @@ each nested predicate restates `p.profile_visible = true` itself.
 **Push the slug as one batch, in timestamp order — the slug ships as a unit** (G4/T00 condition:
 T00 reaching `dev` without T06 would put every seller's catalogue into every other seller's
 deal-line picker).
+
+---
+
+`20260823100000_basket_admission.sql` — **T07 / HEL-61.** One **new** restrictive policy
+`basket_line_admission` on `public.product_basket_line`, plus `revoke all … from anon` and
+`from public`. LOCAL only. **Nothing existing is re-declared** — `basket_line_owner_all` is not
+touched, and there is no `create or replace` in the file, so the class that once stripped
+`list_discoverable_companies()`'s verified gate does not apply here.
+
+**What it closes.** `product_basket_line` carried ownership as its only rule, so any
+authenticated caller could POST a line for **any** `product_id` — a competitor's hidden product
+included. The read hid the product's name; the row still existed, the count was wrong, and
+`toDraftLines` carried it into a deal draft. The new policy's `WITH CHECK` requires the caller
+to be able to SEE the product (inherited from the `product` policies via an RLS-filtered
+`EXISTS` — no visibility predicate is restated) **and**, unless they own it, `price_public`.
+
+**⚠️ THIS REMOVES WRITES FROM LIVE CALLERS — deliberately, and in one further way than the
+attack it closes.** The policy is `FOR ALL`, so its `WITH CHECK` runs on UPDATE as well as
+INSERT. A buyer holding a basket line for a product that has since gone hidden **or**
+price-hidden can no longer change that line's pack count or pack size. This is the ticket's
+**accepted consequence** (PRD §7 puts it out of scope for v1). The line stays **readable and
+deletable** — the policy carries `WITH CHECK` only and **deliberately no `USING` clause**, and
+`SELECT`/`DELETE` have no `WITH CHECK` phase. Both client callers now surface the refusal
+instead of dropping it (`ShopView.handleAddToBasket`, `BasketDrawer`'s pack-count stepper).
+
+**It also closes one T11 instance early.** `anon` holds **TRUNCATE** on this table today
+(`has_table_privilege('anon','public.product_basket_line','TRUNCATE')` → `t`, measured). RLS
+does not reach TRUNCATE at all, so no policy stood between a signed-out caller and an emptied
+basket table. T11's sweep should not re-report this one as open.
+
+**Pre-flight for this one:**
+- **Confirm `basket_line_owner_all` is still present and unmodified on cloud AFTER applying**:
+  `select polname, polpermissive, pg_get_expr(polqual, polrelid), pg_get_expr(polwithcheck, polrelid)
+   from pg_policy where polrelid = 'public.product_basket_line'::regclass;`
+  → **two** rows; `basket_line_owner_all` permissive with qual **and** with-check
+  `(owner_person_id = auth.uid())`.
+- **Confirm `basket_line_admission`'s `polqual` is NULL.** A non-NULL qual means a `USING`
+  clause got added, which delete-proofs rows and silently shrinks baskets. This is the shape
+  decision, and `supabase/tests/basket_admission_test.sql` cell 9 is its guard.
+- **Confirm `polcmd` is `*` (ALL), not `a` (INSERT).** An INSERT-only policy is ornamental here:
+  `authenticated` holds table-wide UPDATE, so a buyer inserts a legal line and PATCHes its
+  `product_id` onto a hidden product.
+- **Do not answer this with a column-REVOKE on `product_id`.** `addToBasket` is a PostgREST
+  upsert and `ON CONFLICT DO UPDATE` needs UPDATE privilege on every payload column — the
+  revoke breaks the real add path.
+- **After applying, `anon` must hold nothing here**:
+  `select relacl from pg_class where oid = 'public.product_basket_line'::regclass;`
+  → no `anon=` entry and no PUBLIC entry. Note that `relacl` carried **no PUBLIC entry before
+  this migration either** — tables get no default PUBLIC grant, so `from public` is defence in
+  depth, not a door being closed.
+- **This migration depends on T06 (`20260822100000`)** — the buyer arm of the EXISTS resolves
+  through `product_public_select`, which T06 rewrites. Applying T07 without T06 gates the
+  basket against the *old*, narrower visibility rule.
+
+**Push the slug as one batch, in timestamp order — the slug ships as a unit** (same condition
+as T06 above).
 
 ---
 

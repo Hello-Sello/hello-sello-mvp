@@ -215,6 +215,14 @@ export function ShopView({
   const { company, products } = shop;
   const router = useRouter();
   const { refresh: refreshBasket } = useBasket();
+  // The server's basket-admission refusal, made visible (T07). The `error` state
+  // below is NOT reusable for this: it renders only inside the SaveBar, under
+  // `viewerCanManage && editing`, so a buyer would never see it. Carried here
+  // rather than in ProductCard because the card's `onAddToBasket` prop is
+  // `=> void` and its onClick drops the Promise — see handleAddToBasket.
+  // (ShopView's fence was amended for exactly this: STATE.md § Locked,
+  // 2026-08-23 — one further state, one further branch, this purpose only.)
+  const [addError, setAddError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   // Present mode (D-07): an in-app UI state that hides the app chrome. NEVER the
@@ -576,7 +584,20 @@ export function ShopView({
     const packSizeGrams = product
       ? packSizes(product, product.tiers)[packIndex]?.grams ?? product.pack_size_grams ?? null
       : null;
-    await addToBasket(productId, packCount, packSizeGrams);
+    // The catch has to live HERE, not in the card: ProductCard's
+    // `onAddToBasket` prop is `=> void` and its onClick (`:852`) drops the
+    // Promise, so an unhandled rejection escapes one frame later with nothing
+    // to catch it. Handling it in this handler resolves the Promise before the
+    // card ever sees it. `e.message` is the shipped idiom for surfacing a write
+    // failure (BasketDrawer's `onPackSizeCommit` catch), and `addToBasket` now guarantees that
+    // message is user-facing for an admission refusal.
+    setAddError(null);
+    try {
+      await addToBasket(productId, packCount, packSizeGrams);
+    } catch (e) {
+      setAddError(e instanceof Error ? e.message : "Couldn't add that to your basket.");
+      return;
+    }
     await refreshBasket();
   }
 
@@ -728,6 +749,23 @@ export function ShopView({
             </LocationGroup>
           ))}
         </>
+      )}
+
+      {/* The basket-admission refusal (T07). A fixed bottom pill rather than an
+          inline note, because the Add control that failed can sit anywhere in a
+          scrolled grid — same idiom as OrdersTable's toast pill, in danger colours.
+          Cleared on the next add attempt; dismissible meanwhile. This is the one
+          further branch the amended fence allows (STATE.md § Locked). */}
+      {addError && (
+        <div
+          role="status"
+          className="fixed bottom-6 left-1/2 z-50 flex max-w-[92vw] -translate-x-1/2 items-center gap-2 rounded-2xl bg-danger px-4 py-3 text-sm font-semibold text-white shadow-lg"
+        >
+          {addError}
+          <button type="button" aria-label="Dismiss" onClick={() => setAddError(null)}>
+            <X size={15} />
+          </button>
+        </div>
       )}
 
       <AddProductsDrawer

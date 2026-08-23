@@ -960,3 +960,36 @@ src/ e2e/` returns four hits and none is in that file. `plan-checker` caught it.
 enough like doing it to fool the author and a reviewer skimming for the reference. The check is
 mechanical and costs one command — **run the grep in the same edit that names the file.** If a plan
 names a file as playing a role, the evidence for that role belongs in the plan next to the name.
+
+---
+
+## L-032 · A file has more than one fence around it, and clearing one is not clearing the others
+
+**2026-08-23 · slug 0022 · T07 · caught TWICE on one ticket — by `plan-checker` round 2, then by `critic`**
+
+**Trigger** — adding a file to a plan's `Files` list, or concluding that an edit is permitted. Also
+any sentence of the form "the fence allows this" / "fence intact".
+
+**What happened, twice.**
+1. PLAN rev 2 argued a `ShopView` edit was permitted, quoting ADR-0005's `Reused` fence — and
+   concluded **"Fence intact."** It had never opened `STATE.md`'s `Locked` entry, which was
+   *stricter*: **no new state, exactly one new branch**, and the one branch was already spent.
+   Two different documents fence the same file, and the plan checked one.
+2. Fixing that finding, the same plan added `BasketDrawer.tsx` to `Files`. `BasketDrawer` is
+   **named in ADR-0005's `Reused — already built; we feed it, don't touch` list** (`:828`).
+   `addToBasket`, one line above it, has an explicit carve-out (`:659-660`); `BasketDrawer` has
+   none. So the fix for a fence miss crossed a second fence, in the same list the first finding
+   had just made the author read.
+
+**Why it kept happening** — fences here live in at least three places: the ADR's `Reused` list,
+the ADR's per-component caps, and the slug's `STATE.md` § `Locked` (which accumulates *amendments*
+from every prior G4). Reading one and finding no prohibition feels like clearance. It is not; it is
+one of three lookups. And the second miss shows the first lesson does not generalise on its own —
+having been burned on `ShopView` did nothing for `BasketDrawer` ten lines later.
+
+**The rule.** Before writing any file into a `Files` list, grep that filename across **all three**:
+the ADR's `Reused` list, the ADR body, and `STATE.md` § `Locked`. Cite what you found — including
+"absent from all three" — next to the filename. **"The fence permits this" is a claim about every
+fence, so it needs every fence checked**; if you have checked one, write "ADR §X permits this; I
+have not checked `Locked`." A carve-out for a *neighbouring* symbol is evidence the list is
+enforced at symbol granularity, not evidence that your symbol is covered.
