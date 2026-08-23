@@ -384,6 +384,68 @@ legitimate writer. ADR-0005 round 5 applied the same reasoning to basket `produc
 touches the surface DEV-83 was fixed in this session — re-run `deal-c2c-create.spec.ts` and the
 connect e2e after.
 
+## T10 — The accept path swallows its own errors · **XS** · depends on: T09 · Linear: owed (MCP auth blocked)
+
+**Filed 2026-08-23 at T09's G4 (Muskan: *"pass"* — accepted as recorded, filed not fixed).**
+
+`accept_connection_request` RAISEs on a request that is already `accepted`, `rejected` or deleted.
+Pre-T09 the client adopted the live pair row regardless of the item's status, so a double-accept was
+silently harmless. It is now reachable from a second tab or a stale Discover list — and **neither
+entry point catches**: `connect/components/InboxView.tsx:137` is
+`onAccept={(id) => void refreshWith(acceptItem(id))}`, and
+`discover/sections/RequestsSection.tsx:95-103` is try/finally with no catch. The failure degrades to
+a silent no-op plus an unhandled rejection.
+
+**This is DEV-83's exact shape** — the bug fixed earlier in this slug, where a swallowed throw left
+the item pending forever with nothing shown. T09 did not cause it; T09 made it reachable.
+
+**Files:** `src/modules/connect/components/InboxView.tsx`,
+`src/app/discover/sections/RequestsSection.tsx`, `e2e/`
+
+- When an accept fails for any reason, the surface shall show the user that it failed — never a
+  silent no-op.
+- When the request was already accepted, the user shall be told it is already accepted rather than
+  shown a raw error.
+- When an accept fails, the e2e shall assert the visible failure, not merely that no row was
+  written — the pre-T09 bug passed every row-count check.
+
+## T11 — `anon` holds TRUNCATE on ~90 tables; deny-by-default was never installed for tables · **S** · depends on: — · Linear: owed (MCP auth blocked)
+
+**Filed 2026-08-23 at T09's G4 (Muskan: *"pass"* — own ticket, not T09's to fix).**
+
+Session 77 installed deny-by-default for **functions** (`20260817120000` — an `ALTER DEFAULT
+PRIVILEGES` narrowing plus the `revoke_anon_execute_on_new_function` event trigger). **Nothing
+equivalent exists for tables.** `pg_default_acl` grants `anon = arwdDxtm` and
+`authenticated = arwdDxtm` on new relations, so both roles hold TRUNCATE and TRIGGER on ~90 tables.
+
+**RLS does not apply to TRUNCATE** — the policy expression that blocks INSERT/UPDATE/DELETE for a
+signed-out caller does nothing here. Proven with real rows, privileged insert then `set role anon`:
+
+```
+seeded audit rows: 3
+truncate table public.audit_log cascade;   → TRUNCATE TABLE
+AFTER anon TRUNCATE: 0 rows
+```
+
+The append-only, hash-chained audit log — the tamper-evidence spine — zeroed by an unauthenticated
+role. Also proven: `authenticated` can `CREATE TRIGGER` on `relationship` and `company`.
+
+**Reachability, stated honestly so this is not overclaimed:** PostgREST emits neither TRUNCATE nor
+DDL, so **neither is reachable from the app's public surface today.** This is a grant-level hole one
+FK or one new client from mattering — T09 already met it once: `TRUNCATE company CASCADE` as `anon`
+now fails *only* because the cascade reaches `relationship`, whose TRUNCATE T09 happened to revoke.
+
+**Files:** `supabase/migrations/<ts>_table_privilege_lockdown.sql`, `supabase/tests/` (pgTAP + runner)
+
+- When a new table is created, `anon` shall hold no privileges on it by default, and `authenticated`
+  shall hold no TRUNCATE and no TRIGGER — enforced by a mechanism, not by a rule in a doc
+  (DECISIONS 2026-08-17).
+- When the migration completes, no existing table shall leave `anon` holding TRUNCATE.
+- When the guard test runs, it shall create a throwaway table and assert the default actually
+  applied — the function-class precedent (`ensure_rls_trigger_test.sql`) is the shape.
+- When the sweep runs, it shall not revoke a privilege a live client path uses — enumerate before
+  revoking, the T09 method.
+
 ## T07 — Server-enforced basket admission · **S** · depends on: T06  · [HEL-61](https://linear.app/hellosello/issue/HEL-61)
 
 AC 10. `product_basket_line` is owner-scoped only today and never checks whether the buyer may

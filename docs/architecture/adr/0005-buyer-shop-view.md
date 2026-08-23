@@ -805,8 +805,21 @@ outcome touching nothing.
   so the two viewers cannot parse the same data differently.
 - `is_caller_verified()` — untouched; the new helper sits beside it and mirrors its grant ritual.
 - `relationship`, `rel_all`, `uq_relationship_pair_active` — read only; no schema, no index.
+  > **AMENDED at T09's G4 (2026-08-23, Muskan: *"pass"*).** T09 revokes `authenticated`'s
+  > INSERT/UPDATE/DELETE/TRUNCATE outright and routes the one legitimate writer through a
+  > `SECURITY DEFINER` RPC. T09's criterion 1 ordered exactly that, so the ticket supersedes this
+  > line. `rel_all` and the unique index are genuinely untouched.
 - `pending_inbox_item`, `pricelist_request`, `createPairInboxItem` — reused via `metadata`;
-  no new table, no new type, no migration.
+  no new table, no new type. ~~no migration~~
+  > **AMENDED at T09's G4 (2026-08-23, Muskan: *"pass"*).** T09 adds a column allowlist on
+  > `pending_inbox_item` and re-creates `inbox_insert` with a `sender_person_id = auth.uid()`
+  > conjunct. **The fence was load-bearing in the wrong direction:** a gate is only as strong as
+  > the write path to its input (`ARCHITECTURE-NOTES.md` 2026-08-22), and this table IS T09's
+  > consent evidence. Two holes were reproduced through this exact door before the build —
+  > rewriting `sender_company_id` on a held item, and spoofing `sender_person_id` on insert, the
+  > latter driving the **shipped** `accept_person_connection` into minting a non-consensual
+  > person-graph edge attributed to the victim. Leaving the fence intact would have shipped a
+  > gate whose consent evidence stayed forgeable.
 - `basket_line_owner_all` — **untouched**; §7 adds a restrictive policy beside it.
 - `addToBasket` / `getMyBasket` / `BasketDrawer` — already group by foreign seller.
 
