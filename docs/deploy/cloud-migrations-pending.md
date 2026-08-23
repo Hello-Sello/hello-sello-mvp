@@ -25,6 +25,35 @@
 
 ## ⚠️ PENDING (2026-08-20, Muskan) — slug 0022 buyer-shop-view
 
+> ### ✅ S6 + S8 RUN AGAINST PRODUCTION 2026-08-23 — read-only, nothing written
+>
+> **S6 — `supabase migration list --linked`.** Confirms **exactly six** local-only migrations,
+> independently of this ledger:
+> ```
+> 20260607090000   ← sorts FIRST; every migration after it is already on cloud
+> 20260820090000 · 20260822090000 · 20260822100000 · 20260823090000 · 20260823100000
+> ```
+> **Six, not five.** `20260607090000` appears at the TOP of the list with applied migrations
+> below it — which is exactly why a plain `supabase db push` refuses it and **`--include-all`
+> is required.** The CLI's own message: *"Found local migration files to be inserted before the
+> last migration on remote database."*
+>
+> **S8 — `get_advisors(type: security)`, BASELINE BEFORE THE PUSH: 80 findings**
+> (`1 ERROR · 78 WARN · 1 INFO`). **None caused by this slug.**
+> - `ERROR security_definer_view` — `current_pricelist_item` is owner-rights **by design**; T06
+>   re-creates it and preserves that property. Pre-existing.
+> - `75 × authenticated_security_definer_function_executable` — the normal pattern for this app.
+> - `1 × anon_security_definer_function_executable` — `get_public_profile` only, **deliberately
+>   public**; matches session 77's recorded end state (65 → 1).
+> - `INFO rls_enabled_no_policy` — `sella_detection`, the row this ledger already flags as
+>   *"worth one conscious confirmation"*.
+> - `WARN auth_leaked_password_protection` — **OFF**. A dashboard setting, not code; worth
+>   enabling independently of this push.
+>
+> **Re-run S8 after the push and diff against 80.** A baseline nobody recorded is not a baseline.
+> ⚠️ CLI is **v2.75.0**; v2.115.0 is available. Deliberately **not** upgraded mid-ship.
+
+
 > ✅ **COMPLETE as of 2026-08-23 (T08).** All **six** local-only migrations in this batch now have
 > an entry below, in timestamp order. **This is the only section of this file that claims un-pushed
 > migrations** — every other section is applied, and any that still reads as pending is annotated in
