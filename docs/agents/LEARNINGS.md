@@ -863,3 +863,63 @@ evidence of where a defect lives; the fixture travels further than the ticket do
 **Corollary, worth its own line:** a builder's green claim is not verification. This one was sincere,
 tested, and wrong. `test-runner` exists because the agent that wrote the change is the worst-placed
 agent to bound it.
+
+## L-029 · A remediation verb in REVIEW.md is a claim about the tree, not about your intent
+
+**2026-08-23 · slug 0022 · T09 · caught by `security`, authored by the orchestrator**
+
+**Trigger** — writing any finding's disposition into REVIEW.md while the fix is still ahead of you:
+"fixed", "→ fixed in the fix pass", "resolved", "handled". Also any status table written *before*
+the pass it describes.
+
+**What I did** — recorded two of `critic`'s notes as **"→ fixed in the fix pass"** at the moment I
+decided to fix them, hours before the fix pass ran. `security` then grepped the tree:
+
+```
+$ grep -n "inbox_item_id" supabase/tests/connection_consent_lockdown_test.sql
+(no output)
+```
+
+and returned both as **blocking**, with the right ruling: *"a claimed fix that is absent from the
+tree is worse than an open finding."* It is worse because an open finding is still on someone's
+list, while a fixed one is off everyone's — the reviewer stops looking, and the gate page inherits
+the claim.
+
+**Why it was wrong** — REVIEW.md is read as a record of what the tree contains, by agents and by
+Muskan at the gate. I was using it as a to-do list. The two uses look identical in prose and are
+opposite in meaning: one says *this is done*, the other says *I mean to do this*.
+
+**The rule.** In REVIEW.md, past tense describes the tree and nothing else. Until the change is
+written and verified, the only legal dispositions are **`→ owed`**, `→ escalated`, or
+`→ not fixed, reason`. Write "fixed" in the same pass that makes it true, never before — and if a
+fix pass is planned, name it as `owed` and let the pass itself flip the word.
+
+**Corollary:** the same applies to STATE.md's gate log and to any handoff. A verb in a record is a
+verifiable claim; a checker will verify it.
+
+---
+
+## L-030 · A line range read from a file is not a line range until something compiles it
+
+**2026-08-23 · slug 0022 · T09 · caught by `builder`, survived two plan-checker rounds**
+
+**Trigger** — writing "delete lines N-M" / "replace lines N-M" into a plan, or accepting a checker's
+correction to such a range. Also any instruction that identifies code by position rather than by
+what it is.
+
+**What happened** — PLAN-T09 told the builder to delete `store.ts:583-620`. `plan-checker` round 2
+corrected it to **581**-620, with evidence (the `const [companyA, companyB] =` line, and a grep
+showing where the two variables occur). Both were wrong: the block to remove runs **580-622**,
+because 581-620 strips the `let relationshipId: string;` declaration while leaving
+`relationshipId = rel.id;` and its closing brace behind. **It does not compile.** The builder found
+it in seconds — by trying it.
+
+**Why it was wrong** — a range derived by reading is a hypothesis about scope. Two careful readers
+narrowed it and both stopped one line short of a brace, because reading finds the *statements* you
+are thinking about and not the *syntax* holding them. The compiler is the only thing that knows
+where a block ends.
+
+**The rule.** Describe the edit by its boundaries in the language — "the pair probe through the
+closing brace of the `if (pairRel)` block" — and let the implementer resolve it to numbers. If a
+plan must carry numbers, they are provisional by definition: say so, and expect the builder to
+correct them. **A builder correcting a plan's line range is the system working, not a deviation.**
