@@ -6,7 +6,10 @@ stage:  triage ✅ · spec ✅ (G1) · prototype ✅ (G2) · design ✅ (G3 2026
         post-G4 ruling: env repair ✅ · DEV-83 ✅ · price gate ✅ · ADR amend ✅ (all 2026-08-22)
         **T05 ✅ G4 PASSED 2026-08-22 — all six items ruled (A-D built + mutation-proved, E dropped, F recorded)**
         **T09 ✅ G4 PASSED 2026-08-23 — Muskan: "pass" (all 5 items ruled).**
-        **▶ T06 UNBLOCKED — its G4 resumes next · then T07 · T08.**
+        **▶ T06 UNBLOCKED — its G4 resumes next · then T07 · T08.** T09's G4 follow-through is DONE:
+        ADR-0005's Reused fence amended (both the `relationship` and `pending_inbox_item` lines,
+        each carrying WHY), and **T10** (the accept path swallows its own errors — DEV-83's shape,
+        made reachable by T09) + **T11** (`anon` holds TRUNCATE on ~90 tables) filed in TICKETS.md.
         **T06 BLOCKED at G4 on T09 (Muskan, 2026-08-22) · then T07 · T08.**
 branch: **claude/muskan/work** — no feature branch (Muskan's call, 2026-08-18)
 >  No cut: this slug is frontend-heavy with no expected migration, so a feature branch
@@ -335,6 +338,23 @@ one gate with all the evidence. Stop immediately if a reviewer returns blocking 
 uncommitted in the working tree on `claude/muskan/work`. Commits were deferred by Muskan on
 2026-08-20 ("leave for now, focus on building"). **A new session should confirm the commit plan
 before doing anything else.**
+
+### ▶ T06's G4 resumes here — what it already owes (recorded, do NOT re-derive)
+
+T06 was BUILT and GREEN and blocked only on T09, which has now shipped. Two factual errors in its
+**shipped comments** are owed before it passes:
+- its migration says `anon`'s **TRUNCATE** is *"blocked by RLS"* — **RLS does not apply to
+  TRUNCATE**. T09 hit this same error a third time and corrected it in its own header; **T11 now
+  carries the proof** (3 audit rows → 0 as `anon`). Fix T06's comment with that evidence.
+- its cascade list **over-counts by one** (`plit_public_select` already has its own gate) — the
+  ledger is right, the migration is wrong.
+- ADR-0005 `:344` calls a policy `untouched` whose role list was narrowed, and `:298-301` is **wrong
+  about the view** (an owner-rights view does not change the effective user id, so `rel_all` IS
+  load-bearing at site 2 — the shipped comment is right, the ADR is wrong).
+
+**T09 changed T06's ground:** the gate T06 builds is no longer ornamental — `relationship` can no
+longer be self-minted, and a member can no longer self-verify. T06's G4 walk should re-confirm the
+connection override against the locked-down write path, not the old one.
 
 ## Owed — surfaced by this slug, NOT in its scope
 
