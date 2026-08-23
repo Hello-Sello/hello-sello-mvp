@@ -38,15 +38,16 @@
 --     regresses it by adding a mirroring USING clause (`add-using`). It is
 --     expected to PASS both before and after this migration ships — its RED
 --     state lives entirely in the `[MUT: add-using]` column, not in today's
---     tree. Documented so a reviewer does not mistake "cell 9 passes today"
---     for "cell 9 asserts nothing" (PLAN-T07 §5, B4).
+--     tree.
 --   * cell 10's grant-message assertion (`SQLERRM ~ 'permission denied'`) is
---     ALSO red today, for a DIFFERENT reason than "gate absent": anon is
---     still blocked (owner_person_id = auth.uid() collapses to NULL for a
---     JWT-less caller), but by an RLS refusal ("new row violates row-level
---     security policy…"), not the post-REVOKE grant refusal ("permission
---     denied for table…") — both raise SQLSTATE 42501, which is exactly why
---     PLAN-T07 §5 forbids asserting on the SQLSTATE alone.
+--     ALSO red today, for a DIFFERENT reason than "gate absent": anon was
+--     already blocked before this migration, but by RLS rather than by
+--     grants — `basket_line_owner_all` is `TO authenticated`
+--     (20260707100000:26-30), so NO permissive policy applied to anon at all
+--     and the write fell to RLS's default deny ("new row violates row-level
+--     security policy…"). The post-REVOKE refusal is a GRANT refusal
+--     ("permission denied for table…"). Both raise SQLSTATE 42501, which is
+--     why PLAN-T07 §5 forbids asserting on the SQLSTATE alone.
 --
 -- Personas (seeded; resolved by supplier_product_code / company / email NAME,
 -- never a raw product/company/person uuid, EXCEPT the four fixed seed ids
@@ -59,12 +60,26 @@
 --     "unconnected verified buyer" persona.
 --   anon — no JWT claims set (grant-arm cell 10).
 --
--- Seeded fixtures used AS-IS (supabase/seed/seed.sql:391-394,433-436,462-465 —
--- L-012 checked, values cited, not assumed):
---   AUR-1A — GreenLeaf, profile_visible=true,  price_public=false, price 8.00.
+-- Seeded fixtures used AS-IS (supabase/seed/seed.sql:391-394,409,433-441,
+-- 462-467 — L-012 checked, values cited, not assumed):
 --   AUR-1B — GreenLeaf, profile_visible=true,  price_public=true,  price 6.00.
 --   AUR-1C — GreenLeaf, profile_visible=false, price_public=true,  price 4.00.
 --   AUR-1D — GreenLeaf, profile_visible=false, price_public=false, price 5.00.
+--   AUR-1F — GreenLeaf, profile_visible=true,  price_public=false, price 8.00.
+--            The seed's designated stable price-hidden row (seed.sql:438-441:
+--            "AUR-1F re-occupies the L1 corner (visible, price hidden)").
+--            AUR-1A holds the same corner and is deliberately NOT used — see
+--            cell 4.
+--
+-- L-033: each of the four was greped across e2e/ and supabase/tests/ for a
+-- COMMITTED mutator before being pinned. The two columns this suite's
+-- predicate reads (profile_visible, price_public) are written from exactly two
+-- controls — `ProductCard`'s "Hide product" button and its "Show price to
+-- buyers" checkbox — and only one e2e drives either, on AUR-1A only
+-- (present-card-edit.spec.ts:244). AUR-1B does carry two OTHER persistent e2e
+-- mutations — a 2-rung price ladder (present-card-edit.spec.ts:171-199, never
+-- removed) and its spec columns (discover-shop.spec.ts:355-405, restored in
+-- afterEach) — neither of which this predicate reads.
 --
 -- Ephemeral fixtures planted here (each new, per L-005 — a new row has no
 -- dependents by construction, and each is scoped to exactly one cell so no
@@ -87,15 +102,37 @@
 -- must break, tagged inline on the cell that proves it (N4: named per
 -- conjunct, not one blanket mutation):
 --   [MUT: drop-policy]     the whole restrictive policy         → 3, 4, 5, 7
---   [MUT: drop-price-arm]  `or p.price_public`                  → 1, 2, 8, 12,
---                                                                  and cell 11's setup insert
---   [MUT: drop-owner-arm]  `p.company_id = current_company_id()`→ 6
+--   [MUT: drop-price-arm]  `or p.price_public`                  → 1, 2, 7, 8,
+--                                                                  12, and the
+--                                                                  SETUP INSERTS
+--                                                                  of 9 and 11
+--   [MUT: drop-owner-arm]  `p.company_id = current_company_id()`→ 6, 13
 --   [MUT: add-using]       a USING clause mirroring the check    → 9 (the
 --                                                                  shape guard)
+--
+-- Reds that are NOT the cell's own headline assertion, and are easy to miss
+-- because ON_ERROR_STOP hides everything after the first one:
+--   * cell 9 plants Bob's line on T07-SHAPE-GUARD and cell 11 plants his on
+--     T07-STAYS-ADMISSIBLE. Bob owns neither, so `price_public` is the only arm
+--     admitting either — drop-price-arm aborts both cells at their SETUP
+--     insert, before the thing they exist to assert.
+--   * cell 7 reds under drop-price-arm through its PRECONDITION: it reuses the
+--     AUR-1B line cell 1 planted, and drop-price-arm refuses that insert.
+--   * cell 13's product (T07-NOPRICE) is profile_visible=false AND
+--     price_public=false, so the owner arm is the only thing admitting Alice's
+--     insert — which is why drop-owner-arm reds 13 as well as 6.
+--
 -- A suite that stays green with the mechanism removed is asserting nothing —
 -- these tags are the reviewer's map for verifying that claim by hand
 -- (temporarily apply each mutation to the shipped migration, rerun, confirm
 -- the named cell(s) and ONLY those go red).
+--
+-- Whole matrix measured cell-by-cell against all four mutations (each installed
+-- in a rolled-back transaction, every cell's write probed independently rather
+-- than reading only the first abort). Under add-using, cell 9's post-hide
+-- readings go 1/1/0 → 0/0/1: the row SURVIVES a DELETE that reported success,
+-- and a buyer-only recount reads 0 either way — which is the case that cell's
+-- privileged post-delete count exists to catch.
 -- ============================================================================
 
 \set ON_ERROR_STOP on
@@ -118,7 +155,7 @@ VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid, 'T07 No Pricelist Row (own
 
 CREATE TEMP TABLE _fix ON COMMIT DROP AS
 SELECT
-  (SELECT id FROM public.product WHERE supplier_product_code = 'AUR-1A' AND company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid) AS aur1a_id,
+  (SELECT id FROM public.product WHERE supplier_product_code = 'AUR-1F' AND company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid) AS aur1f_id,
   (SELECT id FROM public.product WHERE supplier_product_code = 'AUR-1B' AND company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid) AS aur1b_id,
   (SELECT id FROM public.product WHERE supplier_product_code = 'AUR-1C' AND company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid) AS aur1c_id,
   (SELECT id FROM public.product WHERE supplier_product_code = 'AUR-1D' AND company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid) AS aur1d_id,
@@ -135,7 +172,7 @@ DO $$
 BEGIN
   IF EXISTS (
     SELECT 1 FROM _fix
-     WHERE aur1a_id IS NULL OR aur1b_id IS NULL OR aur1c_id IS NULL OR aur1d_id IS NULL
+     WHERE aur1f_id IS NULL OR aur1b_id IS NULL OR aur1c_id IS NULL OR aur1d_id IS NULL
         OR shapeguard_id IS NULL OR staysadmissible_id IS NULL OR nopricepub_id IS NULL
         OR noprice_id IS NULL OR eva_id IS NULL OR bavaria_id IS NULL)
     THEN RAISE EXCEPTION 'FIXTURE: one or more T07 fixtures failed to resolve — seed drift?'; END IF;
@@ -209,10 +246,17 @@ END $$;
 RESET ROLE;
 
 -- ============================================================================
--- Cell 4 [AC10 bullet 2][MUT: drop-policy] — Bob adds AUR-1A: publicly
+-- Cell 4 [AC10 bullet 2][MUT: drop-policy] — Bob adds AUR-1F: publicly
 -- visible (profile_visible=true), but price_public=false. Isolates the price
--- arm from the visibility arm entirely (AUR-1A needs no connection override
+-- arm from the visibility arm entirely (AUR-1F needs no connection override
 -- at all to be seen).
+--
+-- ⚠️ FIXTURE: AUR-1F, not AUR-1A. Both occupy the same seed corner (visible,
+-- price-hidden), but `e2e/present-card-edit.spec.ts:244-245` checks "Show price
+-- to buyers" on AUR-1A and SAVES — committing `price_public = true` and never
+-- restoring it. An AUR-1A assertion here therefore aborts the whole file, cells
+-- 5-13 and the grant block included, on any stack that has run e2e since the
+-- last `db reset`. Nothing committed mutates AUR-1F (L-033).
 -- ============================================================================
 SELECT set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', true);
 SELECT set_config('request.jwt.claims', '{"sub":"22222222-2222-2222-2222-222222222222","role":"authenticated"}', true);
@@ -222,17 +266,17 @@ DECLARE v_refused boolean := false;
 BEGIN
   BEGIN
     INSERT INTO public.product_basket_line (owner_person_id, product_id, pack_count)
-    VALUES ('22222222-2222-2222-2222-222222222222'::uuid, (SELECT aur1a_id FROM _fix), 1);
+    VALUES ('22222222-2222-2222-2222-222222222222'::uuid, (SELECT aur1f_id FROM _fix), 1);
   EXCEPTION WHEN insufficient_privilege THEN
     v_refused := true;
   END;
   IF NOT v_refused THEN
-    RAISE EXCEPTION 'Cell 4/AC10-2: Bob must be REFUSED adding AUR-1A (publicly visible, price_public=false) — price arm, independent of visibility';
+    RAISE EXCEPTION 'Cell 4/AC10-2: Bob must be REFUSED adding AUR-1F (publicly visible, price_public=false) — price arm, independent of visibility';
   END IF;
   IF (SELECT count(*) FROM public.product_basket_line
        WHERE owner_person_id = '22222222-2222-2222-2222-222222222222'::uuid
-         AND product_id = (SELECT aur1a_id FROM _fix)) <> 0
-    THEN RAISE EXCEPTION 'Cell 4: no basket line for AUR-1A may exist after the refusal'; END IF;
+         AND product_id = (SELECT aur1f_id FROM _fix)) <> 0
+    THEN RAISE EXCEPTION 'Cell 4: no basket line for AUR-1F may exist after the refusal'; END IF;
 END $$;
 RESET ROLE;
 
@@ -248,6 +292,13 @@ BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM public.pending_inbox_item p
      WHERE p.status = 'pending'
+       -- `type` is load-bearing, not decoration: without it a leftover
+       -- 'pricelist_request' row satisfies this EXISTS. discover-shop.spec.ts
+       -- creates exactly such a row Bavaria→GreenLeaf and never tears it down
+       -- (resetPricingRequests is StonePharm-scoped), so this precondition
+       -- would pass vacuously if the seeded 'connect' row (seed.sql:370-371)
+       -- ever went missing.
+       AND p.type = 'connect'
        AND p.receiver_company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid
        AND p.sender_company_id = (SELECT bavaria_id FROM _fix))
     THEN RAISE EXCEPTION 'Cell 5 precondition: Eva/Bavaria must have a PENDING inbox item to GreenLeaf and NO relationship row — seed drift?'; END IF;
@@ -341,7 +392,7 @@ RESET ROLE;
 -- ============================================================================
 -- Cell 8 [AC10 bullet 4][MUT: drop-price-arm] — the UPSERT path itself,
 -- exercised twice on AUR-1C: the second INSERT hits the ON CONFLICT DO UPDATE
--- branch, which is the exact statement addToBasket issues (writes.ts:26-37).
+-- branch, which is the exact statement addToBasket issues (writes.ts, `addToBasket`).
 -- Admitted (connected + price_public).
 -- ============================================================================
 SELECT set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', true);
@@ -431,7 +482,22 @@ END $$;
 -- refusal message (NOT the SQLSTATE, which is 42501 for both an RLS refusal
 -- and a grant refusal) must read "permission denied" — the post-REVOKE
 -- grant-level refusal, not merely the pre-existing RLS refusal.
+--
+-- ⚠️ The jwt claims are cleared FIRST. Cell 9 set them (:394-395) with
+-- `set_config(…, is_local => true)` — transaction-scoped, and `RESET ROLE`
+-- does not clear a GUC — so without this they are still Bob's and the cell
+-- would not mean what it says. `auth.uid()` is
+-- `coalesce(nullif(request.jwt.claim.sub,''), request.jwt.claims->>'sub')::uuid`,
+-- so blanking both settings is what makes it NULL: a signed-out caller
+-- carries no claims.
+--
+-- Note the refusal anon got BEFORE this migration was an RLS default-deny, not
+-- a grant refusal: `basket_line_owner_all` is `TO authenticated`
+-- (20260707100000:26-30), so no permissive policy applied to anon at all. That
+-- is why the MESSAGE, not the SQLSTATE, is the assertion.
 -- ============================================================================
+SELECT set_config('request.jwt.claim.sub', '', true);
+SELECT set_config('request.jwt.claims', '', true);
 SET LOCAL ROLE anon;
 DO $$
 DECLARE
@@ -460,7 +526,7 @@ RESET ROLE;
 -- own fixture (T07-STAYS-ADMISSIBLE), never touched by any other cell — every
 -- other numbered cell here is an attack or a refusal; this is the one
 -- positive case for the shipped drawer's plain pack-count updater
--- (writes.ts:41-48).
+-- (writes.ts, `updateBasketLinePackCount`).
 -- ============================================================================
 SELECT set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', true);
 SELECT set_config('request.jwt.claims', '{"sub":"22222222-2222-2222-2222-222222222222","role":"authenticated"}', true);
@@ -528,21 +594,33 @@ RESET ROLE;
 -- product_basket_line at all, checked directly rather than only inferred
 -- from cell 10's behavioural refusal (which cannot on its own distinguish
 -- "no grant" from "grant present but RLS still blocks it").
+--
+-- Asserted on `relacl`, not verb-by-verb via `has_table_privilege`. The
+-- criterion is "anon shall hold NO privileges", and a verb list is only ever
+-- as complete as whoever wrote it — enumerating SELECT/INSERT/UPDATE/DELETE/
+-- TRUNCATE silently exempts REFERENCES, TRIGGER and MAINTAIN. The ACL either
+-- carries an `anon=` entry or it does not: strictly stronger, and the same
+-- idiom this migration's ledger pre-flight uses against cloud.
 -- ============================================================================
 DO $$
+DECLARE
+  v_acl  aclitem[];
+  v_show text;
 BEGIN
-  IF has_table_privilege('anon', 'public.product_basket_line', 'SELECT')
-    THEN RAISE EXCEPTION 'G1/AC10-7: anon still holds SELECT on product_basket_line'; END IF;
-  IF has_table_privilege('anon', 'public.product_basket_line', 'INSERT')
-    THEN RAISE EXCEPTION 'G1/AC10-7: anon still holds INSERT on product_basket_line'; END IF;
-  IF has_table_privilege('anon', 'public.product_basket_line', 'UPDATE')
-    THEN RAISE EXCEPTION 'G1/AC10-7: anon still holds UPDATE on product_basket_line'; END IF;
-  IF has_table_privilege('anon', 'public.product_basket_line', 'DELETE')
-    THEN RAISE EXCEPTION 'G1/AC10-7: anon still holds DELETE on product_basket_line'; END IF;
-  IF has_table_privilege('anon', 'public.product_basket_line', 'TRUNCATE')
-    THEN RAISE EXCEPTION 'G1/AC10-7: anon still holds TRUNCATE on product_basket_line'; END IF;
-  IF has_table_privilege('public', 'public.product_basket_line', 'SELECT')
-    THEN RAISE EXCEPTION 'G1/AC10-7: PUBLIC still holds SELECT on product_basket_line'; END IF;
+  SELECT coalesce(relacl, '{}'::aclitem[]) INTO v_acl
+    FROM pg_class WHERE oid = 'public.product_basket_line'::regclass;
+  v_show := coalesce(nullif(array_to_string(v_acl, ', '), ''), '(empty)');
+  -- Each aclitem's text form is `grantee=privs/grantor`, so a LIKE anchored at
+  -- the start matches one whole grantee and nothing else. A PUBLIC entry
+  -- renders with an EMPTY grantee ('=arwd…/postgres') — hence the bare '=%'.
+  IF EXISTS (SELECT 1 FROM unnest(v_acl) a WHERE a::text LIKE 'anon=%') THEN
+    RAISE EXCEPTION 'G1/AC10-7: anon still holds privileges on product_basket_line — relacl: %', v_show; END IF;
+  IF EXISTS (SELECT 1 FROM unnest(v_acl) a WHERE a::text LIKE '=%') THEN
+    RAISE EXCEPTION 'G1/AC10-7: PUBLIC still holds privileges on product_basket_line — relacl: %', v_show; END IF;
+  -- Positive control: the revoke must not have taken `authenticated` with it.
+  -- Without this an emptied or NULL relacl would satisfy both negatives above.
+  IF NOT EXISTS (SELECT 1 FROM unnest(v_acl) a WHERE a::text LIKE 'authenticated=%') THEN
+    RAISE EXCEPTION 'G1: authenticated lost its grants on product_basket_line — the revoke over-reached. relacl: %', v_show; END IF;
 END $$;
 
 DO $$

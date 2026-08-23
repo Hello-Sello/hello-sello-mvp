@@ -24,9 +24,15 @@ import { createClient } from "@/shared/db/client";
  * The message states the REASON rather than the failed action, so it reads
  * correctly under both a refused add and a refused pack-count edit. It is meant
  * for a person: a caller that only renders `e.message` (the shipped idiom —
- * BasketDrawer's `onPackSizeCommit` catch) then shows something legible instead of a raw Postgres
- * string. The class is exported so a caller that needs to tell a policy refusal
- * from a network failure can, without string-matching.
+ * BasketDrawer's `onPackSizeCommit` catch) then shows something legible instead
+ * of a raw Postgres string.
+ *
+ * The class is exported from THIS FILE but deliberately not re-exported from
+ * `src/modules/basket/index.ts`, so it is not part of the module's public
+ * surface. No caller discriminates on it today — both shipped catchers render
+ * `e.message` — and the only importer is this file's own unit test. Widen the
+ * index export when a caller actually needs to tell a policy refusal from a
+ * transport failure; until then the narrower surface is the honest one.
  */
 export class BasketAdmissionError extends Error {
   constructor() {
@@ -37,11 +43,19 @@ export class BasketAdmissionError extends Error {
 
 /**
  * One owner for "what a PostgREST error on this table means". Postgres raises
- * 42501 (`insufficient_privilege`) for BOTH an RLS refusal and a missing grant,
- * and PostgREST passes the code through — but a signed-in caller holds every
- * grant on `product_basket_line`, so 42501 from these writers means the
- * admission policy refused. Anything else is a transport or server fault and is
- * rethrown untouched, message and all.
+ * 42501 (`insufficient_privilege`) for a missing grant AND for every RLS
+ * refusal, and PostgREST passes the code through.
+ *
+ * 42501 therefore does NOT uniquely identify an admission refusal. A signed-in
+ * caller holds every grant on `product_basket_line`, which rules out the grant
+ * case — but `basket_line_owner_all` raises 42501 too, on a row whose
+ * `owner_person_id` is not `auth.uid()`. That case is unreachable from here in
+ * practice: every writer below either sets `owner_person_id` to the signed-in
+ * user or filters by a line id the same policy already gated. So the mapping is
+ * right for every write this module issues, and the residual mislabel — an
+ * ownership refusal shown as an admission refusal — needs a caller this module
+ * does not have. Anything that is not 42501 is a transport or server fault and
+ * is rethrown untouched, message and all.
  *
  * Applied to the three verbs the policy's `WITH CHECK` actually gates — the
  * insert/upsert and the two updates. NOT to the delete: `WITH CHECK` has no

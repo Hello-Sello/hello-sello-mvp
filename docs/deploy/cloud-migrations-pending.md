@@ -13,12 +13,28 @@
 
 ## ⚠️ PENDING (2026-08-20, Muskan) — slug 0022 buyer-shop-view
 
-> ⚠️ **This section is INCOMPLETE.** `20260822090000_discoverable_shop_spec_columns.sql`
-> (T05 / HEL-59 — `get_discoverable_shop` gains the specification set, the media/location
-> projections and the unfiled-product rule) is LOCAL-only and pending too, but has **no entry
-> here**. Flagged at /build T06; writing T05's entry is T05's job, not this ticket's. **Do not
-> treat the entries below as the whole batch.** Ledgered so far: `20260820090000` (T01),
-> `20260822100000` (T06), `20260823100000` (T07).
+> ⚠️ **This section is INCOMPLETE. TWO migrations in this slug are LOCAL-only and pending
+> with no entry here:**
+>
+> - `20260822090000_discoverable_shop_spec_columns.sql` (**T05 / HEL-59** — `get_discoverable_shop`
+>   gains the specification set, the media/location projections and the unfiled-product rule).
+>   Flagged at /build T06.
+> - `20260823090000_connection_consent_and_verification_lockdown.sql` (**T09** — the connection
+>   write lockdown: `relationship` loses `INSERT/UPDATE/DELETE/TRUNCATE` from `authenticated`,
+>   `accept_person_connection` is re-gated, and a member can no longer self-verify). Flagged at
+>   /build T07.
+>
+> Writing each entry belongs to its own ticket, not to whichever one notices. **Do not treat the
+> entries below as the whole batch.** Ledgered so far: `20260820090000` (T01), `20260822100000`
+> (T06), `20260823100000` (T07).
+
+**🔴 PUSH THE SLUG AS ONE BATCH, IN TIMESTAMP ORDER — THE SLUG SHIPS AS A UNIT.** This governs
+every entry in this section, including the two named as missing above. The G4/T00 condition:
+T00 reaching `dev` without T06 would put every seller's catalogue into every other seller's
+deal-line picker; T07 applied without T06 gates the basket against the old, narrower visibility
+rule. Do not push a subset.
+
+---
 
 `20260820090000_discoverable_company_shop_chrome.sql` — **T01 / HEL-55.** DROP + CREATE of
 `public.get_discoverable_company(uuid)`, adding five projections (`address`,
@@ -101,10 +117,6 @@ each nested predicate restates `p.profile_visible = true` itself.
   to a Seq Scan. Measured on 20 000 synthetic rows: 1.7 ms → 1327 ms. Production holds 13
   products, so this is a scaling cliff, not a live problem. Watch it if the catalogue grows.
 
-**Push the slug as one batch, in timestamp order — the slug ships as a unit** (G4/T00 condition:
-T00 reaching `dev` without T06 would put every seller's catalogue into every other seller's
-deal-line picker).
-
 ---
 
 `20260823100000_basket_admission.sql` — **T07 / HEL-61.** One **new** restrictive policy
@@ -157,9 +169,6 @@ basket table. T11's sweep should not re-report this one as open.
 - **This migration depends on T06 (`20260822100000`)** — the buyer arm of the EXISTS resolves
   through `product_public_select`, which T06 rewrites. Applying T07 without T06 gates the
   basket against the *old*, narrower visibility rule.
-
-**Push the slug as one batch, in timestamp order — the slug ships as a unit** (same condition
-as T06 above).
 
 ---
 

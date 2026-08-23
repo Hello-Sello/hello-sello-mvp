@@ -64,7 +64,6 @@
 --
 -- And `pg_policy.polqual` is genuinely NULL when `USING` is omitted: it does
 -- NOT default to the `WITH CHECK` expression and does NOT default to `false`.
--- Both halves measured, neither inferred.
 --
 -- `WITH CHECK` runs on INSERT and on UPDATE's new row. SELECT and DELETE have
 -- no `WITH CHECK` phase, so they are untouched BY CONSTRUCTION — which is why
@@ -81,17 +80,15 @@
 -- covers the insert and the conflict-update path alike.
 --
 -- The column-REVOKE answer (the DEV-88 idiom) was tried and rejected: it BREAKS
--- the shipped add path. `addToBasket` is a PostgREST upsert (writes.ts:26-37,
--- `onConflict: "owner_person_id,product_id"`), and `ON CONFLICT DO UPDATE`
+-- the shipped add path. `addToBasket` (writes.ts) is a PostgREST upsert
+-- (`onConflict: "owner_person_id,product_id"`), and `ON CONFLICT DO UPDATE`
 -- requires UPDATE privilege on EVERY payload column — `product_id` included.
 -- `FOR ALL` closes the hole with no privilege surgery at all.
 -- ============================================================================
 
 create policy basket_line_admission on public.product_basket_line
   as restrictive for all to authenticated
-  -- NO `using` clause. See the header — this is the shape decision, not an
-  -- omission, and cell 9 of basket_admission_test.sql exists to catch anyone
-  -- who "fixes" it by adding one.
+  -- NO `using` clause — the shape decision, not an omission. See the header.
   with check (
     exists (
       select 1
@@ -118,9 +115,8 @@ comment on policy basket_line_admission on public.product_basket_line is
 -- ----------------------------------------------------------------------------
 -- Grants: `anon` has no business here at all.
 -- ----------------------------------------------------------------------------
--- ⚠️ HONEST STATEMENT OF WHAT THIS DOES AND DOES NOT CLOSE. Tables get NO
--- default PUBLIC grant. Live `pg_class.relacl` for this table, queried before
--- writing this line:
+-- ⚠️ WHAT THIS DOES AND DOES NOT CLOSE. Tables get NO default PUBLIC grant.
+-- Live `pg_class.relacl` for this table, queried before writing this line:
 --
 --   {postgres=arwdDxtm/postgres,anon=arwdDxtm/postgres,
 --    authenticated=arwdDxtm/postgres,service_role=arwdDxtm/postgres}
@@ -129,8 +125,7 @@ comment on policy basket_line_admission on public.product_basket_line is
 -- DEPTH, not a door being closed. (The session-76/77 rule about a standing
 -- PUBLIC grant is about EXECUTE ON FUNCTIONS, which is where 20260817120000
 -- operates and where 20260822100000:102-107 applies it correctly. It does not
--- transfer to tables, and claiming it does would be the fourth false claim
--- about database defaults in this slug's migration prose.)
+-- transfer to tables.)
 --
 -- ⚠️ WHAT IT DOES GENUINELY CLOSE: `anon` holds TRUNCATE on this table TODAY
 -- (`has_table_privilege('anon', …, 'TRUNCATE')` → true, measured). RLS does not

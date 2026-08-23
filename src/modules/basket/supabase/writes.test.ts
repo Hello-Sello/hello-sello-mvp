@@ -20,7 +20,8 @@
  * translating Postgres 42501 into the user-facing refusal, so AC 10's
  * 'no line appears' is legible rather than a raw database error."
  *
- * ⚠️ RED-FIRST: today's `addToBasket` (writes.ts:26-38) does
+ * ⚠️ RED-FIRST (state of the tree when this file was written, before the
+ * mapping shipped): `addToBasket` did
  * `if (error) throw error;` — it rethrows whatever Supabase returns
  * VERBATIM, raw Postgres message included. It never swallows (so the
  * "still rejects" test below already passes today — a regression guard, not
@@ -31,7 +32,7 @@
  *
  * Mocking style: `@/shared/db/client`'s `createClient()` is SYNCHRONOUS
  * (unlike `@/shared/db/server`, which `actions.test.ts` mocks as async) —
- * confirmed by reading `writes.ts:24` (`const supabase = createClient();`,
+ * confirmed by reading `writes.ts` (`const supabase = createClient();`,
  * no `await`) and `client.ts` itself. The stub therefore returns a plain
  * object, not a resolved Promise, matching
  * `reads.getOwnCatalog.test.ts`'s "permissive chainable Supabase stub"
@@ -41,7 +42,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("@/shared/db/client", () => ({ createClient: vi.fn() }));
 
-import { addToBasket } from "./writes";
+import { addToBasket, BasketAdmissionError } from "./writes";
 import { createClient } from "@/shared/db/client";
 
 // Bob — seeded, connected buyer (supabase/seed/seed.sql). The identity here
@@ -82,9 +83,11 @@ describe("addToBasket — 42501 admission-refusal mapping (T07, PLAN-T07.md §6,
 
     const caught: unknown = await addToBasket("hidden-product-id", 1, null).catch((e: unknown) => e);
 
-    expect(caught).toBeTruthy();
-    // Today's code throws the raw Supabase error object verbatim, so its
-    // .message IS the raw Postgres text — this fails against today's tree.
+    // Assert the TYPE, not merely "not the raw message". A `.not.toBe(...)`
+    // alone stays green if the mapping degrades to any other throw at all —
+    // `throw new Error("boom")` would satisfy it. The contract is that the
+    // caller receives a BasketAdmissionError.
+    expect(caught).toBeInstanceOf(BasketAdmissionError);
     expect((caught as Error).message).not.toBe(ADMISSION_REFUSAL.message);
   });
 
