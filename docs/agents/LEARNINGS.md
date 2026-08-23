@@ -993,3 +993,34 @@ the ADR's `Reused` list, the ADR body, and `STATE.md` § `Locked`. Cite what you
 fence, so it needs every fence checked**; if you have checked one, write "ADR §X permits this; I
 have not checked `Locked`." A carve-out for a *neighbouring* symbol is evidence the list is
 enforced at symbol granularity, not evidence that your symbol is covered.
+
+---
+
+## L-033 · A seed row is not a stable fixture until you grep what mutates it
+
+**2026-08-23 · slug 0022 · T07 · caught by `security`; two agents reported opposite results on the same suite**
+
+**Trigger** — choosing a seed row as the fixture for a new assertion. Also: reading a green suite
+result, when anything else has run against that database since the last reset.
+
+**What happened** — cell 4 of a new pgTAP suite asserted on `AUR-1A`, whose seed comment pins it
+`price_public = false`. `builder` ran the suite on a fresh `db reset` → **PASSED end to end**. It
+then ran `e2e/present-card-edit.spec.ts` (12 pass) as its own verification. That spec checks *"Show
+price to buyers"* and saves — **flipping `AUR-1A.price_public` to `true` and committing it.**
+`security` then ran the same suite against the same stack and it **aborted at cell 4**. With
+`ON_ERROR_STOP=1`, cells 5–13 and the whole grant block never executed — including the shape guard
+that the migration header and the ledger pre-flight both name as *the* proof of the no-`USING`
+decision. Both agents reported honestly. Both were right. The stack changed underneath.
+
+**Why it was wrong** — "the seed pins this value" is a claim about `seed.sql`, not about the
+database at the moment your test runs. A committed e2e that mutates a row makes that row a *moving*
+fixture forever after, and the seed comment saying otherwise is exactly what stops anyone checking.
+The same seed file already designated `AUR-1F` as the stable price-hidden fixture; the suite reached
+for the mutated one.
+
+**The rule.** Before pinning an assertion to a seed row, **grep the e2e and test suites for that
+identifier** and read what they do to it — `grep -rn "AUR-1A" e2e/ supabase/tests/` costs one
+command. Prefer a fixture the suite creates and tears down itself; where a seed row must be used,
+cite in the test *why that row is safe* ("no committed test mutates it"). And **a green suite result
+is only evidence for the database state it ran against** — when a report says "passed after a
+reset", ask what ran between the reset and the claim.
