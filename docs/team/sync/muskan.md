@@ -5,8 +5,8 @@
 
 ---
 
-**Last updated:** 2026-08-23 (session `t09_write_lockdown` — T09 built + G4 PASSED; five live holes closed)
-**Status:** offline — session closed. Next: **T06's G4 walk** (unblocked by T09) · then T07 · T08.
+**Last updated:** 2026-08-23 (session `t06_t07_t08` — slug 0022 BUILD-COMPLETE: T06, T07, T08 all through G4)
+**Status:** offline — session closed. **Next: `/ship` slug 0022** in a fresh session. ⚠️ The ship batch is **SIX** migrations and needs **`--include-all`** (`20260607090000` is back-dated and sorts before everything on cloud). The slug ships as ONE unit.
 **Shared files locked:** none — all released.
 > **2026-08-23 (session 81) — T09 SHIPPED (local; NOT yet on cloud).** Migration
 > `20260823090000_connection_consent_and_verification_lockdown.sql` closes five live write holes:

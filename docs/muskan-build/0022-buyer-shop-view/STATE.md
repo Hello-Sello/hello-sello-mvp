@@ -14,8 +14,13 @@ stage:  triage ✅ · spec ✅ (G1) · prototype ✅ (G2) · design ✅ (G3 2026
         **T08 ✅ G4 PASSED 2026-08-23 — Muskan: *"fine, pass it"*. All 8 deviations accepted;
         the scope beyond the written criteria was ruled sound because the ledger could not be
         used for the push without it.**
-        **▶ ✅ ALL 8 TICKETS BUILT AND FULLY THROUGH G4 — T07's last 4 items ruled 2026-08-23,
-        T12 filed for the seed-pollution class. NEXT: `/ship`.**
+        **▶ ✅ BUILD-COMPLETE 2026-08-23. ALL 8 TICKETS THROUGH G4. NEXT SESSION: `/ship`.**
+        Cloud pre-checks DONE: **S6** confirms **six** local-only migrations (`--include-all`
+        required — `20260607090000` is back-dated and sorts before everything on cloud);
+        **S8** baseline **80 findings**, none caused by this slug — re-run and diff after the push.
+        Browser checks **1 + 2 PASSED** (inbox loads; connection accept). **Check 3 DEFERRED** —
+        not runnable as-is: no rejected company in the seed, `PendingCo GmbH` has no user.
+        Ships as ONE unit; two caller classes lose reads by design.
         ~~T08 IN FLIGHT — PLAN rev 2; checker round 1
         spent (4 blocking, rev 1's central claim was FALSE). ⚠️ THE SHIP BATCH IS SIX MIGRATIONS,
         NOT FIVE — `20260607090000` is unledgered and back-dated, so `db push` refuses it without
