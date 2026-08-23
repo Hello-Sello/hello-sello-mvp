@@ -8,10 +8,10 @@ stage:  triage ✅ · spec ✅ (G1) · prototype ✅ (G2) · design ✅ (G3 2026
         **T09 ✅ G4 PASSED 2026-08-23 — Muskan: "pass" (all 5 items ruled).**
         **T06 ✅ G4 PASSED 2026-08-23 — Muskan: *"pass"* (all 6 items ruled). AC 6 PROVEN
         live: connection reveals the product, never the price.**
-        **▶ T07 ⛔ BLOCKED AT PLAN (2026-08-23) — checker budget 2/2 SPENT, did NOT converge
-        (round 2 = 4 blocking, ALL NEW). 3 folded into rev 3; ONE needs Muskan: where a basket
-        refusal is shown, since `ShopView`'s Locked fence allows no new state and its one
-        branch is spent. Options in `blocked.md`.** Then T08.
+        **▶ T07 UNBLOCKED 2026-08-23 — Muskan: *"amend the fence"*. `ShopView` may carry the
+        refusal state + render slot; amendment + WHY written into `Locked`. Checker budget
+        2/2 spent (did NOT converge, 4 NEW blocking in round 2, all folded into rev 3).
+        → tests-first next.** Then T08.
         **▶ T06 UNBLOCKED — its G4 resumes next · then T07 · T08.** T09's G4 follow-through is DONE:
         ADR-0005's Reused fence amended (both the `relationship` and `pending_inbox_item` lines,
         each carrying WHY), and **T10** (the accept path swallows its own errors — DEV-83's shape,
@@ -118,6 +118,18 @@ one file serving every seller. No new route; its insides get rebuilt.
   suppresses the per-location group header when a single named location is the active filter
   (today the name renders twice, one line apart). Driven by state `ShopView` already owns. The
   rule below is **untouched**.
+- **AMENDED AGAIN at T07's plan stage** (2026-08-23, Muskan: *"amend the fence"*). Now
+  **`ShopView` may carry the basket-refusal state and its render slot — one further state and
+  one further branch, for this purpose only.**
+  **WHY, recorded so the fence keeps meaning something:** the fence exists to stop `ShopView`
+  accreting *behaviour props and drive-by state* — the T02 concern. A refusal message is
+  neither: it is the visible half of a criterion T07 states outright (*"the server shall
+  surface a user-facing refusal rather than an unhandled rejection"*), and the server rule is
+  worthless to a user who never sees it fire. **The alternatives were worse, not merely
+  different:** routing it through `ProductCard` is a *fourth* card edit against ADR-0005's cap
+  of three, and deferring the surfacing adds a **fifth** instance of DEV-83's unhandled-rejection
+  shape to a slug that already filed T10 for the fourth. **Still fenced, unchanged:** no new
+  behaviour prop, no third consumer, no fourth `viewerCanManage`-shaped boolean.
 - **G3 · a `BuyerShopView` wrapper, NOT a 4th prop on `ShopView`** (ADR §1). `ShopView` gains
   no behaviour prop. Split trigger written down: a third consumer, or a 4th
   `viewerCanManage`-shaped boolean. Slots don't count.

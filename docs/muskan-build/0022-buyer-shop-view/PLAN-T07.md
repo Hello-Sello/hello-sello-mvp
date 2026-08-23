@@ -128,7 +128,7 @@ privilege surgery. *(This is the mistake ADR-0005 rev 5 shipped and rev 6 caught
 | `supabase/tests/basket_admission_test.sql` | **new** — pgTAP-style behavioural proof |
 | `supabase/tests/run_basket_admission_test.sh` | **new** — runner, copies `run_connection_visibility_override_test.sh` verbatim in idiom |
 | `src/modules/basket/supabase/writes.ts` | `addToBasket` maps the RLS refusal to a typed error |
-| `src/app/present/ShopView.tsx` | `handleAddToBasket` catches it — **shape ESCALATED, see §6** |
+| `src/app/present/ShopView.tsx` | `handleAddToBasket` catches it; refusal state + render slot (**fence amended 2026-08-23**) |
 | `src/modules/basket/components/BasketDrawer.tsx` | 🔴 **B2 (round 2)** — the policy's **second** refusal path |
 | `docs/deploy/cloud-migrations-pending.md` | the ledger entry (note 8 — §8 required it, Files omitted it) |
 
@@ -258,7 +258,7 @@ So the unhandled rejection originates in the click handler, and no change confin
 `writes.ts` can reach it. rev 1 specified neither a Promise-returning signature nor a
 render slot, and listed **no test** for this arm.
 
-### 🔴 B1 (round 2) — THE FENCE READING WAS INCOMPLETE. ESCALATED TO MUSKAN.
+### ✅ B1 (round 2) — RULED 2026-08-23. Muskan: *"amend the fence"*.
 
 rev 2 said the fence "forbids two things" and concluded **"Fence intact."** It read
 ADR-0005 `:579-581` and **never opened STATE.md's `Locked` entry**, which is stricter:
@@ -277,8 +277,11 @@ as *"a private handler beside the existing `handleAddToBasket` costs nothing out
 file"*. **A handler is not state, and not a render slot.** The catch is permitted; the
 surfacing is not.
 
-**This is Muskan's ruling, not a planner's** — the same shape T02, T04 and T09 each brought
-to G4. It blocks the build, so it is asked before, not at, the gate. Options in `blocked.md`.
+**RULED: the fence is amended** — `ShopView` may carry the refusal state and its render slot,
+one further state and one further branch, **for that purpose only**. The amendment and its WHY
+are written into `STATE.md` § `Locked` and into T02's criterion in `TICKETS.md`; ADR §1 stands
+untouched (no behaviour prop, no third consumer, no fourth `viewerCanManage`-shaped boolean).
+**Build the surfacing inside `ShopView`.**
 
 **Verified sound and NOT to be churned:** the catch genuinely does prevent the unhandled
 rejection (`ProductCard.tsx:181` is `=> void`, `:852` drops the Promise; handling one frame

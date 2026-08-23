@@ -63,3 +63,11 @@ with a recorded WHY is the move this slug has made three times, and it keeps the
 - **ADR §7 repaired**: its heading and SQL block still said `as restrictive for insert` while its
   own prose said `FOR ALL, not FOR INSERT`. **A builder copying that block ships the ornamental
   policy rev 6 spent a round removing.**
+
+---
+
+## ✅ RESOLVED 2026-08-23 — Muskan: *"amend the fence"* (option A).
+
+`ShopView` may carry the basket-refusal state and its render slot. Amendment + WHY written into
+`STATE.md` § `Locked` and T02's criterion in `TICKETS.md`. ADR §1 untouched. **T07 is unblocked;
+the build proceeds to tests-first.**

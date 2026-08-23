@@ -119,6 +119,15 @@ delete `src/app/prototype-0022-buyer-shop/`
   buys exactly one branch, driven by state `ShopView` already owns (the active location filter);
   it does **not** relax ADR §1's rule that `ShopView` gains no behaviour prop, which stands
   untouched.
+  > **AMENDED AGAIN 2026-08-23, at T07's plan stage** (Muskan: *"amend the fence"*).
+  > `ShopView` may additionally carry **the basket-refusal state and its render slot** — one
+  > further state, one further branch, for that purpose only. Same reasoning as above and the
+  > same narrowness: a refusal message is not a buyer-mode knob, it is the visible half of a
+  > criterion T07 states outright, and a server rule the user never sees fire is not a
+  > delivered rule. The alternatives were worse — routing it through `ProductCard` is a
+  > **fourth** card edit against ADR-0005's cap of three, and deferring it adds a **fifth**
+  > instance of DEV-83's unhandled-rejection shape. **ADR §1 still stands untouched:** no
+  > behaviour prop, no third consumer, no fourth `viewerCanManage`-shaped boolean.
 
 ## T03 — `ProductCard`: the price gate and the request-pricing hook · **S** · depends on: —  · [HEL-57](https://linear.app/hellosello/issue/HEL-57)
 
