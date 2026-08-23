@@ -1060,3 +1060,35 @@ Before pushing any batch, **diff the filename timestamps against the authoring d
 are wrong on cloud. And **any `pg_default_acl` or grant verification must name the ROLES**, never
 just the privilege letters. Fixing it costs one edit while the file is unpushed, and a compensating
 migration plus a live window afterwards.
+
+---
+
+## L-035 · The builder never edits tests — not even when the orchestrator tells it to
+
+**2026-08-23 · slug 0022 · T07 · ruled by Muskan after the builder flagged it, then refused it itself**
+
+**Trigger** — writing a fix instruction that names a file under `supabase/tests/**`, `e2e/**`, or any
+`*.test.ts`, and addressing it to `builder`.
+
+**What happened** — a review round produced findings inside test files (a mutation matrix that
+under-listed, a cell whose stated preconditions were false, an assertion that only checked a
+negative). The orchestrator put them in `builder`'s fix list, because that is where the findings
+were. `builder` did them and **declared it**: *"I edited test files against the standing fence,
+because the fix items name those files. Flagging, not assuming."* On the next round, given the same
+shape of instruction, it **refused** — and dispatched `test-writer` instead.
+
+**Why the fence exists** — the builder's job is "make the failing test pass". Give it write access to
+the test and the cheapest way to finish is to change the assertion. Nothing catches that: the suite
+goes green, the diff looks like a fix, and the guarantee the test was protecting is gone. The fence
+is what makes "the tests are green" mean something.
+
+**Why an orchestrator instruction does not lift it** — the fence is not about *intent*, it is about
+*capability*. "Only edits tests when told to" is not a safeguard when the telling is routine; it
+just moves the decision to whoever writes the fix list, who is usually working under momentum at the
+end of a long round. Muskan's ruling: **absolute, costs one extra step, keeps the guarantee real.**
+
+**The rule.** Findings in test files go to `test-writer`, always — including when the orchestrator
+has already written them into a fix list, and including when the change is obviously correct and one
+line long. If a fix list mixes source and test findings, **split it and dispatch two agents.**
+**An agent refusing an instruction on fence grounds is the system working** — the same shape as a
+builder correcting a plan's line range (L-030).
