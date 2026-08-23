@@ -334,6 +334,40 @@ company filter — cross-lane, but the leak is this migration's blast radius),
   **only the seller's own** products — `getOwnCatalog` (`deals/supabase/reads.ts:538-542`)
   gains the `company_id` filter it always intended. Widening site 1 makes its pre-existing
   leak strictly worse (round 3, B4).
+- **[ADDED at T08, 2026-08-23 — `documents shipped behaviour`, NOT a new build item. Do not
+  re-do it.]** When this migration re-creates the **view** `current_pricelist_item`, it shall
+  re-issue `GRANT SELECT … TO authenticated` and `REVOKE ALL … FROM anon`.
+  > **Already done — this criterion is being written after the fact, and that is the point.**
+  > `20260822100000_connection_visibility_override.sql:181-182` issues both statements, and the
+  > builder did it from the ADR's grant ritual, not from any written criterion — T06's criteria
+  > covered **functions** only (S4/S5), never relations. Verified live:
+  > `relacl = {postgres=arwdDxtm/postgres, authenticated=arwdDxtm/postgres,
+  > service_role=arwdDxtm/postgres}` — no `anon` entry — and
+  > `has_table_privilege('anon','public.current_pricelist_item','SELECT') = f`.
+  >
+  > **The rot this closes is the missing instruction, not a missing grant.** Supabase's default ACL
+  > still hands `anon` everything on a new relation, and the next view re-creation had nothing
+  > written to inherit. `CREATE OR REPLACE VIEW` does not reset grants — but a `DROP + CREATE`
+  > does, and this project reaches for that whenever the OUT shape changes.
+  >
+  > **Enforced today by two suites** — `supabase/tests/cross_tenant_lockdown_test.sql:86` and
+  > `supabase/tests/pricelist_item_tier_test.sql:102`, both asserting
+  > `has_table_privilege('anon','public.current_pricelist_item', …)` is false. **Not** by
+  > `anon_execute_lockdown_test.sql`, which ADR-0005's invariant table credited: that file contains
+  > **no relation check at all** (0 matches for `view|relacl|pg_class|relkind|has_table_privilege`).
+  > The ADR was corrected in the same commit.
+  >
+  > **Scope note:** `current_pricelist_item` is the **only view in the entire schema**, and across
+  > all six migrations in this slug `create (or replace )?(view|materialized view|table|sequence)`
+  > returns exactly one hit. No other relation was created, so there is no second `anon` read to
+  > close.
+  >
+  > **One live oddity, named rather than silently passed:** the view also carries
+  > `authenticated=arwdDxtm` — INSERT/UPDATE/DELETE included — inherited from migration 0's default
+  > privileges at CREATE time and never revoked. It is **inert**:
+  > `information_schema.views.is_updatable = NO`, so the write verbs cannot be exercised. Worth one
+  > sentence because this is an **owner-rights** view (ADR-0004 §4), where a future change that made
+  > it updatable would turn an inert grant into a live one.
 
 ## T09 — Connections and verification must be server-granted, not self-declared · **M** · depends on: — · **T06 DEPENDS ON THIS** · Linear: owed (MCP auth blocked)
 
