@@ -17,8 +17,20 @@
 -- follows workspace lockstep).
 --
 -- NOT in this migration (tracked follow-ups):
---   * Seller-only COLUMN hiding (deal_line_item.seller_margin/buyer_metric,
---     product.cogs) — needs a view or table split; design decision pending.
+--   * ~~Seller-only COLUMN hiding (deal_line_item.seller_margin/buyer_metric,
+--     product.cogs) — needs a view or table split; design decision pending.~~
+--     ✅ DONE — the table split was built and this line was never retired.
+--     `seller_margin`/`buyer_metric` live on `deal_line_item_private`; `cogs`
+--     lives on `product_cost`. Neither column has ever existed on
+--     `deal_line_item` or `product`. Both split tables are RLS-gated to the
+--     owning company (`company_id = current_company_id()`), `anon` holds
+--     nothing. Verified against production 2026-08-24.
+--     ⚠️ Read the strikethrough above as history, not instruction: on
+--     2026-08-24 a session cited this line as a fact about live columns and
+--     reported a leak that does not exist. A follow-up list describing what a
+--     migration does NOT do becomes false the moment someone does it, and
+--     nothing in the workflow points back here. Retire the line, don't just
+--     do the work.
 --   * RLS test suite (run separately; proves A cannot read/write B).
 --   * audit_log app_writer role/grants (F5).
 -- ============================================================================
