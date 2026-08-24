@@ -1,6 +1,6 @@
 # 0023 deal-draft-lands-in-chat — work order
 lane:   FULL
-stage:  triage ✅  →  spec (next)
+stage:  spec ✅  →  design (next)   ·   G2 /prototype SKIPPED (Muskan, 2026-08-25)
 branch: claude/muskan/work — no feature branch (Muskan's call, 2026-08-18)
 
 ## Seed
@@ -80,27 +80,63 @@ The seed named two entries. Only one is in scope:
 - basket carried into a connection request — ruled out: the existing "connect first"
   block (`BasketDrawer.tsx:320-331`) already IS the rule
 
+## Files so far
+- `docs/muskan-build/0023-deal-draft-lands-in-chat/RESEARCH.md` — prior-art sweep
+- `docs/PRD/0023-deal-draft-lands-in-chat.md` — the WHAT, approved at G1
+
 ## Attempts          three separate budgets — see §10
-(none yet)
+- **spec, 2026-08-25** — `researcher` sweep → RESEARCH.md; interview closed in one
+  pass, no revisions. PRD previewed to Muskan in scratchpad, approved unamended.
 
 ## Gate log
 - triage — FULL, 2026-08-25 (narrowed from F-04, then widened to include the picker)
+- **G1 — PASSED 2026-08-25**, approved unamended. Eight acceptance criteria; with G2
+  skipped they are the ONLY thing G4 compares against.
 
-## For Muskan — two risks + one call owed
-1. **This changes who can see a sent deal.** An inbox ticket is claimable by one
-   person; a c2c thread is company-wide by definition (`CONTEXT.md:41` — "the whole
-   company can see it"). Same consent gate, wider audience. `/spec` states it as
-   intended, not discovers it at G5.
-2. **`deliver_deal` has a SECOND live caller** —
-   `confirm_detected_deal_births_negotiation.sql:176`, the Sella-detection birth
-   door. Fixing `send_deal` alone leaves that door still cutting inbox tickets, so
-   "deals land in chat" would be true of one door and false of the other. Your L-038
-   class. Either widen at `/spec` or say out loud that Sella-born deals keep the old
-   route.
-3. **Call owed at G1: does this need `/prototype`?** The picker is an EXISTING
-   component rendered in one more place, not new UI — so I'd skip G2. Your standing
-   rule is prototype-before-build for new UI, so it's your call, not mine.
+## Rulings taken at G1 — 2026-08-25
 
-Also: `CONTEXT.md:31` defines Deal draft as "a Deal Card sitting inside a **P2P**
-chat". After this it can sit in a c2c chat too — one-line amendment, proposed not
-written.
+| | ruling |
+|---|---|
+| G2 `/prototype` | **skipped** — the picker is an existing component in one more place |
+| Connection Requests entry | **stops** for company-addressed deals; chat is the only surface |
+| Request-pricing → chat | **parked**, own slug |
+| Connection Requests page deletion | **not here**; own slug, after Request-pricing moves |
+| Second send door (Sella) | **left on the old route** — verified no traffic |
+| Person-addressed deal | **P2P only** — the person arm does not change |
+| Pill wording | **sender's person name**, one expression hoisted to serve both arms |
+| Half-card · `claim_deal_ticket` | untouched / stays — spec resolved, unopposed |
+
+### Risk #1 was WRONG — corrected, do not re-raise
+
+The work order claimed this widens the audience (inbox ticket claimable by one person
+vs a company-wide thread). **It does not.** `inbox_select` and the c2c `thread_all`
+branch are both plain `current_company_id()` checks
+(`20260607170000_rls_policies.sql:79-86, :231-232`), and `sign_deal`
+(`20260724120500_sign_deal.sql:73-82`) already lets any company member sign without a
+claim. **The discovery channel changes; who may look does not.** And the MVP has one
+user per company, so the distinction is moot today.
+
+### Risk #2 — CLOSED, but it leaves a written obligation
+
+`confirm_detected_deal_births_negotiation.sql:176` still routes Sella-born deals to the
+inbox. Safe **only** because `deal_detected` messages can be written solely by
+Sella/service-role (`20260614121000_propose_deal_rpc.sql:12`) and Sella is not built.
+**The page-deletion slug MUST NOT delete `/connect/inbox` while this door still writes
+to it.** Carry this forward.
+
+## Open, not blocking
+
+1. `CONTEXT.md:31` — "a P2P chat" → "a chat". Proposed at G1, **not yet written**,
+   awaiting Muskan's yes.
+2. `docs/PRD/deal-flow.md:15-31` describes a pre-Phase-12 deal model. Flagged stale,
+   **not verified** — whether a `type='deal'` thread is still created anywhere is open.
+3. **Linear DEV-163 item 6** — *"Deal goes to Company chat but also people? ISSUE"* —
+   Marcel's own open ticket asking what G1 just ruled. Linear MCP auth-blocked.
+4. **Five SQL suites read only by name**, not line by line: `finalize_deal_test`,
+   `decline_deal_test`, `update_deal_draft_test`, `rls_isolation_test`,
+   `confirm_deal_change_metadata_merge_test`. `/design` must settle whether they assert
+   routing before tickets are cut — otherwise it surfaces as surprise red at build.
+5. **Two suites break BY DESIGN** and need deliberate rewrites, not repairs:
+   `supabase/tests/deliver_deal_test.sql:8-10` and
+   `supabase/tests/claim_deal_ticket_test.sql:1-18`. Plus `e2e/deal-c2c-create.spec.ts:141-191`,
+   whose entire premise this slug reverses.
