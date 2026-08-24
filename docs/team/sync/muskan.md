@@ -5,9 +5,13 @@
 
 ---
 
-**Last updated:** 2026-08-23 (session `t06_t07_t08` — slug 0022 BUILD-COMPLETE: T06, T07, T08 all through G4)
-**Status:** offline — session closed. **Next: `/ship` slug 0022** in a fresh session. ⚠️ The ship batch is **SIX** migrations and needs **`--include-all`** (`20260607090000` is back-dated and sorts before everything on cloud). The slug ships as ONE unit.
+**Last updated:** 2026-08-24 (session `ship_0022` — **SLUG 0022 IS LIVE ON PRODUCTION**)
+**Status:** offline — session closed. **Slug 0022 SHIPPED 2026-08-24**: six migrations live on prod (`--include-all`), app deployed to `main`, Vercel production deploy success. **The `relationship` privilege escalation is CLOSED** — `authenticated` INSERT on that table is now `false`, so the self-minted-connection hole is dead. S8 80 → 85 (all +5 are this batch's own `SECURITY DEFINER` functions; `anon` definer-executable still exactly 1). **G5 live walk is OWED — Muskan's, staged at `G5-WALK.md`.**
 **Shared files locked:** none — all released.
+
+> ⚠️ **RELEVANT TO ANY LANE THAT WRITES `relationship`, `company` OR `pending_inbox_item`:** those grants are now revoked on **production**, not just locally. Direct table writes from app code will fail with `42501`. The only writers are `SECURITY DEFINER` RPCs — `accept_connection_request`, `resubmit_company_verification`. **This bit us during this very ship:** `main`'s `store.ts:573` still wrote `relationship` directly, so connection-accept failed on production between the migration push and the `main` merge. If you have any branch with a direct write to these tables, it is already broken against prod.
+
+> ⚠️ **PRODUCT VISIBILITY TIGHTENED AT THE BASKET DOOR.** `product_visible_to_caller()` is the single owner of "may this caller see this product", and its buyer arm is now term-for-term equal to `get_discoverable_shop`: seller company must be **live and verified**, and the product must have a **location** (*unfiled is not a shelf*). Two more caller groups lose basket detail by design — buyers holding lines from a soft-deleted/unverified seller, and buyers holding lines on an unfiled product. Line stays listed and deletable; detail goes NULL. **If you add a term to either door, diff the two — round 4 of the ship gate caught them drifting on three.**
 > **2026-08-23 (session 81) — T09 SHIPPED (local; NOT yet on cloud).** Migration
 > `20260823090000_connection_consent_and_verification_lockdown.sql` closes five live write holes:
 > `relationship` is no longer directly writable by `authenticated` (one `SECURITY DEFINER` RPC,
