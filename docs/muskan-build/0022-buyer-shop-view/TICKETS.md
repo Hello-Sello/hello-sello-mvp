@@ -474,6 +474,21 @@ the item pending forever with nothing shown. T09 did not cause it; T09 made it r
 
 ## T11 — `anon` holds TRUNCATE on ~90 tables; deny-by-default was never installed for tables · **S** · depends on: — · Linear: owed (MCP auth blocked)
 
+> ✅ **BUILT 2026-08-24 (session 84).** Migration
+> `20260824100000_table_privilege_lockdown.sql`, LOCAL ONLY — ledgered PENDING.
+> **anon 614 table privileges → 0**; authenticated TRUNCATE/TRIGGER → 0, its
+> read/write verbs untouched. Three layers: sweep the existing surface, narrow
+> `ALTER DEFAULT PRIVILEGES` (which DOES work for relations — tables carry no
+> built-in PUBLIC grant, unlike functions), and an event trigger for the role
+> blind spot that stored defaults have.
+> **Enumerated before revoking:** no RLS policy in `public` names `anon`, and
+> `/c/[handle]` runs through a definer RPC — **proven still working after the
+> revoke** (1 row for a probe handle with anon holding zero table privileges).
+> Suite: 5 cells, 4 RED-first; cell 3 asserts the mechanism FIRES, cell 5
+> reproduces the anon TRUNCATE of a **self-seeded** audit_log — the ticket's
+> "3 seeded rows" do not exist on a fresh reset (L-033 again).
+> Clean reset → **41/41 runners**, tsc 0, unit 490/490.
+
 **Filed 2026-08-23 at T09's G4 (Muskan: *"pass"* — own ticket, not T09's to fix).**
 
 Session 77 installed deny-by-default for **functions** (`20260817120000` — an `ALTER DEFAULT

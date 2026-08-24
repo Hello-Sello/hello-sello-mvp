@@ -23,6 +23,44 @@
 
 ---
 
+## ⚠️ PENDING 2026-08-24 — T11 table privilege lockdown (ONE migration)
+
+**Status: LOCAL ONLY. Not pushed. Built on `claude/muskan/work`, deliberately unreleased.**
+
+| # | migration | ticket |
+|---|---|---|
+| 1 | `20260824100000_table_privilege_lockdown.sql` | T11 (`0022-buyer-shop-view/TICKETS.md`) |
+
+**What it closes.** Deny-by-default for TABLES — the half session 77 installed for functions and
+never for relations. Measured before: **`anon` held 614 table privileges in `public`** (TRUNCATE on
+89 tables, INSERT on 88, SELECT on 85); `authenticated` held TRUNCATE on 91 and TRIGGER on 92.
+After: **anon 0, authenticated TRUNCATE/TRIGGER 0.** RLS does not apply to TRUNCATE, so the
+hash-chained `audit_log` was erasable by an unauthenticated role.
+
+**Reachability, not overclaimed:** PostgREST emits neither TRUNCATE nor DDL, so this was not
+reachable from the app's public surface. It is a grant-level hole one FK or one new client from
+mattering.
+
+**Who loses access, by design:** `anon` loses every `public` table privilege. **Nothing uses them** —
+no RLS policy in `public` names `anon` (the only three naming anon/public are in `cron` and
+`storage`, untouched), and the one public route that renders database content, `/c/[handle]`, runs
+through the `get_public_profile` SECURITY DEFINER RPC. **Proven after the change:** with anon holding
+zero table privileges, `get_public_profile` still returns the row (1 row for a probe handle).
+`authenticated` keeps SELECT/INSERT/UPDATE/DELETE — only TRUNCATE and TRIGGER go.
+
+**Push order:** independent of T13's migration and of any app deploy; no app code references these
+grants. Plain `supabase db push`.
+
+**Advisors:** no change expected. This adds one event-trigger function, which is not `SECURITY
+DEFINER`-executable by `authenticated` and does not appear in the advisor classes.
+
+**Proof:** `supabase/tests/table_privilege_lockdown_test.sql` — 5 cells, 4 RED-first. Cell 3 asserts
+the mechanism **fires** (creates a throwaway table, reads the ACL back) rather than that it exists;
+cell 5 reproduces the actual exploit (anon TRUNCATE of a self-seeded `audit_log`). Verified on a
+clean `supabase db reset`: **41/41 SQL runners**, `tsc` 0, unit 490/490.
+
+---
+
 ## ⚠️ PENDING 2026-08-24 — T13 product column confidentiality (ONE migration)
 
 **Status: LOCAL ONLY. Not pushed. Built on `claude/muskan/work`, deliberately unreleased.**
