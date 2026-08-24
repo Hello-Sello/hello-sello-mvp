@@ -284,6 +284,43 @@ Sella/service-role (`20260614121000_propose_deal_rpc.sql:12`) and Sella is not b
 **The page-deletion slug MUST NOT delete `/connect/inbox` while this door still writes
 to it.** Carry this forward.
 
+## Review rounds — full detail in `REVIEW.md`, budgets here
+
+**`blocking-findings` budget: 1 of 2 spent.** Round 4 (`critic`) raised **1 blocking + 8 notes**;
+the fix pass is one attempt, not nine (the budget counts fix ROUNDS).
+
+- **`critic` B1 — the migration header cites the WRONG FUNCTION.** `:120-121` calls the p2p arm
+  *"a port of `openOrCreateP2pThread`, `store.ts:361-388`"*; that function is at **`:383`**, and
+  the cited range is mostly **`resolveC2cThread`** — the **other arm's** resolver, in the one
+  migration whose subject is that the arms differ. **All five header citations were copied
+  forward unverified** from `20260724120300:23-24` and `store.ts` has moved since. ADR §6.4 and
+  PLAN §2.1 made header accuracy this ticket's explicit obligation: **the rationale was rewritten,
+  the citations rode along.** `L-045`'s class inside the file told to police it.
+- **`critic` N4 — the review-only assignment came back CLEAN.** The `on conflict do nothing` +
+  re-select path that **no test exercises** (PLAN §3 handed it to `critic` by name) was read
+  character-by-character against `20260823090000:162-183`: faithful in both arms, re-select
+  predicates term-for-term identical to the initial selects, bare `DO NOTHING` correct for the
+  partial indexes. **This is the one finding that could only ever have come from review.**
+- **`critic` N6 — §8.3's ruling had no assertion.** Every company-arm call discarded the return,
+  so a silent revert to `null` passed the whole suite. **Fixed** — C1 now asserts non-null AND
+  equal to the thread it announced into.
+- ⚠️ **`critic` ran with NO SHELL** and said so, so its "unchanged/verbatim" claims are readings,
+  not `git diff`. The two it flagged as unverifiable were **independently confirmed by me.**
+- 🔴 **`security`'s FIRST ATTEMPT STALLED** (watchdog, 600s) at the point it turned to the catalog.
+  **A stalled agent is NOT a pass and is not recorded as one** (L-001/L-008). Respawned with the
+  caveat that **the local DB is in the PARALLEL SESSION's shape and `20260825090000` is NOT
+  applied**, so a catalog answer about `send_deal` would come from the wrong database.
+
+## ⚠️ FOR MUSKAN — a policy gap this ticket makes reachable, and nothing files it
+
+**`can_access_thread` has no `deleted_at` predicate** (`20260607170000:129-144`) — its c2c branch
+is a bare `is_relationship_member(...)`. So messages in a **soft-deleted** thread stay
+`SELECT`-able by every relationship member, while `resolveC2cThread` (`store.ts:365`) hides that
+thread from the app. **Pre-existing.** But before this ticket `send_deal` could never produce a
+second c2c thread; the heal path now can. **The new suite defends against it by ordering +
+pinning — which is correct for the test and does nothing for the policy.** Own ticket, not this
+slug's scope.
+
 ## LEARNINGS candidate — owed to Muskan at wrap, NOT yet written
 
 ✅ **RESOLVED 2026-08-25 — `L-047` IS CLAIMED BY THE PARALLEL SECURITY SESSION, not by me.**
