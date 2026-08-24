@@ -1,8 +1,8 @@
 ---
 name: plan-checker
 description: Use on a ticket's plan before any code is written. Answers one
-  question - will this plan reach the ticket's goal? Read-only. Verdict:
-  OK or REVISE with findings.
+  question - will this plan reach the ticket's goal? Read-only. Returns OK,
+  or REVISE with findings.
 tools: Read, Grep, Glob
 model: opus
 color: purple
