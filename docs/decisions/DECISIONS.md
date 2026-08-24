@@ -32,6 +32,13 @@ Each entry: **What was decided** → **Why** (the reasoning at the time).
 - **Onboarding-ready milestone = 8-phase GSD roadmap; Buy (DEV-77) + Sell→Allocate (DEV-76) deferred (2026-06-16).** Harden + UX Auth·Onboarding·Admin-verify·Discover·Present for real-world testing (test boundary = full deal loop to Done, joint w/ Ayush); Marcel's DEV-78/81/80/79/70/69/68 folded in as the UX phase; DEV-77/76, though Marcel-assigned to Muskan, deferred to a follow-up milestone. *Why:* sellable-first — onboard real companies on the built surfaces before expanding surface area.
 - **Exclude Buy (Phase 18) from the `main` update; leave Allocate in place (2026-07-16).** Buy was rushed/prototype-quality (Muskan's call) — stripped its app code, e2e specs, and migration from the branch merged to `main`, nav restored to `state: "soon"`. Allocate, built in the same rushed window, was left alone: it had already shipped to `main` on 2026-07-07 with a deployed migration, and the Sales Calendar already depends on its `statusOf()` helper — reverting it is separate, costlier surgery than simply not merging further Buy work. *Why:* draw the "ready to ship" line by what's actually solid in production today, not by when the code was written.
 - **Orphaned production tables get a cleanup migration, not left as drift (2026-07-16).** Buy's `buyer_resale_price` + `purchase_history_import` tables had already been applied to production independently of the git migration file; both were confirmed empty with zero audit_log references before being dropped via a new migration. *Why:* migrations in git should be the single source of truth for schema — orphaned tables with no matching file are exactly the F3-style drift the team has been burned by before.
+- **Security enforcement lives in mechanisms, not prose (2026-08-17).** Grants and RLS defaults are enforced by an event trigger + a guard test proven RED-first, not by a rule in a doc. `ALTER DEFAULT PRIVILEGES` cannot revoke Postgres's built-in `EXECUTE TO PUBLIC` on functions (verified — the same statement against a named role *does* propagate), so deny-by-default is impossible at the database-default level and an event trigger does the job instead. *Why:* prose rules are 98%; the two live exposures found this month both existed while a correct rule was already written down somewhere.
+- **Every RPC must revoke `FROM PUBLIC, anon` — both, always (2026-08-17).** `anon` reaches a function through two independent grants; revoking either alone leaves the other. Proven: after revoking only `anon`, 39 functions were still anon-executable. *Why:* the 2026-08-16 fix caught half the rule and looked complete.
+- **An anon audit must also ask the `authenticated` question (2026-08-17).** The 62-function sweep aimed at `anon` found its most severe defect one role over: `seed_company_superadmin` was granted to `authenticated` and let any ordinary member self-grant `team.manage`. *Why:* the scarier answer was not where the scan was pointed; scope a permission audit by *what a role can reach*, not by the role that prompted it.
+- **Nothing is created in the Supabase dashboard; migrations are the only source of truth (2026-08-17).** `ensure_rls`/`rls_auto_enable` had lived on production and in no migration for months, so `db reset` produced a database unlike prod. Captured in a migration whose body was diffed byte-identical against live first. Drift detection = `supabase db diff --linked` before a release. *Why:* the failure mode is silent — a table missing its RLS line works locally and returns zero rows on prod, with no error to trace.
+- **Ticket breakdown stays inside `/design`; no separate `/breakdown` skill (2026-08-17).** The research build order listed one; PIPELINE.md folds INVEST + S/M/XS sizing + EARS criteria into `/design`'s Ready checkpoint before G3. Confirmed no such skill exists to remove. *Why:* a gate the design must pass beats a command that must be remembered.
+- **`/wrap` becomes a project-specific skill, built AFTER the pipeline, and it prunes rather than appends (2026-08-17).** The global `wrap` is a one-line passthrough that cannot know this project's ledger, sync file, ARCHITECTURE-NOTES or `.planning/session-log.md`. Session-wrap is deliberately NOT a pipeline gate: a session boundary is not a pipeline event (this session shipped a security fix that was never a slug). *Why:* CLAUDE.md has reached 43KB — loaded every session — because every wrap appended and none ever pruned.
+- **Four Aug-2026 platform updates folded into the pipeline design (2026-08-17).** (1) `worktree.baseRef: "head"` retires the manual worktree-base workaround; (2) the prod-data-write gate ships as an **ask rule**, not a custom hook — ask rules override allow rules *and* hook allow-decisions, giving the "a skill may not self-grant" property for free; (3) the Claude Security plugin runs at `/ship` as a whole-repo scan but does **not** replace the per-ticket `security` agent running `SECURITY-CHECKLIST.md`; (4) dynamic workflows are deferred — `/build` stays plain skills + subagents until a wave exceeds ~4 parallel tickets. *Why:* smallest graph that works; adopt platform features that delete our code, defer ones that only move it.
 
 ---
 
@@ -1515,3 +1522,152 @@ The tier-ladder slug finished every stage (G1→G5 + contract migration C live o
 - **`adr-checker` is Tier 1 — CONFIRMED at completion** (not just at G3): its three operating rules (fresh separate-context agent every round · 2-round budget, stop on zero NEW blockers · simplification bias on fixes) held through build and ship and are now locked in PIPELINE.md's `/design` section.
 - **`plan-checker` stays Tier 2, on watch** — its headline predicted catch (missed call sites) was pre-empted by the ADR before any plan existed; no decisive independent catch in T01–T08. Not cut; earns Tier 1 (or the axe) on future slugs. `consistency` likewise: no evidence either way this slug.
 - **Build decision: GO on the Tier-1 set as real skills/agents** (/triage + STATE.md · spec/design with adr-checker · test-writer/runner · visual-verifier + G4 · /ship). /ship must bake in two dry-run-discovered steps: the diff-against-live re-declare protocol, and the fact that **prod data-writes require a human-granted permission rule** (the classifier correctly blocks the agent). Do NOT build plan-checker/consistency as agents yet. *Why:* the dry-run's own rule — a Tier-2 agent that catches nothing gets cut before it's built; automating unproven checkers is the GSD failure mode the pipeline was designed against.
+
+---
+
+## 2026-08-19 (session `buyer_shop_view`) — Buyer shop view: an accepted relationship overrides product visibility (AMENDS the 2026-06-14 soft-openness lock)
+
+Locked at **G1 of slug `0022-buyer-shop-view`** (`docs/PRD/0022-buyer-shop-view.md`), which
+rebuilds the catalogue on `/discover/[companyId]` into the buyer's view of the seller's shop.
+Muskan's call, spec interview 2026-08-18/19.
+
+**What changes.** The 2026-06-14 soft-openness lock made catalogue openness deliberately
+**connection-independent**: openness = `product.profile_visible` × `product.price_public`,
+audience-scoped to logged-in **verified members**, with no relationship in the gate. That
+holds for strangers. It no longer holds for partners:
+
+- **An accepted company relationship overrides `product.profile_visible`.** A connected buyer
+  sees the seller's whole catalogue, hidden products included. `profile_visible` therefore
+  means *"visible to companies I am **not** connected to"* — not *"visible to anyone"*.
+  Muskan, verbatim: *"connected companies can always see shops, that means only if someone
+  is not connected they cannot see shop if seller has made it private."*
+- **`price_public` is NOT overridden.** Connection reveals products, never prices. A connected
+  buyer looking at a price-hidden product still gets **Request pricing**, same as a stranger.
+  *Why:* price is a deliberate per-product choice, and customised pricing for a specific buyer
+  is **Phase 15's** job (per-customer pricelists, September) — not something a connection flag
+  should quietly do in August.
+- **Caller verification is unchanged** in both arms. The wider door is *verified **and**
+  connected*, which is **narrower** than the public arm beside it — so the German **HWG**
+  reasoning behind the 2026-06-14 lock is not weakened, only re-scoped.
+
+**Consequences.** This is a permission-rule change, not a UI change: the shop read path gates
+on caller verification alone today, so it gains a relationship arm (migration). Slug 0022
+therefore carries a migration despite triaging as frontend-only; Muskan re-confirmed the
+no-feature-branch call anyway (sole owner, one migration, `/ship` rebases regardless).
+
+**Also locked at the same gate** (detail in the PRD, §3):
+- **Request pricing is per-product, not shop-level** — the ask names the product; the answer
+  happens in chat. *Why:* the seller cannot price what they cannot identify.
+- **A price-hidden product cannot be added to a basket at all.** Muskan: *"no buyer would add
+  or send order without knowing price."* Read-only card + Request pricing instead.
+- **Basket admission is enforced server-side** on the same permission rule as the read path —
+  the basket table is owner-scoped only today and never checks whether the buyer was allowed
+  to *see* the product.
+- **Ordering without a connection is allowed**: Send delivers the order **and** a connection
+  request, announced to the buyer before they commit. Both reach the seller together, but the
+  order **cannot be opened or acted on until the connection request is accepted**.
+
+**Supersedes / amends:** the 2026-06-14 soft-openness entry (visibility arm only; its price
+arm and its audience-scoping stand). Note for readers: the much older *"Shop prices: visible
+only to connected companies"* line in Layer 1 was already superseded on 2026-05-14 and again
+on 2026-06-10 — it is **not** the basis for this amendment.
+
+**Also superseded by 0022:** `docs/superpowers/plans/2026-07-07-product-basket.md` Tasks 9–11
+(a never-built rival design for the same capability — different route, a second read door, and
+a connection-*required* gate; also stale, returning two price columns migration C dropped).
+It needs a dead marker so it stops reading as live intent.
+
+## 2026-08-20 — Repair broken test harness on discovery, even mid-ticket
+
+**Decided:** when a build turns up that a *guard* cannot execute, fix it in that session rather
+than filing it — even though it expands the ticket's diff. Applied at slug 0022 T01: 22 SQL
+runners repaired mid-ticket (Muskan: *"fix first"*).
+
+**Why:** `/ship` leans on these suites to prove a slug is safe. Shipping while they're inert makes
+the proof theatre. The cost is a wider diff for one ticket; the alternative is a security guard set
+that everyone believes is running and isn't. **Scope discipline protects review quality — it should
+not protect a broken check from being fixed.**
+
+**Scope of the rule:** this covers checks that cannot *run* (a broken runner, a suite that exits 0
+while failing, a test that passes vacuously). It does **not** license fixing every unrelated defect
+a build walks past — those still get recorded and filed. The distinguishing question is whether the
+thing is *claiming to verify something it isn't*.
+
+**See:** `ARCHITECTURE-NOTES.md` 2026-08-20 (the stdin rule) · `docs/agents/LEARNINGS.md` L-013.
+
+## 2026-08-22 — A product always has a location; unfiled never reaches a buyer
+
+**Decided:** a seller may not save a product without a location, and a product with no location is
+not served to a buyer's shop. `product.location` stays **one value per product** — a
+many-locations model was considered at slug 0022's T05 G4 and dropped.
+
+**Why:** the same move as the [2026-08-19 blank-price rule](#2026-08-19) — remove the state rather
+than pick a rendering for it. "Unfiled" forced two wrong answers at once: the buyer's shop rendered
+a pile it has no vocabulary for (a `Toronto Warehouse · 4` divider with five cards under it), and
+the location filter had to choose between hiding a control that genuinely filters and showing one
+that names nothing. Both defects are arithmetic about a state that should not exist. The
+many-locations variant was dropped for cost with no matching gain: a join table plus a rewrite of
+the drag-to-file dialog, the grouping, the RPC projection and the filter, to model something no
+seller has asked for.
+
+**The buyer half is DONE** (slug 0022, T05). Enforced in `get_discoverable_shop`
+(`20260822090000`), one clause beside the owner arm it mirrors:
+
+```sql
+and (p.location is not null or p.company_id = public.current_company_id())
+```
+
+Server-side, not on the page, so an unfiled row never leaves the database toward a buyer.
+Mutation-proved: removing the clause fails `discoverable_shop_spec_columns_test.sql` block (14).
+
+**The owner exception buys consistency, not reachability.** PRD §7 row 158: a member of the seller's
+own company "sees their own shop" on this surface. `/present` reads `getMyShop`, which queries
+`product` directly with **no** location filter, so without the exception the same person would see a
+smaller catalogue at `/discover/<own company id>` than on their own shop. Nothing is stranded either
+way — filing happens on `/present` regardless. Nothing routes an owner to that URL either: the
+Discover listing self-excludes (`list_discoverable_companies`: `c.id is distinct from
+current_company_id()`), so it is a typed-URL edge case, which is what PRD §7 is a table of.
+
+> **Correction, same day.** This entry first justified the exception as "otherwise unfiled rows are
+> stranded forever, because filing happens by dragging them out of the `Unassigned` pile". That was
+> wrong — `/present` never reads this RPC. The clause is unchanged; only the reasoning is. Recorded
+> rather than silently edited because the wrong reason would have made the exception look
+> load-bearing to anyone later deciding whether to keep it.
+
+**The seller half is OWED and ships outside slug 0022** (0022 is the buyer's read surface): the save
+path, the add-product flow, probably a `NOT NULL` constraint, and filing the 8 unfiled products that
+exist on production today. Until it ships, a seller holding legacy unfiled rows plus exactly one
+named location browses `/present` without a location filter — knowingly accepted at T05's G4 rather
+than patched, because the state is being removed rather than counted.
+
+**⚠️ At deploy:** Aurora Deutschland's only two buyer-visible products are unfiled, so its shop goes
+empty on production until someone gives them a location. Demo data (Muskan, 2026-08-22) — a
+one-minute fix in the UI, not a migration.
+
+**Also re-labelled, not deleted:** `ShopView.tsx`'s buyer-side `Unassigned` suppression is now
+defensive rather than live — `/present` reads `getMyShop`, not this RPC, so a future buyer-facing
+caller of that read would arrive ungated. Same treatment ADR-0005 §6's owner criterion got.
+
+**Surfaced by:** slug 0022 T05's G4 walk (`REVIEW.md` rows 15-16).
+
+---
+
+## 2026-08-22 — Close the write door before a gate ships
+
+**Decided:** when a build turns an existing column, row or table into a permission gate, the **write
+path to that gate's input** is in scope for that build. If the input is self-writable, the gate does
+not ship until the write door is closed. Splitting the lockdown into its own ticket is fine — T06
+blocks on T09 rather than absorbing it — but shipping the gate *beside* the hole is not.
+
+**Why:** the gate is otherwise ornamental, and ornamental gates are worse than absent ones — they
+pass review, pass tests, and get relied upon. T06 was correct, green, reviewed and defeated by a
+single `INSERT` that nobody had to be granted: `connected=false, hidden=0` → one row → `connected=true,
+hidden=2`, leaking two products with their `rrp`. **"Pre-existing, not caused by this ticket" is not
+a reason to ship past it** — severity is set by what the gate protects, and T06 is precisely what
+converted a bookkeeping-integrity bug into a catalogue-confidentiality hole. The cost objection
+did not survive measurement either: `relationship` has exactly one write call site in all of `src/`
+and `company.verification_status` has one, so the close is small every time it has been done
+(DEV-88, ADR-0005 round 5, T09).
+
+**Surfaced by:** slug 0022 T06's G4 (Muskan's ruling, 2026-08-22). Engineering form of the same rule:
+[`ARCHITECTURE-NOTES.md` — a permission gate is only as strong as the write path to its input](../architecture/ARCHITECTURE-NOTES.md); `docs/agents/LEARNINGS.md` L-027.

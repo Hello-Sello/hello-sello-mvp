@@ -42,6 +42,23 @@ export const REQUEST_TYPE_META: Record<InboxRequestType, RequestTypeMeta> = {
   deal_card: { label: "Deal card", icon: FileSignature, accent: "text-brand" },
 };
 
+/**
+ * The request-type codes the company inbox reads - derived from the meta map so
+ * there is ONE list, not two that can drift apart.
+ *
+ * This is what keeps an unrecognised code out of `InboxRow` / `InboxDetail`,
+ * both of which look up `REQUEST_TYPE_META[item.type]` and immediately read
+ * `.icon` off it. Before this filter existed, one `connect_person` row - a
+ * type the DB has had since the Discover person graph shipped - made that
+ * lookup `undefined` and took the whole page down with
+ * "Cannot read properties of undefined". `Record<InboxRequestType, ...>` could
+ * not catch it: the union itself was the stale thing, and `tsc` cannot see the
+ * DB's lookup table.
+ */
+export const COMPANY_INBOX_TYPES = Object.keys(
+  REQUEST_TYPE_META,
+) as InboxRequestType[];
+
 /** Fallback preview line when an item carries no note and no deal card. */
 export const REQUEST_TYPE_BLURB: Record<InboxRequestType, string> = {
   connect: "Wants to connect.",

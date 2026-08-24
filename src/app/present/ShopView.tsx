@@ -3,14 +3,15 @@
 /**
  * The seller storefront, with an owner edit mode. /present is always the caller's
  * OWN shop (getMyShop), so "Manage shop" is always available here (viewerCanManage
- * defaults true); the visitor view (/present/[companyId], Task 11) passes
+ * defaults true); the BUYER view (/discover/[companyId], via BuyerShopView) passes
  * viewerCanManage={false} to render the same grid + info boxes with every
  * owner-only control (Manage shop, SaveBar, add/assign products, banner/logo
  * edit) turned off. Products render as the redesigned square 4-up grid, grouped
  * under a per-location divider header, with a location dropdown that re-contexts
  * the grid to one location. The card itself is the reusable ProductCard from the
- * catalog module — its Add-to-basket button is NOT owner-only chrome, it works
- * for every viewer via handleAddToBasket below.
+ * catalog module — two of its actions are NOT owner-only chrome and work for
+ * every viewer: Add-to-basket via handleAddToBasket, and the per-product
+ * Request-pricing ask via handleRequestPricing, both below.
  *
  * The shop CHROME (07-05 + F-01) is fully in-place editable behind ONE "Manage
  * shop" entry: the whole surface takes a calm grey wash (data-edit), PresentBanner
@@ -41,6 +42,7 @@ import type { ProductFieldPatch, ProductBatchPatch } from "@/modules/catalog/man
 import { tiersFromDraft, validateLadder } from "@/modules/catalog/ladderDraft";
 import { packSizes } from "@/modules/catalog/index.client";
 import { saveCompanyProfile } from "@/app/account/actions";
+import { requestProductPricing } from "@/app/discover/actions";
 import { createClient } from "@/shared/db/client";
 import { addToBasket, useBasket } from "@/modules/basket";
 import { AddProductsDrawer } from "./AddProductsDrawer";
@@ -187,18 +189,40 @@ const emptyDraft = (): ProductDraft => ({
   fields: {}, batchInserts: [], batchEdits: {}, batchDeletes: [],
 });
 
-export function ShopView({ shop, canEditBranding = false, viewerCanManage = true }: {
+export function ShopView({
+  shop,
+  canEditBranding = false,
+  viewerCanManage = true,
+  buyerContext,
+  emptyState,
+}: {
   shop: Shop;
   canEditBranding?: boolean;
+  /** Buyer-side context rendered directly beneath the info boxes — verification,
+   *  connection state, Connect. The owner surface passes nothing (a seller is
+   *  never "connected" to their own shop), so /present is unchanged. */
+  buyerContext?: React.ReactNode;
+  /** Replaces the built-in empty state. A buyer's empty shop is not the owner's:
+   *  it may be empty because the catalogue is PRIVATE to them, which is a
+   *  different message and carries a Connect action. */
+  emptyState?: React.ReactNode;
   /** Whether the viewer may manage this shop — enter edit mode, add/assign
    *  products, edit the banner/logo. /present is always the caller's OWN shop
-   *  (default true); the visitor route (/present/[companyId]) passes false so a
+   *  (default true); the buyer route (/discover/[companyId]) passes false so a
    *  buyer sees the product grid + info boxes with none of the owner chrome. */
   viewerCanManage?: boolean;
 }) {
   const { company, products } = shop;
   const router = useRouter();
   const { refresh: refreshBasket } = useBasket();
+  // The server's basket-admission refusal, made visible (T07). The `error` state
+  // below is NOT reusable for this: it renders only inside the SaveBar, under
+  // `viewerCanManage && editing`, so a buyer would never see it. Carried here
+  // rather than in ProductCard because the card's `onAddToBasket` prop is
+  // `=> void` and its onClick drops the Promise — see handleAddToBasket.
+  // (ShopView's fence was amended for exactly this: STATE.md § Locked,
+  // 2026-08-23 — one further state, one further branch, this purpose only.)
+  const [addError, setAddError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   // Present mode (D-07): an in-app UI state that hides the app chrome. NEVER the
@@ -560,8 +584,51 @@ export function ShopView({ shop, canEditBranding = false, viewerCanManage = true
     const packSizeGrams = product
       ? packSizes(product, product.tiers)[packIndex]?.grams ?? product.pack_size_grams ?? null
       : null;
-    await addToBasket(productId, packCount, packSizeGrams);
+    // The catch has to live HERE, not in the card: ProductCard's
+    // `onAddToBasket` prop is `=> void` and its onClick (`:852`) drops the
+    // Promise, so an unhandled rejection escapes one frame later with nothing
+    // to catch it. Handling it in this handler resolves the Promise before the
+    // card ever sees it. `e.message` is the shipped idiom for surfacing a write
+    // failure (BasketDrawer's `onPackSizeCommit` catch), and `addToBasket` now guarantees that
+    // message is user-facing for an admission refusal.
+    setAddError(null);
+    try {
+      await addToBasket(productId, packCount, packSizeGrams);
+    } catch (e) {
+      setAddError(e instanceof Error ? e.message : "Couldn't add that to your basket.");
+      // A refusal means the screen is STALE, not that the click failed: the
+      // server refused because this viewer may no longer see the product or its
+      // price, yet the card still shows the old price and a live Add. Without
+      // this the same pill re-raises on every click, forever, and only the user
+      // guessing "reload" corrects it. `products` comes straight off the `shop`
+      // prop (no local copy), so the withdrawn card — and its Add control —
+      // disappear on the next server payload.
+      //
+      // `addError` survives the refresh: router.refresh() re-renders the server
+      // tree in place, it does not remount this client component, so the pill
+      // set one line above stays on screen through the correction. That
+      // ordering is the requirement — message first, refresh second.
+      router.refresh();
+      return;
+    }
     await refreshBasket();
+  }
+
+  // Ask this shop's owner for a hidden price on ONE product. Owned here for the
+  // same reason handleAddToBasket is — it is not owner-only chrome, so threading
+  // it as a prop would put a behaviour knob on a component the ADR says gains
+  // none. The card only renders the ask when `!viewerIsOwner`, so on /present
+  // (viewerCanManage true) this is unreachable. It is NOT unreachable for an
+  // owner generally: a seller opening /discover/<her own company id> gets
+  // viewerIsOwner={false} on her own catalogue (neither get_discoverable_company
+  // nor get_discoverable_shop self-excludes, and PRD §7 supports that view), so
+  // she can click Request-pricing on her own price-hidden product. The server
+  // refuses it — actions.ts returns "That's your own company." — which is why
+  // the card must render the refusal rather than assume a click landed.
+  // The result is RETURNED, not swallowed — the card needs it to distinguish
+  // "landed" from "failed".
+  async function handleRequestPricing(productId: string) {
+    return requestProductPricing(company.id, productId);
   }
 
   const surface = (
@@ -593,11 +660,14 @@ export function ShopView({ shop, canEditBranding = false, viewerCanManage = true
         onNameChange={(v) => updateEdit("name", v)}
         onTaglineChange={(v) => updateEdit("tagline", v)}
         onPickCover={(f) => { setCoverFile(f); setDirty(true); }}
-        onManage={viewerCanManage ? enterEdit : () => {}}
+        onManage={enterEdit}
+        canManage={viewerCanManage}
         canEditLogo={viewerCanManage && canEditBranding}
         onPickLogo={(f) => { setLogoFile(f); setDirty(true); }}
         onPresent={enterPresent}
       />
+
+      {buyerContext}
 
       <ShopInfoRow
         company={company}
@@ -607,7 +677,7 @@ export function ShopView({ shop, canEditBranding = false, viewerCanManage = true
       />
 
       {products.length === 0 ? (
-        <EmptyShop onAdd={() => setDrawerOpen(true)} canManage={viewerCanManage} />
+        emptyState ?? <EmptyShop onAdd={() => setDrawerOpen(true)} canManage={viewerCanManage} />
       ) : (
         <>
           {/* Location filter + the two edit-mode shop controls. "+ Add shop" stages
@@ -635,6 +705,29 @@ export function ShopView({ shop, canEditBranding = false, viewerCanManage = true
               location={g.location}
               targetLocation={g.location === UNASSIGNED ? null : g.location}
               count={g.products.length}
+              // Under a NAMED location there is exactly one group, and the
+              // dropdown one line above already shows its name — a divider
+              // between one thing divides nothing. Only "All" keeps the header.
+              showHeader={
+                loc === "All" &&
+                // ...and NOT when the only group is the `Unassigned` sentinel:
+                // with one group it divides nothing.
+                !(renderGroups.length === 1 && renderGroups[0]?.location === UNASSIGNED) &&
+                // ...and never for a BUYER. "Unassigned" is shelf vocabulary,
+                // not a place — it names the seller's to-file pile. A seller
+                // needs to see that pile; a buyer has no shelves, and ADR-0005
+                // forbids rendering seller-private state in buyer mode.
+                //
+                // ⚠️ DEFENSIVE, NOT DEAD. Since T05's G4 ruling
+                // (DECISIONS 2026-08-22) `get_discoverable_shop` withholds
+                // unfiled products from buyers outright, so a buyer can no
+                // longer receive an `Unassigned` group through that door at
+                // all. This clause is the second lock: `ShopView` is shared
+                // with `/present`, which reads `getMyShop` instead, and any
+                // future buyer-facing caller of that read would arrive here
+                // ungated. Do not delete it as unreachable code.
+                !(g.location === UNASSIGNED && !viewerCanManage)
+              }
               editing={editing}
               onChanged={() => router.refresh()}
               onReorder={reorderGroups}
@@ -653,6 +746,8 @@ export function ShopView({ shop, canEditBranding = false, viewerCanManage = true
                   onBatchRemove={removeBatch}
                   onReorder={(draggedId, targetId) => reorderProduct(g.location, draggedId, targetId)}
                   onAddToBasket={handleAddToBasket}
+                  onRequestPricing={handleRequestPricing}
+                  viewerIsOwner={viewerCanManage}
                 />
               ))}
               {/* "+ Add product" tile — edit mode only. Opens the EXISTING manual-add
@@ -667,6 +762,23 @@ export function ShopView({ shop, canEditBranding = false, viewerCanManage = true
             </LocationGroup>
           ))}
         </>
+      )}
+
+      {/* The basket-admission refusal (T07). A fixed bottom pill rather than an
+          inline note, because the Add control that failed can sit anywhere in a
+          scrolled grid — same idiom as OrdersTable's toast pill, in danger colours.
+          Cleared on the next add attempt; dismissible meanwhile. This is the one
+          further branch the amended fence allows (STATE.md § Locked). */}
+      {addError && (
+        <div
+          role="status"
+          className="fixed bottom-6 left-1/2 z-50 flex max-w-[92vw] -translate-x-1/2 items-center gap-2 rounded-2xl bg-danger px-4 py-3 text-sm font-semibold text-white shadow-lg"
+        >
+          {addError}
+          <button type="button" aria-label="Dismiss" onClick={() => setAddError(null)}>
+            <X size={15} />
+          </button>
+        </div>
       )}
 
       <AddProductsDrawer
@@ -757,15 +869,9 @@ function ShopInfoRow({
   onEdit: <K extends keyof ChromeEdits>(k: K, v: ChromeEdits[K]) => void;
 }) {
   const hq = company.address || company.country || "—";
-  const tagRows =
-    company.tags.length > 0
-      ? company.tags.map((t) => (
-          <span key={t} className="font-bold text-ink">#{TAG_LABEL[t] ?? titleCase(t)}</span>
-        ))
-      : <span className="text-sm text-ink/40">No tags yet</span>;
 
   const links = (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
       {company.website && <LinkRow icon={<Globe size={16} />} label="Website" url={company.website} />}
       {company.links.map((l, i) => (
         <LinkRow key={i} icon={linkIcon(l.platform)} label={linkLabel(l)} url={linkHref(l)} />
@@ -775,25 +881,38 @@ function ShopInfoRow({
   const hasAnyLink = Boolean(company.website) || company.links.length > 0;
 
   return (
-    <div className="grid grid-cols-1 items-stretch gap-3 lg:grid-cols-[1.4fr_1fr_1fr]">
+    <div className="grid grid-cols-1 items-stretch gap-2.5 lg:grid-cols-3">
       {/* About + description */}
       <InfoBox
         testId="info-card-about"
         title={editing ? edits.name : company.name}
+        subtitle={
+          /* Company tags are IDENTITY (#Cultivator, #Wholesale) — they used to
+             sit in the Location box, which is not what they describe. They ride
+             the company name instead, in both the owner and buyer views. */
+          company.tags.length > 0 ? (
+            <div className="mt-0.5 flex flex-wrap gap-x-2 text-[12px] font-bold text-ink/70">
+              {company.tags.map((t) => (
+                <span key={t}>#{TAG_LABEL[t] ?? titleCase(t)}</span>
+              ))}
+            </div>
+          ) : undefined
+        }
         preview={
           editing ? (
             <DescriptionEditor value={edits.description} onChange={(v) => onEdit("description", v)} />
           ) : company.description ? (
-            <p className="line-clamp-4 text-sm leading-relaxed text-ink/70">“{company.description}”</p>
+            <p className="line-clamp-2 text-[12.5px] leading-relaxed text-ink/70">“{company.description}”</p>
           ) : (
-            <span className="text-sm text-ink/40">No description yet</span>
+            <span className="text-[12.5px] text-ink/40">No description yet</span>
           )
         }
         more={
           !editing && company.description ? (
-            <p className="text-sm leading-relaxed text-ink/75">“{company.description}”</p>
+            <p className="text-[12.5px] leading-relaxed text-ink/75">“{company.description}”</p>
           ) : undefined
         }
+        moreOnOverflow
       />
 
       {/* Location: Headquarter (unchanged, read-only) + a small named Warehouse
@@ -803,34 +922,25 @@ function ShopInfoRow({
         testId="info-card-warehouse"
         title="Location"
         preview={
-          <div className="space-y-2 text-sm">
-            <div className="flex flex-col gap-0.5">{tagRows}</div>
-            <div>
-              <div className="font-bold text-ink">Headquarter:</div>
-              <div className="text-ink/70">{hq}</div>
-            </div>
+          <div className="text-[12.5px] text-ink/70">
+            {/* One horizontal row, "·"-joined: Headquarter first, then the named
+                warehouses. Company TAGS used to live in this box — they are
+                identity, not location, and now ride the buyer context strip. */}
+            {[hq, ...company.locations.map((l) => l.label)]
+              .filter(Boolean)
+              .join(" · ")}
           </div>
         }
         more={
-          <div className="text-sm">
-            <div className="mb-1 font-bold text-ink">Warehouses:</div>
-            {editing ? (
+          editing ? (
+            <div className="text-[12.5px]">
+              <div className="mb-1 font-bold text-ink">Warehouses:</div>
               <LocationsEditor
                 locations={edits.locations}
                 onChange={(next) => onEdit("locations", next)}
               />
-            ) : company.locations.length > 0 ? (
-              <div className="flex flex-col gap-1">
-                {company.locations.map((l, i) => (
-                  <div key={i} className="text-ink/70">
-                    <span className="font-semibold text-ink">{l.label}:</span> {l.value}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-ink/70">Not set</div>
-            )}
-          </div>
+            </div>
+          ) : undefined
         }
       />
 
@@ -846,7 +956,7 @@ function ShopInfoRow({
           ) : hasAnyLink ? (
             links
           ) : (
-            <span className="text-sm text-ink/40">No links yet</span>
+            <span className="text-[12.5px] text-ink/40">No links yet</span>
           )
         }
       />
@@ -872,6 +982,23 @@ function LocationTabs({
   }, []);
   const options = ["All", ...named];
   const count = (loc: string) => filterByLocation(products, loc).length;
+
+  // One rule for every viewer (Muskan, 2026-08-22): one location shows that
+  // location and no filter; many locations show the filter.
+  //
+  // Exact for a BUYER: since T05's G4 ruling (DECISIONS 2026-08-22) an unfiled
+  // product is not served to them at all, so groups and named locations are the
+  // same count and there is never a second thing to filter to.
+  //
+  // ⚠️ Still inexact for a SELLER holding legacy unfiled rows. `filterByLocation`
+  // returns everything for "All" but only matches for a named location, so with
+  // one named location AND a NULL-location product, All ≠ Toronto and this early
+  // return hides a filter that would have filtered. Knowingly accepted at T05's
+  // G4, NOT patched here: the seller-side rule "a product may not be saved
+  // without a location" removes the state rather than counting it, and lands
+  // outside slug 0022. Counting visible groups would also close it — that is the
+  // fallback if the seller-side work slips.
+  if (named.length <= 1) return null;
 
   return (
     <div className="relative w-fit">
@@ -944,7 +1071,7 @@ function linkLabel(l: ShopLink) {
 function LinkRow({ icon, label, url }: { icon: React.ReactNode; label: string; url: string }) {
   return (
     <a href={url} target="_blank" rel="noreferrer"
-       className="flex items-center gap-2 font-bold text-ink hover:text-brand">
+       className="flex items-center gap-1.5 text-[12.5px] font-bold text-ink hover:text-brand">
       {icon} {label}
     </a>
   );
@@ -1220,7 +1347,11 @@ function EmptyShop({ onAdd, canManage }: { onAdd: () => void; canManage: boolean
       <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-brand-soft/50 text-brand-deep">
         <UploadCloud size={30} />
       </div>
-      <h2 className="text-xl font-bold text-ink">Your shop is empty</h2>
+      {/* "Your" is the OWNER's voice. A visitor is not the owner — the heading
+          has to change with the audience, not just the paragraph under it. */}
+      <h2 className="text-xl font-bold text-ink">
+        {canManage ? "Your shop is empty" : "This shop is empty"}
+      </h2>
       <p className="mt-1 max-w-sm text-sm text-ink/55">
         {canManage
           ? "Upload your product list as a CSV, or add a product manually. Then attach photos and your shop goes live."

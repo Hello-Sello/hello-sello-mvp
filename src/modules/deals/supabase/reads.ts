@@ -522,11 +522,19 @@ export async function getPromotion(dealCardId: string): Promise<PromotionView | 
 }
 
 /**
- * The create-form product picker source: the viewer's OWN catalogue (3.5a) —
- * in intent. In reality the product query has no company filter and
- * `product_public_select` is unscoped, so the picker currently returns EVERY
- * company's visible products (known issue, Ayush's lane — flagged, not fixed
- * here); prices/tiers ride along per the current-price view's public arm.
+ * The create-form product picker source: the viewer's OWN catalogue (3.5a).
+ *
+ * The company filter is EXPLICIT and not delegated to RLS. `product` carries
+ * `product_public_select` alongside the owner policy `product_all`, and that
+ * public policy is unscoped by company — so an RLS-only read hands the picker
+ * every *other* company's visible products too. The connection override
+ * (0022/T06) widens that policy again, so the filter is the boundary now.
+ *
+ * `companyId` is resolved from the caller's OWN `person` row, the same way the
+ * sibling reads in this file resolve it — never from an argument, which would
+ * be forgeable. A companyless caller returns `[]` without issuing the query at
+ * all: `.eq("company_id", null)` is not "no rows".
+ *
  * A product with no current price comes back with `unitPrice = null` (a
  * price-less line is allowed, D3). Two flat fetches stitched in JS (same
  * discipline as the other reads); prices come from the single owner
@@ -535,9 +543,22 @@ export async function getPromotion(dealCardId: string): Promise<PromotionView | 
 export async function getOwnCatalog(): Promise<CatalogProduct[]> {
   const supabase = createClient();
 
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return [];
+  const { data: viewerPerson } = await supabase
+    .from("person")
+    .select("company_id")
+    .eq("id", user.id)
+    .single();
+  const viewerCompanyId: string | null = viewerPerson?.company_id ?? null;
+  if (!viewerCompanyId) return [];
+
   const { data: products, error: pErr } = await supabase
     .from("product")
     .select("id, name, cultivar, unit_code, pack_size_grams, thc_percent, cbd_percent, local_code_pzn")
+    .eq("company_id", viewerCompanyId)
     .is("deleted_at", null)
     .order("name", { ascending: true });
   if (pErr) throw pErr;
@@ -567,10 +588,13 @@ export async function getOwnCatalog(): Promise<CatalogProduct[]> {
 /**
  * The batch picker source (BTCH-01, D-07): one product's own lots, read
  * seller-side. The picker is only ever mounted on the seller's screen (Plan 04);
- * RLS `batch_all` (`company_id = current_company_id()`) auto-scopes the read to
- * the caller's own batches, so NO manual company_id filter is needed - the same
- * discipline as `getOwnCatalog`. The buyer never reads `product_batch` (they
- * only ever see the frozen snapshot on the public `deal_line_item`).
+ * `batch_all` is the ONLY policy on `product_batch` and it is company-scoped
+ * (`company_id = current_company_id()`), so RLS alone auto-scopes the read to
+ * the caller's own batches and no manual company_id filter is needed. (Unlike
+ * `getOwnCatalog`, which does filter explicitly - `product` also carries an
+ * unscoped public policy, so RLS there is not a company boundary.) The buyer
+ * never reads `product_batch` at all - they only ever see the frozen snapshot
+ * on the public `deal_line_item`.
  *
  * `product_batch` is in the generated types, so no `as never` cast is needed.
  * The batch carries the lab-MEASURED THC/CBD (the deal truth), distinct from the

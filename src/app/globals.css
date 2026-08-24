@@ -536,3 +536,42 @@ html { scroll-behavior: smooth; }
 @media (prefers-reduced-motion: reduce) {
   .pcard-inner { animation: none; }
 }
+
+/* =====================================================================
+   .speclist-scroll — the product card's spec list (G4 item D, 2026-08-22)
+   The list is taller than the card's fixed 640px, so it scrolls. Two
+   problems were ruled at T05's G4: the bottom row was sliced through its
+   glyphs, and the only "there's more" hint was a 20px fade.
+   - the scrollbar is made permanently visible (macOS hides overlay
+     scrollbars until you scroll, which is why the list read as clipped
+     rather than scrollable). `scrollbar-gutter: stable` reserves its
+     width so rows do not reflow when it appears.
+   - the bottom row is never CUT: the list carries one row of bottom
+     padding, and the fade above it is one row tall, so a partly-visible
+     row dissolves into white instead of ending mid-letter — and at the
+     end of the scroll the padding holds the last row clear of the fade.
+   ===================================================================== */
+.speclist-scroll {
+  scrollbar-gutter: stable;
+  scroll-snap-type: y proximity;
+}
+/* Firefox only. These standard properties must NOT be set unconditionally:
+   Chromium ignores every ::-webkit-scrollbar rule below the moment either one
+   is present, and falls back to a macOS overlay bar that occupies zero width
+   and stays invisible until you scroll — which is the exact problem this class
+   exists to fix. Verified: with `scrollbar-width: thin` set globally the
+   container measured offsetWidth - clientWidth = 0. */
+@supports (-moz-appearance: none) {
+  .speclist-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(0 0 0 / 0.25) transparent;
+  }
+}
+.speclist-scroll::-webkit-scrollbar { width: 6px; }
+.speclist-scroll::-webkit-scrollbar-track { background: transparent; }
+.speclist-scroll::-webkit-scrollbar-thumb {
+  background: rgb(0 0 0 / 0.22);
+  border-radius: 999px;
+}
+.speclist-scroll::-webkit-scrollbar-thumb:hover { background: rgb(0 0 0 / 0.35); }
+.speclist-scroll > * { scroll-snap-align: start; }

@@ -11,7 +11,11 @@ TEST_FILE="supabase/tests/update_deal_draft_test.sql"
 
 if command -v psql >/dev/null 2>&1; then
   DB_URL="$(supabase status -o env 2>/dev/null | grep '^DB_URL=' | cut -d= -f2- | tr -d '"')"
-  exec psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$TEST_FILE"
+  # The file is fed on STDIN (`-f -`), never as `-f <path>`: on a dev machine where
+  # `psql` is the shim (~/.local/bin/psql) that execs psql INSIDE the supabase_db
+  # container, a host-relative path does not exist there and this branch fails with
+  # "No such file or directory". Stdin works for a real psql and for the shim alike.
+  exec psql "$DB_URL" -v ON_ERROR_STOP=1 -f - < "$TEST_FILE"
 fi
 
 DBC="$(docker ps --format '{{.Names}}' | grep '^supabase_db_' | head -1)"

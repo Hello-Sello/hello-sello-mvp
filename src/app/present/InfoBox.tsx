@@ -31,6 +31,7 @@ export function InfoBox({
   subtitle,
   preview,
   more,
+  moreOnOverflow = false,
   className = "",
 }: {
   testId?: string;
@@ -39,11 +40,31 @@ export function InfoBox({
   preview: React.ReactNode;
   /** Overflow content revealed on expand. When absent, the box has no expander. */
   more?: React.ReactNode;
+  /** TRUE = the expander appears only when `preview` is actually clamped, i.e.
+   *  `more` is the same text spelled out in full (the About box). FALSE = `more`
+   *  holds DIFFERENT content the preview never showed (the Location box's
+   *  warehouse list), so the expander must always be offered. */
+  moreOnOverflow?: boolean;
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const hasMore = Boolean(more);
+  const previewRef = useRef<HTMLDivElement>(null);
+  // Whether the clamped preview is actually cutting text off. Measured, not
+  // guessed — a short description must not offer a "More" that reveals nothing.
+  const [clipped, setClipped] = useState(false);
+  const hasMore = Boolean(more) && (!moreOnOverflow || clipped);
+
+  useEffect(() => {
+    if (!moreOnOverflow) return;
+    const el = previewRef.current;
+    if (!el) return;
+    const measure = () => setClipped(el.scrollHeight - el.clientHeight > 1);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [moreOnOverflow, preview]);
 
   // Click-away collapse. Attached only while open, AFTER the opening click has
   // finished bubbling — combined with stopPropagation on the openers, the panel
@@ -63,16 +84,16 @@ export function InfoBox({
       data-testid={testId}
       // relative z-30 → own stacking context ABOVE the flip-card grid (Bug 2). Solid
       // white when open so the expanded panel is never see-through / behind a card.
-      className={`relative z-30 flex flex-col rounded-3xl p-5 ring-1 ring-ink/5 transition-shadow ${
+      className={`relative z-30 flex flex-col rounded-3xl p-4 ring-1 ring-ink/5 transition-shadow ${
         open ? "bg-white shadow-xl" : "glass"
       } ${className}`}
       onClick={() => {
         if (hasMore && !open) setOpen(true);
       }}
     >
-      {title && <h3 className="text-lg font-bold tracking-tight text-ink">{title}</h3>}
+      {title && <h3 className="text-sm font-bold tracking-tight text-ink">{title}</h3>}
       {subtitle}
-      <div className="mt-1 min-h-0">{preview}</div>
+      <div ref={previewRef} className="mt-1 min-h-0">{preview}</div>
 
       {hasMore && !open && (
         <button
@@ -81,7 +102,7 @@ export function InfoBox({
             e.stopPropagation();
             setOpen(true);
           }}
-          className="mt-auto inline-flex items-center gap-1 self-center rounded-full bg-brand/[0.07] px-3 py-1.5 pt-2 text-[11px] font-bold text-brand-deep hover:bg-brand/10"
+          className="mt-1.5 inline-flex items-center gap-1 self-start rounded-full bg-brand/[0.07] px-2.5 py-1 text-[10.5px] font-bold text-brand-deep hover:bg-brand/10"
         >
           More <ChevronDown size={13} />
         </button>

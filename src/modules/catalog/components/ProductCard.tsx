@@ -24,6 +24,7 @@ import { createPortal } from "react-dom";
 import {
   Heart, RotateCw, Minus, Plus, ShoppingCart, EyeOff, Eye,
   GripVertical, Trash2, ChevronLeft, ChevronRight, ChevronDown, X, Pencil,
+  MessageSquareQuote, Check,
 } from "lucide-react";
 import type { ShopProduct } from "../shop";
 import { packSizes, resolveTierPrice } from "../pricing";
@@ -170,6 +171,8 @@ export function ProductCard({
   onBatchChange,
   onBatchRemove,
   onReorder,
+  viewerIsOwner = true,
+  onRequestPricing,
 }: {
   product: ShopProduct;
   companyId?: string;
@@ -192,6 +195,23 @@ export function ProductCard({
    *  this card's id). Only same-location drops reach here — a cross-shop drop
    *  bubbles to the LocationGroup, which moves the location instead. Client-only. */
   onReorder?: (draggedId: string, targetId: string) => void;
+  /** Does the viewer own this product's shop? Gates the buy row (ADR-0005 §6).
+   *  DEFAULTS TO `true` — deliberately the privileged value, so that a caller
+   *  which does not pass it behaves exactly as the card does today (every
+   *  read-mode card renders the buy row). Defaulting to `false` would silently
+   *  strip buy rows off price-hidden products on `/present`. The cost is the
+   *  usual one for a privileged default: a future buyer-facing caller that
+   *  forgets the prop gets owner behaviour with every test green. */
+  viewerIsOwner?: boolean;
+  /** Buyer asks the seller for a price on THIS product (price_public = false).
+   *  The card only reports the intent; the WRITE lives with the caller — this
+   *  card owns no server action. The caller MUST return the outcome, so the card
+   *  can tell "landed" from "failed" and render the right thing in the ask's
+   *  slot. Fire-and-forget is deliberately not expressible: a caller returning
+   *  nothing would leave the card no choice but to assume "landed", which is a
+   *  green confirmation for an ask that may never have landed — the exact defect
+   *  this feedback exists to prevent. */
+  onRequestPricing?: (productId: string) => Promise<{ ok: true } | { error: string }>;
 }) {
   const [flipped, setFlipped] = useState(false);
   // Highlights this card as the drop target while a sibling from the same shop is
@@ -246,6 +266,35 @@ export function ProductCard({
   // list, laid out full-size — feedback was that the cramped inline inputs are
   // hard to see/use. Reuses the same onEditField draft, not a second write path.
   const [detailsOpen, setDetailsOpen] = useState(false);
+  // The pricing ask's outcome, card-local like `flipped` / `qty` / `pricesOpen`.
+  // Nothing on the server re-derives it, so a reload restores the button — which
+  // is correct: the dup-guard is server-side, and a second ask is refused there
+  // rather than by the client hiding a control.
+  const [asked, setAsked] = useState(false);
+  const [asking, setAsking] = useState(false);
+  const [askError, setAskError] = useState<string | null>(null);
+
+  async function askForPricing() {
+    if (!onRequestPricing) return;
+    setAsking(true);
+    setAskError(null);
+    try {
+      const res = await onRequestPricing(p.id);
+      if ("error" in res) {
+        setAskError(res.error);
+        return;
+      }
+      setAsked(true);
+    } catch {
+      // A REJECTED promise — transport failure, a 500 out of the Server Action,
+      // a throw inside the caller. Without this the button would stay disabled
+      // with no message: a permanently dead control.
+      setAskError("We couldn't send that request. Please try again.");
+    } finally {
+      // In `finally` so every path re-enables the button, including the throw.
+      setAsking(false);
+    }
+  }
 
   async function toggleVisible() {
     setBusy(true);
@@ -338,7 +387,14 @@ export function ProductCard({
       kind: "bool", key: "resealable", label: "Resealable",
       display: p.resealable == null ? "n.a." : p.resealable ? "Yes" : "No",
     },
-    { kind: "text", key: "supplier_product_code", label: "Supplier code", display: p.supplier_product_code ?? "n.a." },
+    // OWNER ONLY. `supplier_product_code` is seller-confidential (G3), so the
+    // buyer's RPC never projects it — leaving the row in rendered
+    // `Supplier code — n.a.` on every buyer card, making a WITHHELD field
+    // indistinguishable from an unset one. Ruled at T05's G4 (2026-08-22):
+    // a confidential field should not advertise its own existence.
+    ...(viewerIsOwner
+      ? ([{ kind: "text", key: "supplier_product_code", label: "Supplier code", display: p.supplier_product_code ?? "n.a." }] as SpecRowDef[])
+      : []),
   ];
   // The strip: label · display value · the draft key + fallback its input edits.
   const strip: [string, NumFieldKey, number | null][] = [
@@ -349,6 +405,18 @@ export function ProductCard({
     ["Terp%", "terpene_percent", p.terpPercent],
   ];
   const priceShown = !editing && pricePublic && p.price_per_gram != null;
+  // The footer's one gate group (read them together, they are one decision).
+  // `canBuy`: the owner keeps their controls on their own unpriced/hidden
+  // products; a buyer only gets them when a price is actually on screen.
+  const canBuy = !editing && (priceShown || viewerIsOwner);
+  // `canAsk` keys off `pricePublic`, NOT off `!priceShown` — and the two are
+  // therefore NOT strict complements. `priceShown` is also false when the price
+  // is merely UNSET, and "price on request" (`price_public = false`) vs "price
+  // not set yet" (`price_public = true`, null price) is a distinction the DB
+  // keeps on purpose (`20260816190000:96-97`) and ADR-0005 `:566-567` forbids
+  // collapsing. Consequence, intended: for a non-owner on a public-but-unpriced
+  // product NEITHER control renders. Do not "fix" that into a complement.
+  const canAsk = !editing && !viewerIsOwner && !pricePublic;
   // The open prices panel swaps in for the availability + buy rows (see the
   // footer) — one flag so the panel and the rows it replaces can't disagree.
   const panelShowing = pricesOpen && priceShown && p.tiers.length > 0;
@@ -472,7 +540,10 @@ export function ProductCard({
             ) : (
               <>
                 {/* only status/visibility badges sit on the image */}
-                {!p.profile_visible && (
+                {/* `=== false`, not `!…`: `profile_visible` is optional (seller
+                    state), and ABSENT must not read as hidden — a buyer-facing
+                    mapper never carries it. */}
+                {p.profile_visible === false && (
                   <div className="absolute left-2.5 top-2.5 flex items-center gap-1 rounded-full bg-ink/80 px-2.5 py-1 text-[10px] font-bold text-white">
                     <EyeOff size={11} /> Hidden
                   </div>
@@ -550,7 +621,7 @@ export function ProductCard({
                 fixed-height card (G4 round 2). The bottom fade cues that the
                 list still scrolls past that floor. */}
             <div className="relative mt-1.5 flex min-h-[80px] flex-1 flex-col">
-              <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3.5">
+              <div className="speclist-scroll flex min-h-0 flex-1 flex-col overflow-y-auto px-3.5 pb-7">
                 {specRows.map((row) => (
                   <div key={row.label} className="flex items-start gap-2 border-b border-ink/10 py-1.5 text-xs">
                     <span className="w-[78px] shrink-0 font-medium text-ink-muted">{row.label}</span>
@@ -578,10 +649,14 @@ export function ProductCard({
                   />
                 )}
               </div>
-              {/* Soft scroll cue — a bottom fade (no button/chevron) that hints the
-                  spec list continues below the fold. Non-interactive; the clamped
-                  lineage row is the prototype's other "there's more" signal. */}
-              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-5 bg-gradient-to-t from-white via-white/70 to-transparent" />
+              {/* Bottom fade, ONE ROW tall (G4 item D). It is not the scroll
+                  affordance — `.speclist-scroll` keeps a real scrollbar visible
+                  for that. Its job is that a partly-visible row dissolves into
+                  white instead of being cut through its glyphs, which is how the
+                  Lineage row read at rest. Pairs with the list's `pb-7`: at the
+                  end of the scroll that padding holds the last row clear of this
+                  gradient, so nothing is ever hidden by it. */}
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-7 bg-gradient-to-t from-white via-white to-transparent" />
             </div>
 
             {/* footer: pack bubbles + price, then availability + stepper + Add.
@@ -749,10 +824,11 @@ export function ProductCard({
                   )
                 )}
               </div>
-              {/* Buy row — read mode only. In edit mode it was dead chrome (Add
-                  was rendered disabled) and its ~48px is exactly what the tier
+              {/* Buy row — read mode, and only where the viewer may actually buy
+                  (see `canBuy`). In edit mode it was dead chrome (Add was
+                  rendered disabled) and its ~48px is exactly what the tier
                   editor needs inside the fixed-height footer (G4 feedback). */}
-              {!editing && (
+              {canBuy && (
                 <div className="flex gap-2">
                   <div className="flex items-center rounded-full bg-white shadow-[inset_0_0_0_1px_rgba(20,10,16,0.15)]">
                     <button
@@ -780,9 +856,51 @@ export function ProductCard({
                   </button>
                 </div>
               )}
+              {/* Ask row — the seller DELIBERATELY hid this price, so the buyer
+                  gets the one action that makes sense: ask for it. Occupies the
+                  same footer slot the buy row would. NOT the buy row's strict
+                  complement — see `canAsk`: a merely-unpriced public product
+                  renders neither, on purpose (ADR-0005 §6). The accessible name
+                  carries the product name so the ask names its subject (AC 3).
+                  The handler is wired — `ShopView` passes `onRequestPricing`. */}
+              {canAsk &&
+                (asked ? (
+                  /* The ask landed. A non-interactive confirmation takes the
+                     button's own slot — there is nothing left to click, and
+                     there is no toast primitive in src/shared/ui/ to invent
+                     one for. */
+                  <div
+                    data-testid="pricing-requested"
+                    className="flex w-full items-center justify-center gap-1.5 rounded-full bg-success/15 py-2 text-[12.5px] font-bold text-success"
+                  >
+                    <Check size={14} /> Pricing requested
+                  </div>
+                ) : (
+                  <div>
+                    <button
+                      type="button"
+                      data-testid="request-pricing"
+                      aria-label={`Request pricing for ${p.name}`}
+                      onClick={askForPricing}
+                      disabled={asking}
+                      className="flex w-full items-center justify-center gap-1.5 rounded-full bg-white py-2 text-[12.5px] font-bold text-brand-deep shadow-[inset_0_0_0_1px_rgba(20,10,16,0.15)] hover:bg-brand/5 disabled:opacity-60"
+                    >
+                      <MessageSquareQuote size={14} /> Request pricing
+                    </button>
+                    {/* The ask failed. The button stays above, still clickable —
+                        a retry is the only useful next move. */}
+                    {askError && (
+                      <p className="mt-1 text-center text-[11px] font-medium text-danger">{askError}</p>
+                    )}
+                  </div>
+                ))}
               {/* Batch selection lives in the footer, beside Add-to-basket — not
                   inside the scrollable spec list above (feedback: it was easy to
-                  miss buried in the scroll). Owner-only, view mode. */}
+                  miss buried in the scroll). View mode only. NOT owner-gated,
+                  despite what this comment used to claim: it is DATA-gated, and
+                  buyers see no lots only because the buyer RPC returns none. If
+                  that ever changes, lot data reaches buyers with nothing in this
+                  card stopping it — the gate belongs here or in T05's mapper. */}
               {!editing && p.batches.length > 0 && <BatchPicker product={p} />}
             </div>
           </div>

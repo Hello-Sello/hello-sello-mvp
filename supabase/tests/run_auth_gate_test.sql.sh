@@ -13,7 +13,11 @@ if command -v psql >/dev/null 2>&1; then
     echo "ERROR: could not get DB_URL from supabase status (is the local stack running?)" >&2
     exit 1
   fi
-  exec psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$TEST_FILE"
+  # The file is fed on STDIN (`-f -`), never as `-f <path>`: on a dev machine where
+  # `psql` is the shim (~/.local/bin/psql) that execs psql INSIDE the supabase_db
+  # container, a host-relative path does not exist there and this branch fails with
+  # "No such file or directory". Stdin works for a real psql and for the shim alike.
+  exec psql "$DB_URL" -v ON_ERROR_STOP=1 -f - < "$TEST_FILE"
 fi
 
 DBC="$(docker ps --format '{{.Names}}' | grep '^supabase_db_' | head -1)"

@@ -10,3 +10,4 @@
 | [0002](0002-deal-card-data-model.md) | The deal card has two visibility classes: shared/held and private/immediate | deals · RLS · per-company data |
 | [0003](0003-deal-basket-reusable-form.md) | One reusable basket/deal form serves both sides | deals · basket · UI |
 | [0004](0004-tier-ladder.md) | Volume tiers are child rows of the price row, replacing the single bundle bracket | pricing · catalog · RLS · RPCs · basket · deals |
+| [0005](0005-buyer-shop-view.md) | The buyer's shop IS the seller's shop — one component wrapped, and one connection predicate written once and applied at all seven visibility gates | catalog · RLS · RPCs · basket · Discover · UI |

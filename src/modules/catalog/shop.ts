@@ -3,8 +3,12 @@
  * storefront — profile + products with their company-wide price. RLS scopes
  * everything to the caller's own company, so no company id is passed in.
  *
- * (Browsing *another* company's public shop — /present/[companyId] — comes later;
- * the public-read RLS from the foundation migration already supports it.)
+ * Browsing *another* company's public shop is a SEPARATE read, and it does NOT
+ * live here: it goes through `get_discoverable_shop` and the mapper in
+ * `src/app/discover/companies.ts`, rendering at /discover/[companyId] (slug 0022).
+ * There is deliberately ONE read door per surface — see ARCHITECTURE-NOTES.md:423.
+ * (The old note here said that read "comes later" at /present/[companyId]; both
+ * the timing and the route were wrong by the time T03 opened this file.)
  */
 import { createClient } from "@/shared/db/server";
 import { getCurrentUser } from "@/shared/auth";
@@ -69,7 +73,11 @@ export type ShopProduct = {
    *  set (D-01, F-02), otherwise the derived sum of the representative batch's
    *  terpene rows. Cost/COGS is never surfaced. */
   terpPercent: number | null;
-  profile_visible: boolean;
+  /** Seller-side shelf state: whether the product shows in the owner's own shop
+   *  listing. OPTIONAL because it is seller state — a buyer-facing mapper never
+   *  has it and must never render it. Absent ≠ hidden: only an explicit `false`
+   *  means the seller hid it (see `ProductCard.tsx`'s "Hidden" badge guard). */
+  profile_visible?: boolean;
   price_public: boolean;
   price_per_gram: number | null;
   /** BRIDGE (retired by T04/T05, columns dropped in C): rung 1 of `tiers`
@@ -120,7 +128,7 @@ export type Shop = {
 
 /** Pull the links array out of the company's jsonb metadata, tolerating any
  *  legacy/foreign shape (returns [] rather than throwing on unexpected data). */
-function parseLinks(metadata: unknown): ShopLink[] {
+export function parseLinks(metadata: unknown): ShopLink[] {
   const raw = (metadata as { links?: unknown } | null)?.links;
   if (!Array.isArray(raw)) return [];
   return raw.filter(
@@ -131,7 +139,7 @@ function parseLinks(metadata: unknown): ShopLink[] {
 /** Extra pack sizes stashed in `product.metadata.pack_sizes` (v0, no schema
  *  change). Tolerant of any legacy/foreign shape — returns [] rather than
  *  throwing on unexpected data. */
-function parsePackSizes(metadata: unknown): number[] {
+export function parsePackSizes(metadata: unknown): number[] {
   const raw = (metadata as { pack_sizes?: unknown } | null)?.pack_sizes;
   if (!Array.isArray(raw)) return [];
   return raw.filter((n): n is number => typeof n === "number" && Number.isFinite(n) && n > 0);
