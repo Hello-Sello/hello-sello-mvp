@@ -130,11 +130,23 @@ Same rule we already use for reviewers, applied to the visual gate:
 
 | Diff touches | G4 |
 |---|---|
-| **anything rendered** — a component, a template, CSS, copy | **mandatory, every lane** |
-| backend only — migration, RPC, action, job | acceptance criteria replayed on real data |
+| **anything rendered** — a component, a template, CSS, copy | **mandatory, every lane** — a human stop |
+| backend only — migration, RPC, action, job | acceptance criteria replayed on real data — **closes without a human stop** |
 
 For a spacing fix that's one screenshot. It costs nothing, and it is the cheapest
 insurance in the system.
+
+**Amended 2026-08-25 (Muskan), after slug 0022 spent ~30 rulings across 8 per-ticket
+G4s.** The routing above was already the rule; `/build` step 10 said *"STOP at G4"*
+unconditionally and overrode it, so a backend-only ticket still cost a ruling. Step 10
+now obeys this table. A backend-only ticket closes on its criteria replay plus green
+tests + `critic` + `security`, and is marked `G4 auto` in the gate log.
+
+**Three carve-outs escalate a backend-only ticket to Muskan anyway:** an outstanding
+builder REJECTION, a blocking `security` finding, or behaviour the written criteria do
+not cover. These are chosen from evidence, not caution — every decisive escalation on
+slug 0022 came through one of them (`security` on T09; T08 widening its own criteria),
+while the routine per-ticket stops caught nothing that the automated gate had not.
 
 ---
 
