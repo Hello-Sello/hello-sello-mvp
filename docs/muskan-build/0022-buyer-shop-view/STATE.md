@@ -8,13 +8,27 @@ stage:  triage ✅ · spec ✅ (G1) · prototype ✅ (G2) · design ✅ (G3 2026
         **T09 ✅ G4 PASSED 2026-08-23 — Muskan: "pass" (all 5 items ruled).**
         **T06 ✅ G4 PASSED 2026-08-23 — Muskan: *"pass"* (all 6 items ruled). AC 6 PROVEN
         live: connection reveals the product, never the price.**
-        **▶ T07 ⏸ G4 PART-RULED 2026-08-23 — 3 of 8 items ruled and BUILT (fence amended ·
-        `authenticated` TRUNCATE closed · refusal refetches). 4 still owed → `G4-T07.md`
-        items 3, 5, 6, 8. None block T08.**
+        **T07 ✅ G4 PASSED 2026-08-23 — all 8 items ruled.** (This line read
+        *"PART-RULED, 4 still owed"* until 2026-08-24; the gate log's later, more specific entry
+        supersedes it. Reconciled at `/ship` after `rollup` flagged the two as contradictory —
+        **contradiction #2 of the 11 in `ROLLUP.md` §D**.)
         **T08 ✅ G4 PASSED 2026-08-23 — Muskan: *"fine, pass it"*. All 8 deviations accepted;
         the scope beyond the written criteria was ruled sound because the ledger could not be
         used for the push without it.**
-        **▶ ✅ BUILD-COMPLETE 2026-08-23. ALL 8 TICKETS THROUGH G4. NEXT SESSION: `/ship`.**
+        **✅ BUILD-COMPLETE 2026-08-23. ALL 8 TICKETS THROUGH G4.**
+ship:   **✅ SHIPPED 2026-08-24** — security round 4 found + closed a live leak (the basket door
+        disagreed with the shop door on **three** terms); six migrations pushed with
+        `--include-all` and verified on prod; **the `relationship` privilege escalation is
+        CLOSED**; S8 80 → 85, all +5 this batch's own definer functions; PR #163 → `dev`,
+        PR #164 → `main`, Vercel production deploy **success**. Full record below.
+        ⚠️ **A broken window existed between the migration push and the `main` merge** —
+        connection-accept failed on production for that interval. Same-deploy on this repo
+        means **`dev`→`main`**, not `dev`.
+        **▶ G5 OWED — Muskan's live walk. Staged at `G5-WALK.md`, NOT run, NOT passed.**
+        `rollup` run 2026-08-24 → `ROLLUP.md`: per-stage verdicts, **6 tier rulings owed to
+        Muskan**, **11 internal contradictions** in this file's own gate log (#2 reconciled
+        above; the other 10 stand). ⚠️ `plan-checker` is **still unregistered**.
+        ⚠️ **Linear still owed for T09–T17** (MCP auth blocked).
         Cloud pre-checks DONE: **S6** confirms **six** local-only migrations (`--include-all`
         required — `20260607090000` is back-dated and sorts before everything on cloud);
         **S8** baseline **80 findings**, none caused by this slug — re-run and diff after the push.
