@@ -211,7 +211,34 @@ is not this slug's job, but nothing else is tracking it.
   Checker verified CLEAN: ADR §3 fence, STATE.md Deferred list, the agent split
   (`test-writer` owns all `supabase/tests/**`, builder owns source only), C4's mechanics,
   and C6/C7's expected RLS outcomes.
-  ▶️ **`test-writer` spawned on the rev-2 plan.** *(An earlier line here said the build was
+  ✅ **`test-writer` done, two rounds (`7fd33fc`).** Four files: the new suite
+  `send_deal_c2c_announce_test.sql` (C1-C9) + its runner, and the two deliberate rewrites.
+  **Case order verified by me as built: C1→C2→C3→C6→C7→C8→C9→C4→C5** — the soft-delete runs
+  AFTER the recipient-read cases, and C6 is pinned BOTH ways (C1's captured `_pills` id **and**
+  `t.deleted_at IS NULL`). (2a) calls `deliver_deal` **twice**, with the L-044 reasoning written
+  into the comment so it cannot be undone by accident.
+  🔴 **Round 2 was a stale-comment sweep, and it found more than I did.** I caught
+  `claim_deal_ticket_test.sql:3` — the file's TITLE line still asserting *"the ticket is written
+  by send_deal"* — by reading the top of the file rather than the diff. I sent it back asking for
+  a scan of BOTH files for siblings, and it found **two more**: `deliver_deal_test.sql:1-27`'s
+  header bullet (1), and `:174-178`'s WR-01 comment naming `send_deal` as a live `deliver_deal`
+  caller when T01 deletes that call entirely. **Three stale lines, one found by diff-reading and
+  two only by whole-file reading.** This is exactly `L-045`'s class, inside the same session that
+  wrote `L-045`. My own closing sweep confirms every surviving mention now states the new
+  behaviour.
+  📌 **Honest gap the agent flagged rather than faking:** AC 9's repo-level half (grep for a NEW
+  migration redefining `deliver_deal`) is not expressible as a SQL assertion and has no home under
+  a test-writer fence. **It is MINE to run at the step-10 replay** — recorded so it is not lost.
+  ✅ **`L-045` + `L-046` WRITTEN to `docs/agents/LEARNINGS.md`** (Muskan's yes, 2026-08-25). Both
+  were caught by the parallel security session, both on claims that never reached an artifact:
+  L-045 = a discharged TODO comment cited as fact about live schema; L-046 = recommending
+  `security_invoker` on a view `ADR-0004:239` had already rejected **by name**, naming the exact
+  failure (it would zero out every buyer read). L-046's root cause was sharpened by the peer:
+  **not "outside my fence" — neither of us ran a query before recommending.**
+  ⏳ **NEXT: RED verification, and it is the orchestrator's job, not `test-writer`'s (L-023).**
+  Blocked only on the shared local DB, which the security session holds by agreement. Protocol
+  agreed: each session resets from its own tree immediately before its own run and assumes nothing
+  about the state the other left. *(An earlier line here said the build was
   PAUSED pending Muskan's yes on `L-045` — that was over-cautious and is corrected: the
   LEARNINGS entry does not gate the ticket. The question stays open; the build does not wait
   on it. Everything that does not depend on the answer proceeds.)*
