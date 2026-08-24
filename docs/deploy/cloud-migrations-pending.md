@@ -23,9 +23,11 @@
 
 ---
 
-## ⚠️ PENDING 2026-08-24 — T11 table privilege lockdown (ONE migration)
+## ✅ APPLIED 2026-08-25 (was PENDING 2026-08-24, Muskan) — T11 table privilege lockdown (ONE migration)
 
-**Status: LOCAL ONLY. Not pushed. Built on `claude/muskan/work`, deliberately unreleased.**
+**Status: LIVE ON PRODUCTION.** Pushed 2026-08-25 with `supabase db push --linked` (plain — no
+`--include-all`; the filename sorts after cloud's tip `20260823100000`), together with T13's
+migration in the same push. ~~LOCAL ONLY. Not pushed.~~
 
 | # | migration | ticket |
 |---|---|---|
@@ -59,11 +61,26 @@ the mechanism **fires** (creates a throwaway table, reads the ACL back) rather t
 cell 5 reproduces the actual exploit (anon TRUNCATE of a self-seeded `audit_log`). Verified on a
 clean `supabase db reset`: **41/41 SQL runners**, `tsc` 0, unit 490/490.
 
+**✅ Verified ON PRODUCTION after the push (2026-08-25), by query, not by assumption:**
+
+| claim | before | after |
+|---|---|---|
+| `anon` privileges on `public` tables | **614** (REFERENCES 89, TRIGGER 89, TRUNCATE 89, INSERT 88, DELETE 88, UPDATE 86, SELECT 85) | **0 — the role returns no rows at all** |
+| `authenticated` TRUNCATE / TRIGGER | 91 / 92 | **0 / 0** |
+| `authenticated` SELECT/INSERT/UPDATE/DELETE | 93 / 91 / 88 / 91 | **unchanged** — 93 / 91 / 88 / 91 |
+| the public route still works with anon holding nothing | — | `get_public_profile('clara-vogt')` as `anon` → **1 row** |
+| the mechanism is installed | — | `revoke_anon_privileges_on_new_table_trg` present, `ddl_command_end`, enabled |
+
+The push emitted `NOTICE: event trigger "revoke_anon_privileges_on_new_table_trg" does not exist,
+skipping` — that is the migration's own idempotent DROP running on a database that had never seen
+it. Expected, not a warning.
+
 ---
 
-## ⚠️ PENDING 2026-08-24 — T13 product column confidentiality (ONE migration)
+## ✅ APPLIED 2026-08-25 (was PENDING 2026-08-24, Muskan) — T13 product column confidentiality (ONE migration)
 
-**Status: LOCAL ONLY. Not pushed. Built on `claude/muskan/work`, deliberately unreleased.**
+**Status: LIVE ON PRODUCTION.** Pushed 2026-08-25 with `supabase db push --linked`, in the same push
+as T11's migration. ~~LOCAL ONLY. Not pushed.~~
 
 | # | migration | ticket |
 |---|---|---|
@@ -98,6 +115,24 @@ Verified on a clean `supabase db reset`: **40/40 SQL runners**, `tsc` 0, unit 49
 `connection_visibility_override_test.sql` needed two assertions flipped — its `[door a]` cells
 asserted the base-table read this migration removes; the change is annotated in place, and a warning
 was added to that file so a green `[door a]` line is not mistaken for live signal.
+
+**✅ Verified ON PRODUCTION after the push (2026-08-25), impersonating a real verified buyer**
+(`Nord Apotheke Berlin`, active relationship with `Canadian Craft Cannabis Company GmbH`, via
+`set local role authenticated` + `request.jwt.claims`):
+
+| claim | result |
+|---|---|
+| the buyer's base-table read of the seller's `product` | **0 rows, 0 `rrp_per_gram`** (the leak this ticket exists to close) |
+| the buyer's entitled read still arrives | `get_discoverable_shop(<Canadian Craft>)` → **4 products, 4 with a price** |
+| `public.product` policies | only **`product_all`** remains — `product_public_select` is gone |
+| the four borrowing policies re-pointed, not blanked | `pricelist_item_public_select` and `plit_public_select` → `product_price_visible_to_caller()`; `product_image_public_select` and `product_media_public_select` → `product_visible_to_caller()` |
+
+**⚠️ The advisor prediction in this entry was one short.** It said *"expect
+`authenticated_security_definer_function_executable` **85 → 86** (one new definer function,
+`product_price_visible_to_caller`)"*. Measured: **85 → 87**, because the migration adds **two**
+definer helpers, not one — `product_visible_to_caller` as well. The substantive half of the
+prediction held: **no new ERROR** (still the one pre-existing `security_definer_view`), and the
+class breakdown after the push is 1 ERROR / 84 WARN / 1 INFO.
 
 ---
 
