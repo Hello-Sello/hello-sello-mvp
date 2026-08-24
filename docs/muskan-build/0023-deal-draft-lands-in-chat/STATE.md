@@ -286,9 +286,13 @@ to it.** Carry this forward.
 
 ## LEARNINGS candidate — owed to Muskan at wrap, NOT yet written
 
-**A candidate entry (would be `L-047`), surfaced 2026-08-25 by the parallel security session.**
-Recorded here so it survives to wrap; **not written — Muskan approves LEARNINGS entries and two
-were already taken this session (`L-045`, `L-046`). Queuing a third mid-build is noise.**
+✅ **RESOLVED 2026-08-25 — `L-047` IS CLAIMED BY THE PARALLEL SECURITY SESSION, not by me.**
+It is their catch, their diagnosis, and they are putting it to Muskan themselves; the number
+follows the author. **This session must NOT write `L-047` at wrap** — doing so would file their
+entry underneath them. My claimed range is `L-045`-`L-046` and nothing else.
+
+**A candidate entry, surfaced 2026-08-25 by the parallel security session.**
+Recorded here so it survives to wrap; **not written by me.**
 
 **The insight, in one sentence:** *in both of the day's test traps, a green assertion was borrowing
 its truth from outside itself, and neither suite could tell you it was wrong from the inside.*
@@ -310,6 +314,25 @@ different axis: a **cross-door** divergence, which needs an outside oracle to di
 **Proposed trigger:** *a test goes red on a security or visibility fix, and the fix looks like the
 thing to soften.* **Proposed rule:** check the claim against an **independent door** before touching
 either side — weakening the fix preserves the bug and the green tick together.
+
+### ⚠️ The bigger item the numbering question exposed — FOR MUSKAN, at wrap
+
+`docs/agents/LEARNINGS.md` is an **append-only shared file with a monotonic key and no
+allocator**, written by two sessions on divergent bases. The security session's branch is based
+on `7529d0a` and tops out at `L-044`, so **the next free number LOOKS like `L-045` from there** —
+while `L-045` and `L-046` were already written and pushed here in `7fd33fc`. Two appends in
+different places **merge clean**; git flags nothing; the file silently ends up with two `L-045`s.
+
+**The number is the symptom, not the problem: each session assumed it was the only writer.**
+That is **`L-040`'s shape a second time — and it SURVIVED the move to worktrees**, because a
+worktree isolates the *tree*, not the *convention*. `L-040`'s recorded lesson ("parallel sessions
+need separate branches or worktrees, not a sync file") is therefore **incomplete**: separate
+worktrees fix concurrent writes to the same file and do nothing for a shared sequential key.
+
+**Caught before collision, by the other session asking rather than assuming.** Two options, and
+**deliberately NOT decided unilaterally** — a numbering convention should not be settled by
+whichever session noticed it first: (a) an allocation rule (claim in the sync file before
+writing), or (b) stop using sequential integers for entry ids.
 
 ## Open, not blocking
 
