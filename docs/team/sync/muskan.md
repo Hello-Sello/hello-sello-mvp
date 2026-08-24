@@ -5,9 +5,15 @@
 
 ---
 
-**Last updated:** 2026-08-25 (session 87 `design_0023` — **G3 PASSED, ADR 0006 accepted**)
-**Status:** offline — session closed.
-**Shared files locked:** none — none taken, none held. This session wrote `docs/architecture/adr/0006-*`
+**Last updated:** 2026-08-25 (session 88 `deal_land` — **/build T01 · HEL-63** in progress)
+**Status:** active — building slug 0023 ticket T01 (`send_deal` announces a company-addressed deal in chat).
+**Shared files locked:** `src/modules/deals/actions.ts` (docstring only, `:357-366`).
+Also writing, NOT shared: `supabase/migrations/20260825090000_send_deal_c2c_announce.sql` (new),
+`supabase/tests/send_deal_c2c_announce_test.sql` + runner (new),
+`supabase/tests/deliver_deal_test.sql`, `supabase/tests/claim_deal_ticket_test.sql`,
+`docs/muskan-build/0023-deal-draft-lands-in-chat/**`.
+
+**Previous (session 87):** shared files locked: none — none taken, none held. This session wrote `docs/architecture/adr/0006-*`
 (new file), `ADR-INDEX.md`, `docs/agents/LEARNINGS.md` (L-042..L-044 appended), the per-slug folder,
 and `.planning/` (gitignored). **Every commit was `git add <named paths>` — never `-A`, never `.`**
 
