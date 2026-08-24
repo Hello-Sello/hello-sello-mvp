@@ -15,6 +15,7 @@ import { useState } from "react";
 import type { DiscoverCompanyRequest } from "../companyRequests";
 import type { DiscoverPersonRequest } from "../incomingPersonRequests";
 import { acceptItem, declineItem } from "@/modules/connect/supabase/inbox";
+import { requestActionError } from "@/modules/connect/lib/requestActionError";
 import { acceptPersonRequest, declinePersonRequest } from "../personActions";
 import { SectionCard } from "./SectionCard";
 
@@ -90,13 +91,22 @@ export function RequestsSection({
   // accepted/declined item stays gone even before the server refresh catches up.
   const [handled, setHandled] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState<string | null>(null);
+  // T10: both paths could fail silently — the company one had try/finally and no
+  // catch (an unhandled rejection), the person one read `res.error` only to
+  // decide whether to hide the row and then threw the reason away. Either way
+  // the user clicked Accept and watched nothing happen.
+  const [error, setError] = useState<string | null>(null);
   const markHandled = (id: string) => setHandled((h) => new Set(h).add(id));
 
   async function handleCompany(id: string, action: "accept" | "decline") {
     setBusy(id);
+    setError(null);
     try {
       await (action === "accept" ? acceptItem(id) : declineItem(id));
       markHandled(id);
+    } catch (e) {
+      console.error("discover: connection request action failed", e);
+      setError(requestActionError(e));
     } finally {
       setBusy(null);
     }
@@ -104,9 +114,16 @@ export function RequestsSection({
 
   async function handlePerson(id: string, action: "accept" | "decline") {
     setBusy(id);
+    setError(null);
     const res = await (action === "accept" ? acceptPersonRequest(id) : declinePersonRequest(id));
     setBusy(null);
-    if (!("error" in res)) markHandled(id);
+    if ("error" in res) {
+      // Already a finished sentence — personActions phrases its own failures.
+      console.error("discover: person request action failed", res.error);
+      setError(res.error);
+      return;
+    }
+    markHandled(id);
   }
 
   const company = companyRequests.filter((c) => !handled.has(c.itemId));
@@ -115,6 +132,11 @@ export function RequestsSection({
 
   return (
     <SectionCard title="Connection requests" count={total} fill>
+      {error && (
+        <p role="alert" className="mb-1 text-sm text-red-600">
+          {error}
+        </p>
+      )}
       {total === 0 ? (
         <p className="flex h-full items-center justify-center py-10 text-center text-[13px] text-ink-muted">
           No pending requests.

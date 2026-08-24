@@ -23,7 +23,149 @@
 
 ---
 
-## ⚠️ PENDING (2026-08-20, Muskan) — slug 0022 buyer-shop-view
+## ✅ APPLIED 2026-08-25 (was PENDING 2026-08-24, Muskan) — T11 table privilege lockdown (ONE migration)
+
+**Status: LIVE ON PRODUCTION.** Pushed 2026-08-25 with `supabase db push --linked` (plain — no
+`--include-all`; the filename sorts after cloud's tip `20260823100000`), together with T13's
+migration in the same push. ~~LOCAL ONLY. Not pushed.~~
+
+| # | migration | ticket |
+|---|---|---|
+| 1 | `20260824100000_table_privilege_lockdown.sql` | T11 (`0022-buyer-shop-view/TICKETS.md`) |
+
+**What it closes.** Deny-by-default for TABLES — the half session 77 installed for functions and
+never for relations. Measured before: **`anon` held 614 table privileges in `public`** (TRUNCATE on
+89 tables, INSERT on 88, SELECT on 85); `authenticated` held TRUNCATE on 91 and TRIGGER on 92.
+After: **anon 0, authenticated TRUNCATE/TRIGGER 0.** RLS does not apply to TRUNCATE, so the
+hash-chained `audit_log` was erasable by an unauthenticated role.
+
+**Reachability, not overclaimed:** PostgREST emits neither TRUNCATE nor DDL, so this was not
+reachable from the app's public surface. It is a grant-level hole one FK or one new client from
+mattering.
+
+**Who loses access, by design:** `anon` loses every `public` table privilege. **Nothing uses them** —
+no RLS policy in `public` names `anon` (the only three naming anon/public are in `cron` and
+`storage`, untouched), and the one public route that renders database content, `/c/[handle]`, runs
+through the `get_public_profile` SECURITY DEFINER RPC. **Proven after the change:** with anon holding
+zero table privileges, `get_public_profile` still returns the row (1 row for a probe handle).
+`authenticated` keeps SELECT/INSERT/UPDATE/DELETE — only TRUNCATE and TRIGGER go.
+
+**Push order:** independent of T13's migration and of any app deploy; no app code references these
+grants. Plain `supabase db push`.
+
+**Advisors:** no change expected. This adds one event-trigger function, which is not `SECURITY
+DEFINER`-executable by `authenticated` and does not appear in the advisor classes.
+
+**Proof:** `supabase/tests/table_privilege_lockdown_test.sql` — 5 cells, 4 RED-first. Cell 3 asserts
+the mechanism **fires** (creates a throwaway table, reads the ACL back) rather than that it exists;
+cell 5 reproduces the actual exploit (anon TRUNCATE of a self-seeded `audit_log`). Verified on a
+clean `supabase db reset`: **41/41 SQL runners**, `tsc` 0, unit 490/490.
+
+**✅ Verified ON PRODUCTION after the push (2026-08-25), by query, not by assumption:**
+
+| claim | before | after |
+|---|---|---|
+| `anon` privileges on `public` tables | **614** (REFERENCES 89, TRIGGER 89, TRUNCATE 89, INSERT 88, DELETE 88, UPDATE 86, SELECT 85) | **0 — the role returns no rows at all** |
+| `authenticated` TRUNCATE / TRIGGER | 91 / 92 | **0 / 0** |
+| `authenticated` SELECT/INSERT/UPDATE/DELETE | 93 / 91 / 88 / 91 | **unchanged** — 93 / 91 / 88 / 91 |
+| the public route still works with anon holding nothing | — | `get_public_profile('clara-vogt')` as `anon` → **1 row** |
+| the mechanism is installed | — | `revoke_anon_privileges_on_new_table_trg` present, `ddl_command_end`, enabled |
+
+The push emitted `NOTICE: event trigger "revoke_anon_privileges_on_new_table_trg" does not exist,
+skipping` — that is the migration's own idempotent DROP running on a database that had never seen
+it. Expected, not a warning.
+
+---
+
+## ✅ APPLIED 2026-08-25 (was PENDING 2026-08-24, Muskan) — T13 product column confidentiality (ONE migration)
+
+**Status: LIVE ON PRODUCTION.** Pushed 2026-08-25 with `supabase db push --linked`, in the same push
+as T11's migration. ~~LOCAL ONLY. Not pushed.~~
+
+| # | migration | ticket |
+|---|---|---|
+| 1 | `20260824090000_product_column_confidentiality.sql` | T13 (`0022-buyer-shop-view/TICKETS.md`) |
+
+**What it closes — live on production right now.** `product_public_select` admitted any
+`profile_visible = true` row to any verified caller, and RLS filters rows, not columns, so the row
+came back whole. Measured locally as Bob (verified, connected buyer): **4 GreenLeaf rows, all four
+carrying `rrp_per_gram`, two of them `price_public = false`.** After: **0 rows, 0 leaked**, and the
+buyer still reads all six products through `get_discoverable_shop`.
+
+**Push order:** plain `supabase db push` — the filename timestamp sorts after cloud's tip
+(`20260823100000`), so no `--include-all` is needed. **App code does NOT need to ship with it:**
+every client read of `product` is own-company and carried by `product_all` (verified path by path —
+see the migration header). This migration is safe to land alone, in either order relative to app
+deploys.
+
+**Who loses reads, by design — the pre-push question this file exists to answer:** nobody who was
+entitled to the data. A buyer loses the *base-table* read of another company's `product` row; every
+column she is entitled to still arrives via `get_discoverable_shop`. **One deliberate widening:** a
+connected buyer gains the `pricelist_item` row of a `profile_visible = false` + `price_public = true`
+product, because the shop RPC already showed her that product and price — the base-table policy was
+the narrower of the two doors.
+
+**Advisors:** expect `authenticated_security_definer_function_executable` **85 → 86** (one new
+definer function, `product_price_visible_to_caller`). **No new ERROR** — the `product_public` view
+that would have added a second `security_definer_view` was built and then removed, because no client
+path needed it.
+
+**Proof:** `supabase/tests/product_column_confidentiality_test.sql` (6 cells, RED-first on cell 1).
+Verified on a clean `supabase db reset`: **40/40 SQL runners**, `tsc` 0, unit 490/490.
+`connection_visibility_override_test.sql` needed two assertions flipped — its `[door a]` cells
+asserted the base-table read this migration removes; the change is annotated in place, and a warning
+was added to that file so a green `[door a]` line is not mistaken for live signal.
+
+**✅ Verified ON PRODUCTION after the push (2026-08-25), impersonating a real verified buyer**
+(`Nord Apotheke Berlin`, active relationship with `Canadian Craft Cannabis Company GmbH`, via
+`set local role authenticated` + `request.jwt.claims`):
+
+| claim | result |
+|---|---|
+| the buyer's base-table read of the seller's `product` | **0 rows, 0 `rrp_per_gram`** (the leak this ticket exists to close) |
+| the buyer's entitled read still arrives | `get_discoverable_shop(<Canadian Craft>)` → **4 products, 4 with a price** |
+| `public.product` policies | only **`product_all`** remains — `product_public_select` is gone |
+| the four borrowing policies re-pointed, not blanked | `pricelist_item_public_select` and `plit_public_select` → `product_price_visible_to_caller()`; `product_image_public_select` and `product_media_public_select` → `product_visible_to_caller()` |
+
+**⚠️ The advisor prediction in this entry was one short.** It said *"expect
+`authenticated_security_definer_function_executable` **85 → 86** (one new definer function,
+`product_price_visible_to_caller`)"*. Measured: **85 → 87**, because the migration adds **two**
+definer helpers, not one — `product_visible_to_caller` as well. The substantive half of the
+prediction held: **no new ERROR** (still the one pre-existing `security_definer_view`), and the
+class breakdown after the push is 1 ERROR / 84 WARN / 1 INFO.
+
+---
+
+## ✅ APPLIED 2026-08-24 (was PENDING 2026-08-20, Muskan) — slug 0022 buyer-shop-view
+
+> **ALL SIX MIGRATIONS ARE LIVE ON PRODUCTION as of 2026-08-24**, pushed with
+> `supabase db push --include-all`. `supabase migration list --linked` now reports
+> **152 local <-> 152 remote, 0 local-only, 0 remote-only**. No history repair was needed — the CLI
+> stamps filename timestamps (the call-time drift class comes from MCP `apply_migration`, not from
+> `db push`).
+>
+> **Post-push verification, all run against production and all passing** — the four checks added to
+> this entry on 2026-08-24 plus the original policy checks: three functions `prosecdef` with
+> `search_path` pinned · **`anon` EXECUTE denied on all three** · buyer arm read back via
+> `pg_get_functiondef` carries **all six terms** · `basket_line_admission` restrictive, `polcmd='*'`,
+> `polqual` NULL · `basket_line_owner_all` present and unmodified · **`authenticated` INSERT on
+> `relationship` = false** (the live privilege escalation is closed).
+>
+> **S8 after the push: 80 -> 85.** The +5 are all
+> `authenticated_security_definer_function_executable` (75 -> 80) — the batch's own five new definer
+> functions (`accept_connection_request`, `resubmit_company_verification`,
+> `product_visible_to_caller`, `product_admissible_to_basket`, `get_my_basket_lines`). **`anon`
+> definer-executable stays at exactly 1** (`get_public_profile`). Predicted, not a regression.
+>
+> **App code deployed the same day**: PR #163 -> `dev`, PR #164 -> `main`, Vercel production
+> deployment `6060572217` **success**. ⚠️ **A broken window existed between the migration push and
+> the `main` merge** — `main`'s `store.ts:573` wrote `relationship` directly and that grant is
+> revoked by this batch, so connection-accept failed on production for that interval. **The
+> same-deploy rule on this repo means `dev`->`main`, not `dev`.** Recorded in the slug's STATE.md.
+>
+> **⚠️ THIS SECTION IS MIGRATION DEBT ONLY.** The non-migration deploy debt below
+> (§ OUTSTANDING — edge functions, `RESEND_API_KEY`, dashboard settings) is a **different class**
+> and is **NOT** discharged by this push. Do not fold it in — that is exactly the mistake T08 caught.
 
 > ### ✅ S6 + S8 RUN AGAINST PRODUCTION 2026-08-23 — read-only, nothing written
 >
@@ -704,7 +846,7 @@ anything from THEM is outstanding. ~~(see the 2026-07-20 marker above for what a
 **⚠️ CORRECTED AT T08 (2026-08-23): there is no "2026-07-20 marker" and there never was** — no
 section of this file has ever carried that date. The pointer was dangling, and what it pointed at
 would be stale now anyway. **What is actually outstanding today:**
-- **Migrations** → `## ⚠️ PENDING (2026-08-20, Muskan) — slug 0022 buyer-shop-view`, at the top of
+- **Migrations** → `## ✅ APPLIED 2026-08-24 (was PENDING 2026-08-20, Muskan) — slug 0022 buyer-shop-view`, at the top of
   this file. That is the only such section.
 - **Non-migration** → `## ⚠️ OUTSTANDING — NON-MIGRATION DEPLOY DEBT`, immediately after it.
 
@@ -895,7 +1037,7 @@ ONE batch, in timestamp order, together with the app code.**
 > orphan row) was itself deleted on 2026-08-16 — the 2026-08-17 batch then pushed with a plain
 > `supabase db push`, no repair.
 >
-> **The current push procedure is `## ⚠️ PENDING (2026-08-20, Muskan) — slug 0022 buyer-shop-view ›
+> **The current push procedure is `## ✅ APPLIED 2026-08-24 (was PENDING 2026-08-20, Muskan) — slug 0022 buyer-shop-view ›
 > How to push THIS batch`**, at the top of this file. That batch needs **`--include-all`**, which
 > nothing in this section mentions.
 >
@@ -973,7 +1115,7 @@ supabase db push
 > because a reader who lands here mid-incident must not be handed four live-looking commands with a
 > dead disclaimer above them — this banner is the disclaimer.
 >
-> **The current push procedure is `## ⚠️ PENDING (2026-08-20, Muskan) — slug 0022 buyer-shop-view ›
+> **The current push procedure is `## ✅ APPLIED 2026-08-24 (was PENDING 2026-08-20, Muskan) — slug 0022 buyer-shop-view ›
 > How to push THIS batch`**, at the top of this file. It differs in the way that matters: **this
 > batch requires `--include-all`**, and step 3 below (`supabase db push`) would silently push five
 > of its six migrations.

@@ -10,16 +10,27 @@
 import { createClient } from "@/shared/db/client";
 import { readCurrentPrices, type ProductPrice } from "@/modules/catalog/index.client";
 import { groupBySeller } from "../lib/group";
-import type { BasketLine, BasketView } from "../types";
+import { EMPTY_BASKET, type BasketLine, type BasketView } from "../types";
 
 export async function getMyBasket(): Promise<BasketView> {
   const supabase = createClient();
-  const { data: { user }, error: userError } = await supabase.auth.getUser();
-  if (userError) throw userError;
-  if (!user) return { groups: [], totalLineCount: 0 };
+  // Which failures are legitimately an EMPTY basket, and which are errors, is
+  // decided HERE and nowhere else. `BasketProvider` cannot tell them apart — it
+  // only sees an exception — so it used to guess "signed out" for all of them
+  // and silently blank the cart. Every `throw` below therefore means "the read
+  // genuinely failed"; the provider renders any throw as an error state.
+  //
+  // An expired or invalid session is not a failure to report: the caller has no
+  // basket because they are not signed in — the same outcome as no user at all.
+  const { data: { user } = { user: null }, error: userError } = await supabase.auth.getUser();
+  if (userError || !user) return EMPTY_BASKET;
 
   const { data: viewerPerson, error: personError } = await supabase
     .from("person").select("company_id").eq("id", user.id).single();
+  // PGRST116 = `.single()` matched zero rows: a signed-up account that has not
+  // finished onboarding yet. It has no basket, which is not an error. Any OTHER
+  // person error (a grant, a transport fault) is real and must surface.
+  if (personError?.code === "PGRST116") return EMPTY_BASKET;
   if (personError) throw personError;
   const viewerCompanyId = viewerPerson?.company_id ?? "";
 
@@ -34,21 +45,12 @@ export async function getMyBasket(): Promise<BasketView> {
   const { data: rows, error } = await supabase.rpc("get_my_basket_lines");
   if (error) throw error;
 
-  const typedRows = ((rows ?? []) as Array<{
-    id: string;
-    pack_count: number;
-    pack_size_grams: number | null;
-    product_id: string;
-    // null once the product stops being visible to this caller — hidden,
-    // soft-deleted, out of its window, or the connection ended. The line still
-    // returns so it can be seen and removed; only the details go dark.
-    product_name: string | null;
-    cultivar: string | null;
-    unit_code: string | null;
-    local_code_pzn: string | null;
-    seller_company_id: string;
-    seller_company_name: string | null;
-  }>).map((r) => ({
+  // No local re-assertion of the row shape: `database.types.ts` now declares the
+  // six nullable columns as nullable, so there is ONE owner of that fact. The
+  // details go null once the product stops being visible to this caller —
+  // hidden, soft-deleted, out of its window, or the connection ended. The line
+  // still returns so it can be seen and removed; only the details go dark.
+  const typedRows = (rows ?? []).map((r) => ({
     id: r.id,
     pack_count: r.pack_count,
     pack_size_grams: r.pack_size_grams,

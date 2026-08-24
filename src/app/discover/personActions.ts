@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/shared/db/server";
 import { requireVerified } from "@/shared/auth";
+import { requestActionError } from "@/modules/connect/lib/requestActionError";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -60,7 +61,9 @@ export async function sendPersonConnectRequest(
     receiver_company_id: null,
     status: "pending",
   });
-  if (error) return { error: error.message };
+  // T10: never hand a raw Postgres string to the surface — the guards above
+  // already return finished sentences, and this path now does too.
+  if (error) return { error: requestActionError(error) };
 
   revalidatePath("/discover");
   return { ok: true };
@@ -82,7 +85,9 @@ export async function acceptPersonRequest(
 
   const supabase = await createClient();
   const { error } = await supabase.rpc("accept_person_connection", { p_item_id: itemId });
-  if (error) return { error: error.message };
+  // T10: never hand a raw Postgres string to the surface — the guards above
+  // already return finished sentences, and this path now does too.
+  if (error) return { error: requestActionError(error) };
 
   revalidatePath("/discover");
   return { ok: true };
@@ -107,7 +112,9 @@ export async function declinePersonRequest(
     .update({ status: "rejected" })
     .eq("id", itemId)
     .eq("type", "connect_person");
-  if (error) return { error: error.message };
+  // T10: never hand a raw Postgres string to the surface — the guards above
+  // already return finished sentences, and this path now does too.
+  if (error) return { error: requestActionError(error) };
 
   revalidatePath("/discover");
   return { ok: true };

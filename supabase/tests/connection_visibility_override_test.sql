@@ -497,6 +497,16 @@ BEGIN
 END $$;
 RESET ROLE;
 
+-- ⚠️ READ BEFORE TRUSTING A GREEN [door a] LINE (added by T13, 20260824090000).
+-- `product_public_select` no longer exists, so EVERY "[door a] … must NOT see"
+-- assertion in this file is now structurally true: a buyer reads zero rows of
+-- another company's product table under all conditions. Those lines are kept as
+-- closure guards, but they can no longer distinguish the rule they were written
+-- for — the live signal for the connection override, the window, the
+-- relationship states and the verified gate is in [door b] (current_pricelist_item),
+-- [door c] (get_discoverable_shop) and the three cascade tables. Do not add a new
+-- [door a] assertion expecting a buyer to SEE something; it cannot pass.
+
 -- ============================================================================
 -- §E — the TIGHTENING: an unverified caller's OWN company loses cross-company
 -- reads, and it cascades into product_image/product_media/pricelist_item.
@@ -510,8 +520,14 @@ SELECT set_config('request.jwt.claims', '{"sub":"22222222-2222-2222-2222-2222222
 SET LOCAL ROLE authenticated;
 DO $$
 BEGIN
-  IF (SELECT count(*) FROM public.product WHERE id = (SELECT cascade_id FROM _fix)) <> 1
-    THEN RAISE EXCEPTION 'E0 baseline[door a]: verified Bob must see T06-CASCADE before any demotion'; END IF;
+  -- T13 (20260824090000) CLOSED DOOR A FOR BUYERS. `product_public_select` is
+  -- gone: no caller reads another company's product row directly any more,
+  -- because RLS filters rows and not columns, so an admitted row surrendered
+  -- rrp_per_gram and supplier_product_code with it. Bob's read of this product
+  -- is now proven by the three cascade rows and doors b/c immediately below —
+  -- this line asserts the CLOSURE, not a demotion.
+  IF (SELECT count(*) FROM public.product WHERE id = (SELECT cascade_id FROM _fix)) <> 0
+    THEN RAISE EXCEPTION 'E0 baseline[door a]: T13 closed the buyer''s base-table read — Bob must see 0 rows of GreenLeaf''s product table'; END IF;
   IF (SELECT count(*) FROM public.product_image WHERE id = (SELECT cascade_image_id FROM _fix)) <> 1
     THEN RAISE EXCEPTION 'E0 baseline[cascade]: verified Bob must see T06-CASCADE''s image before any demotion'; END IF;
   IF (SELECT count(*) FROM public.product_media WHERE id = (SELECT cascade_media_id FROM _fix)) <> 1
@@ -582,8 +598,10 @@ SELECT set_config('request.jwt.claims', '{"sub":"22222222-2222-2222-2222-2222222
 SET LOCAL ROLE authenticated;
 DO $$
 BEGIN
-  IF (SELECT count(*) FROM public.product WHERE id = (SELECT aur1a_id FROM _fix)) <> 1
-    THEN RAISE EXCEPTION 'E6 control: re-verifying StonePharm must restore Bob''s read of AUR-1A'; END IF;
+  -- T13: door a stays shut whatever the verification state — the restore this
+  -- cell proves is carried by the three cascade rows below, which DO come back.
+  IF (SELECT count(*) FROM public.product WHERE id = (SELECT aur1a_id FROM _fix)) <> 0
+    THEN RAISE EXCEPTION 'E6 control: T13 closed door a — Bob must read 0 product rows even once StonePharm is re-verified'; END IF;
   IF (SELECT count(*) FROM public.product_image WHERE id = (SELECT cascade_image_id FROM _fix)) <> 1
     THEN RAISE EXCEPTION 'E6 control: re-verifying StonePharm must restore Bob''s cascade read of the product_image row'; END IF;
   IF (SELECT count(*) FROM public.product_media WHERE id = (SELECT cascade_media_id FROM _fix)) <> 1
