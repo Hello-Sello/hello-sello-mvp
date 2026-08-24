@@ -725,6 +725,11 @@ persona). Re-run `run_basket_admission_test.sh`.
 
 ## T15 — `BasketProvider`'s bare `.catch` renders every basket failure as "signed out" · **S** · depends on: none · **PRE-EXISTING, masked round 2's defect**
 
+> ✅ **BUILT 2026-08-24 (session 84), commit `c9dca3c`.** Plan: `PLAN-T15.md`.
+> Judgment moved into `getMyBasket()`; provider no longer classifies. 4 tests.
+> **Not e2e-covered** — forcing the RPC to fail needs a Playwright route-mock and
+> there is no `page.route` precedent in `e2e/`. Named, not hidden.
+
 **Filed 2026-08-24 at `/ship`, security round 4.**
 
 **What.** `src/modules/basket/BasketProvider.tsx:24` is `.catch(() => setView(EMPTY))`. Any failure

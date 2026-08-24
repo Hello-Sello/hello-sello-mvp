@@ -1697,3 +1697,29 @@ live outage on that path.
 
 **Surfaced by:** slug 0022's `/ship` (2026-08-24). `docs/agents/LEARNINGS.md` L-034 is the adjacent
 migration-ordering class; this one is about the *app* half of the same rule.
+
+---
+
+## 2026-08-24 — Security backlog is ranked by cost-of-finding-late, not by severity
+
+**Decided.** The eleven open security items are sequenced by one question — *is it on the
+pharmacy → connect → order path, with real users on it?* — not by how severe they read.
+Order: T15 (built), T10, then T13. T11, T14, T16, T17 and DEV-159 are parked with a written
+reason. The CI/deterministic-fixture project (T12, DEV-161, the 5 suites with no runner) is
+NOT done first.
+
+**Why.** An earlier pass in this session recommended building CI first. That is the right
+answer for a team with a shared main branch and wrong for one person with users arriving:
+it spends the scarcest resource — Muskan's own hours — proving code that is not the thing
+about to break. The inverted principle for a solo team: **observability beats verification.**
+You cannot afford to prove everything works before shipping; you can afford to know within
+minutes when it does not. T15 and T10 were actively *suppressing* the only feedback channel
+that exists, which is why they outrank grant-level holes that are more severe on paper.
+
+**What makes this reversible.** The moment a second engineer works this repo, or the day
+pharmacies are transacting for real money, the ranking flips back to the verification-first
+order. This is a decision about team size and stage, not about what good engineering is.
+
+**Parked, with reasons (so they are not re-found as oversights):** T11 and T14 are not
+reachable through PostgREST · T17 needs a product answer about what deactivation means
+· T16 and DEV-159 bite only on demo data.
