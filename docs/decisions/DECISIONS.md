@@ -1671,3 +1671,29 @@ and `company.verification_status` has one, so the close is small every time it h
 
 **Surfaced by:** slug 0022 T06's G4 (Muskan's ruling, 2026-08-22). Engineering form of the same rule:
 [`ARCHITECTURE-NOTES.md` — a permission gate is only as strong as the write path to its input](../architecture/ARCHITECTURE-NOTES.md); `docs/agents/LEARNINGS.md` L-027.
+
+## 2026-08-24 — The same-deploy rule on this repo means `dev`→`main`, not `dev`
+
+**Decided:** when a batch of migrations and the app code that depends on them must reach production
+together, "merge promptly" means **merging through to `main`**. Merging to `dev` does not deploy
+production and does not close the window. The window is open from the moment `supabase db push`
+finishes until the **production** Vercel deploy reports success, and nothing else counts as closing
+it.
+
+**Why:** production deploys from `main`. On 2026-08-24 the six-migration batch for slug 0022 went to
+production, PR #163 merged to `dev`, and that was treated as the end of the same-deploy window. It
+was not — `main` was 149 commits behind, so production kept running the **old** app against the
+**new** schema. `main`'s `store.ts:573` accepted a connection with a direct
+`.from("relationship").insert(...)`, and the batch had just revoked that grant. **Connection-accept
+failed on production for that interval**, and silently, because the accept path swallows its own
+errors (T10). The migration-first ordering was correct and must not be inverted — the reverse breaks
+every basket read instead — so the fix is not to reorder but to **treat `dev` as a waypoint, never
+as the destination**, and to keep the interval to minutes.
+
+**Practical form:** before pushing migrations that tighten grants or policies, check what
+`origin/main` does with the affected tables — `git show origin/main:<file>` — because that is the
+code the schema will meet. If `main` writes them directly, the window is not merely a delay: it is a
+live outage on that path.
+
+**Surfaced by:** slug 0022's `/ship` (2026-08-24). `docs/agents/LEARNINGS.md` L-034 is the adjacent
+migration-ordering class; this one is about the *app* half of the same rule.
