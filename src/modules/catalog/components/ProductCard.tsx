@@ -34,6 +34,7 @@ import type { LadderRowDraft } from "../ladderDraft";
 import { PackSizeSelector } from "./PackSizeSelector";
 import { MediaManager } from "./MediaManager";
 import { softDeleteProduct, setProductProfileVisible } from "../manage";
+import { buyerVisibilityGaps, buyerVisibilityLabel } from "../visibility";
 import { DOMINANCE_CODES, IRRADIATION_CODES } from "../template";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
@@ -405,6 +406,12 @@ export function ProductCard({
     ["Terp%", "terpene_percent", p.terpPercent],
   ];
   const priceShown = !editing && pricePublic && p.price_per_gram != null;
+  // Why buyers can't see this product, for the Manage-mode status chip. Read off
+  // `p` and not the draft overlay on purpose: every input here is an IMMEDIATE
+  // action (show/hide writes on click, drag-to-file writes on drop), never a
+  // pending text edit, so `p` is already the saved truth. Advisory — the gate is
+  // SQL (see ../visibility).
+  const visibilityGaps = buyerVisibilityGaps(p);
   // The footer's one gate group (read them together, they are one decision).
   // `canBuy`: the owner keeps their controls on their own unpriced/hidden
   // products; a buyer only gets them when a price is actually on screen.
@@ -539,15 +546,13 @@ export function ProductCard({
               </div>
             ) : (
               <>
-                {/* only status/visibility badges sit on the image */}
-                {/* `=== false`, not `!…`: `profile_visible` is optional (seller
-                    state), and ABSENT must not read as hidden — a buyer-facing
-                    mapper never carries it. */}
-                {p.profile_visible === false && (
-                  <div className="absolute left-2.5 top-2.5 flex items-center gap-1 rounded-full bg-ink/80 px-2.5 py-1 text-[10px] font-bold text-white">
-                    <EyeOff size={11} /> Hidden
-                  </div>
-                )}
+                {/* NO visibility badge here, deliberately. This branch is the
+                    SHOP view — what the seller is presenting — and a shelf-state
+                    badge belongs to Manage, not to the storefront. The old
+                    "Hidden" pill sat here and leaked seller bookkeeping into the
+                    seller's own preview of a buyer's page (G5 F-03). It moved
+                    into the status row below, behind `editing`, and grew to
+                    cover the two reasons it never named. */}
                 <button
                   type="button"
                   aria-label={liked ? "Unlike" : "Like"}
@@ -805,10 +810,28 @@ export function ProductCard({
                   data-model addition; the shop currently has no per-product stock.
                   The chip beside it (T05 amendment 1, T06/T07 treatment) is gated
                   exactly like the reveal: hidden price ⇒ no chip either. */}
-              <div className="mb-2 flex items-center gap-1.5">
+              <div className="mb-2 flex flex-wrap items-center gap-1.5">
                 <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-success">
                   <span className="h-1.5 w-1.5 rounded-full bg-current" /> Available
                 </span>
+                {/* ONE buyer-visibility signal, and only in Manage mode.
+                    It answers the seller's actual question — "is this on my shop
+                    or not" — instead of reporting one of the three reasons it
+                    might not be. It lives in the STATUS row because that is what
+                    it is: `Available` is stock status, this is shelf status.
+                    Advisory; SQL is the gate (see ../visibility). */}
+                {editing && visibilityGaps.length > 0 && (
+                  <span
+                    data-testid="buyer-visibility-gap"
+                    className="inline-flex items-center gap-1.5 rounded-full bg-ink/[0.07] px-2 py-0.5 text-[10px] font-bold text-ink/70"
+                  >
+                    <EyeOff size={11} className="shrink-0" />
+                    Not visible to buyers
+                    <span className="font-semibold text-ink/45">
+                      {buyerVisibilityLabel(visibilityGaps)}
+                    </span>
+                  </span>
+                )}
                 {priceShown && p.tiers.length > 0 && (
                   resolved.appliedMin != null ? (
                     <span

@@ -438,6 +438,17 @@ connect e2e after.
 
 ## T10 — The accept path swallows its own errors · **XS** · depends on: T09 · Linear: owed (MCP auth blocked)
 
+> ✅ **BUILT 2026-08-24 (session 84).** One owner for the wording —
+> `modules/connect/lib/requestActionError.ts`, 5 unit tests — wired into BOTH
+> surfaces. `InboxView.refreshWith` catches (and re-pulls, so an item handled in
+> another tab disappears instead of inviting the same failing click);
+> `RequestsSection` catches the company path and now *renders* the person path's
+> error instead of discarding it. `personActions` phrases its own RPC failures at
+> source, so its existing finished sentences ("Your account is not verified.")
+> are preserved rather than flattened.
+> **Not e2e-covered, and the two components' error states are not unit-covered** —
+> node env, no jsdom. Only the pure classifier is tested.
+
 **Filed 2026-08-23 at T09's G4 (Muskan: *"pass"* — accepted as recorded, filed not fixed).**
 
 `accept_connection_request` RAISEs on a request that is already `accepted`, `rejected` or deleted.
@@ -462,6 +473,21 @@ the item pending forever with nothing shown. T09 did not cause it; T09 made it r
   written — the pre-T09 bug passed every row-count check.
 
 ## T11 — `anon` holds TRUNCATE on ~90 tables; deny-by-default was never installed for tables · **S** · depends on: — · Linear: owed (MCP auth blocked)
+
+> ✅ **BUILT 2026-08-24 (session 84).** Migration
+> `20260824100000_table_privilege_lockdown.sql`, LOCAL ONLY — ledgered PENDING.
+> **anon 614 table privileges → 0**; authenticated TRUNCATE/TRIGGER → 0, its
+> read/write verbs untouched. Three layers: sweep the existing surface, narrow
+> `ALTER DEFAULT PRIVILEGES` (which DOES work for relations — tables carry no
+> built-in PUBLIC grant, unlike functions), and an event trigger for the role
+> blind spot that stored defaults have.
+> **Enumerated before revoking:** no RLS policy in `public` names `anon`, and
+> `/c/[handle]` runs through a definer RPC — **proven still working after the
+> revoke** (1 row for a probe handle with anon holding zero table privileges).
+> Suite: 5 cells, 4 RED-first; cell 3 asserts the mechanism FIRES, cell 5
+> reproduces the anon TRUNCATE of a **self-seeded** audit_log — the ticket's
+> "3 seeded rows" do not exist on a fresh reset (L-033 again).
+> Clean reset → **41/41 runners**, tsc 0, unit 490/490.
 
 **Filed 2026-08-23 at T09's G4 (Muskan: *"pass"* — own ticket, not T09's to fix).**
 
@@ -650,6 +676,21 @@ T07's own new test, which creates `T07-E2E-WITHDRAW` and hard-deletes it in `aft
 
 ## T13 — `rrp_per_gram` and `supplier_product_code` are readable off `public.product` for a price-hidden VISIBLE product · **S** · depends on: none · **PRE-EXISTING, live on production**
 
+> ✅ **BUILT 2026-08-24 (session 84).** Migration
+> `20260824090000_product_column_confidentiality.sql`, LOCAL ONLY — ledgered as
+> PENDING, deliberately unreleased. `product_public_select` dropped; the four
+> policies that borrowed the buyer's product read (`product_image`,
+> `product_media`, `pricelist_item`, **`pricelist_item_tier` — which the first
+> dependency scan MISSED because it joins rather than selects `FROM product`**)
+> re-pointed at the SECURITY DEFINER helpers. New
+> `product_price_visible_to_caller()` names the price rule;
+> `product_admissible_to_basket()` delegates to it, body otherwise unchanged.
+> **No app change needed** — every client read of `product` is own-company
+> (verified path by path). A `product_public` view was built and then removed: no
+> caller needed it, and a third buyer-facing door is a permanent agreement
+> burden (L-038).
+> Proof: 6-cell suite, RED-first. Clean reset → **40/40 runners**, tsc 0, unit 490/490.
+
 **Filed 2026-08-23 at `/ship`, after the `security` agent's blocking finding on the hidden-product
 case was fixed.** This is the *other half* of that finding, and it is **not** caused by this slug —
 it is live on production today.
@@ -694,7 +735,43 @@ own catalogue is unchanged.
 
 ---
 
-## T14 — `product_visible_to_caller` is granted to `authenticated`, making it a per-UUID visibility oracle · **XS** · depends on: none · **introduced by this slug**
+## T14 — ~~`product_visible_to_caller` is granted to `authenticated`~~ · **SUPERSEDED 2026-08-24 — DO NOT ACTION AS WRITTEN**
+
+
+> 🛑 **THE REMEDY BELOW IS NOW A TRAP. Applying it blanks images and media for
+> every buyer.**
+>
+> T13 (`20260824090000`) re-pointed `product_image_public_select` and
+> `product_media_public_select` at `product_visible_to_caller(product_id)`. RLS
+> policy expressions are evaluated as the **calling** role, so `authenticated`
+> must hold EXECUTE on any function a policy names. The grant this ticket asks
+> to drop is now **load-bearing**.
+>
+> **Proven, not reasoned** — revoke it and read as a connected buyer:
+> ```
+> revoke execute on function public.product_visible_to_caller(uuid) from authenticated;
+> select count(*) from public.product_image;   -- as Bob
+> ERROR:  permission denied for function product_visible_to_caller
+> ```
+> Not a narrowed read — a hard error on the whole table.
+>
+> **What survives of the original finding.** The oracle is real and is now
+> permanent: any authenticated caller can ask *"may I see product X?"* for an
+> arbitrary UUID without going through a door that shapes or logs the answer.
+> That is the price of stating the visibility rule exactly once, and the
+> alternative — restating the predicate inline in each policy — is what T13 was
+> written to end (L-038: four doors that disagreed). **Accepted, with reasons.**
+>
+> The four `basket_admission_test.sql` cells this ticket wanted reworked
+> (15, 16, 17, 21) call the function under `SET LOCAL ROLE authenticated` and are
+> now **correct as they stand** — they exercise a grant the system genuinely
+> depends on.
+>
+> **Residual, if anyone wants it later:** nothing about the grant. The only
+> remaining lever is rate-limiting or logging enumeration at the API edge, which
+> is a different ticket against a different layer.
+
+<details><summary>Original ticket text (kept for the record — its remedy is void)</summary>
 
 **Filed 2026-08-24 at `/ship`, security round 4 (a note, not a blocking finding). Muskan ruled: keep
 the grant for now, file the removal.**
@@ -723,7 +800,16 @@ persona). Re-run `run_basket_admission_test.sh`.
 
 ---
 
+</details>
+
+---
+
 ## T15 — `BasketProvider`'s bare `.catch` renders every basket failure as "signed out" · **S** · depends on: none · **PRE-EXISTING, masked round 2's defect**
+
+> ✅ **BUILT 2026-08-24 (session 84), commit `c9dca3c`.** Plan: `PLAN-T15.md`.
+> Judgment moved into `getMyBasket()`; provider no longer classifies. 4 tests.
+> **Not e2e-covered** — forcing the RPC to fail needs a Playwright route-mock and
+> there is no `page.route` precedent in `e2e/`. Named, not hidden.
 
 **Filed 2026-08-24 at `/ship`, security round 4.**
 
@@ -745,6 +831,15 @@ failure is an error state the drawer should render (and report). Do not widen th
 ---
 
 ## T16 — `database.types.ts` declares four nullable `get_my_basket_lines` columns as non-nullable · **XS** · depends on: none · **introduced by this slug**
+
+> ✅ **BUILT 2026-08-24 (session 84).** **Six columns, not five** — this ticket
+> missed `pack_size_grams`, which is nullable on the base table. Nullability
+> read off `pg_get_functiondef` rather than inferred: four are `case when
+> product_visible_to_caller(...)` with no ELSE, `seller_company_name` is a LEFT
+> JOIN, `pack_size_grams` is nullable in `product_basket_line`.
+> The local re-assertion in `reads.ts` is gone, so the fact has one owner.
+> **Proven the compiler actually enforces it** — assigning `product_name` to a
+> `string` now errors; before this change it did not. tsc 0, unit 490/490.
 
 **Filed 2026-08-24 at `/ship`, security round 4.**
 

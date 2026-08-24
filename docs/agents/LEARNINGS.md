@@ -1214,3 +1214,102 @@ only because STATE.md insisted on it against three green suites, that caught a l
 not treat consecutive green rounds as evidence the next round is unnecessary; treat a fix authored
 at the tail of a long run as the most likely source of the next finding.**
 
+
+---
+
+## L-039 · The spec's acceptance criteria are not the slug's scope — scope is §8 MINUS what the gates removed
+
+**2026-08-24 · slug 0022 · `/ship` step 7 · caught by `rollup`, against the G5 sheet I had just written**
+
+**Trigger** — copying a criteria list, a requirements table, or an AC set out of a PRD/spec into any
+downstream artifact: a walk sheet, a test matrix, a traceability table, a verification checklist.
+Also: any sentence of the form "walk the spec's acceptance criteria".
+
+**What I authored.** `/ship` step 6 says *"walk the spec's acceptance criteria on the LIVE URL."* I
+took PRD §8's eleven criteria verbatim into `G5-WALK.md` as eleven tick-or-fail rows. **AC 9 was
+split to its own slug at G3** and sits in STATE.md under *Deferred — must NOT be built*, with
+`TICKETS.md`'s traceability row saying the same. The sheet would have failed the slug on a criterion
+the slug deliberately does not own — and worse, it would have looked like a genuine regression on a
+production walk.
+
+**Why it was wrong — the reasoning error.** I treated the PRD as the current statement of scope. It
+is the **original** statement of scope. Every gate between G1 and G5 can *remove* things from it —
+G3 split AC 9 out, and that decision is recorded in STATE.md and TICKETS.md, not back-propagated
+into the PRD. So the PRD stayed literally true as a spec and stopped being true as a work order. I
+read one document where the fact lived in three, and the two I skipped were the two that had moved.
+
+The instruction *"walk the spec's acceptance criteria"* is what made this feel safe: I was following
+the skill verbatim, and verbatim was wrong. **A step that names one source document is telling you
+where to start, not that the list is complete.**
+
+**The rule.** Scope is the spec's criteria **minus what the gates removed**. Before copying any
+criteria list downstream, reconcile it against the slug's deferral list and its traceability
+table, and carry the reconciliation *into* the copy — strike the removed rows through with the
+reason inline, never silently drop them, or the next person re-adds them from the same PRD.
+
+**Corollary — the artifact staged for a human is the one to double-check.** Every other error this
+session was caught by an agent before it reached anyone. This one was aimed directly at Muskan, on
+production, where a false failure costs her a debugging session on a feature that works. **Staging
+work for a human removes the reviewer; it does not remove the need for one.**
+
+---
+
+## L-040 · `git add -A <dir>` in a repo with parallel sessions commits someone else's work
+
+**2026-08-24 · session 84 · T16 + T11 commits · caught by my own wrap, after both were pushed**
+
+**Trigger** — reaching for `git add -A`, `git add .`, or `git add <dir>` in this repo. Also: any
+commit made after a `git status` that showed files you did not touch.
+
+**What I did** — staged with `git add -A src/` and `git add -A supabase/ docs/`. Two commits
+swallowed a parallel session's in-flight work: `a50c318` ("T16: … types tell the truth about nulls")
+carries **359 lines of the F-03 seller-visibility fix** — `visibility.ts`, `visibility.test.ts`,
+`ProductCard.tsx`, `BuyerShopView.tsx`, `shop.ts` — and `97a9312` ("T11 …") carries the G5 walk's
+`G5-WALK.md` and `STATE.md`. All pushed.
+
+**What makes it worse than untidy** — I had ALREADY noticed those files. Earlier in the same session
+I checked their mtimes, established they were written minutes before I started, said out loud that
+they belonged to another session, and deliberately committed only my own paths. Then, four commits
+later, a habit reached for `-A` and undid that decision silently. **A conclusion you reached about
+the working tree expires the moment you stop naming files explicitly.**
+
+**Why it is not fixable by rewriting** — both commits are pushed, and the parallel session may have
+pulled. Rewriting history to tidy the record would risk the very work that got swept. The commits
+stay; the record is corrected in the sync file and the session log instead.
+
+**The rule** — in this repo, stage by explicit path, always: `git add <file> <file>`. `-A` and `.`
+are banned. If a commit needs more than a handful of paths, that is a signal the commit is too big,
+not a reason to widen the pattern.
+
+**Second-order** — a swept file can also be silently invalidated by your own work. `visibility.ts`'s
+header cites `product_public_select` as one of the two authoritative rules, and the T13 migration in
+the commit two before it **deleted that policy**. Neither session has seen that yet.
+
+---
+
+## L-041 · A dependency scan must match the shape, not the common spelling of it
+
+**2026-08-24 · session 84 · T13 · caught by re-running my own scan before revoking**
+
+**Trigger** — writing any catalog query that answers "what depends on X?" before a REVOKE, a DROP,
+or a policy narrowing. Especially one whose pattern encodes how the dependency is usually *written*.
+
+**What I did** — to find every policy that would break when `product_public_select` was dropped, I
+scanned `pg_policies` for `qual ILIKE '%from product%'`. Three hits, all re-pointed, suite green.
+The scan was wrong: `plit_public_select` reaches product as
+`FROM (pricelist_item pli JOIN product p ON …)` — a **join**, not a `FROM product`. A fourth policy
+depended on the buyer's base-table read and my pattern could not see it.
+
+**What made it visible** — not the pattern, and not the test suite. Re-running the scan with the
+question widened to `ILIKE '%product%'` across every policy, because the first result (exactly three,
+tidily matching the migration comment I had just read) felt too agreeable. The migration comment
+said three; the database had four; the comment was written by someone with the same blind spot.
+
+**Why it would have hurt** — `pricelist_item_tier` would have gone silently blank for every buyer.
+Silently: RLS returns zero rows, not an error.
+
+**The rule** — write the dependency scan against the *widest* form of the relationship and read the
+extra hits, rather than the narrow form and trusting the count. A catalog scan is cheap; being
+wrong about it is a production outage. And when a scan's result exactly matches a prose comment you
+just read, that is a reason to re-run it differently, not to feel confirmed (L-014's neighbour: the
+sweep that agrees with your expectation is the one to prove).

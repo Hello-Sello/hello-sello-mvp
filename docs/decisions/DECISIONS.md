@@ -1671,3 +1671,55 @@ and `company.verification_status` has one, so the close is small every time it h
 
 **Surfaced by:** slug 0022 T06's G4 (Muskan's ruling, 2026-08-22). Engineering form of the same rule:
 [`ARCHITECTURE-NOTES.md` — a permission gate is only as strong as the write path to its input](../architecture/ARCHITECTURE-NOTES.md); `docs/agents/LEARNINGS.md` L-027.
+
+## 2026-08-24 — The same-deploy rule on this repo means `dev`→`main`, not `dev`
+
+**Decided:** when a batch of migrations and the app code that depends on them must reach production
+together, "merge promptly" means **merging through to `main`**. Merging to `dev` does not deploy
+production and does not close the window. The window is open from the moment `supabase db push`
+finishes until the **production** Vercel deploy reports success, and nothing else counts as closing
+it.
+
+**Why:** production deploys from `main`. On 2026-08-24 the six-migration batch for slug 0022 went to
+production, PR #163 merged to `dev`, and that was treated as the end of the same-deploy window. It
+was not — `main` was 149 commits behind, so production kept running the **old** app against the
+**new** schema. `main`'s `store.ts:573` accepted a connection with a direct
+`.from("relationship").insert(...)`, and the batch had just revoked that grant. **Connection-accept
+failed on production for that interval**, and silently, because the accept path swallows its own
+errors (T10). The migration-first ordering was correct and must not be inverted — the reverse breaks
+every basket read instead — so the fix is not to reorder but to **treat `dev` as a waypoint, never
+as the destination**, and to keep the interval to minutes.
+
+**Practical form:** before pushing migrations that tighten grants or policies, check what
+`origin/main` does with the affected tables — `git show origin/main:<file>` — because that is the
+code the schema will meet. If `main` writes them directly, the window is not merely a delay: it is a
+live outage on that path.
+
+**Surfaced by:** slug 0022's `/ship` (2026-08-24). `docs/agents/LEARNINGS.md` L-034 is the adjacent
+migration-ordering class; this one is about the *app* half of the same rule.
+
+---
+
+## 2026-08-24 — Security backlog is ranked by cost-of-finding-late, not by severity
+
+**Decided.** The eleven open security items are sequenced by one question — *is it on the
+pharmacy → connect → order path, with real users on it?* — not by how severe they read.
+Order: T15 (built), T10, then T13. T11, T14, T16, T17 and DEV-159 are parked with a written
+reason. The CI/deterministic-fixture project (T12, DEV-161, the 5 suites with no runner) is
+NOT done first.
+
+**Why.** An earlier pass in this session recommended building CI first. That is the right
+answer for a team with a shared main branch and wrong for one person with users arriving:
+it spends the scarcest resource — Muskan's own hours — proving code that is not the thing
+about to break. The inverted principle for a solo team: **observability beats verification.**
+You cannot afford to prove everything works before shipping; you can afford to know within
+minutes when it does not. T15 and T10 were actively *suppressing* the only feedback channel
+that exists, which is why they outrank grant-level holes that are more severe on paper.
+
+**What makes this reversible.** The moment a second engineer works this repo, or the day
+pharmacies are transacting for real money, the ranking flips back to the verification-first
+order. This is a decision about team size and stage, not about what good engineering is.
+
+**Parked, with reasons (so they are not re-found as oversights):** T11 and T14 are not
+reachable through PostgREST · T17 needs a product answer about what deactivation means
+· T16 and DEV-159 bite only on demo data.

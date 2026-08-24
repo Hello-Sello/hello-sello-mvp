@@ -5,9 +5,40 @@
 
 ---
 
-**Last updated:** 2026-08-23 (session `t06_t07_t08` — slug 0022 BUILD-COMPLETE: T06, T07, T08 all through G4)
-**Status:** offline — session closed. **Next: `/ship` slug 0022** in a fresh session. ⚠️ The ship batch is **SIX** migrations and needs **`--include-all`** (`20260607090000` is back-dated and sorts before everything on cloud). The slug ships as ONE unit.
+**Last updated:** 2026-08-24 (session 85 `g5_walk` — **G5 PASSED 10/10, slug 0022 COMPLETE**)
+**Status:** offline — BOTH of today's parallel sessions are closed. Merged status:
+* **Session 84 `close_vulns`** — closed T15, T10, T13, T16, T11; T14 rewritten as a trap warning.
+  `rrp_per_gram` leak **4 rows → 0**; `anon` **614 table privileges → 0**. **Both migrations
+  (`20260824090000`, `20260824100000`) are LOCAL ONLY and ledgered PENDING — production still
+  carries both holes, deliberately.**
+* **Session 85 `g5_walk`** — **G5 PASSED 10/10 on production; slug 0022 is gate-complete G1–G5.**
+  Four findings raised (F-01..F-04). **F-01/F-02/F-03 are BUILT and green** (unit 490/490) but
+  **not on production** — they ride the next deploy alongside session 84's two migrations.
+  **F-04 needs a Linear ticket that supersedes `DECISIONS.md:961` and `:1013` BY NUMBER** — both
+  currently lock the opposite routing. ⚠️ Aurora's demo data is left modified on prod (`PND-CA`
+  hidden, `COS-CA` price off) — walk fixtures; **restore before any demo.**
 **Shared files locked:** none — all released.
+
+> 🔴 **CROSS-SESSION NOTE, please read (L-040).** Two of my commits used `git add -A` and swept up the
+> parallel session's in-flight work:
+> * `a50c318` ("T16 …") carries the **F-03 seller-visibility fix** — `src/modules/catalog/visibility.ts`,
+>   `visibility.test.ts`, `ProductCard.tsx`, `ProductCard.gate.test.tsx`, `shop.ts`,
+>   `BuyerShopView.tsx` (359 lines).
+> * `97a9312` ("T11 …") carries `G5-WALK.md` and `STATE.md`.
+>
+> **Nothing is lost and nothing was rewritten** — both are pushed and the other session may have
+> pulled, so tidying the history would risk the very work that got swept. The commit messages are
+> simply wrong about their contents.
+>
+> ⚠️ **One real consequence:** `visibility.ts`'s header names `product_public_select` as one of its two
+> authoritative rules. **T13 (`20260824090000`, two commits earlier) DROPPED that policy.** The
+> module is advisory-only so nothing breaks, but its stated source of truth no longer exists and the
+> comment needs reconciling by whoever owns F-03.
+
+
+> ⚠️ **RELEVANT TO ANY LANE THAT WRITES `relationship`, `company` OR `pending_inbox_item`:** those grants are now revoked on **production**, not just locally. Direct table writes from app code will fail with `42501`. The only writers are `SECURITY DEFINER` RPCs — `accept_connection_request`, `resubmit_company_verification`. **This bit us during this very ship:** `main`'s `store.ts:573` still wrote `relationship` directly, so connection-accept failed on production between the migration push and the `main` merge. If you have any branch with a direct write to these tables, it is already broken against prod.
+
+> ⚠️ **PRODUCT VISIBILITY TIGHTENED AT THE BASKET DOOR.** `product_visible_to_caller()` is the single owner of "may this caller see this product", and its buyer arm is now term-for-term equal to `get_discoverable_shop`: seller company must be **live and verified**, and the product must have a **location** (*unfiled is not a shelf*). Two more caller groups lose basket detail by design — buyers holding lines from a soft-deleted/unverified seller, and buyers holding lines on an unfiled product. Line stays listed and deletable; detail goes NULL. **If you add a term to either door, diff the two — round 4 of the ship gate caught them drifting on three.**
 > **2026-08-23 (session 81) — T09 SHIPPED (local; NOT yet on cloud).** Migration
 > `20260823090000_connection_consent_and_verification_lockdown.sql` closes five live write holes:
 > `relationship` is no longer directly writable by `authenticated` (one `SECURITY DEFINER` RPC,

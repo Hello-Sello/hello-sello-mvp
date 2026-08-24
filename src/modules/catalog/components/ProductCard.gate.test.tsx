@@ -284,13 +284,59 @@ describe("<ProductCard> buy/ask gate (T03)", () => {
     expect(html).not.toContain("Hidden");
   });
 
-  it("profile_visible=false (seller-set) → the 'Hidden' badge still renders (the guard still fires on a real false)", () => {
-    // Guards the flip in the other direction: inverting `!p.profile_visible`
-    // to `p.profile_visible === false` must not also silence a real, seller-set
-    // hidden state.
-    const product = makeProduct({ profile_visible: false });
+  // ── G5 F-03: the badge left the shop view; ONE signal took its place ──────
+  //
+  // This block REPLACES a test that asserted the opposite — that a read-mode
+  // card renders a "Hidden" pill. That contract was reversed deliberately
+  // (Muskan, 2026-08-24): the read-mode branch is the seller's own preview of
+  // the STOREFRONT, and shelf bookkeeping does not belong there. The rule it
+  // guarded — that a real `profile_visible === false` is never silently
+  // swallowed — is not weakened, it MOVED: cases 2 and 4 below now carry it,
+  // and they are stricter, because they also pin the reason text the old badge
+  // never had.
+  const CHIP = 'data-testid="buyer-visibility-gap"';
+
+  it("read mode: profile_visible=false renders NO visibility badge (the storefront preview is clean)", () => {
+    const product = makeProduct({ profile_visible: false, location: "Berlin" });
     const html = renderCard(product, { editing: false, viewerIsOwner: false });
-    expect(html).toContain("Hidden");
+    expect(html).not.toContain(CHIP);
+    expect(html).not.toContain("Not visible to buyers");
+  });
+
+  it("Manage mode: profile_visible=false renders the chip and names 'hidden'", () => {
+    // `location` is set so 'hidden' is the ONLY gap — otherwise the factory's
+    // default `location: null` would add 'no location' and this case could pass
+    // while the hidden term was broken.
+    const product = makeProduct({ profile_visible: false, location: "Berlin" });
+    const html = renderCard(product, { editing: true });
+    expect(html).toContain(CHIP);
+    expect(html).toContain("Not visible to buyers");
+    expect(html).toContain("hidden");
+    expect(html).not.toContain("no location");
+  });
+
+  it("Manage mode: a visible, FILED product renders no chip at all", () => {
+    const product = makeProduct({ profile_visible: true, location: "Berlin" });
+    const html = renderCard(product, { editing: true });
+    expect(html).not.toContain(CHIP);
+  });
+
+  it("Manage mode: a visible but UNFILED product still says it is not visible to buyers", () => {
+    // The case F-03 exists for. Before this change the seller saw nothing at
+    // all here: `profile_visible` is true, so the old badge stayed silent while
+    // `get_discoverable_shop`'s `location is not null` term withheld the row
+    // from every buyer. This is the assertion that would have caught Aurora's
+    // empty shop on production.
+    const product = makeProduct({ profile_visible: true, location: null });
+    const html = renderCard(product, { editing: true });
+    expect(html).toContain(CHIP);
+    expect(html).toContain("no location");
+  });
+
+  it("read mode: an unfiled product leaks no shelf state to the storefront preview", () => {
+    const product = makeProduct({ profile_visible: true, location: null });
+    const html = renderCard(product, { editing: false, viewerIsOwner: false });
+    expect(html).not.toContain(CHIP);
   });
 
   // ── Named: the Request-pricing control names the product ──────────────────

@@ -465,3 +465,70 @@ Prototyped in `prototypes/chat-prototype` (decisions: DECISIONS.md `## 2026-06-0
 - **The check is two read-only queries, run before the gate ships:** `select grantee, privilege_type from information_schema.role_table_grants where table_name = '<t>'` and `select policyname, with_check from pg_policies where tablename = '<t>'`. If `authenticated` can write it and the `WITH CHECK` does not require the **counterparty's** consent, the gate is ornamental however precise its read predicate is.
 - **The remedy is identical each time:** revoke the direct grant, re-`GRANT` every other column, and route the one legitimate writer through a `SECURITY DEFINER` RPC that verifies consent from evidence **it fetches itself** — never from a caller-supplied parameter. Consent evidence usually already travels with the call and simply is not enforced (T06's accept already passed `inbox_item_id`).
 - **Severity is set by what the gate protects, not by when the hole was introduced.** A self-writable `relationship` was a bookkeeping-integrity bug for as long as nothing read it for permission; T06 promoted it to a catalogue-confidentiality hole without touching it. *(Slug 0022 T06 G4; `docs/agents/LEARNINGS.md` L-027; closed by T09.)*
+
+---
+
+## A "single owner" of a rule is a claim about agreement with the other doors (2026-08-24)
+
+**The pattern.** When one rule is enforced at several places, the standard remedy is to extract it
+into one function and have the sites call that. Slug 0022 did exactly this: `product_visible_to_caller()`
+became the single owner of *"may this caller see this product"*, consulted by both the basket write
+gate and the basket read projection, and its comment says so.
+
+- **The extraction only fixes drift between the callers you moved.** It silently creates drift with
+  every *other* door that answers the same question and was not moved. Round 4 of the ship gate
+  found `product_visible_to_caller` and `get_discoverable_shop` disagreeing on **three** terms —
+  the seller company's `deleted_at` and `verification_status`, and the unfiled `location` rule.
+- **Proving the two new callers agree is the cheap half of the claim.** "Single owner" asserts that
+  this function is now *the authority* for the rule, so the audit is a **term-by-term diff against
+  every other site that answers the same question** — not a check that the callers share a helper.
+- **The catalogue answers it in one query.** `select proname, prosrc like '%c.deleted_at%' from
+  pg_proc …` over the functions that project the same entity showed the split immediately: three
+  discovery functions `t`, all three new basket functions `f`. Run that before claiming single
+  ownership, not after a leak.
+- **When a second copy of a predicate is genuinely justified** — here the base-table policy could
+  not carry it, because RLS filters rows and not columns, so the rule had to move behind a
+  `security definer` boolean — **say so in the file, and name the door it must stay equal to.**
+  `20260823100000`'s buyer arm now carries that comment. A copy with a named twin is maintainable;
+  a copy that believes it is the only one is not.
+
+**Consequence for the buyer/seller split, which is the shape here:** the *owner* arm deliberately
+carries none of the seller-company or unfiled terms — a seller sees their own products whatever
+their company's state, and keeps their unfiled `Unassigned` pile. So the rule is "the buyer arm
+equals the shop door", not "the function equals the shop door". Hoisting a term above both arms
+breaks the seller; two test cells exist solely to fail if someone does.
+
+**Surfaced by:** slug 0022 `/ship` security round 4 (2026-08-24). `docs/agents/LEARNINGS.md` L-038.
+Related: [L-036's class — RLS filters rows, not columns](#) — a policy is not a projection.
+
+---
+
+## A migration's end state on REPLAY is not its end state on PUSH (2026-08-24)
+
+**The pattern.** Local development replays the whole migration history from empty on every
+`supabase db reset`. Production applies only the *new* files, on top of whatever is already there.
+Those two produce the same end state **only if every migration is order-independent** — and a
+migration that re-grants, re-creates or re-declares something is not.
+
+- **The failure is invisible locally, by construction.** A migration that wrongly re-grants a
+  privilege can be corrected by a *later* migration on replay, so `db reset` is green. On a cloud
+  push, that later migration is already applied, so the re-grant is the end state. Slug 0022's
+  `20260607090000` re-granted `execute on functions` to `anon`; locally it replayed *before* the
+  session-77 revoke and was harmless, and on a push it would have landed *after* it.
+- **A back-dated filename makes this worse and is easy to create.** That file is named `2026-06-07`
+  but was authored `2026-08-22`, so it sorts ~14 months before cloud's tip. A plain `db push`
+  **refuses** it and applies the rest while reporting success; `--include-all` is required, and the
+  flag then pushes *everything* local that cloud lacks — so the batch must be verified in both
+  directions first (`local-only` **and** `remote-only`) rather than trusting a remembered count.
+- **The check that catches it:** for each migration in the batch, ask *"does this statement's
+  correctness depend on another migration running after it?"* If yes, it is a replay artefact. Make
+  it order-independent, or verify the end state on the target after the push — reading the object
+  back off production (`pg_get_functiondef`, `pg_policy`, `has_function_privilege`) rather than
+  trusting that applying the file produced what the file says.
+- **Filename timestamp ≠ authoring date, and only one of the two tools preserves it.**
+  `supabase db push` stamps the filename timestamp into the history table; MCP `apply_migration`
+  stamps *call time*, which is what produced the 21-row history drift repaired in session 64. Prefer
+  `db push` for anything that will later be diffed.
+
+**Surfaced by:** slug 0022, T08 (2026-08-23) and its `/ship` (2026-08-24).
+`docs/agents/LEARNINGS.md` L-034.

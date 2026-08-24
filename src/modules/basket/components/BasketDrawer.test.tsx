@@ -74,6 +74,7 @@ function renderDrawerWithGroup(group: BasketGroup): string {
     refresh: vi.fn(async () => {}),
     open: true,
     setOpen: vi.fn(),
+    error: null,
   });
   return renderToStaticMarkup(<BasketDrawer />);
 }
@@ -135,5 +136,35 @@ describe("<BasketDrawer> Group — the non-connected-buyer arm (T02, HEL-56)", (
     // second copy of ConnectActions).
     expect(html).toContain('href="/discover/seller-stranger"');
     expect(html.toLowerCase()).toContain("connect");
+  });
+});
+
+/**
+ * T15 — a failed basket read must not look like an empty basket.
+ *
+ * `BasketProvider` used to collapse every failure of `getMyBasket()` into the
+ * empty view, so a permission error, a schema-cache miss on the brand-new
+ * `get_my_basket_lines` RPC, or a dead connection all rendered as "Your basket
+ * is empty." The provider now carries an `error`; this is the assertion that
+ * the drawer actually shows it.
+ *
+ * Presence AND absence asserted in the same state (L-021): on a blank panel
+ * everything is absent, so "no empty-copy" alone would prove nothing.
+ */
+describe("<BasketDrawer> — a read failure is shown, not disguised as empty (T15)", () => {
+  it("renders the failure and NOT the empty-basket copy", () => {
+    vi.mocked(useBasket).mockReturnValue({
+      view: { groups: [], totalLineCount: 0 },
+      refresh: vi.fn(async () => {}),
+      open: true,
+      setOpen: vi.fn(),
+      error: "We couldn't load your basket.",
+    });
+
+    const html = renderToStaticMarkup(<BasketDrawer />);
+
+    expect(html).toContain("We couldn&#x27;t load your basket.");
+    expect(html).toContain("Try again");
+    expect(html).not.toContain("Your basket is empty.");
   });
 });
