@@ -1415,3 +1415,93 @@ proves something.
 depends on** — not just what it asserts. For each surviving case ask: *would this still fail if the
 behaviour it names were broken?* If the answer needs the case you just inverted, the case needs its
 own setup. **Copying an assertion forward unchanged is not preserving its coverage.**
+
+---
+
+## L-045 · A TODO listing what a migration does NOT do becomes a lie the moment someone does it
+
+**2026-08-25 · slug 0023 · `/build` T01 · caught by the parallel security session, on a claim I
+volunteered to it**
+
+**Trigger** — citing a migration comment as evidence about **current** schema, grants or policy.
+Especially one phrased as a follow-up: *"not in this migration"*, *"tracked follow-ups"*,
+*"needs a view or table split"*, *"design decision pending"*, *"TODO"*, *"deferred"*.
+
+**What I asserted.** Flagging a neighbouring risk to the security session, I wrote that
+`line_all` is `FOR ALL TO authenticated` on a table carrying `seller_margin`/`buyer_metric`, with
+column-hiding done by grant rather than policy — the L-036 class. My source was
+`20260607170000_rls_policies.sql:20-21`:
+
+    -- NOT in this migration (tracked follow-ups):
+    --   * Seller-only COLUMN hiding (deal_line_item.seller_margin/buyer_metric,
+    --     product.cogs) — needs a view or table split; design decision pending.
+
+**All three clauses are false today.** `seller_margin` and `buyer_metric` are not on
+`deal_line_item` — `information_schema.columns` returns exactly two rows for those names, both
+`deal_line_item_private` (rls on, one policy `dli_private_all`, `company_id =
+current_company_id()`). `cogs` is not on `product` — it is on `product_cost`, same shape. And
+`product` itself now carries exactly one policy, `product_all`, owner-only. **The table split the
+comment asks for was built; the comment was never retired.**
+
+**Why it was wrong.** I know that a comment is not a contract (L-006) and I still read this one as
+a fact, because of its grammar. A comment describing what code **does** is falsified loudly — the
+behaviour changes, someone reads the comment beside the code, the mismatch is visible in one
+screen. A comment describing what a migration **does not do yet** is falsified **elsewhere and
+later**, by a different migration, in a different file, by a person who has no reason to open this
+one. Nothing in the workflow ever routes back to it. So the two kinds of comment do not decay at
+the same rate, and I treated them as if they did: a to-do that has been discharged reads exactly
+like a to-do that is still outstanding, and the more confidently it is worded the more it reads
+like a description.
+
+**The rule.** A follow-up comment is evidence of **intent at authoring time**, never of present
+state — and it is the single most stale-prone thing in a migration, because discharging it happens
+somewhere else. Before citing one, resolve the object against the catalog
+(`information_schema.columns`, `pg_policies`, `pg_class.relrowsecurity`), not against the prose.
+**One catalog query outranks every comment in the repo.** Corollary for the writing side: when a
+slug discharges a to-do that another file records, retiring that record is part of the work — the
+alternative is a comment that will mislead every future reader with no failing test to stop it.
+
+---
+
+## L-046 · A generic best practice does not outrank an ADR that already rejected it by name
+
+**2026-08-25 · slug 0023 · `/build` T01 · caught by the parallel security session, on an aside I
+volunteered about THEIR ticket**
+
+**Trigger** — about to recommend a security or schema default: `security_invoker`, RLS on,
+`WITH CHECK`, a constraint, an index, "this should be a view", "this should be definer". Also:
+adding any second claim to a message whose first claim you verified.
+
+**What I asserted.** Reviewing nothing, holding no ticket, I closed a message with *"`security_invoker
+= true` on that view is the right call, incidentally."*
+
+**`docs/architecture/adr/0004…:239` had already rejected it, naming my exact failure mode:**
+*"`security_invoker` on would zero out every buyer read (the `pricelist` owner-policy…)"*. `:236`
+knowingly accepts the `security_definer_view` advisor finding that owner-rights produces; `:401-403`
+books it as a deliberate consequence. Verified against the catalog, not the ADR text: `pricelist`
+carries exactly one policy, `pricelist_all`, `USING (company_id = current_company_id())`, owner-only;
+the view joins it. Under caller-rights every buyer read returns zero rows and the buyer price
+surface goes dark. The view's actual `reloptions` is `security_barrier=true` — **the option I named
+was not even present.**
+
+**Why it was wrong — three mechanisms, and the third is the general one.**
+
+1. **It was an aside, and it rode on a correct claim.** The same message correctly said to assert
+   `reloptions`, because `create or replace view` silently drops the `WITH` clause — I had queried
+   that. The unqueried second half inherited the first half's authority. **That is how a good
+   message smuggles a bad claim**, and an aside carries no evidentiary burden in the writer's head
+   and full authority in the reader's.
+2. **Being outside my fence lowered my bar instead of raising it.** A bystander suggestion feels
+   cheap to offer; it is not cheap to receive.
+3. ⚠️ **But "outside my fence" is NOT the root cause** — the peer made the *identical* mistake
+   **inside** their own fence, with the ADR sitting in their repo, while writing a rule about
+   researching first. **The common factor was not whose ticket it was. It was that neither of us
+   ran a query before recommending.** Ownership is no protection; familiarity is no protection.
+
+**The rule.** A recorded decision in this repo outranks vendor guidance and general best practice,
+and *"does it still hold?"* is a **query, not a reading** — `pg_policies`, `pg_class.reloptions`,
+`information_schema`. Before recommending any default, grep the ADRs for the option name: an ADR
+that rejected it will usually name it. **Corollary: an unresearched aside on someone else's ticket
+is a recommendation. Research it or do not send it.** And when a message carries two claims, the
+verified one does not vouch for the other — say which is which.
+
