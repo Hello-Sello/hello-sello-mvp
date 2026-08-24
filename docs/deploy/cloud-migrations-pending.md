@@ -392,17 +392,47 @@ on `rel_all`.
 ---
 
 `20260823100000_basket_admission.sql` — **T07 / HEL-61.** One **new** restrictive policy
-`basket_line_admission` on `public.product_basket_line`, plus `revoke all … from anon` and
-`from public`. LOCAL only. **Nothing existing is re-declared** — `basket_line_owner_all` is not
-touched, and there is no `create or replace` in the file, so the class that once stripped
-`list_discoverable_companies()`'s verified gate does not apply here.
+`basket_line_admission` on `public.product_basket_line`, **three `create or replace` functions**
+(`product_visible_to_caller`, `product_admissible_to_basket`, `get_my_basket_lines` — all
+`security definer`), plus `revoke all … from anon` and `from public`. LOCAL only.
+
+> **⚠️ THIS PARAGRAPH USED TO SAY THE OPPOSITE — corrected 2026-08-24 at `/ship`.** It read
+> *"Nothing existing is re-declared … there is no `create or replace` in the file"* and
+> *"no visibility predicate is restated"*. Both were true when this entry was written and both
+> were falsified **inside the same slug**, by the ship gate's security rounds 2 and 3, which
+> moved the visibility rule into a function and added the curated read RPC. Nobody reopened the
+> ledger. **L-031's class, and the ledger is the push procedure — so a stale entry here is not a
+> documentation defect, it is an unverified production change.** The pre-flight below is
+> extended accordingly.
 
 **What it closes.** `product_basket_line` carried ownership as its only rule, so any
 authenticated caller could POST a line for **any** `product_id` — a competitor's hidden product
 included. The read hid the product's name; the row still existed, the count was wrong, and
 `toDraftLines` carried it into a deal draft. The new policy's `WITH CHECK` requires the caller
-to be able to SEE the product (inherited from the `product` policies via an RLS-filtered
-`EXISTS` — no visibility predicate is restated) **and**, unless they own it, `price_public`.
+to be able to SEE the product **and**, unless they own it, `price_public`.
+
+**Where the visibility rule lives now — and why it is not inherited.** The original design
+inherited visibility from the `product` policies via an RLS-filtered `EXISTS`. That is gone.
+RLS filters **rows, not columns**, so admitting a connected buyer's hidden rows through the base
+table handed over `rrp_per_gram`, `supplier_product_code` and raw `metadata` (L-036). The base
+policy therefore stays narrow and the rule lives in **`product_visible_to_caller()`**, evaluated
+`security definer` so it returns a boolean and never a readable row. `get_my_basket_lines()`
+gates its four detail columns on the same function per read, so the write gate and the read
+projection cannot drift.
+
+**⚠️ Its buyer arm must stay term-for-term equal to `get_discoverable_shop`.** Round 4 of the
+ship gate found three terms present in the shop door and absent here — the seller company's
+`deleted_at` and `verification_status`, and the unfiled (`location is not null`) rule — and a
+soft-deleted seller's hidden product was still returning its current name, cultivar, PZN and
+price through the basket while the shop door returned nothing. All three are now in the buyer
+arm. **The owner arm deliberately carries none of them** (a seller sees their own products
+regardless of company state, and keeps their unfiled `Unassigned` pile). See L-038.
+
+**⚠️ TWO GROUPS LOSE BASKET DETAIL THE MOMENT THIS LANDS, by design** — on top of the two
+caller classes the slug already names: buyers holding lines from a seller whose company is
+**soft-deleted or not verified**, and buyers holding lines on a product with **no location set**.
+Both go dark (line still listed, still deletable) rather than erroring.
+
 
 **⚠️ THIS REMOVES WRITES FROM LIVE CALLERS — deliberately, and in one further way than the
 attack it closes.** The policy is `FOR ALL`, so its `WITH CHECK` runs on UPDATE as well as
@@ -455,9 +485,56 @@ open in either role.
   service_role=arwdDxtm/postgres}` after a clean `db reset`. Note that `relacl` carried **no
   PUBLIC entry before this migration either** — tables get no default PUBLIC grant, so
   `from public` is defence in depth, not a door being closed.
-- **This migration depends on T06 (`20260822100000`)** — the buyer arm of the EXISTS resolves
-  through `product_public_select`, which T06 rewrites. Applying T07 without T06 gates the
-  basket against the *old*, narrower visibility rule.
+- **This migration depends on T06 (`20260822100000`) — a HARD dependency, corrected 2026-08-24.**
+  This bullet used to say the dependency was that "the buyer arm of the EXISTS resolves through
+  `product_public_select`, which T06 rewrites". That mechanism no longer exists (see the note at
+  the top of this entry). The real dependency is stronger: **`product_visible_to_caller()` calls
+  `public.is_connected_to_company()`, and that function is CREATED by `20260822100000`.** So
+  applying T07 without T06 does not merely gate against an older rule — the `create or replace`
+  itself fails to resolve. Filename order already handles this; do not reorder the batch.
+- **Confirm the three functions exist, are `security definer`, and pin `search_path`** (added
+  2026-08-24 — the original pre-flight verified the policy and nothing else, while the file
+  declares three functions):
+
+      select p.proname, p.prosecdef, p.proconfig
+        from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname = 'public'
+         and p.proname in ('product_visible_to_caller',
+                           'product_admissible_to_basket',
+                           'get_my_basket_lines');
+
+  → **three** rows, `prosecdef` = `t` on all three, `proconfig` = `{search_path=}` on all three.
+
+- **Confirm `anon` cannot execute any of them** (the 2026-08-17 rule: revoke from PUBLIC alone
+  does NOT revoke `anon`):
+
+      select p.proname,
+             has_function_privilege('anon', p.oid, 'EXECUTE')          as anon_exec,
+             has_function_privilege('authenticated', p.oid, 'EXECUTE') as auth_exec
+        from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname = 'public'
+         and p.proname in ('product_visible_to_caller',
+                           'product_admissible_to_basket',
+                           'get_my_basket_lines');
+
+  → `anon_exec` **false** on all three. `auth_exec` true on all three (the
+  `product_visible_to_caller` leg is unnecessary — **T14** removes it later; it is not a defect).
+
+- **Confirm the buyer arm carries all six terms.** Read the body back and check for the three
+  round-4 terms by name — `deleted_at`, `verification_status`, `location` — alongside the
+  original three. A `create or replace` from a stale copy is exactly how this repo lost
+  `list_discoverable_companies()`'s verified gate:
+
+      select pg_get_functiondef('public.product_visible_to_caller(uuid)'::regprocedure);
+
+  → the buyer arm contains `c.deleted_at is null`, `c.verification_status = 'verified'` and
+  `p.location is not null`; the **owner arm contains none of them**.
+
+- **`get_my_basket_lines` is a NEW RPC the shipped app already calls.** `reads.ts` invokes it on
+  every basket render. **Same-deploy rule applies with no slack**: if the app code reaches
+  production before this migration, every basket read fails — and `BasketProvider`'s bare
+  `.catch` renders that failure as an **empty basket**, not an error (**T15**). Push migrations
+  first, confirm this function exists on cloud, then let the app deploy.
 
 ---
 

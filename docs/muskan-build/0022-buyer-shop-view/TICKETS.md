@@ -691,3 +691,90 @@ for **every** combination of `profile_visible` × `price_public`; and the seller
 own catalogue is unchanged.
 
 **Recorded as L-036.** *RLS filters rows; it does not filter columns — a policy is not a projection.*
+
+---
+
+## T14 — `product_visible_to_caller` is granted to `authenticated`, making it a per-UUID visibility oracle · **XS** · depends on: none · **introduced by this slug**
+
+**Filed 2026-08-24 at `/ship`, security round 4 (a note, not a blocking finding). Muskan ruled: keep
+the grant for now, file the removal.**
+
+**What.** `20260823100000_basket_admission.sql:150` carries
+`grant execute on function public.product_visible_to_caller(uuid) to authenticated`. The grant is
+unnecessary: both callers — `product_admissible_to_basket()` and `get_my_basket_lines()` — are
+`security definer`, so the inner call runs as owner, not as the caller. Only
+`product_admissible_to_basket` genuinely needs the grant, because it is named in an RLS policy
+expression and those evaluate as the calling role.
+
+**Why it is not free.** A grant on a boolean visibility predicate that takes a bare UUID is an
+oracle: any authenticated user can ask "may I see product X?" for arbitrary X without going through
+a door that would log or shape the answer. `revoke all … from public, anon` is already correct on
+all three functions (verified: `has_function_privilege('anon', …)` false) — this is the
+`authenticated` leg only.
+
+**Why it was not done at the catch.** Cells 15, 16, 17 and 21 of `basket_admission_test.sql` call
+the function directly under `SET LOCAL ROLE authenticated`. Removing the grant breaks all four, and
+reworking four just-written cells at the tail of a long run is the exact momentum-fix pattern that
+produced rounds 2, 3 and 4 (L-038's corollary). Deliberately deferred, not overlooked.
+
+**Remedy.** Drop line 150; rework the four cells to call the function with `RESET ROLE` (the
+`request.jwt.claim.*` GUCs survive a role reset, so the buyer arm still evaluates for the right
+persona). Re-run `run_basket_admission_test.sh`.
+
+---
+
+## T15 — `BasketProvider`'s bare `.catch` renders every basket failure as "signed out" · **S** · depends on: none · **PRE-EXISTING, masked round 2's defect**
+
+**Filed 2026-08-24 at `/ship`, security round 4.**
+
+**What.** `src/modules/basket/BasketProvider.tsx:24` is `.catch(() => setView(EMPTY))`. Any failure
+of the basket read — a rename, a grant slip, a PostgREST schema-cache miss on the first cloud
+request after this batch lands, a `42501` — presents to the user as an empty basket, identical to
+being signed out. No error surfaces, nothing is logged.
+
+**Why it matters now.** This is what made the ship gate's round-2 defect invisible: a legitimately
+admitted hidden product could be written but not read back, the mapper threw, and this `.catch`
+blanked the **entire** basket with the rows left undeletable. The defect was found by reading SQL,
+not by anything the app did. **The batch about to ship replaces the basket read with a brand-new
+RPC (`get_my_basket_lines`) that has never served a production request** — this handler is exactly
+the thing that would hide it going wrong.
+
+**Remedy.** Distinguish the failure kinds: an auth failure legitimately means EMPTY; a query
+failure is an error state the drawer should render (and report). Do not widen the `catch`.
+
+---
+
+## T16 — `database.types.ts` declares four nullable `get_my_basket_lines` columns as non-nullable · **XS** · depends on: none · **introduced by this slug**
+
+**Filed 2026-08-24 at `/ship`, security round 4.**
+
+**What.** `src/types/database.types.ts:4785-4799` types every `get_my_basket_lines` return column as
+non-nullable. Four of them — `product_name`, `cultivar`, `unit_code`, `local_code_pzn` — are NULL
+**by design** whenever the product is not currently visible to the caller (that is the whole point
+of the round-3 fix), and `seller_company_name` comes off a `LEFT JOIN`.
+
+**Why it is not urgent.** The one shipped caller,
+`src/modules/basket/supabase/reads.ts:37-50`, locally re-asserts them as nullable and handles the
+nulls. So the ship is safe. **The next caller will not**, and `tsc` will actively assure them the
+nulls cannot happen — this file is hand-maintained, so the compiler is repeating a claim a human
+wrote, not one the database made (L-037).
+
+**Remedy.** Mark the five columns nullable in the generated types and drop the local re-assertion in
+`reads.ts` so there is one owner of the nullability fact.
+
+---
+
+## T17 — No discovery door gates on `company.deactivated_at` · **S** · depends on: none · **PRE-EXISTING**
+
+**Filed 2026-08-24 at `/ship`, security round 4 (verified by catalog query, outside this diff).**
+
+**What.** `get_discoverable_company`, `get_discoverable_shop` and `list_discoverable_companies` all
+gate on `c.deleted_at is null and c.verification_status = 'verified'`. **None** of them consults
+`company.deactivated_at`. A deactivated company still lists in Discover and its shop still opens.
+
+**Why it is filed here.** This slug's round 4 made the basket door agree with the shop door
+term-for-term (`deleted_at`, `verification_status`, `location`). `deactivated_at` is a term **no**
+door carries, so the doors agree with each other while all four disagree with the account
+lifecycle. Deciding it needs the product answer first: what does deactivation mean for a company
+that has live relationships and open baskets?
+

@@ -1174,3 +1174,43 @@ each one does after the change. **A capability that can be written must be prova
 same test**; assert the round-trip, not the write. And treat `as unknown as` over a query result as
 a place where nullability has been asserted rather than checked — the widening of a policy is what
 makes it true, so the narrowing is what makes it a lie.
+
+---
+
+## L-038 · A "single owner" of a rule is a claim about AGREEMENT, not about file count
+
+**2026-08-24 · slug 0022 · `/ship` step 3 · caught by the `security` agent, round 4 of 4**
+
+**Trigger** — extracting a rule into one function/module and describing it as "the single owner",
+"the one place", or "so they cannot drift". Also: any fix whose justification is that two sites now
+call the same helper.
+
+**What I authored.** Round 3 pulled the product-visibility rule out of two drifting sites into
+`product_visible_to_caller()`, consulted by both the basket write gate and the basket read
+projection. The comment calls it "the single owner of the visibility rule for basket write AND
+read." Round 4 proved it disagreed with `get_discoverable_shop` — the sanctioned door it was
+supposed to be consistent with — on a predicate it never carried at all: the **seller company's**
+`deleted_at` and `verification_status`. With the seller soft-deleted, the shop door returned zero
+rows while the basket door returned the hidden product's current name, cultivar, PZN and price.
+
+**Why it was wrong — the reasoning error.** I proved the two *callers* agreed with each other and
+stopped. That is the cheap half of the claim. "Single owner" asserts something stronger: that this
+function is now the authority for a rule that other doors also enforce — so the audit is a
+**term-by-term diff against every other door that answers the same question**, not a check that the
+new callers share a helper. Two sites agreeing is not correctness; it is only the absence of drift
+*between those two*. A catalog query over which functions check `c.deleted_at` would have shown the
+split in one line: three discovery functions `t`, all three new basket functions `f`.
+
+**The rule.** When you extract a rule and call the result its single owner, enumerate every OTHER
+site in the schema that answers the same question and diff the predicate lists. Any term present
+there and absent here is a finding until ruled otherwise. **The extraction fixes drift between the
+callers you moved; it silently creates drift with every door you did not.**
+
+**Corollary — fixing under momentum at the tail of a run.** Rounds 1, 2 and 3 each introduced the
+defect the next round found; round 4 found a fourth in round 3's fix. Every one was a *narrower*
+version of the same question ("who may see this product"), answered one predicate at a time as each
+round surfaced one. The budget assumed convergence. It did not converge — and it was round 4, run
+only because STATE.md insisted on it against three green suites, that caught a live exposure. **Do
+not treat consecutive green rounds as evidence the next round is unnecessary; treat a fix authored
+at the tail of a long run as the most likely source of the next finding.**
+

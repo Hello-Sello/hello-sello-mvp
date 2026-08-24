@@ -2,10 +2,26 @@
 -- basket_admission_test.sql — T07 (HEL-61, PLAN-T07.md rev 3)
 -- ----------------------------------------------------------------------------
 -- Proves: the new `basket_line_admission` restrictive policy on
--- public.product_basket_line (WITH CHECK only, FOR ALL, TO authenticated) and
--- the `anon`/`public` grant revoke. Reuses `product_public_select` /
--- `product_all` (T06) for the visibility arm via an RLS-filtered EXISTS
--- subquery — no visibility predicate is restated here (PLAN-T07 §1).
+-- public.product_basket_line (WITH CHECK only, FOR ALL, TO authenticated),
+-- the `anon`/`public` grant revoke, and — directly, not inferred from a
+-- table read — the visibility predicate as it actually ships in
+-- `product_visible_to_caller()` / `product_admissible_to_basket()`.
+--
+-- ⚠️ STALE-CLAIM CORRECTION (round 4): PLAN-T07 §1 originally described this
+-- predicate as REUSING `product_public_select` / `product_all` via an
+-- RLS-filtered EXISTS subquery, so no visibility rule would be restated here.
+-- That was true only through round 1. Round 1 then removed the connection
+-- arm from `product_public_select` entirely, and rounds 2-3 moved the WHOLE
+-- visibility rule (public / owner / connection, the verified gate, the
+-- window, and — as of round 4 — the seller company's own
+-- deleted_at/verification_status and the unfiled-location term) into
+-- `product_visible_to_caller()` instead. Cells 14-21 below assert that
+-- function and `product_admissible_to_basket()` DIRECTLY, precisely because
+-- there is no RLS-filtered subquery left to inherit the rule from — the
+-- shipped shape is a single owning function, called from both the write gate
+-- (below) and the read projection (`get_my_basket_lines()`), which is
+-- narrower and more testable than the read-through-RLS design this file's
+-- own header used to describe.
 --
 -- L-009 checked: `ls supabase/tests/ | grep -i basket` → no existing basket
 -- suite. Genuinely new file.
@@ -133,6 +149,17 @@
 -- readings go 1/1/0 → 0/0/1: the row SURVIVES a DELETE that reported success,
 -- and a buyer-only recount reads 0 either way — which is the case that cell's
 -- privileged post-delete count exists to catch.
+--
+-- ROUND 4 ADDENDUM — cells 14-21, appended after G1 (own header block sits
+-- just above cell 14 in the file): security round 4 found a BLOCKING leak
+-- (product_visible_to_caller()'s buyer arm never checked the SELLER
+-- COMPANY's own deleted_at/verification_status, only the product row's, and
+-- never carried the "unfiled is not a shelf" location term
+-- get_discoverable_shop() already has) and a missing-assertion gap (neither
+-- product_visible_to_caller() nor get_my_basket_lines() had any test at all
+-- before this addendum). Expected RED: 14, 15, 16, 17, 21. Expected GREEN now
+-- (functional regression cover): 18, 19, 20 (cell 20 deliberately runs LAST —
+-- see its own header — cell 21 sits before it).
 -- ============================================================================
 
 \set ON_ERROR_STOP on
@@ -755,6 +782,644 @@ BEGIN
        WHERE owner_person_id = '22222222-2222-2222-2222-222222222222'::uuid
          AND product_id = (SELECT staysadmissible_id FROM _fix)) <> 1
     THEN RAISE EXCEPTION 'G1/CRUD: INSERT on product_basket_line must still work for authenticated after the revoke — the more important half of this cell, since the whole basket depends on it'; END IF;
+END $$;
+RESET ROLE;
+
+-- ============================================================================
+-- ROUND 4 — security round 4 found a BLOCKING leak (findings #1-#4) and a
+-- missing-assertion gap (F2) in this migration. `product_visible_to_caller()`
+-- claims to be the SINGLE owner of "may this caller see this product", but
+-- its buyer arm never consulted the SELLER COMPANY's own `deleted_at` or
+-- `verification_status` — only the PRODUCT's `deleted_at` (migration comment
+-- 20260823100000:110-114 covers the product row only) — and never carried
+-- get_discoverable_shop()'s "unfiled is not a shelf" location term either
+-- (20260822100000:332-334). `get_my_basket_lines()` and
+-- `product_visible_to_caller()` are also asserted NOWHERE else in the repo
+-- (grep -rn "get_my_basket_lines\|product_visible_to_caller" supabase/tests/
+-- e2e/ → 0 hits before this block). Muskan's ruling: close all three missing
+-- terms in one fix — company deleted_at, company verification_status, and
+-- the location term — so `product_visible_to_caller()`'s buyer arm becomes
+-- term-for-term equal to `get_discoverable_shop()`'s WHERE clause.
+--
+-- Cells 14-21 are appended HERE, after G1's CRUD checks and before the closing
+-- NOTICE + ROLLBACK, so nothing above this line is disturbed by any mutation
+-- below it (cells 17, 20 and 21 soft-delete/unverify/reassign company rows),
+-- and nothing below needs to restore state afterward — the whole file is one
+-- ROLLBACK. Cell 20 is placed LAST of all (see its own header) since it is
+-- the one cell that mutates the shared GreenLeaf seed row; cell 21 (also a
+-- fresh ephemeral company) sits before it.
+--
+-- Genuinely SEPARATE ephemeral seller companies, not GreenLeaf (L-012/L-033):
+-- the leak cells mutate a seller COMPANY's own verification_status/deleted_at,
+-- and every cell above this point already depends on GreenLeaf staying
+-- verified+live. A fresh company has no dependents by construction.
+--
+-- Expected RED (the fix that makes these green is not written yet): 14, 15,
+-- 16, 17, 21. Expected GREEN now — functional regression cover the repo is
+-- missing (F2): 18, 19, 20.
+-- ============================================================================
+
+INSERT INTO public.company (id, name, country, verification_status, verified_at, created_by) VALUES
+  ('c7000001-0000-0000-0000-000000000000'::uuid, 'T07 Round4 Seller (soft-delete case)', 'DE', 'verified', now(), NULL),
+  ('c7000002-0000-0000-0000-000000000000'::uuid, 'T07 Round4 Seller (never verified)',   'DE', 'pending',  NULL,  NULL),
+  ('c7000003-0000-0000-0000-000000000000'::uuid, 'T07 Round4 Seller (two-doors agree)',  'DE', 'verified', now(), NULL);
+
+INSERT INTO public.product (company_id, name, supplier_product_code, profile_visible, price_public, cultivar, local_code_pzn, location) VALUES
+  ('c7000001-0000-0000-0000-000000000000'::uuid, 'T07 Round4 Hidden Priced Product',     'T07-R4-HIDDEN-PRICED', false, true, 'T07 Round4 Cultivar', 'T07-R4-PZN-0001', 'T07-FIXTURE-LOC'),
+  ('c7000002-0000-0000-0000-000000000000'::uuid, 'T07 Round4 Unverified Seller Product', 'T07-R4-UNVERIFIED',    true,  true, NULL, NULL, 'T07-FIXTURE-LOC'),
+  ('c7000003-0000-0000-0000-000000000000'::uuid, 'T07 Round4 Agree Product',             'T07-R4-AGREE',         true,  true, NULL, NULL, 'T07-FIXTURE-LOC');
+
+-- Own product, on GreenLeaf itself (cell 19 — relationship-end, not a
+-- soft-delete/verification case, so it belongs on the seed company, same as
+-- cells 1-13's AUR-* fixtures do).
+INSERT INTO public.product (company_id, name, supplier_product_code, profile_visible, price_public, cultivar, local_code_pzn, location) VALUES
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid, 'T07 Round4 Relationship-End Product', 'T07-R4-RELEND', false, true, 'T07 Round4 RelEnd Cultivar', 'T07-R4-PZN-0002', 'T07-FIXTURE-LOC');
+
+-- Bob (StonePharm) gets an ACTIVE relationship to seller1 ONLY — seller2's and
+-- seller3's products are both profile_visible=true, so their buyer arm needs
+-- no connection at all; only seller1's product is hidden (profile_visible=
+-- false) and needs the connection override to be visible before the leak
+-- fires. LEAST/GREATEST required by relationship_canonical_order (company_a_id
+-- < company_b_id) — same idiom as seed.sql §5d.
+INSERT INTO public.relationship (company_a_id, company_b_id, initiated_by_company_id, status)
+VALUES (
+  LEAST('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'::uuid, 'c7000001-0000-0000-0000-000000000000'::uuid),
+  GREATEST('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'::uuid, 'c7000001-0000-0000-0000-000000000000'::uuid),
+  'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'::uuid,
+  'active'
+);
+
+CREATE TEMP TABLE _fix2 ON COMMIT DROP AS
+SELECT
+  'c7000001-0000-0000-0000-000000000000'::uuid AS r4_seller1_id,
+  'c7000002-0000-0000-0000-000000000000'::uuid AS r4_seller2_id,
+  'c7000003-0000-0000-0000-000000000000'::uuid AS r4_seller3_id,
+  (SELECT id FROM public.product WHERE supplier_product_code = 'T07-R4-HIDDEN-PRICED') AS r4_hidden_priced_id,
+  (SELECT id FROM public.product WHERE supplier_product_code = 'T07-R4-UNVERIFIED')    AS r4_unverified_id,
+  (SELECT id FROM public.product WHERE supplier_product_code = 'T07-R4-AGREE')         AS r4_agree_id,
+  (SELECT id FROM public.product WHERE supplier_product_code = 'T07-R4-RELEND')        AS r4_relend_id;
+GRANT SELECT ON _fix2 TO authenticated;
+GRANT SELECT ON _fix2 TO anon;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM _fix2
+     WHERE r4_hidden_priced_id IS NULL OR r4_unverified_id IS NULL
+        OR r4_agree_id IS NULL OR r4_relend_id IS NULL)
+    THEN RAISE EXCEPTION 'FIXTURE: one or more T07 round-4 fixtures failed to resolve'; END IF;
+END $$;
+
+-- ============================================================================
+-- Cell 14 [round-4 finding #1 — 🔴 EXPECTED RED] — a verified buyer (Bob,
+-- StonePharm) with an ACTIVE relationship to the seller has a basket line on
+-- the seller's HIDDEN (profile_visible=false), price_public=true product. The
+-- seller company is then soft-deleted. get_my_basket_lines() must go dark on
+-- product_name/cultivar/local_code_pzn — today it does not:
+-- product_visible_to_caller() never consults the SELLER COMPANY's own
+-- deleted_at, only the PRODUCT's. This is the proven leak: a withdrawn
+-- seller's catalogue detail keeps flowing into a buyer's basket drawer.
+-- ============================================================================
+SELECT set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', true);
+SELECT set_config('request.jwt.claims', '{"sub":"22222222-2222-2222-2222-222222222222","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+DO $$
+BEGIN
+  INSERT INTO public.product_basket_line (owner_person_id, product_id, pack_count)
+  VALUES ('22222222-2222-2222-2222-222222222222'::uuid, (SELECT r4_hidden_priced_id FROM _fix2), 1);
+END $$;
+RESET ROLE;
+
+-- Positive control BEFORE the mutation (B4-class): the line must read back
+-- WITH real detail while the seller company is still verified+live, or the
+-- later "goes NULL" assertion would be vacuous.
+SELECT set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', true);
+SELECT set_config('request.jwt.claims', '{"sub":"22222222-2222-2222-2222-222222222222","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE v_name text;
+BEGIN
+  SELECT g.product_name INTO v_name FROM public.get_my_basket_lines() g
+   WHERE g.product_id = (SELECT r4_hidden_priced_id FROM _fix2);
+  IF v_name IS NULL THEN
+    RAISE EXCEPTION 'Cell 14 precondition: Bob''s line must read a REAL product_name while the seller company is still verified+live — got NULL, so the later "goes dark" assertion would be vacuous';
+  END IF;
+END $$;
+RESET ROLE;
+
+-- The seller company is soft-deleted (privileged — models the seller's own
+-- account lifecycle, not a caller-controlled write; same idiom as cell 6's
+-- privileged verification_status UPDATE).
+UPDATE public.company SET deleted_at = now()
+ WHERE id = (SELECT r4_seller1_id FROM _fix2);
+
+SELECT set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', true);
+SELECT set_config('request.jwt.claims', '{"sub":"22222222-2222-2222-2222-222222222222","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE
+  v_name     text;
+  v_cultivar text;
+  v_pzn      text;
+  v_found    int;
+BEGIN
+  SELECT count(*) INTO v_found FROM public.get_my_basket_lines() g
+   WHERE g.product_id = (SELECT r4_hidden_priced_id FROM _fix2);
+  IF v_found <> 1 THEN
+    RAISE EXCEPTION 'Cell 14: Bob''s line must still be PRESENT (readable) after the seller company is soft-deleted — the ticket''s accepted consequence is "goes dark", never "vanishes" — got % rows', v_found;
+  END IF;
+
+  SELECT g.product_name, g.cultivar, g.local_code_pzn
+    INTO v_name, v_cultivar, v_pzn
+    FROM public.get_my_basket_lines() g
+   WHERE g.product_id = (SELECT r4_hidden_priced_id FROM _fix2);
+  IF v_name IS NOT NULL OR v_cultivar IS NOT NULL OR v_pzn IS NOT NULL THEN
+    RAISE EXCEPTION 'Cell 14/round-4 LEAK: get_my_basket_lines() must return NULL product_name/cultivar/local_code_pzn once the SELLER COMPANY is soft-deleted — got name=%, cultivar=%, pzn=%. product_visible_to_caller() never checks the seller company''s own deleted_at on the buyer arm', v_name, v_cultivar, v_pzn;
+  END IF;
+END $$;
+RESET ROLE;
+
+-- ============================================================================
+-- Cell 15 [round-4 finding #2 — 🔴 EXPECTED RED] — product_visible_to_caller()
+-- itself must be FALSE for this buyer/product pair once the seller company is
+-- soft-deleted (cell 14's mutation carries forward — same fixture, same
+-- transaction). Isolates the leak to the shared visibility function rather
+-- than to get_my_basket_lines()'s own projection.
+-- ============================================================================
+SELECT set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', true);
+SELECT set_config('request.jwt.claims', '{"sub":"22222222-2222-2222-2222-222222222222","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE v_visible boolean;
+BEGIN
+  SELECT public.product_visible_to_caller((SELECT r4_hidden_priced_id FROM _fix2)) INTO v_visible;
+  IF v_visible IS DISTINCT FROM false THEN
+    RAISE EXCEPTION 'Cell 15/round-4 LEAK: product_visible_to_caller() must return FALSE for Bob/r4-hidden-priced once the seller company is soft-deleted — got %', v_visible;
+  END IF;
+END $$;
+RESET ROLE;
+
+-- ============================================================================
+-- Cell 16 [round-4 finding #3] — a seller company with verification_status
+-- <> 'verified' owning a profile_visible=true, price_public=true product must
+-- be NEITHER visible NOR admissible. Under the ruled design all three new
+-- terms (company deleted_at, company verification_status, location) sit in
+-- product_visible_to_caller()'s BUYER ARM — the same function
+-- get_discoverable_shop() is being made to agree with term-for-term
+-- (get_discoverable_shop() joins company ON c.verification_status =
+-- 'verified', refusing an unverified seller's products outright) — so an
+-- unverified seller's product is NOT VISIBLE at all, full stop, and
+-- product_admissible_to_basket() is FALSE as a CONSEQUENCE of visibility
+-- being false, not as an independent admission-layer check.
+--
+-- (Correction, same round: an earlier draft of this cell asserted
+-- profile_visible=true alone kept the product visible regardless of the
+-- seller's verification state, as a "precondition" before the real
+-- assertion. That is the opposite of the shipped design and made the cell
+-- fail on its own precondition once the fix landed — removed.)
+--
+-- Flip-and-restore control, not a "still visible" precondition: with the
+-- seller UNVERIFIED, both functions must read FALSE; flip the seller to
+-- 'verified' and BOTH must flip to TRUE for the SAME caller/product; restore.
+-- This proves the fixture is real and reachable (so step 1's FALSE reading
+-- isn't vacuous — a nonexistent product would also read FALSE) and that the
+-- VERIFICATION term specifically is what is doing the work. Same
+-- privileged-UPDATE-then-restore idiom as cell 21's owner guardrail.
+-- ============================================================================
+SELECT set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', true);
+SELECT set_config('request.jwt.claims', '{"sub":"22222222-2222-2222-2222-222222222222","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE
+  v_visible    boolean;
+  v_admissible boolean;
+BEGIN
+  SELECT public.product_visible_to_caller((SELECT r4_unverified_id FROM _fix2)) INTO v_visible;
+  IF v_visible IS DISTINCT FROM false THEN
+    RAISE EXCEPTION 'Cell 16 step 1: with the seller company NEVER VERIFIED (verification_status=''pending''), product_visible_to_caller() must be FALSE — got %', v_visible;
+  END IF;
+
+  SELECT public.product_admissible_to_basket((SELECT r4_unverified_id FROM _fix2)) INTO v_admissible;
+  IF v_admissible IS DISTINCT FROM false THEN
+    RAISE EXCEPTION 'Cell 16/round-4 LEAK step 1: with the seller company NEVER VERIFIED, product_admissible_to_basket() must be FALSE — got %. get_discoverable_shop() would never surface this shop at all', v_admissible;
+  END IF;
+END $$;
+RESET ROLE;
+
+-- Flip the seller company to verified (privileged) — the control half: if
+-- BOTH functions now read TRUE for the identical caller/product, step 1's
+-- FALSE reading was genuinely caused by verification_status, not by a
+-- missing or misresolved fixture.
+UPDATE public.company SET verification_status = 'verified', verified_at = now()
+ WHERE id = (SELECT r4_seller2_id FROM _fix2);
+
+SELECT set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', true);
+SELECT set_config('request.jwt.claims', '{"sub":"22222222-2222-2222-2222-222222222222","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE
+  v_visible    boolean;
+  v_admissible boolean;
+BEGIN
+  SELECT public.product_visible_to_caller((SELECT r4_unverified_id FROM _fix2)) INTO v_visible;
+  IF v_visible IS DISTINCT FROM true THEN
+    RAISE EXCEPTION 'Cell 16 step 2 (control): once the seller company is flipped to verified, product_visible_to_caller() must flip to TRUE for the SAME caller/product — got %. If this fails, step 1''s FALSE reading was never proven to be caused by verification_status', v_visible;
+  END IF;
+
+  SELECT public.product_admissible_to_basket((SELECT r4_unverified_id FROM _fix2)) INTO v_admissible;
+  IF v_admissible IS DISTINCT FROM true THEN
+    RAISE EXCEPTION 'Cell 16 step 2 (control): once the seller company is flipped to verified, product_admissible_to_basket() must flip to TRUE for the SAME caller/product — got %', v_admissible;
+  END IF;
+END $$;
+RESET ROLE;
+
+-- Restore the seller company to never-verified (privileged). Nothing later
+-- in this file reads seller2's state, but restoring matches the file's own
+-- "mutate then restore" idiom (cell 6, cell 21) and leaves no ambiguity for
+-- a future cell inserted after this one.
+UPDATE public.company SET verification_status = 'pending', verified_at = NULL
+ WHERE id = (SELECT r4_seller2_id FROM _fix2);
+
+-- ============================================================================
+-- Cell 17 [round-4 finding #4 — 🔴 EXPECTED RED — the disproven invariant] —
+-- the two doors must agree: the set of products get_discoverable_shop(seller)
+-- returns must equal the set for which product_visible_to_caller() is true,
+-- for the same caller. Run once with the seller verified+live (both
+-- non-empty, agreeing — the control) and once with the seller soft-deleted
+-- (both must go empty). Round 3 claimed this invariant; round 4 disproved it.
+--
+-- The product carries an explicit `location` (unlike cells 14/16's fixtures):
+-- get_discoverable_shop()'s "unfiled is not a shelf" clause
+-- (20260822100000:332-334) withholds a NULL-location product from a
+-- non-owner caller regardless of profile_visible, which would make the
+-- BEFORE-mutation control disagree for a reason unrelated to round 4 —
+-- setting location avoids tripping that unrelated gap here.
+-- ============================================================================
+SELECT set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', true);
+SELECT set_config('request.jwt.claims', '{"sub":"22222222-2222-2222-2222-222222222222","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE
+  v_shop_before    int;
+  v_visible_before boolean;
+BEGIN
+  SELECT count(*) INTO v_shop_before
+    FROM public.get_discoverable_shop((SELECT r4_seller3_id FROM _fix2)) g
+   WHERE g.id = (SELECT r4_agree_id FROM _fix2);
+  SELECT public.product_visible_to_caller((SELECT r4_agree_id FROM _fix2)) INTO v_visible_before;
+  IF v_shop_before <> 1 OR v_visible_before IS DISTINCT FROM true THEN
+    RAISE EXCEPTION 'Cell 17 precondition: with the seller verified+live, BOTH doors must agree and be non-empty (control) — get_discoverable_shop count=%, product_visible_to_caller=%', v_shop_before, v_visible_before;
+  END IF;
+END $$;
+RESET ROLE;
+
+UPDATE public.company SET deleted_at = now()
+ WHERE id = (SELECT r4_seller3_id FROM _fix2);
+
+SELECT set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', true);
+SELECT set_config('request.jwt.claims', '{"sub":"22222222-2222-2222-2222-222222222222","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE
+  v_shop_after    int;
+  v_visible_after boolean;
+BEGIN
+  SELECT count(*) INTO v_shop_after
+    FROM public.get_discoverable_shop((SELECT r4_seller3_id FROM _fix2)) g
+   WHERE g.id = (SELECT r4_agree_id FROM _fix2);
+  IF v_shop_after <> 0 THEN
+    RAISE EXCEPTION 'Cell 17: get_discoverable_shop() must be EMPTY once the seller company is soft-deleted — got % rows', v_shop_after;
+  END IF;
+
+  SELECT public.product_visible_to_caller((SELECT r4_agree_id FROM _fix2)) INTO v_visible_after;
+  IF v_visible_after IS DISTINCT FROM false THEN
+    RAISE EXCEPTION 'Cell 17/round-4 DISPROVEN INVARIANT: the two doors DISAGREE — get_discoverable_shop() is empty (0 rows) but product_visible_to_caller() still returns % for the SAME caller/product once the seller company is soft-deleted. product_visible_to_caller() never checks the seller company''s own deleted_at on the buyer arm', v_visible_after;
+  END IF;
+END $$;
+RESET ROLE;
+
+-- ============================================================================
+-- Cell 18 [F2 — ownership gate on get_my_basket_lines(), GREEN now] — Eva
+-- (verified, unconnected — cell 5's persona) must see ZERO of Bob's lines via
+-- get_my_basket_lines(), and her OWN line must be present — asserted on the
+-- specific line id, not a bare count, which would pass vacuously if Eva
+-- simply had no lines of her own at all. get_my_basket_lines()'s ONLY
+-- ownership guard is `where l.owner_person_id = auth.uid()`
+-- (SECURITY DEFINER bypasses `basket_line_owner_all`), and nothing in the
+-- repo asserts it.
+-- ============================================================================
+CREATE TEMP TABLE _fix3 ON COMMIT DROP AS
+SELECT id AS bob_aur1b_line_id
+  FROM public.product_basket_line
+ WHERE owner_person_id = '22222222-2222-2222-2222-222222222222'::uuid
+   AND product_id = (SELECT aur1b_id FROM _fix);
+GRANT SELECT ON _fix3 TO authenticated;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM _fix3 WHERE bob_aur1b_line_id IS NOT NULL) THEN
+    RAISE EXCEPTION 'Cell 18 precondition: Bob''s cell-1 AUR-1B line was not found — fixture drift';
+  END IF;
+END $$;
+
+-- Eva adds her OWN line on AUR-1B (public+priced; no connection required —
+-- profile_visible=true alone satisfies the buyer arm).
+SELECT set_config('request.jwt.claim.sub', (SELECT eva_id::text FROM _fix), true);
+SELECT set_config('request.jwt.claims', '{"sub":"' || (SELECT eva_id::text FROM _fix) || '","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+DO $$
+BEGIN
+  INSERT INTO public.product_basket_line (owner_person_id, product_id, pack_count)
+  VALUES ((SELECT eva_id FROM _fix), (SELECT aur1b_id FROM _fix), 1);
+END $$;
+RESET ROLE;
+
+SELECT set_config('request.jwt.claim.sub', (SELECT eva_id::text FROM _fix), true);
+SELECT set_config('request.jwt.claims', '{"sub":"' || (SELECT eva_id::text FROM _fix) || '","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE
+  v_eva_own_count  int;
+  v_bob_leak_count int;
+BEGIN
+  SELECT count(*) INTO v_eva_own_count FROM public.get_my_basket_lines() g
+   WHERE g.product_id = (SELECT aur1b_id FROM _fix);
+  IF v_eva_own_count <> 1 THEN
+    RAISE EXCEPTION 'Cell 18: Eva must see her OWN AUR-1B line via get_my_basket_lines() — got % rows (control: proves the query mechanism is not vacuously empty)', v_eva_own_count;
+  END IF;
+
+  SELECT count(*) INTO v_bob_leak_count FROM public.get_my_basket_lines() g
+   WHERE g.id = (SELECT bob_aur1b_line_id FROM _fix3);
+  IF v_bob_leak_count <> 0 THEN
+    RAISE EXCEPTION 'Cell 18/F2: Eva must see ZERO of Bob''s lines via get_my_basket_lines() — Bob''s AUR-1B line id leaked into Eva''s own result set';
+  END IF;
+END $$;
+RESET ROLE;
+
+-- ============================================================================
+-- Cell 19 [functional regression cover, GREEN now — T06/T07's shipped fix] —
+-- a connected buyer (Bob) sees FULL detail on GreenLeaf's hidden product; the
+-- relationship is then ended (soft-deleted); the SAME call must go dark on
+-- product_name/cultivar/local_code_pzn, the line must still be PRESENT, and
+-- the DELETE on that line must still SUCCEED — the ticket's explicit
+-- "readable and deletable" consequence, exercised end-to-end through
+-- get_my_basket_lines() + a real DELETE rather than product_visible_to_caller
+-- in isolation. Nothing in the repo currently asserts this (grep: 0 hits).
+-- ============================================================================
+SELECT set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', true);
+SELECT set_config('request.jwt.claims', '{"sub":"22222222-2222-2222-2222-222222222222","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+DO $$
+BEGIN
+  INSERT INTO public.product_basket_line (owner_person_id, product_id, pack_count)
+  VALUES ('22222222-2222-2222-2222-222222222222'::uuid, (SELECT r4_relend_id FROM _fix2), 1);
+END $$;
+RESET ROLE;
+
+SELECT set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', true);
+SELECT set_config('request.jwt.claims', '{"sub":"22222222-2222-2222-2222-222222222222","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE v_name text; v_cultivar text; v_pzn text;
+BEGIN
+  SELECT g.product_name, g.cultivar, g.local_code_pzn
+    INTO v_name, v_cultivar, v_pzn
+    FROM public.get_my_basket_lines() g
+   WHERE g.product_id = (SELECT r4_relend_id FROM _fix2);
+  IF v_name IS NULL OR v_cultivar IS NULL OR v_pzn IS NULL THEN
+    RAISE EXCEPTION 'Cell 19 precondition: Bob (connected to GreenLeaf) must see FULL detail on the hidden product BEFORE the relationship ends — name=%, cultivar=%, pzn=%', v_name, v_cultivar, v_pzn;
+  END IF;
+END $$;
+RESET ROLE;
+
+-- End the GreenLeaf <-> StonePharm relationship (seed §5d) — privileged, soft
+-- delete, same shape is_connected_to_company() checks (r.deleted_at is null).
+DO $$
+DECLARE v_ended int;
+BEGIN
+  UPDATE public.relationship
+     SET deleted_at = now()
+   WHERE status = 'active'
+     AND deleted_at IS NULL
+     AND company_a_id = LEAST('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid, 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'::uuid)
+     AND company_b_id = GREATEST('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid, 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'::uuid);
+  GET DIAGNOSTICS v_ended = ROW_COUNT;
+  IF v_ended <> 1 THEN
+    RAISE EXCEPTION 'Cell 19 precondition: expected to end exactly 1 relationship row (GreenLeaf<->StonePharm, seed 5d) — got %', v_ended;
+  END IF;
+END $$;
+
+SELECT set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', true);
+SELECT set_config('request.jwt.claims', '{"sub":"22222222-2222-2222-2222-222222222222","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE
+  v_name     text;
+  v_cultivar text;
+  v_pzn      text;
+  v_found    int;
+  v_deleted  int;
+BEGIN
+  SELECT count(*) INTO v_found FROM public.get_my_basket_lines() g
+   WHERE g.product_id = (SELECT r4_relend_id FROM _fix2);
+  IF v_found <> 1 THEN
+    RAISE EXCEPTION 'Cell 19: Bob''s line must still be PRESENT after the relationship ends — got % rows', v_found;
+  END IF;
+
+  SELECT g.product_name, g.cultivar, g.local_code_pzn
+    INTO v_name, v_cultivar, v_pzn
+    FROM public.get_my_basket_lines() g
+   WHERE g.product_id = (SELECT r4_relend_id FROM _fix2);
+  IF v_name IS NOT NULL OR v_cultivar IS NOT NULL OR v_pzn IS NOT NULL THEN
+    RAISE EXCEPTION 'Cell 19: get_my_basket_lines() must go dark (NULL name/cultivar/pzn) once the relationship ends — got name=%, cultivar=%, pzn=%', v_name, v_cultivar, v_pzn;
+  END IF;
+
+  DELETE FROM public.product_basket_line
+   WHERE owner_person_id = '22222222-2222-2222-2222-222222222222'::uuid
+     AND product_id = (SELECT r4_relend_id FROM _fix2);
+  GET DIAGNOSTICS v_deleted = ROW_COUNT;
+  IF v_deleted <> 1 THEN
+    RAISE EXCEPTION 'Cell 19: the DELETE on Bob''s now-dark line must still SUCCEED (WITH CHECK has no USING clause) — the ticket''s accepted "readable and deletable" consequence — got % rows affected', v_deleted;
+  END IF;
+END $$;
+RESET ROLE;
+
+-- ============================================================================
+-- Cell 21 [round-4 finding #4 — 🔴 EXPECTED RED — the location term] —
+-- "unfiled is not a shelf" on the basket door too. A verified+live seller,
+-- ACTIVELY connected to Bob (the buyer persona used in cells 14-17), owns a
+-- product with location IS NULL, profile_visible=true, price_public=true.
+-- get_discoverable_shop() already withholds a NULL-location product from a
+-- non-owner caller (20260822100000:332-334, "UNFILED IS NOT A SHELF");
+-- product_visible_to_caller() has no equivalent term at all — the third
+-- divergence Muskan ruled must close alongside findings #1-#3.
+--
+-- Placed BEFORE cell 20: cell 21 never touches GreenLeaf (a fresh ephemeral
+-- company, per L-012/L-033), so it has no ordering dependency on cell 20's
+-- GreenLeaf mutation — but cell 20's own header says it is placed LAST of
+-- all round-4 cells deliberately, so cell 21 goes here to keep that true.
+-- ============================================================================
+INSERT INTO public.company (id, name, country, verification_status, verified_at, created_by) VALUES
+  ('c7000004-0000-0000-0000-000000000000'::uuid, 'T07 Round4 Seller (unfiled location)', 'DE', 'verified', now(), NULL);
+
+INSERT INTO public.product (company_id, name, supplier_product_code, profile_visible, price_public, location) VALUES
+  ('c7000004-0000-0000-0000-000000000000'::uuid, 'T07 Round4 Unfiled Product',       'T07-R4-UNFILED',       true, true, NULL),
+  ('c7000004-0000-0000-0000-000000000000'::uuid, 'T07 Round4 Filed Sibling Product', 'T07-R4-FILED-SIBLING', true, true, 'T07-FIXTURE-LOC');
+
+-- Same shape as cell 14-17's Bob<->seller relationship (not strictly required
+-- for visibility here — profile_visible=true admits without a connection —
+-- but the ticket's fixture spec calls for it explicitly, and it costs
+-- nothing to include).
+INSERT INTO public.relationship (company_a_id, company_b_id, initiated_by_company_id, status)
+VALUES (
+  LEAST('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'::uuid, 'c7000004-0000-0000-0000-000000000000'::uuid),
+  GREATEST('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'::uuid, 'c7000004-0000-0000-0000-000000000000'::uuid),
+  'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'::uuid,
+  'active'
+);
+
+CREATE TEMP TABLE _fix4 ON COMMIT DROP AS
+SELECT
+  'c7000004-0000-0000-0000-000000000000'::uuid AS r4_seller4_id,
+  (SELECT id FROM public.product WHERE supplier_product_code = 'T07-R4-UNFILED')       AS r4_unfiled_id,
+  (SELECT id FROM public.product WHERE supplier_product_code = 'T07-R4-FILED-SIBLING') AS r4_filed_sibling_id;
+GRANT SELECT ON _fix4 TO authenticated;
+GRANT SELECT ON _fix4 TO anon;
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM _fix4 WHERE r4_unfiled_id IS NULL OR r4_filed_sibling_id IS NULL)
+    THEN RAISE EXCEPTION 'FIXTURE: one or more T07 round-4 (cell 21) fixtures failed to resolve'; END IF;
+END $$;
+
+-- Positive control FIRST (B4-class): the FILED sibling (location set) must
+-- be visible AND returned by get_discoverable_shop() — proves the fixture
+-- company genuinely has a reachable product, so the headline assertion below
+-- cannot pass merely because the company/fixture is vacuously empty.
+SELECT set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', true);
+SELECT set_config('request.jwt.claims', '{"sub":"22222222-2222-2222-2222-222222222222","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE
+  v_sibling_visible    boolean;
+  v_sibling_shop_count int;
+BEGIN
+  SELECT public.product_visible_to_caller((SELECT r4_filed_sibling_id FROM _fix4)) INTO v_sibling_visible;
+  SELECT count(*) INTO v_sibling_shop_count
+    FROM public.get_discoverable_shop((SELECT r4_seller4_id FROM _fix4)) g
+   WHERE g.id = (SELECT r4_filed_sibling_id FROM _fix4);
+  IF v_sibling_visible IS DISTINCT FROM true OR v_sibling_shop_count <> 1 THEN
+    RAISE EXCEPTION 'Cell 21 precondition: the FILED sibling (location set) must be visible via product_visible_to_caller() AND returned by get_discoverable_shop() — visible=%, shop_count=%. Without this control the cell would pass vacuously if the fixture company had no reachable products at all', v_sibling_visible, v_sibling_shop_count;
+  END IF;
+END $$;
+RESET ROLE;
+
+-- The headline assertions: the UNFILED product (location IS NULL).
+SELECT set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', true);
+SELECT set_config('request.jwt.claims', '{"sub":"22222222-2222-2222-2222-222222222222","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE
+  v_visible    boolean;
+  v_admissible boolean;
+  v_shop_count int;
+BEGIN
+  SELECT count(*) INTO v_shop_count
+    FROM public.get_discoverable_shop((SELECT r4_seller4_id FROM _fix4)) g
+   WHERE g.id = (SELECT r4_unfiled_id FROM _fix4);
+  IF v_shop_count <> 0 THEN
+    RAISE EXCEPTION 'Cell 21 precondition: get_discoverable_shop() must already withhold the UNFILED product (its own "unfiled is not a shelf" rule, 20260822100000:332-334) — got % rows; this cell is about product_visible_to_caller() lacking the SAME rule, not about get_discoverable_shop()', v_shop_count;
+  END IF;
+
+  SELECT public.product_visible_to_caller((SELECT r4_unfiled_id FROM _fix4)) INTO v_visible;
+  IF v_visible IS DISTINCT FROM false THEN
+    RAISE EXCEPTION 'Cell 21/round-4 LEAK: product_visible_to_caller() must return FALSE for Bob on a product with NO location (profile_visible=true, price_public=true, seller verified+live+connected) — got %. get_discoverable_shop() already withholds this exact row; product_visible_to_caller() has no matching term', v_visible;
+  END IF;
+
+  SELECT public.product_admissible_to_basket((SELECT r4_unfiled_id FROM _fix4)) INTO v_admissible;
+  IF v_admissible IS DISTINCT FROM false THEN
+    RAISE EXCEPTION 'Cell 21/round-4 LEAK: product_admissible_to_basket() must be FALSE for the same unfiled product — got %', v_admissible;
+  END IF;
+END $$;
+RESET ROLE;
+
+-- Owner guardrail, same cell: the seller's OWN unfiled product must stay
+-- visible to THEM — the `or p.company_id = current_company_id()` half of the
+-- new location term (the Unassigned pile must stay fileable for the owner,
+-- per 20260822100000's own "UNFILED IS NOT A SHELF" comment). No auth.users
+-- row exists for the ephemeral seller4 company, so the owner arm is proven by
+-- temporarily re-pointing Bob's OWN person.company_id at seller4 — a
+-- PRIVILEGED UPDATE (DEV-88 / 20260710120000 only revoked this column from
+-- the `authenticated` role, not from the superuser this script connects as;
+-- same "mutate then restore" idiom as cell 6's company.verification_status).
+-- Restored immediately after; nothing later in this file depends on Bob's
+-- company_id.
+UPDATE public.person SET company_id = (SELECT r4_seller4_id FROM _fix4)
+ WHERE id = '22222222-2222-2222-2222-222222222222'::uuid;
+
+SELECT set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', true);
+SELECT set_config('request.jwt.claims', '{"sub":"22222222-2222-2222-2222-222222222222","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE v_owner_visible boolean;
+BEGIN
+  SELECT public.product_visible_to_caller((SELECT r4_unfiled_id FROM _fix4)) INTO v_owner_visible;
+  IF v_owner_visible IS DISTINCT FROM true THEN
+    RAISE EXCEPTION 'Cell 21 owner guardrail: the SELLER must still see their OWN unfiled product via product_visible_to_caller() — got %. The location term''s escape (or p.company_id = current_company_id()) must survive the fix, or the owner''s own Unassigned pile becomes unfileable', v_owner_visible;
+  END IF;
+END $$;
+RESET ROLE;
+
+-- Restore Bob's real company_id (privileged — same reasoning as above).
+UPDATE public.person SET company_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'::uuid
+ WHERE id = '22222222-2222-2222-2222-222222222222'::uuid;
+
+-- ============================================================================
+-- Cell 20 [guardrail, GREEN now and MUST STAY green after the round-4 fix] —
+-- the owner arm must survive the fix for findings #1/#2/#3/#4. Alice's OWN
+-- company (GreenLeaf) is soft-deleted, then unverified — in BOTH states,
+-- product_visible_to_caller() must still return TRUE for Alice on her OWN
+-- product. This is the rail: the fix belongs on the BUYER arm only
+-- (20260823100000's header: "the fix must go on the buyer arm ONLY"); a
+-- future editor who hoists a company-liveness/verification check above BOTH
+-- arms would lock every seller out of their own catalogue the moment their
+-- own company is soft-deleted or goes back to pending review.
+--
+-- Placed LAST among the round-4 cells and mutates the shared GreenLeaf seed
+-- row deliberately — this is the final assertion cell before the closing
+-- NOTICE + ROLLBACK, so nothing downstream depends on GreenLeaf's restored
+-- state. Reuses `noprice_id` (T07-NOPRICE, Alice's own product) read-only —
+-- no earlier cell's assertion on that row is disturbed by a SELECT.
+-- ============================================================================
+UPDATE public.company SET deleted_at = now()
+ WHERE id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid;
+
+SELECT set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', true);
+SELECT set_config('request.jwt.claims', '{"sub":"11111111-1111-1111-1111-111111111111","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE v_visible boolean;
+BEGIN
+  SELECT public.product_visible_to_caller((SELECT noprice_id FROM _fix)) INTO v_visible;
+  IF v_visible IS DISTINCT FROM true THEN
+    RAISE EXCEPTION 'Cell 20: Alice must still see her OWN product via product_visible_to_caller() while GreenLeaf itself is SOFT-DELETED — the owner arm must not be gated on the seller company''s own deleted_at. Got %', v_visible;
+  END IF;
+END $$;
+RESET ROLE;
+
+UPDATE public.company SET deleted_at = NULL, verification_status = 'pending'
+ WHERE id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid;
+
+SELECT set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', true);
+SELECT set_config('request.jwt.claims', '{"sub":"11111111-1111-1111-1111-111111111111","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE v_visible boolean;
+BEGIN
+  SELECT public.product_visible_to_caller((SELECT noprice_id FROM _fix)) INTO v_visible;
+  IF v_visible IS DISTINCT FROM true THEN
+    RAISE EXCEPTION 'Cell 20: Alice must still see her OWN product via product_visible_to_caller() while GreenLeaf is UNVERIFIED (verification_status=''pending'') — the owner arm bypasses verification entirely, matching cell 6''s precedent for the INSERT-side owner arm. Got %', v_visible;
+  END IF;
 END $$;
 RESET ROLE;
 

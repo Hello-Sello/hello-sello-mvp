@@ -16,26 +16,32 @@
 -- `list_discoverable_companies()`'s verified gate cannot apply here.
 --
 -- ----------------------------------------------------------------------------
--- WHY THE PREDICATE DOES NOT RESTATE THE VISIBILITY RULE
+-- WHERE THE VISIBILITY RULE LIVES  (rewritten 2026-08-24 — see below)
 -- ----------------------------------------------------------------------------
--- The visibility rule already exists, twice over, as the two `product` policies:
+-- ⚠️ THIS SECTION USED TO SAY THE OPPOSITE. It argued that a bare
+-- `exists (select 1 from public.product p where p.id = …)` inherits the rule
+-- for free, because a policy subquery is RLS-filtered as the calling role, so
+-- no predicate needed restating here. That reasoning died inside this same
+-- commit and the text was not updated — the exact stale-rationale trap L-031
+-- names. It is rewritten rather than deleted so the next reader knows which
+-- of the two arguments won.
 --
---   product_all            qual: company_id = current_company_id()
---   product_public_select  qual: deleted_at is null
---                                and (profile_visible or is_connected_to_company(company_id))
---                                and «visibility window» and is_caller_verified()
+-- WHAT IS ACTUALLY TRUE NOW. `product_public_select`'s live qual is
+-- `profile_visible = true` and nothing else — the ship gate's round 1 removed
+-- the connection arm from it, because RLS filters ROWS, NOT COLUMNS, and every
+-- admitted `product` row carries `rrp_per_gram`, `supplier_product_code` and
+-- raw `metadata` that no sanctioned door returns (L-036). So the cascade this
+-- section once relied on no longer carries the rule, and inheriting it "for
+-- free" is not available at any price.
 --
--- A policy subquery is RLS-FILTERED AS THE CALLING ROLE. So a bare
---
---     exists (select 1 from public.product p where p.id = …)
---
--- evaluates THROUGH whichever `product` policy applies to the caller — a buyer
--- gets T06's rule (visibility window, verified gate, connection override), the
--- seller gets `product_all` — with NO predicate duplicated here and NO edit
--- needed in this file when that rule next changes. This is the same cascade
--- 20260822100000 already relies on for `pricelist_item`, `product_image` and
--- `product_media`. A second authoritative copy of the visibility rule is the
--- failure ADR-0005 §2 fences; this avoids it by construction.
+-- The rule therefore lives in ONE function — `product_visible_to_caller()`
+-- below — evaluated `security definer` so basket admission never needs a
+-- base-table read grant on `public.product`. That IS a second copy of the
+-- predicate relative to `get_discoverable_shop`, and ADR-0005 §2 is right that
+-- copies drift: round 4 caught these two drifting apart on three terms. The
+-- containment is the comment on the buyer arm — the two must be diffed
+-- term-for-term whenever either changes. It is a real cost, accepted
+-- deliberately, not a thing this file gets for free.
 --
 -- ONLY THE PRICE ARM IS NEW TEXT, because no `product` policy expresses it: a
 -- buyer may not add a product whose price is hidden from them (decision 3,
@@ -130,12 +136,39 @@ as $$
             -- Buyer arm: made public, or revealed by a LIVE connection. Every
             -- term here is re-checked on each read, so ending the relationship
             -- takes the product back.
+            --
+            -- THIS ARM IS TERM-FOR-TERM `get_discoverable_shop`'s buyer filter
+            -- (20260822100000). It must stay that way: this function claims to
+            -- be the single owner of "may this caller see this product", and a
+            -- single owner is a claim about AGREEMENT WITH THE OTHER DOORS, not
+            -- about how few files hold the rule. Round 4 of the ship gate found
+            -- three terms present there and absent here — the seller company's
+            -- `deleted_at` and `verification_status`, and the unfiled rule —
+            -- and a soft-deleted seller's HIDDEN product was still handing back
+            -- its current name, cultivar, PZN and price through the basket
+            -- while the shop door returned nothing. Before you add a term to
+            -- either door, diff the two. (LEARNINGS L-038.)
          or (
               (p.profile_visible
                or public.is_connected_to_company(p.company_id))
               and (p.visibility_start is null or p.visibility_start <= current_date)
               and (p.visibility_end   is null or p.visibility_end   >= current_date)
               and public.is_caller_verified()
+              -- The SELLER's company must still be live and verified. Neither
+              -- `is_connected_to_company` (relationship row only) nor
+              -- `is_caller_verified` (the CALLER's company) covers this.
+              and exists (
+                select 1
+                  from public.company c
+                 where c.id = p.company_id
+                   and c.deleted_at is null
+                   and c.verification_status = 'verified'
+              )
+              -- UNFILED IS NOT A SHELF — withheld from buyers, kept for the
+              -- owner so the `Unassigned` pile stays fileable. The owner half
+              -- is carried by the owner arm above, so a bare NOT NULL is right
+              -- here and must not be hoisted out of this arm.
+              and p.location is not null
             )
        )
   );

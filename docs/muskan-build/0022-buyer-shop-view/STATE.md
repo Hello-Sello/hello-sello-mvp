@@ -130,6 +130,88 @@ basket. Now `numeric`.
    A2 proves the capability still works via the RPC. **C4's control was repointed** from the base
    table to the RPC so it can still detect a vacuous C1-C3.
 
+### ▶ ROUND 4 — RUN 2026-08-24. IT FOUND A BLOCKER, EXACTLY WHERE THE LAST SESSION SAID TO LOOK.
+
+The previous session's instruction was *"re-run the security gate first; do not treat three green
+suites as evidence the fourth round is unnecessary."* **Round 4 found a live exposure, and it was
+round 3's fix leaking forward in the predicted shape — the fourth consecutive round to do so.**
+
+**F1 · BLOCKING · the basket door disagreed with the shop door about the SELLER's company.**
+`product_visible_to_caller()` checked the *product's* `deleted_at` and the *caller's* verification,
+and never the *seller company's* state. `get_discoverable_shop` checks
+`c.deleted_at is null and c.verification_status = 'verified'`. Executed on the local stack in a
+rolled-back transaction, seller soft-deleted, relationship still active:
+
+```
+get_discoverable_shop rows                 |  0     ← the sanctioned door says: gone
+product_visible_to_caller(HIDDEN product)  |  true
+get_my_basket_lines()  →  San Raf 29/1 PNK | Pink OG Kush | 38374774 | GreenLeaf Cultivation
+current_pricelist_item →  4.0000                ← and the price
+```
+
+Round 3 fixed "detail survives the entitlement ending" for the *relationship-ended* case and missed
+the *company-gone* case. Same class, one predicate over.
+
+**A THIRD divergence surfaced while writing the tests:** `get_discoverable_shop` also carries
+`p.location is not null or owner` (*"unfiled is not a shelf"*). `product_visible_to_caller` had no
+equivalent, so a buyer could basket and read a product the shop deliberately never showed them.
+
+**Muskan ruled 2026-08-24: close all three, on the BUYER ARM ONLY.** The buyer arm is now
+term-for-term equal to `get_discoverable_shop`. The owner arm deliberately carries none of the three
+— a seller sees their own products whatever their company's state, and keeps their unfiled
+`Unassigned` pile. Hoisting any of the three above both arms breaks the seller; **cell 20 and cell
+21's owner guardrail exist to fail if someone does.**
+
+**F2 · BLOCKING · the two functions rounds 2 and 3 added had ZERO assertions anywhere in the repo.**
+`grep -rn "get_my_basket_lines\|product_visible_to_caller" supabase/tests/ e2e/` returned nothing.
+`get_my_basket_lines` is `security definer` — it bypasses RLS — and `where l.owner_person_id =
+auth.uid()` is the only thing between a caller and another user's cart, with no red-first proof.
+**Eight new cells (14–21)** now cover it: the three round-4 terms, the ownership gate asserted by
+line id rather than by count, detail-goes-dark on relationship-end, and two owner guardrails.
+
+**RED was proven by EXECUTION, not asserted.** Pre-fix, cell 14 aborted the suite naming the real
+leaked values (`name=T07 Round4 Hidden Priced Product … pzn=T07-R4-PZN-0001`). Cells 16, 17 and 21
+never ran pre-fix (hidden behind 14's abort), so each carries its own in-cell A/B instead — 16 flips
+the seller to `verified` and asserts both functions flip TRUE then restores; 21 proves a filed
+sibling is reachable through both doors; 17 proves the doors agree non-empty before they agree
+empty. **Recorded honestly: 14 and 15 have a whole-suite RED proof, 16/17/21 have in-cell controls.**
+
+**⚠️ Cell 16 initially failed on its own PRECONDITION, and the cell was wrong, not the source.** It
+asserted the never-verified seller's product was "still VISIBLE, only admission fails" — which
+encodes the design Muskan did *not* rule. Under the ruled design `verification_status` sits in the
+visibility function, so visibility itself goes false and admission follows. Rewritten as
+flip-and-restore. **The builder never edits tests (L-035); this went back to `test-writer`.**
+
+**NON-BLOCKING notes → filed as T14 (the `authenticated` grant on `product_visible_to_caller` is an
+unnecessary per-UUID visibility oracle — deliberately deferred, see below), T15 (`BasketProvider`'s
+bare `.catch` renders every basket failure as an empty basket — this is what hid round 2's defect,
+and the batch ships a brand-new RPC behind it), T16 (`database.types.ts` lies about four
+deliberately-nullable columns), T17 (no door gates `company.deactivated_at`).**
+
+**T14 was deferred ON PURPOSE, not overlooked.** Dropping the grant breaks cells 15–17 and 21, which
+call the function under `SET LOCAL ROLE authenticated`. Reworking four just-written cells at the tail
+of a long run is precisely the momentum-fix pattern that produced rounds 2, 3 and 4. Muskan ruled:
+keep the grant, file the removal. **L-038's corollary, applied to itself.**
+
+**THE LEDGER WAS ASSERTING TWO THINGS THIS SLUG HAD ALREADY FALSIFIED.**
+`cloud-migrations-pending.md`'s entry for `20260823100000` said *"there is no `create or replace` in
+the file"* and *"no visibility predicate is restated"*. The file `create or replace`s **three**
+`security definer` functions, and the ledger named them **zero** times — so its pre-flight verified
+the policy and would have pushed three definer functions to production unchecked. Its T06-dependency
+bullet was stale too, and understated: the real dependency is that `product_visible_to_caller()`
+calls `is_connected_to_company()`, which `20260822100000` **creates** — apply T07 without T06 and the
+`create or replace` itself fails to resolve. **Corrected, with four new pre-flight checks** (the
+three functions exist / are `prosecdef` / pin `search_path`; `anon` cannot execute any of them; the
+buyer arm read back via `pg_get_functiondef` carries all six terms and the owner arm none; and
+`get_my_basket_lines` is a NEW RPC the shipped app already calls, so the same-deploy rule has no
+slack). **L-031's class, and here the stale doc was the push procedure itself.**
+
+**TWO MORE CALLER GROUPS LOSE BASKET DETAIL ON LANDING, by design** — on top of the two the slug
+already names: buyers holding lines from a seller whose company is soft-deleted or unverified, and
+buyers holding lines on a product with no location set. Line still listed, still deletable, detail
+NULL. Not an error path.
+
+
 ## What it is — Muskan's framing, 2026-08-18
 
 > "From Discover, the user should be able to see the seller's shop properly, like the
