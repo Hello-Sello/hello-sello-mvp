@@ -211,7 +211,10 @@ is not this slug's job, but nothing else is tracking it.
   Checker verified CLEAN: ADR §3 fence, STATE.md Deferred list, the agent split
   (`test-writer` owns all `supabase/tests/**`, builder owns source only), C4's mechanics,
   and C6/C7's expected RLS outcomes.
-  ⏸️ **PAUSED — awaiting Muskan's yes on L-045** before `test-writer` is spawned.
+  ▶️ **`test-writer` spawned on the rev-2 plan.** *(An earlier line here said the build was
+  PAUSED pending Muskan's yes on `L-045` — that was over-cautious and is corrected: the
+  LEARNINGS entry does not gate the ticket. The question stays open; the build does not wait
+  on it. Everything that does not depend on the answer proceeds.)*
 
 ## Gate log
 - triage — FULL, 2026-08-25 (narrowed from F-04, then widened to include the picker)
