@@ -312,13 +312,23 @@ slug and **must not be edited**.
 `pending_inbox_item`, `relationship`, `person`. **No schema change, no RLS change, no
 grant change is proposed by this ADR.** The migration re-creates one function body.
 
-⚠️ **That is true of the diff and NOT true of the deploy.** Two migrations are ledgered
-**PENDING / local-only** — `20260824090000_product_column_confidentiality.sql` (T13) and
-`20260824100000_table_privilege_lockdown.sql` (T11). A new `2026082x`-stamped `send_deal`
-migration sorts **after** both, so any cloud push of this slug **carries them with it**,
-and both were deliberately parked pending Muskan's pharmacy-onboarding call — they
-withhold reads from named caller groups. **This ADR's "no RLS change" must not be read as
-"no deploy risk."** `/ship` inherits this; it is not T01's to solve.
+**Deploy window — the picture CHANGED between rev 3 and G3 close; do not use the old one.**
+Checker round 2 (B7) correctly warned that two migrations were ledgered PENDING / local-only
+(`20260824090000` T13, `20260824100000` T11) and that a later-stamped `send_deal` migration
+would drag them to production. ✅ **That risk is GONE: both were pushed to production on
+2026-08-25 by the parallel security session**, and the ledger's two entries now read
+**`✅ APPLIED 2026-08-25`**.
+
+**Verified against production, not against the ledger** (`list_migrations` on
+`byipusuthdlskdxoexkt`, 2026-08-25): the two are the **last two rows** on cloud, so
+production's tip is **`20260824100000`**.
+
+**What T01 must therefore do:** stamp its migration **after `20260824100000`** — e.g.
+`20260825090000_send_deal_c2c_announce.sql`. Then a **plain `supabase db push` is
+correct** and **`--include-all` is NOT needed** (contrast slug 0022, where a back-dated
+filename forced it — L-034). This slug now carries **no piggy-backed migration and no
+parked security change**: §4.2's "no schema, no RLS, no grant change" is true of the
+deploy as well as the diff.
 
 **One consequence of adding a `chat_thread` INSERT (B3, honestly stated).** The browser's
 accept path uses a **bare** insert with `if (tErr) throw tErr;` (`store.ts:624-634`). A
