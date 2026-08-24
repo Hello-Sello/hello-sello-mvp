@@ -23,7 +23,36 @@
 
 ---
 
-## ⚠️ PENDING (2026-08-20, Muskan) — slug 0022 buyer-shop-view
+## ✅ APPLIED 2026-08-24 (was PENDING 2026-08-20, Muskan) — slug 0022 buyer-shop-view
+
+> **ALL SIX MIGRATIONS ARE LIVE ON PRODUCTION as of 2026-08-24**, pushed with
+> `supabase db push --include-all`. `supabase migration list --linked` now reports
+> **152 local <-> 152 remote, 0 local-only, 0 remote-only**. No history repair was needed — the CLI
+> stamps filename timestamps (the call-time drift class comes from MCP `apply_migration`, not from
+> `db push`).
+>
+> **Post-push verification, all run against production and all passing** — the four checks added to
+> this entry on 2026-08-24 plus the original policy checks: three functions `prosecdef` with
+> `search_path` pinned · **`anon` EXECUTE denied on all three** · buyer arm read back via
+> `pg_get_functiondef` carries **all six terms** · `basket_line_admission` restrictive, `polcmd='*'`,
+> `polqual` NULL · `basket_line_owner_all` present and unmodified · **`authenticated` INSERT on
+> `relationship` = false** (the live privilege escalation is closed).
+>
+> **S8 after the push: 80 -> 85.** The +5 are all
+> `authenticated_security_definer_function_executable` (75 -> 80) — the batch's own five new definer
+> functions (`accept_connection_request`, `resubmit_company_verification`,
+> `product_visible_to_caller`, `product_admissible_to_basket`, `get_my_basket_lines`). **`anon`
+> definer-executable stays at exactly 1** (`get_public_profile`). Predicted, not a regression.
+>
+> **App code deployed the same day**: PR #163 -> `dev`, PR #164 -> `main`, Vercel production
+> deployment `6060572217` **success**. ⚠️ **A broken window existed between the migration push and
+> the `main` merge** — `main`'s `store.ts:573` wrote `relationship` directly and that grant is
+> revoked by this batch, so connection-accept failed on production for that interval. **The
+> same-deploy rule on this repo means `dev`->`main`, not `dev`.** Recorded in the slug's STATE.md.
+>
+> **⚠️ THIS SECTION IS MIGRATION DEBT ONLY.** The non-migration deploy debt below
+> (§ OUTSTANDING — edge functions, `RESEND_API_KEY`, dashboard settings) is a **different class**
+> and is **NOT** discharged by this push. Do not fold it in — that is exactly the mistake T08 caught.
 
 > ### ✅ S6 + S8 RUN AGAINST PRODUCTION 2026-08-23 — read-only, nothing written
 >
@@ -704,7 +733,7 @@ anything from THEM is outstanding. ~~(see the 2026-07-20 marker above for what a
 **⚠️ CORRECTED AT T08 (2026-08-23): there is no "2026-07-20 marker" and there never was** — no
 section of this file has ever carried that date. The pointer was dangling, and what it pointed at
 would be stale now anyway. **What is actually outstanding today:**
-- **Migrations** → `## ⚠️ PENDING (2026-08-20, Muskan) — slug 0022 buyer-shop-view`, at the top of
+- **Migrations** → `## ✅ APPLIED 2026-08-24 (was PENDING 2026-08-20, Muskan) — slug 0022 buyer-shop-view`, at the top of
   this file. That is the only such section.
 - **Non-migration** → `## ⚠️ OUTSTANDING — NON-MIGRATION DEPLOY DEBT`, immediately after it.
 
@@ -895,7 +924,7 @@ ONE batch, in timestamp order, together with the app code.**
 > orphan row) was itself deleted on 2026-08-16 — the 2026-08-17 batch then pushed with a plain
 > `supabase db push`, no repair.
 >
-> **The current push procedure is `## ⚠️ PENDING (2026-08-20, Muskan) — slug 0022 buyer-shop-view ›
+> **The current push procedure is `## ✅ APPLIED 2026-08-24 (was PENDING 2026-08-20, Muskan) — slug 0022 buyer-shop-view ›
 > How to push THIS batch`**, at the top of this file. That batch needs **`--include-all`**, which
 > nothing in this section mentions.
 >
@@ -973,7 +1002,7 @@ supabase db push
 > because a reader who lands here mid-incident must not be handed four live-looking commands with a
 > dead disclaimer above them — this banner is the disclaimer.
 >
-> **The current push procedure is `## ⚠️ PENDING (2026-08-20, Muskan) — slug 0022 buyer-shop-view ›
+> **The current push procedure is `## ✅ APPLIED 2026-08-24 (was PENDING 2026-08-20, Muskan) — slug 0022 buyer-shop-view ›
 > How to push THIS batch`**, at the top of this file. It differs in the way that matters: **this
 > batch requires `--include-all`**, and step 3 below (`supabase db push`) would silently push five
 > of its six migrations.

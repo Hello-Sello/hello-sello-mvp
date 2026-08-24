@@ -56,7 +56,46 @@ seed:   "wehave to build the august_mvp what dhould be the next thing to build?"
 > list. Items 1, 3, 4, 5, 6, 7 are verified done in code (releases 1+2 live; the tier
 > ladder `0021` swallowed 3–7). Item 8 (production UAT) is blocked by this slug.
 
-## 🔴 `/ship` ATTEMPTED 2026-08-23/24 — HALTED BEFORE THE PUSH. NOT SHIPPED.
+
+## ✅ SHIPPED 2026-08-24 — SIX MIGRATIONS LIVE ON PRODUCTION, APP DEPLOYED, `main` UPDATED
+
+**The push halted on 2026-08-23/24 went through on 2026-08-24 after security round 4 closed a live
+leak.** Sequence, in the order it happened:
+
+| # | step | evidence |
+|---|---|---|
+| 1 | `supabase db push --include-all` | six applied in filename order; dry-run listed exactly those six first |
+| 2 | history reconciled | **152 local ↔ 152 remote, 0 local-only, 0 remote-only.** No stamp repair needed — the CLI applies filename timestamps (only MCP `apply_migration` stamps call-time) |
+| 3 | function pre-flight | all three `prosecdef=t`, `proconfig={search_path=""}`, **`anon` EXECUTE denied on all three**, `authenticated` granted |
+| 4 | stale-redeclare check | buyer arm read back off prod via `pg_get_functiondef` carries **all six terms** (`c.deleted_at`, `c.verification_status`, `p.location`, connection, caller-verified, window) |
+| 5 | policy shape | `basket_line_admission` **restrictive**, `polcmd='*'`, **`polqual` NULL**, `with_check = product_admissible_to_basket(product_id)`; `basket_line_owner_all` present + unmodified |
+| 6 | **escalation closed** | `has_table_privilege('authenticated','relationship','INSERT')` → **false**. The self-minted-connection hole verified open last session is dead |
+| 7 | S8 diff | **80 → 85.** +5 WARN, all `authenticated_security_definer_function_executable` (75 → 80) = the batch's five new definer functions. **`anon_security_definer_function_executable` still exactly 1** (`get_public_profile`, the deliberate allowlist entry) — no new anon exposure |
+| 8 | PR #163 → `dev` | 147 commits, 196 files, merged clean; `claude/muskan/work` survived (auto-delete trap did not fire) |
+| 9 | PR #164 → `main` | merged; `main` 0 behind `dev` |
+| 10 | Vercel production | deployment `6060572217` **state=success**; app URL serves 302 (auth redirect) |
+
+**⚠️ A BROKEN WINDOW WAS OPENED AND CLOSED — record it, it is the lesson of this ship.** Between
+step 1 and step 9 **production ran the OLD app against the NEW schema.** `origin/main`'s
+`store.ts:573` accepts a connection with a direct `.from("relationship").insert(...)` and never
+calls `accept_connection_request`; step 1 revoked `authenticated` INSERT on that table. **So
+accepting a connection request was failing on production for that interval** — and T10 (the accept
+path swallows its own errors) means it failed quietly.
+
+**The ordering itself was correct** — migrations must precede app code, and the reverse would have
+broken every basket read instead. **The error was treating the `dev` merge as the end of the
+window.** Production deploys from `main`, and `main` was 149 commits behind `dev` at that moment.
+`/ship` step 5 says "PR → merge PROMPTLY"; on this repo that means **`dev`→`main`, not `dev`**.
+
+**Two groups lose reads by design, as ledgered** (members of unverified companies; companyless
+authenticated accounts — HS staff/reviewers), **plus two more added by round 4's fix**: buyers
+holding basket lines from a seller whose company is soft-deleted or unverified, and buyers holding
+lines on a product with no location. Line stays listed and deletable; detail goes NULL.
+
+**▶ G5 IS OWED — Muskan's walk on the live URL. Not run, not passed.** `/ship` step 6 is hers; it
+is staged, never self-passed.
+
+## ~~🔴 `/ship` ATTEMPTED 2026-08-23/24 — HALTED BEFORE THE PUSH~~ — SUPERSEDED: shipped 2026-08-24 (above). Kept for the round 1-3 record.
 
 **Nothing was pushed to production. Nothing was merged. The branch is committed and pushed to
 `origin/claude/muskan/work` only.** Muskan's call: ship in a fresh session.
