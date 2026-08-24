@@ -1214,3 +1214,40 @@ only because STATE.md insisted on it against three green suites, that caught a l
 not treat consecutive green rounds as evidence the next round is unnecessary; treat a fix authored
 at the tail of a long run as the most likely source of the next finding.**
 
+
+---
+
+## L-039 · The spec's acceptance criteria are not the slug's scope — scope is §8 MINUS what the gates removed
+
+**2026-08-24 · slug 0022 · `/ship` step 7 · caught by `rollup`, against the G5 sheet I had just written**
+
+**Trigger** — copying a criteria list, a requirements table, or an AC set out of a PRD/spec into any
+downstream artifact: a walk sheet, a test matrix, a traceability table, a verification checklist.
+Also: any sentence of the form "walk the spec's acceptance criteria".
+
+**What I authored.** `/ship` step 6 says *"walk the spec's acceptance criteria on the LIVE URL."* I
+took PRD §8's eleven criteria verbatim into `G5-WALK.md` as eleven tick-or-fail rows. **AC 9 was
+split to its own slug at G3** and sits in STATE.md under *Deferred — must NOT be built*, with
+`TICKETS.md`'s traceability row saying the same. The sheet would have failed the slug on a criterion
+the slug deliberately does not own — and worse, it would have looked like a genuine regression on a
+production walk.
+
+**Why it was wrong — the reasoning error.** I treated the PRD as the current statement of scope. It
+is the **original** statement of scope. Every gate between G1 and G5 can *remove* things from it —
+G3 split AC 9 out, and that decision is recorded in STATE.md and TICKETS.md, not back-propagated
+into the PRD. So the PRD stayed literally true as a spec and stopped being true as a work order. I
+read one document where the fact lived in three, and the two I skipped were the two that had moved.
+
+The instruction *"walk the spec's acceptance criteria"* is what made this feel safe: I was following
+the skill verbatim, and verbatim was wrong. **A step that names one source document is telling you
+where to start, not that the list is complete.**
+
+**The rule.** Scope is the spec's criteria **minus what the gates removed**. Before copying any
+criteria list downstream, reconcile it against the slug's deferral list and its traceability
+table, and carry the reconciliation *into* the copy — strike the removed rows through with the
+reason inline, never silently drop them, or the next person re-adds them from the same PRD.
+
+**Corollary — the artifact staged for a human is the one to double-check.** Every other error this
+session was caught by an agent before it reached anyone. This one was aimed directly at Muskan, on
+production, where a false failure costs her a debugging session on a feature that works. **Staging
+work for a human removes the reviewer; it does not remove the need for one.**
