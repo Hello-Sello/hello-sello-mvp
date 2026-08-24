@@ -13,6 +13,16 @@ no amount of reading the function body would have caught.
 looks right. Every item below is phrased as something you *run* and read the output of. A security
 claim without a command and its output is not a finding, it is a guess.
 
+**The research rule that governs all remedies:** a finding is not done when you can name it. Before
+proposing a fix, search the current published guidance for that class and quote it. Say what best
+practice is, then say what it costs us here. A remedy chosen for being low-risk, without the correct
+one stated beside it, is a recommendation Muskan cannot weigh.
+
+> Recorded 2026-08-24 ([HEL-69](https://linear.app/hellosello/issue/HEL-69)): the first
+> recommendation was a predicate-only fix. Supabase's documented guidance is `security_invoker = true`
+> on every view — the narrower fix would have left the ERROR standing and nobody would have known it
+> was a choice.
+
 ---
 
 ## Why this exists — two incidents, one week apart

@@ -75,6 +75,7 @@ Files: `docs/product/surfaces/<NAME>.md`. Build strategy locked in `docs/decisio
 
 ## Core rules
 
+- **Research before recommending** — on any security fix, schema/RLS change, or design decision: web-search the current published guidance FIRST (Postgres/Supabase docs, the vendor's own linter rules, OWASP), state what best practice says with the source, and only then recommend. Never lead with your own reasoning. Never propose the smaller fix because it feels safer without first naming the correct one — Muskan decides the trade-off, you supply the researched options.
 - **Doubts** via `/track-doubt` skill — never create Linear issues directly
 - **Decisions** via propose-mode → preview the one-liner, ask, then write to `docs/decisions/DECISIONS.md`
 - **Writes always preview first** — file edits, new files, Linear writes, anything external
