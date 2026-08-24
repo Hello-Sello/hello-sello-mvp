@@ -110,12 +110,19 @@ revoke execute on function public.is_connected_to_company(uuid) from anon;
 -- 1. SITE 1 — product_public_select (RLS on public.product).
 --
 -- Diff against the live qual, term by term:
---   * `profile_visible = true`
---       → `(profile_visible = true or is_connected_to_company(company_id))`
---     — the override
+--   * `profile_visible = true` — UNCHANGED. The connection override is
+--     deliberately NOT applied here. RLS on a base table filters ROWS, not
+--     COLUMNS: any row this policy admits is handed over whole, including
+--     `rrp_per_gram`, `supplier_product_code` and `metadata` — three columns
+--     the buyer's sanctioned door (`get_discoverable_shop`, a 27-column
+--     projection) withholds on purpose. Widening this policy therefore leaks
+--     a per-gram price for a product whose seller set `price_public = false`,
+--     defeating "connection reveals the product, never the price" through a
+--     column the price gate never covered. The override belongs only at doors
+--     that project an explicit column list.
 --   * `+ and public.is_caller_verified()` — the tightening (NEW; absent live)
 --   * `deleted_at` and BOTH window terms — byte-identical, deliberately
---     re-stated in the same order, and deliberately OUTSIDE the override.
+--     re-stated in the same order.
 --
 -- `product_all` (the owner policy) is NOT touched. It is not
 -- verification-gated, which is what makes "a seller reads their own catalogue
@@ -126,7 +133,7 @@ create policy product_public_select on public.product
   for select to authenticated
   using (
     deleted_at is null
-    and (profile_visible = true or public.is_connected_to_company(company_id))
+    and profile_visible = true
     and (visibility_start is null or visibility_start <= current_date)
     and (visibility_end   is null or visibility_end   >= current_date)
     and public.is_caller_verified()

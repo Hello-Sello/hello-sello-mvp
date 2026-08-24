@@ -645,3 +645,49 @@ T07's own new test, which creates `T07-E2E-WITHDRAW` and hard-deletes it in `aft
   `seed_visibility_matrix_test.sql`. Any spec touching them breaks SQL suites in a different file.
 
 **Recorded as L-033.** *A seed row is not a stable fixture until you grep what mutates it.*
+
+---
+
+## T13 — `rrp_per_gram` and `supplier_product_code` are readable off `public.product` for a price-hidden VISIBLE product · **S** · depends on: none · **PRE-EXISTING, live on production**
+
+**Filed 2026-08-23 at `/ship`, after the `security` agent's blocking finding on the hidden-product
+case was fixed.** This is the *other half* of that finding, and it is **not** caused by this slug —
+it is live on production today.
+
+**What.** `product_public_select` admits any row with `profile_visible = true`. RLS filters rows,
+not columns, so an admitted row is returned whole — including:
+
+| column | why it should not be there |
+|---|---|
+| `rrp_per_gram` | a per-gram price, on a product whose seller set `price_public = false` |
+| `supplier_product_code` | G3 confidentiality: *"buyers never see the seller's internal code"* |
+| `metadata` | the RPC projects only `metadata->'pack_sizes'` |
+
+**Proven, local, as connected Bob after the T06 fix:**
+
+```
+Zephyr 24/1 ZPH-CA   | profile_visible=t | price_public=f | rrp_per_gram=8.0000 | AUR-1F
+Pedanios 31/1 COS-CA | profile_visible=t | price_public=f | rrp_per_gram=9.0000 | AUR-1A
+```
+
+The sanctioned door returns `price_per_gram = NULL` for both. The base table hands over a price
+anyway. So *"connection reveals the product, never the price"* still has a hole for the
+visible + price-hidden quadrant.
+
+**Why it was NOT fixed at `/ship`.** Scope. Closing it means removing the buyer's base-table read
+of `public.product` altogether, and the nested `EXISTS` cascades in `product_image_public_select`,
+`product_media_public_select` and `pricelist_item_public_select` currently depend on that read
+resolving. That is a redesign with real regression surface, not a one-line narrowing, and it does
+not block a batch that strictly *improves* the same policy (this slug adds `is_caller_verified()`,
+which production does not have).
+
+**Do NOT fix with a column-level `GRANT SELECT` allowlist.** Grants are role-wide and not
+policy-aware, so an allowlist strips the seller's own read of their own columns too — the trap this
+migration family already documented for `company` and `pending_inbox_item`.
+
+**Acceptance:** a verified, connected buyer selecting `*` from `public.product` for another
+company's product receives no value for `rrp_per_gram`, `supplier_product_code` or raw `metadata`,
+for **every** combination of `profile_visible` × `price_public`; and the seller's own read of their
+own catalogue is unchanged.
+
+**Recorded as L-036.** *RLS filters rows; it does not filter columns — a policy is not a projection.*

@@ -207,14 +207,43 @@ RESET ROLE;
 -- §A — the happy-path matrix, relationship ACTIVE (as seeded)
 -- ============================================================================
 
--- A1 [door a][AC5] — connected + verified Bob sees GreenLeaf's HIDDEN AUR-1C.
+-- A1 [door a][AC5] — connected + verified Bob must NOT reach GreenLeaf's HIDDEN
+-- AUR-1C through the BASE TABLE.
+--
+-- This assertion was INVERTED (it previously required count = 1). RLS filters
+-- ROWS, not COLUMNS: every row this policy admits is handed over whole,
+-- including `rrp_per_gram`, `supplier_product_code` and `metadata` — which the
+-- buyer's sanctioned door (A2, the 27-column RPC projection) withholds on
+-- purpose. Admitting the row here leaks a per-gram price for a product whose
+-- seller set `price_public = false`, defeating "connection reveals the
+-- product, never the price" through a column the price gate never covered.
+--
+-- The CAPABILITY is not lost: A2 (door c) asserts Bob still sees this exact
+-- product through the RPC. Only the uncurated door closes.
 SELECT set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', true);
 SELECT set_config('request.jwt.claims', '{"sub":"22222222-2222-2222-2222-222222222222","role":"authenticated"}', true);
 SET LOCAL ROLE authenticated;
 DO $$
 BEGIN
-  IF (SELECT count(*) FROM public.product WHERE id = (SELECT aur1c_id FROM _fix)) <> 1
-    THEN RAISE EXCEPTION 'A1[door a]/AC5: connected+verified Bob must see GreenLeaf''s hidden AUR-1C directly'; END IF;
+  IF (SELECT count(*) FROM public.product WHERE id = (SELECT aur1c_id FROM _fix)) <> 0
+    THEN RAISE EXCEPTION 'A1[door a]/AC5: connected+verified Bob must NOT read GreenLeaf''s hidden AUR-1C off the base table — that hands over every column of the row'; END IF;
+
+  -- Negative space, stated as a column fact and not only as a row count: no
+  -- hidden GreenLeaf product may be reachable at all, so neither confidential
+  -- column can be selected for one.
+  IF (SELECT count(*) FROM public.product
+       WHERE company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid
+         AND profile_visible = false) <> 0
+    THEN RAISE EXCEPTION 'A1[door a]/leak: a connected buyer reached a hidden product row directly — rrp_per_gram and supplier_product_code travel with it'; END IF;
+
+  -- NOT ASSERTED HERE, AND DELIBERATELY SO: a product that is profile_visible
+  -- = true but price_public = false still surrenders `rrp_per_gram` off this
+  -- table to any verified caller. That leg is PRE-EXISTING — the live
+  -- production policy admits it today and this slug did not create it — and
+  -- closing it means removing the buyer's base-table read entirely, which the
+  -- nested EXISTS cascades in product_image / product_media /
+  -- pricelist_item_public_select currently depend on. Tracked separately; do
+  -- not silently widen this test to cover it without that redesign.
 END $$;
 RESET ROLE;
 
@@ -423,7 +452,12 @@ DO $$
 BEGIN
   IF NOT public.is_connected_to_company('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid)
     THEN RAISE EXCEPTION 'C4 control: the GreenLeaf<->StonePharm relationship was not fully restored to active'; END IF;
-  IF (SELECT count(*) FROM public.product WHERE id = (SELECT aur1c_id FROM _fix)) <> 1
+  -- Probe the SANCTIONED door, not the base table: door (a) no longer reveals
+  -- hidden products to a connected buyer by design (see A1), so a base-table
+  -- count here would be 0 for the right reason and would destroy this
+  -- control's ability to detect a vacuous C1-C3.
+  IF (SELECT count(*) FROM public.get_discoverable_shop('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid) s
+       WHERE s.id = (SELECT aur1c_id FROM _fix)) <> 1
     THEN RAISE EXCEPTION 'C4 control: Bob no longer sees AUR-1C after restore — C1-C3 negatives may have been vacuous'; END IF;
 END $$;
 RESET ROLE;

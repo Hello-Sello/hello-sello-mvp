@@ -86,29 +86,182 @@
 -- `FOR ALL` closes the hole with no privilege surgery at all.
 -- ============================================================================
 
+-- ----------------------------------------------------------------------------
+-- The admission predicate lives in ONE function, not in the policy body.
+--
+-- WHY A FUNCTION AND NOT AN RLS-FILTERED `EXISTS`: the policy's `exists` reads
+-- `public.product`, and that read is itself subject to `product_public_select`.
+-- Inheriting visibility that way only works if the base-table policy is wide
+-- enough to admit a connected buyer's HIDDEN products — and widening it leaks
+-- every column of those rows (`rrp_per_gram`, `supplier_product_code`,
+-- `metadata`), because RLS filters rows, not columns. So the base-table policy
+-- stays narrow (see 20260822100000) and the visibility rule moves in here,
+-- where `security definer` lets it be evaluated without handing the caller a
+-- readable row. The function returns a boolean and never a column.
+--
+-- `security definer` + `set search_path to ''` + fully-qualified names: the
+-- house rule for every definer function in this schema.
+-- ----------------------------------------------------------------------------
+-- One statement of "may this caller SEE this product at all". Both the write
+-- gate (admission, below) and the read projection (get_my_basket_lines) consult
+-- it, so the rule has a single owner and cannot drift between them — the defect
+-- that shipped a withdrawn product's current name back to a disconnected buyer.
+--
+-- `deleted_at is null` sits ABOVE both arms, so it gates the OWNER arm too.
+-- The pre-2026-08-23 policy inherited the owner arm from `product_all`, which
+-- carries no `deleted_at` term, so a seller could add their own SOFT-DELETED
+-- product to a basket. That is now refused. Tightening, not loosening —
+-- recorded so a future re-declare does not drop it by accident.
+create or replace function public.product_visible_to_caller(p_product_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path to ''
+as $$
+  select exists (
+    select 1
+      from public.product p
+     where p.id = p_product_id
+       and p.deleted_at is null
+       and (
+            -- Owner arm: the seller's own product, hidden or not.
+            p.company_id = public.current_company_id()
+            -- Buyer arm: made public, or revealed by a LIVE connection. Every
+            -- term here is re-checked on each read, so ending the relationship
+            -- takes the product back.
+         or (
+              (p.profile_visible
+               or public.is_connected_to_company(p.company_id))
+              and (p.visibility_start is null or p.visibility_start <= current_date)
+              and (p.visibility_end   is null or p.visibility_end   >= current_date)
+              and public.is_caller_verified()
+            )
+       )
+  );
+$$;
+
+comment on function public.product_visible_to_caller(uuid) is
+  'May the calling person see this product at all? Owner arm, or public/'
+  'connection-revealed within its visibility window for a verified caller. '
+  'The single owner of the visibility rule for basket write AND read.';
+
+revoke all on function public.product_visible_to_caller(uuid) from public, anon;
+grant execute on function public.product_visible_to_caller(uuid) to authenticated;
+
+-- Admission = visible to the caller AND (their own product, or one carrying a
+-- public price). `price_public` stays un-`or`-ed: decision 3 / PRD §6.5.
+create or replace function public.product_admissible_to_basket(p_product_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path to ''
+as $$
+  select public.product_visible_to_caller(p_product_id)
+     and exists (
+       select 1
+         from public.product p
+        where p.id = p_product_id
+          and (p.company_id = public.current_company_id() or p.price_public)
+     );
+$$;
+
+comment on function public.product_admissible_to_basket(uuid) is
+  'T07: may the calling person put this product in a basket? Owner arm, or '
+  'visible-to-caller AND price_public. Evaluated SECURITY DEFINER so basket '
+  'admission never requires a base-table read grant on public.product — RLS '
+  'filters rows, not columns, and those rows carry confidential fields.';
+
+-- Both roles named deliberately: revoking from PUBLIC alone does NOT revoke
+-- `anon` (the 2026-08-17 rule).
+revoke all on function public.product_admissible_to_basket(uuid) from public, anon;
+grant execute on function public.product_admissible_to_basket(uuid) to authenticated;
+
+-- ----------------------------------------------------------------------------
+-- The basket READ, curated.
+--
+-- WHY THIS EXISTS: admission (above) deliberately admits a connected seller's
+-- HIDDEN product when it carries a public price — that is T07's capability. But
+-- `product_public_select` does not admit that row (and must not: RLS filters
+-- rows, not columns, and the row carries `rrp_per_gram`,
+-- `supplier_product_code` and raw `metadata` — see 20260822100000). So a line
+-- can be legitimately written and then not read back: a PostgREST embed off
+-- `public.product` returns `product: null` for it, and the client's mapper
+-- blanks the WHOLE basket on the resulting TypeError.
+--
+-- The answer is the same one the visibility fix used: go to a door that
+-- PROJECTS. This function returns exactly the ten fields the drawer renders and
+-- never a whole product row, so it can run `security definer` without
+-- re-opening the leak. Ownership is enforced INSIDE, on auth.uid(), because
+-- definer bypasses `basket_line_owner_all`.
+-- ----------------------------------------------------------------------------
+create or replace function public.get_my_basket_lines()
+returns table (
+  id                uuid,
+  pack_count        numeric,
+  pack_size_grams   numeric,
+  product_id        uuid,
+  product_name      text,
+  cultivar          text,
+  unit_code         text,
+  local_code_pzn    text,
+  seller_company_id uuid,
+  seller_company_name text
+)
+language sql
+stable
+security definer
+set search_path to ''
+as $$
+  select
+    l.id,
+    l.pack_count,
+    l.pack_size_grams,
+    p.id,
+    -- The product's DETAILS are gated on live visibility, re-evaluated per
+    -- read. `security definer` bypasses product RLS, so without this the row
+    -- would keep surrendering the seller's CURRENT name, cultivar and PZN after
+    -- the product was hidden, renamed, soft-deleted, or the relationship ended.
+    -- The line itself still returns (id, counts, seller) so it stays visible
+    -- and DELETABLE — the ticket's accepted consequence — but it goes dark.
+    case when public.product_visible_to_caller(l.product_id) then p.name::text          end,
+    case when public.product_visible_to_caller(l.product_id) then p.cultivar::text      end,
+    case when public.product_visible_to_caller(l.product_id) then p.unit_code::text     end,
+    case when public.product_visible_to_caller(l.product_id) then p.local_code_pzn::text end,
+    p.company_id,
+    c.name::text
+  from public.product_basket_line l
+  join public.product p on p.id = l.product_id
+  left join public.company c on c.id = p.company_id
+  -- Ownership gate: definer bypasses RLS, so this is the ONLY thing standing
+  -- between the caller and someone else's cart. It is not optional.
+  where l.owner_person_id = auth.uid()
+  order by l.created_at;
+$$;
+
+comment on function public.get_my_basket_lines() is
+  'T07: the caller''s own basket lines, projected to the ten fields the drawer '
+  'renders. SECURITY DEFINER so a legitimately-admitted HIDDEN product still '
+  'reads back without widening product_public_select; confidential product '
+  'columns (rrp_per_gram, supplier_product_code, metadata) are never selected.';
+
+-- Both roles named deliberately: revoking from PUBLIC alone does NOT revoke
+-- `anon` (the 2026-08-17 rule).
+revoke all on function public.get_my_basket_lines() from public, anon;
+grant execute on function public.get_my_basket_lines() to authenticated;
+
 create policy basket_line_admission on public.product_basket_line
   as restrictive for all to authenticated
   -- NO `using` clause — the shape decision, not an omission. See the header.
   with check (
-    exists (
-      select 1
-        from public.product p
-       where p.id = product_basket_line.product_id
-         and (
-              -- Owner arm: the seller's own product. The price rule is N/A —
-              -- hidden, price-hidden, or no price set at all are all fine.
-              p.company_id = public.current_company_id()
-              -- Buyer arm: decision 3 / PRD §6.5. Visibility itself is NOT
-              -- restated — it rides the RLS-filtered EXISTS above.
-           or p.price_public
-         )
-    )
+    public.product_admissible_to_basket(product_basket_line.product_id)
   );
 
 comment on policy basket_line_admission on public.product_basket_line is
-  'T07: restrictive admission gate. Product visibility is inherited from the '
-  'product RLS policies via the RLS-filtered EXISTS (never restated here); only '
-  'the price arm is written. WITH CHECK only, no USING, so an existing line '
+  'T07: restrictive admission gate. The whole predicate lives in '
+  'product_admissible_to_basket() so it is stated exactly once and needs no '
+  'base-table read grant on public.product. WITH CHECK only, no USING, so an existing line '
   'whose product later goes invisible stays readable and deletable — the '
   'ticket''s accepted consequence.';
 

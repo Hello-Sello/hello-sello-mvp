@@ -56,6 +56,80 @@ seed:   "wehave to build the august_mvp what dhould be the next thing to build?"
 > list. Items 1, 3, 4, 5, 6, 7 are verified done in code (releases 1+2 live; the tier
 > ladder `0021` swallowed 3–7). Item 8 (production UAT) is blocked by this slug.
 
+## 🔴 `/ship` ATTEMPTED 2026-08-23/24 — HALTED BEFORE THE PUSH. NOT SHIPPED.
+
+**Nothing was pushed to production. Nothing was merged. The branch is committed and pushed to
+`origin/claude/muskan/work` only.** Muskan's call: ship in a fresh session.
+
+**Why it halted:** the security gate found **three blocking findings across three rounds** — and
+**two of the three were introduced by the fix for the round before it.** Each is closed and proven
+closed, but the pattern (defects born from fixing under momentum at the tail of a long run) is the
+reason the push was deferred rather than pressed through.
+
+| round | finding | whose | status |
+|---|---|---|---|
+| 1 | `product_public_select` widened to `profile_visible or is_connected_to_company` — RLS filters **rows, not columns**, so a connected buyer read whole `product` rows off the base table: `rrp_per_gram` (a per-gram price on a `price_public = false` product), `supplier_product_code` (G3-confidential), `metadata` | T06's design | **FIXED** — policy narrowed; `is_caller_verified()` tightening kept |
+| 2 | The round-1 fix broke the basket: `getMyBasket()` read `product` through a PostgREST **embed**, which that policy filters. A legitimately-admitted HIDDEN product could be written but not read back → `product: null` → mapper `TypeError` → `BasketProvider`'s bare `.catch` blanked the **entire** basket, rows undeletable | the fix | **FIXED** — curated `get_my_basket_lines()` RPC that projects 10 fields |
+| 3 | The round-2 fix leaked forward: the new RPC is `SECURITY DEFINER` (bypasses RLS) and carried **only** the ownership predicate, so it returned a product's **current** name/cultivar/PZN forever — after the seller hid it, renamed it, soft-deleted it, or **ended the relationship**. Proven: `is_connected → f`, `admissible → f`, RPC still returned `WITHDRAWN-SECRET-NAME` | the fix | **FIXED** — visibility rule extracted to `product_visible_to_caller()`, consulted by **both** the write gate and the read projection |
+
+**The shape of the final fix — do not undo it.** `product_visible_to_caller(uuid)` is the **single
+owner** of "may this caller see this product". `product_admissible_to_basket()` = that + (owner or
+`price_public`). `get_my_basket_lines()` gates its four detail columns on it per read. The write
+gate and the read projection therefore cannot drift — round 3 existed precisely because they had.
+
+**Proven behaviour (executed, rolled back, not asserted):**
+- connected → both lines show real details **including the hidden product** (T07 capability intact)
+- disconnected → `product_name` / `cultivar` / `local_code_pzn` all **NULL**, line still listed and
+  **`DELETE` succeeds** (the ticket's accepted "readable and deletable" consequence, honoured)
+- base table → hidden products unreachable; `rrp_per_gram` / `supplier_product_code` not obtainable
+
+**Gate, green on the final code:** SQL **39/39** · unit **462/462** · `tsc` **0** · eslint **6
+errors, byte-identical to `origin/dev`** (files and config unchanged — A/B proven pre-existing) ·
+e2e **114 pass / 21 fail / 9 skipped / 8 did-not-run of 152**, failure set **diffed test-by-test as
+identical to the recorded baseline** (13 auth-keys class + 8 T04-proven class).
+
+**Also fixed, from round 3's note:** `pack_count` was declared `integer` in the RPC against a
+`numeric` column — `2.5` silently became `3` and `3e9` raised `22003`, which would blank the whole
+basket. Now `numeric`.
+
+### ▶ WHAT THE NEXT `/ship` SESSION MUST KNOW
+
+1. **Re-run the security gate first.** Round 4 was never run. Rounds 1-3 each found something real;
+   do not treat three green suites as evidence the fourth round is unnecessary.
+2. **The six-migration facts still hold** — verified this session, independently:
+   `supabase migration list --linked` shows **exactly six** local-only, and
+   `supabase db push --dry-run --include-all` listed exactly those six in order.
+   **`--include-all` is REQUIRED** (`20260607090000` is back-dated; without the flag the push
+   applies **five of six and reports success**).
+3. **All six are additive DDL — no migration-time data-writes.** The only `INSERT`/`UPDATE` are
+   inside `accept_connection_request` / `resubmit_company_verification` bodies. So the prod
+   data-write ask rule does **not** fire.
+4. **Migrations must land BEFORE the app code.** `store.ts` and `onboarding/actions.ts` already call
+   two RPCs that do not exist on production.
+5. **A live production privilege escalation is still open and this batch closes it.** Prod's
+   `relationship` has one policy, `rel_all`, whose `WITH CHECK` only requires the caller be **one**
+   side of the pair — no consent from the other — and `authenticated` holds `INSERT`. Any verified
+   company can self-mint a connection and read another company's hidden products. **Verified live
+   this session.** T09 (line 89-90) revokes it. This is the cost of every day the push waits.
+6. **S8 baseline re-measured this session: 80 findings (1 ERROR / 78 WARN / 1 INFO)** — matches the
+   recorded figure. Expect it to RISE by ~3 after the push: the batch adds three `SECURITY DEFINER`
+   functions, plus the two added by this fix. A rise in
+   `authenticated_security_definer_function_executable` is expected, not a regression.
+7. **Prod↔local drift that is NOT this slug's** (checked via `db diff --linked`, direction confirmed
+   by querying prod directly): prod grants `anon` **full write** on `company`, `relationship`,
+   `pending_inbox_item`, `product_media`, `product_basket_line` (the batch closes three; the rest is
+   **T11**) · `person.links` is NOT NULL on prod, nullable locally (harmless — defaults `'{}'`) ·
+   orphan `avatars_read` policy · `pg_net` in `public`. **No remote-only migrations: 152 local files
+   ↔ 152 history rows, exact 1:1.**
+8. **New tickets filed by this run: T13** (pre-existing `rrp_per_gram` leg — a `profile_visible =
+   true` + `price_public = false` product still surrenders a per-gram price off the base table; live
+   on prod, NOT caused by this slug, and **must not** be "fixed" with a column-level GRANT
+   allowlist). **New learnings: L-036, L-037.**
+9. **Test A1 in `connection_visibility_override_test.sql` was INVERTED** — it asserted a connected
+   buyer *can* read a hidden product off the base table, which encoded the leak as a requirement.
+   A2 proves the capability still works via the RPC. **C4's control was repointed** from the base
+   table to the RPC so it can still detect a vacuous C1-C3.
+
 ## What it is — Muskan's framing, 2026-08-18
 
 > "From Discover, the user should be able to see the seller's shop properly, like the

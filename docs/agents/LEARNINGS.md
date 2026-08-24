@@ -1092,3 +1092,85 @@ has already written them into a fix list, and including when the change is obvio
 line long. If a fix list mixes source and test findings, **split it and dispatch two agents.**
 **An agent refusing an instruction on fence grounds is the system working** — the same shape as a
 builder correcting a plan's line range (L-030).
+
+---
+
+## L-036 · RLS filters ROWS; it does not filter COLUMNS — a policy is not a projection
+
+**2026-08-23 · slug 0022 · `/ship` step 3 · caught by the `security` agent, reproduced twice**
+
+**Trigger** — writing or widening a `for select` RLS policy on a base table that carries any column
+a curated door deliberately withholds. Also: any design that says "the rule is enforced at all three
+sites" where the sites are a policy, a view and a function.
+
+**What I authored.** T06's override widened `product_public_select` to
+`profile_visible = true or is_connected_to_company(company_id)`, so a connected buyer could see a
+seller's hidden products. The ADR called this one of "three sites" enforcing one rule, alongside the
+`current_pricelist_item` view and the `get_discoverable_shop` RPC.
+
+**Why it was wrong — the reasoning error.** I treated three enforcement sites as three instances of
+the same kind of thing, and checked them for *predicate* agreement. They are not the same kind of
+thing. The view and the RPC are **projections**: they name an explicit column list, and
+`get_discoverable_shop` deliberately omits `rrp_per_gram`, `supplier_product_code` and raw
+`metadata`. A base-table `for select` policy is **not** a projection — it decides rows, and every
+admitted row is handed over whole. So predicate agreement across the three sites was the wrong
+check, and passing it proved nothing about what the widest door actually returns.
+
+The consequence was not abstract: a product with `price_public = false` surrendered a per-gram price
+through `rrp_per_gram`, defeating the ticket's own headline invariant — *connection reveals the
+product, never the price* — through a column the price gate never covered. The tests all passed
+because every one of them asked the sanctioned door.
+
+**The rule.** Before widening any base-table SELECT policy, list the table's columns and ask which
+of them the narrowest sanctioned door refuses to return. If that set is non-empty, the policy is the
+wrong place for the rule: move it behind a `security definer` predicate that returns a boolean, and
+keep the base-table policy at the narrowest thing every caller genuinely needs. **"Which rows" and
+"which columns" are enforced by different mechanisms; a design that conflates them cannot be audited
+by comparing predicates.**
+
+**Corollary — the test that would have caught it.** Every visibility assertion in the suite probed
+the intended door. Not one asked *"what else can this identity reach?"* A capability test proves the
+feature works; only a negative-space test over the **other** doors proves the feature is contained.
+When a ticket's invariant is about withholding something, assert the withholding through every path
+that returns the row, not through the path the feature uses.
+
+---
+
+## L-037 · Narrowing a door needs a reader census — and a hand-written cast will hide the breakage from `tsc`
+
+**2026-08-23 · slug 0022 · `/ship` step 3, round 2 · caught by the `security` agent re-checking my own fix**
+
+**Trigger** — removing or narrowing any RLS policy, grant, or view predicate. Also: reading a
+PostgREST embed (`select("a, b, rel:fk(...)")`) whose row type is asserted with `as unknown as`.
+
+**What I did.** L-036's fix narrowed `product_public_select` back to `profile_visible = true`. It
+closed the leak exactly as intended and every SQL suite stayed green. What I never asked was **who
+was still reading through the door I had just narrowed.**
+
+`getMyBasket()` renders each line via a PostgREST **embed** off `public.product` — and an embed is
+filtered by that policy. T07 deliberately admits a connected seller's HIDDEN product to the basket
+when it carries a public price, so after my change that line could be **written but not read back**:
+the embed returned `product: null`, the mapper did `r.product.id`, and `BasketProvider`'s bare
+`.catch(() => setView(EMPTY))` blanked **the entire basket** — other sellers' lines included. No
+error surfaced, because the *write* had succeeded. The rows stayed in the database where the UI
+could no longer render them, so the user could not even delete them.
+
+**Why it was wrong — the reasoning error.** I scoped the blast radius of a narrowing to the thing I
+was narrowing it *for*. A policy is an interface with an unknown number of callers; tightening it is
+a breaking change to every one of them, and the ones that break are the ones I did not enumerate.
+The checklist already has this step — S4, "dependency scan before revoking" — and I ran it against
+*policies* (does any policy depend on this?) while skipping the **application** readers entirely.
+
+**Why nothing caught it.** `tsc` was blind because the row type is asserted with
+`as unknown as Array<{… product: {id: string …}}>`, which declares `product` non-nullable — a cast
+is a promise the compiler stops checking, and PostgREST embeds are exactly where that promise is
+least safe. The SQL suites assert **admission** and never read a line back. The e2e basket spec is
+three `test.fixme()` stubs that never execute. Every layer tested the write; none tested the
+round-trip.
+
+**The rule.** Before narrowing any read door, `grep` for its readers — `.from("<table>")`, embeds
+naming it via a foreign key, and views/policies whose `EXISTS` resolves through it — and state what
+each one does after the change. **A capability that can be written must be provable readable in the
+same test**; assert the round-trip, not the write. And treat `as unknown as` over a query result as
+a place where nullability has been asserted rather than checked — the widening of a policy is what
+makes it true, so the narrowing is what makes it a lie.

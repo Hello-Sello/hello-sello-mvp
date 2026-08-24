@@ -4782,6 +4782,21 @@ export type Database = {
           unit_code: string
         }[]
       }
+      get_my_basket_lines: {
+        Args: never
+        Returns: {
+          cultivar: string
+          id: string
+          local_code_pzn: string
+          pack_count: number
+          pack_size_grams: number
+          product_id: string
+          product_name: string
+          seller_company_id: string
+          seller_company_name: string
+          unit_code: string
+        }[]
+      }
       get_public_profile: {
         Args: { p_handle: string }
         Returns: {
@@ -4956,6 +4971,14 @@ export type Database = {
         Returns: boolean
       }
       owns_product_batch: { Args: { p_batch_id: string }; Returns: boolean }
+      product_admissible_to_basket: {
+        Args: { p_product_id: string }
+        Returns: boolean
+      }
+      product_visible_to_caller: {
+        Args: { p_product_id: string }
+        Returns: boolean
+      }
       propose_deal_change: {
         Args: { p_deal_card_id: string; p_draft: Json; p_reason: string }
         Returns: string
