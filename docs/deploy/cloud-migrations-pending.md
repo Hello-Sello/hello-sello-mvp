@@ -23,6 +23,46 @@
 
 ---
 
+## ⚠️ PENDING 2026-08-24 — T13 product column confidentiality (ONE migration)
+
+**Status: LOCAL ONLY. Not pushed. Built on `claude/muskan/work`, deliberately unreleased.**
+
+| # | migration | ticket |
+|---|---|---|
+| 1 | `20260824090000_product_column_confidentiality.sql` | T13 (`0022-buyer-shop-view/TICKETS.md`) |
+
+**What it closes — live on production right now.** `product_public_select` admitted any
+`profile_visible = true` row to any verified caller, and RLS filters rows, not columns, so the row
+came back whole. Measured locally as Bob (verified, connected buyer): **4 GreenLeaf rows, all four
+carrying `rrp_per_gram`, two of them `price_public = false`.** After: **0 rows, 0 leaked**, and the
+buyer still reads all six products through `get_discoverable_shop`.
+
+**Push order:** plain `supabase db push` — the filename timestamp sorts after cloud's tip
+(`20260823100000`), so no `--include-all` is needed. **App code does NOT need to ship with it:**
+every client read of `product` is own-company and carried by `product_all` (verified path by path —
+see the migration header). This migration is safe to land alone, in either order relative to app
+deploys.
+
+**Who loses reads, by design — the pre-push question this file exists to answer:** nobody who was
+entitled to the data. A buyer loses the *base-table* read of another company's `product` row; every
+column she is entitled to still arrives via `get_discoverable_shop`. **One deliberate widening:** a
+connected buyer gains the `pricelist_item` row of a `profile_visible = false` + `price_public = true`
+product, because the shop RPC already showed her that product and price — the base-table policy was
+the narrower of the two doors.
+
+**Advisors:** expect `authenticated_security_definer_function_executable` **85 → 86** (one new
+definer function, `product_price_visible_to_caller`). **No new ERROR** — the `product_public` view
+that would have added a second `security_definer_view` was built and then removed, because no client
+path needed it.
+
+**Proof:** `supabase/tests/product_column_confidentiality_test.sql` (6 cells, RED-first on cell 1).
+Verified on a clean `supabase db reset`: **40/40 SQL runners**, `tsc` 0, unit 490/490.
+`connection_visibility_override_test.sql` needed two assertions flipped — its `[door a]` cells
+asserted the base-table read this migration removes; the change is annotated in place, and a warning
+was added to that file so a green `[door a]` line is not mistaken for live signal.
+
+---
+
 ## ✅ APPLIED 2026-08-24 (was PENDING 2026-08-20, Muskan) — slug 0022 buyer-shop-view
 
 > **ALL SIX MIGRATIONS ARE LIVE ON PRODUCTION as of 2026-08-24**, pushed with

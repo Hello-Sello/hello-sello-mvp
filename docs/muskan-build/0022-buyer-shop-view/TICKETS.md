@@ -661,6 +661,21 @@ T07's own new test, which creates `T07-E2E-WITHDRAW` and hard-deletes it in `aft
 
 ## T13 — `rrp_per_gram` and `supplier_product_code` are readable off `public.product` for a price-hidden VISIBLE product · **S** · depends on: none · **PRE-EXISTING, live on production**
 
+> ✅ **BUILT 2026-08-24 (session 84).** Migration
+> `20260824090000_product_column_confidentiality.sql`, LOCAL ONLY — ledgered as
+> PENDING, deliberately unreleased. `product_public_select` dropped; the four
+> policies that borrowed the buyer's product read (`product_image`,
+> `product_media`, `pricelist_item`, **`pricelist_item_tier` — which the first
+> dependency scan MISSED because it joins rather than selects `FROM product`**)
+> re-pointed at the SECURITY DEFINER helpers. New
+> `product_price_visible_to_caller()` names the price rule;
+> `product_admissible_to_basket()` delegates to it, body otherwise unchanged.
+> **No app change needed** — every client read of `product` is own-company
+> (verified path by path). A `product_public` view was built and then removed: no
+> caller needed it, and a third buyer-facing door is a permanent agreement
+> burden (L-038).
+> Proof: 6-cell suite, RED-first. Clean reset → **40/40 runners**, tsc 0, unit 490/490.
+
 **Filed 2026-08-23 at `/ship`, after the `security` agent's blocking finding on the hidden-product
 case was fixed.** This is the *other half* of that finding, and it is **not** caused by this slug —
 it is live on production today.
