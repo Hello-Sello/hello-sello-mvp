@@ -284,6 +284,46 @@ Sella/service-role (`20260614121000_propose_deal_rpc.sql:12`) and Sella is not b
 **The page-deletion slug MUST NOT delete `/connect/inbox` while this door still writes
 to it.** Carry this forward.
 
+## ✅ T01 GATE IS GREEN — measured by me, 2026-08-25 (`3ae7873`)
+
+**Five SQL runners + `tsc` + unit, exit codes captured from each runner directly** (never from a
+pipeline — see the `tail` trap below):
+
+| check | result |
+|---|---|
+| `run_send_deal_c2c_announce_test.sh` | **exit 0** |
+| `run_deliver_deal_test.sh` | **exit 0** |
+| `run_claim_deal_ticket_test.sh` | **exit 0** |
+| `run_decline_deal_test.sh` | **exit 0** |
+| `run_update_deal_draft_test.sh` | **exit 0** |
+| `tsc --noEmit` | **exit 0** |
+| `npm run test:unit` | **490 / 490**, 67 files |
+| AC 9 / M8 repo check (both halves) | **clean** |
+
+**Measured on a verified-clean reset — the verification was not optional.** `builder` warned its
+own green "has a shelf life": it hit a reset that stamped `20260825100000` (a version with **no
+file on disk**, the parallel session's) while leaving the OLD `send_deal` body live. So before
+measuring I confirmed **both** that `20260825090000` was at the tip **and** that the new body was
+actually running.
+
+⚠️ **My first probe said `OLD BODY` and the DATABASE WAS FINE — the probe was wrong.** I asked
+whether the live definition contained the string `deliver_deal`; it does, in a **comment inside
+the new body** explaining that the old rationale died with the deleted call. A substring match
+found the comment. The shape-correct probes — `~ 'perform\s+public\.deliver_deal'` (no match) and
+the presence of the `on conflict` idiom (match) — both said NEW. **`L-007` (the tool lied is the
+LAST hypothesis) and `L-041` (match the shape, not the spelling), inside one command.**
+
+## 🔴 A citation error of MINE, found by `builder` — the third of this class tonight
+
+PLAN-T01 §2.2 cited the `on conflict` precedent as `20260823090000:162-183`. **Verified by
+opening it: the idiom's `SELECT id INTO v_rel_id` starts at `:159` and its closing `END IF` is
+`:184`. `:162` lands mid-SELECT.** I inherited the range from **ADR §2** without opening the file.
+
+**Both occurrences corrected in PLAN-T01, with the error recorded in place rather than silently
+swapped.** ⚠️ **ADR §2 (`:225`) and §8.10 (`:623`) STILL CARRY `:162-183` — T04 owns correcting
+them upstream.** Third instance in this one ticket of `L-045`'s class, and **the only one that
+was in my own artifact rather than someone else's.**
+
 ## Review rounds — full detail in `REVIEW.md`, budgets here
 
 **`blocking-findings` budget: 1 of 2 spent.** Round 4 (`critic`) raised **1 blocking + 8 notes**;
@@ -310,6 +350,26 @@ the fix pass is one attempt, not nine (the budget counts fix ROUNDS).
   **A stalled agent is NOT a pass and is not recorded as one** (L-001/L-008). Respawned with the
   caveat that **the local DB is in the PARALLEL SESSION's shape and `20260825090000` is NOT
   applied**, so a catalog answer about `send_deal` would come from the wrong database.
+- ✅ **`builder`'s fix pass: all five `critic` findings ACCEPTED, none rejected** — and it
+  re-opened every cited file at every cited line rather than trusting the correction, then found
+  a **sixth** (mine, above). Only one logic change in the pass: the named `raise` when the thread
+  cannot be resolved. **No builder REJECTION is outstanding** — which matters, because an
+  outstanding rejection is one of the three carve-outs that would escalate this ticket to Muskan.
+
+## ⏳ T01 IS NOT CLOSED — `security`'s verdict is outstanding
+
+T01's diff is **backend-only** (SQL + one docstring, nothing renders), so per `/build` step 10 and
+PIPELINE §3 it closes on green tests + `critic` + `security` with **no human stop**. The three
+carve-outs that would override that:
+
+| carve-out | status |
+|---|---|
+| a `builder` REJECTION outstanding | **no** — all five findings accepted |
+| `security` raised a **blocking** finding | ⏳ **PENDING — this is the one gate left** |
+| the ticket changed behaviour its written criteria do not cover | to be judged at the replay |
+
+**No verdict is being recorded until `security` returns.** ⚠️ Its first attempt STALLED and a
+stalled agent is not a pass.
 
 ## ⚠️ FOR MUSKAN — a policy gap this ticket makes reachable, and nothing files it
 
