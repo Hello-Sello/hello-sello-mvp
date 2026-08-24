@@ -4,6 +4,18 @@ Slug `0023-deal-draft-lands-in-chat` · lane FULL · branch `claude/muskan/work`
 Source of truth: ADR 0006 rev 3 (accepted G3, 2026-08-25) §2, §3, §5, §6.
 Budgets this round: `tests 0/2`, `blocking-findings 0/2`, `G4 rounds 1`.
 
+**Revision 2** — `plan-checker` returned **REVISE**: 3 blocking + 6 notes. **All nine verified
+true against the real files before folding (L-003)**, and all nine accepted — none were
+argued down. The three blocking ones were about what the tests *prove*, not about what the
+plan says about the code:
+1. **AC 9 (M8) had no home** anywhere in the plan → now C9 + a repo-level check.
+2. **Case ordering would have gutted C6/C7**, the two cases this plan calls the ones that
+   matter → C4/C5 moved last, and C6/C7 pinned with `deleted_at is null`.
+3. **Two suites that execute the rewritten body were not being run** → step 6 now runs five
+   runners, not three.
+The checker also verified clean: the ADR §3 fence, the `STATE.md` Deferred list, the
+agent split, C4's mechanics, and C6/C7's expected RLS outcomes.
+
 ---
 
 ## 0 · The mandated first step — DONE, and the ADR's table was incomplete
@@ -11,8 +23,14 @@ Budgets this round: `tests 0/2`, `blocking-findings 0/2`, `G4 rounds 1`.
 ADR §4.3 orders the affected-suite list regenerated **by grep**, not copied. Run:
 
 ```
-grep -rln "send_deal\|deliver_deal\|pending_inbox_item\|chat_message" supabase/tests/ e2e/
+grep -rln "send_deal\|deliver_deal\|pending_inbox_item\|chat_message\|chat_thread" \
+     supabase/tests/ e2e/
 ```
+
+⚠️ **`chat_thread` was added to the grep after `plan-checker` finding 4.** The ticket's
+mandated term list omitted it — and `chat_thread` is the one table this migration **newly
+writes** (ADR §9: *"a thread-create arrives"*). Omitting it reproduced the exact method
+defect ADR §4.3 says was the defect twice.
 
 **21 SQL files + 6 e2e files.** ADR §4.3 listed 12. The 11 SQL suites it omitted are all
 **SAFE** — verified by opening each, not by name (L-009):
@@ -29,8 +47,15 @@ grep -rln "send_deal\|deliver_deal\|pending_inbox_item\|chat_message" supabase/t
 | `list_discoverable_people_test`, `list_incoming_person_requests_test` | `connect_person` fixtures |
 | `seed_visibility_matrix_test` `:232` | joins the inbox for connect-request state |
 
+**Two more found by the widened grep — both SAFE, both opened myself:**
+
+| suite | why safe |
+|---|---|
+| `p2p_companyless_dedup_test` `:37-51` | inserts into `chat_thread` **directly**; never calls `send_deal`. It pins `uq_chat_thread_p2p`'s behaviour when `relationship_id IS NULL` — **the very index §8.11's `on conflict` relies on**, so it is a friend of this change, not a casualty |
+| `list_my_person_connections_test` `:53-54` | a p2p fixture insert |
+
 **Nothing changes the ADR's three BREAKS-BY-DESIGN verdicts.** The omissions were all
-inert. Table reconciled; the ADR's verdicts stand.
+inert. Table reconciled over **five** grep terms, not four.
 
 **Runner census (L-013).** 41 runners / 46 suites. Six suites have no runner and can
 never go red: `announcement_projection`, `auth_gate`, `change_reason_log`,
@@ -150,27 +175,75 @@ GreenLeaf↔StonePharm card. Pattern copied from `deliver_deal_test.sql:1-96`.
 ⚠️ **`seed.sql:321` is now a fixture dependency this ADR created** (M4 in §4.3). The suite
 header states it, so the next person editing the seed sees why the row matters (L-033).
 
-| case | invariant | assertion |
-|---|---|---|
-| C1 | **M1** | company-addressed send → exactly **1** `chat_message`, `type='deal_card'`, in the **c2c** thread of the card's `relationship_id`, `sender_person_id = alice`, body = Alice's name + `' has sent a deal'`, `metadata->>'deal_card_id'` = the card |
-| C2 | **M2** | same send → **0** `pending_inbox_item` rows for that card |
-| C3 | **M3** | person-addressed send (`counterparty_person_id = bob`) → **1** pill in the **p2p** thread, **0** new rows in the c2c thread |
-| C4 | **M4′ (a)** | soft-delete the seeded c2c thread (`deleted_at = now()`), send → a **new** c2c thread exists and carries the pill |
-| C5 | **M4′ (b)** | send a **second** company-addressed card on the same relationship → still exactly **1** live c2c thread, now **2** pills |
-| C6 | **M9** | `SET LOCAL ROLE authenticated` **as Bob** → the c2c pill is SELECT-able, and `deal_card` + `deal_line_item` for its `deal_card_id` are SELECT-able |
-| C7 | **M10** | same reads **as Clara** → **0** rows for all three |
-| C8 | **M11** | `has_function_privilege('authenticated','public.send_deal(uuid)','EXECUTE')` is true |
+| # | case | invariant | assertion |
+|---|---|---|---|
+| 1 | **C1** | **M1** | company-addressed send → exactly **1** `chat_message`, `type='deal_card'`, in the **live** c2c thread of the card's `relationship_id`, `sender_person_id = alice`, body = Alice's name + `' has sent a deal'`, `metadata->>'deal_card_id'` = the card |
+| 2 | **C2** | **M2** | same send → **0** `pending_inbox_item` rows for that card |
+| 3 | **C3** | **M3** | person-addressed send (`counterparty_person_id = bob`) → **1** pill in the **p2p** thread, **0** new rows in the c2c thread |
+| 4 | **C6** | **M9** | `SET LOCAL ROLE authenticated` **as Bob** → C1's pill is SELECT-able, and `deal_card` + `deal_line_item` for its `deal_card_id` are SELECT-able |
+| 5 | **C7** | **M10** | the same three reads **as Clara (Rheinland)** → **0** rows each |
+| 6 | **C8** | **M11** | `has_function_privilege('authenticated','public.send_deal(uuid)','EXECUTE')` is true |
+| 7 | **C9** | **M8** | `pg_get_functiondef('public.deliver_deal(uuid)'::regprocedure)` still contains its `pending_inbox_item` insert **and** its `if not exists` dedupe guard |
+| 8 | **C4** | **M4′ (a)** | soft-delete the live c2c thread (`deleted_at = now()`), send → a **new** c2c thread exists and carries the pill |
+| 9 | **C5** | **M4′ (b)** | send a **second** company-addressed card → still exactly **1** thread with `deleted_at is null`, and **2** pills **in that live thread** |
 
-**C6/C7 are the ones that matter (ADR §5).** Every other assertion is a writer-side count
-taken inside a definer function where RLS is bypassed. FR8/AC5 is falsifiable only by
-reading **as** the recipient — this repo shipped four consecutive visibility divergences
-that writer-side counts could not see.
+### ⚠️ The order in that table is load-bearing — `plan-checker` finding 2
 
-**C6/C7 mechanics (L-019 — a test that changes identity needs a way out):** each identity
-switch is `set_config('request.jwt.claim.sub', …)` + `set_config('request.jwt.claims', …)`
-+ `SET LOCAL ROLE authenticated`, and every block ends `RESET ROLE` **before** the next
-`set_config` — the shape at `deliver_deal_test.sql:100-105,:150-153`. Without the reset the
-next privileged step runs as the wrong role and the failure reads as a permissions bug.
+**C4/C5 run LAST, after C6/C7.** The first draft ran them at positions 4-5, and that would
+have quietly gutted the two cases this plan itself calls the ones that matter.
+
+`can_access_thread` (`20260607170000:117-132`) has **no `deleted_at` predicate** — its c2c
+branch is bare `is_relationship_member(t.relationship_id)` — and `msg_all` (`:288-290`)
+gates on nothing else. **So a message in a soft-deleted thread still passes RLS.** Had C4
+soft-deleted the thread before C6 ran, C6 would have proved the recipient can read a pill in
+a conversation the app never shows (`store.ts:363` filters `deleted_at is null`) — and gone
+green doing it. M9 *is* the slug; asserting it against a dead thread asserts nothing.
+
+Belt and braces, because ordering alone is a fact about the file that a later edit can undo
+(L-044's exact class): **C6/C7 resolve their thread with an explicit `deleted_at is null`
+filter and select the pill by C1's captured `chat_message.id`.** Ordering plus pinning, not
+either alone.
+
+**C5's count is scoped, and the scope is stated** (finding 5). After C4 there are two c2c
+threads on the relationship: the dead one holding C1's pill, and the live one holding C4's.
+`2` is the count **in the live thread**; scoped to the relationship it is 3. The assertion
+names `deleted_at is null` in its own predicate.
+
+### Fixtures — one fresh card per sending case (finding 7)
+
+`send_deal:73-75` refuses any card whose status is not `unsent`, so **C1, C3, C4 and C5 each
+need their own freshly born card.** They are born with `create_deal_draft` as Alice, the
+shape at `claim_deal_ticket_test.sql:188-191`. C3's carries
+`counterparty_person_id = bob`; the rest carry null.
+
+Temp fixtures follow `deliver_deal_test.sql:52-54` — **`GRANT SELECT ON _fix, _rel TO
+authenticated`** (plus `SELECT, INSERT` on any table a definer-less case writes). Without
+those grants C6/C7 fail at the fixture read rather than at the assertion, and the failure
+reads like a policy bug (finding 8).
+
+**Identity switching (L-019).** Each switch is `set_config('request.jwt.claim.sub', …)` +
+`set_config('request.jwt.claims', …)` + `SET LOCAL ROLE authenticated`, and **every block
+ends `RESET ROLE` before the next `set_config`** — the shape at
+`deliver_deal_test.sql:100-105,:150-153`. Without the reset the next privileged step runs as
+the wrong role and the failure reads as a permissions bug.
+
+### ⚠️ What this suite does NOT cover — stated, not papered over (finding 6)
+
+**§8.11's `on conflict do nothing` + re-select path is NOT exercised by any case here.** It
+is reachable only when a *concurrent session* inserts between the SELECT and the INSERT;
+C4/C5 both go through the SELECT branch and never attempt the INSERT. ADR §5 claims M4′
+"covers the `on conflict` path" — **it does not.**
+
+Two honest options, and this plan takes the second:
+- a two-session proof (two `psql` connections, an advisory lock, interleaved) — real cover,
+  but a new harness shape this repo has nowhere else;
+- **declare it review-only and hand it to `critic` explicitly**, which is what §6 step 7
+  does. The code is four lines copied from a shipped precedent
+  (`20260823090000:162-183`); the risk is a mis-transcription, which reading catches.
+
+**This is a deliberate gap with a named owner, not an oversight.** Recording it because
+"M4′ covers it" was already written into an accepted ADR and is false — a silent cap is
+what makes a green suite read as complete cover.
 
 **Runner** `run_send_deal_c2c_announce_test.sh` — copied verbatim from
 `run_deliver_deal_test.sh` (host-psql branch with `-f -` on stdin, docker fallback), only
@@ -178,6 +251,33 @@ next privileged step runs as the wrong role and the failure reads as a permissio
 execs inside the container, where a host-relative path does not exist.
 
 ---
+
+### AC → case map (finding 1: AC 9 had no home)
+
+| ticket AC | invariant | proved by |
+|---|---|---|
+| 1 | M1 | C1 |
+| 2 | M2 | C2 |
+| 3 | M3 | C3 |
+| 4 | M4′ | C4 + C5 |
+| 5 | M9 | C6 |
+| 6 | M10 | C7 |
+| 7 | M11 | C8 |
+| 8 | — | §4.1's rewritten `deliver_deal_test` (2a), double call |
+| 9 | M8 | **C9 + the repo check below** |
+
+**AC 9 was homeless in the first draft.** It is trivially true — no file in §1 touches
+`20260720095000_deliver_deal.sql` — but *"trivially true"* is not evidence, and `/build`
+step 10 has to replay every AC into REVIEW.md. Two cheap proofs, because they fail
+differently:
+
+- **repo level** — `git diff --name-only <base>..HEAD -- supabase/migrations/` must not list
+  `20260720095000_deliver_deal.sql`, **and** `grep -l "function public.deliver_deal"
+  supabase/migrations/2026082*.sql` must return nothing. This catches a *new* migration
+  redefining the function, which a diff of the old file cannot see.
+- **runtime — C9** — `pg_get_functiondef` still shows the insert and the `if not exists`
+  guard after `db reset`. This catches the case where the definition changed by some route
+  the file check missed.
 
 ## 4 · The two deliberate breaks
 
@@ -234,11 +334,19 @@ nullable; the company arm returning a real id instead of `null` is inert at ever
 ## 6 · Runnable order
 
 1. Regenerate the affected-suite table by grep · runner census · third-caller check — **done, §0.**
-2. Sync ritual: lock `src/modules/deals/actions.ts` in `docs/team/sync/muskan.md`; commit + push the sync file alone.
+2. ~~Sync ritual~~ — **already discharged** (`c60ba69`, pushed alone before planning).
 3. `test-writer` → `send_deal_c2c_announce_test.sql` + its runner + the two rewrites. **Test files only.**
 4. Orchestrator verifies **RED** by running the runners (L-023: `test-writer` cannot run anything; the RED proof is mine).
 5. `builder` → the migration + the `actions.ts` docstring. **Source only — never a file under `supabase/tests/**`** (L-035).
-6. `supabase db reset` → `test-runner`: the three runners, then `npm run test:unit` + `tsc`.
+6. `supabase db reset` → `test-runner`, running **FIVE** SQL runners, then `npm run test:unit` + `tsc`:
+   - `run_send_deal_c2c_announce_test.sh` (new)
+   - `run_deliver_deal_test.sh`, `run_claim_deal_ticket_test.sh` (the two rewrites)
+   - **`run_decline_deal_test.sh`, `run_update_deal_draft_test.sh`** — added after
+     `plan-checker` finding 3. `decline_deal_test.sql:110,:143` and
+     `update_deal_draft_test.sql:145` both `PERFORM public.send_deal(...)`, so they are the
+     only other suites that **execute the rewritten body**. Their SAFE rating is a *reading*;
+     both runners exist, so it costs two commands to make it a *result*. This repo's standing
+     record is four consecutive divergences that reading missed.
 7. `critic` + `security` (migration · RPC · SECURITY DEFINER · cross-company reads).
 8. No render in this diff → **no `visual-verifier`, and G4 is `auto`** unless a carve-out fires.
 

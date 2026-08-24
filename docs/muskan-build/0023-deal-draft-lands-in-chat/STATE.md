@@ -178,7 +178,40 @@ is not this slug's job, but nothing else is tracking it.
   `20260824100000`, so `20260825090000` sorts after both → **plain `db push`, NOT
   `--include-all`.**
   ✅ Sync lock on `src/modules/deals/actions.ts` taken + pushed alone (`c60ba69`).
-  🔄 `plan-checker` spawned on PLAN-T01.md — **verdict pending.**
+  ✅ **`plan-checker` → REVISE: 3 blocking + 6 notes. ALL NINE VERIFIED TRUE against the
+  real files before folding (L-003), all nine accepted, none argued down.** Plan is at rev 2.
+  The three blocking findings were all about what the tests **prove**, not about what the plan
+  says about the code — the plan's ~30 code citations were spot-checked and every one held.
+  1. **AC 9 (M8) had no home** in the case table or the runnable order. Trivially true (no
+     listed file touches `20260720095000_deliver_deal.sql`) — but trivially-true is not
+     evidence and `/build` step 10 must replay every AC. → **C9** (`pg_get_functiondef` still
+     shows the insert + the `if not exists` guard) **plus a repo check that greps for a NEW
+     migration redefining it**, which a diff of the old file cannot see.
+  2. 🔴 **THE SHARP ONE — case ordering would have gutted C6/C7**, the two cases the plan
+     itself calls the ones that matter. C4 soft-deletes the seeded c2c thread and sat BEFORE
+     the recipient-read cases. **`can_access_thread` (`20260607170000:117-132`) has no
+     `deleted_at` predicate** — its c2c branch is bare `is_relationship_member` — so a message
+     in a soft-deleted thread still passes RLS. C6 would have proved the recipient can read a
+     pill **in a conversation the app never shows** (`store.ts:363` filters it out), and gone
+     GREEN doing it. M9 *is* this slug. → C4/C5 moved LAST **and** C6/C7 pinned with an
+     explicit `deleted_at is null`: ordering alone is a fact a later edit can silently undo
+     (L-044's exact class).
+  3. **Two suites that EXECUTE the rewritten body were not being run** —
+     `decline_deal_test.sql:110,:143` and `update_deal_draft_test.sql:145` both
+     `PERFORM public.send_deal(...)`. Their SAFE rating was a **reading**; both runners exist.
+     → step 6 now runs **FIVE** runners, not three.
+  ⚠️ **A note that CORRECTS THE ACCEPTED ADR: §5's claim that M4′ "covers the `on conflict`
+  path" is FALSE.** That path needs a concurrent insert; both cases go through the SELECT
+  branch. Rather than fake cover it is **declared review-only and handed to `critic` by
+  name** — a silent cap is what makes a green suite read as complete cover.
+  Also folded: `chat_thread` added to the mandated grep (it is the one table the migration
+  newly writes, and the ticket's term list omitted it) → 2 more suites found, both SAFE;
+  C5's count scoped to the live thread; per-case fresh cards (`send_deal:73-75` refuses a
+  non-`unsent` card); temp-table grants (`deliver_deal_test.sql:52-54`).
+  Checker verified CLEAN: ADR §3 fence, STATE.md Deferred list, the agent split
+  (`test-writer` owns all `supabase/tests/**`, builder owns source only), C4's mechanics,
+  and C6/C7's expected RLS outcomes.
+  ⏸️ **PAUSED — awaiting Muskan's yes on L-045** before `test-writer` is spawned.
 
 ## Gate log
 - triage — FULL, 2026-08-25 (narrowed from F-04, then widened to include the picker)
