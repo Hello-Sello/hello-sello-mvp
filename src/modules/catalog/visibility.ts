@@ -3,10 +3,18 @@
  *
  * ⚠️ ADVISORY ONLY, AND DELIBERATELY SO. The authoritative rule is SQL:
  * `get_discoverable_shop`'s WHERE clause (`20260822100000`) and the
- * `product_public_select` policy. This module exists so a seller can be TOLD
- * why their product is not reaching buyers. It must never gate a read, and
- * nothing server-side may depend on it. If the two ever disagree, SQL is right
- * and this is the bug.
+ * `product_visible_to_caller()` definer helper that `20260824090000` made the
+ * single owner of it. This module exists so a seller can be TOLD why their
+ * product is not reaching buyers. It must never gate a read, and nothing
+ * server-side may depend on it. If the two ever disagree, SQL is right and this
+ * is the bug.
+ *
+ * ⚠️ Corrected 2026-08-24, same day it was written: the first draft cited the
+ * `product_public_select` RLS policy as the second authority. **That policy no
+ * longer exists** — `20260824090000` DROPPED it and re-pointed its borrowers at
+ * `product_visible_to_caller()`, in a parallel session, hours after this file
+ * was authored. Caught by that session's own cross-session note, not by this
+ * one. Being advisory is what kept a stale citation from becoming a stale gate.
  *
  * That split is the whole reason this file is small and has no opinions: a
  * second *enforcing* copy of a visibility rule is the failure this slug spent

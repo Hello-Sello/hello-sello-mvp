@@ -5,12 +5,18 @@
 
 ---
 
-**Last updated:** 2026-08-24 (session `close_vulns` — six security tickets closed, none pushed)
-**Status:** offline — session closed. Scope was **vulnerabilities only**; the G5 walk + its four
-findings ran in a PARALLEL session. Closed T15, T10, T13, T16, T11; T14 rewritten as a trap warning.
-`rrp_per_gram` leak **4 rows → 0**; `anon` **614 table privileges → 0**. **Both migrations
-(`20260824090000`, `20260824100000`) are LOCAL ONLY and ledgered PENDING — production still carries
-both holes, deliberately.**
+**Last updated:** 2026-08-24 (session 85 `g5_walk` — **G5 PASSED 10/10, slug 0022 COMPLETE**)
+**Status:** offline — BOTH of today's parallel sessions are closed. Merged status:
+* **Session 84 `close_vulns`** — closed T15, T10, T13, T16, T11; T14 rewritten as a trap warning.
+  `rrp_per_gram` leak **4 rows → 0**; `anon` **614 table privileges → 0**. **Both migrations
+  (`20260824090000`, `20260824100000`) are LOCAL ONLY and ledgered PENDING — production still
+  carries both holes, deliberately.**
+* **Session 85 `g5_walk`** — **G5 PASSED 10/10 on production; slug 0022 is gate-complete G1–G5.**
+  Four findings raised (F-01..F-04). **F-01/F-02/F-03 are BUILT and green** (unit 490/490) but
+  **not on production** — they ride the next deploy alongside session 84's two migrations.
+  **F-04 needs a Linear ticket that supersedes `DECISIONS.md:961` and `:1013` BY NUMBER** — both
+  currently lock the opposite routing. ⚠️ Aurora's demo data is left modified on prod (`PND-CA`
+  hidden, `COS-CA` price off) — walk fixtures; **restore before any demo.**
 **Shared files locked:** none — all released.
 
 > 🔴 **CROSS-SESSION NOTE, please read (L-040).** Two of my commits used `git add -A` and swept up the
