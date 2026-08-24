@@ -284,6 +284,33 @@ Sella/service-role (`20260614121000_propose_deal_rpc.sql:12`) and Sella is not b
 **The page-deletion slug MUST NOT delete `/connect/inbox` while this door still writes
 to it.** Carry this forward.
 
+## LEARNINGS candidate — owed to Muskan at wrap, NOT yet written
+
+**A candidate entry (would be `L-047`), surfaced 2026-08-25 by the parallel security session.**
+Recorded here so it survives to wrap; **not written — Muskan approves LEARNINGS entries and two
+were already taken this session (`L-045`, `L-046`). Queuing a third mid-build is noise.**
+
+**The insight, in one sentence:** *in both of the day's test traps, a green assertion was borrowing
+its truth from outside itself, and neither suite could tell you it was wrong from the inside.*
+
+Two instances, two different mechanisms:
+- **mine (T01)** — `deliver_deal_test`'s idempotency case passed only because a **different case in
+  the same file** had already written the row. Covered by `L-044`.
+- **theirs (HEL-69)** — `pricelist_item_tier_test`'s fixture asserted a "fully public priced
+  product" was buyer-visible, and passed only because a **second, independent door** (the price
+  view) was more permissive than the one under test. `get_discoverable_shop` returns 0 rows for
+  that unfiled product and always has. **The suite was asserting the divergence.**
+
+**Why it is not folded into an existing entry.** Entries are found by scanning **Trigger** lines,
+so an insight filed under the wrong trigger is nearly unfiled. It is not `L-046`'s class (that
+triggers on *recommending a security/schema default*). It is not quite `L-044`'s either — that one
+is scoped to **shared-fixture suites**, where an earlier case is a later case's setup. This is a
+different axis: a **cross-door** divergence, which needs an outside oracle to diagnose.
+
+**Proposed trigger:** *a test goes red on a security or visibility fix, and the fix looks like the
+thing to soften.* **Proposed rule:** check the claim against an **independent door** before touching
+either side — weakening the fix preserves the bug and the green tick together.
+
 ## Open, not blocking
 
 1. `CONTEXT.md:31` — "a P2P chat" → "a chat". Proposed at G1, **not yet written**,
