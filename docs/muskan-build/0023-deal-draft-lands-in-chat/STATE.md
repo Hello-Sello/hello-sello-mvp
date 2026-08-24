@@ -122,7 +122,25 @@ The seed named two entries. Only one is in scope:
   wording (§8.7). Until T04 lands them the PRD contradicts the ADR.
 - `docs/architecture/adr/0006-deal-draft-lands-in-chat.md` — the HOW, **accepted at G3**
 - `docs/architecture/adr/ADR-INDEX.md` — one-line entry added (/design step 5)
-- `docs/muskan-build/0023-deal-draft-lands-in-chat/TICKETS.md` — T01–T04
+- `docs/muskan-build/0023-deal-draft-lands-in-chat/TICKETS.md` — T01–T04, **all four now
+  in Linear as HEL-63…HEL-66**, plus HEL-67 / HEL-68 for the two G3 "file separately"
+  rulings.
+
+## ✅ Linear MCP is NOT blocked — the note that said so was stale
+
+STATE.md, CLAUDE.md and the PRD all recorded *"Linear MCP auth-blocked"*. **It works.**
+Two teams: **`Codebase Development Tickets` (HEL-xx) — the pipeline's build tickets**, and
+`Development` (DEV-xx) — Marcel's product tickets. Muskan's correction, 2026-08-25:
+build tickets go in the **codebase** team.
+
+**Housekeeping done the same day:** slug 0022's T00–T08 (**HEL-54…HEL-62**) were still
+sitting in `Backlog` although the slug went G1–G5 and shipped to production in session 85.
+All nine moved to **Done**.
+
+⚠️ **Still owed:** 0022's **T09–T17** were never created in Linear at all (they were filed
+into `0022-buyer-shop-view/TICKETS.md` while the MCP was believed blocked). Several are
+built and shipped, several are open — **T17 is still blocked on Muskan.** Backfilling them
+is not this slug's job, but nothing else is tracking it.
 
 ## Attempts          three separate budgets — see §10
 - **spec, 2026-08-25** — `researcher` sweep → RESEARCH.md; interview closed in one

@@ -1,7 +1,12 @@
 # 0023 deal-draft-lands-in-chat — TICKETS
 
 > Cut at `/design` step 4, 2026-08-25, from ADR 0006 rev 3.
-> **Not yet created in Linear** — awaiting G3. Team `Development` (DEV-xx), assignee Muskan.
+> **CREATED IN LINEAR 2026-08-25** — team **`Codebase Development Tickets`** (HEL-xx),
+> assignee Muskan. ⚠️ **Not** the `Development` (DEV-xx) team — Muskan's correction; the
+> pipeline's build tickets live in the codebase team.
+> **T01 = HEL-63 · T02 = HEL-64 · T03 = HEL-65 · T04 = HEL-66**
+> Plus the two G3 "file separately" rulings: **HEL-67** (§8.6 forgeable `deal_detected`)
+> and **HEL-68** (§8.10 c2c thread created by the browser).
 > Every ticket passed the Ready checkpoint: INVEST · sized S/M/XS · EARS criteria.
 
 ## Order and parallelism
@@ -21,7 +26,7 @@ worktrees — **run their DB steps sequentially even when the tickets run in par
 
 ---
 
-## T01 — `send_deal` announces a company-addressed deal in the company chat
+## T01 (HEL-63) — `send_deal` announces a company-addressed deal in the company chat
 
 **Size M** · depends on: none · **G3 rulings it consumes: §8.9, §8.11**
 
@@ -70,7 +75,7 @@ or schema change · the frontend.
 
 ---
 
-## T02 — the buyer can address a deal to a person at the seller's company
+## T02 (HEL-64) — the buyer can address a deal to a person at the seller's company
 
 **Size S** · depends on: none · **G3 rulings it consumes: §8.1, §8.2, §8.7**
 
@@ -100,7 +105,7 @@ or schema change · the frontend.
 
 ---
 
-## T03 — the walk, end to end
+## T03 (HEL-65) — the walk, end to end
 
 **Size S** · **depends on: T01, T02**
 
@@ -121,7 +126,7 @@ or schema change · the frontend.
 
 ---
 
-## T04 — record the decision where the next person will look
+## T04 (HEL-66) — record the decision where the next person will look
 
 **Size XS** · depends on: none · **needs G3 first: §8.4, §8.5, §8.9**
 
@@ -166,5 +171,5 @@ or schema change · the frontend.
 - ~~PRD edge case "the c2c conversation cannot be found → Send must not report success"~~
   — **pending §8.9.** If (a) is ruled, this row is amended out of the PRD and T01's AC 4
   replaces it. It must not reappear on the G4 sheet from the PRD.
-- ~~closing the interrupted-accept window~~ — **own slug, §8.10.**
-- ~~the forgeable `deal_detected` finding~~ — **own ticket, §8.6.**
+- ~~closing the interrupted-accept window~~ — **own slug, §8.10 → HEL-68.**
+- ~~the forgeable `deal_detected` finding~~ — **own ticket, §8.6 → HEL-67.**
