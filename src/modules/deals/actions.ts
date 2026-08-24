@@ -358,11 +358,13 @@ export async function confirmDetectedDeal(args: {
  * Send a deal (12-07, A1/D-06) - the ONE app-side send caller. The whole
  * delivery moment lives in the `send_deal` SECURITY DEFINER RPC, in ONE
  * transaction: the 'unsent' -> 'negotiation' flip, the counterparty co-owner
- * insert, deliver_deal's company-ticket half, the p2p thread + clickable deal
- * pill, and the "Deal sent." log line. The card knows its recipient
+ * insert, the announcement (a clickable deal pill in the recipient's chat -
+ * the p2p thread when the card names a person, else the relationship's c2c
+ * thread), and the "Deal sent." log line. The card knows its recipient
  * (metadata.counterparty_person_id, persisted at birth) - no client input
- * beyond the card id (T-12-07). Returns the p2p thread id (null when
- * company-target) so the host can navigate to the conversation.
+ * beyond the card id (T-12-07). Returns the id of the thread the pill landed
+ * in. No caller navigates on it today - `DecisionBar.tsx:161` discards it -
+ * so treat it as diagnostic, not as a routing contract.
  */
 export async function sendDeal(dealCardId: string): Promise<{ threadId: string | null }> {
   const supabase = await createClient();

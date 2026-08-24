@@ -27,6 +27,10 @@
 --   M4′ [AC4] a missing/soft-deleted c2c thread is healed (created) by a
 --             send, and a second send on a healed thread does not mint a
 --             second one                                          → C4 + C5
+--   §8.3 [ADR 0006, Muskan's G3 ruling — no ticket AC number] send_deal's
+--             return value is the c2c thread id for a company-addressed
+--             send too, not merely non-null (the person arm was already
+--             covered by deliver_deal_test.sql:248-251, case A2-3b)   → C1
 --
 -- Fixture: Alice @ GreenLeaf, Bob @ StonePharm, the seeded `demo-2d`
 -- relationship — which has a seeded c2c thread (seed/seed.sql:321) and a
@@ -101,11 +105,15 @@ CREATE TEMP TABLE _threads (id uuid, kind text) ON COMMIT DROP;
 
 -- the impersonated blocks below run as `authenticated`, which owns nothing —
 -- grant it read (and, where it writes, insert) on the probe's own temp
--- fixtures. Mirrors deliver_deal_test.sql:52-54. (_c2c and _threads are only
--- ever read outside impersonation, so they carry no grant.)
+-- fixtures. Mirrors deliver_deal_test.sql:52-54. (_c2c is only ever read
+-- outside impersonation, so it carries no grant.)
 GRANT SELECT ON _fix, _rel TO authenticated;
 GRANT SELECT, INSERT ON _cards TO authenticated;
 GRANT SELECT ON _pills TO authenticated;
+-- INSERT only: C1 captures send_deal's return value (ADR 0006 §8.3) while
+-- impersonating Alice; C4/C5's own writes to this table run privileged
+-- (postgres), after RESET ROLE, so authenticated needs no SELECT on it.
+GRANT INSERT ON _threads TO authenticated;
 
 DO $$
 BEGIN
@@ -117,9 +125,14 @@ BEGIN
 END $$;
 
 -- ============================================================================
--- C1 [M1 / AC1] — a company-addressed send posts exactly one 'deal_card'
--- pill into the LIVE c2c thread of the card's relationship: sender = Alice,
--- body = "<her name> has sent a deal", metadata.deal_card_id = the card.
+-- C1 [M1 / AC1, + §8.3] — a company-addressed send posts exactly one
+-- 'deal_card' pill into the LIVE c2c thread of the card's relationship:
+-- sender = Alice, body = "<her name> has sent a deal", metadata.deal_card_id
+-- = the card. ALSO asserts send_deal's return value: not null, and equal to
+-- that same c2c thread's id (ADR 0006 §8.3) — the company arm used to
+-- return null; the person arm's return is already covered by
+-- deliver_deal_test.sql:248-251 (case A2-3b), which made this the
+-- asymmetric gap.
 -- ============================================================================
 
 SELECT set_config('request.jwt.claim.sub', (SELECT alice FROM _fix)::text, true);
@@ -142,14 +155,24 @@ SELECT set_config('request.jwt.claim.sub', (SELECT alice FROM _fix)::text, true)
 SELECT set_config('request.jwt.claims',
        json_build_object('sub', (SELECT alice FROM _fix), 'role', 'authenticated')::text, true);
 SET LOCAL ROLE authenticated;
-SELECT public.send_deal((SELECT id FROM _cards WHERE kind = 'c1'));
+-- captured, not discarded (unlike C2/C3/C4/C5's bare calls — one good
+-- assertion of the §8.3 return-value contract is enough for this suite;
+-- see the case banner above).
+DO $$
+DECLARE
+  v_returned uuid;
+BEGIN
+  v_returned := public.send_deal((SELECT id FROM _cards WHERE kind = 'c1'));
+  INSERT INTO _threads VALUES (v_returned, 'c1_returned');
+END $$;
 RESET ROLE;
 
 DO $$
 DECLARE
-  v_n      int;
-  v_msg_id uuid;
-  v_name   text;
+  v_n        int;
+  v_msg_id   uuid;
+  v_name     text;
+  v_returned uuid;
 BEGIN
   SELECT nullif(btrim(coalesce(first_name, '') || ' ' || coalesce(last_name, '')), '')
     INTO v_name
@@ -163,6 +186,17 @@ BEGIN
     AND m.deleted_at IS NULL;
   IF v_n <> 1 THEN
     RAISE EXCEPTION 'C1/M1 FAIL: expected exactly 1 deal_card pill in the c2c thread, got %', v_n;
+  END IF;
+
+  -- §8.3: send_deal must return the id of the thread it just announced
+  -- into, not merely a non-null uuid — the pill's thread is _c2c's,
+  -- established by the count above.
+  SELECT id INTO v_returned FROM _threads WHERE kind = 'c1_returned';
+  IF v_returned IS NULL THEN
+    RAISE EXCEPTION 'C1/§8.3 FAIL: send_deal returned NULL for a company-addressed send';
+  END IF;
+  IF v_returned <> (SELECT thread FROM _c2c) THEN
+    RAISE EXCEPTION 'C1/§8.3 FAIL: send_deal returned % — expected the c2c thread it announced into (%)', v_returned, (SELECT thread FROM _c2c);
   END IF;
 
   SELECT m.id INTO v_msg_id
@@ -203,7 +237,13 @@ END $$;
 
 -- ============================================================================
 -- C3 [M3 / AC3] — a person-addressed send posts its pill into the p2p
--- thread ONLY. Nothing new lands in the c2c thread (still just C1's pill).
+-- thread ONLY. The c2c thread's message count is UNCHANGED by the send —
+-- proved as a DELTA (captured immediately before the send), not against a
+-- hardcoded number. seed.sql:322-323 already seeds a 'connection_established'
+-- system message into this very thread at fixture creation, on top of C1's
+-- pill, so the live count is never "1" — asserting a delta is both immune to
+-- whatever the seed contains and closer to what M3 actually claims ("nothing
+-- new"), not "some specific total".
 -- ============================================================================
 
 SELECT set_config('request.jwt.claim.sub', (SELECT alice FROM _fix)::text, true);
@@ -222,6 +262,11 @@ BEGIN
 END $$;
 RESET ROLE;
 
+-- baseline, captured immediately before the send below
+CREATE TEMP TABLE _c2c_baseline ON COMMIT DROP AS
+SELECT count(*) AS n FROM chat_message
+WHERE thread_id = (SELECT thread FROM _c2c) AND deleted_at IS NULL;
+
 SELECT set_config('request.jwt.claim.sub', (SELECT alice FROM _fix)::text, true);
 SELECT set_config('request.jwt.claims',
        json_build_object('sub', (SELECT alice FROM _fix), 'role', 'authenticated')::text, true);
@@ -231,7 +276,8 @@ RESET ROLE;
 
 DO $$
 DECLARE
-  v_n int;
+  v_n      int;
+  v_before int;
 BEGIN
   SELECT count(*) INTO v_n
   FROM chat_message m
@@ -245,11 +291,12 @@ BEGIN
     RAISE EXCEPTION 'C3/M3 FAIL: expected exactly 1 deal_card pill on the p2p thread, got %', v_n;
   END IF;
 
+  SELECT n INTO v_before FROM _c2c_baseline;
   SELECT count(*) INTO v_n
   FROM chat_message
   WHERE thread_id = (SELECT thread FROM _c2c) AND deleted_at IS NULL;
-  IF v_n <> 1 THEN
-    RAISE EXCEPTION 'C3/M3 FAIL: a person-addressed send must not touch the c2c thread — expected 1 (from C1), got %', v_n;
+  IF v_n <> v_before THEN
+    RAISE EXCEPTION 'C3/M3 FAIL: a person-addressed send must not touch the c2c thread — count was % before the send, % after', v_before, v_n;
   END IF;
 END $$;
 
@@ -407,13 +454,21 @@ DECLARE
   v_thread  uuid;
   v_pills   int;
 BEGIN
-  SELECT count(*), max(t.id) INTO v_threads, v_thread
+  SELECT count(*) INTO v_threads
   FROM chat_thread t
   WHERE t.relationship_id = (SELECT rel FROM _rel) AND t.type = 'c2c' AND t.deleted_at IS NULL;
 
   IF v_threads <> 1 THEN
     RAISE EXCEPTION 'C4/M4prime(a) FAIL: expected exactly 1 LIVE c2c thread after healing, got %', v_threads;
   END IF;
+
+  -- the count above already establishes exactly 1 row, so a plain SELECT INTO
+  -- is safe here — no aggregate needed. (max/min over uuid don't exist before
+  -- PostgreSQL 18; this stack is 17.6.)
+  SELECT t.id INTO v_thread
+  FROM chat_thread t
+  WHERE t.relationship_id = (SELECT rel FROM _rel) AND t.type = 'c2c' AND t.deleted_at IS NULL;
+
   IF v_thread = (SELECT thread FROM _c2c) THEN
     RAISE EXCEPTION 'C4/M4prime(a) FAIL: the healed thread must be a NEW row, not the soft-deleted one';
   END IF;
@@ -469,13 +524,20 @@ DECLARE
   v_thread  uuid;
   v_pills   int;
 BEGIN
-  SELECT count(*), max(t.id) INTO v_threads, v_thread
+  SELECT count(*) INTO v_threads
   FROM chat_thread t
   WHERE t.relationship_id = (SELECT rel FROM _rel) AND t.type = 'c2c' AND t.deleted_at IS NULL;
 
   IF v_threads <> 1 THEN
     RAISE EXCEPTION 'C5/M4prime(b) FAIL: expected exactly 1 LIVE c2c thread after a second send, got %', v_threads;
   END IF;
+
+  -- see C4's comment above: the count already establishes exactly 1 row, no
+  -- aggregate needed (max/min over uuid don't exist before PostgreSQL 18).
+  SELECT t.id INTO v_thread
+  FROM chat_thread t
+  WHERE t.relationship_id = (SELECT rel FROM _rel) AND t.type = 'c2c' AND t.deleted_at IS NULL;
+
   IF v_thread <> (SELECT id FROM _threads WHERE kind = 'c2c_healed') THEN
     RAISE EXCEPTION 'C5/M4prime(b) FAIL: a second send must reuse the healed thread — minted a different one instead';
   END IF;

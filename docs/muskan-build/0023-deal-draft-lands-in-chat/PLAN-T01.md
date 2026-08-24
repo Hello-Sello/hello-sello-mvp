@@ -119,8 +119,15 @@ counterparty's RLS starts seeing the card, so co-ownership must precede it.
 3. **The name lookup and the single `chat_message` insert move BELOW the branch**, outside
    it, written exactly once (J2). Body, sender, type, metadata all unchanged from `:136-140`.
 
-**The `on conflict` idiom is copied from `20260823090000:162-183`, comment included** — not
-re-spelled (ADR §2). Shape:
+**The `on conflict` idiom is copied from `20260823090000:159-184`, comment included** — not
+re-spelled (ADR §2).
+
+⚠️ **CORRECTED 2026-08-25 — this plan said `:162-183` and that was WRONG.** Verified by opening
+the file: the idiom's `SELECT id INTO v_rel_id` starts at **`:159`** and its closing `END IF`
+is **`:184`**; `:162` lands mid-SELECT. **I inherited the wrong range from ADR §2 without
+opening it** — the third instance in this ticket of `L-045`'s class, and the only one that was
+in my own artifact rather than someone else's. **ADR §2 still carries the wrong number and T04
+owns correcting it upstream.** Shape:
 
 ```sql
 select id into v_thread
@@ -239,7 +246,8 @@ Two honest options, and this plan takes the second:
   but a new harness shape this repo has nowhere else;
 - **declare it review-only and hand it to `critic` explicitly**, which is what §6 step 7
   does. The code is four lines copied from a shipped precedent
-  (`20260823090000:162-183`); the risk is a mis-transcription, which reading catches.
+  (`20260823090000:159-184` — see the §2.2 correction); the risk is a mis-transcription,
+  which reading catches.
 
 **This is a deliberate gap with a named owner, not an oversight.** Recording it because
 "M4′ covers it" was already written into an accepted ADR and is false — a silent cap is
