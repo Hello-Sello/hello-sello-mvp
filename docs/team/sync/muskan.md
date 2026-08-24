@@ -5,9 +5,30 @@
 
 ---
 
-**Last updated:** 2026-08-24 (session `ship_0022` — **SLUG 0022 IS LIVE ON PRODUCTION**)
-**Status:** offline — session closed. **Slug 0022 SHIPPED 2026-08-24**: six migrations live on prod (`--include-all`), app deployed to `main`, Vercel production deploy success. **The `relationship` privilege escalation is CLOSED** — `authenticated` INSERT on that table is now `false`, so the self-minted-connection hole is dead. S8 80 → 85 (all +5 are this batch's own `SECURITY DEFINER` functions; `anon` definer-executable still exactly 1). **G5 live walk is OWED — Muskan's, staged at `G5-WALK.md`.**
+**Last updated:** 2026-08-24 (session `close_vulns` — six security tickets closed, none pushed)
+**Status:** offline — session closed. Scope was **vulnerabilities only**; the G5 walk + its four
+findings ran in a PARALLEL session. Closed T15, T10, T13, T16, T11; T14 rewritten as a trap warning.
+`rrp_per_gram` leak **4 rows → 0**; `anon` **614 table privileges → 0**. **Both migrations
+(`20260824090000`, `20260824100000`) are LOCAL ONLY and ledgered PENDING — production still carries
+both holes, deliberately.**
 **Shared files locked:** none — all released.
+
+> 🔴 **CROSS-SESSION NOTE, please read (L-040).** Two of my commits used `git add -A` and swept up the
+> parallel session's in-flight work:
+> * `a50c318` ("T16 …") carries the **F-03 seller-visibility fix** — `src/modules/catalog/visibility.ts`,
+>   `visibility.test.ts`, `ProductCard.tsx`, `ProductCard.gate.test.tsx`, `shop.ts`,
+>   `BuyerShopView.tsx` (359 lines).
+> * `97a9312` ("T11 …") carries `G5-WALK.md` and `STATE.md`.
+>
+> **Nothing is lost and nothing was rewritten** — both are pushed and the other session may have
+> pulled, so tidying the history would risk the very work that got swept. The commit messages are
+> simply wrong about their contents.
+>
+> ⚠️ **One real consequence:** `visibility.ts`'s header names `product_public_select` as one of its two
+> authoritative rules. **T13 (`20260824090000`, two commits earlier) DROPPED that policy.** The
+> module is advisory-only so nothing breaks, but its stated source of truth no longer exists and the
+> comment needs reconciling by whoever owns F-03.
+
 
 > ⚠️ **RELEVANT TO ANY LANE THAT WRITES `relationship`, `company` OR `pending_inbox_item`:** those grants are now revoked on **production**, not just locally. Direct table writes from app code will fail with `42501`. The only writers are `SECURITY DEFINER` RPCs — `accept_connection_request`, `resubmit_company_verification`. **This bit us during this very ship:** `main`'s `store.ts:573` still wrote `relationship` directly, so connection-accept failed on production between the migration push and the `main` merge. If you have any branch with a direct write to these tables, it is already broken against prod.
 
