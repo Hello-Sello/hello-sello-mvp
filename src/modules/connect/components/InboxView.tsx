@@ -9,6 +9,7 @@ import type {
   ViewerContext,
 } from "@/modules/connect/types";
 import { filterByLens, lensCounts } from "@/modules/connect/lib/lenses";
+import { requestActionError } from "@/modules/connect/lib/requestActionError";
 import {
   getInbox,
   getAssignableMembers,
@@ -55,6 +56,7 @@ export function InboxView() {
   const [activeLens, setActiveLens] = useState<LensKey>("unassigned");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   // initial load - resolve the viewer (session) + team + queue, then auto-select
   // the first item of the default lens.
@@ -97,8 +99,27 @@ export function InboxView() {
 
   // run a (real) write, then refresh the list from its returned queue. Selection
   // is kept so the detail panel shows the resulting state (e.g. accepted).
+  //
+  // T10: every one of these writes can RAISE — most reachably when the request
+  // was already handled in another tab — and this used to be an uncaught
+  // `void`, so the failure showed as nothing happening at all. The catch is
+  // here rather than at each of the four call sites because the recovery is the
+  // same for all of them: say what went wrong, then re-pull, so an item handled
+  // elsewhere actually disappears instead of inviting the same failing click.
   async function refreshWith(p: Promise<InboxItemView[]>) {
-    setItems(await p);
+    setActionError(null);
+    try {
+      setItems(await p);
+    } catch (e) {
+      console.error("inbox: action failed", e);
+      setActionError(requestActionError(e));
+      try {
+        setItems(await getInbox());
+      } catch {
+        // the banner already tells the user the action failed; a failed re-pull
+        // must not replace that message with a second one.
+      }
+    }
   }
 
   return (
@@ -123,6 +144,11 @@ export function InboxView() {
 
       {/* panel 4 - detail */}
       <div className="glass flex min-w-0 flex-1 flex-col overflow-hidden rounded-3xl">
+        {actionError && (
+          <p role="alert" className="border-b border-black/5 px-5 py-3 text-sm text-red-600">
+            {actionError}
+          </p>
+        )}
         {selected && viewer ? (
           <InboxDetail
             item={selected}

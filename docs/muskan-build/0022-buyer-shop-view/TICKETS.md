@@ -438,6 +438,17 @@ connect e2e after.
 
 ## T10 — The accept path swallows its own errors · **XS** · depends on: T09 · Linear: owed (MCP auth blocked)
 
+> ✅ **BUILT 2026-08-24 (session 84).** One owner for the wording —
+> `modules/connect/lib/requestActionError.ts`, 5 unit tests — wired into BOTH
+> surfaces. `InboxView.refreshWith` catches (and re-pulls, so an item handled in
+> another tab disappears instead of inviting the same failing click);
+> `RequestsSection` catches the company path and now *renders* the person path's
+> error instead of discarding it. `personActions` phrases its own RPC failures at
+> source, so its existing finished sentences ("Your account is not verified.")
+> are preserved rather than flattened.
+> **Not e2e-covered, and the two components' error states are not unit-covered** —
+> node env, no jsdom. Only the pure classifier is tested.
+
 **Filed 2026-08-23 at T09's G4 (Muskan: *"pass"* — accepted as recorded, filed not fixed).**
 
 `accept_connection_request` RAISEs on a request that is already `accepted`, `rejected` or deleted.
