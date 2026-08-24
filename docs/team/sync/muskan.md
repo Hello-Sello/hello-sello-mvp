@@ -5,7 +5,25 @@
 
 ---
 
-**Last updated:** 2026-08-24 (session 85 `g5_walk` — **G5 PASSED 10/10, slug 0022 COMPLETE**)
+**Last updated:** 2026-08-25 (session 86 `triage_0023` — triage only, no code)
+**Status:** offline — session closed.
+**Shared files locked:** none — none were taken. This session created only a NEW per-slug folder
+(`docs/muskan-build/0023-deal-draft-lands-in-chat/`), which by design no other session touches.
+
+**2026-08-25 — slug 0023 triaged FULL; nothing built, nothing pushed to prod.** `send_deal`'s
+company arm posts no chat message (it calls `deliver_deal` and cuts a Connection-Requests ticket)
+while its person arm posts the clickable deal pill — so a buyer's deal draft never signals in
+chat. Scope is that RPC arm **plus** the buyer person picker (`BasketDrawer.tsx:213` hardcodes
+`counterpartyPersonId: null`); the two are one mechanism, not two tickets that can ship apart.
+Work order + the live reproduction are in that slug's `STATE.md` (`cb470f1`). **Heads-up for any
+session touching `send_deal` or `deliver_deal`:** `deliver_deal` has a second live caller,
+`confirm_detected_deal_births_negotiation.sql:176` — changing one door does not change the other.
+**Two follow-up slugs owed, unfiled:** chat-list consolidation (one relationship renders two
+conversations) and the deal-card editing defects.
+
+---
+
+**Last updated (prev):** 2026-08-24 (session 85 `g5_walk` — **G5 PASSED 10/10, slug 0022 COMPLETE**)
 **Status:** offline — BOTH of today's parallel sessions are closed. Merged status:
 * **Session 84 `close_vulns`** — closed T15, T10, T13, T16, T11; T14 rewritten as a trap warning.
   `rrp_per_gram` leak **4 rows → 0**; `anon` **614 table privileges → 0**. **Both migrations
