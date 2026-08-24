@@ -1313,3 +1313,105 @@ extra hits, rather than the narrow form and trusting the count. A catalog scan i
 wrong about it is a production outage. And when a scan's result exactly matches a prose comment you
 just read, that is a reason to re-run it differently, not to feel confirmed (L-014's neighbour: the
 sweep that agrees with your expectation is the one to prove).
+
+---
+
+## L-042 · A pure planner is not a writer — "the code creates it" needs the INSERT, not the plan
+
+**2026-08-25 · slug 0023 · `/design` ADR 0006 rev 1 · caught by `adr-checker` round 1 (B2)**
+
+**Trigger** — writing any sentence of the form *"X always exists"*, *"X is created on every Y"*, or
+*"a missing X is a broken invariant"* as the justification for code that **refuses** rather than
+repairs. Also: citing a module named `plan*`, `derive*`, `build*`, `spec*` or `*Rollout` as evidence
+that a row exists.
+
+**What I authored.** ADR 0006 rev 1 had `send_deal` **raise** when a relationship had no c2c thread,
+justified by: *"`rollout.ts:63-84` puts a c2c thread in **every** connection rollout. A missing c2c
+thread is therefore a broken invariant, not a normal state."* I had grepped `rollout.ts`, seen `c2c`
+in every returned spec, and read that as minting.
+
+**`rollout.ts` writes nothing.** Its own header, at `:1-8`, says *"**Pure**: no ids, no timestamps,
+no I/O — it returns a plain spec the store executes."* The actual `chat_thread` INSERT is issued
+**by the browser** at `store.ts:623-633`, in a **second round trip** after
+`accept_connection_request` returns (`store.ts:588-592`) — and that RPC mints the relationship and
+no thread. So relationship-without-c2c-thread is reachable by closing a tab mid-accept, and rev 1
+would have made that pair **permanently unable to send**, with no repair path in the product.
+
+**Why it was wrong — and this is the uncomfortable part.** Two paragraphs *earlier in the same
+document* I had refused `resolveC2cThread`'s docstring as evidence, citing L-006 (*a comment on the
+read path is not a contract for the write path*), and then leaned on an even purer artifact: a
+planner that returns a data structure. **Naming a rule does not mean you applied it.** I checked the
+docstring's authority and never checked my own replacement's.
+
+**The rule.** "This data always exists" is a claim about an **INSERT**. Find the statement that
+writes the row — `insert into`, `.insert(`, `upsert` — and confirm it runs in the same transaction
+as the thing that makes it required. A plan, a spec, a type, a config, or a returned array is not a
+write. **And when the answer is "two round trips", the correct design is repair, not refusal**: the
+fix that deletes a failure mode beats the fix that adds a test for one.
+
+---
+
+## L-043 · Changing a design decision can silently overrule an approved spec row
+
+**2026-08-25 · slug 0023 · `/design` ADR 0006 rev 2 · caught by `adr-checker` round 2 (B1)**
+
+**Trigger** — any fold-in that changes what the system **does** in a case the approved spec already
+ruled on, especially an edge case. Also: writing a G3/G4 sign-off list, at the moment you notice it
+contains only wording, naming, or cosmetic items.
+
+**What I authored.** Round 1 proved rev 1's refusal was unsafe (L-042). Rev 2 replaced it with
+resolve-or-create — the right call, and Muskan later ruled for it. **But `PRD:131` says, in an
+approved spec:** *"The company-to-company conversation cannot be found | **Send must not report
+success.** FR7 governs."* I changed that behaviour on engineering grounds and **did not put it to
+Muskan.** Meanwhile §8 asked for her explicit yes on two things: an option's label string, and
+whether an AC should say "Send" or "Create a draft deal".
+
+**Why it was wrong.** I was following the fold-in rules correctly — verify the finding, prefer the
+fix that removes a mechanism — and those rules are silent on *whose decision it is*. A checker
+finding felt like a bug report, so the fix felt like a correction. It was not: it was a **product
+behaviour change in a case the spec had already decided**, which makes it a deviation. That is
+L-017's class (*an exception added to a criterion is a deviation, never a "correct reading"*), and
+L-017 is written about criteria — I did not think of an **edge-case table row** as a criterion.
+It is one.
+
+**The tell, and it is a good one.** My sign-off list was all cosmetics. **If the only things you are
+escalating are wordings, you have almost certainly absorbed a real decision** — a design pass that
+changes behaviour and asks permission for nothing but labels has mis-sorted something.
+
+**The rule.** After folding in checker findings, diff the ADR's behaviour against **every row of the
+spec** — edge cases and constraints, not just FRs and ACs. Any row whose stated outcome changed goes
+to the human as a **spec amendment**, named as such, before the cosmetic items. Then the amendment
+gets a ticket: the spec must be edited, or G4 walks a document that contradicts the code (L-039).
+
+---
+
+## L-044 · Inverting a test's setup can gut a later assertion in the same file
+
+**2026-08-25 · slug 0023 · `/design` ADR 0006 rev 1 §6.1 · caught by `adr-checker` round 2 (B3)**
+
+**Trigger** — planning to **invert, remove or weaken** an assertion in an existing test file, and
+writing that the file's *other* cases are "unchanged", "preserved verbatim", or "still valid".
+
+**What I authored.** ADR 0006 §6.1 said `deliver_deal_test.sql`'s c2c case inverts (assert **zero**
+tickets after `send_deal`), and that *"its idempotency case (`:130-144`) and its `WR-01`
+execute-revoke case (`:146-158`) are about `deliver_deal` itself and **must be preserved
+verbatim**."*
+
+**The idempotency case has no setup of its own.** It calls `deliver_deal` **once** and asserts
+exactly one ticket — which proves idempotency *only because* the earlier case's `send_deal` already
+wrote that ticket. Invert the earlier case to zero and the single call becomes the **first** insert:
+`v_n = 1` passes trivially, the test stays green, and `deliver_deal`'s `if not exists` guard
+(`20260720095000:51-56`) is left **uncovered anywhere in the repo**. The rewrite must call
+`deliver_deal` **twice**.
+
+**Why it was wrong.** I read the file as a list of independent cases because it is written as one —
+separate `DO $$` blocks with their own headers. But they share a transaction and a fixture, so an
+earlier case is **later cases' setup**. "Preserved verbatim" is a claim about the *text*; what
+matters is whether the assertion still *discriminates*. Worse, the failure is silent and in the
+safest-looking direction: a green suite that proves nothing reads exactly like a green suite that
+proves something.
+
+**The rule.** When changing one case in a shared-fixture suite, trace **what every later assertion
+depends on** — not just what it asserts. For each surviving case ask: *would this still fail if the
+behaviour it names were broken?* If the answer needs the case you just inverted, the case needs its
+own setup. **Copying an assertion forward unchanged is not preserving its coverage.**

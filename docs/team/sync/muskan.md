@@ -5,9 +5,28 @@
 
 ---
 
-**Last updated:** 2026-08-25 (session 86 `triage_0023` — triage only, no code)
+**Last updated:** 2026-08-25 (session 87 `design_0023` — **G3 PASSED, ADR 0006 accepted**)
 **Status:** offline — session closed.
-**Shared files locked:** none — none were taken. This session created only a NEW per-slug folder
+**Shared files locked:** none — none taken, none held. This session wrote `docs/architecture/adr/0006-*`
+(new file), `ADR-INDEX.md`, `docs/agents/LEARNINGS.md` (L-042..L-044 appended), the per-slug folder,
+and `.planning/` (gitignored). **Every commit was `git add <named paths>` — never `-A`, never `.`**
+
+⚠️ **A PARALLEL SESSION IS COMMITTING TO THIS SAME BRANCH.** `a8f48f9 deps: clear all 28 Dependabot
+alerts` is theirs, and Muskan says that session is also working vulnerabilities/T17 and will create
+its own Linear tickets. **This is L-040's exact setup and the sync file cannot prevent it** — neither
+session touched the same file last time either, and `git commit -a` still swept the other's work.
+**The fix is separate branches or worktrees.** Flagging, not solved.
+
+**Linear correction (2026-08-25):** pipeline build tickets go in **`Codebase Development Tickets`
+(HEL-xx)**, NOT `Development` (DEV-xx). The MCP is **not** auth-blocked — that note was stale
+everywhere it appeared. Slug 0023 = HEL-63..HEL-66 (+HEL-67, HEL-68 filed). 0022's HEL-54..HEL-62
+moved Backlog → Done (they shipped in session 85 and nobody had closed them).
+
+**Prod note:** `20260824090000` + `20260824100000` are **LIVE on production** (pushed by the parallel
+session 2026-08-25; verified against `list_migrations`, not against the ledger). Production tip is
+`20260824100000` — slug 0023's migration stamps after it and needs a **plain `db push`**.
+
+**Last updated (session 86):** 2026-08-25 (`triage_0023` — triage only, no code)
 (`docs/muskan-build/0023-deal-draft-lands-in-chat/`), which by design no other session touches.
 
 **2026-08-25 — slug 0023 triaged FULL; nothing built, nothing pushed to prod.** `send_deal`'s
