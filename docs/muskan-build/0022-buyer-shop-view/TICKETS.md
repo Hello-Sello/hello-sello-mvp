@@ -720,7 +720,43 @@ own catalogue is unchanged.
 
 ---
 
-## T14 — `product_visible_to_caller` is granted to `authenticated`, making it a per-UUID visibility oracle · **XS** · depends on: none · **introduced by this slug**
+## T14 — ~~`product_visible_to_caller` is granted to `authenticated`~~ · **SUPERSEDED 2026-08-24 — DO NOT ACTION AS WRITTEN**
+
+
+> 🛑 **THE REMEDY BELOW IS NOW A TRAP. Applying it blanks images and media for
+> every buyer.**
+>
+> T13 (`20260824090000`) re-pointed `product_image_public_select` and
+> `product_media_public_select` at `product_visible_to_caller(product_id)`. RLS
+> policy expressions are evaluated as the **calling** role, so `authenticated`
+> must hold EXECUTE on any function a policy names. The grant this ticket asks
+> to drop is now **load-bearing**.
+>
+> **Proven, not reasoned** — revoke it and read as a connected buyer:
+> ```
+> revoke execute on function public.product_visible_to_caller(uuid) from authenticated;
+> select count(*) from public.product_image;   -- as Bob
+> ERROR:  permission denied for function product_visible_to_caller
+> ```
+> Not a narrowed read — a hard error on the whole table.
+>
+> **What survives of the original finding.** The oracle is real and is now
+> permanent: any authenticated caller can ask *"may I see product X?"* for an
+> arbitrary UUID without going through a door that shapes or logs the answer.
+> That is the price of stating the visibility rule exactly once, and the
+> alternative — restating the predicate inline in each policy — is what T13 was
+> written to end (L-038: four doors that disagreed). **Accepted, with reasons.**
+>
+> The four `basket_admission_test.sql` cells this ticket wanted reworked
+> (15, 16, 17, 21) call the function under `SET LOCAL ROLE authenticated` and are
+> now **correct as they stand** — they exercise a grant the system genuinely
+> depends on.
+>
+> **Residual, if anyone wants it later:** nothing about the grant. The only
+> remaining lever is rate-limiting or logging enumeration at the API edge, which
+> is a different ticket against a different layer.
+
+<details><summary>Original ticket text (kept for the record — its remedy is void)</summary>
 
 **Filed 2026-08-24 at `/ship`, security round 4 (a note, not a blocking finding). Muskan ruled: keep
 the grant for now, file the removal.**
@@ -746,6 +782,10 @@ produced rounds 2, 3 and 4 (L-038's corollary). Deliberately deferred, not overl
 **Remedy.** Drop line 150; rework the four cells to call the function with `RESET ROLE` (the
 `request.jwt.claim.*` GUCs survive a role reset, so the buyer arm still evaluates for the right
 persona). Re-run `run_basket_admission_test.sh`.
+
+---
+
+</details>
 
 ---
 
