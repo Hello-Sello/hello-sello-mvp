@@ -11,3 +11,4 @@
 | [0003](0003-deal-basket-reusable-form.md) | One reusable basket/deal form serves both sides | deals · basket · UI |
 | [0004](0004-tier-ladder.md) | Volume tiers are child rows of the price row, replacing the single bundle bracket | pricing · catalog · RLS · RPCs · basket · deals |
 | [0005](0005-buyer-shop-view.md) | The buyer's shop IS the seller's shop — one component wrapped, and one connection predicate written once and applied at all seven visibility gates | catalog · RLS · RPCs · basket · Discover · UI |
+| [0006](0006-deal-draft-lands-in-chat.md) | A company-addressed deal is announced by a message in the company chat, written by the same send step that already announces a person-addressed one — the inbox ticket stops being cut | deals · basket · messaging · RPCs · UI |

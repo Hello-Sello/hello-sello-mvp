@@ -243,3 +243,164 @@ open.
    does `claim_deal_ticket` and the "Deal tickets" lens survive for *any* path?
 4. **Linear DEV-163 item 6 asks this exact question** and is open and unstarted.
 5. **`CONTEXT.md:33` "Half-card" has no defined fate** once `deal_card` leaves the inbox.
+
+---
+
+# Approaches (design)
+
+> Produced by `researcher` at `/design` step 1, 2026-08-25. Five candidate shapes for
+> the fix, on four axes: product meaning · six-month cost · wrong-pick blast radius ·
+> industry norm. **Recommendation: A.** Spot-verified against the repo by the
+> orchestrator before folding into ADR 0006 — corrections are marked `[verified]` /
+> `[corrected]` inline.
+
+## What every approach shares (context, not a choice)
+
+- `send_deal` (`20260724120300_send_deal.sql:45-150`) already does exactly this for
+  people: read `metadata.counterparty_person_id` (`:81`), resolve-or-create a thread
+  (`:118-130`), insert the pill (`:136-140`) — all inside ONE `SECURITY DEFINER`
+  transaction that also holds the row lock (`:69`) and the status flip (`:101-103`).
+  The company arm differs at exactly one line, `:107`, where it calls
+  `perform public.deliver_deal(v_card.id)` instead.
+- `deliver_deal` (`20260720095000_deliver_deal.sql:30-59`) has exactly **two** live
+  callers: `send_deal:107` (unconditional) and
+  `confirm_detected_deal_births_negotiation.sql:176` (only when `v_cp is null`).
+  **[verified]** — the third apparent caller,
+  `20260720100100_create_deal_draft_delivers.sql:179`, is DEAD: the birth-time call was
+  deleted by `20260724120200_create_deal_draft_private_birth.sql:23`. Checked, not
+  assumed (L-031 class).
+- RLS on `chat_message` is `msg_all … USING (can_access_thread(thread_id)) WITH CHECK
+  (can_access_thread(thread_id))` (`20260607170000_rls_policies.sql:288-290`) — a
+  company member can **already legally INSERT** a `deal_card`-type row into their own
+  c2c thread. RLS alone does NOT stop a client-side approach; only "the pill is written
+  only inside the definer transaction that flips status" does.
+- `MessageBubble.tsx` gates on `message.type`, never on thread type (RESEARCH §4) — the
+  render side needs **zero change** under A, C, D or E.
+
+## A — server-side routing inside `send_deal` (the arm becomes symmetric) ← RECOMMENDED
+
+**Change:** replace `send_deal:107`'s `perform public.deliver_deal(...)` with an inline
+**resolve-only** c2c lookup — `select id from chat_thread where type='c2c' and
+relationship_id = v_card.relationship_id` (a real code path already, in TypeScript:
+`resolveC2cThread`, `store.ts:358-372`) — plus a pill insert mirroring `:136-140`.
+`deliver_deal` is no longer called from `send_deal`, but is **untouched as an object**
+and keeps serving `confirm_detected_deal_births_negotiation.sql:176` unmodified.
+
+**Blast radius:** one new migration touching only `send_deal`. `deliver_deal.sql` is not
+edited. The suites that assert today's ticket routing go red **by design under every
+approach that changes what the company arm produces** (A, C, D, E) — that cost is not
+A-specific.
+
+**Server-side / FR7:** yes to both. Same transaction, same lock, same guard set already
+proven for the person arm (`:62-78`); if the c2c thread cannot be resolved the whole
+call raises and rolls back — no path where the DB shows `negotiation` with nothing
+posted.
+
+**Six-month cost:** cheap. It duplicates ~15 lines of resolve+insert between the two
+arms inside one function; that duplication is a pure code-move if unified later — no
+schema or data migration needed to undo it.
+
+## B — client-side (`resolveC2cThread`, then post the pill after `send_deal` returns)
+
+Reintroduces the exact two-step pattern this repo's own migration header says it
+retired (`send_deal.sql:38-39`).
+
+**Server-side / FR7: fails both, concretely.** RLS lets a company member post a
+`deal_card` pill into their own c2c thread whether or not `send_deal` was ever called —
+nothing ties the message to an actual send. And two round trips create the literal
+defect FR7 exists to close: `send_deal` completes (status really flips to
+`negotiation`) while the second call fails, drops, or the tab closes — **Send reports
+success, no signal appears.**
+
+**Six-month cost:** worst of the five — a regression to the pattern this repo names as
+the bug class it fixed, and reversing it means deleting the client code and doing A anyway.
+
+## C — one `resolve_deal_destination_thread(...)` SQL helper, both arms call it
+
+**Blast radius:** same as A on `send_deal`, plus a new standalone function. But
+`confirm_detected_deal_births_negotiation.sql:176` — the *other* live caller of the same
+routing question — is explicitly **not** moved onto it (the PRD keeps Sella on the inbox
+route). That is precisely the pattern `ARCHITECTURE-NOTES.md:471-484` records from this
+repo's own history: *"The extraction only fixes drift between the callers you moved. It
+silently creates drift with every other door that answers the same question and was not
+moved."* **A helper with one moved caller and one deliberately-excluded caller is a
+single-owner claim that is true of one door and false of another — the L-038 class, by name.**
+
+**Six-month cost:** this IS the shape the codebase reaches for when a rule has two or
+more genuine callers (`product_visible_to_caller()`, `is_relationship_member()`). But
+today there is exactly **one** caller with two branches, not two callers — so building
+the extraction now is one-caller overfitting until a second door (e.g. the parked
+`pricelist_request → chat`) actually needs the same rule.
+
+## D — keep `deliver_deal`, make it post to chat itself
+
+Changing its company branch changes behaviour for **both** live callers at once:
+`send_deal:107` (wanted) and Sella's `:176` (explicitly NOT wanted). Avoiding that means
+adding a parameter or mode flag to freeze the Sella caller — the "flags that expose
+internals" antipattern, in a function whose own header states its rationale as *"one
+routing key, no flags."* Also `deliver_deal returns void`; giving the app a thread id to
+navigate to means a `void → uuid` signature change **both** callers inherit.
+
+**Six-month cost:** it either silently reopens a question G1 already closed (Sella's
+routing) or turns a flag-free primitive into a flagged one.
+
+## E — DB trigger on `deal_card` status change posts the pill
+
+The pill-write moves out of `send_deal` — which owns every other guard in this flow
+(auth, lock, status, initiator, `:62-78`) — into code invisible at the call site. It
+would also fire on `confirm_detected_deal_births_negotiation.sql:156`'s own
+`update … set status = 'negotiation'`, the same door D wrongly touches, unless the
+trigger adds a distinguishing guard — at which point the routing rule lives in two
+disconnected places, the opposite of "one owner."
+
+This repo has exactly **one** trigger in its whole schema
+(`sella_enqueue_detection_after_insert`, `20260612130000:56-60`), and it is an async
+queue-and-cron pipeline chosen *because* synchronous delivery was ruled unsafe on this
+very path (`send_deal.sql:26`). E proposes the opposite.
+
+**Six-month cost:** high — hidden dependency plus temporal coupling. Any future code
+that flips `deal_card.status` to `negotiation` inherits the side effect, and nobody
+reading `send_deal.sql` would see the pill being written at all.
+
+## Industry norm — where the addressee lives
+
+Mature "route to a company vs a person" systems store the addressee as a **field on the
+object**, resolved by one server-side authority — not as something the client derives
+and writes into a destination thread. Intercom carries `assigned_team` and
+`assigned_teammate` as separate fields on the conversation record, and assigning either
+is a single mutating operation on the object. Salesforce's Opportunity is the same shape
+one level up: `OwnerId` is a field on the record, and who can see the discussion tied to
+it is resolved server-side from record and group access, not from whichever feed a
+client happened to write to.
+
+**This repo already has that shape for the person arm:**
+`metadata.counterparty_person_id` on `deal_card` (`send_deal.sql:81`) is exactly an
+addressee field on the object, read once by server code at send time. **The gap this PRD
+closes is not a missing field — it is that `send_deal` does not yet READ that field to
+route a company-addressed deal the way it already does for a person-addressed one.**
+That argues for A or C, never B.
+
+- <https://www.intercom.com/help/en/articles/6561699-assign-conversations-to-teammates-and-teams>
+- <https://www.salesforceben.com/salesforce-chatter/>
+
+## Recommendation — A
+
+It gets the same server-side/FR7 guarantees as C with a fraction of the blast radius,
+and C's shared helper has no second real caller inside this PRD's scope.
+
+### Orchestrator corrections to this report
+
+1. **`[corrected]` The app-side caller the report flagged as unlocated IS located.**
+   `sendDeal` (`src/modules/deals/actions.ts:367`) → the only UI caller is
+   `DecisionBar.tsx:161`, which does `void run(() => sendDeal(dealCardId))` and
+   **discards the return value**. The action's docstring (`actions.ts:364`) claims the
+   thread id is returned "so the host can navigate to the conversation" — no host does.
+   Consequence: changing the company arm's return from `null` to a c2c thread id is
+   **inert** for every current caller. Recorded in ADR 0006 §Blast-radius.
+2. **`[verified]` The c2c thread genuinely always exists.** Not taken from
+   `resolveC2cThread`'s docstring (L-006: a comment on the read path is not a contract
+   for the write path) — confirmed at `rollout.ts:63-84` (c2c is in EVERY rollout spec)
+   and enforced by the unique index `chat_thread(relationship_id, type) WHERE type='c2c'
+   AND deleted_at IS NULL` (`20260607090003_phase2_deal.sql:140`). This is why A's
+   lookup is **resolve-only, and raises** — it does not mirror the person arm's
+   resolve-or-**create**.

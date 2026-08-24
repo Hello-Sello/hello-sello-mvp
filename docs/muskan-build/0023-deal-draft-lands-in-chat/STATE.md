@@ -1,6 +1,6 @@
 # 0023 deal-draft-lands-in-chat — work order
 lane:   FULL
-stage:  spec ✅  →  design (next)   ·   G2 /prototype SKIPPED (Muskan, 2026-08-25)
+stage:  design ✅  →  build (next)   ·   G2 /prototype SKIPPED (Muskan, 2026-08-25)
 branch: claude/muskan/work — no feature branch (Muskan's call, 2026-08-18)
 
 ## Seed
@@ -80,18 +80,70 @@ The seed named two entries. Only one is in scope:
 - basket carried into a connection request — ruled out: the existing "connect first"
   block (`BasketDrawer.tsx:320-331`) already IS the rule
 
+## Locked — from ADR 0006 (G3, 2026-08-25)
+
+1. **Approach A.** `send_deal` announces to a company exactly as it already announces to
+   a person. One new migration, `create or replace`, **grant re-emitted**.
+2. **The `perform public.deliver_deal(...)` call at `send_deal.sql:107` is DELETED**, not
+   guarded. `deliver_deal` itself is untouched and keeps serving Sella's door.
+3. **The pill insert is HOISTED** — one expression, one `chat_message` insert, outside the
+   branch. The `if/else` computes `v_thread` only.
+4. **c2c is resolve-OR-CREATE** (`on conflict do nothing` + re-select, `deleted_at is null`),
+   **not** resolve-and-raise. Copy the idiom at `20260823090000:162-183`.
+   ⚠️ **This amends `PRD:131`** — T04 owns that amendment and it is not optional.
+5. **T01 fixes the p2p arm's identical race too** (§8.11).
+6. **Frontend: extract `CounterpartyPersonSelect`**, non-null `relationshipId`, caller
+   gates it, renders in the `needsConnection` **else** branch, "Whole company" shows
+   synchronously, people arrive additively. Must NOT inherit RecipientPicker's
+   `companies.length === 0` fallback string.
+7. **`send_deal` returns the c2c thread id; navigation is NOT wired** (§8.3).
+8. **G4 is walked as Alice (GreenLeaf) → Bob (StonePharm)** — Aurora / Canadian Craft /
+   Marcel are production fixtures and are **not in the local seed**.
+9. **The recipient-read invariants (M9/M10) are mandatory** — every other invariant is a
+   writer-side count taken where RLS is bypassed.
+
+## Deferred — must NOT be built (unchanged from the spec, plus two added at G3)
+
+- chat-list consolidation · deal-card defects · `canAsk` · `pricelist_request` → chat ·
+  deleting `/connect/inbox` + the claim/assign/lens layer · basket-into-connection-request
+  *(all as listed above)*
+- **NEW at G3 — closing the interrupted-accept window** (move the c2c insert into
+  `accept_connection_request`, delete the browser insert). Better fix, wrong scope. **Own
+  slug** (§8.10).
+- **NEW at G3 — the forgeable `deal_detected` message.** `msg_all` has no `type`
+  predicate, so a thread member can insert one and drive `confirm_detected_deal`. **Own
+  ticket** (§8.6).
+
 ## Files so far
-- `docs/muskan-build/0023-deal-draft-lands-in-chat/RESEARCH.md` — prior-art sweep
-- `docs/PRD/0023-deal-draft-lands-in-chat.md` — the WHAT, approved at G1
+- `docs/muskan-build/0023-deal-draft-lands-in-chat/RESEARCH.md` — prior-art sweep **+ the
+  `## Approaches (design)` report (5 options, A recommended) appended at /design step 1**
+- `docs/PRD/0023-deal-draft-lands-in-chat.md` — the WHAT, approved at G1.
+  ⚠️ **owes two amendments from G3** — `:131`'s edge-case row (§8.9) and AC1/AC2's
+  wording (§8.7). Until T04 lands them the PRD contradicts the ADR.
+- `docs/architecture/adr/0006-deal-draft-lands-in-chat.md` — the HOW, **accepted at G3**
+- `docs/architecture/adr/ADR-INDEX.md` — one-line entry added (/design step 5)
+- `docs/muskan-build/0023-deal-draft-lands-in-chat/TICKETS.md` — T01–T04
 
 ## Attempts          three separate budgets — see §10
 - **spec, 2026-08-25** — `researcher` sweep → RESEARCH.md; interview closed in one
   pass, no revisions. PRD previewed to Muskan in scratchpad, approved unamended.
+- **design, 2026-08-25** — `researcher` on approaches (5 options) → A. ADR drafted, then
+  **two `adr-checker` rounds: r1 = 4 blocking, r2 = 9 blocking, ALL NEW.**
+  ⚠️ **THE LOOP DID NOT CONVERGE.** A third round was offered to Muskan and **declined**;
+  the loop closed at its 2-round budget by ruling. **rev 3 is unchecked by a fresh
+  agent** — `critic` + `security` carry it at build, against real code rather than prose.
+  Three of r1's four blocking findings, and several of r2's, corrected claims the ADR
+  author had made — including **overriding an approved PRD row without asking** (§8.9).
 
 ## Gate log
 - triage — FULL, 2026-08-25 (narrowed from F-04, then widened to include the picker)
 - **G1 — PASSED 2026-08-25**, approved unamended. Eight acceptance criteria; with G2
   skipped they are the ONLY thing G4 compares against.
+- **G3 — PASSED 2026-08-25.** ADR 0006 accepted at rev 3. **All eleven sign-offs ruled**
+  (§8.1–§8.11); a third checker round offered and declined. Tickets T01–T04 cut.
+  ⚠️ **G4 cannot be walked against the PRD as it stands** — two amendments (§8.9, §8.7)
+  are T04's, and the G4 sheet must be built from **the ACs minus what G3 changed**, never
+  copied from the PRD (L-039).
 
 ## Rulings taken at G1 — 2026-08-25
 
