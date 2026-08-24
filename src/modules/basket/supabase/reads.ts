@@ -10,16 +10,27 @@
 import { createClient } from "@/shared/db/client";
 import { readCurrentPrices, type ProductPrice } from "@/modules/catalog/index.client";
 import { groupBySeller } from "../lib/group";
-import type { BasketLine, BasketView } from "../types";
+import { EMPTY_BASKET, type BasketLine, type BasketView } from "../types";
 
 export async function getMyBasket(): Promise<BasketView> {
   const supabase = createClient();
-  const { data: { user }, error: userError } = await supabase.auth.getUser();
-  if (userError) throw userError;
-  if (!user) return { groups: [], totalLineCount: 0 };
+  // Which failures are legitimately an EMPTY basket, and which are errors, is
+  // decided HERE and nowhere else. `BasketProvider` cannot tell them apart — it
+  // only sees an exception — so it used to guess "signed out" for all of them
+  // and silently blank the cart. Every `throw` below therefore means "the read
+  // genuinely failed"; the provider renders any throw as an error state.
+  //
+  // An expired or invalid session is not a failure to report: the caller has no
+  // basket because they are not signed in — the same outcome as no user at all.
+  const { data: { user } = { user: null }, error: userError } = await supabase.auth.getUser();
+  if (userError || !user) return EMPTY_BASKET;
 
   const { data: viewerPerson, error: personError } = await supabase
     .from("person").select("company_id").eq("id", user.id).single();
+  // PGRST116 = `.single()` matched zero rows: a signed-up account that has not
+  // finished onboarding yet. It has no basket, which is not an error. Any OTHER
+  // person error (a grant, a transport fault) is real and must surface.
+  if (personError?.code === "PGRST116") return EMPTY_BASKET;
   if (personError) throw personError;
   const viewerCompanyId = viewerPerson?.company_id ?? "";
 

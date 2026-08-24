@@ -30,6 +30,11 @@ export interface BasketView {
   totalLineCount: number;
 }
 
+/** Nothing to show. One owner, because two states resolve to it — a basket that
+ * is genuinely empty, and a read that failed — and only the second carries an
+ * error. Never construct this literal a second time. */
+export const EMPTY_BASKET: BasketView = { groups: [], totalLineCount: 0 };
+
 /** Input to createBasketDraft - the recipient chosen for ONE seller-group. */
 export interface SendGroupInput {
   relationshipId: string;

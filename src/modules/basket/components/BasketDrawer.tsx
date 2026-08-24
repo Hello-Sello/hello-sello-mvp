@@ -32,7 +32,7 @@ import type { BasketGroup, BasketLine } from "../types";
  * needed no change.
  */
 export function BasketDrawer() {
-  const { view, open, setOpen, refresh } = useBasket();
+  const { view, open, setOpen, refresh, error } = useBasket();
   // The active side + the Deal Basket rows. Hooks sit ABOVE the early return
   // (rules of hooks); the drafts fetch only runs while the Deal Basket side is
   // actually showing. null = not yet loaded (vs [] = loaded, empty).
@@ -102,7 +102,20 @@ export function BasketDrawer() {
 
       <div className="max-h-[360px] overflow-y-auto">
         {side === "products" ? (
-          view.groups.length === 0 ? (
+          /* T15: a FAILED read and an EMPTY basket are different states. The
+             failure is checked first and says so, with a way back — the
+             previous code rendered the empty copy for both. */
+          error ? (
+            <div className="py-8 text-center">
+              <p className="text-xs text-ink/60">{error}</p>
+              <button
+                onClick={() => void refresh()}
+                className="mt-2 text-xs font-bold text-ink underline underline-offset-2"
+              >
+                Try again
+              </button>
+            </div>
+          ) : view.groups.length === 0 ? (
             <p className="py-8 text-center text-xs text-ink/45">Your basket is empty.</p>
           ) : (
             view.groups.map((g) => (
