@@ -40,7 +40,8 @@ UPDATE company SET verification_status = 'pending'
   WHERE id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
 
 -- ── Fixture: give GreenLeaf a profile_visible catalogue for the verified-caller
--- no-over-lock check. Seed ships its products profile_visible=false and product
+-- no-over-lock check. Seed ships only SOME of them profile_visible (§6a-2's
+-- visibility matrix leaves AUR-1C/1D hidden) and product
 -- UUIDs are non-deterministic across resets, so flip them in-fixture by company
 -- (rolled back). The assertion must test the lockdown behaviour, not volatile seed
 -- state — without this it would false-fail whenever nothing happens to be opted in. ──
@@ -125,7 +126,11 @@ BEGIN
   -- a verified caller must still see the directory (the lockdown isn't over-broad)
   IF (SELECT count(*) FROM list_discoverable_companies()) = 0
     THEN RAISE EXCEPTION 'REGRESSION: verified caller saw an EMPTY directory'; END IF;
-  -- ...and the verified target's profile_visible catalogue (San Raf 29/1 PNK)
+  -- ...and the verified target's catalogue, made profile_visible by the :48
+  -- in-fixture UPDATE above (San Raf 29/1 PNK is NOT profile_visible in the
+  -- seed itself after T00 — 0022-buyer-shop-view seeds it hidden+priced on
+  -- purpose; this assertion reads true only because :48 flips every GreenLeaf
+  -- product visible+public in-fixture, a superset of T00's own matrix)
   IF (SELECT count(*) FROM get_discoverable_shop('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')) = 0
     THEN RAISE EXCEPTION 'REGRESSION: verified caller saw an EMPTY shop for a verified target'; END IF;
 END $$;

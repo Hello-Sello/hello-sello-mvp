@@ -173,14 +173,13 @@ export async function createCompany(formData: FormData): Promise<ActionResult> {
   }
 
   // Resubmit transition: only when the company was rejected.
-  // Guard is strict: WHERE verification_status = 'rejected' → prevents clobbering
-  // verified or revoked status even if this action is somehow called in those states.
+  // `verification_status` is no longer writable by `authenticated` — a member
+  // could otherwise self-verify their own company by direct UPDATE. The RPC is
+  // the one transition a member may perform, and it carries the strict
+  // rejected → pending guard inside itself, so verified/revoked can never be
+  // clobbered even if this action is somehow reached in those states.
   if (currentStatus === 'rejected') {
-    const { error: flipError } = await supabase
-      .from('company')
-      .update({ verification_status: 'pending' })
-      .eq('id', companyId)
-      .eq('verification_status', 'rejected')
+    const { error: flipError } = await supabase.rpc('resubmit_company_verification')
     if (flipError) return { error: `Could not resubmit for review: ${flipError.message}` }
   }
 

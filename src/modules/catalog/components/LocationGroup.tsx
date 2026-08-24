@@ -22,6 +22,7 @@ export function LocationGroup({
   targetLocation = location,
   count,
   editing = false,
+  showHeader = true,
   onChanged,
   onReorder,
   children,
@@ -35,6 +36,12 @@ export function LocationGroup({
   count: number;
   /** When true, the section accepts card-move + header-reorder drops. */
   editing?: boolean;
+  /** Whether to render the divider header (label, count badge, drop hint).
+   *  Defaults TRUE — /present is unchanged. A caller filtered to ONE named
+   *  location suppresses it: the header would repeat a name the filter control
+   *  already shows, and a divider between one group divides nothing. The drop
+   *  target is the <section>, not the header, so hiding it costs no capability. */
+  showHeader?: boolean;
   /** Called after a card is moved into this group (re-pull the shop). */
   onChanged?: () => void;
   /** Reorder the sections: move `from` before this group (`to`). Client-only. */
@@ -71,34 +78,36 @@ export function LocationGroup({
       onDragLeave={editing ? () => setOver(false) : undefined}
       onDrop={editing ? handleDrop : undefined}
     >
-      <div
-        className="flex items-center gap-2.5 rounded-xl px-3.5 py-2.5"
-        draggable={editing}
-        onDragStart={
-          editing
-            ? (e) => {
-                e.dataTransfer.setData("application/group-loc", location);
-                e.dataTransfer.effectAllowed = "move";
-              }
-            : undefined
-        }
-        style={{
-          background: "linear-gradient(90deg, color-mix(in srgb, var(--color-brand) 13%, transparent), transparent 62%)",
-          boxShadow: "inset 4px 0 0 var(--color-brand)",
-          cursor: editing ? "grab" : undefined,
-        }}
-      >
-        <span className="grid h-6 w-6 shrink-0 place-items-center rounded-lg bg-brand/10 text-brand-deep">
-          <MapPin size={14} />
-        </span>
-        <b className="text-[15px] font-bold tracking-tight text-ink">{location}</b>
-        <span className="grid h-5 min-w-[20px] place-items-center rounded-full bg-brand/10 px-1.5 text-[11px] font-bold text-brand-deep">
-          {count}
-        </span>
-        {editing && (
-          <span className="ml-auto text-[10px] font-semibold text-ink/40">drop products here to move them</span>
-        )}
-      </div>
+      {showHeader && (
+        <div
+          className="flex items-center gap-2.5 rounded-xl px-3.5 py-2.5"
+          draggable={editing}
+          onDragStart={
+            editing
+              ? (e) => {
+                  e.dataTransfer.setData("application/group-loc", location);
+                  e.dataTransfer.effectAllowed = "move";
+                }
+              : undefined
+          }
+          style={{
+            background: "linear-gradient(90deg, color-mix(in srgb, var(--color-brand) 13%, transparent), transparent 62%)",
+            boxShadow: "inset 4px 0 0 var(--color-brand)",
+            cursor: editing ? "grab" : undefined,
+          }}
+        >
+          <span className="grid h-6 w-6 shrink-0 place-items-center rounded-lg bg-brand/10 text-brand-deep">
+            <MapPin size={14} />
+          </span>
+          <b className="text-[15px] font-bold tracking-tight text-ink">{location}</b>
+          <span className="grid h-5 min-w-[20px] place-items-center rounded-full bg-brand/10 px-1.5 text-[11px] font-bold text-brand-deep">
+            {count}
+          </span>
+          {editing && (
+            <span className="ml-auto text-[10px] font-semibold text-ink/40">drop products here to move them</span>
+          )}
+        </div>
+      )}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {children}
       </div>

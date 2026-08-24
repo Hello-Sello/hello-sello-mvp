@@ -4640,6 +4640,10 @@ export type Database = {
       }
     }
     Functions: {
+      accept_connection_request: {
+        Args: { p_inbox_item_id: string }
+        Returns: string
+      }
       accept_person_connection: { Args: { p_item_id: string }; Returns: string }
       approve_company: { Args: { p_company_id: string }; Returns: undefined }
       approve_join_request: {
@@ -4729,15 +4733,20 @@ export type Database = {
         Args: { p_company_id: string }
         Returns: {
           about: string
+          address: string
           connection_state: string
           country: string
           cover_path: string
           id: string
+          links: Json
+          locations: Json
           logo_path: string
           name: string
           pricing_requested: boolean
           tagline: string
           type_codes: string[]
+          updated_at: string
+          warehouse_location: string
           website: string
         }[]
       }
@@ -4745,19 +4754,46 @@ export type Database = {
         Args: { p_company_id: string }
         Returns: {
           cbd_percent: number
+          cbg_percent: number
+          cbn_percent: number
           country_of_origin: string
           cultivar: string
+          cultivator: string
           dominance_code: string
           id: string
           images: Json
+          irradiation_code: string
+          lineage_parent_a: string
+          lineage_parent_b: string
           local_code_pzn: string
+          location: string
+          media: Json
           name: string
           pack_size_grams: number
+          pack_sizes: Json
+          packaging_material: string
           price_per_gram: number
           price_public: boolean
           region: string
+          resealable: boolean
+          terpene_percent: number
           thc_percent: number
           tiers: Json
+          unit_code: string
+        }[]
+      }
+      get_my_basket_lines: {
+        Args: never
+        Returns: {
+          cultivar: string
+          id: string
+          local_code_pzn: string
+          pack_count: number
+          pack_size_grams: number
+          product_id: string
+          product_name: string
+          seller_company_id: string
+          seller_company_name: string
           unit_code: string
         }[]
       }
@@ -4798,6 +4834,10 @@ export type Database = {
         Returns: undefined
       }
       is_caller_verified: { Args: never; Returns: boolean }
+      is_connected_to_company: {
+        Args: { p_company_id: string }
+        Returns: boolean
+      }
       is_group_member: { Args: { p_thread_id: string }; Returns: boolean }
       is_hs_team: { Args: never; Returns: boolean }
       is_person_connected: { Args: { p_other: string }; Returns: boolean }
@@ -4931,6 +4971,14 @@ export type Database = {
         Returns: boolean
       }
       owns_product_batch: { Args: { p_batch_id: string }; Returns: boolean }
+      product_admissible_to_basket: {
+        Args: { p_product_id: string }
+        Returns: boolean
+      }
+      product_visible_to_caller: {
+        Args: { p_product_id: string }
+        Returns: boolean
+      }
       propose_deal_change: {
         Args: { p_deal_card_id: string; p_draft: Json; p_reason: string }
         Returns: string
@@ -4959,6 +5007,7 @@ export type Database = {
         Args: { p_company_id: string; p_note: string }
         Returns: string
       }
+      resubmit_company_verification: { Args: never; Returns: undefined }
       run_scheduled_erasures: { Args: never; Returns: undefined }
       save_price_ladder: {
         Args: { p_base: number; p_pricelist_item_id: string; p_tiers: Json }

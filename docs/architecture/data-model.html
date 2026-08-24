@@ -1,0 +1,1080 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hello Sello — The Data Model</title>
+<style>
+/* browser reset — the hosted artifact version gets this from its wrapper */
+html { -webkit-text-size-adjust: 100%; }
+button { font: inherit; }
+/* ─────────────────────────────────────────────────────────────
+   TOKENS — light is the base; dark redefines only the values.
+   ───────────────────────────────────────────────────────────── */
+:root {
+  --ground:      #F6F5F0;
+  --surface:     #FFFFFF;
+  --surface-2:   #EFEEE7;
+  --line:        #DBDAD1;
+  --line-soft:   #E8E7E0;
+  --ink:         #191C18;
+  --ink-2:       #4A4F49;
+  --muted:       #767C74;
+  --faint:       #9AA097;
+
+  --accent:      #3D6B4E;
+  --accent-ink:  #FFFFFF;
+  --accent-wash: #E4EDE6;
+
+  --amber:       #9A6B1E;
+  --amber-wash:  #F5EBD8;
+  --rust:        #99432F;
+  --rust-wash:   #F6E4DF;
+
+  /* district hues — low saturation, used only as marks */
+  --d-identity:  #4A6D8C;
+  --d-connect:   #7A5C93;
+  --d-product:   #3D6B4E;
+  --d-price:     #8A6A2C;
+  --d-deal:      #A6553C;
+  --d-work:      #526B4B;
+  --d-chat:      #2F7175;
+  --d-record:    #6B5B4A;
+  --d-lookup:    #7E8478;
+
+  --shadow: 0 1px 2px rgba(25,28,24,.05), 0 8px 24px -12px rgba(25,28,24,.16);
+
+  --serif: ui-serif, "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  --sans:  system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono:  ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground:    #121513;
+    --surface:   #1A1E1B;
+    --surface-2: #222724;
+    --line:      #333935;
+    --line-soft: #272C29;
+    --ink:       #E9EBE6;
+    --ink-2:     #B9BFB7;
+    --muted:     #8E958B;
+    --faint:     #6C736A;
+
+    --accent:      #86B594;
+    --accent-ink:  #10160F;
+    --accent-wash: #223028;
+
+    --amber:      #D2A257;
+    --amber-wash: #2E2718;
+    --rust:       #D68C74;
+    --rust-wash:  #2E1F1A;
+
+    --d-identity: #86AAC9;
+    --d-connect:  #B195C6;
+    --d-product:  #86B594;
+    --d-price:    #C6A567;
+    --d-deal:     #D9917A;
+    --d-work:     #9BB491;
+    --d-chat:     #6FB2B5;
+    --d-record:   #B3A08A;
+    --d-lookup:   #9AA294;
+
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 28px -14px rgba(0,0,0,.6);
+  }
+}
+:root[data-theme="dark"] {
+  --ground:    #121513;
+  --surface:   #1A1E1B;
+  --surface-2: #222724;
+  --line:      #333935;
+  --line-soft: #272C29;
+  --ink:       #E9EBE6;
+  --ink-2:     #B9BFB7;
+  --muted:     #8E958B;
+  --faint:     #6C736A;
+
+  --accent:      #86B594;
+  --accent-ink:  #10160F;
+  --accent-wash: #223028;
+
+  --amber:      #D2A257;
+  --amber-wash: #2E2718;
+  --rust:       #D68C74;
+  --rust-wash:  #2E1F1A;
+
+  --d-identity: #86AAC9;
+  --d-connect:  #B195C6;
+  --d-product:  #86B594;
+  --d-price:    #C6A567;
+  --d-deal:     #D9917A;
+  --d-work:     #9BB491;
+  --d-chat:     #6FB2B5;
+  --d-record:   #B3A08A;
+  --d-lookup:   #9AA294;
+
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 28px -14px rgba(0,0,0,.6);
+}
+
+/* ───────────────────────────── base ───────────────────────────── */
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2, h3 { font-family: var(--serif); font-weight: 600; text-wrap: balance; margin: 0; letter-spacing: -.01em; }
+p { margin: 0; }
+a { color: var(--accent); }
+code, .mono { font-family: var(--mono); }
+
+.wrap { max-width: 1180px; margin: 0 auto; padding: 0 24px; }
+@media (max-width: 640px) { .wrap { padding: 0 16px; } }
+
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* ───────────────────────────── header ───────────────────────────── */
+header.masthead {
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  padding: 44px 0 36px;
+}
+.masthead h1 { font-size: clamp(30px, 5vw, 46px); line-height: 1.1; margin: 10px 0 14px; }
+.lede { font-size: 17px; color: var(--ink-2); max-width: 62ch; }
+
+.counts { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
+.count {
+  background: var(--surface-2);
+  border: 1px solid var(--line-soft);
+  border-radius: 3px;
+  padding: 8px 12px;
+  display: flex; align-items: baseline; gap: 8px;
+}
+.count b { font-family: var(--mono); font-size: 17px; font-variant-numeric: tabular-nums; color: var(--ink); }
+.count span { font-size: 12px; color: var(--muted); }
+
+/* ───────────────────────────── sections ───────────────────────────── */
+section { padding: 52px 0; border-bottom: 1px solid var(--line-soft); }
+.sec-head { margin-bottom: 28px; max-width: 68ch; }
+.sec-head h2 { font-size: clamp(21px, 3vw, 28px); margin: 8px 0 10px; }
+.sec-head p { color: var(--ink-2); }
+
+/* ───────────────────────────── legend ───────────────────────────── */
+.legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 1px; background: var(--line-soft); border: 1px solid var(--line-soft); border-radius: 4px; overflow: hidden; }
+.legend > div { background: var(--surface); padding: 16px 18px; }
+.legend h4 { margin: 0 0 5px; font-family: var(--sans); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.legend p { font-size: 14px; color: var(--ink-2); }
+
+/* ───────────────────────────── diagram ───────────────────────────── */
+.diagram-frame {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  overflow-x: auto;
+  padding: 8px;
+  box-shadow: var(--shadow);
+}
+.diagram-frame svg { display: block; min-width: 860px; width: 100%; height: auto; }
+.n-box { fill: var(--surface-2); stroke: var(--line); stroke-width: 1; }
+.n-key { fill: var(--accent-wash); stroke: var(--accent); stroke-width: 1.4; }
+.n-title { font-family: var(--mono); font-size: 12.5px; fill: var(--ink); }
+.n-sub { font-family: var(--sans); font-size: 10.5px; fill: var(--muted); }
+.flow { stroke: var(--faint); stroke-width: 1.4; fill: none; }
+.flow-strong { stroke: var(--accent); stroke-width: 1.8; fill: none; }
+.flow-label { font-family: var(--sans); font-size: 10px; fill: var(--muted); }
+.band-label { font-family: var(--mono); font-size: 10px; fill: var(--faint); letter-spacing: .1em; }
+.band-rule { stroke: var(--line-soft); stroke-width: 1; }
+
+/* ───────────────────────────── search ───────────────────────────── */
+.toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 22px; }
+.search {
+  flex: 1 1 260px;
+  display: flex; align-items: center; gap: 9px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 9px 12px;
+}
+.search input {
+  flex: 1; border: 0; background: transparent; color: var(--ink);
+  font-family: var(--mono); font-size: 14px; outline: none; min-width: 0;
+}
+.search input::placeholder { color: var(--faint); font-family: var(--sans); }
+.search svg { flex: none; color: var(--muted); }
+.hitcount { font-family: var(--mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* ───────────────────────────── districts ───────────────────────────── */
+.districts { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 16px; }
+.district {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 18px 18px 16px;
+  box-shadow: var(--shadow);
+}
+.district[hidden] { display: none; }
+.district-head { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 6px; }
+.dot { width: 9px; height: 9px; border-radius: 50%; flex: none; margin-top: 7px; background: var(--dc); }
+.district h3 { font-size: 17px; }
+.district .n { font-family: var(--mono); font-size: 11px; color: var(--faint); margin-left: auto; flex: none; padding-top: 4px; font-variant-numeric: tabular-nums; }
+.district > p { font-size: 13.5px; color: var(--muted); margin: 0 0 14px; padding-left: 19px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  font-family: var(--mono); font-size: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--line-soft);
+  border-left: 2px solid var(--dc);
+  color: var(--ink-2);
+  border-radius: 2px;
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: background .12s, color .12s, border-color .12s;
+}
+.chip:hover, .chip:focus-visible { background: var(--dc); color: var(--ground); border-color: var(--dc); outline: none; }
+.chip[hidden] { display: none; }
+.chip.pending { border-style: dashed; }
+.chip .pdot { color: var(--amber); }
+
+/* ───────────────────────────── flow stories ───────────────────────────── */
+.stories { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(310px, 1fr)); }
+.story {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 20px;
+  box-shadow: var(--shadow);
+}
+.story h3 { font-size: 17px; margin-bottom: 4px; }
+.story > .eyebrow { display: block; margin-bottom: 4px; }
+.steps { list-style: none; padding: 0; margin: 16px 0 0; }
+.steps li {
+  position: relative;
+  padding: 0 0 16px 26px;
+  border-left: 1px solid var(--line);
+  margin-left: 5px;
+}
+.steps li:last-child { border-left-color: transparent; padding-bottom: 0; }
+.steps li::before {
+  content: ""; position: absolute; left: -4.5px; top: 7px;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--surface); border: 1.5px solid var(--accent);
+}
+.steps .t { font-family: var(--mono); font-size: 12.5px; color: var(--accent); }
+.steps .t button { all: unset; cursor: pointer; color: var(--accent); border-bottom: 1px dotted currentColor; }
+.steps .t button:hover, .steps .t button:focus-visible { color: var(--ink); outline: none; }
+.steps .d { font-size: 13.5px; color: var(--ink-2); display: block; margin-top: 1px; }
+
+/* ───────────────────────────── buckets ───────────────────────────── */
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); box-shadow: var(--shadow); }
+table.grid { border-collapse: collapse; width: 100%; min-width: 620px; font-size: 14px; }
+table.grid th, table.grid td { text-align: left; padding: 11px 16px; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+table.grid th { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; background: var(--surface-2); }
+table.grid tr:last-child td { border-bottom: 0; }
+table.grid td.m { font-family: var(--mono); font-size: 13px; color: var(--ink); white-space: nowrap; }
+.pill { display: inline-block; font-family: var(--mono); font-size: 11px; padding: 2px 7px; border-radius: 2px; white-space: nowrap; }
+.pill.open { background: var(--amber-wash); color: var(--amber); }
+.pill.shut { background: var(--accent-wash); color: var(--accent); }
+
+/* ───────────────────────────── drawer ───────────────────────────── */
+.scrim {
+  position: fixed; inset: 0; background: rgba(10,12,10,.45);
+  opacity: 0; pointer-events: none; transition: opacity .18s; z-index: 40;
+}
+.scrim.on { opacity: 1; pointer-events: auto; }
+.drawer {
+  position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 100%);
+  background: var(--surface); border-left: 1px solid var(--line);
+  transform: translateX(100%); transition: transform .22s cubic-bezier(.3,.7,.3,1);
+  z-index: 50; display: flex; flex-direction: column;
+}
+.drawer.on { transform: none; }
+.drawer-head { padding: 20px 24px 16px; border-bottom: 1px solid var(--line); }
+.drawer-head .row { display: flex; align-items: flex-start; gap: 12px; }
+.drawer-head h3 { font-family: var(--mono); font-size: 18px; word-break: break-all; }
+.drawer-head .grp { font-family: var(--mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--dc, var(--muted)); }
+.drawer-head .plain { font-size: 14.5px; color: var(--ink-2); margin-top: 10px; }
+.xbtn { all: unset; cursor: pointer; margin-left: auto; flex: none; color: var(--muted); font-size: 22px; line-height: 1; padding: 2px 4px; border-radius: 3px; }
+.xbtn:hover, .xbtn:focus-visible { color: var(--ink); background: var(--surface-2); outline: none; }
+.drawer-body { overflow-y: auto; padding: 0 24px 40px; }
+.drawer-sub { font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin: 24px 0 10px; }
+.cols { border: 1px solid var(--line-soft); border-radius: 3px; overflow: hidden; }
+.col-row { display: grid; grid-template-columns: minmax(120px, auto) 1fr; gap: 4px 14px; padding: 9px 13px; border-bottom: 1px solid var(--line-soft); font-size: 13.5px; align-items: baseline; }
+.col-row:last-child { border-bottom: 0; }
+.col-row.plumbing { background: var(--surface-2); }
+.col-row .cn { font-family: var(--mono); font-size: 12.5px; color: var(--ink); word-break: break-all; }
+.col-row .cn .req { color: var(--rust); }
+.col-row .ct { font-family: var(--mono); font-size: 10.5px; color: var(--faint); }
+.col-row .cd { color: var(--ink-2); font-size: 13px; grid-column: 1 / -1; }
+@media (min-width: 480px) { .col-row .cd { grid-column: 2; } }
+.col-row.plumbing .cd { color: var(--muted); }
+.linkline { font-size: 13.5px; color: var(--ink-2); padding: 7px 0; border-bottom: 1px solid var(--line-soft); }
+.linkline:last-child { border-bottom: 0; }
+.linkline button { all: unset; cursor: pointer; font-family: var(--mono); font-size: 12.5px; color: var(--accent); border-bottom: 1px dotted currentColor; }
+.linkline button:hover, .linkline button:focus-visible { color: var(--ink); outline: none; }
+.arrowto { color: var(--faint); font-family: var(--mono); font-size: 11px; }
+.valuelist { display: flex; flex-wrap: wrap; gap: 5px; }
+.valuelist span { font-family: var(--mono); font-size: 11.5px; background: var(--surface-2); border: 1px solid var(--line-soft); border-radius: 2px; padding: 3px 7px; color: var(--ink-2); }
+.notice { border-left: 2px solid var(--amber); background: var(--amber-wash); color: var(--ink-2); padding: 10px 13px; font-size: 13.5px; border-radius: 0 3px 3px 0; margin-top: 16px; }
+.notice.secret { border-left-color: var(--rust); background: var(--rust-wash); }
+
+footer { padding: 40px 0 60px; color: var(--muted); font-size: 13.5px; }
+footer p + p { margin-top: 8px; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
+</style>
+
+</head>
+<body>
+<header class="masthead">
+  <div class="wrap">
+    <span class="eyebrow">Hello Sello · reference</span>
+    <h1>What the database actually holds</h1>
+    <p class="lede">Every table in the system, grouped by the job it does, written in plain English. Click any table name to see its columns and what connects to it.</p>
+    <div class="counts">
+      <div class="count"><b id="c-tables">—</b><span>tables</span></div>
+      <div class="count"><b id="c-real">—</b><span>real data</span></div>
+      <div class="count"><b id="c-lookup">—</b><span>dropdown lists</span></div>
+      <div class="count"><b>5</b><span>file buckets</span></div>
+      <div class="count"><b>1</b><span>not on production yet</span></div>
+    </div>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow">Before you start</span>
+      <h2>Four things that are true of nearly every table</h2>
+      <p>Learn these once and roughly a third of every column list stops needing explanation. In the detail panels these columns are greyed out, so you can skip past them.</p>
+    </div>
+    <div class="legend">
+      <div>
+        <h4>Nothing is ever deleted</h4>
+        <p>Instead of removing a row, we stamp <code>deleted_at</code> with the time. The row stays for the audit trail; the app just hides it. This is called a soft delete.</p>
+      </div>
+      <div>
+        <h4>Every row is signed</h4>
+        <p><code>created_by</code> / <code>updated_by</code> point at the person who did it, and <code>created_at</code> / <code>updated_at</code> record when. So we can always answer "who changed this?"</p>
+      </div>
+      <div>
+        <h4>IDs are random, not counted</h4>
+        <p>Every <code>id</code> is a UUID — a long random string like <code>a3f9…</code>, not 1, 2, 3. Nobody can guess the next one, and two databases never collide.</p>
+      </div>
+      <div>
+        <h4><code>metadata</code> is the spare drawer</h4>
+        <p>A free-form JSON field on most tables for extras we haven't given a proper column yet. Handy, but nothing important should live there long-term.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow">The spine</span>
+      <h2>How the whole thing hangs together</h2>
+      <p>Ignore the other 80-odd tables for a moment. This is the load-bearing structure: a person belongs to a company, two companies form a relationship, and every deal, chat and document hangs off that relationship. Everything else decorates one of these boxes.</p>
+    </div>
+    <div class="diagram-frame">
+      <svg viewBox="0 0 980 600" role="img" aria-label="Diagram: person belongs to company; two companies form a relationship; deals, chats and documents hang off the relationship.">
+        <defs>
+          <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 z" fill="currentColor"/>
+          </marker>
+        </defs>
+
+        <!-- band rules -->
+        <line class="band-rule" x1="0" y1="92"  x2="980" y2="92"/>
+        <line class="band-rule" x1="0" y1="232" x2="980" y2="232"/>
+        <line class="band-rule" x1="0" y1="392" x2="980" y2="392"/>
+        <text class="band-label" x="4" y="26">WHO</text>
+        <text class="band-label" x="4" y="120">WHO KNOWS WHO</text>
+        <text class="band-label" x="4" y="260">WHAT THEY AGREE</text>
+        <text class="band-label" x="4" y="420">HOW THEY WORK &amp; TALK</text>
+
+        <!-- WHO band -->
+        <g>
+          <rect class="n-key" x="120" y="30" width="170" height="46" rx="3"/>
+          <text class="n-title" x="134" y="52">person</text>
+          <text class="n-sub"   x="134" y="67">one human account</text>
+
+          <rect class="n-key" x="400" y="30" width="170" height="46" rx="3"/>
+          <text class="n-title" x="414" y="52">company</text>
+          <text class="n-sub"   x="414" y="67">one business</text>
+
+          <rect class="n-box" x="680" y="30" width="180" height="46" rx="3"/>
+          <text class="n-title" x="694" y="52">group</text>
+          <text class="n-sub"   x="694" y="67">a team inside a company</text>
+        </g>
+        <path class="flow-strong" d="M290 53 H392" marker-end="url(#ar)" color="var(--accent)"/>
+        <text class="flow-label" x="300" y="46">works at</text>
+        <path class="flow" d="M570 53 H672" marker-end="url(#ar)" color="var(--faint)"/>
+        <text class="flow-label" x="588" y="46">is divided into</text>
+
+        <!-- CONNECT band -->
+        <g>
+          <rect class="n-box" x="120" y="140" width="180" height="46" rx="3"/>
+          <text class="n-title" x="134" y="162">pending_inbox_item</text>
+          <text class="n-sub"   x="134" y="177">a request awaiting an answer</text>
+
+          <rect class="n-key" x="400" y="140" width="170" height="46" rx="3"/>
+          <text class="n-title" x="414" y="162">relationship</text>
+          <text class="n-sub"   x="414" y="177">company ↔ company</text>
+
+          <rect class="n-box" x="680" y="140" width="180" height="46" rx="3"/>
+          <text class="n-title" x="694" y="162">relationship_term</text>
+          <text class="n-sub"   x="694" y="177">standing terms they agreed</text>
+        </g>
+        <path class="flow-strong" d="M300 163 H392" marker-end="url(#ar)" color="var(--accent)"/>
+        <text class="flow-label" x="304" y="156">accepted →</text>
+        <path class="flow" d="M570 163 H672" marker-end="url(#ar)" color="var(--faint)"/>
+        <path class="flow" d="M485 76 V132" marker-end="url(#ar)" color="var(--faint)"/>
+        <text class="flow-label" x="493" y="110">two of them</text>
+
+        <!-- DEAL band -->
+        <g>
+          <rect class="n-key" x="400" y="300" width="170" height="46" rx="3"/>
+          <text class="n-title" x="414" y="322">deal_card</text>
+          <text class="n-sub"   x="414" y="337">the deal, versioned</text>
+
+          <rect class="n-box" x="680" y="270" width="180" height="46" rx="3"/>
+          <text class="n-title" x="694" y="292">deal_line_item</text>
+          <text class="n-sub"   x="694" y="307">one product line</text>
+
+          <rect class="n-box" x="680" y="330" width="180" height="46" rx="3"/>
+          <text class="n-title" x="694" y="352">deal_confirmation</text>
+          <text class="n-sub"   x="694" y="367">each side's sign-off</text>
+
+          <rect class="n-box" x="120" y="270" width="180" height="46" rx="3"/>
+          <text class="n-title" x="134" y="292">product</text>
+          <text class="n-sub"   x="134" y="307">what a company sells</text>
+
+          <rect class="n-box" x="120" y="330" width="180" height="46" rx="3"/>
+          <text class="n-title" x="134" y="352">pricelist</text>
+          <text class="n-sub"   x="134" y="367">what it costs, per list</text>
+        </g>
+        <path class="flow-strong" d="M485 186 V292" marker-end="url(#ar)" color="var(--accent)"/>
+        <text class="flow-label" x="493" y="242">every deal sits on one</text>
+        <path class="flow" d="M570 316 H672" marker-end="url(#ar)" color="var(--faint)"/>
+        <path class="flow" d="M570 330 H660 V352 H672" marker-end="url(#ar)" color="var(--faint)"/>
+        <path class="flow" d="M300 293 H340 V316 H392" marker-end="url(#ar)" color="var(--faint)"/>
+        <text class="flow-label" x="306" y="286">lines point back to</text>
+        <path class="flow" d="M210 316 V330" color="var(--faint)"/>
+        <path class="flow" d="M300 353 H340" color="var(--faint)"/>
+
+        <!-- WORK band -->
+        <g>
+          <rect class="n-key" x="120" y="440" width="180" height="46" rx="3"/>
+          <text class="n-title" x="134" y="462">chat_thread</text>
+          <text class="n-sub"   x="134" y="477">a conversation</text>
+
+          <rect class="n-box" x="120" y="510" width="180" height="46" rx="3"/>
+          <text class="n-title" x="134" y="532">chat_message</text>
+          <text class="n-sub"   x="134" y="547">one line in it</text>
+
+          <rect class="n-key" x="400" y="440" width="170" height="46" rx="3"/>
+          <text class="n-title" x="414" y="462">deal_workspace</text>
+          <text class="n-sub"   x="414" y="477">your private room</text>
+
+          <rect class="n-box" x="680" y="440" width="180" height="46" rx="3"/>
+          <text class="n-title" x="694" y="462">thing</text>
+          <text class="n-sub"   x="694" y="477">a to-do inside it</text>
+
+          <rect class="n-box" x="400" y="510" width="170" height="46" rx="3"/>
+          <text class="n-title" x="414" y="532">deal_artifact</text>
+          <text class="n-sub"   x="414" y="547">documents on the deal</text>
+
+          <rect class="n-box" x="680" y="510" width="180" height="46" rx="3"/>
+          <text class="n-title" x="694" y="532">audit_log</text>
+          <text class="n-sub"   x="694" y="547">the tamper-proof record</text>
+        </g>
+        <path class="flow" d="M210 486 V502" marker-end="url(#ar)" color="var(--faint)"/>
+        <path class="flow-strong" d="M400 463 H310" marker-end="url(#ar)" color="var(--accent)"/>
+        <path class="flow-strong" d="M470 346 V432" marker-end="url(#ar)" color="var(--accent)"/>
+        <text class="flow-label" x="478" y="400">one per company</text>
+        <path class="flow" d="M570 463 H672" marker-end="url(#ar)" color="var(--faint)"/>
+        <path class="flow" d="M485 486 V502" marker-end="url(#ar)" color="var(--faint)"/>
+        <path class="flow" d="M410 353 H370 V463" color="var(--faint)"/>
+        <text class="flow-label" x="330" y="456">a deal gets its own thread</text>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow">The full map</span>
+      <h2>Nine neighbourhoods</h2>
+      <p>Every table in the database, sorted by what it's for. Click a name to open its columns. Type in the box to find one.</p>
+    </div>
+    <div class="toolbar">
+      <label class="search">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+        <input id="q" type="search" placeholder="Search tables — try &quot;deal&quot;, &quot;price&quot;, &quot;chat&quot;" autocomplete="off" aria-label="Search tables">
+      </label>
+      <span class="hitcount" id="hits"></span>
+    </div>
+    <div class="districts" id="districts"></div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow">Data in motion</span>
+      <h2>Four things that happen, and what they write</h2>
+      <p>Tables are nouns; this is the verbs. Each step names the table the app actually writes to — click any of them to open its detail.</p>
+    </div>
+    <div class="stories" id="stories"></div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow">Not in the database</span>
+      <h2>Where the files live</h2>
+      <p>Photos, licences and PDFs are too big for a database, so they sit in five storage buckets. The database only keeps the file's <em>path</em> — a pointer to where it lives.</p>
+    </div>
+    <div class="tablewrap">
+      <table class="grid">
+        <thead><tr><th>Bucket</th><th>Who can see it</th><th>Max size</th><th>What goes in</th></tr></thead>
+        <tbody>
+          <tr><td class="m">avatars</td><td><span class="pill open">anyone with the link</span></td><td class="m">5 MB</td><td>Profile photos, company logos and cover images. Public on purpose — they show on shop pages.</td></tr>
+          <tr><td class="m">shop-media</td><td><span class="pill open">anyone with the link</span></td><td class="m">10 MB</td><td>Product photos and shop-page attachments, including PDFs like a spec sheet.</td></tr>
+          <tr><td class="m">company-licenses</td><td><span class="pill shut">locked down</span></td><td class="m">20 MB</td><td>Trading licences uploaded during verification. Only the company and Hello Sello staff can open them.</td></tr>
+          <tr><td class="m">relationship-artifacts</td><td><span class="pill shut">locked down</span></td><td class="m">20 MB</td><td>Files two connected companies share — contracts, certificates. Only those two companies.</td></tr>
+          <tr><td class="m">deal-artifacts</td><td><span class="pill shut">locked down</span></td><td class="m">20 MB</td><td>PDFs attached to a specific deal. PDF only, by design.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p>Read live from the production database (<span class="mono">hello-sello-design</span>, eu-central-1) on 10 August 2026, plus the local migrations not yet pushed.</p>
+    <p><span class="mono">person_connection</span> and the person-target columns on <span class="mono">pending_inbox_item</span> exist locally only — they go live when the Discover migration batch is pushed.</p>
+  </div>
+</footer>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="dname" tabindex="-1">
+  <div class="drawer-head">
+    <div class="row">
+      <div>
+        <div class="grp" id="dgrp"></div>
+        <h3 id="dname"></h3>
+      </div>
+      <button class="xbtn" id="dclose" aria-label="Close">&times;</button>
+    </div>
+    <p class="plain" id="dplain"></p>
+    <div id="dnotice"></div>
+  </div>
+  <div class="drawer-body" id="dbody"></div>
+</aside>
+
+<script>
+/* Columns that appear nearly everywhere and mean the same thing every time.
+   Greyed out in the detail panel so the interesting columns stand out. */
+const PLUMBING = {
+  id: "This row's own unique ID.",
+  created_at: "When this row was created.",
+  updated_at: "When it was last changed.",
+  created_by: "The person who created it.",
+  updated_by: "The person who last changed it.",
+  deleted_by: "The person who deleted it.",
+  deleted_at: "If filled in, this row is deleted — hidden from the app but kept for the record.",
+  metadata: "Free-form JSON for extras with no proper column yet.",
+  sort_order: "Controls the order options appear in a dropdown.",
+  description: "Human-readable description.",
+  code: "The short machine name — this is what other tables store.",
+  is_terminal: "True if this is an end state, i.e. nothing follows it."
+};
+
+const GROUPS = {
+  identity: { name: "Who you are",        color: "--d-identity", blurb: "Accounts, businesses, teams, permissions and everything that establishes identity." },
+  connect:  { name: "Who you know",       color: "--d-connect",  blurb: "The links between companies (and, soon, between people), plus the requests that create them." },
+  product:  { name: "What you sell",      color: "--d-product",  blurb: "The catalogue: products, the physical batches behind them, and their photos and files." },
+  price:    { name: "What it costs",      color: "--d-price",    blurb: "Price lists — a company's prices for its products, drafted then published." },
+  deal:     { name: "The deal",           color: "--d-deal",     blurb: "The negotiating object itself: what's being bought, at what price, and every change to it." },
+  work:     { name: "Working the deal",   color: "--d-work",     blurb: "Your side's private room around a deal — who's on it, the to-dos, the documents." },
+  chat:     { name: "Talking",            color: "--d-chat",     blurb: "Conversations, messages, and Sella's reading of them." },
+  record:   { name: "The record",         color: "--d-record",   blurb: "The tamper-evident history of everything that happened." },
+  lookup:   { name: "The dropdown lists", color: "--d-lookup",   blurb: "Small fixed lists of allowed values. Instead of letting any text into a status column, the database only accepts a code from one of these — so a typo can never become a new status." }
+};
+
+/* cols format: [name, type, plain-English note or null] — "!" suffix on type = required */
+const T = {
+
+/* ── identity ─────────────────────────────────────────────── */
+person: { g:"identity", plain:"One human account. Created automatically the moment somebody signs up, and tied one-to-one to the login record Supabase keeps. Holds their name, photo, job title and which company they work for.",
+  notice:{k:"secret", t:"company_id is the security linchpin. If a person could edit it themselves they'd instantly see another company's data — so the database physically refuses direct writes to that one column."},
+  cols:[["id","uuid!","Same ID as their login record."],["first_name","text!",null],["last_name","text!",null],["display_name","text","What actually shows in the UI — falls back to first + last."],["company_id","uuid","Which company they work at. Empty until they finish onboarding."],["title","text","Job title."],["phone","text",null],["language","text","Preferred UI language."],["avatar_path","text","Pointer to their photo in the avatars bucket."],["links","jsonb!","Their social/web links, shown on the public profile."],["public_handle","text","The short name in their shareable profile URL."],["preferences","jsonb!","Personal UI settings."],["deactivated_at","timestamptz","Set when they pause their account."],["deletion_scheduled_for","timestamptz","GDPR: the date their data gets erased."],["anonymized_at","timestamptz","When the erasure actually ran."],["metadata","jsonb!",null],["created_at","timestamptz!",null],["updated_at","timestamptz!",null],["deleted_at","timestamptz",null]] },
+
+company: { g:"identity", plain:"One business on the platform — a pharmacy, cultivator, wholesaler or importer. This row is both the legal entity and the public shop front people browse.",
+  cols:[["id","uuid!",null],["name","text!",null],["country","char!","Two-letter country code."],["city","text",null],["address","text",null],["description","text","The long 'about us' shown on the shop page."],["tagline","text","One-line strapline under the name."],["primary_products","text","Free-text summary of what they mainly sell."],["website","text",null],["logo_path","text","Pointer into the avatars bucket."],["cover_path","text","Banner image on the shop page."],["warehouse_location","text","Where goods ship from."],["verification_status","text!","pending, verified, rejected or revoked — controls what they're allowed to do."],["verified_at","timestamptz",null],["verified_by","uuid","Which Hello Sello staff member approved them."],["deactivated_at","timestamptz",null],["metadata","jsonb!","Currently also holds the named warehouse-address list."],["created_by","uuid",null],["updated_by","uuid",null],["created_at","timestamptz!",null],["updated_at","timestamptz!",null],["deleted_by","uuid",null],["deleted_at","timestamptz",null]] },
+
+group: { g:"identity", plain:"A team inside a company — Sales, Compliance, Purchasing. Teams can nest inside other teams, and permissions are granted to teams rather than to individuals.",
+  cols:[["id","uuid!",null],["company_id","uuid!","Which company this team belongs to."],["name","text!",null],["description","text",null],["parent_group_id","uuid","The team this one sits inside, if any."],["created_by","uuid",null],["updated_by","uuid",null],["created_at","timestamptz!",null],["updated_at","timestamptz!",null],["deleted_by","uuid",null],["deleted_at","timestamptz",null]] },
+
+person_group: { g:"identity", plain:"Which people are in which team. One row per membership — a person can be in several teams.",
+  cols:[["id","uuid!",null],["person_id","uuid!",null],["group_id","uuid","The team. Empty means company-level with no team."],["role","text","Their role within the team."],["created_at","timestamptz!",null],["deleted_at","timestamptz",null]] },
+
+permission_matrix_entry: { g:"identity", plain:"The permission grid: for this company, is this team allowed to do this action? One row per box ticked. Two actions exist today — editing the company profile, and managing the team.",
+  cols:[["id","uuid!",null],["company_id","uuid!",null],["group_id","uuid!","The team being granted the power."],["action","text!","Which power — from the permission_action list."],["granted","bool!","Ticked or not."],["created_by","uuid",null],["updated_by","uuid",null],["created_at","timestamptz!",null],["updated_at","timestamptz!",null]] },
+
+hs_team_member: { g:"identity", plain:"Hello Sello's own staff — the people who verify companies and run the admin tools. Deliberately separate from customer accounts.",
+  cols:[["id","uuid!",null],["person_id","uuid!","Which person is staff."],["role","text!","superadmin or admin."],["created_by","uuid",null],["updated_by","uuid",null],["created_at","timestamptz!",null],["updated_at","timestamptz!",null],["deleted_at","timestamptz",null]] },
+
+join_request: { g:"identity", plain:"Somebody signing up found their employer already on the platform and asked to join it. An admin at that company approves or rejects.",
+  cols:[["id","uuid!",null],["requester_person_id","uuid!","Who's asking."],["target_company_id","uuid!","Which company they want to join."],["status","text!","pending, approved, rejected or cancelled."],["note","text","Their message to the admin."],["decided_by","uuid","The admin who answered."],["decided_at","timestamptz",null],["rejection_reason","text",null],["metadata","jsonb!",null],["created_at","timestamptz!",null],["updated_at","timestamptz!",null],["deleted_at","timestamptz",null]] },
+
+company_license_file: { g:"identity", plain:"Trading licences a company uploads to prove it's allowed to deal. Stored in a locked-down bucket and virus-scanned before anyone can open them.",
+  cols:[["id","uuid!",null],["company_id","uuid!",null],["storage_path","text!","Where the file sits in the bucket."],["original_filename","text!","What the uploader called it."],["mime_type","text!","PDF or image."],["file_size_bytes","int!",null],["scan_status","text!","pending, clean, infected or scan_error. Nothing opens until it's clean."],["description","text",null],["created_by","uuid",null],["updated_by","uuid",null],["created_at","timestamptz!",null],["updated_at","timestamptz!",null],["deleted_at","timestamptz",null]] },
+
+company_business_category: { g:"identity", plain:"Which sectors a company works in — pharma, food, FMCG and so on. Multi-select, so one row per category ticked.",
+  cols:[["id","uuid!",null],["company_id","uuid!",null],["business_category_code","text!","From the business_category list."],["custom_label","text","Only allowed when the category is 'custom' — their own wording."],["created_by","uuid",null],["created_at","timestamptz!",null],["deleted_at","timestamptz",null]] },
+
+company_type_assignment: { g:"identity", plain:"What kind of operator the company is — pharmacy, wholesaler, EU-GMP cultivator. Separate from sector, and also multi-select.",
+  cols:[["id","uuid!",null],["company_id","uuid!",null],["company_type_code","text!","From the company_type list."],["created_by","uuid",null],["created_at","timestamptz!",null],["deleted_at","timestamptz",null]] },
+
+contact_record: { g:"identity", plain:"Email contacts pulled in when someone connects their Outlook or Google mailbox. Used to spot people they already email who are on the platform.",
+  cols:[["id","uuid!",null],["person_id","uuid!","Whose mailbox this came from."],["email","text!",null],["display_name","text",null],["first_seen","date","Earliest email exchanged."],["last_seen","date","Most recent."],["email_count","int!","How many emails — a rough closeness score."],["role","text","Guessed role from the signature."],["inferred_company_id","uuid","Guessed employer, if we matched the domain."],["provider","text!","Where it was imported from."],["metadata","jsonb!",null],["created_at","timestamptz!",null],["updated_at","timestamptz!",null],["deleted_at","timestamptz",null]] },
+
+notification_preference: { g:"identity", plain:"One row per person, per topic, per channel — the on/off switches behind the notification settings screen.",
+  cols:[["id","uuid!",null],["person_id","uuid!",null],["category_code","text!","join, membership, verification or welcome."],["channel_code","text!","How it's sent — email today."],["enabled","bool!",null],["created_at","timestamptz!",null],["updated_at","timestamptz!",null]] },
+
+/* ── connect ─────────────────────────────────────────────── */
+relationship: { g:"connect", plain:"The trading link between two companies — the single most important row in the system. Deals, chats, shared files, private notes and agreed terms all hang off it. If two companies aren't connected here, they can't see each other's prices.",
+  cols:[["id","uuid!",null],["company_a_id","uuid!","One side."],["company_b_id","uuid!","The other side. A and B are stored in a fixed order so the same pair can't be recorded twice."],["initiated_by_company_id","uuid!","Who reached out first."],["inbox_item_id","uuid","The request that created this, kept as a receipt."],["status","text!","active, suspended or ended."],["metadata","jsonb!",null],["created_by","uuid",null],["updated_by","uuid",null],["created_at","timestamptz!",null],["updated_at","timestamptz!",null],["deleted_at","timestamptz",null]] },
+
+pending_inbox_item: { g:"connect", plain:"A request sitting in somebody's inbox waiting for an answer. One table covers every kind: a connection request, a message from a stranger, a request for a price list, or an incoming deal ticket.",
+  notice:{k:"pending", t:"receiver_person_id is local-only. It's the change that lets a request be addressed to a person instead of a company — the basis of Discover's people connections. Live once the Discover batch is pushed."},
+  cols:[["id","uuid!",null],["type","text!","connect, connect_message, pricelist_request, deal_card — or connect_person once Discover ships."],["sender_person_id","uuid!","Who sent it."],["sender_company_id","uuid!","Their company."],["receiver_company_id","uuid","The company it's addressed to."],["receiver_person_id","uuid","LOCAL ONLY — the person it's addressed to, for Discover's person-to-person requests."],["note","text","The message that came with it."],["deal_card_id","uuid","For deal tickets: which deal."],["status","text!","pending, accepted or rejected."],["assigned_to","uuid","Which colleague picked it up."],["assigned_at","timestamptz",null],["assigned_by","uuid",null],["metadata","jsonb!",null],["created_at","timestamptz!",null],["updated_at","timestamptz!",null],["deleted_at","timestamptz",null]] },
+
+relationship_note: { g:"connect", plain:"Private notes one company keeps about the other. The other side never sees them. Scope decides whether it's visible to your whole team or just to you.",
+  cols:[["id","uuid!",null],["relationship_id","uuid!","Which relationship this is about."],["company_id","uuid!","Whose note it is — this is what keeps it private."],["scope","text!","team or personal."],["body","text!",null],["metadata","jsonb!",null],["created_by","uuid",null],["updated_by","uuid",null],["created_at","timestamptz!",null],["updated_at","timestamptz!",null],["deleted_at","timestamptz",null]] },
+
+relationship_term: { g:"connect", plain:"A standing term between two companies that applies to every deal — payment terms, incoterms, a minimum order, a lead time, exclusivity. One side proposes, the other accepts or rejects. A newer term can supersede an older one, so the history stays intact.",
+  cols:[["id","uuid!",null],["relationship_id","uuid!",null],["term_type_code","text!","Which kind of term."],["value","text!","The agreed value, e.g. 'net30'."],["status","text!","pending, accepted or rejected."],["proposed_by_company_id","uuid!",null],["proposed_by_person_id","uuid!",null],["proposed_at","timestamptz!",null],["responded_by_person_id","uuid",null],["responded_at","timestamptz",null],["response_note","text",null],["superseded_at","timestamptz","When a newer term replaced this one."],["superseded_by_id","uuid","The term that replaced it."],["metadata","jsonb!",null],["created_at","timestamptz!",null],["updated_at","timestamptz!",null],["deleted_at","timestamptz",null]] },
+
+relationship_artifact: { g:"connect", plain:"Files two connected companies share with each other — contracts, certificates, quality documents. Not tied to any single deal.",
+  cols:[["id","uuid!",null],["relationship_id","uuid!",null],["uploaded_by_company_id","uuid!",null],["title","text!",null],["description","text",null],["category","text","What kind of document."],["storage_path","text!",null],["original_filename","text!",null],["mime_type","text!",null],["file_size_bytes","int!",null],["scan_status","text!","Virus scan result."],["metadata","jsonb!",null],["created_by","uuid",null],["updated_by","uuid",null],["created_at","timestamptz!",null],["updated_at","timestamptz!",null],["deleted_by","uuid",null],["deleted_at","timestamptz",null]] },
+
+person_connection: { g:"connect", pending:true, plain:"A connection between two individual people, LinkedIn-style — built for Discover. Deliberately a second, separate network: connecting to a person does not connect your companies, and gives no access to prices or deals.",
+  notice:{k:"pending", t:"This whole table is local-only. It goes live when the Discover migration batch is pushed to production."},
+  cols:[["id","uuid!",null],["person_a_id","uuid!","The person with the lower ID — stored in a fixed order so the same pair can't appear twice."],["person_b_id","uuid!","The other one."],["initiated_by_person_id","uuid!","Who sent the request."],["created_at","timestamptz!",null],["deleted_at","timestamptz","Filled in when someone disconnects."]] },
+
+/* ── product ─────────────────────────────────────────────── */
+product: { g:"product", plain:"One sellable item in a company's catalogue — the thing that appears as a card on the shop page. Holds everything a buyer wants to know: strain, cannabinoid content, pack size, origin, and how it's packaged.",
+  cols:[["id","uuid!",null],["company_id","uuid!","Who sells it."],["name","text!",null],["cultivar","text","The strain name."],["supplier_product_code","text","The seller's own article number."],["local_code_pzn","text","The German pharmacy article number."],["pack_size_grams","num","How much is in one pack."],["unit_code","text!","g, mL or pack."],["bundle_description","text","How it's bundled for sale."],["packaging_material","text",null],["resealable","bool",null],["thc_percent","num",null],["cbd_percent","num",null],["cbg_percent","num",null],["cbn_percent","num",null],["terpene_percent","num","Total terpene content."],["cultivator","text","Who grew it, if not the seller."],["country_of_origin","text",null],["region","text",null],["lineage_parent_a","text","Genetic parent."],["lineage_parent_b","text","The other parent."],["dominance_code","text","indica, sativa or hybrid."],["irradiation_code","text","How it was sterilised."],["rrp_per_gram","num","Recommended retail price."],["visibility_start","date","Show it from this date."],["visibility_end","date","Hide it after this date."],["price_public","bool!","Whether the price shows to anyone, or only to connected buyers."],["profile_visible","bool!","Whether it appears on the public shop page at all."],["location","text","Free-text tag used to group products by shop or warehouse."],["metadata","jsonb!",null],["created_by","uuid",null],["updated_by","uuid",null],["created_at","timestamptz!",null],["updated_at","timestamptz!",null],["deleted_by","uuid",null],["deleted_at","timestamptz",null]] },
+
+product_batch: { g:"product", plain:"A specific physical lot of a product, with its own batch number, its own lab results and its own quantity on hand. Two batches of the same product can have quite different THC — which is why deal lines pin down a batch.",
+  cols:[["id","uuid!",null],["company_id","uuid!",null],["product_id","uuid!","Which product this is a lot of."],["batch_number","text!",null],["quantity_grams","num!","How much is actually in stock."],["ready_for_sale_date","date",null],["shelf_life_months","smallint",null],["expiry_date","date",null],["loss_on_drying_percent","num","Moisture lab result."],["water_activity","num","Another moisture measure."],["thc_percent","num","This batch's own THC, which may differ from the product's headline figure."],["cbd_percent","num",null],["cbg_percent","num",null],["cbn_percent","num",null],["description","text",null],["metadata","jsonb!",null],["created_by","uuid",null],["updated_by","uuid",null],["created_at","timestamptz!",null],["updated_at","timestamptz!",null],["deleted_by","uuid",null],["deleted_at","timestamptz",null]] },
+
+batch_terpene: { g:"product", plain:"The aroma profile of a batch — one row per terpene measured, with its percentage. This is what drives the smell and effect description.",
+  cols:[["id","uuid!",null],["product_batch_id","uuid!",null],["terpene_code","text!","Which compound, from the terpene reference list."],["percent","num","How much of it."]] },
+
+product_cost: { g:"product", plain:"What the product costs the seller to buy or produce. Deliberately its own table rather than a column on product — row-level security can hide a whole row but cannot hide a single column, so the secret number has to live in its own row.",
+  notice:{k:"secret", t:"Never visible to a buyer. This split is a security mechanism, not a filing decision."},
+  cols:[["product_id","uuid!",null],["company_id","uuid!","Whose cost figure this is."],["cogs","num","Cost of goods sold."],["created_by","uuid",null],["updated_by","uuid",null],["created_at","timestamptz!",null],["updated_at","timestamptz!",null]] },
+
+product_image: { g:"product", plain:"Photos of a product, in display order. The first one is the card image on the shop page.",
+  cols:[["id","uuid!",null],["product_id","uuid!",null],["company_id","uuid!",null],["image_path","text!","Where the photo sits in the shop-media bucket."],["position","smallint!","Display order — 0 is the main image."],["created_at","timestamptz!",null]] },
+
+product_media: { g:"product", plain:"Other things attached to a product beyond photos — a spec-sheet PDF, a video link, a lab report.",
+  cols:[["id","uuid!",null],["product_id","uuid!",null],["company_id","uuid!",null],["kind","text!","What sort of media it is."],["path","text","For uploaded files."],["url","text","For external links."],["label","text","What to call it in the UI."],["position","smallint!","Display order."],["created_at","timestamptz!",null]] },
+
+product_buyer_code: { g:"product", plain:"A buyer's own internal article number for your product. Set per relationship, so the same product can carry a different code for each customer — which makes their purchase orders match their own system.",
+  cols:[["id","uuid!",null],["product_id","uuid!",null],["relationship_id","uuid!","Which customer this code is for."],["code","text!","Their article number."],["created_by","uuid",null],["updated_by","uuid",null],["created_at","timestamptz!",null],["updated_at","timestamptz!",null],["deleted_at","timestamptz",null]] },
+
+product_basket_line: { g:"product", plain:"One line in a person's shopping basket, before it becomes a deal. Belongs to the person, not the company, and survives across pages until they turn it into a deal card.",
+  cols:[["id","uuid!",null],["owner_person_id","uuid!","Whose basket."],["product_id","uuid!",null],["pack_count","num!","How many packs."],["pack_size_grams","num","The pack size they picked."],["created_at","timestamptz!",null],["updated_at","timestamptz!",null]] },
+
+/* ── price ─────────────────────────────────────────────── */
+pricelist: { g:"price", plain:"A named list of prices belonging to one company. Sits in draft while it's being built, then gets published — after which buyers can see it.",
+  cols:[["id","uuid!",null],["company_id","uuid!","Whose list."],["name","text!",null],["status_code","text!","draft or published."],["published_at","timestamptz",null],["currency","char!","Three-letter currency code."],["metadata","jsonb!",null],["created_by","uuid",null],["updated_by","uuid",null],["created_at","timestamptz!",null],["updated_at","timestamptz!",null],["deleted_by","uuid",null],["deleted_at","timestamptz",null]] },
+
+pricelist_item: { g:"price", plain:"One product's price on one list, with an optional volume discount: buy more than the threshold and the cheaper rate applies.",
+  cols:[["id","uuid!",null],["pricelist_id","uuid!",null],["product_id","uuid!",null],["price_per_gram","num!","The normal rate."],["bundle_threshold_grams","num","Buy at least this much…"],["bundle_price_per_gram","num","…and pay this rate instead."],["currency","char!",null],["metadata","jsonb!",null],["created_by","uuid",null],["updated_by","uuid",null],["created_at","timestamptz!",null],["updated_at","timestamptz!",null],["deleted_by","uuid",null],["deleted_at","timestamptz",null]] },
+
+/* ── deal ─────────────────────────────────────────────── */
+deal_card: { g:"deal", plain:"The deal itself — the object both sides negotiate over. It is versioned: every accepted change bumps the version number rather than overwriting, so you can always see what was agreed and when.",
+  cols:[["id","uuid!",null],["relationship_id","uuid!","Which two companies. Every deal must sit on a relationship."],["thread_id","uuid","The deal's own chat thread."],["version","int!","Starts at 1 and increases with every accepted change."],["status","text!","draft, confirmed, amended, done, cancelled, withdrawn — or the ticket states."],["deal_type","text!","offer (seller-led) or order (buyer-led)."],["initiating_company_id","uuid!","Who started it."],["value_net","num","Total value."],["currency","char!",null],["offer_expires_at","timestamptz",null],["delivery_date_target","timestamptz",null],["payment_terms_code","text","e.g. net30."],["incoterms_code","text","e.g. DDP — who pays shipping and carries the risk."],["buyer_po_number","text","The buyer's purchase order reference."],["seller_so_number","text","The seller's sales order reference."],["hs_deal_number","text","Hello Sello's own deal reference."],["note_company_a","text","A's private note on this deal."],["note_company_b","text","B's private note."],["ordered_via","text!","Whether it came through Hello Sello, email or fax."],["ticket_status","text","open or closed, for the delivery/pickup ticket flow."],["metadata","jsonb!",null],["created_by","uuid",null],["updated_by","uuid",null],["created_at","timestamptz!",null],["updated_at","timestamptz!",null],["deleted_at","timestamptz",null]] },
+
+deal_line_item: { g:"deal", plain:"One product line on a deal, at a particular version. Because the version is stored on the row, the full line-up of any past version can be reconstructed exactly.",
+  cols:[["id","uuid!",null],["deal_card_id","uuid!",null],["version","int!","Which version of the deal this line belongs to."],["product_id","uuid","The catalogue product."],["product_name","text!","The name copied at the time — so the line still reads correctly if the product is later renamed."],["quantity","num!",null],["unit","text!","g, kg or unit."],["unit_price","num!",null],["currency","char!",null],["line_total","num","Quantity × price, calculated."],["thc_percent","num","Copied at the time."],["cbd_percent","num",null],["batch_id","uuid","Which physical lot is being sold."],["batch_number","text","The batch number copied at the time."],["allocation_status","text!","pending, supply or decline — the seller's answer on whether they can fill this line."],["allocation_locked_at","timestamptz","When that answer was locked in."],["substituted_from_product_id","uuid","If this line replaced a different product, which one."],["sort_order","smallint!",null],["metadata","jsonb!",null],["created_at","timestamptz!",null]] },
+
+deal_line_item_private: { g:"deal", plain:"The numbers on a deal line that only one side is allowed to see — the seller's margin, the buyer's own metric. Each side gets its own row, so security can show you yours and hide theirs.",
+  notice:{k:"secret", t:"Same trick as product_cost: a separate row per company, because row security can hide rows but not columns."},
+  cols:[["id","uuid!",null],["deal_line_item_id","uuid!","Which line."],["company_id","uuid!","Whose private numbers these are."],["seller_margin","num","The seller's margin on this line."],["buyer_metric","num","The buyer's own figure."],["created_by","uuid",null],["created_at","timestamptz!",null]] },
+
+deal_card_log: { g:"deal", plain:"The deal's change history — one entry per version, saying what changed, who changed it, and whether it came from a person, the system or Sella. This is what the timeline on the deal card reads from.",
+  cols:[["id","uuid!",null],["deal_card_id","uuid!",null],["version","int!","The version this entry created."],["change_summary","text!","Plain-English description of what changed."],["origin","text!","What triggered the change."],["changed_by_person_id","uuid",null],["changed_by","text!","person, system or sella."],["created_at","timestamptz!",null]] },
+
+deal_change_input: { g:"deal", plain:"The reason a party typed when they made a change. Attached to a history entry, so every version can show 'why', not just 'what'.",
+  cols:[["id","uuid!",null],["deal_card_id","uuid!",null],["log_id","uuid!","Which history entry this explains."],["party_person_id","uuid!","Who wrote it."],["note","text!","Their reason."],["submitted_at","timestamptz!",null],["created_at","timestamptz!",null]] },
+
+deal_confirmation: { g:"deal", plain:"One company's sign-off on one specific version of a deal. Both sides need a confirmed row on the same version before that version counts as agreed.",
+  cols:[["id","uuid!",null],["deal_card_id","uuid!",null],["version","int!","Which version they're signing."],["company_id","uuid!","Which side is signing."],["responding_person_id","uuid","Who actually clicked."],["status","text!","pending, confirmed or rejected."],["responded_at","timestamptz",null],["note","text","Their reason, especially on a rejection."],["created_at","timestamptz!",null],["updated_at","timestamptz!",null]] },
+
+deal_pending_change: { g:"deal", plain:"A proposed edit that hasn't been accepted yet. The whole draft sits here as JSON, alongside who has voted for it, until it's either confirmed — becoming the next version — or declined and discarded.",
+  cols:[["id","uuid!",null],["deal_card_id","uuid!",null],["base_version","int!","The version this change is built on. If the deal moves on, the proposal is stale."],["source","text!","Where the proposal came from."],["proposed_by_company","uuid!",null],["proposed_by_person","uuid!",null],["proposer_reason","text!","Why they're asking for the change."],["draft","jsonb!","The full proposed deal, held as JSON until accepted."],["votes","jsonb!","Who has agreed so far."],["created_at","timestamptz!",null]] },
+
+deal_promotion: { g:"deal", plain:"A sweetener offered on top of an existing version — an extra discount or a better term — that the other side can take or leave without reopening the whole deal.",
+  cols:[["id","uuid!",null],["deal_card_id","uuid!",null],["base_version","int!","Which version it's offered against."],["offered_by_company","uuid!",null],["offered_by_person","uuid!",null],["line_deltas","jsonb!","The proposed changes to the line items."],["condition_deltas","jsonb!","The proposed changes to terms."],["state","text!","Whether it's still open."],["resolved_by_person","uuid",null],["resolved_at","timestamptz",null],["created_at","timestamptz!",null]] },
+
+deal_party_field: { g:"deal", plain:"Extra fields one side adds to their own half of the paperwork — a cost centre, an internal reference — that appear on their documents without the other side needing to care.",
+  cols:[["id","uuid!",null],["deal_card_id","uuid!",null],["version","int!",null],["owner_company_id","uuid!","Whose field this is."],["party_side","text!","Which side of the deal."],["field_key","text!","The machine name."],["field_label","text!","What it's called on screen."],["value_text","text","The value."],["sort_order","smallint!",null],["metadata","jsonb!",null],["created_by","uuid",null],["created_at","timestamptz!",null]] },
+
+/* ── work ─────────────────────────────────────────────── */
+deal_workspace: { g:"work", plain:"Your company's private room around a deal — where your team organises its own work on it. The other side has their own separate one and never sees inside yours.",
+  cols:[["id","uuid!",null],["deal_card_id","uuid!","Which deal this room is for."],["visibility","text!","company_wide (your whole team can see it) or private (just the members)."],["metadata","jsonb!",null],["created_by","uuid",null],["updated_by","uuid",null],["created_at","timestamptz!",null],["updated_at","timestamptz!",null],["deleted_at","timestamptz",null]] },
+
+deal_member: { g:"work", plain:"Who from your company is working on this deal, and in what capacity. Removing someone stamps a removal time rather than deleting the row, so the record of who had access survives.",
+  cols:[["id","uuid!",null],["deal_workspace_id","uuid!",null],["person_id","uuid!",null],["role","text!","owner, side_lead or member."],["added_by_person_id","uuid!",null],["added_at","timestamptz!",null],["removed_at","timestamptz","Set when they come off the deal."],["removed_by_person_id","uuid",null],["metadata","jsonb!",null],["created_at","timestamptz!",null],["updated_at","timestamptz!",null]] },
+
+deal_artifact: { g:"work", plain:"Documents attached to a specific deal. PDF only by design. Can be marked private, meaning only your side sees it.",
+  cols:[["id","uuid!",null],["deal_workspace_id","uuid!",null],["uploaded_by_company_id","uuid!",null],["title","text!",null],["description","text",null],["category","text","What kind of document."],["storage_path","text!",null],["original_filename","text!",null],["mime_type","text!",null],["file_size_bytes","int!",null],["scan_status","text!","Virus scan result."],["is_private","bool!","If true, the other side never sees it."],["metadata","jsonb!",null],["created_by","uuid",null],["updated_by","uuid",null],["created_at","timestamptz!",null],["updated_at","timestamptz!",null],["deleted_by","uuid",null],["deleted_at","timestamptz",null]] },
+
+thing: { g:"work", plain:"A to-do inside a workspace. Three kinds: a task someone has to do, an approval someone has to give, or a document someone has to upload. Can be pinned to a stage of the deal.",
+  cols:[["id","uuid!",null],["deal_workspace_id","uuid!",null],["title","text!",null],["description","text",null],["type","text!","task, approval or document_upload."],["status","text!","open or done."],["stage_code","text","Which stage of the deal it belongs to."],["assignee_person_id","uuid","Who has to do it."],["due_at","timestamptz",null],["linked_confirmation_id","uuid","For approvals: which sign-off it's waiting on."],["linked_artifact_id","uuid","For uploads: the document that satisfied it."],["is_private","bool!","Hidden from the other side."],["owner_company_id","uuid","Whose to-do it is."],["completed_at","timestamptz",null],["completed_by_person_id","uuid",null],["sort_order","smallint!",null],["metadata","jsonb!",null],["created_by","uuid",null],["updated_by","uuid",null],["created_at","timestamptz!",null],["updated_at","timestamptz!",null],["deleted_at","timestamptz",null]] },
+
+deal_stage_completion: { g:"work", plain:"Marks one stage of a deal as finished. The five stages run negotiation → compliance & quality → agreement → payment → fulfilment & delivery.",
+  cols:[["id","uuid!",null],["deal_workspace_id","uuid!",null],["stage_code","text!","Which stage was completed."],["marked_done_at","timestamptz!",null],["marked_done_by_person_id","uuid!",null],["created_at","timestamptz!",null]] },
+
+/* ── chat ─────────────────────────────────────────────── */
+chat_thread: { g:"chat", plain:"A conversation. Four kinds exist: company-to-company (the default business channel), person-to-person, one attached to a specific deal, and a multi-person group.",
+  cols:[["id","uuid!",null],["type","text!","c2c, p2p, deal or group."],["relationship_id","uuid","For company-to-company threads: which relationship."],["person_a_id","uuid","For person-to-person threads: one participant."],["person_b_id","uuid","The other participant."],["deal_card_id","uuid","For deal threads: which deal."],["name","text","For group threads: what it's called."],["created_at","timestamptz!",null],["deleted_at","timestamptz",null]] },
+
+chat_message: { g:"chat", plain:"A single message in a thread. The author can be a person, the system (those grey centred lines announcing a deal was signed), or Sella — the AI assistant.",
+  cols:[["id","uuid!",null],["thread_id","uuid!",null],["sender_person_id","uuid","Empty when the system or Sella wrote it."],["sender","text!","person, system or sella."],["type","text!","A plain message, or one of the system announcements like deal_signed or connection_established."],["body","text!","The text."],["metadata","jsonb!","For system lines, the structured detail the UI renders from."],["created_at","timestamptz!",null],["deleted_at","timestamptz",null]] },
+
+chat_thread_member: { g:"chat", plain:"Who is in a group thread. Group threads need this because, unlike the other kinds, the participants aren't implied by a relationship or a pair of people.",
+  cols:[["id","uuid!",null],["thread_id","uuid!",null],["person_id","uuid!",null],["state","text!","Their membership state."],["approvals","jsonb!","Who has approved them joining."],["added_by","uuid",null],["added_at","timestamptz!",null]] },
+
+sella_detection: { g:"chat", plain:"Sella's memory of reading a conversation and deciding whether a deal was struck. One row per run. Stops the same deal being flagged twice, and keeps the draft it extracted so a click can turn it into a real deal card.",
+  cols:[["id","uuid!",null],["thread_id","uuid!","Which conversation was read."],["last_message_id","uuid!","How far it read — the basis for not re-reading."],["verdict","text!","What it concluded."],["confidence","text","How sure it was."],["product_key","text","The product it thinks is being discussed — used to spot duplicates."],["draft","jsonb","The deal it extracted, ready to become a real one."],["evidence","jsonb","The message snippets it based this on. Kept only while the detection is live, for privacy."],["surfaced_message_id","uuid","The chat line shown to the humans."],["created_at","timestamptz!",null]] },
+
+/* ── record ─────────────────────────────────────────────── */
+audit_log: { g:"record", plain:"The permanent record of every meaningful action. Append-only — rows are never edited or deleted. Each row carries a hash of the one before it, so if anyone tampered with history the chain would break and we'd know.",
+  notice:{k:"secret", t:"53 kinds of action are recorded. entry_hash and prev_entry_hash form the chain — this is what makes the log tamper-evident rather than merely tamper-discouraged."},
+  cols:[["id","uuid!",null],["sequence_number","int!","Position in the chain."],["company_id","uuid!","Which company's history this belongs to."],["actor_person_id","uuid","Who did it."],["actor_type","text!","A person, the system, or Hello Sello staff."],["on_behalf_of_person_id","uuid","Set when staff acted for a user."],["action","text!","What was done — one of 53 recorded action types."],["content_type","text!","What kind of thing it was done to."],["content_id","uuid!","Which specific row."],["before_diff","jsonb","What it looked like before."],["after_diff","jsonb","What it looked like after."],["reason","text","Why, where the action requires a reason."],["reverses_audit_id","uuid","If this undoes an earlier action, which one."],["prev_entry_hash","bytea","The previous row's fingerprint."],["entry_hash","bytea!","This row's fingerprint, computed from its contents plus the previous hash."],["hmac_schema_version","smallint!","Which hashing recipe was used."],["metadata","jsonb!",null],["created_at","timestamptz!",null]] },
+
+/* ── lookups ─────────────────────────────────────────────── */
+deal_card_status: { g:"lookup", plain:"The states a deal can be in.", values:["draft","withdrawn","confirmed","amended","done","cancelled","ticket_created","ticket_closed"] },
+deal_card_ticket_status: { g:"lookup", plain:"Whether a delivery or pickup ticket is still open.", values:["open","closed"] },
+deal_confirmation_status: { g:"lookup", plain:"How a company answered a request to sign a version.", values:["pending","confirmed","rejected"] },
+deal_line_item_allocation_status: { g:"lookup", plain:"The seller's answer on whether they can fill a line.", values:["pending","supply","decline"] },
+deal_line_unit: { g:"lookup", plain:"Units a deal line can be priced in.", values:["g","kg","unit"] },
+deal_type: { g:"lookup", plain:"Whether the seller offered or the buyer ordered.", values:["offer","order"] },
+deal_stage: { g:"lookup", plain:"The five stages a deal moves through.", values:["negotiation","compliance_quality","agreement","payment","fulfilment_delivery"] },
+deal_member_role: { g:"lookup", plain:"Roles someone can hold on a deal.", values:["owner","side_lead","member"] },
+deal_change_origin: { g:"lookup", plain:"What triggered a change to a deal." },
+deal_artifact_category: { g:"lookup", plain:"Kinds of document that can be attached to a deal." },
+workspace_visibility: { g:"lookup", plain:"Who inside your company can see a deal workspace.", values:["company_wide","private"] },
+relationship_status: { g:"lookup", plain:"The states a company-to-company link can be in.", values:["active","suspended","ended"] },
+relationship_term_status: { g:"lookup", plain:"How a proposed standing term was answered.", values:["pending","accepted","rejected"] },
+agreed_term_type: { g:"lookup", plain:"Kinds of standing term two companies can agree.", values:["payment_terms","incoterms","min_order_qty","delivery_lead_time_days","exclusivity"] },
+artifact_category: { g:"lookup", plain:"Kinds of document shared on a relationship." },
+note_scope: { g:"lookup", plain:"Who can read a private note.", values:["team","personal"] },
+inbox_request_type: { g:"lookup", plain:"Kinds of request that land in an inbox. A fifth, connect_person, is added by the pending Discover batch.", values:["connect","connect_message","pricelist_request","deal_card"] },
+inbox_status: { g:"lookup", plain:"How an inbox request was answered.", values:["pending","accepted","rejected"] },
+join_request_status: { g:"lookup", plain:"How a request to join a company was answered.", values:["pending","approved","rejected","cancelled"] },
+company_verification_status: { g:"lookup", plain:"Where a company sits in the verification process. Only verified companies get full access.", values:["pending","verified","rejected","revoked"] },
+company_type: { g:"lookup", plain:"What kind of operator a company is.", values:["pharmacy","wholesaler","importer","gacp_cultivator","eu_gmp_cultivator","tga_gmp_cultivator","manufacturer_pharma","other"] },
+business_category: { g:"lookup", plain:"Which sector a company works in.", values:["pharma","food","fmcg_cpg","automotive","services","custom"] },
+permission_action: { g:"lookup", plain:"The powers that can be granted to a team.", values:["company.edit_profile","team.manage"] },
+pricelist_status: { g:"lookup", plain:"Whether a price list is still being built or is live.", values:["draft","published"] },
+product_unit: { g:"lookup", plain:"Units a product can be measured in.", values:["g","mL","pack"] },
+strain_dominance: { g:"lookup", plain:"Strain classification.", values:["indica","sativa","hybrid","indica_dominant","sativa_dominant"] },
+irradiation_type: { g:"lookup", plain:"How a product was sterilised." },
+terpene: { g:"lookup", plain:"The reference list of aroma compounds, each with a description of how it smells. Batches point at these.", cols:[["code","text!","The machine name."],["name","text!","The compound's name."],["aroma_description","text","What it smells like — 22 of these are Marcel's list."]] },
+incoterms: { g:"lookup", plain:"International shipping terms — who pays for transport and who carries the risk at each point.", values:["EXW","FCA","FAS","FOB","CFR","CIF","CPT","CIP","DAP","DPU","DDP"] },
+payment_terms: { g:"lookup", plain:"When payment is due.", values:["cod","prepaid","net7","net14","net30","net60","net90"] },
+order_channel: { g:"lookup", plain:"How an order actually arrived.", values:["hello_sello","email","fax"] },
+chat_thread_type: { g:"lookup", plain:"The kinds of conversation.", values:["c2c","p2p","deal","group"] },
+chat_message_type: { g:"lookup", plain:"Message kinds. Most are 'message'; the rest are the system announcements that appear as grey centred lines.", values:["message","connection_established","deal_started","intro","deal_detected","workspace_created","deal_cancelled","deal_opened","deal_card_updated","deal_change_declined","deal_card","deal_signed"] },
+content_author: { g:"lookup", plain:"Who wrote a message or made a change.", values:["person","system","sella"] },
+thing_type: { g:"lookup", plain:"Kinds of to-do.", values:["task","approval","document_upload"] },
+thing_status: { g:"lookup", plain:"Whether a to-do is finished.", values:["open","done"] },
+file_scan_status: { g:"lookup", plain:"Virus-scan result for an uploaded file. Nothing opens until it reads clean.", values:["pending","clean","infected","scan_error"] },
+audit_action_type: { g:"lookup", plain:"The 53 kinds of action the audit log records, each tagged with how reversible it is.", cols:[["code","text!",null],["description","text!",null],["category","text!","Which area of the product it belongs to."],["reversibility_tier","text","How hard it is to undo."],["created_at","timestamptz!",null]] },
+audit_actor_type: { g:"lookup", plain:"Who can perform an audited action." },
+auditable_content_type: { g:"lookup", plain:"The kinds of thing the audit log can point at — each names the table it refers to.", cols:[["code","text!",null],["description","text!",null],["target_table","text!","Which table this refers to."]] },
+notification_category: { g:"lookup", plain:"Notification topics. Transactional ones can't be turned off.", values:["join","membership","verification","welcome"] },
+notification_channel: { g:"lookup", plain:"How a notification is delivered." },
+contact_role: { g:"lookup", plain:"Guessed roles for imported email contacts." },
+contact_provider: { g:"lookup", plain:"Where imported contacts came from." }
+};
+
+/* ── foreign keys, read from the live database ────────────── */
+const FK = [
+["group","company_id","company"],["group","parent_group_id","group"],
+["audit_log","company_id","company"],["audit_log","action","audit_action_type"],["audit_log","content_type","auditable_content_type"],["audit_log","reverses_audit_id","audit_log"],
+["batch_terpene","product_batch_id","product_batch"],["batch_terpene","terpene_code","terpene"],
+["chat_message","thread_id","chat_thread"],["chat_message","type","chat_message_type"],["chat_message","sender","content_author"],
+["chat_thread","relationship_id","relationship"],["chat_thread","deal_card_id","deal_card"],["chat_thread","type","chat_thread_type"],
+["chat_thread_member","thread_id","chat_thread"],
+["company","verification_status","company_verification_status"],
+["company_business_category","company_id","company"],["company_business_category","business_category_code","business_category"],
+["company_license_file","company_id","company"],["company_license_file","scan_status","file_scan_status"],
+["company_type_assignment","company_id","company"],["company_type_assignment","company_type_code","company_type"],
+["contact_record","inferred_company_id","company"],["contact_record","provider","contact_provider"],["contact_record","role","contact_role"],
+["deal_artifact","deal_workspace_id","deal_workspace"],["deal_artifact","uploaded_by_company_id","company"],["deal_artifact","category","deal_artifact_category"],["deal_artifact","scan_status","file_scan_status"],
+["deal_card","relationship_id","relationship"],["deal_card","thread_id","chat_thread"],["deal_card","initiating_company_id","company"],["deal_card","status","deal_card_status"],["deal_card","deal_type","deal_type"],["deal_card","payment_terms_code","payment_terms"],["deal_card","incoterms_code","incoterms"],["deal_card","ordered_via","order_channel"],["deal_card","ticket_status","deal_card_ticket_status"],
+["deal_card_log","deal_card_id","deal_card"],["deal_card_log","origin","deal_change_origin"],["deal_card_log","changed_by","content_author"],
+["deal_change_input","deal_card_id","deal_card"],["deal_change_input","log_id","deal_card_log"],
+["deal_confirmation","deal_card_id","deal_card"],["deal_confirmation","company_id","company"],["deal_confirmation","status","deal_confirmation_status"],
+["deal_line_item","deal_card_id","deal_card"],["deal_line_item","product_id","product"],["deal_line_item","batch_id","product_batch"],["deal_line_item","unit","deal_line_unit"],["deal_line_item","allocation_status","deal_line_item_allocation_status"],["deal_line_item","substituted_from_product_id","product"],
+["deal_line_item_private","deal_line_item_id","deal_line_item"],["deal_line_item_private","company_id","company"],
+["deal_member","deal_workspace_id","deal_workspace"],["deal_member","role","deal_member_role"],
+["deal_party_field","deal_card_id","deal_card"],["deal_party_field","owner_company_id","company"],
+["deal_pending_change","deal_card_id","deal_card"],["deal_pending_change","proposed_by_company","company"],
+["deal_promotion","deal_card_id","deal_card"],["deal_promotion","offered_by_company","company"],
+["deal_stage_completion","deal_workspace_id","deal_workspace"],["deal_stage_completion","stage_code","deal_stage"],
+["deal_workspace","deal_card_id","deal_card"],["deal_workspace","visibility","workspace_visibility"],
+["join_request","target_company_id","company"],["join_request","status","join_request_status"],
+["notification_preference","category_code","notification_category"],["notification_preference","channel_code","notification_channel"],
+["pending_inbox_item","receiver_company_id","company"],["pending_inbox_item","sender_company_id","company"],["pending_inbox_item","deal_card_id","deal_card"],["pending_inbox_item","status","inbox_status"],["pending_inbox_item","type","inbox_request_type"],["pending_inbox_item","receiver_person_id","person"],
+["permission_matrix_entry","company_id","company"],["permission_matrix_entry","group_id","group"],["permission_matrix_entry","action","permission_action"],
+["person","company_id","company"],
+["person_group","group_id","group"],
+["person_connection","person_a_id","person"],["person_connection","person_b_id","person"],
+["pricelist","company_id","company"],["pricelist","status_code","pricelist_status"],
+["pricelist_item","pricelist_id","pricelist"],["pricelist_item","product_id","product"],
+["product","company_id","company"],["product","unit_code","product_unit"],["product","dominance_code","strain_dominance"],["product","irradiation_code","irradiation_type"],
+["product_basket_line","product_id","product"],
+["product_batch","company_id","company"],["product_batch","product_id","product"],
+["product_buyer_code","product_id","product"],["product_buyer_code","relationship_id","relationship"],
+["product_cost","product_id","product"],["product_cost","company_id","company"],
+["product_image","product_id","product"],["product_image","company_id","company"],
+["product_media","product_id","product"],["product_media","company_id","company"],
+["relationship","company_a_id","company"],["relationship","company_b_id","company"],["relationship","initiated_by_company_id","company"],["relationship","inbox_item_id","pending_inbox_item"],["relationship","status","relationship_status"],
+["relationship_artifact","relationship_id","relationship"],["relationship_artifact","uploaded_by_company_id","company"],["relationship_artifact","category","artifact_category"],["relationship_artifact","scan_status","file_scan_status"],
+["relationship_note","relationship_id","relationship"],["relationship_note","company_id","company"],["relationship_note","scope","note_scope"],
+["relationship_term","relationship_id","relationship"],["relationship_term","proposed_by_company_id","company"],["relationship_term","status","relationship_term_status"],["relationship_term","term_type_code","agreed_term_type"],["relationship_term","superseded_by_id","relationship_term"],
+["sella_detection","thread_id","chat_thread"],["sella_detection","last_message_id","chat_message"],["sella_detection","surfaced_message_id","chat_message"],
+["thing","deal_workspace_id","deal_workspace"],["thing","owner_company_id","company"],["thing","stage_code","deal_stage"],["thing","status","thing_status"],["thing","type","thing_type"],["thing","linked_artifact_id","deal_artifact"],["thing","linked_confirmation_id","deal_confirmation"]
+];
+/* Every table also points at `person` through created_by / updated_by — noted once
+   in the legend rather than repeated 200 times in the link lists. */
+
+const STORIES = [
+  { eyebrow:"Flow 1", title:"Somebody signs up", note:"From an email address to a working company account.",
+    steps:[
+      ["person","Supabase records the login, and a database trigger immediately creates the matching row here. At this moment they have no company."],
+      ["company","They fill in the onboarding form and a company row is created — or, if their employer already exists, a join_request goes to that company's admin instead."],
+      ["company_business_category","Their sector and operator-type picks are written as one row each, because both are multi-select."],
+      ["company_license_file","Their trading licence is uploaded to a locked bucket and queued for a virus scan."],
+      ["audit_log","The whole thing is recorded. Hello Sello staff then verify the company, which is what unlocks full access."]
+    ]},
+  { eyebrow:"Flow 2", title:"Two companies connect", note:"The moment that unlocks prices, chat and deals between them.",
+    steps:[
+      ["pending_inbox_item","One company sends a connect request. It sits in the other company's inbox as a pending row."],
+      ["relationship","They accept — and this row is created. This is the switch: from here on, each can see the other's catalogue."],
+      ["chat_thread","A company-to-company thread is opened automatically so they have somewhere to talk."],
+      ["chat_message","A system line appears in it — connection_established — so both sides see when it started."]
+    ]},
+  { eyebrow:"Flow 3", title:"A deal gets made", note:"The longest flow, and the one worth understanding properly.",
+    steps:[
+      ["product_basket_line","A buyer browses a shop and adds products. The basket belongs to the person, not the company."],
+      ["deal_card","They send it. Version 1 is created, pointing at the relationship between the two companies."],
+      ["deal_line_item","Each basket line becomes a deal line — with the product name, price and THC copied in, so the line still reads true if the product is edited later."],
+      ["deal_workspace","Each side gets its own private room around the deal, and a deal-specific chat thread opens."],
+      ["deal_pending_change","The seller wants to change a price. The proposed version sits here as a draft — the real deal is untouched until it's accepted."],
+      ["deal_card_log","The buyer accepts. Version 2 is written, and a history entry records what changed and why."],
+      ["deal_confirmation","Both sides sign that version. Two confirmed rows on the same version means agreed."],
+      ["chat_message","A deal_signed line is posted into the chat, so the agreement shows up where people are actually looking."]
+    ]},
+  { eyebrow:"Flow 4", title:"Two people connect on Discover", note:"A second, separate network — and the part not yet on production.",
+    steps:[
+      ["pending_inbox_item","A connect request addressed to a person rather than a company. That's what the new receiver_person_id column is for."],
+      ["person_connection","They accept, and the link is stored here — in its own table, quite separate from company relationships."],
+      ["chat_thread","A person-to-person thread opens so they can talk directly."],
+      ["relationship","Deliberately untouched. Connecting to a person does not connect your companies, and grants no access to prices or deals."]
+    ]}
+];
+
+/* ─────────────────────────── render ─────────────────────────── */
+const el = (t, c, x) => { const n = document.createElement(t); if (c) n.className = c; if (x !== undefined) n.textContent = x; return n; };
+const names = Object.keys(T);
+const isLookup = n => T[n].g === "lookup";
+
+document.getElementById("c-tables").textContent = names.length;
+document.getElementById("c-real").textContent   = names.filter(n => !isLookup(n)).length;
+document.getElementById("c-lookup").textContent = names.filter(isLookup).length;
+
+const dwrap = document.getElementById("districts");
+for (const [key, g] of Object.entries(GROUPS)) {
+  const list = names.filter(n => T[n].g === key).sort();
+  const card = el("div", "district");
+  card.style.setProperty("--dc", `var(${g.color})`);
+  card.dataset.group = key;
+
+  const head = el("div", "district-head");
+  head.append(el("span", "dot"), el("h3", null, g.name), el("span", "n", list.length));
+  card.append(head, el("p", null, g.blurb));
+
+  const chips = el("div", "chips");
+  for (const n of list) {
+    const b = el("button", "chip" + (T[n].pending ? " pending" : ""));
+    b.type = "button";
+    b.dataset.table = n;
+    b.textContent = n;
+    if (T[n].pending) { const s = el("span", "pdot", " ●"); b.append(s); b.title = "Not on production yet"; }
+    b.addEventListener("click", () => open(n));
+    chips.append(b);
+  }
+  card.append(chips);
+  dwrap.append(card);
+}
+
+const swrap = document.getElementById("stories");
+for (const s of STORIES) {
+  const c = el("div", "story");
+  c.append(el("span", "eyebrow", s.eyebrow), el("h3", null, s.title), el("p", null, s.note));
+  const ol = el("ul", "steps");
+  for (const [tbl, txt] of s.steps) {
+    const li = el("li");
+    const t = el("div", "t");
+    const b = el("button", null, tbl); b.type = "button";
+    b.addEventListener("click", () => open(tbl));
+    t.append(b);
+    li.append(t, el("span", "d", txt));
+    ol.append(li);
+  }
+  c.append(ol);
+  swrap.append(c);
+}
+
+/* ─────────────────────────── search ─────────────────────────── */
+const q = document.getElementById("q");
+const hits = document.getElementById("hits");
+q.addEventListener("input", () => {
+  const v = q.value.trim().toLowerCase();
+  let shown = 0;
+  for (const card of dwrap.children) {
+    let any = 0;
+    for (const chip of card.querySelector(".chips").children) {
+      const match = !v || chip.dataset.table.includes(v) || (T[chip.dataset.table].plain || "").toLowerCase().includes(v);
+      chip.hidden = !match;
+      if (match) any++;
+    }
+    card.hidden = any === 0;
+    card.querySelector(".n").textContent = any;
+    shown += any;
+  }
+  hits.textContent = v ? `${shown} of ${names.length}` : "";
+});
+
+/* ─────────────────────────── drawer ─────────────────────────── */
+const drawer = document.getElementById("drawer");
+const scrim  = document.getElementById("scrim");
+const dbody  = document.getElementById("dbody");
+let lastFocus = null;
+
+function open(name) {
+  const t = T[name];
+  if (!t) return;
+  lastFocus = document.activeElement;
+
+  drawer.style.setProperty("--dc", `var(${GROUPS[t.g].color})`);
+  document.getElementById("dgrp").textContent = GROUPS[t.g].name + (t.pending ? " · not on production yet" : "");
+  document.getElementById("dname").textContent = name;
+  document.getElementById("dplain").textContent = t.plain;
+
+  const nb = document.getElementById("dnotice");
+  nb.innerHTML = "";
+  if (t.notice) nb.append(el("div", "notice" + (t.notice.k === "secret" ? " secret" : ""), t.notice.t));
+
+  dbody.innerHTML = "";
+
+  if (t.values) {
+    dbody.append(el("div", "drawer-sub", `The allowed values (${t.values.length})`));
+    const vl = el("div", "valuelist");
+    t.values.forEach(v => vl.append(el("span", null, v)));
+    dbody.append(vl);
+  }
+
+  const cols = t.cols || (t.g === "lookup" ? [["code","text!",null],["description","text!",null],["sort_order","smallint!",null]] : null);
+  if (cols) {
+    dbody.append(el("div", "drawer-sub", `Columns (${cols.length}) — greyed rows are the everywhere-columns`));
+    const box = el("div", "cols");
+    for (const [cn, ct, cd] of cols) {
+      const plumb = PLUMBING[cn] !== undefined && !cd;
+      const row = el("div", "col-row" + (plumb ? " plumbing" : ""));
+      const nm = el("div", "cn");
+      nm.append(document.createTextNode(cn.replace(/!$/, "")));
+      if (ct.endsWith("!")) { const r = el("span", "req", " *"); r.title = "Required — cannot be empty"; nm.append(r); }
+      row.append(nm, el("div", "ct", ct.replace(/!$/, "")), el("div", "cd", cd || PLUMBING[cn] || ""));
+      box.append(row);
+    }
+    dbody.append(box);
+  }
+
+  const out = FK.filter(f => f[0] === name);
+  const inn = FK.filter(f => f[2] === name && f[0] !== name);
+  if (out.length) {
+    dbody.append(el("div", "drawer-sub", `This table points at (${out.length})`));
+    const b = el("div");
+    out.forEach(([, col, tgt]) => {
+      const l = el("div", "linkline");
+      const code = el("span", "mono"); code.textContent = col; code.style.fontSize = "12.5px";
+      l.append(code, el("span", "arrowto", "  →  "));
+      const btn = el("button", null, tgt); btn.type = "button";
+      btn.addEventListener("click", () => open(tgt));
+      l.append(btn);
+      b.append(l);
+    });
+    dbody.append(b);
+  }
+  if (inn.length) {
+    dbody.append(el("div", "drawer-sub", `Points back at this table (${inn.length})`));
+    const b = el("div");
+    inn.forEach(([src, col]) => {
+      const l = el("div", "linkline");
+      const btn = el("button", null, src); btn.type = "button";
+      btn.addEventListener("click", () => open(src));
+      l.append(btn, el("span", "arrowto", "  via  "));
+      const code = el("span", "mono"); code.textContent = col; code.style.fontSize = "12.5px";
+      l.append(code);
+      b.append(l);
+    });
+    dbody.append(b);
+  }
+  if (!out.length && !inn.length) {
+    dbody.append(el("div", "drawer-sub", "Connections"));
+    dbody.append(el("div", "linkline", "Nothing links to this table directly."));
+  }
+
+  dbody.scrollTop = 0;
+  drawer.classList.add("on");
+  scrim.classList.add("on");
+  drawer.focus();
+}
+
+function close() {
+  drawer.classList.remove("on");
+  scrim.classList.remove("on");
+  if (lastFocus) lastFocus.focus();
+}
+document.getElementById("dclose").addEventListener("click", close);
+scrim.addEventListener("click", close);
+document.addEventListener("keydown", e => { if (e.key === "Escape") close(); });
+</script>
+</body>
+</html>

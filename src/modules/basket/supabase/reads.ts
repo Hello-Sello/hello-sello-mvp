@@ -23,29 +23,47 @@ export async function getMyBasket(): Promise<BasketView> {
   if (personError) throw personError;
   const viewerCompanyId = viewerPerson?.company_id ?? "";
 
-  // RLS-scoped: only my lines. Join the product + its owning company; prices
-  // come from the single owner (current-price view — one row per product, so
-  // the old embed-ordering hack is gone), stitched by product id.
-  const { data: rows, error } = await supabase
-    .from("product_basket_line")
-    .select(
-      "id, pack_count, pack_size_grams, " +
-      "product:product_id(id, name, cultivar, unit_code, local_code_pzn, company_id, " +
-      "company:company_id(id, name))",
-    )
-    .order("created_at", { ascending: true });
+  // Curated read, NOT a PostgREST embed off `product`.
+  //
+  // A basket line may legitimately point at a seller's HIDDEN product (T07
+  // admits it when the product carries a public price), and `product` RLS does
+  // not return that row — deliberately, because the row carries confidential
+  // columns. An embed therefore yields `product: null` for exactly those lines
+  // and the mapper below would blank the entire basket. `get_my_basket_lines()`
+  // projects the ten fields rendered here and enforces ownership on auth.uid().
+  const { data: rows, error } = await supabase.rpc("get_my_basket_lines");
   if (error) throw error;
 
-  const typedRows = rows as unknown as Array<{
+  const typedRows = ((rows ?? []) as Array<{
     id: string;
     pack_count: number;
     pack_size_grams: number | null;
+    product_id: string;
+    // null once the product stops being visible to this caller — hidden,
+    // soft-deleted, out of its window, or the connection ended. The line still
+    // returns so it can be seen and removed; only the details go dark.
+    product_name: string | null;
+    cultivar: string | null;
+    unit_code: string | null;
+    local_code_pzn: string | null;
+    seller_company_id: string;
+    seller_company_name: string | null;
+  }>).map((r) => ({
+    id: r.id,
+    pack_count: r.pack_count,
+    pack_size_grams: r.pack_size_grams,
     product: {
-      id: string; name: string; cultivar: string | null; unit_code: string | null;
-      local_code_pzn: string | null; company_id: string;
-      company: { id: string; name: string } | null;
-    };
-  }>;
+      id: r.product_id,
+      name: r.product_name ?? "No longer available",
+      cultivar: r.cultivar,
+      unit_code: r.unit_code,
+      local_code_pzn: r.local_code_pzn,
+      company_id: r.seller_company_id,
+      company: r.seller_company_name === null
+        ? null
+        : { id: r.seller_company_id, name: r.seller_company_name },
+    },
+  }));
 
   const productIds = [...new Set((typedRows ?? []).map((r) => r.product.id))];
   const prices = productIds.length

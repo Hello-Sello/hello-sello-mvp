@@ -1,17 +1,21 @@
 # Build Pipeline — how work gets done
 
-> **Status: DESIGN FINAL (2026-08-14). Nothing built yet — the manual dry-run comes first.**
+> **Status: DESIGN FINAL (2026-08-14) · DRY-RUN COMPLETE (2026-08-16) · verdict GO — what remains is building the Tier 1 files.**
 >
-> Four rounds of CTO critique + a research-conformance pass applied. What remains before any code: run the whole thing
-> **manually, by hand, on one real ticket.** If the manual pass does not visibly beat how
-> you would have done it anyway, the design is wrong — and you find out in a day instead
-> of a month.
+> Four rounds of CTO critique + a research-conformance pass, and then the whole pipeline was
+> run **manually, by hand, on one real feature** — the tier ladder (`0021`), triage through
+> live contract migration on production. Every stage and every gate was exercised. It beat
+> the unaided baseline, so the design stands, with the amendments the run forced written
+> into §5, §7, §9, §10, §11, §13, §14 and §16 below.
+>
+> Record: [`DRY-RUN-tier-ladder.md`](./DRY-RUN-tier-ladder.md) — per-stage keep/cut/change
+> table, the seven checker rounds, the predictions-vs-outcome comparison.
 >
 > Diagram: [`pipeline.svg`](./pipeline.svg) — two levels: the five blocks, then what runs
 > inside each.
 > Owner: Muskan.
 
-Idea → **live and verified**. Five commands, five gates. Everything between a gate and the
+Idea → **live and verified**. Seven skills — five staged (`/spec` `/prototype` `/design` `/build` `/ship`) plus `/triage` in front and `/diagnose` for the BUG lane — and five gates. Everything between a gate and the
 next one runs without you.
 
 ---
@@ -31,8 +35,8 @@ distance from one gate to the next and does not stop in between.
 | `/spec <slug>` | `researcher` (prior-art sweep) → interview → write the spec | 🚦 **G1** |
 | `/prototype <slug>` | read the spec → build 2–3 variants → you pick | 🚦 **G2** *(frontend only)* |
 | `/design <slug>` | `researcher` (approaches) → ADR + invariants → `adr-checker` → breakdown → tickets | 🚦 **G3** |
-| `/build <ticket>` | plan → `plan-checker` → `test-writer` → `builder` → `test-runner` → reviewers → `visual-verifier` | 🚦 **G4** |
-| `/ship <slug>` | **rebase onto `dev`** → re-run the suite → PR → merge → deploy → walk the criteria on the live URL | 🚦 **G5** |
+| `/build <ticket>` | **base sync** (pull own branch; behind `dev` → rebase NOW, then the base is frozen until `/ship`) → plan → `plan-checker` → `test-writer` → `builder` → `test-runner` → reviewers → `visual-verifier` | 🚦 **G4** |
+| `/ship <slug>` | **rebase onto `dev`** → re-run the suite → **Claude Security plugin "scan changes"** → PR → merge → deploy → walk the criteria on the live URL · **stops at the ask rule when the wave writes prod data** (§9) | 🚦 **G5** |
 | `/diagnose <bug>` | reproduce → write the failing regression test | *hands to `/build`* |
 
 A FULL feature is **five or six things you type**, not eight. `/build` alone replaces four
@@ -71,7 +75,7 @@ Six questions. **Any YES pushes the lane up.**
 | 2 | Touches a migration, RLS, an RPC, or auth? | FULL |
 | 3 | Introduces a concept not already in `CONTEXT.md`? | FULL |
 | 4 | **Changes what the product *does*** — a rule, a condition, who sees what? | STANDARD |
-| 5 | Touches a file in the other engineer's lane? | STANDARD + sync ritual |
+| 5 | Touches a file another active session has locked? | STANDARD + sync ritual |
 | 6 | More than one ticket of work? | STANDARD |
 
 All NO → **TRIVIAL**.
@@ -106,9 +110,11 @@ Triage stays a 60-second guess — it just stops being the last word.
 Most weeks are bugs. A bug's workflow is not a feature's, and running one through the
 feature path produces a fix with no proof it fixed anything.
 
-`/diagnose` already exists as a skill. It slots in unchanged, with one addition made
-mandatory: **the reproduction becomes a permanent regression test before the fix is
-written.** Not "a test" — *the* test that fails for the reported reason and passes after.
+`/diagnose` is a **project skill** (`.claude/skills/diagnose/` — it overrides the generic
+global one inside this repo, which fixes bugs itself). The pipeline version stops earlier,
+and one thing is mandatory: **the reproduction becomes a permanent regression test before
+any fix is written.** Not "a test" — *the* test that fails for the reported reason and
+passes after.
 
 That test is what `/build` then implements against, and what stops the bug coming back.
 
@@ -232,7 +238,7 @@ that is `/design`'s failure, not yours.
 | Section | Says | Who reads it |
 |---|---|---|
 | **Reused** | *Already built — we feed it, don't touch.* What this work builds on and must not modify | `consistency` checks the diff against it; `builder` gets it as a fence |
-| **Blast-radius** | What else this could break, traced — every caller, every cross-lane surface, Ayush's RPCs | `security` + the reviewers; it is the risk map for the whole ticket set |
+| **Blast-radius** | What else this could break, traced — every caller, every cross-surface dependency, **every RPC and base table you did not write** | `security` + the reviewers; it is the risk map for the whole ticket set |
 
 **Fix two — `adr-checker`.** Read-only, runs after the ADR is drafted and before G3. It
 asks three things nothing else asks:
@@ -245,13 +251,33 @@ asks three things nothing else asks:
 Its output is short — *agree / disagree / what I would push back on* — in plain English, on
 top of the ADR. **It does not replace your gate. It feeds it.**
 
+**The nine categories it must sweep — derived from the dry-run, not invented.** The three
+questions above are the *shape* of the review; these are its *surface*. One pass is not one
+perspective, so the agent's prompt enumerates them as an explicit checklist:
+
+| # | Category | What it actually catches |
+|---|---|---|
+| 1 | **Citation truth** | A claim attributed to a file or line that the file does not say |
+| 2 | **Security doors** | RLS enabled · policies present · grants · **both `anon` AND `authenticated`** · `SECURITY DEFINER` re-grants — the concrete checks are [`SECURITY-CHECKLIST.md`](./SECURITY-CHECKLIST.md), S1–S8 |
+| 3 | **Postgres semantics** | Every statement quoted verbatim actually does what the ADR claims it does |
+| 4 | **Deploy-window + ops-ritual reality** | Migration order, same-deploy rules, what is live versus local |
+| 5 | **Call-site truth** | **Writers, not just readers** — and quantities actually present in the code |
+| 6 | **Cross-ADR contradictions** | Via `ADR-INDEX.md` — the accumulating-corpus problem |
+| 7 | **Data loss at migrations** | What a `DROP` / `UPDATE` / backfill destroys that nothing restores |
+| 8 | **Enforceability of every invariant** | An invariant nothing can enforce is a wish, not an invariant |
+| 9 | **Unit / null contracts** | Grams versus packs, nullable versus absent — where two functions disagree |
+
+Category 2 has the best observed record: it produced the reinstated `is_caller_verified()`
+arm *and* surfaced a live production defect (`list_discoverable_companies` had lost its
+verified gate). Category 5 is why reader-only reviews miss writers.
+
 > **Dry-run verdict (2026-08-16): `adr-checker` is promoted Tier 2 → Tier 1.** On the
-> tier-ladder ADR (0021) it ran 7 genuinely fresh separate-context rounds and caught ~70
+> tier-ladder ADR (0021) it ran 7 genuinely fresh separate-context rounds and caught 96
 > findings across security / schema / deploy-ordering / cross-ADR classes — never
 > converging to zero (11+15+15+14+15+14+12), including a live security hole that one of
 > the fix revisions itself introduced. Full trail: `docs/agents/DRY-RUN-tier-ladder.md`.
 
-**Three operating rules, locked by the dry-run:**
+**Four operating rules, locked by the dry-run:**
 
 1. **Fresh context, every round.** The checker must be a genuinely fresh separate-context
    agent — never the ADR's author re-checking their own work. The author defends; only a
@@ -263,16 +289,21 @@ top of the ADR. **It does not replace your gate. It feeds it.**
 3. **Fixes carry a simplification bias.** Prefer removing a mechanism over adding one. The
    single round that made the ADR *worse* was the one revision that answered a finding by
    adding a new RPC instead of deleting the problem (rev 6's hole, removed in rev 7).
+4. **Its output is claims to spot-verify, not verdicts.** Round 5 overturned two of the
+   checker's own earlier findings — the round-2 *"policies silently inert"* rationale was
+   wrong (an `rls_auto_enable` event trigger exists, `ARCHITECTURE-NOTES:231`), and a rev-4
+   blast-radius flag described a change that could not happen. **Checkers err; only repo
+   evidence settles it.** Tier 1 buys this agent a seat at the gate, not the last word.
 
 **It reads an index, not every ADR.** "Read every ADR we have ever written" is fine at 3 and
 useless at 40 — and question 3 gets *harder* as the corpus grows, which is backwards. So
 `/design` maintains one line per ADR:
 
 ```
-| ADR | Decision, in one line                          | Touches                    |
-|-----|------------------------------------------------|----------------------------|
-| 006 | Deal visibility is one flag, not two layers    | deals · RLS · chat         |
-| 014 | Pricelists bind to a relationship, not a buyer  | pricing · relationship · RLS |
+| ADR  | Decision, in one line                          | Touches                    |
+|------|------------------------------------------------|----------------------------|
+| 0006 | Deal visibility is one flag, not two layers    | deals · RLS · chat         |
+| 0014 | Pricelists bind to a relationship, not a buyer  | pricing · relationship · RLS |
 ```
 
 `adr-checker` reads the index, then opens **only the ADRs whose areas overlap this one.**
@@ -313,6 +344,11 @@ T02 and T03 can run at the same time. T04 cannot start until both land.
 editing one file concurrently produces a merge to untangle, not speed — which is a cost,
 not a saving.
 
+> **Worktree base is solved (Aug-2026):** `worktree.baseRef: "head"` in the checked-in
+> `.claude/settings.json` makes every worktree — including `/build`'s parallel builders —
+> branch from the **current checkout**, not a stale `main`. The June manual workaround
+> (pre-create off `origin/dev`) is retired.
+
 ---
 
 ## 6. STATE.md — the work order
@@ -324,9 +360,12 @@ gitignored, copied one-way into a worktree at creation, and getting it back is a
 `cp`. A state file that cannot survive a worktree is not a handoff contract. Because it is
 scoped per-slug, two people on different features never touch the same file.
 
-**Who writes it:** every skill, as its last step. **A hook enforces it** — if `stage` did
-not advance, the skill cannot finish. Without that hook it rots into a stale document and
-the pipeline quietly moves back into conversation, which is the thing it exists to prevent.
+**Who writes it:** every skill, as its last step. **A hook backstops it** — the Stop hook
+checks the working tree *and* the last commit for slug-folder changes with no STATE.md
+advance (skills commit as they go, so a clean tree proves nothing). A multi-commit miss
+can still slip it; the §16 roll-up is the second net. Without both, this rots into a stale
+document and the pipeline quietly moves back into conversation, which is the thing it
+exists to prevent.
 
 **Why it exists, in one sentence:** when you type `/design` tomorrow, that skill has **no
 memory of today's `/spec` conversation** — new session, cleared context, maybe a different
@@ -385,9 +424,14 @@ folder instead of a file.
 | Artifact | Pattern | Example |
 |---|---|---|
 | Spec | `docs/PRD/NNNN-<slug>.md` | `0007-pricelist.md` |
-| ADR | `docs/architecture/adr/ADR-NNN-<slug>.md` | already the convention — keep it |
+| ADR | `docs/architecture/adr/NNNN-<slug>.md` | `0004-tier-ladder.md` — the ADR corpus keeps its **own** sequence (next free number in `adr/`), independent of the slug's: a slug can produce zero or several ADRs, and the index is how you walk between them (corrected 2026-08-18 — an earlier draft claimed an `ADR-` prefix that was never the on-disk convention) |
 | Build folder | `docs/muskan-build/NNNN-<slug>/` | `0007-pricelist/` — same number as its spec |
 | Prototype | `prototypes/NNNN-<slug>-prototype/` | `0007-pricelist-prototype/` — same number (added 2026-08-14, dry-run) |
+
+Research needs no number of its own: the sweep reports land in the slug's build folder
+as `RESEARCH.md` (`/spec` writes *What exists*, `/design` appends *Approaches*) — they
+are point-in-time scaffolding and archive with the slug (decided 2026-08-18; an earlier
+draft put them in `docs/research/`, a flat pile nothing archives).
 
 Zero-padded, sequential, **never reused** — a number is an identity, not a position. The
 spec and its build folder share one number, so you can walk from either to the other.
@@ -400,36 +444,41 @@ every file below is named from it, including the git branch.
 
 ```
 docs/
-├─ research/
-│    pricelist-existing.md        ← Research A · what already exists
-│    pricelist-approach.md        ← Research B · the options + trade-offs
 ├─ PRD/
 │    0007-pricelist.md            ← the WHAT.  permanent.  ("design contracts /
 │                                    the what" — this folder's declared purpose)
 ├─ architecture/adr/
 │    ADR-INDEX.md                 ← one line per ADR + areas it touches
-│    ADR-014-pricelist.md         ← the DECISION + invariants.  permanent.
-│                                    (the 3 existing ADRs already live here)
+│    0005-pricelist.md            ← the DECISION + invariants.  permanent.
+│                                    own sequence — 0001–0004 already live here
 └─ muskan-build/
      0007-pricelist/              ← everything disposable, one folder
        STATE.md                   ← the work order.  committed
+       RESEARCH.md                ← the sweeps: What exists (/spec) +
+                                    Approaches (/design)
        TICKETS.md                 ← tickets · S/M/XS · dependency order
-       plan-T01.md                ← one per ticket
-       review-T01.md              ← findings: blocking / note / rejected
-       visual-T01.md              ← G4 screenshots + criteria walk
+       PLAN-T01.md                ← one per ticket
+       REVIEW.md                  ← ONE per slug, appended per round.
+                                    every finding tagged blocking / note /
+                                    rejected AND attributed to the agent
+                                    that made it — "(consistency)",
+                                    "(critic, migration:192)".  the G4
+                                    visual walk + prototype DEVIATIONs
+                                    append here too.  that attribution is
+                                    what makes the §16 roll-up possible
        blocked.md                 ← only exists if a retry budget blew
                                     ("the how, one file per item" — this
                                     folder's declared purpose, now a folder
-                                    per item.  Ayush's equivalent lane is
-                                    _workshop/build-plans/)
+                                    per item.  The earlier parallel lane,
+                                    _workshop/build-plans/, is history now)
 
 prototypes/
-└─ pricelist-prototype/
+└─ 0007-pricelist-prototype/
      index.html                   ← the approved variant.  the G4 contract
 
 .claude/
 ├─ skills/<name>/SKILL.md         ← the 7 things you type
-├─ agents/<name>.md               ← the 10 workers
+├─ agents/<name>.md               ← the 11 workers
 └─ settings.json                  ← the hooks
 
 supabase/migrations/              ← unchanged, existing convention
@@ -443,13 +492,13 @@ ships.
 
 ---
 
-## 7. Agents — ten workers
+## 7. Agents — eleven workers
 
 `.claude/agents/<name>.md`. Fresh context, returns one artifact, then dies.
 
 | Agent | Asks | Tools |
 |---|---|---|
-| `researcher` | What exists? What are the approaches? | read + web, no write |
+| `researcher` | What exists? What are the approaches? | read + web + Linear reads, no write |
 | `adr-checker` | Does this decision hold up? Does it break an older one? | read-only |
 | `plan-checker` | Will this plan reach the goal? | read-only |
 | `test-writer` | What does the spec say correct looks like? | read + write tests |
@@ -457,39 +506,47 @@ ships.
 | `test-runner` | Run and report | read + bash, **no edit** |
 | `critic` | Correct? Scope creep? Breaks an invariant? | read-only |
 | `consistency` | Reused ours, or invented and patched? | read-only |
-| `security` | RLS · tenant isolation · exposed data | read-only |
+| `security` | RLS · tenant isolation · exposed data · grants on **both** client roles | read-only; runs [`SECURITY-CHECKLIST.md`](./SECURITY-CHECKLIST.md) |
 | `visual-verifier` | Does it match what we approved? | browser + screenshots |
+| `rollup` | What did each stage actually catch, per the artifacts? | read-only (**fresh context — see §16**) |
 
-**Exactly one of the ten can write source code: `builder`.** Everything else is scoped by
+**Exactly one of the eleven can write source code: `builder`.** Everything else is scoped by
 its `tools:` line — structurally, not by asking nicely.
 
-### Why ten is not GSD's thirty-three
+### Why eleven is not GSD's thirty-three
 
 R6 explicitly rejected "a separate agent per SDLC role (8 agents) — that's GSD's mistake."
-Ten is more than eight, so the tension has to be answered, not ignored.
+Eleven is more than eight, so the tension has to be answered, not ignored.
 
 The difference is **shape, not count.** GSD's fleet was writers and orchestrators — a
 planner writing plans, executors writing code, coordinators coordinating — each adding its
-own output to the pile. Ours is **one writer and nine read-only checkers**, which is the
+own output to the pile. Ours is **one writer and ten read-only checkers**, which is the
 shape note 09 endorses: *"built-ins already cover explore and plan; our custom agents
 should be the checker roles."* A checker runs once, returns a verdict, and dies. It cannot
 compound.
 
 But the count still gets earned, not assumed: **the agents are tiered in §13.** Tier 1 has
-independent evidence behind it today. Tier 2 is hypothesis — each of those agents exists
-because of an argument, not an observed catch. **The manual dry-run is the trial:** any
-Tier 2 agent that catches nothing a Tier 1 agent or Muskan would have caught gets cut
-before it is ever built.
+independent observed evidence. Tier 2 started as hypothesis — an argument rather than an
+observed catch. **The manual dry-run was the trial, and it has run:** any Tier 2 agent that
+catches nothing a Tier 1 agent or Muskan would have caught gets cut before it is ever built.
+**Nothing was cut** — the two agents first marked "on watch" were promoted on re-reading the
+evidence. See the tiering table in §13, and §16 for why the first reading got it wrong.
 
-> **Dry-run result (2026-08-16):** `adr-checker` passed the trial and is **Tier 1** — ~70
+> **Dry-run result (2026-08-16):** `adr-checker` passed the trial and is **Tier 1** — 96
 > observed catches across 7 fresh-context rounds on the tier-ladder ADR, including classes
 > (cross-ADR contradiction, deploy-ordering, a fix-introduced security hole) that neither
 > Muskan nor a Tier 1 agent had caught. Its operating rules are locked in the `/design`
 > section above. `plan-checker`'s headline predicted catch (missed call sites —
 > `template.ts`, `get_discoverable_shop`) was pre-empted at design time: the ADR already
 > carried both re-declares before any plan existed. No decisive independent catch was
-> recorded in the T01–T08 sprint — it stays **Tier 2, on watch** for the next slugs
-> rather than cut outright.
+> recorded in the T01–T08 sprint — so it was first marked Tier 2, on watch.
+>
+> **Corrected 2026-08-18: `plan-checker` is Tier 1, and so is `consistency`.** That first
+> reading scored both agents only on whether their *predicted* catch landed, without reading
+> the slug's `REVIEW.md` — which records `plan-checker` returning REVISE on all three plans it
+> saw (headline: a backfill `NOT(a AND b AND c)` hole excluding the main malformed case from
+> the rescue path) and attributes T02's only blocking finding to `consistency`. Neither was
+> cut, and neither should have been on watch. See §16.
 
 `researcher` is custom rather than the built-in Explore because it needs to know *your*
 corpus: `docs/product/surfaces/`, PRDs, `DECISIONS.md`, `ARCHITECTURE-NOTES.md`, Linear,
@@ -501,11 +558,13 @@ nobody checked the plan. We build the checker.
 **No spec-checker.** You read the spec at G1. If that proves leaky after a few features,
 build one then.
 
-### Models are unpinned
+### Models are pinned where judgment concentrates
 
-Earlier drafts asserted Opus here, Sonnet there. That was a guess dressed as a finding —
-the exact habit worth avoiding. **Everything inherits the session model until we have
-measured a reason to pin it.** Revisit after the manual dry-run.
+Revised 2026-08-18 (Muskan's call, building the agents): **judgment-heavy checkers pin
+the smartest model** — Opus on `critic`, `security`, `adr-checker`, `plan-checker`,
+`rollup`, `visual-verifier`; Sonnet on the pattern-matchers and mechanical roles —
+`consistency`, `researcher`, `test-writer`, `test-runner`. Only `builder` inherits the
+session model. Re-measure if a Sonnet role starts missing catches.
 
 ### Review routing
 
@@ -536,6 +595,14 @@ confidently wrong `critic` makes `builder` introduce a real bug to satisfy it.
 
 Never silent compliance. Never silent dismissal. Both are how a review theatre forms.
 
+> **⚠️ Both mechanisms are unproven.** Across the dry-run's eight tickets, `builder`
+> rejections numbered **zero** — every blocking finding was accepted and fixed — and no
+> ticket ever exceeded a budget: T05 hit its cap at 2/2, everything else landed 0/2 or
+> 1/2, so the escalation path never fired. The right-to-reject and §10's escalation path
+> have **no observed evidence either way.** They are still the right shape on the
+> argument above; they are simply not yet evidence-backed, and this document should not
+> pretend otherwise.
+
 ---
 
 ## 8. Two mechanics that make the chain actually run
@@ -549,7 +616,7 @@ run does not stall on a permission prompt mid-chain. It is also a real safety bo
 
 ⚠️ **Do not put `context: fork` on the orchestrator skills.** A forked skill becomes a
 subagent itself — and a subagent cannot spawn its own subagents. `/build` would lose the
-ability to call any of the nine.
+ability to call any of its agents.
 
 ### `/build` in full
 
@@ -558,7 +625,7 @@ ability to call any of the nine.
 name: build
 description: Build one ticket end to end — plan, test, implement, review, verify.
 argument-hint: <ticket-id>
-allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Task
+allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Task, Agent
 ---
 
 Build ticket $1. Read `docs/muskan-build/$1/STATE.md` first.
@@ -622,8 +689,13 @@ Bash but no Edit or Write — so it structurally cannot "fix" the test instead o
 ### G4 approves your branch. Something else deploys.
 
 G4 passes on `feature/pricelist`. Then `/ship` opens a PR, merges to `dev`, and deploys.
-**Between those two, Ayush's work lands.** The thing G4 approved is not necessarily the
-thing that ships.
+**Between those two, `dev` can move.** The thing G4 approved is not necessarily the thing
+that ships.
+
+The original cause was a second engineer's branch landing in that window. With a single
+owner the window is narrower but **not closed** — parallel worktree sessions merge into the
+same `dev`, and the repo still carries plenty of code you did not write. The failure mode
+does not need a second person; it only needs `dev` to change after you verified.
 
 This is not hypothetical — it is most of the session log: migration timestamp collisions,
 RPCs rebuilt from live because the local base was stale, *"diffed every `create or replace`
@@ -644,6 +716,30 @@ rebase onto dev  →  re-run the suite on the rebased code
 instead of verifying your branch and hoping the world stays still. The window where someone
 else's work can slip in shrinks from "however long the PR sits" to "however long the merge
 takes".
+
+### /ship runs the Security plugin before the PR
+
+The **Claude Security plugin** (whole-repo six-phase scan: injection, authz, crypto,
+exposure, with an adversarial 3-voter panel) runs in "scan changes" mode on the rebased
+branch, before the PR opens. It **complements, never replaces, the `security` agent** — that
+one stays a per-ticket diff reviewer running [`SECURITY-CHECKLIST.md`](./SECURITY-CHECKLIST.md)'s
+Supabase-specific S1–S8 (grants on both client roles, `pg_policies`, RLS), which a generic
+scanner won't do. Two different altitudes: per-ticket catalog checks during `/build`,
+whole-branch generic scan at `/ship`.
+
+### G5 has a hard stop the design did not predict: prod data-writes
+
+Found in the dry-run. Additive DDL applied autonomously without friction. The vocab
+migration — which `UPDATE`s production rows and `DELETE`s lookup rows — was **blocked by the
+permission classifier**, and self-editing `settings.local.json` to unblock it was blocked
+too. **Both refusals were correct.**
+
+> **A wave that writes production data cannot be applied autonomously.** `/ship` classifies
+> the wave first — additive DDL versus data-write — and where it writes data it stops and
+> asks Muskan to grant the `apply_migration` allow rule, or to run the SQL herself.
+
+Budget this as a **scheduled stop, not a failure.** The dry-run's 13-migration wave paused
+here for one session and then finished in a single pass once the rule was granted.
 
 If the merge still lands on something tested — it happens — G4 fires again, **capped at 2
 rounds.** Then it stops and escalates rather than looping.
@@ -667,22 +763,44 @@ going red once will make `/build` escalate to you over a naming nit.
 | Trigger | Goes to | Budget |
 |---|---|---|
 | Tests stay red | builder retries | **`tests` 2/2**, then STOP |
-| Finding marked `blocking` | builder fixes | **`blocking-findings` 2/2**, then STOP |
+| Finding marked `blocking` | builder fixes | **`blocking-findings` 2/2**, then STOP — *counts fix **rounds**, not findings* |
 | Finding marked `note` | written to `REVIEW.md`, surfaced at G4 | **never retried** |
 | Builder rejects a finding | written to `REVIEW.md`, **you** adjudicate at G4 | **costs no attempt** |
 | Either budget blown | **you**, with the disagreement in `blocked.md` | — |
-| G4 says it does not match | back into `/build` — **a new round: both counters reset**, `G4 rounds` +1 | **`G4 rounds` 2**, then STOP |
+| G4 says it does not match | back into `/build` — **a new round: both counters reset**, `G4 rounds` +1 | **`G4 rounds` 2**, then STOP — *one named exception below* |
 | The approach itself was wrong | re-open G3, rewrite the ADR | — |
 
 `G4 rounds` was a counter with no limit, which is how `/ship` could bounce forever: merge →
-back to G4 → fix → merge → Ayush's work lands again → back to G4. **Two rounds, then stop
+back to G4 → fix → merge → `dev` moved again → back to G4. **Two rounds, then stop
 and escalate**, same as everything else.
+
+**The `blocking-findings` budget counts fix ROUNDS, not findings.** Three blocking findings
+fixed in one pass is **one** attempt, not three — T04 hit exactly this and the tally briefly
+read "3/2" before being corrected. A round is one build-review cycle, however many findings it
+carried.
 
 Two attempts, not five. When a budget blows, the agent does not try harder — it writes
 down *what it thinks is wrong with the instruction* and hands it over.
 
 `/build` must never refuse to start because a previous round's counters are spent. A
 re-entry after G4 is new work, not a continuation.
+
+### The one named exception — redesign at the gate
+
+The cap counts **iterative fixing.** It does not count the human deciding the approach
+itself is wrong.
+
+On the tier ladder, G4 ran **three** rounds and that was correct. Rounds 1–2 were fixes.
+Round 3 established that three successive in-card fitting attempts — row cap plus scroll,
+hiding buy rows while open, shrinking the photo — had each failed or been rejected on the
+walk: the fixed-height card cannot host the ladder in flow. Muskan designed the replacement
+herself, a floating popover portaled to body, recorded as a prototype DEVIATION in
+`REVIEW.md`.
+
+> **G4 is where the human redesigns, not just approves.** When a round produces a *new
+> design* rather than another fix, it does not consume the budget — log it as a DEVIATION
+> and continue. The cap exists to stop a fix-loop spinning, not to stop Muskan changing the
+> design.
 
 The counter lives in `STATE.md`. In conversation it is worthless: one context reset and it
 silently returns to zero, which is the exact loop it exists to stop.
@@ -691,22 +809,26 @@ silently returns to zero, which is the exact loop it exists to stop.
 
 ## 11. Hooks — deterministic, 100% not 98%
 
-| Hook | Guards |
-|---|---|
-| **Lane vs. diff** | `lane: TRIVIAL` while the diff touches `supabase/migrations/`, RLS, auth, or a server action → **block, force re-triage** |
-| **STATE.md advance** | A skill finishing without advancing `stage` |
-| **Shared-file lock** | Editing a file locked in the other engineer's sync |
-| **Invariant lint rules** | Whatever `/design` sorted into the mechanical bucket — import boundaries first |
-| Supabase MCP schema guard | DDL via MCP with no committed `.sql` — already happened once (`get_public_profile`, R8) |
-| Destructive command guard | `reset --hard`, `checkout .`, `clean -fd`, `git add -u/.`, `rm -rf` |
-| Module boundary | `@/modules/X/internals` imported from module Y |
-| **Stale-map** | A new directory in `src/modules/` absent from `src/README.md` → flag. **Six modules documented, twelve exist today** (R8) — docs drifting from code is observed, not hypothetical |
-| Read-before-edit | Editing a file not yet read |
-| Conventional commits | Non-conforming commit messages |
-| Main-branch write block | Writes on `main`/`master` — ✅ already installed |
+| Hook | Status | Guards |
+|---|---|---|
+| **Lane vs. diff** | ✅ built | `lane: TRIVIAL` while the diff touches `supabase/migrations/`, any `*[Aa]ctions.ts`, a module `server/` dir, `src/proxy.ts`, or `src/app/(auth)/` → **block, force re-triage** |
+| **STATE.md advance** | ✅ built | A skill finishing without advancing `stage` — checks the working tree **and the last commit** (skills commit as they go) |
+| **Shared-file lock** | ✅ built (dormant) | Editing a file locked in another active session's sync file — **own parallel worktrees included**. Known limit: wildcard lock entries (`e2e/*`) don't expand — lock explicit paths |
+| **Prod data-write gate** | ✅ built (ask rules) | Not a hook (Aug-2026 permissions research): `ask` on `apply_migration` + `execute_sql` — **on both Supabase MCP server names** — plus `Bash(supabase db push:*)`, in the checked-in `.claude/settings.json`. Ask rules beat allow rules AND hook allow-decisions, so a skill cannot self-grant. The CLI door (`db push`) and the second MCP server were open until the 2026-08-18 review closed them |
+| Main-branch write block | ✅ user-level | Writes on `main`/`master` — installed in `~/.claude/settings.json` (not checked in; a fresh clone loses it) |
+| **Invariant lint rules** | ▢ per-slug | Whatever `/design` sorted into the mechanical bucket — import boundaries first. Created by `/design`, not pre-built |
+| Supabase MCP schema guard | ▢ not built | DDL via MCP with no committed `.sql` — already happened once (`get_public_profile`, R8) |
+| Destructive command guard | ▢ not built | `reset --hard`, `checkout .`, `clean -fd`, `git add -u/.`, `rm -rf` |
+| Module boundary | ▢ not built | `@/modules/X/internals` imported from module Y |
+| **Stale-map** | ▢ not built | A new directory in `src/modules/` absent from `src/README.md` → flag. **Six modules documented, twelve exist today** (R8) — docs drifting from code is observed, not hypothetical |
+| Read-before-edit | ▢ not built | Editing a file not yet read (the harness itself refuses Edit-without-Read; a hook would only widen coverage) |
+| Conventional commits | ▢ not built | Non-conforming commit messages |
 
-The **shared-file lock** matters more than it looks: it guards the boundary with Ayush's
-lane whether or not he adopts any of this. Your sync ritual, as a hook, not a memory.
+The **shared-file lock** is now a *dormant* guard rather than a daily one — with a single
+owner there is no second engineer's sync file to collide with. Keep it built anyway: it is
+cheap, it still catches **your own parallel worktree sessions** editing one file, and it
+reactivates unchanged the day the team grows again. Your sync ritual, as a hook, not a
+memory.
 
 ---
 
@@ -716,44 +838,83 @@ lane whether or not he adopts any of this. Your sync ritual, as a hook, not a me
 |---|---|
 | **G4 — serialised on you being at a screen** | The agent hands you **one page** with everything on it, never a conversation |
 | **G1 — the spec interview is human-paced** | Accept it. Cheapest place to be slow |
-| **Cloud migrations wait on Ayush** — 13 pending today | Nothing here fixes it. Name it in every plan that depends on one |
+| **Prod data-write waves stop for a human** | Observed, not hypothetical: the classifier blocks `apply_migration` on data writes, and blocks self-granting the rule. Plan it into `/ship` as a scheduled stop (§9) |
 | **Review throughput, not build throughput** | Batch G4 across tickets |
 
 ---
 
 ## 13. Build order
 
-1. **Hooks** — independent of everything, some already exist. `STATE.md`-advance and
-   shared-file-lock first.
-2. **The reviewers** — `critic`, `security`, `consistency`. Highest evidence of any piece
+> **Status 2026-08-18: steps 1–8 are ALL BUILT** — 7 skills (`.claude/skills/`, incl.
+> project-level `/prototype` (G2) and `/diagnose` (BUG lane), added at the 2026-08-18
+> review — they override the same-named generic global skills inside this repo), 11
+> agents (`.claude/agents/`), 3 hooks + the ask-rule gate (`.claude/hooks/`,
+> `settings.json`). The first real slug through the front door is the proving run.
+
+1. **Hooks** ✅ — `state-advance` · `shared-file-lock` (dormant) · `lane-vs-diff` +
+   the ask-rule prod gate.
+2. **The reviewers** ✅ — `critic`, `security`, `consistency`. Highest evidence of any piece
    here: a reviewer agent has already been observed catching an implementer breaking a rule
    that was written in `CLAUDE.md`, and `consistency` is R7's #6 — the blind spot Muskan
    cannot self-serve, with its inputs already written (`.planning/codebase/`, R8).
-3. **`test-writer` + `test-runner`** — spec-not-code is the second-highest-value idea.
-4. **`visual-verifier` + G4** — the gate that would have caught session 69, and R5's
+   **The dry-run confirmed all three.** `security` won its headline bet (the verified-gate
+   class, including a live production defect **and** a cross-tenant insert at T04);
+   `consistency` produced T02's only blocking finding (camelCase vs snake `pack_size_grams`).
+   Build all three — none is on watch.
+3. **`test-writer` + `test-runner`** ✅ — spec-not-code is the second-highest-value idea.
+4. **`visual-verifier` + G4** ✅ — the gate that would have caught session 69, and R5's
    "self-verifying visual prototype loop" (high value, low cost — Playwright is already in
    the repo).
-5. **`/triage` + `STATE.md`** — cheap, and everything reads it.
-6. **`/spec`, `/design`, `/build`, `plan-checker`, `adr-checker`** — the front half.
+5. **`/triage` + `STATE.md`** ✅ — cheap, and everything reads it.
+6. **`/spec`, `/design`, `/build`, `plan-checker`, `adr-checker`** ✅ — the front half.
    Slowest to get right.
-7. **`/ship`** deploy + live verify — closes the loop.
+7. **`/ship`** ✅ deploy + live verify — closes the loop.
+8. **`rollup`** ✅ — the eleventh agent. Before a slug can close, a **fresh context** reads its
+   `REVIEW.md` + `STATE.md` and writes the per-stage verdicts **quoting them.** Cheap to
+   build, and the dry-run proved it is not optional — it is the only reason two agents were
+   not wrongly cut. See §16.
 
-**Steps 1–5 are Tier 1 — evidence-backed today.** Steps 6–7's checker agents
-(`plan-checker`, `adr-checker`, `researcher`-as-custom-agent) are **Tier 2 — hypotheses.**
-Each exists because of an argument, not an observed catch. The dry-run decides: a Tier 2
-agent that catches nothing Muskan or a Tier 1 agent would have caught gets cut before it
-is built. That is the "smallest graph" rule applied to our own roster, not just to GSD's.
+**Tiering after the dry-run — this is now results, not hypotheses.**
 
-**Before any of it: the manual dry-run.** Candidate ticket — the **Discover cloud-migration
-batch**. It exercises the security reviewer, the crossing-into-Ayush's-lane hook, and the
-live verification gate at once.
+| Piece | Tier | Evidence |
+|---|---|---|
+| Steps 1–5 — hooks · reviewers · `test-writer`/`test-runner` · `visual-verifier` + G4 · `/triage` | **Tier 1** | Evidence-backed before the dry-run, unchanged by it |
+| `adr-checker` | **Tier 1 — promoted** | 96 catches over 7 fresh-context rounds, in classes nothing else caught |
+| `researcher` | **Tier 1 — kept, humbled** | Its headline prediction was a wrong target and Muskan overruled it. The human-overrule path is part of the design, and it worked |
+| `plan-checker` | **Tier 1 — promoted** | REVISE on all three plans it ran on. Headline catch: the backfill's `NOT(a AND b AND c)` excluded the main malformed case from the rescue path — a prod data-correctness bug caught before any code existed |
+| `consistency` | **Tier 1 — promoted** | T02's one and only blocking finding was its: camelCase `packSizeGrams` vs the real snake `pack_size_grams`, which would have forced two hand-built adapters |
+
+The rule that produced this table still governs the next slug: **an agent that catches
+nothing Muskan or a Tier 1 agent would have caught gets cut before it is built.** That is
+the "smallest graph" rule applied to our own roster, not just to GSD's.
+
+**The manual dry-run is DONE — 2026-08-16. Verdict: GO.** It ran on the **tier ladder
+(`0021`)**, not the Discover batch: a real feature carried triage → spec → prototype →
+design → eight tickets built → ship → live contract migration on production. Predictions
+were written down before the run and compared afterwards, per the rule that governed it:
 
 > **Write down what you expect the pipeline to catch — before you start.** Then compare.
 > If it catches nothing you would not have caught yourself, that is the signal to **cut
 > stages, not add them.**
 
-This is the only honest way to test a process. Everything above is a hypothesis until that
-comparison exists.
+That comparison exists now — [`DRY-RUN-tier-ladder.md`](./DRY-RUN-tier-ladder.md) — and two
+of its findings changed this document: the prod data-write gate (§9, §11) and the G4
+redesign exception (§10).
+
+**What is actually next: build the Tier 1 set as real skill, agent and hook files.**
+
+1. `/triage` + `STATE.md`
+2. `/spec` and `/design`, with `adr-checker` under its **four** locked rules and the
+   nine-category checklist (§5)
+3. `test-writer` + `test-runner`
+4. `visual-verifier` + G4
+5. `/ship` — carrying the diff-against-live protocol **and** the prod data-write
+   permission stop
+
+**Build `plan-checker` and `consistency` too — both were promoted on 2026-08-18.** An
+earlier reading of this dry-run marked them Tier 2 on watch; re-reading the slug's own
+`REVIEW.md` showed both had decisive recorded catches. **All eleven agents are now Tier 1 or
+better-evidenced than when this document was designed** — nothing on the roster gets cut.
 
 ---
 
@@ -761,13 +922,14 @@ comparison exists.
 
 | # | Question |
 |---|---|
-| 1 | **Authenticate Linear MCP — blocks `researcher`.** Its prior-art sweep is specified to read Linear and `/design`'s breakdown writes tickets there. Until this is done, that agent cannot do half its stated job. Highest-priority open item |
+| 1 | ~~Authenticate Linear MCP — blocks `researcher`.~~ **Answered — done.** Linear MCP is authenticated; HEL-46..53 were created and closed through it during the dry-run, and `researcher`'s tools line carries the Linear read tools (2026-08-18 review) |
 | 2 | ~~Collapse into new `specs/` + `adr/` + `build/` tree?~~ **Answered — no.** The pipeline maps onto the existing taxonomy (§6b, per R7): `docs/PRD/` = specs, `docs/architecture/adr/` = ADRs, `docs/muskan-build/<slug>/` = build workspace. Only residue: whether `docs/superpowers/` folds away |
 | 3 | `SCHEMA.md` vs `SCHEMA-DRAFT.md` — one must die |
 | 4 | **`CLAUDE.md` 32 KB + `AGENTS.md` 39 KB load in full every session.** Only a skill's *name and description* load until it is used — so most of this belongs in skills. Biggest context win available, and cheap |
-| 5 | ~~Does Ayush adopt this?~~ **Deferred by Muskan.** The shared-file-lock hook guards the boundary regardless |
+| 5 | ~~Does Ayush adopt this?~~ **Moot — single owner.** The shared-file-lock hook stays built but dormant: it guards parallel worktree sessions today, and reactivates unchanged if the team grows |
 | 6 | ~~Have commands and skills merged?~~ **Answered — yes.** Current docs: *"Custom commands have been merged into skills."* We build `.claude/skills/<name>/SKILL.md` only |
 | 7 | **Docs cleanup (Muskan, own session):** number the existing `docs/muskan-build/` files, tidy the scattered `docs/architecture/` root (loose files beside `adr/` + `diagrams/`), apply the NNNN scheme going forward |
+| 8 | ~~Can G2 prove *fit*, or only design?~~ **Answered — (a), 2026-08-18; confirmed by Muskan same day.** The project `/prototype` skill now requires a fit check per variant: render it inside a stub of the real container at the container's real constraints before G2 can pass. Rationale: the 640px-card constraint was knowable pre-build for ~30 minutes of prototype cost; option (b) prices every future fit failure at G4's "a rebuild" rate. A5's redesign exception stays as the fallback for what a stub still can't show |
 
 ---
 
@@ -776,7 +938,54 @@ comparison exists.
 - **A skill orchestrates; agents work.** Autonomy is fewer commands, not fewer checks.
 - **The writer is never the checker.** Enforced by `tools:`, not by asking.
 - **Every step writes a file.** Artifacts survive compaction; conversations do not.
+- **Every file gets read back.** Writing evidence nobody reads is how a verdict comes out
+  wrong while sounding confident — see §16.
 - **Tests come from the spec, not the code.** The code may be wrong. The spec is right.
 - **Gates go where mistakes get expensive**, and each is priced so you know what a no costs.
+- **A checker's output is claims to spot-verify, not verdicts.** Checkers err too.
 - **Prompts are 98%, hooks are 100%.**
 - **Smallest graph that improves quality.** Draw it before automating it.
+
+---
+
+## 16. The roll-up — the step the dry-run proved was missing
+
+**The failure, stated plainly.** The dry-run slug wrote ten artifacts, all correct, all
+committed: `STATE.md`, `TICKETS.md`, seven plans, and a 14 KB `REVIEW.md` attributing every
+build finding to the agent that made it (with one gap the 2026-08-18 review found: T05's
+round was never written into it — reconstructed retroactively, detail unrecoverable). Then
+the per-stage verdicts were written **from memory**, and two came out wrong — `plan-checker` and `consistency` were both recorded as
+having caught nothing decisive, when `REVIEW.md` showed each had. Both were nearly cut.
+
+**Every stage in this pipeline writes. No stage read anything back.**
+
+> **The rule: a slug cannot close until a FRESH CONTEXT has read its artifacts back.** The
+> roll-up is an **agent — `rollup`, agent eleven** — not `/ship`'s last paragraph. It is
+> spawned with no memory of the build, reads only that slug's `REVIEW.md` + `STATE.md` +
+> `TICKETS.md`, and writes the per-stage verdicts **quoting them** — agent name, finding, file,
+> line. A verdict with no quotation behind it is not a verdict.
+
+**Why it must be a stranger, and not the session that did the work.** The session that built
+the slug already believes it knows what happened, so it scores from memory and its artifacts
+become decoration. That is not a hypothesis — it is precisely what happened here: the same
+context that had *written* `REVIEW.md` then recorded that `plan-checker` and `consistency`
+caught nothing decisive, because it never re-opened the file. **This is the pipeline's own
+oldest rule applied to itself:**
+
+> **The writer is never the checker.** A slug's builder is not its assessor.
+
+`rollup` is read-only — `REVIEW.md`, `STATE.md`, `TICKETS.md` — and returns one
+artifact: the filled verdict table. It cannot write code, and it never sees the conversation
+that produced the work.
+
+Three things make this cheap rather than ceremonial:
+
+| Requirement | Why |
+|---|---|
+| **Attribute every finding to an agent at the time it is written** | `REVIEW.md` already does this (*"(consistency)"*, *"(critic, migration:192)"*) — and that attribution is the only reason the two wrong verdicts were recoverable at all |
+| **Score each agent twice: did its prediction land, and did it catch anything decisive** | Collapsing these into one column is exactly what hid two Tier 1 agents. A prediction can miss while the agent still earns its place |
+| **Record what got *no* workout** | `builder` rejections and the budget-blow path fired zero times across eight tickets. "No evidence either way" is a real result and must be written down as one, not left blank |
+
+**This is also the honest limit of the whole design.** The pipeline is very good at generating
+evidence. Until step 8 exists, it has no memory of its own findings — which means it cannot
+improve itself, which was the entire purpose of running the dry-run. Build it early.

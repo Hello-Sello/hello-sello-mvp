@@ -35,6 +35,7 @@ export function PresentBanner({
   onTaglineChange,
   onPickCover,
   onManage,
+  canManage = true,
   canEditLogo = false,
   onPickLogo,
   onPresent,
@@ -50,6 +51,11 @@ export function PresentBanner({
   onTaglineChange: (v: string) => void;
   onPickCover: (f: File) => void;
   onManage: () => void;
+  /** Whether the viewer may manage this shop at all. FALSE hides the whole
+   *  owner-control row — "Manage shop" AND "Present mode". Both are owner
+   *  affordances: a buyer looking at someone else's shop must see neither.
+   *  Defaults true so the owner surface (/present) is unchanged. */
+  canManage?: boolean;
   /** Whether the caller may edit branding (Superadmin, D-04). Gates the in-place
    *  logo picker — a non-Superadmin sees the logo but no edit affordance. */
   canEditLogo?: boolean;
@@ -64,7 +70,7 @@ export function PresentBanner({
           not a public-shop control); "Present mode" hides the app chrome (07-06 —
           an in-app view, not the OS Fullscreen API). In edit mode this row
           collapses entirely. */}
-      {!presenting && !editing && (
+      {canManage && !presenting && !editing && (
         <div className="flex items-center justify-end gap-2">
           <button
             type="button"

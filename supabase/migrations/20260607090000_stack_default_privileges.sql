@@ -1,0 +1,92 @@
+-- ============================================================================
+-- Migration 0 — the stack's default privileges, stated explicitly
+-- ----------------------------------------------------------------------------
+-- Runs BEFORE every other migration (timestamp 090000, one second ahead of
+-- 090001). Everything below is a re-statement of what a Supabase stack has
+-- always issued at init for role `postgres` in schema `public`. Nothing here
+-- is a new grant for TABLES and SEQUENCES: production's `pg_default_acl` holds
+-- those values, so those two statements are a no-op there.
+--
+-- ⚠️ THE FUNCTIONS STATEMENT WAS NOT A NO-OP, AND WAS CORRECTED 2026-08-23.
+-- See "THE ORDERING ARGUMENT BELOW IS TRUE ON REPLAY AND FALSE ON PUSH".
+--
+-- WHY IT EXISTS
+-- The local CLI stopped issuing them. On CLI 10.9.7 a clean `db reset` leaves
+-- role `postgres` with `anon=Dxtm authenticated=Dxtm service_role=Dxtm` on
+-- TABLES — INSERT/SELECT/UPDATE/DELETE stripped — while the `supabase_admin`
+-- row in the same database still carries the full `arwdDxtm`. Result:
+-- `authenticated` could SELECT 1 of 93 tables, `/rest/v1/person` 403'd,
+-- `requireVerified()` failed closed, and every gated route bounced to /home.
+-- Nine RPCs were unreachable for the same reason on FUNCTIONS. The database
+-- was unusable and no repo migration caused it.
+--
+-- WHY IT RUNS FIRST, AND WHY THAT IS THE WHOLE DESIGN
+-- ALTER DEFAULT PRIVILEGES only affects objects created AFTER it. Placed
+-- first, every table, sequence and function born in the 147 migrations that
+-- follow inherits the right grants — and every deliberate REVOKE in those
+-- migrations still runs LATER and still wins. Specifically preserved:
+--   · person.company_id  — the column-level UPDATE revoke (privilege
+--     escalation fix, 20260710120000). Re-granting it here would be the bug.
+--   · anon EXECUTE on functions — revoked by 20260817120000 § 3 and enforced
+--     by its event trigger. ⚠️ SEE THE CORRECTION BLOCK BELOW: this file no
+--     longer grants it, because "revoked there" is only true on replay.
+-- That ordering is why this is one statement of the rule rather than a copy
+-- of every revoke in the tree. Do NOT "fix" grant drift by re-granting after
+-- migrations (e.g. from `supabase/policies/`): that runs last, silently undoes
+-- the revokes above, and makes the lockdown suites assert a state no real
+-- environment has.
+--
+-- RLS, not grants, is the access boundary. `anon` holding table privileges is
+-- the standard Supabase model and matches production exactly; every table in
+-- this schema is RLS-enabled (enforced by the `ensure_rls` event trigger).
+--
+-- Verified 2026-08-22 against production `pg_default_acl` (schema public,
+-- role postgres): tables `arwdDxtm`, sequences `rwU`, functions `X`.
+-- ⚠️ That verification recorded privilege LETTERS and not GRANTEES, which is
+-- exactly why it could not detect the defect corrected below. A default-ACL
+-- check that does not name the roles proves nothing about who holds the grant.
+--
+-- ----------------------------------------------------------------------------
+-- ⚠️ THE ORDERING ARGUMENT ABOVE IS TRUE ON REPLAY AND FALSE ON PUSH
+-- Corrected 2026-08-23 (Muskan ruled: amend in place — the file is unpushed).
+--
+-- This file's filename says 2026-06-07. It was AUTHORED 2026-08-22 (`d052371`).
+-- Locally that does not matter: `db reset` replays by timestamp, so this runs
+-- first and 20260817120000 § 3 runs later and revokes anon's EXECUTE. Measured
+-- end state, correct: f | {postgres=X, authenticated=X, service_role=X}.
+--
+-- ON CLOUD IT INVERTS. 20260817120000 has been LIVE ON PRODUCTION SINCE
+-- 2026-08-17. It will not re-run. This file pushes AFTER it (and only with
+-- `--include-all`, since its version sorts ~14 months before cloud's tip). So
+-- the grant would land LAST, re-widening the functions default on production
+-- with nothing left to narrow it — re-opening session 77's deny-by-default.
+--
+-- Bounded, not nil: session 77 installed TWO mechanisms and the second, the
+-- `revoke_anon_execute_on_new_function` event trigger, is also live and would
+-- still strip `anon` at CREATE FUNCTION. It was installed as belt AND braces;
+-- this would have removed the belt silently.
+--
+-- THE FIX: `anon` is dropped from the functions grant below. `authenticated`
+-- and `service_role` keep it — 20260817120000 deliberately left those alone.
+-- Now the statement is genuinely order-independent: it asserts the same end
+-- state whether it replays first or pushes last.
+--
+-- TABLES and SEQUENCES are deliberately UNCHANGED. `anon` holding table
+-- privileges is the standard Supabase model, matches production, and RLS is the
+-- access boundary (every table RLS-enabled, enforced by `ensure_rls`). Narrowing
+-- the tables arm is T11's job — deny-by-default for TABLES was never installed —
+-- and doing it here would be building T11 inside a documentation migration.
+-- ----------------------------------------------------------------------------
+-- ============================================================================
+
+alter default privileges for role postgres in schema public
+  grant all on tables to anon, authenticated, service_role;
+
+alter default privileges for role postgres in schema public
+  grant all on sequences to anon, authenticated, service_role;
+
+-- NOTE: `anon` is deliberately ABSENT here. See the correction block above —
+-- including it re-opens session 77's lockdown when this file is PUSHED rather
+-- than replayed. Do not "restore" it for symmetry with the two statements above.
+alter default privileges for role postgres in schema public
+  grant execute on functions to authenticated, service_role;

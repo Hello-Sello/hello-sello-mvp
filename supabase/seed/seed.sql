@@ -391,12 +391,61 @@ from (values
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid, 'Pedanios 31/1 COS-CA',  'Cosmic Cream', 'AUR-1A', '38364843', 1000, 31, 1, 9.00, 'Aurora Inc',    'Toronto'),
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid, 'Pedanios 31/1 PND-CA',  'Pink Diesel',  'AUR-1B', '52839467', 1000, 31, 1, 8.50, 'Aurora Inc',    'Toronto'),
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid, 'San Raf 29/1 PNK',      'Pink OG Kush', 'AUR-1C', '38374774', 1000, 22, 1, 5.00, 'Pure Sunfarms', 'Montreal'),
-  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid, 'Pedanios 10/10 MBE-CA', 'Moon Berry',   'AUR-1D', '38383838',   10, 10, 10, 6.00, 'Aurora Inc',    'Toronto')
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid, 'Pedanios 10/10 MBE-CA', 'Moon Berry',   'AUR-1D', '38383838',   10, 10, 10, 6.00, 'Aurora Inc',    'Toronto'),
+  -- AUR-1E carries the demo volume ladder (§6c-2). It is a NEW row rather than a
+  -- ladder bolted onto an existing product precisely because it has no dependents:
+  -- AUR-1A/1B are pinned by e2e/present-card-edit.spec.ts and AUR-1C is used by the
+  -- deal fixtures. Its name sorts LAST of the five, so the grid's `.first()` (which
+  -- several /present specs rely on) does not move.
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid, 'Tantalus 24/1 BLB-CA',  'Blue Blaze',   'AUR-1E', '38395011', 1000, 24, 1, 7.50, 'Tantalus Labs', 'Vancouver'),
+  -- AUR-1F is the SECOND visible, price-hidden product (the same L1 corner as
+  -- AUR-1A). It exists so the per-product pricing-request dup-guard can be
+  -- proven per-PRODUCT rather than per-pair: with one such product, "ask about
+  -- A, then ask about B" is not walkable at all. Its name sorts LAST of the six
+  -- ('Z…'), so the grid's `.first()` — pinned by several /present specs — does
+  -- not move, and its `location` MUST stay 'Toronto Warehouse' (§6a-2): the
+  -- matrix suite asserts count(DISTINCT location) = 2 across ALL GreenLeaf
+  -- products, so a new location name (or NULL) fails it.
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid, 'Zephyr 24/1 ZPH-CA',    'Zephyr Haze',  'AUR-1F', '38396120', 1000, 24, 1, 8.00, 'Aurora Inc',    'Toronto')
 ) as v(company_id, name, cultivar, code, pzn, pack, thc, cbd, rrp, cultivator, region)
 where not exists (
   select 1 from public.product p
   where p.company_id = v.company_id and p.supplier_product_code = v.code and p.deleted_at is null
 );
+
+-- 6a-2) The visibility x price matrix. Seed shipped every product with both
+--       dials OFF (column defaults), so a fresh reset had ZERO buyer-visible
+--       products and the buyer shop view could not be walked at all. Each
+--       corner of the 2x2 is occupied on purpose; `location` gives the shop
+--       two tabs. AUR-1A stays price_public=false and AUR-1B stays rung-less
+--       on purpose - e2e/present-card-edit.spec.ts drives both dials itself
+--       and asserts those starting states. Idempotent.
+--       `is distinct from` (never `<>`): product.location is nullable, and with
+--       `<>` the guard would evaluate to NULL for the one row whose two flags
+--       already match (AUR-1D), skipping it and leaving location = NULL - which
+--       adds an "Unassigned" group and moves the grid's `.first()` onto a pinned
+--       product.
+update public.product p
+   set profile_visible = v.visible,
+       price_public    = v.priced,
+       location        = v.loc
+  from (values
+    ('AUR-1A', true,  false, 'Toronto Warehouse'),
+    ('AUR-1B', true,  true,  'Toronto Warehouse'),
+    ('AUR-1C', false, true,  'Montreal Warehouse'),
+    ('AUR-1D', false, false, 'Montreal Warehouse'),
+    ('AUR-1E', true,  true,  'Toronto Warehouse'),
+    -- AUR-1F re-occupies the L1 corner (visible, price hidden) so the buyer's
+    -- shop carries TWO Request-pricing cards. Toronto is a fence, not a
+    -- preference — see the note on its product row above.
+    ('AUR-1F', true,  false, 'Toronto Warehouse')
+  ) as v(code, visible, priced, loc)
+ where p.company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid
+   and p.supplier_product_code = v.code
+   and p.deleted_at is null
+   and (p.profile_visible is distinct from v.visible
+     or p.price_public    is distinct from v.priced
+     or p.location        is distinct from v.loc);
 
 -- 6b) a published "Standard" pricelist for GreenLeaf (fixed id keeps re-seeds stable)
 insert into public.pricelist (id, company_id, name, status_code, currency, published_at, created_by)
@@ -413,7 +462,12 @@ from (values
   ('AUR-1A', 8.00),
   ('AUR-1B', 6.00),
   ('AUR-1C', 4.00),
-  ('AUR-1D', 5.00)
+  ('AUR-1D', 5.00),
+  ('AUR-1E', 6.00),
+  -- AUR-1F mirrors AUR-1A's live price. The price is HIDDEN from buyers
+  -- (price_public = false), not absent: "price on request" and "price not set
+  -- yet" are different states, and only the first renders Request-pricing.
+  ('AUR-1F', 8.00)
 ) as v(code, price)
 join public.product p
   on p.company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid
@@ -439,10 +493,43 @@ where pi.pricelist_id = '3fe179d5-c0e7-4eff-9726-f707c04572f9'::uuid
     where t.pricelist_item_id = pi.id and t.deleted_at is null
   );
 
+--       AUR-1E's two-rung ladder (500 g -> 5.40, 1000 g -> 4.80 under its 6.00
+--       base), so a ladder is reachable by a buyer with NO connection at all -
+--       AUR-1A's rung above sits on a price_public=false product, and AUR-1B is
+--       pinned rung-less by e2e/present-card-edit.spec.ts's "blank slate" test.
+--       Both rungs MUST ride ONE insert: the `not exists` guard reads the
+--       PRE-statement snapshot, so splitting this into two statements would let
+--       the second see rung 1 and skip - silently shipping a one-rung ladder that
+--       still satisfies the shape trigger. That trigger is AFTER ... FOR EACH ROW
+--       and re-reads the whole ladder, so one two-row insert validates once
+--       against the complete ladder. 5.40 then 4.80 is strictly below the 6.00
+--       base and strictly descending as min_grams rises.
+insert into public.pricelist_item_tier (pricelist_item_id, min_grams, price_per_gram)
+select pi.id, v.min_grams, v.price
+from (values
+  (500,  5.40),
+  (1000, 4.80)
+) as v(min_grams, price)
+join public.pricelist_item pi
+  on pi.pricelist_id = '3fe179d5-c0e7-4eff-9726-f707c04572f9'::uuid
+ and pi.deleted_at is null
+join public.product p
+  on p.id = pi.product_id
+ and p.company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid
+ and p.supplier_product_code = 'AUR-1E'
+ and p.deleted_at is null
+where not exists (
+  select 1 from public.pricelist_item_tier t
+  where t.pricelist_item_id = pi.id and t.deleted_at is null
+);
+
 -- ----------------------------------------------------------------------------
--- 7. GreenLeaf demo batches (BTCH-01 / Phase 3f) — each of the 4 products gets
+-- 7. GreenLeaf demo batches (BTCH-01 / Phase 3f) — each of AUR-1A..1D gets
 --    >=2 physical lots (product_batch) so the Deal Basket batch picker has real
 --    rows to choose from (the table exists in every environment but had 0 rows).
+--    AUR-1E (§6a) deliberately ships with NO lots: it exists to carry the demo
+--    volume ladder, and a lot-less product is a real state the shop must render
+--    (no stock, and terpPercent falls back to null with no representative batch).
 --    Same idempotent values-join-product pattern as 6c: resolve product_id by
 --    supplier_product_code joined on GreenLeaf (aaaa) — NEVER hardcode a
 --    gen_random_uuid() product id. Batch numbers are GLOBALLY distinct per

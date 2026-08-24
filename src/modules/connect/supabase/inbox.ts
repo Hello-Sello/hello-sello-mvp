@@ -12,6 +12,7 @@
  */
 import { createClient } from "@/shared/db/client";
 import { acceptInbox, type AcceptRequestType } from "@/modules/messaging";
+import { COMPANY_INBOX_TYPES } from "@/modules/connect/lib/inbox-display";
 import type {
   InboxDealCardPreview,
   InboxItemView,
@@ -150,6 +151,12 @@ export async function getInbox(): Promise<InboxItemView[]> {
          deal_line_item ( product_name, quantity, unit, unit_price, line_total, version, sort_order )
        )`,
     )
+    // Company-inbox types ONLY. `pending_inbox_item` also carries
+    // `connect_person` - a person-to-person request answered on Discover, which
+    // has no claim/assign/accept path here. Without this filter one such row
+    // reached `InboxRow`, whose `REQUEST_TYPE_META[item.type].icon` threw and
+    // blanked the entire inbox.
+    .in("type", COMPANY_INBOX_TYPES)
     .is("deleted_at", null)
     .order("created_at", { ascending: false });
   if (error) throw error;

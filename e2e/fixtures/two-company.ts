@@ -393,6 +393,247 @@ export function pendingChangeLineQuantities(dealCardId: string): number[] {
   return out ? out.split(',').map(Number) : []
 }
 
+/**
+ * Count the live `pending_inbox_item` rows for ONE per-product pricing ask
+ * (0022 T04, HEL-58's dup-guard proof): type 'pricelist_request', status
+ * pending, not soft-deleted, sent BY the named company, carrying the id of
+ * the product with the given `supplier_product_code` — always looked up on
+ * GreenLeaf (the seller every T04 e2e test asks against), by NAME, never a
+ * hardcoded company id, same rule as `resolveRelationshipId` above.
+ *
+ * Scoped by BOTH sender company name AND product code so two tests asking
+ * about different products (or from different senders) never collide on one
+ * count — mirrors `countTicketsForCard`'s per-card scoping.
+ *
+ * CALLER CONTRACT: `senderCompanyName` and `productCode` are interpolated raw
+ * into single-quoted SQL literals — no escaping, no parameter binding. Pass
+ * LITERAL CONSTANTS written in the spec file. Never pass a name read back out
+ * of the DB, scraped off the page, or otherwise derived at runtime: company
+ * names are user-authored in this product, and one apostrophe would break the
+ * query out of its literal. (Today's callers all pass fixed strings.)
+ */
+export function countPricingRequests(senderCompanyName: string, productCode: string): number {
+  const bin = psqlBin()
+  const out = execFileSync(
+    bin,
+    [
+      DB_URL,
+      '-At',
+      '-c',
+      `select count(*) from public.pending_inbox_item pi ` +
+        `join public.company sc on sc.id = pi.sender_company_id ` +
+        `join public.company gl on gl.name = 'GreenLeaf Cultivation' ` +
+        `join public.product p on p.company_id = gl.id and p.supplier_product_code = '${productCode}' ` +
+        `where sc.name = '${senderCompanyName}' and pi.type = 'pricelist_request' ` +
+        `and pi.status = 'pending' and pi.deleted_at is null ` +
+        `and pi.metadata->>'product_id' = p.id::text`,
+    ],
+    { encoding: 'utf8' },
+  ).trim()
+  return Number(out)
+}
+
+/**
+ * The `note` of the ONE live per-product pricing ask a company sent GreenLeaf
+ * about a product (by `supplier_product_code`), or null if none exists.
+ * `countPricingRequests` proves the ROW exists; this proves what it SAYS —
+ * D3's note must name the product, which is what makes T04's criterion 2 true
+ * "to the seller's eye" (the note renders in InboxRow / InboxDetail; a bare
+ * `metadata` key renders nowhere). Same scoping — and the same CALLER CONTRACT
+ * as the counter above: both parameters are interpolated raw into single-quoted
+ * SQL literals, so callers must pass literal constants, never runtime-derived
+ * names.
+ */
+export function pricingRequestNote(senderCompanyName: string, productCode: string): string | null {
+  const bin = psqlBin()
+  const out = execFileSync(
+    bin,
+    [
+      DB_URL,
+      '-At',
+      '-c',
+      `select pi.note from public.pending_inbox_item pi ` +
+        `join public.company sc on sc.id = pi.sender_company_id ` +
+        `join public.company gl on gl.name = 'GreenLeaf Cultivation' ` +
+        `join public.product p on p.company_id = gl.id and p.supplier_product_code = '${productCode}' ` +
+        `where sc.name = '${senderCompanyName}' and pi.type = 'pricelist_request' ` +
+        `and pi.status = 'pending' and pi.deleted_at is null ` +
+        `and pi.metadata->>'product_id' = p.id::text limit 1`,
+    ],
+    { encoding: 'utf8' },
+  ).trim()
+  return out || null
+}
+
+/**
+ * The `status` of the ONE per-product pricing ask a company sent GreenLeaf, or
+ * null if no such row exists. Same scoping and the same CALLER CONTRACT as
+ * `countPricingRequests` above (both parameters interpolated raw — pass literal
+ * constants only), but WITHOUT that helper's `status = 'pending'` filter, which
+ * is the whole point: this is what distinguishes an accept that landed from one
+ * that silently rolled back and left the item pending forever (DEV-83).
+ */
+export function pricingRequestStatus(
+  senderCompanyName: string,
+  productCode: string,
+): string | null {
+  const bin = psqlBin()
+  const out = execFileSync(
+    bin,
+    [
+      DB_URL,
+      '-At',
+      '-c',
+      `select pi.status from public.pending_inbox_item pi ` +
+        `join public.company sc on sc.id = pi.sender_company_id ` +
+        `join public.company gl on gl.name = 'GreenLeaf Cultivation' ` +
+        `join public.product p on p.company_id = gl.id and p.supplier_product_code = '${productCode}' ` +
+        `where sc.name = '${senderCompanyName}' and pi.type = 'pricelist_request' ` +
+        `and pi.deleted_at is null ` +
+        `and pi.metadata->>'product_id' = p.id::text limit 1`,
+    ],
+    { encoding: 'utf8' },
+  ).trim()
+  return out || null
+}
+
+/**
+ * How many live relationships exist between GreenLeaf and StonePharm.
+ * `uq_relationship_pair_active` says this is at most 1 — asserting it directly
+ * is what proves an accept ADOPTED the seeded relationship rather than trying
+ * to mint a second one (DEV-83's `23505`).
+ */
+export function countActiveRelationshipsForPair(): number {
+  const bin = psqlBin()
+  const out = execFileSync(
+    bin,
+    [
+      DB_URL,
+      '-At',
+      '-c',
+      `select count(*) from public.relationship r ` +
+        `join public.company a on a.id = r.company_a_id ` +
+        `join public.company b on b.id = r.company_b_id ` +
+        `where r.deleted_at is null ` +
+        `and (a.name, b.name) in ` +
+        `(('GreenLeaf Cultivation','StonePharm'),('StonePharm','GreenLeaf Cultivation'))`,
+    ],
+    { encoding: 'utf8' },
+  ).trim()
+  return Number(out)
+}
+
+/**
+ * Threads of one `type` on the GreenLeaf <-> StonePharm relationship.
+ * `uq_chat_thread_c2c` allows one c2c; a P2P is created per person pair. Used
+ * to prove an accept on an ADOPTED relationship still opens the P2P the
+ * rollout calls for, without duplicating the C2C that already existed.
+ */
+export function countThreadsForPair(threadType: 'c2c' | 'p2p'): number {
+  const bin = psqlBin()
+  const out = execFileSync(
+    bin,
+    [
+      DB_URL,
+      '-At',
+      '-c',
+      `select count(*) from public.chat_thread t ` +
+        `join public.relationship r on r.id = t.relationship_id ` +
+        `join public.company a on a.id = r.company_a_id ` +
+        `join public.company b on b.id = r.company_b_id ` +
+        `where t.deleted_at is null and r.deleted_at is null ` +
+        `and t.type = '${threadType}' ` +
+        `and (a.name, b.name) in ` +
+        `(('GreenLeaf Cultivation','StonePharm'),('StonePharm','GreenLeaf Cultivation'))`,
+    ],
+    { encoding: 'utf8' },
+  ).trim()
+  return Number(out)
+}
+
+/**
+ * How many `connection_established` system lines sit on the GreenLeaf <->
+ * StonePharm C2C thread. Two already-connected companies must never be told
+ * they are "now connected" a second time, so this stays at its seeded value
+ * across an accept — the assertion that seed lines are written ONLY for a
+ * thread the accept actually creates.
+ */
+export function countConnectionEstablishedLines(): number {
+  const bin = psqlBin()
+  const out = execFileSync(
+    bin,
+    [
+      DB_URL,
+      '-At',
+      '-c',
+      `select count(*) from public.chat_message m ` +
+        `join public.chat_thread t on t.id = m.thread_id ` +
+        `join public.relationship r on r.id = t.relationship_id ` +
+        `join public.company a on a.id = r.company_a_id ` +
+        `join public.company b on b.id = r.company_b_id ` +
+        `where m.type = 'connection_established' and t.type = 'c2c' ` +
+        `and t.deleted_at is null and r.deleted_at is null ` +
+        `and (a.name, b.name) in ` +
+        `(('GreenLeaf Cultivation','StonePharm'),('StonePharm','GreenLeaf Cultivation'))`,
+    ],
+    { encoding: 'utf8' },
+  ).trim()
+  return Number(out)
+}
+
+/**
+ * Live `connect_person` requests aimed at Alice. The seed always plants one
+ * (Clara Vogt -> Alice, seed.sql:1139-1157), which is what makes the inbox
+ * regression test meaningful rather than vacuous: if this ever returns 0 the
+ * test is asserting nothing and must be re-seeded, not deleted.
+ */
+export function countPersonRequestsForAlice(): number {
+  const bin = psqlBin()
+  const out = execFileSync(
+    bin,
+    [
+      DB_URL,
+      '-At',
+      '-c',
+      `select count(*) from public.pending_inbox_item i ` +
+        `join public.person rp on rp.id = i.receiver_person_id ` +
+        `where i.type = 'connect_person' and i.status = 'pending' ` +
+        `and i.deleted_at is null ` +
+        `and rp.first_name = 'Alice' and rp.last_name = 'Green'`,
+    ],
+    { encoding: 'utf8' },
+  ).trim()
+  return Number(out)
+}
+
+/**
+ * Remove StonePharm's pricing asks to GreenLeaf so the accept test starts from
+ * "no ask yet" on a DB other tests have already used. Without this the ask from
+ * a previous run is still `accepted`, T04's per-product dup-guard refuses to
+ * create a second one, and the test asserts against a stale row.
+ *
+ * Deletes the inbox rows ONLY - never the relationship or its threads, which is
+ * the very state the test needs to be already connected.
+ */
+export function resetPricingRequests(): void {
+  const bin = psqlBin()
+  execFileSync(
+    bin,
+    [
+      DB_URL,
+      '-v',
+      'ON_ERROR_STOP=1',
+      '-c',
+      `delete from public.pending_inbox_item pi ` +
+        `using public.company sc, public.company rc ` +
+        `where sc.id = pi.sender_company_id and rc.id = pi.receiver_company_id ` +
+        `and sc.name = 'StonePharm' and rc.name = 'GreenLeaf Cultivation' ` +
+        `and pi.type = 'pricelist_request'`,
+    ],
+    { encoding: 'utf8' },
+  )
+}
+
 const CREDENTIALS: Record<Who, { email: string; password: string }> = {
   alice: { email: 'alice@greenleaf.test', password: 'password123' },
   bob: { email: 'bob@stonepharm.test', password: 'password123' },

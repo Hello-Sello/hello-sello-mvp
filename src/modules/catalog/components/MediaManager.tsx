@@ -375,10 +375,17 @@ export function MediaManager({
 
         {/* Cluster G: trimmed — "shows on the front" duplicated the section
             header's own "· shows on the front" label. Kept the details the
-            header doesn't carry (size limit, reorder, remove). */}
-        <p className="mt-2 text-[10px] leading-relaxed text-ink/45">
-          ≤10 MB each · Drag to re-sort · ✕ to remove.
-        </p>
+            header doesn't carry (size limit, reorder, remove).
+            ⚠️ Gated on `canEdit` like the other 16 owner affordances in this
+            file — it was the one that was missed. It describes actions only an
+            owner can take, and slug 0022 T02 put this card on a BUYER's page
+            for the first time, where "Drag to re-sort · ✕ to remove" is copy
+            for controls that aren't there. (visual-verifier, T02 G4.) */}
+        {canEdit && (
+          <p className="mt-2 text-[10px] leading-relaxed text-ink/45">
+            ≤10 MB each · Drag to re-sort · ✕ to remove.
+          </p>
+        )}
 
         {/* ---------- Documents (COA / custom) ---------- */}
         <div className={`${sectionHead} mt-4`}>
