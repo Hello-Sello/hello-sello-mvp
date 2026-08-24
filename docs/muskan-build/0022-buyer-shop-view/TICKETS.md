@@ -817,6 +817,15 @@ failure is an error state the drawer should render (and report). Do not widen th
 
 ## T16 — `database.types.ts` declares four nullable `get_my_basket_lines` columns as non-nullable · **XS** · depends on: none · **introduced by this slug**
 
+> ✅ **BUILT 2026-08-24 (session 84).** **Six columns, not five** — this ticket
+> missed `pack_size_grams`, which is nullable on the base table. Nullability
+> read off `pg_get_functiondef` rather than inferred: four are `case when
+> product_visible_to_caller(...)` with no ELSE, `seller_company_name` is a LEFT
+> JOIN, `pack_size_grams` is nullable in `product_basket_line`.
+> The local re-assertion in `reads.ts` is gone, so the fact has one owner.
+> **Proven the compiler actually enforces it** — assigning `product_name` to a
+> `string` now errors; before this change it did not. tsc 0, unit 490/490.
+
 **Filed 2026-08-24 at `/ship`, security round 4.**
 
 **What.** `src/types/database.types.ts:4785-4799` types every `get_my_basket_lines` return column as

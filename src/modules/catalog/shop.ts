@@ -78,6 +78,16 @@ export type ShopProduct = {
    *  has it and must never render it. Absent ≠ hidden: only an explicit `false`
    *  means the seller hid it (see `ProductCard.tsx`'s "Hidden" badge guard). */
   profile_visible?: boolean;
+  /** The buyer-visibility window (`product.visibility_start` / `_end`, DATE).
+   *  OWNER READ ONLY, and optional for the same reason `profile_visible` is —
+   *  a buyer-facing mapper never carries it.
+   *
+   *  Settable today through exactly ONE surface: the CSV import template
+   *  (`template.ts`, "Visibility start" / "Visibility end"). No screen shows it
+   *  back, which is what makes it the most invisible way for a product to
+   *  vanish from buyers. Read here so `buyerVisibilityGaps` can say so. */
+  visibility_start?: string | null;
+  visibility_end?: string | null;
   price_public: boolean;
   price_per_gram: number | null;
   /** BRIDGE (retired by T04/T05, columns dropped in C): rung 1 of `tiers`
@@ -176,7 +186,7 @@ export async function getMyShop(): Promise<Shop | null> {
   const { data: rows } = await supabase
     .from("product")
     .select(
-      "id, name, cultivar, thc_percent, cbd_percent, cbg_percent, cbn_percent, terpene_percent, cultivator, lineage_parent_a, lineage_parent_b, irradiation_code, supplier_product_code, packaging_material, resealable, location, pack_size_grams, unit_code, local_code_pzn, dominance_code, country_of_origin, region, profile_visible, price_public, metadata, product_image(id, image_path, position), product_media(id, kind, path, url, label, position), product_batch(id, batch_number, ready_for_sale_date, expiry_date, thc_percent, cbd_percent, created_at, deleted_at, batch_terpene(percent))",
+      "id, name, cultivar, thc_percent, cbd_percent, cbg_percent, cbn_percent, terpene_percent, cultivator, lineage_parent_a, lineage_parent_b, irradiation_code, supplier_product_code, packaging_material, resealable, location, pack_size_grams, unit_code, local_code_pzn, dominance_code, country_of_origin, region, profile_visible, visibility_start, visibility_end, price_public, metadata, product_image(id, image_path, position), product_media(id, kind, path, url, label, position), product_batch(id, batch_number, ready_for_sale_date, expiry_date, thc_percent, cbd_percent, created_at, deleted_at, batch_terpene(percent))",
     )
     .eq("company_id", companyId)
     .is("deleted_at", null)
@@ -248,6 +258,8 @@ export async function getMyShop(): Promise<Shop | null> {
       // Manual column wins; the derived batch-terpene sum is the fallback (F-02).
       terpPercent: r.terpene_percent ?? deriveTerpPercent(repBatch),
       profile_visible: r.profile_visible,
+      visibility_start: r.visibility_start,
+      visibility_end: r.visibility_end,
       price_public: r.price_public,
       price_per_gram: price?.pricePerGram ?? null,
       // Bridge fields = rung 1 (see ShopProduct — T04/T05 retire the consumers).

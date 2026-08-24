@@ -45,21 +45,12 @@ export async function getMyBasket(): Promise<BasketView> {
   const { data: rows, error } = await supabase.rpc("get_my_basket_lines");
   if (error) throw error;
 
-  const typedRows = ((rows ?? []) as Array<{
-    id: string;
-    pack_count: number;
-    pack_size_grams: number | null;
-    product_id: string;
-    // null once the product stops being visible to this caller — hidden,
-    // soft-deleted, out of its window, or the connection ended. The line still
-    // returns so it can be seen and removed; only the details go dark.
-    product_name: string | null;
-    cultivar: string | null;
-    unit_code: string | null;
-    local_code_pzn: string | null;
-    seller_company_id: string;
-    seller_company_name: string | null;
-  }>).map((r) => ({
+  // No local re-assertion of the row shape: `database.types.ts` now declares the
+  // six nullable columns as nullable, so there is ONE owner of that fact. The
+  // details go null once the product stops being visible to this caller —
+  // hidden, soft-deleted, out of its window, or the connection ended. The line
+  // still returns so it can be seen and removed; only the details go dark.
+  const typedRows = (rows ?? []).map((r) => ({
     id: r.id,
     pack_count: r.pack_count,
     pack_size_grams: r.pack_size_grams,

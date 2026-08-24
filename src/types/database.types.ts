@@ -4784,17 +4784,24 @@ export type Database = {
       }
       get_my_basket_lines: {
         Args: never
+        // Six of these ten are nullable and this file is hand-maintained, so
+        // until it is generated the compiler repeats whatever a human wrote
+        // here. Four go NULL BY DESIGN — the RPC gates the product's details on
+        // live visibility per read (`case when product_visible_to_caller(...)`
+        // with no ELSE), which is the whole point of the round-3 fix.
+        // seller_company_name comes off a LEFT JOIN; pack_size_grams is
+        // nullable on the base table.
         Returns: {
-          cultivar: string
+          cultivar: string | null
           id: string
-          local_code_pzn: string
+          local_code_pzn: string | null
           pack_count: number
-          pack_size_grams: number
+          pack_size_grams: number | null
           product_id: string
-          product_name: string
+          product_name: string | null
           seller_company_id: string
-          seller_company_name: string
-          unit_code: string
+          seller_company_name: string | null
+          unit_code: string | null
         }[]
       }
       get_public_profile: {
