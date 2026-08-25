@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # RLS isolation
-# Status 2026-08-25: PASSES on an already-migrated local DB. DEV-161 reports it
-# FAILS on a FRESH `supabase db reset` - that claim is untested here and stands.
+# DEV-161 is STALE - closeable. It reported this suite failing on a FRESH
+# `supabase db reset` for 3 reasons; verified 2026-08-25 on an actual fresh reset
+# and it PASSES. The dropped `deal_workspace.owner_person_id` insert is gone
+# (repaired incidentally by be3abda / 94f9b75, Wave 3). Nobody noticed the ticket
+# was fixed because the suite had no runner to prove it with.
 # Piped on stdin rather than `psql -f`: a sandboxed runner may not let psql open
 # the path itself.
 set -euo pipefail
