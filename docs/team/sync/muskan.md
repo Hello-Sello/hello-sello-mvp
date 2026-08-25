@@ -7,7 +7,7 @@
 
 **Last updated:** 2026-08-25 — session 91 `deal_land_t03` — 🏁 **SLUG 0023 IS BUILD-COMPLETE.**
 **T01 · T02 · T03 · T04 ALL CLOSED.** Next = **`/ship 0023`**.
-**Status:** idle. **Shared files locked: none — all released** (`DECISIONS.md`, `CONTEXT.md`,
+**Status:** offline (session closed). **Shared files locked: none — all released** (`DECISIONS.md`, `CONTEXT.md`,
 `e2e/fixtures/two-company.ts` all unlocked).
 
 ⚠️ **`/ship` MUST diff `pg_get_functiondef('public.send_deal(uuid)')` against PRODUCTION first** —
