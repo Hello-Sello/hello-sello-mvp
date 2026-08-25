@@ -636,3 +636,71 @@ a "single owner" refactor is worth it, the question is not how much duplication 
 **Corollary (L-038 restated in the positive):** a single owner is only real if the doors actually
 *call* it. `current_pricelist_item` reprinted the rule for months while three other doors delegated,
 and it was the reprint that drifted — not any of the callers.
+
+---
+
+## 2026-08-25 — Two doors can agree on a row's existence and disagree on its *state*
+
+**Found while building T02 / HEL-64 (slug 0023), by `plan-checker`. Not reachable in the seed,
+so no test and no gate walk in that slug could ever have shown it. Offered at G4 and deliberately
+left unfiled.**
+
+The buyer's basket and the connections directory both answer *"which relationships does this viewer
+have?"* — and they answer differently:
+
+| door | predicate |
+|---|---|
+| `basket/supabase/reads.ts:101-104` | `deleted_at is null` |
+| `messaging/supabase/connections.ts:119` | `deleted_at is null` **and** `status === 'active'` |
+
+**The consequence, and why it is nastier than a plain divergence.** On a `suspended` or `ended`
+relationship the basket still produces a non-null `relationshipId`, so the group is treated as
+connected, the connect-first block does not render, and the addressee control mounts. The control
+then looks its people up in the *directory*, which does not know that relationship — so the list is
+empty. **Permanently, and silently.**
+
+That empty list is **byte-identical to the legitimate case** the same ticket spent a whole
+acceptance criterion proving: a connected company that genuinely has no people yet. **Two different
+causes, one indistinguishable screen** — and the "correct" one was explicitly designed to look like
+that ("never a dead control"). So the failure is not merely invisible; it is *camouflaged by an
+intended behaviour*.
+
+**The general shape, and it is a sharpening of [[L-038]] rather than a new rule.** L-038 says a
+single owner is a claim about **agreement**, not file count. This adds: agreement has to cover the
+**lifecycle**, not just the identity. Two doors that both find the same row, and both filter it the
+same way *at the happy path*, can still part company on the states in between — and a state that
+never occurs in the seed is a state no local evidence will ever produce.
+
+**Practical rule.** When one module hands another an id, the receiver's *visibility* predicate is
+part of the contract, not an implementation detail. Either the id-producer applies the same
+predicate, or the receiver must be able to say **"I don't know that one"** distinguishably from
+**"I know it and it's empty."** Here it cannot, and that is the whole defect.
+
+---
+
+## 2026-08-25 — A citation nobody can look up cannot go stale visibly
+
+**Found by `builder` during T02 / HEL-64 while fixing two other stale citations. The slug had
+already produced seven of them; this is the reason there were seven.**
+
+The basket module's source comments cite decision IDs — `D-04`, `D-06`, `D-08`, `D-12`, `D-14`,
+`D-15` — that **have no canonical definition anywhere in the tracked tree.** The IDs are per-phase
+and collide across phases. `D-12` alone currently means four different things:
+
+| where | what `D-12` means |
+|---|---|
+| `DECISIONS.md:1219` | "Inbox" is relabelled "Connection Request" |
+| `cloud-migrations-pending.md:1366` | one active pending join request (partial-unique index) |
+| `0021-tier-ladder/PLAN-T07.md:108` | price is seller-only |
+| `basket/actions.ts` | delivery is `send_deal`'s alone |
+
+**Why this belongs in the architecture record rather than a cleanup ticket.** A line-number citation
+is *checkable*: it goes stale loudly the moment someone opens the file, which is how all seven of
+that slug's stale citations were caught. An unresolvable ID is **worse precisely because it never
+goes stale** — no reader can falsify it, so it quietly stops being true and keeps being copied
+forward into new comments as if it carried authority. The slug's own migration header had five such
+citations copied forward unverified.
+
+**The rule this yields:** an identifier used as evidence must resolve to exactly one place. If a
+scheme is scoped per-phase, the scope belongs **in the identifier** (`P17-D12`, not `D-12`), or the
+scheme should not be used in source comments at all. Prefer the thing a reader can open.
