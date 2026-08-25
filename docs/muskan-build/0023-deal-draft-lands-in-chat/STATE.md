@@ -1,6 +1,6 @@
 # 0023 deal-draft-lands-in-chat — work order
 lane:   FULL
-stage:  design ✅  →  build: **T01 ✅ CLOSED** → **T02 / HEL-64 ✅ CLOSED** → **build (next: T03 / HEL-65 · T04 / HEL-66)**   ·   G2 /prototype SKIPPED (Muskan, 2026-08-25)
+stage:  design ✅  →  build: **T01 ✅ CLOSED** → **T02 / HEL-64 ✅ CLOSED** → **T03 / HEL-65 🔨 IN BUILD** (plan rev 1, `/build` step 3) → T04 / HEL-66 pending   ·   G2 /prototype SKIPPED (Muskan, 2026-08-25)
 branch: claude/muskan/work — no feature branch (Muskan's call, 2026-08-18)
 
 ## Seed
@@ -480,6 +480,47 @@ is not this slug's job, but nothing else is tracking it.
   *"🛑 G4 — T02 / HEL-64 · THE SHEET"*. **Four rulings owed:** AC 5's wording · the call-site wiring
   gap (`critic` N1 — **a coverage claim of MINE that does not hold one level up**) · AC 3's cover ·
   and whether the four pre-existing defects (N4/N5/N6/**N8**) become tickets.
+
+- **build T03, 2026-08-25 (session 91 `deal_land_t03`)** — budgets reset for this round:
+  `tests 0/2`, `blocking-findings 0/2`, `G4 rounds 1`. Plan at `PLAN-T03.md` rev 1;
+  `plan-checker` spawned at `/build` step 3.
+  ✅ **Base sync — dev had REAL content this time.** Session 88 skipped its rebase because dev's
+  tree diff was empty; that is no longer true (`6710f3a` HEL-70's 499-line deactivation gate +
+  two ledger commits). **Merged, not rebased** (`992f05b`) — the two local commits were already
+  pushed and a parallel session is live on this repo, so a rebase meant force-pushing a shared
+  branch for no gain. **Base frozen from there.**
+  ✅ **T01 is LIVE ON PRODUCTION** (parallel session, 2026-08-25). Pre-flight diffed prod's
+  `send_deal` on `prosrc` (`md5 b52ea5df…`, byte-identical to `20260724120300`) — **zero drift**.
+  Prod tip `20260825110000`; **the pending cloud batch is EMPTY.** T03 adds no migration.
+  ✅ **Same-deploy hazard CHECKED, not assumed** (DECISIONS 2026-08-24's `git show origin/main:`
+  pre-check). The DB is ahead of `dev`/`main` and it is benign in this direction: main's
+  `MessageBubble.tsx:20-42` already renders `deal_card` with **no thread-type gate**, main's
+  `sendDeal` (`actions.ts:367`) **never reads `pending_inbox_item`**, and main's deal-tickets
+  lens is a filter whose empty state already exists. The 0022 outage was old code *writing*
+  through a revoked grant; nothing was revoked here.
+  ✅ **T01 confirmed applied LOCALLY against `pg_proc`, not against the file** — so
+  `deal-c2c-create.spec.ts:141-191` is **genuinely red right now**, which is AC 4.
+  ⚠️ **A plain `grep deliver_deal` on `prosrc` HITS and is a FALSE POSITIVE** — the only match is
+  a comment explaining why the call was removed ([[L-041]]'s shape). Recorded so the next reader
+  does not conclude the migration failed to apply.
+  ✅ **Fixture premises measured, not assumed:** relationship `active`/live · **one live c2c
+  thread** (so the base case exercises resolve, not the heal path) · GreenLeaf `verified` and
+  **not** deactivated, so HEL-70's new gate does not close the shop under this walk.
+  🔴 **A SIXTH CRITERION ADDED, and TICKETS.md is now stale by one row.** T02's G4 ruling 2 said
+  *"accept, or ask T03 to assert the wiring"* and Muskan's handoff resolved it toward T03 — but
+  **T03's five ACs never mention the picker.** Deferring to a ticket whose criteria do not cover
+  it is exactly [[L-051]], the mistake T02 made. So the criterion is **written into this plan as
+  AC 6**, and TICKETS.md's amendment is booked as **T04/HEL-66's SIXTH doc edit**.
+  ⚠️ **T02's G4 ruling 3 was never recorded and is NOT being adopted silently.** It offered
+  *"accept the code contract as cover for AC 3, or send it to T03 with a throttled fetch."* The
+  gate log carries rulings 1 and 4 only. A throttled-fetch test needs network interception this
+  repo has never used → left in `PLAN-T03.md` §5 as **an open ruling for Muskan at G4**.
+  ✅ **The handed-forward c2c-counter worry is closed BY CONSTRUCTION** —
+  `countThreadsForPair` (`two-company.ts:532-556`) already filters `t.deleted_at is null`, and a
+  repo-wide grep finds **no other c2c thread counter**. `inbox-accept.spec.ts` also never calls
+  `send_deal`. **The deliberate run (AC 5) is still owed and will still be run.**
+  🔒 Sync lock on `e2e/fixtures/two-company.ts` taken + pushed alone — four of its docstrings
+  assert the inbox-ticket behaviour T01 falsified.
 
 ## Gate log
 - **T02 / HEL-64 — G4 PASSED 2026-08-25 (HUMAN).** Muskan ruled **pass, with T04 amending the AC
