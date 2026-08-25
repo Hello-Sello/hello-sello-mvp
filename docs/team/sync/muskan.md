@@ -5,16 +5,30 @@
 
 ---
 
-**Last updated:** 2026-08-25 — session 91 `deal_land_t03` — **T03 / HEL-65 IN BUILD (e2e walk).**
-**Status:** active. `/build` step 3 (`plan-checker` running on `PLAN-T03.md`).
+**Last updated:** 2026-08-25 — session 91 `deal_land_t03` — **T03 / HEL-65 CLOSED, G4 auto.**
+**Status:** idle. Next = `/build HEL-66` (T04, docs, XS — **the LAST ticket of slug 0023**).
 
-**Shared files locked:**
-- 🔒 `e2e/fixtures/two-company.ts` — four docstrings (`:284`, `:321-323`, `:746`, `:888`) still
-  claim `send_deal` mints an inbox ticket for the company arm, which **T01 falsified**; plus one
-  new counter (`countDealPillsOnThread`). The parallel session `security_tickets` has been told.
+**Shared files locked: none — released.** `e2e/fixtures/two-company.ts` is unlocked; it gained
+**five** stale-claim corrections (the plan predicted four — `critic` found the fifth *inside* the
+helper whose docstring this ticket had just corrected) plus one new helper `countDealPillsOnThread`.
 
-Everything else released. The five basket component files are unlocked;
-`src/modules/basket/actions.ts` + `types.ts` gained comment-only edits and are released too.
+**T03 in one line:** the buyer's company-addressed deal is now proven to land as a pill in the
+seller's c2c chat, end to end. tsc 0 · eslint 0 · **six e2e specs green** · basket units 41/41.
+
+🔴 **The result worth knowing:** AC 6 was proven discriminating by a controlled A/B — under
+`relationshipId={group.sellerCompanyId}`, **tsc returns 0 and all 41 basket unit tests pass**
+while the new e2e fails on `Expected "Alice Green" / Received "Whole company"`. That closes
+`critic` N1 from T02 on **evidence, not a ruling**.
+
+⚠️ **T04 / HEL-66 now owes SIX doc edits** — the sixth is `TICKETS.md`'s T03 AC list, stale by one
+row because AC 6 exists by ruling and was never written there.
+
+⚠️ **The person arm has NO end-to-end proof.** The company arm — the defect the slug exists to fix
+— is proven end to end. *Buyer picks a person → pill lands in p2p* is covered as three halves that
+never meet. Named in `PLAN-T03.md` §5 with no owner.
+
+📌 **`rtk` collapses PLAYWRIGHT output too**, not just vitest — it rewrote an invocation to
+`PASS (2) FAIL (0)`. Use `rtk proxy env PLAYWRIGHT_FORCE_ASYNC_LOADER=1 npx playwright test`.
 
 **Base moved this session:** `dev` was 3 real commits ahead (HEL-70's deactivation gate + two
 ledger commits) — **merged, not rebased** (`992f05b`), because the two local commits were already

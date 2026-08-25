@@ -1,6 +1,6 @@
 # 0023 deal-draft-lands-in-chat — work order
 lane:   FULL
-stage:  design ✅  →  build: **T01 ✅ CLOSED** → **T02 / HEL-64 ✅ CLOSED** → **T03 / HEL-65 🔨 IN BUILD** (plan rev 2 after a checker REVISE, `/build` step 4) → T04 / HEL-66 pending   ·   G2 /prototype SKIPPED (Muskan, 2026-08-25)
+stage:  design ✅  →  build: **T01 ✅ CLOSED** → **T02 / HEL-64 ✅ CLOSED** → **T03 / HEL-65 ✅ CLOSED (G4 auto)** → **build (next: T04 / HEL-66 — the LAST ticket)**   ·   G2 /prototype SKIPPED (Muskan, 2026-08-25)
 branch: claude/muskan/work — no feature branch (Muskan's call, 2026-08-18)
 
 ## Seed
@@ -639,9 +639,34 @@ is not this slug's job, but nothing else is tracking it.
   run**, every affected test passing in isolation. **Distinct from the known `sb_secret_`
   baseline**, not T03's diff (that path is untouched). All 19 confirmed by targeted re-runs rather
   than written off. Test-infra debt.
-  ⏳ Fix round 1 sent back to `test-writer` (6 corrections); plan §5 corrected by me.
+  ✅ **Fix round 1 landed — all 6 corrections, `blocking-findings 1/2`.** Re-ran because the
+  teardown change is **behavioural**, so the earlier green did not carry: **tsc 0 · eslint 0 ·
+  7/7 e2e in 20.6s.**
+  ✅ **The seed is EXACTLY as found — measured, not asserted** (the HEL-73 property): 0 `T03-TMP`
+  leaked · 6 GreenLeaf products · all six `AUR-1A`..`1F` flags byte-identical to the pre-run
+  baseline · 2 distinct locations, so `discover-shop.spec.ts:170`'s count-of-3 still holds.
+  ⚠️ **Residual named rather than hidden:** the new pre-clean does not itself call
+  `resetDealData()`, so a prior `afterAll` that threw *at* `resetDealData()` could leave a product
+  still holding `deal_line_item` rows → the pre-clean 23503s. **It fails loudly with a named
+  error**; the permanent-silent-block is gone. Left unfixed deliberately, window is narrow.
 
 ## Gate log
+- **T03 / HEL-65 — G4 AUTO 2026-08-25 (no human stop, and the routing is recorded).** The diff is
+  **test-only** — three files under `e2e/`, no source, no migration, **nothing renders** — so step
+  9's `visual-verifier` did not fire and **all three step-10 carve-outs were checked and none was
+  live** (no builder REJECTION; `security` not routed, correctly, as the diff touches no
+  migration/RLS/RPC/auth/server action; no behaviour changed at all). **All six criteria replayed
+  green**, full table in `REVIEW.md`. Budgets: `tests 0/2` · `blocking-findings 1/2` ·
+  `G4 rounds 1`.
+  **Headline: AC 6 closed `critic` N1 from T02 on EVIDENCE.** Under the exact swap, `tsc` is **0**
+  and basket units are **41/41 green** while this e2e fails on
+  `Expected "Alice Green" / Received "Whole company"`; reverted and re-passed.
+  **SEVEN items owed to Muskan, none blocking** — T02's unrecorded G4 ruling 3 · `TICKETS.md`
+  stale by one row (T04's 6th edit) · the claim **rollout** uncovered at every level (`critic` B2)
+  · **the person arm has no end-to-end proof** (`critic` N8; the company arm does) ·
+  `present-basket.spec.ts` is dead scaffolding, offered · **`rtk` collapses PLAYWRIGHT too**, not
+  just vitest · and `deal-change.spec.ts`'s load-correlated login flake. All in `REVIEW.md`'s G4
+  sheet.
 - **T02 / HEL-64 — G4 PASSED 2026-08-25 (HUMAN).** Muskan ruled **pass, with T04 amending the AC
   wording.** Budgets spent: `tests 0/2` · `blocking-findings 1/2` · `G4 rounds 1`.
   Five of six ACs walked green; **AC 2 walked live after `plan-checker` found it had no owner**.
