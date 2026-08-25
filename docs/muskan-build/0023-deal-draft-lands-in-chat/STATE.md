@@ -429,6 +429,14 @@ systematically wrong policy line numbers (`security` N3 — every claim TRUE, ev
 2. **T03 must grep the c2c counting helpers.** `e2e/inbox-accept.spec.ts:157-158` asserts
    `countThreadsForPair("c2c") === 1`; the heal path can now leave a soft-deleted row beside the
    live one. `resolveC2cThread` is safe (it filters `deleted_at`); naive counters are not.
+4. **T03 must NOT become the fourth seed-mutating spec.** Flagged by the parallel session
+   `security_tickets` (2026-08-25), which owns **HEL-73** — *"specs permanently mutate the shared
+   seed"*, the reason any e2e number in this repo is untrustworthy. **The clean pattern is
+   `e2e/discover-shop.spec.ts:586-594`**: create your own rows, hard-delete them in `afterAll`,
+   mutate **zero** seed rows. **`AUR-1A`–`AUR-1F` are pinned** by `basket_admission_test.sql` and
+   `seed_visibility_matrix_test.sql` — do not touch them. Recorded here so T03 inherits this
+   instead of rediscovering it.
+
 3. **T03 will hit auth-key rotation noise.** Every `db reset` rotates the stack key and the e2e
    fixtures resolve it once — so a reset immediately before an e2e run manufactures failures that
    look real. SQL runners are immune (they go through `psql`). Flagged by the parallel session,
