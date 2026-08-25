@@ -1,6 +1,6 @@
 # 0023 deal-draft-lands-in-chat — work order
 lane:   FULL
-stage:  design ✅  →  build: **T01 ✅ CLOSED** → **T02 / HEL-64 IN PROGRESS** (session 90 `deal_land_t02`)   ·   G2 /prototype SKIPPED (Muskan, 2026-08-25)
+stage:  design ✅  →  build: **T01 ✅ CLOSED** → **T02 / HEL-64 — 🛑 AWAITING G4 (human)** (session 90 `deal_land_t02`)   ·   G2 /prototype SKIPPED (Muskan, 2026-08-25)
 branch: claude/muskan/work — no feature branch (Muskan's call, 2026-08-18)
 
 ## Seed
@@ -445,7 +445,41 @@ is not this slug's job, but nothing else is tracking it.
   it just quietly stops being true.** L-038's shape one level up.
   ✅ **Gate re-measured by me after both fix rounds:** `tsc` **exit 0** · **494 / 494 across 68 / 68
   files** via `rtk proxy npx vitest run`.
-  ⏳ **NEXT: `visual-verifier` staging the G4 shots** → **G4 is a HUMAN stop** (the diff renders).
+  ✅ **`visual-verifier` done — 15 screenshots in `g4/`, staging table + the G4 sheet in REVIEW.md.**
+  Chrome extension was not connected, so it drove the repo's **Playwright** instead — real chromium,
+  real dev server, seeded users, `localhost` never `127.0.0.1`.
+  🟢 **AC 2 WAS WALKED AFTER ALL — the ruling I was about to hand Muskan is CLOSED BY EVIDENCE.**
+  `plan-checker` B2 found AC 2 had no owner (T03 has no such criterion; the seed has no person-less
+  company). The agent **built the fixture**: a throwaway verified company with zero people,
+  connected to Bob. **The control rendered live with `["Whole company"]` and an ENABLED Create
+  button — on both the buyer door and the seller door.** Fixture, its product, pricelist, two
+  relationships and one born card all **hard-deleted**; baseline re-verified **by me, directly
+  against the DB**: 6 companies · 2 relationships · 7 deal cards · 6 products. `AUR-1A`–`AUR-1F`
+  never touched.
+  🟢 **AC 5 proven AT THE DB, not by reading the UI back** — "Carla Klein" picked, draft born, and
+  the row's `metadata.counterparty_person_id` **is Carla's id.** The control is not decorative.
+  🟢 **AC 4's placement — the thing NO unit test could decide — is settled by one frame.** Shot 4
+  carries **both arms in a single screenshot**: the connected group with the control above Create,
+  and a stranger group with the connect-first block and no control. Counted programmatically:
+  **1 control across 2 groups.**
+  ⚠️ **The schema moved MID-RUN** (`20260825100000` + `20260825110000`, parallel session). I warned
+  the agent while it was working — **about misattribution, not about the feature.** It re-took
+  **every** shot after the migrations and deleted the pre-migration set, so the folder is uniform.
+  Nothing attributable was observed (6 product cards / 3 add-to-basket both before and after; no
+  price changed).
+  📌 **AC 3 is `cannot-verify` and the agent said so rather than faking it** — the pre-fetch frame
+  lasts milliseconds against a local Supabase. A ruling, not a defect.
+  📌 **Two observations offered, not filed:** the option ORDER is unstable between loads
+  (`getMyConnections()` imposes none; "Whole company" is always first, so no AC breaks) · and
+  **choosing a person still lands the buyer in the COMPANY chat after birth** — may be correct
+  (birth is not send) but no AC says, and it is the shape G5 finds late.
+  📌 **Honest caveat recorded by the agent:** the expanded-dropdown shots set `size` on the element
+  as a capture aid — a native select popup is OS-drawn and cannot be screenshotted. **The option
+  lists are real; the open-list layout is not what a user sees.**
+  🛑 **STOPPED AT G4 — the gate is Muskan's and nothing is passed.** Sheet in `REVIEW.md` under
+  *"🛑 G4 — T02 / HEL-64 · THE SHEET"*. **Four rulings owed:** AC 5's wording · the call-site wiring
+  gap (`critic` N1 — **a coverage claim of MINE that does not hold one level up**) · AC 3's cover ·
+  and whether the four pre-existing defects (N4/N5/N6/**N8**) become tickets.
 
 ## Gate log
 - triage — FULL, 2026-08-25 (narrowed from F-04, then widened to include the picker)
