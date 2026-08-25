@@ -99,7 +99,7 @@ PARALLEL SESSION's shape and `20260825090000` is NOT applied to it**, so a catal
 | **AC 9 / M8 (a)** — is `20260720095000_deliver_deal.sql` modified? | **untouched** |
 | **AC 9 / M8 (b)** — does any new migration redefine `deliver_deal`? | **none** |
 | RED baseline (pre-migration) | `send_deal_c2c_announce` **exit 3** · `deliver_deal` **exit 3** · `claim_deal_ticket` **exit 0** (green by design) |
-| **five-runner SQL gate (post-migration)** | ⏳ **NOT YET RUN** — blocked on the shared local DB, held by the parallel session |
+| **five-runner SQL gate (post-migration)** | ⏳ **NOT YET RUN** — blocked on the shared local DB, held by the parallel session. ⚠️ **Superseded** — `STATE.md`'s later replay records all five runners at exit 0; this table was never reconciled after the block cleared |
 
 ⚠️ **A measurement trap worth recording.** My first RED pass piped each runner into `tail -6`
 and read `$?` — which reports **tail's** status, not the runner's. All three read as `0` while
