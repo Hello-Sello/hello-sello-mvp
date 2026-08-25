@@ -382,10 +382,30 @@ is not this slug's job, but nothing else is tracking it.
   ✅ **Both of builder's own citations spot-checked by me and both hold:** `RecipientPicker`'s new
   docstring cites `BasketDrawer.tsx:358-367` — the `{counterpartyRelationshipId && (` block does run
   `:358-367`; and `messaging/types.ts:201-220` is `ConnectedCompany`'s real span.
-  ⏳ **NEXT: `test-runner`.** ⚠️ **The file count is the load-bearing number, not the pass count** —
-  T01's baseline was **490 / 67 files**, and the new suite must take it to **68**. A run that still
-  says 67 means `CounterpartyPersonSelect.test.tsx` never executed and its four cases would be green
-  for the wrong reason. **`rtk` collapses vitest to `PASS (n) FAIL (n)` and would hide exactly that.**
+  ✅ **GATE GREEN, and the load-bearing number is the FILE COUNT, not the pass count.**
+  `tsc` **exit 0** · `npm run test:unit` **494 / 494 across 68 / 68 files** · `eslint` **exit 0** on
+  the three source files. T01's baseline was **490 / 67**; a run still reporting **67** would have
+  meant the new suite never executed and its four cases were green for the wrong reason.
+  **Measured through `rtk proxy npx vitest run`** — the wrapper collapses vitest to
+  `PASS (n) FAIL (n)` and would have hidden it. `CounterpartyPersonSelect.test.tsx` confirmed by
+  name with its 4 tests. **Re-measured by me after `test-runner` reported, not taken from it.**
+  ✅ **`consistency` — CLEAN, zero blocking. Four reuse checks, and one CORRECTED A CLAIM OF MINE.**
+  🔴 **The render-phase state adjustment is NOT a first — my plan implied it was.** It is already
+  established at **`IconRail.tsx:200-205`** (`prevOnRoute`/`onSurfaceRoute`) and
+  **`OpenItems.tsx:115-120`** (`prevThings`/`things`) — same shape, same `prev<X>` naming.
+  **Verified by opening both.** `IconRail`'s own comment gives builder's exact reason:
+  *"conditional setState in render, NOT an effect … so it never reads as a setState-in-effect."*
+  **So D1 did not merely dodge a lint rule — it landed on the convention this repo had already
+  chosen for this problem, for this reason.**
+  ✅ Also clean: **no duplication of `NewChatDropdown`** (that one flattens the WHOLE directory with
+  search; this resolves people for one known `relationshipId`) · the fetch idiom matches
+  `BasketDrawer.tsx:43-57` · **the accepted duplicate read had no alternative to skip** — zero hits
+  for `useSWR`/`react-query`/`useQuery` repo-wide, and the single `createContext` (`BasketProvider`)
+  is basket state, not a directory cache · styling byte-identical to the sibling select ·
+  `peopleForRelationship`'s placement upheld against `basket/lib/` on a real distinction
+  (`basket/lib/*` operates on `BasketLine`/`BasketGroup`; this operates on `MyConnectionsView`).
+  ⏳ **NEXT: `critic` still running**, then `visual-verifier` → **G4 is a HUMAN stop** (the diff
+  renders).
 
 ## Gate log
 - triage — FULL, 2026-08-25 (narrowed from F-04, then widened to include the picker)
