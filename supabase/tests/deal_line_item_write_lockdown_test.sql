@@ -45,14 +45,18 @@
 
 BEGIN;
 
+-- Clara and Rheinland are looked up by email/name, not hardcoded: seed.sql's
+-- "5a"/"5b" block (unlike Alice/GreenLeaf's fixed block above it) creates them
+-- with gen_random_uuid(), so a literal here would be a fresh random miss on
+-- every single db reset.
 CREATE TEMP TABLE _t ON COMMIT DROP AS
-SELECT dli.id                                            AS line_id,
-       dli.deal_card_id                                  AS card_id,
-       '09d37c01-4db6-4596-9af3-b7107b053a9c'::uuid      AS clara,     -- Rheinland
-       '65acb952-3aed-46bc-b608-f02f73268de8'::uuid      AS rheinland,
-       '11111111-1111-1111-1111-111111111111'::uuid      AS alice,     -- GreenLeaf
-       dli.sort_order                                    AS sort_order,
-       dli.version                                       AS version
+SELECT dli.id                                                          AS line_id,
+       dli.deal_card_id                                                AS card_id,
+       (SELECT id FROM auth.users WHERE email = 'clara@rheinland.test') AS clara,
+       (SELECT id FROM public.company WHERE name = 'Rheinland Apotheke GmbH') AS rheinland,
+       '11111111-1111-1111-1111-111111111111'::uuid                   AS alice,     -- GreenLeaf, fixed seed UUID
+       dli.sort_order                                                 AS sort_order,
+       dli.version                                                    AS version
   FROM public.deal_line_item dli
   JOIN public.deal_card dc ON dc.id = dli.deal_card_id
   JOIN public.relationship r ON r.id = dc.relationship_id
@@ -84,8 +88,8 @@ END $$;
 -- ============================================================================
 -- §A — CONTROLS.
 -- ============================================================================
-SELECT set_config('request.jwt.claim.sub', '09d37c01-4db6-4596-9af3-b7107b053a9c', true);
-SELECT set_config('request.jwt.claims', '{"sub":"09d37c01-4db6-4596-9af3-b7107b053a9c","role":"authenticated"}', true);
+SELECT set_config('request.jwt.claim.sub', (SELECT clara::text FROM _t), true);
+SELECT set_config('request.jwt.claims', (SELECT json_build_object('sub', clara, 'role', 'authenticated')::text FROM _t), true);
 SET LOCAL ROLE authenticated;
 
 -- A1 — reads are untouched. The counterparty must still SEE the deal lines;
@@ -114,8 +118,8 @@ RESET ROLE;
 --      precisely the privilege DEV-159 abuses. RED against the pre-fix grants:
 --      every one of these writes currently SUCCEEDS.
 -- ============================================================================
-SELECT set_config('request.jwt.claim.sub', '09d37c01-4db6-4596-9af3-b7107b053a9c', true);
-SELECT set_config('request.jwt.claims', '{"sub":"09d37c01-4db6-4596-9af3-b7107b053a9c","role":"authenticated"}', true);
+SELECT set_config('request.jwt.claim.sub', (SELECT clara::text FROM _t), true);
+SELECT set_config('request.jwt.claims', (SELECT json_build_object('sub', clara, 'role', 'authenticated')::text FROM _t), true);
 SET LOCAL ROLE authenticated;
 DO $$
 DECLARE v RECORD; n integer;
@@ -221,7 +225,7 @@ BEGIN
   RETURN n;
 END $$;
 
-SELECT set_config('request.jwt.claims', '{"sub":"09d37c01-4db6-4596-9af3-b7107b053a9c","role":"authenticated"}', true);
+SELECT set_config('request.jwt.claims', (SELECT json_build_object('sub', clara, 'role', 'authenticated')::text FROM _t), true);
 SET LOCAL ROLE authenticated;
 DO $$
 DECLARE v RECORD;

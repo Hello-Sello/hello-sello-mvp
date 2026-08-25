@@ -37,19 +37,28 @@
 --
 -- Shape: one BEGIN…ROLLBACK, zero net seed mutation (L-033 / HEL-73).
 --
--- Fixture (seeded): p2p thread f6ffb1cb-… between Alice 11111111-… and
--- Bob 22222222-…. Carol 09d37c01-… is a genuine NON-member of that thread.
+-- Fixture (seeded): the p2p thread between Alice 11111111-… and
+-- Bob 22222222-…, resolved dynamically below. Carol (Clara Vogt) is a
+-- genuine NON-member of that thread.
 -- ============================================================================
 
 \set ON_ERROR_STOP on
 
 BEGIN;
 
+-- The p2p thread and Carol (Clara Vogt, a genuine non-member) are looked up
+-- dynamically, not hardcoded: chat_thread.id and Clara's auth.users id are
+-- both gen_random_uuid() in seed.sql, so a literal here would be a fresh
+-- random miss on every single db reset.
 CREATE TEMP TABLE _t ON COMMIT DROP AS
-SELECT 'f6ffb1cb-4055-46e1-9ce5-de9e48fdf5f8'::uuid AS thread_id,
-       '11111111-1111-1111-1111-111111111111'::uuid AS alice,
-       '22222222-2222-2222-2222-222222222222'::uuid AS bob,
-       '09d37c01-4db6-4596-9af3-b7107b053a9c'::uuid AS carol;
+SELECT (SELECT ct.id FROM public.chat_thread ct
+         WHERE ct.type = 'p2p'
+           AND ct.person_a_id IN ('11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222222')
+           AND ct.person_b_id IN ('11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222222')
+           AND ct.person_a_id <> ct.person_b_id)                       AS thread_id,
+       '11111111-1111-1111-1111-111111111111'::uuid                   AS alice,
+       '22222222-2222-2222-2222-222222222222'::uuid                   AS bob,
+       (SELECT id FROM auth.users WHERE email = 'clara@rheinland.test') AS carol;
 GRANT SELECT ON _t TO authenticated;
 
 DO $$
@@ -170,8 +179,8 @@ RESET ROLE;
 -- §D — THE EXISTING GATE STILL HOLDS. Carol is not in this thread. Narrowing
 --      WITH CHECK must not have loosened anything on the way past.
 -- ============================================================================
-SELECT set_config('request.jwt.claim.sub', '09d37c01-4db6-4596-9af3-b7107b053a9c', true);
-SELECT set_config('request.jwt.claims', '{"sub":"09d37c01-4db6-4596-9af3-b7107b053a9c","role":"authenticated"}', true);
+SELECT set_config('request.jwt.claim.sub', (SELECT carol::text FROM _t), true);
+SELECT set_config('request.jwt.claims', (SELECT json_build_object('sub', carol, 'role', 'authenticated')::text FROM _t), true);
 SET LOCAL ROLE authenticated;
 DO $$
 BEGIN

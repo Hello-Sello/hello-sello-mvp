@@ -46,15 +46,19 @@
 
 BEGIN;
 
+-- Rheinland, NordCanna and Bavaria are looked up by name, not hardcoded:
+-- seed.sql's "5b" block creates them with gen_random_uuid() (unlike the fixed
+-- Alice/GreenLeaf/Bob/StonePharm/PendingCo block), so a literal here would be
+-- a fresh random miss on every single db reset.
 CREATE TEMP TABLE _t ON COMMIT DROP AS
 SELECT '11111111-1111-1111-1111-111111111111'::uuid AS alice,      -- sender
        'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid AS greenleaf,  -- her company
        '22222222-2222-2222-2222-222222222222'::uuid AS bob,        -- a person receiver
        'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'::uuid AS stonepharm, -- live + verified
-       '65acb952-3aed-46bc-b608-f02f73268de8'::uuid AS rheinland,  -- live + verified
+       (SELECT id FROM public.company WHERE name = 'Rheinland Apotheke GmbH')       AS rheinland,  -- live + verified
        'cccccccc-cccc-cccc-cccc-cccccccccccc'::uuid AS pendingco,  -- live + UNVERIFIED
-       '26620a65-65ba-4b17-a7b6-0ffa20092c73'::uuid AS nordcanna,  -- -> deactivated below
-       'a7d0ddcb-6740-41cc-8065-4c5d61e489b0'::uuid AS bavaria;    -- -> soft-deleted below
+       (SELECT id FROM public.company WHERE name = 'NordCanna Distribution GmbH')   AS nordcanna,   -- -> deactivated below
+       (SELECT id FROM public.company WHERE name = 'Bavaria Medical Cannabis GmbH') AS bavaria;     -- -> soft-deleted below
 GRANT SELECT ON _t TO authenticated;
 
 -- Fixture guard. Every cell below reads a state; if the seed drifted, the suite
