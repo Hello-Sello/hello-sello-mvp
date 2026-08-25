@@ -404,8 +404,48 @@ is not this slug's job, but nothing else is tracking it.
   is basket state, not a directory cache · styling byte-identical to the sibling select ·
   `peopleForRelationship`'s placement upheld against `basket/lib/` on a real distinction
   (`basket/lib/*` operates on `BasketLine`/`BasketGroup`; this operates on `MyConnectionsView`).
-  ⏳ **NEXT: `critic` still running**, then `visual-verifier` → **G4 is a HUMAN stop** (the diff
-  renders).
+  ✅ **`critic` — 2 blocking + 7 notes. ALL NINE VERIFIED TRUE BY ME before folding (L-003).**
+  **`blocking-findings` budget: 1 of 2 spent** — the two blocking findings were fixed in ONE pass
+  (the budget counts fix ROUNDS, not findings).
+  🔴 **`critic` RAN WITH NO SHELL — the SECOND time on this slug, and its agent definition grants
+  `Bash`.** It declared the limitation up front and substituted line-offset arithmetic rather than
+  hiding it, **so its "unchanged/verbatim" claims are readings, not diffs.** I diffed the fenced
+  items myself. **Broken machinery — surfaced at G4, not worked around.**
+  ✅ **B1 + B2 were the same defect twice: THIS DIFF FALSIFIED TWO DOCSTRINGS IN THE MODULE IT WAS
+  EDITING.** `basket/actions.ts:9-11` said the buyer's recipient is *"implicit = the seller company
+  via the relationship"* — **eleven lines above `:29`, which forwards the person the buyer just
+  picked.** `basket/types.ts:41` called the field the *"own-company offer path"*. Both rewritten;
+  the type is byte-identical, so PLAN §7's no-signature-change fence holds.
+  🔴 **N1 — THE FINDING NO CODE CHANGE CAN CLOSE, and it is a gap in MY plan.** C7's decoy closes
+  the `relationshipId`-vs-`companyId` swap **inside the selector only**. Wire
+  `relationshipId={group.sellerCompanyId}` at `BasketDrawer.tsx:361` and both are `string`, `tsc`
+  passes, `useEffect` never fires under static render, **and all six render cases plus C7 still go
+  green** — while the shipped control's people list is empty forever, the exact M7 state the ticket
+  forbids. **PLAN §5's "declared uncovered" table did not list it**, so a reader who accepts C7's
+  rationale would believe the class is closed one level up. **On the G4 sheet beside AC 2.**
+  ✅ **N2 + N3 fixed by `test-writer` (round 2) — and it found a FOURTH stale citation unasked.**
+  C1's title claimed *"first, SELECTED"* while asserting **preselection only** (order is vacuous
+  under an always-empty `people` fixture) → **renamed, not padded with an assertion that would pass
+  for free.** Citations: `BasketDrawer.tsx:231` → **`:232`** (×2) and `RecipientPicker :26-28` →
+  **`:32-34`** (×2) were **all broken BY this diff** (the new import at `:15` shifted every line by
+  one); `BasketDrawer.tsx:187` → **`:202`** was pre-existing from the 0022 pass.
+  ⚠️ **The `:26-28` one was NOT an off-by-N — it pointed at entirely the wrong code** (the
+  `useEffect` fetch, not the early return). **Verified by opening the file.** Seventh stale-citation
+  finding on this slug.
+  📌 **DEFERRED, not fixed — four pre-existing notes, none opened by this diff** (N4 `RecipientPicker`'s
+  fetch has no `.catch`/`alive` guard and shows a **connected** seller a false *"Connect with a
+  company first"* on failure, ~4 lines · N5 choosing *"Select a customer…"* never re-reports, so the
+  parent keeps the previous recipient · N6 the `useState` initialiser on a changing prop · N7 the
+  seller path's **fully redundant** second `getMyConnections()` read). **Tickets offered at G4, not
+  filed unilaterally.**
+  📌 **`builder` raised something bigger than the fix it was doing: the basket module's `D-xx`
+  decision IDs have NO canonical home.** `D-12` means **four** different things across the corpus
+  (`DECISIONS.md:1219` · `cloud-migrations-pending.md:1366` · `0021-tier-ladder/PLAN-T07.md:108` ·
+  `basket/actions.ts`). Verified by grep. **A citation nobody can look up cannot go stale visibly —
+  it just quietly stops being true.** L-038's shape one level up.
+  ✅ **Gate re-measured by me after both fix rounds:** `tsc` **exit 0** · **494 / 494 across 68 / 68
+  files** via `rtk proxy npx vitest run`.
+  ⏳ **NEXT: `visual-verifier` staging the G4 shots** → **G4 is a HUMAN stop** (the diff renders).
 
 ## Gate log
 - triage — FULL, 2026-08-25 (narrowed from F-04, then widened to include the picker)
