@@ -7,7 +7,9 @@
 
 **Last updated:** 2026-08-25 (session 88 `deal_land` — **T01 / HEL-63 CLOSED**)
 **Status:** offline — session closed. Next session = `/build HEL-64` (T02, the buyer's person picker).
-**Shared files locked:** **none — all released.** `src/modules/deals/actions.ts` was locked for a
+**Shared files locked:** `docs/decisions/DECISIONS.md`, `docs/architecture/ARCHITECTURE-NOTES.md`
+(two propose-mode wrap entries, Muskan's yes 2026-08-25 — released immediately after).
+**Previously:** `src/modules/deals/actions.ts` was locked for a
 docstring-only edit (`:356-366`) and is now released, committed in `3ae7873`.
 
 **Shipped this session (local, NOT pushed to cloud):** `supabase/migrations/20260825090000_send_deal_c2c_announce.sql`,
