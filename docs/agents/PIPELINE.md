@@ -32,9 +32,9 @@ distance from one gate to the next and does not stop in between.
 | You type | Runs internally, without pausing | Stops at |
 |---|---|---|
 | `/triage <seed>` | six questions → lane → opens `STATE.md` | *no gate — it routes* |
-| `/spec <slug>` | `researcher` (prior-art sweep) → interview → write the spec | 🚦 **G1** |
+| `/spec <slug>` | `researcher` (prior-art sweep) → interview → write the spec → **show it, do not stop** | *no gate — see §9a* |
 | `/prototype <slug>` | read the spec → build 2–3 variants → you pick | 🚦 **G2** *(frontend only)* |
-| `/design <slug>` | `researcher` (approaches) → ADR + invariants → `adr-checker` → breakdown → tickets | 🚦 **G3** |
+| `/design <slug>` | `researcher` (approaches) → ADR + invariants → `adr-checker` → breakdown → tickets | 🚦 **G3 — approves the WHAT and the HOW together** |
 | `/build <ticket>` | **base sync** (pull own branch; behind `dev` → rebase NOW, then the base is frozen until `/ship`) → plan → `plan-checker` → `test-writer` → `builder` → `test-runner` → reviewers → `visual-verifier` | 🚦 **G4** |
 | `/ship <slug>` | **rebase onto `dev`** → re-run the suite → **Claude Security plugin "scan changes"** → PR → merge → deploy → walk the criteria on the live URL · **stops at the ask rule when the wave writes prod data** (§9) | 🚦 **G5** |
 | `/diagnose <bug>` | reproduce → write the failing regression test | *hands to `/build`* |
@@ -56,11 +56,15 @@ stops were in the wrong places and one of them was missing entirely.
 So: **gates stay human, plumbing chains.** Five stops, and the mechanical block between
 them is one command.
 
-**The collapse path is real, but it runs on evidence.** After ~10 clean features, G1 and
-G3 may merge toward R5's 2-gate model (approve after the design interview, approve before
-merge) — if the gate log shows those gates catching nothing. G4 never collapses: visual
-fidelity cannot be self-certified, per Muskan's explicit call — the agent stages, she
-passes.
+**The collapse path is real, and it has been taken once.** ✅ **G1 merged into G3 on
+2026-08-25** — three slugs, zero G1 rejections, and G2 turns out to be a cheaper check on
+the WHAT than a PRD read. **The condition written here said ~10 features; Muskan overrode it
+at 3.** Full reasoning, and the one case that genuinely loses cover (backend-only slugs,
+which skip G2), in **§9a**. The next collapse candidate is G4-auto widening — but not before
+a backend-only slug proves §9a's exposure is theoretical.
+
+**G4 never collapses:** visual fidelity cannot be self-certified, per Muskan's explicit call
+— the agent stages, she passes.
 
 ---
 
@@ -140,7 +144,7 @@ insurance in the system.
 G4s.** The routing above was already the rule; `/build` step 10 said *"STOP at G4"*
 unconditionally and overrode it, so a backend-only ticket still cost a ruling. Step 10
 now obeys this table. A backend-only ticket closes on its criteria replay plus green
-tests + `critic` + `security`, and is marked `G4 auto` in the gate log.
+tests + `/code-review` + `critic` + `security`, and is marked `G4 auto` in the gate log.
 
 **Three carve-outs escalate a backend-only ticket to Muskan anyway:** an outstanding
 builder REJECTION, a blocking `security` finding, or behaviour the written criteria do
@@ -249,7 +253,7 @@ that is `/design`'s failure, not yours.
 
 | Section | Says | Who reads it |
 |---|---|---|
-| **Reused** | *Already built — we feed it, don't touch.* What this work builds on and must not modify | `consistency` checks the diff against it; `builder` gets it as a fence |
+| **Reused** | *Already built — we feed it, don't touch.* What this work builds on and must not modify | `critic` checks the diff against it; `builder` gets it as a fence |
 | **Blast-radius** | What else this could break, traced — every caller, every cross-surface dependency, **every RPC and base table you did not write** | `security` + the reviewers; it is the risk map for the whole ticket set |
 
 **Fix two — `adr-checker`.** Read-only, runs after the ADR is drafted and before G3. It
@@ -473,7 +477,7 @@ docs/
        REVIEW.md                  ← ONE per slug, appended per round.
                                     every finding tagged blocking / note /
                                     rejected AND attributed to the agent
-                                    that made it — "(consistency)",
+                                    that made it — "(code-review, x.ts:12)",
                                     "(critic, migration:192)".  the G4
                                     visual walk + prototype DEVIATIONs
                                     append here too.  that attribution is
@@ -504,7 +508,7 @@ ships.
 
 ---
 
-## 7. Agents — eleven workers
+## 7. Agents — ten workers, plus the built-in reviewer
 
 `.claude/agents/<name>.md`. Fresh context, returns one artifact, then dies.
 
@@ -516,8 +520,8 @@ ships.
 | `test-writer` | What does the spec say correct looks like? | read + write tests |
 | `builder` | Implement until green | **full write** |
 | `test-runner` | Run and report | read + bash, **no edit** |
-| `critic` | Correct? Scope creep? Breaks an invariant? | read-only |
-| `consistency` | Reused ours, or invented and patched? | read-only |
+| `critic` | Criteria built? Scope creep? Breaks the Reused fence? | read-only |
+| *(built-in)* `/code-review` | Correct? Reused ours, or invented and patched? Simpler? | read-only, not ours to maintain |
 | `security` | RLS · tenant isolation · exposed data · grants on **both** client roles | read-only; runs [`SECURITY-CHECKLIST.md`](./SECURITY-CHECKLIST.md) |
 | `visual-verifier` | Does it match what we approved? | browser + screenshots |
 | `rollup` | What did each stage actually catch, per the artifacts? | read-only (**fresh context — see §16**) |
@@ -553,7 +557,7 @@ evidence. See the tiering table in §13, and §16 for why the first reading got 
 > carried both re-declares before any plan existed. No decisive independent catch was
 > recorded in the T01–T08 sprint — so it was first marked Tier 2, on watch.
 >
-> **Corrected 2026-08-18: `plan-checker` is Tier 1, and so is `consistency`.** That first
+> **Corrected 2026-08-18: `plan-checker` is Tier 1, and so was `consistency`** (retired 2026-08-25, see §7). That first
 > reading scored both agents only on whether their *predicted* catch landed, without reading
 > the slug's `REVIEW.md` — which records `plan-checker` returning REVISE on all three plans it
 > saw (headline: a backfill `NOT(a AND b AND c)` hole excluding the main malformed case from
@@ -575,16 +579,15 @@ build one then.
 Revised 2026-08-18 (Muskan's call, building the agents): **judgment-heavy checkers pin
 the smartest model** — Opus on `critic`, `security`, `adr-checker`, `plan-checker`,
 `rollup`, `visual-verifier`; Sonnet on the pattern-matchers and mechanical roles —
-`consistency`, `researcher`, `test-writer`, `test-runner`. Only `builder` inherits the
+`researcher`, `test-writer`, `test-runner`. Only `builder` inherits the
 session model. Re-measure if a Sonnet role starts missing catches.
 
 ### Review routing
 
 | Diff touches | Reviewers |
 |---|---|
-| migration · RLS · RPC · auth · server action · cross-company reads | critic + **security** |
-| a new component or a new pattern | critic + **consistency** |
-| CSS / copy only | **critic alone** |
+| **anything at all** | `/code-review high` + `critic` — always both |
+| migration · RLS · RPC · auth · server action · cross-company reads | **+ `security`** |
 
 Spawned in **one message** so they run in parallel — they are independent, and serialising
 them is fake waiting.
@@ -651,7 +654,7 @@ Budgets are SEPARATE. Never share one counter across steps 5 and 6.
 4. Implement — spawn `builder`. Only the files named in the plan.
 5. Run — spawn `test-runner`. Red? Back to 4. TWO attempts on `tests`, then STOP.
 6. Review — spawn in ONE message so they run in parallel:
-   critic (always) · security (if migrations/RLS/auth/RPCs) · consistency (if new pattern)
+   `/code-review high` (always) · critic (always) · security (if migrations/RLS/auth/RPCs)
    Each finding is `blocking` or `note`.
    - `note` → write it to REVIEW.md. Do NOT fix. Do NOT spend an attempt.
    - `blocking` → back to 4. TWO attempts on `blocking-findings`, then STOP.
@@ -692,11 +695,45 @@ Bash but no Edit or Write — so it structurally cannot "fix" the test instead o
 
 | Gate | Where | Cost of a no |
 |---|---|---|
-| **G1** | Spec (or prototype-first) | Minutes. The cheapest place to be slow |
-| **G2** | Prototype | An hour |
-| **G3** | ADR | A day |
+| ~~**G1**~~ | *merged into G3, 2026-08-25 — see §9a* | — |
+| **G2** | Prototype | An hour — **and for a frontend slug this is now the cheap check on the WHAT** |
+| **G3** | **Spec + ADR, one approval** | A day |
 | **G4** | **Visual + acceptance** | **A rebuild** |
 | **G5** | Live | A hotfix, in front of users |
+
+### 9a. G1 merged into G3 — 2026-08-25, and what it costs
+
+Across slugs 0021, 0022 and 0023, **G1 never once rejected a spec.** What it did do was
+collect rulings that were not spec questions at all: 0023's G1 took an **eight-row ruling
+table** — G2 skipped, pill wording, which page a Connection Request stops on — every one of
+them a *design* decision being made before the ADR that owns it. Meanwhile G3 took **eleven
+sign-offs** on the same slug. Two gates, ~19 rulings, for one feature.
+
+So `/spec` no longer stops. It writes the PRD, shows it, and hands to `/prototype` or
+`/design`. **G3 approves the spec and the ADR together**, and design rulings are taken at
+G3 where the ADR can actually answer them.
+
+**What this costs, stated plainly.** §9 priced G1 at *"minutes — the cheapest place to be
+slow"*, and that was right. Merging it means a wrong spec is discovered after the ADR is
+written, so a wrong-spec "no" now costs a day instead of minutes.
+
+**Why that is acceptable, and exactly when it is not:**
+
+- **Frontend slugs keep a cheap no — G2.** A prototype is an *earlier, cheaper and far more
+  concrete* check on the WHAT than reading a PRD. Muskan looking at two variants catches a
+  wrong spec faster than Muskan reading acceptance criteria. Nothing is lost.
+- **Backend-only slugs skip G2, so they genuinely lose the cheap no.** Their first stop is
+  now after the ADR. That is the real exposure of this change, and it is not hypothetical —
+  0023 skipped G2.
+- **The revert is one line:** put 🚦 **G1** back in the §1 table against `/spec`. Do it the
+  first time a backend-only slug reaches G3 on a spec that was wrong from the start.
+
+**This deviates from the collapse condition written in §1** (*"after ~10 clean features"*).
+Overridden by Muskan on three slugs of evidence, 2026-08-25, with the exposure above named
+rather than assumed. The condition existed to prove G1 catches nothing; three slugs of it
+catching nothing, plus G2 covering the frontend case, was judged enough.
+
+---
 
 ### G4 approves your branch. Something else deploys.
 
@@ -894,7 +931,7 @@ memory.
 | `adr-checker` | **Tier 1 — promoted** | 96 catches over 7 fresh-context rounds, in classes nothing else caught |
 | `researcher` | **Tier 1 — kept, humbled** | Its headline prediction was a wrong target and Muskan overruled it. The human-overrule path is part of the design, and it worked |
 | `plan-checker` | **Tier 1 — promoted** | REVISE on all three plans it ran on. Headline catch: the backfill's `NOT(a AND b AND c)` excluded the main malformed case from the rescue path — a prod data-correctness bug caught before any code existed |
-| `consistency` | **Tier 1 — promoted** | T02's one and only blocking finding was its: camelCase `packSizeGrams` vs the real snake `pack_size_grams`, which would have forced two hand-built adapters |
+| `consistency` | **Tier 1 — promoted, then RETIRED 2026-08-25** | T02's one and only blocking finding was its: camelCase `packSizeGrams` vs the real snake `pack_size_grams`, which would have forced two hand-built adapters. Retired not for missing catches but because the built-in `/code-review` covers the same lane and is not ours to maintain — and across slugs 0022+0023 it produced **zero further blocking findings**. The lookalike class is named explicitly in `/build` step 7 so it is not silently dropped |
 
 The rule that produced this table still governs the next slug: **an agent that catches
 nothing Muskan or a Tier 1 agent would have caught gets cut before it is built.** That is
