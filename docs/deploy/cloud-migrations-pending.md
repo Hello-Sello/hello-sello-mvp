@@ -23,9 +23,30 @@
 
 ---
 
-## ⚠️ PENDING (2026-08-24, updated 2026-08-25) — THREE migrations, plain `db push`, **no `--include-all`**
+## ✅ APPLIED 2026-08-25 (was PENDING 2026-08-24) — THREE migrations, one plain `db push`
 
-**Status: LOCAL ONLY. Production still carries the price leak.**
+**Status: LIVE ON PRODUCTION.** Pushed 2026-08-25 by the `security_tickets` session on Muskan's
+explicit go-ahead. Production tip is now `20260825110000`, verified against
+`supabase_migrations.schema_migrations` — not against this file.
+
+**Post-push evidence, all run against production, none of it inferred:**
+
+| check | result |
+| -- | -- |
+| Pre-flight — `send_deal` drift | **zero drift.** `md5(prosrc) = b52ea5df…`, len 3591, byte-identical to `20260724120300`. The `create or replace` overwrote nothing hand-edited. |
+| Migration tip | `20260825110000` |
+| HEL-69 — the two leaking rows, read as a **connected buyer** (Aurora → StonePharm) | `Spirit Bear T28 STR MLS` **0 rows**, `fdsc` **0 rows** |
+| …with its control on the same query | the same caller still sees **9** legitimate prices — the zeros are the gate, not a dark view |
+| HEL-69 — does the view delegate? | `product_price_visible_to_caller` present, `profile_visible` reprint **gone** |
+| HEL-70 — all five doors carry the term | 5/5 `deactivated_at`, and 5/5 **kept** `verification_status` (no door traded one for the other) |
+| S8 advisors | **87: 1 ERROR, 85 WARN, 1 INFO.** The one ERROR is `security_definer_view` on `current_pricelist_item` — knowingly accepted, ADR-0004 §4 / ARCHITECTURE-NOTES.md:231. **No new ERROR.** |
+
+⚠️ **On the S8 number, honestly.** The recorded baseline is "85" but its composition was never written
+down precisely, and two migrations landed between that baseline and this push. **87 vs 85 is not a
+clean diff and should not be reported as one.** What IS checkable, and was checked: no new ERROR, and
+all five functions this batch touched were already `SECURITY DEFINER` before it, so none of them
+entered the 82-strong `authenticated_security_definer_function_executable` class as a result of this
+push. A baseline nobody can decompose is worth less than the check that replaced it.
 
 > 🔴 **THIS ENTRY SAID "ONE MIGRATION" AND THE BATCH WAS ALREADY TWO.** Corrected 2026-08-25 by the
 > `security_tickets` session while ledgering HEL-70. `20260825090000` (slug 0023 T01 / HEL-63) has
