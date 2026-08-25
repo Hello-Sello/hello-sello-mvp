@@ -4645,6 +4645,10 @@ export type Database = {
         Returns: string
       }
       accept_person_connection: { Args: { p_item_id: string }; Returns: string }
+      accept_promotion: {
+        Args: { p_deal_card_id: string }
+        Returns: undefined
+      }
       approve_company: { Args: { p_company_id: string }; Returns: undefined }
       approve_join_request: {
         Args: { p_request_id: string; p_role?: string }
@@ -4662,9 +4666,17 @@ export type Database = {
         Args: { p_line_item_id: string }
         Returns: undefined
       }
+      card_buyer_company_id: {
+        Args: { p_deal_card_id: string }
+        Returns: string
+      }
       card_relationship_member: {
         Args: { p_card_id: string }
         Returns: boolean
+      }
+      card_seller_company_id: {
+        Args: { p_deal_card_id: string }
+        Returns: string
       }
       change_member_role: {
         Args: { p_person_id: string; p_role: string }
@@ -4716,6 +4728,10 @@ export type Database = {
       deactivate_account: { Args: never; Returns: undefined }
       deactivate_company: { Args: never; Returns: undefined }
       decline_deal: { Args: { p_deal_card_id: string }; Returns: undefined }
+      decline_promotion: {
+        Args: { p_deal_card_id: string }
+        Returns: undefined
+      }
       deliver_deal: { Args: { p_deal_card_id: string }; Returns: undefined }
       finalize_deal: { Args: { p_deal_card_id: string }; Returns: undefined }
       get_company_licences: {
@@ -4961,6 +4977,14 @@ export type Database = {
         }[]
       }
       log_license_viewed: { Args: { p_company_id: string }; Returns: undefined }
+      offer_promotion: {
+        Args: {
+          p_condition_deltas?: Json
+          p_deal_card_id: string
+          p_line_deltas: Json
+        }
+        Returns: string
+      }
       onboard_company: {
         Args: {
           p_category_codes?: string[]

@@ -579,6 +579,74 @@ assumed to travel with the data and does not.
 
 ---
 
+## 2026-08-25 — A policy predicate is a question about what the CALLER CAN SEE, not about the database
+
+**The mechanism.** An RLS policy expression is evaluated in the **calling role's** row-security
+context. So a subquery inside `USING` or `WITH CHECK` against another RLS-protected table is itself
+filtered by that table's policies. `EXISTS (SELECT 1 FROM b WHERE …)` does not ask *"does this row of
+`b` exist?"* — it asks **"does it exist AND may the caller see it?"** Those are different questions,
+and nothing in the SQL distinguishes them.
+
+**How it bit.** HEL-75 needed `inbox_insert` to refuse a connection request addressed to a
+soft-deleted or deactivated company. The obvious inline `EXISTS` on `public.company` inherited
+`company_select`, which shows `authenticated` only its own company, HS-team rows, and companies it
+already `shares_connection_with_company()`. **A company you have never met is invisible** — so the
+predicate collapsed into *"may I already see this company?"*, which for a connection request is
+backwards: not having met them is the entire point.
+
+Measured as Alice @ GreenLeaf: a direct `SELECT` on `company` returned **5 of 6 rows**, and the inline
+predicate **refused a legitimate connect to the missing one** while blocking the deactivated company
+only *by accident* — it was really gating on "do we already share a connection".
+
+**Why it survives review.** Against a seeded database it looks correct. Every control an author
+reaches for is an already-connected pair, so every control passes; the failing case only appears for a
+counterparty the caller has never met, which is precisely the case no existing fixture covers.
+
+**The rule.** *If a policy needs a fact about a row the caller is not entitled to read, that fact must
+come from a `SECURITY DEFINER` function.* Inline `EXISTS` is safe only against a table with no RLS, or
+when the caller's visibility is genuinely meant to be part of the predicate. This is the same reason
+`product_visible_to_caller()` and `product_price_visible_to_caller()` exist, and why HEL-75 added
+`company_can_receive_requests()` rather than two lines of inline SQL.
+
+**Test discipline that catches it:** be red-first in *both* directions — one cell reproducing the
+original bug, and one cell that fails against **the fix that was proposed**. A suite that only proves
+the bug is gone cannot tell you it was closed with the wrong instrument.
+
+See `docs/agents/LEARNINGS.md` **L-055**.
+
+---
+
+## 2026-08-25 — A SYMMETRIC policy cannot express an ASYMMETRIC rule; census the write path before fencing it
+
+**The shape.** `deal_line_item`'s only policy, `line_all`, is `FOR ALL` with
+`card_relationship_member(deal_card_id)` on both `USING` and `WITH CHECK`. That function is **true for
+both sides of the relationship**. The rule it was being asked to enforce — *only the seller may set
+allocation state* — is asymmetric. **No amount of policy cleverness closes that gap**, because the
+policy has no term that distinguishes buyer from seller, and adding one means duplicating the
+seller-gate that already lives in seven `SECURITY DEFINER` RPCs.
+
+**The fix was not a better fence — it was noticing nobody used the gate.** A census across all of
+`src/` found client code performs **exactly one** write to that table (an `INSERT`, `acceptPromotion`),
+and **zero** UPDATEs and **zero** DELETEs. Every legitimate mutation already went through a definer,
+which bypasses grants. So `UPDATE` and `DELETE` were **removed**, not guarded.
+
+**The generalisation.** When a permission problem looks like it needs a policy predicate, a trigger,
+or a column allowlist, first ask **who actually writes this table as this role**. An unused privilege
+is deleted, not defended — and a deletion cannot drift, whereas a column allowlist silently breaks
+every time a column is added and a trigger must keep enumerating the columns it protects.
+
+**Postgres detail worth keeping:** a **column-level** `REVOKE` cannot subtract from a **table-level**
+grant. DEV-159 recorded an earlier attempt at `REVOKE UPDATE (allocation_status, …)` that appeared to
+do nothing; that is correct behaviour, not a bug. The table-level grant has to go first.
+
+**Corollary for reviewers:** `REVOKE` migrations should say in a `COMMENT ON TABLE` *why* the
+privilege is absent. Otherwise the next person adding a feature reads a missing grant as an oversight
+and re-grants it, reopening the hole. `deal_line_item` now carries that comment.
+
+Origin: DEV-159, `security_tickets` session, 2026-08-25.
+
+---
+
 ## 2026-08-25 — A worktree isolates the tree, not the DATABASE. Parallel sessions share one Postgres, and migration files are per-branch.
 
 **This CHANGES standing guidance rather than adding to it.** `CLAUDE.md` §2b concluded, after L-040,
@@ -777,3 +845,54 @@ citations copied forward unverified.
 **The rule this yields:** an identifier used as evidence must resolve to exactly one place. If a
 scheme is scoped per-phase, the scope belongs **in the identifier** (`P17-D12`, not `D-12`), or the
 scheme should not be used in source comments at all. Prefer the thing a reader can open.
+
+**2026-08-25 addendum — the `basket/actions.ts` row above is now PARTIALLY superseded, for the
+basket door specifically.** Found live during `/ship 0023`'s G5 walk: the buyer's basket picked a
+recipient, birthed a private draft, then navigated into the opened deal card with a SEPARATE "Send
+deal" click required — the picker's choice gave no visible confirmation it had gone anywhere.
+Muskan's ruling: `createBasketDraft` now calls `sendDeal` immediately after `createDeal`, in one
+action, and `BasketDrawer.tsx` no longer navigates into the deal card. **What did NOT change:**
+delivery is still `send_deal`'s alone — no second delivery mechanism was added, `send_deal` still
+owns the flip, the co-owner insert, and the announcement, all in one transaction. What changed is
+*when* it's called for this one door: immediately after birth, not from a later, separate human
+click. The seller's own-company door (`RecipientPicker`) goes through the exact same
+`createBasketDraft` call and is affected identically. The OTHER creation door — "Start a deal" from
+an open chat (`deal-c2c-create.spec.ts`, `deal-p2p-send.spec.ts`) — is UNCHANGED: birth and send
+stay two separate steps there.
+
+---
+
+## 2026-08-25 — `deal_promotion` and `deal_line_item` are now SELECT-only for `authenticated`; every write is a SECURITY DEFINER RPC that re-checks membership itself (HEL-81)
+
+**Locked by HEL-81, closing the confused-deputy gap a second review round found in its own first
+draft.**
+
+Both tables carry a single symmetric RLS policy (`card_relationship_member(deal_card_id)` — true for
+BOTH sides of a relationship) that can express *membership* but not *which side* or *which
+lifecycle step*. `authenticated` no longer holds INSERT/UPDATE/DELETE on either table. Every mutation
+now goes through one of five SECURITY DEFINER functions:
+
+- `offer_promotion` (seller) / `accept_promotion`, `decline_promotion` (buyer) — each re-derives the
+  caller's company from the session and checks it against `card_seller_company_id`/
+  `card_buyer_company_id` (new, card-level analogues of the existing `line_seller_company_id`).
+- Each ALSO calls `card_relationship_member` explicitly, alongside the side check — a definer
+  bypasses RLS entirely, so it re-implements membership + buyer/seller, not just buyer/seller;
+  dropping the membership call would have silently narrowed the old policy's `unsent`-draft
+  restriction (see [[L-057]] in `docs/agents/LEARNINGS.md`).
+- `accept_promotion`/`decline_promotion` take `deal_card`/`deal_promotion` row locks (`FOR UPDATE`)
+  so a concurrent double-accept resolves to "nothing pending" rather than double-applying a reward.
+
+**A structural invariant, not a convention:** a partial unique index,
+`uq_deal_promotion_one_pending ON deal_promotion (deal_card_id) WHERE state = 'pending'`, allows at
+most one pending promotion per card. `offer_promotion` refuses outright (clear message) rather than
+letting the constraint raise a raw violation. This exists so "the pending promotion" is never a
+choice between rows — the alternative (an `ORDER BY … LIMIT 1` convention that every reader and
+writer must independently agree on) is exactly what drifted apart during this same ticket's second
+review round.
+
+**Practical rule for the next promotion-adjacent change:** `deal_promotion.offered_by_company` and
+`.line_deltas` are authorization-relevant input to `accept_promotion` — treat any new write path to
+this table with the same suspicion as a grant, not as an ordinary data column. `line_deltas`/
+`condition_deltas` are CHECK-constrained to `jsonb_typeof = 'array'`; don't re-add a client-side
+`Array.isArray` fallback in a caller — that tolerance is exactly what let a non-array value ever
+reach these tables in the first place.

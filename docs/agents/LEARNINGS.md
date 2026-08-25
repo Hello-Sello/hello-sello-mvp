@@ -1871,3 +1871,112 @@ whoever happened to look.
 [[L-038]] (a single owner is a claim about agreement with the other doors), [[L-027]] (a gate is only
 as strong as the write path to its input), [[L-026]] (verify the REASON for a guard as hard as the
 guard) and [[L-006]].
+
+---
+
+## L-056 · A fixture that hardcodes a seed-generated id passes by accident on the day it's written, then goes red-for-the-wrong-reason forever after
+
+**2026-08-25 · `/ship 0023` gate · caught by `test-runner` running the full suite before a production push**
+
+**Trigger** — writing (or reviewing) any SQL test fixture that embeds a literal UUID for a seeded
+person or company, and any ship/gate run comparing SQL suite results against a "known baseline"
+count.
+
+**What happened.** Three brand-new suites — `deal_line_item_write_lockdown_test.sql` (DEV-159),
+`inbox_insert_receiver_gate_test.sql` (HEL-75), `msg_all_deal_detected_gate_test.sql` (HEL-67) —
+each hardcoded a literal UUID for Clara Vogt / Rheinland Apotheke / NordCanna / Bavaria / the
+Alice↔Bob p2p thread. `seed.sql`'s fixed-UUID block (the header comment listing Alice, Bob,
+GreenLeaf, StonePharm) only covers those four; everything seeded later — Clara's `auth.users` row,
+the three "5b" companies, every `chat_thread` — is `gen_random_uuid()`, different on every single
+`db reset`. Two of the three suites aborted at their own fixture guard before running a single real
+assertion; the third (HEL-75) didn't abort, proceeded to INSERT against a UUID matching no real
+company, and got a spurious RLS-violation "pass" on a control cell for the wrong reason. **The
+consequence that matters: DEV-159's suite — the one meant to prove a live production security hole
+was closed — never ran its actual assertions.** The REVOKE it was shipping alongside had zero
+automated verification at the moment it was about to go to prod.
+
+**Why it looked fine for a while.** Whoever wrote each suite ran it once, against whatever the DB
+happened to contain at that moment (a prior reset, mid-session state, or literally copy-pasted a UUID
+off a screen) — RED-then-GREEN, looks done. The fixture only breaks on the *next* `db reset`, which
+is exactly the gate step that runs right before a production push, and by then the author's session
+had usually already closed. Nothing about a passing suite at authoring time proves it survives a
+reset; a suite result is only as good as the reset regime it was measured under.
+
+**The fix, and why it's the right shape.** Replace the literal with a lookup against the identifying
+fact that IS stable — email for a person, `name` for a company, membership for a thread — matching
+the pattern the same files already used correctly for their JOIN/WHERE clauses on `company.name`.
+Not just in the fixture's own CTE: all three files also had the SAME stale literal repeated in
+`set_config('request.jwt.claims', ...)` calls lower down, setting the RLS-impersonated identity to a
+person who doesn't exist — a literal that compiles and runs without error, so it does not announce
+itself as wrong the way a JOIN-based miss does.
+
+**The rule** — a fixture identifier is only safe to hardcode if `seed.sql`'s own fixed-UUID block
+(check the header, don't assume) assigns it explicitly; anything created later via a bare `INSERT`
+or `SELECT … gen_random_uuid()` must be looked up by name/email at suite-run time, in EVERY place
+the suite uses that identity — not just the first.
+
+**See also** [[L-012]] ("as seeded" is a claim about data — grep the seed before asserting against
+it, same family: unverified assumptions about fixture state), [[L-013]] (a green suite proves
+nothing if its harness never fired — same family: a suite that "passes" without exercising its real
+assertions), [[L-034]] (a migration's end state on replay is not its end state on push — same
+lesson, different layer: state that's true today is not a proof about state after the next reset).
+
+---
+
+## L-057 · Moving a write behind a SECURITY DEFINER RPC must re-import everything the RLS policy was checking, not just the one thing the ticket is about
+
+**2026-08-25 · HEL-81 · caught by a second adversarial review round, independently by both `critic` and `security`**
+
+**Trigger** — replacing a client write path that was governed by an RLS policy with a
+SECURITY DEFINER RPC, for ANY reason (closing a hole, adding atomicity, adding a business
+rule). The RPC bypasses RLS entirely — it doesn't inherit the policy's predicate, it replaces
+it with whatever the function body happens to check.
+
+**What happened.** HEL-81 moved `deal_line_item`'s one remaining client INSERT behind
+`accept_promotion`, gated on "is the caller the buyer." That's the property the ticket was
+about, and it was correct. But `line_all`'s real predicate,
+`card_relationship_member(deal_card_id)`, was never *just* membership — it was membership
+AND `(status <> 'unsent' OR initiating_company_id = current_company_id())`, a second clause
+letting a card's own initiator act on their private draft while blocking the counterparty
+from a card they can't even read yet. `accept_promotion` (and, once written, `offer_promotion`
+/`decline_promotion`) checked buyer/seller equality only — narrower than the RLS predicate it
+replaced, silently. Verified live: the second review round constructed an unsent card and
+had the non-initiator buyer successfully accept a promotion on it, landing a line in a deal
+it has no read access to.
+
+**Why it looked fine.** The ticket's own probe (a rolled-back reproduction of the forgery)
+only exercised the *buyer/seller* dimension, because that's the dimension the ticket is
+about. Nothing in that probe, or in a first read of the new function body, would surface a
+guard the OLD policy had that the NEW code doesn't — you have to go looking for what else
+the policy checked, not just confirm the new code checks what you meant it to.
+
+**The fix, and why it's the right shape.** Call the original policy's own predicate function
+from inside the definer (`IF NOT card_relationship_member(p_deal_card_id) THEN RAISE ...`)
+as an explicit, separate gate alongside the buyer/seller check — don't re-derive or re-type
+the `unsent` clause a second time (that's the same drift risk a column-allowlist re-GRANT
+has, [[L-027]]'s family). The predicate has one owner; import it, don't restate it.
+
+**The rule** — before retiring an RLS policy in favor of a definer function, read the
+policy's FULL expression, not just the clause the current ticket cares about, and account
+for every clause in the replacement — either by calling the same helper the policy called,
+or by naming explicitly, in the migration's own comment, which clause was deliberately
+dropped and why. A definer that only re-implements the part you were thinking about is a
+narrower door than the one it replaced, and nothing will fail loudly to tell you.
+
+**A second, smaller catch from the same review round, same family.** Round 1's own fix added
+an `ORDER BY created_at DESC, id DESC` tiebreak to the RPCs reading "the pending promotion" —
+correct in isolation, but it left the READ side (`getPromotion`, no state filter, no
+tiebreak) newly disagreeing with the WRITE side about which row is "the" one on a tie, a
+mismatch that didn't exist before because neither side had a tiebreak. The fix that
+actually closed it wasn't a matching tiebreak on the reader — it was a partial unique index
+(`(deal_card_id) WHERE state = 'pending'`) making "which pending promotion" a question with
+only one possible answer, so neither side needs a convention to agree on. When two readers
+of the same "current X" concept can disagree, prefer a constraint that makes X unique over
+a matching tiebreak rule on both sides — a rule that must be kept in sync in two places will
+eventually only be updated in one.
+
+**See also** [[L-052]] (a policy predicate is a question about what the caller can see —
+same family: don't assume a security-relevant predicate does only the obvious thing),
+[[L-055]] (a subquery in an RLS policy runs as the calling role — same family: RLS mechanics
+are easy to mismodel when you're not looking directly at them), [[L-027]] (a gate is only as
+strong as the write path to its input — the confused-deputy half of this same ticket).

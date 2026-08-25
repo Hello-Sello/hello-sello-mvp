@@ -1764,6 +1764,37 @@ size**, which is exactly when "who sent this" starts to matter.
 
 ---
 
+## 2026-08-25 — A deactivated company is closed to new connections; an UNVERIFIED one is not
+
+**What was decided.** HEL-75's receiver predicate on `inbox_insert` covers **`deleted_at` and
+`deactivated_at` only**. A company that is unverified — including one mid-`resubmit_company_verification()`
+— **stays reachable** by a connection request. This is deliberately **narrower** than the liveness
+term HEL-70 gave the five discovery read doors, which also require `verification_status = 'verified'`.
+
+**Why.** A deactivated or deleted company has **left**. A pending or re-verifying company is
+**arriving**. Hiding the latter from Discover is right — nobody should transact with an unverified
+counterparty — but *refusing its inbound interest* punishes it at exactly the moment it is trying to
+come back, and the request is inert until someone accepts it anyway (accept is separately gated).
+
+**The asymmetry IS the decision.** This repo's recurring failure is doors disagreeing about one rule
+(L-038), so a deliberate disagreement has to be recorded or the next person will "fix" it. The read
+doors answer *"may this company be seen?"*; this write door answers *"may this company still be
+written to?"* **They are different questions and they are allowed to have different answers.** Do not
+tidy `company_can_receive_requests()` into agreement with `product_visible_to_caller()`'s term.
+
+**Cost accepted:** a request may be sent to a company that never becomes verified, leaving an inert
+pending row. Judged cheaper than a company losing inbound interest during re-verification.
+
+**Not settled by this ruling, and it needs its own:** a request that was already **pending** when the
+receiver deactivates stays acceptable. `WITH CHECK` governs the INSERT only, and accept runs through
+`accept_connection_request` — SECURITY DEFINER, which bypasses RLS entirely, so RLS cannot be the
+mechanism there. Verified on production 2026-08-25: that function checks item state, addressee and
+type, and never the receiver company's liveness.
+
+**Surfaced by:** HEL-75, `security_tickets` session, 2026-08-25.
+
+---
+
 ## 2026-08-25 — HEL-67 ships as one type, and its second half is BLOCKED, not deferred
 
 **What was decided.** `msg_all`'s `WITH CHECK` gains exactly one term — `type <> 'deal_detected'` —
@@ -1908,3 +1939,72 @@ where the reader arrives from five separate citations; this is the chronological
   signal moved onto a weaker policy; **no policy was widened.** Tracked as **HEL-67**, disclosed in
   ADR 0006's invariant **J1**. *Why accepted:* the proper fix is an RLS change, which ADR 0006 §4.2
   put out of scope for this slug; filed rather than smuggled in.
+
+## 2026-08-25 — HEL-81's scope grew mid-build to cover `deal_promotion`, not just `deal_line_item`
+
+**What was decided.** HEL-81 was chartered to close one door: a relationship member INSERTing an
+arbitrary `deal_line_item` row. The fix — `acceptPromotion` behind a SECURITY DEFINER RPC — was
+correct but, on adversarial review, was found to trust `deal_promotion.offered_by_company`/
+`.line_deltas` as its authorization input, while that table was still directly writable under the
+same symmetric policy. A buyer could self-author a fake "seller" promotion (or rewrite the real
+one) and accept it themselves — the exact class of hole HEL-81 exists to close, one table over,
+created by HEL-81's own fix rather than pre-existing. Closed in the same ticket: `offerPromotion`/
+`declinePromotion` also moved behind SECURITY DEFINER RPCs, `deal_promotion` also became
+SELECT-only for `authenticated`.
+
+**What was rejected, and why.** The security reviewer's own first suggestion — add
+`AND offered_by_company IS DISTINCT FROM current_company_id()` to `accept_promotion`'s promotion
+lookup — would have closed the self-INSERT variant in one line. Rejected because `deal_promotion`
+also granted `UPDATE` under the same symmetric policy, so a buyer could still rewrite the seller's
+*genuine* pending promotion's `line_deltas` before accepting it — the one-line fix does not touch
+that path at all. A fix that closes one variant of a two-variant hole is not a fix.
+
+**Why this was NOT filed as a separate follow-up ticket**, unlike HEL-81 itself (split from
+DEV-159) or HEL-83 (split from HEL-81, filed the same session — see below). DEV-159→HEL-81 was a
+pre-existing, independent gap that DEV-159's own fix didn't touch or worsen. This one is different
+in kind: `accept_promotion`'s own design choice — trusting `deal_promotion` as authorization input
+— is what made that table's pre-existing symmetric grants load-bearing for HEL-81's stated
+property. Shipping HEL-81 as "closed" without it would have been true of the letter of the ticket
+(direct `deal_line_item` INSERT, refused) and false of its substance (a relationship member can
+still land an arbitrary line on a shared deal, in two calls instead of one).
+
+**What WAS filed separately: HEL-83** — none of the three promotion RPCs gate on
+`deal_card.status`, so a promotion can still be accepted onto an already-sealed (`done`) deal. This
+one **is** the DEV-159→HEL-81 shape: pre-existing (the old client code had the same gap), not
+worsened by this fix, and blocked on a product ruling (which statuses should still allow it) that
+this ticket has no standing to make.
+
+**Surfaced by:** HEL-81, 2026-08-25; independently confirmed by two review rounds (`critic` +
+`security`, each run twice).
+
+---
+
+## 2026-08-25 — the Product Basket's addressee picker sends immediately; the drawer no longer opens the deal card first
+
+**Supersedes the "drawer never sends" framing** carried in `basket/actions.ts`'s source comments
+(the `basket/actions.ts` row of `ARCHITECTURE-NOTES.md`'s 2026-08-25 "`D-12` means four things"
+entry — that addendum has the full detail; this is the decision record). Found live during
+`/ship 0023`'s G5 walk (Muskan): picking a recipient in the basket, then "Create a draft deal",
+navigated into the newly-opened deal card with a separate "Send deal" click still required — the
+picker gave no visible confirmation the deal had gone anywhere, and the card auto-opening read as
+an extra, unwanted step for what the picker already fully specified.
+
+**Ruling:** `createBasketDraft` (the one seam onto the deals domain from both basket doors — the
+buyer's connected-seller group via `CounterpartyPersonSelect`, and the seller's own-company group
+via `RecipientPicker`) now calls `sendDeal` immediately after `createDeal`, in the same server
+action. `BasketDrawer.tsx` no longer navigates into `dealChatUrl`; the basket just closes. The
+button is relabelled "Send deal" (was "Create a draft deal") to match.
+
+**What did NOT change:** `send_deal` is still the only place delivery happens — the flip to
+`negotiation`, the counterparty co-owner insert, and the chat announcement, all in one transaction,
+routed to the p2p thread for a person or the c2c thread for the whole company. Nothing about that
+routing moved; HEL-63/HEL-64/HEL-65's own G4 walks of it stand. What moved is *when* `sendDeal` is
+called for this one door — immediately, not from a later separate human click in the deal card. The
+OTHER creation door (the chat's own "Start a deal" button, `deal-c2c-create.spec.ts` /
+`deal-p2p-send.spec.ts`) is unaffected: birth and send stay two separate steps there.
+
+**Also closed while here — HEL-76's gap.** No e2e test had ever driven the basket's own picker into
+an actual send; `send_deal`'s p2p-vs-c2c routing was proven only through the other creation door.
+Added: `deal-lands-in-c2c-chat.spec.ts`'s "a PERSON-addressed deal (picked in the basket)..." test,
+which is what actually caught nothing was broken in `send_deal` itself — the routing was always
+correct; the missing piece was the confirmation step.

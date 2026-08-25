@@ -23,13 +23,32 @@
 
 ---
 
-## ⚠️ PENDING (2026-08-25) — security batch: HEL-67 Gap 1 + HEL-75 + DEV-159 (**THREE** migrations, plain `db push`, **no `--include-all`**)
+## ✅ APPLIED 2026-08-25 (was PENDING 2026-08-25) — security batch: HEL-67 Gap 1 + HEL-75 + DEV-159 (THREE migrations)
 
-**Status: LOCAL ONLY.** Production tip is `20260825110000`. This batch stamps `20260825120000` then
-`20260825130000`, in filename order, so ONE plain `supabase db push --linked` takes both. Nothing is
-back-dated. ~~**Count: ONE.**~~ ~~**Count: TWO**~~ → **Count: THREE** — HEL-75 then DEV-159 were added
-to this section 2026-08-25 by the second `security_tickets` session. Do not push any of them alone;
-the heading above is the authority on the count, not the prose in any single entry.
+**Status: LIVE ON PRODUCTION.** Applied 2026-08-25 by the `ship_deal` session on Muskan's explicit
+go-ahead, via three individual `apply_migration` calls (not `supabase db push`, because two more
+files — `20260825150000`/`20260825160000`, HEL-81, untracked WIP from the parallel
+`security_tickets` session — were sitting in the same local `supabase/migrations/` directory and a
+plain `db push` would have swept them in too; confirmed with that session directly before applying).
+History stamps repaired from `apply_migration`'s call-time timestamps to the filenames' own
+`20260825120000` / `20260825130000` / `20260825140000`, in that order. Production tip is now
+`20260825140000`, verified against `supabase_migrations.schema_migrations` — not against this file.
+
+**Post-push evidence, all run against production, none of it inferred:**
+
+| check | result |
+| -- | -- |
+| HEL-67 Gap 1 — write gated, read door untouched | `write_gated = true`, `read_door_moved_MUST_BE_FALSE = false` ✓ |
+| HEL-75 — receiver predicate present | `receiver_gated = true` ✓ |
+| HEL-75 — helper grants | `anon_MUST_BE_FALSE = false`, `authed_MUST_BE_TRUE = true` ✓ |
+| DEV-159 — `authenticated` grant on `deal_line_item` | exactly `INSERT,REFERENCES,SELECT` — no `UPDATE`/`DELETE`; no `anon` row at all ✓ |
+| DEV-159 — direct assertions | `update_MUST_BE_FALSE = false`, `delete_MUST_BE_FALSE = false`, `insert_MUST_BE_TRUE = true` ✓ |
+
+Three SQL suites (`msg_all_deal_detected_gate_test.sql`, `inbox_insert_receiver_gate_test.sql`,
+`deal_line_item_write_lockdown_test.sql`) were fixed before this push — see [[L-056]] — and reran
+green with all real assertions executing (not just the fixture guard) on a fresh `db reset` before
+the push. The original PENDING text below is kept for the reasoning; the count/push-mechanism/order
+claims in it now describe how this batch WAS applied, not what remains to be done.
 
 **Stamps in order:** `20260825120000` → `20260825130000` → `20260825140000`.
 
@@ -165,10 +184,13 @@ a **table-level** grant already covers every column and a column-level revoke ca
 The table-level grant must go first. **Do not re-grant `UPDATE` on this table to add a feature** —
 add a definer function instead. The `COMMENT ON TABLE` says so in the schema.
 
-⚠️ **STILL OPEN, NARROWER, FILED SEPARATELY:** `INSERT` is kept for `acceptPromotion`, and
-`line_all`'s `WITH CHECK` is still only relationship membership — so a member can still insert an
-**extra** line into a shared deal. Not what DEV-159 describes; closing it means moving
-`acceptPromotion` behind a definer RPC.
+~~⚠️ **STILL OPEN, NARROWER, FILED SEPARATELY:**~~ ✅ **CLOSED, in the very next section below**
+(same day). `INSERT` was kept for `acceptPromotion`, and `line_all`'s `WITH CHECK` was still only
+relationship membership — so a member could still insert an **extra** line into a shared deal. Closed
+by moving `acceptPromotion` (and, once that RPC's own trust boundary was found to be forgeable,
+`offerPromotion`/`declinePromotion` too) behind definer RPCs — see "PENDING (2026-08-25) —
+deal_promotion + deal_line_item INSERT lockdown" below. That section's own post-flight query also
+supersedes this one's `insert_MUST_BE_TRUE` line (below) — see its warning.
 
 **`deal_card` needs nothing** — the other half of DEV-159's title is already closed
 (`authenticated` = `REFERENCES, SELECT` on production, shut by `20260724120900`).
@@ -187,6 +209,113 @@ select grantee, string_agg(privilege_type, ',' order by privilege_type) as privs
 select has_table_privilege('authenticated','public.deal_line_item','UPDATE') as update_MUST_BE_FALSE,
        has_table_privilege('authenticated','public.deal_line_item','DELETE') as delete_MUST_BE_FALSE,
        has_table_privilege('authenticated','public.deal_line_item','INSERT') as insert_MUST_BE_TRUE;
+```
+
+---
+
+## ⚠️ PENDING (2026-08-25) — deal_promotion + deal_line_item INSERT lockdown (TWO migrations, plain `db push`)
+
+**Status: LOCAL ONLY.** These sort after `20260825140000` (the DEV-159 batch above), so the same
+plain `supabase db push --linked` (no `--include-all`) picks them up too as long as they're applied
+in filename order with everything above. Written and verified locally on `claude/muskan/work` while
+the THREE-migration batch above was already mid-push in a separate parallel session — that session's
+push does **not** include these two (confirmed with it directly; these files were untracked at the
+time). Do not push either of these two alone — offer/accept/decline all move together or the app
+breaks (see the app-code-coupling warning below).
+
+**Stamps in order:** `20260825150000` → `20260825160000`.
+
+⚠️ **THIS BATCH MAKES DEV-159's OWN POST-FLIGHT QUERY (above, "Migration 3 of 3") GO FALSE, ON
+PURPOSE.** That query asserts `insert_MUST_BE_TRUE` for `authenticated` on `deal_line_item` — true
+right after DEV-159 alone, false once `20260825150000` lands. Don't "fix" DEV-159's block to match;
+annotate it in place when this batch ships, pointing here.
+
+⚠️ **SAME-DEPLOY REQUIRED — THIS IS NOT GRANT-ONLY.** `20260825150000` and `20260825160000` also add
+new RPCs (`accept_promotion`, `offer_promotion`, `decline_promotion`) that
+`src/modules/deals/actions.ts`'s `offerPromotion`/`acceptPromotion`/`declinePromotion` now call
+instead of writing the tables directly. If the migrations land before the app code deploys, every
+promotion accept/offer/decline 500s on `insufficient_privilege`; if the app code deploys first, it
+500s on a missing RPC. Same rule as the rest of this repo's `dev`→`main` same-deploy lesson — this is
+the first migration in this cluster where it's the app code, not another migration, on the other side.
+
+### Migration 1 of 2 — `deal_line_item` direct-INSERT lockdown
+
+| # | file | what it does |
+|---|---|---|
+| 1 | `20260825150000_deal_line_item_insert_lockdown.sql` | Adds `card_buyer_company_id(uuid)` (STABLE SECURITY DEFINER, EXECUTE revoked from everyone but the definer callers) + `accept_promotion(uuid)` (SECURITY DEFINER, buyer-gated, atomic). `REVOKE INSERT ON deal_line_item FROM authenticated` — the table is now SELECT-only for `authenticated`, matching `deal_card`. |
+
+**The hole it closes.** DEV-159 (above) revoked UPDATE/DELETE but deliberately kept INSERT for the
+one legitimate client write, `acceptPromotion`. `line_all`'s `WITH CHECK` never tied that INSERT to a
+promotion, a version, or a side — any relationship member could add an arbitrary line to a shared
+deal via a direct `.insert()`. Reproduced (rolled back) on the seeded stack: the buyer inserted an
+arbitrary rebate line onto the seller's card. Filed as its own ticket deliberately (DEV-159 closed
+what it could without a redesign; this one needed the redesign).
+
+**Who loses writes when this lands: nobody**, once migration 2 of 2 also lands (see below — this one
+alone is necessary but not sufficient). Census: the one former client INSERT (`acceptPromotion` in
+`src/modules/deals/actions.ts`) now goes through `accept_promotion` instead.
+
+⚠️ **DEPLOY-ORDERING HAZARD, ONE DIRECTION ONLY.** `decline_promotion` (migration 2 of 2) calls
+`card_buyer_company_id` (created here, migration 1 of 2). plpgsql does not resolve names at CREATE
+time, so pushing migration 2 without migration 1 first installs cleanly and fails only at first call —
+`function public.card_buyer_company_id(uuid) does not exist` — by which point `deal_promotion`'s
+client UPDATE is already revoked, so the buyer can neither decline via the RPC nor directly.
+Promotions get stuck pending with no error until a user hits it. The other direction (this migration
+without migration 2) is NOT a regression: it leaves the confused-deputy path open, but production
+today already grants `authenticated` a direct INSERT on `deal_line_item`, so that intermediate state
+is no worse than the status quo. Push both, in filename order, same as always — this is a reason to
+never split them across two pushes, not a reason to reorder them.
+
+### Migration 2 of 2 — `deal_promotion` write lockdown
+
+| # | file | what it does |
+|---|---|---|
+| 2 | `20260825160000_deal_promotion_write_lockdown.sql` | Adds `card_seller_company_id(uuid)` (same shape as `card_buyer_company_id`) + `offer_promotion(uuid, jsonb, jsonb)` (seller-gated) + `decline_promotion(uuid)` (buyer-gated). `REVOKE INSERT, UPDATE, DELETE ON deal_promotion FROM authenticated` (+ `REVOKE ALL … FROM PUBLIC, anon`) — SELECT-only for `authenticated`. |
+
+🔴 **WHY THIS ONE IS NOT OPTIONAL.** `accept_promotion` (migration 1) trusts
+`deal_promotion.offered_by_company`/`.line_deltas` as its authorization input — it checks the CALLER
+is the buyer, then writes whatever that row says. `deal_promotion`'s only policy,
+`promotion_member_all`, was the same symmetric `card_relationship_member` predicate this whole ticket
+family exists to route around, and `authenticated` still held INSERT/UPDATE/DELETE. So without this
+migration, the buyer could self-INSERT a promotion spoofing `offered_by_company` as the seller (or
+UPDATE the seller's real pending one) and then accept it as themselves — the exact hole migration 1
+closes, reopened one table over. Reproduced (rolled back) both variants on the seeded stack before
+writing the fix; both are pinned as regressions in `deal_promotion_write_lockdown_test.sql` §D. Found
+by adversarial review of migration 1 before either shipped anywhere — not caught in production.
+
+**Who loses writes when this lands.** The two former client writes to `deal_promotion`
+(`offerPromotion`'s INSERT, `declinePromotion`'s UPDATE, `deals/actions.ts`) now go through
+`offer_promotion`/`decline_promotion`. `acceptPromotion`'s own UPDATE (flip to `accepted`) already
+moved inside `accept_promotion` in migration 1.
+
+**Post-flight — assert both tables' grants and the confused-deputy path is shut.**
+
+```sql
+-- 1. deal_line_item: authenticated is SELECT-only
+select has_table_privilege('authenticated','public.deal_line_item','INSERT') as insert_MUST_BE_FALSE,
+       has_table_privilege('authenticated','public.deal_line_item','UPDATE') as update_MUST_BE_FALSE,
+       has_table_privilege('authenticated','public.deal_line_item','DELETE') as delete_MUST_BE_FALSE,
+       has_table_privilege('authenticated','public.deal_line_item','SELECT') as select_MUST_BE_TRUE;
+
+-- 2. deal_promotion: authenticated is SELECT-only
+select has_table_privilege('authenticated','public.deal_promotion','INSERT') as insert_MUST_BE_FALSE,
+       has_table_privilege('authenticated','public.deal_promotion','UPDATE') as update_MUST_BE_FALSE,
+       has_table_privilege('authenticated','public.deal_promotion','DELETE') as delete_MUST_BE_FALSE,
+       has_table_privilege('authenticated','public.deal_promotion','SELECT') as select_MUST_BE_TRUE;
+
+-- 3. the two card-side helpers are not directly reachable (only other definer functions call them)
+select p.proname,
+       coalesce(has_function_privilege('anon', p.oid, 'execute'), false)          as anon_MUST_BE_FALSE,
+       coalesce(has_function_privilege('authenticated', p.oid, 'execute'), false) as authed_MUST_BE_FALSE
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+ where n.nspname = 'public' and p.proname in ('card_buyer_company_id','card_seller_company_id');
+
+-- 4. the three promotion RPCs ARE reachable by authenticated, not anon
+select p.proname,
+       coalesce(has_function_privilege('anon', p.oid, 'execute'), false)   as anon_MUST_BE_FALSE,
+       has_function_privilege('authenticated', p.oid, 'execute')           as authed_MUST_BE_TRUE
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+ where n.nspname = 'public' and p.proname in ('accept_promotion','offer_promotion','decline_promotion');
 ```
 
 ---

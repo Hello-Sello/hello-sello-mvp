@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Minus, Plus, Trash2, FileText, UserPlus } from "lucide-react";
+import { Minus, Plus, Trash2, FileText, Send, UserPlus } from "lucide-react";
 import { useBasket } from "../BasketProvider";
 import {
   updateBasketLinePackCount,
@@ -211,7 +211,6 @@ function Group({
    *  first, or the panel sits over the destination. */
   onDrafted: () => void;
 }) {
-  const router = useRouter();
   const [recipient, setRecipient] = useState<{ relationshipId: string; counterpartyPersonId: string | null } | null>(
     group.isOwnCompany ? null : (group.relationshipId ? { relationshipId: group.relationshipId, counterpartyPersonId: null } : null),
   );
@@ -238,16 +237,17 @@ function Group({
   // callback that consumes it.
   const counterpartyRelationshipId = group.isOwnCompany ? null : group.relationshipId;
 
-  // Births the PRIVATE draft (status 'unsent'), then lands the viewer on the
-  // born card - the drawer never sends (D-12: delivery is send_deal's alone,
-  // fired later from the card's DecisionBar). The addressee is picked BEFORE
-  // birth on both doors - RecipientPicker for the seller's own-company group,
-  // CounterpartyPersonSelect directly for the buyer's connected seller group -
-  // and the picked person persists in deal_card.metadata via the slim birth RPC
-  // and routes the eventual send. Card open reuses the same
-  // mechanism as the connect host: hs:deal-updated refreshes any mounted deal
-  // UI, then dealChatUrl lands on the relationship's chat where ChatView
-  // re-fires hs:open-deal-card for the born card.
+  // Births the deal card and sends it in one action (createBasketDraft owns
+  // both steps - supersedes D-12's "drawer never sends" for this door,
+  // 2026-08-25: G5 found the old draft-then-open-the-card-then-Send flow
+  // surfaced no visible confirmation that a person-addressed deal actually
+  // landed anywhere but the deal card, so it's now a direct send). The
+  // addressee is picked BEFORE birth on both doors - RecipientPicker for the
+  // seller's own-company group, CounterpartyPersonSelect directly for the
+  // buyer's connected seller group - and routes send_deal's pill into the p2p
+  // thread (person) or the relationship's c2c thread (whole company). No
+  // navigation: the pill lands in that thread directly, and the drawer just
+  // closes - the deal card is not auto-opened.
   async function draft() {
     if (!recipient) return;
     setCreating(true);
@@ -263,7 +263,6 @@ function Group({
       );
       await onChanged();
       onDrafted();
-      router.push(dealChatUrl(recipient.relationshipId, dealCardId));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong.");
     } finally {
@@ -370,7 +369,7 @@ function Group({
             onClick={draft}
             className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg bg-brand py-2 text-xs font-bold text-white hover:bg-brand-deep disabled:opacity-40"
           >
-            <FileText size={13} /> Create a draft deal
+            <Send size={13} /> Send deal
           </button>
         </>
       )}

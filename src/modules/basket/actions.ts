@@ -1,22 +1,24 @@
 "use server";
 
 /**
- * Birth ONE seller-group of the Product Basket as a PRIVATE draft Deal Card
- * (status 'unsent', D-04/D-05), then clear those lines. This is the ONLY seam
- * onto the deals domain: it builds a Deal Basket (toDraftLines) and calls the
- * existing createDeal. The draft carries NO delivery side-effects - Send
- * happens later, from the card's DecisionBar (sendDeal -> send_deal, the one
- * delivery writer, D-06/D-12). dealType follows the group - buyer groups draft
- * an 'order', own-company groups an 'offer' - and the two now differ only in
- * who fixes the counterparty COMPANY: the buyer's is the group's seller,
- * already fixed by that group's relationship, while the seller picks one. The
- * ADDRESSEE is symmetric - either door may name a person on that side, null
- * meaning the whole company - and this seam passes it through unchanged. Line
- * deletion is owner-scoped by RLS. createDeal is Ayush's; nothing here touches
- * deal tables directly.
+ * Birth ONE seller-group of the Product Basket as a Deal Card and send it in
+ * the same action (D-04/D-05 birth, then immediate send - supersedes D-12's
+ * "drawer never sends" for this door specifically, 2026-08-25: the basket
+ * picker is a one-step send, not a draft-then-review step). This is the ONLY
+ * seam onto the deals domain: it builds a Deal Basket (toDraftLines), calls
+ * createDeal to birth the card, then sendDeal to deliver it - the pill lands
+ * in the p2p thread if a person was addressed, else the relationship's c2c
+ * thread (send_deal's own routing, unchanged). dealType follows the group -
+ * buyer groups draft an 'order', own-company groups an 'offer' - and the two
+ * now differ only in who fixes the counterparty COMPANY: the buyer's is the
+ * group's seller, already fixed by that group's relationship, while the
+ * seller picks one. The ADDRESSEE is symmetric - either door may name a
+ * person on that side, null meaning the whole company - and this seam passes
+ * it through unchanged. Line deletion is owner-scoped by RLS. createDeal and
+ * sendDeal are Ayush's; nothing here touches deal tables directly.
  */
 import { createClient } from "@/shared/db/server";
-import { createDeal, type CreateDealResult } from "@/modules/deals";
+import { createDeal, sendDeal, type CreateDealResult } from "@/modules/deals";
 import { toDraftLines } from "./lib/toDraftLines";
 import type { BasketGroup, SendGroupInput } from "./types";
 
@@ -32,6 +34,7 @@ export async function createBasketDraft(
     dealType: group.isOwnCompany ? "offer" : "order",
     counterpartyPersonId: input.counterpartyPersonId,
   });
+  await sendDeal(result.dealCardId);
 
   // Clear the drafted group's lines from the cart (RLS: only my own rows) -
   // the products now live on the draft card.
