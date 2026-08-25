@@ -65,7 +65,7 @@ function sumValueNet(lines: CreateDealInput["lines"]): number | null {
  * to Done (Deal Executed). Thin RPC caller (12-07, D-09): the seller
  * derivation, the seller-invoice trigger, and the confirmed-status gate all
  * live in the `finalize_deal` SECURITY DEFINER RPC now - the app can no
- * longer write deal_card.status (REVOKEd in 12-04/12-05). DocumentsTab calls
+ * longer write deal_card.status (REVOKEd in 12-04/12-05). DecisionBar calls
  * this right after the seller's upload, so the upload itself closes the deal.
  * The RPC's error sentences surface verbatim in the UI banner.
  */
