@@ -11,11 +11,16 @@ import type { RelationshipView } from "../types";
  * meaningful "who, since when" - rather than restating the viewer's own company.
  */
 export function RelationshipHeader({ relationship }: { relationship: RelationshipView }) {
-  const { companies, them, connectedAt } = relationship;
+  const { companies, them, connectedAt, status } = relationship;
   const since = new Date(connectedAt).toLocaleDateString("en-GB", {
     month: "long",
     year: "numeric",
   });
+  // HEL-82: status can now be suspended/ended, not just active — the record
+  // (deals, notes, docs) stays fully readable either way, but this line must
+  // not keep telling a suspended pair they're "Connected". Both sides still
+  // see their own relationship page; only an HS operator can change status.
+  const isLive = status === "active";
 
   return (
     <div className="glass rounded-3xl p-5">
@@ -43,11 +48,19 @@ export function RelationshipHeader({ relationship }: { relationship: Relationshi
         <CompanyBadge name={companies[1].name} initials={companies[1].initials} />
       </div>
 
-      {/* the meaningful status line: connected to whom, since when */}
-      <p className="mt-3 flex items-center justify-center gap-1.5 text-[12px] text-ink/50">
-        <span className="block h-1.5 w-1.5 rounded-full bg-success" />
-        Connected to <span className="font-medium text-ink/70">{them.name}</span> since {since}
-      </p>
+      {/* the meaningful status line: connected to whom, since when — or the
+          real status when it's no longer active */}
+      {isLive ? (
+        <p className="mt-3 flex items-center justify-center gap-1.5 text-[12px] text-ink/50">
+          <span className="block h-1.5 w-1.5 rounded-full bg-success" />
+          Connected to <span className="font-medium text-ink/70">{them.name}</span> since {since}
+        </p>
+      ) : (
+        <p className="mt-3 flex items-center justify-center gap-1.5 text-[12px] text-ink/50">
+          <span className="block h-1.5 w-1.5 rounded-full bg-danger" />
+          {status === "suspended" ? "Suspended" : "Ended"} — {them.name} (connected since {since})
+        </p>
+      )}
     </div>
   );
 }
