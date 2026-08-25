@@ -5,12 +5,14 @@
 
 ---
 
-**Last updated:** 2026-08-25 — session 91 `deal_land_t03` — **T03 / HEL-65 CLOSED, G4 auto.**
-**Status:** idle. Next = `/build HEL-66` (T04, docs, XS — **the LAST ticket of slug 0023**).
+**Last updated:** 2026-08-25 — session 91 `deal_land_t03` — **T04 / HEL-66 IN BUILD (the LAST ticket).**
+**Status:** active. `/build` step 5 — plan rev 2 after a `plan-checker` REVISE (5 blocking).
 
-**Shared files locked: none — released.** `e2e/fixtures/two-company.ts` is unlocked; it gained
-**five** stale-claim corrections (the plan predicted four — `critic` found the fifth *inside* the
-helper whose docstring this ticket had just corrected) plus one new helper `countDealPillsOnThread`.
+**Shared files locked:**
+- 🔒 `docs/decisions/DECISIONS.md` — an inline marker after `:1013` recording the PARTIAL supersede.
+  ⚠️ **`:1013` MUST NOT MOVE** — it is cited by ADR `:47`, ADR `:563`, `PRD:6`, `STATE.md:54`,
+  `STATE.md:68` and CLAUDE.md. Insert **after** the bullet, never above it.
+- 🔒 `docs/architecture/CONTEXT.md` — the "Deal draft" definition (`:31`).
 
 **T03 in one line:** the buyer's company-addressed deal is now proven to land as a pill in the
 seller's c2c chat, end to end. tsc 0 · eslint 0 · **six e2e specs green** · basket units 41/41.
