@@ -5,13 +5,33 @@
 
 ---
 
-**Last updated:** 2026-08-25 (session 88 `deal_land` — **/build T01 · HEL-63** in progress)
-**Status:** active — building slug 0023 ticket T01 (`send_deal` announces a company-addressed deal in chat).
-**Shared files locked:** `src/modules/deals/actions.ts` (docstring only, `:357-366`).
-Also writing, NOT shared: `supabase/migrations/20260825090000_send_deal_c2c_announce.sql` (new),
-`supabase/tests/send_deal_c2c_announce_test.sql` + runner (new),
-`supabase/tests/deliver_deal_test.sql`, `supabase/tests/claim_deal_ticket_test.sql`,
-`docs/muskan-build/0023-deal-draft-lands-in-chat/**`.
+**Last updated:** 2026-08-25 (session 88 `deal_land` — **T01 / HEL-63 CLOSED**)
+**Status:** offline — session closed. Next session = `/build HEL-64` (T02, the buyer's person picker).
+**Shared files locked:** **none — all released.** `src/modules/deals/actions.ts` was locked for a
+docstring-only edit (`:356-366`) and is now released, committed in `3ae7873`.
+
+**Shipped this session (local, NOT pushed to cloud):** `supabase/migrations/20260825090000_send_deal_c2c_announce.sql`,
+`supabase/tests/send_deal_c2c_announce_test.sql` + runner, rewrites of `deliver_deal_test.sql` and
+`claim_deal_ticket_test.sql`, `docs/agents/LEARNINGS.md` (**L-045, L-046 — L-047/L-048 are the
+security session's; L-049 is next free**), and the 0023 slug folder.
+
+⚠️ **`20260825090000` is LOCAL ONLY.** Production tip remains `20260824100000`. Plain
+`supabase db push`, **no `--include-all`** — verified, nothing else is pending on cloud.
+**`/ship` must first diff `pg_get_functiondef('public.send_deal(uuid)')` against PRODUCTION** — a
+file-only diff cannot see prod drift and this repo was bitten by exactly that (`ensure_rls`).
+
+⚠️ **SHARED LOCAL DATABASE — the sync file does not cover it.** A worktree isolates git and **not**
+Postgres. Protocol agreed with the security session and it works: **say HOLDING and RELEASED
+explicitly; reset from your own tree immediately before every run; assume nothing about the state
+the other left.** ⚠️ **Do NOT use an idle notice as a release signal** — `notify_when_idle` answers
+*"between turns?"*, not *"done with the DB?"*, and the one-subagent-round-trip gap between those
+cost us a collision (5 × `FATAL: peer authentication` mid-gate; run discarded, not recorded as a
+failure).
+
+⚠️ **`LEARNINGS.md` HAS A MONOTONIC KEY AND NO ALLOCATOR — for Muskan.** Two sessions on divergent
+bases nearly wrote two `L-045`s. **Two appends in different places merge CLEAN; git flags nothing.**
+`L-040`'s shape, and **it survived worktrees — a worktree isolates the TREE, not the CONVENTION.**
+Caught by conversation, not machinery. Not fixed unilaterally.
 
 **Previous (session 87):** shared files locked: none — none taken, none held. This session wrote `docs/architecture/adr/0006-*`
 (new file), `ADR-INDEX.md`, `docs/agents/LEARNINGS.md` (L-042..L-044 appended), the per-slug folder,
