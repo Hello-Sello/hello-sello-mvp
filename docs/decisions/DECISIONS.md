@@ -1939,3 +1939,40 @@ where the reader arrives from five separate citations; this is the chronological
   signal moved onto a weaker policy; **no policy was widened.** Tracked as **HEL-67**, disclosed in
   ADR 0006's invariant **J1**. *Why accepted:* the proper fix is an RLS change, which ADR 0006 §4.2
   put out of scope for this slug; filed rather than smuggled in.
+
+## 2026-08-25 — HEL-81's scope grew mid-build to cover `deal_promotion`, not just `deal_line_item`
+
+**What was decided.** HEL-81 was chartered to close one door: a relationship member INSERTing an
+arbitrary `deal_line_item` row. The fix — `acceptPromotion` behind a SECURITY DEFINER RPC — was
+correct but, on adversarial review, was found to trust `deal_promotion.offered_by_company`/
+`.line_deltas` as its authorization input, while that table was still directly writable under the
+same symmetric policy. A buyer could self-author a fake "seller" promotion (or rewrite the real
+one) and accept it themselves — the exact class of hole HEL-81 exists to close, one table over,
+created by HEL-81's own fix rather than pre-existing. Closed in the same ticket: `offerPromotion`/
+`declinePromotion` also moved behind SECURITY DEFINER RPCs, `deal_promotion` also became
+SELECT-only for `authenticated`.
+
+**What was rejected, and why.** The security reviewer's own first suggestion — add
+`AND offered_by_company IS DISTINCT FROM current_company_id()` to `accept_promotion`'s promotion
+lookup — would have closed the self-INSERT variant in one line. Rejected because `deal_promotion`
+also granted `UPDATE` under the same symmetric policy, so a buyer could still rewrite the seller's
+*genuine* pending promotion's `line_deltas` before accepting it — the one-line fix does not touch
+that path at all. A fix that closes one variant of a two-variant hole is not a fix.
+
+**Why this was NOT filed as a separate follow-up ticket**, unlike HEL-81 itself (split from
+DEV-159) or HEL-83 (split from HEL-81, filed the same session — see below). DEV-159→HEL-81 was a
+pre-existing, independent gap that DEV-159's own fix didn't touch or worsen. This one is different
+in kind: `accept_promotion`'s own design choice — trusting `deal_promotion` as authorization input
+— is what made that table's pre-existing symmetric grants load-bearing for HEL-81's stated
+property. Shipping HEL-81 as "closed" without it would have been true of the letter of the ticket
+(direct `deal_line_item` INSERT, refused) and false of its substance (a relationship member can
+still land an arbitrary line on a shared deal, in two calls instead of one).
+
+**What WAS filed separately: HEL-83** — none of the three promotion RPCs gate on
+`deal_card.status`, so a promotion can still be accepted onto an already-sealed (`done`) deal. This
+one **is** the DEV-159→HEL-81 shape: pre-existing (the old client code had the same gap), not
+worsened by this fix, and blocked on a product ruling (which statuses should still allow it) that
+this ticket has no standing to make.
+
+**Surfaced by:** HEL-81, 2026-08-25; independently confirmed by two review rounds (`critic` +
+`security`, each run twice).
