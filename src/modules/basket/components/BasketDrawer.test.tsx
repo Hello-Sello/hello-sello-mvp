@@ -14,7 +14,7 @@
  * as it does today). The three fixtures below are own-company /
  * connected-foreign / non-connected-foreign, per the plan's explicit ask.
  *
- * ⚠️ Obstacle noted in the plan: `Group` (BasketDrawer.tsx:187) is
+ * ⚠️ Obstacle noted in the plan: `Group` (BasketDrawer.tsx:202) is
  * module-private and not exported, and it is coupled to `useBasket()`
  * (indirectly, via its parent `BasketDrawer`). Rather than export `Group` or
  * extract a pure predicate — both are `src/` changes, outside this pass's
@@ -23,7 +23,9 @@
  * single-group `BasketView` fixture per test. This exercises the real
  * integration (BasketDrawer → Group), not just Group in isolation, with no
  * source change at all. See the RETURN notes for the two alternatives
- * considered and why this one was preferred.
+ * considered and why this one was preferred. (The `:202` line number above is
+ * corrected here; this citation was already stale, from the 0022 pass — not
+ * introduced by T02/HEL-64's diff.)
  *
  * `renderToStaticMarkup` — this repo's vitest env is pure node, no jsdom
  * (`ProductCard.gate.test.tsx` precedent). Initial paint only: `RecipientPicker`'s
@@ -54,14 +56,14 @@
  *                                now render alongside "Create a draft deal".
  *   C5 (non-connected-foreign) — "Address this deal to" stays absent; this
  *                                is a proof of the `needsConnection` GUARD in
- *                                `BasketDrawer.tsx:231`, NOT of where the
+ *                                `BasketDrawer.tsx:232`, NOT of where the
  *                                control sits on screen — PLAN §4.2 shows the
  *                                guard alone suppresses it in all three
  *                                fixtures regardless of placement, so AC 4's
  *                                placement claim is a G4 visual call.
  *   C6 (own-company)           — "Address this deal to" is absent too, but
  *                                for an UNRELATED reason: `RecipientPicker`
- *                                (`:26-28`) early-returns its own fallback
+ *                                (`:32-34`) early-returns its own fallback
  *                                paragraph before `chosen` is ever reached in
  *                                JSX, so the seller's addressee select never
  *                                renders under static markup regardless of
@@ -143,7 +145,7 @@ describe("<BasketDrawer> Group — the non-connected-buyer arm (T02, HEL-56)", (
     expect(html).toContain("Connect with a company first to send an offer.");
     // C6 (T02/HEL-64, PLAN-T02.md rev 2 §5): the buyer's addressee control
     // stays absent here too — but for an UNRELATED reason. `RecipientPicker`
-    // (`:26-28`) early-returns this exact fallback paragraph before `chosen`
+    // (`:32-34`) early-returns this exact fallback paragraph before `chosen`
     // is ever reached in JSX, so its own addressee select (now
     // `CounterpartyPersonSelect`, §8.2) never renders under static markup —
     // not because `chosen` is undefined once reached, but because the branch
@@ -194,7 +196,7 @@ describe("<BasketDrawer> Group — the non-connected-buyer arm (T02, HEL-56)", (
     expect(html).toContain('href="/discover/seller-stranger"');
     expect(html.toLowerCase()).toContain("connect");
     // C5 (T02/HEL-64): this is a proof of the `needsConnection` GUARD at
-    // `BasketDrawer.tsx:231` (`counterpartyRelationshipId` stays null here by
+    // `BasketDrawer.tsx:232` (`counterpartyRelationshipId` stays null here by
     // construction), NOT a proof of where the control sits on screen —
     // PLAN-T02.md §4.2 shows the guard alone suppresses the control in all
     // three fixtures identically regardless of placement, so AC 4's

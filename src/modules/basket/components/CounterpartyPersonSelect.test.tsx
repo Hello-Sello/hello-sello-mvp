@@ -64,7 +64,7 @@ import type {
 } from "@/modules/messaging";
 
 describe("<CounterpartyPersonSelect> — initial paint (C1, C2)", () => {
-  it("C1: renders a select aria-labelled 'Address this deal to', with 'Whole company' as the first, SELECTED option (J6 default)", () => {
+  it("C1: renders a select aria-labelled 'Address this deal to', with 'Whole company' as the SELECTED option (J6 default — preselection only)", () => {
     const html = renderToStaticMarkup(
       <CounterpartyPersonSelect relationshipId="rel-1" onPick={() => {}} />,
     );
@@ -75,6 +75,15 @@ describe("<CounterpartyPersonSelect> — initial paint (C1, C2)", () => {
     // `selected=""` only appears for a CONTROLLED select, and why an
     // uncontrolled implementation would pass every other assertion in this
     // file but fail this one.
+    //
+    // NOT PROVEN HERE: ORDER. ADR 0006's J6 is a claim about both option
+    // ORDER and PRESELECTION; this assertion proves preselection only. Every
+    // fixture in this file renders with `people` fixed at `[]` (no jsdom, no
+    // `useEffect` — see file header), so "Whole company" is first only
+    // because there is nothing else to be first among. An implementation
+    // that rendered `{people.map(...)}` ABOVE the empty option would pass
+    // this same assertion under this fixture. Proving order needs a
+    // non-empty `people` list, which this static-render env cannot produce.
     expect(html).toContain(
       '<option value="" selected="">Whole company</option>',
     );
