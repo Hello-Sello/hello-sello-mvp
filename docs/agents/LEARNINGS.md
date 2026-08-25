@@ -1505,3 +1505,74 @@ that rejected it will usually name it. **Corollary: an unresearched aside on som
 is a recommendation. Research it or do not send it.** And when a message carries two claims, the
 verified one does not vouch for the other — say which is which.
 
+---
+
+## L-047 · A test that goes red on a security fix may be asserting the bug
+
+**2026-08-24 · HEL-69 · `/build` · caught in the neighbouring-suite regression run**
+
+**Trigger** — a test goes red on a security or visibility fix, and the fix looks like the thing to
+soften.
+
+**What happened.** `current_pricelist_item` was changed to call `product_price_visible_to_caller()`
+instead of reprinting the visibility rule inline. `pricelist_item_tier_test.sql` then failed:
+*"public arm — verified Bob cannot see a fully public priced product."* Read from inside the suite,
+that is a security fix breaking a legitimate buyer read — and the obvious move is to relax the fix.
+
+**It was not.** The fixture inserted its product with `company_id`, `name` and
+`supplier_product_code` only — **no `location`** — so the product was *unfiled*, and unfiled is
+withheld from buyers. The cell called it "a fully public priced product"; the fixture never made it
+one.
+
+**What settled it was a door outside the suite.** `get_discoverable_shop` returns **0 rows** for that
+product and always has. So before the fix the price view returned a row the shop refused: the suite
+was green *because the two doors disagreed*, and what it was pinning was the divergence. Softening
+the migration would have preserved the bug and the green tick together, and the next reader would
+have found a test apparently blessing the behaviour.
+
+**The rule.** When a test goes red on a visibility fix, do not decide from inside the suite which
+side is wrong — **it cannot tell you.** Find an independent door onto the same question and ask it.
+If the doors already disagree, the test is pinning the more permissive one; fix the fixture so it is
+what the assertion says it is. Only weaken the fix once an outside oracle agrees the fix is wrong.
+
+**Related.** L-044 is the same symptom by a different mechanism — there an earlier case was a later
+case's setup; here a second door was more permissive than the one under test. Both are assertions
+borrowing their truth from outside themselves. See also L-048, which is this failure one level up,
+in the measurement rather than the assertion.
+
+---
+
+## L-048 · An A/B whose arms start from different states is not a weak experiment — it is not an experiment
+
+**2026-08-24 · HEL-69 · `/build` · caught while trying to prove the e2e result**
+
+**Trigger** — about to compare a before-run against an after-run: A/B-ing a test suite, benchmarking,
+or proving a failure is pre-existing.
+
+**What I did.** To show the view change broke no e2e, I ran `discover-shop.spec.ts` with the
+migration applied, then removed the migration and ran it again. The two arms failed on **different
+lines** — 195/222 versus 49/368 — and I came close to reading that as a real behavioural difference
+worth investigating.
+
+**It was not data at all.** The "after" arm ran on a database the full e2e suite had already mutated
+(committed specs edit seed rows and never restore them — L-033), while the "before" arm ran on a
+fresh `supabase db reset`. Two arms, two different starting databases. The comparison measured the
+pollution, not the migration. Redone with a reset before **each** arm, the real result was the
+opposite of what the first attempt suggested: 0 failures with the migration, and the baseline's
+failures turned out to be stack-key rotation, not behaviour.
+
+**Why it is seductive.** A confounded A/B does not look broken. Both arms ran to completion, both
+printed output, both produced line numbers, and neither errored. There is no failure signal to
+notice — the output has exactly the shape of a result, which is why it invites interpretation
+instead of suspicion.
+
+**The rule.** Before comparing two runs, state what is held constant and **verify it**, don't assume
+it — here, one query (`pg_get_viewdef(...) LIKE '%product_price_visible_to_caller%'`) confirmed each
+arm was genuinely in the state it claimed. Reset before **every** arm, never once at the start. And
+when two arms differ in a way you did not predict, suspect the setup before the subject: an
+unexplained difference is more often a confound than a finding.
+
+**Related.** L-047 and L-044 are this same shape in assertions — a signal true only because of
+something outside the thing measured. This one generalises furthest, because it applies to every
+before/after comparison, not only to tests.
+
