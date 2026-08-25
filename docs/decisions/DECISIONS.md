@@ -2008,3 +2008,32 @@ an actual send; `send_deal`'s p2p-vs-c2c routing was proven only through the oth
 Added: `deal-lands-in-c2c-chat.spec.ts`'s "a PERSON-addressed deal (picked in the basket)..." test,
 which is what actually caught nothing was broken in `send_deal` itself — the routing was always
 correct; the missing piece was the confirmation step.
+
+---
+
+## 2026-08-25 — HEL-82's admin surface lives at `/admin/relationships`, not `/connect/relationship`; `relationship`'s RLS is untouched
+
+**Reversed mid-session.** The first draft reused the ordinary `/connect/relationship/[id]` page for
+HS-team suspend/reactivate/end controls (per the standing instinct: don't build new UI when an
+existing page can absorb the change) and broadened `rel_all`'s RLS with `OR is_hs_team()` so a
+companyless HS account could load it.
+
+**Ruling, after `critic` + `security` review:** that page is unreachable by the seeded HS account
+regardless of the RLS change — the whole `/connect` tree sits behind `requireVerified()`, which
+redirects a companyless account to `/onboarding` before the page ever runs. The alternative fix
+(give the HS operator a real company) would have turned three other relationship readers
+(`messaging/supabase/store.ts`, `messaging/supabase/connections.ts`, `basket/supabase/reads.ts`)
+into cross-tenant leaks, since none of them has an explicit membership check — they lean on RLS
+alone. Full trace in [[L-059]], `docs/agents/LEARNINGS.md`.
+
+**What shipped instead:** a new `/admin/relationships` queue, same `is_hs_team()`-gated shape as
+the existing company-verification queue, backed by a dedicated `list_relationships_admin()`
+SECURITY DEFINER read. `rel_all` carries no RLS or grant change — `relationship` is exactly as
+narrow after this ticket as before it.
+
+**Also decided here:** HEL-82's shipped scope is "new deals" only (`send_deal` +
+`confirm_detected_deal`, both gated — see [[L-058]]). Its own acceptance criteria also promises
+blocking new chat messages and new pricing asks; neither gained a check. Filed as **HEL-84** (High)
+rather than folded in — the ticket was already large, and this needs its own design pass on
+`msg_all`/`inbox_insert`, not a rushed extension. HEL-82 stays **In Progress**, not Done, until
+HEL-84 lands.
