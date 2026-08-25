@@ -555,3 +555,73 @@ company first"*) · **N5** (no re-report on *"Select a customer…"*) · **N6** 
 the L-038-class one). **They stay unfiled deliberately and are recorded here so that stays visible.**
 
 Budgets spent: `tests 0/2` · `blocking-findings 1/2` · `G4 rounds 1`.
+
+---
+
+# T03 / HEL-65 — the walk, end to end
+
+## Round 1 — `plan-checker`, on PLAN-T03.md rev 1
+
+**Verdict: REVISE — 6 blocking + 8 notes. ALL FOURTEEN verified true by me against the real
+files before folding ([[L-003]]); all fourteen accepted; none argued down.** Plan is at rev 2.
+
+**The plan's headline claim survived.** `plan-checker` traced AC 6 and confirmed it goes red
+under the named sabotage: `CounterpartyPersonSelect.tsx:87` → `peopleForRelationship` → `:27`
+`find(c => c.relationshipId === id)`, against `getMyConnections`'s
+`companies[].relationshipId = rel.id` (`connections.ts:143-154`). A `companyId` matches nothing
+→ `?? []` → only `Whole company` renders. It also confirmed Bob can see both GreenLeaf people
+(`can_see_person` → `shares_connection_with_company`, `20260609183000:33-39`) and that
+`display_name` is unset so `first_name last_name` is the rendered string.
+
+**What did NOT hold was the fixture lifecycle.** Three of my own assertions were false by
+construction against the suite that actually runs, and my `afterAll` could not have executed.
+
+### Blocking — all six FOLDED (`blocking-findings` is a build budget; a plan round does not spend it)
+
+| # | finding | verified how |
+|---|---|---|
+| **B1** | 🔴 **my `afterAll` delete order would have raised `23503` and leaked the fixture into the seed permanently.** `deal_line_item.product_id → product(id)` has **no `ON DELETE`** (`20260607090005:22-24`) and the birth RPC writes that row, so a drafted product cannot be deleted. I copied the order from `discover-shop.spec.ts:713-715`, where the product is never drafted onto a deal. **This is the exact HEL-73 outcome the plan claimed to avoid** | opened the migration — the constraint carries no clause |
+| **B2** | 🔴 **`countDealPillsOnThread('c2c') === 1` / `('p2p') === 0` were false before the spec's first line.** One worker, path order: `deal-c2c-create` leaves a card (it resets in `beforeEach` only) whose send now posts a c2c pill; `deal-change` posts a p2p one. Worse — **`resolveDealCardIdForRelationship` is `limit 1` with no `ORDER BY`** (`two-company.ts:228`) and its own docstring claims safety only after a reset, so `countTicketsForCard(cardId) === 0` could pass **against the wrong card** — a false green on the half I called authoritative | read the function; read its docstring `:216-218` |
+| **B3** | my cases A and B were "the same state" **and** implied a reset — incompatible. **Merged into one test** | — |
+| **B4** | 🔴 **both lens assertions were pure ABSENCE** — [[L-021]]'s class, which I invoked for the pill counts and then not here. `InboxView.tsx:130` renders `LensTabs` **unconditionally, above** the `loading` ternary at `:131`, so the assertion passes on a loading page, a blank page, and a crashed view | opened `InboxView.tsx` — confirmed the render order |
+| **B5** | the fixture's `location` was unspecified; **a new value breaks a neighbour.** `discover-shop.spec.ts:170` asserts **exactly 3** `location-option`s and sorts after this file. Pinned to `Toronto Warehouse` | queried the DB: GreenLeaf has exactly `Toronto Warehouse` + `Montreal Warehouse` |
+| **B6** | 🔴 **the rewrite deletes the ONLY browser-level cover for a still-live path** — "Pick up deal" / `claim_deal_ticket`. My §5 recorded none of it. Residual cover is `supabase/tests/claim_deal_ticket_test.sql` | grep: `deal-c2c-create.spec.ts:22` is the only e2e mention repo-wide |
+
+### Notes — all eight accepted
+
+**N1** the people list arrives after first paint → an auto-retrying matcher, never a one-shot
+`allTextContents()` (flaky-red, and it would burn the `tests 0/2` budget) · **N2** name the pill
+selector (`/click to open the deal card/i`, `deal-p2p-send.spec.ts:69`) rather than leave "assert
+the body" to the builder · **N3** two stale ranges of mine · **N4** `sendDeal` is `:367` on
+`origin/main` and `:369` on HEAD — name the tree · **N5** `pack_size_grams: 100` is not optional
+(without it `toDraftLines.ts:28` writes `unit: "unit"`) · **N6** AC 2 has no independent
+assertion; it is implied by AC 1 + AC 3, and "the walk never navigates there" is a property of
+the script, not a check · **N7** **ADR §4.1 `:307` already recorded the `deal_member` consequence
+and its safety analysis, ending with the words "Recorded so it is not re-derived" — and I
+re-derived it.** It also names a consequence recorded nowhere: `PeopleTab.tsx` is the only reader
+of `deal_member` in `src/`, so a company-addressed deal's People tab now shows the sender alone ·
+**N8** my run set named only `inbox-accept.spec.ts`; it now names six specs.
+
+### 🔴 THREE MORE STALE CITATIONS OF MINE — this slug's tally is NINE
+
+| I wrote | truth |
+|---|---|
+| `countThreadsForPair` at `two-company.ts:532-556` | ends at **`:552`**; `:554-560` is the next docstring |
+| `discover-shop.spec.ts:586-594` is "hard-delete in `afterAll`" | it is an **`afterEach`**; the create is `:566-584` |
+| `deals/actions.ts:367` for `sendDeal` | `:367` on `origin/main`, **`:369` on HEAD** |
+
+### What `plan-checker` verified as TRUE, so the fold-in did not re-check it
+
+The RED claim (`deal-c2c-create.spec.ts:167-168` times out — real, not hypothetical) · all four
+fixture-docstring targets land exactly on the falsified sentences · the [[L-044]] check (the
+rewritten case is the file's last and `beforeEach` resets, so no later assertion depends on it) ·
+the `2 → 1` `deal_member` drop · the `countThreadsForPair` pre-judgement · trap #4's `exact: true`
+reasoning · and `local-supabase.ts:38` resolving the key once at module load.
+
+### 📌 Machinery — `plan-checker` RESOLVED this time
+
+`ROLLUP.md` §C records that `plan-checker` errored `Agent type 'plan-checker' not found` for ten
+consecutive tickets on slug 0022 and was worked around with a `general-purpose` substitute. **It
+is registered in this session and ran as itself.** Its Tier 1 no longer rests on another agent's
+work — recorded because §C's first owed ruling was exactly *"does the tier attach to the ruleset,
+or is it inherited?"*, and that question is now moot going forward.
