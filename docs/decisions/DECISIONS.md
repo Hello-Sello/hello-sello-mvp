@@ -2037,3 +2037,49 @@ blocking new chat messages and new pricing asks; neither gained a check. Filed a
 rather than folded in — the ticket was already large, and this needs its own design pass on
 `msg_all`/`inbox_insert`, not a rushed extension. HEL-82 stays **In Progress**, not Done, until
 HEL-84 lands.
+
+---
+
+## 2026-08-25 — the checker loop stops on SEVERITY, not on a blocker count
+
+**Supersedes one clause of** *"2026-08-14 — Pipeline dry-run executed on the tier ladder"*
+(its **Pipeline process locks** bullet). Superseded by name, not by line number — that entry
+sits above this one and its line numbers move whenever anything is inserted before it.
+
+**What was decided.** The checker loop now stops at the first round that raises **no new
+finding on rungs 1–3 of the severity ladder** — leak · silent failure · won't run. The ladder
+is defined once, in `docs/agents/PIPELINE.md` §10, and mirrored verbatim into the four checker
+agents. Rungs 4–5 — behavioural edge, contract/wording — are `note`: still reported, still
+surfaced to Muskan at the gate, but they no longer hold the fix-loop open.
+
+**What it replaces.** The 2026-08-14 lock said *"ship to the human gate on the first round
+with **zero NEW blocking findings**."* **That state never once occurred.** The dry-run's own
+series was findings 11·15·15·14·15·14·12 and blockers 5·8·4·6·6·8·4 across seven rounds, and
+eight consecutive tickets on slug 0022 hit the 2-round cap. A condition that has never been
+met in ~15 attempts is not a strict rule — it is a rule that silently converts a budget into
+an automatic escalation, which is most of what made a feature cost ~22 rulings.
+
+**Why severity is the right axis.** The dry-run measured it and wrote it down: find-rate is
+**flat** (~14/round regardless of artifact quality — a fresh agent handed a long ADR will
+always find about fourteen things), while **severity decays**: *"leaks → silent failures →
+won't-run → behavioural edges → contracts/wording."* The old rule counted the axis that does
+not move. This one reads the axis that does.
+
+**The root cause was not the rule, it was a missing owner.** Four agents emitted `blocking`
+— `adr-checker`, `plan-checker`, `security`, `critic` — and **only `critic` defined it**, and
+only as of this same day. The stopping rule was counting a word with four private meanings.
+The ladder now has one owner and four declared mirrors; the mirroring is deliberate, because
+an agent file is a system prompt and a threshold the checker does not hold in context is a
+threshold it will not apply.
+
+**What did NOT change.** The 2026-08-14 lock's other three clauses stand, unamended and
+re-affirmed: the checker runs as a genuinely **fresh, separate-context** agent, never the
+author re-reading their own work · revisions carry a **simplification bias**, preferring the
+fix that removes a mechanism over the one that adds it · checker findings are **claims to
+spot-verify**, not verdicts.
+
+**Risk accepted.** A finding mis-rated down to rung 4 or 5 stops blocking the loop. It does
+not stop being reported — every note reaches the gate. The mitigation is that the ladder is
+anchored to the dry-run's own measured severity classes rather than to fresh judgement, and
+the agents are told explicitly: *do not promote a rung-4/5 finding to `blocking` because it
+feels important; say so in the note instead.*
