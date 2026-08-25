@@ -23,6 +23,47 @@
 
 ---
 
+## ⚠️ PENDING (2026-08-25) — HEL-67 Gap 1, `deal_detected` write gate (ONE migration, plain `db push`, **no `--include-all`**)
+
+**Status: LOCAL ONLY.** Production tip is `20260825110000`; this stamps `20260825120000`, so a plain
+`supabase db push --linked` takes it. Nothing is back-dated. **Count: ONE.**
+
+| # | file | what it does |
+|---|---|---|
+| 1 | `20260825120000_msg_all_deal_detected_gate.sql` | `ALTER POLICY msg_all ON chat_message` — `WITH CHECK` gains `and type <> 'deal_detected'`. `USING` is **not** touched. |
+
+**The hole it closes.** `20260614121000:12` claims *"RLS lets only Sella / service-role insert a*
+`deal_detected` *message; a person cannot."* That was a comment, not a gate — `msg_all` is the only
+policy on `chat_message` and its `WITH CHECK` was `can_access_thread(thread_id)` and nothing else. Any
+thread member could mint the row that drives `confirm_detected_deal` into birthing a real deal.
+Confined to threads the actor already belongs to, so not cross-tenant (L-006).
+
+**Who loses writes when this lands: nobody.** Verified by census, not assumption — `deal_detected`
+appears in `src/` only as a READ filter (`reads.ts:259`) and is written solely by SECURITY DEFINER
+functions, which bypass RLS and are unaffected.
+
+⚠️ **DO NOT WIDEN THIS PREDICATE WITHOUT RE-READING THE CENSUS.** The ticket originally proposed
+banning *"Sella-authored types, service-role only"*. That is **false for five of six**: the browser
+legitimately writes `intro`, `deal_cancelled`, `deal_signed`, `deal_change_proposed` and
+`deal_negotiation_requested` with `sender = 'sella'` and a NULL author. The suite's §A pins all six
+shapes so a future widening goes red here rather than in production.
+
+⚠️ **HEL-67 IS ONLY HALF CLOSED, DELIBERATELY.** Gap 2 — the forgeable SENDER — is **blocked on
+HEL-68**, not merely unfinished. The accept rollout has the browser insert a `person` message
+attributed to the **requester** (`rollout.ts:179`), so `sender_person_id = auth.uid()` breaks
+connection-accept. Ruled by Muskan 2026-08-25.
+
+**Post-flight — assert the policy shape, not a row count.** There is no data symptom to query: the
+forgery leaves a valid-looking row, and nobody has forged one.
+
+```sql
+select pg_get_expr(polwithcheck, polrelid) ~ 'deal_detected' as write_gated,
+       pg_get_expr(polqual,      polrelid) ~ 'deal_detected' as read_door_moved_MUST_BE_FALSE
+  from pg_policy where polrelid = 'public.chat_message'::regclass and polname = 'msg_all';
+```
+
+---
+
 ## ✅ APPLIED 2026-08-25 (was PENDING 2026-08-24) — THREE migrations, one plain `db push`
 
 **Status: LIVE ON PRODUCTION.** Pushed 2026-08-25 by the `security_tickets` session on Muskan's
