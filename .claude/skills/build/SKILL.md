@@ -55,10 +55,16 @@ allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Task, Agent
      `SECURITY-CHECKLIST.md` S1-S8 (grants on both client roles,
      `pg_policies`, RLS), which a general reviewer does not do.
 
-   Findings: `blocking` → builder fixes (budget counts fix ROUNDS — three
-   findings fixed in one pass = one attempt; `blocking-findings 2/2` then
-   STOP) · `note` → REVIEW.md, never retried · builder REJECTION → REVIEW.md
-   with reasoning, costs no attempt, Muskan adjudicates at G4.
+   Findings are severity-rated on the **ladder in PIPELINE §10** —
+   `blocking` is rungs 1-3 ONLY (leak · silent failure · won't run); rungs
+   4-5 (behavioural edge, contract/wording) are `note`. A reviewer that
+   rates a wording nit `blocking` is mis-rating it; take it as a note.
+
+   `blocking` → builder fixes (budget counts fix ROUNDS — three findings
+   fixed in one pass = one attempt; `blocking-findings 2/2` then STOP) ·
+   `note` → REVIEW.md, never retried, still surfaced at G4 · builder
+   REJECTION → REVIEW.md with reasoning, costs no attempt, Muskan
+   adjudicates at G4.
 
 8. **Everything appends to the slug's ONE `REVIEW.md`**, every finding
    attributed: `(code-review, file:line)`, `(critic, file:line)`,
