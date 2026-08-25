@@ -1747,3 +1747,56 @@ tell you about the ones *its* test writes. Delete children the test creates befo
 
 **See also** [[L-033]] (a seed row is not a stable fixture until you grep what mutates it) — this
 is its mirror image: a fixture *you* create is not clean until you grep what references it.
+
+---
+
+## L-054 · "Built and green" names a database state — say which stack, and whether another branch can reproduce it
+
+**2026-08-25 · HEL-67 · `security_tickets` · caught by `deal_land_t02` cross-checking the claim, after I had already reported it to Muskan**
+
+> **Numbering:** L-054. L-053 was taken by the parallel session in the same hour, announced before
+> writing. [[L-049]] remains a deliberate hole — see [[L-052]].
+
+**Trigger** — writing "built", "green", "N/N passing", or "applied" about anything that lives in the
+local database rather than in a file: a migration, a policy, a grant, a seeded fixture. Also: any
+handover between parallel sessions that says a suite passes.
+
+**What I did.** I reported HEL-67 as built and green, with a full-suite A/B (45/0 applied, 44/1
+reverted). All of that was true. The parallel session then said its stack's tip was `20260825110000`
+with no `20260825120000`, and asked which database my green came from — declining to theorise past
+its own measurement.
+
+**Both measurements were correct, and that is the finding.** The *policy* was live on the shared
+stack; the *migration row* had never been stamped, because I applied the SQL with `psql` and skipped
+the `schema_migrations` insert I had correctly done for the two migrations before it. So *"is it
+applied?"* answered **yes** against `pg_policy` and **no** against `schema_migrations` — one database,
+two facts, and the peer had queried the one I left inconsistent.
+
+**Chasing the discrepancy found the real hazard, which was not the stamp.** The migration *file*
+exists only on my branch. A `db reset` from the other tree would silently revert the gate; and until
+then, that branch was running its tests against a policy its own tree does not contain. Neither
+direction produces a conflict, a warning, or a file collision — every detection mechanism this repo
+has is file-level, and a shared Postgres is not a file. See `ARCHITECTURE-NOTES.md` 2026-08-25.
+
+**The part I want the next session to sit with.** The hazard surfaced **only because I skipped a
+step**. Had I stamped correctly, both sessions would have seen agreement, and the divergence would
+have stayed armed and silent. **A detection mechanism that depends on someone forgetting something is
+not a detection mechanism.** The lesson is emphatically *not* "skip the stamp" — it is that we had no
+real mechanism here at all, and got lucky.
+
+**What to do instead.** Two habits, both cheap:
+
+1. **Stamp at apply time**, every time, so the database is self-consistent — then the ledger table is
+   worth querying and disagreement means something.
+2. **Qualify every green with its stack.** "45/0 on the shared local stack, which carries a migration
+   that only branch X contains" is a different and more honest claim than "45/0". If another branch
+   cannot reproduce it, that belongs in the same sentence as the number — not in a footnote, and not
+   left for a peer to discover.
+
+And when a peer reports a measurement that contradicts yours, **measure again before explaining**.
+The explanation here would have been right and would still have missed the hazard; only the second
+query — *does the other branch even have this file?* — found it.
+
+**See also** [[L-033]] (a green run is only evidence for the DB state it ran against — this is that
+sentence at the schema level), [[L-048]] (an A/B whose arms start from different states is not an
+experiment), [[L-040]] (parallel sessions on one branch) and [[L-052]].

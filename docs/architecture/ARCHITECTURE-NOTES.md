@@ -579,6 +579,51 @@ assumed to travel with the data and does not.
 
 ---
 
+## 2026-08-25 — A worktree isolates the tree, not the DATABASE. Parallel sessions share one Postgres, and migration files are per-branch.
+
+**This CHANGES standing guidance rather than adding to it.** `CLAUDE.md` §2b concluded, after L-040,
+that *"parallel sessions need separate branches or worktrees, not a sync file."* That is true for
+**files** and **false for the local database**, which is the one resource neither mechanism isolates.
+
+**Measured 2026-08-25**, two sessions on two branches against one stack:
+
+| queried | answer |
+| -- | -- |
+| `pg_policy` — is the HEL-67 gate live? | **yes**, on both sessions' stack |
+| `git show claude/muskan/work:supabase/migrations/20260825120000_…` | **fails** — the file exists only on `worktree-security-tickets` |
+
+So one branch was **running against a policy it does not contain**. Two consequences, and the second
+is worse than the first:
+
+- **Silent revert.** A `db reset` from the branch without the file rebuilds from the migrations *that
+  branch can see* and drops the other session's schema change. No conflict, no warning, no file
+  collision — the detection mechanisms we have are all file-level, and nothing here is a file.
+- **Silent grant.** Until that reset, the other branch's tests run against a gate its own tree cannot
+  describe. A spec that *should* be blocked can pass because someone else's fix is present; a spec
+  can fail for a reason its branch cannot explain, and the fix will look like a defect in its own
+  code. **Tests measure a schema no tree describes, in both directions.**
+
+This is `L-033` moved from the row level to the schema level: *a green suite is only evidence for the
+database state it ran against* — where that state is now partly set by a branch you cannot see.
+
+**⚠️ The uncomfortable part, worth keeping.** This surfaced **only because a step was skipped.** The
+migration's effect was applied without stamping `schema_migrations`, so *"is it applied?"* answered
+**yes** against `pg_policy` and **no** against the ledger table, and the disagreement is what prompted
+the second session to look. **Had the stamp been done correctly — the right thing to do — both
+sessions would have seen agreement and the hazard would have stayed fully armed and invisible.** A
+detection mechanism that depends on someone forgetting a step is not one.
+
+**What this does NOT justify:** stamping is still correct, and the fix is not to skip it. The fix is
+that co-ordination between parallel sessions must include *what has been applied to the shared
+database*, not only what files are locked — and that any "built and green" claim names the stack it
+was measured on. Options not yet decided: a per-session database, a `supabase db diff` check at
+session start, or simply declaring applied migrations the way files are declared today.
+
+**Source:** `security_tickets` + `deal_land_t02`, 2026-08-25, found while cross-checking a
+"built and green" claim. See `L-054`, `L-033`, `L-040`, `CLAUDE.md` §2b (now known insufficient).
+
+---
+
 ## 2026-08-25 — A message type names a VOICE; RLS governs a WRITER. They are not the same axis, and our vocabulary hides it.
 
 `chat_message.type` and `chat_message.sender` look like they encode the same fact — who produced this
