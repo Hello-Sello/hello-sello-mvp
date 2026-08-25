@@ -5,6 +5,18 @@
 
 ---
 
+**Last updated:** 2026-08-25 — `security_tickets` session (worktree-security-tickets) — starting
+**HEL-82** (relationship suspend/end + HEL-74's liveness gates). Rebased worktree onto
+`origin/claude/muskan/work` @ `73d8b89` (post-0023-ship) first — clean, no divergence.
+**Status:** active.
+**Shared files locked:** `src/app/connect/relationship/[relationshipId]/page.tsx`,
+`src/modules/relationship/**`, `src/modules/basket/**` (getMyConnections/basket status-check
+fix only), `src/modules/connect/**` (same). New `supabase/migrations/*` files only — no existing
+migration files edited in place. Flagged to `g5_walk` (post-0023 session) before starting; it's
+idle, no conflict expected.
+
+---
+
 **Last updated:** 2026-08-25 — `ship_deal` session — **SLUG 0023 SHIPPED TO PRODUCTION (PR #177);
 G5 walk found + fixed a real bug in the basket send flow, also shipped (PR #180). G5 itself still
 PENDING — walk in a new session.**
