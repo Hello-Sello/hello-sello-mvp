@@ -22,7 +22,8 @@
  *
  * THE ONE PROPERTY THIS FILE EXISTS TO HOLD (plan-checker's own charge): test 1
  * must go RED if BasketDrawer.tsx:361 read `relationshipId={group.sellerCompanyId}`
- * instead of `group.relationshipId` — both are `string`, both compile, and
+ * instead of `relationshipId={counterpartyRelationshipId}` (hoisted at :239 from
+ * `group.relationshipId`) — both are `string`, both compile, and
  * T02's seven unit cases stay green under that swap (L-050). Asserting "the
  * control renders" or "Whole company is the default" does NOT discriminate;
  * only asserting the NAMED people (Alice Green, Carla Klein) does, because
@@ -82,6 +83,39 @@ let productId: string | null = null
 
 test.beforeAll(async () => {
   const admin = makeAdminClient()
+
+  // Idempotent pre-clean. `uq_product_supplier_code_active` is UNIQUE
+  // (company_id, supplier_product_code) WHERE deleted_at IS NULL
+  // (20260607090004:52-53) — if a PRIOR run's afterAll threw after its FIRST
+  // delete, this exact row is still sitting there and every future run's
+  // insert below would 23505 forever, not just once. Find and remove it
+  // before inserting, every time — same FK-safe order as the real teardown.
+  const { data: leaked, error: leakErr } = await admin
+    .from('product')
+    .select('id')
+    .eq('company_id', GREENLEAF_ID)
+    .eq('supplier_product_code', PRODUCT_CODE)
+    .is('deleted_at', null)
+  if (leakErr) {
+    throw new Error(`T03 fixture: pre-clean lookup failed — ${leakErr.message}`)
+  }
+  for (const row of leaked ?? []) {
+    const leakedId = (row as { id: string }).id
+    const preCleanErrors: string[] = []
+    const { error: lineErr } = await admin
+      .from('product_basket_line')
+      .delete()
+      .eq('product_id', leakedId)
+    if (lineErr) preCleanErrors.push(`product_basket_line: ${lineErr.message}`)
+    const { error: priceErr } = await admin.from('pricelist_item').delete().eq('product_id', leakedId)
+    if (priceErr) preCleanErrors.push(`pricelist_item: ${priceErr.message}`)
+    const { error: prodErr } = await admin.from('product').delete().eq('id', leakedId)
+    if (prodErr) preCleanErrors.push(`product: ${prodErr.message}`)
+    if (preCleanErrors.length) {
+      throw new Error(`T03 fixture: pre-clean of a leaked row failed — ${preCleanErrors.join('; ')}`)
+    }
+  }
+
   const { data: product, error: productErr } = await admin
     .from('product')
     .insert({
@@ -120,20 +154,27 @@ test.afterAll(async () => {
   // resetDealData() FIRST — see the module header's teardown-order note (B1).
   resetDealData()
   const admin = makeAdminClient()
+
+  // Run all three deletes and collect errors rather than throwing on the
+  // first one: a throw at `product_basket_line` would otherwise skip
+  // `pricelist_item` and `product` entirely, leaking this exact row past
+  // `uq_product_supplier_code_active` (company_id, supplier_product_code)
+  // WHERE deleted_at IS NULL — every future run of this file would then 23505
+  // in beforeAll until a human hand-deletes it. The beforeAll pre-clean above
+  // is the recovery path; this is what keeps a partial failure from needing it.
+  const errors: string[] = []
   const { error: lineErr } = await admin
     .from('product_basket_line')
     .delete()
     .eq('product_id', productId)
-  if (lineErr) {
-    throw new Error(`T03 fixture teardown: product_basket_line delete failed — ${lineErr.message}`)
-  }
+  if (lineErr) errors.push(`product_basket_line: ${lineErr.message}`)
   const { error: priceErr } = await admin.from('pricelist_item').delete().eq('product_id', productId)
-  if (priceErr) {
-    throw new Error(`T03 fixture teardown: pricelist_item delete failed — ${priceErr.message}`)
-  }
+  if (priceErr) errors.push(`pricelist_item: ${priceErr.message}`)
   const { error: prodErr } = await admin.from('product').delete().eq('id', productId)
-  if (prodErr) {
-    throw new Error(`T03 fixture teardown: product delete failed — ${prodErr.message}`)
+  if (prodErr) errors.push(`product: ${prodErr.message}`)
+
+  if (errors.length) {
+    throw new Error(`T03 fixture teardown: ${errors.length} delete(s) failed — ${errors.join('; ')}`)
   }
 })
 
@@ -246,11 +287,11 @@ test('a company-addressed deal lands as a pill in the seller\'s c2c chat, opens 
 
     // ---- AC 3 (AC 2 implied by this + AC 1 above): no NEW Deal-tickets entry ----
     await alicePage.goto('/connect/inbox')
-    // B4: LensTabs renders UNCONDITIONALLY, above the loading ternary
-    // (InboxView.tsx:130-131) — an absence assertion taken before load
+    // B4: LensTabs renders UNCONDITIONALLY (InboxView.tsx:130), above the
+    // loading ternary (:132) — an absence assertion taken before load
     // finishes would pass on a loading page, a blank page, or a crashed
     // InboxView just as readily as on a correct one. Copies the shape already
-    // in deal-c2c-create.spec.ts (:152-161): wait for load, assert the
+    // in deal-c2c-create.spec.ts (:164-169): wait for load, assert the
     // POSITIVE empty-state string, THEN the absence.
     await expect(alicePage.getByText('Loading inbox…')).toBeHidden({ timeout: 15000 })
     await alicePage.getByRole('button', { name: /deal tickets/i }).click()

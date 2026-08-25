@@ -960,9 +960,10 @@ export async function createC2cDealAsAlice(alicePage: Page): Promise<void> {
   await dealPanel(alicePage)
     .getByRole('button', { name: /edit deal/i })
     .waitFor({ timeout: 15000 })
-  // the explicit Send (company-target: this is the moment the StonePharm inbox
-  // ticket mints) — wait on the negotiation-unique DecisionBar signal, exactly
-  // as createDraftDealAsAlice does.
+  // the explicit Send (company-target: STALE-CORRECTED — this is the moment
+  // the c2c pill posts, not a StonePharm inbox ticket; T01/HEL-63 deleted that
+  // ticket mint from this arm entirely) — wait on the negotiation-unique
+  // DecisionBar signal, exactly as createDraftDealAsAlice does.
   await dealPanel(alicePage).getByRole('button', { name: /^send deal$/i }).click()
   await dealPanel(alicePage).getByText(/waiting for the other side to sign/i).waitFor({
     timeout: 15000,

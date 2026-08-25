@@ -26,7 +26,7 @@
  *      chat — no ticket, no "Pick up deal", no claim — and opens the SAME
  *      card from there; the creator remains the sole `deal_member` throughout
  *      (ADR 0006 §4.1:307 carries the safety analysis for this — cited, not
- *      re-derived here, per LEARNINGS L-044).
+ *      re-derived here).
  *
  * Selectors mirror fixtures/two-company.ts (createC2cDealAsAlice drives the
  * create + send flow; the panel is `<aside aria-label="Deal card">`).
@@ -187,8 +187,7 @@ test('a c2c-chat-created deal lands in the recipient\'s c2c chat directly — no
 
     // ---- no claim happened: the creator is still the SOLE deal_member ----
     // (ADR 0006 §4.1:307 carries the safety analysis for a company-wide-born
-    // workspace staying reachable with one owner — cited, not re-derived here,
-    // per LEARNINGS L-044.)
+    // workspace staying reachable with one owner — cited, not re-derived here.)
     expect(countDealMembersForCard(cardId)).toBe(1)
   } finally {
     await aliceContext.close()
