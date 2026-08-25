@@ -5,10 +5,22 @@
 
 ---
 
-**Last updated:** 2026-08-25 — **BOTH of today's parallel sessions are now closed.** Merged status:
+**Last updated:** 2026-08-25 — session 90 `deal_land_t02` OPEN.
+**Status:** active — `/build T02` (HEL-64), slug 0023, branch `claude/muskan/work`.
+
+**Shared files locked:**
+- `src/modules/basket/components/CounterpartyPersonSelect.tsx` (new)
+- `src/modules/basket/components/RecipientPicker.tsx`
+- `src/modules/basket/components/BasketDrawer.tsx`
+- `src/modules/basket/components/CounterpartyPersonSelect.test.tsx` (new)
+- `src/modules/basket/components/BasketDrawer.test.tsx`
+
+⚠️ **`docs/decisions/DECISIONS.md` is DIRTY in the working tree and is NOT mine** — two
+uncommitted entries left behind by session 89 (company deactivation; HEL-69 rides the 0023
+push). Session 90 does not touch it and every commit names its paths explicitly (L-040).
+
+**Previously:** **BOTH of 2026-08-25's parallel sessions are closed.** Merged status:
 session 88 `deal_land` (T01 / HEL-63) **and** session 89 `security_audit` (HEL-69 + the ticket sweep).
-**Status:** offline — both sessions closed. Next session = new tickets (Muskan's call), with
-`/build HEL-64` (T02, the buyer's person picker) queued from 0023.
 
 > ⚠️ **CORRECTION to the line below, from session 89:** the note *"nothing else is pending on cloud"*
 > was true when written and is **no longer**. TWO migrations are now pending, not one —
