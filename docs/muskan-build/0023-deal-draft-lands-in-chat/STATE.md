@@ -211,7 +211,37 @@ is not this slug's job, but nothing else is tracking it.
   Checker verified CLEAN: ADR §3 fence, STATE.md Deferred list, the agent split
   (`test-writer` owns all `supabase/tests/**`, builder owns source only), C4's mechanics,
   and C6/C7's expected RLS outcomes.
-  ⏸️ **PAUSED — awaiting Muskan's yes on L-045** before `test-writer` is spawned.
+  ✅ **`test-writer` done, two rounds (`7fd33fc`).** Four files: the new suite
+  `send_deal_c2c_announce_test.sql` (C1-C9) + its runner, and the two deliberate rewrites.
+  **Case order verified by me as built: C1→C2→C3→C6→C7→C8→C9→C4→C5** — the soft-delete runs
+  AFTER the recipient-read cases, and C6 is pinned BOTH ways (C1's captured `_pills` id **and**
+  `t.deleted_at IS NULL`). (2a) calls `deliver_deal` **twice**, with the L-044 reasoning written
+  into the comment so it cannot be undone by accident.
+  🔴 **Round 2 was a stale-comment sweep, and it found more than I did.** I caught
+  `claim_deal_ticket_test.sql:3` — the file's TITLE line still asserting *"the ticket is written
+  by send_deal"* — by reading the top of the file rather than the diff. I sent it back asking for
+  a scan of BOTH files for siblings, and it found **two more**: `deliver_deal_test.sql:1-27`'s
+  header bullet (1), and `:174-178`'s WR-01 comment naming `send_deal` as a live `deliver_deal`
+  caller when T01 deletes that call entirely. **Three stale lines, one found by diff-reading and
+  two only by whole-file reading.** This is exactly `L-045`'s class, inside the same session that
+  wrote `L-045`. My own closing sweep confirms every surviving mention now states the new
+  behaviour.
+  📌 **Honest gap the agent flagged rather than faking:** AC 9's repo-level half (grep for a NEW
+  migration redefining `deliver_deal`) is not expressible as a SQL assertion and has no home under
+  a test-writer fence. **It is MINE to run at the step-10 replay** — recorded so it is not lost.
+  ✅ **`L-045` + `L-046` WRITTEN to `docs/agents/LEARNINGS.md`** (Muskan's yes, 2026-08-25). Both
+  were caught by the parallel security session, both on claims that never reached an artifact:
+  L-045 = a discharged TODO comment cited as fact about live schema; L-046 = recommending
+  `security_invoker` on a view `ADR-0004:239` had already rejected **by name**, naming the exact
+  failure (it would zero out every buyer read). L-046's root cause was sharpened by the peer:
+  **not "outside my fence" — neither of us ran a query before recommending.**
+  ⏳ **NEXT: RED verification, and it is the orchestrator's job, not `test-writer`'s (L-023).**
+  Blocked only on the shared local DB, which the security session holds by agreement. Protocol
+  agreed: each session resets from its own tree immediately before its own run and assumes nothing
+  about the state the other left. *(An earlier line here said the build was
+  PAUSED pending Muskan's yes on `L-045` — that was over-cautious and is corrected: the
+  LEARNINGS entry does not gate the ticket. The question stays open; the build does not wait
+  on it. Everything that does not depend on the answer proceeds.)*
 
 ## Gate log
 - triage — FULL, 2026-08-25 (narrowed from F-04, then widened to include the picker)
@@ -253,6 +283,189 @@ inbox. Safe **only** because `deal_detected` messages can be written solely by
 Sella/service-role (`20260614121000_propose_deal_rpc.sql:12`) and Sella is not built.
 **The page-deletion slug MUST NOT delete `/connect/inbox` while this door still writes
 to it.** Carry this forward.
+
+## ✅ T01 GATE IS GREEN — measured by me, 2026-08-25 (`3ae7873`)
+
+**Five SQL runners + `tsc` + unit, exit codes captured from each runner directly** (never from a
+pipeline — see the `tail` trap below):
+
+| check | result |
+|---|---|
+| `run_send_deal_c2c_announce_test.sh` | **exit 0** |
+| `run_deliver_deal_test.sh` | **exit 0** |
+| `run_claim_deal_ticket_test.sh` | **exit 0** |
+| `run_decline_deal_test.sh` | **exit 0** |
+| `run_update_deal_draft_test.sh` | **exit 0** |
+| `tsc --noEmit` | **exit 0** |
+| `npm run test:unit` | **490 / 490**, 67 files |
+| AC 9 / M8 repo check (both halves) | **clean** |
+
+**Measured on a verified-clean reset — the verification was not optional.** `builder` warned its
+own green "has a shelf life": it hit a reset that stamped `20260825100000` (a version with **no
+file on disk**, the parallel session's) while leaving the OLD `send_deal` body live. So before
+measuring I confirmed **both** that `20260825090000` was at the tip **and** that the new body was
+actually running.
+
+⚠️ **My first probe said `OLD BODY` and the DATABASE WAS FINE — the probe was wrong.** I asked
+whether the live definition contained the string `deliver_deal`; it does, in a **comment inside
+the new body** explaining that the old rationale died with the deleted call. A substring match
+found the comment. The shape-correct probes — `~ 'perform\s+public\.deliver_deal'` (no match) and
+the presence of the `on conflict` idiom (match) — both said NEW. **`L-007` (the tool lied is the
+LAST hypothesis) and `L-041` (match the shape, not the spelling), inside one command.**
+
+## 🔴 A citation error of MINE, found by `builder` — the third of this class tonight
+
+PLAN-T01 §2.2 cited the `on conflict` precedent as `20260823090000:162-183`. **Verified by
+opening it: the idiom's `SELECT id INTO v_rel_id` starts at `:159` and its closing `END IF` is
+`:184`. `:162` lands mid-SELECT.** I inherited the range from **ADR §2** without opening the file.
+
+**Both occurrences corrected in PLAN-T01, with the error recorded in place rather than silently
+swapped.** ⚠️ **ADR §2 (`:225`) and §8.10 (`:623`) STILL CARRY `:162-183` — T04 owns correcting
+them upstream.** Third instance in this one ticket of `L-045`'s class, and **the only one that
+was in my own artifact rather than someone else's.**
+
+## Review rounds — full detail in `REVIEW.md`, budgets here
+
+**`blocking-findings` budget: 1 of 2 spent.** Round 4 (`critic`) raised **1 blocking + 8 notes**;
+the fix pass is one attempt, not nine (the budget counts fix ROUNDS).
+
+- **`critic` B1 — the migration header cites the WRONG FUNCTION.** `:120-121` calls the p2p arm
+  *"a port of `openOrCreateP2pThread`, `store.ts:361-388`"*; that function is at **`:383`**, and
+  the cited range is mostly **`resolveC2cThread`** — the **other arm's** resolver, in the one
+  migration whose subject is that the arms differ. **All five header citations were copied
+  forward unverified** from `20260724120300:23-24` and `store.ts` has moved since. ADR §6.4 and
+  PLAN §2.1 made header accuracy this ticket's explicit obligation: **the rationale was rewritten,
+  the citations rode along.** `L-045`'s class inside the file told to police it.
+- **`critic` N4 — the review-only assignment came back CLEAN.** The `on conflict do nothing` +
+  re-select path that **no test exercises** (PLAN §3 handed it to `critic` by name) was read
+  character-by-character against `20260823090000:162-183`: faithful in both arms, re-select
+  predicates term-for-term identical to the initial selects, bare `DO NOTHING` correct for the
+  partial indexes. **This is the one finding that could only ever have come from review.**
+- **`critic` N6 — §8.3's ruling had no assertion.** Every company-arm call discarded the return,
+  so a silent revert to `null` passed the whole suite. **Fixed** — C1 now asserts non-null AND
+  equal to the thread it announced into.
+- ⚠️ **`critic` ran with NO SHELL** and said so, so its "unchanged/verbatim" claims are readings,
+  not `git diff`. The two it flagged as unverifiable were **independently confirmed by me.**
+- 🔴 **`security`'s FIRST ATTEMPT STALLED** (watchdog, 600s) at the point it turned to the catalog.
+  **A stalled agent is NOT a pass and is not recorded as one** (L-001/L-008). Respawned with the
+  caveat that **the local DB is in the PARALLEL SESSION's shape and `20260825090000` is NOT
+  applied**, so a catalog answer about `send_deal` would come from the wrong database.
+- ✅ **`builder`'s fix pass: all five `critic` findings ACCEPTED, none rejected** — and it
+  re-opened every cited file at every cited line rather than trusting the correction, then found
+  a **sixth** (mine, above). Only one logic change in the pass: the named `raise` when the thread
+  cannot be resolved. **No builder REJECTION is outstanding** — which matters, because an
+  outstanding rejection is one of the three carve-outs that would escalate this ticket to Muskan.
+
+## 🔴 T01 IS ESCALATED TO MUSKAN — `security` raised a BLOCKING finding
+
+**The carve-out fired.** T01's diff is backend-only, so it would have closed with **no human
+stop**. `/build` step 10 lists three overrides; **one is live:**
+
+| carve-out | status |
+|---|---|
+| a `builder` REJECTION outstanding | no — all five `critic` findings accepted |
+| **`security` raised a blocking finding** | 🔴 **YES — B1. This is the escalation** |
+| behaviour changed that the criteria do not cover | no — all 9 ACs replay green |
+
+**B1 in one sentence: the code is correct and green; the ADR's disclosure is not.** This slug
+moves the company-arm signal from `pending_inbox_item` — **identity-hardened one slug ago**
+(`20260823090000:306-309`, `sender_person_id = auth.uid()`, whose header says *"a request may no
+longer be attributed to someone who never asked"*) — onto `chat_message`, whose only policy
+`msg_all` (`20260607170000:300-302`) checks **`can_access_thread` and nothing else**.
+
+**Verified live by me, not taken from the agent:** `authenticated` holds `INSERT` on
+`chat_message`. So any member of either company can post a `type='deal_card'` pill with
+`sender_person_id` set to **another person** and a body reading *"<victim> has sent a deal"*.
+
+**ADR J1 discloses half of this** (the arbitrary `deal_card_id`) and **never mentions sender
+attribution**. §4.1 records `chat_message` RLS as *"unchanged … no policy is widened"* — **true,
+and not the question. The policy did not widen; the signal migrated onto a weaker policy.**
+
+**The proper fix is an RLS change, which ADR §4.2 forbids for this slug** — so this is Muskan's
+call and must be an explicit one, not an omission. **`HEL-67` already exists for the forgeable
+`deal_detected` message — same table, same two missing predicates.**
+
+**Also escalated with it — `security` N1:** `send_deal` never checks the relationship is still
+live. A member can soft-delete the relationship by direct write (DEV-159 class), and the
+initiator can then still Send an old `unsent` draft — **now minting a c2c thread on a
+soft-deleted relationship and landing a message in it.** Before this diff that produced an inbox
+ticket. **CLAUDE.md's T09 invariant says an unconnected buyer must not land a message in a
+seller's thread; a formerly-connected one now can.** One predicate in the resolve step.
+
+## ⏳ (superseded) `security`'s verdict was outstanding
+
+T01's diff is **backend-only** (SQL + one docstring, nothing renders), so per `/build` step 10 and
+PIPELINE §3 it closes on green tests + `critic` + `security` with **no human stop**. The three
+carve-outs that would override that:
+
+| carve-out | status |
+|---|---|
+| a `builder` REJECTION outstanding | **no** — all five findings accepted |
+| `security` raised a **blocking** finding | ⏳ **PENDING — this is the one gate left** |
+| the ticket changed behaviour its written criteria do not cover | to be judged at the replay |
+
+**No verdict is being recorded until `security` returns.** ⚠️ Its first attempt STALLED and a
+stalled agent is not a pass.
+
+## ⚠️ FOR MUSKAN — a policy gap this ticket makes reachable, and nothing files it
+
+**`can_access_thread` has no `deleted_at` predicate** (`20260607170000:129-144`) — its c2c branch
+is a bare `is_relationship_member(...)`. So messages in a **soft-deleted** thread stay
+`SELECT`-able by every relationship member, while `resolveC2cThread` (`store.ts:365`) hides that
+thread from the app. **Pre-existing.** But before this ticket `send_deal` could never produce a
+second c2c thread; the heal path now can. **The new suite defends against it by ordering +
+pinning — which is correct for the test and does nothing for the policy.** Own ticket, not this
+slug's scope.
+
+## LEARNINGS candidate — owed to Muskan at wrap, NOT yet written
+
+✅ **RESOLVED 2026-08-25 — `L-047` IS CLAIMED BY THE PARALLEL SECURITY SESSION, not by me.**
+It is their catch, their diagnosis, and they are putting it to Muskan themselves; the number
+follows the author. **This session must NOT write `L-047` at wrap** — doing so would file their
+entry underneath them. My claimed range is `L-045`-`L-046` and nothing else.
+
+**A candidate entry, surfaced 2026-08-25 by the parallel security session.**
+Recorded here so it survives to wrap; **not written by me.**
+
+**The insight, in one sentence:** *in both of the day's test traps, a green assertion was borrowing
+its truth from outside itself, and neither suite could tell you it was wrong from the inside.*
+
+Two instances, two different mechanisms:
+- **mine (T01)** — `deliver_deal_test`'s idempotency case passed only because a **different case in
+  the same file** had already written the row. Covered by `L-044`.
+- **theirs (HEL-69)** — `pricelist_item_tier_test`'s fixture asserted a "fully public priced
+  product" was buyer-visible, and passed only because a **second, independent door** (the price
+  view) was more permissive than the one under test. `get_discoverable_shop` returns 0 rows for
+  that unfiled product and always has. **The suite was asserting the divergence.**
+
+**Why it is not folded into an existing entry.** Entries are found by scanning **Trigger** lines,
+so an insight filed under the wrong trigger is nearly unfiled. It is not `L-046`'s class (that
+triggers on *recommending a security/schema default*). It is not quite `L-044`'s either — that one
+is scoped to **shared-fixture suites**, where an earlier case is a later case's setup. This is a
+different axis: a **cross-door** divergence, which needs an outside oracle to diagnose.
+
+**Proposed trigger:** *a test goes red on a security or visibility fix, and the fix looks like the
+thing to soften.* **Proposed rule:** check the claim against an **independent door** before touching
+either side — weakening the fix preserves the bug and the green tick together.
+
+### ⚠️ The bigger item the numbering question exposed — FOR MUSKAN, at wrap
+
+`docs/agents/LEARNINGS.md` is an **append-only shared file with a monotonic key and no
+allocator**, written by two sessions on divergent bases. The security session's branch is based
+on `7529d0a` and tops out at `L-044`, so **the next free number LOOKS like `L-045` from there** —
+while `L-045` and `L-046` were already written and pushed here in `7fd33fc`. Two appends in
+different places **merge clean**; git flags nothing; the file silently ends up with two `L-045`s.
+
+**The number is the symptom, not the problem: each session assumed it was the only writer.**
+That is **`L-040`'s shape a second time — and it SURVIVED the move to worktrees**, because a
+worktree isolates the *tree*, not the *convention*. `L-040`'s recorded lesson ("parallel sessions
+need separate branches or worktrees, not a sync file") is therefore **incomplete**: separate
+worktrees fix concurrent writes to the same file and do nothing for a shared sequential key.
+
+**Caught before collision, by the other session asking rather than assuming.** Two options, and
+**deliberately NOT decided unilaterally** — a numbering convention should not be settled by
+whichever session noticed it first: (a) an allocation rule (claim in the sync file before
+writing), or (b) stop using sequential integers for entry ids.
 
 ## Open, not blocking
 

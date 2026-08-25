@@ -1,6 +1,7 @@
 -- ============================================================================
 -- claim_deal_ticket_test.sql — deal-ticket pickup (Lane A / A3, re-timed for
--- Phase 12: the ticket is written by send_deal, no longer at birth)
+-- Phase 12, then decoupled from send_deal by T01/HEL-63 — the ticket is
+-- inserted directly by the fixture, not by any RPC)
 -- ----------------------------------------------------------------------------
 -- Proves the pickup half of the company-delivery spine: a member of the
 -- RECEIVING company claims a delivered 'deal_card' ticket and becomes a
@@ -10,9 +11,13 @@
 -- this bootstrap (the claimer is not yet a workspace member), hence the
 -- SECURITY DEFINER RPC — same pattern as create_deal_draft.
 --
--- Phase-12 re-time (D-04/D-06): birth is PRIVATE and writes no ticket; the
--- fixture below births, proves the ticket is absent, then SENDS (send_deal is
--- the one delivery writer) and proves the ticket appears before claiming.
+-- Phase-12 re-time (D-04/D-06): birth is PRIVATE and writes no ticket. T01/
+-- HEL-63 (2026-08-25): send_deal's company arm no longer writes a ticket
+-- either — it posts a clickable pill into the c2c thread instead (proved in
+-- send_deal_c2c_announce_test.sql). The fixture below births, proves the
+-- ticket is absent, then inserts a 'deal_card' ticket DIRECTLY (privileged,
+-- mirroring deliver_deal.sql:53-55) before claiming — the claim gate is what
+-- THIS file tests, not the ticket's producer.
 --
 -- Run:  bash supabase/tests/run_claim_deal_ticket_test.sh
 -- ============================================================================
@@ -47,8 +52,8 @@ BEGIN
 END $$;
 
 -- ── Fixture: Alice births a COMPANY-TARGET deal (no counterparty person) —
--- birth writes NO ticket (D-04); Alice then SENDS, and send_deal delivers the
--- StonePharm ticket (D-06). ──
+-- birth writes NO ticket (D-04). send_deal no longer delivers a ticket
+-- either (T01/HEL-63) — the ticket below is inserted directly instead. ──
 SELECT set_config('request.jwt.claim.sub', (SELECT alice FROM _fix)::text, true);
 SELECT set_config('request.jwt.claims',
        json_build_object('sub', (SELECT alice FROM _fix), 'role', 'authenticated')::text, true);
@@ -76,12 +81,13 @@ BEGIN
   END IF;
 END $$;
 
-SELECT set_config('request.jwt.claim.sub', (SELECT alice FROM _fix)::text, true);
-SELECT set_config('request.jwt.claims',
-       json_build_object('sub', (SELECT alice FROM _fix), 'role', 'authenticated')::text, true);
-SET LOCAL ROLE authenticated;
-SELECT public.send_deal((SELECT id FROM _card));
-RESET ROLE;
+-- T01/HEL-63: send_deal no longer produces this ticket (it posts a chat
+-- pill instead — out of scope for this file). Insert it directly, privileged,
+-- mirroring deliver_deal.sql:53-55's own insert shape exactly.
+INSERT INTO public.pending_inbox_item
+  (type, sender_person_id, sender_company_id, receiver_company_id, deal_card_id, status)
+SELECT 'deal_card', f.alice, f.greenleaf, f.stonepharm, c.id, 'pending'
+FROM _fix f, _card c;
 
 DO $$
 DECLARE
@@ -95,7 +101,7 @@ BEGIN
     AND p.status = 'pending'
     AND p.deleted_at IS NULL;
   IF v_n <> 1 THEN
-    RAISE EXCEPTION 'A3-0 FAIL: expected exactly 1 claimable ticket after send, got %', v_n;
+    RAISE EXCEPTION 'A3-0 FAIL: expected exactly 1 claimable ticket after the fixture insert, got %', v_n;
   END IF;
 END $$;
 
