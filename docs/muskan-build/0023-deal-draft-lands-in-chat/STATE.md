@@ -419,7 +419,21 @@ slug's scope.
 
 ## LEARNINGS candidate — owed to Muskan at wrap, NOT yet written
 
-✅ **RESOLVED 2026-08-25 — `L-047` IS CLAIMED BY THE PARALLEL SECURITY SESSION, not by me.**
+✅ **CLOSED 2026-08-25 — WRITTEN BY THE PARALLEL SECURITY SESSION as `L-047` AND `L-048`**
+(their commit `06c244a`, Muskan approved). **They split it by TRIGGER, on my argument that an
+insight filed under the wrong trigger is close to unfiled:**
+- **`L-047`** — *a test that goes red on a security fix may be asserting the bug.* Trigger: a test
+  goes red on a security or visibility fix and the fix looks like the thing to soften.
+- **`L-048`** — *an A/B whose arms start from different states is not a weak experiment, it is not
+  an experiment.* Trigger: about to compare a before-run against an after-run.
+
+Both cross-reference **`L-044`** (mine) as the third member of the family — the shared axis being
+*a green signal that is true only because of something outside the thing being measured.*
+
+⚠️ **`L-045`-`L-048` ARE ALL TAKEN. The next free number is `L-049`.** This session claimed
+`L-045` and `L-046` only.
+
+**(superseded) `L-047` was claimed by the parallel security session, not by me.**
 It is their catch, their diagnosis, and they are putting it to Muskan themselves; the number
 follows the author. **This session must NOT write `L-047` at wrap** — doing so would file their
 entry underneath them. My claimed range is `L-045`-`L-046` and nothing else.
