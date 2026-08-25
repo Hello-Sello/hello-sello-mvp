@@ -1,6 +1,6 @@
 # 0023 deal-draft-lands-in-chat — work order
 lane:   FULL
-stage:  design ✅  →  build: **T01 ✅ CLOSED** → **T02 / HEL-64 ✅ CLOSED** → **T03 / HEL-65 🔨 IN BUILD** (plan rev 1, `/build` step 3) → T04 / HEL-66 pending   ·   G2 /prototype SKIPPED (Muskan, 2026-08-25)
+stage:  design ✅  →  build: **T01 ✅ CLOSED** → **T02 / HEL-64 ✅ CLOSED** → **T03 / HEL-65 🔨 IN BUILD** (plan rev 2 after a checker REVISE, `/build` step 4) → T04 / HEL-66 pending   ·   G2 /prototype SKIPPED (Muskan, 2026-08-25)
 branch: claude/muskan/work — no feature branch (Muskan's call, 2026-08-18)
 
 ## Seed
@@ -521,6 +521,43 @@ is not this slug's job, but nothing else is tracking it.
   `send_deal`. **The deliberate run (AC 5) is still owed and will still be run.**
   🔒 Sync lock on `e2e/fixtures/two-company.ts` taken + pushed alone — four of its docstrings
   assert the inbox-ticket behaviour T01 falsified.
+  ✅ **`plan-checker` → REVISE: 6 blocking + 8 notes. ALL FOURTEEN VERIFIED TRUE by me against
+  the real files before folding ([[L-003]]), all fourteen accepted, none argued down.** Plan is
+  at **rev 2**. Full detail in `REVIEW.md` → *"T03 — Round 1"*.
+  **My headline claim survived** — it traced AC 6 and confirmed the assertion goes red under the
+  call-site swap. **What did not survive was my fixture lifecycle**, and three findings are worth
+  carrying:
+  1. 🔴 **B1 — my `afterAll` could not have executed.** `deal_line_item.product_id → product(id)`
+     has **no `ON DELETE`** (`20260607090005:22-24`) and the walk drafts the fixture product onto
+     a deal, so `delete from product` raises **`23503`**. I copied the order from
+     `discover-shop.spec.ts:713-715`, where the product is never drafted. **It would have leaked
+     the fixture into the seed permanently — the exact HEL-73 outcome the plan opened by claiming
+     to avoid.**
+  2. 🔴 **B2 — two assertions were false before the spec's first line ran.** One worker, file
+     order = path order: `deal-c2c-create` leaves a card whose send now posts a **c2c** pill and
+     `deal-change` posts a **p2p** one, so both pill counts started wrong. Worse:
+     **`resolveDealCardIdForRelationship` is `limit 1` with no `ORDER BY`** (`two-company.ts:228`,
+     and its own docstring claims safety only after a reset) — so `countTicketsForCard(cardId)
+     === 0`, **the half I called authoritative, could have passed against the WRONG card.**
+  3. 🔴 **B6 — the rewrite silently deletes live coverage.** `deal-c2c-create.spec.ts:22` is the
+     **only** e2e anywhere exercising "Pick up deal" / `claim_deal_ticket`, and that path is still
+     live (G1 kept it, `:516`; Sella's door still writes into that lens, Risk #2 `:530-534`).
+     My §5 recorded none of it. **Residual cover is now named:** `claim_deal_ticket_test.sql`.
+  🔴 **THREE MORE STALE CITATIONS OF MINE — the slug's tally is now NINE.** `countThreadsForPair`
+  ends at `:552` not `:556` · `discover-shop.spec.ts:586-594` is an **`afterEach`**, not an
+  `afterAll` · `sendDeal` is `:367` on `origin/main` but **`:369` on HEAD**, and the tree must be
+  named on a file this slug itself edited.
+  📌 **N7 stung:** ADR **§4.1 `:307`** already recorded the `deal_member` consequence *and* its
+  safety analysis, ending with the words *"Recorded so it is not re-derived"* — **and I
+  re-derived it.** It also surfaces a consequence named nowhere: `PeopleTab.tsx` is the only
+  reader of `deal_member` in `src/`, so a company-addressed deal's People tab now shows **the
+  sender alone**. Not a defect; recorded so G4 does not meet it cold.
+  📌 **MACHINERY — `plan-checker` RESOLVED AS ITSELF this time.** `ROLLUP.md` §C records it
+  erroring `Agent type 'plan-checker' not found` for **ten consecutive tickets** on slug 0022,
+  worked around with a `general-purpose` substitute. It is registered in this session. **§C's
+  first owed ruling — "does the tier attach to the ruleset, or is it inherited from another
+  agent's work?" — is moot going forward**, though the 0022 record still stands as written.
+  ⏳ `test-writer` spawned at `/build` step 4 against rev 2.
 
 ## Gate log
 - **T02 / HEL-64 — G4 PASSED 2026-08-25 (HUMAN).** Muskan ruled **pass, with T04 amending the AC
