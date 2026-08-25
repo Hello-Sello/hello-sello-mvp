@@ -280,9 +280,14 @@ export function countPendingChangesForCard(dealCardId: string): number {
 /**
  * Count the live `deal_member` rows across ONE card's workspace (A1). A deal
  * born from a c2c COMPANY chat has no counterparty person, so its creator must
- * be the SOLE owner — that absence is the company-target routing key the
- * delivery spine (deliver_deal) reads. Card id resolved at RUNTIME by the
- * caller (never hardcoded — the seed regenerates ids on every db reset).
+ * be the SOLE owner — that absence is the company-target routing key
+ * `send_deal` reads DIRECTLY (STALE until this correction: T01/HEL-63 deleted
+ * `send_deal`'s call to `deliver_deal` from this arm entirely — the routing
+ * decision is made inline in the function's own branch now, per
+ * `20260825090000_send_deal_c2c_announce.sql:124-196`. `deliver_deal` keeps
+ * exactly one caller today, `confirm_detected_deal_births_negotiation`, per
+ * PLAN-T03 §4 step 5 N7). Card id resolved at RUNTIME by the caller (never
+ * hardcoded — the seed regenerates ids on every db reset).
  */
 export function countDealMembersForCard(dealCardId: string): number {
   const bin = psqlBin()
@@ -321,7 +326,11 @@ export function countDealCardsForRelationship(): number {
  * Count the live pending_inbox_item rows for ONE card (Lane A routing). A
  * PERSON-target birth (counterparty co-owner set) must deliver as a chat
  * message, never as a company inbox ticket — this proves the ticket half
- * stayed silent. Card id resolved at RUNTIME by the caller.
+ * stayed silent. STALE-CORRECTED (T01/HEL-63): this is now ALSO the
+ * authoritative assertion for a COMPANY-target send — `send_deal`'s c2c arm no
+ * longer calls `deliver_deal` at all, so a company-addressed deal stays at 0
+ * here too (`deal-lands-in-c2c-chat.spec.ts`); before T01 the same send
+ * produced 1. Card id resolved at RUNTIME by the caller.
  */
 export function countTicketsForCard(dealCardId: string): number {
   const bin = psqlBin()
@@ -552,6 +561,40 @@ export function countThreadsForPair(threadType: 'c2c' | 'p2p'): number {
 }
 
 /**
+ * Count the live `deal_card` chat-message pills on ONE thread type (`c2c` or
+ * `p2p`) of the GreenLeaf <-> StonePharm relationship. T01/HEL-63 makes
+ * `send_deal` post this pill into the c2c thread for a company-target deal and
+ * into the p2p thread for a person-target deal, never both — this is the row
+ * fact that proves WHICH thread the pill landed in, since the UI only ever
+ * shows one thread at a time and "the pill is in c2c and NOT in p2p" is not
+ * otherwise checkable in a single state (L-019 — prove the row; L-021 —
+ * presence AND absence on the same state). Relationship resolved at RUNTIME by
+ * company name, like every sibling helper here — never a hardcoded id.
+ */
+export function countDealPillsOnThread(threadType: 'c2c' | 'p2p'): number {
+  const bin = psqlBin()
+  const out = execFileSync(
+    bin,
+    [
+      DB_URL,
+      '-At',
+      '-c',
+      `select count(*) from public.chat_message m ` +
+        `join public.chat_thread t on t.id = m.thread_id ` +
+        `join public.relationship r on r.id = t.relationship_id ` +
+        `join public.company a on a.id = r.company_a_id ` +
+        `join public.company b on b.id = r.company_b_id ` +
+        `where m.type = 'deal_card' and t.type = '${threadType}' ` +
+        `and m.deleted_at is null and t.deleted_at is null ` +
+        `and (a.name, b.name) in ` +
+        `(('GreenLeaf Cultivation','StonePharm'),('StonePharm','GreenLeaf Cultivation'))`,
+    ],
+    { encoding: 'utf8' },
+  ).trim()
+  return Number(out)
+}
+
+/**
  * How many `connection_established` system lines sit on the GreenLeaf <->
  * StonePharm C2C thread. Two already-connected companies must never be told
  * they are "now connected" a second time, so this stays at its seeded value
@@ -743,8 +786,13 @@ export async function openFirstLineForEdit(page: Page): Promise<void> {
  *      swaps the panel to the born card in place (no navigation). Bob sees
  *      nothing yet (RLS, D-08).
  *   7. click the born card's DecisionBar "Send deal" — `sendDeal` -> the
- *      `send_deal` RPC delivers the deal (p2p pill / inbox ticket) and flips
- *      it to `negotiation`.
+ *      `send_deal` RPC delivers the deal and flips it to `negotiation`. THIS
+ *      fixture's deal is PERSON-addressed (born from the p2p thread), so
+ *      delivery is a `deal_card` pill in the p2p thread — STALE-CORRECTED
+ *      (T01/HEL-63): never a `pending_inbox_item` ticket, not even for the
+ *      OTHER (company-target) arm any more — `createC2cDealAsAlice` below now
+ *      delivers the same pill shape into the c2c thread instead, and neither
+ *      arm mints a ticket on send.
  *
  * Deterministic product: "Pedanios 31/1 COS-CA" (seed.sql section 6, GreenLeaf's
  * AUR-1A) — always present in Alice's catalogue on a fresh `supabase db reset`.
@@ -884,10 +932,13 @@ export async function createTwoLineDraftDealAsAlice(alicePage: Page): Promise<vo
  * (C2C)" subtitle after narrowing the list by search — the p2p row subtitles
  * the company name instead), press its "Start a deal" door, and birth + SEND
  * the same deterministic Pedanios deal as createDraftDealAsAlice. No
- * counterparty person exists in a company chat, so the deal is COMPANY-target:
- * the claimable inbox ticket for StonePharm now mints at SEND (Phase 12 D-06 —
- * `send_deal` calls deliver_deal; birth writes no ticket), so any
- * ticket-existence assertion belongs AFTER this fixture returns.
+ * counterparty person exists in a company chat, so the deal is COMPANY-target.
+ * STALE-CORRECTED (T01/HEL-63, `deal-lands-in-c2c-chat.spec.ts`): this
+ * docstring used to say SEND mints a claimable StonePharm inbox ticket via
+ * `deliver_deal` — that call was DELETED from `send_deal`'s c2c arm. SEND now
+ * posts the `deal_card` pill DIRECTLY into the relationship's c2c thread and
+ * creates ZERO `pending_inbox_item` rows; there is no ticket to assert the
+ * existence of any more, only the pill (`countDealPillsOnThread('c2c')`).
  */
 export async function createC2cDealAsAlice(alicePage: Page): Promise<void> {
   await alicePage.goto('/connect/chat')
