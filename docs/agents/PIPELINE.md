@@ -298,10 +298,15 @@ verified gate). Category 5 is why reader-only reviews miss writers.
 1. **Fresh context, every round.** The checker must be a genuinely fresh separate-context
    agent — never the ADR's author re-checking their own work. The author defends; only a
    stranger attacks. (Every one of the 7 rounds that caught something was a stranger.)
-2. **The loop is budgeted: 2 rounds, stop on zero NEW blockers.** Stop at the first round
-   that raises no *new blocking* findings — never wait for zero findings total, which the
-   dry-run showed does not converge (7 rounds, never zero). More rounds are Muskan's
-   explicit call per ADR, not the default.
+2. **The loop is budgeted: 2 rounds, stop on a clean SEVERITY round.** Stop at the first
+   round that raises no *new* finding on **rungs 1-3 of the severity ladder** (§10) — leak,
+   silent failure, won't-run. Rungs 4-5 (behavioural edges, contract/wording) are notes:
+   reported, carried to the gate, and they **do not hold the loop open**.
+   **Corrected 2026-08-25.** The old rule said *"zero NEW blocking findings"*, and across
+   the dry-run and 8+ tickets that state **never once occurred** — blockers ran
+   5·8·4·6·6·8·4 and the cap blew every time, escalating to Muskan by default. Find-rate is
+   flat; severity is what decays. The rule now reads the axis that moves.
+   More rounds are Muskan's explicit call per ADR, not the default.
 3. **Fixes carry a simplification bias.** Prefer removing a mechanism over adding one. The
    single round that made the ADR *worse* was the one revision that answered a finding by
    adding a new RPC instead of deleting the problem (rev 6's hole, removed in rev 7).
@@ -806,14 +811,39 @@ is the same failure that produced session 69.
 
 ## 10. Failure paths
 
+### The severity ladder — `blocking` means these five rungs, nothing else
+
+> **This section OWNS the definition.** It is mirrored verbatim into
+> `.claude/agents/adr-checker.md`, `plan-checker.md`, `security.md` and `critic.md`,
+> because an agent file is a system prompt and a threshold the checker does not have in
+> context is a threshold it will not apply. **Change it here and in all four, or in none.**
+> The duplication is deliberate and declared; four silently-drifting copies is what this
+> replaces.
+
+| Rung | Severity | Example |
+|---|---|---|
+| 1 · **Leak** | `blocking` | data crosses a tenant boundary; a grant or policy exposes what it must not |
+| 2 · **Silent failure** | `blocking` | it appears to work and does not — RLS not enabled, a backfill that skips rows, a guard that never fires |
+| 3 · **Won't run** | `blocking` | invalid as written, a contract mismatch that throws, a migration that cannot apply, a test that cannot execute |
+| 4 · **Behavioural edge** | `note` | a real but narrow case: concurrency window, unusual input, an unhandled rare state |
+| 5 · **Contract / wording** | `note` | a §3↔§4 contradiction, a stale citation, naming, a clearer phrasing |
+
+**Rungs 4 and 5 are still reported and still reach Muskan at the gate.** They simply do not
+hold the loop open. Nothing is hidden by this; only the stopping condition changes.
+
+**Why the ladder and not a judgement call:** the dry-run measured that find-rate is *flat*
+(11·15·15·14·15·14·12 over seven rounds) while **severity decays** — *"leaks → silent
+failures → won't-run → behavioural edges → contracts/wording."* A rule that counts findings
+is reading the axis that does not move. This one reads the axis that does.
+
 **Three separate budgets. Never one shared counter** — a single budget of 2 means tests
 going red once will make `/build` escalate to you over a naming nit.
 
 | Trigger | Goes to | Budget |
 |---|---|---|
 | Tests stay red | builder retries | **`tests` 2/2**, then STOP |
-| Finding marked `blocking` | builder fixes | **`blocking-findings` 2/2**, then STOP — *counts fix **rounds**, not findings* |
-| Finding marked `note` | written to `REVIEW.md`, surfaced at G4 | **never retried** |
+| Finding on ladder rungs 1-3 (`blocking`) | builder fixes | **`blocking-findings` 2/2**, then STOP — *counts fix **rounds**, not findings* |
+| Finding on rungs 4-5 (`note`) | written to `REVIEW.md`, surfaced at G4 | **never retried** |
 | Builder rejects a finding | written to `REVIEW.md`, **you** adjudicate at G4 | **costs no attempt** |
 | Either budget blown | **you**, with the disagreement in `blocked.md` | — |
 | G4 says it does not match | back into `/build` — **a new round: both counters reset**, `G4 rounds` +1 | **`G4 rounds` 2**, then STOP — *one named exception below* |

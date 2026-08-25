@@ -49,9 +49,17 @@ there, and they are yours to close at step 6.
    - Each round = ONE fresh `adr-checker` spawn via the Agent tool. Never
      review inline — inline review does not count as a round. Its input is
      the ADR + the spec + `ADR-INDEX.md`, NEVER prior rounds' findings.
-   - **Budget: 2 rounds. Stop at the first round with zero NEW blocking
-     findings** — never wait for zero findings total. More rounds are
-     Muskan's explicit call, not the default.
+   - **Budget: 2 rounds. Stop at the first round that raises no NEW finding
+     on severity ladder rungs 1-3** (leak · silent failure · won't run —
+     the ladder is in PIPELINE §10 and in the checker's own prompt). Rungs
+     4-5 (behavioural edge, contract/wording) are notes: they go to
+     REVIEW.md and to the gate, and they **do not hold the loop open**.
+     Never wait for zero findings total.
+     **Do not treat the old rule as this one.** It said *"zero NEW blocking
+     findings"*; that state never once occurred in the dry-run or in 8+
+     tickets (blockers ran 5·8·4·6·6·8·4), so the cap blew every time and
+     escalated by default. Find-rate is flat; severity is what decays.
+     More rounds are Muskan's explicit call, not the default.
    - Fold-ins carry a **simplification bias**: prefer removing a mechanism
      over adding one. A fix that adds a mechanism gets flagged to Muskan
      before it goes in.
