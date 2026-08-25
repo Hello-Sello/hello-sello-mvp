@@ -6,10 +6,14 @@
  * onto the deals domain: it builds a Deal Basket (toDraftLines) and calls the
  * existing createDeal. The draft carries NO delivery side-effects - Send
  * happens later, from the card's DecisionBar (sendDeal -> send_deal, the one
- * delivery writer, D-06/D-12). Buyer groups draft an 'order' (recipient
- * implicit = the seller company via the relationship); own-company groups
- * draft an 'offer' to the chosen recipient. Line deletion is owner-scoped by
- * RLS. createDeal is Ayush's; nothing here touches deal tables directly.
+ * delivery writer, D-06/D-12). dealType follows the group - buyer groups draft
+ * an 'order', own-company groups an 'offer' - and the two now differ only in
+ * who fixes the counterparty COMPANY: the buyer's is the group's seller,
+ * already fixed by that group's relationship, while the seller picks one. The
+ * ADDRESSEE is symmetric - either door may name a person on that side, null
+ * meaning the whole company - and this seam passes it through unchanged. Line
+ * deletion is owner-scoped by RLS. createDeal is Ayush's; nothing here touches
+ * deal tables directly.
  */
 import { createClient } from "@/shared/db/server";
 import { createDeal, type CreateDealResult } from "@/modules/deals";
