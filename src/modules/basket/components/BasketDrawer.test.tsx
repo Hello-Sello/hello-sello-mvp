@@ -30,13 +30,52 @@
  * `useEffect`-driven `getMyConnections()` fetch never fires, so it renders its
  * `companies.length === 0` fallback ("Connect with a company first…") — that
  * is a DIFFERENT message from this ticket's non-connected-FOREIGN-group
- * message, and it belongs to the own-company arm only (RecipientPicker is
- * never mounted for a foreign group either way).
+ * message, and it belongs to the own-company arm only. `RecipientPicker` is
+ * STILL never mounted for a foreign group (unchanged by T02/HEL-64) — but as
+ * of that ticket a CONNECTED foreign group is no longer addressee-silent
+ * either: it now renders the sibling `CounterpartyPersonSelect` control (own
+ * render contract, own test file), so its initial paint shows "Address this
+ * deal to" / "Whole company" (see the C4/C5/C6 additions below). Reading
+ * "RecipientPicker never mounts for a foreign group" as "a foreign group
+ * shows no addressee UI" is the stale inference this paragraph used to
+ * invite — corrected here rather than left for the next reader to trip on.
  *
  * Interaction (click → setOpen(false) → router.push) is NOT testable under
  * this static-render env — no DOM, no event dispatch. That half of B6 needs
  * either jsdom/RTL (not configured in this repo) or a Playwright e2e; flagged
  * as a gap in the RETURN, not silently skipped.
+ *
+ * EXTENDED for T02/HEL-64 (slug 0023-deal-draft-lands-in-chat,
+ * PLAN-T02.md rev 2 §5, cases C4-C6) — the buyer's addressee control
+ * (`CounterpartyPersonSelect`; its own render contract lives in
+ * `CounterpartyPersonSelect.test.tsx`, cases C1/C2/C7). Same three fixtures
+ * as above, extra assertions only:
+ *   C4 (connected-foreign)     — "Address this deal to" + "Whole company"
+ *                                now render alongside "Create a draft deal".
+ *   C5 (non-connected-foreign) — "Address this deal to" stays absent; this
+ *                                is a proof of the `needsConnection` GUARD in
+ *                                `BasketDrawer.tsx:231`, NOT of where the
+ *                                control sits on screen — PLAN §4.2 shows the
+ *                                guard alone suppresses it in all three
+ *                                fixtures regardless of placement, so AC 4's
+ *                                placement claim is a G4 visual call.
+ *   C6 (own-company)           — "Address this deal to" is absent too, but
+ *                                for an UNRELATED reason: `RecipientPicker`
+ *                                (`:26-28`) early-returns its own fallback
+ *                                paragraph before `chosen` is ever reached in
+ *                                JSX, so the seller's addressee select never
+ *                                renders under static markup regardless of
+ *                                §8.2's gate removal. This is an ENVIRONMENT
+ *                                ARTIFACT, not a contract: it is the literal
+ *                                INVERSE of AC 6 / ADR §8.2's intent (the
+ *                                select SHOULD show on a person-less
+ *                                company), and the day jsdom lands in this
+ *                                repo this assertion must FLIP, not stay
+ *                                green.
+ * NOT reachable from this file (PLAN §5 "declared uncovered"): AC 2 / M7
+ * live (a real seller with zero connected people — needs `getMyConnections()`
+ * to resolve) and AC 5 (choosing a person changes `createBasketDraft`'s
+ * payload — needs DOM event dispatch). Both are T03 (e2e) + G4 territory.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -84,7 +123,7 @@ beforeEach(() => {
 });
 
 describe("<BasketDrawer> Group — the non-connected-buyer arm (T02, HEL-56)", () => {
-  it("own-company group: the shipped path is UNTOUCHED — no 'connect first' message, RecipientPicker still mounts", () => {
+  it("own-company group: the shipped path is UNTOUCHED — no 'connect first' message, RecipientPicker still mounts (T02/HEL-64: C6)", () => {
     const group: BasketGroup = {
       sellerCompanyId: "own-co",
       sellerCompanyName: "My Shop",
@@ -102,9 +141,20 @@ describe("<BasketDrawer> Group — the non-connected-buyer arm (T02, HEL-56)", (
     // RecipientPicker's own-company-only fallback (no connections loaded yet
     // under static render) — proves RecipientPicker mounted at all.
     expect(html).toContain("Connect with a company first to send an offer.");
+    // C6 (T02/HEL-64, PLAN-T02.md rev 2 §5): the buyer's addressee control
+    // stays absent here too — but for an UNRELATED reason. `RecipientPicker`
+    // (`:26-28`) early-returns this exact fallback paragraph before `chosen`
+    // is ever reached in JSX, so its own addressee select (now
+    // `CounterpartyPersonSelect`, §8.2) never renders under static markup —
+    // not because `chosen` is undefined once reached, but because the branch
+    // that would reach it is never taken here. This is an ENVIRONMENT
+    // ARTIFACT, not a contract: it is the literal INVERSE of AC 6 / ADR
+    // §8.2's intent (a person-less company's select SHOULD render), and the
+    // day jsdom lands in this repo this assertion must FLIP, not stay green.
+    expect(html).not.toContain("Address this deal to");
   });
 
-  it("connected-foreign group (relationshipId set): renders the live 'Create a draft deal' path, no connect-first message", () => {
+  it("connected-foreign group (relationshipId set): renders the live 'Create a draft deal' path, no connect-first message (T02/HEL-64: C4)", () => {
     const group: BasketGroup = {
       sellerCompanyId: "seller-connected",
       sellerCompanyName: "GreenLeaf",
@@ -116,9 +166,16 @@ describe("<BasketDrawer> Group — the non-connected-buyer arm (T02, HEL-56)", (
 
     expect(html).not.toContain("connecting comes first");
     expect(html).toContain("Create a draft deal");
+    // C4 (T02/HEL-64, AC 1): the buyer's addressee control now renders in
+    // this arm — `CounterpartyPersonSelect`, whose own render contract is
+    // pinned in `CounterpartyPersonSelect.test.tsx` (C1/C2/C7). Only the two
+    // strings that prove IT rendered are asserted here; the full contract is
+    // not duplicated into this file.
+    expect(html).toContain("Address this deal to");
+    expect(html).toContain("Whole company");
   });
 
-  it("non-connected-foreign group (relationshipId null, NOT own company): states connecting comes first and offers a Connect link, not a dead Send button", () => {
+  it("non-connected-foreign group (relationshipId null, NOT own company): states connecting comes first and offers a Connect link, not a dead Send button (T02/HEL-64: C5)", () => {
     const group: BasketGroup = {
       sellerCompanyId: "seller-stranger",
       sellerCompanyName: "Stranger Co",
@@ -136,6 +193,13 @@ describe("<BasketDrawer> Group — the non-connected-buyer arm (T02, HEL-56)", (
     // second copy of ConnectActions).
     expect(html).toContain('href="/discover/seller-stranger"');
     expect(html.toLowerCase()).toContain("connect");
+    // C5 (T02/HEL-64): this is a proof of the `needsConnection` GUARD at
+    // `BasketDrawer.tsx:231` (`counterpartyRelationshipId` stays null here by
+    // construction), NOT a proof of where the control sits on screen —
+    // PLAN-T02.md §4.2 shows the guard alone suppresses the control in all
+    // three fixtures identically regardless of placement, so AC 4's
+    // placement claim is a G4 visual call, not a unit assertion.
+    expect(html).not.toContain("Address this deal to");
   });
 });
 
