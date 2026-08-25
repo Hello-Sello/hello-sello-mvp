@@ -14,10 +14,13 @@
 import { describe, it, expect, vi } from "vitest";
 import type { BasketGroup } from "./types";
 
-// The one deals seam: createDeal births the private draft. Mock it so the birth
-// "succeeds" with a known id and we can assert it ran exactly once (no retry).
+// The two deals seams: createDeal births the private draft, sendDeal delivers
+// it immediately after (2026-08-25: createBasketDraft now does both in one
+// call). Both mocked to "succeed" so we can assert createDeal ran exactly
+// once (no retry) regardless of the unrelated basket-cleanup failure below.
 vi.mock("@/modules/deals", () => ({
   createDeal: vi.fn().mockResolvedValue({ dealCardId: "card-1" }),
+  sendDeal: vi.fn().mockResolvedValue({ threadId: "thread-1" }),
 }));
 
 // A Supabase client whose product_basket_line delete FAILS — the exact failure
