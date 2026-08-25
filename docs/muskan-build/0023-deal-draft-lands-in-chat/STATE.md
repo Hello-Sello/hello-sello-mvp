@@ -1,4 +1,13 @@
 # 0023 deal-draft-lands-in-chat — work order
+
+> ⚠️ **The `g4/` screenshots were DELETED 2026-08-25 — deliberately, by Muskan's ruling,
+> as repo housekeeping.** 15 PNGs went; `docs/` dropped 18M → 3.6M. **No gate moved and no
+> verdict changed** — this is not a stage advance. Every G4 evidence table below still cites
+> its frames by filename (e.g. `02-buyer-addressee-closed-whole-company.png`); **those files no
+> longer exist.** Read each citation as *the frame this verdict was ruled on*, not as a file
+> you can open. The written findings are the surviving record and they stand unaltered.
+> Recoverable from git if ever needed: `git show 55aef9f^:<path>`.
+
 lane:   FULL
 stage:  design ✅ → build ✅ (T01-T04 all closed) → ship ✅ (PR #177 + #180) → **G5 WALKED 2026-08-25 — 🏁 SLUG COMPLETE**   ·   G2 /prototype SKIPPED (Muskan, 2026-08-25)
 branch: claude/muskan/work — no feature branch (Muskan's call, 2026-08-18)
