@@ -13,6 +13,36 @@ no amount of reading the function body would have caught.
 looks right. Every item below is phrased as something you *run* and read the output of. A security
 claim without a command and its output is not a finding, it is a guess.
 
+**The research rule that governs all remedies:** a finding is not done when you can name it. Before
+proposing a fix, search the current published guidance for that class and quote it. Say what best
+practice is, then say what it costs us here. A remedy chosen for being low-risk, without the correct
+one stated beside it, is a recommendation Muskan cannot weigh.
+
+**Then read the second source, which outranks the first: this repo's own decisions.** Search the ADRs,
+`ARCHITECTURE-NOTES.md` and the defining migration's header for the thing you are about to change.
+A documented local exception that still holds beats generic vendor guidance — and "still holds" is a
+catalog query, not a reading of the ADR. Published advice assumes a default codebase; ours is not one.
+
+> Recorded 2026-08-24 ([HEL-69](https://linear.app/hellosello/issue/HEL-69)), where BOTH halves of
+> this rule failed in one evening, in both directions.
+>
+> First: the remedy was proposed as a narrow predicate fix, with the `security_invoker = true` flip
+> framed as an optional riskier extra — chosen from private risk reasoning, no research. Muskan had
+> to ask what industry practice was to get the researched answer. **That is the failure the first
+> paragraph exists to stop.**
+>
+> Then the researched answer was itself wrong here. `ADR-0004 §4` had **pre-declared** the trade-off:
+> `current_pricelist_item` is owner-rights on purpose, the ERROR-level `security_definer_view` advisor
+> entry is knowingly accepted, and flipping `security_invoker` on zeroes out every buyer read — the
+> view joins `pricelist`, which carries one owner-only policy. Verified by catalog query, not by
+> trusting the ADR text. Shipping the "best practice" fix would have taken the buyer price surface
+> dark. **That is the failure the second paragraph exists to stop.**
+>
+> The real fix turned out to be smaller than either proposal: delete the hand-written predicate and
+> call `product_price_visible_to_caller()`, which already owned the rule. Prefer removing a mechanism
+> to adding one — the correct remedy is often the one that deletes code, and neither the private
+> reasoning nor the generic guidance found it.
+
 ---
 
 ## Why this exists — two incidents, one week apart

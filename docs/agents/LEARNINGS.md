@@ -1313,3 +1313,266 @@ extra hits, rather than the narrow form and trusting the count. A catalog scan i
 wrong about it is a production outage. And when a scan's result exactly matches a prose comment you
 just read, that is a reason to re-run it differently, not to feel confirmed (L-014's neighbour: the
 sweep that agrees with your expectation is the one to prove).
+
+---
+
+## L-042 · A pure planner is not a writer — "the code creates it" needs the INSERT, not the plan
+
+**2026-08-25 · slug 0023 · `/design` ADR 0006 rev 1 · caught by `adr-checker` round 1 (B2)**
+
+**Trigger** — writing any sentence of the form *"X always exists"*, *"X is created on every Y"*, or
+*"a missing X is a broken invariant"* as the justification for code that **refuses** rather than
+repairs. Also: citing a module named `plan*`, `derive*`, `build*`, `spec*` or `*Rollout` as evidence
+that a row exists.
+
+**What I authored.** ADR 0006 rev 1 had `send_deal` **raise** when a relationship had no c2c thread,
+justified by: *"`rollout.ts:63-84` puts a c2c thread in **every** connection rollout. A missing c2c
+thread is therefore a broken invariant, not a normal state."* I had grepped `rollout.ts`, seen `c2c`
+in every returned spec, and read that as minting.
+
+**`rollout.ts` writes nothing.** Its own header, at `:1-8`, says *"**Pure**: no ids, no timestamps,
+no I/O — it returns a plain spec the store executes."* The actual `chat_thread` INSERT is issued
+**by the browser** at `store.ts:623-633`, in a **second round trip** after
+`accept_connection_request` returns (`store.ts:588-592`) — and that RPC mints the relationship and
+no thread. So relationship-without-c2c-thread is reachable by closing a tab mid-accept, and rev 1
+would have made that pair **permanently unable to send**, with no repair path in the product.
+
+**Why it was wrong — and this is the uncomfortable part.** Two paragraphs *earlier in the same
+document* I had refused `resolveC2cThread`'s docstring as evidence, citing L-006 (*a comment on the
+read path is not a contract for the write path*), and then leaned on an even purer artifact: a
+planner that returns a data structure. **Naming a rule does not mean you applied it.** I checked the
+docstring's authority and never checked my own replacement's.
+
+**The rule.** "This data always exists" is a claim about an **INSERT**. Find the statement that
+writes the row — `insert into`, `.insert(`, `upsert` — and confirm it runs in the same transaction
+as the thing that makes it required. A plan, a spec, a type, a config, or a returned array is not a
+write. **And when the answer is "two round trips", the correct design is repair, not refusal**: the
+fix that deletes a failure mode beats the fix that adds a test for one.
+
+---
+
+## L-043 · Changing a design decision can silently overrule an approved spec row
+
+**2026-08-25 · slug 0023 · `/design` ADR 0006 rev 2 · caught by `adr-checker` round 2 (B1)**
+
+**Trigger** — any fold-in that changes what the system **does** in a case the approved spec already
+ruled on, especially an edge case. Also: writing a G3/G4 sign-off list, at the moment you notice it
+contains only wording, naming, or cosmetic items.
+
+**What I authored.** Round 1 proved rev 1's refusal was unsafe (L-042). Rev 2 replaced it with
+resolve-or-create — the right call, and Muskan later ruled for it. **But `PRD:131` says, in an
+approved spec:** *"The company-to-company conversation cannot be found | **Send must not report
+success.** FR7 governs."* I changed that behaviour on engineering grounds and **did not put it to
+Muskan.** Meanwhile §8 asked for her explicit yes on two things: an option's label string, and
+whether an AC should say "Send" or "Create a draft deal".
+
+**Why it was wrong.** I was following the fold-in rules correctly — verify the finding, prefer the
+fix that removes a mechanism — and those rules are silent on *whose decision it is*. A checker
+finding felt like a bug report, so the fix felt like a correction. It was not: it was a **product
+behaviour change in a case the spec had already decided**, which makes it a deviation. That is
+L-017's class (*an exception added to a criterion is a deviation, never a "correct reading"*), and
+L-017 is written about criteria — I did not think of an **edge-case table row** as a criterion.
+It is one.
+
+**The tell, and it is a good one.** My sign-off list was all cosmetics. **If the only things you are
+escalating are wordings, you have almost certainly absorbed a real decision** — a design pass that
+changes behaviour and asks permission for nothing but labels has mis-sorted something.
+
+**The rule.** After folding in checker findings, diff the ADR's behaviour against **every row of the
+spec** — edge cases and constraints, not just FRs and ACs. Any row whose stated outcome changed goes
+to the human as a **spec amendment**, named as such, before the cosmetic items. Then the amendment
+gets a ticket: the spec must be edited, or G4 walks a document that contradicts the code (L-039).
+
+---
+
+## L-044 · Inverting a test's setup can gut a later assertion in the same file
+
+**2026-08-25 · slug 0023 · `/design` ADR 0006 rev 1 §6.1 · caught by `adr-checker` round 2 (B3)**
+
+**Trigger** — planning to **invert, remove or weaken** an assertion in an existing test file, and
+writing that the file's *other* cases are "unchanged", "preserved verbatim", or "still valid".
+
+**What I authored.** ADR 0006 §6.1 said `deliver_deal_test.sql`'s c2c case inverts (assert **zero**
+tickets after `send_deal`), and that *"its idempotency case (`:130-144`) and its `WR-01`
+execute-revoke case (`:146-158`) are about `deliver_deal` itself and **must be preserved
+verbatim**."*
+
+**The idempotency case has no setup of its own.** It calls `deliver_deal` **once** and asserts
+exactly one ticket — which proves idempotency *only because* the earlier case's `send_deal` already
+wrote that ticket. Invert the earlier case to zero and the single call becomes the **first** insert:
+`v_n = 1` passes trivially, the test stays green, and `deliver_deal`'s `if not exists` guard
+(`20260720095000:51-56`) is left **uncovered anywhere in the repo**. The rewrite must call
+`deliver_deal` **twice**.
+
+**Why it was wrong.** I read the file as a list of independent cases because it is written as one —
+separate `DO $$` blocks with their own headers. But they share a transaction and a fixture, so an
+earlier case is **later cases' setup**. "Preserved verbatim" is a claim about the *text*; what
+matters is whether the assertion still *discriminates*. Worse, the failure is silent and in the
+safest-looking direction: a green suite that proves nothing reads exactly like a green suite that
+proves something.
+
+**The rule.** When changing one case in a shared-fixture suite, trace **what every later assertion
+depends on** — not just what it asserts. For each surviving case ask: *would this still fail if the
+behaviour it names were broken?* If the answer needs the case you just inverted, the case needs its
+own setup. **Copying an assertion forward unchanged is not preserving its coverage.**
+
+---
+
+## L-045 · A TODO listing what a migration does NOT do becomes a lie the moment someone does it
+
+**2026-08-25 · slug 0023 · `/build` T01 · caught by the parallel security session, on a claim I
+volunteered to it**
+
+**Trigger** — citing a migration comment as evidence about **current** schema, grants or policy.
+Especially one phrased as a follow-up: *"not in this migration"*, *"tracked follow-ups"*,
+*"needs a view or table split"*, *"design decision pending"*, *"TODO"*, *"deferred"*.
+
+**What I asserted.** Flagging a neighbouring risk to the security session, I wrote that
+`line_all` is `FOR ALL TO authenticated` on a table carrying `seller_margin`/`buyer_metric`, with
+column-hiding done by grant rather than policy — the L-036 class. My source was
+`20260607170000_rls_policies.sql:20-21`:
+
+    -- NOT in this migration (tracked follow-ups):
+    --   * Seller-only COLUMN hiding (deal_line_item.seller_margin/buyer_metric,
+    --     product.cogs) — needs a view or table split; design decision pending.
+
+**All three clauses are false today.** `seller_margin` and `buyer_metric` are not on
+`deal_line_item` — `information_schema.columns` returns exactly two rows for those names, both
+`deal_line_item_private` (rls on, one policy `dli_private_all`, `company_id =
+current_company_id()`). `cogs` is not on `product` — it is on `product_cost`, same shape. And
+`product` itself now carries exactly one policy, `product_all`, owner-only. **The table split the
+comment asks for was built; the comment was never retired.**
+
+**Why it was wrong.** I know that a comment is not a contract (L-006) and I still read this one as
+a fact, because of its grammar. A comment describing what code **does** is falsified loudly — the
+behaviour changes, someone reads the comment beside the code, the mismatch is visible in one
+screen. A comment describing what a migration **does not do yet** is falsified **elsewhere and
+later**, by a different migration, in a different file, by a person who has no reason to open this
+one. Nothing in the workflow ever routes back to it. So the two kinds of comment do not decay at
+the same rate, and I treated them as if they did: a to-do that has been discharged reads exactly
+like a to-do that is still outstanding, and the more confidently it is worded the more it reads
+like a description.
+
+**The rule.** A follow-up comment is evidence of **intent at authoring time**, never of present
+state — and it is the single most stale-prone thing in a migration, because discharging it happens
+somewhere else. Before citing one, resolve the object against the catalog
+(`information_schema.columns`, `pg_policies`, `pg_class.relrowsecurity`), not against the prose.
+**One catalog query outranks every comment in the repo.** Corollary for the writing side: when a
+slug discharges a to-do that another file records, retiring that record is part of the work — the
+alternative is a comment that will mislead every future reader with no failing test to stop it.
+
+---
+
+## L-046 · A generic best practice does not outrank an ADR that already rejected it by name
+
+**2026-08-25 · slug 0023 · `/build` T01 · caught by the parallel security session, on an aside I
+volunteered about THEIR ticket**
+
+**Trigger** — about to recommend a security or schema default: `security_invoker`, RLS on,
+`WITH CHECK`, a constraint, an index, "this should be a view", "this should be definer". Also:
+adding any second claim to a message whose first claim you verified.
+
+**What I asserted.** Reviewing nothing, holding no ticket, I closed a message with *"`security_invoker
+= true` on that view is the right call, incidentally."*
+
+**`docs/architecture/adr/0004…:239` had already rejected it, naming my exact failure mode:**
+*"`security_invoker` on would zero out every buyer read (the `pricelist` owner-policy…)"*. `:236`
+knowingly accepts the `security_definer_view` advisor finding that owner-rights produces; `:401-403`
+books it as a deliberate consequence. Verified against the catalog, not the ADR text: `pricelist`
+carries exactly one policy, `pricelist_all`, `USING (company_id = current_company_id())`, owner-only;
+the view joins it. Under caller-rights every buyer read returns zero rows and the buyer price
+surface goes dark. The view's actual `reloptions` is `security_barrier=true` — **the option I named
+was not even present.**
+
+**Why it was wrong — three mechanisms, and the third is the general one.**
+
+1. **It was an aside, and it rode on a correct claim.** The same message correctly said to assert
+   `reloptions`, because `create or replace view` silently drops the `WITH` clause — I had queried
+   that. The unqueried second half inherited the first half's authority. **That is how a good
+   message smuggles a bad claim**, and an aside carries no evidentiary burden in the writer's head
+   and full authority in the reader's.
+2. **Being outside my fence lowered my bar instead of raising it.** A bystander suggestion feels
+   cheap to offer; it is not cheap to receive.
+3. ⚠️ **But "outside my fence" is NOT the root cause** — the peer made the *identical* mistake
+   **inside** their own fence, with the ADR sitting in their repo, while writing a rule about
+   researching first. **The common factor was not whose ticket it was. It was that neither of us
+   ran a query before recommending.** Ownership is no protection; familiarity is no protection.
+
+**The rule.** A recorded decision in this repo outranks vendor guidance and general best practice,
+and *"does it still hold?"* is a **query, not a reading** — `pg_policies`, `pg_class.reloptions`,
+`information_schema`. Before recommending any default, grep the ADRs for the option name: an ADR
+that rejected it will usually name it. **Corollary: an unresearched aside on someone else's ticket
+is a recommendation. Research it or do not send it.** And when a message carries two claims, the
+verified one does not vouch for the other — say which is which.
+
+---
+
+## L-047 · A test that goes red on a security fix may be asserting the bug
+
+**2026-08-24 · HEL-69 · `/build` · caught in the neighbouring-suite regression run**
+
+**Trigger** — a test goes red on a security or visibility fix, and the fix looks like the thing to
+soften.
+
+**What happened.** `current_pricelist_item` was changed to call `product_price_visible_to_caller()`
+instead of reprinting the visibility rule inline. `pricelist_item_tier_test.sql` then failed:
+*"public arm — verified Bob cannot see a fully public priced product."* Read from inside the suite,
+that is a security fix breaking a legitimate buyer read — and the obvious move is to relax the fix.
+
+**It was not.** The fixture inserted its product with `company_id`, `name` and
+`supplier_product_code` only — **no `location`** — so the product was *unfiled*, and unfiled is
+withheld from buyers. The cell called it "a fully public priced product"; the fixture never made it
+one.
+
+**What settled it was a door outside the suite.** `get_discoverable_shop` returns **0 rows** for that
+product and always has. So before the fix the price view returned a row the shop refused: the suite
+was green *because the two doors disagreed*, and what it was pinning was the divergence. Softening
+the migration would have preserved the bug and the green tick together, and the next reader would
+have found a test apparently blessing the behaviour.
+
+**The rule.** When a test goes red on a visibility fix, do not decide from inside the suite which
+side is wrong — **it cannot tell you.** Find an independent door onto the same question and ask it.
+If the doors already disagree, the test is pinning the more permissive one; fix the fixture so it is
+what the assertion says it is. Only weaken the fix once an outside oracle agrees the fix is wrong.
+
+**Related.** L-044 is the same symptom by a different mechanism — there an earlier case was a later
+case's setup; here a second door was more permissive than the one under test. Both are assertions
+borrowing their truth from outside themselves. See also L-048, which is this failure one level up,
+in the measurement rather than the assertion.
+
+---
+
+## L-048 · An A/B whose arms start from different states is not a weak experiment — it is not an experiment
+
+**2026-08-24 · HEL-69 · `/build` · caught while trying to prove the e2e result**
+
+**Trigger** — about to compare a before-run against an after-run: A/B-ing a test suite, benchmarking,
+or proving a failure is pre-existing.
+
+**What I did.** To show the view change broke no e2e, I ran `discover-shop.spec.ts` with the
+migration applied, then removed the migration and ran it again. The two arms failed on **different
+lines** — 195/222 versus 49/368 — and I came close to reading that as a real behavioural difference
+worth investigating.
+
+**It was not data at all.** The "after" arm ran on a database the full e2e suite had already mutated
+(committed specs edit seed rows and never restore them — L-033), while the "before" arm ran on a
+fresh `supabase db reset`. Two arms, two different starting databases. The comparison measured the
+pollution, not the migration. Redone with a reset before **each** arm, the real result was the
+opposite of what the first attempt suggested: 0 failures with the migration, and the baseline's
+failures turned out to be stack-key rotation, not behaviour.
+
+**Why it is seductive.** A confounded A/B does not look broken. Both arms ran to completion, both
+printed output, both produced line numbers, and neither errored. There is no failure signal to
+notice — the output has exactly the shape of a result, which is why it invites interpretation
+instead of suspicion.
+
+**The rule.** Before comparing two runs, state what is held constant and **verify it**, don't assume
+it — here, one query (`pg_get_viewdef(...) LIKE '%product_price_visible_to_caller%'`) confirmed each
+arm was genuinely in the state it claimed. Reset before **every** arm, never once at the start. And
+when two arms differ in a way you did not predict, suspect the setup before the subject: an
+unexplained difference is more often a confound than a finding.
+
+**Related.** L-047 and L-044 are this same shape in assertions — a signal true only because of
+something outside the thing measured. This one generalises furthest, because it applies to every
+before/after comparison, not only to tests.
+

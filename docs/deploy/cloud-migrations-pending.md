@@ -23,6 +23,73 @@
 
 ---
 
+## ⚠️ PENDING (2026-08-24, Muskan) — HEL-69 price-view single owner (ONE migration)
+
+**Status: LOCAL ONLY. Production still carries the leak.**
+
+| # | file | what it does |
+|---|---|---|
+| 1 | `20260825100000_pricelist_view_single_owner.sql` | `current_pricelist_item` stops reprinting the product-price-visibility rule and calls `public.product_price_visible_to_caller()` — the function that already gates `pricelist_item_public_select` and `plit_public_select`. Also revokes `INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES` that `authenticated` held on the view although the defining migration grants SELECT only. |
+
+**The leak it closes, measured on production 2026-08-24.** The view's hand-written public arm was
+missing three terms `product_visible_to_caller()` carries: the seller company's `deleted_at` and
+`verification_status`, and the product's `location`. `is_caller_verified()` does not cover the
+second — it reads the CALLER's company, and nothing in the old view read the seller's `company` row
+at all. Same shape as slug 0022's round-4 basket leak (L-038).
+
+**Who loses reads the moment this lands — by design, this IS the fix.** Connected buyers stop seeing
+the price and tier ladder of any product that is unfiled, or whose seller company is soft-deleted or
+unverified. Two named production rows go dark for buyers:
+
+- StonePharm's `Spirit Bear T28 STR MLS` — unfiled (`location IS NULL`), EUR 9.50/g
+- CNG Berlin's `fdsc` — seller `verification_status = 'pending'`, EUR 2.00/g
+
+**Both sellers keep full sight of their own products.** The owner arm is asserted explicitly
+(`pricelist_view_single_owner_test.sql` §B), including the unfiled one — unfiled is withheld from
+buyers and kept for the owner so the Unassigned pile stays fileable.
+
+**Push:** plain `supabase db push --linked` — **no `--include-all`**. `20260825100000` sorts after
+cloud's tip `20260824100000` and after slug 0023's `20260825090000`. The two are independent; either
+order is fine.
+
+**Post-flight — re-run the two queries that found it. Both must return 0 rows:**
+
+```sql
+-- 1. rows the view would hand a connected buyer that the canonical rule denies
+select p.id, p.name, c.name as seller, p.location, c.verification_status
+  from pricelist_item pli
+  join pricelist pl on pl.id = pli.pricelist_id
+  join product p on p.id = pli.product_id and p.company_id = pl.company_id
+  join company c on c.id = p.company_id
+ where pli.deleted_at is null and pl.deleted_at is null and p.deleted_at is null
+   and p.price_public
+   and (p.location is null or c.deleted_at is not null or c.verification_status <> 'verified')
+   and not public.product_price_visible_to_caller(p.id);
+
+-- 2. the compensating control survived the replace (must contain security_barrier=true,
+--    and must NOT contain security_invoker=true)
+select reloptions from pg_class where oid = 'public.current_pricelist_item'::regclass;
+```
+
+> ⚠️ **DO NOT "fix" the `security_definer_view` advisor ERROR while you are in there.** The view is
+> owner-rights **deliberately** — ADR-0004 §4 pre-declared the trade-off and accepts the advisor
+> entry (precedent: `ARCHITECTURE-NOTES.md:231`). Re-verified against production 2026-08-24 rather
+> than read off the ADR: `pricelist` carries exactly one policy, `pricelist_all USING (company_id =
+> current_company_id())`, and this view joins it — so `security_invoker = true` returns **zero rows
+> to every buyer** and takes the price surface dark. Supabase's general "always set security_invoker"
+> guidance assumes base tables whose policies admit the intended readers; ours deliberately do not.
+
+**Gate evidence at time of filing:** RED reproduced before the fix (the unfiled product handed EUR
+7.77 to a connected buyer), green after. Four neighbouring SQL suites green
+(`connection_visibility_override`, `cross_tenant_lockdown`, `discoverable_shop_spec_columns`,
+`pricelist_item_tier`), `tsc` clean, unit 490/490.
+
+**What this entry does NOT claim.** The full Playwright e2e run did not complete at filing time (the
+local DB was held by a parallel session), so this migration is **not** backed by an e2e A/B against a
+clean base. Do not read the green list above as a full gate.
+
+---
+
 ## ✅ APPLIED 2026-08-25 (was PENDING 2026-08-24, Muskan) — T11 table privilege lockdown (ONE migration)
 
 **Status: LIVE ON PRODUCTION.** Pushed 2026-08-25 with `supabase db push --linked` (plain — no

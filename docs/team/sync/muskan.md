@@ -5,7 +5,50 @@
 
 ---
 
-**Last updated:** 2026-08-24 (session 85 `g5_walk` — **G5 PASSED 10/10, slug 0022 COMPLETE**)
+**Last updated:** 2026-08-25 (session 88 `deal_land` — **/build T01 · HEL-63** in progress)
+**Status:** active — building slug 0023 ticket T01 (`send_deal` announces a company-addressed deal in chat).
+**Shared files locked:** `src/modules/deals/actions.ts` (docstring only, `:357-366`).
+Also writing, NOT shared: `supabase/migrations/20260825090000_send_deal_c2c_announce.sql` (new),
+`supabase/tests/send_deal_c2c_announce_test.sql` + runner (new),
+`supabase/tests/deliver_deal_test.sql`, `supabase/tests/claim_deal_ticket_test.sql`,
+`docs/muskan-build/0023-deal-draft-lands-in-chat/**`.
+
+**Previous (session 87):** shared files locked: none — none taken, none held. This session wrote `docs/architecture/adr/0006-*`
+(new file), `ADR-INDEX.md`, `docs/agents/LEARNINGS.md` (L-042..L-044 appended), the per-slug folder,
+and `.planning/` (gitignored). **Every commit was `git add <named paths>` — never `-A`, never `.`**
+
+⚠️ **A PARALLEL SESSION IS COMMITTING TO THIS SAME BRANCH.** `a8f48f9 deps: clear all 28 Dependabot
+alerts` is theirs, and Muskan says that session is also working vulnerabilities/T17 and will create
+its own Linear tickets. **This is L-040's exact setup and the sync file cannot prevent it** — neither
+session touched the same file last time either, and `git commit -a` still swept the other's work.
+**The fix is separate branches or worktrees.** Flagging, not solved.
+
+**Linear correction (2026-08-25):** pipeline build tickets go in **`Codebase Development Tickets`
+(HEL-xx)**, NOT `Development` (DEV-xx). The MCP is **not** auth-blocked — that note was stale
+everywhere it appeared. Slug 0023 = HEL-63..HEL-66 (+HEL-67, HEL-68 filed). 0022's HEL-54..HEL-62
+moved Backlog → Done (they shipped in session 85 and nobody had closed them).
+
+**Prod note:** `20260824090000` + `20260824100000` are **LIVE on production** (pushed by the parallel
+session 2026-08-25; verified against `list_migrations`, not against the ledger). Production tip is
+`20260824100000` — slug 0023's migration stamps after it and needs a **plain `db push`**.
+
+**Last updated (session 86):** 2026-08-25 (`triage_0023` — triage only, no code)
+(`docs/muskan-build/0023-deal-draft-lands-in-chat/`), which by design no other session touches.
+
+**2026-08-25 — slug 0023 triaged FULL; nothing built, nothing pushed to prod.** `send_deal`'s
+company arm posts no chat message (it calls `deliver_deal` and cuts a Connection-Requests ticket)
+while its person arm posts the clickable deal pill — so a buyer's deal draft never signals in
+chat. Scope is that RPC arm **plus** the buyer person picker (`BasketDrawer.tsx:213` hardcodes
+`counterpartyPersonId: null`); the two are one mechanism, not two tickets that can ship apart.
+Work order + the live reproduction are in that slug's `STATE.md` (`cb470f1`). **Heads-up for any
+session touching `send_deal` or `deliver_deal`:** `deliver_deal` has a second live caller,
+`confirm_detected_deal_births_negotiation.sql:176` — changing one door does not change the other.
+**Two follow-up slugs owed, unfiled:** chat-list consolidation (one relationship renders two
+conversations) and the deal-card editing defects.
+
+---
+
+**Last updated (prev):** 2026-08-24 (session 85 `g5_walk` — **G5 PASSED 10/10, slug 0022 COMPLETE**)
 **Status:** offline — BOTH of today's parallel sessions are closed. Merged status:
 * **Session 84 `close_vulns`** — closed T15, T10, T13, T16, T11; T14 rewritten as a trap warning.
   `rrp_per_gram` leak **4 rows → 0**; `anon` **614 table privileges → 0**. **Both migrations
