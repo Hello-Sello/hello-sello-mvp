@@ -5,15 +5,49 @@
 
 ---
 
-**Last updated:** 2026-08-25 — `security_tickets` session (worktree-security-tickets) — starting
-**HEL-82** (relationship suspend/end + HEL-74's liveness gates). Rebased worktree onto
-`origin/claude/muskan/work` @ `73d8b89` (post-0023-ship) first — clean, no divergence.
-**Status:** active.
-**Shared files locked:** `src/app/connect/relationship/[relationshipId]/page.tsx`,
-`src/modules/relationship/**`, `src/modules/basket/**` (getMyConnections/basket status-check
-fix only), `src/modules/connect/**` (same). New `supabase/migrations/*` files only — no existing
-migration files edited in place. Flagged to `g5_walk` (post-0023 session) before starting; it's
-idle, no conflict expected.
+**Last updated:** 2026-08-25 — `security_tickets` session (worktree-security-tickets) —
+**HEL-82 + HEL-74 BUILT, committed `fc2a07b`, pushed to `worktree-security-tickets`.**
+**Status:** offline (session closed).
+**Shared files locked: none — all released.**
+
+**What shipped.** `suspend_relationship`/`reactivate_relationship`/`end_relationship`
+(`is_hs_team()`-gated definer RPCs) + a new `/admin/relationships` queue (NOT
+`/connect/relationship` — see the design-revision note below). `send_deal` AND
+`confirm_detected_deal` (Sella's double-accept door, which never calls `send_deal` and would
+otherwise bypass it) both refuse to deliver a new deal onto a suspended/ended relationship.
+`accept_connection_request` refuses to silently adopt an existing non-active relationship —
+closes a reconnect-loop bug (discovery hides a suspended pair, but the old accept still
+"succeeded" on the dead row with a fresh chat thread as a side effect). `RelationshipHeader`
+and the basket's connection resolver now agree with `getMyConnections` on what "connected"
+means. Two-round `critic`+`security` review both found real blocking gaps in the first draft —
+full detail in the HEL-82 Linear comment, not repeated here.
+
+**Design revision, worth naming for whoever reads this later:** the first draft put the admin
+panel on `/connect/relationship/[id]` (reusing the existing page, per instruction) and broadened
+`rel_all`'s RLS. Review found that page is unreachable by the seeded (companyless) HS account
+regardless — the whole `/connect` tree sits behind `requireVerified()` — and that fixing THAT
+by giving HS staff a company would turn three other relationship readers into cross-tenant leaks
+(none of them has an explicit membership check, all lean on RLS alone). Moved to `/admin` instead;
+`relationship` carries no RLS/grant change in the final version.
+
+**Scope deliberately narrowed, ticketed as HEL-84 (High), not silently gapped:** new chat
+messages and new pricing asks still have zero relationship-status check (`msg_all`,
+`inbox_insert`/`discover/actions.ts`) — HEL-82's own AC names both. Real, immediate gap once
+suspension ships, not latent. HEL-82 left **In Progress**, not Done, until HEL-84 lands.
+
+**Still local-only, cloud-pending:** 4 migrations, `20260825170000`–`20260825200000`, ledgered
+as ONE batch (do not push a partial prefix — see the ledger entry). `/admin/relationships`'s
+server actions call RPCs that don't exist without them — same-deploy required with the app code.
+
+**One real DB-hygiene mistake, self-caught:** ran a live auth+RPC smoke test (real Supabase
+session, not SQL impersonation) to verify the admin flow actually works end-to-end for the
+seeded HS account — it does — but the script committed for real (no rollback) and left 4 extra
+audit_log rows on the local shared DB, which then failed my own test suite's exact-count
+assertion on the next run. Caught by the failure itself, not silently missed; fixed with a
+`db reset` and a full clean re-verification pass (14/14 SQL suites, tsc, eslint, vitest) before
+committing. Worth a beat: a manual verification script against a REAL client is more convincing
+than SQL impersonation, but it is also a REAL side effect — wrap it in a rollback too, or reset
+after.
 
 ---
 
