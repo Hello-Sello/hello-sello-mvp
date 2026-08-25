@@ -711,8 +711,11 @@ is not this slug's job, but nothing else is tracking it.
   `can_access_workspace` `:117-125` · `inbox_select` `:243` · `thread_all` `:293` ·
   `can_access_thread` c2c arm `:136` · on-conflict `:159-184` · pill build `:222-230`.
   **Sweep for surviving OLD values: four hits, ALL historical quotes inside the corrections
-  themselves** (banner ×2, §4.1's inline note, the PRD's correction text). **Zero live stale
-  citations remain.** `DECISIONS.md:1013` re-confirmed still the cited bullet **after** the edit.
+  themselves** (banner ×2, §4.1's inline note, the PRD's correction text). ~~**Zero live stale citations remain.**~~ ⚠️ **NARROWED (`critic` N9): the sweep searched only
+  for the SEVEN old values it had replaced.** It did not re-audit the maintained buckets for
+  *other* stale citations — and `critic` then found four live ones there (§4.1's `actions.ts:367`,
+  the §4.1 docstring row, **J6**, **J7**). All four fixed in round 1. **A sweep's claim is only as
+  wide as its query.** `DECISIONS.md:1013` re-confirmed still the cited bullet **after** the edit.
   ⚠️ **A parallel merge landed on this branch mid-push** (HEL-75, on Muskan's instruction).
   Rebased and **verified rather than assumed**: their `20260825130000` present, my ADR edits
   intact, local == origin. **The pending cloud batch is now TWO migrations**

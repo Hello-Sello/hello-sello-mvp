@@ -162,7 +162,7 @@ with Canadian Craft. The thread body ends with a new clickable line reading
 `20260825090000_send_deal_c2c_announce.sql:222-230` — **citation corrected 2026-08-25, T04;
 `send_deal:131-140` was the SUPERSEDED migration.** The shipped expression is
 `nullif(btrim(coalesce(first_name,'') || ' ' || coalesce(last_name,'')), '')`, falling back to
-`Someone`. ⚠️ **This is not the same as the `||` concatenation this PRD previously described:**
+`Someone`. ⚠️ **The EXPRESSION ITSELF IS UNCHANGED from the superseded migration** (`20260724120300:132-140` and `20260825090000:222-230` differ only in indentation) — **it was this PRD's paraphrase of it that was wrong**, not the behaviour. The pill text did not change. What the paraphrase got wrong:
 for a person with a NULL last name the old formula yields `Someone`, the shipped code yields
 **the first name**. Assert the constructed value, not a label read off a screenshot.)*
 

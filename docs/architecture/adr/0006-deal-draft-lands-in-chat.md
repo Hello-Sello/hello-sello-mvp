@@ -319,8 +319,8 @@ slug and **must not be edited**.
 | `deliver_deal` | `20260720095000` | **loses one of its two live callers.** Its only remaining caller becomes `confirm_detected_deal_births_negotiation.sql:176` (Sella) |
 | Sella's deal door | `confirm_detected_deal_births_negotiation.sql:176` | **unchanged, by explicit G1 ruling.** No traffic: `deal_detected` is service-role-writable only (`20260614121000:12`) and Sella is not built |
 | `create_deal_draft`'s old delivery | `20260720100100:179` | **already dead** — deleted by `20260724120200:23`. Verified, not assumed |
-| `sendDeal` action | `deals/actions.ts:367` | signature is `Promise<{ threadId: string \| null }>` — the **field** is already nullable, so **no signature change** |
-| `sendDeal`'s docstring | `deals/actions.ts:358-365` | **becomes false and is on the fix list.** It documents the RPC as doing *"deliver_deal's company-ticket half"*, which stops being true. A stale comment left behind by a correct code change is the L-040 class |
+| `sendDeal` action | `deals/actions.ts:369` | signature is `Promise<{ threadId: string \| null }>` — the **field** is already nullable, so **no signature change** |
+| `sendDeal`'s docstring | `deals/actions.ts:357-368` | ~~**becomes false and is on the fix list.**~~ **DISCHARGED 2026-08-25 (T04): T01 rewrote it.** It no longer mentions `deliver_deal` at all — it now reads *"No caller navigates on it today - `DecisionBar.tsx:161` discards it"*. ⚠️ *The twin statement in §8.3 was corrected earlier in this same ticket under the "false in substance" rule; **this one sits in the MAINTAINED bucket and was missed on the first pass** (`critic` N2) — the principle was applied to the frozen half and not the maintained half* |
 | Its only UI caller | `DecisionBar.tsx:161` | does `void run(() => sendDeal(...))` — **discards the return**. The company arm returning a thread id instead of `null` is inert (see §8.3) |
 | The Sella detection trigger | `20260612130000:41-49` | **cannot fire** on the new insert: requires `type='message'` (ours is `deal_card`) *and* a p2p thread (ours is c2c). Doubly safe |
 | `pending_inbox_item` | base table | **not written to** by the deal path any more. Row shape, RLS and every other type untouched |
@@ -460,15 +460,21 @@ the negative space is the standing rule, not an extra.
 - **J6 — FR2's default is unchecked by any test.** *"The addressee defaults to the whole
   company; choosing a person is a deliberate act"* is a claim about option **order and
   preselection**, and §8.7's proposed relabel of `RecipientPicker.tsx:56` is precisely the
-  edit that could reorder them. If §8.7 is taken, T02 must assert the default explicitly.
-- **J7 — "only connected people are selectable" is not what the picker does.** ADR-0003:30
+  edit that could reorder them. ~~If §8.7 is taken, T02 must assert the default explicitly.~~
+  **RESOLVED 2026-08-25 (T04): §8.7 WAS taken and built.** T02's C1 asserts the default, and the
+  option string no longer lives in `RecipientPicker.tsx` at all — it moved to
+  `CounterpartyPersonSelect.tsx:108`. ⚠️ **The banner above names this very citation as its
+  headline example of frozen design-time drift. J6 is a MAINTAINED invariant, so it is corrected
+  here and the banner's example stands as history** (`critic` N3 — one citation was claimed by
+  both buckets).
+- **J7 — "only connected people are selectable" is not what the picker does.** ADR-0003:32
   says only connected companies/people are selectable. `getMyConnections()` returns
   **every** person at a connected company via `can_see_person`
   (`connections.ts:104-116,:143`), not person-graph connections, and
   `create_deal_draft:88-100` validates only "on the other side of the relationship." This
   is pre-existing, but the buyer picker is **new traffic through it**. Recorded as
   deliberate: the person graph (`accept_person_connection`) is **not** consulted when
-  addressing a deal. Anyone who reads ADR-0003:30 as violated should read this line first.
+  addressing a deal. Anyone who reads ADR-0003:32 as violated should read this line first.
 - **J5 — the discovery channel changed; the audience did not.** Re-litigating this as a
   permissions change is a wrong turn the work order already took once (PRD §Audience).
 

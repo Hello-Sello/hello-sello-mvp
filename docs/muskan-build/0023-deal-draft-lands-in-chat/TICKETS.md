@@ -15,7 +15,7 @@
 T01 (M, SQL) ─┐
               ├─→ T03 (S, e2e)
 T02 (S, TSX) ─┘
-T04 (XS, docs) — independent, but 3 of its 4 edits need a G3 ruling first
+T04 (XS, docs) — independent. ⚠️ *Cut as 4 edits; it landed as **12**, each addition traceable to a recorded ruling — see T04's criterion 4*
 ```
 
 **T01 ∥ T02 are parallel-safe — computed, not assumed (L-004).**
@@ -39,7 +39,7 @@ the *suite rewrites* out and land them in the same commit series, not the same t
 **Files** — `supabase/migrations/<new>_send_deal_c2c_announce.sql` ·
 `supabase/tests/send_deal_c2c_announce_test.sql` (new) + its `run_*.sh` ·
 `supabase/tests/deliver_deal_test.sql` · `supabase/tests/claim_deal_ticket_test.sql` ·
-`src/modules/deals/actions.ts` (docstring only, `:358-365`)
+`src/modules/deals/actions.ts` (docstring only, `:357-368` — *corrected 2026-08-25, T04*)
 
 **First step, before any code:** regenerate ADR §4.3's affected-suite table **by grep**,
 not from the table — it was written from recall twice and was wrong twice
@@ -96,7 +96,9 @@ or schema change · the frontend.
 4. When the buyer's group is for a seller they are **not** connected to, the system shall
    render the existing connect-first block and **no** addressee control. **(AC7 — the
    control belongs in the `needsConnection` ELSE branch; the existing picker slot at
-   `BasketDrawer.tsx:311-315` sits ABOVE that split)**
+   `BasketDrawer.tsx:321-325` sits ABOVE the `needsConnection` split at `:329` — ⚠️ *citations
+   corrected 2026-08-25, T04; they read `:311-315`/`:319` at cut and T02's own diff moved them.
+   Claim unchanged, `critic` N5*)**
 5. When a person is chosen, the system shall pass that `counterpartyPersonId` into
    `createBasketDraft`. ⚠️ **Wording amended 2026-08-25 (Muskan's ruling at T02's G4).** The
    original said *"instead of the hardcoded null at `BasketDrawer.tsx:215`"*. **That literal STAYS**
@@ -158,6 +160,17 @@ ticket exists to fix, one level up* ·
 3. When the PRD's edge-case row and ACs are read at G4, they shall match the built
    behaviour. **(§8.7 AC wording, §8.9 edge-case row — both are spec amendments and land
    ONLY on the G3 ruling)**
+4. ⚠️ **ADDED 2026-08-25 (`critic` N6). Criteria 1-3 covered 3 of this ticket's 12 edits**, so a
+   G4 walk would have replayed a quarter of it. The remaining nine, each authorised by a recorded
+   ruling rather than by the cut: ADR **J1** must name **sender-identity** forgery (`security` B1,
+   T01 G4) · ADR **§4.1's** live citations shall resolve (`security` N3) · **`PRD:52`** shall not
+   claim "verified safe" about the `deal_detected` hole ADR §7.4 refuted and HEL-67 tracks ·
+   **`PRD:117-121`'s** policy citations shall resolve · the ADR shall state **which citations it
+   maintains and which are frozen** · **J6/J7** shall not describe rulings as pending once built ·
+   **T02 AC 5** and **T03 AC 6** shall match what was ruled and proven · and **this ticket's own
+   Files list and criteria** shall name what it edits.
+   **This ticket grew by ruling five times after its cut. That is the defect it exists to fix,
+   one level up, and it went uncorrected here until `critic` said so.**
 
 ---
 
