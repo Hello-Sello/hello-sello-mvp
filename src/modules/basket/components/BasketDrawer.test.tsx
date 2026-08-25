@@ -10,7 +10,7 @@
  * B5 — the correct condition is `!group.isOwnCompany && group.relationshipId
  * === null`, NOT `!group.relationshipId` (which is ALSO true for the
  * seller's own-company group, `basket/lib/group.ts:24` — that arm must keep
- * rendering `RecipientPicker` + a live "Create a draft deal" button exactly
+ * rendering `RecipientPicker` + a live "Send deal" button exactly
  * as it does today). The three fixtures below are own-company /
  * connected-foreign / non-connected-foreign, per the plan's explicit ask.
  *
@@ -42,8 +42,9 @@
  * shows no addressee UI" is the stale inference this paragraph used to
  * invite — corrected here rather than left for the next reader to trip on.
  *
- * Interaction (click → setOpen(false) → router.push) is NOT testable under
- * this static-render env — no DOM, no event dispatch. That half of B6 needs
+ * Interaction (click → createBasketDraft, which now births AND sends in one
+ * call → onDrafted closes the drawer) is NOT testable under this
+ * static-render env — no DOM, no event dispatch. That half of B6 needs
  * either jsdom/RTL (not configured in this repo) or a Playwright e2e; flagged
  * as a gap in the RETURN, not silently skipped.
  *
@@ -53,7 +54,7 @@
  * `CounterpartyPersonSelect.test.tsx`, cases C1/C2/C7). Same three fixtures
  * as above, extra assertions only:
  *   C4 (connected-foreign)     — "Address this deal to" + "Whole company"
- *                                now render alongside "Create a draft deal".
+ *                                now render alongside "Send deal".
  *   C5 (non-connected-foreign) — "Address this deal to" stays absent; this
  *                                is a proof of the `needsConnection` GUARD in
  *                                `BasketDrawer.tsx:232`, NOT of where the
@@ -139,7 +140,7 @@ describe("<BasketDrawer> Group — the non-connected-buyer arm (T02, HEL-56)", (
     // always carry a null relationshipId) — a predicate that keyed off that
     // alone would wrongly route this group into the non-connected message.
     expect(html).not.toContain("connecting comes first");
-    expect(html).toContain("Create a draft deal");
+    expect(html).toContain("Send deal");
     // RecipientPicker's own-company-only fallback (no connections loaded yet
     // under static render) — proves RecipientPicker mounted at all.
     expect(html).toContain("Connect with a company first to send an offer.");
@@ -156,7 +157,7 @@ describe("<BasketDrawer> Group — the non-connected-buyer arm (T02, HEL-56)", (
     expect(html).not.toContain("Address this deal to");
   });
 
-  it("connected-foreign group (relationshipId set): renders the live 'Create a draft deal' path, no connect-first message (T02/HEL-64: C4)", () => {
+  it("connected-foreign group (relationshipId set): renders the live 'Send deal' path, no connect-first message (T02/HEL-64: C4)", () => {
     const group: BasketGroup = {
       sellerCompanyId: "seller-connected",
       sellerCompanyName: "GreenLeaf",
@@ -167,7 +168,7 @@ describe("<BasketDrawer> Group — the non-connected-buyer arm (T02, HEL-56)", (
     const html = renderDrawerWithGroup(group);
 
     expect(html).not.toContain("connecting comes first");
-    expect(html).toContain("Create a draft deal");
+    expect(html).toContain("Send deal");
     // C4 (T02/HEL-64, AC 1): the buyer's addressee control now renders in
     // this arm — `CounterpartyPersonSelect`, whose own render contract is
     // pinned in `CounterpartyPersonSelect.test.tsx` (C1/C2/C7). Only the two
@@ -189,7 +190,7 @@ describe("<BasketDrawer> Group — the non-connected-buyer arm (T02, HEL-56)", (
 
     // B6 point 3: hide the disabled Send button in this arm entirely — never
     // render it dead beside the explanation.
-    expect(html).not.toContain("Create a draft deal");
+    expect(html).not.toContain("Send deal");
     // A Connect action pointing at the shop page that already owns connect
     // state (B6's decision: a Link to /discover/[sellerCompanyId], not a
     // second copy of ConnectActions).

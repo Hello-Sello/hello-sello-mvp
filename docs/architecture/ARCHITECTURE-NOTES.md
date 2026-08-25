@@ -845,3 +845,17 @@ citations copied forward unverified.
 **The rule this yields:** an identifier used as evidence must resolve to exactly one place. If a
 scheme is scoped per-phase, the scope belongs **in the identifier** (`P17-D12`, not `D-12`), or the
 scheme should not be used in source comments at all. Prefer the thing a reader can open.
+
+**2026-08-25 addendum — the `basket/actions.ts` row above is now PARTIALLY superseded, for the
+basket door specifically.** Found live during `/ship 0023`'s G5 walk: the buyer's basket picked a
+recipient, birthed a private draft, then navigated into the opened deal card with a SEPARATE "Send
+deal" click required — the picker's choice gave no visible confirmation it had gone anywhere.
+Muskan's ruling: `createBasketDraft` now calls `sendDeal` immediately after `createDeal`, in one
+action, and `BasketDrawer.tsx` no longer navigates into the deal card. **What did NOT change:**
+delivery is still `send_deal`'s alone — no second delivery mechanism was added, `send_deal` still
+owns the flip, the co-owner insert, and the announcement, all in one transaction. What changed is
+*when* it's called for this one door: immediately after birth, not from a later, separate human
+click. The seller's own-company door (`RecipientPicker`) goes through the exact same
+`createBasketDraft` call and is affected identically. The OTHER creation door — "Start a deal" from
+an open chat (`deal-c2c-create.spec.ts`, `deal-p2p-send.spec.ts`) — is UNCHANGED: birth and send
+stay two separate steps there.
