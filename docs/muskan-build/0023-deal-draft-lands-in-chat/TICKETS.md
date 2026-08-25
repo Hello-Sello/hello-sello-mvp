@@ -98,7 +98,11 @@ or schema change · the frontend.
    control belongs in the `needsConnection` ELSE branch; the existing picker slot at
    `BasketDrawer.tsx:311-315` sits ABOVE that split)**
 5. When a person is chosen, the system shall pass that `counterpartyPersonId` into
-   `createBasketDraft` instead of the hardcoded null at `BasketDrawer.tsx:215`.
+   `createBasketDraft`. ⚠️ **Wording amended 2026-08-25 (Muskan's ruling at T02's G4).** The
+   original said *"instead of the hardcoded null at `BasketDrawer.tsx:215`"*. **That literal STAYS**
+   (now `:216`): it is the effective "Whole company" default and what keeps Create enabled —
+   **deleting it ships a dead Create button on every buyer group**, contradicting FR2. The code is
+   right; the criterion's wording was stale.
 6. When a seller uses `RecipientPicker` on a company with zero people, the system shall
    render the same control rather than hiding it. **(§8.2 — behaviour change to an
    existing surface, needs the G3 yes)**
@@ -123,6 +127,13 @@ or schema change · the frontend.
 4. `deal-c2c-create.spec.ts:141-191`'s premise is reversed and rewritten, not deleted.
 5. `e2e/inbox-accept.spec.ts` shall be **run deliberately and judged** — `:157-158` is the
    only guard in the repo on c2c-thread uniqueness, the invariant T01 now writes against.
+6. ⚠️ **ADDED 2026-08-25 by ruling, not at cut** (T02's G4 ruling 2 / `critic` N1). When the
+   buyer's basket renders the addressee control on a connected seller's group, the spec shall
+   assert the control offers that seller's **named people**, not merely that it renders and
+   defaults to "Whole company". **Rationale:** swapping the call site to
+   `relationshipId={group.sellerCompanyId}` leaves `tsc` at 0 and **all seven of T02's unit cases
+   green** while the people list is empty forever — only an e2e discriminates. **Proven by a
+   controlled A/B at T03's G4** (units 41/41 green under the bug; this criterion red).
 
 ---
 
@@ -132,6 +143,9 @@ or schema change · the frontend.
 
 **Files** — `docs/architecture/CONTEXT.md:31` · `docs/decisions/DECISIONS.md` ·
 `docs/PRD/0023-deal-draft-lands-in-chat.md` (the §8.9 / §8.7 amendments) ·
+**`docs/architecture/adr/0006-deal-draft-lands-in-chat.md`** and **this file** — ⚠️ *both added
+2026-08-25: T04 edits them and the cut list named neither, which is the same staleness this
+ticket exists to fix, one level up* ·
 `docs/architecture/adr/ADR-INDEX.md` *(index line is `/design` step 5, not this ticket)*
 
 ### Acceptance criteria (EARS)

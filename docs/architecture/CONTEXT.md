@@ -28,7 +28,7 @@ Consumed by Matt Pocock's `grill-with-docs` and `improve-codebase-architecture` 
 | **SIGNALS** | The back of the Deal Card. Deal-Sella-generated, **per-company** insights about the deal (deal age, expiry risk, repeat patterns, etc.; everyone in a company sees the same signals, per-person is a future refinement, 2026-06-17) - each side sees its own. |
 | **PO card / SO card** | The two faces of one Deal Card, set by who authored it: a **PO card** = purchase order (buyer→seller), an **SO card** = sales order (seller→buyer). Same entity, distinguished by `doc_type`. |
 | **`doc_type`** | The discriminator on a Deal Card = `purchase_order` or `sales_order` - decides whether it renders as a PO card or an SO card. |
-| **Deal draft** | A Deal Card sitting inside a P2P chat that has not yet been confirmed. Confirming it ("start a deal") spawns the Deal Workspace. |
+| **Deal draft** | A Deal Card sitting inside a chat that has not yet been confirmed. *(Widened from "a P2P chat" 2026-08-25, ADR 0006 §8.4: a company-addressed draft lands in the **c2c** company chat, so the definition may not name one thread type.)* Confirming it ("start a deal") spawns the Deal Workspace. |
 | **Deal selector** | The chat control "Talking about: [current deal]" that picks which deal the conversation is about; defaults to the current deal. |
 | **Half-card** | The collapsed Deal Card shown only in the Inbox as a pre-connection gate. In a chat the card is always full. |
 

@@ -49,7 +49,7 @@ Two things cause it, and neither works without the other:
 |---|---|---|
 | **Request-pricing → chat** | needs a message type that does not exist, and an unanswered question: a deal pill opens a deal card, a pricing pill opens *what?* | own slug (Muskan, 2026-08-25) |
 | **Deleting the Connection Requests page** | still carries the other three request types; deleting now strands Request-pricing with no surface | own slug, after Request-pricing moves |
-| **The second send door** — `confirm_detected_deal_births_negotiation.sql:176` | Sella-born deals keep the old inbox route. Verified safe: `deal_detected` messages can only be written by Sella/service-role (`20260614121000_propose_deal_rpc.sql:12`) and Sella is not built, so the door has no traffic | **written obligation on the page-deletion slug** — that slug must not delete the page while this door still writes to it |
+| **The second send door** — `confirm_detected_deal_births_negotiation.sql:176` | Sella-born deals keep the old inbox route. ~~Verified safe: `deal_detected` messages can only be written by Sella/service-role (`20260614121000_propose_deal_rpc.sql:12`)~~ 🔴 **CORRECTED 2026-08-25 (T04): that was NOT verified and is NOT safe.** ADR 0006 §7.4 established that `20260614121000:12` is **a code comment, not a gate** — `msg_all` (`20260607170000:300-302`) is `FOR ALL TO authenticated` with **no `type` predicate**, so an authenticated member of a p2p thread **can insert a `deal_detected` row today** and drive `confirm_detected_deal`. Filed as **HEL-67**. What remains true is only the second half: Sella is not built, so the door has **no traffic** — a choice, not a proof | **written obligation on the page-deletion slug** — that slug must not delete the page while this door still writes to it |
 | **Removing `claim_deal_ticket`** | becomes unreachable for deals but still serves the other types | page-deletion slug |
 | **Half-card** (`CONTEXT.md:33`) | it is the *pre-connection* inbox view; this slug is entirely post-connection | untouched |
 | **Chat-list consolidation** (one relationship showing two conversations) | pre-existing and upstream of this fix | own slug |
@@ -116,7 +116,9 @@ STATE.md framed this as widening the audience: an inbox ticket is claimable by o
 person, a company conversation is company-wide. **That is not what the system does.**
 Both surfaces are already company-wide — `inbox_select` and the company-thread policy
 are both plain `current_company_id()` checks
-(`20260607170000_rls_policies.sql:79-86, :231-232`), and `sign_deal`
+(`20260607170000_rls_policies.sql:243-244` for `inbox_select`, and `:293-298` for `thread_all`,
+whose c2c arm resolves through `can_access_thread` `:136`. *Citations corrected 2026-08-25, T04 —
+the claim was true; `:79-86` and `:231-232` pointed at `owns_group` and `person_group_all`.*), and `sign_deal`
 (`20260724120500_sign_deal.sql:73-82`) already lets any member of the company sign a
 deal without anyone claiming anything. "Claimable" describes an inbox convention, not
 a permission. **What this slug changes is the discovery channel, not who may look.**
@@ -128,7 +130,7 @@ a permission. **What this slug changes is the discovery channel, not who may loo
 | case | required behaviour |
 |---|---|
 | The seller company has no connected people to pick | The addressee control still renders, offering the whole company. It is never a dead control. |
-| The company-to-company conversation cannot be found | Send must not report success. FR7 governs. |
+| The company-to-company conversation cannot be found | **The send creates it; the deal still lands.** *(Amended 2026-08-25 by ADR 0006 §8.9 ruling (a) — resolve-or-CREATE. The previous wording, "Send must not report success", described a behaviour that was never built: an interrupted accept can leave a connected pair with no c2c thread and no repair path, so refusing forever was the worse failure. T01's AC 4 governs.)* |
 | The buyer sends the same deal twice | Refused, as today. |
 | The buyer is not connected to the seller | No send path is offered, as today. |
 | The buyer's basket holds products from several sellers | Each seller's group is addressed independently. |
@@ -146,14 +148,23 @@ Marcel (Canadian Craft).
 Alice opens Canadian Craft's shop, adds 2 products, opens the basket. The Canadian
 Craft group shows an addressee control. It reads **"Whole company"** as the selected
 value, and opening it lists Canadian Craft's connected people as alternatives.
+*(Wording amended 2026-08-25 by ADR 0006 §8.7: the option is exactly **"Whole company"** —
+the earlier draft's "(optional person)" suffix was dropped. The control is
+`aria-label="Address this deal to"`. It renders even when the company has **zero** connected
+people — never a dead control. **Option ORDER beyond the first is not stable between loads**;
+"Whole company" is always first.)*
 
 **AC2 — a company-addressed deal appears in the company conversation.**
 With "Whole company" still selected, Alice clicks Send. Alice opens her conversation
 with Canadian Craft. The thread body ends with a new clickable line reading
 **"&lt;Alice's full name&gt; has sent a deal"**, dated today.
-*(The exact string is `person.first_name || ' ' || person.last_name` of the sender,
-falling back to `Someone` — `send_deal:131-140`. Assert the constructed value, not a
-label read off a screenshot.)*
+*(The exact string is built at
+`20260825090000_send_deal_c2c_announce.sql:222-230` — **citation corrected 2026-08-25, T04;
+`send_deal:131-140` was the SUPERSEDED migration.** The shipped expression is
+`nullif(btrim(coalesce(first_name,'') || ' ' || coalesce(last_name,'')), '')`, falling back to
+`Someone`. ⚠️ **This is not the same as the `||` concatenation this PRD previously described:**
+for a person with a NULL last name the old formula yields `Someone`, the shipped code yields
+**the first name**. Assert the constructed value, not a label read off a screenshot.)*
 
 **AC3 — and nowhere else.**
 After AC2, Canadian Craft's Connection Requests page shows **no** new deal entry.
