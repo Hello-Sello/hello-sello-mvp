@@ -576,6 +576,70 @@ is not this slug's job, but nothing else is tracking it.
   is stated in the gate report rather than left implicit** ([[L-033]]). Plan §6 trap 1 rewritten
   to carry both reasons not to reset.
   ⏳ `test-writer` spawned at `/build` step 4 against rev 2.
+  ✅ **`test-writer` → 3 files.** New `e2e/deal-lands-in-c2c-chat.spec.ts` (AC 1/3/6, AC 2 implied) ·
+  `deal-c2c-create.spec.ts`'s `:141-191` premise reversed, not deleted (AC 4) · `two-company.ts`
+  4 docstrings + `countDealPillsOnThread`. It **flagged** one edit beyond the plan's literal
+  wording (a comment in the file's FIRST test repeating the same falsified `deliver_deal` claim)
+  rather than doing it silently — **accepted**, and `critic` independently agreed.
+  ✅ **GATE, exit codes captured from each command directly, never through a pipe** (the `tail`
+  trap — my first attempt returned EMPTY exit codes and had to be redone): **tsc 0 · eslint 0**.
+  ✅ **`test-runner` → SIX e2e specs GREEN**: `deal-lands-in-c2c-chat` 2/2 · `deal-c2c-create` 5/5 ·
+  **`inbox-accept` 2/2 (AC 5, run deliberately — incl. the `countThreadsForPair("c2c")===1` trap
+  assertion)** · `deal-change` 19/19 substantive + 5 pre-existing skips · `chat-phase7` 4/4 ·
+  `deal-p2p-send` 6/6. **ADR §4.3 rated the last three SAFE by READING; they are now RUN.**
+  🔴 **THE A/B — this ticket's entire justification, MEASURED not argued.** Controlled, both arms
+  on the same state ([[L-048]]), source verified byte-identical to committed after revert:
+
+  | arm | tsc | basket unit | AC 6 e2e |
+  |---|---|---|---|
+  | correct code | 0 | 41/41 across 9 files | **PASS** |
+  | `relationshipId={group.sellerCompanyId}` | **0** | **41/41 GREEN** | **FAIL** — `Expected "Alice Green", Received "Whole company"` |
+  | reverted (control) | 0 | — | **PASS** |
+
+  **`critic` N1's gap from T02 is now closed on EVIDENCE, not a ruling** — the same shape as
+  T02's AC 2. The middle row is the proof that the unit layer cannot see this class at all.
+  ✅ **`consistency` → CLEAN, ZERO BLOCKING.** All four judged items are correct reuse: the repo
+  has **two id conventions** split by *why* an id is stable (company/pricelist ids are seed
+  literals; the relationship id rotates) and the diff applied the right one to each ·
+  `countDealPillsOnThread` is a genuine sibling of `countConnectionEstablishedLines`, not a
+  duplicate · the local basket helper is right to stay local (**this is the FIRST e2e ever to
+  drive the real `BasketDrawer`**) · the lifecycle correctly merges its two nearest precedents.
+  ✅ **`critic` → 2 blocking + 9 notes, all verified true by me before folding ([[L-003]]).**
+  Fix round 1 → `blocking-findings 1/2`. It confirmed the empty-state assertions, the pill counts
+  and the `cardId`-on-reset capture all genuinely discriminate.
+  1. 🔴 **B1 — a FIFTH stale claim, and the plan counted four.** `two-company.ts:963-964` still
+     said Send "is the moment the StonePharm inbox ticket mints" — **twenty lines below the
+     docstring this ticket corrected to say the opposite.** Self-contradictory inside one function.
+  2. 🔴 **B2 — my §5's residual-cover claim was true of the RPC and FALSE of the browser.**
+     `claim_deal_ticket_test.sql` covers the RPC; the rollout the deleted e2e was the only thing
+     exercising has **nothing at any level** — `inbox.ts:265-300`, `InboxDetail.tsx:78`, and
+     `inbox.ts:201`'s `viewerIsReceiver` derivation. `src/modules/connect/` has exactly two unit
+     files, neither touching them. **Corrected in §5.**
+  3. 🔴 **N8 — §5 omitted the slug's HEADLINE SEAM.** Nothing end-to-end proves *buyer picks a
+     person → pill lands in the p2p thread*: AC 6 proves the options render, T01's M3 proves the
+     RPC routes, T02's G4 proved the DB field — **three halves that never meet.** §5 named the
+     *seller*-side call site and missed this. **The same omission shape as [[L-050]]/[[L-051]],
+     committed a third time in the document that cites them.** The COMPANY arm — the actual
+     defect this slug exists to fix — **is** proven end to end; it is the person arm that is not.
+  4. **N6 — a teardown failure leaks PERMANENTLY.** Deletes throw immediately, and
+     `uq_product_supplier_code_active` (`20260607090004:52-53`) then makes **every future run of
+     the spec fail in `beforeAll` with 23505** until a human deletes the row. `critic` confirmed a
+     *test* failure is safe (Playwright runs `afterAll`; `resetDealData()`-first avoids the 23503).
+  5. **N1-N4 — four more citation drifts**, incl. two of MINE (the L-044 misattribution the plan
+     carried first, and the diff breaking its own cross-file citation by rewriting the file it
+     cited). **Slug tally: fourteen.**
+  📌 **OFFER for G4, verified not assumed:** `e2e/present-basket.spec.ts` is **dead scaffolding** —
+  3 `test.fixme` cases, **0 live tests**, asserting `basket-panel`/`basket-line` test-ids while the
+  shipped `BasketDrawer.tsx` has **zero** `data-testid` attributes. Pre-existing, not opened here.
+  📌 **MACHINERY — `rtk` rewrote a PLAYWRIGHT invocation** and collapsed it to `PASS (2) FAIL (0)`.
+  CLAUDE.md records this trap for vitest only; **it hits Playwright too.** Real per-test output
+  needed `rtk proxy env PLAYWRIGHT_FORCE_ASYNC_LOADER=1 npx playwright test`.
+  📌 **`deal-change.spec.ts` has a load-correlated flake** in the shared `openTwoContexts`/`loginAs`
+  fixture — a `beforeEach` timeout hitting 4 of 5 attempts at a **different test position each
+  run**, every affected test passing in isolation. **Distinct from the known `sb_secret_`
+  baseline**, not T03's diff (that path is untouched). All 19 confirmed by targeted re-runs rather
+  than written off. Test-infra debt.
+  ⏳ Fix round 1 sent back to `test-writer` (6 corrections); plan §5 corrected by me.
 
 ## Gate log
 - **T02 / HEL-64 — G4 PASSED 2026-08-25 (HUMAN).** Muskan ruled **pass, with T04 amending the AC
