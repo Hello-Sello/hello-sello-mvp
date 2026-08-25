@@ -57,6 +57,28 @@ prd: docs/PRD/0023-deal-draft-lands-in-chat.md (APPROVED at G1, 2026-08-25)
 
 # ADR 0006 — A company-addressed deal is announced in the company's chat, by the same code that already announces a person-addressed one
 
+> ### ⚠️ How to read the line numbers in this ADR — added 2026-08-25 (T04 / HEL-66)
+>
+> **An ADR is a decision record, not a maintained index.** Two kinds of citation live here and
+> they are maintained differently — on purpose:
+>
+> - **Design-time citations** (§2, §3's Reused fence, §6, §8) are **frozen at rev 3, 2026-08-25**.
+>   They record what the code looked like *when the decision was made*, and re-pointing them every
+>   time the code moves would falsify that record. **This slug's own T01 and T02 diffs have already
+>   moved about ten of them** — e.g. `RecipientPicker.tsx:56`'s option string no longer exists in
+>   that file, `:48` is now a different element, and "Create a draft deal" moved `:345` → `:373`.
+>   **Expect drift here and read these as historical.**
+> - **§4.1 and the J-invariants are NOT design-time.** They assert what the system does *now*, and
+>   a reader acts on them. **They are maintained**, and were corrected in T04 — `msg_all`
+>   `:288-290` → **`:300-302`** (three sites), the `card_relationship_member` deal-child policies
+>   `:300-311` → **`:312-322`**, and `can_access_workspace` `:105-113` → **`:117-125`** (`:105-113`
+>   was `is_workspace_member` — a *different* function, and the one this ADR's own argument depends
+>   on the `OR` branch bypassing).
+>
+> Anything in the first bucket that becomes **false in substance** — not merely drifted — is
+> corrected regardless; one such case is marked inline in §7.
+
+
 ## 0 · In plain English — read this first
 
 **What is wrong today — stated precisely, because the obvious version is wrong.** A
@@ -222,7 +244,7 @@ diff beyond the company arm. ⚠️ G3, §8.11.)*
 **Two details the body must not miss:** the c2c lookup filters `deleted_at is null` (the
 unique index is partial, and `resolveC2cThread` filters it at `store.ts:363`); and the
 in-repo precedent for the whole idiom is
-`20260823090000_connection_consent_and_verification_lockdown.sql:162-183`, which already
+`20260823090000_connection_consent_and_verification_lockdown.sql:159-184`, which already
 does `INSERT … ON CONFLICT DO NOTHING RETURNING` + re-select-on-null — copy it, comment
 included, rather than inventing a second spelling.
 
@@ -303,8 +325,8 @@ slug and **must not be edited**.
 | The Sella detection trigger | `20260612130000:41-49` | **cannot fire** on the new insert: requires `type='message'` (ours is `deal_card`) *and* a p2p thread (ours is c2c). Doubly safe |
 | `pending_inbox_item` | base table | **not written to** by the deal path any more. Row shape, RLS and every other type untouched |
 | The inbox "Deal tickets" lens | `/connect/inbox` | goes permanently empty for buyer-sent deals. **In scope and intended** (FR5/AC3); the page and its other three types stay |
-| `chat_message` RLS | `20260607170000:288-290` | unchanged — the definer insert does not depend on it, and no policy is widened |
-| Recipient-side `deal_member` | `claim_deal_ticket:62-68` | **nobody on the receiving side becomes a `deal_member` any more** — claiming was the only path for company-addressed deals. **Checked, and benign:** `deal_line_item` / `deal_card_log` / `deal_change_input` gate on `card_relationship_member` (`20260607170000:300-311`), `deal_workspace` is born `company_wide` so `can_access_workspace` (`:105-113`) passes, and `sign_deal` gates on relationship membership only (`20260724120500:73-82`). Recorded so it is not re-derived |
+| `chat_message` RLS | `20260607170000:300-302` | unchanged — the definer insert does not depend on it, and no policy is widened |
+| Recipient-side `deal_member` | `claim_deal_ticket:62-68` | **nobody on the receiving side becomes a `deal_member` any more** — claiming was the only path for company-addressed deals. **Checked, and benign:** `deal_line_item` / `deal_card_log` / `deal_change_input` gate on `card_relationship_member` (`20260607170000:312-322`), `deal_workspace` is born `company_wide` so `can_access_workspace` (`:117-125`) passes — ⚠️ earlier revisions cited `:105-113`, which is **`is_workspace_member`**, the function this argument depends on the `OR` branch BYPASSING (`:123`), and `sign_deal` gates on relationship membership only (`20260724120500:73-82`). Recorded so it is not re-derived |
 
 ### 4.2 Base tables this work did not write
 
@@ -408,14 +430,24 @@ the negative space is the standing rule, not an extra.
 - **J1 — the pill's *thread* is decided server-side, never by the client.** A future
   convenience that resolves a thread in TypeScript and posts the pill re-creates
   approach B and silently voids FR7. RLS permits such an insert
-  (`20260607170000:288-290`); only this design forbids it.
-  **What this does NOT buy, stated so it is not over-claimed:** `msg_all` is
-  `FOR ALL TO authenticated` with no `type` predicate, so any thread member can already
-  insert a `type='deal_card'` row carrying an arbitrary `metadata.deal_card_id`, and
-  `MessageBubble.tsx:43-45` will open whatever id it carries. The PRD's constraint (a
-  client cannot place a signal in a conversation it could not otherwise reach) holds.
-  *"Every pill points at a real deal on this relationship"* does **not** hold, and
-  nothing in this slug makes it so.
+  (`20260607170000:300-302`); only this design forbids it.
+  **What this does NOT buy, stated so it is not over-claimed — TWO halves, not one
+  (amended 2026-08-25, T04; the second half was disclosed by `security` B1 at T01's G4 and
+  was missing here):** `msg_all` is `FOR ALL TO authenticated` with **neither a `type`
+  predicate nor a sender predicate**, so any thread member can already
+  1. insert a `type='deal_card'` row carrying an **arbitrary `metadata.deal_card_id`** — the
+     id is read at `MessageBubble.tsx:43` and opened at `:46-53`, whatever it points at; and
+  2. 🔴 **forge the SENDER.** `sender_person_id` is unconstrained on INSERT, so a member can
+     post a pill attributed to **another person**, with a body reading *"&lt;victim&gt; has sent a
+     deal"*. **This slug moved the deal signal onto that policy**: before T01 the company arm
+     wrote `pending_inbox_item`, which `20260823090000:306-309` had identity-hardened
+     (`sender_person_id = auth.uid()`) one slug earlier. **The signal migrated onto a weaker
+     policy; no policy was widened.** Tracked as **HEL-67** (widened Medium→High).
+
+  The PRD's constraint (a client cannot place a signal in a conversation it could not
+  otherwise reach) holds. *"Every pill points at a real deal on this relationship"* and
+  *"every pill was sent by the person it names"* do **not** hold, and nothing in this slug
+  makes them so.
 - **J2 — the two arms must stay one expression.** If a later change gives the company
   pill different wording, the arms fork and "the same signal in both places" stops being
   true without any test failing.
@@ -503,7 +535,7 @@ none of STATE.md's. It is safe (§4.3), but it was found, not known.
 **7.4 — "Sella's door has no traffic" is a choice, not a proof — and the difference
 matters twice.** Rev 1 cited `20260614121000:12` as evidence that `deal_detected`
 messages are service-role-writable only. **That line is a code comment.** The governing
-policy is `msg_all` (`20260607170000:288-290`): `FOR ALL TO authenticated`,
+policy is `msg_all` (`20260607170000:300-302`): `FOR ALL TO authenticated`,
 `USING/WITH CHECK can_access_thread(thread_id)` — **no `type` predicate** — and no
 migration REVOKEs or narrows `chat_message` for `authenticated`. So an authenticated
 member of a p2p thread **can** insert a `deal_detected` row today.
@@ -547,9 +579,12 @@ company deals. After this change the company arm naturally has a c2c thread id t
 return. **Recommended: return it.** It costs nothing, it is honest, and it makes the
 two arms symmetric. **Explicitly NOT recommended: wiring navigation to it.** The only
 caller discards the value (`DecisionBar.tsx:161`) and "land the sender in the
-conversation after Send" is not in the PRD. Flagged because the action's own docstring
-(`actions.ts:364`) already *claims* the host navigates, and no host does — a stale
-comment that will read as a bug to the next person.
+conversation after Send" is not in the PRD. ~~Flagged because the action's own docstring (`actions.ts:364`) already *claims* the host
+navigates, and no host does — a stale comment that will read as a bug to the next person.~~
+**CORRECTED 2026-08-25 (T04): no longer true. T01 rewrote that docstring**; it now reads
+*"No caller navigates on it today - `DecisionBar.tsx:161` discards it - so treat it as
+diagnostic, not as a routing contract"* (`actions.ts:365-367`). The recommendation stands;
+the stale-comment rationale for it is discharged.
 
 > ✅ RULED yes — Muskan, 2026-08-25. T04 owns it.
 
@@ -620,7 +655,7 @@ genuinely *removes* a mechanism is to move the c2c insert **into
 `accept_connection_request`** and delete the browser insert — making "an accepted
 relationship has a c2c thread" a real invariant, which `resolveC2cThread` (`store.ts:368-370`)
 and `ChatView.tsx:101` already assume today. The RPC already uses the exact idiom
-(`20260823090000:162-183`).
+(`20260823090000:159-184`).
 
 **Not folded in, deliberately: it is a different slug.** It touches the accept path, which
 this slug was not asked to open, and §8.9(a) makes it unnecessary for *this* capability.
