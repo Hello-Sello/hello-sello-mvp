@@ -23,13 +23,26 @@
 
 ---
 
-## ⚠️ PENDING (2026-08-24, Muskan) — HEL-69 price-view single owner (ONE migration)
+## ⚠️ PENDING (2026-08-24, updated 2026-08-25) — THREE migrations, plain `db push`, **no `--include-all`**
 
-**Status: LOCAL ONLY. Production still carries the leak.**
+**Status: LOCAL ONLY. Production still carries the price leak.**
+
+> 🔴 **THIS ENTRY SAID "ONE MIGRATION" AND THE BATCH WAS ALREADY TWO.** Corrected 2026-08-25 by the
+> `security_tickets` session while ledgering HEL-70. `20260825090000` (slug 0023 T01 / HEL-63) has
+> been on `claude/muskan/work` since 2026-08-25 and **was never ledgered** — it appeared in this
+> file only as a passing mention inside HEL-69's push paragraph. That is the `20260607090000`
+> failure mode repeating: a migration nobody entered, found later by someone reading the push line
+> rather than the table. A plain `db push` would have carried it silently either way; the risk is
+> not that it fails to ship, it is that **nobody reviewed what shipped.**
+>
+> **Row 1's "what it does" is written from its filename and header only** — this session did not
+> author it and is not summarising work it did not do. Its author owes the real entry.
 
 | # | file | what it does |
 |---|---|---|
-| 1 | `20260825100000_pricelist_view_single_owner.sql` | `current_pricelist_item` stops reprinting the product-price-visibility rule and calls `public.product_price_visible_to_caller()` — the function that already gates `pricelist_item_public_select` and `plit_public_select`. Also revokes `INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES` that `authenticated` held on the view although the defining migration grants SELECT only. |
+| 1 | `20260825090000_send_deal_c2c_announce.sql` | **⚠️ ENTRY OWED BY ITS AUTHOR (session 88, T01 / HEL-63).** `send_deal`'s company arm announces the deal in the c2c chat thread instead of cutting an inbox ticket. `create or replace` — see the pre-flight diff below. |
+| 2 | `20260825100000_pricelist_view_single_owner.sql` | `current_pricelist_item` stops reprinting the product-price-visibility rule and calls `public.product_price_visible_to_caller()` — the function that already gates `pricelist_item_public_select` and `plit_public_select`. Also revokes `INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES` that `authenticated` held on the view although the defining migration grants SELECT only. |
+| 3 | `20260825110000_deactivated_company_gate.sql` | **HEL-70.** `company.deactivated_at` starts closing every discovery door. One predicate added to five functions: `product_visible_to_caller` (six doors inherit it), `list_discoverable_companies`, `get_discoverable_company`, `get_discoverable_shop`, `list_discoverable_people`. `create or replace` throughout, grants re-emitted. |
 
 **The leak it closes, measured on production 2026-08-24.** The view's hand-written public arm was
 missing three terms `product_visible_to_caller()` carries: the seller company's `deleted_at` and
@@ -48,9 +61,68 @@ unverified. Two named production rows go dark for buyers:
 (`pricelist_view_single_owner_test.sql` §B), including the unfiled one — unfiled is withheld from
 buyers and kept for the owner so the Unassigned pile stays fileable.
 
-**Push:** plain `supabase db push --linked` — **no `--include-all`**. `20260825100000` sorts after
-cloud's tip `20260824100000` and after slug 0023's `20260825090000`. The two are independent; either
-order is fine.
+**Push: THREE migrations, ONE plain `supabase db push --linked`, `--include-all` NOT needed and NOT
+to be passed.** All three filenames sort after cloud's tip `20260824100000`, in this order:
+`20260825090000` → `20260825100000` → `20260825110000`. Nothing is back-dated, so a plain push
+takes the lot.
+
+⚠️ **THE ORDER IS LOAD-BEARING BETWEEN ROWS 2 AND 3, and this was measured, not reasoned.** HEL-70
+(row 3) claims one edit to `product_visible_to_caller()` closes six doors including the price view.
+**That is only true once row 2 has landed.** Proven on the local stack 2026-08-25: with row 2
+absent, HEL-70's suite failed at cell `B6/price` — a deactivated seller still handed a connected
+buyer a per-gram price, because the pre-HEL-69 `current_pricelist_item` reprints the rule instead of
+delegating to `product_price_visible_to_caller()`. Applying row 2 turned the same cell green with no
+other change. Filename order already guarantees this; **do not reorder them by hand.**
+
+⚠️ **PRE-FLIGHT, owed and not previously in this file (handed over by the `deal_land_t02` session).**
+Row 1 is a `create or replace`, so if production's `send_deal` body ever drifted from the repo it
+gets **silently overwritten** by this push. Diff it first and keep the output:
+
+```sql
+-- run against PRODUCTION, before pushing
+select pg_get_functiondef('public.send_deal(uuid)'::regprocedure);
+```
+
+This repo has been bitten by exactly this shape before — `ensure_rls` lived on production and in no
+migration until `20260817130000` captured it.
+
+**Who loses reads when ROW 3 lands — by design, this IS the fix.** Nothing changes today:
+**0 of 21 live production companies are deactivated** (measured 2026-08-25). The moment a Superadmin
+pauses a company, that company stops listing in Discover, its page stops opening on a direct link,
+its shop and prices close, its people leave the People directory, and a buyer holding its products
+in a basket **loses those lines with no warning** — a cost recorded and accepted in
+`DECISIONS.md` 2026-08-25.
+
+**Its own members lose nothing.** `/present` reads `getMyShop()` through plain RLS, and the owner arm
+of `product_visible_to_caller` never consults the `company` row, so it is unreachable from this
+change by construction — asserted anyway in §C of the suite. The one thing a paused company's member
+does lose is the **buyer preview** at `/discover/<own id>`, because `get_discoverable_company` and
+`get_discoverable_shop` have no owner arm on the company side. That is the shop, and the rule says
+the shop is closed.
+
+**What row 3 does NOT deliver.** The ruling's table says *new connections blocked*. These five edits
+cannot do that: a connect request is a direct client `INSERT` into `pending_inbox_item` governed by
+`inbox_insert`, which constrains only the **sender**. Hiding the company removes the button, not the
+door. Filed as its own ticket — do not read this batch as having closed it.
+
+**Post-flight for ROW 3 — should return 0 rows, and returns 0 today for a second reason.**
+
+```sql
+-- any deactivated company still reachable through a discovery door
+select c.id, c.name, c.deactivated_at
+  from company c
+ where c.deactivated_at is not null
+   and c.deleted_at is null
+   and c.verification_status = 'verified';
+```
+
+⚠️ **That query returns 0 rows on today's production whether or not row 3 shipped**, because nothing
+is deactivated yet — so it is NOT evidence the gate works. The evidence is
+`supabase/tests/deactivated_company_gate_test.sql` (26 cells: 7 controls, 7 gate, 3 owner, 7 round
+trip, 2 source-agreement), which was proven **red before green** and whose five gate cells were shown
+to discriminate 1:1 — reverting any single door made exactly that door's cell fire and no other.
+
+---
 
 **Post-flight — re-run the two queries that found it. Both must return 0 rows:**
 
