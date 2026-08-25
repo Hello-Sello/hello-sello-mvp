@@ -532,3 +532,47 @@ migration that re-grants, re-creates or re-declares something is not.
 
 **Surfaced by:** slug 0022, T08 (2026-08-23) and its `/ship` (2026-08-24).
 `docs/agents/LEARNINGS.md` L-034.
+
+## Moving a signal to a new table moves it onto that table's integrity (2026-08-25)
+
+**The shape.** A feature changes *where* a signal is written — from one table to another, or from a
+table to a queue, a log, a message. The row's **contents** are reviewed carefully. Nobody reviews
+what the destination **guarantees about who may write it**, because no policy was edited and the
+diff shows no RLS change.
+
+**The instance.** Slug 0023 moved the company-addressed deal signal off `pending_inbox_item` and
+onto `chat_message`:
+
+| | policy | identity guard |
+|---|---|---|
+| `pending_inbox_item` — signal **removed** | `inbox_insert` (`20260823090000:306-309`) | ✅ `sender_company_id = current_company_id() AND sender_person_id = auth.uid()` |
+| `chat_message` — signal **added** | `msg_all` (`20260607170000:300-302`) | ❌ `can_access_thread(thread_id)` — nothing else |
+
+`pending_inbox_item` had been hardened **one slug earlier**, and that migration's own header states
+the intent: *"a request may no longer be attributed to someone who never asked."* Slug 0023 then
+routed the deal signal onto a table where that sentence is not true — **without editing a single
+policy.**
+
+**Why review misses it.** The ADR recorded, accurately, that `chat_message` RLS was *"unchanged —
+no policy is widened."* Both halves are true. **And it is the wrong question.** The policy did not
+widen; **the signal migrated onto a weaker policy.** A diff-shaped review asks *what did this change
+loosen?* and correctly answers *nothing*. The right question is *what did the thing I moved used to
+be protected by, and what protects it now?* — which no diff can ask, because the old protection is
+not in the diff either.
+
+**The tell.** A change description containing *"we now write X to Y instead of Z"*, alongside a
+review line reading *"no RLS/permissions change."* Those two sentences together are the signature.
+
+**The check, and it is cheap.** For every table a change stops writing to and starts writing to,
+put the two `WITH CHECK` clauses and the two grant sets **side by side** and diff them by hand.
+Ask specifically: **who could forge this row before, and who can forge it now?** Not *did a policy
+change* — the whole point is that none did.
+
+**Related and distinct.** **L-027** (*a permission gate is only as strong as the write path to its
+input*) is about a gate reading a forgeable value. This is the mirror image: **a value that was not
+forgeable becomes forgeable by being relocated**, and the gate never moved at all. **L-036** (*RLS
+filters rows, not columns*) is a third member of the family — each is a case where a protection is
+assumed to travel with the data and does not.
+
+**Surfaced by:** slug 0023 T01 / HEL-63, `security` finding B1, 2026-08-25. Filed as **HEL-67**
+(widened) and **HEL-74**. Ruling recorded in `DECISIONS.md` 2026-08-25.

@@ -1723,3 +1723,41 @@ order. This is a decision about team size and stage, not about what good enginee
 **Parked, with reasons (so they are not re-found as oversights):** T11 and T14 are not
 reachable through PostgREST · T17 needs a product answer about what deactivation means
 · T16 and DEV-159 bite only on demo data.
+
+## 2026-08-25 — A slug that promised no RLS change does not get to make one, even when a review finds a real gap
+
+**Decided:** slug 0023's `security` review raised a genuine finding — the company-addressed deal
+signal moves off `pending_inbox_item` (identity-hardened one slug earlier) onto `chat_message`,
+whose `msg_all` policy has **no sender predicate**, so a thread member can post a pill attributed
+to someone else. **The fix was NOT taken into the slug.** Both findings were filed instead:
+**HEL-67 widened** (it already covered the same policy missing a `type` predicate — two missing
+guards on one statement, so one ticket) and **HEL-74** (`send_deal` never checks the relationship
+is still live).
+
+**Why.** ADR 0006 §4.2 commits slug 0023 to *no schema, no RLS, no grant change*. **That
+constraint is not paperwork — it is what makes the migration safe to deploy on its own**, with a
+plain `db push` and no coupled batch. Widening scope to fix an RLS policy would have:
+- turned a one-function `create or replace` into a policy change on a `FOR ALL` policy, which hits
+  SELECT as well as INSERT and needs a reader census first (**L-037**);
+- coupled a deployable slug to a security fix with its own design questions — `sender_person_id` is
+  **nullable** for system messages, so the obvious predicate breaks every `connection_established`
+  writer;
+- and done it under end-of-build momentum, which is the condition the checker-loop record already
+  warns about.
+
+**The general rule:** a scope fence is a deployment guarantee, not an aspiration. When a review
+finds something the fence excludes, **the finding is filed and the fence holds.** Overriding it is
+a decision to be taken deliberately and in daylight, not absorbed into the ticket that found it.
+
+**The distinction that made this easy to rule.** Neither finding was a hole the slug **opened**.
+`msg_all` has never had a sender predicate; the relationship path produced an inbox ticket before
+rather than a chat message. **What changed is that the deal signal now rides on guards that were
+never there.** A slug that inherits a weakness is in a different position from one that creates
+it — the first files, the second fixes before shipping.
+
+**Cost accepted, explicitly:** deal-arrival messages are forgeable until HEL-67 lands. Low today
+(one user per company; a forged pill points at a card everyone in that thread can already read —
+`security` confirmed it confers **no new read rights**, only discoverability). **Rises with team
+size**, which is exactly when "who sent this" starts to matter.
+
+**Surfaced by:** slug 0023 T01 / HEL-63, `/build` G4, 2026-08-25.
