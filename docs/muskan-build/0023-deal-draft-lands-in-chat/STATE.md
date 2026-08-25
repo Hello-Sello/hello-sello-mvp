@@ -277,7 +277,62 @@ is not this slug's job, but nothing else is tracking it.
   ✅ Sync lock on the five basket component files taken + pushed alone.
   ⚠️ **`docs/decisions/DECISIONS.md` is DIRTY in the working tree and is NOT this session's** — two
   uncommitted entries from session 89. Untouched; every commit this ticket makes names its paths.
-  ⏳ **`plan-checker` running.**
+  ✅ **`plan-checker` → REVISE: 4 blocking + 9 notes. ALL THIRTEEN VERIFIED TRUE against the real
+  files before folding (L-003), all thirteen accepted, none argued down.** Plan is at **rev 2**.
+  Its verdict on my §0 citation table: *"every line-number citation was re-opened — all of them
+  hold."* **The defects were in what the tests PROVE, not in the code reading** — the same shape as
+  T01's round.
+  1. **B1 — `): JSX.Element` does not compile in this repo.** `@types/react` v19 declares `JSX`
+     **inside** `namespace React`; there is no global fallback and `src/` has **zero** existing
+     uses. Verified by grep. Rev 1's signature sketch would have died at `tsc`.
+  2. 🔴 **B2 — AC 2 / M7 was handed to two owners and NEITHER can reach it.** Rev 1 wrote
+     *"already declared e2e by the ticket"*. **False.** T03's five ACs (`TICKETS.md:116-126`) contain
+     **no criterion about a person-less company**, and the local seed has no such fixture —
+     GreenLeaf has Alice **+ Carla**, StonePharm has Bob, and G4's walk is locked to exactly those
+     two. So the ticket's headline invariant — *"it is never a dead control"* (`PRD:130`) — was
+     declared uncovered, deferred, **and landed nowhere.** Now an explicit **G4 ruling for Muskan**:
+     add a T03 AC + a seed fixture, or close AC 2 on C1 + C7. **Not decided unilaterally.**
+  3. 🔴 **B3 — THE SHARP ONE. The half of that gap that IS unit-reachable was declared
+     unreachable.** `ConnectedCompany` carries **both** `companyId` and `relationshipId`
+     (`connections.ts:145-146`); both are `string`, both compile, and **an implementation keyed on
+     the wrong one renders identically green in every render test** while shipping a control whose
+     people list is empty forever — precisely the state M7 forbids, surfacing only at G4. The
+     mapping is **pure** — no fetch, no DOM, no effect. → `peopleForRelationship()` extracted and
+     given **C7 with a decoy fixture** (company A's `companyId` IS the target `relationshipId`), so
+     the wrong key goes RED.
+  4. **B4 — rev 1's claimed placement proof does not test placement.** I wrote that the
+     stranger-group case *"is the case a mirrored `:311-315` placement would fail."* Enumerated over
+     the three fixtures, the `counterpartyRelationshipId` guard is null for BOTH null-relationship
+     cases, so **the two placements emit byte-identical markup in all three.** C5 restated as a
+     **guard** proof; **AC 4's placement moved to the G4 visual sheet**, where a human sees it.
+  ✅ **Two findings verified by MEASUREMENT, not reading.** (a) B1 by grep (0 hits in `src/`).
+  (b) **N4 by a scratchpad probe**: `renderToStaticMarkup` emits
+  `<option value="" selected="">` **only when the select is controlled**; uncontrolled emits **no
+  `selected` attribute at all.** That inverts the reasoning — "controlled" is not just a stale-DOM
+  fix, **it is the only thing that makes J6's explicit-default assertion writable.** Recorded in the
+  plan so a later *"simplify to `key={relationshipId}`"* cannot silently gut C1.
+  ✅ **Folded, each verified:** N1 (AC 5's re-reading is sound but is **Muskan's to rule** — §8.7 set
+  that precedent this slug; on the G4 sheet) · N2 (**rev 1's argument against the prop alternative
+  was self-defeating** — the accepted design costs **1 + N** fetches, not 2; the real reason to
+  extract is the synchronous render) · N3 (the reset's contract: **the caller owns its own copy**;
+  both callers verified to reset) · N5 (rev 1's C3 asserted nothing C1 did not — **deleted**) ·
+  N6 (C6's stated reason was wrong — the gate is `RecipientPicker.tsx:26-28`'s **early return**, not
+  `chosen`; and the assertion is an **env artifact that must flip the day jsdom lands**) ·
+  N7 (**`security` is off the routing list for the wrong reason** — the value is now
+  **buyer-supplied**, which normally *triggers* a look; what closes it is
+  `create_deal_draft:88-100`'s server-side re-validation, verified by opening it) ·
+  N9 (the baseline **must become 68 files**; a run still saying 67 means the new file did not
+  execute and 490/490 would be green for the wrong reason).
+  🔴 **N8 — a NEW defect neither the ticket nor the ADR knew about, and it is L-038's class.** The
+  basket read filters relationships on `deleted_at` only (`basket/supabase/reads.ts:101-104`);
+  `getMyConnections` **additionally requires `status = 'active'`** (`connections.ts:119`). On a
+  `suspended`/`ended` relationship the group still carries a non-null `relationshipId`,
+  `needsConnection` is false, the control renders — **and the lookup never matches, so the people
+  list is empty forever, indistinguishable from the legitimate M7 case.** Not reachable in the seed,
+  so **no test and no walk in this slug will show it.** Named in the plan's accepted-cost section; a
+  ticket is **offered on the G4 sheet, not filed unilaterally.**
+  ⏳ **NEXT: `test-writer` running** (C1, C2, C7 new file; C4, C5, C6 extended). **RED verification
+  is MINE, not the agent's** (L-023).
 
 ## Gate log
 - triage — FULL, 2026-08-25 (narrowed from F-04, then widened to include the picker)
