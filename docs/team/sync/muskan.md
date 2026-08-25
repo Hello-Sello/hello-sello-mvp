@@ -7,7 +7,15 @@
 
 **Last updated:** 2026-08-25 — session 91 `deal_land_t03` — 🏁 **SLUG 0023 IS BUILD-COMPLETE.**
 **T01 · T02 · T03 · T04 ALL CLOSED.** Next = **`/ship 0023`**.
-**Status:** offline (session closed). **Shared files locked: none — all released** (`DECISIONS.md`, `CONTEXT.md`,
+**Status:** offline (session closed).
+
+⚠️ **TWO UNTRACKED FILES IN THE TREE THAT ARE NOT MINE — deliberately left alone (L-040).**
+`supabase/tests/deal_line_item_write_lockdown_test.sql` + `run_deal_line_item_write_lockdown_test.sh`.
+Their header says **DEV-159** (the buyer forges allocation state via a direct `deal_line_item`
+write). **Session 92 did not create them, did not run them, and did not commit them.** They appeared
+in the working tree during the session. **Whoever owns DEV-159 should claim them** — and nobody
+should `git add -A` past them, which is exactly how session 84 committed another session's work
+under its own ticket messages. **Shared files locked: none — all released** (`DECISIONS.md`, `CONTEXT.md`,
 `e2e/fixtures/two-company.ts` all unlocked).
 
 ⚠️ **`/ship` MUST diff `pg_get_functiondef('public.send_deal(uuid)')` against PRODUCTION first** —
