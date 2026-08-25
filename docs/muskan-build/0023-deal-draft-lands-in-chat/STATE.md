@@ -1,6 +1,6 @@
 # 0023 deal-draft-lands-in-chat — work order
 lane:   FULL
-stage:  design ✅  →  build: **T01 ✅ CLOSED** → **T02 / HEL-64 — 🛑 AWAITING G4 (human)** (session 90 `deal_land_t02`)   ·   G2 /prototype SKIPPED (Muskan, 2026-08-25)
+stage:  design ✅  →  build: **T01 ✅ CLOSED** → **T02 / HEL-64 ✅ CLOSED** → **build (next: T03 / HEL-65 · T04 / HEL-66)**   ·   G2 /prototype SKIPPED (Muskan, 2026-08-25)
 branch: claude/muskan/work — no feature branch (Muskan's call, 2026-08-18)
 
 ## Seed
@@ -482,6 +482,13 @@ is not this slug's job, but nothing else is tracking it.
   and whether the four pre-existing defects (N4/N5/N6/**N8**) become tickets.
 
 ## Gate log
+- **T02 / HEL-64 — G4 PASSED 2026-08-25 (HUMAN).** Muskan ruled **pass, with T04 amending the AC
+  wording.** Budgets spent: `tests 0/2` · `blocking-findings 1/2` · `G4 rounds 1`.
+  Five of six ACs walked green; **AC 2 walked live after `plan-checker` found it had no owner**.
+  **The four pre-existing side-findings were OFFERED AND NOT FILED** — Muskan declined the
+  file-them option. They are named in `REVIEW.md`'s G4 sheet (N4 unguarded fetch · N5 no re-report
+  on "Select a customer…" · N6 the initialiser · **N8 the suspended-relationship empty list, the
+  L-038-class one**) and stay unfiled deliberately, not by oversight.
 - triage — FULL, 2026-08-25 (narrowed from F-04, then widened to include the picker)
 - **G1 — PASSED 2026-08-25**, approved unamended. Eight acceptance criteria; with G2
   skipped they are the ONLY thing G4 compares against.
@@ -614,7 +621,15 @@ All nine ACs replayed green on real data; full replay table in `REVIEW.md`.
 sender predicate; the relationship path produced an inbox ticket before rather than a chat message.
 **What changed is that the deal signal now rides on guards that were never there.**
 
-### ⚠️ T04 / HEL-66 gains a fourth edit — NOT optional
+### ⚠️ T04 / HEL-66 gains a FIFTH edit — ruled by Muskan at T02's G4, 2026-08-25
+
+**AC 5's wording.** The ticket says the picked person replaces *"the hardcoded null at
+`BasketDrawer.tsx:215`"*. The literal **stays** (now `:216`) — it is the effective "Whole company"
+default and what keeps Create enabled; deleting it ships a dead Create button on every buyer group.
+**The code is right and the criterion's wording is stale.** Muskan ruled **pass, T04 amends the
+AC** — so this is now a required doc edit, not a note.
+
+### ⚠️ T04 / HEL-66's fourth edit — NOT optional
 
 ADR **J1** discloses only the arbitrary-`deal_card_id` half of B1 and **says nothing about sender
 attribution**. It must be amended to name it. *(Also written into HEL-67 so it survives if T04

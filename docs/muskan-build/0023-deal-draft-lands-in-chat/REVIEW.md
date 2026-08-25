@@ -542,3 +542,16 @@ diff; all four were left untouched deliberately.
 **AC 3** (the transition), **the call-site wiring** (ruling 2), and **T03's e2e** — the interaction
 path, the c2c counting helpers, and `inbox-accept.spec.ts`. Stated in these words because PLAN §5
 already got this wrong once by handing AC 2 to a ticket that had no criterion for it.
+
+## ✅ T02 / HEL-64 IS CLOSED — G4 PASSED 2026-08-25 (HUMAN)
+
+**Muskan's ruling: pass, with T04 amending AC 5's wording.** The code is right; the criterion's
+wording is stale. That amendment is now **T04's fifth required doc edit**, not a note.
+
+**The four pre-existing side-findings were OFFERED AND DECLINED** — the "file them too" option was
+on the table and not taken. **N4** (unguarded fetch → a connected seller told *"Connect with a
+company first"*) · **N5** (no re-report on *"Select a customer…"*) · **N6** (the initialiser) ·
+**N8** (the suspended-relationship empty list, indistinguishable from the legitimate AC 2 case —
+the L-038-class one). **They stay unfiled deliberately and are recorded here so that stays visible.**
+
+Budgets spent: `tests 0/2` · `blocking-findings 1/2` · `G4 rounds 1`.
