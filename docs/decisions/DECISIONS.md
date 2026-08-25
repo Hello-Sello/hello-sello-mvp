@@ -1976,3 +1976,35 @@ this ticket has no standing to make.
 
 **Surfaced by:** HEL-81, 2026-08-25; independently confirmed by two review rounds (`critic` +
 `security`, each run twice).
+
+---
+
+## 2026-08-25 — the Product Basket's addressee picker sends immediately; the drawer no longer opens the deal card first
+
+**Supersedes the "drawer never sends" framing** carried in `basket/actions.ts`'s source comments
+(the `basket/actions.ts` row of `ARCHITECTURE-NOTES.md`'s 2026-08-25 "`D-12` means four things"
+entry — that addendum has the full detail; this is the decision record). Found live during
+`/ship 0023`'s G5 walk (Muskan): picking a recipient in the basket, then "Create a draft deal",
+navigated into the newly-opened deal card with a separate "Send deal" click still required — the
+picker gave no visible confirmation the deal had gone anywhere, and the card auto-opening read as
+an extra, unwanted step for what the picker already fully specified.
+
+**Ruling:** `createBasketDraft` (the one seam onto the deals domain from both basket doors — the
+buyer's connected-seller group via `CounterpartyPersonSelect`, and the seller's own-company group
+via `RecipientPicker`) now calls `sendDeal` immediately after `createDeal`, in the same server
+action. `BasketDrawer.tsx` no longer navigates into `dealChatUrl`; the basket just closes. The
+button is relabelled "Send deal" (was "Create a draft deal") to match.
+
+**What did NOT change:** `send_deal` is still the only place delivery happens — the flip to
+`negotiation`, the counterparty co-owner insert, and the chat announcement, all in one transaction,
+routed to the p2p thread for a person or the c2c thread for the whole company. Nothing about that
+routing moved; HEL-63/HEL-64/HEL-65's own G4 walks of it stand. What moved is *when* `sendDeal` is
+called for this one door — immediately, not from a later separate human click in the deal card. The
+OTHER creation door (the chat's own "Start a deal" button, `deal-c2c-create.spec.ts` /
+`deal-p2p-send.spec.ts`) is unaffected: birth and send stay two separate steps there.
+
+**Also closed while here — HEL-76's gap.** No e2e test had ever driven the basket's own picker into
+an actual send; `send_deal`'s p2p-vs-c2c routing was proven only through the other creation door.
+Added: `deal-lands-in-c2c-chat.spec.ts`'s "a PERSON-addressed deal (picked in the basket)..." test,
+which is what actually caught nothing was broken in `send_deal` itself — the routing was always
+correct; the missing piece was the confirmation step.

@@ -235,24 +235,18 @@ test('a company-addressed deal lands as a pill in the seller\'s c2c chat, opens 
     const basket = await addFixtureAndOpenBasket(bobPage)
 
     // the addressee is left at its default, "Whole company" (T02 AC1) — this
-    // walk never touches the select.
-    await basket.getByRole('button', { name: /^create a draft deal$/i }).click()
+    // walk never touches the select. createBasketDraft now births AND sends
+    // in one action (supersedes D-12's "drawer never sends" for this door,
+    // 2026-08-25, found during /ship 0023's G5) — no deal panel opens; the
+    // basket closing is the completion signal (BasketDrawer.tsx onDrafted).
+    await basket.getByRole('button', { name: /^send deal$/i }).click()
+    await expect(basket).toBeHidden({ timeout: 15000 })
 
-    // the born card panel — the DecisionBar's "Send deal" button is the
-    // unsent-status-only signal (mirrors createDraftDealAsAlice's own wait).
-    await dealPanel(bobPage).getByRole('button', { name: /^send deal$/i }).waitFor({
-      timeout: 15000,
-    })
     // B2: this test's beforeEach reset the relationship and this is the ONLY
     // card born on it since — `resolveDealCardIdForRelationship`'s `limit 1`
-    // (no ORDER BY) is unambiguous here. Captured now, right after birth, "on
-    // the reset state" (PLAN-T03 §4 step 4).
+    // (no ORDER BY) is unambiguous here. Captured now, right after the basket
+    // closes, "on the reset state" (PLAN-T03 §4 step 4).
     const cardId = resolveDealCardIdForRelationship()
-
-    await dealPanel(bobPage).getByRole('button', { name: /^send deal$/i }).click()
-    await dealPanel(bobPage).getByText(/waiting for the other side to sign/i).waitFor({
-      timeout: 15000,
-    })
 
     // ---- AC 1: the pill lands in the SELLER's (Alice/GreenLeaf) c2c chat ----
     await alicePage.goto('/connect/chat')
@@ -299,6 +293,53 @@ test('a company-addressed deal lands as a pill in the seller\'s c2c chat, opens 
       alicePage.getByText('No deal tickets waiting to be picked up.', { exact: false }),
     ).toBeVisible({ timeout: 15000 })
     await expect(alicePage.getByText(PRODUCT_NAME)).toHaveCount(0)
+  } finally {
+    await aliceContext.close()
+    await bobContext.close()
+  }
+})
+
+/**
+ * HEL-76 — the person arm had NO end-to-end proof (the company arm, above,
+ * did). Found live during /ship 0023's G5 walk: `CounterpartyPersonSelect`'s
+ * own render contract was pinned (C1/C2/C7), and `send_deal`'s p2p-vs-c2c
+ * routing was proven through the OTHER creation door
+ * (`deal-p2p-send.spec.ts`'s `createDraftDealAsAlice`) — but nothing drove
+ * the basket's picker itself into a send and checked which thread it landed
+ * on. This is that missing link, added alongside the D-12 supersede
+ * (createBasketDraft now sends immediately — see BasketDrawer.tsx `draft()`).
+ */
+test('a PERSON-addressed deal (picked in the basket) lands as a pill in the p2p thread, not c2c, and mints no new deal ticket', async ({
+  browser,
+}) => {
+  const { aliceContext, bobContext, alicePage, bobPage } = await openTwoContexts(browser)
+  try {
+    const basket = await addFixtureAndOpenBasket(bobPage)
+
+    const select = basket.getByLabel('Address this deal to')
+    await expect(select).toContainText('Alice Green')
+    await select.selectOption({ label: 'Alice Green' })
+
+    await basket.getByRole('button', { name: /^send deal$/i }).click()
+    await expect(basket).toBeHidden({ timeout: 15000 })
+
+    const cardId = resolveDealCardIdForRelationship()
+
+    // ---- the row fact: p2p got it, c2c did NOT (the exact inverse of the
+    //      whole-company test above — this is what proves the picker's
+    //      choice actually reached send_deal, not just the UI default) ----
+    expect(countDealPillsOnThread('p2p')).toBe(1)
+    expect(countDealPillsOnThread('c2c')).toBe(0)
+    expect(countTicketsForCard(cardId)).toBe(0)
+
+    // ---- the pill is visible in Alice's p2p conversation WITH BOB specifically
+    //      (a p2p row is titled by the PERSON, ConversationRow.tsx — "Bob
+    //      Stone", not the company, so this can't collide with her c2c row) ----
+    await alicePage.goto('/connect/chat')
+    await alicePage.getByText('Bob Stone', { exact: true }).first().click()
+    const pill = alicePage.getByRole('button', { name: /click to open the deal card/i }).first()
+    await expect(pill).toBeVisible({ timeout: 15000 })
+    await expect(pill).toContainText('Bob Stone has sent a deal')
   } finally {
     await aliceContext.close()
     await bobContext.close()
