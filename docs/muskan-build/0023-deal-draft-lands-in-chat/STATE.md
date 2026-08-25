@@ -678,6 +678,55 @@ is not this slug's job, but nothing else is tracking it.
   times — §8.9/§8.7 (G3) · ADR **J1** (`security` B1, T01 G4) · **AC 5's wording** (T02 G4) ·
   and **`TICKETS.md`'s own T03 AC list** (this session). **The ticket's own criteria are the thing
   most out of date — the same defect it exists to fix, one level up.**
+  ✅ **`plan-checker` → REVISE: 5 blocking + 7 notes, all verified true by me before folding
+  ([[L-003]]), all accepted.** Plan at **rev 2**. **The truth table SURVIVED** — it re-derived all
+  five rows from the files and every replacement range was exact. **What failed was COVERAGE:**
+  I measured five citations and walked past three more defect sites *inside my own declared files*,
+  plus ten this slug broke itself. **The ticket became TWELVE edits, not eight.**
+  1. **B1 — I planned a DELETION where the ruling said REWRITE.** ADR `:607-608` records §8.9
+     verbatim: the row **becomes** *"the send creates it; the deal still lands"*. I inherited
+     "amended out" from `TICKETS.md`'s **pre-ruling** prose — [[L-039]] pointed at myself.
+  2. 🔴 **B2 — the approved PRD said "Verified safe" about a hole THIS SLUG filed as HEL-67.**
+     `PRD:52` cited `20260614121000:12` as proof only Sella can write `deal_detected`. The slug's
+     own ADR §7.4 had already established **that line is a CODE COMMENT, not a gate.**
+  3. **B3 — two more wrong citations in the PRD** (`inbox_select` is `:243-244` not `:79-86`;
+     the company-thread policy is `thread_all` `:293-298` not `:231-232`, which is
+     `person_group_all`). §4.1's defect one file over.
+  4. 🔴 **B4 — this slug's OWN diff falsified ~10 ADR citations**, and T04 was about to ship an
+     ADR advertising corrected citations while carrying ten it broke. **Resolved with a
+     distinction, not a sweep** — see below.
+  5. 🔴 **B5 — my edit 2 did not satisfy the ticket's own AC 2, and the obvious fix was worse.**
+     The AC says *"when a reader reaches `DECISIONS.md:1013`"*; a tail entry sits ~810 lines away.
+     **And inserting ABOVE `:1013` would move it — breaking FIVE citations at once** (ADR `:47`,
+     ADR `:563`, `PRD:6`, `STATE.md:54`, `STATE.md:68`, plus CLAUDE.md). Marker goes **AFTER**.
+  📌 **THE USEFUL OUTPUT OF B4 — a distinction now written into the ADR as a banner:**
+  **an ADR is a decision record, not a maintained index.** Design-time citations (§2/§3/§6/§8) are
+  **frozen at rev 3** — re-pointing them as code moves would falsify the record of what was known
+  when the decision was made. **§4.1 and the J-invariants are NOT design-time** — they assert what
+  the system does *now* and a reader acts on them, so they are **maintained**. A third bucket:
+  anything **false in SUBSTANCE** rather than merely drifted is corrected regardless — one case
+  qualified (§7's rationale that a docstring "claims the host navigates"; **T01 rewrote it**).
+  ✅ **All TWELVE edits applied**, and **every corrected citation re-verified by opening the file**
+  (`/build` step 6, not from memory): `msg_all` `:300` · `line_all` `:312` · `changein_all` `:322` ·
+  `can_access_workspace` `:117-125` · `inbox_select` `:243` · `thread_all` `:293` ·
+  `can_access_thread` c2c arm `:136` · on-conflict `:159-184` · pill build `:222-230`.
+  **Sweep for surviving OLD values: four hits, ALL historical quotes inside the corrections
+  themselves** (banner ×2, §4.1's inline note, the PRD's correction text). **Zero live stale
+  citations remain.** `DECISIONS.md:1013` re-confirmed still the cited bullet **after** the edit.
+  ⚠️ **A parallel merge landed on this branch mid-push** (HEL-75, on Muskan's instruction).
+  Rebased and **verified rather than assumed**: their `20260825130000` present, my ADR edits
+  intact, local == origin. **The pending cloud batch is now TWO migrations**
+  (`20260825120000` + `20260825130000`), one plain `db push`, no `--include-all`.
+  📌 **Their HEL-75 finding, recorded because it generalises past their ticket:** the remedy that
+  ticket itself sketched — an inline `EXISTS (SELECT 1 FROM company …)` in a `WITH CHECK` — is
+  evaluated **as the calling role**, so it inherits `company_select`. It would have read as *"the
+  receiver is alive"* and meant *"I already share a connection with the receiver"*, **blocking
+  every legitimate connect to a new company.** **A predicate inside a policy is not a question
+  about the database — it is a question about what the CALLER CAN SEE.** Needed a definer helper.
+  📌 **Their fixture pattern is better than T02's and T03's** — dead companies built inside
+  `BEGIN…ROLLBACK`, so **zero** seed mutation and nothing to leak. T03 needed an idempotent
+  pre-clean precisely because a hard-delete teardown leaks permanently. **Copy theirs next time.**
+  ⏳ `critic` spawned on the built diff.
   📌 **HEL-74's stated exploit is DEAD, and it was filed out of THIS slug** (T01 G4, `security`
   N1). The parallel session verified on production that `relationship` is **SELECT-only** for
   `authenticated` and no `public` function updates or deletes it — so "soft-delete the
