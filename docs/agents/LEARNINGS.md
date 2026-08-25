@@ -1871,3 +1871,52 @@ whoever happened to look.
 [[L-038]] (a single owner is a claim about agreement with the other doors), [[L-027]] (a gate is only
 as strong as the write path to its input), [[L-026]] (verify the REASON for a guard as hard as the
 guard) and [[L-006]].
+
+---
+
+## L-056 · A fixture that hardcodes a seed-generated id passes by accident on the day it's written, then goes red-for-the-wrong-reason forever after
+
+**2026-08-25 · `/ship 0023` gate · caught by `test-runner` running the full suite before a production push**
+
+**Trigger** — writing (or reviewing) any SQL test fixture that embeds a literal UUID for a seeded
+person or company, and any ship/gate run comparing SQL suite results against a "known baseline"
+count.
+
+**What happened.** Three brand-new suites — `deal_line_item_write_lockdown_test.sql` (DEV-159),
+`inbox_insert_receiver_gate_test.sql` (HEL-75), `msg_all_deal_detected_gate_test.sql` (HEL-67) —
+each hardcoded a literal UUID for Clara Vogt / Rheinland Apotheke / NordCanna / Bavaria / the
+Alice↔Bob p2p thread. `seed.sql`'s fixed-UUID block (the header comment listing Alice, Bob,
+GreenLeaf, StonePharm) only covers those four; everything seeded later — Clara's `auth.users` row,
+the three "5b" companies, every `chat_thread` — is `gen_random_uuid()`, different on every single
+`db reset`. Two of the three suites aborted at their own fixture guard before running a single real
+assertion; the third (HEL-75) didn't abort, proceeded to INSERT against a UUID matching no real
+company, and got a spurious RLS-violation "pass" on a control cell for the wrong reason. **The
+consequence that matters: DEV-159's suite — the one meant to prove a live production security hole
+was closed — never ran its actual assertions.** The REVOKE it was shipping alongside had zero
+automated verification at the moment it was about to go to prod.
+
+**Why it looked fine for a while.** Whoever wrote each suite ran it once, against whatever the DB
+happened to contain at that moment (a prior reset, mid-session state, or literally copy-pasted a UUID
+off a screen) — RED-then-GREEN, looks done. The fixture only breaks on the *next* `db reset`, which
+is exactly the gate step that runs right before a production push, and by then the author's session
+had usually already closed. Nothing about a passing suite at authoring time proves it survives a
+reset; a suite result is only as good as the reset regime it was measured under.
+
+**The fix, and why it's the right shape.** Replace the literal with a lookup against the identifying
+fact that IS stable — email for a person, `name` for a company, membership for a thread — matching
+the pattern the same files already used correctly for their JOIN/WHERE clauses on `company.name`.
+Not just in the fixture's own CTE: all three files also had the SAME stale literal repeated in
+`set_config('request.jwt.claims', ...)` calls lower down, setting the RLS-impersonated identity to a
+person who doesn't exist — a literal that compiles and runs without error, so it does not announce
+itself as wrong the way a JOIN-based miss does.
+
+**The rule** — a fixture identifier is only safe to hardcode if `seed.sql`'s own fixed-UUID block
+(check the header, don't assume) assigns it explicitly; anything created later via a bare `INSERT`
+or `SELECT … gen_random_uuid()` must be looked up by name/email at suite-run time, in EVERY place
+the suite uses that identity — not just the first.
+
+**See also** [[L-012]] ("as seeded" is a claim about data — grep the seed before asserting against
+it, same family: unverified assumptions about fixture state), [[L-013]] (a green suite proves
+nothing if its harness never fired — same family: a suite that "passes" without exercising its real
+assertions), [[L-034]] (a migration's end state on replay is not its end state on push — same
+lesson, different layer: state that's true today is not a proof about state after the next reset).
