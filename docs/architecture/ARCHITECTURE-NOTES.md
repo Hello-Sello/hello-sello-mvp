@@ -579,6 +579,74 @@ assumed to travel with the data and does not.
 
 ---
 
+## 2026-08-25 — A policy predicate is a question about what the CALLER CAN SEE, not about the database
+
+**The mechanism.** An RLS policy expression is evaluated in the **calling role's** row-security
+context. So a subquery inside `USING` or `WITH CHECK` against another RLS-protected table is itself
+filtered by that table's policies. `EXISTS (SELECT 1 FROM b WHERE …)` does not ask *"does this row of
+`b` exist?"* — it asks **"does it exist AND may the caller see it?"** Those are different questions,
+and nothing in the SQL distinguishes them.
+
+**How it bit.** HEL-75 needed `inbox_insert` to refuse a connection request addressed to a
+soft-deleted or deactivated company. The obvious inline `EXISTS` on `public.company` inherited
+`company_select`, which shows `authenticated` only its own company, HS-team rows, and companies it
+already `shares_connection_with_company()`. **A company you have never met is invisible** — so the
+predicate collapsed into *"may I already see this company?"*, which for a connection request is
+backwards: not having met them is the entire point.
+
+Measured as Alice @ GreenLeaf: a direct `SELECT` on `company` returned **5 of 6 rows**, and the inline
+predicate **refused a legitimate connect to the missing one** while blocking the deactivated company
+only *by accident* — it was really gating on "do we already share a connection".
+
+**Why it survives review.** Against a seeded database it looks correct. Every control an author
+reaches for is an already-connected pair, so every control passes; the failing case only appears for a
+counterparty the caller has never met, which is precisely the case no existing fixture covers.
+
+**The rule.** *If a policy needs a fact about a row the caller is not entitled to read, that fact must
+come from a `SECURITY DEFINER` function.* Inline `EXISTS` is safe only against a table with no RLS, or
+when the caller's visibility is genuinely meant to be part of the predicate. This is the same reason
+`product_visible_to_caller()` and `product_price_visible_to_caller()` exist, and why HEL-75 added
+`company_can_receive_requests()` rather than two lines of inline SQL.
+
+**Test discipline that catches it:** be red-first in *both* directions — one cell reproducing the
+original bug, and one cell that fails against **the fix that was proposed**. A suite that only proves
+the bug is gone cannot tell you it was closed with the wrong instrument.
+
+See `docs/agents/LEARNINGS.md` **L-055**.
+
+---
+
+## 2026-08-25 — A SYMMETRIC policy cannot express an ASYMMETRIC rule; census the write path before fencing it
+
+**The shape.** `deal_line_item`'s only policy, `line_all`, is `FOR ALL` with
+`card_relationship_member(deal_card_id)` on both `USING` and `WITH CHECK`. That function is **true for
+both sides of the relationship**. The rule it was being asked to enforce — *only the seller may set
+allocation state* — is asymmetric. **No amount of policy cleverness closes that gap**, because the
+policy has no term that distinguishes buyer from seller, and adding one means duplicating the
+seller-gate that already lives in seven `SECURITY DEFINER` RPCs.
+
+**The fix was not a better fence — it was noticing nobody used the gate.** A census across all of
+`src/` found client code performs **exactly one** write to that table (an `INSERT`, `acceptPromotion`),
+and **zero** UPDATEs and **zero** DELETEs. Every legitimate mutation already went through a definer,
+which bypasses grants. So `UPDATE` and `DELETE` were **removed**, not guarded.
+
+**The generalisation.** When a permission problem looks like it needs a policy predicate, a trigger,
+or a column allowlist, first ask **who actually writes this table as this role**. An unused privilege
+is deleted, not defended — and a deletion cannot drift, whereas a column allowlist silently breaks
+every time a column is added and a trigger must keep enumerating the columns it protects.
+
+**Postgres detail worth keeping:** a **column-level** `REVOKE` cannot subtract from a **table-level**
+grant. DEV-159 recorded an earlier attempt at `REVOKE UPDATE (allocation_status, …)` that appeared to
+do nothing; that is correct behaviour, not a bug. The table-level grant has to go first.
+
+**Corollary for reviewers:** `REVOKE` migrations should say in a `COMMENT ON TABLE` *why* the
+privilege is absent. Otherwise the next person adding a feature reads a missing grant as an oversight
+and re-grants it, reopening the hole. `deal_line_item` now carries that comment.
+
+Origin: DEV-159, `security_tickets` session, 2026-08-25.
+
+---
+
 ## 2026-08-25 — A worktree isolates the tree, not the DATABASE. Parallel sessions share one Postgres, and migration files are per-branch.
 
 **This CHANGES standing guidance rather than adding to it.** `CLAUDE.md` §2b concluded, after L-040,

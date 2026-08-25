@@ -1764,6 +1764,37 @@ size**, which is exactly when "who sent this" starts to matter.
 
 ---
 
+## 2026-08-25 — A deactivated company is closed to new connections; an UNVERIFIED one is not
+
+**What was decided.** HEL-75's receiver predicate on `inbox_insert` covers **`deleted_at` and
+`deactivated_at` only**. A company that is unverified — including one mid-`resubmit_company_verification()`
+— **stays reachable** by a connection request. This is deliberately **narrower** than the liveness
+term HEL-70 gave the five discovery read doors, which also require `verification_status = 'verified'`.
+
+**Why.** A deactivated or deleted company has **left**. A pending or re-verifying company is
+**arriving**. Hiding the latter from Discover is right — nobody should transact with an unverified
+counterparty — but *refusing its inbound interest* punishes it at exactly the moment it is trying to
+come back, and the request is inert until someone accepts it anyway (accept is separately gated).
+
+**The asymmetry IS the decision.** This repo's recurring failure is doors disagreeing about one rule
+(L-038), so a deliberate disagreement has to be recorded or the next person will "fix" it. The read
+doors answer *"may this company be seen?"*; this write door answers *"may this company still be
+written to?"* **They are different questions and they are allowed to have different answers.** Do not
+tidy `company_can_receive_requests()` into agreement with `product_visible_to_caller()`'s term.
+
+**Cost accepted:** a request may be sent to a company that never becomes verified, leaving an inert
+pending row. Judged cheaper than a company losing inbound interest during re-verification.
+
+**Not settled by this ruling, and it needs its own:** a request that was already **pending** when the
+receiver deactivates stays acceptable. `WITH CHECK` governs the INSERT only, and accept runs through
+`accept_connection_request` — SECURITY DEFINER, which bypasses RLS entirely, so RLS cannot be the
+mechanism there. Verified on production 2026-08-25: that function checks item state, addressee and
+type, and never the receiver company's liveness.
+
+**Surfaced by:** HEL-75, `security_tickets` session, 2026-08-25.
+
+---
+
 ## 2026-08-25 — HEL-67 ships as one type, and its second half is BLOCKED, not deferred
 
 **What was decided.** `msg_all`'s `WITH CHECK` gains exactly one term — `type <> 'deal_detected'` —

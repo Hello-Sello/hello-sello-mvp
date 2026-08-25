@@ -5,18 +5,44 @@
 
 ---
 
-**Last updated:** 2026-08-25 — session 91 `deal_land_t03` — 🏁 **SLUG 0023 IS BUILD-COMPLETE.**
-**T01 · T02 · T03 · T04 ALL CLOSED.** Next = **`/ship 0023`**.
+**Last updated:** 2026-08-25 — session 93 `security_tickets` — **HEL-75 + DEV-159 BUILT, GREEN, CLOSED.**
 **Status:** offline (session closed).
+**Shared files locked: none — all released.**
 
-⚠️ **TWO UNTRACKED FILES IN THE TREE THAT ARE NOT MINE — deliberately left alone (L-040).**
-`supabase/tests/deal_line_item_write_lockdown_test.sql` + `run_deal_line_item_write_lockdown_test.sh`.
-Their header says **DEV-159** (the buyer forges allocation state via a direct `deal_line_item`
-write). **Session 92 did not create them, did not run them, and did not commit them.** They appeared
-in the working tree during the session. **Whoever owns DEV-159 should claim them** — and nobody
-should `git add -A` past them, which is exactly how session 84 committed another session's work
-under its own ticket messages. **Shared files locked: none — all released** (`DECISIONS.md`, `CONTEXT.md`,
-`e2e/fixtures/two-company.ts` all unlocked).
+⚠️ **THE PENDING CLOUD BATCH IS THREE MIGRATIONS, NOT ONE.** `20260825120000` (HEL-67 Gap 1) ·
+`20260825130000` (HEL-75) · `20260825140000` (DEV-159). One plain `db push --linked`, **no
+`--include-all`**. Muskan authorised the push and handed it to the `ship_deal` session. The ledger
+heading is the authority on the count; each entry carries its own post-flight queries.
+
+🔴 **`20260825140000` closes a LIVE PRODUCTION HOLE** — until it lands, `authenticated` holds
+`UPDATE`/`DELETE` on `deal_line_item`, so either side of a deal can rewrite the other's prices,
+quantities and allocation state by a direct PostgREST call. Reproduced, then proven shut.
+
+✅ **CORRECTION to session 92's note below — those two files ARE mine.**
+`supabase/tests/deal_line_item_write_lockdown_test.sql` and its runner are **DEV-159's suite, written
+by this session**, and are now committed in `cc54bdc`. Session 92 was right to flag them and right not
+to touch them (L-040). Nothing is unclaimed and nothing was committed under the wrong ticket.
+
+**What landed:** HEL-75 (`inbox_insert` receiver gate + `company_can_receive_requests()` definer +
+`discover/actions.ts` stops leaking raw Postgres strings) · DEV-159 (`REVOKE UPDATE, DELETE ON
+deal_line_item`) · HEL-74 corrected to Low/latent · HEL-81 + HEL-82 filed · **L-055** written
+(L-056 is next free). tsc 0 · eslint 0 · unit **497/497 across 68 files** · **47/47 SQL runners**.
+
+🔴 **The catch worth carrying: HEL-75's own suggested fix would have broken the product.** A subquery
+inside an RLS policy is evaluated **as the calling role**, so a bare `EXISTS` on `company` inherits
+`company_select` and silently becomes *"do I already share a connection with them?"*. It refused a
+legitimate connect to an unmet company while blocking the deactivated one by accident. **Against the
+seed it looks correct**, because every control is an already-connected pair. Definer helper instead.
+L-055 + two ARCHITECTURE-NOTES entries.
+
+📌 **HEL-82 (new, High) — there is currently NO WAY TO DISCONNECT AT ALL.** `relationship` is
+`SELECT`-only for `authenticated` and no `public` function updates or deletes it, so a connection is
+permanent for both parties and for us. **The schema already has `active`/`suspended`/`ended` in a
+lookup table and nothing can write it.** Framed as compliance-driven suspension (EU GDP: licence
+lapse, ≥5-year retention), **not** a user-facing disconnect button — Muskan's call.
+
+⚠️ **Do not grant `UPDATE` on `relationship` to build HEL-82.** That absence is exactly what makes
+HEL-74 unexploitable today. Use a definer RPC.
 
 ⚠️ **`/ship` MUST diff `pg_get_functiondef('public.send_deal(uuid)')` against PRODUCTION first** —
 row 1 is a `create or replace`. **T01 is ALREADY LIVE on prod** (pushed 2026-08-25, zero drift).
