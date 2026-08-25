@@ -1650,6 +1650,65 @@ correct deferral would have been "no owner, needs a fixture", which is exactly w
 
 ---
 
+## L-052 · A ticket's own suggested fix is a hypothesis, and a security ticket's is the one most likely to be believed
+
+**2026-08-25 · HEL-67 / HEL-70 · `security_tickets` session · caught by a write-path census, before any code**
+
+> **Numbering note:** this is **L-052**, not L-049. **L-049 is an unclaimed hole** — session 89 wrote
+> "L-049 is next free", nobody took it, and session 90 then wrote L-050 and L-051. The gap is left
+> **deliberately**: back-filling it would make the sequence non-chronological and erase the evidence
+> that this file has a monotonic key and no allocator. That gap is the open convention question,
+> made visible instead of tidied away.
+
+**Trigger** — a ticket containing a fenced `sql` block, a "suggested fix", or a predicate sketch,
+*especially* one written by a previous careful session that already listed the traps. Also: any
+ticket phrase of the form "X is service-role only" or "only the system writes X".
+
+**What happened, twice in one session.**
+
+**HEL-70** said four discovery doors. There were **five** — `list_discoverable_people` gated on the
+same two terms and had never been redefined, so a deactivated company's *people* stayed discoverable.
+Building the ticket as written would have shipped a "single owner" that four of five doors agreed
+with, which is the exact defect the ticket existed to fix.
+
+**HEL-67** sketched `type NOT IN ('deal_detected', ...)` with the gloss *"Sella-authored types,
+service-role only"*, and separately `sender_person_id = auth.uid()`. A census of every
+`chat_message` INSERT reachable as `authenticated` killed **both**:
+
+- Five of six Sella-or-system-voiced types are written **by an ordinary browser session**
+  (`intro`, and four deal-lifecycle pills from `announceDealEvent`). Banning "Sella-authored types"
+  would have broken the deal pills and connection-accept outright.
+- The ticket flagged that `sender_person_id` is nullable for system lines and said the predicate must
+  be "conditional on `sender`". True, and **not enough**: the accept rollout inserts a
+  `sender = 'person'` message whose author is the **requester, not the caller** (`rollout.ts:179`).
+  So the sketch breaks connection-accept even in the case it was scoped to.
+
+**The shape.** A ticket's suggested fix is written from the *reading* side — someone traced how a
+value is consumed, then inferred who must produce it. The inference is from **naming and intent**
+("Sella-authored", "system message"), not from the write path. Naming describes a *voice*; RLS
+governs a *writer*; the product routinely has one identity speak in another's voice. On a security
+ticket this is more dangerous than elsewhere, because the sketch arrives pre-justified — it was
+written by a session that had just done real work, it names real traps, and it makes the fix look
+like transcription rather than design.
+
+**What to do instead.** Before implementing any suggested predicate, **enumerate every write site
+that reaches the table as the role being narrowed**, from source, and tabulate the actual column
+values — not the ones the type names imply. Then check the sketch against the table. If the sketch
+survives, you have lost twenty minutes; if it does not, you have avoided shipping a gate that breaks
+production or a fix that half-closes a class while reading as closed.
+
+**And when the census kills half the ticket, say which half and why it is BLOCKED rather than
+deferred.** HEL-67 Gap 2 is not "not done yet" — it is unbuildable until [[L-037]]'s reader census
+has somewhere to move those writes ( HEL-68 ). Recording it as blocked, with the counterexample line
+number, is what stops the next session re-deriving the same dead end.
+
+**See also** [[L-038]] (a single owner is a claim about agreement with the other doors),
+[[L-006]] (a comment on the read path is not a contract for the write path), [[L-026]] (verify the
+REASON for a guard as hard as the guard), [[L-051]] (a deferral naming an owner is a claim about that
+owner) and [[L-031]].
+
+---
+
 ## L-053 · A teardown copied from a precedent inherits that precedent's REFERENCES, not just its shape
 
 **2026-08-25 · slug 0023 · T03 / HEL-65 · `/build` step 3 · caught by `plan-checker` (B1) before any code was written**
@@ -1688,3 +1747,56 @@ tell you about the ones *its* test writes. Delete children the test creates befo
 
 **See also** [[L-033]] (a seed row is not a stable fixture until you grep what mutates it) — this
 is its mirror image: a fixture *you* create is not clean until you grep what references it.
+
+---
+
+## L-054 · "Built and green" names a database state — say which stack, and whether another branch can reproduce it
+
+**2026-08-25 · HEL-67 · `security_tickets` · caught by `deal_land_t02` cross-checking the claim, after I had already reported it to Muskan**
+
+> **Numbering:** L-054. L-053 was taken by the parallel session in the same hour, announced before
+> writing. [[L-049]] remains a deliberate hole — see [[L-052]].
+
+**Trigger** — writing "built", "green", "N/N passing", or "applied" about anything that lives in the
+local database rather than in a file: a migration, a policy, a grant, a seeded fixture. Also: any
+handover between parallel sessions that says a suite passes.
+
+**What I did.** I reported HEL-67 as built and green, with a full-suite A/B (45/0 applied, 44/1
+reverted). All of that was true. The parallel session then said its stack's tip was `20260825110000`
+with no `20260825120000`, and asked which database my green came from — declining to theorise past
+its own measurement.
+
+**Both measurements were correct, and that is the finding.** The *policy* was live on the shared
+stack; the *migration row* had never been stamped, because I applied the SQL with `psql` and skipped
+the `schema_migrations` insert I had correctly done for the two migrations before it. So *"is it
+applied?"* answered **yes** against `pg_policy` and **no** against `schema_migrations` — one database,
+two facts, and the peer had queried the one I left inconsistent.
+
+**Chasing the discrepancy found the real hazard, which was not the stamp.** The migration *file*
+exists only on my branch. A `db reset` from the other tree would silently revert the gate; and until
+then, that branch was running its tests against a policy its own tree does not contain. Neither
+direction produces a conflict, a warning, or a file collision — every detection mechanism this repo
+has is file-level, and a shared Postgres is not a file. See `ARCHITECTURE-NOTES.md` 2026-08-25.
+
+**The part I want the next session to sit with.** The hazard surfaced **only because I skipped a
+step**. Had I stamped correctly, both sessions would have seen agreement, and the divergence would
+have stayed armed and silent. **A detection mechanism that depends on someone forgetting something is
+not a detection mechanism.** The lesson is emphatically *not* "skip the stamp" — it is that we had no
+real mechanism here at all, and got lucky.
+
+**What to do instead.** Two habits, both cheap:
+
+1. **Stamp at apply time**, every time, so the database is self-consistent — then the ledger table is
+   worth querying and disagreement means something.
+2. **Qualify every green with its stack.** "45/0 on the shared local stack, which carries a migration
+   that only branch X contains" is a different and more honest claim than "45/0". If another branch
+   cannot reproduce it, that belongs in the same sentence as the number — not in a footnote, and not
+   left for a peer to discover.
+
+And when a peer reports a measurement that contradicts yours, **measure again before explaining**.
+The explanation here would have been right and would still have missed the hazard; only the second
+query — *does the other branch even have this file?* — found it.
+
+**See also** [[L-033]] (a green run is only evidence for the DB state it ran against — this is that
+sentence at the schema level), [[L-048]] (an A/B whose arms start from different states is not an
+experiment), [[L-040]] (parallel sessions on one branch) and [[L-052]].

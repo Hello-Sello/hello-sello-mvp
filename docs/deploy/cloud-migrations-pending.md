@@ -23,9 +23,134 @@
 
 ---
 
-## ⚠️ PENDING (2026-08-24, updated 2026-08-25) — THREE migrations, plain `db push`, **no `--include-all`**
+## ⚠️ PENDING (2026-08-25) — security batch: HEL-67 Gap 1 + HEL-75 (**TWO** migrations, plain `db push`, **no `--include-all`**)
 
-**Status: LOCAL ONLY. Production still carries the price leak.**
+**Status: LOCAL ONLY.** Production tip is `20260825110000`. This batch stamps `20260825120000` then
+`20260825130000`, in filename order, so ONE plain `supabase db push --linked` takes both. Nothing is
+back-dated. ~~**Count: ONE.**~~ → **Count: TWO** — HEL-75 was added to this section 2026-08-25 by the
+second `security_tickets` session. Do not push either alone; the heading above is the authority on
+the count, not the prose in any single entry.
+
+| # | file | what it does |
+|---|---|---|
+| 1 | `20260825120000_msg_all_deal_detected_gate.sql` | `ALTER POLICY msg_all ON chat_message` — `WITH CHECK` gains `and type <> 'deal_detected'`. `USING` is **not** touched. |
+
+**The hole it closes.** `20260614121000:12` claims *"RLS lets only Sella / service-role insert a*
+`deal_detected` *message; a person cannot."* That was a comment, not a gate — `msg_all` is the only
+policy on `chat_message` and its `WITH CHECK` was `can_access_thread(thread_id)` and nothing else. Any
+thread member could mint the row that drives `confirm_detected_deal` into birthing a real deal.
+Confined to threads the actor already belongs to, so not cross-tenant (L-006).
+
+**Who loses writes when this lands: nobody.** Verified by census, not assumption — `deal_detected`
+appears in `src/` only as a READ filter (`reads.ts:259`) and is written solely by SECURITY DEFINER
+functions, which bypass RLS and are unaffected.
+
+⚠️ **DO NOT WIDEN THIS PREDICATE WITHOUT RE-READING THE CENSUS.** The ticket originally proposed
+banning *"Sella-authored types, service-role only"*. That is **false for five of six**: the browser
+legitimately writes `intro`, `deal_cancelled`, `deal_signed`, `deal_change_proposed` and
+`deal_negotiation_requested` with `sender = 'sella'` and a NULL author. The suite's §A pins all six
+shapes so a future widening goes red here rather than in production.
+
+⚠️ **HEL-67 IS ONLY HALF CLOSED, DELIBERATELY.** Gap 2 — the forgeable SENDER — is **blocked on
+HEL-68**, not merely unfinished. The accept rollout has the browser insert a `person` message
+attributed to the **requester** (`rollout.ts:179`), so `sender_person_id = auth.uid()` breaks
+connection-accept. Ruled by Muskan 2026-08-25.
+
+**Post-flight — assert the policy shape, not a row count.** There is no data symptom to query: the
+forgery leaves a valid-looking row, and nobody has forged one.
+
+```sql
+select pg_get_expr(polwithcheck, polrelid) ~ 'deal_detected' as write_gated,
+       pg_get_expr(polqual,      polrelid) ~ 'deal_detected' as read_door_moved_MUST_BE_FALSE
+  from pg_policy where polrelid = 'public.chat_message'::regclass and polname = 'msg_all';
+```
+
+### Migration 2 of 2 — HEL-75, `inbox_insert` receiver gate
+
+| # | file | what it does |
+|---|---|---|
+| 2 | `20260825130000_inbox_insert_receiver_gate.sql` | Adds `company_can_receive_requests(uuid)` (STABLE SECURITY DEFINER), then `ALTER POLICY inbox_insert ON pending_inbox_item` — `WITH CHECK` gains `receiver_company_id IS NULL OR company_can_receive_requests(receiver_company_id)`. |
+
+**The hole it closes.** `inbox_insert`'s `WITH CHECK` constrained only the SENDER
+(`sender_company_id = current_company_id() AND sender_person_id = auth.uid()`). Nothing constrained
+the receiver, so HEL-70 hiding a deactivated company from the five discovery doors removed the
+**button, not the door** — anyone holding the company id could still land a pending connection
+request through PostgREST. L-027.
+
+**Scope is DELETED + DEACTIVATED only — narrower than the read doors, deliberately.** Muskan's ruling
+2026-08-25: an **unverified or re-verifying company stays reachable**, because it is arriving, not
+leaving. Do not "tidy" this into agreement with `product_visible_to_caller()`'s term.
+
+🔴 **THE TICKET'S OWN SUGGESTED FIX IS WRONG AND MUST NOT BE RESTORED.** HEL-75 sketched a bare
+`EXISTS (SELECT 1 FROM public.company …)` inline in the policy. A subquery in a policy expression is
+evaluated **as the calling role**, so it obeys `company_select`, which shows `authenticated` only its
+own company, HS-team rows, and companies it already shares a connection with. Measured on the local
+stack as Alice @ GreenLeaf: a direct `SELECT` on `company` returns **5 of 6 rows**, PendingCo absent;
+the inline predicate then **REFUSED** a legitimate `connect` to PendingCo (live, unverified) while
+refusing the deactivated company only *by accident* — it was really gating on "do we already share a
+connection". That ships a gate which breaks connecting to any company you have not met, i.e. the
+product's primary flow, while reading as a two-line liveness check. Hence the SECURITY DEFINER
+helper. L-052.
+
+**Who loses writes when this lands.** Only a sender addressing a soft-deleted or deactivated company.
+Census, from source: exactly two client sites insert here as `authenticated` —
+`discover/actions.ts:76` (gated) and `discover/personActions.ts:56` (`connect_person`,
+`receiver_company_id` null by CHECK, untouched). `deal_card` rows come from `deliver_deal`, SECURITY
+DEFINER, which bypasses RLS and is unaffected.
+
+**Client copy ships with it.** `discover/actions.ts` returned the raw Postgres string; it now routes
+through `requestActionError`, which gained a branch rendering the refusal as *"This company is no
+longer available."* — matching what the read side already shows. Without that edit this migration
+puts `new row violates row-level security policy …` on a pharmacy's screen (T10).
+
+⚠️ **NOT CLOSED BY THIS MIGRATION, and it needs its own decision.** A request that was already
+**pending** when the receiver deactivated stays acceptable. `WITH CHECK` governs the INSERT only, and
+accept runs through `accept_connection_request` — SECURITY DEFINER, bypasses RLS, so RLS cannot be
+the mechanism there. Verified against **production** 2026-08-25: that function checks item state,
+addressee and type, and **never** the receiver company's liveness; `current_company_id()` does not
+gate deactivation either. Recorded on HEL-75.
+
+**Post-flight — assert the policy shape and the helper's grants.** There is no data symptom: nothing
+has been forged, and the pending rows that exist are all on live companies.
+
+```sql
+-- 1. the gate is on the write door
+select pg_get_expr(polwithcheck, polrelid) ~ 'company_can_receive_requests' as receiver_gated
+  from pg_policy where polrelid = 'public.pending_inbox_item'::regclass and polname = 'inbox_insert';
+
+-- 2. the helper is not reachable by anon/PUBLIC (session-77 rule: revoke from BOTH)
+select coalesce(has_function_privilege('anon', p.oid, 'execute'), false) as anon_MUST_BE_FALSE,
+       has_function_privilege('authenticated', p.oid, 'execute')         as authed_MUST_BE_TRUE
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+ where n.nspname = 'public' and p.proname = 'company_can_receive_requests';
+```
+
+---
+
+## ✅ APPLIED 2026-08-25 (was PENDING 2026-08-24) — THREE migrations, one plain `db push`
+
+**Status: LIVE ON PRODUCTION.** Pushed 2026-08-25 by the `security_tickets` session on Muskan's
+explicit go-ahead. Production tip is now `20260825110000`, verified against
+`supabase_migrations.schema_migrations` — not against this file.
+
+**Post-push evidence, all run against production, none of it inferred:**
+
+| check | result |
+| -- | -- |
+| Pre-flight — `send_deal` drift | **zero drift.** `md5(prosrc) = b52ea5df…`, len 3591, byte-identical to `20260724120300`. The `create or replace` overwrote nothing hand-edited. |
+| Migration tip | `20260825110000` |
+| HEL-69 — the two leaking rows, read as a **connected buyer** (Aurora → StonePharm) | `Spirit Bear T28 STR MLS` **0 rows**, `fdsc` **0 rows** |
+| …with its control on the same query | the same caller still sees **9** legitimate prices — the zeros are the gate, not a dark view |
+| HEL-69 — does the view delegate? | `product_price_visible_to_caller` present, `profile_visible` reprint **gone** |
+| HEL-70 — all five doors carry the term | 5/5 `deactivated_at`, and 5/5 **kept** `verification_status` (no door traded one for the other) |
+| S8 advisors | **87: 1 ERROR, 85 WARN, 1 INFO.** The one ERROR is `security_definer_view` on `current_pricelist_item` — knowingly accepted, ADR-0004 §4 / ARCHITECTURE-NOTES.md:231. **No new ERROR.** |
+
+⚠️ **On the S8 number, honestly.** The recorded baseline is "85" but its composition was never written
+down precisely, and two migrations landed between that baseline and this push. **87 vs 85 is not a
+clean diff and should not be reported as one.** What IS checkable, and was checked: no new ERROR, and
+all five functions this batch touched were already `SECURITY DEFINER` before it, so none of them
+entered the 82-strong `authenticated_security_definer_function_executable` class as a result of this
+push. A baseline nobody can decompose is worth less than the check that replaced it.
 
 > 🔴 **THIS ENTRY SAID "ONE MIGRATION" AND THE BATCH WAS ALREADY TWO.** Corrected 2026-08-25 by the
 > `security_tickets` session while ledgering HEL-70. `20260825090000` (slug 0023 T01 / HEL-63) has
@@ -111,8 +236,15 @@ gets **silently overwritten** by this push. Diff it first and keep the output:
 
 ```sql
 -- run against PRODUCTION, before pushing
-select pg_get_functiondef('public.send_deal(uuid)'::regprocedure);
+select md5(prosrc), length(prosrc) from pg_proc
+ where oid = 'public.send_deal(uuid)'::regprocedure;
 ```
+
+✅ **RUN 2026-08-25, BEFORE THE PUSH — ZERO DRIFT.** Production's body is
+`md5 = b52ea5dfddd626afc3074acd2615b48d`, length **3591**, a byte-for-byte match for the body in
+`20260724120300_send_deal.sql`. Nothing was hand-edited on production, so row 1's `create or
+replace` overwrites nothing unexpected. Compared on `prosrc` rather than `pg_get_functiondef` —
+the latter re-renders the header and would differ on formatting alone.
 
 This repo has been bitten by exactly this shape before — `ensure_rls` lived on production and in no
 migration until `20260817130000` captured it.

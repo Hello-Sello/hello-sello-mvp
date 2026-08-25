@@ -33,6 +33,34 @@ describe("requestActionError", () => {
     expect(requestActionError(e)).toBe("This request is no longer available.");
   });
 
+  // ---- HEL-75: the SEND side. `inbox_insert` now carries a receiver-liveness
+  // term, so this is a refusal an ordinary person can actually reach.
+  it("a request refused because the company is gone names the company, not RLS", () => {
+    const e = {
+      message:
+        'new row violates row-level security policy for table "pending_inbox_item"',
+    };
+    expect(requestActionError(e)).toBe("This company is no longer available.");
+  });
+
+  it("the RLS branch still matches when PostgREST wraps the text over lines", () => {
+    // The pattern spans newlines on purpose: the wire text is not always one line.
+    const e = {
+      message:
+        'new row violates row-level security policy\nfor table "pending_inbox_item"',
+    };
+    expect(requestActionError(e)).toBe("This company is no longer available.");
+  });
+
+  it("an RLS refusal on a DIFFERENT table does not borrow this sentence", () => {
+    // Guards against widening the match to any 42501 anywhere — a company that
+    // is perfectly fine must never be reported as gone.
+    const e = {
+      message: 'new row violates row-level security policy for table "chat_message"',
+    };
+    expect(requestActionError(e)).toBe("We couldn't complete that. Please try again.");
+  });
+
   it("anything unrecognised gets the generic message — never the raw text", () => {
     const e = { message: 'permission denied for function "accept_connection_request"' };
     expect(requestActionError(e)).toBe("We couldn't complete that. Please try again.");
