@@ -579,6 +579,34 @@ assumed to travel with the data and does not.
 
 ---
 
+## 2026-08-25 — A message type names a VOICE; RLS governs a WRITER. They are not the same axis, and our vocabulary hides it.
+
+`chat_message.type` and `chat_message.sender` look like they encode the same fact — who produced this
+line — and they do not. `sender` has three values (`person`, `system`, `sella`) and `type` has
+fourteen, and the product **routinely has one identity speak in another's voice from an ordinary
+browser session**: `announceDealEvent` writes four deal-lifecycle pills as `sella` with a NULL author
+(`actions.ts:682`), the accept rollout writes `intro` as `sella` and `connection_established` as
+`system` (`rollout.ts:110,174`), and it writes a `person` message whose author is the **requester,
+not the caller** (`rollout.ts:179`).
+
+The consequence for anyone writing RLS on this table: **"only Sella writes X" is a statement about
+the voice, and is never evidence about the writer.** A predicate derived from type names will either
+ban writes the product depends on, or permit the ones it meant to stop. The only sound derivation is
+a census of the write sites reachable as the role being narrowed.
+
+This is why HEL-67 shipped one type rather than the list its ticket proposed, and why its
+sender-forgery half is blocked until HEL-68 moves the rollout's three inserts out of the browser —
+at which point `sender` finally *does* line up with the writer, and a predicate becomes possible.
+
+The same shape has a name upstream: a comment on the read path is not a contract for the write path
+(L-006). This entry is its schema-level twin — **a column that describes presentation is not a
+column that describes authorship**, even when its values look like they do.
+
+**Source:** HEL-67 build, `security_tickets` session, 2026-08-25. See `L-052`, `DECISIONS.md`
+2026-08-25 ("HEL-67 ships as one type").
+
+---
+
 ## 2026-08-25 — `supabase db reset` rotates the stack secret, and our own resets manufacture "pre-existing" e2e failures
 
 The local Supabase stack issues a **new secret key on every `supabase db reset`**. The Playwright
