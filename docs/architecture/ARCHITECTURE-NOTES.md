@@ -845,3 +845,40 @@ citations copied forward unverified.
 **The rule this yields:** an identifier used as evidence must resolve to exactly one place. If a
 scheme is scoped per-phase, the scope belongs **in the identifier** (`P17-D12`, not `D-12`), or the
 scheme should not be used in source comments at all. Prefer the thing a reader can open.
+
+---
+
+## 2026-08-25 — `deal_promotion` and `deal_line_item` are now SELECT-only for `authenticated`; every write is a SECURITY DEFINER RPC that re-checks membership itself (HEL-81)
+
+**Locked by HEL-81, closing the confused-deputy gap a second review round found in its own first
+draft.**
+
+Both tables carry a single symmetric RLS policy (`card_relationship_member(deal_card_id)` — true for
+BOTH sides of a relationship) that can express *membership* but not *which side* or *which
+lifecycle step*. `authenticated` no longer holds INSERT/UPDATE/DELETE on either table. Every mutation
+now goes through one of five SECURITY DEFINER functions:
+
+- `offer_promotion` (seller) / `accept_promotion`, `decline_promotion` (buyer) — each re-derives the
+  caller's company from the session and checks it against `card_seller_company_id`/
+  `card_buyer_company_id` (new, card-level analogues of the existing `line_seller_company_id`).
+- Each ALSO calls `card_relationship_member` explicitly, alongside the side check — a definer
+  bypasses RLS entirely, so it re-implements membership + buyer/seller, not just buyer/seller;
+  dropping the membership call would have silently narrowed the old policy's `unsent`-draft
+  restriction (see [[L-057]] in `docs/agents/LEARNINGS.md`).
+- `accept_promotion`/`decline_promotion` take `deal_card`/`deal_promotion` row locks (`FOR UPDATE`)
+  so a concurrent double-accept resolves to "nothing pending" rather than double-applying a reward.
+
+**A structural invariant, not a convention:** a partial unique index,
+`uq_deal_promotion_one_pending ON deal_promotion (deal_card_id) WHERE state = 'pending'`, allows at
+most one pending promotion per card. `offer_promotion` refuses outright (clear message) rather than
+letting the constraint raise a raw violation. This exists so "the pending promotion" is never a
+choice between rows — the alternative (an `ORDER BY … LIMIT 1` convention that every reader and
+writer must independently agree on) is exactly what drifted apart during this same ticket's second
+review round.
+
+**Practical rule for the next promotion-adjacent change:** `deal_promotion.offered_by_company` and
+`.line_deltas` are authorization-relevant input to `accept_promotion` — treat any new write path to
+this table with the same suspicion as a grant, not as an ordinary data column. `line_deltas`/
+`condition_deltas` are CHECK-constrained to `jsonb_typeof = 'array'`; don't re-add a client-side
+`Array.isArray` fallback in a caller — that tolerance is exactly what let a non-array value ever
+reach these tables in the first place.

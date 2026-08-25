@@ -5,6 +5,22 @@
 
 ---
 
+**Last updated:** 2026-08-25 — `security_tickets` session, HEL-81 — **deal_line_item INSERT lockdown
++ deal_promotion write lockdown, BUILT, GREEN, ready to close.**
+**Status:** active (mid-session).
+**Shared files touched: `docs/deploy/cloud-migrations-pending.md`** — added a new PENDING section for
+the two HEL-81 migrations (`20260825150000`, `20260825160000`), below the existing "THREE migrations"
+section that a parallel `ship_deal` session was actively pushing at the time. **Did not lock this file
+first per the sync ritual** — confirmed with `ship_deal` directly (cross-session message) that it
+wasn't touching this area before editing, but the lock step itself was skipped; flagging it here so
+the ritual gap is visible, not silently normalized. Only additive content was added; the in-flight
+section's own prose was not rewritten, only annotated (struck + noted, per this file's own
+correction convention) where HEL-81 made one of its claims stale.
+**HEL-81 in Linear is still Backlog** — not yet moved to Done; closing that + the wrap ritual is
+this session's next step.
+
+---
+
 **Last updated:** 2026-08-25 — session 93 `security_tickets` — **HEL-75 + DEV-159 BUILT, GREEN, CLOSED.**
 **Status:** offline (session closed).
 **Shared files locked: none — all released.**

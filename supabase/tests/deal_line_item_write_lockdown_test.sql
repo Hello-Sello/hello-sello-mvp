@@ -3,8 +3,14 @@
 -- ----------------------------------------------------------------------------
 -- Proves: a member of a deal's relationship can no longer rewrite or delete a
 -- `deal_line_item` row by a direct PostgREST write, while every legitimate
--- path — the seven SECURITY DEFINER RPCs, the buyer's promotion accept, and
--- all reads — is untouched.
+-- path — the SECURITY DEFINER RPCs and all reads — is untouched.
+--
+-- ⚠️  SUPERSEDED IN PART BY HEL-81 (2026-08-25): at the time this was written,
+--     INSERT was deliberately kept for the ONE client write (`acceptPromotion`,
+--     then a direct `.insert()` at `deals/actions.ts:991`) — §A2 below proved
+--     it survived. HEL-81 closed that gap too: `acceptPromotion` now calls the
+--     `accept_promotion` SECURITY DEFINER RPC instead, and INSERT was revoked
+--     the same way. §A2 is inverted, not deleted — see its own comment.
 --
 -- Run:  bash supabase/tests/run_deal_line_item_write_lockdown_test.sh
 --
@@ -17,10 +23,12 @@
 --     TRUE for BOTH sides of the relationship. It cannot distinguish buyer from
 --     seller, so the allocation columns were writable by the counterparty.
 --     DEV-159 proposed three fixes; a census killed the need for all three:
---     across the whole of `src/`, client code performs exactly ONE write to this
---     table — the INSERT at `deals/actions.ts:991` — and ZERO updates and ZERO
---     deletes. The seven legitimate writers are all SECURITY DEFINER and bypass
---     grants. So the privilege is simply removed rather than fenced.
+--     at the time, across the whole of `src/`, client code performed exactly
+--     ONE write to this table — the INSERT at `deals/actions.ts:991` — and
+--     ZERO updates and ZERO deletes (HEL-81 later closed that one INSERT too;
+--     see the banner above — the table is ZERO-write from the client now).
+--     The seven legitimate writers are all SECURITY DEFINER and bypass grants.
+--     So the privilege is simply removed rather than fenced.
 --
 --     Rejected on purpose: a column-allowlist re-GRANT (breaks silently every
 --     time a column is added — DEV-159's own option 1) and a BEFORE UPDATE
@@ -100,16 +108,29 @@ BEGIN
     THEN RAISE EXCEPTION 'A1/read: the revoke took SELECT as well — the counterparty can no longer see the deal'; END IF;
 END $$;
 
--- A2 — the buyer's promotion accept still INSERTs (`deals/actions.ts:991`).
---      This is the ONE client write in the codebase and it must survive.
-INSERT INTO public.deal_line_item
-  (deal_card_id, version, product_id, product_name, quantity, unit, unit_price, currency, sort_order)
-SELECT card_id, version, NULL, 'DEV159 A2 promotion reward', 1, 'g', 0, 'EUR', sort_order + 9001 FROM _t;
-
+-- A2 — INVERTED by HEL-81 (2026-08-25): INSERT is no longer kept for the
+--      client. `acceptPromotion` now writes its reward lines through the
+--      `accept_promotion` SECURITY DEFINER RPC (deal_line_item_insert_lockdown_test.sql
+--      §A1 proves that path); a direct table INSERT — even the exact shape the
+--      old promotion accept used — must now be refused the same as B1-B4.
+--      Kept here, not deleted, per HEL-81's own instruction: this cell is
+--      DEV-159's historical record that the door used to be open on purpose.
 DO $$
+DECLARE n integer;
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM public.deal_line_item WHERE product_name = 'DEV159 A2 promotion reward')
-    THEN RAISE EXCEPTION 'A2/insert: acceptPromotion''s insert was refused — the revoke was too wide'; END IF;
+  BEGIN
+    INSERT INTO public.deal_line_item
+      (deal_card_id, version, product_id, product_name, quantity, unit, unit_price, currency, sort_order)
+    SELECT card_id, version, NULL, 'DEV159 A2 promotion reward', 1, 'g', 0, 'EUR', sort_order + 9001 FROM _t;
+    GET DIAGNOSTICS n = ROW_COUNT;
+    IF n > 0 THEN RAISE EXCEPTION 'A2/insert: a direct table INSERT succeeded — HEL-81 is open (or was reverted)'; END IF;
+    RAISE EXCEPTION 'A2/insert: the insert was allowed but matched 0 rows — inconclusive';
+  EXCEPTION
+    WHEN insufficient_privilege THEN NULL;   -- expected since HEL-81
+    WHEN others THEN
+      IF SQLERRM LIKE 'A2/insert%' THEN RAISE; END IF;
+      RAISE EXCEPTION 'A2/insert: refused for the WRONG reason (%)', SQLERRM;
+  END;
 END $$;
 RESET ROLE;
 
