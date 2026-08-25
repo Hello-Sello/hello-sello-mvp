@@ -1576,3 +1576,74 @@ unexplained difference is more often a confound than a finding.
 something outside the thing measured. This one generalises furthest, because it applies to every
 before/after comparison, not only to tests.
 
+
+---
+
+## L-050 · A coverage claim can be true inside a unit and false at its caller
+
+**2026-08-25 · T02 / HEL-64 · `/build` · caught by `critic` (N1) after the test was already green**
+
+**Trigger** — writing a test that proves a function picks the right one of two same-typed inputs,
+and then describing that test as closing the class. Also: any sentence of the form *"case X closes
+the Y confusion"* where Y can also occur in the code that CALLS the function.
+
+**What I did.** `ConnectedCompany` carries both `companyId` and `relationshipId`. Both are `string`,
+both compile, and a lookup keyed on the wrong one renders **identically green** in every render test
+while shipping a control whose people list is empty forever. I extracted the mapping into a pure
+`peopleForRelationship()` and gave it a **decoy fixture** — company A's `companyId` IS the target
+`relationshipId` — so a `companyId`-keyed implementation goes red. That was a good test and it did
+what it claimed.
+
+**What it did not do.** `critic` pointed at the **call site**: change
+`relationshipId={group.sellerCompanyId}` in the component that renders the control and *both* are
+still `string`, `tsc` still passes, and **all seven unit cases still pass** — including the decoy,
+because the pure function it tests is untouched. The shipped control's people list is empty forever,
+which is exactly the state the ticket's headline invariant forbids.
+
+**The shape.** Extracting a confusable choice into a tested function moves the confusion **up one
+level**; it does not delete it. The test proves the callee. Nothing proves the caller passed the
+right thing, and under a jsdom-less render env nothing can.
+
+**What to do instead.** When you extract-and-test a same-typed choice, say in the plan **which level
+the test closes** and put the caller on the uncovered list explicitly. If the caller is not
+unit-reachable, it belongs in the e2e or on the human gate sheet — named, not implied. A "declared
+uncovered" table that omits the level you did not close is worse than no table, because a reader who
+accepts the decoy's rationale reasonably believes the whole class is shut.
+
+**See also** [[L-038]] (a single owner is a claim about agreement, not file count) and
+[[L-021]] (assert presence and absence on the same state).
+
+---
+
+## L-051 · Handing a gap to another ticket is a claim about that ticket's criteria — open it
+
+**2026-08-25 · T02 / HEL-64 · `/build` · caught by `plan-checker` (B2) before any code was written**
+
+**Trigger** — writing "covered by T0X", "already declared e2e by the ticket", "the walk will catch
+it", or any deferral naming an owner. Also: a "declared uncovered" table with an `owner` column.
+
+**What I did.** My plan declared the ticket's **headline invariant** — *"the control is never a dead
+control"* — not unit-testable, and routed it to the e2e ticket with the words *"already declared
+e2e by the ticket."* I had read that ticket earlier in the same session.
+
+**It was false.** The e2e ticket's five acceptance criteria are entirely about a chat pill, an inbox
+route and two existing specs. **None mentions a company with zero connected people.** And the local
+seed has no such company either, while the human gate walk is locked to two companies that both have
+people. So the invariant was declared uncovered, deferred, **and landed nowhere** — three separate
+places each assuming one of the others held it.
+
+**The shape.** A deferral reads like bookkeeping and is actually an assertion about a *different
+artifact*, made from memory. It is the [[L-031]] shape ("the other copy is right" — and the other
+copy was never opened) pointed at a ticket instead of a file. It survives review easily because the
+sentence is about somewhere else, so nobody checks it where it is written.
+
+**What to do instead.** Before naming an owner, **open that owner and find the criterion**. If there
+is no criterion, you have three honest options and "defer" is not one of them: add the criterion to
+that ticket, close it here, or put it to the human as an open ruling. Say which. And check the
+**fixture** as well as the criterion — a criterion nobody can stage is not covered either.
+
+**Ending worth recording:** the gap closed on **evidence, not a ruling** — `visual-verifier` built
+the missing fixture (a throwaway zero-people company, hard-deleted after) and walked it live. The
+correct deferral would have been "no owner, needs a fixture", which is exactly what got built.
+
+**See also** [[L-039]] (scope is the gates' output, not the spec's AC list) and [[L-050]].
