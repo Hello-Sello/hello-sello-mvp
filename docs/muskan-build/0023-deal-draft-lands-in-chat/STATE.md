@@ -1,6 +1,6 @@
 # 0023 deal-draft-lands-in-chat — work order
 lane:   FULL
-stage:  design ✅  →  build: **T01 ✅ CLOSED** → **T02 / HEL-64 ✅ CLOSED** → **T03 / HEL-65 ✅ CLOSED (G4 auto)** → **build (next: T04 / HEL-66 — the LAST ticket)**   ·   G2 /prototype SKIPPED (Muskan, 2026-08-25)
+stage:  design ✅  →  build: **T01 ✅ CLOSED** → **T02 / HEL-64 ✅ CLOSED** → **T03 / HEL-65 ✅ CLOSED (G4 auto)** → **T04 / HEL-66 🔨 IN BUILD** (plan rev 1, `/build` step 3 — the LAST ticket)   ·   G2 /prototype SKIPPED (Muskan, 2026-08-25)
 branch: claude/muskan/work — no feature branch (Muskan's call, 2026-08-18)
 
 ## Seed
@@ -649,6 +649,43 @@ is not this slug's job, but nothing else is tracking it.
   `resetDealData()`, so a prior `afterAll` that threw *at* `resetDealData()` could leave a product
   still holding `deal_line_item` rows → the pre-clean 23503s. **It fails loudly with a named
   error**; the permanent-silent-block is gone. Left unfixed deliberately, window is narrow.
+
+- **build T04, 2026-08-25 (session 91 `deal_land_t03`, continued)** — budgets reset:
+  `tests 0/2`, `blocking-findings 0/2`, `G4 rounds 1`. Plan at `PLAN-T04.md` rev 1;
+  `plan-checker` spawned at `/build` step 3.
+  🔴 **A MISS OF MINE, caught by `git pull --rebase` refusing to run.** T03's **fix-round
+  corrections were never committed** — I committed the test files BEFORE the fix round, then
+  committed only docs afterwards, so **T03 was recorded as CLOSED while its own six corrections
+  sat uncommitted in the working tree.** The gate results still stand (they were measured against
+  the working tree, which had the fixes) but the branch did not carry them. Committed now.
+  **The class: a green gate and a pushed branch are two different claims**, and I made the first
+  while implying the second.
+  ✅ **Every T04 target opened and MEASURED before writing a word** — the plan's §1 is a truth
+  table, because the way a citation-repair ticket fails is by copying line numbers out of the
+  document it is repairing. Five citations independently established:
+  `msg_all` **`:300-302`** (ADR says `:288-290`, in THREE places) · the
+  `card_relationship_member` deal-child policies **`:312-322`** (ADR says `:300-311`, which is
+  actually `msg_all` + `card_all` + `conf_all`) · `can_access_workspace` **`:117-125`** ·
+  the `on conflict` precedent **`:159-184`** · and the PRD's pill citation, which points at the
+  **superseded** migration.
+  🔴 **The sharpest one is not a typo.** ADR §4.1 cites `20260607170000:105-113` for
+  *"`deal_workspace` is born `company_wide` so `can_access_workspace` passes"*. The claim is
+  **TRUE** (`:123` = `visibility = 'company_wide' OR is_workspace_member(...)`) but `:105-113` is
+  **`is_workspace_member` — the function the OR-branch exists to BYPASS.** A reader following the
+  citation concludes membership is required, the exact opposite of the sentence's argument and of
+  what T03 relies on to assert `deal_member === 1`.
+  ⚠️ **T04 owes EIGHT edits, not the three `TICKETS.md` cut it with.** It has grown by ruling four
+  times — §8.9/§8.7 (G3) · ADR **J1** (`security` B1, T01 G4) · **AC 5's wording** (T02 G4) ·
+  and **`TICKETS.md`'s own T03 AC list** (this session). **The ticket's own criteria are the thing
+  most out of date — the same defect it exists to fix, one level up.**
+  📌 **HEL-74's stated exploit is DEAD, and it was filed out of THIS slug** (T01 G4, `security`
+  N1). The parallel session verified on production that `relationship` is **SELECT-only** for
+  `authenticated` and no `public` function updates or deletes it — so "soft-delete the
+  relationship, then Send onto a dead one" is unreachable. **The gap may not be dead:**
+  `send_deal` still never checks the relationship is live, which is harmless only because of the
+  current grant surface, not because of `send_deal`. Asked for the ticket to be CORRECTED rather
+  than closed, so nobody re-derives it from N1's original wording. **Separately: "there is
+  currently no way to disconnect at all" is a PRODUCT gap, bigger than HEL-74, and unowned.**
 
 ## Gate log
 - **T03 / HEL-65 — G4 AUTO 2026-08-25 (no human stop, and the routing is recorded).** The diff is
