@@ -1723,3 +1723,126 @@ order. This is a decision about team size and stage, not about what good enginee
 **Parked, with reasons (so they are not re-found as oversights):** T11 and T14 are not
 reachable through PostgREST · T17 needs a product answer about what deactivation means
 · T16 and DEV-159 bite only on demo data.
+
+## 2026-08-25 — A slug that promised no RLS change does not get to make one, even when a review finds a real gap
+
+**Decided:** slug 0023's `security` review raised a genuine finding — the company-addressed deal
+signal moves off `pending_inbox_item` (identity-hardened one slug earlier) onto `chat_message`,
+whose `msg_all` policy has **no sender predicate**, so a thread member can post a pill attributed
+to someone else. **The fix was NOT taken into the slug.** Both findings were filed instead:
+**HEL-67 widened** (it already covered the same policy missing a `type` predicate — two missing
+guards on one statement, so one ticket) and **HEL-74** (`send_deal` never checks the relationship
+is still live).
+
+**Why.** ADR 0006 §4.2 commits slug 0023 to *no schema, no RLS, no grant change*. **That
+constraint is not paperwork — it is what makes the migration safe to deploy on its own**, with a
+plain `db push` and no coupled batch. Widening scope to fix an RLS policy would have:
+- turned a one-function `create or replace` into a policy change on a `FOR ALL` policy, which hits
+  SELECT as well as INSERT and needs a reader census first (**L-037**);
+- coupled a deployable slug to a security fix with its own design questions — `sender_person_id` is
+  **nullable** for system messages, so the obvious predicate breaks every `connection_established`
+  writer;
+- and done it under end-of-build momentum, which is the condition the checker-loop record already
+  warns about.
+
+**The general rule:** a scope fence is a deployment guarantee, not an aspiration. When a review
+finds something the fence excludes, **the finding is filed and the fence holds.** Overriding it is
+a decision to be taken deliberately and in daylight, not absorbed into the ticket that found it.
+
+**The distinction that made this easy to rule.** Neither finding was a hole the slug **opened**.
+`msg_all` has never had a sender predicate; the relationship path produced an inbox ticket before
+rather than a chat message. **What changed is that the deal signal now rides on guards that were
+never there.** A slug that inherits a weakness is in a different position from one that creates
+it — the first files, the second fixes before shipping.
+
+**Cost accepted, explicitly:** deal-arrival messages are forgeable until HEL-67 lands. Low today
+(one user per company; a forged pill points at a card everyone in that thread can already read —
+`security` confirmed it confers **no new read rights**, only discoverability). **Rises with team
+size**, which is exactly when "who sent this" starts to matter.
+
+**Surfaced by:** slug 0023 T01 / HEL-63, `/build` G4, 2026-08-25.
+
+---
+
+## 2026-08-25 — Company deactivation is closed-to-everyone
+
+**What was decided.** A deactivated company (`company.deactivated_at` set) reads **identically to a
+soft-deleted one** across every discovery door — hidden from the Discover listing, company page
+closed on a direct link, shop and prices closed, and existing baskets drop its lines. New
+connections blocked. The difference from deletion is only that it is **reversible**, and that the
+company's **own members never lose sight of their catalogue** — they need to work on it before
+reactivating.
+
+**Why.** Three readings were on the table and all three were defensible:
+
+- *Invisible to strangers, open to partners* — "stop marketing, keep serving existing customers."
+- *Read-only freeze* — everything stays visible, nothing new can start, open deals finish.
+- *Closed to everyone* — chosen.
+
+The deciding argument was **one rule that is easy to reason about**, matching a shape the codebase
+already has and already tests (`deleted_at`). The two rejected options each introduce a *third*
+lifecycle state with its own visibility semantics, and this repo's recurring failure is doors
+disagreeing about the same rule (L-038). Adding a state that only some doors understand is how that
+happens again. The cost accepted is real and should not be discovered later: **a buyer with the
+deactivated seller's products in a basket loses those lines with no warning.**
+
+**Consequence, worth noting because it inverts the usual direction:** the fix got *cheaper while it
+sat in the backlog*. When filed (T17, 2026-08-24) it meant editing four doors. Because T13 pointed
+the product policies at `product_visible_to_caller()` and HEL-69 pointed the price view at
+`product_price_visible_to_caller()`, six doors now inherit the term from **one edit** to that
+function; only the three Discover RPCs still need it individually. Do **not** add the term to the
+owner arm.
+
+**Surfaced by:** HEL-70, ruled during the security audit session, 2026-08-25.
+
+---
+
+## 2026-08-25 — HEL-69's price-view migration ships with the slug 0023 push to `main`
+
+**What was decided.** `20260825100000_pricelist_view_single_owner.sql` is **not** a separate deploy.
+It rides the slug 0023 push. Its filename sorts after 0023's `20260825090000`, so one plain
+`supabase db push --linked` takes both in filename order with **no `--include-all`**. Both now sit
+together on `claude/muskan/work`.
+
+**Why.** The leak it closes is real but narrow — two production rows, reachable only by an already
+connected buyer — so it does not justify its own deploy window. Batching also keeps the ordering
+trivially correct instead of relying on two separate pushes landing in the right sequence, which is
+where L-034 bit before.
+
+**⚠️ Same-deploy on this repo means `dev` → `main`, not `dev`** (DECISIONS 2026-08-24). The 0022
+outage came from stopping at `dev`.
+
+**Until it ships, production still leaks** `Spirit Bear T28 STR MLS` (€9.50/g) and `fdsc` (€2.00/g)
+to any connected buyer. HEL-69 stays **open** until the push, deliberately — a ticket closed on a
+local green while production still carries the bug makes the whole list untrustworthy.
+
+**Surfaced by:** HEL-69, 2026-08-25.
+
+---
+
+## 2026-08-25 — `/c/<handle>` publishes contact details by design
+
+**What was decided.** The public business card at `/c/<handle>` continues to show the person's email
+and phone to anonymous visitors. **Accepted as intended behaviour, not a hole** — closed so the next
+audit finds a ruling rather than re-raising it.
+
+**Why.** A business card exists to make someone contactable, and in a bounded named trade network —
+50 wholesalers, ~2,500 pharmacies, everyone expecting to be reachable — that is the point of the
+page. The `anon` grant on `get_public_profile` is deliberate and already documented in three
+migrations.
+
+**What was weighed against it, and is not dismissed.** The address published is `auth.users.email`,
+i.e. **the credential the person signs in with** — not a separate contact address. Nobody was asked,
+and there is no opt-out. Measured 2026-08-25: 17 of 17 handles expose a login email, 7 expose a
+phone, all enumerable by plain HTTP. Publishing a login identifier lowers the cost of credential
+stuffing and phishing against our own users, and under GDPR it is personal data published without a
+recorded basis.
+
+**⏰ REVISIT TRIGGER — before real pharmacies onboard.** This was ruled while all 17 handles belong
+to the team and demo accounts. It is **not** a ruling about outside users' personal data. If
+reopened, start from the rejected option that fixes the credential problem without emptying the
+cards: **a separate `contact_email` field**, published instead of the login address. (The other
+rejected option — per-person toggles defaulting off — is safest but silently empties every existing
+card until each person opts back in.)
+
+**Surfaced by:** HEL-72, 2026-08-25.

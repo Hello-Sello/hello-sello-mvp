@@ -5,13 +5,83 @@
 
 ---
 
-**Last updated:** 2026-08-25 (session 88 `deal_land` — **/build T01 · HEL-63** in progress)
-**Status:** active — building slug 0023 ticket T01 (`send_deal` announces a company-addressed deal in chat).
-**Shared files locked:** `src/modules/deals/actions.ts` (docstring only, `:357-366`).
-Also writing, NOT shared: `supabase/migrations/20260825090000_send_deal_c2c_announce.sql` (new),
-`supabase/tests/send_deal_c2c_announce_test.sql` + runner (new),
-`supabase/tests/deliver_deal_test.sql`, `supabase/tests/claim_deal_ticket_test.sql`,
-`docs/muskan-build/0023-deal-draft-lands-in-chat/**`.
+**Last updated:** 2026-08-25 — session 90 `deal_land_t02` OPEN.
+**Status:** active — `/build T02` (HEL-64), slug 0023, branch `claude/muskan/work`.
+
+**Shared files locked:**
+- `src/modules/basket/components/CounterpartyPersonSelect.tsx` (new)
+- `src/modules/basket/components/RecipientPicker.tsx`
+- `src/modules/basket/components/BasketDrawer.tsx`
+- `src/modules/basket/components/CounterpartyPersonSelect.test.tsx` (new)
+- `src/modules/basket/components/BasketDrawer.test.tsx`
+
+⚠️ **`docs/decisions/DECISIONS.md` is DIRTY in the working tree and is NOT mine** — two
+uncommitted entries left behind by session 89 (company deactivation; HEL-69 rides the 0023
+push). Session 90 does not touch it and every commit names its paths explicitly (L-040).
+
+**Previously:** **BOTH of 2026-08-25's parallel sessions are closed.** Merged status:
+session 88 `deal_land` (T01 / HEL-63) **and** session 89 `security_audit` (HEL-69 + the ticket sweep).
+
+> ⚠️ **CORRECTION to the line below, from session 89:** the note *"nothing else is pending on cloud"*
+> was true when written and is **no longer**. TWO migrations are now pending, not one —
+> `20260825090000` (T01) **and** `20260825100000` (HEL-69, the price-view single-owner fix). They sit
+> together on `claude/muskan/work` in filename order, and **ship as one plain `db push`, no
+> `--include-all`** (Muskan, 2026-08-25). Do not push either alone.
+
+### Session 89 — `security_audit` (parallel to 88, worktree `hel-69-pricelist-view`, now merged)
+
+**Shipped (local, NOT pushed to cloud):** `supabase/migrations/20260825100000_pricelist_view_single_owner.sql`,
+`supabase/tests/pricelist_view_single_owner_test.sql` + runner, a fixture correction in
+`pricelist_item_tier_test.sql`, `docs/agents/LEARNINGS.md` (**L-047, L-048 — L-049 is next free**),
+`AGENTS.md` + `docs/agents/SECURITY-CHECKLIST.md` (the research rule), `DECISIONS.md` ×3,
+`ARCHITECTURE-NOTES.md` ×2, the ledger entry, and a comment correction in
+`20260607170000_rls_policies.sql`.
+
+**Linear:** HEL-69 (In Progress, built+green, held open until the push), HEL-70 (ruled, unblocked),
+HEL-71 (dashboard toggle, Muskan's), HEL-72 (**closed — ruled intended behaviour**), HEL-73 (open).
+
+⚠️ **PRODUCTION STILL LEAKS until `20260825100000` ships** — `Spirit Bear T28 STR MLS` (€9.50/g) and
+`fdsc` (€2.00/g) hand a per-gram price and tier ladder to any connected buyer.
+
+⚠️ **Two dev-environment traps worth knowing before anyone reads a red e2e run:** every
+`supabase db reset` **rotates the local stack secret**, and the Playwright fixtures resolve it once —
+so a reset-heavy session manufactures `cannot resolve the local Supabase secret key` failures that
+look like real regressions. Compounds with HEL-73 (specs permanently mutate the seed). SQL runners
+are immune. Full note in `ARCHITECTURE-NOTES.md` 2026-08-25.
+
+⚠️ **`LEARNINGS.md` has a monotonic key and no allocator.** Sessions 88 and 89 both independently
+believed L-045 was free; two appends in different places would have merged **clean** and left two
+L-045s. Caught by conversation, not machinery. Unresolved — **whatever replaces it should fail loudly
+at merge**, which sequential integers appended in different places structurally cannot.
+
+### Session 88 — `deal_land` (original entry below, unedited)
+**Shared files locked:** **none — all released.** `DECISIONS.md` + `ARCHITECTURE-NOTES.md` were
+locked for the two wrap entries and released on commit `30dd975`.
+**Also released:** `src/modules/deals/actions.ts` was locked for a
+docstring-only edit (`:356-366`) and is now released, committed in `3ae7873`.
+
+**Shipped this session (local, NOT pushed to cloud):** `supabase/migrations/20260825090000_send_deal_c2c_announce.sql`,
+`supabase/tests/send_deal_c2c_announce_test.sql` + runner, rewrites of `deliver_deal_test.sql` and
+`claim_deal_ticket_test.sql`, `docs/agents/LEARNINGS.md` (**L-045, L-046 — L-047/L-048 are the
+security session's; L-049 is next free**), and the 0023 slug folder.
+
+⚠️ **`20260825090000` is LOCAL ONLY.** Production tip remains `20260824100000`. Plain
+`supabase db push`, **no `--include-all`** — verified, nothing else is pending on cloud.
+**`/ship` must first diff `pg_get_functiondef('public.send_deal(uuid)')` against PRODUCTION** — a
+file-only diff cannot see prod drift and this repo was bitten by exactly that (`ensure_rls`).
+
+⚠️ **SHARED LOCAL DATABASE — the sync file does not cover it.** A worktree isolates git and **not**
+Postgres. Protocol agreed with the security session and it works: **say HOLDING and RELEASED
+explicitly; reset from your own tree immediately before every run; assume nothing about the state
+the other left.** ⚠️ **Do NOT use an idle notice as a release signal** — `notify_when_idle` answers
+*"between turns?"*, not *"done with the DB?"*, and the one-subagent-round-trip gap between those
+cost us a collision (5 × `FATAL: peer authentication` mid-gate; run discarded, not recorded as a
+failure).
+
+⚠️ **`LEARNINGS.md` HAS A MONOTONIC KEY AND NO ALLOCATOR — for Muskan.** Two sessions on divergent
+bases nearly wrote two `L-045`s. **Two appends in different places merge CLEAN; git flags nothing.**
+`L-040`'s shape, and **it survived worktrees — a worktree isolates the TREE, not the CONVENTION.**
+Caught by conversation, not machinery. Not fixed unilaterally.
 
 **Previous (session 87):** shared files locked: none — none taken, none held. This session wrote `docs/architecture/adr/0006-*`
 (new file), `ADR-INDEX.md`, `docs/agents/LEARNINGS.md` (L-042..L-044 appended), the per-slug folder,
