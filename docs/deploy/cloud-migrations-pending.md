@@ -35,14 +35,45 @@
 > rather than the table. A plain `db push` would have carried it silently either way; the risk is
 > not that it fails to ship, it is that **nobody reviewed what shipped.**
 >
-> **Row 1's "what it does" is written from its filename and header only** — this session did not
-> author it and is not summarising work it did not do. Its author owes the real entry.
+> **Row 1's full entry was written by its author's session (`deal_land_t02`) and placed here by the
+> `security_tickets` session, which held the file.** It was deliberately NOT summarised by whoever
+> happened to hold the lock — that is how a ledger entry stops describing the migration it names.
 
 | # | file | what it does |
 |---|---|---|
-| 1 | `20260825090000_send_deal_c2c_announce.sql` | **⚠️ ENTRY OWED BY ITS AUTHOR (session 88, T01 / HEL-63).** `send_deal`'s company arm announces the deal in the c2c chat thread instead of cutting an inbox ticket. `create or replace` — see the pre-flight diff below. |
+| 1 | `20260825090000_send_deal_c2c_announce.sql` | **Slug 0023 / T01 / HEL-63.** `create or replace` of `public.send_deal(uuid)`, grant re-emitted. The **company** arm stops calling `deliver_deal` and posts the same clickable `deal_card` pill into the relationship's `c2c` thread that the person arm already posts. Full entry below. |
 | 2 | `20260825100000_pricelist_view_single_owner.sql` | `current_pricelist_item` stops reprinting the product-price-visibility rule and calls `public.product_price_visible_to_caller()` — the function that already gates `pricelist_item_public_select` and `plit_public_select`. Also revokes `INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES` that `authenticated` held on the view although the defining migration grants SELECT only. |
 | 3 | `20260825110000_deactivated_company_gate.sql` | **HEL-70.** `company.deactivated_at` starts closing every discovery door. One predicate added to five functions: `product_visible_to_caller` (six doors inherit it), `list_discoverable_companies`, `get_discoverable_company`, `get_discoverable_shop`, `list_discoverable_people`. `create or replace` throughout, grants re-emitted. |
+
+### Row 1 in full — `20260825090000_send_deal_c2c_announce.sql` (T01 / HEL-63)
+
+*Written by the slug's own session; placed here verbatim.*
+
+`create or replace` of `public.send_deal(uuid)`, **grant re-emitted** (`grant execute … to
+authenticated` is a separate statement; a `drop`+`create` would kill Send for every user).
+
+**What changes.** The **company** arm stops calling `perform public.deliver_deal(...)` — that call is
+**deleted, not guarded** — and instead resolves the relationship's `c2c` thread and posts the same
+clickable `deal_card` pill the person arm already posts. The pill insert is **hoisted**: the
+`if/else` computes the thread only, and one `chat_message` insert serves both arms. The c2c lookup is
+**resolve-or-create** (`on conflict do nothing` + re-select, `deleted_at is null`), so an interrupted
+accept self-heals on first send. The **p2p** arm gets the same `on conflict` treatment — it had the
+identical race.
+
+**Not touched.** `deliver_deal`'s own body is byte-identical and keeps serving Sella's door via
+`confirm_detected_deal_births_negotiation.sql:176`. No RLS, grant, or schema change.
+
+**Behaviour change the moment it lands.** A company-addressed deal creates **zero**
+`pending_inbox_item` rows and appears in the company chat instead. Pre-existing Connection-Requests
+tickets survive and stay claimable.
+
+**Breaks by design, rewritten in the same commit.** `deliver_deal_test.sql` (its idempotency case now
+calls `deliver_deal` twice directly) and `claim_deal_ticket_test.sql`. New suite
+`send_deal_c2c_announce_test.sql` + runner ships with it.
+
+**Gate at close.** 5 SQL runners exit 0 · `tsc` 0 · unit 490/490 · nine ACs replayed on real data.
+
+---
 
 **The leak it closes, measured on production 2026-08-24.** The view's hand-written public arm was
 missing three terms `product_visible_to_caller()` carries: the seller company's `deleted_at` and
