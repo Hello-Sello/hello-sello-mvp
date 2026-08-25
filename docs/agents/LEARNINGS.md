@@ -2089,3 +2089,78 @@ about a fresh baseline — it might be counting the probe's own leftovers.
 
 **See also** [[L-033]] (zero net seed mutation is the suite discipline this script fell outside
 of).
+
+---
+
+## L-061 · Tests are what make dead code look alive
+
+**2026-08-25 · session `workflow_retro` · found by an inbound-import census, not by review**
+
+**Trigger** — before concluding a module is in use, or before a cleanup pass decides what to
+keep. Check **inbound imports**, not test coverage.
+
+**What I did** — audited `src/` for unreferenced files and found eight, totalling 1,111 lines.
+Two of them — `deals/lib/finalize.ts` and `deals/lib/lineEditing.ts` — were imported by
+**nothing except their own test files**, and those tests carried **23 passing assertions** that
+ran on every `vitest` invocation. They had survived several review passes and a slug rollup.
+
+**Why it wasn't obviously wrong at the time.** A file with no importer and no test reads as
+suspicious — someone deletes it. A file with 17 green tests reads as load-bearing, because green
+tests are the signal we are trained to trust. The tests didn't cause the rot; they **camouflaged**
+it. `DocumentsTab.tsx` and `ProductList.tsx` compounded it differently: their only surviving
+mentions were *stale comments in live files* (`deals/actions.ts:68`, `CardFront.tsx:14`), which a
+grep for the name finds and a human reads as evidence of use.
+
+**The rule** — "is this used?" is answered by inbound imports, and only by inbound imports. A test
+file is not an importer; a comment is not an importer. Verify a static scan is authoritative first
+(this repo has **zero** dynamic imports in `src/`, so a grep is), then delete and let the suite
+adjudicate: the unit count must fall by **exactly** the number of tests the deleted modules owned.
+497 → 474 = exactly 6 + 17 was the proof the cut was surgical; any other number means something
+live was touched.
+
+**The counter-case, which matters as much.** `getProductBatches()` also had zero callers and was
+**kept**. It is the real batch reader for a picker currently faking its options
+(`CardFront.tsx:224` — *"FRONTEND-ONLY mock option lists"*). Unreferenced code is either
+**superseded by something that shipped** (delete) or **the correct implementation of something
+currently faked** (keep, and file the wire-up). Deleting the second kind removes the good version
+and leaves the mock.
+
+**See also** [[L-013]] (a green suite proves nothing if it never runs), [[L-062]].
+
+---
+
+## L-062 · A severity word with four authors and no owner is not a severity word
+
+**2026-08-25 · session `workflow_retro` · found by mapping the term before changing the rule**
+
+**Trigger** — before tuning any rule that counts a term (`blocking`, `critical`, `ready`,
+`done`), find every place that term is *produced*, not just where it is consumed.
+
+**What I did** — the checker loop had failed to converge on eight consecutive tickets, and the
+dry-run's own series showed why the stopping rule could never fire: findings 11·15·15·14·15·14·12,
+blockers 5·8·4·6·6·8·4, over seven rounds. I diagnosed it as *"`adr-checker` doesn't define
+`blocking`"* and was about to fix that one file. Mapping the term first showed **four** agents
+emit `blocking` — `adr-checker`, `plan-checker`, `security`, `critic` — and **only `critic`
+defined it**, and only because it had been rewritten hours earlier the same day.
+
+**Why it wasn't obviously wrong at the time.** Every agent file looked complete on its own. Each
+said `Severity: blocking | note` and moved on, which reads as a convention being referenced rather
+than a definition being omitted. The gap is only visible when you line all four up. Meanwhile the
+orchestrator's rule — *"stop at the first round with zero NEW blocking findings"* — looked precise,
+because it named a specific severity. It was counting a word with four private meanings, and had
+never once been satisfied in roughly fifteen attempts.
+
+**Why the rule was unfixable without the definition.** With no threshold, anything a checker felt
+strongly about became `blocking`, so the count could not decay. The dry-run had already measured
+the real signal — *find-rate is flat, **severity** decays: leaks → silent failures → won't-run →
+behavioural edges → contracts/wording* — but the rule read the axis that does not move.
+
+**The rule** — a rule that counts a term owns that term. Give it exactly one definition, in one
+place, and **name the mirrors**. Here: a five-rung ladder owned by `PIPELINE.md` §10 and copied
+verbatim into all four agents, with each copy carrying a line saying where the owner is. The
+duplication is deliberate and declared, because an agent file is a system prompt and a threshold
+the checker does not hold in context is a threshold it will not apply — four *undeclared* copies
+is what that replaces, not what it creates.
+
+**See also** [[L-038]] (a "single owner" is a claim about agreement, not about file count),
+[[L-061]].
