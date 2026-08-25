@@ -258,3 +258,52 @@ Backend-only diff, all nine ACs green on real data, `critic` clean after one fix
 2. **T03 must grep the c2c counting helpers.** `e2e/inbox-accept.spec.ts:157-158` asserts
    `countThreadsForPair("c2c") === 1`, and the heal path can now leave a soft-deleted row beside
    the live one.
+
+---
+
+# T02 / HEL-64 — the buyer can address a deal to a person at the seller's company
+
+Session 90 `deal_land_t02`, 2026-08-25. Diff: `8d8d7c4` (source) + `7d2c0e2` (tests).
+Budgets this round: `tests 0/2` · `blocking-findings 0/2` · `G4 rounds 1`.
+
+## Gate — measured by me, not taken from an agent
+
+| check | result |
+|---|---|
+| `npx tsc --noEmit` | **exit 0** |
+| `npm run test:unit` | **494 / 494 across 68 / 68 files** |
+| `npx eslint` (the three source files) | **exit 0** |
+
+⚠️ **The file count was the load-bearing number, not the pass count.** T01's baseline was
+**490 / 67**. A run still reporting 67 would have meant `CounterpartyPersonSelect.test.tsx`
+never executed and its four cases were green for the wrong reason. **`rtk` collapses vitest
+to `PASS (n) FAIL (n)` and would have hidden exactly that** — the real numbers came from
+`rtk proxy npx vitest run`, and the new suite is confirmed by name with its 4 tests.
+
+## `consistency` — CLEAN, zero blocking
+
+Four checks, all reuse-positive, and **one of them corrected a claim of mine**:
+
+- **No duplication of `NewChatDropdown`** (consistency). That component flattens *all*
+  connections with search and sections, for starting a chat from the whole directory. This
+  one resolves people for **one known `relationshipId`**. The only shared resource is
+  `getMyConnections()`, which is reused verbatim — an ADR §3 fenced item.
+- **The fetch idiom matches** `BasketDrawer.tsx:43-57` and the old `RecipientPicker`.
+  On the accepted duplicate read: **there is no shared-fetch primitive in this repo to have
+  skipped** — zero hits for `useSWR`/`react-query`/`useQuery`, and the single `createContext`
+  (`BasketProvider`) is basket-domain state, not a directory cache. A stated tradeoff, not a
+  silent one.
+- 🔴 **The render-phase state adjustment is NOT a first — my plan implied it was.**
+  `consistency` found it already established at **`IconRail.tsx:200-205`**
+  (`prevOnRoute`/`onSurfaceRoute`) and **`OpenItems.tsx:115-120`** (`prevThings`/`things`),
+  same shape, same `prev<X>` naming. **Verified by me by opening both** — and `IconRail`'s
+  own comment names the reason: *"conditional setState in render, NOT an effect … so it never
+  reads as a setState-in-effect."* So builder's D1 deviation did not merely dodge a lint
+  rule; **it landed on the convention this repo had already chosen for exactly this problem,
+  for exactly this reason.**
+- **Styling byte-identical** to the sibling company select (`RecipientPicker.tsx:40`), and
+  `aria-label="Address this deal to"` matches the repo's short-descriptive convention
+  (`"Member role"`, `"Link type"`, `"Document type"`).
+- **`peopleForRelationship`'s placement upheld**, and not as post-hoc rationalisation:
+  `basket/lib/group.ts` and `pack.ts` operate on `BasketLine`/`BasketGroup` — basket math.
+  This function operates on `MyConnectionsView`, a messaging type. The distinction is real.
