@@ -1,6 +1,6 @@
 # 0023 deal-draft-lands-in-chat — work order
 lane:   FULL
-stage:  design ✅  →  **build — T01 (HEL-63) IN PROGRESS**   ·   G2 /prototype SKIPPED (Muskan, 2026-08-25)
+stage:  design ✅  →  build: **T01 ✅ CLOSED** → **build (next ticket: T02 / HEL-64)**   ·   G2 /prototype SKIPPED (Muskan, 2026-08-25)
 branch: claude/muskan/work — no feature branch (Muskan's call, 2026-08-18)
 
 ## Seed
@@ -247,6 +247,10 @@ is not this slug's job, but nothing else is tracking it.
 - triage — FULL, 2026-08-25 (narrowed from F-04, then widened to include the picker)
 - **G1 — PASSED 2026-08-25**, approved unamended. Eight acceptance criteria; with G2
   skipped they are the ONLY thing G4 compares against.
+- **T01 / HEL-63 — G4 PASSED 2026-08-25 (HUMAN, not auto).** Backend-only diff would have closed
+  with no stop, but `security`'s **blocking** B1 fired the carve-out. Muskan ruled **file and ship**;
+  B1 → HEL-67 (widened), N1 → HEL-74. Nine ACs replayed green on real data. Budgets: `tests 0/2`,
+  `blocking-findings 1/2`, `G4 rounds 1`.
 - **G3 — PASSED 2026-08-25.** ADR 0006 accepted at rev 3. **All eleven sign-offs ruled**
   (§8.1–§8.11); a third checker round offered and declined. Tickets T01–T04 cut.
   ⚠️ **G4 cannot be walked against the PRD as it stands** — two amendments (§8.9, §8.7)
@@ -356,7 +360,45 @@ the fix pass is one attempt, not nine (the budget counts fix ROUNDS).
   cannot be resolved. **No builder REJECTION is outstanding** — which matters, because an
   outstanding rejection is one of the three carve-outs that would escalate this ticket to Muskan.
 
-## 🔴 T01 IS ESCALATED TO MUSKAN — `security` raised a BLOCKING finding
+## ✅ T01 IS CLOSED — 2026-08-25. Muskan ruled **file and ship**.
+
+**Budgets spent: `tests 0/2` · `blocking-findings 1/2` · `G4 rounds 1`.**
+All nine ACs replayed green on real data; full replay table in `REVIEW.md`.
+
+**The `security` B1 escalation was RULED, not waived.** Both findings filed:
+
+| finding | filed as |
+|---|---|
+| **B1** — the deal signal moved from an identity-hardened table onto `msg_all`, which has no sender predicate | **HEL-67 WIDENED** (Medium → **High**, retitled). It already covered the **same policy** missing a `type` predicate — two missing predicates on **one statement**, so one ticket; fixing them apart means rewriting `msg_all` twice |
+| **N1** — `send_deal` never checks the relationship is still live | **HEL-74** (new, High), related to HEL-67 + HEL-63 |
+
+**Recorded honestly in both: neither hole was opened by this slug.** `msg_all` has never had a
+sender predicate; the relationship path produced an inbox ticket before rather than a chat message.
+**What changed is that the deal signal now rides on guards that were never there.**
+
+### ⚠️ T04 / HEL-66 gains a fourth edit — NOT optional
+
+ADR **J1** discloses only the arbitrary-`deal_card_id` half of B1 and **says nothing about sender
+attribution**. It must be amended to name it. *(Also written into HEL-67 so it survives if T04
+slips.)* **T04 already owed three ADR/PRD corrections; this is the fourth**, alongside ADR §2/§8.10
+still carrying the wrong `on conflict` precedent range (`:162-183` → `:159-184`) and §4.1's
+systematically wrong policy line numbers (`security` N3 — every claim TRUE, every citation wrong).
+
+### ⚠️ Handed forward — two items, both with a named owner
+
+1. **`/ship` MUST diff `pg_get_functiondef('public.send_deal(uuid)')` against PRODUCTION** before
+   pushing (`security` S5 residual). A file-only diff cannot see prod drift, **and this repo has
+   been bitten by exactly that** (`ensure_rls` lived on prod and in no migration). If prod's body
+   ever diverged, this `create or replace` silently overwrites the divergence.
+2. **T03 must grep the c2c counting helpers.** `e2e/inbox-accept.spec.ts:157-158` asserts
+   `countThreadsForPair("c2c") === 1`; the heal path can now leave a soft-deleted row beside the
+   live one. `resolveC2cThread` is safe (it filters `deleted_at`); naive counters are not.
+3. **T03 will hit auth-key rotation noise.** Every `db reset` rotates the stack key and the e2e
+   fixtures resolve it once — so a reset immediately before an e2e run manufactures failures that
+   look real. SQL runners are immune (they go through `psql`). Flagged by the parallel session,
+   which lost a baseline to it.
+
+## (superseded) T01 was escalated to Muskan — `security` raised a BLOCKING finding
 
 **The carve-out fired.** T01's diff is backend-only, so it would have closed with **no human
 stop**. `/build` step 10 lists three overrides; **one is live:**

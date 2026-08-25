@@ -204,3 +204,57 @@ repo has been bitten by exactly this** (`ensure_rls` lived on prod and in no mig
 pushing, run `pg_get_functiondef('public.send_deal(uuid)')` **against production** and diff it
 against `20260724120300`. If prod's body has ever diverged from the file, this `create or replace`
 **silently overwrites the divergence.**
+
+---
+
+## G4 — MUSKAN'S RULING, 2026-08-25: **file and ship**
+
+The `security` B1 carve-out was escalated and **ruled**. Both findings are **filed, not fixed
+here** — the fix is an RLS change and ADR §4.2 commits this slug to none, which is what makes its
+migration safe to deploy alone.
+
+| finding | filed as |
+|---|---|
+| **B1** — `msg_all` has no sender predicate; the deal signal moved onto a weaker policy | **HEL-67 WIDENED** — it already covered the *same policy* missing a `type` predicate. Two missing predicates on **one policy statement**, so one ticket: fixing them apart means rewriting `msg_all` twice. Retitled, **Medium → High** |
+| **N1** — `send_deal` never checks the relationship is still live | **HEL-74** (new, High) — related to HEL-67 + HEL-63 |
+
+**Honest scoping recorded in both tickets: neither hole was opened by this slug.** `msg_all` has
+never had a sender predicate, and the relationship path produced an inbox ticket before rather than
+a chat message. What changed is that **the deal signal now rides on guards that were never there.**
+
+**Owed to T04 / HEL-66 (docs), and now written into HEL-67:** ADR J1 discloses only the arbitrary
+`deal_card_id` half and must be amended to name **sender-identity forgery**.
+
+### Acceptance-criteria replay — T01's nine EARS criteria, on real data
+
+Replayed on a verified-clean reset (`20260825090000` at the tip **and** the new body confirmed
+live by a shape-correct probe, not a substring match).
+
+| AC | invariant | proved by | result |
+|---|---|---|---|
+| 1 | M1 | C1 | ✅ exactly 1 `deal_card` pill in the live c2c thread, right sender/body/metadata |
+| 2 | M2 | C2 | ✅ zero `pending_inbox_item` rows |
+| 3 | M3 | C3 | ✅ p2p only; c2c count **unchanged** (delta assertion, immune to seed content) |
+| 4 | M4′ | C4 + C5 | ✅ missing thread healed; second send reuses it, mints no duplicate |
+| 5 | M9 | C6 | ✅ recipient (`authenticated`, Bob's jwt) reads pill + card + line items |
+| 6 | M10 | C7 | ✅ third company (Clara) gets zero rows on all three |
+| 7 | M11 | C8 | ✅ `authenticated` still holds EXECUTE on `send_deal` |
+| 8 | — | `deliver_deal_test` (2a), **two** direct calls | ✅ the dedupe guard is genuinely exercised |
+| 9 | M8 | C9 + repo check | ✅ `deliver_deal` definition intact; no new migration redefines it |
+
+**Plus, beyond the nine:** ADR §8.3's ruling is now asserted — C1 checks `send_deal` returns
+**the thread it announced into**, not merely a non-null uuid.
+
+### T01 — CLOSED
+
+Backend-only diff, all nine ACs green on real data, `critic` clean after one fix round,
+`security`'s blocking finding **ruled by Muskan and filed**. Budgets spent: `tests 0/2`,
+`blocking-findings 1/2`, `G4 rounds 1`.
+
+⚠️ **Two things this ticket hands forward, both already recorded above:**
+1. **`/ship` must diff `pg_get_functiondef('public.send_deal(uuid)')` against PRODUCTION** before
+   pushing (`security` S5 residual). A file-only diff cannot see prod drift, and this repo has been
+   bitten by exactly that (`ensure_rls`).
+2. **T03 must grep the c2c counting helpers.** `e2e/inbox-accept.spec.ts:157-158` asserts
+   `countThreadsForPair("c2c") === 1`, and the heal path can now leave a soft-deleted row beside
+   the live one.
