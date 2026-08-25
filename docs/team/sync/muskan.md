@@ -5,8 +5,44 @@
 
 ---
 
-**Last updated:** 2026-08-25 (session 88 `deal_land` — **T01 / HEL-63 CLOSED**)
-**Status:** offline — session closed. Next session = `/build HEL-64` (T02, the buyer's person picker).
+**Last updated:** 2026-08-25 — **BOTH of today's parallel sessions are now closed.** Merged status:
+session 88 `deal_land` (T01 / HEL-63) **and** session 89 `security_audit` (HEL-69 + the ticket sweep).
+**Status:** offline — both sessions closed. Next session = new tickets (Muskan's call), with
+`/build HEL-64` (T02, the buyer's person picker) queued from 0023.
+
+> ⚠️ **CORRECTION to the line below, from session 89:** the note *"nothing else is pending on cloud"*
+> was true when written and is **no longer**. TWO migrations are now pending, not one —
+> `20260825090000` (T01) **and** `20260825100000` (HEL-69, the price-view single-owner fix). They sit
+> together on `claude/muskan/work` in filename order, and **ship as one plain `db push`, no
+> `--include-all`** (Muskan, 2026-08-25). Do not push either alone.
+
+### Session 89 — `security_audit` (parallel to 88, worktree `hel-69-pricelist-view`, now merged)
+
+**Shipped (local, NOT pushed to cloud):** `supabase/migrations/20260825100000_pricelist_view_single_owner.sql`,
+`supabase/tests/pricelist_view_single_owner_test.sql` + runner, a fixture correction in
+`pricelist_item_tier_test.sql`, `docs/agents/LEARNINGS.md` (**L-047, L-048 — L-049 is next free**),
+`AGENTS.md` + `docs/agents/SECURITY-CHECKLIST.md` (the research rule), `DECISIONS.md` ×3,
+`ARCHITECTURE-NOTES.md` ×2, the ledger entry, and a comment correction in
+`20260607170000_rls_policies.sql`.
+
+**Linear:** HEL-69 (In Progress, built+green, held open until the push), HEL-70 (ruled, unblocked),
+HEL-71 (dashboard toggle, Muskan's), HEL-72 (**closed — ruled intended behaviour**), HEL-73 (open).
+
+⚠️ **PRODUCTION STILL LEAKS until `20260825100000` ships** — `Spirit Bear T28 STR MLS` (€9.50/g) and
+`fdsc` (€2.00/g) hand a per-gram price and tier ladder to any connected buyer.
+
+⚠️ **Two dev-environment traps worth knowing before anyone reads a red e2e run:** every
+`supabase db reset` **rotates the local stack secret**, and the Playwright fixtures resolve it once —
+so a reset-heavy session manufactures `cannot resolve the local Supabase secret key` failures that
+look like real regressions. Compounds with HEL-73 (specs permanently mutate the seed). SQL runners
+are immune. Full note in `ARCHITECTURE-NOTES.md` 2026-08-25.
+
+⚠️ **`LEARNINGS.md` has a monotonic key and no allocator.** Sessions 88 and 89 both independently
+believed L-045 was free; two appends in different places would have merged **clean** and left two
+L-045s. Caught by conversation, not machinery. Unresolved — **whatever replaces it should fail loudly
+at merge**, which sequential integers appended in different places structurally cannot.
+
+### Session 88 — `deal_land` (original entry below, unedited)
 **Shared files locked:** **none — all released.** `DECISIONS.md` + `ARCHITECTURE-NOTES.md` were
 locked for the two wrap entries and released on commit `30dd975`.
 **Also released:** `src/modules/deals/actions.ts` was locked for a
