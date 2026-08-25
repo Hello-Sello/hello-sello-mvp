@@ -356,7 +356,36 @@ is not this slug's job, but nothing else is tracking it.
   📌 **Agent-flagged, accepted:** C1 asserts the selected option by substring, not by position. Under
   these fixtures `people` is always `[]`, so "first" holds by construction. Recorded rather than
   hardened.
-  ⏳ **NEXT: `builder` running** — three source files, tests fenced (L-035).
+  ✅ **`builder` done, one round. Three source files, tests untouched** (`git status`: `M
+  BasketDrawer.tsx`, `M RecipientPicker.tsx`, `?? CounterpartyPersonSelect.tsx` — nothing else).
+  **No REJECTION outstanding**, which matters: an outstanding rejection is one of the three
+  carve-outs that would escalate a ticket to Muskan.
+  🔴 **D1 — THE PLAN'S OWN INSTRUCTION WOULD HAVE SHIPPED A LINT ERROR, and I verified it rather
+  than taking the agent's word.** PLAN clause 5 said the relationship-change reset happens *"in the
+  effect, alongside the refetch."* Written that way it trips **`react-hooks/set-state-in-effect`** —
+  and `tsc` and vitest are BOTH green with it, so only the lint catches it. **Probed directly**: a
+  four-line throwaway component with `setState` inside a `useEffect` body →
+  `✖ 1 problem (1 error) · Avoid calling setState() directly within an effect`. Builder implemented
+  React's documented *adjust-state-when-a-prop-changes* idiom instead (a `shownFor` state compared
+  during render). Contract preserved, select still controlled, C1 unaffected. **The plan was wrong
+  and the builder was right.**
+  ✅ **D2 — builder widened the reset to clear `people` as well as `personId`, and the reason is
+  sound.** Without it, a `relationshipId` change leaves the PREVIOUS company's people selectable in
+  the in-flight window; picking one sends a person id from the wrong company, which
+  `create_deal_draft:88-100` then rejects at birth. **Same failure class clause 5 exists to close** —
+  the plan named one half of it.
+  📌 **Builder caught a stale comment IN ITS OWN DIFF before returning.** It first wrote the
+  placement comment claiming a mirrored placement would leak the control to a stranger — **rev 1's
+  retracted claim**, which PLAN §4.2 explicitly corrects. Rewrote it to say what is true: the
+  **guard**, not the placement, suppresses the control. **That would have been this slug's SIXTH
+  stale-comment finding**, and it is the first one caught by its own author.
+  ✅ **Both of builder's own citations spot-checked by me and both hold:** `RecipientPicker`'s new
+  docstring cites `BasketDrawer.tsx:358-367` — the `{counterpartyRelationshipId && (` block does run
+  `:358-367`; and `messaging/types.ts:201-220` is `ConnectedCompany`'s real span.
+  ⏳ **NEXT: `test-runner`.** ⚠️ **The file count is the load-bearing number, not the pass count** —
+  T01's baseline was **490 / 67 files**, and the new suite must take it to **68**. A run that still
+  says 67 means `CounterpartyPersonSelect.test.tsx` never executed and its four cases would be green
+  for the wrong reason. **`rtk` collapses vitest to `PASS (n) FAIL (n)` and would hide exactly that.**
 
 ## Gate log
 - triage — FULL, 2026-08-25 (narrowed from F-04, then widened to include the picker)
