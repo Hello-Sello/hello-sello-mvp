@@ -342,11 +342,36 @@ fires in it. **Concern closed by construction — the run is still owed and will
 
 ## §6 · Traps carried in, so they are not rediscovered
 
-1. **Auth-key rotation.** Every `db reset` rotates the stack secret;
+1. **Do not `db reset`. There are now TWO independent reasons, and the second is new.**
+
+   **(a) Auth-key rotation.** Every `db reset` rotates the stack secret;
    `fixtures/local-supabase.ts:20-35` resolves it **once**, at module load (`:38`). A reset
    immediately before an e2e run manufactures `cannot resolve the local Supabase secret key`
    failures that look like real regressions and cascade into `waitForURL` timeouts.
-   **Do not reset before the run.** SQL runners are immune (`psql`, not the JS fixtures).
+   SQL runners are immune (`psql`, not the JS fixtures).
+
+   **(b) 🔴 A `db reset` from THIS tree would silently revert another branch's live schema.**
+   Found by the parallel session `security_tickets`, 2026-08-25, and **verified independently
+   by me** on this stack:
+
+   | fact | measured |
+   |---|---|
+   | `msg_all`'s WITH CHECK carries HEL-67's gate **right now** | `(can_access_thread(thread_id) AND ((type)::text <> 'deal_detected'::text))` |
+   | stamp | tip is `20260825120000` |
+   | can this branch see that migration file? | **NO** — `git show claude/muskan/work:supabase/migrations/20260825120000_…` fails |
+
+   A reset rebuilds from **the migration files this branch can see**, which stop at
+   `20260825110000`. The policy and its stamp would both vanish, with no conflict, no warning,
+   and no file collision to detect it. **A worktree isolates the tree; it does not isolate the
+   database** — and migration files are per-branch while the local Postgres is not.
+
+   **Consequence T03 must report honestly, not hide:** this ticket's green will be measured on
+   a stack whose schema **this branch cannot reproduce**. For T03 the extra policy term is
+   **inert** — grepped: the only `authenticated` `chat_message` insert in `e2e/` is
+   `chat-phase7.spec.ts:273` with `type: 'message'`, and `two-company.ts:119`'s `deal_detected`
+   is a superuser `DELETE` inside `RESET_SQL`. So the results stand. **But "green" is a claim
+   about a database state** ([[L-033]]), and that state is currently one no `db reset` here
+   would rebuild. Said in the gate report, not left implicit.
 2. **`npm test` is PLAYWRIGHT here, not vitest** ([[L-022]]) — `package.json:10`, and it sets
    `PLAYWRIGHT_FORCE_ASYNC_LOADER=1`, **which is mandatory**: without it Playwright 1.61 on
    Node 22+ crashes in its sync ESM resolve hook the moment a spec imports `e2e/fixtures/*`.

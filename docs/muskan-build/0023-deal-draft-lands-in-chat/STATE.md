@@ -557,6 +557,24 @@ is not this slug's job, but nothing else is tracking it.
   worked around with a `general-purpose` substitute. It is registered in this session. **§C's
   first owed ruling — "does the tier attach to the ruleset, or is it inherited from another
   agent's work?" — is moot going forward**, though the 0022 record still stands as written.
+  🔴 **NEW HAZARD — a `db reset` from this tree would silently revert another branch's live
+  schema.** Found by the parallel session `security_tickets`; **verified independently by me on
+  this stack.** `msg_all` carries HEL-67's gate right now
+  (`… AND ((type)::text <> 'deal_detected'::text)`) and the tip stamps `20260825120000` — but
+  `git show claude/muskan/work:supabase/migrations/20260825120000_…` **fails**. A reset rebuilds
+  from the files THIS branch can see, which stop at `20260825110000`, so the policy and its stamp
+  both vanish — **no conflict, no warning, no file collision to detect it.**
+  **A worktree isolates the tree, not the database.** CLAUDE.md §2b already says parallel sessions
+  need separate branches or worktrees rather than a sync file; **that guidance is now known to be
+  incomplete** — the one resource neither mechanism isolates is the local Postgres, and migration
+  files are per-branch while the DB is not. The parallel session is raising it with Muskan as a
+  possible architecture note, since it **changes** standing guidance rather than adding to it.
+  **What it costs T03:** the ticket's green will be measured on a stack whose schema this branch
+  cannot reproduce. The extra term is **inert here** — the only `authenticated` `chat_message`
+  insert in `e2e/` is `chat-phase7.spec.ts:273` with `type: 'message'`, and `two-company.ts:119`'s
+  `deal_detected` is a superuser DELETE inside `RESET_SQL`. **The results stand; the qualification
+  is stated in the gate report rather than left implicit** ([[L-033]]). Plan §6 trap 1 rewritten
+  to carry both reasons not to reset.
   ⏳ `test-writer` spawned at `/build` step 4 against rev 2.
 
 ## Gate log
