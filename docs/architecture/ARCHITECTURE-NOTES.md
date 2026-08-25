@@ -576,3 +576,63 @@ assumed to travel with the data and does not.
 
 **Surfaced by:** slug 0023 T01 / HEL-63, `security` finding B1, 2026-08-25. Filed as **HEL-67**
 (widened) and **HEL-74**. Ruling recorded in `DECISIONS.md` 2026-08-25.
+
+---
+
+## 2026-08-25 — `supabase db reset` rotates the stack secret, and our own resets manufacture "pre-existing" e2e failures
+
+The local Supabase stack issues a **new secret key on every `supabase db reset`**. The Playwright
+fixtures resolve that key **once** (`e2e/fixtures/local-supabase.ts` — deliberately not hardcoded,
+"the key rotates per stack"). So a session that resets frequently produces:
+
+```
+Error: E2E: cannot resolve the local Supabase secret key.
+Error: createUser failed for <email>: {}
+```
+
+…which then cascades into `page.waitForURL` timeouts across unrelated specs, because signup and
+login stop working. The result *looks* exactly like a broad regression.
+
+**This is part of what has been recorded for months as the "pre-existing e2e auth-keys failures."**
+Some of that class is genuinely pre-existing; some of it is **manufactured by the measurement
+itself**. A full run taken shortly after a reset, or during a session doing repeated resets, is not
+evidence about the code.
+
+**Practical rules:**
+- **SQL runners are immune** — they go through `psql` with `DB_URL` from `supabase status`, never the
+  JS fixtures. A green SQL suite after a reset means what it says.
+- **e2e is not.** Before reading an e2e failure as a regression, check whether the stack was reset
+  under it.
+- This compounds with **HEL-73** (committed specs permanently mutate the shared seed). Together they
+  mean a full e2e run currently carries two independent sources of noise, and neither announces
+  itself.
+
+**Found by:** HEL-69, while A/B-ing whether a view change broke e2e — the *baseline* arm failed for
+this reason, which is what exposed it. Related: **L-048**.
+
+---
+
+## 2026-08-25 — Single-owner delegation compounds: the second rule change is where it pays
+
+The argument for routing a rule through one function is usually made as tidiness. The measurable
+payoff showed up this week, and it is worth recording as a number rather than a principle.
+
+**T13** pointed the `product` / `product_image` / `product_media` RLS policies at
+`product_visible_to_caller()`. **HEL-69** pointed `current_pricelist_item` at
+`product_price_visible_to_caller()`, which wraps it. Both consult the seller's `company` row through
+a single `EXISTS`.
+
+**Consequence:** HEL-70 (add `deactivated_at` to the visibility rule) was scoped as an **S** when
+filed on 2026-08-24 — four doors, each edited separately, each a chance to diverge. By 2026-08-25 it
+is **one edit** to `product_visible_to_caller()` — inherited by the product, image, media,
+pricelist-item, tier, basket and price-view doors — plus the three Discover RPCs, which still carry
+their own company predicates and remain the outstanding consolidation target.
+
+**The rule.** The cost of consolidating a duplicated rule is paid once; the saving is collected on
+**every subsequent change to that rule**, and it grows as more doors delegate. When judging whether
+a "single owner" refactor is worth it, the question is not how much duplication it removes today but
+**how often that rule changes** — a visibility rule on a marketplace changes constantly.
+
+**Corollary (L-038 restated in the positive):** a single owner is only real if the doors actually
+*call* it. `current_pricelist_item` reprinted the rule for months while three other doors delegated,
+and it was the reprint that drifted — not any of the callers.
