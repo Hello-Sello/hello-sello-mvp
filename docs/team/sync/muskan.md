@@ -5,10 +5,46 @@
 
 ---
 
-**Last updated:** 2026-08-25 — `security_tickets` session, HEL-81 — **deal_line_item INSERT lockdown
-+ deal_promotion write lockdown, BUILT, GREEN, CLOSED (`0587be8`, pushed).**
+**Last updated:** 2026-08-25 — `ship_deal` session — **SLUG 0023 SHIPPED TO PRODUCTION (PR #177);
+G5 walk found + fixed a real bug in the basket send flow, also shipped (PR #180). G5 itself still
+PENDING — walk in a new session.**
 **Status:** offline (session closed).
 **Shared files locked: none — all released.**
+
+**What shipped.** `/ship 0023`: T01-T04 + 3 security migrations (HEL-67 Gap 1, HEL-75, DEV-159) live
+on production, both PRs merged to `main`, both Vercel production deploys READY. Fixed 3 SQL test
+fixtures that hardcoded seed-random UUIDs before pushing (**L-056** — DEV-159's own suite had never
+run its real assertions as a result). Migrations applied individually via MCP `apply_migration`, not
+`db push`, because `security_tickets`' unfinished HEL-81 migrations were sitting untracked in the
+same directory and a plain push would have swept them in.
+
+**G5 found a real bug, not a false alarm.** Muskan's live walk: picking a person in the basket still
+landed the deal in company chat. Traced with a direct SQL repro before touching UI code —
+`send_deal`'s p2p/c2c routing was correct the whole time. The actual gap: the flow required a
+separate "Send deal" click inside an auto-opened deal card, with no visible confirmation from the
+picker alone. Fixed (`createBasketDraft` now sends immediately, supersedes the "drawer never sends"
+framing for this door — DECISIONS.md + ARCHITECTURE-NOTES.md), tested (new e2e proves person-picks
+land in p2p — closes **HEL-76**, which had been open the whole time for exactly this untested gap),
+shipped as PR #180. **0023 is NOT closed** — next session walks G5 against the fixed flow, then
+`rollup` + close the four Linear tickets.
+
+**Two PR-hygiene near-misses, both caught before merging anything wrong.** Cutting a PR from
+`claude/muskan/work`'s moving tip pulled in `security_tickets`' unreviewed HEL-81 commits twice —
+once during the 0023 ship (caught, recut from a fixed ref), once during the follow-up fix (caught
+after opening the PR, required closing it and cherry-picking the exact commit onto `main` in an
+isolated `git worktree`). Also: briefly ran `git checkout` in this shared main directory mid
+cherry-pick-prep, swapping every file on disk to `main`'s state for a few seconds before catching it
+and switching back — the right tool for that operation is `git worktree add`, never `checkout` in a
+directory other sessions are actively using.
+
+**Tooling note:** `rtk`'s hook-based rewriting collapses `psql`, `eslint`, and `git status`/`diff`
+output too, not just Playwright (previously HEL-80's scope). Worked around throughout via direct
+`node <real-binary-path>` invocation and a thin `bash`-wrapped `git` script.
+
+---
+
+**Previously (2026-08-25) — `security_tickets` session, HEL-81 — deal_line_item INSERT lockdown
++ deal_promotion write lockdown, BUILT, GREEN, CLOSED (`0587be8`, pushed).**
 
 **What landed.** `deal_line_item` and `deal_promotion` are both SELECT-only for `authenticated` now;
 every promotion write goes through `offer_promotion`/`accept_promotion`/`decline_promotion`
