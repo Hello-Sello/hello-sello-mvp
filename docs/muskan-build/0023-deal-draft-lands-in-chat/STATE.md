@@ -356,7 +356,43 @@ the fix pass is one attempt, not nine (the budget counts fix ROUNDS).
   cannot be resolved. **No builder REJECTION is outstanding** — which matters, because an
   outstanding rejection is one of the three carve-outs that would escalate this ticket to Muskan.
 
-## ⏳ T01 IS NOT CLOSED — `security`'s verdict is outstanding
+## 🔴 T01 IS ESCALATED TO MUSKAN — `security` raised a BLOCKING finding
+
+**The carve-out fired.** T01's diff is backend-only, so it would have closed with **no human
+stop**. `/build` step 10 lists three overrides; **one is live:**
+
+| carve-out | status |
+|---|---|
+| a `builder` REJECTION outstanding | no — all five `critic` findings accepted |
+| **`security` raised a blocking finding** | 🔴 **YES — B1. This is the escalation** |
+| behaviour changed that the criteria do not cover | no — all 9 ACs replay green |
+
+**B1 in one sentence: the code is correct and green; the ADR's disclosure is not.** This slug
+moves the company-arm signal from `pending_inbox_item` — **identity-hardened one slug ago**
+(`20260823090000:306-309`, `sender_person_id = auth.uid()`, whose header says *"a request may no
+longer be attributed to someone who never asked"*) — onto `chat_message`, whose only policy
+`msg_all` (`20260607170000:300-302`) checks **`can_access_thread` and nothing else**.
+
+**Verified live by me, not taken from the agent:** `authenticated` holds `INSERT` on
+`chat_message`. So any member of either company can post a `type='deal_card'` pill with
+`sender_person_id` set to **another person** and a body reading *"<victim> has sent a deal"*.
+
+**ADR J1 discloses half of this** (the arbitrary `deal_card_id`) and **never mentions sender
+attribution**. §4.1 records `chat_message` RLS as *"unchanged … no policy is widened"* — **true,
+and not the question. The policy did not widen; the signal migrated onto a weaker policy.**
+
+**The proper fix is an RLS change, which ADR §4.2 forbids for this slug** — so this is Muskan's
+call and must be an explicit one, not an omission. **`HEL-67` already exists for the forgeable
+`deal_detected` message — same table, same two missing predicates.**
+
+**Also escalated with it — `security` N1:** `send_deal` never checks the relationship is still
+live. A member can soft-delete the relationship by direct write (DEV-159 class), and the
+initiator can then still Send an old `unsent` draft — **now minting a c2c thread on a
+soft-deleted relationship and landing a message in it.** Before this diff that produced an inbox
+ticket. **CLAUDE.md's T09 invariant says an unconnected buyer must not land a message in a
+seller's thread; a formerly-connected one now can.** One predicate in the resolve step.
+
+## ⏳ (superseded) `security`'s verdict was outstanding
 
 T01's diff is **backend-only** (SQL + one docstring, nothing renders), so per `/build` step 10 and
 PIPELINE §3 it closes on green tests + `critic` + `security` with **no human stop**. The three

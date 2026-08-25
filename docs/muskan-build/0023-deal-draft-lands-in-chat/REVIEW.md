@@ -112,3 +112,95 @@ exit code in this file was captured from the runner directly.**
 session reset the DB mid-run. **That is an environment collision, not a result.** Cause: an
 idle notice fired while this session was idle *between subagent calls*, and was read as
 "finished with the shared resource". **Agent-idle is not resource-free.**
+
+## Round 5 — `security` (respawn), S1-S8 against the built diff
+
+⚠️ **Method, stated by the agent itself:** verified **entirely from migration files**, not the
+catalog, because the local stack was in the parallel session's shape and `20260825090000` was not
+applied to it. **Three checklist items are NOT RUN and are listed as such rather than guessed.**
+
+### 🔴 B1 — BLOCKING (S2). The announcement's write path lost its identity guard.
+
+**Verified by me, live, before escalating.** This diff swaps the company-arm signal from a
+`pending_inbox_item` row to a `chat_message` row. **The two tables have different INSERT
+integrity, and the swap goes the weaker way:**
+
+| | policy | identity guard |
+|---|---|---|
+| `pending_inbox_item` — the signal **removed** | `inbox_insert` (`20260823090000:306-309`) | ✅ `sender_company_id = current_company_id() AND sender_person_id = auth.uid()` |
+| `chat_message` — the signal **added** | `msg_all` (`20260607170000:300-302`) | ❌ `USING/WITH CHECK (can_access_thread(thread_id))` — **no sender predicate, no type predicate** |
+
+`pending_inbox_item` was identity-hardened one slug ago, and `20260823090000:293` states the
+intent: *"a request may no longer be attributed to someone who never asked."*
+
+**Live confirmation (mine, not the agent's):** `authenticated` holds `INSERT` on `chat_message`
+(`information_schema.role_table_grants`), and `20260824100000_table_privilege_lockdown.sql`
+does not mention the table — it revoked only `truncate, trigger` elsewhere. So **any member of
+either company can insert a `type='deal_card'` pill with `sender_person_id` set to any other
+person and a body reading "<victim's name> has sent a deal"**, pointing at an arbitrary card.
+
+**ADR J1 (`:412-418`) discloses HALF of this** — the arbitrary `metadata.deal_card_id` — and
+explicitly says what it does not buy. **It does not mention sender attribution.** And §4.1:306
+records `chat_message` RLS as *"unchanged … no policy is widened"*, which is **true and not the
+question**: the policy did not widen, **the signal migrated onto a weaker policy.**
+
+**Blocking on DISCLOSURE, not on code.** The migration is correct. What is missing is (a) J1
+amended to name sender-identity forgery, and (b) a ticket. The proper fix — `WITH CHECK (… AND
+sender_person_id = auth.uid())` plus a type restriction — **is an RLS change, which ADR §4.2
+forbids for this slug.** → **ESCALATED TO MUSKAN** (a blocking `security` finding is one of the
+three `/build` step-10 carve-outs).
+
+### Notes
+
+| # | finding | disposition |
+|---|---|---|
+| N1 | **`send_deal` never checks the relationship is still live.** `:162-186` routes on `relationship_id` with no `deleted_at`/`status` predicate, and `is_relationship_member` has none either. `rel_all` is `FOR ALL TO authenticated` and `authenticated` holds UPDATE on `relationship`, so a member can soft-delete it by direct write (DEV-159 class). After a disconnect the initiator can still Send an old `unsent` draft — now **minting a c2c thread on a soft-deleted relationship and landing a message in it**. Before this diff that produced an inbox ticket. **CLAUDE.md carries the T09 invariant "an unconnected buyer must not land a message in a seller's thread" — a formerly-connected one now can** (`security`) | **FOR MUSKAN** — one predicate in the resolve step. Same escalation |
+| N2 | The new suite asserts the `authenticated` grant (C8) but never the `anon` non-grant (`security`) | **NOTE** — the class IS machine-held: `anon_execute_lockdown_test.sql:44-60` sweeps `pg_proc` dynamically with a one-function allowlist that excludes `send_deal`; and `create or replace` preserves the ACL. One line would make it local |
+| N3 | **ADR §4.1's evidence line numbers are systematically wrong, though every claim they support is TRUE.** `card_relationship_member` policies are at `:312-322` not `:300-311`; `can_access_workspace` at `:117-125` not `:105-113`; `msg_all` at `:300-302` not `:288-290` (`:288-290` is `relart_all` on a different table); `sign_deal` at `20260724120500:75-81` not `:73-82` (`security`) | **NOTE — all four §4.1 claims about the removed `claim_deal_ticket` path HOLD.** But a reviewer following the citations lands on the wrong policies. **`L-045`'s class AGAIN — fourth instance this ticket.** T04 owns the upstream fix |
+| N4 | `claim_deal_ticket_test.sql` now hand-copies `deliver_deal`'s insert shape; if that shape changes the test passes against one that no longer exists (`security`) | **NOTE** — the `L-047`-candidate class, borrowed truth |
+
+### Attacks 2, 3, 7 — REFUTED / CONFIRMED, and the refutations are load-bearing
+
+- **#2 REFUTED — no card state lets `relationship_id` and `initiating_company_id` disagree.** Every
+  birth path sets the latter from the session *after* asserting the caller is in the relationship
+  (`20260724120200:84-86`, and identically in three legacy bodies the agent checked **because
+  `20260724120000` backfills old `draft` rows to `unsent`, making them sendable**). No RPC updates
+  either column; `20260724120900:33` revokes INSERT/UPDATE/DELETE on `deal_card` from both client roles.
+- **#3 REFUTED — both ADR §3 citations verify**, and the agent closed a gap the ADR does not
+  mention: `update_deal_draft` merges metadata as `(metadata - 'free_delivery') || {…}`
+  (`20260724121100:104-105`), so `counterparty_person_id` survives and is not client-settable there;
+  and no RPC returns a card to `unsent`. **`v_cp` is only ever read while still birth-validated.**
+- **#7 CONFIRMED — all four claims true** (see N3 for the wrong line numbers).
+- **M9/M10 CONFIRMED, with a refinement:** the pill confers **no new read rights** — it adds
+  discoverability to rows already readable post-flip. But *the announcement's audience did widen*:
+  the sender's own colleagues now see a pill they never saw, among people who could already read
+  the card.
+
+### The known pre-existing gap — CONFIRMED as described, REFUTED as exploitable
+
+`can_access_thread`'s c2c branch has no `deleted_at` predicate, so a healed relationship can carry
+two c2c rows and both stay readable. **Not a confidentiality bug:** both rows share the same
+`relationship_id` and the branch keys on relationship membership alone, so the healed thread's
+audience is byte-identical. **The real cost is assumption integrity** — *"one c2c thread per
+relationship"* stops being true of the row set. `resolveC2cThread` is safe (filters `deleted_at`),
+but `e2e/inbox-accept.spec.ts:157-158` asserts `countThreadsForPair("c2c") === 1`. **T03 must grep
+the counting helpers.**
+
+### Checklist disposition — three items NOT RUN, listed rather than guessed
+
+| | verdict |
+|---|---|
+| S1 | PASS via `anon_execute_lockdown_test.sql:44-60`; N2 on local coverage |
+| S2 | 🔴 **B1** |
+| S3 | **NOT RUN** — needs a throwaway function on a live DB |
+| S4 | PASS, vacuous — this diff contains no revoke |
+| S5 | PASS **against files**; see the /ship residual below |
+| S6 | **NOT RUN** — `supabase db diff --linked` |
+| S7 | Partial — RED was recorded by me (`exit 3` ×2), but the agent could not execute it |
+| S8 | **NOT RUN** — `get_advisors` before/after |
+
+⚠️ **CARRY TO `/ship` — the S5 residual.** A file-only diff cannot see production drift. **This
+repo has been bitten by exactly this** (`ensure_rls` lived on prod and in no migration). Before
+pushing, run `pg_get_functiondef('public.send_deal(uuid)')` **against production** and diff it
+against `20260724120300`. If prod's body has ever diverged from the file, this `create or replace`
+**silently overwrites the divergence.**
