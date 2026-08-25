@@ -813,3 +813,105 @@ to scope to. `critic` itself rated it a note.
    fixture — `beforeEach` timeout, 4 of 5 attempts, **a different test position each run**, every
    affected test passing in isolation. **Distinct from the known `sb_secret_` baseline**; not this
    diff (that path is untouched). All 19 confirmed by targeted re-runs, not written off.
+
+---
+
+# T04 / HEL-66 — record the decision where the next person will look
+
+## Round 1 — `plan-checker`: REVISE, 5 blocking + 7 notes. **The truth table survived; COVERAGE failed.**
+
+It re-derived all five truth-table rows from the files — **every replacement range exact**. What
+failed is that I measured five citations and walked past **three more defect sites inside my own
+declared files**, plus ten this slug broke itself. **Eight edits became twelve.**
+
+| # | finding |
+|---|---|
+| **B1** | I planned a **DELETION** where §8.9 ruled a **REWRITE** (ADR `:607-608`: the row *becomes* "the send creates it; the deal still lands"). I took scope from `TICKETS.md`'s **pre-ruling** prose — [[L-039]] pointed at myself |
+| **B2** | 🔴 **`PRD:52` said "Verified safe"** about `deal_detected`, citing `20260614121000:12`. **This slug's own ADR §7.4 had already established that line is a CODE COMMENT, not a gate.** The hole is live and is HEL-67 — an approved spec asserting safety about a ticketed vulnerability |
+| **B3** | two more wrong PRD citations — `inbox_select` is `:243-244` not `:79-86`; the company-thread policy is `thread_all` `:293-298`, while `:231-232` is `person_group_all` |
+| **B4** | 🔴 **this slug's own T01/T02 diffs falsified ~10 ADR citations**, and T04 was about to ship an ADR advertising corrected citations while carrying ten it broke |
+| **B5** | 🔴 my edit 2 **did not satisfy the ticket's own AC 2**, and the obvious fix was worse: inserting above `DECISIONS.md:1013` moves it, breaking five citations at once |
+
+### The useful output of B4 — a distinction, not a sweep
+
+Now a banner in the ADR: **an ADR is a decision record, not a maintained index.** Design-time
+citations (§2/§3/§6/§8) are **frozen at rev 3** — re-pointing them as code moves falsifies the
+record of what was known when the decision was made. **§4.1 and the J-invariants are NOT
+design-time**: they assert what the system does *now*, a reader acts on them, so they are
+**maintained**. Third rule cutting across both: anything **false in SUBSTANCE**, not merely
+drifted, is corrected regardless.
+
+## Round 2 — `critic` on the built diff: 2 blocking + 10 notes. Both blocking verified before fixing.
+
+### 🔴 B2 — I protected the line I was warned about and broke every line beneath it
+
+`plan-checker` B5 told me `DECISIONS.md:1013` must not move; I placed the marker **below** it,
+correctly — and the **10-line insert shifted everything under it by ten.** `D-12` went `:1219` →
+`:1229`, and **three live citations broke**: `ARCHITECTURE-NOTES.md:765`, `STATE.md:443`, and
+`REVIEW.md:371` — the last two being **this slug's own finding that "`D-12` means four different
+things", one of whose four citations the fix falsified.**
+
+**Fixed with `critic`'s remedy: a zero-line-cost marker appended to the `:1013` bullet itself.**
+`D-12` is back at `:1219`; `:1013` unmoved. **The lesson is not "insert below" — it is that any
+insert into a cited file is a write to every line number beneath it.**
+
+### 🔴 B1 — and then the correction itself went stale, twice, inside one ticket
+
+The marker's own citation of the ADR's §8.5 reference was `:563` (blank). Corrected to `:598` —
+which my J1/N2/N3 edits then pushed to **`:604`** *in the same ticket*. **It now cites the SECTION
+(§8.5), not a line.** A line number into a file you are concurrently editing is not a citation.
+
+### N1-N4 — the banner's principle was applied to the frozen half and not the maintained half
+
+Four live stale citations **inside the buckets the banner declares maintained**: §4.1's
+`actions.ts:367`→`:369` · §4.1's docstring row, still saying it "becomes false" when **T01 already
+rewrote it** (the twin in §8.3 *was* corrected — the frozen half got the treatment the maintained
+half needed) · **J6**, still saying "if §8.7 is taken" when it was taken and built · **J7**'s
+`ADR-0003:30`→`:32`. All four fixed.
+
+### N5-N7, N9 — accepted and fixed
+
+`TICKETS.md`'s own T02 AC 4 citation, two lines above the AC this ticket amended · **T04's criteria
+covered 3 of its 12 edits**, so a G4 walk would have replayed a quarter of the ticket — a fourth
+criterion now enumerates the other nine and names that **this ticket grew by ruling five times
+after its cut** · the PRD's AC2 note implied the pill text changed, when the expression is
+**byte-identical** to the superseded migration and only the PRD's paraphrase was wrong · and the
+sweep's *"zero live stale citations remain"* narrowed to what it actually queried — **a sweep's
+claim is only as wide as its query.**
+
+### N8, N10 — recorded, NOT fixed
+
+`20260823090000:297` cites `rls_policies:233` for `inbox_insert` (truth `:245-246`), and
+`STATE.md:92`'s `Locked` list still carries `:162-183`. **Both outside T04's declared file set** —
+widening scope at a checker's note is how a docs ticket becomes unbounded.
+
+## G4 — T04 / HEL-66. Routing: **AUTO**
+
+Docs-only; nothing renders, no code, no migration, no test. All three carve-outs checked and none
+live (no builder REJECTION — no builder ran; `security` not routed and correctly so; no behaviour
+changed). Budgets: `tests 0/2` · `blocking-findings 1/2` · `G4 rounds 1`.
+
+**The gate is the re-grep, and `tsc`/`eslint` were deliberately NOT run** — there is no code in
+this diff and running them for the appearance of a gate would be theatre.
+
+| criterion | verdict | evidence |
+|---|---|---|
+| **1** CONTEXT.md says "a chat", not "a P2P chat" | ✅ | `:31`, with the §8.4 reason inline |
+| **2** a dated entry at `DECISIONS.md:1013` records the **partial** supersede + the ADR-0003 correction | ✅ | in-place marker on `:1013` itself (zero lines added) + the chronological tail entry |
+| **3** the PRD's edge-case row and ACs match the built behaviour | ✅ | `:131` rewritten to the **ruled text verbatim**; AC1 §8.7 wording; AC2's citation and formula |
+| **4** *(added by `critic` N6)* the other nine edits | ✅ | J1 · §4.1 · `PRD:52` · `PRD:117-121` · the banner · J6/J7 · T02 AC 5 · T03 AC 6 · this ticket's own Files list |
+
+**Every corrected citation re-opened and confirmed after the fix round:** `actions.ts:369` ·
+`:357-368` · `ADR-0003:32` · `CounterpartyPersonSelect.tsx:108` · `BasketDrawer.tsx:321`/`:329` ·
+and `DECISIONS.md` `:1013`/`:1219` line integrity restored.
+
+### Correction owed to a ticket this slug FILED
+
+**HEL-74's stated exploit is dead.** It was filed from T01's G4 (`security` N1): *soft-delete the
+relationship by direct write, then Send an old draft onto it.* The parallel session verified on
+production that **`relationship` is SELECT-only for `authenticated`** and no `public` function
+updates or deletes it — so that path is unreachable. **The gap is not dead:** `send_deal` still
+never checks the relationship is live, which is harmless only because of the current grant surface,
+**and it re-arms silently the day a disconnect feature exists.** Agreed with that session that the
+ticket is **corrected, not closed**. Separately: **"there is currently no way to disconnect at
+all" is a product gap, bigger than HEL-74, and unowned.**

@@ -5,14 +5,21 @@
 
 ---
 
-**Last updated:** 2026-08-25 — session 91 `deal_land_t03` — **T04 / HEL-66 IN BUILD (the LAST ticket).**
-**Status:** active. `/build` step 5 — plan rev 2 after a `plan-checker` REVISE (5 blocking).
+**Last updated:** 2026-08-25 — session 91 `deal_land_t03` — 🏁 **SLUG 0023 IS BUILD-COMPLETE.**
+**T01 · T02 · T03 · T04 ALL CLOSED.** Next = **`/ship 0023`**.
+**Status:** idle. **Shared files locked: none — all released** (`DECISIONS.md`, `CONTEXT.md`,
+`e2e/fixtures/two-company.ts` all unlocked).
 
-**Shared files locked:**
-- 🔒 `docs/decisions/DECISIONS.md` — an inline marker after `:1013` recording the PARTIAL supersede.
-  ⚠️ **`:1013` MUST NOT MOVE** — it is cited by ADR `:47`, ADR `:563`, `PRD:6`, `STATE.md:54`,
-  `STATE.md:68` and CLAUDE.md. Insert **after** the bullet, never above it.
-- 🔒 `docs/architecture/CONTEXT.md` — the "Deal draft" definition (`:31`).
+⚠️ **`/ship` MUST diff `pg_get_functiondef('public.send_deal(uuid)')` against PRODUCTION first** —
+row 1 is a `create or replace`. **T01 is ALREADY LIVE on prod** (pushed 2026-08-25, zero drift).
+**The pending cloud batch is TWO migrations, both from the parallel session:** `20260825120000`
+(HEL-67) + `20260825130000` (HEL-75). One plain `db push`, **no `--include-all`**.
+
+🔴 **T04's lesson, worth more than the ticket:** an **insert** into a cited file is a **write to
+every line number beneath it**. A 10-line marker in `DECISIONS.md` moved `D-12` from `:1219` to
+`:1229` and falsified three live citations — two of them this slug's own. Fixed with a zero-line
+in-place marker. **And the correction itself went stale twice within the same ticket**, so it now
+cites a **section**, not a line.
 
 **T03 in one line:** the buyer's company-addressed deal is now proven to land as a pill in the
 seller's c2c chat, end to end. tsc 0 · eslint 0 · **six e2e specs green** · basket units 41/41.

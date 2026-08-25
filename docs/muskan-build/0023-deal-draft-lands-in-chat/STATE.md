@@ -740,6 +740,30 @@ is not this slug's job, but nothing else is tracking it.
   currently no way to disconnect at all" is a PRODUCT gap, bigger than HEL-74, and unowned.**
 
 ## Gate log
+- **T04 / HEL-66 — G4 AUTO 2026-08-25. 🏁 SLUG 0023 IS BUILD-COMPLETE (T01-T04).** Docs-only diff,
+  nothing renders; all three carve-outs checked, none live. Budgets: `tests 0/2` ·
+  `blocking-findings 1/2` · `G4 rounds 1`. **`tsc`/`eslint` deliberately NOT run** — no code in the
+  diff; running them for the appearance of a gate would be theatre. **The gate is the re-grep.**
+  **Cut with 3 criteria and 4 edits; landed with 4 criteria and TWELVE edits**, every addition
+  traceable to a recorded ruling. `plan-checker` REVISE (5 blocking) then `critic` (2 blocking +
+  10 notes), all verified before folding.
+  🔴 **The finding worth keeping: I protected the line I was warned about and broke every line
+  beneath it.** `plan-checker` B5 said `DECISIONS.md:1013` must not move; I placed the marker below
+  it — and the **10-line insert shifted everything under it by ten**, moving `D-12` `:1219`→`:1229`
+  and **falsifying three live citations, two of them this slug's own** (`REVIEW.md:371` /
+  `STATE.md:443` — the *"`D-12` means four different things"* finding). Fixed with a **zero-line
+  in-place marker**. **An insert into a cited file is a write to every line number beneath it.**
+  🔴 **And the correction went stale twice inside one ticket** — the marker's ADR citation was
+  `:563` (blank) → `:598` → **`:604`**, moved by *this ticket's own* edits above it. **It now cites
+  the SECTION, not a line.** A line number into a file you are concurrently editing is a guess.
+  📌 **The durable output — now a banner in ADR 0006: an ADR is a decision record, not a maintained
+  index.** Design-time citations frozen at rev 3; **§4.1 + the J-invariants maintained** because a
+  reader acts on them; anything **false in substance** corrected regardless. `critic` then caught
+  that I had applied the principle **to the frozen half and not the maintained half** (N1-N4).
+  📌 **HEL-74's stated exploit is DEAD** (`relationship` is SELECT-only on prod; no `public`
+  function writes it) — **but the gap is not**: `send_deal` still never checks the relationship is
+  live, harmless only via the grant surface, and it **re-arms the day a disconnect exists**.
+  Corrected, not closed. **"No way to disconnect at all" is a bigger, unowned PRODUCT gap.**
 - **T03 / HEL-65 — G4 AUTO 2026-08-25 (no human stop, and the routing is recorded).** The diff is
   **test-only** — three files under `e2e/`, no source, no migration, **nothing renders** — so step
   9's `visual-verifier` did not fire and **all three step-10 carve-outs were checked and none was
