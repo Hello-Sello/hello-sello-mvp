@@ -307,3 +307,71 @@ Four checks, all reuse-positive, and **one of them corrected a claim of mine**:
 - **`peopleForRelationship`'s placement upheld**, and not as post-hoc rationalisation:
   `basket/lib/group.ts` and `pack.ts` operate on `BasketLine`/`BasketGroup` — basket math.
   This function operates on `MyConnectionsView`, a messaging type. The distinction is real.
+
+## `critic` — 2 blocking + 7 notes. **All nine verified true by me before folding** (L-003)
+
+⚠️ **`critic` ran with NO SHELL — the second time on this slug**, and its agent definition
+grants `Bash`. It said so up front and substituted line-offset arithmetic, so **its
+"unchanged/verbatim" claims are readings, not diffs.** I diffed the fenced items myself.
+**This is broken machinery, not a checker quirk** — surfaced to Muskan at G4, not worked
+around silently.
+
+### Blocking — both FIXED, one round (`blocking-findings 1/2`)
+
+Both are the same defect twice: **this diff falsified two docstrings in the module it was
+editing.**
+
+- **B1 — `basket/actions.ts:9-11`** said the buyer's recipient is *"implicit = the seller
+  company via the relationship"*. **Eleven lines below, `:29` forwards the person the buyer
+  just picked.** Rewritten to name what actually still differs: the buyer never chooses the
+  counterparty *company* (the group's relationship fixes it), but since T02 **the addressee
+  is symmetric** — either door may name a person, null meaning the whole company.
+- **B2 — `basket/types.ts:41`** labelled `counterpartyPersonId` as the *"own-company offer
+  path"*; the buyer's foreign `dealType: "order"` path now supplies it too. **Comment only —
+  the type is byte-identical and PLAN §7's no-signature-change fence holds.**
+
+### 🔴 N1 — the finding that cannot be fixed by code, and goes to G4
+
+**C7's decoy closes the `relationshipId`-vs-`companyId` swap INSIDE THE SELECTOR ONLY.**
+Change `BasketDrawer.tsx:361` to `relationshipId={group.sellerCompanyId}` — both are
+`string`, `tsc` passes, `useEffect` never fires under `renderToStaticMarkup`, and **C1, C2,
+C4, C5, C6 and C7 all still pass** while the shipped control's people list is empty forever.
+That is precisely the M7 state the ticket forbids. Same for `RecipientPicker.tsx:59` →
+`chosen.companyId`.
+
+**My PLAN §5 "declared uncovered" table did not list this**, and a reader who accepts C7's
+rationale would reasonably believe the class is closed one level up. **It is not, it is not
+unit-coverable under this env, and it belongs on the G4 sheet beside AC 2.**
+
+### Notes — DEFERRED, not fixed. Each is pre-existing and none is opened by this diff
+
+| # | finding | why not fixed here |
+|---|---|---|
+| **N4** | `RecipientPicker.tsx:26-28`'s fetch has **no `.catch` and no `alive` guard**. On failure a **connected** seller is shown *"Connect with a company first to send an offer."* — a false message — plus an unhandled rejection. The sibling written in this diff has both guards | pre-existing; changes behaviour no AC covers. **~4 lines.** A ticket to file |
+| **N5** | `RecipientPicker.tsx:42-46` only re-reports `onPick` when a company is found. Choosing *"Select a customer…"* (value `""`) never calls it, so the parent **keeps the previous recipient** while the control unmounts | pre-existing. The controlled select closes the A→B divergence; **the B→none half is untouched and reachable in one click** |
+| **N6** | `BasketDrawer.tsx:215-217` is a `useState` initialiser on a prop that can change. A group going stranger → connected while the drawer is open leaves `recipient` null and renders a dead Create button | pre-existing, low reachability. **This diff improves it** (the select now gives the buyer a way to fill `recipient`) without closing it |
+| **N7** | The **seller** path now fetches the directory **twice, fully redundantly** — `RecipientPicker` already holds `chosen.people` and the child re-fetches the same view (~4 round trips). PLAN's accepted cost declared the buyer's 1+N; **it did not declare this** | the shape is what G3 §8.1 chose. Correcting the *record*, not the code |
+
+### N2 / N3 — corrected in the test files (`test-writer`, round 2)
+
+- **N2** — C1's title claimed *"first, SELECTED"*; the assertion proves **preselection only**,
+  and order is vacuous under an always-empty `people` fixture. **Renamed rather than padded
+  with an assertion that would pass for free.**
+- **N3 — three stale citations, and `test-writer` found a fourth I had not asked for.**
+  `BasketDrawer.tsx:231` → **`:232`** (×2) and `RecipientPicker :26-28` → **`:32-34`** (×2)
+  were **all broken BY this diff** (the new import at `:15` shifted everything by one).
+  `BasketDrawer.tsx:187` → **`:202`** was pre-existing, from the 0022 pass.
+  ⚠️ **The `:26-28` one was not an off-by-N — it pointed at entirely the wrong code** (the
+  `useEffect` fetch, not the early return). **Verified by me by opening the file.**
+
+### 📌 `builder` raised something worth more than the fix it was doing
+
+The basket module's `D-xx` decision IDs **have no canonical home**. `D-12` currently means
+four different things across the corpus — *"Inbox relabelled Connection Request"*
+(`DECISIONS.md:1219`), *"one active pending join request"* (`cloud-migrations-pending.md:1366`),
+*"price is seller-only"* (`0021-tier-ladder/PLAN-T07.md:108`), and *"delivery is `send_deal`'s
+alone"* in `basket/actions.ts`. **Verified by grep.**
+
+**A citation nobody can look up cannot go stale visibly — it just quietly stops being true.**
+That is `L-038`'s shape one level up, and it is the seventh stale-citation finding on this
+slug. A ticket is **offered at G4, not filed unilaterally.**
