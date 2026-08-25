@@ -320,6 +320,47 @@ select p.proname,
 
 ---
 
+## ⚠️ PENDING (2026-08-25) — HEL-82 relationship suspend/reactivate/end + HEL-74 liveness gates (FOUR migrations, plain `db push`)
+
+**Status: LOCAL ONLY.** These sort after `20260825160000` (the deal_promotion/deal_line_item batch
+above), so the same plain `supabase db push --linked` (no `--include-all`) picks them up too as long
+as everything applies in filename order. Built in `worktree-security-tickets`.
+
+**Stamps in order:** `20260825170000` → `20260825180000` → `20260825190000` → `20260825200000`.
+
+⚠️ **SAME-DEPLOY REQUIRED, BOTH DIRECTIONS.** `src/app/admin/relationships/*` calls
+`list_relationships_admin`/`suspend_relationship`/`reactivate_relationship`/`end_relationship` — new
+in `20260825170000` — so the app code and this migration must land together (same rule as the
+promotion RPCs above). **And do not push a partial prefix of these four**: shipping `20260825170000`
+alone would make `suspended`/`ended` reachable while `send_deal`, `confirm_detected_deal`, and
+`accept_connection_request` still don't check it — a false sense of the compliance control actually
+working. All four, together, or none.
+
+| # | file | what it does |
+|---|---|---|
+| 1 | `20260825170000_relationship_admin_suspend_end.sql` | `list_relationships_admin`/`suspend_relationship`/`reactivate_relationship`/`end_relationship` (all `is_hs_team()`-gated SECURITY DEFINER). New `audit_action_type`/`auditable_content_type` lookup rows. `relationship` itself is untouched — no RLS/grant change on that table. |
+| 2 | `20260825180000_send_deal_relationship_liveness_guard.sql` | Re-emits `send_deal` (verbatim, from the live `20260825090000` body) with one added check: refuses a suspended/ended/missing relationship. |
+| 3 | `20260825190000_confirm_detected_deal_liveness_guard.sql` | Same check, on the SECOND delivery door — Sella's double-accept `confirm_detected_deal`, which never calls `send_deal` and would otherwise bypass migration 2 entirely. |
+| 4 | `20260825200000_accept_connection_request_status_guard.sql` | Refuses to silently adopt an existing non-active relationship — closes a "reconnect a suspended/ended pair via a fresh request" loop `20260823090000`'s own header had already flagged as future work. |
+
+**What this does NOT cover, on purpose — narrowed and ticketed, not silently gapped.** HEL-82's
+acceptance criteria says suspension should also block new chat messages and new pricing asks. Neither
+`msg_all` nor the pricing-request path (`discover/actions.ts`) gained a relationship-status check in
+this batch — both are reachable directly via PostgREST (`authenticated` holds `INSERT` on
+`chat_message`/`pending_inbox_item`), so this is a real, immediate gap the moment suspension becomes
+reachable, not a latent one. Follow-up ticket owed before this is treated as done; file it referencing
+this ledger entry.
+
+**Pre-push insurance query** (run before `db push`, confirms nothing already suspended/ended exists
+that this batch would newly start gating mid-flight):
+
+```sql
+select status, count(*) from relationship group by 1;
+-- expect: only 'active' rows today — suspended/ended have never been reachable.
+```
+
+---
+
 ## ✅ APPLIED 2026-08-25 (was PENDING 2026-08-24) — THREE migrations, one plain `db push`
 
 **Status: LIVE ON PRODUCTION.** Pushed 2026-08-25 by the `security_tickets` session on Muskan's

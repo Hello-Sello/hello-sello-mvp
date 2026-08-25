@@ -816,8 +816,9 @@ export interface PromotionView {
 
 /**
  * The offer-a-promotion payload handed to `offerPromotion` (seller-only). The
- * action derives the seller from the SESSION (never a client-claimed side) and
- * inserts a `deal_promotion` row - NO reason gate, NO version bump (D-26).
+ * `offer_promotion` SECURITY DEFINER RPC it calls derives the seller from the
+ * SESSION (never a client-claimed side) and inserts the `deal_promotion` row -
+ * NO reason gate, NO version bump (D-26).
  */
 export interface OfferPromotionInput {
   dealCardId: string;

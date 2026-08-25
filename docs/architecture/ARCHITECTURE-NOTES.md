@@ -859,3 +859,80 @@ click. The seller's own-company door (`RecipientPicker`) goes through the exact 
 `createBasketDraft` call and is affected identically. The OTHER creation door — "Start a deal" from
 an open chat (`deal-c2c-create.spec.ts`, `deal-p2p-send.spec.ts`) — is UNCHANGED: birth and send
 stay two separate steps there.
+
+---
+
+## 2026-08-25 — `deal_promotion` and `deal_line_item` are now SELECT-only for `authenticated`; every write is a SECURITY DEFINER RPC that re-checks membership itself (HEL-81)
+
+**Locked by HEL-81, closing the confused-deputy gap a second review round found in its own first
+draft.**
+
+Both tables carry a single symmetric RLS policy (`card_relationship_member(deal_card_id)` — true for
+BOTH sides of a relationship) that can express *membership* but not *which side* or *which
+lifecycle step*. `authenticated` no longer holds INSERT/UPDATE/DELETE on either table. Every mutation
+now goes through one of five SECURITY DEFINER functions:
+
+- `offer_promotion` (seller) / `accept_promotion`, `decline_promotion` (buyer) — each re-derives the
+  caller's company from the session and checks it against `card_seller_company_id`/
+  `card_buyer_company_id` (new, card-level analogues of the existing `line_seller_company_id`).
+- Each ALSO calls `card_relationship_member` explicitly, alongside the side check — a definer
+  bypasses RLS entirely, so it re-implements membership + buyer/seller, not just buyer/seller;
+  dropping the membership call would have silently narrowed the old policy's `unsent`-draft
+  restriction (see [[L-057]] in `docs/agents/LEARNINGS.md`).
+- `accept_promotion`/`decline_promotion` take `deal_card`/`deal_promotion` row locks (`FOR UPDATE`)
+  so a concurrent double-accept resolves to "nothing pending" rather than double-applying a reward.
+
+**A structural invariant, not a convention:** a partial unique index,
+`uq_deal_promotion_one_pending ON deal_promotion (deal_card_id) WHERE state = 'pending'`, allows at
+most one pending promotion per card. `offer_promotion` refuses outright (clear message) rather than
+letting the constraint raise a raw violation. This exists so "the pending promotion" is never a
+choice between rows — the alternative (an `ORDER BY … LIMIT 1` convention that every reader and
+writer must independently agree on) is exactly what drifted apart during this same ticket's second
+review round.
+
+**Practical rule for the next promotion-adjacent change:** `deal_promotion.offered_by_company` and
+`.line_deltas` are authorization-relevant input to `accept_promotion` — treat any new write path to
+this table with the same suspicion as a grant, not as an ordinary data column. `line_deltas`/
+`condition_deltas` are CHECK-constrained to `jsonb_typeof = 'array'`; don't re-add a client-side
+`Array.isArray` fallback in a caller — that tolerance is exactly what let a non-array value ever
+reach these tables in the first place.
+
+---
+
+## 2026-08-25 — `relationship.status` is now a real lifecycle (HEL-82); two things anyone touching relationship membership needs to know
+
+**A relationship can be `active`, `suspended`, or `ended`** (`relationship_status`, seeded FK,
+`ended` marked `is_terminal`). Three SECURITY DEFINER RPCs own every transition —
+`suspend_relationship`/`reactivate_relationship` (suspended→active only, never from `ended`)/
+`end_relationship` — each `is_hs_team()`-gated, each writing two `audit_log` rows (one per
+`company_a_id`/`company_b_id`, as two separate single-row INSERTs — not one multi-row INSERT; the
+hash-chain trigger reads the latest `sequence_number` per row and two statements make each row's
+chain link unambiguous). `relationship` itself carries **no** RLS or grant change from this ticket
+— `authenticated` is still `SELECT`/`REFERENCES`-only, same as before HEL-82. HS staff read via a
+dedicated RPC, `list_relationships_admin()`, not via a broadened policy (see [[L-059]] in
+`docs/agents/LEARNINGS.md` for why the broadened-policy version was reverted before shipping).
+
+**"Delivering a deal" has two independent doors, and any future liveness/status/permission check on
+deal delivery needs both.** `send_deal` is the obvious one. `confirm_detected_deal` (Sella's
+double-accept path) is the other — it births a card straight into `negotiation` itself and, by its
+own header, must NEVER call `send_deal` (the caller there is the confirmer, not the initiator;
+`send_deal`'s initiator guard would reject it). HEL-74 added a relationship-liveness check to
+both — `20260825180000` (`send_deal`) and `20260825190000` (`confirm_detected_deal`) — for exactly
+this reason (see [[L-058]]). **Deliberately still open:** neither `create_deal_draft` (births a
+PRIVATE draft — nothing has reached the counterparty yet) nor `confirm_deal_change`/`sign_deal`
+(both operate on a deal that was already sent while the relationship WAS active) gained a liveness
+check — whether a mid-suspension negotiation should also freeze is a product call, not decided.
+
+**Two more doors that agree with `relationship.status` now, that didn't before:** `getMyConnections`
+(`messaging/supabase/connections.ts`) already required `status = 'active'`; the basket's own
+seller→relationship resolver (`basket/supabase/reads.ts`) filtered only `deleted_at is null` until
+this ticket added the same `status = 'active'` check — before, once suspension became reachable, a
+suspended seller's cart lines would still have resolved a `relationshipId` and let the basket try to
+send through it. `RelationshipHeader.tsx` also stopped hardcoding "Connected… since" — it now
+reflects the real status for both parties, not just for the HS operator.
+
+**Still open, filed as HEL-84 (High), not closed by this ticket:** neither `msg_all` (chat message
+insert) nor the pricing-request path (`discover/actions.ts`) carries a relationship-status check.
+`authenticated` holds `INSERT` on both `chat_message` and `pending_inbox_item` directly, so a
+suspended/ended pair can still exchange new chat messages and pricing asks — reachable the moment
+suspension ships, not latent. Anyone touching either path should check HEL-84 first.

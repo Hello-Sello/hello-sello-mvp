@@ -1920,3 +1920,172 @@ it, same family: unverified assumptions about fixture state), [[L-013]] (a green
 nothing if its harness never fired — same family: a suite that "passes" without exercising its real
 assertions), [[L-034]] (a migration's end state on replay is not its end state on push — same
 lesson, different layer: state that's true today is not a proof about state after the next reset).
+
+---
+
+## L-057 · Moving a write behind a SECURITY DEFINER RPC must re-import everything the RLS policy was checking, not just the one thing the ticket is about
+
+**2026-08-25 · HEL-81 · caught by a second adversarial review round, independently by both `critic` and `security`**
+
+**Trigger** — replacing a client write path that was governed by an RLS policy with a
+SECURITY DEFINER RPC, for ANY reason (closing a hole, adding atomicity, adding a business
+rule). The RPC bypasses RLS entirely — it doesn't inherit the policy's predicate, it replaces
+it with whatever the function body happens to check.
+
+**What happened.** HEL-81 moved `deal_line_item`'s one remaining client INSERT behind
+`accept_promotion`, gated on "is the caller the buyer." That's the property the ticket was
+about, and it was correct. But `line_all`'s real predicate,
+`card_relationship_member(deal_card_id)`, was never *just* membership — it was membership
+AND `(status <> 'unsent' OR initiating_company_id = current_company_id())`, a second clause
+letting a card's own initiator act on their private draft while blocking the counterparty
+from a card they can't even read yet. `accept_promotion` (and, once written, `offer_promotion`
+/`decline_promotion`) checked buyer/seller equality only — narrower than the RLS predicate it
+replaced, silently. Verified live: the second review round constructed an unsent card and
+had the non-initiator buyer successfully accept a promotion on it, landing a line in a deal
+it has no read access to.
+
+**Why it looked fine.** The ticket's own probe (a rolled-back reproduction of the forgery)
+only exercised the *buyer/seller* dimension, because that's the dimension the ticket is
+about. Nothing in that probe, or in a first read of the new function body, would surface a
+guard the OLD policy had that the NEW code doesn't — you have to go looking for what else
+the policy checked, not just confirm the new code checks what you meant it to.
+
+**The fix, and why it's the right shape.** Call the original policy's own predicate function
+from inside the definer (`IF NOT card_relationship_member(p_deal_card_id) THEN RAISE ...`)
+as an explicit, separate gate alongside the buyer/seller check — don't re-derive or re-type
+the `unsent` clause a second time (that's the same drift risk a column-allowlist re-GRANT
+has, [[L-027]]'s family). The predicate has one owner; import it, don't restate it.
+
+**The rule** — before retiring an RLS policy in favor of a definer function, read the
+policy's FULL expression, not just the clause the current ticket cares about, and account
+for every clause in the replacement — either by calling the same helper the policy called,
+or by naming explicitly, in the migration's own comment, which clause was deliberately
+dropped and why. A definer that only re-implements the part you were thinking about is a
+narrower door than the one it replaced, and nothing will fail loudly to tell you.
+
+**A second, smaller catch from the same review round, same family.** Round 1's own fix added
+an `ORDER BY created_at DESC, id DESC` tiebreak to the RPCs reading "the pending promotion" —
+correct in isolation, but it left the READ side (`getPromotion`, no state filter, no
+tiebreak) newly disagreeing with the WRITE side about which row is "the" one on a tie, a
+mismatch that didn't exist before because neither side had a tiebreak. The fix that
+actually closed it wasn't a matching tiebreak on the reader — it was a partial unique index
+(`(deal_card_id) WHERE state = 'pending'`) making "which pending promotion" a question with
+only one possible answer, so neither side needs a convention to agree on. When two readers
+of the same "current X" concept can disagree, prefer a constraint that makes X unique over
+a matching tiebreak rule on both sides — a rule that must be kept in sync in two places will
+eventually only be updated in one.
+
+**See also** [[L-052]] (a policy predicate is a question about what the caller can see —
+same family: don't assume a security-relevant predicate does only the obvious thing),
+[[L-055]] (a subquery in an RLS policy runs as the calling role — same family: RLS mechanics
+are easy to mismodel when you're not looking directly at them), [[L-027]] (a gate is only as
+strong as the write path to its input — the confused-deputy half of this same ticket).
+
+---
+
+## L-058 · Closing a delivery gap on the function the ticket names doesn't close it on every function with the same effect
+
+**2026-08-25 · HEL-74 · caught by `critic`, first review round**
+
+**Trigger** — a ticket names one RPC as "the door that delivers X" and you gate that RPC. Before
+declaring the gap closed, ask: does anything ELSE in the codebase produce the same effect?
+
+**What happened.** HEL-74 asked for `send_deal` to refuse delivering a new deal onto a
+suspended/ended relationship — a straightforward re-emit with one added check, and it worked. But
+`confirm_detected_deal` (Sella's double-accept path) also births a card straight into
+`negotiation` — by design it must NEVER call `send_deal` (its own header says so: the caller is
+the confirmer, not the initiator, and `send_deal`'s initiator guard would reject it). The first
+draft's migration header scoped OUT `create_deal_draft`/`confirm_deal_change`/`sign_deal`
+deliberately and by name — and simply never considered that a second, independent delivery path
+existed at all. Nothing in the ticket's own text or the `send_deal` diff would have surfaced this;
+it only came up because a reviewer asked "what else in this codebase delivers a deal" as a
+question, not as a check against the diff.
+
+**The rule** — when a ticket gates one function against an effect ("deliver a deal," "grant a
+promotion," "mint a relationship"), grep for every OTHER function that produces the SAME effect
+before writing the migration header's scope paragraph. A scope paragraph that lists what it
+deliberately excludes is only trustworthy if it was built from a census of doors, not from the
+ticket's own vocabulary — the ticket names the door it found, not the doors it didn't know about.
+
+**See also** [[L-037]] (narrowing a read door needs a reader census first — same shape, applied to
+delivery/write effects instead of reads), [[L-057]] (a definer replacing a policy must re-import
+every clause, not just the one the ticket is about — same family: the diff you wrote is not the
+same question as "is the thing actually closed").
+
+---
+
+## L-059 · Reusing an existing page for a new caller class is only safe if you check what ELSE reads that same table without an explicit membership check
+
+**2026-08-25 · HEL-82 · caught by `critic` + `security`, both independently, first review round**
+
+**Trigger** — adding `OR is_hs_team()` (or any similar `OR <new-caller-check>`) to an existing
+RLS policy's `USING` clause, to let a new caller class reach an existing page/table.
+
+**What happened.** The first draft of HEL-82 needed an HS-team operator to view a relationship
+they aren't a party to. The instinct — reuse the existing `/connect/relationship/[id]` page rather
+than build a new one — was right (and came from direct feedback: don't build new UI when an
+existing page can absorb the change). The mechanism chosen to make that page work for HS staff —
+broadening `rel_all`'s `USING` with `OR is_hs_team()` — was wrong, for two independent reasons
+review found: (1) the page was unreachable anyway, since the whole `/connect` tree sits behind
+`requireVerified()`, which the seeded companyless HS account never passes; (2) even if reachability
+were fixed by giving HS staff a company, three OTHER relationship readers
+(`messaging/supabase/store.ts`, `messaging/supabase/connections.ts`,
+`basket/supabase/reads.ts`) have no explicit membership check of their own — they rely entirely on
+RLS scoping the row down to "my company's relationships" for them. Broadening the shared RLS
+predicate for one new caller class would have silently broadened what ALL THREE of those readers
+return, none of which expected a non-member row to ever appear.
+
+**Why it looked fine.** `rel_all` is the only policy on `relationship`, so broadening it looked
+self-contained — it changes what one table's RLS returns, full stop. The blast radius isn't in
+`relationship`'s own policy; it's in every OTHER query that trusts RLS on that table to imply
+"caller is a real member," which is a fact those queries never verify themselves.
+
+**The rule** — before broadening a shared RLS predicate to admit a new caller class, census every
+reader of that table for an implicit "RLS already proved membership" assumption, the same way
+[[L-037]] asks for a reader census before narrowing. When the new caller class doesn't belong in
+the general population the table's OTHER readers assume (an HS operator among ordinary company
+members), prefer a dedicated SECURITY DEFINER read (here, `list_relationships_admin()`, same shape
+as the existing `list_pending_verifications()`) scoped to exactly the new caller, over widening a
+policy every unrelated reader also depends on.
+
+**See also** [[L-037]] (the read-side twin of this — narrowing needs a census, broadening needs one
+too), [[L-038]] (a "single owner" of a rule is a claim about agreement with the other doors — this
+is that claim failing in the opposite direction, an addition rather than a narrowing).
+
+---
+
+## L-060 · A live smoke test against a real authenticated client is stronger evidence than SQL impersonation — and a real committed side effect, not a rollback
+
+**2026-08-25 · HEL-82 · self-caught, by the suite's own exact-count assertion on the next run**
+
+**Trigger** — verifying a built feature works by signing in as a real seeded user through the
+actual client library (not `SET LOCAL ROLE` + `set_config('request.jwt.claims', …)` inside a SQL
+transaction) against the local dev stack.
+
+**What happened.** Every SQL suite in this repo runs inside `BEGIN…ROLLBACK` — zero net seed
+mutation is the house discipline (L-033). A quick Node script using `@supabase/supabase-js` to
+sign in as the seeded HS reviewer and call `suspend_relationship`/`reactivate_relationship`
+directly was genuinely useful — it proved the real auth+JWT path reaches `is_hs_team()` and the
+RPCs correctly, which a SQL suite's `set_config` impersonation can approximate but never fully
+prove. But that script talks to the local Postgres/PostgREST stack over the network, as a real
+client — there is no transaction wrapping it, and nothing rolled it back. It left 4 real,
+committed `audit_log` rows behind. The very next run of `relationship_admin_suspend_end_test.sql`
+failed its own `B3/audit: expected 2 audit_log rows` assertion — count 4, from the suite's own 2
+rows plus the smoke test's leftover 2.
+
+**Why it wasn't obviously wrong at the time.** The script's whole job was to prove a real
+end-to-end path works, which by construction means it isn't sandboxed in a rollback the way the
+SQL suites are — that's the exact thing that makes it more convincing than a SQL suite. It's easy
+to reach for it as "just another verification step" and forget it carries a real side effect the
+SQL suites don't.
+
+**The rule** — a script that authenticates as a real user through the actual client library and
+calls real RPCs over the network is not covered by "the test suites already roll back." Either
+wrap it in the same discipline (open a transaction and roll it back — awkward across a network
+client, but not impossible for local Postgres) or, simpler on a local dev stack, run
+`supabase db reset` immediately after and re-verify the SQL suites before treating the branch as
+clean. Don't assume a passing SQL suite run AFTER a manual client-side probe is telling the truth
+about a fresh baseline — it might be counting the probe's own leftovers.
+
+**See also** [[L-033]] (zero net seed mutation is the suite discipline this script fell outside
+of).

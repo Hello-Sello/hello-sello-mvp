@@ -11,7 +11,7 @@
  *                     finished-deal skin is removed (D-17: the only closed cue is
  *                     the pencil -> lock in DealCard).
  *   3. PARTIES      - seller -> buyer. Fixed.
- *   4. PRODUCTS     - the product table; read-only rows (ProductList) or inline
+ *   4. PRODUCTS     - the product table; read-only rows or inline
  *                     row-edit when the card is in edit mode (D-16). A held change
  *                     renders as the on-card red/green diff (NegotiationDiff, D-18);
  *                     a promotion's reward lines render in the yellow track.

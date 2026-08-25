@@ -5,6 +5,125 @@
 
 ---
 
+**Last updated:** 2026-08-25 — `security_tickets` session (worktree-security-tickets) —
+**HEL-82 + HEL-74 BUILT, committed `fc2a07b`, pushed to `worktree-security-tickets`.**
+**Status:** offline (session closed).
+**Shared files locked: none — all released.**
+
+**What shipped.** `suspend_relationship`/`reactivate_relationship`/`end_relationship`
+(`is_hs_team()`-gated definer RPCs) + a new `/admin/relationships` queue (NOT
+`/connect/relationship` — see the design-revision note below). `send_deal` AND
+`confirm_detected_deal` (Sella's double-accept door, which never calls `send_deal` and would
+otherwise bypass it) both refuse to deliver a new deal onto a suspended/ended relationship.
+`accept_connection_request` refuses to silently adopt an existing non-active relationship —
+closes a reconnect-loop bug (discovery hides a suspended pair, but the old accept still
+"succeeded" on the dead row with a fresh chat thread as a side effect). `RelationshipHeader`
+and the basket's connection resolver now agree with `getMyConnections` on what "connected"
+means. Two-round `critic`+`security` review both found real blocking gaps in the first draft —
+full detail in the HEL-82 Linear comment, not repeated here.
+
+**Design revision, worth naming for whoever reads this later:** the first draft put the admin
+panel on `/connect/relationship/[id]` (reusing the existing page, per instruction) and broadened
+`rel_all`'s RLS. Review found that page is unreachable by the seeded (companyless) HS account
+regardless — the whole `/connect` tree sits behind `requireVerified()` — and that fixing THAT
+by giving HS staff a company would turn three other relationship readers into cross-tenant leaks
+(none of them has an explicit membership check, all lean on RLS alone). Moved to `/admin` instead;
+`relationship` carries no RLS/grant change in the final version.
+
+**Scope deliberately narrowed, ticketed as HEL-84 (High), not silently gapped:** new chat
+messages and new pricing asks still have zero relationship-status check (`msg_all`,
+`inbox_insert`/`discover/actions.ts`) — HEL-82's own AC names both. Real, immediate gap once
+suspension ships, not latent. HEL-82 left **In Progress**, not Done, until HEL-84 lands.
+
+**Still local-only, cloud-pending:** 4 migrations, `20260825170000`–`20260825200000`, ledgered
+as ONE batch (do not push a partial prefix — see the ledger entry). `/admin/relationships`'s
+server actions call RPCs that don't exist without them — same-deploy required with the app code.
+
+**One real DB-hygiene mistake, self-caught:** ran a live auth+RPC smoke test (real Supabase
+session, not SQL impersonation) to verify the admin flow actually works end-to-end for the
+seeded HS account — it does — but the script committed for real (no rollback) and left 4 extra
+audit_log rows on the local shared DB, which then failed my own test suite's exact-count
+assertion on the next run. Caught by the failure itself, not silently missed; fixed with a
+`db reset` and a full clean re-verification pass (14/14 SQL suites, tsc, eslint, vitest) before
+committing. Worth a beat: a manual verification script against a REAL client is more convincing
+than SQL impersonation, but it is also a REAL side effect — wrap it in a rollback too, or reset
+after.
+
+---
+
+**Last updated:** 2026-08-25 — `ship_deal` session — **SLUG 0023 SHIPPED TO PRODUCTION (PR #177);
+G5 walk found + fixed a real bug in the basket send flow, also shipped (PR #180). G5 itself still
+PENDING — walk in a new session.**
+**Status:** offline (session closed).
+**Shared files locked: none — all released.**
+
+**What shipped.** `/ship 0023`: T01-T04 + 3 security migrations (HEL-67 Gap 1, HEL-75, DEV-159) live
+on production, both PRs merged to `main`, both Vercel production deploys READY. Fixed 3 SQL test
+fixtures that hardcoded seed-random UUIDs before pushing (**L-056** — DEV-159's own suite had never
+run its real assertions as a result). Migrations applied individually via MCP `apply_migration`, not
+`db push`, because `security_tickets`' unfinished HEL-81 migrations were sitting untracked in the
+same directory and a plain push would have swept them in.
+
+**G5 found a real bug, not a false alarm.** Muskan's live walk: picking a person in the basket still
+landed the deal in company chat. Traced with a direct SQL repro before touching UI code —
+`send_deal`'s p2p/c2c routing was correct the whole time. The actual gap: the flow required a
+separate "Send deal" click inside an auto-opened deal card, with no visible confirmation from the
+picker alone. Fixed (`createBasketDraft` now sends immediately, supersedes the "drawer never sends"
+framing for this door — DECISIONS.md + ARCHITECTURE-NOTES.md), tested (new e2e proves person-picks
+land in p2p — closes **HEL-76**, which had been open the whole time for exactly this untested gap),
+shipped as PR #180. **0023 is NOT closed** — next session walks G5 against the fixed flow, then
+`rollup` + close the four Linear tickets.
+
+**Two PR-hygiene near-misses, both caught before merging anything wrong.** Cutting a PR from
+`claude/muskan/work`'s moving tip pulled in `security_tickets`' unreviewed HEL-81 commits twice —
+once during the 0023 ship (caught, recut from a fixed ref), once during the follow-up fix (caught
+after opening the PR, required closing it and cherry-picking the exact commit onto `main` in an
+isolated `git worktree`). Also: briefly ran `git checkout` in this shared main directory mid
+cherry-pick-prep, swapping every file on disk to `main`'s state for a few seconds before catching it
+and switching back — the right tool for that operation is `git worktree add`, never `checkout` in a
+directory other sessions are actively using.
+
+**Tooling note:** `rtk`'s hook-based rewriting collapses `psql`, `eslint`, and `git status`/`diff`
+output too, not just Playwright (previously HEL-80's scope). Worked around throughout via direct
+`node <real-binary-path>` invocation and a thin `bash`-wrapped `git` script.
+
+---
+
+**Previously (2026-08-25) — `security_tickets` session, HEL-81 — deal_line_item INSERT lockdown
++ deal_promotion write lockdown, BUILT, GREEN, CLOSED (`0587be8`, pushed).**
+
+**What landed.** `deal_line_item` and `deal_promotion` are both SELECT-only for `authenticated` now;
+every promotion write goes through `offer_promotion`/`accept_promotion`/`decline_promotion`
+(SECURITY DEFINER). Two-round adversarial review (`critic` + `security`, twice each) caught a real
+confused-deputy hole in round 1's own first draft — `accept_promotion` trusted `deal_promotion` as
+its authorization input, but that table was still writable directly, so the buyer could forge a
+"seller" promotion and accept it themselves. Closed the same way as the ticket's own fix, one table
+over. Round 2 caught a second, narrower thing: moving the write behind a definer had silently dropped
+`card_relationship_member`'s `unsent`-draft guard, since a definer bypasses RLS entirely rather than
+inheriting the policy it replaces — restored explicitly. **L-057** written on the general lesson.
+Filed **HEL-83** for a related-but-out-of-scope gap: none of the three RPCs check `deal_card.status`,
+so a promotion can still land on an already-sealed deal — needs a product ruling, not an engineering
+call, so left for triage rather than folded in here.
+
+**Shared file touched without a lock: `docs/deploy/cloud-migrations-pending.md`.** Added a new
+PENDING section for the two HEL-81 migrations while a parallel `ship_deal` session was actively
+pushing a different batch through the same file. Confirmed directly with that session first (it
+wasn't touching my area) but skipped the actual lock step — noting the ritual gap rather than
+normalizing it silently. No conflict resulted: `ship_deal` later committed its own "APPLIED" update
+to the same file (`1684f8a`) from the same shared working tree, which picked up my uncommitted
+section along with its own edit — verified afterward that both survived intact and the result reads
+coherently. `ship_deal`'s commit message shows it deliberately avoided a plain `db push` specifically
+because it would have swept up HEL-81's then-untracked migration files — good cross-session care,
+worth naming.
+
+**Still local-only, cloud-pending:** `20260825150000_deal_line_item_insert_lockdown.sql` +
+`20260825160000_deal_promotion_write_lockdown.sql`, ledgered together (do not push separately — see
+the ledger's own deploy-ordering warning). Needs the matching app-code deploy in the same push
+(`src/modules/deals/actions.ts`'s three promotion actions now call RPCs that don't exist without
+these migrations).
+
+---
+
 **Last updated:** 2026-08-25 — session 93 `security_tickets` — **HEL-75 + DEV-159 BUILT, GREEN, CLOSED.**
 **Status:** offline (session closed).
 **Shared files locked: none — all released.**
