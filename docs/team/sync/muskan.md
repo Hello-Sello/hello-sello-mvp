@@ -6,18 +6,39 @@
 ---
 
 **Last updated:** 2026-08-25 — `security_tickets` session, HEL-81 — **deal_line_item INSERT lockdown
-+ deal_promotion write lockdown, BUILT, GREEN, ready to close.**
-**Status:** active (mid-session).
-**Shared files touched: `docs/deploy/cloud-migrations-pending.md`** — added a new PENDING section for
-the two HEL-81 migrations (`20260825150000`, `20260825160000`), below the existing "THREE migrations"
-section that a parallel `ship_deal` session was actively pushing at the time. **Did not lock this file
-first per the sync ritual** — confirmed with `ship_deal` directly (cross-session message) that it
-wasn't touching this area before editing, but the lock step itself was skipped; flagging it here so
-the ritual gap is visible, not silently normalized. Only additive content was added; the in-flight
-section's own prose was not rewritten, only annotated (struck + noted, per this file's own
-correction convention) where HEL-81 made one of its claims stale.
-**HEL-81 in Linear is still Backlog** — not yet moved to Done; closing that + the wrap ritual is
-this session's next step.
++ deal_promotion write lockdown, BUILT, GREEN, CLOSED (`0587be8`, pushed).**
+**Status:** offline (session closed).
+**Shared files locked: none — all released.**
+
+**What landed.** `deal_line_item` and `deal_promotion` are both SELECT-only for `authenticated` now;
+every promotion write goes through `offer_promotion`/`accept_promotion`/`decline_promotion`
+(SECURITY DEFINER). Two-round adversarial review (`critic` + `security`, twice each) caught a real
+confused-deputy hole in round 1's own first draft — `accept_promotion` trusted `deal_promotion` as
+its authorization input, but that table was still writable directly, so the buyer could forge a
+"seller" promotion and accept it themselves. Closed the same way as the ticket's own fix, one table
+over. Round 2 caught a second, narrower thing: moving the write behind a definer had silently dropped
+`card_relationship_member`'s `unsent`-draft guard, since a definer bypasses RLS entirely rather than
+inheriting the policy it replaces — restored explicitly. **L-057** written on the general lesson.
+Filed **HEL-83** for a related-but-out-of-scope gap: none of the three RPCs check `deal_card.status`,
+so a promotion can still land on an already-sealed deal — needs a product ruling, not an engineering
+call, so left for triage rather than folded in here.
+
+**Shared file touched without a lock: `docs/deploy/cloud-migrations-pending.md`.** Added a new
+PENDING section for the two HEL-81 migrations while a parallel `ship_deal` session was actively
+pushing a different batch through the same file. Confirmed directly with that session first (it
+wasn't touching my area) but skipped the actual lock step — noting the ritual gap rather than
+normalizing it silently. No conflict resulted: `ship_deal` later committed its own "APPLIED" update
+to the same file (`1684f8a`) from the same shared working tree, which picked up my uncommitted
+section along with its own edit — verified afterward that both survived intact and the result reads
+coherently. `ship_deal`'s commit message shows it deliberately avoided a plain `db push` specifically
+because it would have swept up HEL-81's then-untracked migration files — good cross-session care,
+worth naming.
+
+**Still local-only, cloud-pending:** `20260825150000_deal_line_item_insert_lockdown.sql` +
+`20260825160000_deal_promotion_write_lockdown.sql`, ledgered together (do not push separately — see
+the ledger's own deploy-ordering warning). Needs the matching app-code deploy in the same push
+(`src/modules/deals/actions.ts`'s three promotion actions now call RPCs that don't exist without
+these migrations).
 
 ---
 
