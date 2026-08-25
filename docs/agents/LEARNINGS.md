@@ -1576,3 +1576,227 @@ unexplained difference is more often a confound than a finding.
 something outside the thing measured. This one generalises furthest, because it applies to every
 before/after comparison, not only to tests.
 
+
+---
+
+## L-050 · A coverage claim can be true inside a unit and false at its caller
+
+**2026-08-25 · T02 / HEL-64 · `/build` · caught by `critic` (N1) after the test was already green**
+
+**Trigger** — writing a test that proves a function picks the right one of two same-typed inputs,
+and then describing that test as closing the class. Also: any sentence of the form *"case X closes
+the Y confusion"* where Y can also occur in the code that CALLS the function.
+
+**What I did.** `ConnectedCompany` carries both `companyId` and `relationshipId`. Both are `string`,
+both compile, and a lookup keyed on the wrong one renders **identically green** in every render test
+while shipping a control whose people list is empty forever. I extracted the mapping into a pure
+`peopleForRelationship()` and gave it a **decoy fixture** — company A's `companyId` IS the target
+`relationshipId` — so a `companyId`-keyed implementation goes red. That was a good test and it did
+what it claimed.
+
+**What it did not do.** `critic` pointed at the **call site**: change
+`relationshipId={group.sellerCompanyId}` in the component that renders the control and *both* are
+still `string`, `tsc` still passes, and **all seven unit cases still pass** — including the decoy,
+because the pure function it tests is untouched. The shipped control's people list is empty forever,
+which is exactly the state the ticket's headline invariant forbids.
+
+**The shape.** Extracting a confusable choice into a tested function moves the confusion **up one
+level**; it does not delete it. The test proves the callee. Nothing proves the caller passed the
+right thing, and under a jsdom-less render env nothing can.
+
+**What to do instead.** When you extract-and-test a same-typed choice, say in the plan **which level
+the test closes** and put the caller on the uncovered list explicitly. If the caller is not
+unit-reachable, it belongs in the e2e or on the human gate sheet — named, not implied. A "declared
+uncovered" table that omits the level you did not close is worse than no table, because a reader who
+accepts the decoy's rationale reasonably believes the whole class is shut.
+
+**See also** [[L-038]] (a single owner is a claim about agreement, not file count) and
+[[L-021]] (assert presence and absence on the same state).
+
+---
+
+## L-051 · Handing a gap to another ticket is a claim about that ticket's criteria — open it
+
+**2026-08-25 · T02 / HEL-64 · `/build` · caught by `plan-checker` (B2) before any code was written**
+
+**Trigger** — writing "covered by T0X", "already declared e2e by the ticket", "the walk will catch
+it", or any deferral naming an owner. Also: a "declared uncovered" table with an `owner` column.
+
+**What I did.** My plan declared the ticket's **headline invariant** — *"the control is never a dead
+control"* — not unit-testable, and routed it to the e2e ticket with the words *"already declared
+e2e by the ticket."* I had read that ticket earlier in the same session.
+
+**It was false.** The e2e ticket's five acceptance criteria are entirely about a chat pill, an inbox
+route and two existing specs. **None mentions a company with zero connected people.** And the local
+seed has no such company either, while the human gate walk is locked to two companies that both have
+people. So the invariant was declared uncovered, deferred, **and landed nowhere** — three separate
+places each assuming one of the others held it.
+
+**The shape.** A deferral reads like bookkeeping and is actually an assertion about a *different
+artifact*, made from memory. It is the [[L-031]] shape ("the other copy is right" — and the other
+copy was never opened) pointed at a ticket instead of a file. It survives review easily because the
+sentence is about somewhere else, so nobody checks it where it is written.
+
+**What to do instead.** Before naming an owner, **open that owner and find the criterion**. If there
+is no criterion, you have three honest options and "defer" is not one of them: add the criterion to
+that ticket, close it here, or put it to the human as an open ruling. Say which. And check the
+**fixture** as well as the criterion — a criterion nobody can stage is not covered either.
+
+**Ending worth recording:** the gap closed on **evidence, not a ruling** — `visual-verifier` built
+the missing fixture (a throwaway zero-people company, hard-deleted after) and walked it live. The
+correct deferral would have been "no owner, needs a fixture", which is exactly what got built.
+
+**See also** [[L-039]] (scope is the gates' output, not the spec's AC list) and [[L-050]].
+
+---
+
+## L-052 · A ticket's own suggested fix is a hypothesis, and a security ticket's is the one most likely to be believed
+
+**2026-08-25 · HEL-67 / HEL-70 · `security_tickets` session · caught by a write-path census, before any code**
+
+> **Numbering note:** this is **L-052**, not L-049. **L-049 is an unclaimed hole** — session 89 wrote
+> "L-049 is next free", nobody took it, and session 90 then wrote L-050 and L-051. The gap is left
+> **deliberately**: back-filling it would make the sequence non-chronological and erase the evidence
+> that this file has a monotonic key and no allocator. That gap is the open convention question,
+> made visible instead of tidied away.
+
+**Trigger** — a ticket containing a fenced `sql` block, a "suggested fix", or a predicate sketch,
+*especially* one written by a previous careful session that already listed the traps. Also: any
+ticket phrase of the form "X is service-role only" or "only the system writes X".
+
+**What happened, twice in one session.**
+
+**HEL-70** said four discovery doors. There were **five** — `list_discoverable_people` gated on the
+same two terms and had never been redefined, so a deactivated company's *people* stayed discoverable.
+Building the ticket as written would have shipped a "single owner" that four of five doors agreed
+with, which is the exact defect the ticket existed to fix.
+
+**HEL-67** sketched `type NOT IN ('deal_detected', ...)` with the gloss *"Sella-authored types,
+service-role only"*, and separately `sender_person_id = auth.uid()`. A census of every
+`chat_message` INSERT reachable as `authenticated` killed **both**:
+
+- Five of six Sella-or-system-voiced types are written **by an ordinary browser session**
+  (`intro`, and four deal-lifecycle pills from `announceDealEvent`). Banning "Sella-authored types"
+  would have broken the deal pills and connection-accept outright.
+- The ticket flagged that `sender_person_id` is nullable for system lines and said the predicate must
+  be "conditional on `sender`". True, and **not enough**: the accept rollout inserts a
+  `sender = 'person'` message whose author is the **requester, not the caller** (`rollout.ts:179`).
+  So the sketch breaks connection-accept even in the case it was scoped to.
+
+**The shape.** A ticket's suggested fix is written from the *reading* side — someone traced how a
+value is consumed, then inferred who must produce it. The inference is from **naming and intent**
+("Sella-authored", "system message"), not from the write path. Naming describes a *voice*; RLS
+governs a *writer*; the product routinely has one identity speak in another's voice. On a security
+ticket this is more dangerous than elsewhere, because the sketch arrives pre-justified — it was
+written by a session that had just done real work, it names real traps, and it makes the fix look
+like transcription rather than design.
+
+**What to do instead.** Before implementing any suggested predicate, **enumerate every write site
+that reaches the table as the role being narrowed**, from source, and tabulate the actual column
+values — not the ones the type names imply. Then check the sketch against the table. If the sketch
+survives, you have lost twenty minutes; if it does not, you have avoided shipping a gate that breaks
+production or a fix that half-closes a class while reading as closed.
+
+**And when the census kills half the ticket, say which half and why it is BLOCKED rather than
+deferred.** HEL-67 Gap 2 is not "not done yet" — it is unbuildable until [[L-037]]'s reader census
+has somewhere to move those writes ( HEL-68 ). Recording it as blocked, with the counterexample line
+number, is what stops the next session re-deriving the same dead end.
+
+**See also** [[L-038]] (a single owner is a claim about agreement with the other doors),
+[[L-006]] (a comment on the read path is not a contract for the write path), [[L-026]] (verify the
+REASON for a guard as hard as the guard), [[L-051]] (a deferral naming an owner is a claim about that
+owner) and [[L-031]].
+
+---
+
+## L-053 · A teardown copied from a precedent inherits that precedent's REFERENCES, not just its shape
+
+**2026-08-25 · slug 0023 · T03 / HEL-65 · `/build` step 3 · caught by `plan-checker` (B1) before any code was written**
+
+**Trigger** — copying a fixture's `afterAll`/`afterEach` teardown from another spec, or writing
+any hard-delete order for rows you created. Also: the phrase "the clean pattern is `<file>:<lines>`"
+appearing in a plan.
+
+**What I did.** T03 must not become the fourth seed-mutating spec (HEL-73), so the plan created its
+own product and hard-deleted it after, citing `e2e/discover-shop.spec.ts` as the clean pattern and
+copying its delete order verbatim: `product_basket_line` → `pricelist_item` → `product`.
+
+**It cannot execute.** `deal_line_item.product_id → product(id)` carries **no `ON DELETE` action**
+(`20260607090005_fk_alters_triggers.sql:22-24` — the constraint has no clause at all, so it is
+`NO ACTION`). My walk *drafts the fixture product onto a deal*, so at teardown a live
+`deal_line_item` still references it and `delete from product` raises **`23503`**. The precedent's
+product is only ever added to a basket and viewed — **it is never drafted onto a deal**, so its
+three-step order is complete *for its lifecycle* and incomplete for mine.
+
+**Why it matters more than a failed delete.** The delete was fire-and-forget, with no `error`
+check — the shape the precedent also uses, because there it never fails. So the throw would have
+been swallowed, the product would have survived every subsequent run, and the spec would have
+become **exactly the seed-mutating spec the plan opened by promising not to write.** The failure
+mode is silent and lands in the safest-looking direction: a passing suite that is quietly
+corrupting the shared seed for every later file.
+
+**The shape.** A teardown is not a reusable snippet. It is a claim about **the full set of rows
+that now reference your fixture**, and that set is determined by *what your test does to the
+fixture*, not by what the file you copied from does to its own. Two fixtures of the same table can
+need different teardowns.
+
+**What to do instead.** Before copying a delete order, enumerate the FKs pointing at your
+fixture's table and ask **which of them your test causes to be written** — the precedent can only
+tell you about the ones *its* test writes. Delete children the test creates before the parent, and
+**check every delete's error**: an unchecked delete in a teardown is an assertion you never make.
+
+**See also** [[L-033]] (a seed row is not a stable fixture until you grep what mutates it) — this
+is its mirror image: a fixture *you* create is not clean until you grep what references it.
+
+---
+
+## L-054 · "Built and green" names a database state — say which stack, and whether another branch can reproduce it
+
+**2026-08-25 · HEL-67 · `security_tickets` · caught by `deal_land_t02` cross-checking the claim, after I had already reported it to Muskan**
+
+> **Numbering:** L-054. L-053 was taken by the parallel session in the same hour, announced before
+> writing. [[L-049]] remains a deliberate hole — see [[L-052]].
+
+**Trigger** — writing "built", "green", "N/N passing", or "applied" about anything that lives in the
+local database rather than in a file: a migration, a policy, a grant, a seeded fixture. Also: any
+handover between parallel sessions that says a suite passes.
+
+**What I did.** I reported HEL-67 as built and green, with a full-suite A/B (45/0 applied, 44/1
+reverted). All of that was true. The parallel session then said its stack's tip was `20260825110000`
+with no `20260825120000`, and asked which database my green came from — declining to theorise past
+its own measurement.
+
+**Both measurements were correct, and that is the finding.** The *policy* was live on the shared
+stack; the *migration row* had never been stamped, because I applied the SQL with `psql` and skipped
+the `schema_migrations` insert I had correctly done for the two migrations before it. So *"is it
+applied?"* answered **yes** against `pg_policy` and **no** against `schema_migrations` — one database,
+two facts, and the peer had queried the one I left inconsistent.
+
+**Chasing the discrepancy found the real hazard, which was not the stamp.** The migration *file*
+exists only on my branch. A `db reset` from the other tree would silently revert the gate; and until
+then, that branch was running its tests against a policy its own tree does not contain. Neither
+direction produces a conflict, a warning, or a file collision — every detection mechanism this repo
+has is file-level, and a shared Postgres is not a file. See `ARCHITECTURE-NOTES.md` 2026-08-25.
+
+**The part I want the next session to sit with.** The hazard surfaced **only because I skipped a
+step**. Had I stamped correctly, both sessions would have seen agreement, and the divergence would
+have stayed armed and silent. **A detection mechanism that depends on someone forgetting something is
+not a detection mechanism.** The lesson is emphatically *not* "skip the stamp" — it is that we had no
+real mechanism here at all, and got lucky.
+
+**What to do instead.** Two habits, both cheap:
+
+1. **Stamp at apply time**, every time, so the database is self-consistent — then the ledger table is
+   worth querying and disagreement means something.
+2. **Qualify every green with its stack.** "45/0 on the shared local stack, which carries a migration
+   that only branch X contains" is a different and more honest claim than "45/0". If another branch
+   cannot reproduce it, that belongs in the same sentence as the number — not in a footnote, and not
+   left for a peer to discover.
+
+And when a peer reports a measurement that contradicts yours, **measure again before explaining**.
+The explanation here would have been right and would still have missed the hazard; only the second
+query — *does the other branch even have this file?* — found it.
+
+**See also** [[L-033]] (a green run is only evidence for the DB state it ran against — this is that
+sentence at the schema level), [[L-048]] (an A/B whose arms start from different states is not an
+experiment), [[L-040]] (parallel sessions on one branch) and [[L-052]].

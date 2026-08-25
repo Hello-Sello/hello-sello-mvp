@@ -5,11 +5,20 @@
 
 ---
 
-**Last updated:** 2026-08-25 — session 90 `deal_land_t02` — **T02 / HEL-64 CLOSED, G4 PASSED.**
-**Status:** idle. Next = `/build HEL-65` (T03, e2e) or `HEL-66` (T04, docs).
+**Last updated:** 2026-08-25 — session 91 `deal_land_t03` — **T03 / HEL-65 IN BUILD (e2e walk).**
+**Status:** active. `/build` step 3 (`plan-checker` running on `PLAN-T03.md`).
 
-**Shared files locked: none — all released.** The five basket component files are unlocked;
+**Shared files locked:**
+- 🔒 `e2e/fixtures/two-company.ts` — four docstrings (`:284`, `:321-323`, `:746`, `:888`) still
+  claim `send_deal` mints an inbox ticket for the company arm, which **T01 falsified**; plus one
+  new counter (`countDealPillsOnThread`). The parallel session `security_tickets` has been told.
+
+Everything else released. The five basket component files are unlocked;
 `src/modules/basket/actions.ts` + `types.ts` gained comment-only edits and are released too.
+
+**Base moved this session:** `dev` was 3 real commits ahead (HEL-70's deactivation gate + two
+ledger commits) — **merged, not rebased** (`992f05b`), because the two local commits were already
+pushed and a parallel session is live on this repo. Base frozen from there.
 
 **T02 in one line:** the buyer can now address a deal to a person at the seller's company —
 `CounterpartyPersonSelect` shared by both doors. `tsc` 0 · unit **494/494 across 68 files** ·

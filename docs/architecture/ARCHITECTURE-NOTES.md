@@ -579,6 +579,79 @@ assumed to travel with the data and does not.
 
 ---
 
+## 2026-08-25 — A worktree isolates the tree, not the DATABASE. Parallel sessions share one Postgres, and migration files are per-branch.
+
+**This CHANGES standing guidance rather than adding to it.** `CLAUDE.md` §2b concluded, after L-040,
+that *"parallel sessions need separate branches or worktrees, not a sync file."* That is true for
+**files** and **false for the local database**, which is the one resource neither mechanism isolates.
+
+**Measured 2026-08-25**, two sessions on two branches against one stack:
+
+| queried | answer |
+| -- | -- |
+| `pg_policy` — is the HEL-67 gate live? | **yes**, on both sessions' stack |
+| `git show claude/muskan/work:supabase/migrations/20260825120000_…` | **fails** — the file exists only on `worktree-security-tickets` |
+
+So one branch was **running against a policy it does not contain**. Two consequences, and the second
+is worse than the first:
+
+- **Silent revert.** A `db reset` from the branch without the file rebuilds from the migrations *that
+  branch can see* and drops the other session's schema change. No conflict, no warning, no file
+  collision — the detection mechanisms we have are all file-level, and nothing here is a file.
+- **Silent grant.** Until that reset, the other branch's tests run against a gate its own tree cannot
+  describe. A spec that *should* be blocked can pass because someone else's fix is present; a spec
+  can fail for a reason its branch cannot explain, and the fix will look like a defect in its own
+  code. **Tests measure a schema no tree describes, in both directions.**
+
+This is `L-033` moved from the row level to the schema level: *a green suite is only evidence for the
+database state it ran against* — where that state is now partly set by a branch you cannot see.
+
+**⚠️ The uncomfortable part, worth keeping.** This surfaced **only because a step was skipped.** The
+migration's effect was applied without stamping `schema_migrations`, so *"is it applied?"* answered
+**yes** against `pg_policy` and **no** against the ledger table, and the disagreement is what prompted
+the second session to look. **Had the stamp been done correctly — the right thing to do — both
+sessions would have seen agreement and the hazard would have stayed fully armed and invisible.** A
+detection mechanism that depends on someone forgetting a step is not one.
+
+**What this does NOT justify:** stamping is still correct, and the fix is not to skip it. The fix is
+that co-ordination between parallel sessions must include *what has been applied to the shared
+database*, not only what files are locked — and that any "built and green" claim names the stack it
+was measured on. Options not yet decided: a per-session database, a `supabase db diff` check at
+session start, or simply declaring applied migrations the way files are declared today.
+
+**Source:** `security_tickets` + `deal_land_t02`, 2026-08-25, found while cross-checking a
+"built and green" claim. See `L-054`, `L-033`, `L-040`, `CLAUDE.md` §2b (now known insufficient).
+
+---
+
+## 2026-08-25 — A message type names a VOICE; RLS governs a WRITER. They are not the same axis, and our vocabulary hides it.
+
+`chat_message.type` and `chat_message.sender` look like they encode the same fact — who produced this
+line — and they do not. `sender` has three values (`person`, `system`, `sella`) and `type` has
+fourteen, and the product **routinely has one identity speak in another's voice from an ordinary
+browser session**: `announceDealEvent` writes four deal-lifecycle pills as `sella` with a NULL author
+(`actions.ts:682`), the accept rollout writes `intro` as `sella` and `connection_established` as
+`system` (`rollout.ts:110,174`), and it writes a `person` message whose author is the **requester,
+not the caller** (`rollout.ts:179`).
+
+The consequence for anyone writing RLS on this table: **"only Sella writes X" is a statement about
+the voice, and is never evidence about the writer.** A predicate derived from type names will either
+ban writes the product depends on, or permit the ones it meant to stop. The only sound derivation is
+a census of the write sites reachable as the role being narrowed.
+
+This is why HEL-67 shipped one type rather than the list its ticket proposed, and why its
+sender-forgery half is blocked until HEL-68 moves the rollout's three inserts out of the browser —
+at which point `sender` finally *does* line up with the writer, and a predicate becomes possible.
+
+The same shape has a name upstream: a comment on the read path is not a contract for the write path
+(L-006). This entry is its schema-level twin — **a column that describes presentation is not a
+column that describes authorship**, even when its values look like they do.
+
+**Source:** HEL-67 build, `security_tickets` session, 2026-08-25. See `L-052`, `DECISIONS.md`
+2026-08-25 ("HEL-67 ships as one type").
+
+---
+
 ## 2026-08-25 — `supabase db reset` rotates the stack secret, and our own resets manufacture "pre-existing" e2e failures
 
 The local Supabase stack issues a **new secret key on every `supabase db reset`**. The Playwright
@@ -636,3 +709,71 @@ a "single owner" refactor is worth it, the question is not how much duplication 
 **Corollary (L-038 restated in the positive):** a single owner is only real if the doors actually
 *call* it. `current_pricelist_item` reprinted the rule for months while three other doors delegated,
 and it was the reprint that drifted — not any of the callers.
+
+---
+
+## 2026-08-25 — Two doors can agree on a row's existence and disagree on its *state*
+
+**Found while building T02 / HEL-64 (slug 0023), by `plan-checker`. Not reachable in the seed,
+so no test and no gate walk in that slug could ever have shown it. Offered at G4 and deliberately
+left unfiled.**
+
+The buyer's basket and the connections directory both answer *"which relationships does this viewer
+have?"* — and they answer differently:
+
+| door | predicate |
+|---|---|
+| `basket/supabase/reads.ts:101-104` | `deleted_at is null` |
+| `messaging/supabase/connections.ts:119` | `deleted_at is null` **and** `status === 'active'` |
+
+**The consequence, and why it is nastier than a plain divergence.** On a `suspended` or `ended`
+relationship the basket still produces a non-null `relationshipId`, so the group is treated as
+connected, the connect-first block does not render, and the addressee control mounts. The control
+then looks its people up in the *directory*, which does not know that relationship — so the list is
+empty. **Permanently, and silently.**
+
+That empty list is **byte-identical to the legitimate case** the same ticket spent a whole
+acceptance criterion proving: a connected company that genuinely has no people yet. **Two different
+causes, one indistinguishable screen** — and the "correct" one was explicitly designed to look like
+that ("never a dead control"). So the failure is not merely invisible; it is *camouflaged by an
+intended behaviour*.
+
+**The general shape, and it is a sharpening of [[L-038]] rather than a new rule.** L-038 says a
+single owner is a claim about **agreement**, not file count. This adds: agreement has to cover the
+**lifecycle**, not just the identity. Two doors that both find the same row, and both filter it the
+same way *at the happy path*, can still part company on the states in between — and a state that
+never occurs in the seed is a state no local evidence will ever produce.
+
+**Practical rule.** When one module hands another an id, the receiver's *visibility* predicate is
+part of the contract, not an implementation detail. Either the id-producer applies the same
+predicate, or the receiver must be able to say **"I don't know that one"** distinguishably from
+**"I know it and it's empty."** Here it cannot, and that is the whole defect.
+
+---
+
+## 2026-08-25 — A citation nobody can look up cannot go stale visibly
+
+**Found by `builder` during T02 / HEL-64 while fixing two other stale citations. The slug had
+already produced seven of them; this is the reason there were seven.**
+
+The basket module's source comments cite decision IDs — `D-04`, `D-06`, `D-08`, `D-12`, `D-14`,
+`D-15` — that **have no canonical definition anywhere in the tracked tree.** The IDs are per-phase
+and collide across phases. `D-12` alone currently means four different things:
+
+| where | what `D-12` means |
+|---|---|
+| `DECISIONS.md:1219` | "Inbox" is relabelled "Connection Request" |
+| `cloud-migrations-pending.md:1366` | one active pending join request (partial-unique index) |
+| `0021-tier-ladder/PLAN-T07.md:108` | price is seller-only |
+| `basket/actions.ts` | delivery is `send_deal`'s alone |
+
+**Why this belongs in the architecture record rather than a cleanup ticket.** A line-number citation
+is *checkable*: it goes stale loudly the moment someone opens the file, which is how all seven of
+that slug's stale citations were caught. An unresolvable ID is **worse precisely because it never
+goes stale** — no reader can falsify it, so it quietly stops being true and keeps being copied
+forward into new comments as if it carried authority. The slug's own migration header had five such
+citations copied forward unverified.
+
+**The rule this yields:** an identifier used as evidence must resolve to exactly one place. If a
+scheme is scoped per-phase, the scope belongs **in the identifier** (`P17-D12`, not `D-12`), or the
+scheme should not be used in source comments at all. Prefer the thing a reader can open.

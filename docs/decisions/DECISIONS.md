@@ -1764,6 +1764,39 @@ size**, which is exactly when "who sent this" starts to matter.
 
 ---
 
+## 2026-08-25 — HEL-67 ships as one type, and its second half is BLOCKED, not deferred
+
+**What was decided.** `msg_all`'s `WITH CHECK` gains exactly one term — `type <> 'deal_detected'` —
+and **not** the list the ticket proposed. The ticket's second half (the forgeable *sender*) is
+**recorded as blocked on HEL-68**, not carried as outstanding work.
+
+**Why one type and not a list.** The ticket sketched banning *"Sella-authored types, service-role
+only"*. A census of every `chat_message` INSERT reachable as `authenticated` shows that is false for
+**five of six**: an ordinary browser session writes `intro` and four deal-lifecycle pills with
+`sender = 'sella'` and a NULL author (`actions.ts:682`, `rollout.ts:174`). The type name describes a
+**voice**; RLS governs a **writer**; in this product one identity routinely speaks in another's
+voice. `deal_detected` is the only type no client writes.
+
+**Why the second half is blocked rather than deferred — the distinction matters.** The obvious fix,
+`sender_person_id = auth.uid()`, breaks connection-accept. Not because of the nullable system-message
+case the ticket already flagged, but because the accept rollout has the browser insert a
+`sender = 'person'` message attributed to the **requester, not the caller** (`rollout.ts:179`, *"the
+requester wrote the note"*). Attribution-to-another-person is load-bearing behaviour here, not a
+defect. Until HEL-68 moves that write into a definer, any sender predicate either breaks accept or
+gates nothing.
+
+"Deferred" would imply someone could pick it up. They cannot, and a future session that tries will
+rediscover the same dead end. The counterexample line number is recorded in the ticket, the migration
+header and the test so that it fails loudly rather than being re-derived.
+
+**The cost accepted.** HEL-67 stays open and half-closed. The sender of any chat message remains
+forgeable by a thread member — as it always has been; slug 0023 did not open it, it moved the deal
+signal onto it. Low today at one user per company, rising with team size.
+
+**Surfaced by:** the `security_tickets` session, 2026-08-25.
+
+---
+
 ## 2026-08-25 — Company deactivation is closed-to-everyone
 
 **What was decided.** A deactivated company (`company.deactivated_at` set) reads **identically to a

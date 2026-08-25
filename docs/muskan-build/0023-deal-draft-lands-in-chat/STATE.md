@@ -1,6 +1,6 @@
 # 0023 deal-draft-lands-in-chat — work order
 lane:   FULL
-stage:  design ✅  →  build: **T01 ✅ CLOSED** → **T02 / HEL-64 ✅ CLOSED** → **build (next: T03 / HEL-65 · T04 / HEL-66)**   ·   G2 /prototype SKIPPED (Muskan, 2026-08-25)
+stage:  design ✅  →  build: **T01 ✅ CLOSED** → **T02 / HEL-64 ✅ CLOSED** → **T03 / HEL-65 🔨 IN BUILD** (plan rev 2 after a checker REVISE, `/build` step 4) → T04 / HEL-66 pending   ·   G2 /prototype SKIPPED (Muskan, 2026-08-25)
 branch: claude/muskan/work — no feature branch (Muskan's call, 2026-08-18)
 
 ## Seed
@@ -480,6 +480,102 @@ is not this slug's job, but nothing else is tracking it.
   *"🛑 G4 — T02 / HEL-64 · THE SHEET"*. **Four rulings owed:** AC 5's wording · the call-site wiring
   gap (`critic` N1 — **a coverage claim of MINE that does not hold one level up**) · AC 3's cover ·
   and whether the four pre-existing defects (N4/N5/N6/**N8**) become tickets.
+
+- **build T03, 2026-08-25 (session 91 `deal_land_t03`)** — budgets reset for this round:
+  `tests 0/2`, `blocking-findings 0/2`, `G4 rounds 1`. Plan at `PLAN-T03.md` rev 1;
+  `plan-checker` spawned at `/build` step 3.
+  ✅ **Base sync — dev had REAL content this time.** Session 88 skipped its rebase because dev's
+  tree diff was empty; that is no longer true (`6710f3a` HEL-70's 499-line deactivation gate +
+  two ledger commits). **Merged, not rebased** (`992f05b`) — the two local commits were already
+  pushed and a parallel session is live on this repo, so a rebase meant force-pushing a shared
+  branch for no gain. **Base frozen from there.**
+  ✅ **T01 is LIVE ON PRODUCTION** (parallel session, 2026-08-25). Pre-flight diffed prod's
+  `send_deal` on `prosrc` (`md5 b52ea5df…`, byte-identical to `20260724120300`) — **zero drift**.
+  Prod tip `20260825110000`; **the pending cloud batch is EMPTY.** T03 adds no migration.
+  ✅ **Same-deploy hazard CHECKED, not assumed** (DECISIONS 2026-08-24's `git show origin/main:`
+  pre-check). The DB is ahead of `dev`/`main` and it is benign in this direction: main's
+  `MessageBubble.tsx:20-42` already renders `deal_card` with **no thread-type gate**, main's
+  `sendDeal` (`actions.ts:367`) **never reads `pending_inbox_item`**, and main's deal-tickets
+  lens is a filter whose empty state already exists. The 0022 outage was old code *writing*
+  through a revoked grant; nothing was revoked here.
+  ✅ **T01 confirmed applied LOCALLY against `pg_proc`, not against the file** — so
+  `deal-c2c-create.spec.ts:141-191` is **genuinely red right now**, which is AC 4.
+  ⚠️ **A plain `grep deliver_deal` on `prosrc` HITS and is a FALSE POSITIVE** — the only match is
+  a comment explaining why the call was removed ([[L-041]]'s shape). Recorded so the next reader
+  does not conclude the migration failed to apply.
+  ✅ **Fixture premises measured, not assumed:** relationship `active`/live · **one live c2c
+  thread** (so the base case exercises resolve, not the heal path) · GreenLeaf `verified` and
+  **not** deactivated, so HEL-70's new gate does not close the shop under this walk.
+  🔴 **A SIXTH CRITERION ADDED, and TICKETS.md is now stale by one row.** T02's G4 ruling 2 said
+  *"accept, or ask T03 to assert the wiring"* and Muskan's handoff resolved it toward T03 — but
+  **T03's five ACs never mention the picker.** Deferring to a ticket whose criteria do not cover
+  it is exactly [[L-051]], the mistake T02 made. So the criterion is **written into this plan as
+  AC 6**, and TICKETS.md's amendment is booked as **T04/HEL-66's SIXTH doc edit**.
+  ⚠️ **T02's G4 ruling 3 was never recorded and is NOT being adopted silently.** It offered
+  *"accept the code contract as cover for AC 3, or send it to T03 with a throttled fetch."* The
+  gate log carries rulings 1 and 4 only. A throttled-fetch test needs network interception this
+  repo has never used → left in `PLAN-T03.md` §5 as **an open ruling for Muskan at G4**.
+  ✅ **The handed-forward c2c-counter worry is closed BY CONSTRUCTION** —
+  `countThreadsForPair` (`two-company.ts:532-556`) already filters `t.deleted_at is null`, and a
+  repo-wide grep finds **no other c2c thread counter**. `inbox-accept.spec.ts` also never calls
+  `send_deal`. **The deliberate run (AC 5) is still owed and will still be run.**
+  🔒 Sync lock on `e2e/fixtures/two-company.ts` taken + pushed alone — four of its docstrings
+  assert the inbox-ticket behaviour T01 falsified.
+  ✅ **`plan-checker` → REVISE: 6 blocking + 8 notes. ALL FOURTEEN VERIFIED TRUE by me against
+  the real files before folding ([[L-003]]), all fourteen accepted, none argued down.** Plan is
+  at **rev 2**. Full detail in `REVIEW.md` → *"T03 — Round 1"*.
+  **My headline claim survived** — it traced AC 6 and confirmed the assertion goes red under the
+  call-site swap. **What did not survive was my fixture lifecycle**, and three findings are worth
+  carrying:
+  1. 🔴 **B1 — my `afterAll` could not have executed.** `deal_line_item.product_id → product(id)`
+     has **no `ON DELETE`** (`20260607090005:22-24`) and the walk drafts the fixture product onto
+     a deal, so `delete from product` raises **`23503`**. I copied the order from
+     `discover-shop.spec.ts:713-715`, where the product is never drafted. **It would have leaked
+     the fixture into the seed permanently — the exact HEL-73 outcome the plan opened by claiming
+     to avoid.**
+  2. 🔴 **B2 — two assertions were false before the spec's first line ran.** One worker, file
+     order = path order: `deal-c2c-create` leaves a card whose send now posts a **c2c** pill and
+     `deal-change` posts a **p2p** one, so both pill counts started wrong. Worse:
+     **`resolveDealCardIdForRelationship` is `limit 1` with no `ORDER BY`** (`two-company.ts:228`,
+     and its own docstring claims safety only after a reset) — so `countTicketsForCard(cardId)
+     === 0`, **the half I called authoritative, could have passed against the WRONG card.**
+  3. 🔴 **B6 — the rewrite silently deletes live coverage.** `deal-c2c-create.spec.ts:22` is the
+     **only** e2e anywhere exercising "Pick up deal" / `claim_deal_ticket`, and that path is still
+     live (G1 kept it, `:516`; Sella's door still writes into that lens, Risk #2 `:530-534`).
+     My §5 recorded none of it. **Residual cover is now named:** `claim_deal_ticket_test.sql`.
+  🔴 **THREE MORE STALE CITATIONS OF MINE — the slug's tally is now NINE.** `countThreadsForPair`
+  ends at `:552` not `:556` · `discover-shop.spec.ts:586-594` is an **`afterEach`**, not an
+  `afterAll` · `sendDeal` is `:367` on `origin/main` but **`:369` on HEAD**, and the tree must be
+  named on a file this slug itself edited.
+  📌 **N7 stung:** ADR **§4.1 `:307`** already recorded the `deal_member` consequence *and* its
+  safety analysis, ending with the words *"Recorded so it is not re-derived"* — **and I
+  re-derived it.** It also surfaces a consequence named nowhere: `PeopleTab.tsx` is the only
+  reader of `deal_member` in `src/`, so a company-addressed deal's People tab now shows **the
+  sender alone**. Not a defect; recorded so G4 does not meet it cold.
+  📌 **MACHINERY — `plan-checker` RESOLVED AS ITSELF this time.** `ROLLUP.md` §C records it
+  erroring `Agent type 'plan-checker' not found` for **ten consecutive tickets** on slug 0022,
+  worked around with a `general-purpose` substitute. It is registered in this session. **§C's
+  first owed ruling — "does the tier attach to the ruleset, or is it inherited from another
+  agent's work?" — is moot going forward**, though the 0022 record still stands as written.
+  🔴 **NEW HAZARD — a `db reset` from this tree would silently revert another branch's live
+  schema.** Found by the parallel session `security_tickets`; **verified independently by me on
+  this stack.** `msg_all` carries HEL-67's gate right now
+  (`… AND ((type)::text <> 'deal_detected'::text)`) and the tip stamps `20260825120000` — but
+  `git show claude/muskan/work:supabase/migrations/20260825120000_…` **fails**. A reset rebuilds
+  from the files THIS branch can see, which stop at `20260825110000`, so the policy and its stamp
+  both vanish — **no conflict, no warning, no file collision to detect it.**
+  **A worktree isolates the tree, not the database.** CLAUDE.md §2b already says parallel sessions
+  need separate branches or worktrees rather than a sync file; **that guidance is now known to be
+  incomplete** — the one resource neither mechanism isolates is the local Postgres, and migration
+  files are per-branch while the DB is not. The parallel session is raising it with Muskan as a
+  possible architecture note, since it **changes** standing guidance rather than adding to it.
+  **What it costs T03:** the ticket's green will be measured on a stack whose schema this branch
+  cannot reproduce. The extra term is **inert here** — the only `authenticated` `chat_message`
+  insert in `e2e/` is `chat-phase7.spec.ts:273` with `type: 'message'`, and `two-company.ts:119`'s
+  `deal_detected` is a superuser DELETE inside `RESET_SQL`. **The results stand; the qualification
+  is stated in the gate report rather than left implicit** ([[L-033]]). Plan §6 trap 1 rewritten
+  to carry both reasons not to reset.
+  ⏳ `test-writer` spawned at `/build` step 4 against rev 2.
 
 ## Gate log
 - **T02 / HEL-64 — G4 PASSED 2026-08-25 (HUMAN).** Muskan ruled **pass, with T04 amending the AC
