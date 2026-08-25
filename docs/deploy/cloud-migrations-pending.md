@@ -111,8 +111,15 @@ gets **silently overwritten** by this push. Diff it first and keep the output:
 
 ```sql
 -- run against PRODUCTION, before pushing
-select pg_get_functiondef('public.send_deal(uuid)'::regprocedure);
+select md5(prosrc), length(prosrc) from pg_proc
+ where oid = 'public.send_deal(uuid)'::regprocedure;
 ```
+
+✅ **RUN 2026-08-25, BEFORE THE PUSH — ZERO DRIFT.** Production's body is
+`md5 = b52ea5dfddd626afc3074acd2615b48d`, length **3591**, a byte-for-byte match for the body in
+`20260724120300_send_deal.sql`. Nothing was hand-edited on production, so row 1's `create or
+replace` overwrites nothing unexpected. Compared on `prosrc` rather than `pg_get_functiondef` —
+the latter re-renders the header and would differ on formatting alone.
 
 This repo has been bitten by exactly this shape before — `ensure_rls` lived on production and in no
 migration until `20260817130000` captured it.
