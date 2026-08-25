@@ -5,15 +5,27 @@
 
 ---
 
-**Last updated:** 2026-08-25 — session 90 `deal_land_t02` OPEN.
-**Status:** active — `/build T02` (HEL-64), slug 0023, branch `claude/muskan/work`.
+**Last updated:** 2026-08-25 — session 90 `deal_land_t02` — **T02 / HEL-64 CLOSED, G4 PASSED.**
+**Status:** idle. Next = `/build HEL-65` (T03, e2e) or `HEL-66` (T04, docs).
 
-**Shared files locked:**
-- `src/modules/basket/components/CounterpartyPersonSelect.tsx` (new)
-- `src/modules/basket/components/RecipientPicker.tsx`
-- `src/modules/basket/components/BasketDrawer.tsx`
-- `src/modules/basket/components/CounterpartyPersonSelect.test.tsx` (new)
-- `src/modules/basket/components/BasketDrawer.test.tsx`
+**Shared files locked: none — all released.** The five basket component files are unlocked;
+`src/modules/basket/actions.ts` + `types.ts` gained comment-only edits and are released too.
+
+**T02 in one line:** the buyer can now address a deal to a person at the seller's company —
+`CounterpartyPersonSelect` shared by both doors. `tsc` 0 · unit **494/494 across 68 files** ·
+eslint 0 · 15 G4 screenshots in `docs/muskan-build/0023-deal-draft-lands-in-chat/g4/`.
+
+⚠️ **T04 / HEL-66 now owes FIVE doc edits, not four** — AC 5's wording was ruled stale at T02's G4.
+
+📌 **Four pre-existing defects were OFFERED at G4 and Muskan declined to file them.** Named in
+`REVIEW.md`'s G4 sheet. The one worth remembering: **the basket and the connections directory
+disagree about which relationships exist** (basket filters `deleted_at`; `getMyConnections` also
+requires `status = 'active'`), so a **suspended** relationship renders a permanently empty people
+list that is **indistinguishable from the legitimate zero-people case**. L-038's class. Unfiled,
+deliberately.
+
+🔴 **Machinery: `critic` ran with NO SHELL twice on this slug**, though its definition grants
+`Bash`. It declared the limit both times rather than hiding it. Unfixed.
 
 ⚠️ **`docs/decisions/DECISIONS.md` is DIRTY in the working tree and is NOT mine** — two
 uncommitted entries left behind by session 89 (company deactivation; HEL-69 rides the 0023

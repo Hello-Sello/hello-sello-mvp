@@ -1,6 +1,6 @@
 # 0023 deal-draft-lands-in-chat — work order
 lane:   FULL
-stage:  design ✅  →  build: **T01 ✅ CLOSED** → **T02 / HEL-64 IN PROGRESS** (session 90 `deal_land_t02`)   ·   G2 /prototype SKIPPED (Muskan, 2026-08-25)
+stage:  design ✅  →  build: **T01 ✅ CLOSED** → **T02 / HEL-64 ✅ CLOSED** → **build (next: T03 / HEL-65 · T04 / HEL-66)**   ·   G2 /prototype SKIPPED (Muskan, 2026-08-25)
 branch: claude/muskan/work — no feature branch (Muskan's call, 2026-08-18)
 
 ## Seed
@@ -331,10 +331,164 @@ is not this slug's job, but nothing else is tracking it.
   list is empty forever, indistinguishable from the legitimate M7 case.** Not reachable in the seed,
   so **no test and no walk in this slug will show it.** Named in the plan's accepted-cost section; a
   ticket is **offered on the G4 sheet, not filed unilaterally.**
-  ⏳ **NEXT: `test-writer` running** (C1, C2, C7 new file; C4, C5, C6 extended). **RED verification
-  is MINE, not the agent's** (L-023).
+  ✅ **`test-writer` done, one round (`7d2c0e2`).** Two files, source untouched
+  (`git status` verified: `M BasketDrawer.test.tsx`, `?? CounterpartyPersonSelect.test.tsx`, nothing
+  else). **C7's decoy is built exactly right** — company A carries `companyId: "rel-1"` (the id under
+  test) with `relationshipId: "r-A"`; company B carries `relationshipId: "rel-1"`. A
+  `companyId`-keyed implementation returns A's people and goes RED; no other case in the file is
+  sensitive to the swap.
+  ✅ **RED VERIFIED BY ME from the RAW runner output, not from the agent's claim (L-023) — and the
+  wrapper made that non-trivial.** `rtk` collapses vitest's output to `PASS (7) FAIL (1)`, which
+  would have hidden the fact that the new suite never ran at all. Read from the tee log
+  (`~/Library/Application Support/rtk/tee/…_vitest_run.log`):
+  - `CounterpartyPersonSelect.test.tsx` → **suite-level** `Cannot find module
+    './CounterpartyPersonSelect'`, `assertionResults: []` — C1/C2/C7 have **never executed**, which
+    is the correct RED for a component that does not exist, **and means their assertion text is
+    still unproven.** Watch at the green step that all three actually run.
+  - **C4** → `AssertionError: expected … to contain 'Address this deal to'`.
+  - **C5 / C6** → pass **vacuously**, and both say so in the file. Declared, not disguised.
+  ✅ **The stale header at `BasketDrawer.test.tsx:28-34` was corrected, and the correction names the
+  wrong inference it used to invite** — *"RecipientPicker never mounts for a foreign group"* is still
+  true, but it no longer implies *"a foreign group shows no addressee UI"*.
+  ✅ **C6's comment records that its assertion is an ENVIRONMENT ARTIFACT, not a contract** — it is
+  the literal inverse of AC 6 / §8.2's intent and **must flip the day jsdom lands**. Written into the
+  test rather than into a plan nobody re-reads.
+  📌 **Agent-flagged, accepted:** C1 asserts the selected option by substring, not by position. Under
+  these fixtures `people` is always `[]`, so "first" holds by construction. Recorded rather than
+  hardened.
+  ✅ **`builder` done, one round. Three source files, tests untouched** (`git status`: `M
+  BasketDrawer.tsx`, `M RecipientPicker.tsx`, `?? CounterpartyPersonSelect.tsx` — nothing else).
+  **No REJECTION outstanding**, which matters: an outstanding rejection is one of the three
+  carve-outs that would escalate a ticket to Muskan.
+  🔴 **D1 — THE PLAN'S OWN INSTRUCTION WOULD HAVE SHIPPED A LINT ERROR, and I verified it rather
+  than taking the agent's word.** PLAN clause 5 said the relationship-change reset happens *"in the
+  effect, alongside the refetch."* Written that way it trips **`react-hooks/set-state-in-effect`** —
+  and `tsc` and vitest are BOTH green with it, so only the lint catches it. **Probed directly**: a
+  four-line throwaway component with `setState` inside a `useEffect` body →
+  `✖ 1 problem (1 error) · Avoid calling setState() directly within an effect`. Builder implemented
+  React's documented *adjust-state-when-a-prop-changes* idiom instead (a `shownFor` state compared
+  during render). Contract preserved, select still controlled, C1 unaffected. **The plan was wrong
+  and the builder was right.**
+  ✅ **D2 — builder widened the reset to clear `people` as well as `personId`, and the reason is
+  sound.** Without it, a `relationshipId` change leaves the PREVIOUS company's people selectable in
+  the in-flight window; picking one sends a person id from the wrong company, which
+  `create_deal_draft:88-100` then rejects at birth. **Same failure class clause 5 exists to close** —
+  the plan named one half of it.
+  📌 **Builder caught a stale comment IN ITS OWN DIFF before returning.** It first wrote the
+  placement comment claiming a mirrored placement would leak the control to a stranger — **rev 1's
+  retracted claim**, which PLAN §4.2 explicitly corrects. Rewrote it to say what is true: the
+  **guard**, not the placement, suppresses the control. **That would have been this slug's SIXTH
+  stale-comment finding**, and it is the first one caught by its own author.
+  ✅ **Both of builder's own citations spot-checked by me and both hold:** `RecipientPicker`'s new
+  docstring cites `BasketDrawer.tsx:358-367` — the `{counterpartyRelationshipId && (` block does run
+  `:358-367`; and `messaging/types.ts:201-220` is `ConnectedCompany`'s real span.
+  ✅ **GATE GREEN, and the load-bearing number is the FILE COUNT, not the pass count.**
+  `tsc` **exit 0** · `npm run test:unit` **494 / 494 across 68 / 68 files** · `eslint` **exit 0** on
+  the three source files. T01's baseline was **490 / 67**; a run still reporting **67** would have
+  meant the new suite never executed and its four cases were green for the wrong reason.
+  **Measured through `rtk proxy npx vitest run`** — the wrapper collapses vitest to
+  `PASS (n) FAIL (n)` and would have hidden it. `CounterpartyPersonSelect.test.tsx` confirmed by
+  name with its 4 tests. **Re-measured by me after `test-runner` reported, not taken from it.**
+  ✅ **`consistency` — CLEAN, zero blocking. Four reuse checks, and one CORRECTED A CLAIM OF MINE.**
+  🔴 **The render-phase state adjustment is NOT a first — my plan implied it was.** It is already
+  established at **`IconRail.tsx:200-205`** (`prevOnRoute`/`onSurfaceRoute`) and
+  **`OpenItems.tsx:115-120`** (`prevThings`/`things`) — same shape, same `prev<X>` naming.
+  **Verified by opening both.** `IconRail`'s own comment gives builder's exact reason:
+  *"conditional setState in render, NOT an effect … so it never reads as a setState-in-effect."*
+  **So D1 did not merely dodge a lint rule — it landed on the convention this repo had already
+  chosen for this problem, for this reason.**
+  ✅ Also clean: **no duplication of `NewChatDropdown`** (that one flattens the WHOLE directory with
+  search; this resolves people for one known `relationshipId`) · the fetch idiom matches
+  `BasketDrawer.tsx:43-57` · **the accepted duplicate read had no alternative to skip** — zero hits
+  for `useSWR`/`react-query`/`useQuery` repo-wide, and the single `createContext` (`BasketProvider`)
+  is basket state, not a directory cache · styling byte-identical to the sibling select ·
+  `peopleForRelationship`'s placement upheld against `basket/lib/` on a real distinction
+  (`basket/lib/*` operates on `BasketLine`/`BasketGroup`; this operates on `MyConnectionsView`).
+  ✅ **`critic` — 2 blocking + 7 notes. ALL NINE VERIFIED TRUE BY ME before folding (L-003).**
+  **`blocking-findings` budget: 1 of 2 spent** — the two blocking findings were fixed in ONE pass
+  (the budget counts fix ROUNDS, not findings).
+  🔴 **`critic` RAN WITH NO SHELL — the SECOND time on this slug, and its agent definition grants
+  `Bash`.** It declared the limitation up front and substituted line-offset arithmetic rather than
+  hiding it, **so its "unchanged/verbatim" claims are readings, not diffs.** I diffed the fenced
+  items myself. **Broken machinery — surfaced at G4, not worked around.**
+  ✅ **B1 + B2 were the same defect twice: THIS DIFF FALSIFIED TWO DOCSTRINGS IN THE MODULE IT WAS
+  EDITING.** `basket/actions.ts:9-11` said the buyer's recipient is *"implicit = the seller company
+  via the relationship"* — **eleven lines above `:29`, which forwards the person the buyer just
+  picked.** `basket/types.ts:41` called the field the *"own-company offer path"*. Both rewritten;
+  the type is byte-identical, so PLAN §7's no-signature-change fence holds.
+  🔴 **N1 — THE FINDING NO CODE CHANGE CAN CLOSE, and it is a gap in MY plan.** C7's decoy closes
+  the `relationshipId`-vs-`companyId` swap **inside the selector only**. Wire
+  `relationshipId={group.sellerCompanyId}` at `BasketDrawer.tsx:361` and both are `string`, `tsc`
+  passes, `useEffect` never fires under static render, **and all six render cases plus C7 still go
+  green** — while the shipped control's people list is empty forever, the exact M7 state the ticket
+  forbids. **PLAN §5's "declared uncovered" table did not list it**, so a reader who accepts C7's
+  rationale would believe the class is closed one level up. **On the G4 sheet beside AC 2.**
+  ✅ **N2 + N3 fixed by `test-writer` (round 2) — and it found a FOURTH stale citation unasked.**
+  C1's title claimed *"first, SELECTED"* while asserting **preselection only** (order is vacuous
+  under an always-empty `people` fixture) → **renamed, not padded with an assertion that would pass
+  for free.** Citations: `BasketDrawer.tsx:231` → **`:232`** (×2) and `RecipientPicker :26-28` →
+  **`:32-34`** (×2) were **all broken BY this diff** (the new import at `:15` shifted every line by
+  one); `BasketDrawer.tsx:187` → **`:202`** was pre-existing from the 0022 pass.
+  ⚠️ **The `:26-28` one was NOT an off-by-N — it pointed at entirely the wrong code** (the
+  `useEffect` fetch, not the early return). **Verified by opening the file.** Seventh stale-citation
+  finding on this slug.
+  📌 **DEFERRED, not fixed — four pre-existing notes, none opened by this diff** (N4 `RecipientPicker`'s
+  fetch has no `.catch`/`alive` guard and shows a **connected** seller a false *"Connect with a
+  company first"* on failure, ~4 lines · N5 choosing *"Select a customer…"* never re-reports, so the
+  parent keeps the previous recipient · N6 the `useState` initialiser on a changing prop · N7 the
+  seller path's **fully redundant** second `getMyConnections()` read). **Tickets offered at G4, not
+  filed unilaterally.**
+  📌 **`builder` raised something bigger than the fix it was doing: the basket module's `D-xx`
+  decision IDs have NO canonical home.** `D-12` means **four** different things across the corpus
+  (`DECISIONS.md:1219` · `cloud-migrations-pending.md:1366` · `0021-tier-ladder/PLAN-T07.md:108` ·
+  `basket/actions.ts`). Verified by grep. **A citation nobody can look up cannot go stale visibly —
+  it just quietly stops being true.** L-038's shape one level up.
+  ✅ **Gate re-measured by me after both fix rounds:** `tsc` **exit 0** · **494 / 494 across 68 / 68
+  files** via `rtk proxy npx vitest run`.
+  ✅ **`visual-verifier` done — 15 screenshots in `g4/`, staging table + the G4 sheet in REVIEW.md.**
+  Chrome extension was not connected, so it drove the repo's **Playwright** instead — real chromium,
+  real dev server, seeded users, `localhost` never `127.0.0.1`.
+  🟢 **AC 2 WAS WALKED AFTER ALL — the ruling I was about to hand Muskan is CLOSED BY EVIDENCE.**
+  `plan-checker` B2 found AC 2 had no owner (T03 has no such criterion; the seed has no person-less
+  company). The agent **built the fixture**: a throwaway verified company with zero people,
+  connected to Bob. **The control rendered live with `["Whole company"]` and an ENABLED Create
+  button — on both the buyer door and the seller door.** Fixture, its product, pricelist, two
+  relationships and one born card all **hard-deleted**; baseline re-verified **by me, directly
+  against the DB**: 6 companies · 2 relationships · 7 deal cards · 6 products. `AUR-1A`–`AUR-1F`
+  never touched.
+  🟢 **AC 5 proven AT THE DB, not by reading the UI back** — "Carla Klein" picked, draft born, and
+  the row's `metadata.counterparty_person_id` **is Carla's id.** The control is not decorative.
+  🟢 **AC 4's placement — the thing NO unit test could decide — is settled by one frame.** Shot 4
+  carries **both arms in a single screenshot**: the connected group with the control above Create,
+  and a stranger group with the connect-first block and no control. Counted programmatically:
+  **1 control across 2 groups.**
+  ⚠️ **The schema moved MID-RUN** (`20260825100000` + `20260825110000`, parallel session). I warned
+  the agent while it was working — **about misattribution, not about the feature.** It re-took
+  **every** shot after the migrations and deleted the pre-migration set, so the folder is uniform.
+  Nothing attributable was observed (6 product cards / 3 add-to-basket both before and after; no
+  price changed).
+  📌 **AC 3 is `cannot-verify` and the agent said so rather than faking it** — the pre-fetch frame
+  lasts milliseconds against a local Supabase. A ruling, not a defect.
+  📌 **Two observations offered, not filed:** the option ORDER is unstable between loads
+  (`getMyConnections()` imposes none; "Whole company" is always first, so no AC breaks) · and
+  **choosing a person still lands the buyer in the COMPANY chat after birth** — may be correct
+  (birth is not send) but no AC says, and it is the shape G5 finds late.
+  📌 **Honest caveat recorded by the agent:** the expanded-dropdown shots set `size` on the element
+  as a capture aid — a native select popup is OS-drawn and cannot be screenshotted. **The option
+  lists are real; the open-list layout is not what a user sees.**
+  🛑 **STOPPED AT G4 — the gate is Muskan's and nothing is passed.** Sheet in `REVIEW.md` under
+  *"🛑 G4 — T02 / HEL-64 · THE SHEET"*. **Four rulings owed:** AC 5's wording · the call-site wiring
+  gap (`critic` N1 — **a coverage claim of MINE that does not hold one level up**) · AC 3's cover ·
+  and whether the four pre-existing defects (N4/N5/N6/**N8**) become tickets.
 
 ## Gate log
+- **T02 / HEL-64 — G4 PASSED 2026-08-25 (HUMAN).** Muskan ruled **pass, with T04 amending the AC
+  wording.** Budgets spent: `tests 0/2` · `blocking-findings 1/2` · `G4 rounds 1`.
+  Five of six ACs walked green; **AC 2 walked live after `plan-checker` found it had no owner**.
+  **The four pre-existing side-findings were OFFERED AND NOT FILED** — Muskan declined the
+  file-them option. They are named in `REVIEW.md`'s G4 sheet (N4 unguarded fetch · N5 no re-report
+  on "Select a customer…" · N6 the initialiser · **N8 the suspended-relationship empty list, the
+  L-038-class one**) and stay unfiled deliberately, not by oversight.
 - triage — FULL, 2026-08-25 (narrowed from F-04, then widened to include the picker)
 - **G1 — PASSED 2026-08-25**, approved unamended. Eight acceptance criteria; with G2
   skipped they are the ONLY thing G4 compares against.
@@ -467,7 +621,15 @@ All nine ACs replayed green on real data; full replay table in `REVIEW.md`.
 sender predicate; the relationship path produced an inbox ticket before rather than a chat message.
 **What changed is that the deal signal now rides on guards that were never there.**
 
-### ⚠️ T04 / HEL-66 gains a fourth edit — NOT optional
+### ⚠️ T04 / HEL-66 gains a FIFTH edit — ruled by Muskan at T02's G4, 2026-08-25
+
+**AC 5's wording.** The ticket says the picked person replaces *"the hardcoded null at
+`BasketDrawer.tsx:215`"*. The literal **stays** (now `:216`) — it is the effective "Whole company"
+default and what keeps Create enabled; deleting it ships a dead Create button on every buyer group.
+**The code is right and the criterion's wording is stale.** Muskan ruled **pass, T04 amends the
+AC** — so this is now a required doc edit, not a note.
+
+### ⚠️ T04 / HEL-66's fourth edit — NOT optional
 
 ADR **J1** discloses only the arbitrary-`deal_card_id` half of B1 and **says nothing about sender
 attribution**. It must be amended to name it. *(Also written into HEL-67 so it survives if T04

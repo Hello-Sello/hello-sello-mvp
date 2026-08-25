@@ -12,6 +12,7 @@ import {
 } from "../supabase/writes";
 import { createBasketDraft } from "../actions";
 import { RecipientPicker } from "./RecipientPicker";
+import { CounterpartyPersonSelect } from "./CounterpartyPersonSelect";
 import { dealChatUrl, formatMoney, getMyDraftDeals, type DraftDealRow } from "@/modules/deals";
 import { resolveBasketLine, type ResolvedBasketLine } from "../lib/pack";
 import type { BasketGroup, BasketLine } from "../types";
@@ -229,12 +230,21 @@ function Group({
   // load-bearing — the seller's own group also carries a null relationshipId
   // (basket/lib/group.ts:24) and drafts fine through RecipientPicker.
   const needsConnection = !group.isOwnCompany && group.relationshipId === null;
+  // The relationship a FOREIGN, already-connected seller group addresses.
+  // Non-null exactly when the else-branch below is the connected arm —
+  // `needsConnection` covers the null case, and `isOwnCompany` groups carry a
+  // null relationshipId by construction (basket/lib/group.ts:24). Hoisted
+  // rather than inlined because a property access does not narrow inside the
+  // callback that consumes it.
+  const counterpartyRelationshipId = group.isOwnCompany ? null : group.relationshipId;
 
   // Births the PRIVATE draft (status 'unsent'), then lands the viewer on the
   // born card - the drawer never sends (D-12: delivery is send_deal's alone,
-  // fired later from the card's DecisionBar). The RecipientPicker still runs
-  // BEFORE birth: the picked person persists in deal_card.metadata via the
-  // slim birth RPC and routes the eventual send. Card open reuses the same
+  // fired later from the card's DecisionBar). The addressee is picked BEFORE
+  // birth on both doors - RecipientPicker for the seller's own-company group,
+  // CounterpartyPersonSelect directly for the buyer's connected seller group -
+  // and the picked person persists in deal_card.metadata via the slim birth RPC
+  // and routes the eventual send. Card open reuses the same
   // mechanism as the connect host: hs:deal-updated refreshes any mounted deal
   // UI, then dealChatUrl lands on the relationship's chat where ChatView
   // re-fires hs:open-deal-card for the born card.
@@ -337,13 +347,32 @@ function Group({
           </Link>
         </div>
       ) : (
-        <button
-          disabled={!recipient || creating}
-          onClick={draft}
-          className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg bg-brand py-2 text-xs font-bold text-white hover:bg-brand-deep disabled:opacity-40"
-        >
-          <FileText size={13} /> Create a draft deal
-        </button>
+        <>
+          {/* The buyer's addressee control, in the connected arm beside the
+              action it configures. The guard — not the placement — is what
+              keeps it off a stranger's group: `counterpartyRelationshipId` is
+              null for both the own-company and the not-yet-connected fixture,
+              so this branch and the own-company slot above emit identical
+              markup either way. The guard is also what gives TypeScript a
+              non-null relationshipId inside the onPick closure. */}
+          {counterpartyRelationshipId && (
+            <div className="mt-2">
+              <CounterpartyPersonSelect
+                relationshipId={counterpartyRelationshipId}
+                onPick={(counterpartyPersonId) =>
+                  setRecipient({ relationshipId: counterpartyRelationshipId, counterpartyPersonId })
+                }
+              />
+            </div>
+          )}
+          <button
+            disabled={!recipient || creating}
+            onClick={draft}
+            className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg bg-brand py-2 text-xs font-bold text-white hover:bg-brand-deep disabled:opacity-40"
+          >
+            <FileText size={13} /> Create a draft deal
+          </button>
+        </>
       )}
     </div>
   );

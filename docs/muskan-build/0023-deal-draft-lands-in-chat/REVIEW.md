@@ -258,3 +258,300 @@ Backend-only diff, all nine ACs green on real data, `critic` clean after one fix
 2. **T03 must grep the c2c counting helpers.** `e2e/inbox-accept.spec.ts:157-158` asserts
    `countThreadsForPair("c2c") === 1`, and the heal path can now leave a soft-deleted row beside
    the live one.
+
+---
+
+# T02 / HEL-64 — the buyer can address a deal to a person at the seller's company
+
+Session 90 `deal_land_t02`, 2026-08-25. Diff: `8d8d7c4` (source) + `7d2c0e2` (tests).
+Budgets this round: `tests 0/2` · `blocking-findings 0/2` · `G4 rounds 1`.
+
+## Gate — measured by me, not taken from an agent
+
+| check | result |
+|---|---|
+| `npx tsc --noEmit` | **exit 0** |
+| `npm run test:unit` | **494 / 494 across 68 / 68 files** |
+| `npx eslint` (the three source files) | **exit 0** |
+
+⚠️ **The file count was the load-bearing number, not the pass count.** T01's baseline was
+**490 / 67**. A run still reporting 67 would have meant `CounterpartyPersonSelect.test.tsx`
+never executed and its four cases were green for the wrong reason. **`rtk` collapses vitest
+to `PASS (n) FAIL (n)` and would have hidden exactly that** — the real numbers came from
+`rtk proxy npx vitest run`, and the new suite is confirmed by name with its 4 tests.
+
+## `consistency` — CLEAN, zero blocking
+
+Four checks, all reuse-positive, and **one of them corrected a claim of mine**:
+
+- **No duplication of `NewChatDropdown`** (consistency). That component flattens *all*
+  connections with search and sections, for starting a chat from the whole directory. This
+  one resolves people for **one known `relationshipId`**. The only shared resource is
+  `getMyConnections()`, which is reused verbatim — an ADR §3 fenced item.
+- **The fetch idiom matches** `BasketDrawer.tsx:43-57` and the old `RecipientPicker`.
+  On the accepted duplicate read: **there is no shared-fetch primitive in this repo to have
+  skipped** — zero hits for `useSWR`/`react-query`/`useQuery`, and the single `createContext`
+  (`BasketProvider`) is basket-domain state, not a directory cache. A stated tradeoff, not a
+  silent one.
+- 🔴 **The render-phase state adjustment is NOT a first — my plan implied it was.**
+  `consistency` found it already established at **`IconRail.tsx:200-205`**
+  (`prevOnRoute`/`onSurfaceRoute`) and **`OpenItems.tsx:115-120`** (`prevThings`/`things`),
+  same shape, same `prev<X>` naming. **Verified by me by opening both** — and `IconRail`'s
+  own comment names the reason: *"conditional setState in render, NOT an effect … so it never
+  reads as a setState-in-effect."* So builder's D1 deviation did not merely dodge a lint
+  rule; **it landed on the convention this repo had already chosen for exactly this problem,
+  for exactly this reason.**
+- **Styling byte-identical** to the sibling company select (`RecipientPicker.tsx:40`), and
+  `aria-label="Address this deal to"` matches the repo's short-descriptive convention
+  (`"Member role"`, `"Link type"`, `"Document type"`).
+- **`peopleForRelationship`'s placement upheld**, and not as post-hoc rationalisation:
+  `basket/lib/group.ts` and `pack.ts` operate on `BasketLine`/`BasketGroup` — basket math.
+  This function operates on `MyConnectionsView`, a messaging type. The distinction is real.
+
+## `critic` — 2 blocking + 7 notes. **All nine verified true by me before folding** (L-003)
+
+⚠️ **`critic` ran with NO SHELL — the second time on this slug**, and its agent definition
+grants `Bash`. It said so up front and substituted line-offset arithmetic, so **its
+"unchanged/verbatim" claims are readings, not diffs.** I diffed the fenced items myself.
+**This is broken machinery, not a checker quirk** — surfaced to Muskan at G4, not worked
+around silently.
+
+### Blocking — both FIXED, one round (`blocking-findings 1/2`)
+
+Both are the same defect twice: **this diff falsified two docstrings in the module it was
+editing.**
+
+- **B1 — `basket/actions.ts:9-11`** said the buyer's recipient is *"implicit = the seller
+  company via the relationship"*. **Eleven lines below, `:29` forwards the person the buyer
+  just picked.** Rewritten to name what actually still differs: the buyer never chooses the
+  counterparty *company* (the group's relationship fixes it), but since T02 **the addressee
+  is symmetric** — either door may name a person, null meaning the whole company.
+- **B2 — `basket/types.ts:41`** labelled `counterpartyPersonId` as the *"own-company offer
+  path"*; the buyer's foreign `dealType: "order"` path now supplies it too. **Comment only —
+  the type is byte-identical and PLAN §7's no-signature-change fence holds.**
+
+### 🔴 N1 — the finding that cannot be fixed by code, and goes to G4
+
+**C7's decoy closes the `relationshipId`-vs-`companyId` swap INSIDE THE SELECTOR ONLY.**
+Change `BasketDrawer.tsx:361` to `relationshipId={group.sellerCompanyId}` — both are
+`string`, `tsc` passes, `useEffect` never fires under `renderToStaticMarkup`, and **C1, C2,
+C4, C5, C6 and C7 all still pass** while the shipped control's people list is empty forever.
+That is precisely the M7 state the ticket forbids. Same for `RecipientPicker.tsx:59` →
+`chosen.companyId`.
+
+**My PLAN §5 "declared uncovered" table did not list this**, and a reader who accepts C7's
+rationale would reasonably believe the class is closed one level up. **It is not, it is not
+unit-coverable under this env, and it belongs on the G4 sheet beside AC 2.**
+
+### Notes — DEFERRED, not fixed. Each is pre-existing and none is opened by this diff
+
+| # | finding | why not fixed here |
+|---|---|---|
+| **N4** | `RecipientPicker.tsx:26-28`'s fetch has **no `.catch` and no `alive` guard**. On failure a **connected** seller is shown *"Connect with a company first to send an offer."* — a false message — plus an unhandled rejection. The sibling written in this diff has both guards | pre-existing; changes behaviour no AC covers. **~4 lines.** A ticket to file |
+| **N5** | `RecipientPicker.tsx:42-46` only re-reports `onPick` when a company is found. Choosing *"Select a customer…"* (value `""`) never calls it, so the parent **keeps the previous recipient** while the control unmounts | pre-existing. The controlled select closes the A→B divergence; **the B→none half is untouched and reachable in one click** |
+| **N6** | `BasketDrawer.tsx:215-217` is a `useState` initialiser on a prop that can change. A group going stranger → connected while the drawer is open leaves `recipient` null and renders a dead Create button | pre-existing, low reachability. **This diff improves it** (the select now gives the buyer a way to fill `recipient`) without closing it |
+| **N7** | The **seller** path now fetches the directory **twice, fully redundantly** — `RecipientPicker` already holds `chosen.people` and the child re-fetches the same view (~4 round trips). PLAN's accepted cost declared the buyer's 1+N; **it did not declare this** | the shape is what G3 §8.1 chose. Correcting the *record*, not the code |
+
+### N2 / N3 — corrected in the test files (`test-writer`, round 2)
+
+- **N2** — C1's title claimed *"first, SELECTED"*; the assertion proves **preselection only**,
+  and order is vacuous under an always-empty `people` fixture. **Renamed rather than padded
+  with an assertion that would pass for free.**
+- **N3 — three stale citations, and `test-writer` found a fourth I had not asked for.**
+  `BasketDrawer.tsx:231` → **`:232`** (×2) and `RecipientPicker :26-28` → **`:32-34`** (×2)
+  were **all broken BY this diff** (the new import at `:15` shifted everything by one).
+  `BasketDrawer.tsx:187` → **`:202`** was pre-existing, from the 0022 pass.
+  ⚠️ **The `:26-28` one was not an off-by-N — it pointed at entirely the wrong code** (the
+  `useEffect` fetch, not the early return). **Verified by me by opening the file.**
+
+### 📌 `builder` raised something worth more than the fix it was doing
+
+The basket module's `D-xx` decision IDs **have no canonical home**. `D-12` currently means
+four different things across the corpus — *"Inbox relabelled Connection Request"*
+(`DECISIONS.md:1219`), *"one active pending join request"* (`cloud-migrations-pending.md:1366`),
+*"price is seller-only"* (`0021-tier-ladder/PLAN-T07.md:108`), and *"delivery is `send_deal`'s
+alone"* in `basket/actions.ts`. **Verified by grep.**
+
+**A citation nobody can look up cannot go stale visibly — it just quietly stops being true.**
+That is `L-038`'s shape one level up, and it is the seventh stale-citation finding on this
+slug. A ticket is **offered at G4, not filed unilaterally.**
+
+---
+
+# G4 — staging table (T02 / HEL-64)
+
+> Staged 2026-08-25 by `stage-visual-comparison`. Screenshots:
+> `docs/muskan-build/0023-deal-draft-lands-in-chat/g4/`.
+> **This is evidence, not a verdict. The gate is Muskan's.**
+
+## How this was staged, and what is different about it
+
+**There is no approved prototype.** G2 `/prototype` was skipped by Muskan's ruling (2026-08-25)
+— the control is an existing component rendered in one more place. So every row below compares
+the **live page against the ticket's acceptance criteria and the existing seller-side control**,
+never against a mockup. No row can say "matches the prototype", because there is nothing to match.
+
+**Driver:** Playwright (`@playwright/test`, chromium, 1440×900 unless stated) against
+`http://localhost:3000`, signed in as the real seeded users. **The Chrome extension was not
+connected**, so this was scripted rather than hand-driven; every shot is a real browser against
+the real dev server and the real local DB.
+
+**No `supabase db reset` was run** — the DB was already at the seeded baseline and a reset would
+have rotated the stack auth key mid-run. Baseline was verified before and after
+(6 companies · 2 relationships · 7 deal cards · 0 basket lines · 6 products · 1 pricelist · 7 people).
+
+**⚠️ Schema moved mid-session.** Migrations `20260825100000` (HEL-69) and `20260825110000`
+(HEL-70) were applied by a parallel session partway through. **Every screenshot in the folder was
+re-taken AFTER those migrations** — the pre-migration set was deleted, so the record is uniform.
+Nothing attributable to those two migrations was observed: the GreenLeaf shop rendered
+**6 product cards / 3 add-to-basket buttons** both before and after, and no price rendered
+differently. Reported for completeness, not as a finding.
+
+**Fixtures created and hard-deleted.** The local seed has **no verified company that Bob is not
+connected to**, and **no company with zero connected people** — so two rows below could not be
+walked on seed data alone. A throwaway company (`G4 Staging Seller (temp)`, zero people), its
+pricelist, one product, two relationships and one born draft card were created and **hard-deleted
+after**; baseline was re-verified row-for-row. **`AUR-1A`–`AUR-1F` were never touched** —
+their `profile_visible` / `price_public` flags were confirmed identical afterwards.
+
+## The table
+
+| # | Shot(s) | What it shows | Criterion | Verdict | What Muskan should look for |
+|---|---|---|---|---|---|
+| 1 | `02-buyer-addressee-closed-whole-company.png`, `01-buyer-basket-in-page-1440x900.png` | Bob (StonePharm) with 2 GreenLeaf products in the basket. The GreenLeaf group carries a select reading **"Whole company"** | **T02 AC 1** (FR1/FR2, PRD AC1) | **present, as specified** | The control exists, is on the buyer's side, and defaults to the whole company with no interaction. This is the ticket's whole point |
+| 2 | `03-buyer-addressee-expanded.png` | The same control expanded: **Whole company · Carla Klein · Alice Green** — GreenLeaf's two people | **T02 AC 1**, PRD AC1 | **present** | Both GreenLeaf people are offered, and "Whole company" is the preselected first option. ⚠️ **The expansion is a capture aid** — a native `<select>` popup is drawn by the OS and does not appear in a screenshot, so `size` was set on the element for this frame only. The option *list* is real; the *layout* of the open list is not what a user sees |
+| 3 | `02-…png`, `01-…png` | The connected group's vertical order: **2 lines → addressee control → "Create a draft deal"** | **T02 AC 4** (placement; the control belongs in the `needsConnection` ELSE branch) | **matches the ticket** | This is the row the unit tests cannot decide. The guard suppresses the control for a stranger wherever it sits, so correct and incorrect placement emit identical markup. **The screenshot is the only evidence.** Read the order top-to-bottom and judge whether the control reads as configuring the button beneath it |
+| 4 | `05-stranger-arm-no-addressee-control.png`, `06-stranger-arm-in-page.png` | One drawer, **two groups**: connected GreenLeaf (control + Create button) above, and a seller Bob is **not** connected to below — connect-first copy + "Connect with …" link, **no addressee control** | **T02 AC 4** (PRD AC7) | **unchanged** | Both arms in one frame. Confirm the stranger arm is byte-for-byte the old behaviour and gained nothing. Counted programmatically: **1 addressee control across 2 groups** |
+| 5 | `04-option-label-whole-company.png` | The option string, legible at full size | §8.7 wording (was *"Whole company (optional person)"*) | **reads exactly "Whole company"** | Just the words. This is the string T03's e2e will select on |
+| 6 | `12-seller-before-company-chosen.png`, `13-seller-company-chosen-addressee-appears.png`, `14-seller-addressee-expanded.png` | Alice's own-company group. `RecipientPicker` still shows **"Select a customer…"**; picking StonePharm makes the addressee select appear reading **"Whole company"**, offering **Bob Stone** | **T02 AC 6** (§8.2), and that the seller door still works | **works; behaviour deliberately changed** | The seller path is unbroken and now has a second control it did not have. Note the sequencing: **no addressee control exists until a company is chosen** (measured: 0 controls before the pick) |
+| 7 | `15-seller-zero-people-company-control-shown.png` | The seller picks a customer company with **zero** connected people — the addressee control still renders, offering "Whole company" only | **T02 AC 6** (§8.2 — the ruled-accepted change: this used to be **hidden**) | **the change is real and visible** | This is the deliberate deviation G3 accepted as scope. Muskan is looking at a control that, before this ticket, would not have been on screen at all. **Walked only because a zero-people fixture company was created for it** |
+| 8 | `08-zero-connected-people-live-control.png` | The **buyer** side of the same case: a connected seller with zero people still gets a live control ("Whole company") **and an enabled** "Create a draft deal" | **T02 AC 2** (M7 — "never a dead control") | **walkable after all, and it passes** | The brief expected this to be **not walkable locally**, because the seed has no zero-people company. It became walkable by creating one and connecting Bob to it (both rows deleted after). Measured: options `["Whole company"]`, default "Whole company", Create button **not** disabled |
+| 9 | `09-buyer-person-chosen-carla.png`, `10-draft-born-lands-in-chat.png` | "Carla Klein" chosen, then "Create a draft deal" clicked. The born card's `metadata.counterparty_person_id` = `33333333-…` = **Carla Klein**; card is `unsent` / `order` | **T02 AC 5** (the pick replaces the hardcoded `null`) | **wired, proven at the DB** | The control is not decorative — the picked person reaches the draft. Verified by SQL against the born row, not by reading the UI back |
+| 10 | `07-narrow-900x700.png` | **Fit check** — the drawer inside its real container at a narrow width | container fit / overflow | **fits; no clipping** | Measured at 1440×900: drawer 320×350, sits **484px above** the viewport bottom, addressee select 124px wide, `scrollWidth === clientWidth` (no text clipping). At 900×700: 178px clear of the right edge, 179px clear of the bottom. With two groups the drawer's inner scroller (`max-h-[360px] overflow-y-auto`) does scroll — **the second group's control is reachable only by scrolling**, which is the pre-existing drawer behaviour, not something this ticket introduced |
+
+## Criteria these shots do NOT cover
+
+| Criterion | Why not |
+|---|---|
+| **T02 AC 3** — "shows *Whole company* immediately and adds people when the fetch resolves" | **cannot-verify visually.** The pre-fetch frame lasts a few milliseconds against a local Supabase; no screenshot can honestly claim to have caught it. The *contract* is in the code (`people` starts `[]`, the `<select>` returns unconditionally) and row 8 proves the empty-people render, but **the transition itself is unwitnessed** |
+| **All of T01 (HEL-63)** — the c2c pill, zero inbox tickets, p2p-only routing, the grant | out of scope for this staging pass; T01 is backend-only and was gated on SQL suites |
+| **T03 (HEL-65), T04 (HEL-66)** | not built yet |
+
+## Three things worth Muskan's eye that are not verdicts
+
+1. **The option order is not stable between loads.** Two runs of the identical flow produced
+   `["Whole company","Alice Green","Carla Klein"]` and `["Whole company","Carla Klein","Alice Green"]`.
+   "Whole company" is always first, so **no acceptance criterion is broken** — but a buyer who
+   learns the position of a name will be wrong half the time. `getMyConnections()` imposes no
+   ordering. **Not filed; offered.**
+
+2. **Choosing a person does not change where the buyer is landed after birth.** In shot 10 the
+   draft is addressed to **Carla Klein**, yet `dealChatUrl(relationshipId, dealCardId)` lands Bob
+   in the **Company chat (C2C)** with GreenLeaf. That may well be correct — birth is not send, and
+   the pill routing is `send_deal`'s job (T01) — but **the first thing the buyer sees after picking
+   a person is a company chat**, and no AC says which it should be. Flagging because it is
+   exactly the kind of thing G5 discovers late.
+
+3. **The zero-people case became walkable, so the brief's expected gap closed.** It cost one
+   throwaway company plus two relationship rows, all deleted. If Muskan wants this walked again
+   in future without hand-built fixtures, **the seed has no company with zero people** — that is
+   a seed gap, and T03's e2e will hit the same wall.
+
+---
+
+# 🛑 G4 — T02 / HEL-64 · THE SHEET. This gate is Muskan's; nothing below is passed.
+
+The diff renders, so `/build` step 10 makes this a **human stop**. Budgets spent:
+`tests 0/2` · `blocking-findings 1/2` · `G4 rounds 1`.
+
+## The gate, in one line
+
+`tsc` **0** · unit **494/494 across 68/68 files** · `eslint` **0** · **`critic` clean after one
+fix round** · **`consistency` clean, zero blocking** · **no builder REJECTION outstanding** ·
+**15 screenshots staged**, and **the criterion I had written off as unwalkable was walked and
+passed**.
+
+## The six acceptance criteria, walked
+
+| AC | what it demands | verdict | evidence |
+|---|---|---|---|
+| **1** | a connected seller's group renders an addressee control defaulting to the whole company | ✅ | shots 1-2; C1/C4 |
+| **2** | **zero connected people → still renders. Never a dead control** | ✅ **walked live** | shot 8 — options `["Whole company"]`, Create button **enabled** |
+| **3** | "Whole company" shows immediately; people arrive when the fetch resolves | ⚠️ **contract only** | see ruling 3 |
+| **4** | a stranger's group renders the connect-first block and **no** control | ✅ | shot 4 — **both arms in one frame**, 1 control across 2 groups |
+| **5** | the chosen person replaces the hardcoded null | ✅ **proven at the DB** | shot 9 — the born card's `counterparty_person_id` **is Carla Klein**. See ruling 1 |
+| **6** | the seller's picker shows the control on a person-less company | ✅ **the §8.2 change is visible** | shots 6-7 |
+
+## ⚠️ FOUR RULINGS OWED — none taken by me
+
+**1 — AC 5's wording.** The ticket says *"instead of the hardcoded null at `BasketDrawer.tsx:215`"*.
+The literal is **still there** (now `:216`) and was deliberately kept: it is what makes "Whole
+company" the effective default and keeps Create enabled. **Deleting it ships a dead Create button
+on every buyer group**, contradicting FR2. The behaviour is proven correct (shot 9). **§8.7 set
+this slug's precedent that criterion wording is yours and lands in a doc** — so this is a ruling,
+not a fix. **Rule the wording, or T04 amends the AC.**
+
+**2 — 🔴 A COVERAGE CLAIM OF MINE THAT DOES NOT HOLD ONE LEVEL UP.** `critic` N1. C7's decoy
+proves `peopleForRelationship` keys on `relationshipId` not `companyId` — **inside the selector
+only.** Wire `relationshipId={group.sellerCompanyId}` at the **call site** and both are `string`,
+`tsc` passes, and **all seven unit cases still go green** while the shipped control's people list
+is empty forever — the exact M7 state AC 2 forbids. **My PLAN §5 "declared uncovered" table did
+not list this.** It is not unit-coverable under a jsdom-less env. Shot 3 and shot 8 are the only
+things standing between that swap and production. **Accept, or ask T03 to assert the wiring.**
+
+**3 — AC 3 cannot be witnessed.** The pre-fetch frame lasts milliseconds against a local
+Supabase; no screenshot honestly catches it. What exists: the code contract (`people` starts `[]`,
+the `<select>` returns unconditionally) and shot 8, which proves the empty-people render is live
+and usable. **Accept that as cover, or send it to T03 with a throttled fetch.**
+
+**4 — the four pre-existing defects, and whether they become tickets.** None was opened by this
+diff; all four were left untouched deliberately.
+
+| # | what | size |
+|---|---|---|
+| N4 | `RecipientPicker`'s own fetch has **no `.catch`, no cancel guard**. On a failed read a **connected** seller is told *"Connect with a company first to send an offer."* — **a false statement** — plus an unhandled rejection. The sibling written in this diff has both guards | **~4 lines** |
+| N5 | choosing *"Select a customer…"* never re-reports upward, so the parent **keeps the previous recipient** while the control unmounts. Reachable in one click | small |
+| N6 | `BasketDrawer.tsx:216` is a `useState` initialiser on a prop that can change; a group going stranger → connected mid-drawer leaves a dead Create button. **This diff improves it without closing it** | small |
+| N8 | 🔴 **the basket and the connections directory disagree about which relationships exist.** The basket filters `deleted_at` only; `getMyConnections` also requires `status = 'active'`. On a **suspended** relationship the control renders with a **permanently empty** people list — **indistinguishable from the legitimate AC 2 case.** Not reachable in the seed, so nothing in this slug will ever show it. **L-038's class** | needs a decision, not a patch |
+
+## Three observations from the walk — offered, not filed
+
+1. **The option order is not stable between loads.** Two identical runs gave
+   `[Whole company, Alice, Carla]` and `[Whole company, Carla, Alice]`. "Whole company" is always
+   first so **no AC breaks** — but a buyer who learns a name's position is wrong half the time.
+   `getMyConnections()` imposes no ordering.
+2. **Choosing a person does not change where the buyer lands after birth.** Shot 10: the draft is
+   addressed to **Carla**, and Bob is landed in the **company** chat. That may be right — birth is
+   not send, and pill routing is T01's job — but **the first thing a buyer sees after picking a
+   person is a company conversation**, and no AC says which it should be. *This is the shape of
+   thing G5 finds late.*
+3. **The seed has no company with zero connected people.** AC 2 was walked only by building one
+   and deleting it. **T03's e2e will hit the same wall.**
+
+## Machinery, and one thing bigger than this ticket
+
+- 🔴 **`critic` ran with NO SHELL — the second time on this slug**, though its definition grants
+  `Bash`. It declared the limit and substituted line arithmetic rather than hiding it; **I diffed
+  the fenced items myself.** Broken machinery, not a checker quirk.
+- 📌 **The basket module's `D-xx` decision IDs have no canonical home.** `D-12` currently means
+  **four** different things across the corpus. **A citation nobody can look up cannot go stale
+  visibly — it just quietly stops being true.** Seventh stale-citation finding on this slug.
+
+## What a green run here is NOT cover for
+
+**AC 3** (the transition), **the call-site wiring** (ruling 2), and **T03's e2e** — the interaction
+path, the c2c counting helpers, and `inbox-accept.spec.ts`. Stated in these words because PLAN §5
+already got this wrong once by handing AC 2 to a ticket that had no criterion for it.
+
+## ✅ T02 / HEL-64 IS CLOSED — G4 PASSED 2026-08-25 (HUMAN)
+
+**Muskan's ruling: pass, with T04 amending AC 5's wording.** The code is right; the criterion's
+wording is stale. That amendment is now **T04's fifth required doc edit**, not a note.
+
+**The four pre-existing side-findings were OFFERED AND DECLINED** — the "file them too" option was
+on the table and not taken. **N4** (unguarded fetch → a connected seller told *"Connect with a
+company first"*) · **N5** (no re-report on *"Select a customer…"*) · **N6** (the initialiser) ·
+**N8** (the suspended-relationship empty list, indistinguishable from the legitimate AC 2 case —
+the L-038-class one). **They stay unfiled deliberately and are recorded here so that stays visible.**
+
+Budgets spent: `tests 0/2` · `blocking-findings 1/2` · `G4 rounds 1`.
