@@ -331,8 +331,32 @@ is not this slug's job, but nothing else is tracking it.
   list is empty forever, indistinguishable from the legitimate M7 case.** Not reachable in the seed,
   so **no test and no walk in this slug will show it.** Named in the plan's accepted-cost section; a
   ticket is **offered on the G4 sheet, not filed unilaterally.**
-  ⏳ **NEXT: `test-writer` running** (C1, C2, C7 new file; C4, C5, C6 extended). **RED verification
-  is MINE, not the agent's** (L-023).
+  ✅ **`test-writer` done, one round (`7d2c0e2`).** Two files, source untouched
+  (`git status` verified: `M BasketDrawer.test.tsx`, `?? CounterpartyPersonSelect.test.tsx`, nothing
+  else). **C7's decoy is built exactly right** — company A carries `companyId: "rel-1"` (the id under
+  test) with `relationshipId: "r-A"`; company B carries `relationshipId: "rel-1"`. A
+  `companyId`-keyed implementation returns A's people and goes RED; no other case in the file is
+  sensitive to the swap.
+  ✅ **RED VERIFIED BY ME from the RAW runner output, not from the agent's claim (L-023) — and the
+  wrapper made that non-trivial.** `rtk` collapses vitest's output to `PASS (7) FAIL (1)`, which
+  would have hidden the fact that the new suite never ran at all. Read from the tee log
+  (`~/Library/Application Support/rtk/tee/…_vitest_run.log`):
+  - `CounterpartyPersonSelect.test.tsx` → **suite-level** `Cannot find module
+    './CounterpartyPersonSelect'`, `assertionResults: []` — C1/C2/C7 have **never executed**, which
+    is the correct RED for a component that does not exist, **and means their assertion text is
+    still unproven.** Watch at the green step that all three actually run.
+  - **C4** → `AssertionError: expected … to contain 'Address this deal to'`.
+  - **C5 / C6** → pass **vacuously**, and both say so in the file. Declared, not disguised.
+  ✅ **The stale header at `BasketDrawer.test.tsx:28-34` was corrected, and the correction names the
+  wrong inference it used to invite** — *"RecipientPicker never mounts for a foreign group"* is still
+  true, but it no longer implies *"a foreign group shows no addressee UI"*.
+  ✅ **C6's comment records that its assertion is an ENVIRONMENT ARTIFACT, not a contract** — it is
+  the literal inverse of AC 6 / §8.2's intent and **must flip the day jsdom lands**. Written into the
+  test rather than into a plan nobody re-reads.
+  📌 **Agent-flagged, accepted:** C1 asserts the selected option by substring, not by position. Under
+  these fixtures `people` is always `[]`, so "first" holds by construction. Recorded rather than
+  hardened.
+  ⏳ **NEXT: `builder` running** — three source files, tests fenced (L-035).
 
 ## Gate log
 - triage — FULL, 2026-08-25 (narrowed from F-04, then widened to include the picker)
