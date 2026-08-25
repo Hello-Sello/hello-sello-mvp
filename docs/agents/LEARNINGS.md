@@ -1647,3 +1647,44 @@ the missing fixture (a throwaway zero-people company, hard-deleted after) and wa
 correct deferral would have been "no owner, needs a fixture", which is exactly what got built.
 
 **See also** [[L-039]] (scope is the gates' output, not the spec's AC list) and [[L-050]].
+
+---
+
+## L-053 · A teardown copied from a precedent inherits that precedent's REFERENCES, not just its shape
+
+**2026-08-25 · slug 0023 · T03 / HEL-65 · `/build` step 3 · caught by `plan-checker` (B1) before any code was written**
+
+**Trigger** — copying a fixture's `afterAll`/`afterEach` teardown from another spec, or writing
+any hard-delete order for rows you created. Also: the phrase "the clean pattern is `<file>:<lines>`"
+appearing in a plan.
+
+**What I did.** T03 must not become the fourth seed-mutating spec (HEL-73), so the plan created its
+own product and hard-deleted it after, citing `e2e/discover-shop.spec.ts` as the clean pattern and
+copying its delete order verbatim: `product_basket_line` → `pricelist_item` → `product`.
+
+**It cannot execute.** `deal_line_item.product_id → product(id)` carries **no `ON DELETE` action**
+(`20260607090005_fk_alters_triggers.sql:22-24` — the constraint has no clause at all, so it is
+`NO ACTION`). My walk *drafts the fixture product onto a deal*, so at teardown a live
+`deal_line_item` still references it and `delete from product` raises **`23503`**. The precedent's
+product is only ever added to a basket and viewed — **it is never drafted onto a deal**, so its
+three-step order is complete *for its lifecycle* and incomplete for mine.
+
+**Why it matters more than a failed delete.** The delete was fire-and-forget, with no `error`
+check — the shape the precedent also uses, because there it never fails. So the throw would have
+been swallowed, the product would have survived every subsequent run, and the spec would have
+become **exactly the seed-mutating spec the plan opened by promising not to write.** The failure
+mode is silent and lands in the safest-looking direction: a passing suite that is quietly
+corrupting the shared seed for every later file.
+
+**The shape.** A teardown is not a reusable snippet. It is a claim about **the full set of rows
+that now reference your fixture**, and that set is determined by *what your test does to the
+fixture*, not by what the file you copied from does to its own. Two fixtures of the same table can
+need different teardowns.
+
+**What to do instead.** Before copying a delete order, enumerate the FKs pointing at your
+fixture's table and ask **which of them your test causes to be written** — the precedent can only
+tell you about the ones *its* test writes. Delete children the test creates before the parent, and
+**check every delete's error**: an unchecked delete in a teardown is an assertion you never make.
+
+**See also** [[L-033]] (a seed row is not a stable fixture until you grep what mutates it) — this
+is its mirror image: a fixture *you* create is not clean until you grep what references it.
