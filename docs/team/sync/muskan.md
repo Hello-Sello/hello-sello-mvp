@@ -5,16 +5,47 @@
 
 ---
 
-**Last updated:** 2026-08-25 — session 91 `deal_land_t03` — **T03 / HEL-65 IN BUILD (e2e walk).**
-**Status:** active. `/build` step 3 (`plan-checker` running on `PLAN-T03.md`).
+**Last updated:** 2026-08-25 — session 91 `deal_land_t03` — 🏁 **SLUG 0023 IS BUILD-COMPLETE.**
+**T01 · T02 · T03 · T04 ALL CLOSED.** Next = **`/ship 0023`**.
+**Status:** offline (session closed).
 
-**Shared files locked:**
-- 🔒 `e2e/fixtures/two-company.ts` — four docstrings (`:284`, `:321-323`, `:746`, `:888`) still
-  claim `send_deal` mints an inbox ticket for the company arm, which **T01 falsified**; plus one
-  new counter (`countDealPillsOnThread`). The parallel session `security_tickets` has been told.
+⚠️ **TWO UNTRACKED FILES IN THE TREE THAT ARE NOT MINE — deliberately left alone (L-040).**
+`supabase/tests/deal_line_item_write_lockdown_test.sql` + `run_deal_line_item_write_lockdown_test.sh`.
+Their header says **DEV-159** (the buyer forges allocation state via a direct `deal_line_item`
+write). **Session 92 did not create them, did not run them, and did not commit them.** They appeared
+in the working tree during the session. **Whoever owns DEV-159 should claim them** — and nobody
+should `git add -A` past them, which is exactly how session 84 committed another session's work
+under its own ticket messages. **Shared files locked: none — all released** (`DECISIONS.md`, `CONTEXT.md`,
+`e2e/fixtures/two-company.ts` all unlocked).
 
-Everything else released. The five basket component files are unlocked;
-`src/modules/basket/actions.ts` + `types.ts` gained comment-only edits and are released too.
+⚠️ **`/ship` MUST diff `pg_get_functiondef('public.send_deal(uuid)')` against PRODUCTION first** —
+row 1 is a `create or replace`. **T01 is ALREADY LIVE on prod** (pushed 2026-08-25, zero drift).
+**The pending cloud batch is TWO migrations, both from the parallel session:** `20260825120000`
+(HEL-67) + `20260825130000` (HEL-75). One plain `db push`, **no `--include-all`**.
+
+🔴 **T04's lesson, worth more than the ticket:** an **insert** into a cited file is a **write to
+every line number beneath it**. A 10-line marker in `DECISIONS.md` moved `D-12` from `:1219` to
+`:1229` and falsified three live citations — two of them this slug's own. Fixed with a zero-line
+in-place marker. **And the correction itself went stale twice within the same ticket**, so it now
+cites a **section**, not a line.
+
+**T03 in one line:** the buyer's company-addressed deal is now proven to land as a pill in the
+seller's c2c chat, end to end. tsc 0 · eslint 0 · **six e2e specs green** · basket units 41/41.
+
+🔴 **The result worth knowing:** AC 6 was proven discriminating by a controlled A/B — under
+`relationshipId={group.sellerCompanyId}`, **tsc returns 0 and all 41 basket unit tests pass**
+while the new e2e fails on `Expected "Alice Green" / Received "Whole company"`. That closes
+`critic` N1 from T02 on **evidence, not a ruling**.
+
+⚠️ **T04 / HEL-66 now owes SIX doc edits** — the sixth is `TICKETS.md`'s T03 AC list, stale by one
+row because AC 6 exists by ruling and was never written there.
+
+⚠️ **The person arm has NO end-to-end proof.** The company arm — the defect the slug exists to fix
+— is proven end to end. *Buyer picks a person → pill lands in p2p* is covered as three halves that
+never meet. Named in `PLAN-T03.md` §5 with no owner.
+
+📌 **`rtk` collapses PLAYWRIGHT output too**, not just vitest — it rewrote an invocation to
+`PASS (2) FAIL (0)`. Use `rtk proxy env PLAYWRIGHT_FORCE_ASYNC_LOADER=1 npx playwright test`.
 
 **Base moved this session:** `dev` was 3 real commits ahead (HEL-70's deactivation gate + two
 ledger commits) — **merged, not rebased** (`992f05b`), because the two local commits were already

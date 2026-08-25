@@ -15,7 +15,7 @@
 T01 (M, SQL) ─┐
               ├─→ T03 (S, e2e)
 T02 (S, TSX) ─┘
-T04 (XS, docs) — independent, but 3 of its 4 edits need a G3 ruling first
+T04 (XS, docs) — independent. ⚠️ *Cut as 4 edits; it landed as **12**, each addition traceable to a recorded ruling — see T04's criterion 4*
 ```
 
 **T01 ∥ T02 are parallel-safe — computed, not assumed (L-004).**
@@ -39,7 +39,7 @@ the *suite rewrites* out and land them in the same commit series, not the same t
 **Files** — `supabase/migrations/<new>_send_deal_c2c_announce.sql` ·
 `supabase/tests/send_deal_c2c_announce_test.sql` (new) + its `run_*.sh` ·
 `supabase/tests/deliver_deal_test.sql` · `supabase/tests/claim_deal_ticket_test.sql` ·
-`src/modules/deals/actions.ts` (docstring only, `:358-365`)
+`src/modules/deals/actions.ts` (docstring only, `:357-368` — *corrected 2026-08-25, T04*)
 
 **First step, before any code:** regenerate ADR §4.3's affected-suite table **by grep**,
 not from the table — it was written from recall twice and was wrong twice
@@ -96,9 +96,15 @@ or schema change · the frontend.
 4. When the buyer's group is for a seller they are **not** connected to, the system shall
    render the existing connect-first block and **no** addressee control. **(AC7 — the
    control belongs in the `needsConnection` ELSE branch; the existing picker slot at
-   `BasketDrawer.tsx:311-315` sits ABOVE that split)**
+   `BasketDrawer.tsx:321-325` sits ABOVE the `needsConnection` split at `:329` — ⚠️ *citations
+   corrected 2026-08-25, T04; they read `:311-315`/`:319` at cut and T02's own diff moved them.
+   Claim unchanged, `critic` N5*)**
 5. When a person is chosen, the system shall pass that `counterpartyPersonId` into
-   `createBasketDraft` instead of the hardcoded null at `BasketDrawer.tsx:215`.
+   `createBasketDraft`. ⚠️ **Wording amended 2026-08-25 (Muskan's ruling at T02's G4).** The
+   original said *"instead of the hardcoded null at `BasketDrawer.tsx:215`"*. **That literal STAYS**
+   (now `:216`): it is the effective "Whole company" default and what keeps Create enabled —
+   **deleting it ships a dead Create button on every buyer group**, contradicting FR2. The code is
+   right; the criterion's wording was stale.
 6. When a seller uses `RecipientPicker` on a company with zero people, the system shall
    render the same control rather than hiding it. **(§8.2 — behaviour change to an
    existing surface, needs the G3 yes)**
@@ -123,6 +129,13 @@ or schema change · the frontend.
 4. `deal-c2c-create.spec.ts:141-191`'s premise is reversed and rewritten, not deleted.
 5. `e2e/inbox-accept.spec.ts` shall be **run deliberately and judged** — `:157-158` is the
    only guard in the repo on c2c-thread uniqueness, the invariant T01 now writes against.
+6. ⚠️ **ADDED 2026-08-25 by ruling, not at cut** (T02's G4 ruling 2 / `critic` N1). When the
+   buyer's basket renders the addressee control on a connected seller's group, the spec shall
+   assert the control offers that seller's **named people**, not merely that it renders and
+   defaults to "Whole company". **Rationale:** swapping the call site to
+   `relationshipId={group.sellerCompanyId}` leaves `tsc` at 0 and **all seven of T02's unit cases
+   green** while the people list is empty forever — only an e2e discriminates. **Proven by a
+   controlled A/B at T03's G4** (units 41/41 green under the bug; this criterion red).
 
 ---
 
@@ -132,6 +145,9 @@ or schema change · the frontend.
 
 **Files** — `docs/architecture/CONTEXT.md:31` · `docs/decisions/DECISIONS.md` ·
 `docs/PRD/0023-deal-draft-lands-in-chat.md` (the §8.9 / §8.7 amendments) ·
+**`docs/architecture/adr/0006-deal-draft-lands-in-chat.md`** and **this file** — ⚠️ *both added
+2026-08-25: T04 edits them and the cut list named neither, which is the same staleness this
+ticket exists to fix, one level up* ·
 `docs/architecture/adr/ADR-INDEX.md` *(index line is `/design` step 5, not this ticket)*
 
 ### Acceptance criteria (EARS)
@@ -144,6 +160,17 @@ or schema change · the frontend.
 3. When the PRD's edge-case row and ACs are read at G4, they shall match the built
    behaviour. **(§8.7 AC wording, §8.9 edge-case row — both are spec amendments and land
    ONLY on the G3 ruling)**
+4. ⚠️ **ADDED 2026-08-25 (`critic` N6). Criteria 1-3 covered 3 of this ticket's 12 edits**, so a
+   G4 walk would have replayed a quarter of it. The remaining nine, each authorised by a recorded
+   ruling rather than by the cut: ADR **J1** must name **sender-identity** forgery (`security` B1,
+   T01 G4) · ADR **§4.1's** live citations shall resolve (`security` N3) · **`PRD:52`** shall not
+   claim "verified safe" about the `deal_detected` hole ADR §7.4 refuted and HEL-67 tracks ·
+   **`PRD:117-121`'s** policy citations shall resolve · the ADR shall state **which citations it
+   maintains and which are frozen** · **J6/J7** shall not describe rulings as pending once built ·
+   **T02 AC 5** and **T03 AC 6** shall match what was ruled and proven · and **this ticket's own
+   Files list and criteria** shall name what it edits.
+   **This ticket grew by ruling five times after its cut. That is the defect it exists to fix,
+   one level up, and it went uncorrected here until `critic` said so.**
 
 ---
 

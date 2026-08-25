@@ -23,13 +23,15 @@
 
 ---
 
-## ⚠️ PENDING (2026-08-25) — security batch: HEL-67 Gap 1 + HEL-75 (**TWO** migrations, plain `db push`, **no `--include-all`**)
+## ⚠️ PENDING (2026-08-25) — security batch: HEL-67 Gap 1 + HEL-75 + DEV-159 (**THREE** migrations, plain `db push`, **no `--include-all`**)
 
 **Status: LOCAL ONLY.** Production tip is `20260825110000`. This batch stamps `20260825120000` then
 `20260825130000`, in filename order, so ONE plain `supabase db push --linked` takes both. Nothing is
-back-dated. ~~**Count: ONE.**~~ → **Count: TWO** — HEL-75 was added to this section 2026-08-25 by the
-second `security_tickets` session. Do not push either alone; the heading above is the authority on
-the count, not the prose in any single entry.
+back-dated. ~~**Count: ONE.**~~ ~~**Count: TWO**~~ → **Count: THREE** — HEL-75 then DEV-159 were added
+to this section 2026-08-25 by the second `security_tickets` session. Do not push any of them alone;
+the heading above is the authority on the count, not the prose in any single entry.
+
+**Stamps in order:** `20260825120000` → `20260825130000` → `20260825140000`.
 
 | # | file | what it does |
 |---|---|---|
@@ -123,6 +125,68 @@ select coalesce(has_function_privilege('anon', p.oid, 'execute'), false) as anon
        has_function_privilege('authenticated', p.oid, 'execute')         as authed_MUST_BE_TRUE
   from pg_proc p join pg_namespace n on n.oid = p.pronamespace
  where n.nspname = 'public' and p.proname = 'company_can_receive_requests';
+```
+
+### Migration 3 of 3 — DEV-159, `deal_line_item` direct-write lockdown
+
+| # | file | what it does |
+|---|---|---|
+| 3 | `20260825140000_deal_line_item_write_lockdown.sql` | `REVOKE UPDATE, DELETE ON deal_line_item FROM authenticated` (+ `REVOKE ALL … FROM PUBLIC, anon`), and a `COMMENT ON TABLE` recording why. **No policy, no trigger, no column allowlist.** |
+
+🔴 **THIS ONE CLOSES A LIVE PRODUCTION HOLE.** Verified 2026-08-25 against
+`information_schema.role_table_grants` on prod: `authenticated` holds
+`DELETE, INSERT, REFERENCES, SELECT, UPDATE`. `line_all` is the only policy on the table, `FOR ALL`,
+with `card_relationship_member()` on both `USING` and `WITH CHECK` — **true for BOTH sides of the
+relationship**. So either company can bypass the allocation RPCs entirely:
+
+```js
+await supabase.from('deal_line_item')
+  .update({ allocation_status: 'supply', allocation_locked_at: new Date() })
+  .eq('id', theirOrderLineId);
+```
+
+That forges the seller's "confirm & send" state, and the same door rewrites `unit_price`, `quantity`,
+`batch_id`/`batch_number` and `substituted_from_product_id` — **the money and the audit trail.**
+Reproduced on the seeded stack as Clara (Rheinland, the BUYER) against a GreenLeaf line before the
+fix: the update **succeeded**.
+
+**Who loses writes when this lands: nobody.** Census across all of `src/` — client code performs
+**exactly ONE** write to this table, the `INSERT` at `deals/actions.ts:991` (`acceptPromotion`, whose
+values come from the seller-authored `deal_promotion.line_deltas`). **Zero client UPDATEs, zero client
+DELETEs.** All seven legitimate mutators are `SECURITY DEFINER` owned by postgres and bypass grants:
+`create_deal_draft`, `update_deal_draft`, `confirm_deal_change`, `set_line_allocation`,
+`substitute_line_product`, `cancel_line_substitution`, `confirm_line_allocations`. Proven by calling
+`set_line_allocation` + `confirm_line_allocations` as a real authenticated **seller** post-fix and
+asserting the row actually changed — not merely that the call returned.
+
+⚠️ **A COLUMN-LEVEL REVOKE WAS TRIED BEFORE AND DID NOT WORK.** DEV-159's history records
+`REVOKE UPDATE (allocation_status, …)` failing to stop the write. That is correct Postgres behaviour:
+a **table-level** grant already covers every column and a column-level revoke cannot subtract from it.
+The table-level grant must go first. **Do not re-grant `UPDATE` on this table to add a feature** —
+add a definer function instead. The `COMMENT ON TABLE` says so in the schema.
+
+⚠️ **STILL OPEN, NARROWER, FILED SEPARATELY:** `INSERT` is kept for `acceptPromotion`, and
+`line_all`'s `WITH CHECK` is still only relationship membership — so a member can still insert an
+**extra** line into a shared deal. Not what DEV-159 describes; closing it means moving
+`acceptPromotion` behind a definer RPC.
+
+**`deal_card` needs nothing** — the other half of DEV-159's title is already closed
+(`authenticated` = `REFERENCES, SELECT` on production, shut by `20260724120900`).
+
+**Post-flight — assert the grant, and that the definer path still writes.**
+
+```sql
+-- 1. the privilege is gone (expect exactly: INSERT, REFERENCES, SELECT)
+select grantee, string_agg(privilege_type, ',' order by privilege_type) as privs
+  from information_schema.role_table_grants
+ where table_schema = 'public' and table_name = 'deal_line_item'
+   and grantee in ('authenticated','anon')
+ group by grantee;
+
+-- 2. and nothing silently re-granted it later in the batch
+select has_table_privilege('authenticated','public.deal_line_item','UPDATE') as update_MUST_BE_FALSE,
+       has_table_privilege('authenticated','public.deal_line_item','DELETE') as delete_MUST_BE_FALSE,
+       has_table_privilege('authenticated','public.deal_line_item','INSERT') as insert_MUST_BE_TRUE;
 ```
 
 ---

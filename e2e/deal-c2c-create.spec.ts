@@ -1,7 +1,11 @@
 /**
- * Lane A — deal creation from the c2c (company) chat + the company-delivery
- * spine (birth → SEND → inbox ticket → claim; Phase 12 moved the ticket mint
- * from birth to the explicit Send — `send_deal` calls deliver_deal).
+ * Lane A — deal creation from the c2c (company) chat. The company-delivery
+ * spine, POST T01/HEL-63 (`send_deal_c2c_announce`): birth -> SEND -> a
+ * `deal_card` chat pill lands DIRECTLY in the c2c thread. There is no
+ * inbox-ticket hop and no claim any more — `send_deal`'s call to
+ * `deliver_deal` was DELETED for this arm (`20260825090000_send_deal_c2c_announce.sql:15-20`);
+ * the last test in this file used to exercise "ticket -> Pick up deal ->
+ * claim" and now exercises the reversed premise (point 4 below).
  *
  * Before this lane the c2c chat rendered DealPin's State A as just "No deal
  * yet": the "Start a deal" button + the `hs:create-deal` listener were gated on
@@ -11,17 +15,18 @@
  *
  * What this file proves, in order:
  *   1. the c2c chat offers "Start a deal"; through birth AND send the CREATOR
- *      stays the SOLE OWNER (no counterparty person exists in a company chat —
- *      that absence is deliver_deal's company-target routing key; only a CLAIM
- *      adds a second member);
+ *      stays the SOLE OWNER (no counterparty person exists in a company chat,
+ *      and `send_deal` skips the co-owner insert when none is set — only a
+ *      CLAIM ever added a second member, and this file no longer drives one);
  *   2. the born deal's row appears in the c2c chat LIVE (hs:deal-updated —
  *      the creator sees own drafts/deals in the strip);
  *   3. the row survives a fresh navigation and opens the card panel;
- *   4. the full company delivery: after the fixture's Send the ticket lands in
- *      the OTHER company's "Deal tickets" inbox lens with a real card preview,
- *      "Pick up deal" makes the claimer a deal_member owner on the SAME deal
- *      (no new relationship), and the deal then opens from the claimer's own
- *      c2c chat.
+ *   4. the full company delivery, PREMISE REVERSED by T01/HEL-63: after the
+ *      fixture's Send, the pill lands DIRECTLY in the OTHER company's c2c
+ *      chat — no ticket, no "Pick up deal", no claim — and opens the SAME
+ *      card from there; the creator remains the sole `deal_member` throughout
+ *      (ADR 0006 §4.1:307 carries the safety analysis for this — cited, not
+ *      re-derived here).
  *
  * Selectors mirror fixtures/two-company.ts (createC2cDealAsAlice drives the
  * create + send flow; the panel is `<aside aria-label="Deal card">`).
@@ -35,6 +40,8 @@ import {
   resolveDealCardIdForRelationship,
   countDealMembersForCard,
   countDealCardsForRelationship,
+  countTicketsForCard,
+  countDealPillsOnThread,
   dealPanel,
   COUNTERPARTY_NAME,
 } from './fixtures/two-company'
@@ -66,8 +73,10 @@ test('c2c chat offers "Start a deal" and births a draft with the creator as sole
   await createC2cDealAsAlice(page)
 
   // no counterparty person exists in a company chat → the creator is the SOLE
-  // deal_member owner through birth AND send (this absence is deliver_deal's
-  // company-target routing key at send time; only a claim adds a member)
+  // deal_member owner through birth AND send (STALE-CORRECTED: this absence is
+  // `send_deal`'s OWN company-target routing key at send time — T01/HEL-63
+  // deleted its call to deliver_deal; only a claim ever added a member, and
+  // there is no claim door left in this file, see the last test below)
   const cardId = resolveDealCardIdForRelationship()
   expect(countDealMembersForCard(cardId)).toBe(1)
 })
@@ -138,7 +147,7 @@ test('a SECOND deal can be started from the same c2c chat — the button stays v
   await expect.poll(() => countDealCardsForRelationship(), { timeout: 15000 }).toBe(2)
 })
 
-test('the ticket lands in the other company\'s Deal tickets lens; accepting joins the deal', async ({
+test('a c2c-chat-created deal lands in the recipient\'s c2c chat directly — no ticket, no claim (T01/HEL-63 premise reversed)', async ({
   browser,
 }) => {
   const { aliceContext, bobContext, alicePage, bobPage } = await openTwoContexts(browser)
@@ -146,44 +155,40 @@ test('the ticket lands in the other company\'s Deal tickets lens; accepting join
     await createC2cDealAsAlice(alicePage)
     const cardId = resolveDealCardIdForRelationship()
 
-    // NEGATIVE SPACE: the ticket row is visible to both companies at the DB
-    // layer (inbox select RLS is deliberately two-sided), but only the RECEIVER
-    // can act — so the SENDER's inbox must offer it in NO actionable lens.
-    await alicePage.goto('/connect/inbox')
-    // wait for the queue to actually load (also guarantees hydration) before
-    // driving the tabs — a click during load lands on a handler-less button
-    await expect(alicePage.getByText('Loading inbox…')).toBeHidden({ timeout: 15000 })
-    // default lens (Unassigned): her outgoing ticket must not be listed
-    await expect(alicePage.getByText('Pedanios 31/1 COS-CA')).toHaveCount(0)
-    await alicePage.getByRole('button', { name: /deal tickets/i }).click()
-    await expect(
-      alicePage.getByText('No deal tickets waiting to be picked up.', { exact: false }),
-    ).toBeVisible({ timeout: 15000 })
-
-    // Bob (StonePharm) finds the claimable ticket under its OWN lens, with the
-    // real card preview (deterministic Pedanios line from the create fixture)
+    // ---- Bob's (the RECEIVING company's) Deal-tickets lens shows nothing new ----
+    // There is no ticket to find any more (T01 deleted send_deal's call to
+    // deliver_deal on this arm), so the ONLY correct state is the lens's
+    // positive empty-state string — asserted AFTER load finishes, never
+    // before (an absence taken on a loading page passes just as readily as on
+    // an empty one).
     await bobPage.goto('/connect/inbox')
+    await expect(bobPage.getByText('Loading inbox…')).toBeHidden({ timeout: 15000 })
     await bobPage.getByRole('button', { name: /deal tickets/i }).click()
-    const ticketRow = bobPage.getByText('Pedanios 31/1 COS-CA', { exact: false }).first()
-    await expect(ticketRow).toBeVisible({ timeout: 15000 })
-    await ticketRow.click()
+    await expect(
+      bobPage.getByText('No deal tickets waiting to be picked up.', { exact: false }),
+    ).toBeVisible({ timeout: 15000 })
+    await expect(bobPage.getByText('Pedanios 31/1 COS-CA')).toHaveCount(0)
+    // the row fact behind the UI check above: zero pending_inbox_item rows for
+    // this card (T01 AC 2 / M2).
+    expect(countTicketsForCard(cardId)).toBe(0)
 
-    // Accept = claim (the button is deal-worded — nothing is being "connected"):
-    // Bob becomes a deal_member OWNER on the SAME deal
-    await bobPage.getByRole('button', { name: /pick up deal/i }).first().click()
-    await expect
-      .poll(() => countDealMembersForCard(cardId), { timeout: 15000 })
-      .toBe(2)
-
-    // …and NO new relationship was minted: the deal opens from the EXISTING
-    // GreenLeaf c2c chat on Bob's side.
+    // ---- the pill is in BOB's OWN c2c chat already — no claim needed to reach it ----
     await openC2cChat(bobPage, COUNTERPARTY_NAME.bob)
-    const openCard = bobPage.getByRole('button', { name: 'Open the deal card', exact: true })
-    await expect(openCard.first()).toBeVisible({ timeout: 15000 })
-    await openCard.first().click()
+    const pill = bobPage.getByRole('button', { name: /click to open the deal card/i }).first()
+    await expect(pill).toBeVisible({ timeout: 15000 })
+    await pill.click()
     await dealPanel(bobPage)
       .getByRole('button', { name: /talk about this deal/i })
       .waitFor({ timeout: 15000 })
+    // the pill is in c2c, and (this file's OTHER creation door — the c2c chat,
+    // not the basket) never touched p2p at all.
+    expect(countDealPillsOnThread('c2c')).toBe(1)
+    expect(countDealPillsOnThread('p2p')).toBe(0)
+
+    // ---- no claim happened: the creator is still the SOLE deal_member ----
+    // (ADR 0006 §4.1:307 carries the safety analysis for a company-wide-born
+    // workspace staying reachable with one owner — cited, not re-derived here.)
+    expect(countDealMembersForCard(cardId)).toBe(1)
   } finally {
     await aliceContext.close()
     await bobContext.close()

@@ -1,6 +1,6 @@
 # 0023 deal-draft-lands-in-chat — work order
 lane:   FULL
-stage:  design ✅  →  build: **T01 ✅ CLOSED** → **T02 / HEL-64 ✅ CLOSED** → **T03 / HEL-65 🔨 IN BUILD** (plan rev 2 after a checker REVISE, `/build` step 4) → T04 / HEL-66 pending   ·   G2 /prototype SKIPPED (Muskan, 2026-08-25)
+stage:  design ✅  →  build: **T01 ✅ CLOSED** → **T02 / HEL-64 ✅ CLOSED** → **T03 / HEL-65 ✅ CLOSED (G4 auto)** → **T04 / HEL-66 🔨 IN BUILD** (plan rev 1, `/build` step 3 — the LAST ticket)   ·   G2 /prototype SKIPPED (Muskan, 2026-08-25)
 branch: claude/muskan/work — no feature branch (Muskan's call, 2026-08-18)
 
 ## Seed
@@ -576,8 +576,210 @@ is not this slug's job, but nothing else is tracking it.
   is stated in the gate report rather than left implicit** ([[L-033]]). Plan §6 trap 1 rewritten
   to carry both reasons not to reset.
   ⏳ `test-writer` spawned at `/build` step 4 against rev 2.
+  ✅ **`test-writer` → 3 files.** New `e2e/deal-lands-in-c2c-chat.spec.ts` (AC 1/3/6, AC 2 implied) ·
+  `deal-c2c-create.spec.ts`'s `:141-191` premise reversed, not deleted (AC 4) · `two-company.ts`
+  4 docstrings + `countDealPillsOnThread`. It **flagged** one edit beyond the plan's literal
+  wording (a comment in the file's FIRST test repeating the same falsified `deliver_deal` claim)
+  rather than doing it silently — **accepted**, and `critic` independently agreed.
+  ✅ **GATE, exit codes captured from each command directly, never through a pipe** (the `tail`
+  trap — my first attempt returned EMPTY exit codes and had to be redone): **tsc 0 · eslint 0**.
+  ✅ **`test-runner` → SIX e2e specs GREEN**: `deal-lands-in-c2c-chat` 2/2 · `deal-c2c-create` 5/5 ·
+  **`inbox-accept` 2/2 (AC 5, run deliberately — incl. the `countThreadsForPair("c2c")===1` trap
+  assertion)** · `deal-change` 19/19 substantive + 5 pre-existing skips · `chat-phase7` 4/4 ·
+  `deal-p2p-send` 6/6. **ADR §4.3 rated the last three SAFE by READING; they are now RUN.**
+  🔴 **THE A/B — this ticket's entire justification, MEASURED not argued.** Controlled, both arms
+  on the same state ([[L-048]]), source verified byte-identical to committed after revert:
+
+  | arm | tsc | basket unit | AC 6 e2e |
+  |---|---|---|---|
+  | correct code | 0 | 41/41 across 9 files | **PASS** |
+  | `relationshipId={group.sellerCompanyId}` | **0** | **41/41 GREEN** | **FAIL** — `Expected "Alice Green", Received "Whole company"` |
+  | reverted (control) | 0 | — | **PASS** |
+
+  **`critic` N1's gap from T02 is now closed on EVIDENCE, not a ruling** — the same shape as
+  T02's AC 2. The middle row is the proof that the unit layer cannot see this class at all.
+  ✅ **`consistency` → CLEAN, ZERO BLOCKING.** All four judged items are correct reuse: the repo
+  has **two id conventions** split by *why* an id is stable (company/pricelist ids are seed
+  literals; the relationship id rotates) and the diff applied the right one to each ·
+  `countDealPillsOnThread` is a genuine sibling of `countConnectionEstablishedLines`, not a
+  duplicate · the local basket helper is right to stay local (**this is the FIRST e2e ever to
+  drive the real `BasketDrawer`**) · the lifecycle correctly merges its two nearest precedents.
+  ✅ **`critic` → 2 blocking + 9 notes, all verified true by me before folding ([[L-003]]).**
+  Fix round 1 → `blocking-findings 1/2`. It confirmed the empty-state assertions, the pill counts
+  and the `cardId`-on-reset capture all genuinely discriminate.
+  1. 🔴 **B1 — a FIFTH stale claim, and the plan counted four.** `two-company.ts:963-964` still
+     said Send "is the moment the StonePharm inbox ticket mints" — **twenty lines below the
+     docstring this ticket corrected to say the opposite.** Self-contradictory inside one function.
+  2. 🔴 **B2 — my §5's residual-cover claim was true of the RPC and FALSE of the browser.**
+     `claim_deal_ticket_test.sql` covers the RPC; the rollout the deleted e2e was the only thing
+     exercising has **nothing at any level** — `inbox.ts:265-300`, `InboxDetail.tsx:78`, and
+     `inbox.ts:201`'s `viewerIsReceiver` derivation. `src/modules/connect/` has exactly two unit
+     files, neither touching them. **Corrected in §5.**
+  3. 🔴 **N8 — §5 omitted the slug's HEADLINE SEAM.** Nothing end-to-end proves *buyer picks a
+     person → pill lands in the p2p thread*: AC 6 proves the options render, T01's M3 proves the
+     RPC routes, T02's G4 proved the DB field — **three halves that never meet.** §5 named the
+     *seller*-side call site and missed this. **The same omission shape as [[L-050]]/[[L-051]],
+     committed a third time in the document that cites them.** The COMPANY arm — the actual
+     defect this slug exists to fix — **is** proven end to end; it is the person arm that is not.
+  4. **N6 — a teardown failure leaks PERMANENTLY.** Deletes throw immediately, and
+     `uq_product_supplier_code_active` (`20260607090004:52-53`) then makes **every future run of
+     the spec fail in `beforeAll` with 23505** until a human deletes the row. `critic` confirmed a
+     *test* failure is safe (Playwright runs `afterAll`; `resetDealData()`-first avoids the 23503).
+  5. **N1-N4 — four more citation drifts**, incl. two of MINE (the L-044 misattribution the plan
+     carried first, and the diff breaking its own cross-file citation by rewriting the file it
+     cited). **Slug tally: fourteen.**
+  📌 **OFFER for G4, verified not assumed:** `e2e/present-basket.spec.ts` is **dead scaffolding** —
+  3 `test.fixme` cases, **0 live tests**, asserting `basket-panel`/`basket-line` test-ids while the
+  shipped `BasketDrawer.tsx` has **zero** `data-testid` attributes. Pre-existing, not opened here.
+  📌 **MACHINERY — `rtk` rewrote a PLAYWRIGHT invocation** and collapsed it to `PASS (2) FAIL (0)`.
+  CLAUDE.md records this trap for vitest only; **it hits Playwright too.** Real per-test output
+  needed `rtk proxy env PLAYWRIGHT_FORCE_ASYNC_LOADER=1 npx playwright test`.
+  📌 **`deal-change.spec.ts` has a load-correlated flake** in the shared `openTwoContexts`/`loginAs`
+  fixture — a `beforeEach` timeout hitting 4 of 5 attempts at a **different test position each
+  run**, every affected test passing in isolation. **Distinct from the known `sb_secret_`
+  baseline**, not T03's diff (that path is untouched). All 19 confirmed by targeted re-runs rather
+  than written off. Test-infra debt.
+  ✅ **Fix round 1 landed — all 6 corrections, `blocking-findings 1/2`.** Re-ran because the
+  teardown change is **behavioural**, so the earlier green did not carry: **tsc 0 · eslint 0 ·
+  7/7 e2e in 20.6s.**
+  ✅ **The seed is EXACTLY as found — measured, not asserted** (the HEL-73 property): 0 `T03-TMP`
+  leaked · 6 GreenLeaf products · all six `AUR-1A`..`1F` flags byte-identical to the pre-run
+  baseline · 2 distinct locations, so `discover-shop.spec.ts:170`'s count-of-3 still holds.
+  ⚠️ **Residual named rather than hidden:** the new pre-clean does not itself call
+  `resetDealData()`, so a prior `afterAll` that threw *at* `resetDealData()` could leave a product
+  still holding `deal_line_item` rows → the pre-clean 23503s. **It fails loudly with a named
+  error**; the permanent-silent-block is gone. Left unfixed deliberately, window is narrow.
+
+- **build T04, 2026-08-25 (session 91 `deal_land_t03`, continued)** — budgets reset:
+  `tests 0/2`, `blocking-findings 0/2`, `G4 rounds 1`. Plan at `PLAN-T04.md` rev 1;
+  `plan-checker` spawned at `/build` step 3.
+  🔴 **A MISS OF MINE, caught by `git pull --rebase` refusing to run.** T03's **fix-round
+  corrections were never committed** — I committed the test files BEFORE the fix round, then
+  committed only docs afterwards, so **T03 was recorded as CLOSED while its own six corrections
+  sat uncommitted in the working tree.** The gate results still stand (they were measured against
+  the working tree, which had the fixes) but the branch did not carry them. Committed now.
+  **The class: a green gate and a pushed branch are two different claims**, and I made the first
+  while implying the second.
+  ✅ **Every T04 target opened and MEASURED before writing a word** — the plan's §1 is a truth
+  table, because the way a citation-repair ticket fails is by copying line numbers out of the
+  document it is repairing. Five citations independently established:
+  `msg_all` **`:300-302`** (ADR says `:288-290`, in THREE places) · the
+  `card_relationship_member` deal-child policies **`:312-322`** (ADR says `:300-311`, which is
+  actually `msg_all` + `card_all` + `conf_all`) · `can_access_workspace` **`:117-125`** ·
+  the `on conflict` precedent **`:159-184`** · and the PRD's pill citation, which points at the
+  **superseded** migration.
+  🔴 **The sharpest one is not a typo.** ADR §4.1 cites `20260607170000:105-113` for
+  *"`deal_workspace` is born `company_wide` so `can_access_workspace` passes"*. The claim is
+  **TRUE** (`:123` = `visibility = 'company_wide' OR is_workspace_member(...)`) but `:105-113` is
+  **`is_workspace_member` — the function the OR-branch exists to BYPASS.** A reader following the
+  citation concludes membership is required, the exact opposite of the sentence's argument and of
+  what T03 relies on to assert `deal_member === 1`.
+  ⚠️ **T04 owes EIGHT edits, not the three `TICKETS.md` cut it with.** It has grown by ruling four
+  times — §8.9/§8.7 (G3) · ADR **J1** (`security` B1, T01 G4) · **AC 5's wording** (T02 G4) ·
+  and **`TICKETS.md`'s own T03 AC list** (this session). **The ticket's own criteria are the thing
+  most out of date — the same defect it exists to fix, one level up.**
+  ✅ **`plan-checker` → REVISE: 5 blocking + 7 notes, all verified true by me before folding
+  ([[L-003]]), all accepted.** Plan at **rev 2**. **The truth table SURVIVED** — it re-derived all
+  five rows from the files and every replacement range was exact. **What failed was COVERAGE:**
+  I measured five citations and walked past three more defect sites *inside my own declared files*,
+  plus ten this slug broke itself. **The ticket became TWELVE edits, not eight.**
+  1. **B1 — I planned a DELETION where the ruling said REWRITE.** ADR `:607-608` records §8.9
+     verbatim: the row **becomes** *"the send creates it; the deal still lands"*. I inherited
+     "amended out" from `TICKETS.md`'s **pre-ruling** prose — [[L-039]] pointed at myself.
+  2. 🔴 **B2 — the approved PRD said "Verified safe" about a hole THIS SLUG filed as HEL-67.**
+     `PRD:52` cited `20260614121000:12` as proof only Sella can write `deal_detected`. The slug's
+     own ADR §7.4 had already established **that line is a CODE COMMENT, not a gate.**
+  3. **B3 — two more wrong citations in the PRD** (`inbox_select` is `:243-244` not `:79-86`;
+     the company-thread policy is `thread_all` `:293-298` not `:231-232`, which is
+     `person_group_all`). §4.1's defect one file over.
+  4. 🔴 **B4 — this slug's OWN diff falsified ~10 ADR citations**, and T04 was about to ship an
+     ADR advertising corrected citations while carrying ten it broke. **Resolved with a
+     distinction, not a sweep** — see below.
+  5. 🔴 **B5 — my edit 2 did not satisfy the ticket's own AC 2, and the obvious fix was worse.**
+     The AC says *"when a reader reaches `DECISIONS.md:1013`"*; a tail entry sits ~810 lines away.
+     **And inserting ABOVE `:1013` would move it — breaking FIVE citations at once** (ADR `:47`,
+     ADR `:563`, `PRD:6`, `STATE.md:54`, `STATE.md:68`, plus CLAUDE.md). Marker goes **AFTER**.
+  📌 **THE USEFUL OUTPUT OF B4 — a distinction now written into the ADR as a banner:**
+  **an ADR is a decision record, not a maintained index.** Design-time citations (§2/§3/§6/§8) are
+  **frozen at rev 3** — re-pointing them as code moves would falsify the record of what was known
+  when the decision was made. **§4.1 and the J-invariants are NOT design-time** — they assert what
+  the system does *now* and a reader acts on them, so they are **maintained**. A third bucket:
+  anything **false in SUBSTANCE** rather than merely drifted is corrected regardless — one case
+  qualified (§7's rationale that a docstring "claims the host navigates"; **T01 rewrote it**).
+  ✅ **All TWELVE edits applied**, and **every corrected citation re-verified by opening the file**
+  (`/build` step 6, not from memory): `msg_all` `:300` · `line_all` `:312` · `changein_all` `:322` ·
+  `can_access_workspace` `:117-125` · `inbox_select` `:243` · `thread_all` `:293` ·
+  `can_access_thread` c2c arm `:136` · on-conflict `:159-184` · pill build `:222-230`.
+  **Sweep for surviving OLD values: four hits, ALL historical quotes inside the corrections
+  themselves** (banner ×2, §4.1's inline note, the PRD's correction text). ~~**Zero live stale citations remain.**~~ ⚠️ **NARROWED (`critic` N9): the sweep searched only
+  for the SEVEN old values it had replaced.** It did not re-audit the maintained buckets for
+  *other* stale citations — and `critic` then found four live ones there (§4.1's `actions.ts:367`,
+  the §4.1 docstring row, **J6**, **J7**). All four fixed in round 1. **A sweep's claim is only as
+  wide as its query.** `DECISIONS.md:1013` re-confirmed still the cited bullet **after** the edit.
+  ⚠️ **A parallel merge landed on this branch mid-push** (HEL-75, on Muskan's instruction).
+  Rebased and **verified rather than assumed**: their `20260825130000` present, my ADR edits
+  intact, local == origin. **The pending cloud batch is now TWO migrations**
+  (`20260825120000` + `20260825130000`), one plain `db push`, no `--include-all`.
+  📌 **Their HEL-75 finding, recorded because it generalises past their ticket:** the remedy that
+  ticket itself sketched — an inline `EXISTS (SELECT 1 FROM company …)` in a `WITH CHECK` — is
+  evaluated **as the calling role**, so it inherits `company_select`. It would have read as *"the
+  receiver is alive"* and meant *"I already share a connection with the receiver"*, **blocking
+  every legitimate connect to a new company.** **A predicate inside a policy is not a question
+  about the database — it is a question about what the CALLER CAN SEE.** Needed a definer helper.
+  📌 **Their fixture pattern is better than T02's and T03's** — dead companies built inside
+  `BEGIN…ROLLBACK`, so **zero** seed mutation and nothing to leak. T03 needed an idempotent
+  pre-clean precisely because a hard-delete teardown leaks permanently. **Copy theirs next time.**
+  ⏳ `critic` spawned on the built diff.
+  📌 **HEL-74's stated exploit is DEAD, and it was filed out of THIS slug** (T01 G4, `security`
+  N1). The parallel session verified on production that `relationship` is **SELECT-only** for
+  `authenticated` and no `public` function updates or deletes it — so "soft-delete the
+  relationship, then Send onto a dead one" is unreachable. **The gap may not be dead:**
+  `send_deal` still never checks the relationship is live, which is harmless only because of the
+  current grant surface, not because of `send_deal`. Asked for the ticket to be CORRECTED rather
+  than closed, so nobody re-derives it from N1's original wording. **Separately: "there is
+  currently no way to disconnect at all" is a PRODUCT gap, bigger than HEL-74, and unowned.**
 
 ## Gate log
+- **T04 / HEL-66 — G4 AUTO 2026-08-25. 🏁 SLUG 0023 IS BUILD-COMPLETE (T01-T04).** Docs-only diff,
+  nothing renders; all three carve-outs checked, none live. Budgets: `tests 0/2` ·
+  `blocking-findings 1/2` · `G4 rounds 1`. **`tsc`/`eslint` deliberately NOT run** — no code in the
+  diff; running them for the appearance of a gate would be theatre. **The gate is the re-grep.**
+  **Cut with 3 criteria and 4 edits; landed with 4 criteria and TWELVE edits**, every addition
+  traceable to a recorded ruling. `plan-checker` REVISE (5 blocking) then `critic` (2 blocking +
+  10 notes), all verified before folding.
+  🔴 **The finding worth keeping: I protected the line I was warned about and broke every line
+  beneath it.** `plan-checker` B5 said `DECISIONS.md:1013` must not move; I placed the marker below
+  it — and the **10-line insert shifted everything under it by ten**, moving `D-12` `:1219`→`:1229`
+  and **falsifying three live citations, two of them this slug's own** (`REVIEW.md:371` /
+  `STATE.md:443` — the *"`D-12` means four different things"* finding). Fixed with a **zero-line
+  in-place marker**. **An insert into a cited file is a write to every line number beneath it.**
+  🔴 **And the correction went stale twice inside one ticket** — the marker's ADR citation was
+  `:563` (blank) → `:598` → **`:604`**, moved by *this ticket's own* edits above it. **It now cites
+  the SECTION, not a line.** A line number into a file you are concurrently editing is a guess.
+  📌 **The durable output — now a banner in ADR 0006: an ADR is a decision record, not a maintained
+  index.** Design-time citations frozen at rev 3; **§4.1 + the J-invariants maintained** because a
+  reader acts on them; anything **false in substance** corrected regardless. `critic` then caught
+  that I had applied the principle **to the frozen half and not the maintained half** (N1-N4).
+  📌 **HEL-74's stated exploit is DEAD** (`relationship` is SELECT-only on prod; no `public`
+  function writes it) — **but the gap is not**: `send_deal` still never checks the relationship is
+  live, harmless only via the grant surface, and it **re-arms the day a disconnect exists**.
+  Corrected, not closed. **"No way to disconnect at all" is a bigger, unowned PRODUCT gap.**
+- **T03 / HEL-65 — G4 AUTO 2026-08-25 (no human stop, and the routing is recorded).** The diff is
+  **test-only** — three files under `e2e/`, no source, no migration, **nothing renders** — so step
+  9's `visual-verifier` did not fire and **all three step-10 carve-outs were checked and none was
+  live** (no builder REJECTION; `security` not routed, correctly, as the diff touches no
+  migration/RLS/RPC/auth/server action; no behaviour changed at all). **All six criteria replayed
+  green**, full table in `REVIEW.md`. Budgets: `tests 0/2` · `blocking-findings 1/2` ·
+  `G4 rounds 1`.
+  **Headline: AC 6 closed `critic` N1 from T02 on EVIDENCE.** Under the exact swap, `tsc` is **0**
+  and basket units are **41/41 green** while this e2e fails on
+  `Expected "Alice Green" / Received "Whole company"`; reverted and re-passed.
+  **SEVEN items owed to Muskan, none blocking** — T02's unrecorded G4 ruling 3 · `TICKETS.md`
+  stale by one row (T04's 6th edit) · the claim **rollout** uncovered at every level (`critic` B2)
+  · **the person arm has no end-to-end proof** (`critic` N8; the company arm does) ·
+  `present-basket.spec.ts` is dead scaffolding, offered · **`rtk` collapses PLAYWRIGHT too**, not
+  just vitest · and `deal-change.spec.ts`'s load-correlated login flake. All in `REVIEW.md`'s G4
+  sheet.
 - **T02 / HEL-64 — G4 PASSED 2026-08-25 (HUMAN).** Muskan ruled **pass, with T04 amending the AC
   wording.** Budgets spent: `tests 0/2` · `blocking-findings 1/2` · `G4 rounds 1`.
   Five of six ACs walked green; **AC 2 walked live after `plan-checker` found it had no owner**.

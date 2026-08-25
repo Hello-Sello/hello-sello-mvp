@@ -1010,7 +1010,7 @@ The "closed by default" lock above was a demo simplification (Marcel: build clos
 - **Public profile is company-curated (soft), not closed-by-default.** Openness = two per-product dials: visible-on-profile (`product.profile_visible`, **new**) × price-visible (`product.price_public`, exists). Levels emerge: **L0** bare card → **L1** products/no price → **L4** full priced shop. *Why:* the soft model is a **superset** of "closed" — a company that wants closed just stays at L0; gives each company go-to-market flexibility; matches B2B norm (LinkedIn / Alibaba / Faire).
 - **Audience-scoped for compliance.** Products/prices show to logged-in **verified members** only; the anonymous public card (`/c/<handle>`) stays **bare**. *Why:* contains German **HWG** public-advertising risk for prescription cannabis — showing to verified members ≠ showing to the open internet.
 - **Discover directory stays minimal** (brand line: logo · name · category · country); the chosen openness shows on the company's **profile** after click. *Why:* listing ≠ browsing — reconciles the closed directory with the soft profile.
-- **Connect CTAs map to the 4 existing inbox types**, surfaced contextually on the profile: Connect (`connect`) · Connect + note (`connect_message`) · Request pricing (`pricelist_request`) · Offer card (`deal_card`). A note is optional on every connect. *Why:* reuse locked inbox machinery; **no new request types**.
+- **Connect CTAs map to the 4 existing inbox types**, surfaced contextually on the profile: Connect (`connect`) · Connect + note (`connect_message`) · Request pricing (`pricelist_request`) · Offer card (`deal_card`). A note is optional on every connect. *Why:* reuse locked inbox machinery; **no new request types**. 🔴 **PARTIALLY SUPERSEDED 2026-08-25 — the `deal_card` arm ONLY** (ADR 0006 §8.5, slug `0023-deal-draft-lands-in-chat`): a buyer's company-addressed deal no longer cuts an inbox ticket — `send_deal` posts a `deal_card` pill straight into the relationship's c2c chat and creates **zero** `pending_inbox_item` rows. **`connect`, `connect_message` and `pricelist_request` are UNTOUCHED and still route to `/connect/inbox`**, so this bullet stands for them and the page is not retired. Pre-existing deal tickets survive and stay claimable. Live on production 2026-08-25. Full entry at the file's tail. *(Appended in place, adding no lines: `:1013` is cited by ADR 0006 `:47` and its **§8.5** (a SECTION anchor, deliberately — that reference sat at `:563`, then `:598`, then `:604` as this very ticket edited the ADR above it; a line number into a file you are also editing is not a citation, it is a guess), plus `PRD/0023:6` and `STATE.md:54`/`:68` — and an INSERT here would shift every line below, which is how `D-12` at `:1219` was briefly falsified.)*
 - **Two-track build.** **Track 1 (now)** = the real connect loop between two onboarded companies (Discover real data → profile → connect/note/request-pricing → accept → C2C/P2P chat), buildable on existing schema + one `profile_visible` column. **Track 2 (later)** = the FLOWZ growth engine — already documented (LAYER-1 §13, LAYER-5, [`research/dev-62-dev-44-flowzz-mirror-shop.md`](../research/dev-62-dev-44-flowzz-mirror-shop.md)); its **outbound offer/inquiry email is legally RED** (UWG §7(2) per-se rule), deferred behind consent/partnership. The shadow-profile + claim-on-signup part is the defensible half. *Why:* ship the testable loop first; don't build the RED outbound until consent exists. Build plan: [`docs/muskan-build/discover-connect-loop.md`](../muskan-build/discover-connect-loop.md).
 
 ---
@@ -1879,3 +1879,32 @@ rejected option — per-person toggles defaulting off — is safest but silently
 card until each person opts back in.)
 
 **Surfaced by:** HEL-72, 2026-08-25.
+
+## 2026-08-25 — a company-addressed deal is announced in the company's chat
+
+**Partial supersede of `:1013`, the `deal_card` arm only** (ADR 0006, slug
+`0023-deal-draft-lands-in-chat`). An inline marker sits beside `:1013` itself, because that is
+where the reader arrives from five separate citations; this is the chronological record.
+
+- **What changed.** `send_deal`'s company arm no longer calls `deliver_deal`. It resolves — or
+  creates — the relationship's **c2c thread** and posts the same clickable `deal_card` pill its
+  person arm has always posted to the p2p thread. **One mechanism now serves both arms**, and the
+  fix was a **deletion**, not an addition. Company-addressed sends create **zero**
+  `pending_inbox_item` rows. *Why:* the recipient previously had to know the Connection Requests
+  page existed, find the ticket, then hunt for the matching conversation — the deal never signalled
+  in chat at all.
+- **The other three Connect CTAs are untouched.** `connect`, `connect_message` and
+  `pricelist_request` still route to `/connect/inbox`, so `:1013` stands for them and the page is
+  **not** being retired. *Why:* the inbox hop is today's consent step for those flows.
+- **`deliver_deal` itself is untouched** and keeps its other caller
+  (`confirm_detected_deal_births_negotiation.sql:176`, Sella's door). ⚠️ **The page-deletion slug
+  must not delete `/connect/inbox` while that door still writes to it.**
+- **ADR-0003:48-49's "FUTURE" clause is retired, not fulfilled here.** The `assigned_to` primitive
+  it waited on was built in `20260607090002_phase1_core.sql:200` and company-addressed send has
+  worked since 2026-07; the clause was discharged *with* the primitive. This ADR retires the
+  routing it described.
+- **Known and accepted:** the deal signal now rides on `msg_all`, which has **neither a `type` nor
+  a sender predicate** — so a thread member can post a pill attributed to another person. The
+  signal moved onto a weaker policy; **no policy was widened.** Tracked as **HEL-67**, disclosed in
+  ADR 0006's invariant **J1**. *Why accepted:* the proper fix is an RLS change, which ADR 0006 §4.2
+  put out of scope for this slug; filed rather than smuggled in.

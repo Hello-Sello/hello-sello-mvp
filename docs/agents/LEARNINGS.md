@@ -1800,3 +1800,74 @@ query — *does the other branch even have this file?* — found it.
 **See also** [[L-033]] (a green run is only evidence for the DB state it ran against — this is that
 sentence at the schema level), [[L-048]] (an A/B whose arms start from different states is not an
 experiment), [[L-040]] (parallel sessions on one branch) and [[L-052]].
+
+---
+
+## L-055 · A subquery inside an RLS policy runs as the CALLING role — so a liveness check written that way is silently a visibility check
+
+**2026-08-25 · HEL-75 · `security_tickets` session · caught by measuring the policy before trusting it, after the code was written and before it was committed**
+
+> **Numbering:** L-055, announced to the parallel session before writing. [[L-049]] is still a
+> deliberate hole — see [[L-052]].
+
+**Trigger** — writing or reviewing any RLS policy whose `USING` or `WITH CHECK` contains a subquery,
+`EXISTS`, or `IN` against **another table**. Also: any ticket that proposes one, and any sentence of
+the form *"just add an `EXISTS` on `<other table>`"*.
+
+**The mechanism, which is not obvious and is not what most people assume.** A policy expression is
+evaluated with the privileges and the **row-level security context of the caller**, not of the table
+owner. So when policy `A` on table `A` contains `EXISTS (SELECT 1 FROM B …)`, table `B`'s own RLS
+applies to that subquery. The predicate does not ask *"does this row of B exist?"* — it asks
+**"does this row of B exist AND may the caller see it?"** Those two questions are different, and the
+gap between them is invisible in the SQL.
+
+**What happened.** HEL-75 needed `inbox_insert` to refuse a connection request addressed to a
+soft-deleted or deactivated company. The ticket sketched the obvious thing:
+
+```sql
+AND EXISTS (SELECT 1 FROM public.company c
+             WHERE c.id = receiver_company_id
+               AND c.deleted_at IS NULL AND c.deactivated_at IS NULL)
+```
+
+`company` has RLS, and `company_select` shows `authenticated` only its own company, HS-team rows, and
+companies it already `shares_connection_with_company()`. **A company you have never met is
+invisible.** So the predicate collapsed into *"may I already see this company?"* — which, for a
+connection request, is precisely backwards: **the entire point is that you have not met them yet.**
+
+Measured, on the seeded stack, as Alice @ GreenLeaf — the numbers are the finding:
+
+| probe | result |
+| -- | -- |
+| direct `SELECT` on `company` | **5 of 6 rows**; PendingCo absent |
+| inline `EXISTS`, connect → PendingCo (live, unverified) | **REFUSED** — a legitimate request |
+| inline `EXISTS`, connect → NordCanna (deactivated) | refused — **but by the wrong term** |
+
+**The second row is the bug and the third row is why it would have shipped.** Against the seed, the
+sketch *looks* correct: the deactivated company is refused, every control the author thinks to try is
+a company they already share a connection with, and those all pass. The failing case only appears for
+a receiver the sender has never met — which no existing suite had a fixture for, and which is the
+product's primary flow.
+
+**The fix is a SECURITY DEFINER helper**, which is also the shape this repo had already converged on
+for the same problem (`product_visible_to_caller`, `product_price_visible_to_caller`). Stated as a
+rule: **if a policy needs a fact about a row the caller is not entitled to read, that fact must come
+from a definer function.** Inline `EXISTS` is only safe against a table with no RLS, or when you
+positively intend the caller's visibility to be part of the predicate.
+
+**Why this is not just [[L-052]] again.** L-052 says a ticket's suggested fix is a hypothesis; that is
+about *provenance*. This is about a **mechanism** that makes a whole class of suggested fixes wrong in
+a way that reads correct, passes review, and passes any suite whose fixtures are all already-connected
+pairs. Two independent sessions wrote this same predicate shape from two different directions.
+
+**The test discipline that caught it, and the part worth copying.** The suite is red-first in *both*
+directions: one cell (`B1`) reproduces the original bug against the pre-fix policy, and a second cell
+(`A4`) fails against **the fix the ticket proposed**. A suite that only proves the bug is gone cannot
+tell you that you closed it with the wrong instrument. **When a ticket ships a suggested predicate,
+add the cell that kills the suggestion** — otherwise the only evidence against it is the reasoning of
+whoever happened to look.
+
+**See also** [[L-052]] (a ticket's suggested fix is a hypothesis — same ticket family, same hour),
+[[L-038]] (a single owner is a claim about agreement with the other doors), [[L-027]] (a gate is only
+as strong as the write path to its input), [[L-026]] (verify the REASON for a guard as hard as the
+guard) and [[L-006]].
