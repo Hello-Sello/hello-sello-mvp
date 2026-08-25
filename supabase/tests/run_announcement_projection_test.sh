@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # announcement projection (ANNC-01/ANNC-02)
-# 🔴 FAILS 2026-08-25, first run ever. The suite asserts sender='sella'; migration
-# 20260707130300_deal_event_system_voice.sql changed it to sender='system'. The
-# feature works - the TEST is stale. Left failing on purpose: now it is visible.
+# First run ever was 2026-08-25 and it FAILED: the suite asserted sender='sella'
+# while 20260707130300_deal_event_system_voice.sql moved the voice to 'system' on
+# 2026-07-07. The feature was fine; the test had rotted unseen for ~7 weeks
+# because it had no runner. Assertions corrected the same day - now PASSES.
 # Piped on stdin rather than `psql -f`: a sandboxed runner may not let psql open
 # the path itself.
 set -euo pipefail

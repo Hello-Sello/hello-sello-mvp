@@ -1,14 +1,22 @@
 -- ============================================================================
 -- announcement_projection_test.sql — the Phase 2 ANNC-01 / ANNC-02 projection invariant
 -- ----------------------------------------------------------------------------
+-- ⚠️ CORRECTED 2026-08-25: every assertion below read sender='sella' until today.
+-- 20260707130300_deal_event_system_voice.sql moved the announcement voice to
+-- sender='system' on 2026-07-07 ("OBS-3/D-10: neutral audit voice while Sella is
+-- a placeholder" — the rationale is inline in confirm_deal_change itself). The
+-- suite was never re-run because it had NO RUNNER, so it stayed wrong for ~7 weeks.
+-- This is the test catching up to a deliberate design change, NOT a loosened
+-- assertion: it still demands EXACTLY ONE announcement per thread.
+--
 -- INVARIANT UNDER TEST (Phase 2, ANNC-01 / ANNC-02):
 --   When a held change RESOLVES through confirm_deal_change, the announcement is
 --   a PROJECTION of the durable log line into BOTH the card's chat threads:
---     • on COMMIT  (both sides accept): exactly ONE sender='sella'
+--     • on COMMIT  (both sides accept): exactly ONE sender='system'
 --       'deal_card_updated' message exists in the deal thread AND ONE in the p2p
 --       thread, alongside the 'Deal updated to vN' deal_card_log row, and the card
 --       moved to base+1.
---     • on DECLINE: exactly ONE sender='sella' 'deal_change_declined' message in
+--     • on DECLINE: exactly ONE sender='system' 'deal_change_declined' message in
 --       the deal thread AND ONE in the p2p thread, the body carries the reason,
 --       and the card did NOT move (no new deal_card_log at base+1).
 --   The FIRST accept (still waiting) and a withdraw announce NOTHING (not exercised
@@ -59,10 +67,10 @@ WHERE r.company_a_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
 -- this relationship and can already hold committed announcements from other deals
 -- (e.g. a prior committed e2e run), so the p2p counts below scope to THIS test's
 -- ephemeral card via metadata->>'deal_card_id'. A sender+type filter alone does
--- NOT isolate them -- a leftover decline row is also sender='sella' +
+-- NOT isolate them -- a leftover decline row is also sender='system' +
 -- type='deal_change_declined' in the same thread and would inflate the count.
 
--- ── CASE 1: COMMIT (both accept) → 2 sella 'deal_card_updated' rows + version bump ──
+-- ── CASE 1: COMMIT (both accept) → 2 system 'deal_card_updated' rows + version bump ──
 -- A held change proposed by GreenLeaf/Alice, GreenLeaf already accepted (auto-accept),
 -- waiting on StonePharm. Bob (the caller) accepting flips both keys → commit.
 INSERT INTO public.deal_pending_change
@@ -107,26 +115,26 @@ BEGIN
     RAISE EXCEPTION 'FAIL(commit): expected card version 2 after both-accept, found %', v_new;
   END IF;
 
-  -- exactly ONE sella 'deal_card_updated' announcement in the DEAL thread
+  -- exactly ONE system 'deal_card_updated' announcement in the DEAL thread
   SELECT count(*) INTO v_deal_msgs FROM public.chat_message
   WHERE thread_id = 'd1d1d1d1-d1d1-d1d1-d1d1-d1d1d1d1d1d1'
-    AND sender = 'sella' AND type = 'deal_card_updated';
+    AND sender = 'system' AND type = 'deal_card_updated';
   IF v_deal_msgs <> 1 THEN
-    RAISE EXCEPTION 'FAIL(commit): expected 1 sella deal_card_updated in the deal thread, found %', v_deal_msgs;
+    RAISE EXCEPTION 'FAIL(commit): expected 1 system deal_card_updated in the deal thread, found %', v_deal_msgs;
   END IF;
 
   -- exactly ONE in the seeded P2P thread (scoped to THIS card: the p2p thread is
   -- shared, so leftover announcements from other deals must not inflate the count)
   SELECT count(*) INTO v_p2p_msgs FROM public.chat_message
   WHERE thread_id = v_p2p
-    AND sender = 'sella' AND type = 'deal_card_updated'
+    AND sender = 'system' AND type = 'deal_card_updated'
     AND metadata->>'deal_card_id' = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
   IF v_p2p_msgs <> 1 THEN
-    RAISE EXCEPTION 'FAIL(commit): expected 1 sella deal_card_updated in the p2p thread, found %', v_p2p_msgs;
+    RAISE EXCEPTION 'FAIL(commit): expected 1 system deal_card_updated in the p2p thread, found %', v_p2p_msgs;
   END IF;
 END $$;
 
--- ── CASE 2: DECLINE → 2 sella 'deal_change_declined' rows + NO version bump ──
+-- ── CASE 2: DECLINE → 2 system 'deal_change_declined' rows + NO version bump ──
 -- A fresh held change on the same card; Bob declines → reason announced, card frozen.
 INSERT INTO public.deal_pending_change
   (deal_card_id, base_version, source, proposed_by_company, proposed_by_person,
@@ -172,21 +180,21 @@ BEGIN
     RAISE EXCEPTION 'FAIL(decline): a decline must not write a v3 commit log row';
   END IF;
 
-  -- exactly ONE sella 'deal_change_declined' announcement in EACH thread
+  -- exactly ONE system 'deal_change_declined' announcement in EACH thread
   SELECT count(*) INTO v_deal_msgs FROM public.chat_message
   WHERE thread_id = 'd1d1d1d1-d1d1-d1d1-d1d1-d1d1d1d1d1d1'
-    AND sender = 'sella' AND type = 'deal_change_declined';
+    AND sender = 'system' AND type = 'deal_change_declined';
   IF v_deal_msgs <> 1 THEN
-    RAISE EXCEPTION 'FAIL(decline): expected 1 sella deal_change_declined in the deal thread, found %', v_deal_msgs;
+    RAISE EXCEPTION 'FAIL(decline): expected 1 system deal_change_declined in the deal thread, found %', v_deal_msgs;
   END IF;
 
   -- scoped to THIS card (the shared p2p thread may hold leftover declines from other deals)
   SELECT count(*) INTO v_p2p_msgs FROM public.chat_message
   WHERE thread_id = v_p2p
-    AND sender = 'sella' AND type = 'deal_change_declined'
+    AND sender = 'system' AND type = 'deal_change_declined'
     AND metadata->>'deal_card_id' = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
   IF v_p2p_msgs <> 1 THEN
-    RAISE EXCEPTION 'FAIL(decline): expected 1 sella deal_change_declined in the p2p thread, found %', v_p2p_msgs;
+    RAISE EXCEPTION 'FAIL(decline): expected 1 system deal_change_declined in the p2p thread, found %', v_p2p_msgs;
   END IF;
 
   -- the decline body carries the reason inline (ANNC-02)
