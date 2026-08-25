@@ -5,7 +5,198 @@
 
 ---
 
-**Last updated:** 2026-08-24 (session 85 `g5_walk` — **G5 PASSED 10/10, slug 0022 COMPLETE**)
+**Last updated:** 2026-08-25 — session 93 `security_tickets` — **HEL-75 + DEV-159 BUILT, GREEN, CLOSED.**
+**Status:** offline (session closed).
+**Shared files locked: none — all released.**
+
+⚠️ **THE PENDING CLOUD BATCH IS THREE MIGRATIONS, NOT ONE.** `20260825120000` (HEL-67 Gap 1) ·
+`20260825130000` (HEL-75) · `20260825140000` (DEV-159). One plain `db push --linked`, **no
+`--include-all`**. Muskan authorised the push and handed it to the `ship_deal` session. The ledger
+heading is the authority on the count; each entry carries its own post-flight queries.
+
+🔴 **`20260825140000` closes a LIVE PRODUCTION HOLE** — until it lands, `authenticated` holds
+`UPDATE`/`DELETE` on `deal_line_item`, so either side of a deal can rewrite the other's prices,
+quantities and allocation state by a direct PostgREST call. Reproduced, then proven shut.
+
+✅ **CORRECTION to session 92's note below — those two files ARE mine.**
+`supabase/tests/deal_line_item_write_lockdown_test.sql` and its runner are **DEV-159's suite, written
+by this session**, and are now committed in `cc54bdc`. Session 92 was right to flag them and right not
+to touch them (L-040). Nothing is unclaimed and nothing was committed under the wrong ticket.
+
+**What landed:** HEL-75 (`inbox_insert` receiver gate + `company_can_receive_requests()` definer +
+`discover/actions.ts` stops leaking raw Postgres strings) · DEV-159 (`REVOKE UPDATE, DELETE ON
+deal_line_item`) · HEL-74 corrected to Low/latent · HEL-81 + HEL-82 filed · **L-055** written
+(L-056 is next free). tsc 0 · eslint 0 · unit **497/497 across 68 files** · **47/47 SQL runners**.
+
+🔴 **The catch worth carrying: HEL-75's own suggested fix would have broken the product.** A subquery
+inside an RLS policy is evaluated **as the calling role**, so a bare `EXISTS` on `company` inherits
+`company_select` and silently becomes *"do I already share a connection with them?"*. It refused a
+legitimate connect to an unmet company while blocking the deactivated one by accident. **Against the
+seed it looks correct**, because every control is an already-connected pair. Definer helper instead.
+L-055 + two ARCHITECTURE-NOTES entries.
+
+📌 **HEL-82 (new, High) — there is currently NO WAY TO DISCONNECT AT ALL.** `relationship` is
+`SELECT`-only for `authenticated` and no `public` function updates or deletes it, so a connection is
+permanent for both parties and for us. **The schema already has `active`/`suspended`/`ended` in a
+lookup table and nothing can write it.** Framed as compliance-driven suspension (EU GDP: licence
+lapse, ≥5-year retention), **not** a user-facing disconnect button — Muskan's call.
+
+⚠️ **Do not grant `UPDATE` on `relationship` to build HEL-82.** That absence is exactly what makes
+HEL-74 unexploitable today. Use a definer RPC.
+
+⚠️ **`/ship` MUST diff `pg_get_functiondef('public.send_deal(uuid)')` against PRODUCTION first** —
+row 1 is a `create or replace`. **T01 is ALREADY LIVE on prod** (pushed 2026-08-25, zero drift).
+**The pending cloud batch is TWO migrations, both from the parallel session:** `20260825120000`
+(HEL-67) + `20260825130000` (HEL-75). One plain `db push`, **no `--include-all`**.
+
+🔴 **T04's lesson, worth more than the ticket:** an **insert** into a cited file is a **write to
+every line number beneath it**. A 10-line marker in `DECISIONS.md` moved `D-12` from `:1219` to
+`:1229` and falsified three live citations — two of them this slug's own. Fixed with a zero-line
+in-place marker. **And the correction itself went stale twice within the same ticket**, so it now
+cites a **section**, not a line.
+
+**T03 in one line:** the buyer's company-addressed deal is now proven to land as a pill in the
+seller's c2c chat, end to end. tsc 0 · eslint 0 · **six e2e specs green** · basket units 41/41.
+
+🔴 **The result worth knowing:** AC 6 was proven discriminating by a controlled A/B — under
+`relationshipId={group.sellerCompanyId}`, **tsc returns 0 and all 41 basket unit tests pass**
+while the new e2e fails on `Expected "Alice Green" / Received "Whole company"`. That closes
+`critic` N1 from T02 on **evidence, not a ruling**.
+
+⚠️ **T04 / HEL-66 now owes SIX doc edits** — the sixth is `TICKETS.md`'s T03 AC list, stale by one
+row because AC 6 exists by ruling and was never written there.
+
+⚠️ **The person arm has NO end-to-end proof.** The company arm — the defect the slug exists to fix
+— is proven end to end. *Buyer picks a person → pill lands in p2p* is covered as three halves that
+never meet. Named in `PLAN-T03.md` §5 with no owner.
+
+📌 **`rtk` collapses PLAYWRIGHT output too**, not just vitest — it rewrote an invocation to
+`PASS (2) FAIL (0)`. Use `rtk proxy env PLAYWRIGHT_FORCE_ASYNC_LOADER=1 npx playwright test`.
+
+**Base moved this session:** `dev` was 3 real commits ahead (HEL-70's deactivation gate + two
+ledger commits) — **merged, not rebased** (`992f05b`), because the two local commits were already
+pushed and a parallel session is live on this repo. Base frozen from there.
+
+**T02 in one line:** the buyer can now address a deal to a person at the seller's company —
+`CounterpartyPersonSelect` shared by both doors. `tsc` 0 · unit **494/494 across 68 files** ·
+eslint 0 · 15 G4 screenshots in `docs/muskan-build/0023-deal-draft-lands-in-chat/g4/`.
+
+⚠️ **T04 / HEL-66 now owes FIVE doc edits, not four** — AC 5's wording was ruled stale at T02's G4.
+
+📌 **Four pre-existing defects were OFFERED at G4 and Muskan declined to file them.** Named in
+`REVIEW.md`'s G4 sheet. The one worth remembering: **the basket and the connections directory
+disagree about which relationships exist** (basket filters `deleted_at`; `getMyConnections` also
+requires `status = 'active'`), so a **suspended** relationship renders a permanently empty people
+list that is **indistinguishable from the legitimate zero-people case**. L-038's class. Unfiled,
+deliberately.
+
+🔴 **Machinery: `critic` ran with NO SHELL twice on this slug**, though its definition grants
+`Bash`. It declared the limit both times rather than hiding it. Unfixed.
+
+⚠️ **`docs/decisions/DECISIONS.md` is DIRTY in the working tree and is NOT mine** — two
+uncommitted entries left behind by session 89 (company deactivation; HEL-69 rides the 0023
+push). Session 90 does not touch it and every commit names its paths explicitly (L-040).
+
+**Previously:** **BOTH of 2026-08-25's parallel sessions are closed.** Merged status:
+session 88 `deal_land` (T01 / HEL-63) **and** session 89 `security_audit` (HEL-69 + the ticket sweep).
+
+> ⚠️ **CORRECTION to the line below, from session 89:** the note *"nothing else is pending on cloud"*
+> was true when written and is **no longer**. TWO migrations are now pending, not one —
+> `20260825090000` (T01) **and** `20260825100000` (HEL-69, the price-view single-owner fix). They sit
+> together on `claude/muskan/work` in filename order, and **ship as one plain `db push`, no
+> `--include-all`** (Muskan, 2026-08-25). Do not push either alone.
+
+### Session 89 — `security_audit` (parallel to 88, worktree `hel-69-pricelist-view`, now merged)
+
+**Shipped (local, NOT pushed to cloud):** `supabase/migrations/20260825100000_pricelist_view_single_owner.sql`,
+`supabase/tests/pricelist_view_single_owner_test.sql` + runner, a fixture correction in
+`pricelist_item_tier_test.sql`, `docs/agents/LEARNINGS.md` (**L-047, L-048 — L-049 is next free**),
+`AGENTS.md` + `docs/agents/SECURITY-CHECKLIST.md` (the research rule), `DECISIONS.md` ×3,
+`ARCHITECTURE-NOTES.md` ×2, the ledger entry, and a comment correction in
+`20260607170000_rls_policies.sql`.
+
+**Linear:** HEL-69 (In Progress, built+green, held open until the push), HEL-70 (ruled, unblocked),
+HEL-71 (dashboard toggle, Muskan's), HEL-72 (**closed — ruled intended behaviour**), HEL-73 (open).
+
+⚠️ **PRODUCTION STILL LEAKS until `20260825100000` ships** — `Spirit Bear T28 STR MLS` (€9.50/g) and
+`fdsc` (€2.00/g) hand a per-gram price and tier ladder to any connected buyer.
+
+⚠️ **Two dev-environment traps worth knowing before anyone reads a red e2e run:** every
+`supabase db reset` **rotates the local stack secret**, and the Playwright fixtures resolve it once —
+so a reset-heavy session manufactures `cannot resolve the local Supabase secret key` failures that
+look like real regressions. Compounds with HEL-73 (specs permanently mutate the seed). SQL runners
+are immune. Full note in `ARCHITECTURE-NOTES.md` 2026-08-25.
+
+⚠️ **`LEARNINGS.md` has a monotonic key and no allocator.** Sessions 88 and 89 both independently
+believed L-045 was free; two appends in different places would have merged **clean** and left two
+L-045s. Caught by conversation, not machinery. Unresolved — **whatever replaces it should fail loudly
+at merge**, which sequential integers appended in different places structurally cannot.
+
+### Session 88 — `deal_land` (original entry below, unedited)
+**Shared files locked:** **none — all released.** `DECISIONS.md` + `ARCHITECTURE-NOTES.md` were
+locked for the two wrap entries and released on commit `30dd975`.
+**Also released:** `src/modules/deals/actions.ts` was locked for a
+docstring-only edit (`:356-366`) and is now released, committed in `3ae7873`.
+
+**Shipped this session (local, NOT pushed to cloud):** `supabase/migrations/20260825090000_send_deal_c2c_announce.sql`,
+`supabase/tests/send_deal_c2c_announce_test.sql` + runner, rewrites of `deliver_deal_test.sql` and
+`claim_deal_ticket_test.sql`, `docs/agents/LEARNINGS.md` (**L-045, L-046 — L-047/L-048 are the
+security session's; L-049 is next free**), and the 0023 slug folder.
+
+⚠️ **`20260825090000` is LOCAL ONLY.** Production tip remains `20260824100000`. Plain
+`supabase db push`, **no `--include-all`** — verified, nothing else is pending on cloud.
+**`/ship` must first diff `pg_get_functiondef('public.send_deal(uuid)')` against PRODUCTION** — a
+file-only diff cannot see prod drift and this repo was bitten by exactly that (`ensure_rls`).
+
+⚠️ **SHARED LOCAL DATABASE — the sync file does not cover it.** A worktree isolates git and **not**
+Postgres. Protocol agreed with the security session and it works: **say HOLDING and RELEASED
+explicitly; reset from your own tree immediately before every run; assume nothing about the state
+the other left.** ⚠️ **Do NOT use an idle notice as a release signal** — `notify_when_idle` answers
+*"between turns?"*, not *"done with the DB?"*, and the one-subagent-round-trip gap between those
+cost us a collision (5 × `FATAL: peer authentication` mid-gate; run discarded, not recorded as a
+failure).
+
+⚠️ **`LEARNINGS.md` HAS A MONOTONIC KEY AND NO ALLOCATOR — for Muskan.** Two sessions on divergent
+bases nearly wrote two `L-045`s. **Two appends in different places merge CLEAN; git flags nothing.**
+`L-040`'s shape, and **it survived worktrees — a worktree isolates the TREE, not the CONVENTION.**
+Caught by conversation, not machinery. Not fixed unilaterally.
+
+**Previous (session 87):** shared files locked: none — none taken, none held. This session wrote `docs/architecture/adr/0006-*`
+(new file), `ADR-INDEX.md`, `docs/agents/LEARNINGS.md` (L-042..L-044 appended), the per-slug folder,
+and `.planning/` (gitignored). **Every commit was `git add <named paths>` — never `-A`, never `.`**
+
+⚠️ **A PARALLEL SESSION IS COMMITTING TO THIS SAME BRANCH.** `a8f48f9 deps: clear all 28 Dependabot
+alerts` is theirs, and Muskan says that session is also working vulnerabilities/T17 and will create
+its own Linear tickets. **This is L-040's exact setup and the sync file cannot prevent it** — neither
+session touched the same file last time either, and `git commit -a` still swept the other's work.
+**The fix is separate branches or worktrees.** Flagging, not solved.
+
+**Linear correction (2026-08-25):** pipeline build tickets go in **`Codebase Development Tickets`
+(HEL-xx)**, NOT `Development` (DEV-xx). The MCP is **not** auth-blocked — that note was stale
+everywhere it appeared. Slug 0023 = HEL-63..HEL-66 (+HEL-67, HEL-68 filed). 0022's HEL-54..HEL-62
+moved Backlog → Done (they shipped in session 85 and nobody had closed them).
+
+**Prod note:** `20260824090000` + `20260824100000` are **LIVE on production** (pushed by the parallel
+session 2026-08-25; verified against `list_migrations`, not against the ledger). Production tip is
+`20260824100000` — slug 0023's migration stamps after it and needs a **plain `db push`**.
+
+**Last updated (session 86):** 2026-08-25 (`triage_0023` — triage only, no code)
+(`docs/muskan-build/0023-deal-draft-lands-in-chat/`), which by design no other session touches.
+
+**2026-08-25 — slug 0023 triaged FULL; nothing built, nothing pushed to prod.** `send_deal`'s
+company arm posts no chat message (it calls `deliver_deal` and cuts a Connection-Requests ticket)
+while its person arm posts the clickable deal pill — so a buyer's deal draft never signals in
+chat. Scope is that RPC arm **plus** the buyer person picker (`BasketDrawer.tsx:213` hardcodes
+`counterpartyPersonId: null`); the two are one mechanism, not two tickets that can ship apart.
+Work order + the live reproduction are in that slug's `STATE.md` (`cb470f1`). **Heads-up for any
+session touching `send_deal` or `deliver_deal`:** `deliver_deal` has a second live caller,
+`confirm_detected_deal_births_negotiation.sql:176` — changing one door does not change the other.
+**Two follow-up slugs owed, unfiled:** chat-list consolidation (one relationship renders two
+conversations) and the deal-card editing defects.
+
+---
+
+**Last updated (prev):** 2026-08-24 (session 85 `g5_walk` — **G5 PASSED 10/10, slug 0022 COMPLETE**)
 **Status:** offline — BOTH of today's parallel sessions are closed. Merged status:
 * **Session 84 `close_vulns`** — closed T15, T10, T13, T16, T11; T14 rewritten as a trap warning.
   `rrp_per_gram` leak **4 rows → 0**; `anon` **614 table privileges → 0**. **Both migrations

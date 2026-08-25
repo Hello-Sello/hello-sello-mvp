@@ -38,7 +38,9 @@ export const EMPTY_BASKET: BasketView = { groups: [], totalLineCount: 0 };
 /** Input to createBasketDraft - the recipient chosen for ONE seller-group. */
 export interface SendGroupInput {
   relationshipId: string;
-  /** the chosen person on the other side (own-company offer path); null → company-addressed */
+  /** the chosen person on the other side - BOTH doors supply it (the seller's
+   *  own-company 'offer' and the buyer's connected-seller 'order'); null →
+   *  company-addressed */
   counterpartyPersonId: string | null;
   note: string | null;
 }

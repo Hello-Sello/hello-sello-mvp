@@ -58,7 +58,24 @@ allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Task, Agent
 9. Diff renders anything? → **spawn `visual-verifier`** (screenshots →
    `g4/`, staging table appended to REVIEW.md).
 
-10. **STOP at G4.** Hand Muskan ONE page: the criteria walk, the visual
-    staging table, the notes, and every rejection to adjudicate. Never pass
-    the gate yourself. On her pass, update STATE.md: budgets spent, `Gate
-    log` += G4, stage advanced (or `→ build (next ticket)` if more remain).
+10. **G4 is routed by the diff (PIPELINE §3) — it is NOT run on every
+    ticket.** Step 9 already asks the routing question; this step obeys the
+    same answer.
+
+    - **Diff renders anything** → **STOP at G4.** Hand Muskan ONE page: the
+      criteria walk, the visual staging table, the notes, and every rejection
+      to adjudicate. Never pass the gate yourself.
+    - **Backend only** — migration, RPC, server action, job, types → **no
+      human stop.** Replay the acceptance criteria on real data, append the
+      replay to REVIEW.md, and close the ticket on green tests + `critic` +
+      `security`.
+
+    **Escalate a backend-only ticket to Muskan anyway when ANY of these is
+    true** — these are the carve-outs, and they are not optional:
+      - a builder REJECTION is outstanding (step 7 defers it to G4);
+      - `security` raised a blocking finding;
+      - the ticket changed behaviour its written criteria do not cover.
+
+    On close, update STATE.md: budgets spent, `Gate log` += G4 — marked
+    `G4 auto` when it closed with no human — stage advanced (or
+    `→ build (next ticket)` if more remain).

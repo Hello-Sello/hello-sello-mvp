@@ -23,6 +23,501 @@
 
 ---
 
+## ✅ APPLIED 2026-08-25 (was PENDING 2026-08-25) — security batch: HEL-67 Gap 1 + HEL-75 + DEV-159 (THREE migrations)
+
+**Status: LIVE ON PRODUCTION.** Applied 2026-08-25 by the `ship_deal` session on Muskan's explicit
+go-ahead, via three individual `apply_migration` calls (not `supabase db push`, because two more
+files — `20260825150000`/`20260825160000`, HEL-81, untracked WIP from the parallel
+`security_tickets` session — were sitting in the same local `supabase/migrations/` directory and a
+plain `db push` would have swept them in too; confirmed with that session directly before applying).
+History stamps repaired from `apply_migration`'s call-time timestamps to the filenames' own
+`20260825120000` / `20260825130000` / `20260825140000`, in that order. Production tip is now
+`20260825140000`, verified against `supabase_migrations.schema_migrations` — not against this file.
+
+**Post-push evidence, all run against production, none of it inferred:**
+
+| check | result |
+| -- | -- |
+| HEL-67 Gap 1 — write gated, read door untouched | `write_gated = true`, `read_door_moved_MUST_BE_FALSE = false` ✓ |
+| HEL-75 — receiver predicate present | `receiver_gated = true` ✓ |
+| HEL-75 — helper grants | `anon_MUST_BE_FALSE = false`, `authed_MUST_BE_TRUE = true` ✓ |
+| DEV-159 — `authenticated` grant on `deal_line_item` | exactly `INSERT,REFERENCES,SELECT` — no `UPDATE`/`DELETE`; no `anon` row at all ✓ |
+| DEV-159 — direct assertions | `update_MUST_BE_FALSE = false`, `delete_MUST_BE_FALSE = false`, `insert_MUST_BE_TRUE = true` ✓ |
+
+Three SQL suites (`msg_all_deal_detected_gate_test.sql`, `inbox_insert_receiver_gate_test.sql`,
+`deal_line_item_write_lockdown_test.sql`) were fixed before this push — see [[L-056]] — and reran
+green with all real assertions executing (not just the fixture guard) on a fresh `db reset` before
+the push. The original PENDING text below is kept for the reasoning; the count/push-mechanism/order
+claims in it now describe how this batch WAS applied, not what remains to be done.
+
+**Stamps in order:** `20260825120000` → `20260825130000` → `20260825140000`.
+
+| # | file | what it does |
+|---|---|---|
+| 1 | `20260825120000_msg_all_deal_detected_gate.sql` | `ALTER POLICY msg_all ON chat_message` — `WITH CHECK` gains `and type <> 'deal_detected'`. `USING` is **not** touched. |
+
+**The hole it closes.** `20260614121000:12` claims *"RLS lets only Sella / service-role insert a*
+`deal_detected` *message; a person cannot."* That was a comment, not a gate — `msg_all` is the only
+policy on `chat_message` and its `WITH CHECK` was `can_access_thread(thread_id)` and nothing else. Any
+thread member could mint the row that drives `confirm_detected_deal` into birthing a real deal.
+Confined to threads the actor already belongs to, so not cross-tenant (L-006).
+
+**Who loses writes when this lands: nobody.** Verified by census, not assumption — `deal_detected`
+appears in `src/` only as a READ filter (`reads.ts:259`) and is written solely by SECURITY DEFINER
+functions, which bypass RLS and are unaffected.
+
+⚠️ **DO NOT WIDEN THIS PREDICATE WITHOUT RE-READING THE CENSUS.** The ticket originally proposed
+banning *"Sella-authored types, service-role only"*. That is **false for five of six**: the browser
+legitimately writes `intro`, `deal_cancelled`, `deal_signed`, `deal_change_proposed` and
+`deal_negotiation_requested` with `sender = 'sella'` and a NULL author. The suite's §A pins all six
+shapes so a future widening goes red here rather than in production.
+
+⚠️ **HEL-67 IS ONLY HALF CLOSED, DELIBERATELY.** Gap 2 — the forgeable SENDER — is **blocked on
+HEL-68**, not merely unfinished. The accept rollout has the browser insert a `person` message
+attributed to the **requester** (`rollout.ts:179`), so `sender_person_id = auth.uid()` breaks
+connection-accept. Ruled by Muskan 2026-08-25.
+
+**Post-flight — assert the policy shape, not a row count.** There is no data symptom to query: the
+forgery leaves a valid-looking row, and nobody has forged one.
+
+```sql
+select pg_get_expr(polwithcheck, polrelid) ~ 'deal_detected' as write_gated,
+       pg_get_expr(polqual,      polrelid) ~ 'deal_detected' as read_door_moved_MUST_BE_FALSE
+  from pg_policy where polrelid = 'public.chat_message'::regclass and polname = 'msg_all';
+```
+
+### Migration 2 of 2 — HEL-75, `inbox_insert` receiver gate
+
+| # | file | what it does |
+|---|---|---|
+| 2 | `20260825130000_inbox_insert_receiver_gate.sql` | Adds `company_can_receive_requests(uuid)` (STABLE SECURITY DEFINER), then `ALTER POLICY inbox_insert ON pending_inbox_item` — `WITH CHECK` gains `receiver_company_id IS NULL OR company_can_receive_requests(receiver_company_id)`. |
+
+**The hole it closes.** `inbox_insert`'s `WITH CHECK` constrained only the SENDER
+(`sender_company_id = current_company_id() AND sender_person_id = auth.uid()`). Nothing constrained
+the receiver, so HEL-70 hiding a deactivated company from the five discovery doors removed the
+**button, not the door** — anyone holding the company id could still land a pending connection
+request through PostgREST. L-027.
+
+**Scope is DELETED + DEACTIVATED only — narrower than the read doors, deliberately.** Muskan's ruling
+2026-08-25: an **unverified or re-verifying company stays reachable**, because it is arriving, not
+leaving. Do not "tidy" this into agreement with `product_visible_to_caller()`'s term.
+
+🔴 **THE TICKET'S OWN SUGGESTED FIX IS WRONG AND MUST NOT BE RESTORED.** HEL-75 sketched a bare
+`EXISTS (SELECT 1 FROM public.company …)` inline in the policy. A subquery in a policy expression is
+evaluated **as the calling role**, so it obeys `company_select`, which shows `authenticated` only its
+own company, HS-team rows, and companies it already shares a connection with. Measured on the local
+stack as Alice @ GreenLeaf: a direct `SELECT` on `company` returns **5 of 6 rows**, PendingCo absent;
+the inline predicate then **REFUSED** a legitimate `connect` to PendingCo (live, unverified) while
+refusing the deactivated company only *by accident* — it was really gating on "do we already share a
+connection". That ships a gate which breaks connecting to any company you have not met, i.e. the
+product's primary flow, while reading as a two-line liveness check. Hence the SECURITY DEFINER
+helper. L-052.
+
+**Who loses writes when this lands.** Only a sender addressing a soft-deleted or deactivated company.
+Census, from source: exactly two client sites insert here as `authenticated` —
+`discover/actions.ts:76` (gated) and `discover/personActions.ts:56` (`connect_person`,
+`receiver_company_id` null by CHECK, untouched). `deal_card` rows come from `deliver_deal`, SECURITY
+DEFINER, which bypasses RLS and is unaffected.
+
+**Client copy ships with it.** `discover/actions.ts` returned the raw Postgres string; it now routes
+through `requestActionError`, which gained a branch rendering the refusal as *"This company is no
+longer available."* — matching what the read side already shows. Without that edit this migration
+puts `new row violates row-level security policy …` on a pharmacy's screen (T10).
+
+⚠️ **NOT CLOSED BY THIS MIGRATION, and it needs its own decision.** A request that was already
+**pending** when the receiver deactivated stays acceptable. `WITH CHECK` governs the INSERT only, and
+accept runs through `accept_connection_request` — SECURITY DEFINER, bypasses RLS, so RLS cannot be
+the mechanism there. Verified against **production** 2026-08-25: that function checks item state,
+addressee and type, and **never** the receiver company's liveness; `current_company_id()` does not
+gate deactivation either. Recorded on HEL-75.
+
+**Post-flight — assert the policy shape and the helper's grants.** There is no data symptom: nothing
+has been forged, and the pending rows that exist are all on live companies.
+
+```sql
+-- 1. the gate is on the write door
+select pg_get_expr(polwithcheck, polrelid) ~ 'company_can_receive_requests' as receiver_gated
+  from pg_policy where polrelid = 'public.pending_inbox_item'::regclass and polname = 'inbox_insert';
+
+-- 2. the helper is not reachable by anon/PUBLIC (session-77 rule: revoke from BOTH)
+select coalesce(has_function_privilege('anon', p.oid, 'execute'), false) as anon_MUST_BE_FALSE,
+       has_function_privilege('authenticated', p.oid, 'execute')         as authed_MUST_BE_TRUE
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+ where n.nspname = 'public' and p.proname = 'company_can_receive_requests';
+```
+
+### Migration 3 of 3 — DEV-159, `deal_line_item` direct-write lockdown
+
+| # | file | what it does |
+|---|---|---|
+| 3 | `20260825140000_deal_line_item_write_lockdown.sql` | `REVOKE UPDATE, DELETE ON deal_line_item FROM authenticated` (+ `REVOKE ALL … FROM PUBLIC, anon`), and a `COMMENT ON TABLE` recording why. **No policy, no trigger, no column allowlist.** |
+
+🔴 **THIS ONE CLOSES A LIVE PRODUCTION HOLE.** Verified 2026-08-25 against
+`information_schema.role_table_grants` on prod: `authenticated` holds
+`DELETE, INSERT, REFERENCES, SELECT, UPDATE`. `line_all` is the only policy on the table, `FOR ALL`,
+with `card_relationship_member()` on both `USING` and `WITH CHECK` — **true for BOTH sides of the
+relationship**. So either company can bypass the allocation RPCs entirely:
+
+```js
+await supabase.from('deal_line_item')
+  .update({ allocation_status: 'supply', allocation_locked_at: new Date() })
+  .eq('id', theirOrderLineId);
+```
+
+That forges the seller's "confirm & send" state, and the same door rewrites `unit_price`, `quantity`,
+`batch_id`/`batch_number` and `substituted_from_product_id` — **the money and the audit trail.**
+Reproduced on the seeded stack as Clara (Rheinland, the BUYER) against a GreenLeaf line before the
+fix: the update **succeeded**.
+
+**Who loses writes when this lands: nobody.** Census across all of `src/` — client code performs
+**exactly ONE** write to this table, the `INSERT` at `deals/actions.ts:991` (`acceptPromotion`, whose
+values come from the seller-authored `deal_promotion.line_deltas`). **Zero client UPDATEs, zero client
+DELETEs.** All seven legitimate mutators are `SECURITY DEFINER` owned by postgres and bypass grants:
+`create_deal_draft`, `update_deal_draft`, `confirm_deal_change`, `set_line_allocation`,
+`substitute_line_product`, `cancel_line_substitution`, `confirm_line_allocations`. Proven by calling
+`set_line_allocation` + `confirm_line_allocations` as a real authenticated **seller** post-fix and
+asserting the row actually changed — not merely that the call returned.
+
+⚠️ **A COLUMN-LEVEL REVOKE WAS TRIED BEFORE AND DID NOT WORK.** DEV-159's history records
+`REVOKE UPDATE (allocation_status, …)` failing to stop the write. That is correct Postgres behaviour:
+a **table-level** grant already covers every column and a column-level revoke cannot subtract from it.
+The table-level grant must go first. **Do not re-grant `UPDATE` on this table to add a feature** —
+add a definer function instead. The `COMMENT ON TABLE` says so in the schema.
+
+~~⚠️ **STILL OPEN, NARROWER, FILED SEPARATELY:**~~ ✅ **CLOSED, in the very next section below**
+(same day). `INSERT` was kept for `acceptPromotion`, and `line_all`'s `WITH CHECK` was still only
+relationship membership — so a member could still insert an **extra** line into a shared deal. Closed
+by moving `acceptPromotion` (and, once that RPC's own trust boundary was found to be forgeable,
+`offerPromotion`/`declinePromotion` too) behind definer RPCs — see "PENDING (2026-08-25) —
+deal_promotion + deal_line_item INSERT lockdown" below. That section's own post-flight query also
+supersedes this one's `insert_MUST_BE_TRUE` line (below) — see its warning.
+
+**`deal_card` needs nothing** — the other half of DEV-159's title is already closed
+(`authenticated` = `REFERENCES, SELECT` on production, shut by `20260724120900`).
+
+**Post-flight — assert the grant, and that the definer path still writes.**
+
+```sql
+-- 1. the privilege is gone (expect exactly: INSERT, REFERENCES, SELECT)
+select grantee, string_agg(privilege_type, ',' order by privilege_type) as privs
+  from information_schema.role_table_grants
+ where table_schema = 'public' and table_name = 'deal_line_item'
+   and grantee in ('authenticated','anon')
+ group by grantee;
+
+-- 2. and nothing silently re-granted it later in the batch
+select has_table_privilege('authenticated','public.deal_line_item','UPDATE') as update_MUST_BE_FALSE,
+       has_table_privilege('authenticated','public.deal_line_item','DELETE') as delete_MUST_BE_FALSE,
+       has_table_privilege('authenticated','public.deal_line_item','INSERT') as insert_MUST_BE_TRUE;
+```
+
+---
+
+## ⚠️ PENDING (2026-08-25) — deal_promotion + deal_line_item INSERT lockdown (TWO migrations, plain `db push`)
+
+**Status: LOCAL ONLY.** These sort after `20260825140000` (the DEV-159 batch above), so the same
+plain `supabase db push --linked` (no `--include-all`) picks them up too as long as they're applied
+in filename order with everything above. Written and verified locally on `claude/muskan/work` while
+the THREE-migration batch above was already mid-push in a separate parallel session — that session's
+push does **not** include these two (confirmed with it directly; these files were untracked at the
+time). Do not push either of these two alone — offer/accept/decline all move together or the app
+breaks (see the app-code-coupling warning below).
+
+**Stamps in order:** `20260825150000` → `20260825160000`.
+
+⚠️ **THIS BATCH MAKES DEV-159's OWN POST-FLIGHT QUERY (above, "Migration 3 of 3") GO FALSE, ON
+PURPOSE.** That query asserts `insert_MUST_BE_TRUE` for `authenticated` on `deal_line_item` — true
+right after DEV-159 alone, false once `20260825150000` lands. Don't "fix" DEV-159's block to match;
+annotate it in place when this batch ships, pointing here.
+
+⚠️ **SAME-DEPLOY REQUIRED — THIS IS NOT GRANT-ONLY.** `20260825150000` and `20260825160000` also add
+new RPCs (`accept_promotion`, `offer_promotion`, `decline_promotion`) that
+`src/modules/deals/actions.ts`'s `offerPromotion`/`acceptPromotion`/`declinePromotion` now call
+instead of writing the tables directly. If the migrations land before the app code deploys, every
+promotion accept/offer/decline 500s on `insufficient_privilege`; if the app code deploys first, it
+500s on a missing RPC. Same rule as the rest of this repo's `dev`→`main` same-deploy lesson — this is
+the first migration in this cluster where it's the app code, not another migration, on the other side.
+
+### Migration 1 of 2 — `deal_line_item` direct-INSERT lockdown
+
+| # | file | what it does |
+|---|---|---|
+| 1 | `20260825150000_deal_line_item_insert_lockdown.sql` | Adds `card_buyer_company_id(uuid)` (STABLE SECURITY DEFINER, EXECUTE revoked from everyone but the definer callers) + `accept_promotion(uuid)` (SECURITY DEFINER, buyer-gated, atomic). `REVOKE INSERT ON deal_line_item FROM authenticated` — the table is now SELECT-only for `authenticated`, matching `deal_card`. |
+
+**The hole it closes.** DEV-159 (above) revoked UPDATE/DELETE but deliberately kept INSERT for the
+one legitimate client write, `acceptPromotion`. `line_all`'s `WITH CHECK` never tied that INSERT to a
+promotion, a version, or a side — any relationship member could add an arbitrary line to a shared
+deal via a direct `.insert()`. Reproduced (rolled back) on the seeded stack: the buyer inserted an
+arbitrary rebate line onto the seller's card. Filed as its own ticket deliberately (DEV-159 closed
+what it could without a redesign; this one needed the redesign).
+
+**Who loses writes when this lands: nobody**, once migration 2 of 2 also lands (see below — this one
+alone is necessary but not sufficient). Census: the one former client INSERT (`acceptPromotion` in
+`src/modules/deals/actions.ts`) now goes through `accept_promotion` instead.
+
+⚠️ **DEPLOY-ORDERING HAZARD, ONE DIRECTION ONLY.** `decline_promotion` (migration 2 of 2) calls
+`card_buyer_company_id` (created here, migration 1 of 2). plpgsql does not resolve names at CREATE
+time, so pushing migration 2 without migration 1 first installs cleanly and fails only at first call —
+`function public.card_buyer_company_id(uuid) does not exist` — by which point `deal_promotion`'s
+client UPDATE is already revoked, so the buyer can neither decline via the RPC nor directly.
+Promotions get stuck pending with no error until a user hits it. The other direction (this migration
+without migration 2) is NOT a regression: it leaves the confused-deputy path open, but production
+today already grants `authenticated` a direct INSERT on `deal_line_item`, so that intermediate state
+is no worse than the status quo. Push both, in filename order, same as always — this is a reason to
+never split them across two pushes, not a reason to reorder them.
+
+### Migration 2 of 2 — `deal_promotion` write lockdown
+
+| # | file | what it does |
+|---|---|---|
+| 2 | `20260825160000_deal_promotion_write_lockdown.sql` | Adds `card_seller_company_id(uuid)` (same shape as `card_buyer_company_id`) + `offer_promotion(uuid, jsonb, jsonb)` (seller-gated) + `decline_promotion(uuid)` (buyer-gated). `REVOKE INSERT, UPDATE, DELETE ON deal_promotion FROM authenticated` (+ `REVOKE ALL … FROM PUBLIC, anon`) — SELECT-only for `authenticated`. |
+
+🔴 **WHY THIS ONE IS NOT OPTIONAL.** `accept_promotion` (migration 1) trusts
+`deal_promotion.offered_by_company`/`.line_deltas` as its authorization input — it checks the CALLER
+is the buyer, then writes whatever that row says. `deal_promotion`'s only policy,
+`promotion_member_all`, was the same symmetric `card_relationship_member` predicate this whole ticket
+family exists to route around, and `authenticated` still held INSERT/UPDATE/DELETE. So without this
+migration, the buyer could self-INSERT a promotion spoofing `offered_by_company` as the seller (or
+UPDATE the seller's real pending one) and then accept it as themselves — the exact hole migration 1
+closes, reopened one table over. Reproduced (rolled back) both variants on the seeded stack before
+writing the fix; both are pinned as regressions in `deal_promotion_write_lockdown_test.sql` §D. Found
+by adversarial review of migration 1 before either shipped anywhere — not caught in production.
+
+**Who loses writes when this lands.** The two former client writes to `deal_promotion`
+(`offerPromotion`'s INSERT, `declinePromotion`'s UPDATE, `deals/actions.ts`) now go through
+`offer_promotion`/`decline_promotion`. `acceptPromotion`'s own UPDATE (flip to `accepted`) already
+moved inside `accept_promotion` in migration 1.
+
+**Post-flight — assert both tables' grants and the confused-deputy path is shut.**
+
+```sql
+-- 1. deal_line_item: authenticated is SELECT-only
+select has_table_privilege('authenticated','public.deal_line_item','INSERT') as insert_MUST_BE_FALSE,
+       has_table_privilege('authenticated','public.deal_line_item','UPDATE') as update_MUST_BE_FALSE,
+       has_table_privilege('authenticated','public.deal_line_item','DELETE') as delete_MUST_BE_FALSE,
+       has_table_privilege('authenticated','public.deal_line_item','SELECT') as select_MUST_BE_TRUE;
+
+-- 2. deal_promotion: authenticated is SELECT-only
+select has_table_privilege('authenticated','public.deal_promotion','INSERT') as insert_MUST_BE_FALSE,
+       has_table_privilege('authenticated','public.deal_promotion','UPDATE') as update_MUST_BE_FALSE,
+       has_table_privilege('authenticated','public.deal_promotion','DELETE') as delete_MUST_BE_FALSE,
+       has_table_privilege('authenticated','public.deal_promotion','SELECT') as select_MUST_BE_TRUE;
+
+-- 3. the two card-side helpers are not directly reachable (only other definer functions call them)
+select p.proname,
+       coalesce(has_function_privilege('anon', p.oid, 'execute'), false)          as anon_MUST_BE_FALSE,
+       coalesce(has_function_privilege('authenticated', p.oid, 'execute'), false) as authed_MUST_BE_FALSE
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+ where n.nspname = 'public' and p.proname in ('card_buyer_company_id','card_seller_company_id');
+
+-- 4. the three promotion RPCs ARE reachable by authenticated, not anon
+select p.proname,
+       coalesce(has_function_privilege('anon', p.oid, 'execute'), false)   as anon_MUST_BE_FALSE,
+       has_function_privilege('authenticated', p.oid, 'execute')           as authed_MUST_BE_TRUE
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+ where n.nspname = 'public' and p.proname in ('accept_promotion','offer_promotion','decline_promotion');
+```
+
+---
+
+## ✅ APPLIED 2026-08-25 (was PENDING 2026-08-24) — THREE migrations, one plain `db push`
+
+**Status: LIVE ON PRODUCTION.** Pushed 2026-08-25 by the `security_tickets` session on Muskan's
+explicit go-ahead. Production tip is now `20260825110000`, verified against
+`supabase_migrations.schema_migrations` — not against this file.
+
+**Post-push evidence, all run against production, none of it inferred:**
+
+| check | result |
+| -- | -- |
+| Pre-flight — `send_deal` drift | **zero drift.** `md5(prosrc) = b52ea5df…`, len 3591, byte-identical to `20260724120300`. The `create or replace` overwrote nothing hand-edited. |
+| Migration tip | `20260825110000` |
+| HEL-69 — the two leaking rows, read as a **connected buyer** (Aurora → StonePharm) | `Spirit Bear T28 STR MLS` **0 rows**, `fdsc` **0 rows** |
+| …with its control on the same query | the same caller still sees **9** legitimate prices — the zeros are the gate, not a dark view |
+| HEL-69 — does the view delegate? | `product_price_visible_to_caller` present, `profile_visible` reprint **gone** |
+| HEL-70 — all five doors carry the term | 5/5 `deactivated_at`, and 5/5 **kept** `verification_status` (no door traded one for the other) |
+| S8 advisors | **87: 1 ERROR, 85 WARN, 1 INFO.** The one ERROR is `security_definer_view` on `current_pricelist_item` — knowingly accepted, ADR-0004 §4 / ARCHITECTURE-NOTES.md:231. **No new ERROR.** |
+
+⚠️ **On the S8 number, honestly.** The recorded baseline is "85" but its composition was never written
+down precisely, and two migrations landed between that baseline and this push. **87 vs 85 is not a
+clean diff and should not be reported as one.** What IS checkable, and was checked: no new ERROR, and
+all five functions this batch touched were already `SECURITY DEFINER` before it, so none of them
+entered the 82-strong `authenticated_security_definer_function_executable` class as a result of this
+push. A baseline nobody can decompose is worth less than the check that replaced it.
+
+> 🔴 **THIS ENTRY SAID "ONE MIGRATION" AND THE BATCH WAS ALREADY TWO.** Corrected 2026-08-25 by the
+> `security_tickets` session while ledgering HEL-70. `20260825090000` (slug 0023 T01 / HEL-63) has
+> been on `claude/muskan/work` since 2026-08-25 and **was never ledgered** — it appeared in this
+> file only as a passing mention inside HEL-69's push paragraph. That is the `20260607090000`
+> failure mode repeating: a migration nobody entered, found later by someone reading the push line
+> rather than the table. A plain `db push` would have carried it silently either way; the risk is
+> not that it fails to ship, it is that **nobody reviewed what shipped.**
+>
+> **Row 1's full entry was written by its author's session (`deal_land_t02`) and placed here by the
+> `security_tickets` session, which held the file.** It was deliberately NOT summarised by whoever
+> happened to hold the lock — that is how a ledger entry stops describing the migration it names.
+
+| # | file | what it does |
+|---|---|---|
+| 1 | `20260825090000_send_deal_c2c_announce.sql` | **Slug 0023 / T01 / HEL-63.** `create or replace` of `public.send_deal(uuid)`, grant re-emitted. The **company** arm stops calling `deliver_deal` and posts the same clickable `deal_card` pill into the relationship's `c2c` thread that the person arm already posts. Full entry below. |
+| 2 | `20260825100000_pricelist_view_single_owner.sql` | `current_pricelist_item` stops reprinting the product-price-visibility rule and calls `public.product_price_visible_to_caller()` — the function that already gates `pricelist_item_public_select` and `plit_public_select`. Also revokes `INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES` that `authenticated` held on the view although the defining migration grants SELECT only. |
+| 3 | `20260825110000_deactivated_company_gate.sql` | **HEL-70.** `company.deactivated_at` starts closing every discovery door. One predicate added to five functions: `product_visible_to_caller` (six doors inherit it), `list_discoverable_companies`, `get_discoverable_company`, `get_discoverable_shop`, `list_discoverable_people`. `create or replace` throughout, grants re-emitted. |
+
+### Row 1 in full — `20260825090000_send_deal_c2c_announce.sql` (T01 / HEL-63)
+
+*Written by the slug's own session; placed here verbatim.*
+
+`create or replace` of `public.send_deal(uuid)`, **grant re-emitted** (`grant execute … to
+authenticated` is a separate statement; a `drop`+`create` would kill Send for every user).
+
+**What changes.** The **company** arm stops calling `perform public.deliver_deal(...)` — that call is
+**deleted, not guarded** — and instead resolves the relationship's `c2c` thread and posts the same
+clickable `deal_card` pill the person arm already posts. The pill insert is **hoisted**: the
+`if/else` computes the thread only, and one `chat_message` insert serves both arms. The c2c lookup is
+**resolve-or-create** (`on conflict do nothing` + re-select, `deleted_at is null`), so an interrupted
+accept self-heals on first send. The **p2p** arm gets the same `on conflict` treatment — it had the
+identical race.
+
+**Not touched.** `deliver_deal`'s own body is byte-identical and keeps serving Sella's door via
+`confirm_detected_deal_births_negotiation.sql:176`. No RLS, grant, or schema change.
+
+**Behaviour change the moment it lands.** A company-addressed deal creates **zero**
+`pending_inbox_item` rows and appears in the company chat instead. Pre-existing Connection-Requests
+tickets survive and stay claimable.
+
+**Breaks by design, rewritten in the same commit.** `deliver_deal_test.sql` (its idempotency case now
+calls `deliver_deal` twice directly) and `claim_deal_ticket_test.sql`. New suite
+`send_deal_c2c_announce_test.sql` + runner ships with it.
+
+**Gate at close.** 5 SQL runners exit 0 · `tsc` 0 · unit 490/490 · nine ACs replayed on real data.
+
+---
+
+**The leak it closes, measured on production 2026-08-24.** The view's hand-written public arm was
+missing three terms `product_visible_to_caller()` carries: the seller company's `deleted_at` and
+`verification_status`, and the product's `location`. `is_caller_verified()` does not cover the
+second — it reads the CALLER's company, and nothing in the old view read the seller's `company` row
+at all. Same shape as slug 0022's round-4 basket leak (L-038).
+
+**Who loses reads the moment this lands — by design, this IS the fix.** Connected buyers stop seeing
+the price and tier ladder of any product that is unfiled, or whose seller company is soft-deleted or
+unverified. Two named production rows go dark for buyers:
+
+- StonePharm's `Spirit Bear T28 STR MLS` — unfiled (`location IS NULL`), EUR 9.50/g
+- CNG Berlin's `fdsc` — seller `verification_status = 'pending'`, EUR 2.00/g
+
+**Both sellers keep full sight of their own products.** The owner arm is asserted explicitly
+(`pricelist_view_single_owner_test.sql` §B), including the unfiled one — unfiled is withheld from
+buyers and kept for the owner so the Unassigned pile stays fileable.
+
+**Push: THREE migrations, ONE plain `supabase db push --linked`, `--include-all` NOT needed and NOT
+to be passed.** All three filenames sort after cloud's tip `20260824100000`, in this order:
+`20260825090000` → `20260825100000` → `20260825110000`. Nothing is back-dated, so a plain push
+takes the lot.
+
+⚠️ **THE ORDER IS LOAD-BEARING BETWEEN ROWS 2 AND 3, and this was measured, not reasoned.** HEL-70
+(row 3) claims one edit to `product_visible_to_caller()` closes six doors including the price view.
+**That is only true once row 2 has landed.** Proven on the local stack 2026-08-25: with row 2
+absent, HEL-70's suite failed at cell `B6/price` — a deactivated seller still handed a connected
+buyer a per-gram price, because the pre-HEL-69 `current_pricelist_item` reprints the rule instead of
+delegating to `product_price_visible_to_caller()`. Applying row 2 turned the same cell green with no
+other change. Filename order already guarantees this; **do not reorder them by hand.**
+
+⚠️ **PRE-FLIGHT, owed and not previously in this file (handed over by the `deal_land_t02` session).**
+Row 1 is a `create or replace`, so if production's `send_deal` body ever drifted from the repo it
+gets **silently overwritten** by this push. Diff it first and keep the output:
+
+```sql
+-- run against PRODUCTION, before pushing
+select md5(prosrc), length(prosrc) from pg_proc
+ where oid = 'public.send_deal(uuid)'::regprocedure;
+```
+
+✅ **RUN 2026-08-25, BEFORE THE PUSH — ZERO DRIFT.** Production's body is
+`md5 = b52ea5dfddd626afc3074acd2615b48d`, length **3591**, a byte-for-byte match for the body in
+`20260724120300_send_deal.sql`. Nothing was hand-edited on production, so row 1's `create or
+replace` overwrites nothing unexpected. Compared on `prosrc` rather than `pg_get_functiondef` —
+the latter re-renders the header and would differ on formatting alone.
+
+This repo has been bitten by exactly this shape before — `ensure_rls` lived on production and in no
+migration until `20260817130000` captured it.
+
+**Who loses reads when ROW 3 lands — by design, this IS the fix.** Nothing changes today:
+**0 of 21 live production companies are deactivated** (measured 2026-08-25). The moment a Superadmin
+pauses a company, that company stops listing in Discover, its page stops opening on a direct link,
+its shop and prices close, its people leave the People directory, and a buyer holding its products
+in a basket **loses those lines with no warning** — a cost recorded and accepted in
+`DECISIONS.md` 2026-08-25.
+
+**Its own members lose nothing.** `/present` reads `getMyShop()` through plain RLS, and the owner arm
+of `product_visible_to_caller` never consults the `company` row, so it is unreachable from this
+change by construction — asserted anyway in §C of the suite. The one thing a paused company's member
+does lose is the **buyer preview** at `/discover/<own id>`, because `get_discoverable_company` and
+`get_discoverable_shop` have no owner arm on the company side. That is the shop, and the rule says
+the shop is closed.
+
+**What row 3 does NOT deliver.** The ruling's table says *new connections blocked*. These five edits
+cannot do that: a connect request is a direct client `INSERT` into `pending_inbox_item` governed by
+`inbox_insert`, which constrains only the **sender**. Hiding the company removes the button, not the
+door. Filed as its own ticket — do not read this batch as having closed it.
+
+**Post-flight for ROW 3 — should return 0 rows, and returns 0 today for a second reason.**
+
+```sql
+-- any deactivated company still reachable through a discovery door
+select c.id, c.name, c.deactivated_at
+  from company c
+ where c.deactivated_at is not null
+   and c.deleted_at is null
+   and c.verification_status = 'verified';
+```
+
+⚠️ **That query returns 0 rows on today's production whether or not row 3 shipped**, because nothing
+is deactivated yet — so it is NOT evidence the gate works. The evidence is
+`supabase/tests/deactivated_company_gate_test.sql` (26 cells: 7 controls, 7 gate, 3 owner, 7 round
+trip, 2 source-agreement), which was proven **red before green** and whose five gate cells were shown
+to discriminate 1:1 — reverting any single door made exactly that door's cell fire and no other.
+
+---
+
+**Post-flight — re-run the two queries that found it. Both must return 0 rows:**
+
+```sql
+-- 1. rows the view would hand a connected buyer that the canonical rule denies
+select p.id, p.name, c.name as seller, p.location, c.verification_status
+  from pricelist_item pli
+  join pricelist pl on pl.id = pli.pricelist_id
+  join product p on p.id = pli.product_id and p.company_id = pl.company_id
+  join company c on c.id = p.company_id
+ where pli.deleted_at is null and pl.deleted_at is null and p.deleted_at is null
+   and p.price_public
+   and (p.location is null or c.deleted_at is not null or c.verification_status <> 'verified')
+   and not public.product_price_visible_to_caller(p.id);
+
+-- 2. the compensating control survived the replace (must contain security_barrier=true,
+--    and must NOT contain security_invoker=true)
+select reloptions from pg_class where oid = 'public.current_pricelist_item'::regclass;
+```
+
+> ⚠️ **DO NOT "fix" the `security_definer_view` advisor ERROR while you are in there.** The view is
+> owner-rights **deliberately** — ADR-0004 §4 pre-declared the trade-off and accepts the advisor
+> entry (precedent: `ARCHITECTURE-NOTES.md:231`). Re-verified against production 2026-08-24 rather
+> than read off the ADR: `pricelist` carries exactly one policy, `pricelist_all USING (company_id =
+> current_company_id())`, and this view joins it — so `security_invoker = true` returns **zero rows
+> to every buyer** and takes the price surface dark. Supabase's general "always set security_invoker"
+> guidance assumes base tables whose policies admit the intended readers; ours deliberately do not.
+
+**Gate evidence at time of filing:** RED reproduced before the fix (the unfiled product handed EUR
+7.77 to a connected buyer), green after. Four neighbouring SQL suites green
+(`connection_visibility_override`, `cross_tenant_lockdown`, `discoverable_shop_spec_columns`,
+`pricelist_item_tier`), `tsc` clean, unit 490/490.
+
+**What this entry does NOT claim.** The full Playwright e2e run did not complete at filing time (the
+local DB was held by a parallel session), so this migration is **not** backed by an e2e A/B against a
+clean base. Do not read the green list above as a full gate.
+
+---
+
 ## ✅ APPLIED 2026-08-25 (was PENDING 2026-08-24, Muskan) — T11 table privilege lockdown (ONE migration)
 
 **Status: LIVE ON PRODUCTION.** Pushed 2026-08-25 with `supabase db push --linked` (plain — no

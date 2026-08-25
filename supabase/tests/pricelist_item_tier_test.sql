@@ -37,10 +37,21 @@ BEGIN;
 -- Own fixture products/items instead of mutating the seeded AUR-1A..1D rows
 -- (AUR-1A carries the seeded demo rung; touching it would couple this
 -- test to seed drift). NOT NULL floor on product: company_id + name.
-INSERT INTO public.product (company_id, name, supplier_product_code)
+-- `location` is set deliberately (HEL-69, 2026-08-24). It used to be omitted,
+-- which left both fixtures UNFILED — and unfiled is not a shelf: the canonical
+-- rule withholds an unfiled product from buyers and keeps it for the owner.
+-- `get_discoverable_shop` has always applied that term, so the shop door
+-- returned 0 rows for TIER-VIEW while the price view returned 1; the cell below
+-- calling it "a fully public priced product" was describing a product that was
+-- not, in fact, fully public. Once `current_pricelist_item` was made to call
+-- `product_price_visible_to_caller()` the two doors agree, and the fixture has
+-- to say what the assertion means. Verified both ways before changing this:
+-- with no location, shop door = 0 AND price view = 0; the old pass depended on
+-- the divergence, not on the behaviour under test.
+INSERT INTO public.product (company_id, name, supplier_product_code, location)
 VALUES
-  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Tier Test RPC Target', 'TIER-RPC'),
-  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Tier Test View Target', 'TIER-VIEW');
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Tier Test RPC Target', 'TIER-RPC', 'TIER-FIXTURE-LOC'),
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Tier Test View Target', 'TIER-VIEW', 'TIER-FIXTURE-LOC');
 
 INSERT INTO public.pricelist_item
   (pricelist_id, product_id, price_per_gram, currency)

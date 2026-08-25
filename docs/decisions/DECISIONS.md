@@ -1010,7 +1010,7 @@ The "closed by default" lock above was a demo simplification (Marcel: build clos
 - **Public profile is company-curated (soft), not closed-by-default.** Openness = two per-product dials: visible-on-profile (`product.profile_visible`, **new**) × price-visible (`product.price_public`, exists). Levels emerge: **L0** bare card → **L1** products/no price → **L4** full priced shop. *Why:* the soft model is a **superset** of "closed" — a company that wants closed just stays at L0; gives each company go-to-market flexibility; matches B2B norm (LinkedIn / Alibaba / Faire).
 - **Audience-scoped for compliance.** Products/prices show to logged-in **verified members** only; the anonymous public card (`/c/<handle>`) stays **bare**. *Why:* contains German **HWG** public-advertising risk for prescription cannabis — showing to verified members ≠ showing to the open internet.
 - **Discover directory stays minimal** (brand line: logo · name · category · country); the chosen openness shows on the company's **profile** after click. *Why:* listing ≠ browsing — reconciles the closed directory with the soft profile.
-- **Connect CTAs map to the 4 existing inbox types**, surfaced contextually on the profile: Connect (`connect`) · Connect + note (`connect_message`) · Request pricing (`pricelist_request`) · Offer card (`deal_card`). A note is optional on every connect. *Why:* reuse locked inbox machinery; **no new request types**.
+- **Connect CTAs map to the 4 existing inbox types**, surfaced contextually on the profile: Connect (`connect`) · Connect + note (`connect_message`) · Request pricing (`pricelist_request`) · Offer card (`deal_card`). A note is optional on every connect. *Why:* reuse locked inbox machinery; **no new request types**. 🔴 **PARTIALLY SUPERSEDED 2026-08-25 — the `deal_card` arm ONLY** (ADR 0006 §8.5, slug `0023-deal-draft-lands-in-chat`): a buyer's company-addressed deal no longer cuts an inbox ticket — `send_deal` posts a `deal_card` pill straight into the relationship's c2c chat and creates **zero** `pending_inbox_item` rows. **`connect`, `connect_message` and `pricelist_request` are UNTOUCHED and still route to `/connect/inbox`**, so this bullet stands for them and the page is not retired. Pre-existing deal tickets survive and stay claimable. Live on production 2026-08-25. Full entry at the file's tail. *(Appended in place, adding no lines: `:1013` is cited by ADR 0006 `:47` and its **§8.5** (a SECTION anchor, deliberately — that reference sat at `:563`, then `:598`, then `:604` as this very ticket edited the ADR above it; a line number into a file you are also editing is not a citation, it is a guess), plus `PRD/0023:6` and `STATE.md:54`/`:68` — and an INSERT here would shift every line below, which is how `D-12` at `:1219` was briefly falsified.)*
 - **Two-track build.** **Track 1 (now)** = the real connect loop between two onboarded companies (Discover real data → profile → connect/note/request-pricing → accept → C2C/P2P chat), buildable on existing schema + one `profile_visible` column. **Track 2 (later)** = the FLOWZ growth engine — already documented (LAYER-1 §13, LAYER-5, [`research/dev-62-dev-44-flowzz-mirror-shop.md`](../research/dev-62-dev-44-flowzz-mirror-shop.md)); its **outbound offer/inquiry email is legally RED** (UWG §7(2) per-se rule), deferred behind consent/partnership. The shadow-profile + claim-on-signup part is the defensible half. *Why:* ship the testable loop first; don't build the RED outbound until consent exists. Build plan: [`docs/muskan-build/discover-connect-loop.md`](../muskan-build/discover-connect-loop.md).
 
 ---
@@ -1723,3 +1723,219 @@ order. This is a decision about team size and stage, not about what good enginee
 **Parked, with reasons (so they are not re-found as oversights):** T11 and T14 are not
 reachable through PostgREST · T17 needs a product answer about what deactivation means
 · T16 and DEV-159 bite only on demo data.
+
+## 2026-08-25 — A slug that promised no RLS change does not get to make one, even when a review finds a real gap
+
+**Decided:** slug 0023's `security` review raised a genuine finding — the company-addressed deal
+signal moves off `pending_inbox_item` (identity-hardened one slug earlier) onto `chat_message`,
+whose `msg_all` policy has **no sender predicate**, so a thread member can post a pill attributed
+to someone else. **The fix was NOT taken into the slug.** Both findings were filed instead:
+**HEL-67 widened** (it already covered the same policy missing a `type` predicate — two missing
+guards on one statement, so one ticket) and **HEL-74** (`send_deal` never checks the relationship
+is still live).
+
+**Why.** ADR 0006 §4.2 commits slug 0023 to *no schema, no RLS, no grant change*. **That
+constraint is not paperwork — it is what makes the migration safe to deploy on its own**, with a
+plain `db push` and no coupled batch. Widening scope to fix an RLS policy would have:
+- turned a one-function `create or replace` into a policy change on a `FOR ALL` policy, which hits
+  SELECT as well as INSERT and needs a reader census first (**L-037**);
+- coupled a deployable slug to a security fix with its own design questions — `sender_person_id` is
+  **nullable** for system messages, so the obvious predicate breaks every `connection_established`
+  writer;
+- and done it under end-of-build momentum, which is the condition the checker-loop record already
+  warns about.
+
+**The general rule:** a scope fence is a deployment guarantee, not an aspiration. When a review
+finds something the fence excludes, **the finding is filed and the fence holds.** Overriding it is
+a decision to be taken deliberately and in daylight, not absorbed into the ticket that found it.
+
+**The distinction that made this easy to rule.** Neither finding was a hole the slug **opened**.
+`msg_all` has never had a sender predicate; the relationship path produced an inbox ticket before
+rather than a chat message. **What changed is that the deal signal now rides on guards that were
+never there.** A slug that inherits a weakness is in a different position from one that creates
+it — the first files, the second fixes before shipping.
+
+**Cost accepted, explicitly:** deal-arrival messages are forgeable until HEL-67 lands. Low today
+(one user per company; a forged pill points at a card everyone in that thread can already read —
+`security` confirmed it confers **no new read rights**, only discoverability). **Rises with team
+size**, which is exactly when "who sent this" starts to matter.
+
+**Surfaced by:** slug 0023 T01 / HEL-63, `/build` G4, 2026-08-25.
+
+---
+
+## 2026-08-25 — A deactivated company is closed to new connections; an UNVERIFIED one is not
+
+**What was decided.** HEL-75's receiver predicate on `inbox_insert` covers **`deleted_at` and
+`deactivated_at` only**. A company that is unverified — including one mid-`resubmit_company_verification()`
+— **stays reachable** by a connection request. This is deliberately **narrower** than the liveness
+term HEL-70 gave the five discovery read doors, which also require `verification_status = 'verified'`.
+
+**Why.** A deactivated or deleted company has **left**. A pending or re-verifying company is
+**arriving**. Hiding the latter from Discover is right — nobody should transact with an unverified
+counterparty — but *refusing its inbound interest* punishes it at exactly the moment it is trying to
+come back, and the request is inert until someone accepts it anyway (accept is separately gated).
+
+**The asymmetry IS the decision.** This repo's recurring failure is doors disagreeing about one rule
+(L-038), so a deliberate disagreement has to be recorded or the next person will "fix" it. The read
+doors answer *"may this company be seen?"*; this write door answers *"may this company still be
+written to?"* **They are different questions and they are allowed to have different answers.** Do not
+tidy `company_can_receive_requests()` into agreement with `product_visible_to_caller()`'s term.
+
+**Cost accepted:** a request may be sent to a company that never becomes verified, leaving an inert
+pending row. Judged cheaper than a company losing inbound interest during re-verification.
+
+**Not settled by this ruling, and it needs its own:** a request that was already **pending** when the
+receiver deactivates stays acceptable. `WITH CHECK` governs the INSERT only, and accept runs through
+`accept_connection_request` — SECURITY DEFINER, which bypasses RLS entirely, so RLS cannot be the
+mechanism there. Verified on production 2026-08-25: that function checks item state, addressee and
+type, and never the receiver company's liveness.
+
+**Surfaced by:** HEL-75, `security_tickets` session, 2026-08-25.
+
+---
+
+## 2026-08-25 — HEL-67 ships as one type, and its second half is BLOCKED, not deferred
+
+**What was decided.** `msg_all`'s `WITH CHECK` gains exactly one term — `type <> 'deal_detected'` —
+and **not** the list the ticket proposed. The ticket's second half (the forgeable *sender*) is
+**recorded as blocked on HEL-68**, not carried as outstanding work.
+
+**Why one type and not a list.** The ticket sketched banning *"Sella-authored types, service-role
+only"*. A census of every `chat_message` INSERT reachable as `authenticated` shows that is false for
+**five of six**: an ordinary browser session writes `intro` and four deal-lifecycle pills with
+`sender = 'sella'` and a NULL author (`actions.ts:682`, `rollout.ts:174`). The type name describes a
+**voice**; RLS governs a **writer**; in this product one identity routinely speaks in another's
+voice. `deal_detected` is the only type no client writes.
+
+**Why the second half is blocked rather than deferred — the distinction matters.** The obvious fix,
+`sender_person_id = auth.uid()`, breaks connection-accept. Not because of the nullable system-message
+case the ticket already flagged, but because the accept rollout has the browser insert a
+`sender = 'person'` message attributed to the **requester, not the caller** (`rollout.ts:179`, *"the
+requester wrote the note"*). Attribution-to-another-person is load-bearing behaviour here, not a
+defect. Until HEL-68 moves that write into a definer, any sender predicate either breaks accept or
+gates nothing.
+
+"Deferred" would imply someone could pick it up. They cannot, and a future session that tries will
+rediscover the same dead end. The counterexample line number is recorded in the ticket, the migration
+header and the test so that it fails loudly rather than being re-derived.
+
+**The cost accepted.** HEL-67 stays open and half-closed. The sender of any chat message remains
+forgeable by a thread member — as it always has been; slug 0023 did not open it, it moved the deal
+signal onto it. Low today at one user per company, rising with team size.
+
+**Surfaced by:** the `security_tickets` session, 2026-08-25.
+
+---
+
+## 2026-08-25 — Company deactivation is closed-to-everyone
+
+**What was decided.** A deactivated company (`company.deactivated_at` set) reads **identically to a
+soft-deleted one** across every discovery door — hidden from the Discover listing, company page
+closed on a direct link, shop and prices closed, and existing baskets drop its lines. New
+connections blocked. The difference from deletion is only that it is **reversible**, and that the
+company's **own members never lose sight of their catalogue** — they need to work on it before
+reactivating.
+
+**Why.** Three readings were on the table and all three were defensible:
+
+- *Invisible to strangers, open to partners* — "stop marketing, keep serving existing customers."
+- *Read-only freeze* — everything stays visible, nothing new can start, open deals finish.
+- *Closed to everyone* — chosen.
+
+The deciding argument was **one rule that is easy to reason about**, matching a shape the codebase
+already has and already tests (`deleted_at`). The two rejected options each introduce a *third*
+lifecycle state with its own visibility semantics, and this repo's recurring failure is doors
+disagreeing about the same rule (L-038). Adding a state that only some doors understand is how that
+happens again. The cost accepted is real and should not be discovered later: **a buyer with the
+deactivated seller's products in a basket loses those lines with no warning.**
+
+**Consequence, worth noting because it inverts the usual direction:** the fix got *cheaper while it
+sat in the backlog*. When filed (T17, 2026-08-24) it meant editing four doors. Because T13 pointed
+the product policies at `product_visible_to_caller()` and HEL-69 pointed the price view at
+`product_price_visible_to_caller()`, six doors now inherit the term from **one edit** to that
+function; only the three Discover RPCs still need it individually. Do **not** add the term to the
+owner arm.
+
+**Surfaced by:** HEL-70, ruled during the security audit session, 2026-08-25.
+
+---
+
+## 2026-08-25 — HEL-69's price-view migration ships with the slug 0023 push to `main`
+
+**What was decided.** `20260825100000_pricelist_view_single_owner.sql` is **not** a separate deploy.
+It rides the slug 0023 push. Its filename sorts after 0023's `20260825090000`, so one plain
+`supabase db push --linked` takes both in filename order with **no `--include-all`**. Both now sit
+together on `claude/muskan/work`.
+
+**Why.** The leak it closes is real but narrow — two production rows, reachable only by an already
+connected buyer — so it does not justify its own deploy window. Batching also keeps the ordering
+trivially correct instead of relying on two separate pushes landing in the right sequence, which is
+where L-034 bit before.
+
+**⚠️ Same-deploy on this repo means `dev` → `main`, not `dev`** (DECISIONS 2026-08-24). The 0022
+outage came from stopping at `dev`.
+
+**Until it ships, production still leaks** `Spirit Bear T28 STR MLS` (€9.50/g) and `fdsc` (€2.00/g)
+to any connected buyer. HEL-69 stays **open** until the push, deliberately — a ticket closed on a
+local green while production still carries the bug makes the whole list untrustworthy.
+
+**Surfaced by:** HEL-69, 2026-08-25.
+
+---
+
+## 2026-08-25 — `/c/<handle>` publishes contact details by design
+
+**What was decided.** The public business card at `/c/<handle>` continues to show the person's email
+and phone to anonymous visitors. **Accepted as intended behaviour, not a hole** — closed so the next
+audit finds a ruling rather than re-raising it.
+
+**Why.** A business card exists to make someone contactable, and in a bounded named trade network —
+50 wholesalers, ~2,500 pharmacies, everyone expecting to be reachable — that is the point of the
+page. The `anon` grant on `get_public_profile` is deliberate and already documented in three
+migrations.
+
+**What was weighed against it, and is not dismissed.** The address published is `auth.users.email`,
+i.e. **the credential the person signs in with** — not a separate contact address. Nobody was asked,
+and there is no opt-out. Measured 2026-08-25: 17 of 17 handles expose a login email, 7 expose a
+phone, all enumerable by plain HTTP. Publishing a login identifier lowers the cost of credential
+stuffing and phishing against our own users, and under GDPR it is personal data published without a
+recorded basis.
+
+**⏰ REVISIT TRIGGER — before real pharmacies onboard.** This was ruled while all 17 handles belong
+to the team and demo accounts. It is **not** a ruling about outside users' personal data. If
+reopened, start from the rejected option that fixes the credential problem without emptying the
+cards: **a separate `contact_email` field**, published instead of the login address. (The other
+rejected option — per-person toggles defaulting off — is safest but silently empties every existing
+card until each person opts back in.)
+
+**Surfaced by:** HEL-72, 2026-08-25.
+
+## 2026-08-25 — a company-addressed deal is announced in the company's chat
+
+**Partial supersede of `:1013`, the `deal_card` arm only** (ADR 0006, slug
+`0023-deal-draft-lands-in-chat`). An inline marker sits beside `:1013` itself, because that is
+where the reader arrives from five separate citations; this is the chronological record.
+
+- **What changed.** `send_deal`'s company arm no longer calls `deliver_deal`. It resolves — or
+  creates — the relationship's **c2c thread** and posts the same clickable `deal_card` pill its
+  person arm has always posted to the p2p thread. **One mechanism now serves both arms**, and the
+  fix was a **deletion**, not an addition. Company-addressed sends create **zero**
+  `pending_inbox_item` rows. *Why:* the recipient previously had to know the Connection Requests
+  page existed, find the ticket, then hunt for the matching conversation — the deal never signalled
+  in chat at all.
+- **The other three Connect CTAs are untouched.** `connect`, `connect_message` and
+  `pricelist_request` still route to `/connect/inbox`, so `:1013` stands for them and the page is
+  **not** being retired. *Why:* the inbox hop is today's consent step for those flows.
+- **`deliver_deal` itself is untouched** and keeps its other caller
+  (`confirm_detected_deal_births_negotiation.sql:176`, Sella's door). ⚠️ **The page-deletion slug
+  must not delete `/connect/inbox` while that door still writes to it.**
+- **ADR-0003:48-49's "FUTURE" clause is retired, not fulfilled here.** The `assigned_to` primitive
+  it waited on was built in `20260607090002_phase1_core.sql:200` and company-addressed send has
+  worked since 2026-07; the clause was discharged *with* the primitive. This ADR retires the
+  routing it described.
+- **Known and accepted:** the deal signal now rides on `msg_all`, which has **neither a `type` nor
+  a sender predicate** — so a thread member can post a pill attributed to another person. The
+  signal moved onto a weaker policy; **no policy was widened.** Tracked as **HEL-67**, disclosed in
+  ADR 0006's invariant **J1**. *Why accepted:* the proper fix is an RLS change, which ADR 0006 §4.2
+  put out of scope for this slug; filed rather than smuggled in.

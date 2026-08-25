@@ -532,3 +532,316 @@ migration that re-grants, re-creates or re-declares something is not.
 
 **Surfaced by:** slug 0022, T08 (2026-08-23) and its `/ship` (2026-08-24).
 `docs/agents/LEARNINGS.md` L-034.
+
+## Moving a signal to a new table moves it onto that table's integrity (2026-08-25)
+
+**The shape.** A feature changes *where* a signal is written — from one table to another, or from a
+table to a queue, a log, a message. The row's **contents** are reviewed carefully. Nobody reviews
+what the destination **guarantees about who may write it**, because no policy was edited and the
+diff shows no RLS change.
+
+**The instance.** Slug 0023 moved the company-addressed deal signal off `pending_inbox_item` and
+onto `chat_message`:
+
+| | policy | identity guard |
+|---|---|---|
+| `pending_inbox_item` — signal **removed** | `inbox_insert` (`20260823090000:306-309`) | ✅ `sender_company_id = current_company_id() AND sender_person_id = auth.uid()` |
+| `chat_message` — signal **added** | `msg_all` (`20260607170000:300-302`) | ❌ `can_access_thread(thread_id)` — nothing else |
+
+`pending_inbox_item` had been hardened **one slug earlier**, and that migration's own header states
+the intent: *"a request may no longer be attributed to someone who never asked."* Slug 0023 then
+routed the deal signal onto a table where that sentence is not true — **without editing a single
+policy.**
+
+**Why review misses it.** The ADR recorded, accurately, that `chat_message` RLS was *"unchanged —
+no policy is widened."* Both halves are true. **And it is the wrong question.** The policy did not
+widen; **the signal migrated onto a weaker policy.** A diff-shaped review asks *what did this change
+loosen?* and correctly answers *nothing*. The right question is *what did the thing I moved used to
+be protected by, and what protects it now?* — which no diff can ask, because the old protection is
+not in the diff either.
+
+**The tell.** A change description containing *"we now write X to Y instead of Z"*, alongside a
+review line reading *"no RLS/permissions change."* Those two sentences together are the signature.
+
+**The check, and it is cheap.** For every table a change stops writing to and starts writing to,
+put the two `WITH CHECK` clauses and the two grant sets **side by side** and diff them by hand.
+Ask specifically: **who could forge this row before, and who can forge it now?** Not *did a policy
+change* — the whole point is that none did.
+
+**Related and distinct.** **L-027** (*a permission gate is only as strong as the write path to its
+input*) is about a gate reading a forgeable value. This is the mirror image: **a value that was not
+forgeable becomes forgeable by being relocated**, and the gate never moved at all. **L-036** (*RLS
+filters rows, not columns*) is a third member of the family — each is a case where a protection is
+assumed to travel with the data and does not.
+
+**Surfaced by:** slug 0023 T01 / HEL-63, `security` finding B1, 2026-08-25. Filed as **HEL-67**
+(widened) and **HEL-74**. Ruling recorded in `DECISIONS.md` 2026-08-25.
+
+---
+
+## 2026-08-25 — A policy predicate is a question about what the CALLER CAN SEE, not about the database
+
+**The mechanism.** An RLS policy expression is evaluated in the **calling role's** row-security
+context. So a subquery inside `USING` or `WITH CHECK` against another RLS-protected table is itself
+filtered by that table's policies. `EXISTS (SELECT 1 FROM b WHERE …)` does not ask *"does this row of
+`b` exist?"* — it asks **"does it exist AND may the caller see it?"** Those are different questions,
+and nothing in the SQL distinguishes them.
+
+**How it bit.** HEL-75 needed `inbox_insert` to refuse a connection request addressed to a
+soft-deleted or deactivated company. The obvious inline `EXISTS` on `public.company` inherited
+`company_select`, which shows `authenticated` only its own company, HS-team rows, and companies it
+already `shares_connection_with_company()`. **A company you have never met is invisible** — so the
+predicate collapsed into *"may I already see this company?"*, which for a connection request is
+backwards: not having met them is the entire point.
+
+Measured as Alice @ GreenLeaf: a direct `SELECT` on `company` returned **5 of 6 rows**, and the inline
+predicate **refused a legitimate connect to the missing one** while blocking the deactivated company
+only *by accident* — it was really gating on "do we already share a connection".
+
+**Why it survives review.** Against a seeded database it looks correct. Every control an author
+reaches for is an already-connected pair, so every control passes; the failing case only appears for a
+counterparty the caller has never met, which is precisely the case no existing fixture covers.
+
+**The rule.** *If a policy needs a fact about a row the caller is not entitled to read, that fact must
+come from a `SECURITY DEFINER` function.* Inline `EXISTS` is safe only against a table with no RLS, or
+when the caller's visibility is genuinely meant to be part of the predicate. This is the same reason
+`product_visible_to_caller()` and `product_price_visible_to_caller()` exist, and why HEL-75 added
+`company_can_receive_requests()` rather than two lines of inline SQL.
+
+**Test discipline that catches it:** be red-first in *both* directions — one cell reproducing the
+original bug, and one cell that fails against **the fix that was proposed**. A suite that only proves
+the bug is gone cannot tell you it was closed with the wrong instrument.
+
+See `docs/agents/LEARNINGS.md` **L-055**.
+
+---
+
+## 2026-08-25 — A SYMMETRIC policy cannot express an ASYMMETRIC rule; census the write path before fencing it
+
+**The shape.** `deal_line_item`'s only policy, `line_all`, is `FOR ALL` with
+`card_relationship_member(deal_card_id)` on both `USING` and `WITH CHECK`. That function is **true for
+both sides of the relationship**. The rule it was being asked to enforce — *only the seller may set
+allocation state* — is asymmetric. **No amount of policy cleverness closes that gap**, because the
+policy has no term that distinguishes buyer from seller, and adding one means duplicating the
+seller-gate that already lives in seven `SECURITY DEFINER` RPCs.
+
+**The fix was not a better fence — it was noticing nobody used the gate.** A census across all of
+`src/` found client code performs **exactly one** write to that table (an `INSERT`, `acceptPromotion`),
+and **zero** UPDATEs and **zero** DELETEs. Every legitimate mutation already went through a definer,
+which bypasses grants. So `UPDATE` and `DELETE` were **removed**, not guarded.
+
+**The generalisation.** When a permission problem looks like it needs a policy predicate, a trigger,
+or a column allowlist, first ask **who actually writes this table as this role**. An unused privilege
+is deleted, not defended — and a deletion cannot drift, whereas a column allowlist silently breaks
+every time a column is added and a trigger must keep enumerating the columns it protects.
+
+**Postgres detail worth keeping:** a **column-level** `REVOKE` cannot subtract from a **table-level**
+grant. DEV-159 recorded an earlier attempt at `REVOKE UPDATE (allocation_status, …)` that appeared to
+do nothing; that is correct behaviour, not a bug. The table-level grant has to go first.
+
+**Corollary for reviewers:** `REVOKE` migrations should say in a `COMMENT ON TABLE` *why* the
+privilege is absent. Otherwise the next person adding a feature reads a missing grant as an oversight
+and re-grants it, reopening the hole. `deal_line_item` now carries that comment.
+
+Origin: DEV-159, `security_tickets` session, 2026-08-25.
+
+---
+
+## 2026-08-25 — A worktree isolates the tree, not the DATABASE. Parallel sessions share one Postgres, and migration files are per-branch.
+
+**This CHANGES standing guidance rather than adding to it.** `CLAUDE.md` §2b concluded, after L-040,
+that *"parallel sessions need separate branches or worktrees, not a sync file."* That is true for
+**files** and **false for the local database**, which is the one resource neither mechanism isolates.
+
+**Measured 2026-08-25**, two sessions on two branches against one stack:
+
+| queried | answer |
+| -- | -- |
+| `pg_policy` — is the HEL-67 gate live? | **yes**, on both sessions' stack |
+| `git show claude/muskan/work:supabase/migrations/20260825120000_…` | **fails** — the file exists only on `worktree-security-tickets` |
+
+So one branch was **running against a policy it does not contain**. Two consequences, and the second
+is worse than the first:
+
+- **Silent revert.** A `db reset` from the branch without the file rebuilds from the migrations *that
+  branch can see* and drops the other session's schema change. No conflict, no warning, no file
+  collision — the detection mechanisms we have are all file-level, and nothing here is a file.
+- **Silent grant.** Until that reset, the other branch's tests run against a gate its own tree cannot
+  describe. A spec that *should* be blocked can pass because someone else's fix is present; a spec
+  can fail for a reason its branch cannot explain, and the fix will look like a defect in its own
+  code. **Tests measure a schema no tree describes, in both directions.**
+
+This is `L-033` moved from the row level to the schema level: *a green suite is only evidence for the
+database state it ran against* — where that state is now partly set by a branch you cannot see.
+
+**⚠️ The uncomfortable part, worth keeping.** This surfaced **only because a step was skipped.** The
+migration's effect was applied without stamping `schema_migrations`, so *"is it applied?"* answered
+**yes** against `pg_policy` and **no** against the ledger table, and the disagreement is what prompted
+the second session to look. **Had the stamp been done correctly — the right thing to do — both
+sessions would have seen agreement and the hazard would have stayed fully armed and invisible.** A
+detection mechanism that depends on someone forgetting a step is not one.
+
+**What this does NOT justify:** stamping is still correct, and the fix is not to skip it. The fix is
+that co-ordination between parallel sessions must include *what has been applied to the shared
+database*, not only what files are locked — and that any "built and green" claim names the stack it
+was measured on. Options not yet decided: a per-session database, a `supabase db diff` check at
+session start, or simply declaring applied migrations the way files are declared today.
+
+**Source:** `security_tickets` + `deal_land_t02`, 2026-08-25, found while cross-checking a
+"built and green" claim. See `L-054`, `L-033`, `L-040`, `CLAUDE.md` §2b (now known insufficient).
+
+---
+
+## 2026-08-25 — A message type names a VOICE; RLS governs a WRITER. They are not the same axis, and our vocabulary hides it.
+
+`chat_message.type` and `chat_message.sender` look like they encode the same fact — who produced this
+line — and they do not. `sender` has three values (`person`, `system`, `sella`) and `type` has
+fourteen, and the product **routinely has one identity speak in another's voice from an ordinary
+browser session**: `announceDealEvent` writes four deal-lifecycle pills as `sella` with a NULL author
+(`actions.ts:682`), the accept rollout writes `intro` as `sella` and `connection_established` as
+`system` (`rollout.ts:110,174`), and it writes a `person` message whose author is the **requester,
+not the caller** (`rollout.ts:179`).
+
+The consequence for anyone writing RLS on this table: **"only Sella writes X" is a statement about
+the voice, and is never evidence about the writer.** A predicate derived from type names will either
+ban writes the product depends on, or permit the ones it meant to stop. The only sound derivation is
+a census of the write sites reachable as the role being narrowed.
+
+This is why HEL-67 shipped one type rather than the list its ticket proposed, and why its
+sender-forgery half is blocked until HEL-68 moves the rollout's three inserts out of the browser —
+at which point `sender` finally *does* line up with the writer, and a predicate becomes possible.
+
+The same shape has a name upstream: a comment on the read path is not a contract for the write path
+(L-006). This entry is its schema-level twin — **a column that describes presentation is not a
+column that describes authorship**, even when its values look like they do.
+
+**Source:** HEL-67 build, `security_tickets` session, 2026-08-25. See `L-052`, `DECISIONS.md`
+2026-08-25 ("HEL-67 ships as one type").
+
+---
+
+## 2026-08-25 — `supabase db reset` rotates the stack secret, and our own resets manufacture "pre-existing" e2e failures
+
+The local Supabase stack issues a **new secret key on every `supabase db reset`**. The Playwright
+fixtures resolve that key **once** (`e2e/fixtures/local-supabase.ts` — deliberately not hardcoded,
+"the key rotates per stack"). So a session that resets frequently produces:
+
+```
+Error: E2E: cannot resolve the local Supabase secret key.
+Error: createUser failed for <email>: {}
+```
+
+…which then cascades into `page.waitForURL` timeouts across unrelated specs, because signup and
+login stop working. The result *looks* exactly like a broad regression.
+
+**This is part of what has been recorded for months as the "pre-existing e2e auth-keys failures."**
+Some of that class is genuinely pre-existing; some of it is **manufactured by the measurement
+itself**. A full run taken shortly after a reset, or during a session doing repeated resets, is not
+evidence about the code.
+
+**Practical rules:**
+- **SQL runners are immune** — they go through `psql` with `DB_URL` from `supabase status`, never the
+  JS fixtures. A green SQL suite after a reset means what it says.
+- **e2e is not.** Before reading an e2e failure as a regression, check whether the stack was reset
+  under it.
+- This compounds with **HEL-73** (committed specs permanently mutate the shared seed). Together they
+  mean a full e2e run currently carries two independent sources of noise, and neither announces
+  itself.
+
+**Found by:** HEL-69, while A/B-ing whether a view change broke e2e — the *baseline* arm failed for
+this reason, which is what exposed it. Related: **L-048**.
+
+---
+
+## 2026-08-25 — Single-owner delegation compounds: the second rule change is where it pays
+
+The argument for routing a rule through one function is usually made as tidiness. The measurable
+payoff showed up this week, and it is worth recording as a number rather than a principle.
+
+**T13** pointed the `product` / `product_image` / `product_media` RLS policies at
+`product_visible_to_caller()`. **HEL-69** pointed `current_pricelist_item` at
+`product_price_visible_to_caller()`, which wraps it. Both consult the seller's `company` row through
+a single `EXISTS`.
+
+**Consequence:** HEL-70 (add `deactivated_at` to the visibility rule) was scoped as an **S** when
+filed on 2026-08-24 — four doors, each edited separately, each a chance to diverge. By 2026-08-25 it
+is **one edit** to `product_visible_to_caller()` — inherited by the product, image, media,
+pricelist-item, tier, basket and price-view doors — plus the three Discover RPCs, which still carry
+their own company predicates and remain the outstanding consolidation target.
+
+**The rule.** The cost of consolidating a duplicated rule is paid once; the saving is collected on
+**every subsequent change to that rule**, and it grows as more doors delegate. When judging whether
+a "single owner" refactor is worth it, the question is not how much duplication it removes today but
+**how often that rule changes** — a visibility rule on a marketplace changes constantly.
+
+**Corollary (L-038 restated in the positive):** a single owner is only real if the doors actually
+*call* it. `current_pricelist_item` reprinted the rule for months while three other doors delegated,
+and it was the reprint that drifted — not any of the callers.
+
+---
+
+## 2026-08-25 — Two doors can agree on a row's existence and disagree on its *state*
+
+**Found while building T02 / HEL-64 (slug 0023), by `plan-checker`. Not reachable in the seed,
+so no test and no gate walk in that slug could ever have shown it. Offered at G4 and deliberately
+left unfiled.**
+
+The buyer's basket and the connections directory both answer *"which relationships does this viewer
+have?"* — and they answer differently:
+
+| door | predicate |
+|---|---|
+| `basket/supabase/reads.ts:101-104` | `deleted_at is null` |
+| `messaging/supabase/connections.ts:119` | `deleted_at is null` **and** `status === 'active'` |
+
+**The consequence, and why it is nastier than a plain divergence.** On a `suspended` or `ended`
+relationship the basket still produces a non-null `relationshipId`, so the group is treated as
+connected, the connect-first block does not render, and the addressee control mounts. The control
+then looks its people up in the *directory*, which does not know that relationship — so the list is
+empty. **Permanently, and silently.**
+
+That empty list is **byte-identical to the legitimate case** the same ticket spent a whole
+acceptance criterion proving: a connected company that genuinely has no people yet. **Two different
+causes, one indistinguishable screen** — and the "correct" one was explicitly designed to look like
+that ("never a dead control"). So the failure is not merely invisible; it is *camouflaged by an
+intended behaviour*.
+
+**The general shape, and it is a sharpening of [[L-038]] rather than a new rule.** L-038 says a
+single owner is a claim about **agreement**, not file count. This adds: agreement has to cover the
+**lifecycle**, not just the identity. Two doors that both find the same row, and both filter it the
+same way *at the happy path*, can still part company on the states in between — and a state that
+never occurs in the seed is a state no local evidence will ever produce.
+
+**Practical rule.** When one module hands another an id, the receiver's *visibility* predicate is
+part of the contract, not an implementation detail. Either the id-producer applies the same
+predicate, or the receiver must be able to say **"I don't know that one"** distinguishably from
+**"I know it and it's empty."** Here it cannot, and that is the whole defect.
+
+---
+
+## 2026-08-25 — A citation nobody can look up cannot go stale visibly
+
+**Found by `builder` during T02 / HEL-64 while fixing two other stale citations. The slug had
+already produced seven of them; this is the reason there were seven.**
+
+The basket module's source comments cite decision IDs — `D-04`, `D-06`, `D-08`, `D-12`, `D-14`,
+`D-15` — that **have no canonical definition anywhere in the tracked tree.** The IDs are per-phase
+and collide across phases. `D-12` alone currently means four different things:
+
+| where | what `D-12` means |
+|---|---|
+| `DECISIONS.md:1219` | "Inbox" is relabelled "Connection Request" |
+| `cloud-migrations-pending.md:1366` | one active pending join request (partial-unique index) |
+| `0021-tier-ladder/PLAN-T07.md:108` | price is seller-only |
+| `basket/actions.ts` | delivery is `send_deal`'s alone |
+
+**Why this belongs in the architecture record rather than a cleanup ticket.** A line-number citation
+is *checkable*: it goes stale loudly the moment someone opens the file, which is how all seven of
+that slug's stale citations were caught. An unresolvable ID is **worse precisely because it never
+goes stale** — no reader can falsify it, so it quietly stops being true and keeps being copied
+forward into new comments as if it carried authority. The slug's own migration header had five such
+citations copied forward unverified.
+
+**The rule this yields:** an identifier used as evidence must resolve to exactly one place. If a
+scheme is scoped per-phase, the scope belongs **in the identifier** (`P17-D12`, not `D-12`), or the
+scheme should not be used in source comments at all. Prefer the thing a reader can open.

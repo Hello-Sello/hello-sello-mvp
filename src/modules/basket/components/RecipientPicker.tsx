@@ -2,12 +2,18 @@
 
 import { useEffect, useState } from "react";
 import { getMyConnections, type ConnectedCompany } from "@/modules/messaging";
+import { CounterpartyPersonSelect } from "./CounterpartyPersonSelect";
 
 /**
- * Pick who an OWN-company offer is sent to: a connected company (mandatory) and
- * optionally a person on that side. Reuses getMyConnections — the same connected
- * directory the "+ New chat" picker uses. Buyer (other-company) groups never
- * render this; their recipient is the seller company, implicit.
+ * The SELLER's picker: who an OWN-company offer is sent to — a connected company
+ * (mandatory, the select below) and then a person on that side (optional). Reuses
+ * getMyConnections — the same connected directory the "+ New chat" picker uses.
+ *
+ * Only the company half is this component's own. The addressee half is
+ * `CounterpartyPersonSelect`, shared with the BUYER's connected-seller group in
+ * `BasketDrawer` (`BasketDrawer.tsx:358-367`) — which renders that control
+ * directly and never mounts this picker, since a buyer's counterparty company is
+ * the seller group itself, not a choice.
  */
 export function RecipientPicker({
   onPick,
@@ -45,19 +51,16 @@ export function RecipientPicker({
         ))}
       </select>
 
-      {chosen && chosen.people.length > 0 && (
-        <select
-          aria-label="Recipient person (optional)"
-          className="rounded-lg bg-white/80 px-2 py-1.5 text-xs ring-1 ring-black/10"
-          onChange={(e) =>
-            onPick({ relationshipId: chosen.relationshipId, counterpartyPersonId: e.target.value || null })
+      {/* No `people.length > 0` gate: a company with no visible people still
+          gets the control, showing "Whole company" — the same always-on
+          addressee the buyer's group gets. */}
+      {chosen && (
+        <CounterpartyPersonSelect
+          relationshipId={chosen.relationshipId}
+          onPick={(counterpartyPersonId) =>
+            onPick({ relationshipId: chosen.relationshipId, counterpartyPersonId })
           }
-        >
-          <option value="">Whole company (optional person)</option>
-          {chosen.people.map((p) => (
-            <option key={p.personId} value={p.personId}>{p.name}</option>
-          ))}
-        </select>
+        />
       )}
     </div>
   );

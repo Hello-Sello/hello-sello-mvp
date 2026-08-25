@@ -1,21 +1,30 @@
 -- ============================================================================
 -- deliver_deal_test.sql — the deal-delivery routing spine (Lane A / A2,
--- re-timed for Phase 12: birth is PRIVATE, send_deal owns the delivery)
+-- re-timed for Phase 12: birth is PRIVATE. T01/HEL-63 (2026-08-25) then took
+-- deliver_deal OUT of send_deal entirely: send_deal's company arm now posts
+-- a chat pill directly instead of calling deliver_deal. deliver_deal is
+-- still called by confirm_detected_deal (case (4) below) — and, since
+-- send_deal no longer exercises it, THIS file now calls it directly to keep
+-- proving its own idempotency guard (case (2a) below).
 -- ----------------------------------------------------------------------------
 -- Phase 12 split birth from delivery (D-04/D-06): create_deal_draft births a
--- PRIVATE 'unsent' card and writes NO ticket; public.send_deal is the ONE
--- delivery writer. This file proves the re-timed spine:
+-- PRIVATE 'unsent' card and writes NO ticket. This file proves the re-timed
+-- spine, T01/HEL-63-corrected:
 --   (1) a c2c birth (no counterparty person) delivers NOTHING; send_deal then
---       flips the card to 'negotiation' and writes exactly one claimable
---       pending_inbox_item ('deal_card') for the OTHER company;
---   (2) deliver_deal stays idempotent, and a SECOND send_deal is rejected
---       (only an unsent draft can be sent — the double-send guard);
+--       flips the card to 'negotiation' and posts a 'deal_card' chat pill
+--       into the c2c thread — ZERO pending_inbox_item rows (T01/HEL-63; the
+--       full pill/RLS proof lives in send_deal_c2c_announce_test.sql);
+--   (2) deliver_deal stays idempotent under two DIRECT calls (T01/HEL-63 —
+--       send_deal no longer calls it, so a single call would no longer prove
+--       anything), and a SECOND send_deal is rejected (only an unsent draft
+--       can be sent — the double-send guard);
 --   (3) a person-target birth (counterparty person set) delivers nothing at
---       birth AND nothing at send on the company half — send_deal's person
---       half posts the clickable 'deal_card' pill on the p2p thread instead;
+--       birth AND writes no ticket at send — send_deal's person half posts
+--       the clickable 'deal_card' pill on the p2p thread instead;
 --   (4) the Sella-detection door (confirm_detected_deal) births straight into
 --       'negotiation', delivered-by-construction: co-owner added inside the
---       door, zero tickets (a ticket here would double-deliver).
+--       door, zero tickets (a ticket here would double-deliver). This is now
+--       deliver_deal's LAST production caller.
 --
 -- Mirrors person_company_lockdown_test.sql: one BEGIN…ROLLBACK transaction,
 -- runtime-resolved seed ids (never hardcoded — the seed regenerates them on
@@ -95,8 +104,13 @@ BEGIN
   END IF;
 END $$;
 
--- ── (1b) SEND DELIVERS: Alice sends → the flip to 'negotiation' + exactly ONE
--- 'deal_card' ticket for StonePharm (the company half of send_deal, D-06). ──
+-- ── (1b) SEND ANNOUNCES, NOT TICKETS: Alice sends → the flip to
+-- 'negotiation' + ZERO pending_inbox_item rows + exactly ONE 'deal_card'
+-- pill in the seeded c2c thread. T01/HEL-63 (2026-08-25): send_deal's
+-- company arm no longer calls deliver_deal — it posts the same clickable
+-- pill the person arm already posts, into the c2c thread instead. The
+-- 'deal_card' ticket producer this case used to prove is now covered by
+-- deliver_deal_test's own (2a) below, called directly. ──
 SELECT set_config('request.jwt.claim.sub', (SELECT alice FROM _fix)::text, true);
 SELECT set_config('request.jwt.claims',
        json_build_object('sub', (SELECT alice FROM _fix), 'role', 'authenticated')::text, true);
@@ -110,16 +124,24 @@ DECLARE
   v_status text;
 BEGIN
   SELECT count(*) INTO v_n
-  FROM pending_inbox_item p, _fix f
-  WHERE p.deal_card_id = (SELECT id FROM _cards WHERE kind = 'c2c')
-    AND p.type = 'deal_card'
-    AND p.receiver_company_id = f.stonepharm
-    AND p.sender_company_id   = f.greenleaf
-    AND p.status = 'pending'
-    AND p.deleted_at IS NULL;
-  IF v_n <> 1 THEN
-    RAISE EXCEPTION 'A2-1b FAIL: expected exactly 1 deal_card ticket for the other company after send, got %', v_n;
+  FROM pending_inbox_item
+  WHERE deal_card_id = (SELECT id FROM _cards WHERE kind = 'c2c') AND deleted_at IS NULL;
+  IF v_n <> 0 THEN
+    RAISE EXCEPTION 'A2-1b FAIL: send_deal must not write a ticket for a company-addressed deal any more (it posts a chat pill instead — see send_deal_c2c_announce_test.sql), got %', v_n;
   END IF;
+
+  SELECT count(*) INTO v_n
+  FROM chat_message m
+  JOIN chat_thread t ON t.id = m.thread_id
+  JOIN _rel r ON r.rel = t.relationship_id
+  WHERE t.type = 'c2c' AND t.deleted_at IS NULL
+    AND m.type = 'deal_card'
+    AND m.metadata->>'deal_card_id' = (SELECT id FROM _cards WHERE kind = 'c2c')::text
+    AND m.deleted_at IS NULL;
+  IF v_n <> 1 THEN
+    RAISE EXCEPTION 'A2-1b FAIL: expected exactly 1 deal_card pill in the c2c thread after send, got %', v_n;
+  END IF;
+
   SELECT status INTO v_status FROM deal_card
   WHERE id = (SELECT id FROM _cards WHERE kind = 'c2c');
   IF v_status <> 'negotiation' THEN
@@ -127,10 +149,16 @@ BEGIN
   END IF;
 END $$;
 
--- ── (2a) IDEMPOTENT: delivering the SAME card again adds nothing. WR-01: the
--- direct deliver_deal call is now a PRIVILEGED (postgres) call — authenticated
--- lost EXECUTE (probe 2c below), so the idempotency check runs as the owner. ──
+-- ── (2a) IDEMPOTENT: deliver_deal is called directly TWICE. T01/HEL-63
+-- (plan-checker finding 3 / the L-044 trap): now that (1b) above asserts
+-- ZERO tickets after send_deal, a single deliver_deal call here would be the
+-- FIRST insert ever made for this card, and "1 ticket" would pass trivially
+-- without ever exercising deliver_deal's own `if not exists` dedupe guard
+-- (20260720095000:51-56). Calling it twice is the only way this repo still
+-- proves that guard. WR-01: the direct call is a PRIVILEGED (postgres) call —
+-- authenticated lost EXECUTE (probe 2c below), so both calls run as owner. ──
 RESET ROLE;
+SELECT public.deliver_deal((SELECT id FROM _cards WHERE kind = 'c2c'));
 SELECT public.deliver_deal((SELECT id FROM _cards WHERE kind = 'c2c'));
 DO $$
 DECLARE
@@ -139,14 +167,15 @@ BEGIN
   SELECT count(*) INTO v_n FROM pending_inbox_item
   WHERE deal_card_id = (SELECT id FROM _cards WHERE kind = 'c2c') AND deleted_at IS NULL;
   IF v_n <> 1 THEN
-    RAISE EXCEPTION 'A2-2a FAIL: deliver_deal is not idempotent — % tickets', v_n;
+    RAISE EXCEPTION 'A2-2a FAIL: deliver_deal is not idempotent after 2 direct calls — % tickets', v_n;
   END IF;
 END $$;
 
 -- ── (2c / WR-01) EXECUTE REVOKED: authenticated may NOT call deliver_deal
--- directly — only the nested definer calls from send_deal/confirm_detected_deal
--- may (they run as the function owner). As Alice, a direct call is blocked at
--- the grant layer (insufficient_privilege). ──
+-- directly — only a nested definer call from confirm_detected_deal may (T01/
+-- HEL-63: send_deal no longer calls deliver_deal at all; this file's own
+-- (2a) probe above runs privileged, not as authenticated). As Alice, a
+-- direct call is blocked at the grant layer (insufficient_privilege). ──
 SELECT set_config('request.jwt.claim.sub', (SELECT alice FROM _fix)::text, true);
 SELECT set_config('request.jwt.claims',
        json_build_object('sub', (SELECT alice FROM _fix), 'role', 'authenticated')::text, true);
