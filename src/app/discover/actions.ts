@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/shared/db/server";
 import { requireVerified } from "@/shared/auth";
+import { requestActionError } from "@/modules/connect/lib/requestActionError";
 import { getDiscoverableShop } from "./companies";
 import {
   PRODUCT_ID_KEY,
@@ -86,7 +87,11 @@ async function createPairInboxItem(
     // default.
     ...(productId ? { metadata: buildPricingRequestMetadata(productId) } : {}),
   });
-  if (error) return { error: error.message };
+  // Never the raw string (T10). Since HEL-75 this insert can be refused by RLS
+  // when the receiver company has deactivated or been deleted, and a 42501
+  // carries no message of its own — requestActionError owns that sentence, the
+  // same helper personActions.ts:66 already uses for the p2p twin.
+  if (error) return { error: requestActionError(error) };
 
   revalidatePath("/discover");
   revalidatePath(`/discover/${receiverCompanyId}`);

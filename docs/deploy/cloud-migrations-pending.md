@@ -23,10 +23,13 @@
 
 ---
 
-## ⚠️ PENDING (2026-08-25) — HEL-67 Gap 1, `deal_detected` write gate (ONE migration, plain `db push`, **no `--include-all`**)
+## ⚠️ PENDING (2026-08-25) — security batch: HEL-67 Gap 1 + HEL-75 (**TWO** migrations, plain `db push`, **no `--include-all`**)
 
-**Status: LOCAL ONLY.** Production tip is `20260825110000`; this stamps `20260825120000`, so a plain
-`supabase db push --linked` takes it. Nothing is back-dated. **Count: ONE.**
+**Status: LOCAL ONLY.** Production tip is `20260825110000`. This batch stamps `20260825120000` then
+`20260825130000`, in filename order, so ONE plain `supabase db push --linked` takes both. Nothing is
+back-dated. ~~**Count: ONE.**~~ → **Count: TWO** — HEL-75 was added to this section 2026-08-25 by the
+second `security_tickets` session. Do not push either alone; the heading above is the authority on
+the count, not the prose in any single entry.
 
 | # | file | what it does |
 |---|---|---|
@@ -60,6 +63,66 @@ forgery leaves a valid-looking row, and nobody has forged one.
 select pg_get_expr(polwithcheck, polrelid) ~ 'deal_detected' as write_gated,
        pg_get_expr(polqual,      polrelid) ~ 'deal_detected' as read_door_moved_MUST_BE_FALSE
   from pg_policy where polrelid = 'public.chat_message'::regclass and polname = 'msg_all';
+```
+
+### Migration 2 of 2 — HEL-75, `inbox_insert` receiver gate
+
+| # | file | what it does |
+|---|---|---|
+| 2 | `20260825130000_inbox_insert_receiver_gate.sql` | Adds `company_can_receive_requests(uuid)` (STABLE SECURITY DEFINER), then `ALTER POLICY inbox_insert ON pending_inbox_item` — `WITH CHECK` gains `receiver_company_id IS NULL OR company_can_receive_requests(receiver_company_id)`. |
+
+**The hole it closes.** `inbox_insert`'s `WITH CHECK` constrained only the SENDER
+(`sender_company_id = current_company_id() AND sender_person_id = auth.uid()`). Nothing constrained
+the receiver, so HEL-70 hiding a deactivated company from the five discovery doors removed the
+**button, not the door** — anyone holding the company id could still land a pending connection
+request through PostgREST. L-027.
+
+**Scope is DELETED + DEACTIVATED only — narrower than the read doors, deliberately.** Muskan's ruling
+2026-08-25: an **unverified or re-verifying company stays reachable**, because it is arriving, not
+leaving. Do not "tidy" this into agreement with `product_visible_to_caller()`'s term.
+
+🔴 **THE TICKET'S OWN SUGGESTED FIX IS WRONG AND MUST NOT BE RESTORED.** HEL-75 sketched a bare
+`EXISTS (SELECT 1 FROM public.company …)` inline in the policy. A subquery in a policy expression is
+evaluated **as the calling role**, so it obeys `company_select`, which shows `authenticated` only its
+own company, HS-team rows, and companies it already shares a connection with. Measured on the local
+stack as Alice @ GreenLeaf: a direct `SELECT` on `company` returns **5 of 6 rows**, PendingCo absent;
+the inline predicate then **REFUSED** a legitimate `connect` to PendingCo (live, unverified) while
+refusing the deactivated company only *by accident* — it was really gating on "do we already share a
+connection". That ships a gate which breaks connecting to any company you have not met, i.e. the
+product's primary flow, while reading as a two-line liveness check. Hence the SECURITY DEFINER
+helper. L-052.
+
+**Who loses writes when this lands.** Only a sender addressing a soft-deleted or deactivated company.
+Census, from source: exactly two client sites insert here as `authenticated` —
+`discover/actions.ts:76` (gated) and `discover/personActions.ts:56` (`connect_person`,
+`receiver_company_id` null by CHECK, untouched). `deal_card` rows come from `deliver_deal`, SECURITY
+DEFINER, which bypasses RLS and is unaffected.
+
+**Client copy ships with it.** `discover/actions.ts` returned the raw Postgres string; it now routes
+through `requestActionError`, which gained a branch rendering the refusal as *"This company is no
+longer available."* — matching what the read side already shows. Without that edit this migration
+puts `new row violates row-level security policy …` on a pharmacy's screen (T10).
+
+⚠️ **NOT CLOSED BY THIS MIGRATION, and it needs its own decision.** A request that was already
+**pending** when the receiver deactivated stays acceptable. `WITH CHECK` governs the INSERT only, and
+accept runs through `accept_connection_request` — SECURITY DEFINER, bypasses RLS, so RLS cannot be
+the mechanism there. Verified against **production** 2026-08-25: that function checks item state,
+addressee and type, and **never** the receiver company's liveness; `current_company_id()` does not
+gate deactivation either. Recorded on HEL-75.
+
+**Post-flight — assert the policy shape and the helper's grants.** There is no data symptom: nothing
+has been forged, and the pending rows that exist are all on live companies.
+
+```sql
+-- 1. the gate is on the write door
+select pg_get_expr(polwithcheck, polrelid) ~ 'company_can_receive_requests' as receiver_gated
+  from pg_policy where polrelid = 'public.pending_inbox_item'::regclass and polname = 'inbox_insert';
+
+-- 2. the helper is not reachable by anon/PUBLIC (session-77 rule: revoke from BOTH)
+select coalesce(has_function_privilege('anon', p.oid, 'execute'), false) as anon_MUST_BE_FALSE,
+       has_function_privilege('authenticated', p.oid, 'execute')         as authed_MUST_BE_TRUE
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+ where n.nspname = 'public' and p.proname = 'company_can_receive_requests';
 ```
 
 ---
