@@ -1,7 +1,7 @@
 # 0024 c2c-thread-atomicity — work order
 
 lane:   FULL
-stage:  triage ✅ → research ✅ → interview ✅ → PRD ✅ → approaches research ✅ → ADR drafted ✅ → adr-checker round 1 (next)
+stage:  triage ✅ → research ✅ → interview ✅ → PRD ✅ → ADR ✅ (2 checker rounds) → G3 ✅ (Muskan, 2026-08-26) → build (next)
 branch: claude/muskan/work
 
 ## Seed
@@ -50,18 +50,51 @@ callers, p2p thread parity question).
   thread (shipped 0023), so this is no longer closing a "permanently stuck" bug — it's
   making the chat exist at accept time instead of lazily, and unblocking HEL-67 Gap 2.
 
-## Locked
-(none yet)
+## Locked (from ADR 0007, approved at G3)
+1. `accept_connection_request` creates/resolves BOTH c2c and p2p threads + seed
+   lines, in the same transaction as the relationship — signature change,
+   `DROP` + `CREATE` (return-type change forces this), full grant re-emit.
+2. Two new internal helpers (`_resolve_or_create_c2c_thread`,
+   `_resolve_or_create_p2p_thread`), plain (not `SECURITY DEFINER`), callable only
+   from another function's body, `REVOKE ALL` from `public, anon, authenticated`.
+3. Seed-line inserts branch by request type (`connect_message` vs
+   `pricelist_request` get different intro text) with real person/company name
+   composition — not a single hardcoded body.
+4. `clock_timestamp()` on every seed-line insert, not the `created_at` column
+   default — preserves the message-ordering guarantee the deleted browser code had.
+5. `send_deal` is NOT touched by this migration (named follow-up, not bundled).
+6. `planRollout` and its callers are deleted in this same diff (dead code once
+   `acceptInbox`'s insert loop goes) — not deferred.
+7. Five existing SQL test-suite call sites (`connection_consent_lockdown_test.sql`,
+   `accept_connection_request_status_guard_test.sql`) must be rewritten for the new
+   return shape — explicit `TICKETS.md` item, not incidental.
+8. Six-plus stale comments across `store.ts`, `inbox.ts`, `sella-intro/index.ts`,
+   `messaging/types.ts` corrected in this diff (exact list in the ADR's Blast-radius).
 
-## Deferred
-(none yet)
+## Deferred (from the PRD's Out list + ADR)
+- Migrating `send_deal` onto the two new helper functions.
+- The database-trigger alternative (considered, rejected — "action at a distance").
+- Any UI change consuming the newly-returned thread ids — no current caller.
+- HEL-67 Gap 2 itself — this slug unblocks it, doesn't close it.
+- 0026-relationship-write-gate's own gate re-targeting — coordinated by line-number
+  handoff once this migration lands, not built here.
 
 ## Attempts
-- **research, 2026-08-26** — `researcher` sweep, no revisions requested yet. Six open
-  questions carried below, unresolved.
+- **research, 2026-08-26** — `researcher` sweep (prior art) + `researcher` sweep
+  (approaches), both appended to `RESEARCH.md`.
+- **design, 2026-08-26** — ADR 0007 drafted. `adr-checker` round 1: 2 blocking
+  (a Blast-radius claim that was false — the function IS called from two live SQL
+  suites that break on the signature change; a message-ordering guarantee silently
+  dropped) + 9 notes, all folded in. `adr-checker` round 2: 1 blocking (a hardcoded
+  message body that's actually 3 different bodies depending on request type, in
+  the exact file being deleted) + 10 notes, all folded in. Budget exhausted at 2
+  rounds per `/design`'s own rule — no round 3 spawned automatically.
 
 ## Gate log
-(none yet)
+- **G3 (spec + ADR, merged gate) — APPROVED, Muskan, 2026-08-26.** "yes, approved,"
+  after a plain-English walkthrough of the ADR's core move (accept mints the
+  relationship AND the chat in one transaction, so no in-between broken state is
+  reachable).
 
 ## Interview — decisions locked 2026-08-26 (all six answered)
 1. **Scope vs. HEL-67 Gap 2 → move the WHOLE rollout now** (c2c + p2p together, not

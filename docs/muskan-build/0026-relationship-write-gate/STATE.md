@@ -2,7 +2,7 @@
 
 lane:   FULL
 branch: claude/muskan/work
-stage:  triage ✅ → census ✅ → interview ✅ → PRD ✅ → approaches research ✅ → ADR drafted ✅ → adr-checker round 1 (next)
+stage:  triage ✅ → census ✅ → interview ✅ → PRD ✅ → ADR ✅ (2 checker rounds) → G3 ✅ (Muskan, 2026-08-26) → build (next)
 
 ## Seed
 Muskan, 2026-08-26. Origin: HEL-84 (Linear), High priority. Found by `security` review
@@ -86,21 +86,6 @@ down to the currently-live function bodies (several of those files are historica
 `create or replace` layers on the same function name, not 12 distinct live writers) and
 confirming each one's actual reachability.
 
-## Files so far
-(none yet)
-
-## Locked
-(none yet)
-
-## Deferred
-(none yet)
-
-## Attempts
-(none yet)
-
-## Gate log
-(none yet)
-
 ## Interview — decisions locked 2026-08-26 (all three answered)
 1. **Pricing-ask scope → NEW requests only.** Suspending a relationship blocks new
    connect/pricing requests; pricing the buyer already had access to keeps working
@@ -130,11 +115,68 @@ still applies once the ADR is drafted.
   (`deliver_deal`, `propose_deal`), 1 excluded (`create_deal_draft` no longer
   touches `chat_message` at all, confirmed live), 1 flagged open below.
 
-## New open question from research — not covered by the original 3
-`confirm_deal_change` inserts NEW `chat_message` rows when a held pricing/quantity
-change is accepted or declined — literally covered by the PRD's letter, but that
-insert happens on a deal that was ALREADY active when it was sent; HEL-74's own
-header explicitly punted this exact question as "a genuine product call, not an
-engineering one" and it's still unanswered. Does suspending a relationship also
-freeze resolution of an in-flight held change on it, or does that need to complete
-regardless of a suspension that happened mid-negotiation?
+## Two more questions, ruled 2026-08-26
+- **In-flight held changes → let them resolve.** `confirm_deal_change` is
+  explicitly excluded from the gate (PRD AC7) — resolving something already
+  pending when suspension happens is not a "new" write.
+- **`announceDealEvent` (system deal-lifecycle announcements) → also excluded**,
+  found by `adr-checker` round 1, same reasoning as the above (PRD AC8).
+
+## Locked (from ADR 0008, approved at G3)
+1. One function, `assert_relationship_writable(p_relationship_id uuid) RETURNS
+   boolean` — `RETURNS void` was the original draft and is wrong (can't appear in
+   an RLS `WITH CHECK`). Returns `true`, always raises on failure.
+2. **NULL relationship id → allow** (not an error) — covers pre-connection writes,
+   company-less p2p threads, and `group` threads, none of which are suspendable.
+3. **Membership check with a `service_role` carve-out**: a non-party
+   `authenticated` caller gets the same "not found" message as a nonexistent id
+   (closes a real probe/leak); `current_company_id() IS NULL` (i.e. `service_role`
+   — Sella's edge functions) skips the membership check entirely, since
+   `service_role` already bypasses RLS system-wide and has no company context to
+   check against.
+4. Call sites: `msg_all` + `inbox_insert` (RLS, new `WITH CHECK` term) ·
+   `send_deal` + `confirm_detected_deal` (REFACTORED off their existing duplicated
+   inline check, `create or replace` never `drop`+`create`) · `deliver_deal` +
+   `propose_deal` (NEW gate) · `accept_person_connection` (no call needed — always
+   creates NULL-relationship threads) · `sella-detect` + `sella-summarize` (new
+   TypeScript-side calls, found by `adr-checker` round 1, invisible to the
+   original RPC-only census).
+5. Excluded, by ruling not oversight: `create_deal_draft` (verified — touches
+   neither table anymore), `confirm_deal_change`, `announceDealEvent`.
+6. `propose_deal` **was** in an earlier call-site draft as a function that doesn't
+   exist — corrected: it's real (confirmed live, writes `chat_message`), the
+   round-2 checker's claim otherwise was itself wrong. Do NOT re-remove it.
+
+## Deferred (from the PRD's Out list + ADR)
+- Any change to `is_relationship_member()`.
+- Existing/already-shared pricing becoming unusable on suspension (ruled out —
+  new requests only).
+- `requestActionError.ts` needs one new entry for the new raise message — named
+  as a `/build` task, not done here.
+- 0024's own migration — this ADR only re-targets its `store.ts:646` census entry
+  once 0024 ships (already approved, sequenced first).
+
+## Attempts
+- **census, 2026-08-26** — read-only, L-037. Found the fix needs a per-RPC pattern,
+  not one RLS predicate — most `chat_message` writers are `SECURITY DEFINER` RPCs
+  RLS never reaches.
+- **research (approaches), 2026-08-26** — deduplicated the census's ~12 flagged
+  migrations to real live call sites; found `pending_inbox_item` has no
+  `relationship_id` column and the PRD's `RETURNS void` was a type error waiting
+  to happen.
+- **design, 2026-08-26** — ADR 0008 drafted. `adr-checker` round 1: 6 blocking
+  (would have broken Discover's Connect button + all group chats on a legitimate
+  NULL relationship; a real leak letting any user probe relationship status;
+  `accept_person_connection` missing from the census; two Sella edge functions
+  invisible to the RPC-only census) + notes, all folded in. `adr-checker` round 2:
+  2 blocking (the round-1 security fix broke the round-1 Sella fix — `service_role`
+  has no company context, so every Sella write would have raised "not found" even
+  on active relationships; `propose_deal` was independently re-verified as real
+  after the checker claimed otherwise) + notes, all folded in. Budget exhausted at
+  2 rounds per `/design`'s own rule.
+
+## Gate log
+- **G3 (spec + ADR, merged gate) — APPROVED, Muskan, 2026-08-26.** "yes, approved,"
+  after a plain-English walkthrough of the shared-function approach and
+  confirmation that both prior rulings (in-flight changes, deal announcements) are
+  correctly reflected as exclusions.
