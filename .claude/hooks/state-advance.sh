@@ -5,7 +5,11 @@
 # belong to this session). Blocks the stop ONCE with the reason.
 input=$(cat)
 echo "$input" | jq -e '.stop_hook_active == true' >/dev/null 2>&1 && exit 0
-changed=$(git status --porcelain docs/muskan-build/ 2>/dev/null | awk '{print $NF}')
+# -uall here is scoped to docs/muskan-build/ only (a few hundred KB of planning
+# docs) — without it, a brand-new slug directory collapses to one untracked
+# line and this check can never see its STATE.md. The repo-wide -uall memory
+# warning (CLAUDE.md) is about scanning the whole tree, not this one folder.
+changed=$(git status --porcelain -uall docs/muskan-build/ 2>/dev/null | awk '{print $NF}')
 head_ts=$(git log -1 --format=%ct 2>/dev/null || echo 0)
 if [ $(( $(date +%s) - head_ts )) -lt 21600 ]; then
   changed="$changed
