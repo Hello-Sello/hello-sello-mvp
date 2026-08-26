@@ -1,6 +1,6 @@
 # ADR 0008 — block new writes on a suspended/ended relationship
 
-**Status:** Proposed — awaiting G3 (Muskan)
+**Status:** Accepted — approved at G3 (Muskan, 2026-08-26)
 **Slug:** 0026-relationship-write-gate · **Ticket:** HEL-84
 **Date:** 2026-08-26
 

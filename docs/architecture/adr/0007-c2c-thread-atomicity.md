@@ -1,6 +1,6 @@
 # ADR 0007 — c2c/p2p thread atomicity at accept
 
-**Status:** Proposed — awaiting G3 (Muskan)
+**Status:** Accepted — approved at G3 (Muskan, 2026-08-26)
 **Slug:** 0024-c2c-thread-atomicity · **Ticket:** HEL-68
 **Date:** 2026-08-26
 

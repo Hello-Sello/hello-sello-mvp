@@ -295,15 +295,24 @@ export interface PartyPerson {
 }
 
 /**
- * The plain DTO `connect.acceptItem` hands to `messaging.acceptInbox` to run
- * the accept side-effects (mint relationship + threads + seed lines, §2).
- * Plain data only - no connect row types - so messaging never depends on
- * connect (the seam that breaks the otherwise-circular dependency).
+ * The plain DTO `connect.acceptItem` hands to `messaging.acceptInbox`, which
+ * now forwards only `inboxItemId` to the `accept_connection_request` RPC -
+ * that RPC mints the relationship + threads + seed lines itself, atomically
+ * (0024/HEL-68). Plain data only - no connect row types - so messaging never
+ * depends on connect (the seam that breaks the otherwise-circular
+ * dependency).
+ *
+ * Most of the other fields below (`ownCompany`/`senderCompany`/
+ * `viewerPerson`/`senderPerson`/`note`) are no longer read by `acceptInbox`
+ * itself after 0024/HEL-68 - they survive on this DTO only because
+ * `connect/supabase/inbox.ts`'s `acceptItem` reuses the same locals to build
+ * the separate `sella-intro` edge function invoke it makes right after. They
+ * are still live, just for a different caller.
  */
 export interface AcceptInput {
   /** pending_inbox_item.id - written onto relationship.inbox_item_id */
   inboxItemId: string;
-  /** which rollout to run (the §2 table) */
+  /** which accept branch the RPC/`acceptInbox` takes (the §2 table) */
   requestType: AcceptRequestType;
   /** the sender's note (present for connect_message); null otherwise */
   note: string | null;

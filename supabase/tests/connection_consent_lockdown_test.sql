@@ -509,7 +509,8 @@ DECLARE
   v_b uuid := GREATEST('60000001-0000-0000-0000-000000000000'::uuid, '60000002-0000-0000-0000-000000000000'::uuid);
   v_row public.relationship%ROWTYPE;
 BEGIN
-  v_rel_id := public.accept_connection_request('6a000001-0000-0000-0000-000000000000');
+  SELECT relationship_id INTO v_rel_id
+    FROM public.accept_connection_request('6a000001-0000-0000-0000-000000000000');
   IF v_rel_id IS NULL THEN
     RAISE EXCEPTION 'BLOCK 5 FAIL: accept_connection_request returned NULL on a legitimate accept';
   END IF;
@@ -571,14 +572,16 @@ BEGIN
   END IF;
 
   -- Re-accepting the SAME item must return the same id, not mint a second row.
-  v_second := public.accept_connection_request('6a000001-0000-0000-0000-000000000000');
+  SELECT relationship_id INTO v_second
+    FROM public.accept_connection_request('6a000001-0000-0000-0000-000000000000');
   IF v_second <> v_first THEN
     RAISE EXCEPTION 'BLOCK 6 FAIL: re-accepting the same item returned a different relationship id (% vs %)', v_second, v_first;
   END IF;
 
   -- Accepting a DIFFERENT pending item for the SAME pair must ADOPT the
   -- existing relationship, not mint a second one.
-  v_third := public.accept_connection_request('6a000005-0000-0000-0000-000000000000');
+  SELECT relationship_id INTO v_third
+    FROM public.accept_connection_request('6a000005-0000-0000-0000-000000000000');
   IF v_third <> v_first THEN
     RAISE EXCEPTION 'BLOCK 6 FAIL: accepting a second pending item for an already-connected pair minted a NEW relationship (% vs %)', v_third, v_first;
   END IF;

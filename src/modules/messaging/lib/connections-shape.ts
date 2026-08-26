@@ -4,8 +4,8 @@
  * These are the load-bearing RULES of the picker that must hold WITHOUT a
  * database, so they live here, separate from the Supabase read in
  * `../supabase/connections.ts`, and are unit-tested directly (mirrors the
- * deals/lib/recipient.ts + recipient.test.ts pattern, and rollout.ts's pure
- * style). No Supabase, no React, no I/O - pure functions only.
+ * deals/lib/recipient.ts + recipient.test.ts pattern). No Supabase, no React,
+ * no I/O - pure functions only.
  *
  *   - canonicalPair               -> the DB `person_a_id < person_b_id` ordering (D-05)
  *   - isNewConnection             -> the 30-day "new connections" recency window (D-03)
@@ -18,9 +18,12 @@ const MS_PER_DAY = 86_400_000;
 /**
  * Canonical participant order for a P2P thread. The DB enforces
  * `person_a_id < person_b_id` (CHECK chat_thread_p2p_canonical_order); default
- * string sort matches that lexicographic comparison. Re-authored here (the
- * messaging copy in rollout.ts is private) so it can be exported + unit-tested
- * and reused by `openOrCreateP2pThread`.
+ * string sort matches that lexicographic comparison. Exported + unit-tested
+ * here so `openOrCreateP2pThread` can reuse it - the identical `<` ordering
+ * rule is also independently implemented in SQL, inline, by both `send_deal`
+ * and `accept_connection_request`'s resolve-or-create helpers (a known,
+ * accepted drift risk rather than a shared function, since Postgres and this
+ * module can't share one implementation).
  */
 export function canonicalPair(a: string, b: string): [string, string] {
   return a < b ? [a, b] : [b, a];
