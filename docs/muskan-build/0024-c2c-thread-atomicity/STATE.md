@@ -1,7 +1,7 @@
 # 0024 c2c-thread-atomicity — work order
 
 lane:   FULL
-stage:  triage ✅ → research ✅ → interview ✅ → PRD ✅ → ADR ✅ (2 checker rounds) → G3 ✅ (Muskan, 2026-08-26) → build (next)
+stage:  triage ✅ → research ✅ → interview ✅ → PRD ✅ → ADR ✅ (2 checker rounds) → G3 ✅ (Muskan, 2026-08-26) → build ✅ → G4 auto ✅ → 🏁 SLUG COMPLETE
 branch: claude/muskan/work
 
 ## Seed
@@ -95,6 +95,41 @@ callers, p2p thread parity question).
   after a plain-English walkthrough of the ADR's core move (accept mints the
   relationship AND the chat in one transaction, so no in-between broken state is
   reachable).
+- **`/build`, 2026-08-26.** Plan (`PLAN-HEL-68.md`) went through **3
+  `plan-checker` rounds** before converging — each round found a genuine
+  PL/pgSQL bug in the PREVIOUS round's own fix: round 1 caught that a naive
+  `v_rel_id → relationship_id` rename would shadow the new OUT param; round 2
+  caught that round 1's own fix miscounted (one occurrence needed deletion, not
+  renaming — renaming it is a parse-time error in a function with OUT params)
+  and that a `\v` escape in a different fix isn't valid Postgres syntax
+  (silently corrupts any note starting with the letter "v"); round 3 confirmed
+  both fixes correct and found no third bug. `test-writer` wrote deny-tests +
+  5 invariant tests in one suite, plus a scoped follow-up fixing 3 call sites
+  in a sibling suite the signature change would otherwise break (L-035 — that's
+  test-writer's job, not builder's, even for a mechanical rewrite). `builder`
+  implemented in one pass, reporting green.
+  **Verified independently by the orchestrator (L-023), not taken on trust:**
+  fresh `db reset`, both SQL suites green, `e2e/inbox-accept.spec.ts` 2/2,
+  `tsc` clean, 474/474 vitest, eslint clean (1 pre-existing unrelated warning,
+  confirmed via `git blame` to predate this session).
+  `/code-review high` + `critic` + `security` (mandatory — migration/RPC/grants)
+  all ran clean of blocking findings — full findings and disposition in
+  `REVIEW.md`. Ten findings fixed directly (a missing `.trim()` that would have
+  baked a double-space into single-name users' seeded messages; message
+  ordering hardened from probabilistic `clock_timestamp()` ties to an asserted
+  1ms offset; Linear issue codes stripped from migration/test comments per
+  standing rule; a factually-false security claim about `chat_thread` grants;
+  a stale precedent citation; an overstated docstring guarantee; dangling
+  references to the deleted `rollout.ts`; both ADRs' stale "awaiting G3"
+  status headers; the PRD's AC3 wording narrowed to match correct behavior).
+  Eight more findings named and accepted, not fixed — see REVIEW.md for why
+  each is either already-reasoned-about (ADR-level decisions), pre-existing
+  and unrelated to this diff, or a real-but-low-priority coverage gap.
+- **G4 — auto-closed**, backend-only diff (PIPELINE §3): two migrations, one
+  server module, no rendered component. No outstanding rejection, no blocking
+  `security` finding. None of the three human-escalation carve-outs apply.
+
+🏁 **SLUG COMPLETE.**
 
 ## Interview — decisions locked 2026-08-26 (all six answered)
 1. **Scope vs. HEL-67 Gap 2 → move the WHOLE rollout now** (c2c + p2p together, not

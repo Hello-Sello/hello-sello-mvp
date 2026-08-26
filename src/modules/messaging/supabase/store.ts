@@ -12,7 +12,9 @@
  * view in JS - the same "directory" resolution the mock did, just from the DB.
  *
  * WRITES are REAL too: `postMessage` inserts a real `chat_message` row (RLS
- * `msg_all`) and `acceptInbox` mints the relationship + threads + seed lines.
+ * `msg_all`) and `acceptInbox` calls the `accept_connection_request` RPC,
+ * which mints the relationship + threads + seed lines itself, atomically
+ * (see that RPC's own migration for the c2c/p2p rollout logic).
  * Realtime broadcasts each insert to both sides, so the chat persists end to
  * end. This is the Path A prerequisite for Sella detection - see
  * `_workshop/build-plans/4-sella-build.md`.
@@ -21,7 +23,6 @@ import { createClient } from "@/shared/db/client";
 import { previewOf } from "../lib/chat-display";
 import { canonicalPair } from "../lib/connections-shape";
 import { companylessP2pDisplay } from "../lib/companylessP2pDisplay";
-import { planRollout } from "../lib/rollout";
 import type {
   AcceptInput,
   ChatMessageView,
@@ -351,9 +352,13 @@ export async function getDealThread(
 
 /**
  * Resolve the C2C thread for a relationship (company-mode selection, D-05).
- * The C2C is minted on EVERY accept (`planRollout`), so it always exists - this
- * is resolve-only. RLS (`thread_all`) scopes the row to the viewer; a guard
- * throws if the (shouldn't-happen) missing case is hit.
+ * `accept_connection_request`'s own SQL now mints the C2C thread atomically
+ * with the relationship for every accept going forward - this is resolve-only.
+ * (A relationship that predates that change and never had a deal sent through
+ * it - which self-heals the thread on send - is the one case where the guard
+ * below can still fire; not expected in practice, but the throw stays
+ * meaningful rather than dead.) RLS (`thread_all`) scopes the row to the
+ * viewer.
  */
 export async function resolveC2cThread(relationshipId: string): Promise<string> {
   const supabase = createClient();
@@ -373,12 +378,13 @@ export async function resolveC2cThread(relationshipId: string): Promise<string> 
 
 /**
  * Open the P2P thread between the viewer and another person, creating it if
- * missing (person-mode selection, D-05). `planRollout` only mints a P2P for the
- * accepting/sender pair, so most connected people have NO P2P thread yet
- * (Pitfall 2) - hence resolve-or-create. The pair is stored in canonical order
- * (`person_a_id < person_b_id`, DB CHECK), and the `thread_all` WITH CHECK
- * (`auth.uid() IN (person_a_id, person_b_id)`) allows the INSERT because the
- * viewer is always one side. Returns the thread id either way.
+ * missing (person-mode selection, D-05). `accept_connection_request` only
+ * mints a P2P for the accepting/sender pair, so most connected people have NO
+ * P2P thread yet (Pitfall 2) - hence resolve-or-create. The pair is stored in
+ * canonical order (`person_a_id < person_b_id`, DB CHECK), and the
+ * `thread_all` WITH CHECK (`auth.uid() IN (person_a_id, person_b_id)`) allows
+ * the INSERT because the viewer is always one side. Returns the thread id
+ * either way.
  */
 export async function openOrCreateP2pThread(
   relationshipId: string,
@@ -521,20 +527,22 @@ export async function postDealMessage(threadId: string, dealCardId: string): Pro
 }
 
 /**
- * Run the accept rollout against Supabase: ENSURE a `relationship` (+ the
- * C2C/P2P threads and their seed lines per `planRollout`) exists, creating only
- * what is missing.
+ * Run the accept against Supabase via the `accept_connection_request` RPC,
+ * which ENSURES the `relationship` + its C2C/P2P threads and seed lines
+ * atomically, in one transaction (previously this function ran that rollout
+ * itself, as a separate later set of writes; see the RPC's own migration for
+ * the mint/adopt + thread + seed-line logic now inside it).
  *
  * Ensure, not insert, because the schema already declares these as unique and
  * an accept is not the only thing that creates them: one active relationship
  * per company pair (`uq_relationship_pair_active`), one C2C per relationship
  * (`uq_chat_thread_c2c`), one P2P per person pair (`uq_chat_thread_p2p`). Two
  * companies can already be connected when a request arrives - that is the
- * normal case for a pricing ask - so this function adopts what is there and
- * adds the rest. Seed lines are written only for threads it creates.
+ * normal case for a pricing ask - so the RPC adopts what is there and adds
+ * the rest. Seed lines are written only for threads it creates.
  *
- * Callers get the relationship id and every thread id the plan calls for,
- * whether this call made them or found them.
+ * Callers get the relationship id and every thread id the RPC minted or
+ * adopted.
  *
  * Does NOT touch the inbox item status - connect owns that table
  * (connect.acceptItem flips it after this returns).
@@ -577,76 +585,43 @@ export async function acceptInbox(
     return { relationshipId: relId as unknown as string, threadIds: [] };
   }
 
-  // relationship - server-granted, never self-declared. `authenticated` has no
-  // write grant on the table at all: the counterparty's consent lives in the
-  // inbox item, so the item id is the ONLY thing this call may supply. The RPC
-  // derives the pair, the canonical order (CHECK company_a_id < company_b_id)
-  // and the initiator, verifies the request is pending and addressed to the
-  // caller's company, and ADOPTS an existing active pair rather than minting a
-  // second one (`uq_relationship_pair_active`). It does not flip the item's
-  // status - connect.acceptItem still owns that.
-  const { data: relationshipId, error: relErr } = await supabase.rpc(
-    "accept_connection_request",
-    { p_inbox_item_id: input.inboxItemId },
+  // relationship + threads + seed lines - server-granted, never self-declared,
+  // ONE atomic RPC call. `authenticated` has no write grant on `relationship`
+  // at all: the counterparty's consent lives in the inbox item, so the item
+  // id is the ONLY thing this call may supply (this RPC also happens to be
+  // the only path that writes `chat_thread`/`chat_message` now that this
+  // function's own insert loop is gone — `authenticated` still holds a direct
+  // client-side write grant on both tables via `thread_all`/`msg_all`, e.g.
+  // `postMessage` below uses it; that's a different, still-open question,
+  // not something this RPC closes). The RPC derives the pair, the canonical
+  // order (CHECK company_a_id < company_b_id) and the initiator, verifies the
+  // request is pending and addressed to the caller's company, ADOPTS an
+  // existing active pair rather than minting a second one
+  // (`uq_relationship_pair_active`), and resolves-or-creates the c2c/p2p
+  // chat_thread rows + seed lines in the same transaction. It does not flip
+  // the item's status - connect.acceptItem still owns that.
+  //
+  // The RPC's OUT params come back as one record; be tolerant of a
+  // single-object or an array-of-one shape across PostgREST versions (same
+  // discipline as confirmDetectedDeal, deals/actions.ts:335 - the closest
+  // precedent in this codebase for an OUT-param-returning RPC). The generated
+  // type still says `Returns: string` (the prior signature) - the call rides
+  // the localized `as never` cast bridge until types regenerate.
+  const { data, error: relErr } = await supabase.rpc(
+    "accept_connection_request" as never,
+    { p_inbox_item_id: input.inboxItemId } as never,
   );
   if (relErr) throw relErr;
 
-  // threads + seed lines from the (pure) rollout plan - ENSURED, not inserted.
-  // `uq_chat_thread_c2c` (one per relationship) and `uq_chat_thread_p2p` (one
-  // per person pair) tell the same story as the relationship above: on an
-  // adopted relationship the c2c already exists, so re-inserting it raises
-  // `23505`. Seed lines are written ONLY for a thread this call creates - that
-  // is what stops a double-accept from double-posting, since the inbox item's
-  // status flips only after this function returns.
-  const plan = planRollout(input);
-  const { data: present, error: presentErr } = await supabase
-    .from("chat_thread")
-    .select("id, type, person_a_id, person_b_id")
-    .eq("relationship_id", relationshipId)
-    .is("deleted_at", null);
-  if (presentErr) throw presentErr;
-
-  const base = Date.now();
-  const threadIds: string[] = [];
-  for (let ti = 0; ti < plan.threads.length; ti++) {
-    const spec = plan.threads[ti];
-    const already = (present ?? []).find(
-      (t) =>
-        t.type === spec.type &&
-        (spec.type !== "p2p" ||
-          (t.person_a_id === spec.personAId &&
-            t.person_b_id === spec.personBId)),
-    );
-    if (already) {
-      threadIds.push(already.id);
-      continue;
-    }
-    const { data: thread, error: tErr } = await supabase
-      .from("chat_thread")
-      .insert({
-        relationship_id: relationshipId,
-        type: spec.type,
-        person_a_id: spec.personAId,
-        person_b_id: spec.personBId,
-      })
-      .select("id")
-      .single();
-    if (tErr) throw tErr;
-    threadIds.push(thread.id);
-    if (spec.seed.length) {
-      // nudge each line a few ms apart so the stream order is deterministic
-      const rows = spec.seed.map((s, mi) => ({
-        thread_id: thread.id,
-        sender: s.sender,
-        sender_person_id: s.senderPersonId,
-        type: s.type,
-        body: s.body,
-        created_at: new Date(base + ti * 1_000 + mi * 100).toISOString(),
-      }));
-      const { error: mErr } = await supabase.from("chat_message").insert(rows);
-      if (mErr) throw mErr;
-    }
+  const rec = (Array.isArray(data) ? data[0] : data) as
+    | { relationship_id: string | null; c2c_thread_id: string | null; p2p_thread_id: string | null }
+    | null;
+  if (!rec?.relationship_id) {
+    throw new Error("acceptInbox: accept_connection_request returned no relationship id");
   }
 
-  return { relationshipId, threadIds };
+  return {
+    relationshipId: rec.relationship_id,
+    threadIds: [rec.c2c_thread_id, rec.p2p_thread_id].filter((id): id is string => !!id),
+  };
 }

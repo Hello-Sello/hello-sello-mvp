@@ -96,9 +96,12 @@ write path entirely.
 - **AC2:** Given the same setup but a person-addressed request, when it is accepted,
   then a p2p `chat_thread` row also exists immediately after, with the correct seed
   line(s) for that request type.
-- **AC3:** Given an already-connected pair (adopt path), when a duplicate accept runs,
-  then no second thread and no second seed line are created — thread/seed-line counts
-  are unchanged.
+- **AC3:** Given an already-connected pair (adopt path), when a duplicate accept
+  runs for the SAME two people, then no second thread and no second seed line
+  are created — thread/seed-line counts are unchanged. (A pricing ask from a
+  DIFFERENT person at an already-connected company legitimately mints a new
+  p2p thread on the adopt path — that's a new person pair, not a duplicate
+  accept, and is correct AC2 behavior, not a violation of this criterion.)
 - **AC4:** Given the browser's `acceptInbox` code path, after this change it issues
   zero `INSERT`s against `chat_thread` or `chat_message` — verified by removing the
   insert loop, not by a runtime guard.
