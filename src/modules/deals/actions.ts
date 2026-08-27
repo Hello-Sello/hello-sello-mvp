@@ -552,16 +552,17 @@ export async function proposeDealChange(
   // E1: a change proposed on a LIVE deal projects a chat pill so the
   // counterparty sees it in the stream (DEV-33). GATED on status ===
   // 'negotiation': a still-PRIVATE 'unsent' draft's edit must never leak to the
-  // other side (D-08) - proposeDealChange can also run before Send.
+  // other side (D-08) - proposeDealChange can also run before Send. §12.3
+  // (HEL-84): routes through announce_deal_event, a SECURITY DEFINER RPC that
+  // composes the actor-name body server-side now - this guard staying
+  // client-side is a deliberate, named divergence (§12.3): the RPC has no
+  // deal_card.status check of its own.
   if (cardRow.status === "negotiation") {
-    const actorName = await resolveActorName(supabase, user.id);
-    await announceDealEvent(
-      supabase,
-      input.dealCardId,
-      cardRow.relationship_id,
-      "deal_change_proposed",
-      `${actorName} proposed a change`,
-    );
+    const { error: announceErr } = await supabase.rpc("announce_deal_event" as never, {
+      p_deal_card_id: input.dealCardId,
+      p_type: "deal_change_proposed",
+    } as never);
+    if (announceErr) console.error("deal event announcement failed", announceErr);
   }
 
   return { pendingId: newPendingId };
@@ -641,79 +642,6 @@ export async function withdrawDealChange({
 }
 
 /**
- * Project a deal lifecycle event into the chat stream — the DEV-33 doctrine:
- * the chat is the activity feed, and every deal event lands as a thin
- * WhatsApp-style system line ("the system message is a projection of a log
- * entry", DECISIONS 2026-05-22). Posts into the thread people actually read —
- * the relationship's p2p thread when one exists (person deals), else the c2c
- * company channel — plus the deal's own hidden thread as the durable record.
- *
- * FAIL-SOFT by design: the deal action has already committed by the time this
- * runs, so a failed announcement logs and returns — it never surfaces as a
- * failed decline/sign. (The SQL-side announcements in confirm_deal_change are
- * transactional with their status change; these app-side ones are not — the
- * accepted trade-off of keeping declineDeal/signDeal as app actions.)
- * Inserted per-thread (not one batch) so an RLS miss on one thread — e.g. a
- * p2p pair the actor isn't part of — never voids the others.
- */
-async function announceDealEvent(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  dealCardId: string,
-  relationshipId: string,
-  type:
-    | "deal_cancelled"
-    | "deal_signed"
-    | "deal_change_proposed"
-    | "deal_negotiation_requested",
-  body: string,
-): Promise<void> {
-  try {
-    const { data: threads } = await supabase
-      .from("chat_thread")
-      .select("id, type, deal_card_id")
-      .eq("relationship_id", relationshipId)
-      .is("deleted_at", null);
-    const list = threads ?? [];
-    const targets: string[] = [];
-    const dealThread = list.find((t) => t.type === "deal" && t.deal_card_id === dealCardId);
-    if (dealThread) targets.push(dealThread.id);
-    const visible = list.find((t) => t.type === "p2p") ?? list.find((t) => t.type === "c2c");
-    if (visible) targets.push(visible.id);
-    for (const thread_id of targets) {
-      const { error } = await supabase.from("chat_message").insert({
-        thread_id,
-        sender: "sella",
-        type,
-        body,
-        metadata: { deal_card_id: dealCardId },
-      });
-      if (error) console.error("deal event announcement failed", error);
-    }
-  } catch (e) {
-    console.error("deal event announcement failed", e);
-  }
-}
-
-/**
- * Resolve a person's display name (first + last) for a chat-projection body.
- * Falls back to "A teammate" when the row carries no name - the SAME shape the
- * logs read uses (reads.ts). Shared by the two projection-only actions
- * (proposeDealChange's E1 pill, requestNegotiation's B1 pill).
- */
-async function resolveActorName(
-  supabase: ServerClient,
-  personId: string,
-): Promise<string> {
-  const { data: person } = await supabase
-    .from("person")
-    .select("first_name, last_name")
-    .eq("id", personId)
-    .single();
-  const name = [person?.first_name, person?.last_name].filter(Boolean).join(" ").trim();
-  return name || "A teammate";
-}
-
-/**
  * Decline a deal (chj/07-08) - the "end it" action from the on-card DecisionBar.
  * A decline is a CLOSE, not a delete (the user's lifecycle rule): the card flips
  * to `cancelled` and reuses the existing closed-deal handling (the lock, no more
@@ -767,14 +695,15 @@ export async function declineDeal(args: { dealCardId: string }): Promise<void> {
     contentId: args.dealCardId,
     actorPersonId: user.id,
   });
-  // DEV-33: project the decline into the chat stream (thin system line)
-  await announceDealEvent(
-    supabase,
-    args.dealCardId,
-    card.relationship_id,
-    "deal_cancelled",
-    "Deal declined - the deal is closed.",
-  );
+  // DEV-33: project the decline into the chat stream (thin system line).
+  // §12.3 (HEL-84): routes through announce_deal_event, a SECURITY DEFINER
+  // RPC — same fail-soft contract as before (log, never throw; the decline
+  // already committed above, a failed announcement must never surface).
+  const { error: announceErr } = await supabase.rpc("announce_deal_event" as never, {
+    p_deal_card_id: args.dealCardId,
+    p_type: "deal_cancelled",
+  } as never);
+  if (announceErr) console.error("deal event announcement failed", announceErr);
 }
 
 /**
@@ -819,14 +748,13 @@ export async function signDeal({
     contentId: dealCardId,
     actorPersonId: user.id,
   });
-  // DEV-33: project the sign into the chat stream (thin system line)
-  await announceDealEvent(
-    supabase,
-    dealCardId,
-    card.relationship_id,
-    "deal_signed",
-    "Deal signed - the deal is confirmed.",
-  );
+  // DEV-33: project the sign into the chat stream (thin system line).
+  // §12.3 (HEL-84): routes through announce_deal_event, a SECURITY DEFINER RPC.
+  const { error: announceErr } = await supabase.rpc("announce_deal_event" as never, {
+    p_deal_card_id: dealCardId,
+    p_type: "deal_signed",
+  } as never);
+  if (announceErr) console.error("deal event announcement failed", announceErr);
   return { cardStatus: "confirmed" };
 }
 
@@ -856,14 +784,13 @@ export async function requestNegotiation({
     .single();
   if (cardErr) throw cardErr;
 
-  const actorName = await resolveActorName(supabase, user.id);
-  await announceDealEvent(
-    supabase,
-    dealCardId,
-    card.relationship_id,
-    "deal_negotiation_requested",
-    `${actorName} wants to negotiate`,
-  );
+  // §12.3 (HEL-84): routes through announce_deal_event, a SECURITY DEFINER
+  // RPC that composes the actor-name body server-side.
+  const { error: announceErr } = await supabase.rpc("announce_deal_event" as never, {
+    p_deal_card_id: dealCardId,
+    p_type: "deal_negotiation_requested",
+  } as never);
+  if (announceErr) console.error("deal event announcement failed", announceErr);
 }
 
 /* -------------------------------------------------------------------------- */
