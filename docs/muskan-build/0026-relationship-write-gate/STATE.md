@@ -301,6 +301,25 @@ still applies once the ADR is drafted.
   behavioral divergence: a suspended relationship still gets the SQL-side
   deal-change announcement but not Sella's parallel summary of it).
   **Next:** re-spawn `plan-checker` round 4.
+- **`plan-checker` round 4, 2026-08-27** — REVISE: **1 blocking, 4 notes.**
+  Confirmed round 3's B1/B2 fixes hold under independent re-derivation
+  (not just re-statement). B1: §8's test-cell hardening (position, role,
+  exception shape, "flip actually took" assertion) was applied to
+  `deliver_deal_test.sql` only — the two OTHER suite extensions in the same
+  §8 (`msg_all_deal_detected_gate_test.sql`, `inbox_insert_receiver_gate_
+  test.sql`) needed the identical four fixes and had none of them, including
+  one cell that would have passed vacuously. 4 notes: N1 (§3's `or` is
+  actually safe, unlike §2's, but for an unstated reason — reads as
+  self-contradicting without it), N2 (seed line citations off by one), N3
+  (an unnamed side effect: gating `sella-detect` early also means no
+  `sella_detection` memory row for a suspended-relationship run), N4 (new
+  migration timestamps must sort after the tip, which moved when 0024
+  shipped mid-plan).
+- **`/build`, 2026-08-27** — fixed B1 by applying the same four-point
+  structural fix (position, role, exception shape, flip-verification) to
+  both remaining suite extensions, including how to derive each file's
+  relationship id (neither fixture carries one today). N1-N4 folded in.
+  **Next:** re-spawn `plan-checker` round 5.
 
 ## Gate log
 - **G3 (spec + ADR, merged gate) — APPROVED, Muskan, 2026-08-26.** "yes, approved,"
