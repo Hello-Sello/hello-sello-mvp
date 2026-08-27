@@ -2,7 +2,7 @@
 
 lane:   FULL
 branch: claude/muskan/work
-stage:  triage ✅ → census ✅ → interview ✅ → PRD ✅ → ADR ✅ (2 checker rounds) → G3 ✅ (Muskan, 2026-08-26) → plan written ✅ → plan-checker ✅ (6 rounds: 4→2→2→1→1→0 blocking) → test-writer ✅ (RED verified) → builder ✅ (GREEN verified) → security + full gate (next)
+stage:  triage ✅ → census ✅ → interview ✅ → PRD ✅ → ADR ✅ (2 checker rounds) → G3 ✅ (Muskan, 2026-08-26) → plan written ✅ → plan-checker ✅ (6 rounds: 4→2→2→1→1→0 blocking) → test-writer ✅ → builder ✅ → e2e ✅ → critic ✅ → security found 1 blocking (client-controlled type bypass) → §12 addendum written, Muskan ruled fix-properly → plan-checker on §12 (next)
 
 ## Seed
 Muskan, 2026-08-26. Origin: HEL-84 (Linear), High priority. Found by `security` review
@@ -427,6 +427,39 @@ still applies once the ADR is drafted.
   (ADR 0008's own prose has an internal tension between Locked #3 and
   Invariant 16 — the code matches both rulings, the ADR's wording is what
   reads as contradictory).
+- **`security`, 2026-08-27** — **1 blocking (rung 2, live-proven exploit),
+  6 notes.** B1: §2's four-type `announceDealEvent` exemption is keyed on
+  `chat_message.type`, a fully client-controlled, unconstrained column —
+  `authenticated` can insert/update with any `type`, so a thread member on
+  a SUSPENDED relationship bypasses the entire write gate by setting
+  `type` to one of the four exempt values. Proved live: identical insert,
+  only `type` changed from `'message'` to `'deal_signed'`, went through.
+  Also defeats the UPDATE side (`msg_all` is `FOR ALL`) — an existing
+  message can be retyped to bypass the gate retroactively. All other S1-S8
+  checks PASS on the local stack; S6/S8's remote halves owed at `/ship`.
+  Independently re-verified the round-3 fail-open fix is real in the LIVE
+  catalog body (`pg_get_functiondef`), not just the file, via a live probe
+  with a company-less caller against a suspended relationship. 6 notes:
+  N1 (the `connect_person` door bypasses suspension entirely via a
+  permanently-NULL relationship_id — pre-existing, plan declares it
+  out of scope, but `assert_relationship_writable`'s own comment claiming
+  "none are suspendable" is inaccurate of this population), N2 (the gate
+  also blocks a member soft-deleting/editing their own message — probably
+  fine, should be a deliberate ruling), N3 (group threads are entirely
+  ungated, pre-existing), N4 (proposing a change AND its chat pill both
+  survive suspension — two separately-correct exclusions composing into a
+  whole bypassable flow), N5 (misleading refusal text for a soft-deleted
+  relationship's member), N6 (S6/S8 remote checks owed at ship).
+  **Muskan's ruling: fix properly** (not downgrade AC2/AC8's enforcement
+  claim) — matching this repo's own established precedent (HEL-67 Gap 1,
+  and 0024's `send_deal` fix for the identical shape): move
+  `announceDealEvent` into a `SECURITY DEFINER` RPC, which bypasses RLS
+  entirely and needs no client-facing exemption. Written as **§12,
+  addendum** to `PLAN-HEL-84.md` (real new scope beyond the 6-round-checked
+  plan — its own function, own membership check, own tests, deletes
+  `announceDealEvent`/`resolveActorName` from `actions.ts`). **Next:**
+  `plan-checker` on §12, then `test-writer`/`builder` for the addendum,
+  then re-verify `security` clean before G4.
 
 ## Gate log
 - **G3 (spec + ADR, merged gate) — APPROVED, Muskan, 2026-08-26.** "yes, approved,"
