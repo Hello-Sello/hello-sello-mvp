@@ -460,6 +460,38 @@ still applies once the ADR is drafted.
   `announceDealEvent`/`resolveActorName` from `actions.ts`). **Next:**
   `plan-checker` on §12, then `test-writer`/`builder` for the addendum,
   then re-verify `security` clean before G4.
+- **`plan-checker`, §12 round 1, 2026-08-27** — REVISE: **4 blocking, 8
+  notes.** Confirmed the core design sound (exploit genuinely closed once
+  built, Invariant 16 survives, fail-soft trace holds end to end, in-place
+  migration edit confirmed safe against the real production tip). B1: the
+  §F5 test spec claimed the four types must be refused on ANY relationship
+  — false, self-contradicts this suite's own existing active-relationship
+  control. B2 (the substantive one): the visible-thread resolution matched
+  ANY p2p thread on the relationship, not the caller's own pair — on a
+  relationship with ≥2 person pairs, the announcement could land in a
+  private 1:1 between two OTHER people. B3: the TS snippet wouldn't
+  compile (RPC not in the generated types, no cast). B4: the new suite had
+  no runner named. 8 notes, including a real inverted-logic bug in the
+  addendum's own NULL-safety reasoning (right conclusion, backwards
+  explanation — a future editor trusting the wrong explanation could
+  remove the actual guard) and a scope-overstatement about what the fix
+  closes.
+- **`/build`, 2026-08-27** — fixed all 4 blocking: B1 (corrected F5's scope
+  to suspended-only, matching its existing position; named 4 more stale
+  comments in the same file beyond F5 itself), B2 (restricted the p2p
+  lookup to the caller's own person pair, matching `send_deal`'s own
+  established precedent for the identical shape), B3 (switched to this
+  file's own `as never` cast pattern, matching `propose_deal_change`'s
+  precedent at `actions.ts:529-536`), B4 (named
+  `run_announce_deal_event_test.sh`, plus a new required test cell for the
+  B2 regression itself). All 8 notes folded in: N1 (fixed the inverted
+  NULL-safety explanation), N2 (confirmed, no fix needed), N3 (named the
+  4 additional stale references), N4 (kept the two dead `deal_card` reads
+  deliberately rather than changing behavior as a side effect, named as a
+  future cleanup), N5 (named the client-only D-08 guard explicitly), N6
+  (fixed the evidence citation for "never shipped"), N7 (corrected an
+  overstated closure claim), N8 (added the missing `deleted_at` filters).
+  **Next:** re-spawn `plan-checker` on §12.
 
 ## Gate log
 - **G3 (spec + ADR, merged gate) — APPROVED, Muskan, 2026-08-26.** "yes, approved,"
