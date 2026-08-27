@@ -427,6 +427,20 @@ One file, `create or replace` (no signature change):
 an earlier draft of this plan included one, resurrecting a dropped function
 (L-063). Do not re-add it.
 
+**Unlike §4's delta 3, this predicate is NOT redundant-but-harmless for
+`deliver_deal` — name the real behavior change (round 6, N4):** §4 argues
+`assert_relationship_writable`'s membership check is inert on `send_deal`/
+`confirm_detected_deal` because the caller's party-status is already
+established earlier in each function's own body. That argument does NOT
+transfer here. `deliver_deal`'s own header
+(`20260720095000_deliver_deal.sql:20-22`) states it "derives every id from
+the card row — no client input is trusted" and performs no caller-is-party
+check of its own; it is invoked nested, privileged. After this migration, it
+refuses whenever the session's active JWT claims belong to a non-party —
+a real new behavior, not a no-op, even though it's currently unreachable
+(its one live caller, `confirm_detected_deal`, already gates on the same
+relationship first) and `service_role` is exempt via `auth.uid() IS NULL`.
+
 ## §6 — TypeScript: the two Sella edge functions
 
 Neither file needs a schema change — both already select `relationship_id`
@@ -535,13 +549,43 @@ to prove: `accept_connection_request`'s own guard
 request that predates a suspension and must still be refused at accept
 time — not for a request minted after suspension, which after this ticket
 can't be minted through the RLS path at all. The reorder needs no privileged
-role and doesn't touch what §§B-E test. **Census performed by `plan-checker`
-round 5, not re-done here — trust it, don't re-derive**: 12 suites write
-`chat_message`/`pending_inbox_item`; of those, this is the ONLY one that
-breaks (the other 11 either write through a definer, write pre-suspension,
-target a pair the gate doesn't reach, or collapse to the unsatisfiable
-canonical-order NULL case the same way §3's own `connect_person` exemption
-does).
+role and doesn't touch what §§B-E test. **Census performed independently by
+`plan-checker` rounds 5 AND 6 (round 6 re-derived it from scratch rather than
+trusting round 5, and confirmed the same conclusion, correcting one
+misclassification) — trust it, don't re-derive a third time**: of the
+suites touching `chat_message`/`pending_inbox_item` writes, this is the ONLY
+one that breaks (the rest either write through a definer, write
+pre-suspension, target a pair the gate doesn't reach, or collapse to the
+unsatisfiable canonical-order NULL case the same way §3's own
+`connect_person` exemption does — including two suites round 6 specifically
+verified are safe for reasons stronger than short-circuit luck: `msg_all_
+deal_detected_gate_test.sql`'s §D1 non-member cell is safe because
+`thread_all`'s own `USING` clause excludes the non-member from ever seeing
+the thread row at all, independent of evaluation order; `inbox_insert_
+receiver_gate_test.sql`'s §B cells target companies with no relationship row
+to begin with).
+
+**The reorder also needs its own comments updated (round 6, N3) — five
+places in `accept_connection_request_status_guard_test.sql` state the OLD
+semantics and would mislead a future reader into re-swapping the order
+back:** the file's top docstring, the `-- HS team suspends the pair first`
+comment, §A's own header (`"a fresh request onto the now-suspended pair"`),
+the two comments immediately around Clara's insert, and the note literal
+itself (`'A2/suite: pricing ask on a suspended pair'`) all need to say the
+new thing this cell actually tests — a request that predates a suspension.
+
+**`send_deal_c2c_announce_test.sql` is a DIFFERENT blast-radius class, not a
+write site (round 6, N5 — round 5's census listed it among the 12 as if it
+inserts; it does not):** its only match is a string probe against
+`pg_get_functiondef('public.deliver_deal(uuid)')`, asserting the TEXT of
+that function still contains `insert into public.pending_inbox_item` and a
+matching `if not exists` guard. §5's verbatim re-emit (the function body
+copied unchanged plus one inserted `perform` line) preserves both needles,
+so this suite is safe as specified — but name it explicitly in §5 as a
+"text-assertion" dependent, not a data-write dependent, so a future edit
+that reformats or restructures `deliver_deal`'s body (even while preserving
+behavior) doesn't turn this suite red for a reason nothing else in this plan
+would predict.
 
 **Existing suites needing an assertion-text confirmation pass, not a
 rewrite** — already re-verified during this plan's own citation pass (§0): the
@@ -586,11 +630,14 @@ placement instructions didn't match this file's actual structure — corrected:
    at that point) — `authenticated` has `UPDATE` revoked on `relationship`
    (`20260823090000_connection_consent_and_verification_lockdown.sql:89`), a
    plain `UPDATE` as `authenticated` would itself raise before ever reaching
-   `deliver_deal`. And whatever `request.jwt.claims` the immediately-prior
-   cell left set carries forward (this file's fixtures are cumulative, not
-   reset between cells) — name explicitly which caller's claims are active
-   for this new cell rather than silently inheriting whatever the previous
-   cell happened to leave.
+   `deliver_deal`. **The claims active at this point are Bob's (round 6, N2
+   — named, not left implicit): `:325-327` sets them last, and `:341`'s
+   `RESET ROLE` clears only the role, not the transaction-local
+   `set_config`** (this file's fixtures are cumulative, not reset between
+   cells). This matters more after §4/§5 than it did before: `deliver_deal`
+   never had a caller-is-party check of its own — `assert_relationship_
+   writable` adds one, so the active claims at this cell must belong to an
+   actual party to GL↔StonePharm, which Bob is.
 4. **Add an explicit "fixture is active at start" assertion (round 3, N3 —
    the plan's earlier citation of `:67-69` for this was wrong: that block
    only asserts the fixture ROW EXISTS, not that its status is `'active'`).**
@@ -687,11 +734,16 @@ needed — all four apply here too, made concrete against this file:**
    the four `announceDealEvent`-type inserts succeed.
 
 Cells, once the above is in place:
-- `authenticated` app-path insert into a thread on a suspended relationship →
-  refused (AC1).
-- The same insert attempted as a direct PostgREST-shaped call (bypassing any
-  app-level guard) → still refused — proves the gate is server-side, not
-  UI-only (AC2).
+- **AC1 and AC2 are ONE cell, not two (round 6, N1 — in a `psql` SQL suite,
+  "app path" and "a direct PostgREST-shaped call" are indistinguishable:
+  both are a bare `INSERT` under `SET LOCAL ROLE authenticated`, exactly
+  what this suite already does everywhere and what its own header states
+  outright — `msg_all_deal_detected_gate_test.sql:34-36`, "covers FROM
+  `authenticated`, NOT through a definer").** `authenticated` insert into a
+  thread on a suspended relationship → refused. This ONE cell discharges
+  both AC1 (the app can't do it) and AC2 (neither can a direct API call,
+  since there is no separate "app" code path at this layer to bypass) —
+  do not write two cells expecting them to differ.
 - One insert per `announceDealEvent` type (`deal_signed`, `deal_cancelled`,
   `deal_change_proposed`, `deal_negotiation_requested`) on a suspended
   relationship → all four still succeed (the exemption, ADR Invariant 16).
