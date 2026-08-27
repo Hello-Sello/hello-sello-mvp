@@ -580,6 +580,27 @@ still applies once the ADR is drafted.
   **Full re-verification: 60/60 SQL, 483/483 vitest, tsc clean.**
   F2-F4 accepted as non-blocking, named for the G5 walk / future tickets,
   not fixed in this pass.
+- **Final `critic` pass on §12, 2026-08-27 — clean, 0 blocking, 5 rung-5
+  notes.** Confirmed live in the SQL (not claimed): Invariant 16 still
+  holds (no `assert_relationship_writable` call anywhere in the RPC),
+  `msg_all` genuinely carries no type-keyed exemption, the `deal_workspace`
+  fix matches `can_access_thread`'s own predicate exactly (imports
+  `can_access_workspace`, doesn't restate it), no scope creep, all four
+  call sites' pre-existing behavioral guards (D-08, idempotency, audit
+  ordering) intact. Notes: stale ADR/PRD/ARCHITECTURE-NOTES/DECISIONS
+  citations of the deleted mechanism (fixed below), the migration batch
+  unledgered (fixed below), a harmless narrowing divergence in the
+  workspace filter, one-of-four-types tested for Invariant 16 (adequate in
+  substance, the gate has no type branch), D-08 enforced client-side only
+  (pre-existing, not a regression, named for the record).
+- **Wrap-adjacent fixes, 2026-08-27** — ledgered all 7 migrations +
+  2 edge-function redeploys in `docs/deploy/cloud-migrations-pending.md`
+  (new PENDING section + item 4 in the non-migration deploy-debt section).
+  Corrected ADR 0008 (Invariant 16, the call-site table, the deferred
+  list), PRD AC8, and annotated (not silently rewritten — both are dated
+  historical entries) `ARCHITECTURE-NOTES.md` and `DECISIONS.md`'s stale
+  citations of the deleted `announceDealEvent`/`actions.ts:682`. §12.7's
+  documentation debt is now discharged. **0026 is ready for PR.**
 
 ## Gate log
 - **G3 (spec + ADR, merged gate) — APPROVED, Muskan, 2026-08-26.** "yes, approved,"
