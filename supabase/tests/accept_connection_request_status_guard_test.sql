@@ -184,6 +184,30 @@ END $$;
 -- function body (or its argument values) are ever evaluated.
 -- ============================================================================
 
+-- Privilege-level assertion, not just the call-and-catch below: 42501
+-- (insufficient_privilege) is not unique to a missing EXECUTE grant — an
+-- invoker-rights helper that regressed to a table-privilege denial or an RLS
+-- WITH CHECK violation inside its own body would raise the identical SQLSTATE
+-- and this suite would stay green with the REVOKE gone (found by `security`
+-- during HEL-68's pre-ship scan). has_function_privilege reads the GRANT
+-- itself, so it goes red the moment either REVOKE regresses, independent of
+-- what the call-and-catch below happens to trip on.
+DO $$
+BEGIN
+  IF has_function_privilege('anon', 'public._resolve_or_create_c2c_thread(uuid)', 'EXECUTE') THEN
+    RAISE EXCEPTION 'C/anon-c2c FAIL: anon holds EXECUTE on _resolve_or_create_c2c_thread';
+  END IF;
+  IF has_function_privilege('anon', 'public._resolve_or_create_p2p_thread(uuid,uuid,uuid)', 'EXECUTE') THEN
+    RAISE EXCEPTION 'C/anon-p2p FAIL: anon holds EXECUTE on _resolve_or_create_p2p_thread';
+  END IF;
+  IF has_function_privilege('authenticated', 'public._resolve_or_create_c2c_thread(uuid)', 'EXECUTE') THEN
+    RAISE EXCEPTION 'C/auth-c2c FAIL: authenticated holds EXECUTE on _resolve_or_create_c2c_thread';
+  END IF;
+  IF has_function_privilege('authenticated', 'public._resolve_or_create_p2p_thread(uuid,uuid,uuid)', 'EXECUTE') THEN
+    RAISE EXCEPTION 'C/auth-p2p FAIL: authenticated holds EXECUTE on _resolve_or_create_p2p_thread';
+  END IF;
+END $$;
+
 -- anon — no jwt claims set, a signed-out visitor has none.
 SET LOCAL ROLE anon;
 DO $$
