@@ -1072,12 +1072,35 @@ begin
   -- production doesn't actually have. The relationship's own accept
   -- flow (HEL-68) does mint c2c/p2p, which is why THAT arm is reliably
   -- non-NULL. A NULL find on either arm is silently skipped.
+  --
+  -- FIXED (post-build security re-check, not a plan-checker round — a real,
+  -- live-proven access-control gap, not a style note): the party check
+  -- above re-imports msg_all's RELATIONSHIP clause but this select had
+  -- dropped can_access_thread's `deal` arm entirely, which is WORKSPACE-
+  -- scoped, not relationship-scoped (`can_access_workspace`:
+  -- 20260607170000_rls_policies.sql:117-124 — `visibility = 'company_wide'
+  -- OR is_workspace_member`). Without the exists() clause below, ANY
+  -- relationship member — not just deal participants — could write into a
+  -- PRIVATE deal thread via this RPC, proven live: a second person at the
+  -- caller's own company, not a deal_member, posted into a workspace she
+  -- could not even read via the ordinary client path. `card_all` has no
+  -- workspace clause of its own, so `p_deal_card_id` is readable by every
+  -- relationship member regardless — nothing has to be guessed to reach
+  -- this. `can_access_workspace` is called directly (itself `SECURITY
+  -- DEFINER`), not reimplemented, per this repo's own "import the
+  -- predicate, don't restate it" rule (L-057).
   select id into v_deal_thread
-  from public.chat_thread
-  where relationship_id = v_card.relationship_id
-    and type = 'deal'
-    and deal_card_id = p_deal_card_id
-    and deleted_at is null;
+  from public.chat_thread t
+  where t.relationship_id = v_card.relationship_id
+    and t.type = 'deal'
+    and t.deal_card_id = p_deal_card_id
+    and t.deleted_at is null
+    and exists (
+      select 1 from public.deal_workspace w
+      where w.deal_card_id = t.deal_card_id
+        and w.deleted_at is null
+        and public.can_access_workspace(w.id)
+    );
 
   -- FIXED (plan-checker B2 — the original draft matched ANY p2p thread on
   -- the relationship, not the actor's own. The old app-side code ran as the
