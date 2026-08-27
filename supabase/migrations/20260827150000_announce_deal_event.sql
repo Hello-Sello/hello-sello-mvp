@@ -115,12 +115,30 @@ begin
   -- production doesn't actually have. The relationship's own accept
   -- flow (HEL-68) does mint c2c/p2p, which is why THAT arm is reliably
   -- non-NULL. A NULL find on either arm is silently skipped.
+  -- FIXED (security re-check, post-build — a real, live-proven gap, not a
+  -- style note): the party check above re-imported msg_all's relationship
+  -- clause but dropped can_access_thread's `deal` arm, which is workspace-
+  -- scoped, not relationship-scoped — a private deal_workspace restricts
+  -- to its own members regardless of relationship membership. Without this,
+  -- any relationship member (not just deal participants) could write into
+  -- a PRIVATE deal thread via this RPC, proven live: a second person at
+  -- the same company, not a deal_member, posted into a workspace she
+  -- cannot even read. `can_access_workspace` is itself SECURITY DEFINER
+  -- (20260607170000_rls_policies.sql:117-124) — called directly, not
+  -- reimplemented, per this repo's own "import the predicate, don't
+  -- restate it" rule (L-057).
   select id into v_deal_thread
-  from public.chat_thread
-  where relationship_id = v_card.relationship_id
-    and type = 'deal'
-    and deal_card_id = p_deal_card_id
-    and deleted_at is null;
+  from public.chat_thread t
+  where t.relationship_id = v_card.relationship_id
+    and t.type = 'deal'
+    and t.deal_card_id = p_deal_card_id
+    and t.deleted_at is null
+    and exists (
+      select 1 from public.deal_workspace w
+      where w.deal_card_id = t.deal_card_id
+        and w.deleted_at is null
+        and public.can_access_workspace(w.id)
+    );
 
   -- FIXED (plan-checker B2 — the original draft matched ANY p2p thread on
   -- the relationship, not the actor's own. The old app-side code ran as the

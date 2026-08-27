@@ -546,6 +546,40 @@ still applies once the ADR is drafted.
   §12.5 named as affected. **Next:** re-spawn `security` to independently
   reproduce the original exploit against the fixed code and confirm it's
   actually closed — the point of the whole addendum.
+- **`security`, re-check, 2026-08-27** — **original exploit CONFIRMED
+  CLOSED, live-proven** (all 4 types, both INSERT and UPDATE/retype, on a
+  suspended relationship — all refused; live policy body carries no
+  type-keyed term; the RPC's own party/company-less/no-JWT refusals all
+  independently proven). **But found 1 NEW blocking finding the fix itself
+  introduced (F1, rung 2):** the RPC's authorization re-imported `msg_all`'s
+  relationship-level clause but dropped `can_access_thread`'s `deal` arm,
+  which is WORKSPACE-scoped, not relationship-scoped — any relationship
+  member (not just deal participants) could write into a PRIVATE deal
+  thread via the RPC. Live-proven: a second person at the same company,
+  not a `deal_member`, posted into a private workspace she couldn't even
+  read via the ordinary RLS path. 3 non-blocking notes: F2 (`confirm_deal_
+  change` has the identical gap, pre-existing, out of this slug's scope,
+  worth its own ticket), F3 (on a suspended relationship the caller's own
+  display name is the only writable text channel left — narrow, not a
+  regression, named for the record), F4 (the RPC's `returns uuid` is
+  near-always NULL in production — not a bug, worth stating in the
+  signature).
+- **Fixed directly, 2026-08-27** — added the missing `deal_workspace`
+  membership check (`exists (... and can_access_workspace(w.id))`) to the
+  deal-thread lookup, reusing the canonical `can_access_workspace` function
+  rather than reimplementing it. **Independently reproduced both
+  directions myself** (not just trusting the fix): the exact F1 exploit
+  scenario now refused (0 rows written), a genuine workspace member still
+  succeeds (1 row written) — both live-probed against the reset database
+  before touching the test suite. Added `announce_deal_event_test.sql` §G
+  (the permanent regression guard + a company-wide control cell proving
+  the fix refuses on workspace membership specifically, not by accident)
+  — this also surfaced that the suite's own fixture never minted a
+  `deal_workspace` row for its card (harmless before F1, would have made
+  every §D/§E cell silently vacuous after it), fixed alongside.
+  **Full re-verification: 60/60 SQL, 483/483 vitest, tsc clean.**
+  F2-F4 accepted as non-blocking, named for the G5 walk / future tickets,
+  not fixed in this pass.
 
 ## Gate log
 - **G3 (spec + ADR, merged gate) — APPROVED, Muskan, 2026-08-26.** "yes, approved,"

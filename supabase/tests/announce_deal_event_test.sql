@@ -71,26 +71,39 @@ END $$;
 -- connecting superuser — same idiom deliver_deal_test.sql's own _cards/_sent
 -- fixtures use for privileged inserts). id = the deal_card id (what the RPC's
 -- p_deal_card_id argument takes); deal_thread = the 'deal' chat_thread's own
--- id (one of the two targets §12.2's RPC writes into).
-CREATE TEMP TABLE _card (id uuid, deal_thread uuid) ON COMMIT DROP;
+-- id (one of the two targets §12.2's RPC writes into); workspace = this
+-- card's own deal_workspace id (security re-check finding, F1 fix — every
+-- real deal_card has one, minted by create_deal_draft; a raw INSERT skips
+-- it, which silently made every §D/§E cell below vacuous once the F1 fix
+-- landed — announce_deal_event's deal-thread arm now requires a readable
+-- workspace to exist at all, so this fixture must mint one too).
+-- Defaults to 'company_wide' (the table's own DEFAULT), matching the
+-- ordinary case every existing cell exercises; §G below flips it private.
+CREATE TEMP TABLE _card (id uuid, deal_thread uuid, workspace uuid) ON COMMIT DROP;
 WITH card AS (
   INSERT INTO public.deal_card (relationship_id, status, deal_type, initiating_company_id, currency)
   SELECT rel_id, 'negotiation', 'offer', f.greenleaf, 'EUR'
   FROM _rel, _fix f
   RETURNING id
 ),
+ws AS (
+  INSERT INTO public.deal_workspace (deal_card_id)
+  SELECT card.id FROM card
+  RETURNING id, deal_card_id
+),
 thread AS (
   INSERT INTO public.chat_thread (relationship_id, type, deal_card_id)
-  SELECT (SELECT rel_id FROM _rel), 'deal', card.id FROM card
+  SELECT (SELECT rel_id FROM _rel), 'deal', ws.deal_card_id FROM ws
   RETURNING id, deal_card_id
 )
-INSERT INTO _card SELECT thread.deal_card_id, thread.id FROM thread;
+INSERT INTO _card SELECT thread.deal_card_id, thread.id, ws.id FROM thread, ws WHERE ws.deal_card_id = thread.deal_card_id;
 GRANT SELECT ON _card TO authenticated;
 
 DO $$
 BEGIN
-  IF (SELECT count(*) FROM _card) <> 1 OR (SELECT id FROM _card) IS NULL OR (SELECT deal_thread FROM _card) IS NULL THEN
-    RAISE EXCEPTION 'FIXTURE: failed to mint this suite''s own deal_card + deal thread';
+  IF (SELECT count(*) FROM _card) <> 1 OR (SELECT id FROM _card) IS NULL
+     OR (SELECT deal_thread FROM _card) IS NULL OR (SELECT workspace FROM _card) IS NULL THEN
+    RAISE EXCEPTION 'FIXTURE: failed to mint this suite''s own deal_card + workspace + deal thread';
   END IF;
 END $$;
 
@@ -326,6 +339,84 @@ BEGIN
 END $$;
 
 -- ============================================================================
+-- §G — REGRESSION GUARD for the post-build security re-check's own blocking
+--      finding (F1): the party check re-imported msg_all's RELATIONSHIP
+--      clause but dropped can_access_thread's `deal` arm, which is
+--      WORKSPACE-scoped, not relationship-scoped. A relationship member who
+--      is a company colleague but NOT a deal_workspace member must be
+--      refused from writing into a PRIVATE deal thread — live-proven
+--      exploitable before the fix (a second GreenLeaf person posted into a
+--      private workspace she could not even read). Dana is minted as a
+--      GreenLeaf colleague (same company as Alice, genuine relationship
+--      member) who is never added as a deal_member — the exact population
+--      the fix closes. This suite's own workspace defaults to
+--      'company_wide' (every other cell above relies on that), so this
+--      cell flips it 'private' first, then restores it — must NOT be the
+--      suite's last cell, unlike §F (which deliberately leaves its own
+--      flip in place through ROLLBACK).
+-- ============================================================================
+CREATE TEMP TABLE _dana ON COMMIT DROP AS
+WITH ins AS (
+  INSERT INTO auth.users (instance_id, id, aud, role, email, raw_user_meta_data, created_at, updated_at)
+  VALUES ('00000000-0000-0000-0000-000000000000', gen_random_uuid(), 'authenticated', 'authenticated',
+          'hel84-announce-dana@example.test',
+          '{"first_name":"Dana","last_name":"Colleague","full_name":"Dana Colleague"}', NOW(), NOW())
+  RETURNING id
+)
+SELECT id FROM ins;
+GRANT SELECT ON _dana TO authenticated;
+
+UPDATE public.person SET company_id = (SELECT greenleaf FROM _fix) WHERE id = (SELECT id FROM _dana);
+UPDATE public.deal_workspace SET visibility = 'private' WHERE id = (SELECT workspace FROM _card);
+
+DO $$
+BEGIN
+  IF (SELECT company_id FROM public.person WHERE id = (SELECT id FROM _dana)) IS DISTINCT FROM (SELECT greenleaf FROM _fix) THEN
+    RAISE EXCEPTION 'FIXTURE: Dana is not at GreenLeaf — the membership predicate would refuse for the wrong reason';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.deal_member m WHERE m.deal_workspace_id = (SELECT workspace FROM _card) AND m.person_id = (SELECT id FROM _dana) AND m.removed_at IS NULL) THEN
+    RAISE EXCEPTION 'FIXTURE: Dana is unexpectedly already a deal_member — the negative case can''t be tested';
+  END IF;
+END $$;
+
+SELECT set_config('request.jwt.claims', (SELECT json_build_object('sub', id, 'role', 'authenticated')::text FROM _dana), true);
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE v_before int; v_after int;
+BEGIN
+  SELECT count(*) INTO v_before FROM public.chat_message WHERE thread_id = (SELECT deal_thread FROM _card);
+  PERFORM public.announce_deal_event((SELECT id FROM _card), 'deal_signed');
+  SELECT count(*) INTO v_after FROM public.chat_message WHERE thread_id = (SELECT deal_thread FROM _card);
+  IF v_after > v_before THEN
+    RAISE EXCEPTION 'G1/private-workspace FAIL: Dana (a relationship member, not a deal_member) wrote into a PRIVATE deal thread — before=%, after=% (the exact post-build security-re-check regression)', v_before, v_after;
+  END IF;
+END $$;
+RESET ROLE;
+
+-- Restore company_wide before §D's own row counts get re-checked or §F runs
+-- — this cell is not this suite's last, unlike §F which deliberately keeps
+-- its own state change through ROLLBACK.
+UPDATE public.deal_workspace SET visibility = 'company_wide' WHERE id = (SELECT workspace FROM _card);
+
+-- Control: a genuine relationship member DOES still get through once the
+-- workspace goes back to company_wide — proves §G refused on WORKSPACE
+-- membership specifically, not by accident (e.g. a stale role/claim from
+-- the block above leaking through).
+SELECT set_config('request.jwt.claims', (SELECT json_build_object('sub', id, 'role', 'authenticated')::text FROM _dana), true);
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE v_before int; v_after int;
+BEGIN
+  SELECT count(*) INTO v_before FROM public.chat_message WHERE thread_id = (SELECT deal_thread FROM _card);
+  PERFORM public.announce_deal_event((SELECT id FROM _card), 'deal_signed');
+  SELECT count(*) INTO v_after FROM public.chat_message WHERE thread_id = (SELECT deal_thread FROM _card);
+  IF v_after <> v_before + 1 THEN
+    RAISE EXCEPTION 'G2/company-wide-control FAIL: Dana was refused even on a company_wide workspace — the fix over-restricts, before=%, after=%', v_before, v_after;
+  END IF;
+END $$;
+RESET ROLE;
+
+-- ============================================================================
 -- §F (ADR Invariant 16 — the whole reason this addendum exists) — on a
 --     SUSPENDED relationship, a genuine party calling with a valid type
 --     STILL SUCCEEDS. Without this cell, a future reader could "fix" this
@@ -367,6 +458,6 @@ BEGIN
   END IF;
 END $$;
 
-DO $$ BEGIN RAISE NOTICE 'announce_deal_event: ALL CELLS PASSED (A non-party, B companyless, C bad-type, D happy-path x4/both-threads, E multi-pair regression guard, F suspended-relationship exemption)'; END $$;
+DO $$ BEGIN RAISE NOTICE 'announce_deal_event: ALL CELLS PASSED (A non-party, B companyless, C bad-type, D happy-path x4/both-threads, E multi-pair regression guard, F suspended-relationship exemption, G private-workspace regression guard + company-wide control)'; END $$;
 
 ROLLBACK;
