@@ -903,3 +903,299 @@ backend-only (2 Postgres RLS policies, 3 RPC refactors/new-gates, 2 Edge
 Functions, 1 client-side error-message map — no rendered component) → should
 auto-close per PIPELINE §3 unless `security` (mandatory — migrations/RLS/RPC)
 raises a blocking finding, or behavior diverges from AC1-AC6.
+
+---
+
+## §12 — ADDENDUM (post-build): the §2 four-type exemption is a client-
+reachable bypass, closed by moving `announceDealEvent` into a definer RPC
+
+Written 2026-08-27, after `builder`'s implementation of §1-§7 passed full
+gate (59/59 SQL, 479/479 vitest, tsc clean, e2e clean, `critic` clean) and
+`security`'s pre-G4 pass found a real, live-proven exploit — not a plan
+error, an implementation of §2 exactly as designed that turned out to be
+attacker-reachable. Muskan's ruling (2026-08-27): fix it properly, matching
+this repo's own established precedent for the identical shape, rather than
+downgrading the AC.
+
+### The finding
+
+§2's `msg_all` `WITH CHECK` exempts 4 `announceDealEvent` message types
+(`deal_signed`, `deal_cancelled`, `deal_change_proposed`,
+`deal_negotiation_requested`) from the relationship-writable gate via a
+`CASE WHEN type IN (...) THEN true ELSE assert_relationship_writable(...)
+END`. The `CASE` logic itself is correct — `security` confirmed it doesn't
+over-exempt by type and fails closed on `NULL`. The problem is one layer
+down: `chat_message.type` has no CHECK constraint, `authenticated` holds
+table-wide INSERT with no column-level restriction, and this suite's own §A3
+already proved a browser session can set arbitrary `sender`/`type` values.
+**Live-proven exploit**: a thread member on a SUSPENDED relationship, doing
+an ordinary client insert with `type: 'deal_signed'` instead of `'message'`,
+gets the write through — same for `UPDATE` (`msg_all` is `FOR ALL`), so an
+existing message can be retyped to bypass the gate retroactively too.
+
+**Why this is the right fix, not a smaller patch on the same mechanism.**
+Tightening the carve-out (e.g. also requiring `sender = 'sella'`) does not
+close it — `sender` is exactly as client-forgeable as `type` (proven by the
+same §A3 cell). Any predicate keyed on columns `authenticated` can write is
+the same hole with a longer key. This repo has already solved the identical
+shape twice: HEL-67 Gap 1 refused `type = 'deal_detected'` from
+`authenticated` entirely rather than trying to distinguish "real" Sella rows
+from forged ones by column value; HEL-68/0024's `send_deal` refactor
+(`20260825090000_send_deal_c2c_announce.sql`) moved its own chat pill insert
+into the RPC itself, `SECURITY DEFINER`, so it bypasses RLS and needs no
+carve-out from a client-facing policy at all. This addendum applies the same
+move to `announceDealEvent`.
+
+### §12.1 — what `announceDealEvent` currently does (read fresh, cited exactly)
+
+`src/modules/deals/actions.ts:659-695`. Four call sites, unchanged in
+purpose by this addendum:
+- `proposeDealChange` (`:558-564`) — `deal_change_proposed`, body
+  `` `${actorName} proposed a change` ``, ONLY when `cardRow.status ===
+  "negotiation"` (a still-private draft's edit must never leak, D-08).
+- `declineDeal` (`:771-777`) — `deal_cancelled`, fixed body `"Deal declined
+  - the deal is closed."`.
+- `signDeal` (`:823-829`) — `deal_signed`, fixed body `"Deal signed - the
+  deal is confirmed."`.
+- `requestNegotiation` (`:860-866`) — `deal_negotiation_requested`, body
+  `` `${actorName} wants to negotiate` ``.
+
+Current body (`:669-695`): fetches every live `chat_thread` for the card's
+`relationship_id`, targets the `deal` thread (matched by `deal_card_id`) AND
+the "visible" thread (`p2p` preferred, else `c2c`), inserts `sender: 'sella'`
+per target, catches its own errors per-insert and logs (fail-soft — "the
+deal action has already committed by the time this runs... it never
+surfaces as a failed decline/sign", `:651-655`).
+
+`resolveActorName` (`:703-714`) composes the display name for the two
+call sites that need it; used ONLY by `announceDealEvent`'s callers.
+
+### §12.2 — new migration: `announce_deal_event`, a `SECURITY DEFINER` RPC
+
+New file, timestamp after `20260827140000` (verify the actual tip at build
+time, same rule as §0's floor).
+
+```sql
+create or replace function public.announce_deal_event(
+  p_deal_card_id uuid,
+  p_type text
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_uid    uuid := auth.uid();
+  v_company uuid;
+  v_card   record;
+  v_rel    record;
+  v_name   text;
+  v_body   text;
+  v_deal_thread    uuid;
+  v_visible_thread uuid;
+begin
+  if v_uid is null then
+    raise exception 'announce_deal_event: not authenticated';
+  end if;
+
+  -- The type allow-list lives HERE, not on a client-writable column — this is
+  -- the actual fix. A caller cannot pass an arbitrary type; the function's own
+  -- CASE below is the only thing that ever writes one of these four values.
+  if p_type not in ('deal_signed', 'deal_cancelled', 'deal_change_proposed',
+                     'deal_negotiation_requested') then
+    raise exception 'announce_deal_event: unsupported type %', p_type;
+  end if;
+
+  select company_id into v_company from public.person where id = v_uid;
+
+  select * into v_card from public.deal_card where id = p_deal_card_id;
+  if v_card.id is null then
+    raise exception 'announce_deal_event: deal not found';
+  end if;
+
+  -- Membership, not liveness: this is deliberately NOT a call to
+  -- assert_relationship_writable. ADR 0008 Invariant 16 rules these four
+  -- announcements exempt from the suspension gate (an event already in
+  -- motion is not a "new" write) — moving the insert server-side must NOT
+  -- silently re-impose the gate this addendum exists to keep exempt. The
+  -- check below is authorization (is the caller a real party to this deal),
+  -- which a SECURITY DEFINER function must still perform itself since it
+  -- bypasses RLS entirely and inherits no predicate from msg_all.
+  select * into v_rel from public.relationship where id = v_card.relationship_id;
+  if v_rel.id is null or v_company is null
+     or v_company not in (v_rel.company_a_id, v_rel.company_b_id) then
+    raise exception 'announce_deal_event: caller is not a party to this deal''s relationship';
+  end if;
+
+  select nullif(btrim(coalesce(first_name, '') || ' ' || coalesce(last_name, '')), '')
+    into v_name
+  from public.person where id = v_uid;
+
+  v_body := case p_type
+    when 'deal_change_proposed'       then coalesce(v_name, 'A teammate') || ' proposed a change'
+    when 'deal_negotiation_requested' then coalesce(v_name, 'A teammate') || ' wants to negotiate'
+    when 'deal_cancelled'             then 'Deal declined - the deal is closed.'
+    when 'deal_signed'                then 'Deal signed - the deal is confirmed.'
+  end;
+
+  -- Both targets are READ, not resolve-or-create: unlike send_deal's c2c
+  -- pill (which can fire before any message has ever been sent), every one
+  -- of these four events happens well into a deal's lifecycle — the deal
+  -- thread and the visible p2p/c2c thread both already exist by construction
+  -- (create_deal_draft mints the deal thread; the relationship's own accept
+  -- flow, HEL-68, mints c2c/p2p). A NULL find is silently skipped, matching
+  -- announceDealEvent's own `if (dealThread) targets.push(...)` shape — not
+  -- an error, since a thread genuinely may not exist for one arm (e.g. no
+  -- p2p thread yet for a company-only relationship).
+  select id into v_deal_thread
+  from public.chat_thread
+  where relationship_id = v_card.relationship_id
+    and type = 'deal'
+    and deal_card_id = p_deal_card_id
+    and deleted_at is null;
+
+  select id into v_visible_thread
+  from public.chat_thread
+  where relationship_id = v_card.relationship_id
+    and type in ('p2p', 'c2c')
+    and deleted_at is null
+  order by (type = 'p2p') desc  -- p2p preferred over c2c, matching the app's `??` fallback
+  limit 1;
+
+  if v_deal_thread is not null then
+    insert into public.chat_message (thread_id, sender, type, body, metadata)
+    values (v_deal_thread, 'sella', p_type, v_body,
+            jsonb_build_object('deal_card_id', p_deal_card_id));
+  end if;
+  if v_visible_thread is not null and v_visible_thread is distinct from v_deal_thread then
+    insert into public.chat_message (thread_id, sender, type, body, metadata)
+    values (v_visible_thread, 'sella', p_type, v_body,
+            jsonb_build_object('deal_card_id', p_deal_card_id));
+  end if;
+
+  return v_deal_thread;
+end;
+$$;
+
+revoke execute on function public.announce_deal_event(uuid, text) from public, anon;
+grant  execute on function public.announce_deal_event(uuid, text) to authenticated;
+```
+
+**Behavior change, named not hidden:** the original per-thread fail-soft
+(one thread's insert failure never blocks the other, `:656-657`,
+`:682-691`) becomes per-CALL fail-soft — both inserts happen in one
+transaction, so a failure on either aborts both and the RPC raises. This is
+MORE consistent than today (today, a partial post to only one of two
+threads is a silent, unlogged inconsistency) — but it is a real behavior
+change, so §12.3 below preserves the OUTER fail-soft contract (a failed
+announcement still never blocks the parent decline/sign/propose/negotiate)
+at the call site instead of inside the SQL.
+
+### §12.3 — TypeScript: `actions.ts`'s four call sites, `announceDealEvent`
+and `resolveActorName` deleted
+
+Replace each `await announceDealEvent(supabase, <id>, <relationshipId>,
+'<type>', <body>)` call with `await supabase.rpc('announce_deal_event', {
+p_deal_card_id: <id>, p_type: '<type>' })`, wrapped to preserve the
+existing fail-soft contract exactly:
+
+```ts
+const { error: announceErr } = await supabase.rpc("announce_deal_event", {
+  p_deal_card_id: dealCardId,
+  p_type: "deal_signed",
+});
+if (announceErr) console.error("deal event announcement failed", announceErr);
+```
+
+- `proposeDealChange` (`:556-565`) — same `cardRow.status === "negotiation"`
+  guard stays; drop the `actorName`/`resolveActorName` call (the RPC composes
+  the name-including body itself now), drop the `body` argument.
+- `declineDeal` (`:770-777`) — same shape, `p_type: "deal_cancelled"`.
+- `signDeal` (`:822-829`) — same shape, `p_type: "deal_signed"`.
+- `requestNegotiation` (`:859-866`) — same shape, `p_type:
+  "deal_negotiation_requested"`, drop `resolveActorName`.
+
+**Delete `announceDealEvent` (`:659-695`) and `resolveActorName`
+(`:703-714`) entirely** — both become dead code once all four call sites
+route through the RPC; `resolveActorName`'s docstring already says it's
+"shared by the two projection-only actions," both of which no longer need
+it.
+
+### §12.4 — migration: `msg_all` loses the exemption
+
+Edit the ALREADY-COMMITTED (never shipped to production)
+`supabase/migrations/20260827100000_msg_all_relationship_write_gate.sql`
+directly, in place — this migration has never been applied to production
+(§ledger has it nowhere), so rewriting it before first deploy is correct,
+not history-rewriting of shipped state. Replace the `CASE` with a plain
+check:
+
+```sql
+alter policy msg_all on public.chat_message
+  with check (
+    public.can_access_thread(thread_id)
+    and type <> 'deal_detected'
+    and public.assert_relationship_writable(
+      (select relationship_id from public.chat_thread where id = thread_id)
+    )
+  );
+```
+
+Re-emit the `comment on policy` to drop the now-false claim about a
+four-type exemption. `announceDealEvent`'s four types are no longer written
+by ANY client-facing path — they're written only by
+`announce_deal_event`'s own `SECURITY DEFINER` body, which bypasses this
+policy entirely, same as `deal_detected`, `deal_card`, and every other
+system-authored type already does.
+
+### §12.5 — tests
+
+- **`msg_all_deal_detected_gate_test.sql` §F5 (the exemption cell) is now
+  WRONG and must be replaced, not kept.** It currently asserts the four
+  types succeed as a direct `authenticated` client insert on a suspended
+  relationship — that assertion must now be the OPPOSITE: a direct client
+  insert of any of the four types, as `authenticated`, on ANY relationship
+  (active or suspended), is REFUSED (there is no more client-reachable path
+  to them at all — `type` carries no special meaning to this policy anymore,
+  the four values just don't get an exemption). This is the regression
+  guard that would have caught the vulnerability `security` found.
+- **New SQL suite** (or extend an existing announce-adjacent one) for
+  `announce_deal_event` itself, `security`-review shaped since this is a new
+  attack surface: a non-party calling it (any relationship, active or
+  suspended) → refused, message names "not a party" not a raw error; a
+  genuine party calling it with each of the 4 valid types → both threads
+  (where they exist) receive a `sender = 'sella'` row with the correct
+  server-composed body; an invalid `p_type` value → refused (proves the
+  allow-list is real, not decorative); **on a SUSPENDED relationship, a
+  genuine party calling it with a valid type → STILL SUCCEEDS** (this is the
+  one cell that proves ADR Invariant 16's exemption survived the move —
+  without it, a future reader could "fix" this RPC by adding an
+  `assert_relationship_writable` call and silently re-break the ruling this
+  whole addendum protects).
+- `src/modules/deals/actions.test.ts` (or wherever this module's existing
+  unit tests live — check before assuming a new file) — the four call
+  sites' fail-soft wrapping (`announceErr` logged, never thrown) needs a
+  regression test per call site, since this is now hand-written glue code
+  instead of a shared function with one try/catch.
+
+### §12.6 — plan-checker's job for this addendum specifically
+
+- Verify `v_visible_thread is distinct from v_deal_thread` actually
+  prevents a double-insert in the case where a `deal` thread and the
+  "visible" thread could ever be the SAME row (trace whether that's
+  possible given the schema, or provably isn't).
+- Verify the membership check's `v_company not in (...)` correctly denies a
+  company-less caller (same class of bug §1's own membership check had
+  before its round-3 fix) — does `v_company is null` genuinely short-circuit
+  to refusal here, or does `NULL NOT IN (a, b)` evaluate to `NULL` (falsy in
+  an `if`, so it DOES refuse) — confirm this is actually safe Postgres
+  semantics, not assumed.
+- Verify `deal_card`'s live schema actually has a `relationship_id` column
+  reachable the way this addendum assumes (read the live table, don't
+  inherit from `send_deal`'s usage of the same column).
+- Verify no OTHER caller of `announceDealEvent`/`resolveActorName` exists
+  beyond the four named (a fresh grep, not inherited from this addendum's
+  own count).
+- Confirm deleting `announceDealEvent`/`resolveActorName` doesn't break
+  anything else in the file — re-check for any other reference.
