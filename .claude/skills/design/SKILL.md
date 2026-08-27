@@ -1,12 +1,19 @@
 ---
 name: design
-description: Turn an approved spec into an ADR + checked tickets. Runs the
+description: Turn a written spec into an ADR + checked tickets. Runs the
   adr-checker loop under its locked budget, sorts invariants, writes tickets
-  to Linear. Stops at G3. Use /design <slug>.
+  to Linear. Stops at G3, which now approves the SPEC and the ADR together
+  (G1 merged in, PIPELINE 9a). Use /design <slug>.
 allowed-tools: Read, Grep, Glob, Write, Edit, Task, Agent, mcp__claude_ai_Linear__save_issue
 ---
 
-# /design — from approved WHAT to checked HOW
+# /design — from written WHAT to checked HOW
+
+**G3 is now the first gate for a non-frontend slug.** G1 was merged into it on
+2026-08-25 (PIPELINE §9a), so this gate approves the **spec and the ADR
+together** — the WHAT is still open here, not settled upstream. Before step 1,
+read `STATE.md`'s `For Muskan` section: `/spec` carries its unclosed questions
+there, and they are yours to close at step 6.
 
 0. `docs/muskan-build/<slug>/STATE.md`: stage must be `spec ✅` (and
    `prototype ✅` if the lane included one). Read the PRD in full.
@@ -42,9 +49,17 @@ allowed-tools: Read, Grep, Glob, Write, Edit, Task, Agent, mcp__claude_ai_Linear
    - Each round = ONE fresh `adr-checker` spawn via the Agent tool. Never
      review inline — inline review does not count as a round. Its input is
      the ADR + the spec + `ADR-INDEX.md`, NEVER prior rounds' findings.
-   - **Budget: 2 rounds. Stop at the first round with zero NEW blocking
-     findings** — never wait for zero findings total. More rounds are
-     Muskan's explicit call, not the default.
+   - **Budget: 2 rounds. Stop at the first round that raises no NEW finding
+     on severity ladder rungs 1-3** (leak · silent failure · won't run —
+     the ladder is in PIPELINE §10 and in the checker's own prompt). Rungs
+     4-5 (behavioural edge, contract/wording) are notes: they go to
+     REVIEW.md and to the gate, and they **do not hold the loop open**.
+     Never wait for zero findings total.
+     **Do not treat the old rule as this one.** It said *"zero NEW blocking
+     findings"*; that state never once occurred in the dry-run or in 8+
+     tickets (blockers ran 5·8·4·6·6·8·4), so the cap blew every time and
+     escalated by default. Find-rate is flat; severity is what decays.
+     More rounds are Muskan's explicit call, not the default.
    - Fold-ins carry a **simplification bias**: prefer removing a mechanism
      over adding one. A fix that adds a mechanism gets flagged to Muskan
      before it goes in.
@@ -63,8 +78,16 @@ allowed-tools: Read, Grep, Glob, Write, Edit, Task, Agent, mcp__claude_ai_Linear
    `docs/architecture/adr/ADR-INDEX.md` — decision in one line + areas it
    touches. An ADR not in the index does not exist.
 
-6. **Stop at G3.** Hand Muskan: the plain-English opening, the checker's
-   verdict on top of the ADR, every sign-off that needs her explicitly, and
-   the ticket list. On approve, update STATE.md: `stage: design ✅ → build
-   (next)`, `Locked` filled from the ADR, `Deferred` from the spec's Out
-   list, `Files so far`, `Gate log` += G3 with date.
+6. **Stop at G3 — the merged gate.** Hand Muskan ONE page, in this order:
+
+   1. **The spec, in plain English, and what it commits to** — the acceptance
+      criteria as a list. This half used to be G1. Say plainly: *"reject here
+      and we lose the ADR too"*, so the raised cost of a late no is visible
+      at the moment she rules.
+   2. Any question `/spec` carried into `For Muskan`, unclosed.
+   3. The ADR's plain-English opening + the checker's verdict.
+   4. Every sign-off that needs her explicitly, and the ticket list.
+
+   On approve, update STATE.md: `stage: design ✅ → build (next)`, `Locked`
+   filled from the ADR, `Deferred` from the spec's Out list, `Files so far`,
+   `Gate log` += `G3 (spec + ADR, merged gate)` with date.

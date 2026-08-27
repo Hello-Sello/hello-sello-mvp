@@ -12,17 +12,144 @@
  *  3. Save flushes the pending edit: the changed value survives a reload.
  *  4. ✕ discard clears the whole pending tree: the edit is not shown and not saved.
  *
- * ⚠️ These cases MUTATE the local seed (case 3 persists a THC value on the first
- * card). Run serially so the persist/reload assertions are deterministic; re-run
- * `supabase db reset` to restore the seed. Sign-in mirrors present-edit-model.spec.ts
- * (alice@greenleaf.test — GreenLeaf has products but no seeded images).
+ * Seed isolation: these cases MUTATE the shared seed (AUR-1A.price_public
+ * via T05's Save flow; AUR-1D's thc_percent/cultivator/country_of_origin via F-02/
+ * F-05's Save flow — `.first()` resolves to AUR-1D, not AUR-1A, see fixtures/
+ * catalog.ts; and AUR-1B's price ladder via T04). Every mutated row/table is
+ * captured before its own mutation and restored in `afterAll`, verified by an
+ * independent read-back that re-selects from the DB rather than trusting the
+ * write call not to throw — the file is safe to run repeatedly with no
+ * `db reset` between runs. Run serially so the persist/reload assertions are
+ * deterministic. Sign-in mirrors present-edit-model.spec.ts (alice@greenleaf.test
+ * — GreenLeaf has products but no seeded images).
+ *
+ * NOT restored (accepted residue, not this ticket's fix): T05 ("Add to basket")
+ * leaves one persistent basket line for Alice on AUR-1A — confirmed benign on
+ * repeat runs (`addToBasket` upserts on (owner_person_id, product_id), so it
+ * never duplicates) and out of scope for `seed_visibility_matrix_test.sql` /
+ * `basket_admission_test.sql` (this ticket's AC2 targets), which scope to Bob/Eva.
  *
  * NOT asserted here (human-UAT): carousel arrow advance (needs ≥2 images) and the
  * native card→location drag (Playwright cannot drive native dataTransfer).
+ *
+ * Run via `npm test`, not a bare `npx playwright test` — the relative import from
+ * `./fixtures/catalog` needs `PLAYWRIGHT_FORCE_ASYNC_LOADER=1`, which only the npm
+ * script sets (`playwright.config.ts`'s own comment explains why).
  */
 import { test, expect, type Page } from "@playwright/test";
+import { psqlValue, psqlExec, resolveProductId } from "./fixtures/catalog";
 
 test.describe.configure({ mode: "serial" });
+
+// ── Seed isolation — capture + restore ────────────────────────────────────
+// See the module docstring above for what's mutated and why the row is safe
+// to reuse across runs. No product identity is hardcoded below except
+// AUR-1A (price_public, T05 filters by name explicitly) and AUR-1B (the
+// ladder, also filtered by name via `aur1b(page)`) — everything `.first()`
+// touches is resolved dynamically off the DOM, never assumed statically.
+const GREENLEAF_COMPANY_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+
+let seededPricePublic: boolean;
+test.beforeAll(() => {
+  // company_id scoped (matches resolveProductId's convention) — supplier_product_code
+  // is only unique per company, not globally.
+  seededPricePublic = psqlValue(
+    `select price_public from product where company_id = '${GREENLEAF_COMPANY_ID}' and supplier_product_code = 'AUR-1A'`,
+  ) === "t";
+});
+
+type FieldSnapshot = { id: string; fields: Record<string, string> };
+const capturedFields: FieldSnapshot[] = [];
+
+/** Capture the `.first()` card's real id (by its CURRENTLY-DISPLAYED name — call
+ * BEFORE this test's own mutation, and AFTER `await manageShop(page)`: outside edit
+ * mode the name renders as plain text, not an input, so `.inputValue()` would throw)
+ * plus the named columns' CURRENT values, so the restore target and the restore
+ * values are both read fresh, never assumed. MERGES into an existing captured entry
+ * for the same id rather than dropping the call — two tests can resolve to the same
+ * product with DIFFERENT column sets, and skipping would silently lose the second
+ * set's restore (round 3's B8). Keeps the EARLIEST value seen for any column already
+ * captured, since a later capture may already be reading a post-mutation value. */
+async function captureFirstCardFields(page: Page, columns: string[]): Promise<void> {
+  const card = page.getByTestId("product-card").first();
+  const name = await card.getByLabel(/product name/i).inputValue();
+  const id = resolveProductId(GREENLEAF_COMPANY_ID, name);
+  const row = psqlValue(`select ${columns.join(",")} from product where id = '${id}'`);
+  const values = row.split("|");
+  const existing = capturedFields.find((c) => c.id === id);
+  if (existing) {
+    columns.forEach((col, i) => {
+      if (!(col in existing.fields)) existing.fields[col] = values[i];
+    });
+  } else {
+    const fields: Record<string, string> = {};
+    columns.forEach((col, i) => { fields[col] = values[i]; });
+    capturedFields.push({ id, fields });
+  }
+}
+
+test.afterAll(() => {
+  // All restores run FIRST, every failure collected into one array, ONE assert at
+  // the end (round 4's N1: an early-failing assert must not abort restores that
+  // come after it in the hook — that would leave e.g. the AUR-1B ladder leak in
+  // place because a price_public mismatch threw before reaching it).
+  const failures: string[] = [];
+
+  // price_public — restore then verify against the DB, not against our own write
+  // blindly: the read-back is a SEPARATE select, so a wrong `id`/WHERE clause would
+  // still be caught (it would read back whatever the row's REAL current value is,
+  // not whatever we intended to write).
+  try {
+    const where = `company_id = '${GREENLEAF_COMPANY_ID}' and supplier_product_code = 'AUR-1A'`;
+    psqlExec(`update product set price_public = ${seededPricePublic} where ${where}`);
+    const got = psqlValue(`select price_public from product where ${where}`) === "t";
+    if (got !== seededPricePublic) failures.push(`AUR-1A.price_public: expected ${seededPricePublic}, got ${got}`);
+  } catch (e) {
+    failures.push(`AUR-1A.price_public: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  // dynamically-captured fields
+  for (const snap of capturedFields) {
+    const setClause = Object.entries(snap.fields)
+      .map(([col, val]) => `${col} = '${val.replace(/'/g, "''")}'`)
+      .join(", ");
+    try {
+      psqlExec(`update product set ${setClause} where id = '${snap.id}'`);
+      const cols = Object.keys(snap.fields);
+      const readBack = psqlValue(`select ${cols.join(",")} from product where id = '${snap.id}'`).split("|");
+      cols.forEach((col, i) => {
+        if (readBack[i] !== snap.fields[col]) {
+          failures.push(`${snap.id}.${col}: expected "${snap.fields[col]}", got "${readBack[i]}"`);
+        }
+      });
+    } catch (e) {
+      failures.push(`${snap.id}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  // AUR-1B price ladder — resolved by CODE, not a frozen id (addresses B6:
+  // pricelist_item.id has no `id` column in the seed insert, so it's
+  // gen_random_uuid() on every reset, never stable to hardcode). Guarded the same
+  // way resolveProductId is (N2) — a miss or a duplicate fails loudly, named, rather
+  // than an empty/ambiguous string reaching the DELETE below.
+  try {
+    const aur1bRow = psqlValue(
+      `select pi.id from pricelist_item pi join product p on p.id = pi.product_id ` +
+        `where p.supplier_product_code = 'AUR-1B' and pi.deleted_at is null`,
+    );
+    if (!aur1bRow) throw new Error("no live pricelist_item found");
+    if (aur1bRow.includes("\n")) throw new Error("ambiguous pricelist_item match");
+    psqlExec(`delete from pricelist_item_tier where pricelist_item_id = '${aur1bRow}'`);
+    const remaining = psqlValue(
+      `select count(*) from pricelist_item_tier where pricelist_item_id = '${aur1bRow}' and deleted_at is null`,
+    );
+    if (remaining !== "0") failures.push(`AUR-1B tier rows: expected 0 remaining, got ${remaining}`);
+  } catch (e) {
+    failures.push(`AUR-1B ladder restore: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  expect(failures, `restore failed: ${failures.join("; ")}`).toEqual([]);
+});
 
 const EMAIL = "alice@greenleaf.test";
 const PASSWORD = "password123";
@@ -73,6 +200,7 @@ test("F-02 · a cannabinoid edit is batched — nothing persists until Save", as
 
 test("F-02 · Save flushes the pending field edit (persists across reload)", async ({ page }) => {
   await manageShop(page);
+  await captureFirstCardFields(page, ["thc_percent"]);
   const card = page.getByTestId("product-card").first();
   await card.getByLabel("THC %").fill("41.7");
 
@@ -100,8 +228,9 @@ test("F-02 · ✕ discard clears the pending edit", async ({ page }) => {
 // ── F-05 — spec-row inline editing (Cultivator, Origin) ──────────────────────
 // Extends the SAME pending-edit tree (onEditField → pendingProductEdits → Save
 // flush → updateProductFields) to the card's other spec rows, not just the
-// numeric strip. The seeded first card (AUR-1A) carries cultivator="Aurora Inc"
-// so the discard case has a real original value to revert to.
+// numeric strip. The seeded first card (AUR-1D — see the module docstring)
+// carries a non-empty cultivator so the discard case has a real original value
+// to revert to.
 
 test("F-05 · a Cultivator (text spec-row) edit is batched — nothing persists until Save", async ({ page }) => {
   await manageShop(page);
@@ -120,6 +249,7 @@ test("F-05 · a Cultivator (text spec-row) edit is batched — nothing persists 
 
 test("F-05 · Save flushes the Cultivator + Origin spec-row edits (persists across reload)", async ({ page }) => {
   await manageShop(page);
+  await captureFirstCardFields(page, ["cultivator", "country_of_origin"]);
   const card = page.getByTestId("product-card").first();
   await card.getByLabel("Cultivator").fill("Northern Grow Co");
   await card.getByLabel("Origin").fill("Netherlands");

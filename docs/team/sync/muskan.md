@@ -5,10 +5,10 @@
 
 ---
 
-**Last updated:** 2026-08-25 — `security_tickets` session (worktree-security-tickets) —
+**Last updated:** 2026-08-25 — `workflow_retro` — **HEL-81+82+74 SHIPPED (PR #181); pipeline slimmed**
 **HEL-82 + HEL-74 BUILT, committed `fc2a07b`, pushed to `worktree-security-tickets`.**
-**Status:** offline (session closed).
-**Shared files locked: none — all released.**
+**Status:** offline (session closed). Production tip `20260825200000`; **nothing cloud-pending**. G5 on the shipped security work is OWED.
+**Shared files locked: none — all released.** This session touched `AGENTS.md`, `docs/agents/PIPELINE.md`, `.claude/agents/*`, `.claude/skills/*` and `.claude/rules/*` (new). ⚠️ **`AGENTS.md` is no longer the file Claude loads** — project rules now live in `.claude/rules/` (`project.md` always-on; `supabase.md` + `product.md` path-scoped). Change a rule there, not in `AGENTS.md` alone.
 
 **What shipped.** `suspend_relationship`/`reactivate_relationship`/`end_relationship`
 (`is_hs_team()`-gated definer RPCs) + a new `/admin/relationships` queue (NOT

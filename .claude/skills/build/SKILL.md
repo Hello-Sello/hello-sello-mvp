@@ -42,18 +42,33 @@ allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Task, Agent
 6. **Spawn `test-runner`:** full report. Red → builder retries.
    Budget: `tests 2/2`, then STOP → write `blocked.md`, escalate.
 
-7. **Reviewers — routed by what the diff touches, spawned in ONE message:**
+7. **Review — two always, one routed. Spawn in ONE message:**
+   - **always** → **`/code-review high`** on the ticket's diff. It owns
+     general correctness, reuse, simplification and efficiency — including
+     the invented-lookalike class (a camelCase `packSizeGrams` beside the
+     real `pack_size_grams` in `database.types.ts`).
+   - **always** → **`critic`** — the three things `/code-review` has no way
+     to know: the acceptance criteria, scope against them, the ADR's Reused
+     fence.
    - migration · RLS · RPC · auth · server action · cross-company reads →
-     `critic` + `security`
-   - a new component or new pattern → `critic` + `consistency`
-   - CSS / copy only → `critic` alone
-   Findings: `blocking` → builder fixes (budget counts fix ROUNDS — three
-   findings fixed in one pass = one attempt; `blocking-findings 2/2` then
-   STOP) · `note` → REVIEW.md, never retried · builder REJECTION → REVIEW.md
-   with reasoning, costs no attempt, Muskan adjudicates at G4.
+     **+ `security`**. Not optional and not substitutable: it runs
+     `SECURITY-CHECKLIST.md` S1-S8 (grants on both client roles,
+     `pg_policies`, RLS), which a general reviewer does not do.
+
+   Findings are severity-rated on the **ladder in PIPELINE §10** —
+   `blocking` is rungs 1-3 ONLY (leak · silent failure · won't run); rungs
+   4-5 (behavioural edge, contract/wording) are `note`. A reviewer that
+   rates a wording nit `blocking` is mis-rating it; take it as a note.
+
+   `blocking` → builder fixes (budget counts fix ROUNDS — three findings
+   fixed in one pass = one attempt; `blocking-findings 2/2` then STOP) ·
+   `note` → REVIEW.md, never retried, still surfaced at G4 · builder
+   REJECTION → REVIEW.md with reasoning, costs no attempt, Muskan
+   adjudicates at G4.
 
 8. **Everything appends to the slug's ONE `REVIEW.md`**, every finding
-   attributed: `(critic, file:line)`, `(security, S3)`, `(consistency)`.
+   attributed: `(code-review, file:line)`, `(critic, file:line)`,
+   `(security, S3)`.
 
 9. Diff renders anything? → **spawn `visual-verifier`** (screenshots →
    `g4/`, staging table appended to REVIEW.md).
@@ -67,8 +82,8 @@ allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Task, Agent
       to adjudicate. Never pass the gate yourself.
     - **Backend only** — migration, RPC, server action, job, types → **no
       human stop.** Replay the acceptance criteria on real data, append the
-      replay to REVIEW.md, and close the ticket on green tests + `critic` +
-      `security`.
+      replay to REVIEW.md, and close the ticket on green tests + `/code-review` +
+      `critic` + `security`.
 
     **Escalate a backend-only ticket to Muskan anyway when ANY of these is
     true** — these are the carve-outs, and they are not optional:

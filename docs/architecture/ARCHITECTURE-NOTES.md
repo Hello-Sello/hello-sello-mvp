@@ -936,3 +936,47 @@ insert) nor the pricing-request path (`discover/actions.ts`) carries a relations
 `authenticated` holds `INSERT` on both `chat_message` and `pending_inbox_item` directly, so a
 suspended/ended pair can still exchange new chat messages and pricing asks — reachable the moment
 suspension ships, not latent. Anyone touching either path should check HEL-84 first.
+
+---
+
+## 2026-08-25 — a claim that nothing executes stops being about the code
+
+Three independent drifts surfaced in one session. They look unrelated and share one cause.
+
+1. **Six SQL suites had no runner.** 54 suite files, 49 runners. They were written, they read as
+   coverage, and they had never executed. When runners were finally written for all six, the first
+   run found `announcement_projection_test.sql` asserting `sender='sella'` while
+   `20260707130300_deal_event_system_voice.sql` had moved the announcement voice to `'system'` on
+   2026-07-07 — **wrong for roughly seven weeks.** Two more suites carried the opposite error:
+   `auth_gate` insisted in its own header that it must stay RED and passes; `rls_isolation` was
+   filed as broken and passes.
+2. **DEV-161 was fixed by accident and stayed open.** It reported `rls_isolation_test` failing on a
+   fresh `db reset` for three named reasons. All three had been repaired incidentally by Wave 3
+   (`be3abda`, `94f9b75`) — including, correctly, the assertion the ticket warned must not simply be
+   loosened. Nobody knew, because the artifact that would have reported it was the suite with no
+   runner.
+3. **`AGENTS.md` had never been loaded.** `CLAUDE.md` said *"project-wide rules live in
+   `AGENTS.md`"* as prose rather than an `@import`, and Claude Code reads `CLAUDE.md` and
+   `.claude/rules/`, never `AGENTS.md`. 281 lines of project rules were inert. The tell was sitting
+   in the file: its "current build state" section was last updated **2026-06-21**, two months
+   earlier, because a log with no reader does not get updated.
+
+**The shared cause.** In each case a written artifact continued to *look* authoritative while
+having no execution path — no runner, no reader, no load. Review does not catch this, because
+review reads the artifact and the artifact is well-formed. Only *trying to run it* catches it, and
+in all three cases that is exactly what did.
+
+**The implication for how we work.** Prefer executable verification over prose that stages a
+decision. Where a rule must live in prose, give it a mechanism that fails when the prose goes
+stale: suites and runners are kept **1:1 by census**, not by eye; a rule that governs Claude lives
+in `.claude/rules/` where it actually loads, with `AGENTS.md` as the human long form that says on
+line 3 that Claude does not read it. The same principle already had a narrower form in
+`PIPELINE.md` — *"a policy stated in two places where only one of them runs is a policy you don't
+actually have"* — which cost slug 0022 about thirty rulings. This is that rule generalised: **a
+policy with no runner at all is not a policy either.**
+
+**Corollary, from the same session.** The check that catches this class is usually cheap and
+boring. Verifying a git worktree's commits had reached an integration branch before deleting it
+took two minutes; the first time it ran it saved 1,965 lines of security work that was stranded on
+a branch nobody had merged, and the second time it passed uneventfully. Value shows up in the one
+run out of two where the obvious assumption is wrong.

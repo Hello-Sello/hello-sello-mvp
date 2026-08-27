@@ -1,8 +1,9 @@
 ---
 name: spec
 description: Write the WHAT for a triaged slug - researcher sweep, interview,
-  then the PRD. Stops at G1. Use /spec <slug>, or /spec --amend <slug> for
-  the STANDARD lane's one-paragraph amendment.
+  then the PRD. Does NOT stop - hands to /prototype or /design; the spec is
+  approved at G3 with the ADR (PIPELINE 9a). Use /spec <slug>, or
+  /spec --amend <slug> for the STANDARD lane's one-paragraph amendment.
 allowed-tools: Read, Grep, Glob, Write, Edit, Task, Agent
 ---
 
@@ -10,8 +11,8 @@ allowed-tools: Read, Grep, Glob, Write, Edit, Task, Agent
 
 0. Open `docs/muskan-build/<slug>/STATE.md` — read lane, seed; stage must be
    `triage ✅`. **`--amend` mode (STANDARD lane):** one paragraph appended to
-   the existing PRD it amends, then straight to the G1 stop. Everything below
-   is the FULL lane.
+   the existing PRD it amends, then straight to the hand-off in step 4.
+   Everything below is the FULL lane.
 
    **Then scan `docs/agents/LEARNINGS.md` — Trigger lines only**; open an entry
    when its trigger matches what this run is about to do. The moment a checker, a
@@ -46,9 +47,20 @@ allowed-tools: Read, Grep, Glob, Write, Edit, Task, Agent
      Reject and rewrite vague ones — G4 walks these lines verbatim.
    - New vocabulary → propose a CONTEXT.md line; never write it unasked.
 
-4. **Stop at G1.** Hand Muskan: the spec, the researcher's conflict list,
-   and any question you could not close. She approves, amends, or rejects.
-   On approve, update STATE.md: `stage: spec ✅ → prototype|design (next)`
-   (prototype only if the lane's path includes a frontend surface),
-   `Files so far` += the PRD + RESEARCH.md paths, `Gate log` += G1 passed
-   with date.
+4. **Show, then hand off — do NOT stop.** G1 was merged into G3 on
+   2026-08-25 (PIPELINE §9a): the spec is approved together with the ADR
+   that acts on it.
+
+   Show Muskan the spec, the researcher's conflict list, and any question
+   you could not close — **as a report, not a gate.** She may redirect; if
+   she says nothing, continue.
+
+   **Carry every unclosed question forward into `STATE.md`'s `For Muskan`
+   section, verbatim.** They are now G3's business, and an unclosed
+   question that is not carried is a question that is silently dropped.
+
+   Update STATE.md: `stage: spec ✅ → prototype|design (next)` (prototype
+   only if the lane's path includes a frontend surface), `Files so far` +=
+   the PRD + RESEARCH.md paths, `Gate log` += `spec written (no gate — G1
+   merged into G3, PIPELINE §9a)` with date. Then hand straight to
+   `/prototype` if the lane has a frontend surface, else `/design`.
