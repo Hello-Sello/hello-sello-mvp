@@ -49,7 +49,7 @@ WHERE (r.company_a_id = f.greenleaf OR r.company_b_id = f.greenleaf)
   AND cb.name LIKE 'StonePharm%'
 LIMIT 1;
 
-GRANT SELECT ON _fix, _rel TO authenticated;
+GRANT SELECT ON _fix, _rel TO authenticated, service_role;
 
 DO $$
 BEGIN

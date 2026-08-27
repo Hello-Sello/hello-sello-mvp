@@ -69,6 +69,19 @@ Deno.serve(async (req: Request) => {
   const vOld = vNew - 1;
   if (vOld < 1) return json({ deal_card_id: cardId, version: vNew, skipped: "no prior version (creation, not an edit)" }, 200);
 
+  // HEL-84 (0026-relationship-write-gate): gate BEFORE the deal_card_log
+  // reads below, runSummary (the Bedrock call), and the deal_card_log insert
+  // — a suspended/ended relationship must not pay for either on a run that
+  // was always going to be refused. Both targets (dealThread + p2pThread)
+  // share this one relationship (see PLAN-HEL-84.md §10), so one call covers
+  // both potential posts.
+  const { error: notWritableErr } = await supabase.rpc("assert_relationship_writable", {
+    p_relationship_id: card.relationship_id,
+  });
+  if (notWritableErr) {
+    return json({ deal_card_id: cardId, version: vNew, skipped: "relationship not writable" }, 200);
+  }
+
   // idempotency: summarize each version at most once. The probe MUST match the
   // author the log is written under below (OBS-3: 'system'), or it would never
   // find the prior row and re-summarize on every call.
