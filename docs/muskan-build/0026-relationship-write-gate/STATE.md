@@ -239,7 +239,32 @@ still applies once the ADR is drafted.
   folded in (2 required checker-level SQL-compile verification this plan
   can't self-certify; 2 needed the checker's own original wording to
   address precisely, which STATE.md's summary didn't carry) — left for round
-  2 to re-flag if still open. **Next:** re-spawn `plan-checker` round 2.
+  2 to re-flag if still open.
+- **`plan-checker` round 2, 2026-08-27** — REVISE: **2 blocking.** B1: §8
+  claimed AC4/`deliver_deal` coverage was already proven transitively —
+  false on every count (no suspended-relationship cell existed anywhere,
+  neither Sella function calls `deliver_deal`, and `send_deal` stopped
+  calling it back in an earlier August migration). B2: the new
+  `assert_relationship_writable_test.sql` suite had no named runner script
+  — this repo's own rule is a suite without a runner isn't coverage. Plus
+  8 notes, one real and non-trivial (N3: the `msg_all` exemption relied on
+  SQL `OR` short-circuit for a side effect, which Postgres explicitly
+  disclaims as unreliable evaluation order).
+- **`/build`, 2026-08-27** — fixed all round-2 findings: B1 (§0/§5's
+  `deliver_deal` reachability claim corrected to `confirm_detected_deal`
+  only; §8's false transitive-coverage claim replaced with a new required
+  test cell in `deliver_deal_test.sql`), B2 (named the runner script,
+  `run_assert_relationship_writable_test.sh`), N1 (reachability, folded
+  into B1's fix), N2 (`chat_message` UPDATE/DELETE grant claim was
+  inverted — corrected), N3 (`OR` → `CASE` in `msg_all`'s SQL), N5 (§4's
+  "one delta" corrected to three, each named), N6 (the `service_role` test
+  cell needs an explicit JWT-claims reset or it silently tests the wrong
+  branch), N7 (resolved the open `sella-summarize` two-thread question —
+  provably sufficient, traced), N8 (the `service_role` grant's stated
+  reason was wrong even though the grant itself was already correct;
+  corrected). N4 declared as a non-blocking gap (chat-door user-facing
+  message, PRD AC1 doesn't require it) rather than fixed. **Next:**
+  re-spawn `plan-checker` round 3.
 
 ## Gate log
 - **G3 (spec + ADR, merged gate) — APPROVED, Muskan, 2026-08-26.** "yes, approved,"
