@@ -1034,6 +1034,15 @@ begin
      or v_company not in (v_rel.company_a_id, v_rel.company_b_id) then
     raise exception 'announce_deal_event: caller is not a party to this deal''s relationship';
   end if;
+  -- Deliberately NOT collapsed with the "deal not found" raise above into
+  -- one message, unlike §1's Invariant-9 (round-2 checker N5 asked why).
+  -- The probe §1 protects against needs only a relationship id, which is
+  -- effectively guessable (existing rows, sequential exposure elsewhere).
+  -- This function's first gate is `p_deal_card_id`, a `deal_card` UUID —
+  -- an attacker needs one already valid before the party-check message
+  -- becomes reachable at all, at which point they already know the deal
+  -- exists. The two-message split costs nothing extra here because the
+  -- UUID itself is the higher bar, not the message text.
 
   select nullif(btrim(coalesce(first_name, '') || ' ' || coalesce(last_name, '')), '')
     into v_name
@@ -1046,15 +1055,23 @@ begin
     when 'deal_signed'                then 'Deal signed - the deal is confirmed.'
   end;
 
-  -- Both targets are READ, not resolve-or-create: unlike send_deal's c2c
-  -- pill (which can fire before any message has ever been sent), every one
-  -- of these four events happens well into a deal's lifecycle — the deal
-  -- thread and the visible p2p/c2c thread both already exist by construction
-  -- (create_deal_draft mints the deal thread; the relationship's own accept
-  -- flow, HEL-68, mints c2c/p2p). A NULL find is silently skipped, matching
-  -- announceDealEvent's own `if (dealThread) targets.push(...)` shape — not
-  -- an error, since a thread genuinely may not exist for one arm (e.g. no
-  -- p2p thread yet for a company-only relationship).
+  -- Both targets are READ, not resolve-or-create. CORRECTED (round-2
+  -- checker N4 — an earlier draft claimed "create_deal_draft mints the
+  -- deal thread," which is false and this plan's own §10 already
+  -- established the opposite: 20260724120200_create_deal_draft_private_
+  -- birth.sql:16-22 DELETED that insert, "the birth-created deal chat is
+  -- a RETIRED concept (D-05)"). Consequence, stated rather than hidden:
+  -- v_deal_thread is NULL for every card born since that migration —
+  -- meaning in production this RPC usually posts to ONE thread (the
+  -- visible p2p/c2c one) and `returns uuid` is near-always NULL. Not a
+  -- bug — announceDealEvent's own original code was identically
+  -- NULL-safe for a missing deal thread (`if (dealThread)
+  -- targets.push(...)`), and the seeded test fixtures DO have `deal`
+  -- threads (seed.sql's own inserts), so §12.5's cells still exercise
+  -- both arms — just don't read the comment as claiming a guarantee
+  -- production doesn't actually have. The relationship's own accept
+  -- flow (HEL-68) does mint c2c/p2p, which is why THAT arm is reliably
+  -- non-NULL. A NULL find on either arm is silently skipped.
   select id into v_deal_thread
   from public.chat_thread
   where relationship_id = v_card.relationship_id
@@ -1074,9 +1091,18 @@ begin
   -- while the actor's own channel gets nothing — silent in every existing
   -- test because the seeded fixtures only ever have one p2p thread per
   -- relationship. Restricting to v_uid's own pair reproduces the pre-fix
-  -- behavior exactly, matching send_deal's own precedent
-  -- (20260825090000_send_deal_c2c_announce.sql:132-144, keyed on
-  -- (v_uid, counterparty) the same way).
+  -- behavior exactly — round-2 checker (N1) corrected an overclaim here:
+  -- this is NOT as precise as send_deal's own precedent
+  -- (20260825090000_send_deal_c2c_announce.sql:132-144), which keys on
+  -- BOTH ends (v_uid AND v_card.metadata->>'counterparty_person_id').
+  -- This filter keys on v_uid alone with an unordered `limit 1` — if the
+  -- caller belongs to TWO p2p pairs on the same relationship, the target
+  -- is arbitrary among them. NOT a regression (the old app-side code was
+  -- equally arbitrary in that case — `list.find(t => t.type === "p2p")`
+  -- with no tiebreak either), and no current call site can construct that
+  -- state, but it is not the deterministic guarantee the wording used to
+  -- claim. If this ever needs to be exact, `v_card.metadata` already
+  -- carries `counterparty_person_id` the same way send_deal reads it.
   select id into v_visible_thread
   from public.chat_thread
   where relationship_id = v_card.relationship_id
@@ -1208,6 +1234,16 @@ alter policy msg_all on public.chat_message
   );
 ```
 
+**Rewrite the migration's own 31-line header comment too (round-2 checker
+N2), not only the `comment on policy`** — the current header
+(`20260827100000_msg_all_relationship_write_gate.sql:1-34`) justifies the
+now-deleted `CASE`/exemption/`OR`-vs-`CASE` reasoning at length; left as-is
+it would contradict the SQL directly below it. Replace with a header
+explaining the plain check and pointing forward to
+`announce_deal_event` (§12.2) as where the four types are now written
+instead — a reader hitting this file should learn WHY there's no
+type-keyed term, not find stale reasoning for one that no longer exists.
+
 Re-emit the `comment on policy` to drop the now-false claim about a
 four-type exemption. **Precisely what this closes, not overstated
 (plan-checker N7 — "no longer written by ANY client-facing path" is false:
@@ -1245,7 +1281,15 @@ system-authored type already does — that mechanism was never in question.
   `announceDealEvent` any more, though the CONTROL assertion itself stays
   correct and unedited), the §F section header (`:238-239`), F1's inline
   comment (`:260-262`), and the pass banner (`:355`, "F5 exemption x4") —
-  all currently describe the old exemption-by-type design.
+  all currently describe the old exemption-by-type design. **One more
+  (round-2 checker N3):** the file's own census table at `:24` ("sella NULL
+  deal_signed + 3 siblings actions.ts:682") cites the exact loop this
+  addendum deletes — update. Separately, unrelated to this addendum but
+  sitting inside the same block being touched: F2's comment at `:286-288`
+  ("the claims active immediately before this point are Carol's") is
+  already factually wrong in the built file — F1 sets Alice's claims at
+  `:264-265`, not Carol's. Pre-existing, not introduced here, but fix it
+  while the surrounding lines are already being edited.
 - **New SQL suite** `supabase/tests/announce_deal_event_test.sql`, WITH its
   runner `supabase/tests/run_announce_deal_event_test.sh` (plan-checker
   B4 — same class as §8's own B2: a suite with no runner is not coverage,
@@ -1268,11 +1312,43 @@ system-authored type already does — that mechanism was never in question.
   without it, a future reader could "fix" this RPC by adding an
   `assert_relationship_writable` call and silently re-break the ruling this
   whole addendum protects).
-- `src/modules/deals/actions.test.ts` (or wherever this module's existing
-  unit tests live — check before assuming a new file) — the four call
-  sites' fail-soft wrapping (`announceErr` logged, never thrown) needs a
-  regression test per call site, since this is now hand-written glue code
-  instead of a shared function with one try/catch.
+- **`src/modules/deals/actions.test.ts` — new file, no precedent to extend
+  (round-2 checker N7: confirmed `actions.ts` has no existing test file;
+  every current test for this module is at the `lib/`-level or a component
+  test).** Follow `src/modules/basket/actions.test.ts:28`'s established
+  mocking pattern (`vi.mock("@/shared/db/server", ...)`) — `actions.ts`
+  imports exactly `@/shared/db/server` and `@/shared/audit`, matching that
+  precedent's own shape closely enough to copy, not invent fresh. Cover the
+  four call sites' fail-soft wrapping (`announceErr` logged, never thrown),
+  since this is now hand-written glue code instead of one shared
+  try/catch.
+- **Named e2e coverage this diff affects (round-2 checker N7 — §12.5
+  originally left this to guesswork):** `e2e/deal-change.spec.ts:400`
+  asserts the `deal_negotiation_requested` pill's exact text
+  ("`<Bob>` wants to negotiate") lands in the p2p chat. The name
+  composition should stay equivalent (`btrim(coalesce(first,'')||'
+  '||coalesce(last,''))` vs. the deleted client code's `[first,
+  last].filter(Boolean).join(" ").trim()` agree on every null/empty
+  combination — verify this holds, don't just assume), but this diff
+  changes the WRITER of a user-visible chat pill, so re-run this spec
+  explicitly as part of gate, not just the full e2e sweep.
+
+### §12.7 — documentation debt this addendum owes, not silently carried
+
+Round-2 checker N6: ADR 0008 and its downstream docs describe the
+now-retired mechanism and need an amendment pass (propose-mode, at wrap —
+not blocking the build itself, named here so it isn't lost):
+- `docs/architecture/adr/0008-relationship-write-gate.md:207-219`
+  (Invariant 16) currently says the four types "write through `msg_all`
+  like any other client insert" — false after this addendum. The RULING
+  survives unchanged (still exempt from the suspension gate, now proven by
+  §12.5's suspended-relationship success cell) — only the MECHANISM
+  description is stale.
+- `docs/PRD/0026-relationship-write-gate.md` AC8's wording may need the
+  same correction.
+- `docs/architecture/ARCHITECTURE-NOTES.md:700` cites `actions.ts:682` (the
+  deleted loop) as a live browser-session writer of these four pills —
+  stale once §12.3 lands.
 
 ### §12.6 — plan-checker's job for this addendum specifically
 

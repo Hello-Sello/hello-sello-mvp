@@ -492,6 +492,29 @@ still applies once the ADR is drafted.
   (fixed the evidence citation for "never shipped"), N7 (corrected an
   overstated closure claim), N8 (added the missing `deleted_at` filters).
   **Next:** re-spawn `plan-checker` on §12.
+- **`plan-checker`, §12 round 2, 2026-08-27 — OK, 0 blocking.** Confirmed
+  the round-1 fixes hold under fresh re-derivation, including the
+  substantive one (B2's p2p restriction traced through all 4 real call
+  sites against live schema/seed). 7 non-blocking notes, all folded in:
+  N1 (the "matches send_deal's precedent" claim overstated its own
+  precision — corrected, and the residual multi-pair-membership edge case
+  named as pre-existing, not a regression), N2 (the migration's own
+  31-line header comment justifies a mechanism that no longer exists —
+  flagged for rewrite alongside the policy comment), N3 (one more stale
+  test-file reference, plus a pre-existing wrong comment sitting inside
+  the same block being rewritten, fixed opportunistically), N4 (a factual
+  error — "create_deal_draft mints the deal thread" — already contradicted
+  by this plan's own §10; corrected, with the real consequence named: the
+  RPC's deal-thread arm is near-always NULL in production since that
+  migration retired the insert), N5 (documented why the RPC's two-message
+  error split doesn't need §1's message-collapse doctrine — a `deal_card`
+  UUID is the effective bar here, not the message text), N6 (named 3 docs
+  — ADR 0008, the PRD, ARCHITECTURE-NOTES — that describe the now-retired
+  mechanism and owe a wrap-time amendment pass, not blocking the build),
+  N7 (named the actual test-mocking precedent to follow and the specific
+  e2e spec this diff's writer-change affects).
+  **§12 is buildable. Next:** `test-writer` for §12's tests, then
+  `builder`, then re-verify `security` clean before G4.
 
 ## Gate log
 - **G3 (spec + ADR, merged gate) — APPROVED, Muskan, 2026-08-26.** "yes, approved,"
