@@ -518,6 +518,31 @@ follow-up if the suspended-relationship chat-refusal UX matters at G4/G5.
 ADR 0008's Invariants 1-10 are marked "machine-checkable" — this section maps
 each to where it gets proven, per `test-writer`'s remit.
 
+**`supabase/tests/accept_connection_request_status_guard_test.sql` needs a
+REORDER, lands in the same commit as §3 (round 5, B1 — a real blast-radius
+miss: this file was never censused against §3's new gate, and it breaks).**
+Its §A (`:88-104`) mints a `pricelist_request` onto the Rheinland↔GreenLeaf
+pair as `authenticated` (Clara) — the RLS-legitimate path — AFTER the fixture
+already suspends that same pair at `:85`. Once §3 lands, that mint is exactly
+what `inbox_insert`'s new gate refuses: `:99`'s `INSERT` is a bare top-level
+statement with no exception handler, so under `ON_ERROR_STOP=1` the raise
+aborts the entire suite, and §§B-E never run. **Fix: swap the order — mint
+the `pending_inbox_item` first (Clara, while the pair is still active), THEN
+suspend the relationship (HS team), THEN attempt to accept it.** This is not
+a workaround, it's the MORE correct test of what this suite actually exists
+to prove: `accept_connection_request`'s own guard
+(`20260825200000_accept_connection_request_status_guard.sql`) is for a
+request that predates a suspension and must still be refused at accept
+time — not for a request minted after suspension, which after this ticket
+can't be minted through the RLS path at all. The reorder needs no privileged
+role and doesn't touch what §§B-E test. **Census performed by `plan-checker`
+round 5, not re-done here — trust it, don't re-derive**: 12 suites write
+`chat_message`/`pending_inbox_item`; of those, this is the ONLY one that
+breaks (the other 11 either write through a definer, write pre-suspension,
+target a pair the gate doesn't reach, or collapse to the unsatisfiable
+canonical-order NULL case the same way §3's own `connect_person` exemption
+does).
+
 **Existing suites needing an assertion-text confirmation pass, not a
 rewrite** — already re-verified during this plan's own citation pass (§0): the
 new raise text from `assert_relationship_writable` (`relationship is % — no
@@ -622,7 +647,8 @@ not create a new suite (round 3, N4). Round 4 (B1) found this block missing
 the SAME four structural requirements deliver_deal_test.sql's new cell above
 needed — all four apply here too, made concrete against this file:**
 1. **Position: last cell, immediately before the file's own `ROLLBACK`
-   (`:239`)** — the file is one transaction (`BEGIN` at `:47`), and its §A
+   (`:229` — round 5, N1 corrected a stale `:239`, past this file's actual
+   237 lines)** — the file is one transaction (`BEGIN` at `:47`), and its §A
    controls (`:83-110`) insert into the SAME seeded Alice↔Bob p2p thread this
    new cell must suspend. A flip anywhere earlier aborts the rest of the
    suite under `ON_ERROR_STOP=1`.
@@ -633,10 +659,17 @@ needed — all four apply here too, made concrete against this file:**
    include it — matching the file's existing convention of looking values up
    dynamically rather than hardcoding (its own fixture comment says exactly
    this, for `thread_id`/`carol`).
-3. **`RESET ROLE` before the flip** — `authenticated` has `UPDATE` revoked on
-   `relationship` (`20260823090000:89`); the flip must run privileged, then
-   `SET LOCAL ROLE authenticated` again (with `_t`'s Alice claims) before the
-   refusal cells.
+3. **`RESET ROLE` before the flip, AND name whose claims are active
+   afterward (round 5, N2 — a previous draft said "re-establish `_t`'s Alice
+   claims" without saying what was active before that):** `authenticated`
+   has `UPDATE` revoked on `relationship` (`20260823090000:89`), so the flip
+   must run privileged first. The claims in effect immediately before this
+   new cell are Carol's (§D's deliberate non-member, set at `:182-183`) —
+   §D's own `RESET ROLE` (`:198`) resets the ROLE but does NOT clear the
+   `set_config` claims. After the privileged flip, explicitly
+   `set_config('request.jwt.claims', …)` back to Alice's (`_t.alice`) before
+   `SET LOCAL ROLE authenticated` — do not assume Alice's claims are still
+   active just because an earlier cell set them once.
 4. **New refusal cells must NOT copy this file's neighboring
    `insufficient_privilege` idiom (`:134-139`)** — that idiom is for a
    table/RLS-privilege denial (42501). `assert_relationship_writable`'s raise
@@ -692,13 +725,28 @@ not create a new suite (round 3, N4). Same four requirements (round 4, B1):**
 
 Cells, once the above is in place:
 - A new connect/pricing request addressed to a company with a suspended
-  relationship to the sender → refused (AC3).
+  relationship to the sender → refused (AC3). This cell suspends
+  GreenLeaf↔StonePharm.
 - A `connect_person` row (`receiver_company_id IS NULL`) → unaffected by this
   gate entirely (Invariant 8's NULL-passthrough, exercised via the real
   no-company-pair path, not just the function's own NULL-arg test above).
-- A company pair with both a soft-deleted and a live `relationship` row →
+- **A company pair with both a soft-deleted and a live `relationship` row →
   ordinary send still succeeds, no "more than one row" error (Invariant 13 /
-  round 2 F4 regression guard).
+  round 2 F4 regression guard). Must use GreenLeaf↔Rheinland
+  (`seed.sql:344`), NOT GreenLeaf↔StonePharm (round 5, N3 — the AC3 cell
+  above already suspends that pair; this cell needs a genuinely `active`
+  pair or it's testing the wrong thing).** The extra soft-deleted
+  `relationship` row this cell inserts must be inserted privileged —
+  `authenticated` has `INSERT` revoked on `relationship` too, same
+  constraint point 3 above already names for `UPDATE`
+  (`20260823090000:89`).
+
+**Both extended suites' PASSED banners need updating (round 5, N4)** —
+`msg_all_deal_detected_gate_test.sql:237` and
+`inbox_insert_receiver_gate_test.sql:248` each `\echo`/`RAISE NOTICE` an
+explicit cell-by-cell enumeration (e.g. "A control x6/9 rows, B gate x2, C
+definer x1..."); both go stale the moment §8's new cells land and are the
+only thing either runner prints — update both to name the new cells.
 
 **Read-path regression guard (AC5/AC6)** — not a new suite: confirm the
 existing read-side suites for `chat_message`/`pending_inbox_item`/pricing
