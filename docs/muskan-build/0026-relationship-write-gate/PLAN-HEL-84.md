@@ -7,6 +7,16 @@ states; nothing dev has is new relative to this branch (verified with
 silently truncates this exact query — see HEL-68's own base-sync note). No rebase;
 base frozen from here.
 
+**Migration timestamp floor (round 4, N4) — every `<ts>` placeholder in §1-§5
+below must sort after `20260826100000`** (0024's own
+`accept_connection_request_atomic_threads.sql`, shipped to production
+2026-08-27, after this plan was first written). Per `.claude/rules/
+supabase.md`, verify the actual local tip at build time
+(`supabase migration list --linked` or the newest file in
+`supabase/migrations/`) rather than assuming `20260826100000` is still
+current — the tip can move again between this plan being checked and
+`builder` actually writing the files.
+
 ## §0 — citations, verified live today, not inherited from the ADR
 
 - `msg_all`'s live `WITH CHECK`: `20260825120000_msg_all_deal_detected_gate.sql:77-83`
@@ -320,6 +330,20 @@ own (a caller who can't see the relationship row gets NULL, which
 Invariant 8's NULL-passthrough lets through as allowed). Add the same one-line
 SQL comment noting this is load-bearing on `rel_all` staying unfiltered.
 
+**This section's `or` is safe, unlike the one §2 replaced with `case` (round
+4, N1 — state why, don't leave the two sections reading as contradictory):**
+for a `connect_person` row, `receiver_company_id IS NULL`, and `least`/
+`greatest` ignore NULL arguments, so the derivation collapses to `company_a_id
+= sender_company_id AND company_b_id = sender_company_id` — unsatisfiable
+against the live `relationship_canonical_order` CHECK
+(`company_a_id < company_b_id`, `20260607090003_phase2_deal.sql:31`). The
+subquery always returns zero rows (NULL), so `assert_relationship_writable
+(NULL)` always returns `true` regardless of evaluation order — there is no
+side-effecting raise for `or` to short-circuit around here, unlike §2's
+`type IN (...)` exemption. This safety is load-bearing on the derivation
+never changing shape; if it ever stops collapsing to an unsatisfiable
+predicate for the NULL case, revisit whether `or` is still safe.
+
 ## §4 — migrations: refactor `send_deal` and `confirm_detected_deal`
 
 Two files, `create or replace` (their return signatures don't change — this is
@@ -424,6 +448,15 @@ in try/catch expecting a throw):
   same shape the function already uses for an early exit (e.g. `json({
   thread_id: threadId, skipped: "relationship not writable" }, 200)` — match
   the existing early-return shape at `:118`/`:129`, don't invent a new one).
+  **Named consequence of this placement, not just "no chat write" (round 4,
+  N3):** gating this early also means NO `sella_detection` memory row is
+  written for a suspended-relationship run — where today, on every
+  non-idempotent run regardless of outcome, one always is. This is the
+  correct trade-off (the alternative pays the idempotency-claim cost and the
+  Bedrock call for a run that was always going to be refused), but it's a
+  distinct fact from "the chat post is refused," worth its own line so a
+  future reader checking `sella_detection` history for a suspended
+  relationship's thread doesn't read a gap there as a bug.
   **`postDetectedMessage()` itself needs no change** — it has exactly two call
   sites, in the `"post"` (`:260`) and `"supersede"` (`:262`) branches, out of
   FOUR total `decision.kind` branches (round 3, N6 corrected the count again
@@ -585,8 +618,42 @@ ROLLBACK` fixture pattern (`.claude/rules/supabase.md`):
 
 **New assertions in `supabase/tests/msg_all_deal_detected_gate_test.sql`,
 already has a runner (`run_msg_all_deal_detected_gate_test.sh`) — extend, do
-not create a new suite (round 3, N4, same class as round 2's B2: naming the
-runner is what makes a suite real coverage in this repo).**
+not create a new suite (round 3, N4). Round 4 (B1) found this block missing
+the SAME four structural requirements deliver_deal_test.sql's new cell above
+needed — all four apply here too, made concrete against this file:**
+1. **Position: last cell, immediately before the file's own `ROLLBACK`
+   (`:239`)** — the file is one transaction (`BEGIN` at `:47`), and its §A
+   controls (`:83-110`) insert into the SAME seeded Alice↔Bob p2p thread this
+   new cell must suspend. A flip anywhere earlier aborts the rest of the
+   suite under `ON_ERROR_STOP=1`.
+2. **The relationship id is NOT in `_t` today — derive it, don't hardcode:**
+   `_t` carries `thread_id` (the seeded p2p thread) but no `relationship_id`.
+   Add `(select relationship_id from public.chat_thread where id = (select
+   thread_id from _t))` at the point of use, or extend `_t`'s own `SELECT` to
+   include it — matching the file's existing convention of looking values up
+   dynamically rather than hardcoding (its own fixture comment says exactly
+   this, for `thread_id`/`carol`).
+3. **`RESET ROLE` before the flip** — `authenticated` has `UPDATE` revoked on
+   `relationship` (`20260823090000:89`); the flip must run privileged, then
+   `SET LOCAL ROLE authenticated` again (with `_t`'s Alice claims) before the
+   refusal cells.
+4. **New refusal cells must NOT copy this file's neighboring
+   `insufficient_privilege` idiom (`:134-139`)** — that idiom is for a
+   table/RLS-privilege denial (42501). `assert_relationship_writable`'s raise
+   is `raise_exception` (P0001) — a `WITH CHECK` term raising propagates as
+   itself. Catch `raise_exception`, or assert "refused" generically without
+   pinning the SQLSTATE, or AC1/AC2's cells go red for the wrong reason (the
+   exact failure mode round 4 also names in §2's own `case`/`and`-order N1 —
+   the error a caller sees for a refusal isn't guaranteed to be one specific
+   shape).
+5. **The exemption cell needs a real "did the flip take" assertion, not just
+   a positive "all four succeed" claim** — as written it would pass
+   vacuously if the derived relationship id in point 2 were wrong (e.g. NULL
+   from a bad lookup) or the flip silently no-opped. Assert
+   `relationship.status = 'suspended'` for the derived id before asserting
+   the four `announceDealEvent`-type inserts succeed.
+
+Cells, once the above is in place:
 - `authenticated` app-path insert into a thread on a suspended relationship →
   refused (AC1).
 - The same insert attempted as a direct PostgREST-shaped call (bypassing any
@@ -600,7 +667,30 @@ runner is what makes a suite real coverage in this repo).**
 
 **New assertions in `supabase/tests/inbox_insert_receiver_gate_test.sql`,
 already has a runner (`run_inbox_insert_receiver_gate_test.sh`) — extend, do
-not create a new suite (round 3, N4):**
+not create a new suite (round 3, N4). Same four requirements (round 4, B1):**
+1. **Position: last cell, before the file's own `ROLLBACK`** — `BEGIN` at
+   `:47`; its §A controls (`:96-97`, `:100-105`) send between the SAME
+   GreenLeaf↔StonePharm and GreenLeaf↔Rheinland pairs this cell would
+   suspend. Insert after the file's existing D1 cell, immediately before
+   `ROLLBACK`.
+2. **Derive the relationship id, don't hardcode:** `_t` carries
+   `greenleaf`/`stonepharm`/`rheinland` company ids but no `relationship_id`.
+   Use this suite's own canonical-pair idiom (matching
+   `accept_connection_request`'s `least`/`greatest`): `(select id from
+   public.relationship where company_a_id = least(v.greenleaf, v.stonepharm)
+   and company_b_id = greatest(v.greenleaf, v.stonepharm) and deleted_at is
+   null)` — GreenLeaf↔StonePharm is one of the two seeded active
+   relationships (`seed.sql:316`), confirmed live by round 4.
+3. **`RESET ROLE` before the flip** — same `authenticated`-lacks-UPDATE
+   constraint as `msg_all`'s cell above; flip privileged, re-establish
+   Alice's claims and role after.
+4. **New refusal cells must NOT copy this file's neighboring
+   `insufficient_privilege` idiom either** — same P0001-vs-42501 distinction
+   as `msg_all`'s cell.
+5. **Assert the flip took** before asserting AC3's refusal — same vacuous-
+   pass risk as `msg_all`'s cell if the derived id in point 2 is wrong.
+
+Cells, once the above is in place:
 - A new connect/pricing request addressed to a company with a suspended
   relationship to the sender → refused (AC3).
 - A `connect_person` row (`receiver_company_id IS NULL`) → unaffected by this
@@ -700,7 +790,7 @@ explicitly at G4 so it isn't mistaken for silent coverage.
   DELETES the deal-thread insert entirely, "the birth-created deal chat is a
   RETIRED concept (D-05)"). The conclusion still holds, on different
   evidence: every surviving `deal`-thread producer is a seed row
-  (`supabase/seed/seed.sql:655,723,787,855,920,988,1052`, all
+  (`supabase/seed/seed.sql:656,724,788,856,921,989,1053`, all
   `select ids.rel_id, 'deal', card.id`) or a legacy row — every one keyed off
   the card's own relationship id. Both threads are provably the card's one
   relationship; they cannot diverge. No second call needed.
