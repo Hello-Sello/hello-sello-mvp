@@ -531,6 +531,21 @@ still applies once the ADR is drafted.
   expected reason (still calling the old code paths, `announce_deal_event`
   never invoked). No collateral damage: 58/60 SQL, 479/483 vitest, tsc
   clean. **Next:** `builder` implements §12 against these tests.
+- **`builder`, §12, 2026-08-27** — implemented §12.2-§12.4 exactly, no
+  deviations, no rejected findings. New migration
+  `20260827150000_announce_deal_event.sql` (the RPC, verbatim to §12.2).
+  `actions.ts`'s four call sites rewired to the RPC via the `as never`
+  cast precedent; `announceDealEvent`/`resolveActorName` deleted.
+  `20260827100000_msg_all_relationship_write_gate.sql` edited in place —
+  `CASE` removed, plain check, header rewritten.
+  **Verified independently by the orchestrator (L-023):** fresh `db
+  reset`, **60/60 SQL suites**, **483/483 vitest**, `tsc` clean, eslint
+  exactly 2 new warnings (both `card` unused in `actions.ts`, deliberately
+  kept per §12.3, warn-level only — matches builder's own report),
+  `e2e/deal-change.spec.ts` 19/19 passing including both pill-text specs
+  §12.5 named as affected. **Next:** re-spawn `security` to independently
+  reproduce the original exploit against the fixed code and confirm it's
+  actually closed — the point of the whole addendum.
 
 ## Gate log
 - **G3 (spec + ADR, merged gate) — APPROVED, Muskan, 2026-08-26.** "yes, approved,"
