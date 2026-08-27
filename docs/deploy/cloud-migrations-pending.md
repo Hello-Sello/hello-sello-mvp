@@ -23,12 +23,11 @@
 
 ---
 
-## ⚠️ PENDING (2026-08-27) — HEL-68 c2c/p2p thread atomicity (TWO migrations, plain `db push`)
+## ✅ APPLIED 2026-08-27 (was PENDING 2026-08-27) — HEL-68 c2c/p2p thread atomicity (TWO migrations)
 
-**Status: LOCAL ONLY.** These sort after `20260825200000` (the HEL-82/HEL-74 batch above), so
-the same plain `supabase db push --linked` (no `--include-all`) picks them up too. Confirmed
-against `supabase migration list --linked` 2026-08-27: cloud tip is `20260825200000`; these two
-are the only local-only rows.
+**Status: LIVE ON PRODUCTION.** Pushed 2026-08-27 with `supabase db push --linked` (plain — no
+`--include-all`; both filenames sorted after cloud's tip `20260825200000`). Production tip is
+now `20260826100000`, verified against `supabase_migrations.schema_migrations`.
 
 **Stamps in order:** `20260826090000` → `20260826100000`.
 
@@ -73,25 +72,14 @@ entry). Fixed by adding an explicit `has_function_privilege` assertion beside th
 call-and-catch; RED-first verified by temporarily re-granting EXECUTE and confirming the suite
 fails, then reverting. `LEARNINGS.md` **L-064**.
 
-**Post-push evidence to capture once applied (do not skip — this section is written PENDING,
-fill in after the push, do not mark APPLIED until it's here):**
+**Post-push evidence, all run against production 2026-08-27, none of it inferred:**
 
-```sql
--- 1. the two helpers are unreachable by anon/authenticated (both should be false)
-select p.proname,
-       coalesce(has_function_privilege('anon', p.oid, 'execute'), false)          as anon_MUST_BE_FALSE,
-       coalesce(has_function_privilege('authenticated', p.oid, 'execute'), false) as authed_MUST_BE_FALSE
-  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
- where n.nspname = 'public'
-   and p.proname in ('_resolve_or_create_c2c_thread', '_resolve_or_create_p2p_thread');
-
--- 2. accept_connection_request keeps its authenticated EXECUTE grant post-DROP+CREATE
-select has_function_privilege('authenticated', 'public.accept_connection_request(uuid)', 'execute') as authed_MUST_BE_TRUE;
-
--- 3. migration tip
-select version from supabase_migrations.schema_migrations order by version desc limit 1;
--- expect: 20260826100000
-```
+| check | result |
+| -- | -- |
+| `_resolve_or_create_c2c_thread` / `_resolve_or_create_p2p_thread` — anon/authenticated EXECUTE | both `false` for both roles ✓ |
+| `accept_connection_request` keeps its `authenticated` EXECUTE grant post-`DROP`+`CREATE` | `true` ✓ |
+| Migration tip | `20260826100000` ✓ |
+| S8 advisors (security) | **95: 1 ERROR, 93 WARN, 1 INFO.** The one ERROR is the same already-accepted `security_definer_view` on `current_pricelist_item` (ADR-0004 §4). No new ERROR. |
 
 ---
 
