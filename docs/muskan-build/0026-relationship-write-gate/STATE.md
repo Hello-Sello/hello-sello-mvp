@@ -515,6 +515,22 @@ still applies once the ADR is drafted.
   e2e spec this diff's writer-change affects).
   **§12 is buildable. Next:** `test-writer` for §12's tests, then
   `builder`, then re-verify `security` clean before G4.
+- **`test-writer`, §12, 2026-08-27** — rewrote `msg_all_deal_detected_gate_
+  test.sql`'s F5 cell (now asserts refusal on the suspended relationship,
+  per-type, catching P0001 not 42501) plus 6 other stale references in the
+  same file including the pre-existing "Carol's"→"Alice's" comment bug;
+  wrote `announce_deal_event_test.sql` + its runner (6 sections: non-party,
+  company-less, invalid type, happy path, the B2 multi-p2p-pair regression
+  guard, and the Invariant-16 suspended-relationship exemption); wrote new
+  `src/modules/deals/actions.test.ts` (no prior test file for this module
+  — followed `basket/actions.test.ts`'s mocking precedent), covering all
+  4 call sites' fail-soft wrapping.
+  **RED independently verified by the orchestrator:** fresh `db reset`,
+  both SQL suites fail for the expected reason (the old exemption is still
+  live; the new function doesn't exist), 4/4 new vitest cases fail for the
+  expected reason (still calling the old code paths, `announce_deal_event`
+  never invoked). No collateral damage: 58/60 SQL, 479/483 vitest, tsc
+  clean. **Next:** `builder` implements §12 against these tests.
 
 ## Gate log
 - **G3 (spec + ADR, merged gate) — APPROVED, Muskan, 2026-08-26.** "yes, approved,"
