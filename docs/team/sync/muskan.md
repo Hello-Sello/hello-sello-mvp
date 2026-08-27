@@ -5,6 +5,40 @@
 
 ---
 
+**Last updated:** 2026-08-27 — session 98 — **0024 + 0026 SHIPPED (PR #182, #183); a live
+exploit found and closed mid-build**
+**Status:** offline (session closed). Production tip `20260827150000`; **nothing cloud-pending**
+(7 migrations + 2 edge-function redeploys all applied/deployed this session). G5 on both is
+**deliberately deferred**, not skipped — see `CLAUDE.md` #1b.
+**Shared files locked: none — all released.**
+
+**What shipped.** HEL-68 (0024): `accept_connection_request` mints c2c/p2p threads atomically
+with the relationship — clean ship, one deny-test correctness fix (`LEARNINGS.md` L-064).
+HEL-84 (0026): `assert_relationship_writable` gates `chat_message`/`pending_inbox_item` on
+relationship status. Full detail: `.planning/session-log.md` session 98.
+
+**The part worth flagging for anyone who reads this later.** 0026's plan took **6
+`plan-checker` rounds** to converge — every round a real catch, none noise. Once built and
+fully gated (`critic` clean too), `security`'s pre-G4 pass found a **live-proven exploit**: the
+shipped design's four-type system-message exemption in `msg_all` was keyed on
+`chat_message.type`, a client-writable column — a thread member on a suspended relationship
+bypassed the write gate entirely by mislabeling an ordinary message. Fixed via a `SECURITY
+DEFINER` RPC addendum (`announce_deal_event`), 2 more `plan-checker` rounds. **That fix's own
+follow-up security re-check then found a SECOND gap in the fix itself** — a dropped
+deal-workspace-membership check, also live-proven, also fixed and independently verified
+closed. `DECISIONS.md` + `ARCHITECTURE-NOTES.md` both updated, 2026-08-27 — the reusable lesson
+is that a client-facing RLS exemption keyed on any client-writable column is never a security
+boundary, and this is the third time this repo has hit that exact shape (HEL-67 Gap 1, 0024's
+own `send_deal` fix, now this).
+
+**Linear:** HEL-68 + HEL-84 moved Backlog → In Review (not Done — G5 owed, kept visible on
+purpose). HEL-82/HEL-67 commented (blockers cleared, both stay In Progress pending their own
+G5s). Two new follow-ups filed: HEL-85 (`confirm_deal_change` may have the same
+workspace-membership gap `announce_deal_event` just closed) and HEL-86 (low priority — the two
+Sella edge functions can't distinguish the new gate's refusal from a genuine RPC failure).
+
+---
+
 **Last updated:** 2026-08-25 — `workflow_retro` — **HEL-81+82+74 SHIPPED (PR #181); pipeline slimmed**
 **HEL-82 + HEL-74 BUILT, committed `fc2a07b`, pushed to `worktree-security-tickets`.**
 **Status:** offline (session closed). Production tip `20260825200000`; **nothing cloud-pending**. G5 on the shipped security work is OWED.

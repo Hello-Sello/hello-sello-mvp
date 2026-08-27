@@ -2087,3 +2087,34 @@ not stop being reported — every note reaches the gate. The mitigation is that 
 anchored to the dry-run's own measured severity classes rather than to fresh judgement, and
 the agents are told explicitly: *do not promote a rung-4/5 finding to `blocking` because it
 feels important; say so in the note instead.*
+
+## 2026-08-27 — HEL-84's client-controlled-type exploit gets fixed properly, not downgraded
+
+**What was decided.** `security`'s post-build review of HEL-84 found the four-type
+`announceDealEvent` exemption in `msg_all`'s `WITH CHECK` was keyed on `chat_message.type`, a
+column `authenticated` can set to anything — live-proven exploitable: a thread member on a
+suspended relationship bypassed the entire write gate by mislabeling an ordinary message's
+`type` as one of the four exempt values. Offered two paths: fix it properly (move the
+exemption into a `SECURITY DEFINER` RPC, closing the client-facing door entirely) or downgrade
+PRD AC2/AC8's enforcement claim to "UI friction, not a security boundary" and ship as-is.
+**Decided: fix it properly.**
+
+**Why.** This repo has already solved the identical shape twice — HEL-67 Gap 1 refused a
+forgeable `type` outright rather than trying to distinguish real system rows from forged ones
+by column value, and 0024's `send_deal` refactor moved its own chat pill into a definer RPC for
+the same reason. A third instance of "a client-writable column decides whether RLS lets a write
+through" is a pattern, not a one-off — downgrading the AC would have shipped a compliance
+control the PRD describes as enforcement while it was actually decorative.
+
+**What it cost.** Real new scope beyond the 6-round-checked plan: a new RPC with its own
+authorization (2 more `plan-checker` rounds to converge), deleting the old client-side
+`announceDealEvent`/`resolveActorName` helpers, rewiring four call sites. The fix's own
+follow-up `security` re-check then found a second gap in the new RPC itself (a dropped
+deal-workspace-membership check) — also fixed, independently reproduced closed. Total: the
+slug's build stretched across roughly a full session past what the original converged plan
+implied.
+
+**What did NOT change.** The underlying product ruling — these four system-authored types stay
+exempt from the suspension gate (ADR 0008 Invariant 16, "an event already in motion is not a
+new write") — is untouched. Only the mechanism moved, from a client-facing carve-out to a
+server-side one.
