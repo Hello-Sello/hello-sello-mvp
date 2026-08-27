@@ -67,6 +67,16 @@ BEGIN
   IF (SELECT count(*) FROM _fix) <> 1 OR (SELECT count(*) FROM _rel) <> 1 THEN
     RAISE EXCEPTION 'FIXTURE: seeded alice/bob/relationship not found — run supabase db reset';
   END IF;
+  -- HEL-84: the earlier citation for this fixture-liveness guard (:67-69)
+  -- only asserted the ROW EXISTS, not that its status is 'active' — added
+  -- explicitly (send_deal_relationship_liveness_test.sql:55 and confirm_
+  -- detected_deal_relationship_liveness_test.sql:44 both already assert this
+  -- for their own fixtures) so a future seed change can't silently start
+  -- this suite on an already-non-active relationship, which would make case
+  -- (5)'s own "flip took" assertion below meaningless.
+  IF (SELECT status FROM relationship WHERE id = (SELECT rel FROM _rel)) <> 'active' THEN
+    RAISE EXCEPTION 'FIXTURE: relationship is not active at suite start — a prior suite left it dirty';
+  END IF;
 END $$;
 
 -- ── (1a) COMPANY-TARGET BIRTH IS PRIVATE: Alice births with NO counterparty
@@ -356,6 +366,50 @@ BEGIN
     RAISE EXCEPTION 'A2-4 FAIL: the Sella door must birth straight into negotiation (D-07), got %', v_status;
   END IF;
 END $$;
+
+-- ── (5, AC4/HEL-84) SUSPENDED RELATIONSHIP REFUSES DELIVERY: this repo's own
+-- PLAN-HEL-84.md §0 confirms deliver_deal is unreachable through the product
+-- except nested inside confirm_detected_deal, which already gates the same
+-- relationship first — so this cell is the ONLY place deliver_deal's OWN new
+-- gate is exercised directly (built anyway, per ADR 0008's Blast-radius, "so
+-- a third future caller can't reopen the gap silently"). True last cell,
+-- immediately before this file's own ROLLBACK: the flip below persists for
+-- the rest of this transaction, and every case above already ran. ──
+RESET ROLE;
+UPDATE relationship SET status = 'suspended' WHERE id = (SELECT rel FROM _rel);
+DO $$
+BEGIN
+  IF (SELECT status FROM relationship WHERE id = (SELECT rel FROM _rel)) <> 'suspended' THEN
+    RAISE EXCEPTION 'A2-5/flip FAIL: relationship status is % after the UPDATE, expected suspended',
+      (SELECT status FROM relationship WHERE id = (SELECT rel FROM _rel));
+  END IF;
+END $$;
+
+-- Bob's claims — the ones already active at this point in the file (case
+-- (4)'s own RESET ROLE, above, clears only the ROLE, not this
+-- transaction-local set_config) — restated explicitly here rather than
+-- relied on implicitly. Called PRIVILEGED, with NO SET LOCAL ROLE
+-- authenticated: case (2c)/WR-01 above already proved authenticated has
+-- EXECUTE revoked on deliver_deal entirely — the call below runs as the
+-- connection's own privileged role, same as case (2a)'s direct calls, while
+-- Bob's claims stay active so assert_relationship_writable's membership
+-- check (a real party, not the service_role skip) resolves the way a
+-- genuine nested caller would see it. Unlike §4's refactor of send_deal/
+-- confirm_detected_deal, this membership predicate is NOT redundant-but-
+-- harmless for deliver_deal — it never had a caller-is-party check of its
+-- own before this ticket.
+SELECT set_config('request.jwt.claim.sub', (SELECT bob FROM _fix)::text, true);
+SELECT set_config('request.jwt.claims',
+       json_build_object('sub', (SELECT bob FROM _fix), 'role', 'authenticated')::text, true);
+DO $$ BEGIN BEGIN
+  PERFORM public.deliver_deal((SELECT id FROM _cards WHERE kind = 'c2c'));
+  RAISE EXCEPTION 'A2-5/AC4 FAIL: deliver_deal delivered onto a SUSPENDED relationship';
+EXCEPTION WHEN raise_exception THEN
+  IF SQLERRM LIKE 'A2-5/AC4%' THEN RAISE; END IF;
+  IF SQLERRM NOT LIKE '%relationship is suspended%' THEN
+    RAISE EXCEPTION 'A2-5/AC4 FAIL: refused for the WRONG reason (%)', SQLERRM;
+  END IF;
+END; END $$;
 
 ROLLBACK;
 SELECT 'ALL DELIVER_DEAL TESTS PASSED' AS result;

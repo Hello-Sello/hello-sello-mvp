@@ -2,7 +2,7 @@
 
 lane:   FULL
 branch: claude/muskan/work
-stage:  triage ✅ → census ✅ → interview ✅ → PRD ✅ → ADR ✅ (2 checker rounds) → G3 ✅ (Muskan, 2026-08-26) → plan written ✅ → plan-checker ✅ (6 rounds: 4→2→2→1→1→0 blocking) → test-writer (next)
+stage:  triage ✅ → census ✅ → interview ✅ → PRD ✅ → ADR ✅ (2 checker rounds) → G3 ✅ (Muskan, 2026-08-26) → plan written ✅ → plan-checker ✅ (6 rounds: 4→2→2→1→1→0 blocking) → test-writer ✅ (RED verified) → builder (next)
 
 ## Seed
 Muskan, 2026-08-26. Origin: HEL-84 (Linear), High priority. Found by `security` review
@@ -362,6 +362,27 @@ still applies once the ADR is drafted.
   (incl. a real security fail-open for company-less callers) → 1 → 1 (a
   6th uncensused suite) → 0). **Next:** `test-writer` writes failing tests
   from this plan, then `builder` implements.
+- **`test-writer`, 2026-08-27** — wrote/extended 5 SQL suites (new:
+  `assert_relationship_writable_test.sql` + its runner; extended:
+  `msg_all_deal_detected_gate_test.sql`, `inbox_insert_receiver_gate_
+  test.sql`, `deliver_deal_test.sql`; reordered:
+  `accept_connection_request_status_guard_test.sql`, all 5 stale comments
+  rewritten) plus 5 new cases in `requestActionError.test.ts`. Confirmed by
+  reading (not running) that `send_deal_relationship_liveness_test.sql`/
+  `confirm_detected_deal_relationship_liveness_test.sql` need no edit — the
+  plan's own claim about their assertions already matching held. Caught and
+  fixed its own bug while writing: a new temp table needed a `GRANT` it
+  hadn't been given, matching this repo's existing precedent for the same
+  pattern.
+  **RED independently verified by the orchestrator (L-023), not taken on
+  trust:** fresh `db reset`, all 4 gate-dependent suites fail for the
+  expected reason (the function/check doesn't exist yet) — the reordered
+  guard suite correctly stays GREEN (it's a companion fix, not a new-gate
+  proof). `requestActionError.test.ts`: 4/5 new cases RED, 1 green by
+  design (a forward-looking non-match regression guard). Full-suite check
+  for collateral damage: 55/59 SQL suites pass (exactly the 4 expected
+  fail, nothing else), 475/479 vitest (same), `tsc` clean.
+  **Next:** `builder` implements PLAN-HEL-84.md against these tests.
 
 ## Gate log
 - **G3 (spec + ADR, merged gate) — APPROVED, Muskan, 2026-08-26.** "yes, approved,"

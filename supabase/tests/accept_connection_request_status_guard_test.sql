@@ -2,13 +2,20 @@
 -- accept_connection_request_status_guard_test.sql
 -- ----------------------------------------------------------------------------
 -- Proves HEL-82's `security`-reviewer-found fix: once a relationship is
--- suspended or ended, accepting a fresh connection/pricing request onto that
--- SAME pair is refused, not silently adopted. Before this fix,
--- accept_connection_request's "ENSURE, not insert" branch found the existing
--- non-active row and returned success with status untouched — a permanent
--- Connect-loop (discovery says "not connected" because it requires
--- status='active'; accepting "worked"; nothing ever un-hides the Connect
--- button) with a live side effect (a fresh chat thread) each time through it.
+-- suspended or ended, accepting a connection/pricing request onto that SAME
+-- pair is refused, not silently adopted — a request that already existed
+-- (minted while the pair was still active, i.e. PREDATES the suspension).
+-- Before this fix, accept_connection_request's "ENSURE, not insert" branch
+-- found the existing non-active row and returned success with status
+-- untouched — a permanent Connect-loop (discovery says "not connected"
+-- because it requires status='active'; accepting "worked"; nothing ever
+-- un-hides the Connect button) with a live side effect (a fresh chat thread)
+-- each time through it. §A's own request is minted BEFORE the suspension on
+-- purpose (HEL-84, 0026-relationship-write-gate): once inbox_insert gains
+-- its own relationship-write gate, a request minted AFTER a suspension can
+-- no longer be minted through the RLS path at all — this suite would be
+-- testing a mint that can't happen, not the accept-time guard it exists to
+-- prove.
 --
 -- §§C-E: accept_connection_request now mints c2c/p2p chat_thread rows + their
 -- seed messages ITSELF, atomically, via two new PLAIN (deliberately NOT
@@ -79,30 +86,39 @@ BEGIN
   END IF;
 END $$;
 
--- HS team suspends the pair first.
-SELECT set_config('request.jwt.claims', (SELECT json_build_object('sub', hsteam, 'role', 'authenticated')::text FROM _t), true);
-SET LOCAL ROLE authenticated;
-SELECT public.suspend_relationship((SELECT rel_id FROM _t), 'suite setup: licence lapsed');
-RESET ROLE;
-
 -- ============================================================================
--- §A — a fresh request onto the now-suspended pair is refused on accept.
+-- §A — a request that PREDATES a suspension is refused at ACCEPT time (not a
+--      request minted after — after HEL-84 (0026-relationship-write-gate),
+--      inbox_insert's own new gate would refuse that mint outright, before
+--      this suite ever reached what it exists to prove:
+--      accept_connection_request's own status guard for a request that was
+--      already pending when the pair was suspended).
 -- ============================================================================
 
--- Clara (Rheinland) sends GreenLeaf a pricing ask — the RLS-legitimate path
--- (inbox_insert requires sender_company_id = current_company_id() AND
--- sender_person_id = auth.uid()), same as an ordinary caller would.
+-- Clara (Rheinland) sends GreenLeaf a pricing ask WHILE THE PAIR IS STILL
+-- ACTIVE — the RLS-legitimate path (inbox_insert requires sender_company_id
+-- = current_company_id() AND sender_person_id = auth.uid()), same as an
+-- ordinary caller would. Minted BEFORE the suspension below on purpose
+-- (HEL-84): once inbox_insert gains its own relationship-write gate, a mint
+-- AFTER suspension is refused there instead, never reaching what this suite
+-- tests.
 SELECT set_config('request.jwt.claims', (SELECT json_build_object('sub', clara, 'role', 'authenticated')::text FROM _t), true);
 SET LOCAL ROLE authenticated;
 CREATE TEMP TABLE _item ON COMMIT DROP AS
 WITH ins AS (
   INSERT INTO public.pending_inbox_item (type, sender_person_id, sender_company_id, receiver_company_id, note)
-  SELECT 'pricelist_request', clara, rheinland, greenleaf, 'A2/suite: pricing ask on a suspended pair'
+  SELECT 'pricelist_request', clara, rheinland, greenleaf, 'A2/suite: pricing ask that PREDATES a suspension'
   FROM _t
   RETURNING id
 )
 SELECT id FROM ins;
 GRANT SELECT ON _item TO authenticated;
+RESET ROLE;
+
+-- HS team suspends the pair SECOND, now that the request already exists.
+SELECT set_config('request.jwt.claims', (SELECT json_build_object('sub', hsteam, 'role', 'authenticated')::text FROM _t), true);
+SET LOCAL ROLE authenticated;
+SELECT public.suspend_relationship((SELECT rel_id FROM _t), 'suite setup: licence lapsed');
 RESET ROLE;
 
 -- Alice (GreenLeaf) tries to accept it. Refused — the relationship is suspended.
