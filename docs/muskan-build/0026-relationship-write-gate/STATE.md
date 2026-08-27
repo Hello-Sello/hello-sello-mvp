@@ -401,6 +401,32 @@ still applies once the ADR is drafted.
   `chat_message`/`pending_inbox_item` touch many flows, even though this
   slug adds no rendered surface of its own). `security` review spawned in
   parallel (mandatory — migrations/RLS/RPC).
+  **e2e: clean.** 21 failed / 9 skipped / 8 did not run / 117 passed —
+  identical failure set to this session's already-established 0024
+  baseline (same 20 files, one fewer flake), zero overlap with anything
+  0026 touches. The highest-risk specs for this diff
+  (`discover.spec.ts`, `discover-shop.spec.ts`, `inbox-accept.spec.ts`,
+  `admin-verification.spec.ts`) all passed clean.
+  **`critic`: clean on all three things it owns** — AC1-AC8 verified true
+  in the shipped code (not just claimed), no scope creep, ADR 0008's
+  Reused fence intact (`is_relationship_member()` untouched, `USING`
+  clauses untouched, grant-preservation held under both `create or
+  replace` refactors). 5 non-blocking notes for the G5 walk list, none
+  requiring a code change: N1 (the 4-type `announceDealEvent` exemption is
+  keyed on a client-supplied `type` column — a thread member on a
+  suspended relationship could in principle post arbitrary text tagged as
+  one of the 4 exempt types, compounding the already-open HEL-67 Gap 2
+  forgeable-sender issue; implemented exactly as ADR 0008 approved, not a
+  build defect, but worth knowing), N2 (an `ended` relationship's
+  user-facing message says "until it's reactivated," which doesn't apply
+  to a terminal state), N3 (AC5/AC6 — read paths unaffected — are argued
+  structurally, not asserted by any test; belongs on the G5 walk), N4 (the
+  two Sella edge-function gates have zero automated coverage and their
+  error handling can't distinguish "relationship not writable" from a
+  genuine RPC failure — both fail closed to an HTTP 200 either way), N5
+  (ADR 0008's own prose has an internal tension between Locked #3 and
+  Invariant 16 — the code matches both rulings, the ADR's wording is what
+  reads as contradictory).
 
 ## Gate log
 - **G3 (spec + ADR, merged gate) — APPROVED, Muskan, 2026-08-26.** "yes, approved,"
