@@ -2,7 +2,7 @@
 
 lane:   FULL
 branch: claude/muskan/work
-stage:  triage ✅ → census ✅ → interview ✅ → PRD ✅ → ADR ✅ (2 checker rounds) → G3 ✅ (Muskan, 2026-08-26) → plan written ✅ → plan-checker round 1 ✅ (4 blocking, fixes not yet applied) → plan fix (next)
+stage:  triage ✅ → census ✅ → interview ✅ → PRD ✅ → ADR ✅ (2 checker rounds) → G3 ✅ (Muskan, 2026-08-26) → plan written ✅ → plan-checker ✅ (6 rounds: 4→2→2→1→1→0 blocking) → test-writer (next)
 
 ## Seed
 Muskan, 2026-08-26. Origin: HEL-84 (Linear), High priority. Found by `security` review
@@ -338,7 +338,30 @@ still applies once the ADR is drafted.
   (mint the pending item before suspending, not after) — not a workaround
   but the more correct test of what that suite's own RPC-level guard
   actually protects (a request that predates suspension, refused at accept
-  time). N1-N4 folded in. **Next:** re-spawn `plan-checker` round 6.
+  time). N1-N4 folded in.
+- **`plan-checker` round 6, 2026-08-27 — OK.** Re-derived everything from
+  the live tree rather than trusting rounds 1-5, including independently
+  re-censusing all suites touching `chat_message`/`pending_inbox_item`
+  writes from scratch (confirming round 5's finding was complete — no
+  seventh suite — and correcting one misclassification: `send_deal_c2c_
+  announce_test.sql` doesn't write either table, it string-probes a
+  function body §5 rewrites, a different blast-radius class). Verified the
+  round-5 reorder fix works against the real file end to end, including
+  that §§B-E are genuinely untouched. **5 non-blocking notes, all folded
+  in:** N1 (AC1/AC2 collapse to one cell — indistinguishable at the SQL
+  layer), N2 (named the `deliver_deal_test.sql` cell's active claims —
+  Bob's), N3 (the reorder leaves 5 stale comments asserting the old
+  semantics), N4 (§5's membership predicate is a real behavior change for
+  `deliver_deal`, unlike §4's redundant-but-harmless one for the other two
+  RPCs — the reasoning doesn't transfer and shouldn't be silently
+  inherited), N5 (named `send_deal_c2c_announce_test.sql`'s text-assertion
+  dependency explicitly, so a future reformat of `deliver_deal` doesn't
+  break it for an unpredicted reason).
+- **`/build`, 2026-08-27** — all 5 notes folded in. **Plan converged after 6
+  `plan-checker` rounds** (findings across rounds: 4 blocking → 2 → 2
+  (incl. a real security fail-open for company-less callers) → 1 → 1 (a
+  6th uncensused suite) → 0). **Next:** `test-writer` writes failing tests
+  from this plan, then `builder` implements.
 
 ## Gate log
 - **G3 (spec + ADR, merged gate) — APPROVED, Muskan, 2026-08-26.** "yes, approved,"
