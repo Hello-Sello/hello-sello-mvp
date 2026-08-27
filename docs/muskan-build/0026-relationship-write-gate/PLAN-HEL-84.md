@@ -23,8 +23,21 @@ base frozen from here.
 - `deliver_deal`'s live body: `20260720095000_deliver_deal.sql:30-57`. Insertion
   point confirmed: immediately after `:37` (`if v_rel is null then return; end
   if;`), before the co-owner probe at `:41`. `EXECUTE` already revoked from
-  `authenticated`/`anon`/`public` (`20260724121000_revoke_deliver_deal_execute.sql`)
-  — only reachable nested from `send_deal`/`confirm_detected_deal`.
+  `authenticated`/`anon`/`public` (`20260724121000_revoke_deliver_deal_execute.sql`).
+  **Reachability, corrected (plan-checker round 2, N1 — an earlier draft of this
+  plan said "nested from `send_deal`/`confirm_detected_deal`", which is only
+  half true and the false half is the reachable one):** `send_deal` stopped
+  calling `deliver_deal` entirely in `20260825090000_send_deal_c2c_announce.sql`
+  (the company arm now posts its own chat pill directly) — grepped, zero hits.
+  The ONLY live caller is `confirm_detected_deal`
+  (`20260825190000_confirm_detected_deal_liveness_guard.sql:193`), inside the
+  both-accepted branch — **after** §4's own
+  `assert_relationship_writable(v_rel)` call on the identical relationship
+  already ran. So §5's gate on `deliver_deal` is currently unreachable through
+  the product — this is still the right thing to build (ADR 0008's own
+  Blast-radius names it explicitly, "so a third future caller can't reopen the
+  gap silently"), but the plan must say that reason, not the false
+  "send_deal calls it too" one that led directly to B1.
 - `propose_deal` — **excluded** (ADR 0008 Blast-radius, corrected round 2 F2, not
   re-derived here per L-063): `DROP FUNCTION`ed in
   `20260724120800_drop_propose_edit_rpcs.sql:18` — does not exist in the live
@@ -115,14 +128,18 @@ grant  execute on function public.assert_relationship_writable(uuid) to authenti
 grant  execute on function public.assert_relationship_writable(uuid) to service_role;
 ```
 
-The `service_role` grant is explicit, not incidental: `authenticated` reaches this
-function only nested (inside `msg_all`/`inbox_insert`'s `WITH CHECK`, or inside
-another `SECURITY DEFINER` RPC's body), but `sella-detect` and `sella-summarize`
-(§6) call it directly over `supabase.rpc(...)` using their `service_role` key —
-the same explicit-grant pattern this repo already uses for
-`scrub_person_pii`/`audit_person_scrub` (`20260706090200_erasure_cron.sql:71,118`),
-not left to whatever the ambient default-privileges narrowing (`20260817120000`)
-happens to leave in place for that role.
+The `service_role` grant is explicit, belt-and-braces, not a repair of a real
+gap (round 2, N8 corrected the REASON — the grant itself was already right):
+`20260817120000_anon_execute_lockdown.sql` narrows default privileges for
+`anon` only (`REVOKE EXECUTE ON FUNCTIONS FROM anon`, scoped to that role); it
+never touches `service_role`, which keeps Supabase's own default EXECUTE
+grant on new `public` functions (stated directly in
+`20260706090200_erasure_cron.sql:66`). So `service_role` would already reach
+this function without the explicit line. It's added anyway, matching this
+repo's own `scrub_person_pii`/`audit_person_scrub` precedent
+(`20260706090200_erasure_cron.sql:71,118`), so the grant is stated rather than
+inherited — a future narrowing of `service_role`'s defaults (there is none
+today) wouldn't silently break `sella-detect`/`sella-summarize`.
 
 `RETURNS boolean`, not `void` — a `void`-typed function cannot appear inside an
 RLS `WITH CHECK` boolean expression (verified: this is a hard Postgres type
@@ -140,15 +157,31 @@ alter policy msg_all on public.chat_message
   with check (
     public.can_access_thread(thread_id)
     and type <> 'deal_detected'
-    and (
-      type in ('deal_signed', 'deal_cancelled', 'deal_change_proposed',
-                'deal_negotiation_requested')
-      or public.assert_relationship_writable(
-        (select relationship_id from public.chat_thread where id = thread_id)
-      )
-    )
+    and case
+          when type in ('deal_signed', 'deal_cancelled', 'deal_change_proposed',
+                         'deal_negotiation_requested')
+          then true
+          else public.assert_relationship_writable(
+                 (select relationship_id from public.chat_thread where id = thread_id)
+               )
+        end
   );
 ```
+
+**`case`, not `or` (closes N3 — round 2)**: `assert_relationship_writable`
+never returns `false`, it raises — the exemption only works if the right-hand
+side is never evaluated for the four exempt types. `or`'s short-circuit is
+NOT guaranteed evaluation order in Postgres: the docs (§4.2.14, *Expression
+Evaluation Rules*) say plainly that "the order of evaluation of subexpressions
+is not defined" and warn against relying on it for functions with side
+effects (a `raise` counts). A `case` expression IS a defined evaluation-order
+construct — the `when` is evaluated first, and only the matching branch's
+`then`/`else` runs. Relying on `or` here would occasionally (implementation-
+and plan-dependent, not never) raise on a legitimate `announceDealEvent`
+write on a suspended relationship — caught silently by that function's own
+fail-soft `catch`/`console.error` (§8's four-type test cell would still catch
+this in CI before it ships, but the SQL should be correct on its own terms,
+not rely on the test to compensate for it).
 
 Re-emit the existing `comment on policy` too (append one sentence about the new
 term), matching this repo's convention of keeping the policy comment in sync
@@ -175,10 +208,17 @@ This exemption is scoped to these four `type` values only — an ordinary
 `assert_relationship_writable` normally.
 
 **`msg_all` is `FOR ALL`, not `FOR INSERT`** — this `WITH CHECK` term also
-governs `UPDATE`/`DELETE` on `chat_message`, not just `INSERT`.
-`authenticated` holds no client-side `UPDATE`/`DELETE` grant on this table
-today (verified), so this is a wording correction, not a new behavior, but
-worth stating so a future reader doesn't assume this term is INSERT-only.
+governs `UPDATE`/`DELETE` on `chat_message`, not just `INSERT`. **Correction
+(round 2, N2 — an earlier draft of this plan inverted this fact while calling
+it "verified"):** `authenticated` DOES hold `UPDATE`/`DELETE` on
+`chat_message` (`20260825120000_msg_all_deal_detected_gate.sql:72-74` says so
+directly — the grant exists, no client or SQL path currently uses it). No
+`GRANT`/`REVOKE` on `chat_message` exists anywhere else in
+`supabase/migrations/` (grepped). So this IS a new behavior, not a wording
+correction: an `authenticated` `UPDATE` of any `chat_message` row on a
+suspended relationship becomes refused where it previously wasn't. Zero known
+callers exercise this today, so the practical exposure is nil — but name the
+real fact, not the safer-sounding wrong one.
 
 **RLS-context caveat (ADR Invariant 15) — carried forward as a code comment,
 not left implicit:** the `chat_thread` subquery above runs in the CALLING
@@ -240,7 +280,26 @@ SQL comment noting this is load-bearing on `rel_all` staying unfiltered.
 
 Two files, `create or replace` (their return signatures don't change — this is
 NOT a repeat of HEL-68's `DROP`+`CREATE` situation), each re-emitting the FULL
-live body verbatim except the one delta named:
+live body verbatim except **three deltas** (round 2, N5 — an earlier draft of
+this plan collapsed these to "one," which understated what changes even
+though the substitution itself was already correctly specified below):
+1. The inline check's block is replaced by the `perform` call (the delta
+   named per-function below).
+2. The raise's message PREFIX changes from `send_deal:`/
+   `confirm_detected_deal:` to `assert_relationship_writable:` — it's now the
+   shared function raising, not the caller.
+3. `assert_relationship_writable` adds a membership predicate
+   (`current_company_id() in (company_a_id, company_b_id)`) neither inline
+   check had — redundant-but-harmless here (an RPC calling it has already
+   established the caller is a legitimate party by the time it gets this far,
+   per ADR 0008's own reasoning), but a real behavioral surface, not a no-op.
+
+§8 already verified (not assumed) that none of `send_deal_relationship_
+liveness_test.sql`/`confirm_detected_deal_relationship_liveness_test.sql`'s
+existing assertions depend on the exact prefix — they match on
+`%relationship is suspended%`/`%relationship is ended%` — so deltas 2 and 3
+need no test-suite change, only naming here so a future reader doesn't
+mistake "one delta" for "nothing else moved."
 
 **"Verbatim" means the `create or replace function ... as $$ ... $$` block
 only** — never the source migration's own leading `drop function if exists`
@@ -289,7 +348,12 @@ One file, `create or replace` (no signature change):
   `if v_rel is null then return; end if;` (old `:37`), before the co-owner
   probe (old `:41`). Do not re-emit the trailing grant line — the function
   stays `EXECUTE`-revoked from `authenticated`/`anon`/`public` exactly as it
-  is today, reachable only nested from `send_deal`/`confirm_detected_deal`.
+  is today, reachable only nested from `confirm_detected_deal` (§0 — `send_deal`
+  stopped calling it in `20260825090000`, and that call site is currently the
+  ONLY one, arriving after `confirm_detected_deal`'s own gate already ran on
+  the same relationship). This gate is built anyway, unreachable through the
+  product today, so a third future caller into `deliver_deal` can't reopen the
+  gap silently (ADR 0008 Blast-radius) — not because `send_deal` needs it too.
 
 **No `propose_deal` gate** — excluded, see §0. There is no second file here;
 an earlier draft of this plan included one, resurrecting a dropped function
@@ -350,6 +414,18 @@ constant + one line in the exported function), for
   that phrasing rather than inventing new copy for the same user-facing
   situation.
 
+**Declared gap, not silently missed (round 2, N4):** this covers the
+connect/pricing door only (`requestActionError.ts` is called from
+`discover/actions.ts`/`personActions.ts`). The chat door has no equivalent —
+`postMessage` (`store.ts:484-491`) and `postDealMessage` (`:518-526`) both
+`if (error) throw error;` with no message mapping, so a suspended-relationship
+chat post surfaces `assert_relationship_writable`'s raw raise text (or
+nothing coherent) in the UI — the exact T10 shape this file's own docstring
+says it exists to prevent, just on a door this file doesn't cover. PRD AC1
+only requires the write be refused, not that it read well, so this is NOT
+blocking — naming it here so it isn't mistaken for closed. Worth its own
+follow-up if the suspended-relationship chat-refusal UX matters at G4/G5.
+
 ## §8 — tests (closes B4: an earlier draft of this plan had zero)
 
 ADR 0008's Invariants 1-10 are marked "machine-checkable" — this section maps
@@ -363,11 +439,32 @@ existing assertions unchanged, since none of them assert the OLD inline
 check's exact wording:
 - `supabase/tests/send_deal_relationship_liveness_test.sql`
 - `supabase/tests/confirm_detected_deal_relationship_liveness_test.sql`
-- `supabase/tests/deliver_deal_test.sql`
 
-**New SQL suite: `supabase/tests/assert_relationship_writable_test.sql`** —
-unit-level tests of the shared function itself, using the zero-mutation
-`BEGIN … ROLLBACK` fixture pattern (`.claude/rules/supabase.md`):
+**`supabase/tests/deliver_deal_test.sql` needs a NEW cell, not just a
+confirmation pass (closes B1 — round 2 found the plan claimed this suite
+already covers AC4/Invariant 4 transitively, which is false on every count:
+no existing cell uses a suspended/ended relationship — all run on the active
+seeded GreenLeaf↔StonePharm pair, `:67-69` asserts that fixture is active at
+start — and neither Sella edge function nor `send_deal` calls `deliver_deal`
+any more, so there was never a transitive path to inherit coverage from).**
+Add one cell inside the file's own `BEGIN … ROLLBACK`: flip the fixture
+relationship's `status` to `'suspended'`, call `public.deliver_deal(<card>)`
+directly as owner (the file's existing `:160-162` already does this shape
+for its idempotency case), assert the raise text
+(`relationship is suspended — no new writes`), then let the ROLLBACK undo
+the status flip so the rest of the suite's cells are unaffected.
+
+**New SQL suite: `supabase/tests/assert_relationship_writable_test.sql`, WITH
+its runner `supabase/tests/run_assert_relationship_writable_test.sh`** (closes
+B2 — round 2 found an earlier draft of this plan named the suite and never its
+runner; every one of the five existing suites this plan touches has a
+`run_*.sh` sibling, and `.claude/rules/supabase.md` is explicit that "a suite
+with no runner is not coverage" — six suites in this repo silently rotted for
+weeks that way). Model the new runner on an existing one of the same shape
+(e.g. `run_send_deal_relationship_liveness_test.sh`) — stdin, not `-f <path>`
+(the sandbox can't open files that way), `ON_ERROR_STOP=1` always. Unit-level
+tests of the shared function itself, using the zero-mutation `BEGIN …
+ROLLBACK` fixture pattern (`.claude/rules/supabase.md`):
 - NULL `p_relationship_id` → returns `true` (Invariant 8).
 - Active relationship, calling party → returns `true`.
 - Suspended/ended relationship, calling party → raises `relationship is %`.
@@ -375,9 +472,18 @@ unit-level tests of the shared function itself, using the zero-mutation
 - Active relationship, `authenticated` caller who is NOT a party → raises the
   SAME `relationship not found` text as the nonexistent-id case (Invariant 9
   — assert the message strings are identical, not just that both raise).
-- Active relationship, `service_role` (`set local role service_role`, no
-  `sub` claim) → returns `true` without raising (Invariant 10 — reproduce
-  live per the ADR's own instruction to re-prove this after the fix).
+- Active relationship, `service_role`, no `sub` claim → returns `true` without
+  raising (Invariant 10 — reproduce live per the ADR's own instruction to
+  re-prove this after the fix). **Must explicitly clear the JWT claims before
+  the role switch, not just `set local role service_role` (round 2, N6):**
+  `set_config('request.jwt.claims', …, true)` is transaction-local and
+  survives a bare role switch — `deliver_deal_test.sql:160`'s own fixture
+  proves this live (a `RESET ROLE` there leaves a prior `set_config` claim in
+  place). Without `select set_config('request.jwt.claims', '', true);` (and
+  `request.jwt.claim.sub` too) run first, this cell would silently exercise
+  the membership branch with a leftover `sub` from an earlier fixture in the
+  same file, not the `service_role`-with-no-context path Invariant 10 is
+  actually about — passing for the wrong reason.
 
 **New assertions in (or alongside) `msg_all`'s existing test coverage**
 (check whether `chat_message` RLS already has a suite to extend before
@@ -412,13 +518,17 @@ never `USING`) by re-running them, not by re-deriving new assertions.
 **Sella edge functions (`sella-detect`, `sella-summarize`) — declared gap,
 not silently missed**: this repo has no existing TypeScript-level test
 harness for edge functions (confirm this against the live repo structure
-before writing anything — do not assume). AC4 (`deliver_deal` refusal) is
-already covered transitively through `deliver_deal_test.sql` since both edge
-functions call it only through `send_deal`/`confirm_detected_deal`. Direct
-coverage of the two edge functions' own new RPC call is deferred to the
-G4/G5 live walk (per PIPELINE §3, this diff's rendered-component-free
-services still get exercised there), not built as an automated suite here —
-name this explicitly at G4 so it isn't mistaken for silent coverage.
+before writing anything — do not assume). **Neither edge function calls
+`deliver_deal`** (grepped, zero hits in `supabase/functions/`) — an earlier
+draft of this plan claimed their own `assert_relationship_writable` RPC call
+was transitively proven by `deliver_deal_test.sql`, which was false on two
+independent counts (round 2, closes B1): wrong call chain (fixed above, §0),
+and that suite had no suspended-relationship cell at all until this fix.
+The two edge functions' OWN new RPC call — the one this diff actually adds to
+them — has no automated coverage anywhere; it is deferred to the G4/G5 live
+walk (per PIPELINE §3, this diff's rendered-component-free services still get
+exercised there), not built as an automated suite here — name this
+explicitly at G4 so it isn't mistaken for silent coverage.
 
 ## §9 — the two things NOT built here (declared, not silently missed)
 
@@ -450,11 +560,14 @@ name this explicitly at G4 so it isn't mistaken for silent coverage.
   `deliver_deal` migration does NOT re-emit the trailing `grant` line from its
   cited source file (that grant was later revoked on purpose — re-emitting it
   would silently undo the revoke).
-- Check whether `sella-summarize`'s single up-front gate call (§6) is correct
-  given the loop posts to TWO threads that could, in principle, belong to
-  different relationships if `dealThread` and `p2pThread` ever diverge — trace
-  whether that's actually possible given `card.relationship_id`'s role in both
-  lookups, or whether the single check is provably sufficient.
+- **Resolved (round 2, N7 — traced, not left open):** `sella-summarize`'s
+  single up-front gate call IS provably sufficient. `dealThread` is resolved
+  by `deal_card_id` (`:135-137`), and every deal thread is minted with its
+  `relationship_id` taken directly from the card's own `relationship_id`
+  (`20260618130200_create_deal_draft_retire_private_box.sql:155` and its
+  successors) — `p2pThread` is resolved by `card.relationship_id` directly
+  (`:138-140`). Both threads are provably the card's one relationship; they
+  cannot diverge. No second call needed.
 
 ## §11 — acceptance criteria this plan closes
 
