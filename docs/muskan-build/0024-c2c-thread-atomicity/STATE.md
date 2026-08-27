@@ -128,8 +128,35 @@ callers, p2p thread parity question).
 - **G4 — auto-closed**, backend-only diff (PIPELINE §3): two migrations, one
   server module, no rendered component. No outstanding rejection, no blocking
   `security` finding. None of the three human-escalation carve-outs apply.
+- **`/ship`, 2026-08-27** — full gate re-run on the rebased tip (rebase was a
+  no-op, `origin/dev` had nothing new): vitest 474/474, tsc clean, eslint zero
+  new issues (1 pre-existing warning confirmed via `git blame` to predate this
+  session, June 2026), SQL 58/58 fresh reset, e2e clean of regressions (22
+  failures against a stale "15" baseline, all in files 0024 never touches —
+  auth/team/present-info/public-profile — zero overlap with 0024's diff;
+  0024's own `inbox-accept.spec.ts` guard 2/2 in isolation; two failure
+  classes spot-verified structurally unrelated: a pre-existing `sb_secret_`
+  JWT-signing mismatch, and a UI-timing issue in an unrelated surface).
+  `security` pre-ship scan: **1 blocking (S7)** — the §C deny-tests for the
+  two new internal helpers (`_resolve_or_create_c2c_thread`/`_p2p_thread`)
+  caught on SQLSTATE 42501 alone, which an invoker-rights function shares
+  with unrelated RLS/table-privilege denials one level deeper — the suite
+  would stay green with the protective `REVOKE` removed. Fixed: added an
+  explicit `has_function_privilege` assertion for both roles beside the
+  existing call-and-catch. RED-first verified per S7's own remedy: granted
+  EXECUTE back to `anon`/`authenticated` (simulating the exact regression),
+  confirmed the suite now fails, `db reset` to restore, confirmed green
+  again. Root cause + rule → `LEARNINGS.md` **L-064**. 3 more findings named,
+  not fixed (S2 note — `service_role` holds EXECUTE on the "internal-only"
+  helpers via this repo's own default-privilege norm, not a deviation; a
+  generated-types drift note, already mitigated in `store.ts`'s own casts;
+  a behavioral note — a companyless p2p thread isn't adopted by the new SQL
+  path, matching the deleted browser code's identical pre-existing
+  behavior). S6/S8 (schema drift vs. linked project, advisor scan) owed at
+  the actual `apply_migration`/deploy step, not answerable pre-merge.
 
-🏁 **SLUG COMPLETE.**
+🏁 **SLUG COMPLETE** (build). `/ship` in progress — migrations, PR, merge,
+deploy, G5 walk still owed.
 
 ## Interview — decisions locked 2026-08-26 (all six answered)
 1. **Scope vs. HEL-67 Gap 2 → move the WHOLE rollout now** (c2c + p2p together, not

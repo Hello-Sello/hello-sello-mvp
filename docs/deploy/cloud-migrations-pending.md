@@ -23,6 +23,78 @@
 
 ---
 
+## ⚠️ PENDING (2026-08-27) — HEL-68 c2c/p2p thread atomicity (TWO migrations, plain `db push`)
+
+**Status: LOCAL ONLY.** These sort after `20260825200000` (the HEL-82/HEL-74 batch above), so
+the same plain `supabase db push --linked` (no `--include-all`) picks them up too. Confirmed
+against `supabase migration list --linked` 2026-08-27: cloud tip is `20260825200000`; these two
+are the only local-only rows.
+
+**Stamps in order:** `20260826090000` → `20260826100000`.
+
+**Pure DDL, not data-writes — the `apply_migration`/`execute_sql` ask-rule does not apply.**
+Both migrations define/replace functions only; neither touches an existing row.
+
+| # | file | what it does |
+|---|---|---|
+| 1 | `20260826090000__resolve_or_create_c2c_p2p_thread.sql` | Two new internal helpers, `_resolve_or_create_c2c_thread(uuid)` and `_resolve_or_create_p2p_thread(uuid,uuid,uuid)` — plain (not `SECURITY DEFINER`), `REVOKE ALL FROM public, anon, authenticated`, callable only from inside another function's body (`accept_connection_request`, migration 2). |
+| 2 | `20260826100000_accept_connection_request_atomic_threads.sql` | `DROP` + `CREATE` of `accept_connection_request` — return signature changes (now returns the c2c/p2p thread ids too), so a `create or replace` can't be used; grant re-emitted in full (`GRANT EXECUTE ... TO authenticated`, matching the live pre-image). |
+
+**The gap it closes.** Accepting a connection used to be two round trips: the RPC minted the
+relationship with no thread, and the browser inserted the c2c thread afterward from a pure
+planner that "writes nothing." Closing the tab in between left a connected pair with no c2c
+conversation, with no repair path (before 0023's `send_deal` self-heal shipped). This migration
+moves both thread creations (c2c AND p2p, same transaction) inside the RPC itself, atomic with
+the relationship. `docs/architecture/adr/0007-*.md` has the full design; `ADR 0006 §8.10` is
+where this was ruled its own slug rather than folded into 0023.
+
+**Who loses writes when this lands.** The browser-side `planRollout`/its callers, deleted in the
+same diff (`src/modules/messaging/lib/rollout.ts` removed entirely) — dead code once the RPC
+does the insert itself. No client write site is newly blocked; the insert just moves server-side.
+
+**Grant/drop risk, already checked, not assumed.** `S4` (dependency census): grepped
+`pg_policies` and `pg_proc.prosrc` for any other caller of `accept_connection_request`'s old
+signature or either new helper — zero hits, nothing else depends on the dropped shape. `S5`
+(diff vs. live body): the new `accept_connection_request` body was diffed against the LIVE
+`20260825200000` definition, not a local copy — every existing guard (auth, company match,
+`FOR UPDATE`, NOT FOUND, deleted, `<> 'pending'`, receiver `IS DISTINCT FROM`, self-send, type
+allowlist, canonical company order, the `<> 'active'` status refusal, the
+`ON CONFLICT DO NOTHING` + re-select idiom) carries over verbatim; only additive deltas. The
+`DROP` + re-emitted `REVOKE ALL … FROM public, anon` / `GRANT … TO authenticated` tail matches
+the prior grant state exactly.
+
+**A deny-test correctness issue found and fixed pre-push, not a production issue.**
+`security`'s pre-ship scan (2026-08-27) found the local suite's §C deny-tests for the two new
+helpers caught on SQLSTATE 42501 alone — which an invoker-rights function shares with unrelated
+RLS/table-privilege denials, so the suite would stay green even with the protective `REVOKE`
+removed. The protection itself was independently verified sound by catalog query
+(`has_function_privilege` false for `anon`/`authenticated` on both helpers, no `PUBLIC` ACL
+entry). Fixed by adding an explicit `has_function_privilege` assertion beside the existing
+call-and-catch; RED-first verified by temporarily re-granting EXECUTE and confirming the suite
+fails, then reverting. `LEARNINGS.md` **L-064**.
+
+**Post-push evidence to capture once applied (do not skip — this section is written PENDING,
+fill in after the push, do not mark APPLIED until it's here):**
+
+```sql
+-- 1. the two helpers are unreachable by anon/authenticated (both should be false)
+select p.proname,
+       coalesce(has_function_privilege('anon', p.oid, 'execute'), false)          as anon_MUST_BE_FALSE,
+       coalesce(has_function_privilege('authenticated', p.oid, 'execute'), false) as authed_MUST_BE_FALSE
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+ where n.nspname = 'public'
+   and p.proname in ('_resolve_or_create_c2c_thread', '_resolve_or_create_p2p_thread');
+
+-- 2. accept_connection_request keeps its authenticated EXECUTE grant post-DROP+CREATE
+select has_function_privilege('authenticated', 'public.accept_connection_request(uuid)', 'execute') as authed_MUST_BE_TRUE;
+
+-- 3. migration tip
+select version from supabase_migrations.schema_migrations order by version desc limit 1;
+-- expect: 20260826100000
+```
+
+---
+
 ## ✅ APPLIED 2026-08-25 (was PENDING 2026-08-25) — security batch: HEL-67 Gap 1 + HEL-75 + DEV-159 (THREE migrations)
 
 **Status: LIVE ON PRODUCTION.** Applied 2026-08-25 by the `ship_deal` session on Muskan's explicit

@@ -2,7 +2,7 @@
 
 lane:   FULL
 branch: claude/muskan/work
-stage:  triage ✅ → census ✅ → interview ✅ → PRD ✅ → ADR ✅ (2 checker rounds) → G3 ✅ (Muskan, 2026-08-26) → build (next)
+stage:  triage ✅ → census ✅ → interview ✅ → PRD ✅ → ADR ✅ (2 checker rounds) → G3 ✅ (Muskan, 2026-08-26) → plan written ✅ → plan-checker round 1 ✅ (4 blocking, fixes not yet applied) → plan fix (next)
 
 ## Seed
 Muskan, 2026-08-26. Origin: HEL-84 (Linear), High priority. Found by `security` review
@@ -174,6 +174,72 @@ still applies once the ADR is drafted.
   on active relationships; `propose_deal` was independently re-verified as real
   after the checker claimed otherwise) + notes, all folded in. Budget exhausted at
   2 rounds per `/design`'s own rule.
+- **`/build`, 2026-08-26/27** — `PLAN-HEL-84.md` written: 1 new shared function,
+  2 RLS policy rewrites, 2 RPC refactors, 2 new RPC gates, 2 edge-function
+  TypeScript changes, 1 client-side error-message addition. Every citation
+  (live policy/function bodies, edge-function structure, schema) re-verified
+  fresh before writing, not inherited from the ADR's design-time research.
+  `plan-checker` round 1: **4 blocking, not yet fixed** —
+  (B1) plan's §5 resurrects `propose_deal`, which ADR 0008's own Blast-radius
+  section already found DROPPED (`20260724120800_drop_propose_edit_rpcs.sql
+  :18`) — a fresh grep only checked for the `CREATE`, missed the later
+  `DROP`, silently regressing a decision the ADR had already made and had
+  been checked twice. Root cause + rule written to `LEARNINGS.md` **L-063**:
+  an approved ADR's own findings are authoritative, don't re-derive
+  citations from scratch.
+  (B2) §4/§5's "re-emit verbatim" instructions for `deliver_deal` and
+  `confirm_detected_deal` would literally copy the cited migration's own
+  trailing `GRANT ... TO authenticated` (later revoked, WR-01) / leading
+  `DROP FUNCTION IF EXISTS` lines — needs explicit wording that "verbatim"
+  means the function body only, never the source migration's own leading
+  DROP or trailing GRANT/REVOKE.
+  (B3) `announceDealEvent` (`actions.ts:683`) writes through the exact same
+  `msg_all` RLS door §2 is about to gate — PRD AC8 declares it exempt but
+  the plan does nothing to keep it exempt in practice, so it would start
+  silently failing (the write's own error handling swallows via
+  console.error only). Needs a `type`-based exemption added to `msg_all`'s
+  `WITH CHECK`, mirroring the existing `type <> 'deal_detected'` carve-out —
+  the exact `type` values `announceDealEvent` writes need re-confirming
+  from `actions.ts` (around `:663-667`) before writing the SQL.
+  (B4) zero tests planned, despite ADR 0008 requiring its 10 invariants be
+  machine-checkable — needs a full test section covering AC1-AC6, naming
+  the three pre-existing suites already in the blast radius
+  (`send_deal_relationship_liveness_test.sql`,
+  `confirm_detected_deal_relationship_liveness_test.sql`,
+  `deliver_deal_test.sql` — checker confirmed the new raise text still
+  satisfies their existing assertions unchanged).
+  Plus 11 notes, several worth folding in on the next pass: the gate call
+  in both edge functions is placed too late (should move before the
+  Bedrock call and the idempotency-claiming insert in `sella-detect`, and
+  before the Bedrock call and the `deal_card_log` insert in
+  `sella-summarize`, to avoid a half-write); a wrong stated reason for why
+  `deliver_deal` needs gating; a miscounted `postDetectedMessage` caller
+  count; a wrong line count for `requestActionError.ts` (58, not 41);
+  `service_role` grant preservation not mentioned; ADR Invariant 15 not
+  carried into the plan; `msg_all` being `FOR ALL` (so the new term also
+  governs `UPDATE`, not just `INSERT`) not stated.
+  **Next:** fix `PLAN-HEL-84.md` for B1-B4 + the worthwhile notes above,
+  re-spawn `plan-checker` round 2.
+- **`/build`, 2026-08-27** — `PLAN-HEL-84.md` fixed for all 4 round-1 blocking
+  findings + 7 of 11 notes (gate-call placement in both edge functions moved
+  before their Bedrock calls; a wrong `postDetectedMessage` caller count
+  corrected 3→2; `requestActionError.ts`'s line count corrected 41→58;
+  `service_role` EXECUTE grant added explicitly; ADR Invariants 13/15 carried
+  forward as in-plan/in-SQL-comment caveats; `msg_all`'s `FOR ALL` scope
+  stated plainly). B1 (`propose_deal`) removed from §0/§5/§9/§10, not
+  replaced. B2 ("verbatim") now states explicitly that a source migration's
+  own leading `DROP`/trailing `GRANT`/`REVOKE` are never re-emitted — cited
+  concretely against `deliver_deal`'s own later-revoked grant. B3
+  (`announceDealEvent`) closed with a `type IN (...)` OR-branch in `msg_all`'s
+  `WITH CHECK`, using the ADR's confirmed four-member type union. B4 closed
+  with a new §8 mapping every ADR Invariant 1-10 to where it gets tested,
+  naming the 3 pre-existing suites needing only an assertion-text
+  reconfirmation (not a rewrite) and declaring the Sella edge functions' own
+  gap (no TS test harness exists) rather than leaving it silent. 4 notes not
+  folded in (2 required checker-level SQL-compile verification this plan
+  can't self-certify; 2 needed the checker's own original wording to
+  address precisely, which STATE.md's summary didn't carry) — left for round
+  2 to re-flag if still open. **Next:** re-spawn `plan-checker` round 2.
 
 ## Gate log
 - **G3 (spec + ADR, merged gate) — APPROVED, Muskan, 2026-08-26.** "yes, approved,"
