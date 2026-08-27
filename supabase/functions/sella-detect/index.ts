@@ -97,6 +97,20 @@ Deno.serve(async (req: Request) => {
     .single();
   if (tErr || !thread) return json({ error: `thread not found: ${tErr?.message ?? "no row"}` }, 404);
 
+  // HEL-84 (0026-relationship-write-gate): gate BEFORE the idempotency claim
+  // (sella_detection insert, below) and the Bedrock call (runDetection) — a
+  // suspended/ended relationship must not pay for either on a run that was
+  // always going to be refused. This also means NO sella_detection memory row
+  // is written for a suspended-relationship run, unlike every other outcome
+  // of this function, which always writes one — a distinct, deliberate fact,
+  // not a gap in the memory trail.
+  const { error: notWritableErr } = await supabase.rpc("assert_relationship_writable", {
+    p_relationship_id: thread.relationship_id,
+  });
+  if (notWritableErr) {
+    return json({ thread_id: threadId, skipped: "relationship not writable" }, 200);
+  }
+
   // PERSON messages only - the actual buyer/seller negotiation. Sella's own lines
   // (deal_detected, intro) and system lines (connection_established) are NOT part of the
   // conversation: including them would let Sella's own post bump the idempotency key and

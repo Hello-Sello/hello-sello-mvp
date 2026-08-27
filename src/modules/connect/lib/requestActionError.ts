@@ -20,6 +20,16 @@
  * about, and a confident-sounding wrong explanation is worse than a vague right
  * one. Extend the matches when a new raise becomes reachable — never widen by
  * passing `.message` through.
+ *
+ * HEL-84 (0026-relationship-write-gate) added a third door this file covers:
+ * `inbox_insert` now also calls `assert_relationship_writable`, whose two
+ * raise texts (`relationship is % — no new writes` / `relationship not
+ * found`) are reachable through this same server action once the target
+ * company's relationship to the sender is suspended/ended. This covers the
+ * connect/pricing door only — the chat door (`postMessage`/`postDealMessage`
+ * in `store.ts`) has no equivalent mapping yet; a suspended-relationship chat
+ * refusal still surfaces the raw raise text there. Declared gap, not silently
+ * missed (PLAN-HEL-84.md §7).
  */
 
 const GENERIC = "We couldn't complete that. Please try again.";
@@ -38,6 +48,23 @@ const NOT_PENDING = / is (\w+) \(not pending\)/;
  */
 const INBOX_RLS = /row-level security policy[\s\S]*pending_inbox_item/;
 
+/**
+ * `assert_relationship_writable`'s status raise (HEL-84,
+ * `<ts>_assert_relationship_writable.sql`): `relationship is <status> — no
+ * new writes`. Status-agnostic on purpose — the function raises the same
+ * shape for 'suspended' and 'ended' alike, so one branch covers both rather
+ * than pattern-matching a specific status word. `[\s\S]*` spans PostgREST's
+ * occasional line wrap between the status and the dash.
+ */
+const RELATIONSHIP_NOT_WRITABLE = /relationship is \w+[\s\S]*no new writes/;
+
+/**
+ * `assert_relationship_writable`'s not-found raise: the SAME "can't tell
+ * existence from access" shape INBOX_RLS already covers above — reuses that
+ * wording rather than inventing new copy for the identical situation.
+ */
+const RELATIONSHIP_NOT_FOUND = /relationship not found\b/;
+
 export function requestActionError(e: unknown): string {
   const text =
     typeof e === "string"
@@ -49,6 +76,12 @@ export function requestActionError(e: unknown): string {
   if (/ is deleted\b/.test(text)) return "This request is no longer available.";
 
   if (INBOX_RLS.test(text)) return "This company is no longer available.";
+
+  if (RELATIONSHIP_NOT_WRITABLE.test(text)) {
+    return "This relationship is suspended — new messages and requests aren't allowed until it's reactivated.";
+  }
+
+  if (RELATIONSHIP_NOT_FOUND.test(text)) return "This company is no longer available.";
 
   const status = NOT_PENDING.exec(text)?.[1];
   if (status === "accepted") return "This request has already been accepted.";

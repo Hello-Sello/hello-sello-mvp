@@ -2,7 +2,7 @@
 
 lane:   FULL
 branch: claude/muskan/work
-stage:  triage ✅ → census ✅ → interview ✅ → PRD ✅ → ADR ✅ (2 checker rounds) → G3 ✅ (Muskan, 2026-08-26) → plan written ✅ → plan-checker ✅ (6 rounds: 4→2→2→1→1→0 blocking) → test-writer ✅ (RED verified) → builder (next)
+stage:  triage ✅ → census ✅ → interview ✅ → PRD ✅ → ADR ✅ (2 checker rounds) → G3 ✅ (Muskan, 2026-08-26) → plan written ✅ → plan-checker ✅ (6 rounds: 4→2→2→1→1→0 blocking) → test-writer ✅ (RED verified) → builder ✅ (GREEN verified) → security + full gate (next)
 
 ## Seed
 Muskan, 2026-08-26. Origin: HEL-84 (Linear), High priority. Found by `security` review
@@ -383,6 +383,24 @@ still applies once the ADR is drafted.
   for collateral damage: 55/59 SQL suites pass (exactly the 4 expected
   fail, nothing else), 475/479 vitest (same), `tsc` clean.
   **Next:** `builder` implements PLAN-HEL-84.md against these tests.
+- **`builder`, 2026-08-27** — implemented §1-§7 exactly: 6 new migrations
+  (`20260827090000`-`140000`, verified against the actual tip before
+  timestamping), the two Sella edge-function RPC calls at the plan's exact
+  insertion points, and `requestActionError.ts`'s two new branches. No
+  deviations from the plan's file set. **Caught and correctly did NOT
+  silently fix a real bug in the test file itself** (§G's `service_role`
+  cell reads a temp table only granted to `authenticated`) — proved the
+  implementation was correct against every assertion via a scratchpad-only
+  diagnostic, then flagged it rather than editing the test.
+  **Verified independently by the orchestrator (L-023):** fixed the
+  test-fixture bug (one `GRANT` line), fresh `db reset`, **59/59 SQL suites
+  green**, **479/479 vitest**, `tsc` clean, eslint zero new issues (same 6
+  pre-existing errors/13 warnings as 0024's baseline, zero overlap with
+  0026's touched files). Full e2e run in progress for a regression check
+  against this session's freshly-established baseline (RLS changes on
+  `chat_message`/`pending_inbox_item` touch many flows, even though this
+  slug adds no rendered surface of its own). `security` review spawned in
+  parallel (mandatory — migrations/RLS/RPC).
 
 ## Gate log
 - **G3 (spec + ADR, merged gate) — APPROVED, Muskan, 2026-08-26.** "yes, approved,"
