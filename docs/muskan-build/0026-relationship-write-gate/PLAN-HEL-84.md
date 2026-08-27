@@ -54,10 +54,13 @@ base frozen from here.
   (PRD AC8). No source change.
 - `sella-detect/index.ts`: `thread` (with `relationship_id`) resolved at `:93-98`
   (`.select("id, relationship_id")`); the actual insert is `postDetectedMessage()`
-  at `:223-253`, called from exactly two of the three `decision.kind` branches
-  (`"post"` at `:260`, `"supersede"` at `:262`) — an earlier draft of this plan
-  said three, `"suppress"` (`:258`) reuses an existing message id and never
-  calls it.
+  at `:223-253`, called from exactly two of the FOUR `decision.kind` branches —
+  `"post"` (condition `:259`, call `:260`) and `"supersede"` (condition `:261`,
+  call `:262`) — corrected count (round 3, N6; an earlier draft said three,
+  then two-of-three): the branches are `"suppress"` (`:256`, reuses an
+  existing message id, never calls it), `"post"`, `"supersede"`, and `"none"`
+  (`:274`, the implicit fall-through — no chat write at all). The placement
+  decision in §6 is unaffected by the count itself.
 - `sella-summarize/index.ts`: `card.relationship_id` already selected at `:63`
   (`.select("id, version, relationship_id")`), used at `:140`. The insert loop is
   `:144-154`, posting to up to two threads (`deal` + `p2p`) that share one
@@ -95,14 +98,22 @@ begin
   -- status back out of the raised message. Same NOT FOUND message for "doesn't
   -- exist" and "not yours" — a probe can't tell them apart.
   --
-  -- Deliberately does NOT restrict `service_role` (current_company_id() is
-  -- NULL under service_role, since there is no end-user JWT) — service_role
-  -- already bypasses RLS system-wide, it isn't a caller this check is FOR.
+  -- Deliberately does NOT restrict `service_role` (no end-user JWT at all, so
+  -- auth.uid() is NULL) — service_role already bypasses RLS system-wide, it
+  -- isn't a caller this check is FOR. Discriminated on auth.uid(), NOT
+  -- current_company_id(): the latter is ALSO NULL for a real, reachable
+  -- authenticated state this repo deliberately supports — a signed-in person
+  -- between signup and company onboarding (person.company_id is nullable by
+  -- design, per the v0 invariant). Checking current_company_id() IS NULL
+  -- would let any company-less signed-in user pass this branch unconditionally
+  -- and probe any relationship id's existence/status through the raised
+  -- message — the exact leak this comment says it prevents, just for a
+  -- different population than service_role.
   select status into v_status
   from public.relationship
   where id = p_relationship_id
     and deleted_at is null
-    and (public.current_company_id() is null
+    and (auth.uid() is null
          or public.current_company_id() in (company_a_id, company_b_id));
 
   if v_status is null then
@@ -148,6 +159,24 @@ this function itself performs the authorization check inside its own body
 (the membership predicate), so it needs definer privileges to read
 `relationship` regardless of the caller's own RLS visibility into that table.
 
+**The membership check discriminates on `auth.uid()`, not
+`current_company_id()` (round 3, B1 — a real fail-open, not just a wording
+issue):** an earlier draft used `current_company_id() is null` to detect "no
+caller context" (meant for `service_role`), but `current_company_id()`
+resolves to NULL for a SECOND, fully reachable population — a signed-in
+person with no company yet (`person.company_id` is nullable by this repo's own
+v0 design, true of every user between signup and onboarding). A company-less
+signed-in caller would have passed that branch unconditionally and could
+enumerate any relationship's existence and status by id, through the raised
+message — exactly the probe this function's own comment says it closes.
+`auth.uid()` is NULL only when there is no end-user JWT at all — true for
+`service_role`, false for every authenticated caller regardless of company
+state — so it's the correct discriminator. Verified against both real
+call paths: `sella-detect`/`sella-summarize` call this under `service_role`
+with no JWT (`createClient(url, serviceKey)`), and the nested-RPC path
+(`send_deal`/`confirm_detected_deal`/`deliver_deal`) always carries the real
+user's JWT, and that user is always a party by the time it's reached.
+
 ## §2 — migration: `msg_all` gains the write-gate term
 
 New file: `<ts>_msg_all_relationship_write_gate.sql`.
@@ -182,6 +211,21 @@ write on a suspended relationship — caught silently by that function's own
 fail-soft `catch`/`console.error` (§8's four-type test cell would still catch
 this in CI before it ships, but the SQL should be correct on its own terms,
 not rely on the test to compensate for it).
+
+**Known, accepted limitation (round 3, N1) — the outer `AND` chain has the
+same unguaranteed-evaluation-order property the `CASE` fix above addresses,
+and this one is NOT fixed, only named:** `can_access_thread(thread_id) and
+type <> 'deal_detected' and case … end` — Postgres does not guarantee `AND`
+evaluates left-to-right either, so the `CASE` (and therefore
+`assert_relationship_writable`'s raise) could in principle run even when an
+earlier term would have refused first. No security consequence — a refusal
+is a refusal either way, and `relationship not found` is already the same
+text for "doesn't exist" and "not yours" by design — but it means the exact
+SQLSTATE/message a caller sees for a given refusal isn't strictly pinned to
+which predicate "actually" failed. §7's user-facing mapping and §8's
+`deal_detected` regression cell should assert "refused", not a specific
+error shape, to stay correct regardless of which term Postgres evaluates
+first.
 
 Re-emit the existing `comment on policy` too (append one sentence about the new
 term), matching this repo's convention of keeping the policy comment in sync
@@ -381,10 +425,11 @@ in try/catch expecting a throw):
   thread_id: threadId, skipped: "relationship not writable" }, 200)` — match
   the existing early-return shape at `:118`/`:129`, don't invent a new one).
   **`postDetectedMessage()` itself needs no change** — it has exactly two call
-  sites, in the `"post"` (`:260`) and `"supersede"` (`:262`) branches of the
-  `decision.kind` switch, not three as an earlier draft of this plan said; the
-  third branch, `"suppress"` (`:258`), reuses `decision.keepMessageId` and
-  never calls it.
+  sites, in the `"post"` (`:260`) and `"supersede"` (`:262`) branches, out of
+  FOUR total `decision.kind` branches (round 3, N6 corrected the count again
+  — `"suppress"` at `:256`, not `:258`; `"none"` at `:274` is the fourth,
+  the implicit fall-through). `"suppress"` reuses `decision.keepMessageId`
+  and never calls it; `"none"` writes nothing at all.
 - `supabase/functions/sella-summarize/index.ts` — call the same RPC **right
   after `card.relationship_id` is selected (`:63`), before the `deal_card_log`
   reads that follow**, using `card.relationship_id` (both `targets` share one
@@ -402,6 +447,15 @@ in try/catch expecting a throw):
 `/design`'s research).
 
 ## §7 — `requestActionError.ts`: the new raise needs a caller-facing message
+
+File: `src/modules/connect/lib/requestActionError.ts` (round 3, N5 — path
+stated explicitly; not under `discover/`). Callers: `src/app/discover/
+actions.ts:94`, `src/app/discover/personActions.ts:66,90,117`,
+`InboxView.tsx:115`, `RequestsSection.tsx:109`. **This file has a co-located
+unit suite, `requestActionError.test.ts`, that covers every existing branch
+today — the two new branches below need matching cases added there, not just
+the source change** (an earlier draft of this plan named only the source
+edit and left the test file unmentioned).
 
 Add a matching branch, following this file's existing pattern (a named regex
 constant + one line in the exported function), for
@@ -443,16 +497,50 @@ check's exact wording:
 **`supabase/tests/deliver_deal_test.sql` needs a NEW cell, not just a
 confirmation pass (closes B1 — round 2 found the plan claimed this suite
 already covers AC4/Invariant 4 transitively, which is false on every count:
-no existing cell uses a suspended/ended relationship — all run on the active
-seeded GreenLeaf↔StonePharm pair, `:67-69` asserts that fixture is active at
-start — and neither Sella edge function nor `send_deal` calls `deliver_deal`
-any more, so there was never a transitive path to inherit coverage from).**
-Add one cell inside the file's own `BEGIN … ROLLBACK`: flip the fixture
-relationship's `status` to `'suspended'`, call `public.deliver_deal(<card>)`
-directly as owner (the file's existing `:160-162` already does this shape
-for its idempotency case), assert the raise text
-(`relationship is suspended — no new writes`), then let the ROLLBACK undo
-the status flip so the rest of the suite's cells are unaffected.
+no existing cell uses a suspended/ended relationship, and neither Sella edge
+function nor `send_deal` calls `deliver_deal` any more, so there was never a
+transitive path to inherit coverage from).** Round 3 (B2) found the original
+placement instructions didn't match this file's actual structure — corrected:
+
+1. **Position: LAST cell, immediately before the file's own `ROLLBACK` at
+   `:360`** — the file is one single transaction (`BEGIN` at `:37`), so a
+   `status = 'suspended'` flip anywhere earlier persists for every cell after
+   it and turns the suite red (case (3)'s `send_deal` call at `:248` and case
+   (4)'s `confirm_detected_deal` calls at `:321`/`:335` both raise on a
+   suspended relationship). If it can't be made the true last cell, wrap the
+   flip in `SAVEPOINT before_suspend; …; ROLLBACK TO SAVEPOINT
+   before_suspend;` instead of relying on file-end position.
+2. **Use the file's OWN exception-catching shape (`:183-190`/`:199-207`),
+   NOT the bare statement at `:160-162`.** `:160-162` is a top-level
+   `SELECT public.deliver_deal(...)` with no exception handler — under
+   `ON_ERROR_STOP=1` (mandatory, `.claude/rules/supabase.md`) a raise there
+   aborts the entire psql run, not just the cell. Use:
+   ```sql
+   DO $$ BEGIN BEGIN
+     PERFORM public.deliver_deal(<card>);
+     RAISE EXCEPTION 'FAIL: deliver_deal accepted a suspended relationship';
+   EXCEPTION WHEN raise_exception THEN
+     IF SQLERRM NOT LIKE '%relationship is suspended%' THEN RAISE; END IF;
+   END; END $$;
+   ```
+3. **State, don't inherit, two preconditions.** The status flip must run as
+   `postgres` (or whatever privileged role/RESET ROLE state the file is in
+   at that point) — `authenticated` has `UPDATE` revoked on `relationship`
+   (`20260823090000_connection_consent_and_verification_lockdown.sql:89`), a
+   plain `UPDATE` as `authenticated` would itself raise before ever reaching
+   `deliver_deal`. And whatever `request.jwt.claims` the immediately-prior
+   cell left set carries forward (this file's fixtures are cumulative, not
+   reset between cells) — name explicitly which caller's claims are active
+   for this new cell rather than silently inheriting whatever the previous
+   cell happened to leave.
+4. **Add an explicit "fixture is active at start" assertion (round 3, N3 —
+   the plan's earlier citation of `:67-69` for this was wrong: that block
+   only asserts the fixture ROW EXISTS, not that its status is `'active'`).**
+   `send_deal_relationship_liveness_test.sql:55` and
+   `confirm_detected_deal_relationship_liveness_test.sql:44` both assert
+   this explicitly for their own fixtures — add the matching assertion here
+   too, so a future change to the seed can't silently start this suite on an
+   already-non-active relationship.
 
 **New SQL suite: `supabase/tests/assert_relationship_writable_test.sql`, WITH
 its runner `supabase/tests/run_assert_relationship_writable_test.sh`** (closes
@@ -469,9 +557,19 @@ ROLLBACK` fixture pattern (`.claude/rules/supabase.md`):
 - Active relationship, calling party → returns `true`.
 - Suspended/ended relationship, calling party → raises `relationship is %`.
 - Nonexistent id → raises `relationship not found`.
-- Active relationship, `authenticated` caller who is NOT a party → raises the
-  SAME `relationship not found` text as the nonexistent-id case (Invariant 9
-  — assert the message strings are identical, not just that both raise).
+- Active relationship, `authenticated` caller who is NOT a party (a real
+  person, member of a THIRD company) → raises the SAME `relationship not
+  found` text as the nonexistent-id case (Invariant 9 — assert the message
+  strings are identical, not just that both raise).
+- **Second, DISTINCT cell (round 3, B1 — this population is not covered by
+  the cell above and the fix specifically targets it):** active relationship,
+  `authenticated` caller with `person.company_id IS NULL` (company-less —
+  seed or insert a person with no company, matching the reachable v0 state)
+  → raises the SAME `relationship not found` text, not a silent pass. This is
+  the exact population B1's fix (discriminating on `auth.uid()` rather than
+  `current_company_id()`) exists to close — a THIRD-company cell alone would
+  stay green even if that fix were reverted, because `current_company_id()`
+  is non-NULL for a real third-company member.
 - Active relationship, `service_role`, no `sub` claim → returns `true` without
   raising (Invariant 10 — reproduce live per the ADR's own instruction to
   re-prove this after the fix). **Must explicitly clear the JWT claims before
@@ -485,9 +583,10 @@ ROLLBACK` fixture pattern (`.claude/rules/supabase.md`):
   same file, not the `service_role`-with-no-context path Invariant 10 is
   actually about — passing for the wrong reason.
 
-**New assertions in (or alongside) `msg_all`'s existing test coverage**
-(check whether `chat_message` RLS already has a suite to extend before
-creating a new one):
+**New assertions in `supabase/tests/msg_all_deal_detected_gate_test.sql`,
+already has a runner (`run_msg_all_deal_detected_gate_test.sh`) — extend, do
+not create a new suite (round 3, N4, same class as round 2's B2: naming the
+runner is what makes a suite real coverage in this repo).**
 - `authenticated` app-path insert into a thread on a suspended relationship →
   refused (AC1).
 - The same insert attempted as a direct PostgREST-shaped call (bypassing any
@@ -499,8 +598,9 @@ creating a new one):
 - `type = 'deal_detected'` on an active relationship, as `authenticated` →
   still refused (pre-existing behavior, must not regress).
 
-**New assertions in (or alongside) `inbox_insert`'s existing test
-coverage**:
+**New assertions in `supabase/tests/inbox_insert_receiver_gate_test.sql`,
+already has a runner (`run_inbox_insert_receiver_gate_test.sh`) — extend, do
+not create a new suite (round 3, N4):**
 - A new connect/pricing request addressed to a company with a suspended
   relationship to the sender → refused (AC3).
 - A `connect_person` row (`receiver_company_id IS NULL`) → unaffected by this
@@ -535,6 +635,19 @@ explicitly at G4 so it isn't mistaken for silent coverage.
 - `create_deal_draft`, `confirm_deal_change`, and `propose_deal` — excluded
   (§0). `propose_deal` no longer exists in the live catalog (dropped); do not
   write a migration for it.
+- **Chosen divergence, not an inconsistency (round 3, N8):** `confirm_deal_
+  change`'s exclusion (above) means it still resolves a held pricing change
+  on a suspended relationship, and its own SQL-side announcement
+  (`deal_card_updated`, `20260707130300_deal_event_system_voice.sql:285-296`,
+  `SECURITY DEFINER`, bypasses RLS) still lands in both threads. §6 gates
+  `sella-summarize`'s PARALLEL summary of the same edit — so on a suspended
+  relationship, the SQL announcement posts and Sella's own summary silently
+  does not. This is a real, visible asymmetry between two write paths for the
+  same event, not a bug in either — the SQL announcement is a system-of-
+  record entry `confirm_deal_change`'s own exclusion (PRD AC7) protects,
+  Sella's summary is new automated content generation this ADR's Locked #3
+  ("no exemption for automated writes") deliberately does gate. Named here so
+  it reads as a decision, not an oversight, if noticed at G4/G5.
 - `announceDealEvent` — exempted via §2's four-type carve-out in `msg_all`'s
   `WITH CHECK`, not a separate gate — no source change to `actions.ts`, no
   separate migration beyond §2's.
@@ -542,6 +655,22 @@ explicitly at G4 so it isn't mistaken for silent coverage.
 - 0024's own `store.ts:646` census entry — that write left the client path
   entirely once HEL-68 shipped (already merged); nothing to re-target, since
   it no longer exists as a write site at all.
+- **0024's `accept_connection_request` (round 3, N7 — a new `chat_message`
+  writer that landed after this plan's census, needs naming, not gating):**
+  `20260826100000_accept_connection_request_atomic_threads.sql:209-257`
+  inserts three `chat_message` rows (`connection_established`, `intro`, the
+  requester's note) as part of HEL-68, shipped to production 2026-08-27. It
+  needs no gate from this ADR — it already carries its own refusal at
+  `:139-141` (`relationship % is % — cannot accept a new request onto it`),
+  so a suspended/ended relationship can't reach these inserts through this
+  RPC at all.
+- **`deal_line_item_batch` and `deal_event_system_voice` — the PRD's census
+  named these as if distinct from `confirm_deal_change` (round 3, N7); they
+  are `create or replace` layers ON `confirm_deal_change`, not separate write
+  sites** (`20260707130300_deal_event_system_voice.sql:25` re-emits
+  `confirm_deal_change` itself). Already excluded under the same ruling
+  (PRD AC7) as `confirm_deal_change` — no separate exclusion needed, naming
+  here so the PRD's census and this plan's don't read as disagreeing.
 
 ## §10 — plan-checker's job
 
@@ -560,14 +689,21 @@ explicitly at G4 so it isn't mistaken for silent coverage.
   `deliver_deal` migration does NOT re-emit the trailing `grant` line from its
   cited source file (that grant was later revoked on purpose — re-emitting it
   would silently undo the revoke).
-- **Resolved (round 2, N7 — traced, not left open):** `sella-summarize`'s
-  single up-front gate call IS provably sufficient. `dealThread` is resolved
-  by `deal_card_id` (`:135-137`), and every deal thread is minted with its
-  `relationship_id` taken directly from the card's own `relationship_id`
-  (`20260618130200_create_deal_draft_retire_private_box.sql:155` and its
-  successors) — `p2pThread` is resolved by `card.relationship_id` directly
-  (`:138-140`). Both threads are provably the card's one relationship; they
-  cannot diverge. No second call needed.
+- **Resolved (round 2, N7 — traced, not left open; citation corrected round
+  3, N2):** `sella-summarize`'s single up-front gate call IS provably
+  sufficient. `dealThread` is resolved by `deal_card_id` (`:135-137`);
+  `p2pThread` is resolved by `card.relationship_id` directly (`:138-140`).
+  The evidence that both are the SAME relationship is not the migration this
+  plan originally cited (`20260618130200_create_deal_draft_retire_private_
+  box.sql:155` — superseded; the live `create_deal_draft` is
+  `20260724120200_create_deal_draft_private_birth.sql`, whose own `:16-22`
+  DELETES the deal-thread insert entirely, "the birth-created deal chat is a
+  RETIRED concept (D-05)"). The conclusion still holds, on different
+  evidence: every surviving `deal`-thread producer is a seed row
+  (`supabase/seed/seed.sql:655,723,787,855,920,988,1052`, all
+  `select ids.rel_id, 'deal', card.id`) or a legacy row — every one keyed off
+  the card's own relationship id. Both threads are provably the card's one
+  relationship; they cannot diverge. No second call needed.
 
 ## §11 — acceptance criteria this plan closes
 
