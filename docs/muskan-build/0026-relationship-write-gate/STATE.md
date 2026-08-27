@@ -265,6 +265,42 @@ still applies once the ADR is drafted.
   corrected). N4 declared as a non-blocking gap (chat-door user-facing
   message, PRD AC1 doesn't require it) rather than fixed. **Next:**
   re-spawn `plan-checker` round 3.
+- **`plan-checker` round 3, 2026-08-27** — REVISE: **2 blocking, both real
+  correctness/security issues, not documentation quality.** B1: the
+  membership check discriminated `service_role` from `authenticated` using
+  `current_company_id() is null`, which is ALSO null for any real signed-in
+  person with no company yet (nullable by this repo's own v0 design) — a
+  company-less caller could pass the check unconditionally and probe any
+  relationship's existence/status. B2: the new `deliver_deal_test.sql` cell
+  (from round 2's B1 fix) was structurally incompatible with that file —
+  wrong position (would leak the status flip into later cells), wrong
+  exception-handling shape (would abort the whole suite under
+  `ON_ERROR_STOP=1`), two unstated preconditions (privileged role needed for
+  the flip; inherited JWT claims). Plus 8 notes.
+- **`/build`, 2026-08-27** — fixed both blocking: B1 (discriminator changed
+  to `auth.uid() is null`; added a distinct company-less-caller test cell
+  so the fix has its own regression guard, not just the pre-existing
+  third-company-caller cell). B2 (repositioned as the file's true last cell
+  or via SAVEPOINT; switched to the file's own exception-catching DO-block
+  shape; stated the privileged-role and inherited-claims preconditions
+  explicitly; added the missing "fixture is active at start" assertion).
+  All 8 notes folded in: N1 (named, not fixed — the outer AND chain has the
+  same unguaranteed-order property as the CASE fix, no security consequence,
+  §7/§8 should assert "refused" not a specific error shape), N2 (a citation
+  for a resolved question pointed at a superseded migration — corrected to
+  the live one, conclusion unchanged), N3 (the "fixture active" citation was
+  wrong — fixed, folded into B2), N4 (named the two existing suites/runners
+  to extend for `msg_all`/`inbox_insert`, same class as round 2's B2), N5
+  (stated `requestActionError.ts`'s real path + its co-located test file,
+  both previously unstated), N6 (branch count re-corrected — 4 total, not 3;
+  also fixed a line-number discrepancy between round 1's and round 3's own
+  citations by re-verifying against the live file directly), N7 (named
+  0024's new `chat_message` writer — already self-guarded, no gate needed —
+  and clarified two PRD-census entries are `create or replace` layers on the
+  already-excluded `confirm_deal_change`), N8 (named a real, chosen
+  behavioral divergence: a suspended relationship still gets the SQL-side
+  deal-change announcement but not Sella's parallel summary of it).
+  **Next:** re-spawn `plan-checker` round 4.
 
 ## Gate log
 - **G3 (spec + ADR, merged gate) — APPROVED, Muskan, 2026-08-26.** "yes, approved,"
