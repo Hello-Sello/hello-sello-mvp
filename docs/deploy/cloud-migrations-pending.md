@@ -83,6 +83,57 @@ fails, then reverting. `LEARNINGS.md` **L-064**.
 
 ---
 
+## ⚠️ PENDING (2026-08-27) — HEL-84 relationship-write-gate (SEVEN migrations, plain `db push`)
+
+**Status: LOCAL ONLY.** All seven sort after `20260826100000` (0024's tip), so a
+plain `supabase db push --linked` (no `--include-all`) picks up the lot in filename
+order. Confirmed via `supabase migration list --linked` 2026-08-27: cloud tip is
+`20260826100000`; these seven are the only local-only rows.
+
+**Stamps in order:** `20260827090000` → `100000` → `110000` → `120000` → `130000` →
+`140000` → `150000`.
+
+**Pure DDL, not data-writes — the `apply_migration`/`execute_sql` ask-rule does not
+apply.** Every one of the seven defines/replaces a function or alters an RLS policy;
+none touches an existing row.
+
+| # | file | what it does |
+|---|---|---|
+| 1 | `20260827090000_assert_relationship_writable.sql` | New shared function — gates a write on `relationship.status`, NULL-passthrough for pre-connection/company-less threads, `service_role` exempt (discriminated on `auth.uid() IS NULL`, not `current_company_id() IS NULL` — the latter would fail open for a real, reachable company-less-caller population, caught in review). |
+| 2 | `20260827100000_msg_all_relationship_write_gate.sql` | `msg_all` gains the gate as a plain `AND` term — **no client-facing exemption of any kind.** An earlier draft carved out four `announceDealEvent` types by `type`, found live-exploitable (a thread member could bypass the whole gate by mislabeling an ordinary message's `type`) — closed by moving those four types into migration 7 instead. |
+| 3 | `20260827110000_inbox_insert_relationship_write_gate.sql` | `inbox_insert` gains the same gate, deriving the relationship via the canonical `least`/`greatest` company pair. |
+| 4 | `20260827120000_send_deal_relationship_write_gate_refactor.sql` | `create or replace` — `send_deal`'s existing inline liveness check refactored to call the shared function. |
+| 5 | `20260827130000_confirm_detected_deal_relationship_write_gate_refactor.sql` | Same refactor for `confirm_detected_deal`, gate stays inside the both-accepted branch (a decline must still succeed on a suspended relationship). |
+| 6 | `20260827140000_deliver_deal_relationship_write_gate.sql` | New gate on `deliver_deal` — currently unreachable through the product (its one live caller, `confirm_detected_deal`, already gates the same relationship first), kept so a future caller can't reopen the gap silently. |
+| 7 | `20260827150000_announce_deal_event.sql` | New `SECURITY DEFINER` RPC — the four system-authored deal-lifecycle chat pills (`deal_signed`, `deal_cancelled`, `deal_change_proposed`, `deal_negotiation_requested`), moved server-side so `type` is never client-supplied. Deliberately does NOT call `assert_relationship_writable` (ADR 0008 Invariant 16: these four are exempt from the suspension gate, an event already in motion is not a "new" write) — its own authorization is a relationship-party check plus a `deal_workspace` membership check for the deal-thread arm (a gap found post-build by `security`'s own re-check — an earlier version of this RPC re-imported the relationship-level check but dropped the workspace-level one, live-provenly letting a relationship member write into a PRIVATE deal thread she wasn't part of; fixed by calling the canonical `can_access_workspace` directly). |
+
+**⚠️ SAME-DEPLOY REQUIRED, migrations + two Edge Functions.**
+`supabase/functions/sella-detect/index.ts` and `supabase/functions/sella-summarize/index.ts`
+both gained a new call to migration 1's RPC (`assert_relationship_writable`) — this is
+**non-migration deploy debt**, tracked separately below, not covered by `db push`. If the
+migrations land without redeploying the two edge functions, nothing breaks (the RPC just
+sits unused by them); if the edge functions somehow deployed first, the RPC call would 404
+against a function that doesn't exist yet on the remote project. Deploy both edge functions
+in the same session as the migration push, migrations first.
+
+**Pre-push insurance query** (run before `db push` — confirms the two new definer
+call sites, `deliver_deal` and the announce RPC, aren't reachable by anyone they
+shouldn't be, post-push):
+
+```sql
+-- expect all FALSE except authed_MUST_BE_TRUE columns
+select p.proname,
+       coalesce(has_function_privilege('anon', p.oid, 'execute'), false)          as anon_MUST_BE_FALSE,
+       coalesce(has_function_privilege('authenticated', p.oid, 'execute'), false) as authed_result
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+ where n.nspname = 'public'
+   and p.proname in ('assert_relationship_writable', 'announce_deal_event');
+-- assert_relationship_writable: authed_result = true (client-facing, RLS call sites)
+-- announce_deal_event: authed_result = true (client-invoked directly from actions.ts)
+```
+
+---
+
 ## ✅ APPLIED 2026-08-25 (was PENDING 2026-08-25) — security batch: HEL-67 Gap 1 + HEL-75 + DEV-159 (THREE migrations)
 
 **Status: LIVE ON PRODUCTION.** Applied 2026-08-25 by the `ship_deal` session on Muskan's explicit
@@ -1346,6 +1397,27 @@ non-migration steps explicitly rather than sweeping them with the batch:**
 **How to close it:** open the Supabase dashboard → Auth → Email Templates → Invite and compare
 against `supabase/templates/invite.html`. If it matches, mark this item discharged here and say
 where it was checked. If it does not, paste it — that IS the step.
+
+### 4. HEL-84 relationship-write-gate — two edge functions · **OWED**
+
+Both `supabase/functions/sella-detect/index.ts` and
+`supabase/functions/sella-summarize/index.ts` gained a new call to
+`assert_relationship_writable` (see the migration batch above, migration 1) —
+placed before their idempotency-claiming inserts and Bedrock calls, so a
+suspended-relationship run fails before paying for either.
+
+**Non-migration cloud steps — REQUIRED for the gate to actually reach Sella's
+automated writes (do WITH the migration push, migrations first — same-deploy
+rule):**
+- `supabase functions deploy sella-detect`
+- `supabase functions deploy sella-summarize`
+
+**Live consequence if skipped:** the migrations alone don't break anything —
+the RPC just sits unused by the currently-deployed edge functions. But the
+gate is INCOMPLETE for automated writes until both are redeployed: Sella's
+detection/summarize runs would keep writing to suspended relationships via
+`service_role`, the exact automated-write class ADR 0008's Locked #3 ("no
+exemption for automated writes") exists to close.
 
 ### Ruled and NOT outstanding — recorded so the survey is not re-run
 

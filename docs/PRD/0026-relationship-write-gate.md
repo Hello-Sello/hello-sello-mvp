@@ -124,5 +124,8 @@ predicate on `msg_all` alone would only gate `postMessage`.
   cancelled, a change proposed, negotiation requested), when the system posts its
   automatic announcement message, then the announcement still posts — same
   reasoning as AC7, an event already in motion is not a "new" write this gate cares
-  about (ruling, 2026-08-26: `announceDealEvent` is explicitly excluded from this
-  gate).
+  about (ruling, 2026-08-26: these four system-authored types are explicitly
+  exempt from this gate). Implemented via the `announce_deal_event` `SECURITY
+  DEFINER` RPC (§12 addendum, post-ship correction) — the original client-side
+  `announceDealEvent` helper is deleted; the RPC bypasses `msg_all` entirely
+  rather than carrying a client-facing exemption.

@@ -204,19 +204,27 @@ of sync with itself; a rule copy-pasted six times eventually will.
     through). Currently safe because `rel_all`/`thread_all` have no status filter of
     their own — but that safety is load-bearing on those two policies staying that
     shape, and must be re-checked if either is ever narrowed.
-16. **`announceDealEvent` is excluded — ruled, not deferred (Muskan, 2026-08-26).**
-    `src/modules/deals/actions.ts`'s system-authored deal-lifecycle lines
-    (`deal_signed`, `deal_cancelled`, `deal_change_proposed`, and
-    `deal_negotiation_requested` — the type union has four members, not the three
-    an earlier draft here named) write through `msg_all` like any other client
-    insert, but are NOT additionally gated by `assert_relationship_writable`. Same
-    reasoning as Invariant 7: an event already in motion when suspension happens
-    (a deal signing, a change being proposed) is not a "new" write in the sense
-    this ticket cares about. One consequence carried over from round 1, not
-    resolved by this ruling: `announceDealEvent` already fails soft (catches its
-    own error, logs to console, no user-facing signal) — that's a pre-existing
-    gap, unrelated to suspension, worth its own follow-up ticket if it's ever
-    worth fixing, not this ADR's job.
+16. **The four system-authored deal-lifecycle types are exempt from the gate —
+    ruled, not deferred (Muskan, 2026-08-26).** `deal_signed`, `deal_cancelled`,
+    `deal_change_proposed`, and `deal_negotiation_requested` (four members) are
+    NOT gated by `assert_relationship_writable` — same reasoning as Invariant 7:
+    an event already in motion when suspension happens (a deal signing, a
+    change being proposed) is not a "new" write in the sense this ticket cares
+    about. **Mechanism, corrected post-ship (§12 addendum,
+    `docs/muskan-build/0026-relationship-write-gate/PLAN-HEL-84.md`):** the
+    original build implemented this ruling as a client-facing carve-out in
+    `msg_all`'s `WITH CHECK`, keyed on `chat_message.type` — found live-exploitable
+    (a thread member could bypass the entire gate by mislabeling an ordinary
+    message's `type` as one of the four exempt values). Closed by moving these
+    four types into a new `SECURITY DEFINER` RPC, `announce_deal_event`
+    (formerly the client-side `announceDealEvent` helper in
+    `src/modules/deals/actions.ts`, now deleted), which bypasses `msg_all`
+    entirely and performs its own party + deal-workspace-membership
+    authorization instead of a client-writable exemption. The ruling above is
+    unchanged; only the mechanism moved. `announceDealEvent`'s old fail-soft
+    behavior (catches its own error, logs to console, no user-facing signal)
+    carries over to the new RPC call site — still a pre-existing gap, still
+    not this ADR's job.
 
 ## The design
 
@@ -300,7 +308,7 @@ below):**
 | `sella-detect` / `sella-summarize` (Supabase Edge Functions, not RPCs) | **New — a class of writer the RPC-only census structurally couldn't see.** Both authenticate with `SUPABASE_SERVICE_ROLE_KEY` and insert `chat_message` directly (`supabase/functions/sella-detect/index.ts:229-231`, `sella-summarize/index.ts:145`), bypassing RLS the same way a `SECURITY DEFINER` RPC does. Locked #3 ("no exemption for automated writes") applies here as much as to `deliver_deal` — and Invariant 10's `service_role` carve-out (round 2's F1 fix) is what makes this actually work rather than break every write. Each function calls the Postgres RPC `assert_relationship_writable(relationship_id)` itself, in TypeScript, before its insert, and lets the RAISE surface as a caught error the function already logs and skips past (matching each function's existing error-handling shape — read the live file before writing this, don't assume the shape). A third Sella function, `sella-intro`, was checked and correctly excluded — it only `UPDATE`s an existing `sella`/`intro` row, never inserts. |
 | `create_deal_draft` | **Excluded** — verified live, touches neither table |
 | `confirm_deal_change` | **Excluded** — Muskan's ruling, Invariant 7 |
-| `announceDealEvent` | **Excluded** — Muskan's ruling, Invariant 16 |
+| `announce_deal_event` | **New `SECURITY DEFINER` RPC (§12 addendum, post-ship correction) — replaces the client-side `announceDealEvent` helper, deleted.** Writes the four Invariant-16-exempt types (still not gated by `assert_relationship_writable`, per that ruling) via its own party + `deal_workspace`-membership authorization instead of a `msg_all` client-facing carve-out — the original carve-out design was live-exploitable (client-controlled `type` bypassed the whole gate) and is what this row used to describe. |
 
 One migration per unit of change, following this repo's established convention
 (function + grants in its own file; each RPC re-emit in its own file); the two
@@ -315,5 +323,7 @@ edge-function changes are ordinary TypeScript diffs, not migrations.
   oversight; do not reopen without a fresh product ruling.
 - 0024's own migration — this ADR only re-targets its census entry once 0024 ships,
   it does not build or wait on 0024's work.
-- **`announceDealEvent`** — see Invariant 16 below. **Ruled 2026-08-26 (Muskan):
-  excluded, same reasoning as `confirm_deal_change`.** No longer an open question.
+- **The four system-authored deal-lifecycle types** — see Invariant 16 above.
+  **Ruled 2026-08-26 (Muskan): exempt from the gate, same reasoning as
+  `confirm_deal_change`.** No longer an open question. Mechanism corrected
+  post-ship — see Invariant 16's own note.
