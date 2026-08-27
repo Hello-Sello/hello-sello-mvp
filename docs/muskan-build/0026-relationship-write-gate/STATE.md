@@ -320,6 +320,25 @@ still applies once the ADR is drafted.
   both remaining suite extensions, including how to derive each file's
   relationship id (neither fixture carries one today). N1-N4 folded in.
   **Next:** re-spawn `plan-checker` round 5.
+- **`plan-checker` round 5, 2026-08-27** — REVISE: **1 blocking (genuinely
+  new information, not re-litigation), 4 notes.** Confirmed round 4's fixes
+  hold under fresh re-derivation of both suite extensions (position,
+  derivation, exception shape all verified against the live files). B1: §3's
+  new gate breaks a SIXTH suite the plan never censused —
+  `accept_connection_request_status_guard_test.sql` mints a pricing request
+  onto an already-suspended pair as `authenticated` with no exception
+  handler; the checker independently censused all 12 suites that write
+  `chat_message`/`pending_inbox_item` and confirmed this is the only one
+  that breaks. 4 notes: N1 (a stale line number, `:239` past a 237-line
+  file), N2 (the claims active at the new `msg_all` cell's insertion point
+  are Carol's, not stated), N3 (the `inbox_insert` Invariant-13 cell's pair
+  choice collides with the AC3 cell earlier in the same file, which already
+  suspends it), N4 (both suites' pass banners go stale).
+- **`/build`, 2026-08-27** — fixed B1: the existing suite needs a REORDER
+  (mint the pending item before suspending, not after) — not a workaround
+  but the more correct test of what that suite's own RPC-level guard
+  actually protects (a request that predates suspension, refused at accept
+  time). N1-N4 folded in. **Next:** re-spawn `plan-checker` round 6.
 
 ## Gate log
 - **G3 (spec + ADR, merged gate) — APPROVED, Muskan, 2026-08-26.** "yes, approved,"
