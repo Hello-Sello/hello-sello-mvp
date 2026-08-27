@@ -21,7 +21,13 @@
 --     sender   sender_person_id   type                        written by
 --     person   auth.uid()         message                     store.ts:478
 --     person   auth.uid()         deal_card                   store.ts:512
---     sella    NULL               deal_signed + 3 siblings    actions.ts:682
+--     sella    NULL               deal_signed + 3 siblings    announce_deal_event()
+--                                                              SECURITY DEFINER RPC
+--                                                              (HEL-84 §12.2, NOT a
+--                                                              direct client insert
+--                                                              any more — §A3 below
+--                                                              is now a structural
+--                                                              control only)
 --     system   NULL               connection_established      store.ts:646
 --     sella    NULL               intro                       store.ts:646
 --     person   ANOTHER PERSON     message                     store.ts:646
@@ -87,9 +93,21 @@ SELECT thread_id, 'person', alice, 'message', 'HEL67 A1 ordinary message' FROM _
 INSERT INTO public.chat_message (thread_id, sender, sender_person_id, type, body, metadata)
 SELECT thread_id, 'person', alice, 'deal_card', 'HEL67 A2 deal pill', '{}'::jsonb FROM _t;
 
--- A3 — the four lifecycle pills announceDealEvent writes in Sella's voice with
---      NO person author (actions.ts:682). All four, not a representative one:
---      a type predicate that caught any of them would break a shipped action.
+-- A3 — the four lifecycle pill TYPES (deal_signed/deal_cancelled/
+--      deal_change_proposed/deal_negotiation_requested) still insert fine as a
+--      direct `authenticated` write, sender='sella'/no person author, on an
+--      ACTIVE relationship — same as any other type would. STALE RATIONALE,
+--      CORRECTED (HEL-84 §12): the original comment here said catching any of
+--      these types would break a shipped action (`actions.ts:682`'s loop) —
+--      that loop is DELETED. The real Sella voice for these four types is now
+--      `announce_deal_event`, a SECURITY DEFINER RPC (§12.2) that bypasses
+--      this policy entirely and composes its own body server-side; it needs
+--      no exemption here because it never goes through `msg_all`'s WITH CHECK
+--      at all. This cell is now a structural control only — proving the
+--      TYPE VALUES themselves aren't refused by some other predicate (HEL-67
+--      Gap 1's `type <> 'deal_detected'` term doesn't touch them) — not a
+--      claim about who writes them in production. See §F5 below for the
+--      cell that proves the opposite fact on a SUSPENDED relationship.
 INSERT INTO public.chat_message (thread_id, sender, sender_person_id, type, body)
 SELECT thread_id, 'sella', NULL, t, 'HEL67 A3 ' || t
   FROM _t, unnest(ARRAY['deal_cancelled','deal_signed','deal_change_proposed','deal_negotiation_requested']) AS t;
@@ -226,12 +244,164 @@ BEGIN
     THEN RAISE EXCEPTION 'E3: chat_message no longer carries exactly one policy — a second policy could re-open what this one closes'; END IF;
 END $$;
 
+-- ============================================================================
+-- §F — HEL-84: msg_all's relationship-write-gate term. F1 re-confirms the
+--      pre-existing deal_detected refusal (§B) is unaffected by the new
+--      predicate WHILE the relationship is still active (this cell's whole
+--      point). F2-F3 flip the relationship SUSPENDED, and F4/F5 prove the
+--      new gate: AC1 and AC2 are ONE cell (round 6, N1 — in a psql suite, "an
+--      app write" and "a direct PostgREST-shaped call" are indistinguishable
+--      — both are a bare INSERT under SET LOCAL ROLE authenticated, exactly
+--      what this file's own header (:34-36) already says it covers).
+--      CORRECTED SCOPE (HEL-84 §12 addendum — a live-proven exploit found
+--      the original four-type exemption was itself client-reachable: setting
+--      `type` to one of the four alone bypassed the whole gate): F5 no
+--      longer asserts these four types are EXEMPT. After §12.4, `msg_all`
+--      carries a plain `assert_relationship_writable` check with no type
+--      carve-out at all — F5 now asserts the four types are REFUSED on this
+--      SAME suspended relationship, same as any other type, the regression
+--      guard that would have caught the vulnerability `security` found. The
+--      real Sella voice for these four types moved server-side entirely
+--      (`announce_deal_event`, a SECURITY DEFINER RPC, §12.2/
+--      announce_deal_event_test.sql) — it bypasses this policy and needs no
+--      exemption from it. Last cell, immediately before this file's own
+--      ROLLBACK: the flip below persists for anything after it, and every
+--      earlier section above already ran.
+-- ============================================================================
+
+-- F0 — the relationship id backing the seeded Alice<->Bob p2p thread is NOT
+--      in _t today — derived dynamically, matching this file's own
+--      convention of resolving values at runtime rather than hardcoding.
+CREATE TEMP TABLE _f ON COMMIT DROP AS
+SELECT relationship_id AS rel_id FROM public.chat_thread WHERE id = (SELECT thread_id FROM _t);
+GRANT SELECT ON _f TO authenticated;
+
+DO $$
+BEGIN
+  IF (SELECT rel_id FROM _f) IS NULL THEN
+    RAISE EXCEPTION 'FIXTURE: the seeded Alice<->Bob p2p thread has no relationship_id — cannot run §F';
+  END IF;
+END $$;
+
+-- F1 — REGRESSION GUARD, relationship still ACTIVE: type = 'deal_detected'
+--      as authenticated is still refused, same as §B. The refusal here is a
+--      genuine RLS WITH CHECK violation (type <> 'deal_detected' fails; the
+--      assert_relationship_writable term never raises on an active
+--      relationship either way — post-§12.4 this is a plain AND, not a CASE,
+--      but the same fact holds), so this uses the file's OWN
+--      insufficient_privilege idiom (§B), not the P0001 idiom F4 needs below.
+SELECT set_config('request.jwt.claim.sub', (SELECT alice::text FROM _t), true);
+SELECT set_config('request.jwt.claims', (SELECT json_build_object('sub', alice, 'role', 'authenticated')::text FROM _t), true);
+SET LOCAL ROLE authenticated;
+DO $$
+BEGIN
+  BEGIN
+    INSERT INTO public.chat_message (thread_id, sender, sender_person_id, type, body, metadata)
+    SELECT thread_id, 'person', alice, 'deal_detected', 'HEL84 F1 forged detection, still active', '{}'::jsonb FROM _t;
+    RAISE EXCEPTION 'F1/regression: a thread member minted deal_detected on an ACTIVE relationship — the pre-existing gate regressed';
+  EXCEPTION
+    WHEN insufficient_privilege THEN NULL;
+    WHEN others THEN
+      IF SQLERRM LIKE 'F1/regression%' THEN RAISE; END IF;
+      RAISE EXCEPTION 'F1/regression: refused for the WRONG reason (%)', SQLERRM;
+  END;
+END $$;
+RESET ROLE;
+
+-- F2 — flip. Runs privileged (RESET ROLE — authenticated lacks UPDATE on
+--      relationship, 20260823090000:89); a plain UPDATE as authenticated
+--      would itself raise before this cell ever reached msg_all. The claims
+--      active immediately before this point are Alice's (F1, above — F1 sets
+--      Alice's claims to run its own probe; PRE-EXISTING COMMENT BUG FIXED
+--      here, HEL-84 §12: this used to say "Carol's (§D, :182-183)", which
+--      was already wrong when this file was first built — §D's own RESET
+--      ROLE resets only the ROLE, not the transaction-local set_config
+--      claims, but F1 (immediately above, not §D) is the last block to have
+--      set them). This RESET ROLE is defensive/explicit either way, not
+--      corrective of anything this section left.
+RESET ROLE;
+UPDATE public.relationship SET status = 'suspended' WHERE id = (SELECT rel_id FROM _f);
+
+-- F3 — the flip actually took, asserted before relying on it — a wrong/NULL
+--      derivation in F0 would otherwise make F4/F5 below pass vacuously.
+DO $$
+BEGIN
+  IF (SELECT status FROM public.relationship WHERE id = (SELECT rel_id FROM _f)) <> 'suspended' THEN
+    RAISE EXCEPTION 'F3/flip FAIL: relationship status is % after the UPDATE, expected suspended',
+      (SELECT status FROM public.relationship WHERE id = (SELECT rel_id FROM _f));
+  END IF;
+END $$;
+
+-- F4 (AC1 + AC2, one cell) — Alice, an ordinary thread member, tries an
+--     ordinary chat message on the now-SUSPENDED relationship. Refused.
+--     Claims re-established explicitly to Alice's (NOT Carol's, which are
+--     what's active immediately before this block) before the role switch.
+--     Catches raise_exception (P0001) — assert_relationship_writable's raise
+--     propagates as itself, NOT this file's neighboring insufficient_
+--     privilege idiom (:134-139), which is for a table/RLS-privilege denial.
+SELECT set_config('request.jwt.claim.sub', (SELECT alice::text FROM _t), true);
+SELECT set_config('request.jwt.claims', (SELECT json_build_object('sub', alice, 'role', 'authenticated')::text FROM _t), true);
+SET LOCAL ROLE authenticated;
+DO $$
+BEGIN
+  BEGIN
+    INSERT INTO public.chat_message (thread_id, sender, sender_person_id, type, body)
+    SELECT thread_id, 'person', alice, 'message', 'HEL84 F4 refused on a suspended relationship' FROM _t;
+    RAISE EXCEPTION 'F4/AC1-AC2: an ordinary message inserted onto a SUSPENDED relationship — the write gate did not fire';
+  EXCEPTION
+    WHEN raise_exception THEN
+      IF SQLERRM LIKE 'F4/AC1-AC2%' THEN RAISE; END IF;
+      IF SQLERRM NOT LIKE '%relationship is suspended%' THEN
+        RAISE EXCEPTION 'F4/AC1-AC2: refused for the WRONG reason (%)', SQLERRM;
+      END IF;
+  END;
+END $$;
+RESET ROLE;
+
+-- F5 (HEL-84 §12 addendum — REPLACES the old exemption cell) — the four
+--     types that USED to be exempt (deal_signed/deal_cancelled/
+--     deal_change_proposed/deal_negotiation_requested) are now REFUSED on
+--     this SAME suspended relationship, exactly like F4's ordinary message —
+--     `msg_all` no longer carries any type-keyed carve-out (§12.4 replaced
+--     the CASE with a plain check). This is the regression guard that would
+--     have caught the vulnerability `security` found: the original
+--     exemption let a client bypass the write-gate on a suspended
+--     relationship by setting `type` to one of these four values instead of
+--     `'message'`. Catches raise_exception (P0001) — assert_relationship_
+--     writable's raise propagates as itself, NOT this file's neighboring
+--     insufficient_privilege idiom (§8's own point 4 pattern, same as F4
+--     above). The legitimate voice for these four types now lives entirely
+--     in `announce_deal_event`, a SECURITY DEFINER RPC (§12.2) that bypasses
+--     this policy — its own suspended-relationship success cell is
+--     announce_deal_event_test.sql §F, not here.
+SELECT set_config('request.jwt.claim.sub', (SELECT alice::text FROM _t), true);
+SELECT set_config('request.jwt.claims', (SELECT json_build_object('sub', alice, 'role', 'authenticated')::text FROM _t), true);
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE v_type text;
+BEGIN
+  FOREACH v_type IN ARRAY ARRAY['deal_cancelled','deal_signed','deal_change_proposed','deal_negotiation_requested'] LOOP
+    BEGIN
+      INSERT INTO public.chat_message (thread_id, sender, sender_person_id, type, body)
+      SELECT thread_id, 'sella', NULL, v_type, 'HEL84 F5 ' || v_type FROM _t;
+      RAISE EXCEPTION 'F5/refusal: type = % inserted as authenticated on a SUSPENDED relationship — the old client-reachable exemption bypass is back', v_type;
+    EXCEPTION
+      WHEN raise_exception THEN
+        IF SQLERRM LIKE 'F5/refusal%' THEN RAISE; END IF;
+        IF SQLERRM NOT LIKE '%relationship is suspended%' THEN
+          RAISE EXCEPTION 'F5/refusal: type = % refused for the WRONG reason (%)', v_type, SQLERRM;
+        END IF;
+    END;
+  END LOOP;
+END $$;
+RESET ROLE;
+
 ROLLBACK;
 
 DO $$
 BEGIN
-  IF EXISTS (SELECT 1 FROM public.chat_message WHERE body LIKE 'HEL67 %')
-    THEN RAISE EXCEPTION 'TEARDOWN: HEL-67 fixture rows survived ROLLBACK — this suite mutated the shared seed'; END IF;
+  IF EXISTS (SELECT 1 FROM public.chat_message WHERE body LIKE 'HEL67 %' OR body LIKE 'HEL84 %')
+    THEN RAISE EXCEPTION 'TEARDOWN: HEL-67/HEL-84 fixture rows survived ROLLBACK — this suite mutated the shared seed'; END IF;
 END $$;
 
-\echo '  HEL-67 Gap 1 (deal_detected un-forgeable): ALL CELLS PASSED (A control x6/9 rows, B gate x2, C definer x1, D outsider x1, E policy-shape x3)'
+\echo '  HEL-67 Gap 1 (deal_detected un-forgeable): ALL CELLS PASSED (A control x6/9 rows, B gate x2, C definer x1, D outsider x1, E policy-shape x3, F HEL-84 write-gate: F1 regression, F2-F3 flip, F4 AC1/AC2, F5 refusal x4 (HEL-84 §12: the old exemption-by-type is gone))'

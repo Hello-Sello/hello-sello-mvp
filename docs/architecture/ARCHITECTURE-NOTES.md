@@ -698,7 +698,10 @@ session start, or simply declaring applied migrations the way files are declared
 line — and they do not. `sender` has three values (`person`, `system`, `sella`) and `type` has
 fourteen, and the product **routinely has one identity speak in another's voice from an ordinary
 browser session**: `announceDealEvent` writes four deal-lifecycle pills as `sella` with a NULL author
-(`actions.ts:682`), the accept rollout writes `intro` as `sella` and `connection_established` as
+(`actions.ts:682` — ⚠️ **stale as of HEL-84's §12 addendum, 2026-08-27**: this call site was deleted;
+the four pills now write through the `announce_deal_event` `SECURITY DEFINER` RPC instead, a
+server-side writer, not an ordinary browser session — the underlying voice-vs-writer point this note
+makes is unaffected, only this specific example moved), the accept rollout writes `intro` as `sella` and `connection_established` as
 `system` (`rollout.ts:110,174`), and it writes a `person` message whose author is the **requester,
 not the caller** (`rollout.ts:179`).
 

@@ -155,8 +155,17 @@ callers, p2p thread parity question).
   behavior). S6/S8 (schema drift vs. linked project, advisor scan) owed at
   the actual `apply_migration`/deploy step, not answerable pre-merge.
 
-🏁 **SLUG COMPLETE** (build). `/ship` in progress — migrations, PR, merge,
-deploy, G5 walk still owed.
+- **`/ship`, 2026-08-27, continued** — migrations `20260826090000`/
+  `20260826100000` applied to production (`supabase db push --linked`);
+  ledgered as APPLIED in `docs/deploy/cloud-migrations-pending.md` with
+  post-push evidence. PR #182 → `main` (base chosen over `dev`: `dev` is
+  stale, 3 commits behind and none new relative to this branch; the last
+  two real PRs, #178 and #181, both landed on `main` directly). CI green,
+  merged. Vercel production deploy `dpl_EAS4zdrEqWduA1envjo4mvVY9o4g`
+  confirmed READY, aliased to `hello-sello-mvp.vercel.app`.
+
+🏁 **SLUG COMPLETE** (build + ship mechanics). **G5 — OWED**: Muskan's own
+live walk on production is the only remaining step before this slug closes.
 
 ## Interview — decisions locked 2026-08-26 (all six answered)
 1. **Scope vs. HEL-67 Gap 2 → move the WHOLE rollout now** (c2c + p2p together, not

@@ -1804,7 +1804,11 @@ and **not** the list the ticket proposed. The ticket's second half (the forgeabl
 **Why one type and not a list.** The ticket sketched banning *"Sella-authored types, service-role
 only"*. A census of every `chat_message` INSERT reachable as `authenticated` shows that is false for
 **five of six**: an ordinary browser session writes `intro` and four deal-lifecycle pills with
-`sender = 'sella'` and a NULL author (`actions.ts:682`, `rollout.ts:174`). The type name describes a
+`sender = 'sella'` and a NULL author (`actions.ts:682` — ⚠️ **stale as of HEL-84's §12 addendum,
+2026-08-27**: this browser-session call site was deleted; the four pills now write through the
+`announce_deal_event` `SECURITY DEFINER` RPC, no longer reachable from an ordinary session at
+all — the census conclusion above describes the state at the time this entry was written, not
+today's, `rollout.ts:174`). The type name describes a
 **voice**; RLS governs a **writer**; in this product one identity routinely speaks in another's
 voice. `deal_detected` is the only type no client writes.
 
