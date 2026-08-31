@@ -5,6 +5,21 @@
 
 ---
 
+**Last updated:** 2026-08-31 — decision session — **Connection Request page retirement DECIDED,
+no code this session**
+**Status:** offline (session closed).
+**Shared files locked: none — all released.** (`docs/decisions/DECISIONS.md` edited without a
+prior lock — checked retroactively: Ayush fully offline since 2026-07-24, branch matched origin,
+no conflict.)
+
+**What happened.** Research + one resolved fork on retiring `/connect/inbox`: the accept gate
+stays for unconnected sends (pricing asks, deals), claim/assign/reassign/history retire (MVP =
+one person per company per side), Discover's `RequestsSection` becomes the one accept surface for
+all four `pending_inbox_item` types. Full entry: `DECISIONS.md`, "2026-08-31". Not yet triaged
+into a slug — next session's job.
+
+---
+
 **Last updated:** 2026-08-27 — session 98 — **0024 + 0026 SHIPPED (PR #182, #183); a live
 exploit found and closed mid-build**
 **Status:** offline (session closed). Production tip `20260827150000`; **nothing cloud-pending**

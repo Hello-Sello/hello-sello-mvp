@@ -2118,3 +2118,32 @@ implied.
 exempt from the suspension gate (ADR 0008 Invariant 16, "an event already in motion is not a
 new write") — is untouched. Only the mechanism moved, from a client-facing carve-out to a
 server-side one.
+
+---
+
+## 2026-08-31 — Connection Request page retires; all four request types settle in Discover's accept gate, no ticket/claim system for MVP
+
+Follows from the shop→chat simplification (browse any Discover shop, add products, send to a
+company/person in chat) and MVP's single-person-per-company reality.
+
+- **Accept gate is KEPT for unconnected sends** (pricing asks, deals) — reaffirms Marcel's
+  2026-06-10 closed/consent directive. Sending a product ask or a deal to a company you're not
+  yet connected to still needs an explicit accept before a chat thread exists; it does not
+  auto-connect on send.
+- **Claim/assign/reassign/history retire.** MVP is one person per company on both sides, so the
+  team-ticket-ownership model (`/connect/inbox`'s lenses, `assigned_to`, admin reassign) has no
+  one to distinguish between — whoever's on the receiving side accepts directly.
+- **Discover's `RequestsSection`** (built 2026-07-23 for `connect`/`connect_message`, see `:1435`)
+  **becomes the one accept/decline surface for all four request types**, extended to also carry
+  `pricelist_request` and `deal_card` tickets — both currently excluded on purpose
+  (`companyRequests.ts`'s query filter and `RequestsSection`'s own "out of scope" note).
+  `deal_card` acceptance runs a different function (`claim_deal_ticket`) than the other three
+  (`acceptItem`) — `inbox.ts:287-290` — so folding it in means branching on type at accept-time,
+  not just widening a filter.
+- **`/connect/inbox` and its module** (InboxView, LensTabs, InboxList, InboxDetail, lenses.ts,
+  claim/assign functions) retire once `RequestsSection` covers the other two types — **not
+  before**: Sella's `deliver_deal` (via `confirm_detected_deal_births_negotiation`) is still the
+  one live door writing `deal_card` tickets there today (per the 2026-08-25 warning at `:1935`).
+- **Home's proposed deal-claim board** (2026-07-23, `:1440`) **is dropped for MVP** — moot without
+  multiple people per company to claim against. Revisit if a company ever has more than one team
+  member.
