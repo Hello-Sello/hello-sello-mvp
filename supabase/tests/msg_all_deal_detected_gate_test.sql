@@ -93,44 +93,42 @@ SELECT thread_id, 'person', alice, 'message', 'HEL67 A1 ordinary message' FROM _
 INSERT INTO public.chat_message (thread_id, sender, sender_person_id, type, body, metadata)
 SELECT thread_id, 'person', alice, 'deal_card', 'HEL67 A2 deal pill', '{}'::jsonb FROM _t;
 
--- A3 — the four lifecycle pill TYPES (deal_signed/deal_cancelled/
---      deal_change_proposed/deal_negotiation_requested) still insert fine as a
---      direct `authenticated` write, sender='sella'/no person author, on an
---      ACTIVE relationship — same as any other type would. STALE RATIONALE,
---      CORRECTED (HEL-84 §12): the original comment here said catching any of
---      these types would break a shipped action (`actions.ts:682`'s loop) —
---      that loop is DELETED. The real Sella voice for these four types is now
---      `announce_deal_event`, a SECURITY DEFINER RPC (§12.2) that bypasses
---      this policy entirely and composes its own body server-side; it needs
---      no exemption here because it never goes through `msg_all`'s WITH CHECK
---      at all. This cell is now a structural control only — proving the
---      TYPE VALUES themselves aren't refused by some other predicate (HEL-67
---      Gap 1's `type <> 'deal_detected'` term doesn't touch them) — not a
---      claim about who writes them in production. See §F5 below for the
---      cell that proves the opposite fact on a SUSPENDED relationship.
-INSERT INTO public.chat_message (thread_id, sender, sender_person_id, type, body)
-SELECT thread_id, 'sella', NULL, t, 'HEL67 A3 ' || t
-  FROM _t, unnest(ARRAY['deal_cancelled','deal_signed','deal_change_proposed','deal_negotiation_requested']) AS t;
-
--- A4 — the system line the accept rollout seeds (store.ts:646 / rollout.ts:110)
-INSERT INTO public.chat_message (thread_id, sender, sender_person_id, type, body)
-SELECT thread_id, 'system', NULL, 'connection_established', 'HEL67 A4 system line' FROM _t;
-
--- A5 — Sella's intro line (rollout.ts:174)
-INSERT INTO public.chat_message (thread_id, sender, sender_person_id, type, body)
-SELECT thread_id, 'sella', NULL, 'intro', 'HEL67 A5 sella intro' FROM _t;
-
--- A6 — ⚠️ THE TRAP. Alice inserts a `person` message authored by BOB.
---      This is not a forgery: it is `rollout.ts:179`, the accepter seeding the
---      requester's own note. Any future `sender_person_id = auth.uid()`
---      predicate turns this cell RED, which is the whole point of it existing.
-INSERT INTO public.chat_message (thread_id, sender, sender_person_id, type, body)
-SELECT thread_id, 'person', bob, 'message', 'HEL67 A6 the requester''s note, written by the accepter' FROM _t;
-
+-- ── A3–A6 RETIRED 2026-09-03 (HEL-67 Gap 2), NOT DELETED IN PASSING ──
+--
+-- This suite used to carry four more control cells, and every one of them has
+-- now been REFUTED by a shipped migration rather than by a change of opinion.
+-- They are recorded here because a control that silently disappears looks like
+-- coverage that was never there:
+--
+--   A3  sella  / NULL     / the four lifecycle pill types  (was actions.ts:682)
+--   A4  system / NULL     / connection_established         (was rollout.ts:110)
+--   A5  sella  / NULL     / intro                          (was rollout.ts:174)
+--   A6  person / BOB'S ID / message                        (was rollout.ts:179)
+--
+-- A6 was this file's ⚠️ THE TRAP: the accepter seeding the REQUESTER's own
+-- note, deliberately attributed to someone other than the caller. Its comment
+-- read "any future `sender_person_id = auth.uid()` predicate turns this cell
+-- RED, which is the whole point of it existing." That is exactly what
+-- happened — and the trap did its job, which is why this block is a rewrite
+-- and not a surprise.
+--
+-- What changed: HEL-68 (`20260826100000`) moved thread creation into
+-- `accept_connection_request` and DELETED `rollout.ts`, taking A4/A5/A6's
+-- write paths out of the client entirely; HEL-84 (`20260827150000`) moved
+-- A3's four types into `announce_deal_event`, a SECURITY DEFINER RPC. None of
+-- these four is a legitimate `authenticated` write any more, so
+-- `20260903090000_msg_all_sender_attribution_gate.sql` refuses all four.
+--
+-- Where the coverage went — it did not evaporate:
+--   * refusal of all four shapes  -> msg_all_sender_gate_test.sql §B3/§B4/§B5
+--   * the definer voices still work -> msg_all_sender_gate_test.sql §C
+--   * A6's forgery, now the headline vulnerability -> that file's §B1/§B2
+--
+-- §A below is now the FULL census of what an ordinary browser session writes.
 DO $$
 BEGIN
-  IF (SELECT count(*) FROM public.chat_message WHERE body LIKE 'HEL67 A%') <> 9
-    THEN RAISE EXCEPTION 'A/control: expected 9 legitimate rows to insert, got %',
+  IF (SELECT count(*) FROM public.chat_message WHERE body LIKE 'HEL67 A%') <> 2
+    THEN RAISE EXCEPTION 'A/control: expected 2 legitimate rows to insert, got %',
       (SELECT count(*) FROM public.chat_message WHERE body LIKE 'HEL67 A%'); END IF;
 END $$;
 RESET ROLE;
@@ -157,6 +155,13 @@ BEGIN
   END;
 
   -- B2 — and not by dressing it up in Sella's voice either.
+  --      ⚠️ NO LONGER AN ISOLATED PROOF (HEL-67 Gap 2, 2026-09-03). This row
+  --      now violates TWO terms — `type <> 'deal_detected'` AND `sender =
+  --      'person'` — and Postgres does not guarantee which one refuses it, so
+  --      a pass here no longer attributes to the type term specifically. B1
+  --      above is the isolated cell for that (person voice, own id, forged
+  --      type) and is what actually protects Gap 1. B2 is kept as
+  --      defence-in-depth: whichever term fires, the forgery must not land.
   BEGIN
     INSERT INTO public.chat_message (thread_id, sender, sender_person_id, type, body, metadata)
     SELECT thread_id, 'sella', NULL, 'deal_detected', 'HEL67 B2 forged, sella voice', '{}'::jsonb FROM _t;
@@ -382,8 +387,15 @@ DECLARE v_type text;
 BEGIN
   FOREACH v_type IN ARRAY ARRAY['deal_cancelled','deal_signed','deal_change_proposed','deal_negotiation_requested'] LOOP
     BEGIN
+      -- ⚠️ VOICE CHANGED sella/NULL -> person/alice (HEL-67 Gap 2,
+      --    2026-09-03). This cell must violate ONLY the relationship term, or
+      --    it stops proving anything: since 20260903090000 a `sella`-voiced
+      --    row is refused by the sender term too, and Postgres may report
+      --    either — an insufficient_privilege would escape this block's
+      --    raise_exception handler and fail the suite for the wrong reason.
+      --    The four TYPES are what this cell is about, and they are unchanged.
       INSERT INTO public.chat_message (thread_id, sender, sender_person_id, type, body)
-      SELECT thread_id, 'sella', NULL, v_type, 'HEL84 F5 ' || v_type FROM _t;
+      SELECT thread_id, 'person', alice, v_type, 'HEL84 F5 ' || v_type FROM _t;
       RAISE EXCEPTION 'F5/refusal: type = % inserted as authenticated on a SUSPENDED relationship — the old client-reachable exemption bypass is back', v_type;
     EXCEPTION
       WHEN raise_exception THEN
@@ -404,4 +416,4 @@ BEGIN
     THEN RAISE EXCEPTION 'TEARDOWN: HEL-67/HEL-84 fixture rows survived ROLLBACK — this suite mutated the shared seed'; END IF;
 END $$;
 
-\echo '  HEL-67 Gap 1 (deal_detected un-forgeable): ALL CELLS PASSED (A control x6/9 rows, B gate x2, C definer x1, D outsider x1, E policy-shape x3, F HEL-84 write-gate: F1 regression, F2-F3 flip, F4 AC1/AC2, F5 refusal x4 (HEL-84 §12: the old exemption-by-type is gone))'
+\echo '  HEL-67 Gap 1 (deal_detected un-forgeable): ALL CELLS PASSED (A control x2/2 rows (A3-A6 retired by HEL-67 Gap 2 — see the block above §A''s count check), B gate x2, C definer x1, D outsider x1, E policy-shape x3, F HEL-84 write-gate: F1 regression, F2-F3 flip, F4 AC1/AC2, F5 refusal x4 (HEL-84 §12: the old exemption-by-type is gone))'
