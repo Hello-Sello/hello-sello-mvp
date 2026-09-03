@@ -8,7 +8,9 @@
 **Last updated:** 2026-09-03 — session 101 — **HEL-67 Gap 2 built (sender forgery closed)**
 **Status:** active.
 **Linear issue in progress:** HEL-67 (Gap 2).
-**Shared files locked: none — released.** (`docs/deploy/cloud-migrations-pending.md` edited and
+**Shared files locked:** `docs/agents/LEARNINGS.md` — appending L-065 (a blocked ticket's
+blocker can clear silently; nothing re-checks it). Previously locked and released:
+(`docs/deploy/cloud-migrations-pending.md` edited and
 released, commit `86e8b59`: added the `20260903090000` ledger entry and struck three stale
 `⚠️ PENDING` headings covering 13 migrations that are live on production — verified against the
 remote via `list_migrations`, and corroborated by my own 2026-08-27 entry below saying "nothing
