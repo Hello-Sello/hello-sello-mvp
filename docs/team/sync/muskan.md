@@ -8,11 +8,15 @@
 **Last updated:** 2026-09-03 — session 101 — **HEL-67 Gap 2 built (sender forgery closed)**
 **Status:** active.
 **Linear issue in progress:** HEL-67 (Gap 2).
-**Shared files locked:** `docs/deploy/cloud-migrations-pending.md` (ledger the `20260903100000`
-HEL-85 batch) and `docs/agents/LEARNINGS.md` (L-066 — an RLS bypass cannot be observed from
-inside the role being bypassed).
+**Shared files locked: none — all released.**
 
-Previously locked and released this session:
+**HEL-85 built** (commit `3c3b99f`, **local only**). `confirm_deal_change` re-imports the
+workspace half of `can_access_workspace`; ledgered as `20260903100000`. **Latent, not live** —
+production has zero private workspaces, so it is not exploitable against prod data today.
+**L-066 added:** an RLS bypass cannot be measured from inside the role being bypassed — the first
+draft of the suite counted rows as the probe user and passed vacuously on a live exploit.
+
+Released this session:
 - `docs/agents/LEARNINGS.md` — **L-065 added**: a ticket parked "blocked on X" is a claim with an
   expiry date, and nothing re-checks it when X ships. Write the reverse edge on the BLOCKING
   ticket, and at `/ship` ask "what did this release?".

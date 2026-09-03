@@ -42,7 +42,10 @@ headings below is struck through with a pointer here. The batch bodies (pre-flig
 grant/drop analysis, same-deploy warnings) are untouched: they are the record of how each push
 was reasoned about, and they stay readable as that.
 
-**Only ONE batch is genuinely pending: `20260903090000`, immediately below.**
+**Only the 2026-09-03 batches are genuinely pending: `20260903090000` and `20260903100000`,
+immediately below. They are INDEPENDENT of each other** — different objects (an RLS policy vs a
+function), no shared call path, no ordering constraint between them beyond filename sort. Either
+may ship alone.
 
 ---
 
@@ -92,6 +95,60 @@ tsc clean, `e2e/chat-phase7.spec.ts` 4/4. The Gap 1 suite
 (`msg_all_deal_detected_gate_test.sql`) was edited in the same commit — its A3–A6 controls
 asserted the three write paths HEL-68/HEL-84 deleted, and its own documented trap (A6) fired
 exactly as its comment said it would.
+
+---
+
+## ⚠️ PENDING (2026-09-03) — HEL-85, `confirm_deal_change` workspace gate (ONE migration, plain `db push`)
+
+**Status: LOCAL ONLY.** `20260903100000_confirm_deal_change_workspace_gate.sql` sorts after
+`20260903090000`, so a plain `supabase db push --linked` takes both in filename order.
+
+**Pure DDL, not a data write — the `apply_migration`/`execute_sql` ask-rule does not apply.**
+One `create or replace` plus a re-emitted grant. No existing row is touched.
+
+| # | file | what it does |
+|---|---|---|
+| 1 | `20260903100000_confirm_deal_change_workspace_gate.sql` | `confirm_deal_change` gains the WORKSPACE half of `can_access_workspace`. It re-imported only `card_relationship_member` and dropped `(visibility = 'company_wide' OR is_workspace_member(ws))`. On a PRIVATE workspace a company colleague who is not a `deal_member` could resolve the held change — delete the `deal_pending_change` row, write `deal_card_log` + `deal_change_input`, and land a `deal_change_declined` message in a thread RLS hides from her. Same defect `announce_deal_event` had (HEL-84 §12); same remedy. |
+
+**SEVERITY: LATENT, NOT LIVE.** Production has **zero** private workspaces right now — all 30 that
+exist are `company_wide`, where the dropped conjunct is a no-op. Not exploitable against
+production data today; it arms the moment the first workspace is made private, which is an
+existing product capability one UPDATE away. Same posture HEL-74 shipped under.
+
+**NO app-code coupling.** Signature unchanged (`p_deal_card_id uuid, p_decision text, p_reason
+text` RETURNS integer), so `create or replace` is legal, grants survive, and no `src/` change
+ships with it. Safe to push alone or with `20260903090000`.
+
+⚠️ **The NULL-passthrough in the guard is load-bearing, do not "tidy" it.** 3 of the 33 cards on
+production carry **no `deal_workspace` row at all**. `can_access_workspace` is EXISTS-based and
+returns FALSE for a missing workspace, so an unconditional call would refuse a legitimate resolve
+on every one of those three. The guard therefore fires only when a workspace exists.
+
+**Provenance.** Generated from the LIVE production body (`md5 554a25ce2e932fc48cb9edf12f710815`,
+14655 chars, confirmed byte-identical to local before editing). Diff against that body is
+**+38 / −0 lines** — one `v_ws` declaration and one guard block. No predicate, lock order, branch
+or announcement altered.
+
+**Post-flight (cloud, after the push).** Asserts the guard is present and the passthrough intact:
+
+```sql
+select prosrc ilike '%can_access_workspace%'      as guard_present,
+       prosrc ilike '%v_ws is not null%'          as null_passthrough_intact,
+       prosrc ilike '%caller is not a member of this relationship%' as old_guard_survived
+from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+where n.nspname = 'public' and p.proname = 'confirm_deal_change';
+-- all three MUST be true
+```
+
+**Local proof.** Red-first reproduced live: Dana wrote 1 row into a private deal thread she cannot
+read. Green after. Gate: **62/62 SQL suites**, 483 unit, tsc clean, `deal-change.spec.ts` 19
+passed / 5 skipped (including `decline-clears-pending`, the exact path changed). New suite
+`confirm_deal_change_workspace_gate_test.sql` + runner (1:1 census re-run, holds).
+
+⚠️ **Read L-066 before trusting any similar suite.** The first draft of this one counted
+`chat_message` rows from inside the probe user's session and passed **vacuously on a live
+exploit** — she cannot read the thread she just wrote into, so before and after were both 0. All
+counts are now taken privileged.
 
 ---
 

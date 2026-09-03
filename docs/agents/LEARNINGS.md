@@ -2308,3 +2308,57 @@ repo and stale-Backlog in Linear. Read the tracker, not the note about the track
 **See also** [[L-030]] (a written pointer goes stale and must be re-derived, never trusted),
 [[L-033]] (the HEL-73 subject this entry's corollary corrects), [[L-013]] (a claim that has
 never been re-run against reality is an assumption, not a result).
+
+---
+
+## L-066 · An RLS bypass cannot be measured from inside the role being bypassed — the boundary under test also hides the evidence that it failed
+
+**2026-09-03 · session 101 · HEL-85 · caught by a guard cell, one iteration before it would have shipped green**
+
+**Trigger** — any test that proves a `SECURITY DEFINER` function does NOT write somewhere, by
+counting rows before and after a call. Especially when the thing being protected is a row the
+probe user is not allowed to read.
+
+**What I did** — the HEL-85 suite mints a private `deal_workspace` and has Dana (a relationship
+member, deliberately not a `deal_member`) call `confirm_deal_change`. §B counted
+`chat_message` rows in the deal thread before and after, from inside Dana's own session:
+
+```sql
+SET LOCAL ROLE authenticated;   -- Dana
+SELECT count(*) INTO v_before FROM public.chat_message WHERE thread_id = ...;
+PERFORM public.confirm_deal_change(...);
+SELECT count(*) INTO v_after  FROM public.chat_message WHERE thread_id = ...;
+IF v_after > v_before THEN RAISE EXCEPTION 'exploit'; END IF;
+```
+
+It reported `before=0, after=0` and passed. A privileged count on the same thread, in the same
+transaction, showed **2**. The write had landed. The suite was green on a live exploit.
+
+**Why it was wrong** — `can_access_thread` gates SELECT on `chat_message`. Dana cannot read that
+thread; that is the entire premise of the test. So she cannot see the row she just wrote either.
+The definer bypassed RLS to insert; RLS then hid the result from her. Both counts were `0` for the
+same reason the test existed: **the boundary being violated is also the boundary that reports on
+it.** A `0 → 0` delta was indistinguishable from a working gate, and would have stayed
+indistinguishable forever — the cell could never have gone red, for any regression, ever.
+
+**The rule** — split the actor from the observer. The probe user makes the call and nothing else;
+every count, every assertion, every read of what happened runs **privileged, outside the role
+under test** (in this repo: `RESET ROLE`, or a `pg_temp` helper invoked before the `SET LOCAL
+ROLE`). If the probe user must carry something out of her own block — a `SQLERRM`, a returned id —
+write it to a scratch table she has `INSERT` on and read it back from outside. Concretely: never
+put a `SELECT count(*)` that decides a security verdict inside a `SET LOCAL ROLE authenticated`
+block.
+
+**What actually saved it** — not review, and not the assertion itself. A separate `silent-pass`
+cell, added because [[L-064]] says a deny-test must prove WHY it passed:
+
+> *nothing landed AND nothing raised. The RPC neither wrote nor refused, so this cell is not
+> evidence of a gate.*
+
+That fired, and it was the only signal anything was wrong. The lesson generalises past this bug:
+a negative assertion needs a companion cell proving the mechanism was actually exercised, because
+"nothing happened" is what both success and total non-execution look like.
+
+**See also** [[L-064]] (a deny-test that catches on SQLSTATE alone can pass for the wrong reason —
+the same family: a pass condition that under-discriminates), [[L-013]] (a green never run against
+its own failure is an assumption), [[L-033]] (measure the fixture, don't assume it).
