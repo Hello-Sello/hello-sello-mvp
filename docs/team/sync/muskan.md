@@ -8,10 +8,19 @@
 **Last updated:** 2026-09-03 — session 101 — **HEL-67 Gap 2 built (sender forgery closed)**
 **Status:** active.
 **Linear issue in progress:** HEL-67 (Gap 2).
-**Shared files locked:** `docs/deploy/cloud-migrations-pending.md` — adding the
-`20260903090000` ledger entry and correcting three stale `⚠️ PENDING` headings (those
-13 migrations are live on production; verified against `list_migrations`, and my own
-2026-08-27 entry below already says "nothing cloud-pending").
+**Shared files locked: none — released.** (`docs/deploy/cloud-migrations-pending.md` edited and
+released, commit `86e8b59`: added the `20260903090000` ledger entry and struck three stale
+`⚠️ PENDING` headings covering 13 migrations that are live on production — verified against the
+remote via `list_migrations`, and corroborated by my own 2026-08-27 entry below saying "nothing
+cloud-pending". Bodies left verbatim per that file's annotate-never-delete rule.)
+
+**Built this session.** HEL-67 Gap 2 — `msg_all` WITH CHECK gains `sender = 'person' AND
+sender_person_id = auth.uid()`, closing chat-message sender forgery (commit `fc0f7da`). Was
+blocked on HEL-68 since 2026-08-25; HEL-68 + HEL-84 shipping on 2026-08-27 removed the three
+attributed-to-another-person write paths, which is what made the predicate writable. **LOCAL
+ONLY — the cloud push is Muskan's.** Gate: 61/61 SQL suites, 483 unit, tsc clean, chat e2e 4/4.
+`design_oo27` messaged, since 0027's "posts straight to chat" branches are now constrained to a
+person-voiced, self-attributed client write (or a definer).
 
 ⚠️ **A parallel session is working in this same tree on 0027's `/design`** — it owns
 `docs/architecture/CONTEXT.md`, `docs/decisions/DECISIONS.md`,
