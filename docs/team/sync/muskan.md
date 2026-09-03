@@ -8,7 +8,11 @@
 **Last updated:** 2026-09-03 — session 101 — **HEL-67 Gap 2 built (sender forgery closed)**
 **Status:** active.
 **Linear issue in progress:** HEL-67 (Gap 2).
-**Shared files locked: none — all released.**
+**Shared files locked:** `docs/deploy/cloud-migrations-pending.md` (ledger the `20260903100000`
+HEL-85 batch) and `docs/agents/LEARNINGS.md` (L-066 — an RLS bypass cannot be observed from
+inside the role being bypassed).
+
+Previously locked and released this session:
 - `docs/agents/LEARNINGS.md` — **L-065 added**: a ticket parked "blocked on X" is a claim with an
   expiry date, and nothing re-checks it when X ships. Write the reverse edge on the BLOCKING
   ticket, and at `/ship` ask "what did this release?".
