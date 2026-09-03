@@ -8,7 +8,13 @@
 **Last updated:** 2026-09-03 — session 101 — **HEL-67 Gap 2 built (sender forgery closed)**
 **Status:** active.
 **Linear issue in progress:** HEL-67 (Gap 2).
-**Shared files locked: none — all released.**
+**Shared files locked:** `docs/decisions/DECISIONS.md` — appending the 2026-09-03 HEL-83 ruling
+(a promotion is negotiation-only to offer/accept; decline always works).
+⚠️ `design_oo27` is mid-write in this same tree on `docs/muskan-build/0027-*` — untouched here.
+
+**HEL-83 built** (commit `11e8769`, **local only**). Muskan ruled: only `negotiation`.
+`offer_promotion` + `accept_promotion` gated; `decline_promotion` deliberately NOT (a gated
+decline would strand a pending promotion forever). UI drops Accept rather than disabling it.
 
 **HEL-86 built.** New `supabase/functions/_shared/relationshipGate.ts` classifies the gate RPC's
 outcome into writable / refused / missing / **unavailable**; only the last logs at error level.
