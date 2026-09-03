@@ -2147,3 +2147,55 @@ company/person in chat) and MVP's single-person-per-company reality.
 - **Home's proposed deal-claim board** (2026-07-23, `:1440`) **is dropped for MVP** — moot without
   multiple people per company to claim against. Revisit if a company ever has more than one team
   member.
+
+---
+
+## 2026-09-01 — Correction: Sella's detected deals were never an "unconnected send"
+
+Found during `/spec 0027`'s interview, re-reading `confirm_detected_deal`'s own body
+(`confirm_detected_deal_relationship_write_gate_refactor.sql`).
+
+- **`confirm_detected_deal` only fires inside an existing chat thread on an existing
+  relationship** — it locks a `chat_message` of type `deal_detected`, reads that message's
+  `thread_id`, and reads the thread's `relationship_id`. The company pair is always already
+  connected by the time Sella can detect anything. The 2026-08-31 entry above filed this
+  under "accept gate kept for unconnected sends" — it isn't one.
+- **The "person unknown" branch doesn't need an accept gate.** It needs the one company
+  person resolved (MVP is one person per company) and the deal posted straight into the
+  existing chat, exactly as the person-known branch already does (`v_cp is not null`,
+  same function).
+- **`deliver_deal` and `claim_deal_ticket` retire entirely**, not relocate to Discover, once
+  this ships. ADR 0006 §7.2/J4's "kept alive for a door that has no traffic yet" justification
+  is discharged by this fix, not deferred past it.
+- **Pricing requests get the same split.** An ask to an already-connected company posts
+  straight into the existing chat; only a genuinely unconnected pricing ask still needs
+  Discover's accept gate — `requestProductPricing` currently uses one mechanism for both
+  cases on purpose (ADR-0005 G3), which this reopens for the connected case only.
+- Scope carried into `docs/PRD/0027-retire-connect-inbox.md`, slug `0027-retire-connect-inbox`.
+
+---
+
+## 2026-09-03 — Correction to the 2026-09-01 entry: no person resolve, and the one-person-per-company premise was false
+
+Found at `/design 0027`'s G3, by two independent `adr-checker` rounds, and verified against the
+repo before folding in. Supersedes the third bullet of the 2026-09-01 entry above.
+
+- **The deal was never unreachable, so nothing needed resolving.** `deal_workspace` is born
+  `company_wide` (`20260607090003_phase2_deal.sql:286`) and `can_access_workspace`
+  (`20260607170000_rls_policies.sql:117-125`) grants access to any relationship member on a
+  company-wide workspace — with **no `deal_member` row**. ADR 0006 §4.1 had already recorded
+  this; the 2026-09-01 entry re-derived the opposite from scratch. `confirm_detected_deal`
+  therefore just stops cutting the ticket and adds nothing in its place.
+- **"MVP is one person per company" is not true, and was never enforced.** `person.company_id`
+  carries no unique constraint and no partial unique index, and GreenLeaf Cultivation has two
+  people in our own seed data (`supabase/seed/seed.sql:114` — "Carla — a SECOND member of
+  GreenLeaf"). Any design that resolves "the company's one person" raises against existing
+  fixtures. The invariant is convention, not a constraint — treat it as such everywhere.
+- **The ticket branch is unreachable anyway.** Detection only ever lands on `p2p` threads, where
+  `chat_thread_p2p_has_both_people` (`20260607090003_phase2_deal.sql:132`) forces both person ids
+  non-null — so the counterparty is never unknown and the `else` branch never runs. The deletion
+  is dead-code removal, not a user-facing fix, and no G5 walk can show a before/after on it.
+- **What survives from 2026-09-01, unchanged:** the pricing-request split (an ask to an
+  already-connected company posts straight into the existing chat), the outright retirement of
+  `deliver_deal` and `claim_deal_ticket`, and the discharge of ADR 0006 §7.2/J4.
+- Locked in `docs/architecture/adr/0009-retire-connect-inbox.md` (G3 approved 2026-09-03).
