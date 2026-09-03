@@ -2199,3 +2199,62 @@ repo before folding in. Supersedes the third bullet of the 2026-09-01 entry abov
   already-connected company posts straight into the existing chat), the outright retirement of
   `deliver_deal` and `claim_deal_ticket`, and the discharge of ADR 0006 §7.2/J4.
 - Locked in `docs/architecture/adr/0009-retire-connect-inbox.md` (G3 approved 2026-09-03).
+
+---
+
+## 2026-09-03 — A promotion may only be **offered or accepted** while the deal is in `negotiation`; **declining always works**
+
+**Decided by Muskan, 2026-09-03.** Closes HEL-83, which was filed explicitly as needing a product
+ruling rather than an engineering call — the actor is the legitimate buyer or seller acting at a
+bad time in the lifecycle, not an intruder, so "which statuses are still open for business" is a
+product question.
+
+**What was decided.** Of the seven `deal_card_status` codes, exactly one permits a promotion to be
+offered or accepted:
+
+| status | | |
+|---|---|---|
+| `negotiation` | sent, being negotiated | **ALLOWED** |
+| `unsent` | draft, private to the creating company | refused |
+| `confirmed` | both sides confirmed | refused |
+| `done` | delivery note + invoice present | refused (terminal) |
+| `cancelled` | cancelled | refused (terminal) |
+| `ticket_created` · `ticket_closed` | reopen ticket open / closed | refused |
+
+**Why.** None of the three promotion RPCs checked `deal_card.status` at all, so a promotion could
+be accepted onto a `done` deal — and `accept_promotion` inserts real `deal_line_item` rows, which
+then silently disagree with the invoice already issued against that deal. Reachable through the
+normal UI, not only by direct API call.
+
+- **It matches what the product already decided.** `sign_deal` is the only sibling with a real
+  status gate and it raises *"only a deal in negotiation can be signed"* — same rule, same shape,
+  same wording. And D-29 already says that once a deal closes, the only way back in is a reopen
+  ticket and *"the sealed deal terms never change again"* — which is why both ticket states refuse.
+- **There is no second gate to fall back on.** A promotion is deliberately sign-agnostic (D-26):
+  accepting one never touches `deal_confirmation` and never bumps the version. `deal_card.status`
+  is the only available lever, which is precisely why its absence mattered.
+- **Strict was the cheap direction.** Production holds zero `deal_promotion` rows, so there was
+  nothing to migrate and no back-compat risk. Widening later is a one-line change; the loose
+  direction is the one that is hard to undo, since deals that had already gained lines after
+  confirmation would need reconciling by hand.
+
+**Why `decline_promotion` is deliberately NOT gated.** Declining changes nothing on the deal — it
+sets `state='declined'` and stamps the resolver. Gating it would strand data: a deal that leaves
+`negotiation` while a promotion is still `pending` would leave that row pending forever, behind
+two buttons that both refuse, with no path to clear it. This mirrors HEL-84's own ruling one slug
+earlier, where a decline had to keep working on a suspended relationship (ADR 0008). The principle
+generalises: **gate what changes the deal, never the exit.**
+`promotion_status_gate_test.sql` §D exists to fail anyone who later "fixes the inconsistency".
+
+**Two implementation consequences worth keeping.**
+- The gate sits **after** each RPC's authorization check, never before, so an outsider is refused
+  for not being a party and never learns the card's status from the error message (§E proves it).
+- The UI **removes** Accept once the deal has moved on rather than disabling it — the project rule
+  is no dead disabled buttons (`.claude/rules/product.md`). Decline stays, matching the server.
+
+⚠️ **D-29 survives only in the header of `20260707140100_lifecycle_status_codes.sql`** — it is in
+no decision doc, and that is part of why this rule went unenforced for two months. It is restated
+above so it is findable here from now on.
+
+Built as `supabase/migrations/20260903110000_promotion_status_gate.sql` (commit `11e8769`,
+local-only at the time of writing; cloud push is Muskan's).

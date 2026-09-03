@@ -42,10 +42,15 @@ headings below is struck through with a pointer here. The batch bodies (pre-flig
 grant/drop analysis, same-deploy warnings) are untouched: they are the record of how each push
 was reasoned about, and they stay readable as that.
 
-**Only the 2026-09-03 batches are genuinely pending: `20260903090000` and `20260903100000`,
-immediately below. They are INDEPENDENT of each other** — different objects (an RLS policy vs a
-function), no shared call path, no ordering constraint between them beyond filename sort. Either
-may ship alone.
+**Only the 2026-09-03 batches are genuinely pending: `20260903090000`, `20260903100000` and
+`20260903110000`, immediately below. All three are INDEPENDENT of each other** — different
+objects (an RLS policy, one function, two functions), no shared call path, no ordering constraint
+beyond filename sort. Any may ship alone.
+
+⚠️ **But `20260903110000` (HEL-83) has APP-CODE COUPLING and its own must-ship-together rule** —
+`PromotionTrack.tsx` + `CardFront.tsx` go with it. The other two are DB-only. Separately,
+**HEL-86 needs both Sella edge functions redeployed** (no migration at all — see the
+non-migration debt section, item 4).
 
 ---
 
@@ -95,6 +100,70 @@ tsc clean, `e2e/chat-phase7.spec.ts` 4/4. The Gap 1 suite
 (`msg_all_deal_detected_gate_test.sql`) was edited in the same commit — its A3–A6 controls
 asserted the three write paths HEL-68/HEL-84 deleted, and its own documented trap (A6) fired
 exactly as its comment said it would.
+
+---
+
+## ⚠️ PENDING (2026-09-03) — HEL-83, promotion status gate (ONE migration, plain `db push`)
+
+**Status: LOCAL ONLY.** `20260903110000_promotion_status_gate.sql` sorts after `20260903100000`,
+so a plain `supabase db push --linked` takes all three of the day's migrations in filename order.
+
+**Pure DDL, not a data write.** Two `create or replace` plus re-emitted grants. No existing row is
+touched — and there are none to touch (see blast radius below).
+
+| # | file | what it does |
+|---|---|---|
+| 1 | `20260903110000_promotion_status_gate.sql` | `offer_promotion` and `accept_promotion` gain `status = 'negotiation'`. Neither checked `deal_card.status` at all, so a promotion could be accepted onto a `done` (invoiced) or `cancelled` deal — and `accept_promotion` inserts real `deal_line_item` rows, which then disagree with the invoice already issued. `decline_promotion` is deliberately UNCHANGED. |
+
+**⚠️ SAME-DEPLOY REQUIRED — this one DOES have app-code coupling.** Unlike the day's other two
+batches, `src/modules/deals/components/PromotionTrack.tsx` and `CardFront.tsx` ship with it: the
+Accept button is now removed (not disabled) once the deal leaves `negotiation`, driven by a new
+`dealStatus` prop. Push the migration without the app code and a buyer still sees an Accept button
+that the server now refuses; ship the app code without the migration and the button correctly
+disappears while the RPC would still have allowed it. **Both together.**
+
+**The ruling, and where it lives.** Muskan, 2026-09-03 — only `negotiation`. Full reasoning in
+`docs/decisions/DECISIONS.md` under that date, and in the migration header. HEL-83 was filed as
+needing a product decision, not an engineering one.
+
+⚠️ **`decline_promotion` is deliberately NOT gated — do not "finish the job" later.** A gated
+decline would strand a `pending` promotion forever on any deal that left `negotiation` while one
+was open, behind two refusing buttons. Same principle as HEL-84's decline exemption.
+`promotion_status_gate_test.sql` §D fails anyone who changes this.
+
+**BLAST RADIUS: ZERO.** `deal_promotion` has **no rows on production** (verified 2026-09-03).
+Nothing to migrate, nothing to reconcile. Strict now is cheap; widening later is one line.
+
+**Provenance.** Both bodies generated from the LIVE production definitions, confirmed
+byte-identical to local before editing:
+`offer_promotion` md5 `e1a743b778b02054fe92776044e1157f` (1207 chars) ·
+`accept_promotion` md5 `8861480b6ab62a25e655f24c6ce57a5b` (1957 chars).
++10 lines each, all additive: one `v_status` declaration, one widened SELECT (`version` →
+`version, status` — same row, same lock, no extra query), one guard. Signatures unchanged, so
+`create or replace` is legal and grants survive.
+
+**Post-flight (cloud, after the push).**
+
+```sql
+select proname,
+       prosrc ilike '%only a deal in negotiation can carry a promotion%' as gate_present
+from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+where n.nspname = 'public'
+  and proname in ('offer_promotion','accept_promotion','decline_promotion')
+order by proname;
+-- offer_promotion  -> true
+-- accept_promotion -> true
+-- decline_promotion -> FALSE  (deliberate; see above)
+```
+
+**Local proof.** Red-first verified by reverting to the pre-fix bodies and re-running: §B failed
+("a promotion was OFFERED on a unsent deal"). Green after restoring. Gate: **63/63 SQL suites**,
+499 unit, tsc clean, `deal-change.spec.ts` 19 passed / 5 skipped.
+
+⚠️ **The UI half has NO automated cover.** Accept/Decline sit behind a client-side reveal
+(`revealed` state) and this repo's vitest env is pure node with no jsdom, so a static render
+cannot reach them. The server gate is fully covered; the button change is type-checked and
+reviewed only. Worth an e2e cell when someone is next in that file.
 
 ---
 

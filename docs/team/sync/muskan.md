@@ -8,8 +8,8 @@
 **Last updated:** 2026-09-03 — session 101 — **HEL-67 Gap 2 built (sender forgery closed)**
 **Status:** active.
 **Linear issue in progress:** HEL-67 (Gap 2).
-**Shared files locked:** `docs/decisions/DECISIONS.md` — appending the 2026-09-03 HEL-83 ruling
-(a promotion is negotiation-only to offer/accept; decline always works).
+**Shared files locked: none — all released.** (`docs/decisions/DECISIONS.md` — 2026-09-03 HEL-83
+ruling appended; `docs/deploy/cloud-migrations-pending.md` — `20260903110000` ledgered.)
 ⚠️ `design_oo27` is mid-write in this same tree on `docs/muskan-build/0027-*` — untouched here.
 
 **HEL-83 built** (commit `11e8769`, **local only**). Muskan ruled: only `negotiation`.
