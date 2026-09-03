@@ -23,6 +23,78 @@
 
 ---
 
+## 🔴 READ FIRST (2026-09-03) — THE THREE `⚠️ PENDING` HEADINGS BELOW ARE STALE
+
+**All 13 migrations under them are LIVE ON PRODUCTION.** Verified 2026-09-03 against the
+remote itself (`list_migrations` via MCP, project `byipusuthdlskdxoexkt`): production's tip is
+`20260827150000` and every local migration file is present in
+`supabase_migrations.schema_migrations`. Corroborated independently by
+`docs/team/sync/muskan.md`'s 2026-08-27 entry — *"Production tip `20260827150000`; **nothing
+cloud-pending** (7 migrations + 2 edge-function redeploys all applied/deployed this session)"*.
+
+**Why this was dangerous, not just untidy.** The file's contract is that a `⚠️ PENDING` heading
+means "not on cloud." Three batches were pushed on 2026-08-27 and their headings never moved, so
+the file invited a re-push of work already live — and this is exactly the file whose own rule
+says a stale claim must be struck rather than left standing.
+
+**Annotated in place per this file's own correcting rule, not deleted** — each of the three
+headings below is struck through with a pointer here. The batch bodies (pre-flight queries,
+grant/drop analysis, same-deploy warnings) are untouched: they are the record of how each push
+was reasoned about, and they stay readable as that.
+
+**Only ONE batch is genuinely pending: `20260903090000`, immediately below.**
+
+---
+
+## ⚠️ PENDING (2026-09-03) — HEL-67 Gap 2, `msg_all` sender attribution (ONE migration, plain `db push`)
+
+**Status: LOCAL ONLY.** `20260903090000_msg_all_sender_attribution_gate.sql` sorts after
+production's tip `20260827150000`, so a plain `supabase db push --linked` (no `--include-all`)
+picks it up alone.
+
+**Pure DDL, not a data write — the `apply_migration`/`execute_sql` ask-rule does not apply.**
+One `ALTER POLICY ... WITH CHECK` plus a `COMMENT ON POLICY`. No existing row is touched.
+
+| # | file | what it does |
+|---|---|---|
+| 1 | `20260903090000_msg_all_sender_attribution_gate.sql` | `msg_all`'s `WITH CHECK` gains `sender = 'person' AND sender_person_id = auth.uid()`. Closes HEL-67 Gap 2 — an authenticated thread member could attribute a message (including slug 0023's deal-arrival pill, *"<victim> has sent a deal"*) to any other person, or write in the `system`/`sella` voice. `USING` is deliberately **not** restated: `msg_all` is `FOR ALL` and the only policy on `chat_message`, so retyping the read half would silently change who can SELECT every message in the product (L-037). |
+
+**NO app-code coupling — this one is safe to push alone.** Unlike the promotion-RPC and
+`relationship_admin` batches below, nothing in `src/` changes with it. The two client writers
+(`store.ts:484`, `:518`) already send `sender: 'person'` + `sender_person_id: user.id` and have
+done since they were written; this migration makes the server enforce what they already do. A
+stale browser tab running older JS cannot violate it either, for the same reason.
+
+**Why it became buildable now, which is the part worth not losing.** Gap 2 was blocked, not
+deferred: three `authenticated` writers legitimately wrote in someone else's name, the worst
+being connection-accept seeding the *requester's* note (`rollout.ts:179`). HEL-68
+(`20260826100000`) deleted `rollout.ts`; HEL-84 (`20260827150000`) moved the four Sella-voiced
+pills into `announce_deal_event`. Both are live. **If either is ever reverted, this migration
+must be reverted with it** — it would start refusing legitimate writes.
+
+**Post-flight (assert the policy SHAPE, not data).** There is no data check worth running: a
+forged row is indistinguishable from a real one and nobody has forged one. Run against cloud
+after the push:
+
+```sql
+select pg_get_expr(polwithcheck, polrelid) ~ 'sender_person_id' as gap2_term_present,
+       pg_get_expr(polqual,      polrelid) !~ 'sender'          as read_door_untouched,
+       (select count(*) from pg_policy
+         where polrelid = 'public.chat_message'::regclass) = 1  as still_one_policy
+from pg_policy
+where polrelid = 'public.chat_message'::regclass and polname = 'msg_all';
+-- all three columns MUST be true
+```
+
+**Local proof.** Red-first reproduced on the pre-fix schema (§B1: Alice attributed a deal pill to
+Bob and it was accepted), green after. Full gate re-run: **61/61 SQL suites**, 483 unit tests,
+tsc clean, `e2e/chat-phase7.spec.ts` 4/4. The Gap 1 suite
+(`msg_all_deal_detected_gate_test.sql`) was edited in the same commit — its A3–A6 controls
+asserted the three write paths HEL-68/HEL-84 deleted, and its own documented trap (A6) fired
+exactly as its comment said it would.
+
+---
+
 ## ✅ APPLIED 2026-08-27 (was PENDING 2026-08-27) — HEL-68 c2c/p2p thread atomicity (TWO migrations)
 
 **Status: LIVE ON PRODUCTION.** Pushed 2026-08-27 with `supabase db push --linked` (plain — no
@@ -83,9 +155,15 @@ fails, then reverting. `LEARNINGS.md` **L-064**.
 
 ---
 
-## ⚠️ PENDING (2026-08-27) — HEL-84 relationship-write-gate (SEVEN migrations, plain `db push`)
+## ~~⚠️ PENDING (2026-08-27) — HEL-84 relationship-write-gate (SEVEN migrations, plain `db push`)~~ → ✅ APPLIED 2026-08-27
 
-**Status: LOCAL ONLY.** All seven sort after `20260826100000` (0024's tip), so a
+> **STRUCK 2026-09-03.** All seven ARE live on production — verified against
+> `supabase_migrations.schema_migrations` on the remote, and corroborated by
+> `docs/team/sync/muskan.md`'s own 2026-08-27 entry. The heading never moved when the batch was
+> pushed. See "🔴 READ FIRST (2026-09-03)" at the top of this file. **Do not push these again.**
+> Body left verbatim below — it is the record of how the push was reasoned about.
+
+**Status: ~~LOCAL ONLY~~ LIVE (2026-08-27).** All seven sort after `20260826100000` (0024's tip), so a
 plain `supabase db push --linked` (no `--include-all`) picks up the lot in filename
 order. Confirmed via `supabase migration list --linked` 2026-08-27: cloud tip is
 `20260826100000`; these seven are the only local-only rows.
@@ -324,9 +402,19 @@ select has_table_privilege('authenticated','public.deal_line_item','UPDATE') as 
 
 ---
 
-## ⚠️ PENDING (2026-08-25) — deal_promotion + deal_line_item INSERT lockdown (TWO migrations, plain `db push`)
+## ~~⚠️ PENDING (2026-08-25) — deal_promotion + deal_line_item INSERT lockdown (TWO migrations, plain `db push`)~~ → ✅ APPLIED 2026-08-27
 
-**Status: LOCAL ONLY.** These sort after `20260825140000` (the DEV-159 batch above), so the same
+> **STRUCK 2026-09-03.** Both ARE live on production (`20260825150000`, `20260825160000`) —
+> verified on the remote. See "🔴 READ FIRST (2026-09-03)" at the top of this file.
+> **Do not push these again.** Body left verbatim below.
+>
+> ⚠️ **One live consequence to carry forward:** the app-code coupling this section warns about
+> (the three promotion RPCs `offer_promotion`/`accept_promotion`/`decline_promotion`) shipped
+> together as intended. **HEL-83 is still open against those same three RPCs** — none gates on
+> `deal_card.status`, so a promotion can still be accepted onto a sealed `done` deal. That is a
+> product ruling Muskan owes, not a deploy step.
+
+**Status: ~~LOCAL ONLY~~ LIVE (2026-08-27).** These sort after `20260825140000` (the DEV-159 batch above), so the same
 plain `supabase db push --linked` (no `--include-all`) picks them up too as long as they're applied
 in filename order with everything above. Written and verified locally on `claude/muskan/work` while
 the THREE-migration batch above was already mid-push in a separate parallel session — that session's
@@ -431,9 +519,18 @@ select p.proname,
 
 ---
 
-## ⚠️ PENDING (2026-08-25) — HEL-82 relationship suspend/reactivate/end + HEL-74 liveness gates (FOUR migrations, plain `db push`)
+## ~~⚠️ PENDING (2026-08-25) — HEL-82 relationship suspend/reactivate/end + HEL-74 liveness gates (FOUR migrations, plain `db push`)~~ → ✅ APPLIED 2026-08-27
 
-**Status: LOCAL ONLY.** These sort after `20260825160000` (the deal_promotion/deal_line_item batch
+> **STRUCK 2026-09-03.** All four ARE live on production (`20260825170000`–`20260825200000`) —
+> verified on the remote. See "🔴 READ FIRST (2026-09-03)" at the top of this file.
+> **Do not push these again.** Body left verbatim below.
+>
+> ⚠️ **This batch's "all four, together, or none" warning is discharged** — they went as one.
+> What is NOT discharged is the **G5 walk**: `/admin/relationships` suspend/reactivate/end has
+> been live since 2026-08-27 and has never been driven by a human. HEL-82 and HEL-84 both sit
+> In Progress / In Review in Linear waiting on that walk, not on code. `CLAUDE.md` #1 and #1b.
+
+**Status: ~~LOCAL ONLY~~ LIVE (2026-08-27).** These sort after `20260825160000` (the deal_promotion/deal_line_item batch
 above), so the same plain `supabase db push --linked` (no `--include-all`) picks them up too as long
 as everything applies in filename order. Built in `worktree-security-tickets`.
 
