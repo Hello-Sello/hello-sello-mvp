@@ -8,9 +8,11 @@
 **Last updated:** 2026-09-03 — session 101 — **HEL-67 Gap 2 built (sender forgery closed)**
 **Status:** active.
 **Linear issue in progress:** HEL-67 (Gap 2).
-**Shared files locked:** `docs/agents/LEARNINGS.md` — appending L-065 (a blocked ticket's
-blocker can clear silently; nothing re-checks it). Previously locked and released:
-(`docs/deploy/cloud-migrations-pending.md` edited and
+**Shared files locked: none — all released.**
+- `docs/agents/LEARNINGS.md` — **L-065 added**: a ticket parked "blocked on X" is a claim with an
+  expiry date, and nothing re-checks it when X ships. Write the reverse edge on the BLOCKING
+  ticket, and at `/ship` ask "what did this release?".
+- (`docs/deploy/cloud-migrations-pending.md` edited and
 released, commit `86e8b59`: added the `20260903090000` ledger entry and struck three stale
 `⚠️ PENDING` headings covering 13 migrations that are live on production — verified against the
 remote via `list_migrations`, and corroborated by my own 2026-08-27 entry below saying "nothing
@@ -24,10 +26,17 @@ ONLY — the cloud push is Muskan's.** Gate: 61/61 SQL suites, 483 unit, tsc cle
 `design_oo27` messaged, since 0027's "posts straight to chat" branches are now constrained to a
 person-voiced, self-attributed client write (or a definer).
 
-⚠️ **A parallel session is working in this same tree on 0027's `/design`** — it owns
-`docs/architecture/CONTEXT.md`, `docs/decisions/DECISIONS.md`,
-`docs/architecture/adr/0009-retire-connect-inbox.md` and `docs/muskan-build/0027-*`.
-Not touched here; my commit `fc0f7da` staged four `supabase/` paths explicitly.
+**Also closed: HEL-73** — was `🏁 SLUG COMPLETE` in slug 0025 and stale-`Backlog` in Linear.
+Closed on measured evidence, not on that record: its AC ran as written (61 SQL runners → e2e →
+61 again → the two seed-mutating specs it names → 61 a third time; **61/61 every time, no
+reset**), and both suites it named as casualties pass by name.
+
+⚠️ **A parallel session (`design_oo27`) is working in this same tree on 0027's `/design`.**
+Confirmed directly with it: it owns `docs/architecture/adr/0009-retire-connect-inbox.md`,
+`adr/ADR-INDEX.md` and `docs/muskan-build/0027-*`, and has **not** touched the ledger,
+`CONTEXT.md` or `DECISIONS.md`. No conflict either way — my commits staged their paths
+explicitly. It has cited `20260903090000` in its ADR; its own migrations will sort after it, so
+**the local tip is no longer `20260827150000`** — anything assuming that tip is now stale.
 
 ---
 

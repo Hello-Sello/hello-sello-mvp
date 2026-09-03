@@ -2258,3 +2258,53 @@ check because a never-granted function and a revoked one are indistinguishable; 
 the wrong check on the OTHER side, an exception class that under-discriminates instead of a
 grep that over-trusts), [[L-013]] (run the runner, not just the test — the same root cause:
 a green result was trusted without being run against the failure it exists to catch).
+
+---
+
+## L-065 · A ticket parked as "blocked" is a claim with an expiry date, and nothing in this pipeline re-checks it — the blocker cleared a week ago and no one noticed
+
+**2026-09-03 · session 101 · HEL-67 Gap 2 · caught by reading the ticket, not by any tool**
+
+**Trigger** — any ticket deliberately left open with a recorded reason it cannot be built
+yet ("blocked on X", "needs a product ruling", "do not force"), where X is another ticket in
+the same backlog.
+
+**What happened** — HEL-67 Gap 2 (chat-message sender forgery) was ruled un-buildable on
+2026-08-25 for a genuinely good reason: three `authenticated` write paths legitimately wrote
+in someone else's name, so `sender_person_id = auth.uid()` would have broken connection-accept
+outright. The ticket said so precisely, named its blocker (HEL-68), and Muskan ruled "ship
+Gap 1 now, do not force Gap 2." All correct.
+
+**HEL-68 shipped on 2026-08-27. HEL-84 shipped the same day and removed the fourth path.**
+Between them they deleted `rollout.ts` entirely and moved the Sella-voiced pills into
+`announce_deal_event`. Every one of Gap 2's blockers was gone — and neither slug's `/ship`
+noticed, because neither was built with HEL-67 in mind. The unblocking was a side effect.
+`CLAUDE.md`'s security backlog listed six items and **did not list HEL-67 at all**; it was
+found only by pulling the full Linear team list and reading a High-priority ticket sitting in
+`In Progress` that the personal notes had dropped.
+
+**Why the existing machinery missed it** — the pipeline records a blocker in the BLOCKED
+ticket ("Gap 2 is blocked on HEL-68") and never in the BLOCKING one. HEL-68's own STATE, ADR
+and ship notes say nothing about what closing it releases, so nothing at ship time prompts
+the question. The dependency is written down exactly once, in the file that only gets read
+when someone already suspects the work is doable. That is backwards: the moment the fact
+becomes actionable is the moment the blocker closes.
+
+**The rule** — when a ticket is parked with a named blocker, write the reverse edge too: add
+a line to the BLOCKING ticket saying what unblocks when it closes, and use Linear's real
+`blocks`/`blockedBy` relation rather than prose so it shows up on the blocker's own page.
+At `/ship`, before a slug closes, ask one question — *what did this release?* — and check the
+backlog for tickets naming it. A "blocked" note with no reverse edge decays into a "wontfix"
+that nobody ever revisits; this one cost a week on a High-priority security item, and it was
+only luck that the next session read the ticket rather than trusting the summary in
+`CLAUDE.md`.
+
+**Corollary, learned the same session** — the personal `CLAUDE.md` backlog is a *summary*,
+and it had drifted twice: it omitted HEL-67 entirely and mis-described HEL-73 as "the e2e half
+of HEL-68" when HEL-73 is the shared-seed mutation ticket ([[L-033]]), already complete in the
+repo and stale-Backlog in Linear. Read the tracker, not the note about the tracker
+([[L-030]]'s shape, applied to issues instead of line numbers).
+
+**See also** [[L-030]] (a written pointer goes stale and must be re-derived, never trusted),
+[[L-033]] (the HEL-73 subject this entry's corollary corrects), [[L-013]] (a claim that has
+never been re-run against reality is an assumption, not a result).
