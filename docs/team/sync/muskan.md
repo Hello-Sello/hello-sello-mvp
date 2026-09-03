@@ -8,9 +8,15 @@
 **Last updated:** 2026-09-03 — session 101 — **HEL-67 Gap 2 built (sender forgery closed)**
 **Status:** active.
 **Linear issue in progress:** HEL-67 (Gap 2).
-**Shared files locked:** `vitest.config.ts` (add a `supabase/functions/**/*.test.ts` glob so the
-new HEL-86 gate-classifier unit spec actually runs — the include is `src/**` only today) and
-`docs/deploy/cloud-migrations-pending.md` (HEL-86 adds to the edge-function redeploy debt).
+**Shared files locked: none — all released.**
+
+**HEL-86 built.** New `supabase/functions/_shared/relationshipGate.ts` classifies the gate RPC's
+outcome into writable / refused / missing / **unavailable**; only the last logs at error level.
+Both Sella edge functions use it. `vitest.config.ts` gained a `supabase/functions/**/*.test.ts`
+glob (one pure spec, 16 tests). **Both functions need a REDEPLOY** — folded into the existing
+edge-function debt item in the ledger, still one deploy each.
+⚠️ `deno check` cannot verify either `index.ts` in this repo and never could — `functions-js`
+types pull an uninstalled `npm:openai`. Pre-existing; verified against an untouched function.
 
 **HEL-85 built** (commit `3c3b99f`, **local only**). `confirm_deal_change` re-imports the
 workspace half of `can_access_workspace`; ledgered as `20260903100000`. **Latent, not live** —

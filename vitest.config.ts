@@ -33,7 +33,19 @@ export default defineConfig({
   test: {
     environment: "node",
     globals: true,
-    include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
+    // HEL-86 adds the second glob. The `src/**` scoping above exists to keep
+    // the Playwright specs in `e2e/` out; naming `supabase/functions` explicitly
+    // does not reopen that (and `exclude` still names `e2e/**` anyway). It picks
+    // up ONE spec: the edge-function relationship-gate classifier, which is
+    // deliberately pure — no Deno globals, no `npm:`/`jsr:` imports — precisely
+    // so it can be covered here. Anything under `supabase/functions` that
+    // touches `Deno.*` is not unit-testable by this runner and must not grow a
+    // `.test.ts` next to it.
+    include: [
+      "src/**/*.test.ts",
+      "src/**/*.test.tsx",
+      "supabase/functions/**/*.test.ts",
+    ],
     exclude: ["e2e/**", "node_modules/**", ".next/**"],
   },
 });

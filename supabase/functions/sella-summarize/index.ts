@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { runSummary, type SummaryLine } from "../_shared/sella/summarize.ts";
+import { checkRelationshipWritable, logGateOutcome } from "../_shared/relationshipGate.ts";
 
 // sella-summarize (Sella 4d): the "why it changed" summary. An edit is PERSON-WAITING
 // (a human just clicked Update), so by the placement rule it is triggered INLINE by the
@@ -75,11 +76,14 @@ Deno.serve(async (req: Request) => {
   // was always going to be refused. Both targets (dealThread + p2pThread)
   // share this one relationship (see PLAN-HEL-84.md §10), so one call covers
   // both potential posts.
-  const { error: notWritableErr } = await supabase.rpc("assert_relationship_writable", {
-    p_relationship_id: card.relationship_id,
-  });
-  if (notWritableErr) {
-    return json({ deal_card_id: cardId, version: vNew, skipped: "relationship not writable" }, 200);
+  // HEL-86: see the twin comment in sella-detect. The skip and the 200 are
+  // unchanged; the three reasons behind them are now distinguishable, and a
+  // gate that is simply not deployed logs at error level instead of passing for
+  // an ordinary suspension.
+  const gate = await checkRelationshipWritable(supabase, card.relationship_id);
+  if (gate.kind !== "writable") {
+    logGateOutcome("sella-summarize", gate, { deal_card_id: cardId, version: vNew });
+    return json({ deal_card_id: cardId, version: vNew, skipped: "relationship not writable", gate: gate.kind }, 200);
   }
 
   // idempotency: summarize each version at most once. The probe MUST match the

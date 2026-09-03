@@ -1552,7 +1552,31 @@ non-migration steps explicitly rather than sweeping them with the batch:**
 against `supabase/templates/invite.html`. If it matches, mark this item discharged here and say
 where it was checked. If it does not, paste it — that IS the step.
 
-### 4. HEL-84 relationship-write-gate — two edge functions · **OWED**
+### 4. HEL-84 relationship-write-gate — two edge functions · **OWED** · ⚠️ NOW ALSO CARRIES HEL-86
+
+> **UPDATED 2026-09-03 (HEL-86).** Both functions changed again, in the same two places this
+> item already covers, so this is still ONE redeploy of each — not a second, separate step. But
+> the reason to do it grew: as of commit `912b4bb`+ they no longer treat every gate error alike.
+> A deliberate suspension, a missing relationship row, and **a gate RPC that is not deployed at
+> all** are now three distinguishable outcomes; only the last logs at `console.error`. The HTTP
+> response stays 200 in every case, so nothing calling them needs to change.
+>
+> **Why that matters specifically for THIS deploy.** Until these two functions ship, the exact
+> failure mode HEL-86 was filed about is live and invisible: if `assert_relationship_writable`
+> is present but a function is stale, or vice versa, every Sella run silently skips at HTTP 200
+> and looks like a quiet week. The new `console.error` line is what makes a half-deploy visible
+> — which means the observability arrives with the deploy, not before it.
+>
+> New shared module `supabase/functions/_shared/relationshipGate.ts` (owns the RPC name, the
+> SQLSTATE and the message parsing in one place). Covered by 16 unit tests via a new
+> `supabase/functions/**/*.test.ts` glob in `vitest.config.ts`.
+>
+> ⚠️ **`deno check` cannot verify either index.ts in this repo, and could not before this
+> change either** — `jsr:@supabase/functions-js`'s own types pull `npm:openai@^4.52.5`, which is
+> not installed, so the check dies on line 1 of every edge function including untouched ones
+> (verified against `sella-intro` and against the pre-change committed file). The new shared
+> module DOES `deno check` clean on its own. Treat the two index files as unverified-by-tooling
+> and read the diff.
 
 Both `supabase/functions/sella-detect/index.ts` and
 `supabase/functions/sella-summarize/index.ts` gained a new call to

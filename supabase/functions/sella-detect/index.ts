@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { runDetection } from "../_shared/sella/detect.ts";
+import { checkRelationshipWritable, logGateOutcome } from "../_shared/relationshipGate.ts";
 import type { DetectionMessage, SellerProduct } from "../_shared/sella/context.ts";
 import {
   decideSurface,
@@ -104,11 +105,16 @@ Deno.serve(async (req: Request) => {
   // is written for a suspended-relationship run, unlike every other outcome
   // of this function, which always writes one — a distinct, deliberate fact,
   // not a gap in the memory trail.
-  const { error: notWritableErr } = await supabase.rpc("assert_relationship_writable", {
-    p_relationship_id: thread.relationship_id,
-  });
-  if (notWritableErr) {
-    return json({ thread_id: threadId, skipped: "relationship not writable" }, 200);
+  // HEL-86: the skip is unchanged (still fails closed, still HTTP 200 — a
+  // non-2xx would drive pgmq/pg_cron into a retry loop against a condition that
+  // will not change). What changed is that the THREE reasons for it are no
+  // longer one indistinguishable "error": a deliberate suspension, a missing
+  // relationship row, and a gate that is not deployed at all now log
+  // differently and say so in the response body. Only the last is an error.
+  const gate = await checkRelationshipWritable(supabase, thread.relationship_id);
+  if (gate.kind !== "writable") {
+    logGateOutcome("sella-detect", gate, { thread_id: threadId });
+    return json({ thread_id: threadId, skipped: "relationship not writable", gate: gate.kind }, 200);
   }
 
   // PERSON messages only - the actual buyer/seller negotiation. Sella's own lines
