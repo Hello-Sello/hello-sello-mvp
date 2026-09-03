@@ -8,7 +8,9 @@
 **Last updated:** 2026-09-03 — session 101 — **HEL-67 Gap 2 built (sender forgery closed)**
 **Status:** active.
 **Linear issue in progress:** HEL-67 (Gap 2).
-**Shared files locked: none — all released.**
+**Shared files locked:** `vitest.config.ts` (add a `supabase/functions/**/*.test.ts` glob so the
+new HEL-86 gate-classifier unit spec actually runs — the include is `src/**` only today) and
+`docs/deploy/cloud-migrations-pending.md` (HEL-86 adds to the edge-function redeploy debt).
 
 **HEL-85 built** (commit `3c3b99f`, **local only**). `confirm_deal_change` re-imports the
 workspace half of `can_access_workspace`; ledgered as `20260903100000`. **Latent, not live** —
