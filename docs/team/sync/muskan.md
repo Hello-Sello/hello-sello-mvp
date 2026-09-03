@@ -5,6 +5,21 @@
 
 ---
 
+**Last updated:** 2026-09-03 — session 101 — **HEL-67 Gap 2 built (sender forgery closed)**
+**Status:** active.
+**Linear issue in progress:** HEL-67 (Gap 2).
+**Shared files locked:** `docs/deploy/cloud-migrations-pending.md` — adding the
+`20260903090000` ledger entry and correcting three stale `⚠️ PENDING` headings (those
+13 migrations are live on production; verified against `list_migrations`, and my own
+2026-08-27 entry below already says "nothing cloud-pending").
+
+⚠️ **A parallel session is working in this same tree on 0027's `/design`** — it owns
+`docs/architecture/CONTEXT.md`, `docs/decisions/DECISIONS.md`,
+`docs/architecture/adr/0009-retire-connect-inbox.md` and `docs/muskan-build/0027-*`.
+Not touched here; my commit `fc0f7da` staged four `supabase/` paths explicitly.
+
+---
+
 **Last updated:** 2026-08-31 — decision session — **Connection Request page retirement DECIDED,
 no code this session**
 **Status:** offline (session closed).
