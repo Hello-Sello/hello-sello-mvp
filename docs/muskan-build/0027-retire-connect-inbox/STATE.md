@@ -2,7 +2,7 @@
 
 lane:   FULL
 branch: claude/muskan/work
-stage:  spec ✅ → prototype ✅ → design ✅ → build (T01 ✅ → T02 ✅ → T03 ✅ → T04 next)
+stage:  spec ✅ → prototype ✅ → design ✅ → build (T01 ✅ → T02 ✅ → T03 ✅ → T04 ✅ → T05 next)
 
 ## Seed
 Muskan, 2026-08-31, via `/triage`: "deletion of connection request page inside connect"
@@ -81,6 +81,53 @@ before D2's app code. ADR §6 supersedes `PRD:61`, which states the reverse.
 - a single-RPC version of D2 — the fix if the read-then-write race ever bites, not now
 
 ## Attempts          three separate budgets — see PIPELINE.md §10
+
+### T04 — Every request row shows a type badge; the box is retitled
+- Plan written: `PLAN-T04.md`. `plan-checker` round 1: REVISE (3 blocking
+  claimed, 2 held — a stale title string in `DiscoverShell.test.tsx` and
+  two in `e2e/discover.spec.ts`, neither in TICKETS.md's file list, both
+  folded in — plus 1 spot-verified FALSE: a claimed `TS2352` on
+  `"connect_person" as DiscoverRequestKind` that this repo's own
+  `tsc --strict` compiles clean, confirmed by bypassing the `rtk` hook,
+  which had fabricated a fake clean pass with zero real diagnostics on
+  the first, wrong attempt — not folded in). 5 notes, 4 held and folded
+  in, 1 (row-density) named for the G4 look instead of fixed in code.
+- `test-writer` → RED across 4 test files (new module import failure +
+  string-absence failures), no source touched.
+- `builder` → green first pass, 2 source files, 0 deviations, 0
+  rejections.
+- `test-runner` → `tsc` clean, unit 514/514 (+8 exact, 0 drift), eslint
+  6/15 and SQL 63/65 both independently A/B-proven pre-existing/unrelated
+  (same baseline as T01-T03), e2e `discover.spec.ts` 4/4 green (the one
+  file `builder` didn't run itself).
+- `/code-review high` + `critic`, parallel (no `security` — no
+  migration/RLS/RPC/auth/server-action/cross-company-read surface) → 0
+  blocking, 8 notes (2 stale doc-comments left by the retitle, a
+  `REQUEST_TYPE_BLURB` half of D4 that never got a home, a theoretical
+  unreachable fallback edge case, a non-discriminating e2e assertion, and
+  others — full list in `REVIEW.md`).
+- **This ticket renders UI (a badge + a retitled box) — stopped at G4 per
+  PIPELINE §3, did not auto-close.** `visual-verifier` staged 23 checks:
+  17 match, 1 cannot-verify (the unreachable-from-a-browser fallback,
+  covered only by a unit test), 5 deviate — none blocking. Two of those
+  deviations **corrected the review record**: `critic`'s claim that the
+  badge "never renders in a browser run" was wrong (Alice has 3 live
+  seeded incoming requests, not 0 — the `e2e/discover.spec.ts` header
+  comment describing her as request-less is stale), and `critic`'s
+  row-density estimate (~24px, "4 rows become 3") was measured live and
+  corrected to +13px, "3 rows either way." The other 3 deviations: two
+  badges share one accent colour (not a spec breach, D4 names no
+  colours), and a pre-existing page-shell clipping bug at 768px/390px
+  **proven to be zero-width-contribution from the badge** (row min-content
+  identical with/without it) — flagged for a possible `/track-doubt`,
+  not fixed here.
+- `tests 0/2` · `blocking-findings 0/2` — closed clean, no retries spent.
+- **G4: Muskan reviewed the staged screenshots and passed.** The two
+  side-questions raised at the gate (distinct accent colour for
+  `connect_message`/`person`; whether the 768px/390px bug becomes a
+  `/track-doubt`) were **not explicitly ruled on** — "pass" closed the
+  ticket itself, both side-questions are still open, not decided either
+  way.
 
 ### T03 — Discover's Requests list carries pricelist requests
 - Plan written: `PLAN-T03.md`. `plan-checker` round 1: REVISE (1 blocking —
@@ -205,6 +252,23 @@ before D2's app code. ADR §6 supersedes `PRD:61`, which states the reverse.
   → stage advances to T04 (W2, depends on T03 for the `type` field — now
   live). T04 wires the badge that closes the "unbadged pricing ask" gap
   `/code-review` flagged this round (already anticipated, not a defect).
+- 2026-09-04 — **G4 T04 — human, PASSED (this ticket renders, PIPELINE §3
+  routes it to a stop, not an auto-close).** `plan-checker` round 1: 3
+  blocking claimed, 2 held + folded in, 1 spot-verified FALSE and
+  rejected (a claimed `tsc` error that the real compiler doesn't raise —
+  caught the `rtk` hook fabricating a fake clean pass along the way).
+  `test-runner`: `tsc` clean, unit 514/514 (+8 exact), eslint/SQL both
+  A/B-proven pre-existing. `/code-review high` + `critic` → 0 blocking, 8
+  notes. `visual-verifier` staged 23 checks (17 match, 1 cannot-verify, 5
+  deviate, 0 blocking) and corrected two of `critic`'s own notes against
+  live evidence (the "badge never renders" claim was wrong — Alice has 3
+  seeded incoming requests; the row-density estimate was off by roughly
+  half). Muskan reviewed the staged screenshots and passed. Two side
+  questions raised at the gate (accent-colour distinction; whether the
+  768px/390px pre-existing clipping bug becomes a `/track-doubt`) were
+  **not ruled on** — recorded as still open, not decided either way.
+  `tests 0/2`, `blocking-findings 0/2` — closed clean, no retries spent.
+  → stage advances to T05 (W3, depends on T01 — live).
 
 ## For Muskan
 

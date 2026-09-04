@@ -23,7 +23,7 @@ describe('<DiscoverShell> (DISC-6)', () => {
       <DiscoverShell companies={[co({ id: 'a', name: 'Acme Cultivation' })]} />,
     )
     expect(html).toContain('Sponsored') // ads banner region label
-    expect(html).toContain('Connection requests') // duo — left box
+    expect(html).toContain('Requests') // duo — left box (D9)
     expect(html).toContain('My network') // duo — right box
     expect(html).toContain('Companies') // directory section header
     expect(html).toContain('Acme Cultivation') // a company row

@@ -28,11 +28,12 @@ describe('<RequestsSection> (DISC-12)', () => {
     const html = renderToStaticMarkup(
       <RequestsSection companyRequests={[companyReq]} personRequests={[personReq]} />,
     )
-    expect(html).toContain('Connection requests') // section title
+    expect(html).toContain('Requests') // section title (D9)
     expect(html).toContain('Green Leaf Labs') // company request
     expect(html).toContain('Sam Sender') // person request
     expect(html).toContain('Accept')
     expect(html).toContain('Decline')
+    expect(html).toContain('Message') // connect_message fixture's badge label (D4/T04)
   })
 
   it('shows an empty state (not nothing) when there are no requests', () => {
@@ -40,5 +41,21 @@ describe('<RequestsSection> (DISC-12)', () => {
       <RequestsSection companyRequests={[]} personRequests={[]} />,
     )
     expect(html).toContain('No pending requests')
+  })
+
+  it('badges a pricelist_request row "Pricelist request" and a person row "Person" (D10/I-M16)', () => {
+    // note is pinned so it cannot itself contain any badge label string — PLAN-T04
+    // N4: buildPricingRequestNote emits `Pricing request for "X".`
+    // (pricingRequest.ts:42-46), which does not collide with "Pricelist request".
+    const pricelistReq: DiscoverCompanyRequest = {
+      itemId: 'c2', note: 'Pricing request for "CBD Blossom 10g".', createdAt: '2026-07-24T00:00:00Z',
+      senderCompanyId: 'co3', senderCompanyName: 'Acme Cultivation', senderInitials: 'AC',
+      type: 'pricelist_request',
+    }
+    const html = renderToStaticMarkup(
+      <RequestsSection companyRequests={[companyReq, pricelistReq]} personRequests={[personReq]} />,
+    )
+    expect(html).toContain('Pricelist request') // I-M16's exact literal
+    expect(html).toContain('Person') // personReq row's badge (D10)
   })
 })

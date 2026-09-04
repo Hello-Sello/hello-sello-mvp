@@ -388,3 +388,224 @@ function/migration touched).
 **Backend-only, no carve-out triggered**: no outstanding rejection, no
 blocking finding from any reviewer, no behavior change outside written
 criteria. Closes on green tests + all three reviews, no human G4 stop.
+
+---
+
+## T04 · Every request row shows a type badge; the box is retitled
+
+Diff: `src/app/discover/requestTypeMeta.ts` (new — `DiscoverRequestKind`,
+`RequestTypeBadge`, `requestTypeBadge()`), `src/app/discover/requestTypeMeta.test.ts`
+(new), `src/app/discover/sections/RequestsSection.tsx` (modified — badge +
+retitle), `src/app/discover/sections/RequestsSection.test.tsx` (modified),
+`src/app/discover/DiscoverShell.test.tsx` (modified — one literal, `plan-checker`
+B1), `e2e/discover.spec.ts` (modified — two literals, `plan-checker` B2).
+
+**Verdict: 0 blocking across `/code-review` and `critic` (no `security` — no
+migration/RLS/RPC/auth/server-action/cross-company-read surface). 3 blocking
++ 5 notes at plan stage (1 of the 3 spot-verified FALSE and rejected, 2 held
+and folded into `PLAN-T04.md`), 8 notes at review stage — all recorded below,
+none retried.**
+
+### Round trail
+
+- `plan-checker` round 1: REVISE — 3 blocking + 5 notes.
+  - **B1 (rung 3, held):** `DiscoverShell.test.tsx:26` hardcodes
+    `'Connection requests'`, outside T04's stated file list — D9's retitle
+    turns it red. Folded in as Plan File 5.
+  - **B2 (rung 3, held):** `e2e/discover.spec.ts:43,53` hardcode the same
+    string in two Playwright assertions, owned by neither T04 nor T09.
+    Folded in as Plan File 6.
+  - **B3 (rung 3, claimed, spot-verified FALSE):** claimed
+    `"connect_person" as DiscoverRequestKind` raises `TS2352`, requiring
+    `as unknown as` first. Disproved by running this repo's own
+    `tsc --strict` directly (bypassing the `rtk` hook, which fabricated a
+    clean pass with zero real diagnostics on the first, wrong attempt) —
+    the cast compiles clean; TypeScript widens a literal source expression
+    to its base type (`string`) before the assertion-overlap check, so two
+    disjoint string-literal types are comparable where two disjoint
+    primitive types (the control case, `5 as string`) are not. Not folded
+    in. `critic` independently re-derived the same mechanism during review
+    and confirmed the rejection (see Notes below) — two independent checks
+    now agree B3 was wrong.
+  - N1 (missing `RequestTypeBadge` import in the plan's own snippet), N2
+    (I-M11 asserted only in prose, not machine-checked), N4 (render
+    assertions are page-wide substrings, not row-bound), N5 (a factual
+    slip describing `InboxRequestType` as DB-sourced rather than a
+    deliberate subset) — all held, folded into the plan. N3 (row-height/
+    density change from the taller badged row) — named, routed to the G4
+    human look rather than fixed in code.
+- `test-writer` → RED across 4 test files: import-resolution failure for
+  the not-yet-built module, and string-absence failures for the retitle/
+  badge assertions everywhere else. Touched no source file.
+- `builder` → green on first pass. Two source files, exactly as planned,
+  zero deviations, zero rejections.
+- `test-runner` → full suite: `tsc` clean, unit 514/514 (+8 new cases
+  exactly, 0 drift elsewhere), eslint 6/15 pre-existing (byte-identical
+  A/B against the T03 tip), SQL 63/65 pre-existing (same 2 fails already
+  recorded at T01, unrelated — T04 touches no `supabase/` file, confirmed
+  via `git status`), `e2e/discover.spec.ts` 4/4 green (run twice for
+  stability) — the one file `builder` didn't run itself.
+- `/code-review high` + `critic`, parallel → 0 blocking from either.
+  `/code-review` independently re-verified `tsc` clean and 11/11 on the
+  three unit files it could reach, confirmed no other `<RequestsSection>`
+  consumer and no other file besides the two `plan-checker` already found
+  referencing the retired title string. `critic` walked all three EARS
+  criteria against the shipped code line-by-line (below) and confirmed
+  the Reused fence intact.
+
+### Notes (rung 4-5, not retried)
+
+1. **(code-review, `src/app/discover/sections/RequestsSection.tsx:5`)**
+   The top-of-file docblock still calls this the "Connection requests"
+   box after this same diff renames the rendered title to "Requests" (D9)
+   a few dozen lines below — self-contradicting comment.
+2. **(code-review, `src/app/discover/sections/RequestsSection.test.tsx:2`)**
+   Same shape: the docblock still says 'One "Connection requests" box'
+   while the test's own assertion three lines below now expects
+   "Requests".
+3. **(critic, scope note, no action)** `DiscoverShell.test.tsx` and
+   `e2e/discover.spec.ts` are outside TICKETS.md T04's stated file list —
+   both are the `plan-checker` B1/B2 findings, both one-word title-string
+   swaps, both fall under ADR §9's "scope may grow to keep the shipped
+   system correct." Recorded so the growth is visible at the gate, not
+   absorbed silently.
+4. **(critic, `src/modules/connect/lib/inbox-display.ts:63-68` vs
+   `src/app/discover/requestTypeMeta.ts`)** ADR 0009:142 says
+   `REQUEST_TYPE_META`/`REQUEST_TYPE_BLURB` both "move" to the new file;
+   only the META half shipped. `REQUEST_TYPE_BLURB`'s one consumer
+   (`InboxRow.tsx:32`) is deleted by T07, so it dies unreplaced — a
+   `connect` row with a null `note` shows name + badge and no descriptive
+   line, where the retiring inbox showed "Wants to connect." Not blocking
+   (T04's EARS never mention a blurb), but either D4's wording is stale or
+   a one-line product call is owed before T07 removes the option.
+5. **(critic, `e2e/discover.spec.ts:43`)** Playwright's `name` matcher is
+   a case-insensitive substring match, and after the swap "Requests" is a
+   substring of the OLD title "Connection requests" too — so this
+   assertion would now pass on either title. The change was still
+   required (the literal-equality-adjacent old string fails outright
+   pre-swap), but the browser-level cover for D9 is nominal; the two unit
+   assertions are what actually pin it. `exact: true` would restore
+   discrimination.
+6. **(critic, `src/app/discover/requestTypeMeta.ts:1-19`)** The fallback
+   has a theoretical prototype-chain hole in the exact mechanism AC2
+   names: `requestTypeBadge('constructor' as DiscoverRequestKind)`
+   returns the inherited `Object`, not `undefined`, so `?? FALLBACK_BADGE`
+   never fires and `<Icon />` throws "Element type is invalid" — same
+   crash class the criterion cites, via a different door. Unreachable
+   today (`inbox_request_type` seeds no such value, and
+   `companyRequests.ts`'s `.in("type", COMPANY_REQUEST_TYPES)` gates the
+   query besides). `Object.hasOwn(...)` would close it; rung 4, not
+   promoted to blocking.
+7. **(critic, no file — coverage gap)** D4's *visual* half ("stacked above
+   Accept/Decline") has zero automated cover. `renderToStaticMarkup` sees
+   the label text, never DOM position; the seeded e2e account
+   (`alice@greenleaf.test`) has no incoming requests, so the badge never
+   renders in a browser run either. Variant C's placement rests entirely
+   on the G4 human look below.
+8. **(critic, `src/app/discover/sections/SectionCard.tsx:28`)** Confirms
+   plan-stage N3: the duo is pinned to `md:h-[320px]` with internal
+   scroll, and the badge adds roughly 24px per row, so roughly 3 rows are
+   visible before scrolling instead of roughly 4. No test breaks (the
+   equal-height e2e assertion is fixed-height, row-count-indifferent) —
+   exactly why it needs the human look rather than a green suite.
+
+### Verification replay
+
+- `plan-checker` round 1: REVISE (3 blocking claimed, 2 held + folded, 1
+  spot-verified false and rejected) → not re-run, per skill (one round).
+- `test-writer` → RED confirmed (import-resolution + string-absence, both
+  genuine pre-build failures, not vacuous).
+- `builder` → green, first pass, 0/2 retries spent, 0 deviations, 0
+  rejections.
+- `test-runner` → `tsc` clean; unit 514/514 (+8 exact); eslint 6/15 and
+  SQL 63/65 both independently A/B-proven pre-existing/unrelated; e2e
+  4/4. `tests 0/2`.
+- `/code-review high` + `critic`, parallel → 0 blocking, 8 notes (above).
+  `blocking-findings 0/2` — closed clean, no retries spent.
+
+**This diff renders** (a badge and a title, on a page a person looks at) —
+per PIPELINE §3 / SKILL.md step 10, this stops at G4 for Muskan's own look,
+not an auto-close. `visual-verifier` next.
+
+### G4 visual staging (`visual-verifier`) — evidence for Muskan's look
+
+**⚠️ There is no prototype file to diff against.** `STATE.md` records that the
+row-label variants were driven live on `/discover?variant=` and thrown away
+after the decision, so every row below is staged against the **written** spec:
+ADR 0009 D4 / D9 / D10 / I-M16 and TICKETS.md T04's three EARS lines. Where a
+row says `deviates`, it deviates from that prose (or from a claim made earlier
+in this same file), never from an image.
+
+**How the page was reached.** Fresh `supabase db reset` (local stack, migration
+tip `20260903130000`, `.env.local` → `127.0.0.1:54321`), `next dev` on
+`localhost:3000`, signed in as the seeded `alice@greenleaf.test` through the
+repo's own `e2e/fixtures/two-company.ts:loginAs`, real page, real data, no
+isolated component render.
+
+**On the data.** `e2e/discover.spec.ts`'s header comment claiming Alice has "NO
+incoming requests" is **stale** — seed §5f and §7c give her three live pending
+rows (`connect` from Eva/Bavaria, `connect_message` from David/NordCanna,
+`connect_person` from Clara). The fourth kind is **not** seeded: a
+`pricelist_request` was added as a local-only fixture row whose columns mirror
+`createPairInboxItem` exactly (`note` = `buildPricingRequestNote(product.name)`,
+`metadata` = `{"product_id": …}`, sender Eva/Bavaria — unconnected to GreenLeaf,
+which is the arm that still cuts a ticket after T02). **It was inserted by SQL,
+not produced by a live `requestProductPricing` call** — so this staging proves
+the *badge*, not T02's write path. All four `DiscoverRequestKind` values were on
+screen together.
+
+Screenshots: `docs/muskan-build/0027-retire-connect-inbox/g4/`.
+
+#### Acceptance criteria (TICKETS.md T04 EARS)
+
+| # | Spec line | Verdict | Evidence / what differs |
+|---|---|---|---|
+| 1 | "When any request row renders, the system shall display a type badge for it." | **match** | All four rows badged, none blank. `g4/02-desktop-requests-box-default.png`, `g4/03-…-scrolled-bottom.png` |
+| 2 | "When a row of an unrecognised type is encountered, the system shall not throw — no badge lookup may return `undefined`." | **cannot-verify** | Not reachable from a browser: `companyRequests.ts` gates the query with `.in("type", COMPANY_REQUEST_TYPES)` and person rows are hard-coded `kind="person"`, so no out-of-union value can arrive on this surface. Covered only by `requestTypeMeta.test.ts`'s cast case. `critic` note 6's `'constructor'` door is likewise unreachable live. |
+| 3 | "When the Requests box renders, its title shall read 'Requests'." | **match** | `<h2>` exact text `Requests`, not "Connection requests" — populated `g4/02`, empty `g4/14-empty-state-1440.png` |
+
+#### Prototype differentiators — the things Variant C won on (ADR D4 / D9 / D10 / I-M16)
+
+| # | Spec line | Verdict | Evidence / what differs |
+|---|---|---|---|
+| 4 | D4 — badge **stacked above** Accept/Decline | **match** | Badge bottom `322` vs Actions top `328` (6px gap) on every row, held at 390 / 640 / 768 / 820 / 1024 / 1280 / 1440. `g4/05-desktop-badge-column-zoom.png` |
+| 5 | D4 — "grouped with the **decision** rather than the identity" | **match** | Badge right edge `796` = Accept right edge `796`; badge left `683` sits right of the name column's right edge `624`. It is in the button column, not beside the avatar. |
+| 6 | D10 — **every** row badged, person rows included | **match** | Clara Vogt (the `connect_person` row) carries "Person". `g4/03` |
+| 7 | `connect` → "Connection" | **match** | `g4/03`, `g4/05` |
+| 8 | `connect_message` → "Message" | **match** | `g4/02`, `g4/05` |
+| 9 | I-M16 — `pricelist_request` → literal "Pricelist request" | **match** | Top row of `g4/02`, rendered in a browser (not just `renderToStaticMarkup`) |
+| 10 | person row → "Person" | **match** | `g4/03` |
+| 11 | A distinct icon per kind | **match** | `lucide-receipt-text` / `lucide-link-2` / `lucide-message-square` / `lucide-user`, all rendered at `h-3 w-3`. `g4/05` |
+| 12 | A distinct accent per kind | **deviates** | `connect_message` and `person` are **both** `text-info` — two of the four badges are the same blue. Not a spec breach (D4 names no colours), but the colour carries no information for those two; label + icon do all the work. `g4/05` vs the "Person" pill in `g4/03` |
+
+#### States
+
+| # | State | Verdict | Evidence / what differs |
+|---|---|---|---|
+| 13 | Default | **match** | `g4/02`, page context `g4/01-desktop-1440-page.png` |
+| 14 | Hover — Accept, then Decline | **match** | Accept darkens to `brand-deep`, Decline tints; badge and its spacing unaffected. `g4/04-desktop-hover-accept.png`, `g4/12-hover-decline.png` |
+| 15 | Filled — all four kinds at once | **match** | Two rows from the same sender (Bavaria) are told apart **only** by the badge — "Pricelist request" vs "Connection". `g4/02` |
+| 16 | Error | **match** | Row soft-deleted out from under the client, then Accept clicked: `This request is no longer available.` renders above the list, count falls 4→3, badges intact. `g4/13-error-state.png` |
+| 17 | Empty | **match** | "Requests · 0 · No pending requests." — the retitle holds in the empty branch too. `g4/14` |
+| 18 | Narrow width | **deviates** | See fit check rows 22-23. |
+
+#### Fit check — the component inside its real container
+
+| # | Constraint | Verdict | Evidence / what differs |
+|---|---|---|---|
+| 19 | `SectionCard` `fill` → `md:h-[320px]` with internal scroll | **match** | Body `clientHeight 267` / `scrollHeight 341`; scrolls cleanly to the Person row, no clipped badge, no overlapping text. `g4/03` |
+| 20 | Row density (`critic` note 8: "roughly 3 rows instead of roughly 4") | **deviates — from the note, not the spec** | Measured with the badges hidden via injected CSS on the same live page: rows go **69px → 82px, i.e. +13px, not ~24px**, and the count of **fully visible rows is 3 either way**. What actually changed is how much of the 4th row peeks above the fold: **60px → 21px**. Baseline shot: `g4/11-baseline-badge-hidden-1440.png`. Nothing looks broken. |
+| 21 | No clipping / overflow at desktop widths | **match** | 820 / 1024 / 1280 / 1440: `document.scrollWidth` equals the viewport, card `scrollWidth` equals `clientWidth`, no badge crosses the card edge. `g4/09-fit-1024-page.png`, `g4/10-fit-1024-requests-box.png` |
+| 22 | 768px — exactly the `md` breakpoint | **deviates (pre-existing, T04 contributes 0px)** | The duo goes two-column while the shell sidebar is still expanded: card is **231px** wide against a row min-content of **246px**, so `overflow-hidden` cuts the Accept button and the badge labels. **Proven not caused by the badge:** the row's min-content is `246px` *both* with and without the badge, and the right column is `160px` (the Decline+Accept pair) at every width while the widest badge is `113px` — the badge never sets the row's minimum. `g4/06-md-768-requests-box.png` |
+| 23 | 390px mobile | **deviates (pre-existing, T04 contributes 0px)** | The shell's sidebar does not collapse; the whole page overflows (`document.scrollWidth 591` vs a 390 viewport) and the Requests card is squeezed to **122px**, clipping name, note, badge and both buttons alike. Same zero-contribution proof as row 22. Below `md` the card is auto-height (395px) and all four rows render with **no** internal scroll — `g4/10-fit-640-requests-box.png` is what the mobile card is *meant* to look like. `g4/07-narrow-390-page.png`, `g4/08-narrow-390-requests-box.png` |
+
+**Two things this walk corrects in the record above.** (a) `critic` note 8's
+`~24px` / "4 rows becomes 3" is off — it is `+13px` and "3 rows either way, with
+a thinner sliver of the 4th". (b) `critic` note 7 says the badge "never renders
+in a browser run" because Alice has no incoming requests; she has three seeded
+ones, and with a fourth staged all four badges have now been seen in Chromium.
+
+**Staged, not judged.** No verdict is passed here. Rows 12, 18, 20, 22 and 23
+are what G4 exists to put in front of Muskan; rows 22 and 23 in particular are
+page-shell behaviour that predates this ticket and may belong in a separate
+doubt rather than in T04.

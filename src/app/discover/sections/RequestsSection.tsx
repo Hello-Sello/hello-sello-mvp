@@ -18,9 +18,21 @@ import { acceptItem, declineItem } from "@/modules/connect/supabase/inbox";
 import { requestActionError } from "@/modules/connect/lib/requestActionError";
 import { acceptPersonRequest, declinePersonRequest } from "../personActions";
 import { SectionCard } from "./SectionCard";
+import { requestTypeBadge, type DiscoverRequestKind, type RequestTypeBadge } from "../requestTypeMeta";
 
 const initials = (name: string) =>
   name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+
+function Badge({ label, icon: Icon, accent }: RequestTypeBadge) {
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center gap-1 rounded-full bg-black/[0.03] px-2 py-0.5 text-[10px] font-bold ${accent}`}
+    >
+      <Icon className="h-3 w-3" />
+      {label}
+    </span>
+  );
+}
 
 function Actions({
   busy,
@@ -56,6 +68,7 @@ function Row({
   avatar,
   name,
   note,
+  kind,
   busy,
   onAccept,
   onDecline,
@@ -63,6 +76,7 @@ function Row({
   avatar: React.ReactNode;
   name: string;
   note: string | null;
+  kind: DiscoverRequestKind;
   busy: boolean;
   onAccept: () => void;
   onDecline: () => void;
@@ -74,7 +88,10 @@ function Row({
         <div className="truncate font-bold text-ink">{name}</div>
         {note && <div className="truncate text-[12.5px] text-ink-muted">{note}</div>}
       </div>
-      <Actions busy={busy} onAccept={onAccept} onDecline={onDecline} />
+      <div className="flex shrink-0 flex-col items-end gap-1.5">
+        <Badge {...requestTypeBadge(kind)} />
+        <Actions busy={busy} onAccept={onAccept} onDecline={onDecline} />
+      </div>
     </div>
   );
 }
@@ -131,7 +148,7 @@ export function RequestsSection({
   const total = company.length + people.length;
 
   return (
-    <SectionCard title="Connection requests" count={total} fill>
+    <SectionCard title="Requests" count={total} fill>
       {error && (
         <p role="alert" className="mb-1 text-sm text-red-600">
           {error}
@@ -153,6 +170,7 @@ export function RequestsSection({
               }
               name={c.senderCompanyName}
               note={c.note}
+              kind={c.type}
               busy={busy === c.itemId}
               onAccept={() => void handleCompany(c.itemId, "accept")}
               onDecline={() => void handleCompany(c.itemId, "decline")}
@@ -173,6 +191,7 @@ export function RequestsSection({
               }
               name={p.senderName}
               note={[p.senderTitle, p.senderCompanyName].filter(Boolean).join(" · ") || null}
+              kind="person"
               busy={busy === p.itemId}
               onAccept={() => void handlePerson(p.itemId, "accept")}
               onDecline={() => void handlePerson(p.itemId, "decline")}
