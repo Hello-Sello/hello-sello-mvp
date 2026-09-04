@@ -527,6 +527,261 @@ none retried.**
 per PIPELINE §3 / SKILL.md step 10, this stops at G4 for Muskan's own look,
 not an auto-close. `visual-verifier` next.
 
+---
+
+## T05 · Backfill: resolve every pending deal ticket
+
+Diff: `supabase/migrations/20260904090000_pending_inbox_item_deal_card_backfill.sql`
+(new — DML-only, one `UPDATE`), `supabase/tests/pending_inbox_item_deal_card_backfill_test.sql`
+(new), `supabase/tests/run_pending_inbox_item_deal_card_backfill_test.sh` (new).
+
+**Verdict: 1 blocking finding (security, rung 2, S7 — the test doesn't prove
+`status = 'pending'` is load-bearing), fixed in one round and independently
+re-verified. 0 blocking from `/code-review` or `critic`. 6 + 4 + 8 notes
+across the three reviewers — recorded below, most are re-discoveries or
+findings about already-shipped tickets, not new T05 gaps.**
+
+### Round trail
+
+- `plan-checker` round 1: REVISE — 1 blocking (the EARS-3 fixture design
+  didn't work: `create_deal_draft` births `'unsent'` not `'negotiation'`,
+  creates no thread, needs an authenticated caller the plan told the
+  builder to avoid — spot-verified against the RPC's live body, held,
+  redesigned to plain INSERTs) + 6 notes (a false "no trigger" claim — one
+  exists, built via `format()` in a loop, invisible to a literal grep; a
+  wrong grant-rejection rationale — the real reason to avoid
+  `SET LOCAL ROLE authenticated` is RLS silently narrowing rows, not a
+  permission error; missing NOT NULL columns in the fixture spec; an
+  undernamed `claim_deal_ticket` behaviour change; a `deal_card_id` wiring
+  gap weakening the EARS-3 assertion; a stale ticket-count in TICKETS.md's
+  own Ready table). All held, folded into `PLAN-T05.md`.
+- `test-writer` → wrote the SQL suite + runner. Could not `chmod +x` the
+  runner (no Bash tool available to it) — done manually before `builder`
+  ran.
+- `builder` round 1 → green first pass. Byte-identity between the
+  migration's UPDATE and the test's inlined copy confirmed via `diff` +
+  matching MD5 checksums (the coupling the plan explicitly calls out for
+  a DML-only migration with nothing else to call).
+- `test-runner` round 1 → `tsc` clean, unit 514/514 (0 drift, this ticket
+  touches no TypeScript), eslint 6/15 and SQL 2/66 both independently
+  confirmed pre-existing/unrelated (same baseline as T01-T04),
+  `supabase db reset` applies clean with the new migration correctly at
+  the tail. New suite independently re-run, not just trusted from
+  `builder`'s report — green.
+- `/code-review high` + `critic` + `security`, parallel:
+  - **security F1 — BLOCKING, rung 2 (silent failure, S7).** The suite's
+    own header claims all three WHERE predicates are independently
+    provable by "dropping any one … would flip a different row and fail
+    a specific cell" — false for `status = 'pending'`. The only non-
+    `pending` fixture row is already `'accepted'` (a no-op target either
+    way), so dropping that predicate flips zero visible values and every
+    cell still passes. Not hypothetical: `declineItem`
+    (`src/modules/connect/supabase/inbox.ts:352-356`) produces real
+    `deal_card` rows at `status = 'rejected'` with no type filter — an
+    unguarded WHERE clause would silently flip a declined ticket back to
+    `accepted` in production, undetected by this suite. `critic` and
+    `/code-review` did not independently find this; `security`'s own S7
+    checklist item (proven RED-first) is what surfaced it.
+  - `critic` → 0 blocking, 6 notes (below) — independently censused
+    every other consumer of the precondition this migration deletes
+    (not just `claim_deal_ticket`, which the plan already named) and
+    confirmed nothing else is affected; confirmed the byte-identity
+    claim itself by re-diffing.
+  - `/code-review high` → 0 blocking specific to T05's own diff. 8
+    findings total, but only one (the misleading History-lens banner)
+    concerns T05's diff at all — and `security` (F4) and `critic` (N6)
+    had already independently found and rated the same fact non-blocking
+    (a disclosed, self-resolving W3→W4 window artifact). The other 7
+    are pre-existing gaps in `confirm_detected_deal` (unchanged by any
+    ticket in this slug — already on record from T01's own review, see
+    below), a deliberate ADR-locked design choice in T04's
+    `requestTypeMeta.ts` mistaken for duplication, and efficiency/process
+    notes about already-shipped T02 code or the plan's own disclosed
+    manual checkpoint. None are T05 regressions.
+- `builder` round 2 (blocking-findings 1/2) → added fixture row 7
+  (`deal_card`/`rejected`/`NULL`) and an assertion it stays `rejected`
+  after the UPDATE, per security's exact fix suggestion. Proved its own
+  fix by temporarily stripping `status = 'pending'` from the test's
+  embedded UPDATE copy, confirming the new cell fails
+  (`row 7 … expected to stay rejected, found accepted`), then restoring
+  the original text.
+- `test-runner` (re-check) → independently reproduced: full suite green,
+  same 2 pre-existing SQL fails (unrelated, confirmed via file-diff —
+  neither touched by this ticket), unit 514/514, `tsc` clean, `db reset`
+  applies clean. Did not trust `builder`'s report — read the test file
+  directly to confirm row 7 and the new cell are really present, then
+  ran the suite itself.
+- `security` (re-check) → **F1 CLOSED, independently re-verified from
+  first principles, not on builder's word.** Hashed the migration file
+  before/after (unchanged, `sha256` identical throughout the fix loop);
+  confirmed the byte-identity invariant still holds (migration and test's
+  embedded copy hash identically); re-ran the three-predicate removal
+  simulation against the now-seven-row fixture — each drop now moves a
+  row a specific §A cell pins; then went further than asked and
+  **rebuilt all three predicate-drop mutants itself** in a scratch
+  transaction, reproducing the exact failure for each (including
+  `builder`'s claimed message for `status`, verbatim) before restoring
+  and leaving the DB clean. Re-ran the full negative-space sweep too
+  (every reader of `pending_inbox_item` — `inbox_select`,
+  `list_discoverable_companies/people`, `shares_connection_with_company`,
+  `can_see_person`) and confirmed none of them change their answer for
+  any caller as a result of this backfill.
+
+### Notes (rung 4-5, not retried)
+
+1. **(critic)** The suite's own header (`:61-68` pre-fix) claimed "EXPECTED
+   TO BE RED right now: the migration file does not exist yet" — false on
+   both counts even before the fix; there is no function to call, so the
+   suite was never RED-against-old-code the way T01-T04's were. A
+   `test-writer` leftover, matches L-045's shape.
+2. **(critic)** The `claim_deal_ticket`-unreachable consequence is named in
+   `PLAN-T05.md` but not in the migration's own header — a DBA reading
+   just the migration wouldn't learn it.
+3. **(critic)** §A/§C assert proxies of the EARS wording rather than the
+   literal criteria (row-by-row status instead of AC1's count query; a
+   `chat_message` row instead of AC3's "chat thread"; a column subset
+   rather than genuinely every column) — equivalent given this fixture,
+   provable by construction, but the wording overclaims "byte-identical."
+4. **(critic, rung 4)** `pending_inbox_item` is in the realtime
+   publication — the backfill broadcasts one UPDATE per touched row to
+   every connected client. RLS-scoped, no leak; practical impact ~0 since
+   production is expected to hold 0 such rows (ADR §1).
+5. **(critic)** Five `GRANT SELECT ON _t TO authenticated` statements in a
+   suite that deliberately never switches role — dead, copied from the
+   sibling suite where the switch is real, quietly contradicts the
+   header's own emphatic note.
+6. **(critic, rung 5)** A backfilled row would show a misleading "Deal
+   picked up" banner in `/connect/inbox`'s History lens for the W3→W4
+   window — only reachable before T07 deletes the page, and (per the
+   ADR) on rows that were never cut through a sanctioned route to begin
+   with. A wording artifact, not live work. **Converges with security F4
+   and code-review's finding 3 below — three reviewers, same fact, same
+   non-blocking rating.**
+7. **(security, S7, rung 5)** The header's "one each of the three OTHER
+   live `inbox_request_type` codes" is wrong — the catalog seeds five
+   codes total, not four; `connect_person` is the uncounted one. No
+   practical risk (exact-equality predicate on a `NOT NULL` column), but
+   the sentence is untrue as written.
+8. **(security, S2, rung 5)** Same dead-grant observation as critic's
+   note 5, independently found.
+9. **(security, S4, rung 4)** Confirms critic's note 6/code-review's
+   finding 3 — the History-lens banner is real but not a leak
+   (RLS-scoped, viewer already entitled to see the row) and
+   `claim_deal_ticket` stays unreachable exactly as the plan predicted
+   (verified directly against `InboxDetail.tsx`'s render branches, not
+   assumed).
+10. **(code-review, `confirm_detected_deal_drop_ticket_branch.sql:79`,
+    pre-existing, NOT T05's — flagged for the record)** The idempotent
+    "already born" early-return runs BEFORE the participant guard, so
+    any authenticated caller who obtains a `deal_detected` message id
+    can read back its `deal_card_id` for a deal they have no
+    relationship to — a distinct info-disclosure angle from the
+    already-documented NULL-guard bypass (T01 REVIEW.md notes 1/5/7).
+    Unchanged by T01's diff (which only deletes the trailing `else`
+    branch) or by anything in this slug. **Not fixed here — out of
+    T05's scope, needs its own `/track-doubt` alongside the already-
+    flagged NULL-guard issue.**
+11. **(code-review, same file:87, pre-existing, already on record)**
+    Re-discovery of the NULL-blind participant guard already documented
+    in T01's REVIEW.md notes 1/5/7 and STATE.md's "For Muskan" section.
+    Nothing new.
+12. **(code-review, `20260903130000_request_product_pricing_c2c.sql:190`,
+    concerns already-shipped T02, NOT T05 — flagged for the record, not
+    fixed here)** A TOCTOU gap in the dedup guard: step 9's `EXISTS`
+    check and step 11's `INSERT` have no unique constraint or lock
+    between them, so two near-simultaneous calls (a double-click, a
+    retried request) can both pass the check and both insert — violating
+    I-M13's locked invariant ("the same ask twice … does not produce a
+    second chat message") under concurrency, which T02's sequential SQL
+    suite would not have caught. **Genuinely new, not a re-discovery —
+    T02 is already merged and G4-approved, so this isn't T05's fix to
+    make. Needs a ruling: a follow-up ticket, or `/track-doubt`.**
+13. **(code-review, `src/app/discover/requestTypeMeta.ts:7`, already
+    decided, not a gap)** Flagged as duplicating
+    `inbox-display.ts`'s `REQUEST_TYPE_META` instead of reusing it. This
+    was a deliberate ADR decision (D4/I-M11, `PLAN-T04.md`): importing
+    from `inbox-display.ts` would couple the new badge map to
+    `COMPANY_INBOX_TYPES`, which derives a query filter from that map's
+    keys — exactly the coupling I-M11 exists to prevent. `inbox-display.ts`
+    is also deleted outright in T07, making "reuse it" actively wrong
+    advice. Re-discovery of an already-ruled-on tradeoff.
+14. **(code-review, `20260903130000_...sql:130`, concerns already-shipped
+    T02, efficiency only)** Expensive validation (relationship lookup,
+    liveness, visibility) runs before the cheap dedup check, so a repeat
+    ask pays full validation cost before short-circuiting. Not fixed
+    here — T02's own ticket, already closed.
+15. **(code-review, `PLAN-T05.md:222`, process note, not a code defect)**
+    Observes the real I-M5 checkpoint (run for real against the target
+    environment before T06/T07 start) has no automated enforcement.
+    Already disclosed identically in the plan and the migration header —
+    reinforcement, not a new finding.
+16. **(code-review, `src/app/discover/actions.ts:170`, concerns
+    already-shipped T02, efficiency only)** `is_connected_to_company`'s
+    underlying predicate is evaluated up to three times across one
+    `requestProductPricing` call. Related to T02 REVIEW note 13
+    (sequential awaits, not `Promise.all`) but a distinct angle. Not
+    fixed here.
+17. **(security, re-check N1, rung 5)** The suite's header still says
+    fixture rows 4-6 cover "the three OTHER live `inbox_request_type`
+    codes" — there are four others (`connect_person` uncounted), and it
+    's live (seeded on `db reset`, written by
+    `src/app/discover/personActions.ts:57`). Not a real gap — `type` is
+    still proven red by rows 4-6, and §B's delta happens to cover the
+    seeded `connect_person` row — but adding a real row 8 isn't a
+    one-line tuple (`connect_person` forces a different column shape:
+    `receiver_company_id NULL`, `receiver_person_id NOT NULL`, per three
+    separate CHECK constraints). Cheapest correct fix is the wording.
+18. **(security, re-check N2, rung 5)** The "EXPECTED TO BE RED right
+    now" header line is stale post-fix too (same underlying issue as
+    critic's note 1) — the suite runs its own embedded UPDATE copy, so
+    it was never genuinely RED against the migration's absence.
+19. **(security, re-check N3, rung 4)** The migration↔test byte-identity
+    coupling is enforced only by a comment, not the runner — if a future
+    edit changes the migration's predicate without updating the test's
+    embedded copy, the suite stays green and the drift is silent.
+    Verified identical today; this is about future drift, not a present
+    gap. Cheap to harden (hash the migration's UPDATE block against the
+    test's in the runner script) — not done here, rung 4, named for the
+    record.
+20. **(security, re-check, out-of-diff, not a T05 finding)**
+    `shares_connection_with_company` matches any `pending_inbox_item`
+    row with no `status` and no `deleted_at` filter — a rejected or
+    soft-deleted request appears to grant person-visibility permanently.
+    Pre-existing, untouched by this ticket, unaffected by the backfill
+    either way (T05 doesn't change which rows exist, only `deal_card`
+    rows' status, and this predicate doesn't filter on `type` either) —
+    worth its own `/track-doubt`, not fixed here.
+
+### Verification replay (backend-only ticket — no G4 human stop per PIPELINE §3)
+
+- `plan-checker`, `test-writer`, `builder` ×2, `test-runner` ×2,
+  `/code-review`, `critic`, `security` ×2 — full trail above.
+- `tests 0/2` (no test-runner-caught regression, only the security-caught
+  test-rigor gap), `blocking-findings 1/2` — well inside budget.
+- **No visual diff** — DML-only migration, nothing rendered. Step 9
+  (visual-verifier) does not apply.
+- **Carve-out check (PIPELINE §3 / SKILL.md step 10):** no outstanding
+  builder rejection. The one blocking security finding was fixed AND
+  independently re-verified by `security` itself before this ticket
+  closed — matching T02's own precedent (a blocking finding that gets
+  fixed-and-reverified within the ticket's own round does not leave
+  anything "outstanding," so the carve-out does not trigger). The one
+  named behaviour change (`claim_deal_ticket` becoming unreachable) is
+  documented as the intended, written-into-the-plan end state (D5/I-M2),
+  not an undocumented one. **No carve-out triggered — closes on green
+  tests + all three reviews + independent re-verification, no human G4
+  stop.**
+
+**Three findings surfaced during this round that are NOT T05's to fix, all
+need your ruling, none block this ticket:** (a) a new info-disclosure
+angle in `confirm_detected_deal` — pre-existing, unchanged by this slug —
+alongside the already-known NULL-guard bypass; (b) a genuine TOCTOU dedup
+race in T02's already-shipped `request_product_pricing_c2c`, violating a
+locked invariant (I-M13) under concurrency; (c) `shares_connection_with_company`
+grants person-visibility with no `status`/`deleted_at` filter, found by
+`security`'s re-check sweep, unrelated to T05's own diff. All three are
+`/track-doubt` candidates — see notes 10, 12, and 20 above.
+
 ### G4 visual staging (`visual-verifier`) — evidence for Muskan's look
 
 **⚠️ There is no prototype file to diff against.** `STATE.md` records that the

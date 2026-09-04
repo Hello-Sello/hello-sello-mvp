@@ -2,7 +2,7 @@
 
 lane:   FULL
 branch: claude/muskan/work
-stage:  spec ✅ → prototype ✅ → design ✅ → build (T01 ✅ → T02 ✅ → T03 ✅ → T04 ✅ → T05 next)
+stage:  spec ✅ → prototype ✅ → design ✅ → build (T01 ✅ → T02 ✅ → T03 ✅ → T04 ✅ → T05 ✅ → T06 next)
 
 ## Seed
 Muskan, 2026-08-31, via `/triage`: "deletion of connection request page inside connect"
@@ -81,6 +81,60 @@ before D2's app code. ADR §6 supersedes `PRD:61`, which states the reverse.
 - a single-RPC version of D2 — the fix if the read-then-write race ever bites, not now
 
 ## Attempts          three separate budgets — see PIPELINE.md §10
+
+### T05 — Backfill: resolve every pending deal ticket
+- Plan written: `PLAN-T05.md`. `plan-checker` round 1: REVISE (1 blocking —
+  the EARS-3 fixture design didn't work: `create_deal_draft` births
+  `'unsent'` not `'negotiation'`, creates no thread, needs an authenticated
+  caller the plan told the builder to avoid — spot-verified against the
+  RPC's live body, held, redesigned to plain INSERTs — plus 6 notes,
+  including a false "no trigger" claim and a wrong grant-rejection
+  rationale). All held and folded in.
+- `test-writer` → wrote the SQL suite + runner (a DML-only migration has
+  no function to call, so the suite inlines the migration's own UPDATE
+  statement — a real, documented coupling, not a design flaw). Could not
+  `chmod +x` the runner itself (no Bash tool); done manually.
+- `builder` round 1 → green first pass. Byte-identity between the
+  migration and the test's inlined copy confirmed via `diff` + matching
+  MD5.
+- `test-runner` round 1 → `tsc` clean, unit 514/514 (0 drift), eslint
+  6/15 and SQL 2/66 both pre-existing/unrelated, `db reset` applies
+  clean.
+- `/code-review high` + `critic` + `security`, parallel → **security F1:
+  BLOCKING, rung 2 (silent failure, S7)** — the suite couldn't actually
+  prove `status = 'pending'` was load-bearing (the only non-`pending`
+  fixture row was already `'accepted'`, a no-op target either way; a
+  real `declineItem`-produced `'rejected'` row would have silently
+  flipped back to `'accepted'` undetected). `critic` (0 blocking, 6
+  notes) and `/code-review` (0 blocking on T05's own diff; 7 of its 8
+  findings concerned pre-existing gaps or already-shipped T02 code, not
+  T05) converged with `security` that the one shared fact all three
+  reviewers touched — a misleading "Deal picked up" banner in Connect
+  Inbox's History lens during the W3→W4 window — is a disclosed,
+  non-blocking edge case. `blocking-findings 1/2`.
+- `builder` round 2 → added a 7th fixture row (`deal_card`/`rejected`)
+  and an assertion it stays `rejected` — proved its own fix by
+  temporarily breaking the predicate, watching the new assertion fail
+  with a named error, then restoring it.
+- `test-runner` (re-check) + `security` (re-check), parallel → both
+  independently re-verified, neither trusting `builder`'s report.
+  `security` went further than asked: hashed the migration file
+  before/after (unchanged), rebuilt all three predicate-drop mutants
+  itself and reproduced each exact failure message, then re-ran a full
+  negative-space sweep of every reader of `pending_inbox_item` and
+  confirmed none change their answer for any caller. **F1 CLOSED.** 3
+  more low-severity notes surfaced during the re-check, none blocking.
+- `tests 0/2` · `blocking-findings 1/2` — one fix round, well inside
+  budget.
+- ⚠️ **Three findings surfaced this round that are NOT T05's to fix, all
+  need Muskan's ruling, none blocked this ticket:** a new info-disclosure
+  angle in `confirm_detected_deal` (pre-existing, unchanged by this
+  slug, alongside the already-known NULL-guard bypass); a genuine TOCTOU
+  dedup race in T02's already-shipped `request_product_pricing_c2c`
+  violating locked invariant I-M13 under concurrency; and
+  `shares_connection_with_company` granting person-visibility with no
+  `status`/`deleted_at` filter (pre-existing, unrelated to this slug).
+  All three are `/track-doubt` candidates — full detail in `REVIEW.md`.
 
 ### T04 — Every request row shows a type badge; the box is retitled
 - Plan written: `PLAN-T04.md`. `plan-checker` round 1: REVISE (3 blocking
@@ -269,6 +323,27 @@ before D2's app code. ADR §6 supersedes `PRD:61`, which states the reverse.
   **not ruled on** — recorded as still open, not decided either way.
   `tests 0/2`, `blocking-findings 0/2` — closed clean, no retries spent.
   → stage advances to T05 (W3, depends on T01 — live).
+- 2026-09-04 — **G4 T05 — auto (backend-only, no human stop, PIPELINE
+  §3).** `plan-checker` round 1: 1 blocking (a broken EARS-3 fixture
+  design), held, redesigned to plain INSERTs. `test-runner` round 1:
+  green, no drift. `/code-review` + `critic` + `security` parallel:
+  **security F1 — blocking, rung 2 (S7, the test couldn't prove
+  `status = 'pending'` was load-bearing)** — fixed in one round (a 7th
+  fixture row + a new assertion), independently re-verified by BOTH
+  `test-runner` and `security` (which rebuilt all three predicate-drop
+  mutants itself and reproduced each failure). No carve-out triggered —
+  the one blocking finding was fixed and re-verified within the round,
+  matching T02's own precedent for what "no carve-out" means; the one
+  named behaviour change (`claim_deal_ticket` becoming unreachable) is
+  the documented, intended end state (D5/I-M2), not undocumented.
+  `tests 0/2`, `blocking-findings 1/2` — one round, inside budget. Three
+  findings outside T05's own scope surfaced and are flagged for
+  Muskan's ruling (see the T05 entry in `## Attempts` above /
+  `REVIEW.md`), none blocking.
+  → stage advances to T06 (W4, depends on T01 + T05 — both live. **The
+  real I-M5 checkpoint — both counts, run for real against the target
+  environment — is still owed before T06 starts**, per TICKETS.md's own
+  instruction; it cannot be satisfied locally).
 
 ## For Muskan
 
@@ -302,3 +377,17 @@ found that you did not already know.**
   sanctioned route gates to p2p. And `deal_workspace.visibility` is client-updatable under
   `ws_all`, so a party can flip a workspace to `private` and lock the counterparty out — after
   the DROP there is no recovery path. Both belong in `/track-doubt`.
+- ⚠️ **Three more found during T05's build, none filed, none blocking T05:** (a)
+  `confirm_detected_deal`'s idempotent "already born" early-return (`20260903120000_…sql:79`)
+  runs BEFORE the participant guard — any authenticated caller who obtains a `deal_detected`
+  message id can read back its `deal_card_id` for a deal they have no relationship to. Distinct
+  from the already-known NULL-guard bypass on the same function. Pre-existing, unchanged by
+  anything in this slug. (b) A genuine race in T02's `request_product_pricing_c2c` (already
+  shipped, G4-approved): the dup-guard's `EXISTS`-then-`INSERT` has no unique constraint or lock
+  between them, so a double-click or retried request can produce two identical chat messages —
+  violates locked invariant I-M13 under concurrency, which T02's sequential SQL suite couldn't
+  have caught. This one needs a decision (follow-up ticket vs. `/track-doubt`), not just a note,
+  since it's a real regression against a signed invariant. (c) `shares_connection_with_company`
+  has no `status`/`deleted_at` filter on `pending_inbox_item` — a rejected or soft-deleted
+  request appears to grant person-visibility permanently. Pre-existing, unrelated to this slug.
+  Full detail on all three: `REVIEW.md`'s T05 section, notes 10/12/20.
