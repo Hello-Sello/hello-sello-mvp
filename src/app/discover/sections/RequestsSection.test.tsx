@@ -15,6 +15,7 @@ import type { DiscoverPersonRequest } from '@/app/discover/incomingPersonRequest
 const companyReq: DiscoverCompanyRequest = {
   itemId: 'c1', note: 'Let us connect', createdAt: '2026-07-24T00:00:00Z',
   senderCompanyId: 'co1', senderCompanyName: 'Green Leaf Labs', senderInitials: 'GL',
+  type: 'connect_message',
 }
 const personReq: DiscoverPersonRequest = {
   itemId: 'p1', note: 'hi', createdAt: '2026-07-24T00:00:00Z',

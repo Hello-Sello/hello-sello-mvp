@@ -4640,19 +4640,36 @@ export type Database = {
       }
     }
     Functions: {
+      _resolve_or_create_c2c_thread: {
+        Args: { p_relationship_id: string }
+        Returns: Record<string, unknown>
+      }
+      _resolve_or_create_p2p_thread: {
+        Args: {
+          p_person_x: string
+          p_person_y: string
+          p_relationship_id: string
+        }
+        Returns: Record<string, unknown>
+      }
       accept_connection_request: {
         Args: { p_inbox_item_id: string }
-        Returns: string
+        Returns: Record<string, unknown>
       }
       accept_person_connection: { Args: { p_item_id: string }; Returns: string }
-      accept_promotion: {
-        Args: { p_deal_card_id: string }
-        Returns: undefined
+      accept_promotion: { Args: { p_deal_card_id: string }; Returns: undefined }
+      announce_deal_event: {
+        Args: { p_deal_card_id: string; p_type: string }
+        Returns: string
       }
       approve_company: { Args: { p_company_id: string }; Returns: undefined }
       approve_join_request: {
         Args: { p_request_id: string; p_role?: string }
         Returns: undefined
+      }
+      assert_relationship_writable: {
+        Args: { p_relationship_id: string }
+        Returns: boolean
       }
       audit_person_scrub: { Args: { p_person_id: string }; Returns: undefined }
       can_access_thread: { Args: { p_thread_id: string }; Returns: boolean }
@@ -4686,6 +4703,10 @@ export type Database = {
       close_deal_ticket: {
         Args: { p_deal_card_id: string }
         Returns: undefined
+      }
+      company_can_receive_requests: {
+        Args: { p_company_id: string }
+        Returns: boolean
       }
       confirm_deal_change: {
         Args: { p_deal_card_id: string; p_decision: string; p_reason: string }
@@ -4733,6 +4754,10 @@ export type Database = {
         Returns: undefined
       }
       deliver_deal: { Args: { p_deal_card_id: string }; Returns: undefined }
+      end_relationship: {
+        Args: { p_reason?: string; p_relationship_id: string }
+        Returns: undefined
+      }
       finalize_deal: { Args: { p_deal_card_id: string }; Returns: undefined }
       get_company_licences: {
         Args: { p_company_id: string }
@@ -4976,6 +5001,18 @@ export type Database = {
           type_codes: string[]
         }[]
       }
+      list_relationships_admin: {
+        Args: never
+        Returns: {
+          company_a_id: string
+          company_a_name: string
+          company_b_id: string
+          company_b_name: string
+          connected_at: string
+          id: string
+          status: string
+        }[]
+      }
       log_license_viewed: { Args: { p_company_id: string }; Returns: undefined }
       offer_promotion: {
         Args: {
@@ -5006,6 +5043,10 @@ export type Database = {
         Args: { p_product_id: string }
         Returns: boolean
       }
+      product_price_visible_to_caller: {
+        Args: { p_product_id: string }
+        Returns: boolean
+      }
       product_visible_to_caller: {
         Args: { p_product_id: string }
         Returns: boolean
@@ -5016,6 +5057,10 @@ export type Database = {
       }
       reactivate_account: { Args: never; Returns: undefined }
       reactivate_company: { Args: never; Returns: undefined }
+      reactivate_relationship: {
+        Args: { p_reason?: string; p_relationship_id: string }
+        Returns: undefined
+      }
       record_invite_sent: {
         Args: { p_email: string; p_role: string }
         Returns: undefined
@@ -5034,6 +5079,10 @@ export type Database = {
         Returns: undefined
       }
       request_account_deletion: { Args: never; Returns: undefined }
+      request_product_pricing_c2c: {
+        Args: { p_product_id: string; p_receiver_company_id: string }
+        Returns: boolean
+      }
       request_to_join: {
         Args: { p_company_id: string; p_note: string }
         Returns: string
@@ -5076,6 +5125,10 @@ export type Database = {
       sign_deal: { Args: { p_deal_card_id: string }; Returns: number }
       substitute_line_product: {
         Args: { p_line_item_id: string; p_new_product_id: string }
+        Returns: undefined
+      }
+      suspend_relationship: {
+        Args: { p_reason?: string; p_relationship_id: string }
         Returns: undefined
       }
       update_deal_draft: {

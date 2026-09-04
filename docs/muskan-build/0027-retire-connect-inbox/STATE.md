@@ -2,7 +2,7 @@
 
 lane:   FULL
 branch: claude/muskan/work
-stage:  spec ✅ → prototype ✅ → design ✅ → build (next)
+stage:  spec ✅ → prototype ✅ → design ✅ → build (T01 ✅ → T02 ✅ → T03 ✅ → T04 next)
 
 ## Seed
 Muskan, 2026-08-31, via `/triage`: "deletion of connection request page inside connect"
@@ -81,7 +81,82 @@ before D2's app code. ADR §6 supersedes `PRD:61`, which states the reverse.
 - a single-RPC version of D2 — the fix if the read-then-write race ever bites, not now
 
 ## Attempts          three separate budgets — see PIPELINE.md §10
-(none yet)
+
+### T03 — Discover's Requests list carries pricelist requests
+- Plan written: `PLAN-T03.md`. `plan-checker` round 1: REVISE (1 blocking —
+  a required `type` field would break `tsc` at two uncensused call sites —
+  plus 5 notes, including a wrong I-M9 test citation). Folded in; extended
+  the *existing* `accept_connection_request_status_guard_test.sql` suite
+  with a genuinely missing c2c-thread assertion rather than writing new
+  SQL.
+- `builder` → green first pass, single file (`companyRequests.ts`).
+- `test-runner` → full suite green, matches baseline exactly.
+- `/code-review` + `critic` + `security` parallel → 0 blocking. All of
+  `/code-review`'s 8 findings turned out to be re-discoveries of T01/T02
+  notes already on record, or T04's explicitly-deferred badge work.
+  `critic`/`security` found 7 notes on T03's own diff, none blocking.
+- `tests 0/2` · `blocking-findings 0/2` — closed clean, no retries spent.
+
+### T02 — pricing ask to a connected company posts to chat
+- Plan written: `PLAN-T02.md`. `plan-checker` round 1: REVISE (3 blocking —
+  unqualified identifiers under `search_path=''`, a non-compiling TS
+  snippet, a dup-guard scoped to person instead of company — plus 6 notes).
+  Spot-verified and folded in.
+- `test-writer` → RED suite + unit cases; caught a `created_at`-ordering
+  design gap before `builder` ran.
+- `builder` round 1 → green first pass.
+- `test-runner` round 1 → 1 new eslint error (this ticket's own test file),
+  fixed round 2. `tests 1/2`. Also surfaced an untracked e2e planning gap
+  (see REVIEW.md) — not fixed here, needs Muskan's ruling before `/ship`.
+- `/code-review` + `critic` + `security` parallel → **security F1: BLOCKING,
+  rung 1 leak** (RPC's product lookup skipped `product_visible_to_caller`,
+  proved exploitable). Bundled with a `/code-review`-found timestamp-ordering
+  correctness bug into one fix round. `blocking-findings 1/2`.
+- `builder` round 3 → both fixed; `security` + `test-runner` independently
+  re-verified against the live catalog — fix holds, full suite green.
+- 21 notes total across all rounds, recorded in `REVIEW.md`, none retried.
+
+### T01 — `confirm_detected_deal` stops cutting a deal ticket
+- Plan written: `PLAN-T01.md`. `plan-checker` round 1 in progress.
+- `tests 0/2` · `blocking-findings 0/2` · `G4 rounds 0`
+- Base sync at build start: `origin/dev` fetched — confirmed its tree is
+  byte-identical to the merge-base (a stale, no-op 2026-08-25 snapshot), so
+  the required rebase was skipped as a no-op rather than forced through a
+  spurious conflict in `DECISIONS.md`/`ARCHITECTURE-NOTES.md`. Working tree
+  clean, `HEAD` unchanged.
+- ⚠️ **`rtk` corrupted a `git status` read mid-build** — a bare `git status`
+  (hook-rewritten to `rtk git status`) reported
+  `supabase/migrations/20260903110000_promotion_status_gate.sql` as
+  untracked with an unrecorded decision; `/usr/bin/git` (bypassing the hook)
+  shows it's actually committed at `11e8769`, decision recorded
+  `DECISIONS.md:2259`. False alarm, corrected. Reinforces **HEL-80** — the
+  rtk collapse trap now confirmed to hit plain `git status`, not just the
+  tools already listed there.
+- `plan-checker` round 1 on `PLAN-T01.md`: REVISE — 1 blocking (a wrong
+  `deal_member` assertion), 4 notes (stale RLS citation, unpinned vote
+  order, unrecorded NULL-logic fixture dependency, the rtk-caused stale
+  file status above). Spot-verified and folded in.
+- `test-writer` wrote `confirm_detected_deal_no_ticket_test.sql` +
+  runner — RED as expected against the live code.
+- `builder` wrote `20260903120000_confirm_detected_deal_drop_ticket_branch.sql`
+  — green on first pass, no retry needed. `tests 0/2` (no retries spent).
+- `test-runner` independently confirmed: 62/64 SQL suites, 499/499 unit
+  tests, `tsc` clean. The 2 SQL fails (`deal_line_item_insert_lockdown`,
+  `deal_promotion_write_lockdown`) and 6 eslint errors are proven
+  **pre-existing, unrelated to T01** via an A/B worktree run against
+  committed `HEAD` (excludes T01's diff) — same failures reproduced.
+  e2e (Playwright) skipped for this ticket: backend-only SQL change, no
+  e2e spec exercises the deleted branch.
+- ⚠️ **New debt surfaced, not caused by T01:** HEL-83's
+  `20260903110000_promotion_status_gate.sql` (committed `11e8769` same
+  session, immediately before T01's build started) added a
+  `deal_card.status <> 'negotiation'` guard to the promotion RPCs. Two
+  sibling suites' shared fixture (`deal_line_item_insert_lockdown_test.sql`,
+  `deal_promotion_write_lockdown_test.sql` — both pick a card with no status
+  filter, currently landing on a `confirmed` one) never got updated for that
+  guard and now fail at setup, before their own assertions run. Not in
+  `docs/agents/LEARNINGS.md` or CLAUDE.md's record-debt list yet — needs an
+  L-number and a fixture fix, unrelated to this ticket or slug.
 
 ## Gate log
 - 2026-09-02 — spec written (no gate — G1 merged into G3, PIPELINE §9a)
@@ -96,6 +171,40 @@ before D2's app code. ADR §6 supersedes `PRD:61`, which states the reverse.
   Muskan also approved six spec amendments (FR1, AC1, AC4, PRD:60, PRD:61, FR6/FR9 scope)
   and three product rulings (product-blind rows, "Requests" title, badge every row), plus the
   message shape (person-voiced, from the asker).
+- 2026-09-04 — **G4 T01 — auto (backend-only, no human stop, PIPELINE §3).**
+  Migration + SQL suite green (`test-runner` independent confirmation: 62/64 SQL,
+  499/499 unit, `tsc` clean — 2 SQL fails + eslint proven pre-existing/unrelated
+  via A/B worktree). `/code-review high` + `critic` + `security` in parallel: 0
+  blocking, 8 notes, all folded into `REVIEW.md`. No carve-out triggered (no
+  outstanding rejection, no blocking security finding, no undocumented behavior
+  change). `tests 0/2`, `blocking-findings 0/2` — closed clean, no retries spent.
+  → stage advances to T02 (W1, parallel-safe with T01, no dependencies).
+- 2026-09-04 — **G4 T02 — auto (backend-only, no human stop, PIPELINE §3).**
+  `security` caught a real rung-1 leak (`product_visible_to_caller` skipped
+  on the new RPC's product lookup) that `critic`/`code-review` had both
+  independently spotted but under-rated — proved exploitable with live
+  probes, fixed (called the owner predicate, not reimplemented), then
+  independently re-verified against the live catalog by a fresh `security`
+  pass. A `/code-review`-found timestamp-ordering bug (two bare
+  `clock_timestamp()` calls, a false "guaranteed" claim in the header)
+  fixed in the same round. `tests 1/2` (an eslint error test-runner caught),
+  `blocking-findings 1/2` (the leak + timestamp fix, bundled) — both well
+  inside budget. 21 notes total, `REVIEW.md`, none retried.
+  ⚠️ **Untracked gap surfaced, needs your ruling before `/ship`:**
+  `e2e/discover-shop.spec.ts` test #2 asserts the exact ticket-cutting
+  behavior T02 retires and will read red the next e2e run — it is not in
+  T09's named scope (`inbox-accept.spec.ts`, `deal-lands-in-c2c-chat.spec.ts`,
+  `deal-c2c-create.spec.ts` only). Either widen T09 or open a sibling
+  ticket; not fixed here since e2e edits aren't in T02's file list.
+  → stage advances to T03 (W2, no dependencies, ships independently of W1).
+- 2026-09-04 — **G4 T03 — auto (backend-only, no human stop, PIPELINE §3).**
+  Single-file TS change (`companyRequests.ts`), plus a genuinely missing
+  I-M9 assertion added to the existing `accept_connection_request` SQL
+  suite (no function/migration touched). 0 blocking across all reviewers.
+  `tests 0/2`, `blocking-findings 0/2` — closed clean.
+  → stage advances to T04 (W2, depends on T03 for the `type` field — now
+  live). T04 wires the badge that closes the "unbadged pricing ask" gap
+  `/code-review` flagged this round (already anticipated, not a defect).
 
 ## For Muskan
 

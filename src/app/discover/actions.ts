@@ -117,10 +117,14 @@ export async function sendConnectRequest(
 }
 
 /**
- * Ask a seller for the price of ONE product — the L1 ask, per product. Lands as
- * a `pricelist_request` in their Connect inbox naming the product; accepting
- * runs Connect's existing rollout. One mechanism for both arms: connected or
- * not, the seller gets the same item (ADR-0005, G3).
+ * Ask a seller for the price of ONE product — the L1 ask, per product.
+ * Branches on `is_connected_to_company` (T02, ADR 0009 D2): unconnected
+ * lands as a `pricelist_request` in their Connect inbox naming the product,
+ * unchanged from before (ADR-0005, G3) — accepting still runs Connect's
+ * existing rollout. Connected posts a person-voiced message directly into
+ * the existing c2c thread via `request_product_pricing_c2c`, a SECURITY
+ * DEFINER RPC, and cuts no ticket at all — there is nothing left to accept
+ * between two companies already talking.
  *
  * Authorization and the product NAME come through the same door that rendered
  * the card — `get_discoverable_shop`, SECURITY DEFINER, applying the seller's
@@ -161,6 +165,31 @@ export async function requestProductPricing(
   // the seller's own dial, read through the same door that authorised the read.
   if (product.price_public)
     return { error: "This product's price is already shown, so there's nothing to request." };
+
+  const supabase = await createClient();
+  const { data: connected, error: connError } = await supabase.rpc("is_connected_to_company", {
+    p_company_id: receiverCompanyId,
+  });
+  // FAIL CLOSED to a refusal, not to a write (T02, plan-checker round 1's
+  // N1). Falling through to createPairInboxItem on a query error would let a
+  // transient fault create a pricelist_request ticket between two ALREADY-
+  // connected companies, which I-J2 says must never exist ("the only reason
+  // a row exists in pending_inbox_item is that someone awaits permission
+  // from a company they have not spoken to"). Matches the local precedent
+  // shape (getDiscoverableShop swallowing a fault degrades to a REFUSAL, not
+  // a different write), not diverges from it.
+  if (connError) return { error: requestActionError(connError) };
+
+  if (connected) {
+    const { error } = await supabase.rpc("request_product_pricing_c2c", {
+      p_receiver_company_id: receiverCompanyId,
+      p_product_id: productId,
+    });
+    if (error) return { error: requestActionError(error) };
+    revalidatePath("/discover");
+    revalidatePath(`/discover/${receiverCompanyId}`);
+    return { ok: true };
+  }
 
   return createPairInboxItem(
     "pricelist_request",

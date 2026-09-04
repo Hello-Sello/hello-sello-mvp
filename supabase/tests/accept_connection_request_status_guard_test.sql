@@ -465,6 +465,7 @@ RESET ROLE;
 DO $$
 DECLARE
   v_p2p   uuid;
+  v_c2c   uuid;
   v_body  text;
   v_count int;
 BEGIN
@@ -482,6 +483,20 @@ BEGIN
    WHERE thread_id = v_p2p AND sender = 'sella' AND type = 'intro';
   IF v_body IS DISTINCT FROM 'CaseThree Sender from HEL68 Sender Co is asking Receiver Rex (HEL68 Receiver Co) for a price list. Over to you both.' THEN
     RAISE EXCEPTION 'D3/AC2 FAIL: pricelist_request intro text mismatch, got: %', v_body;
+  END IF;
+
+  -- I-M9: a pricelist_request accept also resolves a c2c thread (unconditionally,
+  -- 20260826100000:206-207 — outside the type-conditional branch at :215) —
+  -- previously resolved into _hel68_ac2pl but never asserted.
+  SELECT c2c_thread_id INTO v_c2c FROM _hel68_ac2pl;
+  IF v_c2c IS NULL THEN
+    RAISE EXCEPTION 'D3/I-M9 FAIL: c2c_thread_id is NULL for a pricelist_request accept';
+  END IF;
+
+  SELECT count(*) INTO v_count FROM public.chat_thread
+   WHERE id = v_c2c AND type = 'c2c' AND deleted_at IS NULL;
+  IF v_count <> 1 THEN
+    RAISE EXCEPTION 'D3/I-M9 FAIL: c2c_thread_id does not resolve to exactly one live chat_thread row (found %)', v_count;
   END IF;
 END $$;
 

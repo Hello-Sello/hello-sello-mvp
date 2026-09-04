@@ -15,7 +15,12 @@
 
 /** The `metadata` key carrying the asked-about product, and the dup-guard's
  *  filter key. One owner: the builder below and the PostgREST filter in
- *  `createPairInboxItem` must never disagree. */
+ *  `createPairInboxItem` must never disagree.
+ *  `request_product_pricing_c2c` (T02, `supabase/migrations/
+ *  20260903130000_request_product_pricing_c2c.sql`) mirrors this VALUE as a
+ *  literal SQL string in its own dup-guard and metadata insert — SQL cannot
+ *  import a TS constant, so keep the two in sync by hand if this ever
+ *  changes. */
 export const PRODUCT_ID_KEY = "product_id";
 
 /** `pending_inbox_item.note` is unbounded TEXT but every writer clamps to 280
