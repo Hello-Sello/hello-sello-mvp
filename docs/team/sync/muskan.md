@@ -5,6 +5,48 @@
 
 ---
 
+**Last updated:** 2026-09-07 — worktree session (`wt-manage-shop-dnd`) — **Present-page Linear
+triage + 3 code fixes shipped to `claude/muskan/work`; session closing, handing off to the
+`hello-sello-product-6c` session below for merge/deploy.**
+**Status:** offline (session closed on request — "finish up, send everything, I'll merge +
+deploy from the other session").
+
+**What happened.** Walked Marcel's Present/Manage-Shop Linear tickets one by one against the
+live code and closed what was actually done: **DEV-119, DEV-101, DEV-106, DEV-104 → Done.**
+**DEV-111 was closed then REVERTED to In Progress same-session** — closed against its title
+alone, its real description held 4 more unbuilt asks (see LEARNINGS L-070, the mistake and the
+rule). Built and shipped in the same session: a drag-and-drop reorder bug (a card could never
+become the LAST item — `moveBefore` → `moveRelative` with before/after, decided by which half of
+the target card was dropped on) + its related stuck-outline bug; "Additional pack sizes (g)" on
+the manual Add Products form + CSV template/parser (new migration
+`20260907140000_import_products_pack_sizes.sql`); DEV-107's Origin+Region combined row and a new
+seller-set Badge (new/coming_soon/launch/re_launch) shown as a pill on the card image. Commit
+`049683d` (merged with this session's `8ce7967`, then rebased again by the other session onto
+`9b39d34` — see its message below, confirmed independently, zero file overlap both times).
+
+**Still open, real remaining scope (not just "not started"):** DEV-111 (uniform box sizing, an
+expand arrow, draggable links, and an entire "Manage shops per country" sub-feature — tags,
+certificate uploads); DEV-112 (the actual per-location links table doesn't exist yet, only a
+platform dropdown); DEV-107 (#1 trim skipped — Marcel already approved the current card as-is;
+#5 Wishlist deferred, needs the Buy page; #6/#7.1/#7.3/#7.4/#8 unverified either way). Untouched:
+DEV-150, DEV-96, DEV-65. DEV-158/DEV-167 have no description in Linear at all — need a scoping
+pass before anyone can act on them.
+
+**Owed, not done by this session (both gitignored, unreachable from a worktree that never had
+them):** CLAUDE.md's "What's next" doesn't mention any of this yet — worth a pointer next wrap.
+`.planning/session-log.md` likewise never got an entry for this thread. The worktree itself
+(`/Users/muskanmuskan/Documents/wt-manage-shop-dnd`) is left on disk, not removed — the dev
+server that was running on :3001 has been stopped.
+
+**New in LEARNINGS.md:** L-070 (Linear title ≠ scope — pull the real description before closing),
+L-071 (a shared local Supabase instance across worktrees can silently revert another session's
+already-applied migration on a container restart — verify the write landed, don't trust the
+apply command's own success message), L-072 (a fresh `git worktree` has none of the source
+directory's gitignored setup — `.env.local`, `node_modules` — and Turbopack specifically rejects
+a `node_modules` symlink pointing outside the worktree root, unlike webpack/vitest/tsc).
+
+---
+
 **Last updated:** 2026-09-07 — session 103 — **0027 build phase COMPLETE: T06-T09 closed, all
 nine tickets (T01-T09) done. Next stage is `/ship`.**
 **Status:** active — mid-session, substantial UNCOMMITTED work in this exact working tree

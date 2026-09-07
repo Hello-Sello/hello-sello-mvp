@@ -2434,3 +2434,94 @@ same failure mode reaches basic filesystem tools too — the class is wider than
 every tool in this class — not only the ones HEL-80 already named. Treat a suspiciously clean or
 suspiciously empty result from any wrapped shell command as a signal to re-run via the direct path
 before trusting it, especially right before a decision that's expensive to get wrong.
+
+---
+
+## L-070 · A Linear ticket's title is not its scope — pull the full description before verifying or closing
+
+**2026-09-07 · Present-page ticket triage (Marcel's DEV-10x tickets), worktree
+`wt-manage-shop-dnd` · caught by Muskan, self-corrected same turn**
+
+**Trigger** — verifying whether a Linear ticket is "done," or closing one, based on a title
+pulled from a list search (`list_issues` without `description` in `fields`, or a title that
+already reads like a full sentence).
+
+**What happened.** DEV-111's title was "Description in Present" — read as fully self-explanatory,
+so I delegated its verification to a sub-agent with just that title and closed it as Done once the
+description-editing feature checked out. Its actual Linear `description` field, never pulled,
+held four more asks (uniform box sizing, an expand arrow, draggable links, and an entire
+"Manage shops per country" sub-feature with tags and certificate uploads) — none of it built. The
+ticket had to be reverted to In Progress. Two OTHER tickets in the same batch (DEV-119, DEV-101)
+had genuinely empty `description` fields, so verifying against the title alone was correct for
+them — the mistake was treating "title looks complete" as proof, rather than checking.
+
+**Why it was wrong.** I trusted a title's apparent completeness as a proxy for a description
+being empty, instead of confirming it. A short or absent description is a fact about the ticket,
+not a guessable property of how the title reads.
+
+**The rule.** Before verifying a ticket against code, or closing it, call `get_issue` (or include
+`"description"` in a `list_issues` `fields` array) and read the actual field — every time, even
+when the title reads as a complete sentence. A ticket with a real, empty `description` (confirm by
+reading it) is the only case where the title-as-full-spec shortcut is safe.
+
+---
+
+## L-071 · A shared local Supabase instance across worktrees can silently revert another session's applied state
+
+**2026-09-07 · Present-page migration (`import_products` pack_sizes), worktree
+`wt-manage-shop-dnd` alongside a parallel session on `claude/muskan/work` · confirmed directly**
+
+**Trigger** — running `supabase db reset`, or applying a migration file directly to the local
+Postgres container, from ANY worktree, while another session/worktree of the same project might
+be running against the same local Supabase stack.
+
+**What happened.** `supabase migration list --local` showed a migration (`20260907090000`,
+another session's T06 work) already applied to the live local DB with no matching file in this
+worktree's `supabase/migrations/` — proof the two sessions share ONE Docker-based Postgres
+instance (`supabase_db_hello-sello-design`), not one per worktree. Applying a new migration
+directly via `docker exec ... psql < file.sql` appeared to succeed (`CREATE FUNCTION` printed),
+but a follow-up `pg_get_functiondef` check showed the OLD function body still live — the other
+session had restarted the shared DB container in between (confirmed via `docker ps`, "Up 6
+seconds"), silently discarding the direct SQL write. Re-applying after the container reported
+healthy again fixed it. A `supabase db reset` in this window would have been worse: replaying only
+THIS worktree's migration files onto the shared DB would have deleted the other session's already-
+applied, not-yet-committed `20260907090000` migration entirely.
+
+**Why it was wrong.** I treated the local Supabase stack as owned by my worktree, when it's
+actually one shared mutable resource two sessions were both writing to. A `CREATE FUNCTION`
+success message confirmed the statement ran, not that the result was still there moments later.
+
+**The rule.** Before any `supabase db reset` (never do this from a worktree without asking — it
+can delete another session's uncommitted-but-applied migrations) or direct SQL write to the local
+DB: check `docker ps` for the shared container's uptime/health as a signal of recent
+restarts, and re-verify the change landed via a direct query (`pg_get_functiondef`, `\d`, etc.)
+rather than trusting the apply command's own success output. Extends [[L-024]]/[[L-069]]'s "trust
+the tool's verdict, not your eyes" family to shared infrastructure, not just wrapped CLI output.
+
+---
+
+## L-072 · A fresh `git worktree` has none of the source directory's gitignored setup — env files, `node_modules`, nothing
+
+**2026-09-07 · Present-page fixes, worktree `wt-manage-shop-dnd` set up mid-session · confirmed
+directly, twice**
+
+**Trigger** — creating a fresh `git worktree add` and immediately trying to run the dev server or
+a test runner in it, assuming it behaves like a second checkout of the same project.
+
+**What happened, twice.** (1) `next dev` in the new worktree threw `Your project's URL and Key are
+required to create a Supabase client!` — `.env.local` is gitignored, so `git worktree add` never
+created it; had to `cp` it from the source directory and restart the dev server (env vars are read
+once at boot, a running process won't pick up a file that appears later). (2) `npx vitest` failed
+with `Cannot find module '.../node_modules/vitest/vitest.mjs'` — `node_modules` doesn't exist in a
+fresh worktree either. A symlink to the source directory's `node_modules` fixed `vitest`/`tsc`, but
+Turbopack (`next dev`) then failed outright — `Symlink [project]/node_modules is invalid, it points
+out of the filesystem root` — Turbopack's own sandboxing rejects a `node_modules` symlink that
+resolves outside the worktree root, unlike webpack/vitest/tsc, which don't care. Had to remove the
+symlink and run a real `npm ci` (safe here since the lockfile matched the source directory's
+exactly — worth confirming that before reusing a symlink at all).
+
+**The rule.** A new worktree only has what git tracks at that commit — nothing gitignored comes
+with it. Before running anything in one: `cp` every `.env*` file the app needs from the source
+checkout, and either run a real `npm ci` (safest, works with every tool including Turbopack) or,
+only as a faster shortcut for non-Turbopack tools (`vitest`, `tsc`, `eslint`), symlink
+`node_modules` from a directory with a lockfile confirmed to match.
