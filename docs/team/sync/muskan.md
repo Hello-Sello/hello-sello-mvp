@@ -59,11 +59,20 @@ uncommitted work sits cleanly on top, zero drift from origin otherwise.
 (`claude/muskan/manage-shop-dnd-fix`, also branched from `1f258ff`) merged its Present/Manage-Shop
 work (`049683d` — drag-and-drop reorder, "Additional pack sizes," Origin+Region/Badge on
 ProductCard, + `20260907140000_import_products_pack_sizes.sql`) into `claude/muskan/work` and
-pushed. **`origin/claude/muskan/work` is now `21a6973`** (a merge of `8ce7967`, this sync commit,
-with `049683d`) — independently verified: clean merge, 16 files touched, zero overlap with 0027's
-work. This session's LOCAL branch is still at `1f258ff` (pre-both commits) with the same ~62
-uncommitted files on top — harmless; **next `pull --rebase` before this session's own commit+push
-will rebase onto `21a6973`**, one extra upstream commit, same zero-overlap guarantee holds.
+pushed, then wrapped its own session with a second commit (`cec41ca` — `LEARNINGS.md` L-070/071/
+072, its own sync-file entry). Both synced cleanly via `pull --rebase`, verified zero file overlap
+with 0027's work both times. **`origin/claude/muskan/work` is now `cec41ca`, this session rebased
+onto it with a resolved `LEARNINGS.md` conflict — details below.**
+
+⚠️ **Real `LEARNINGS.md` numbering collision, third occurrence of this class (the allocator
+question `CLAUDE.md` already flags as open, unresolved).** Both sessions independently wrote a
+new entry titled "L-070" — different content, both legitimate (theirs: a Linear-ticket-scope
+lesson; mine: T06's repointed-citation lesson). Git caught it as a real merge conflict on `git
+stash pop` (not a silent duplicate — the insertion point was identical for both). Resolved by
+renumbering mine to L-073 (their L-070/071/072 kept as committed), verified no duplicate headers
+survive, `tsc` still clean. **Still no actual allocator exists** — this was manual, ad hoc
+resolution, same as every prior collision. Flagging again since "flag it again next time" hasn't
+produced a fix across three occurrences now.
 **Linear issue in progress:** none.
 **Shared files locked: none — all released.**
 

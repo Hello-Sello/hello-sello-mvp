@@ -2525,3 +2525,41 @@ with it. Before running anything in one: `cp` every `.env*` file the app needs f
 checkout, and either run a real `npm ci` (safest, works with every tool including Turbopack) or,
 only as a faster shortcut for non-Turbopack tools (`vitest`, `tsc`, `eslint`), symlink
 `node_modules` from a directory with a lockfile confirmed to match.
+
+---
+
+## L-073 · A repointed coverage citation is a new claim — verify it against the target's actual assertions, not the source's old wording
+
+**2026-09-07 · slug 0027 T06 · caught by `/code-review` and `critic`, independently, same round**
+
+**Trigger** — deleting a file and relocating/repointing any comment that cites "this behavior is
+covered by [file:lines]" to point at a surviving file instead, during a test-file consolidation.
+
+**What happened.** `PLAN-T06.md` scoped a ported test case (P2) to cover exactly three cells from
+the file being deleted — "A2-3a/3c/3e … **NOT** 3b/3d, already covered by this file's own C3" —
+a correct, deliberate exclusion. Two paragraphs later, the same plan instructed `test-writer` to
+repoint a separate stale citation ("the person arm's return value … covered by
+`deliver_deal_test.sql:248-251, case A2-3b`") to read "covered by this file's own case P2." That
+is exactly the A2-3b cell P2 had just been scoped to exclude. Worse, the assumption behind the
+exclusion — "C3 already covers it" — was never checked either: C3 calls `send_deal` as a bare,
+result-discarding `SELECT`, same as P2 did before the fix. Neither case had ever captured the
+return value. Two independent reviewers caught the same gap from different angles
+(`/code-review` read the diff cold; `critic` cross-checked TICKETS.md against the shipped file).
+
+**Why it was wrong.** I treated a citation-repoint as a mechanical find-replace — "this content
+used to live in the deleted file, so point at wherever it landed now" — instead of as a new claim
+that has to be independently true. I never re-derived it from what the target case (P2) or the
+case I'd delegated it to (C3) actually asserts; I picked a target by proximity to the recent
+discussion, not by reading its assertions. I also never cross-checked the citation against a
+contradicting sentence I had written two paragraphs earlier in the same document — a single
+self-consistency pass over the plan would have caught it before `test-writer` ever ran.
+
+**The rule.** When repointing a "covered by X" citation during a file consolidation or deletion,
+re-derive the claim from the target's actual assertions (read the DO block, not the banner comment
+above it) — never carry the old citation's wording forward on the assumption that *something* in
+the new location must satisfy it. If the plan itself contains a nearby sentence that scopes the
+same content OUT of the case you're about to cite, that is a direct contradiction to resolve before
+the plan ships, not two independent facts that happen to coexist.
+
+**See also** [[L-002]] (the shape one level up: synchronized copies of the same fact drifting
+apart over time, rather than a citation being wrong from the moment it's written).

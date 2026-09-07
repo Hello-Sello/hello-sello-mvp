@@ -5,10 +5,13 @@ import { SellaPlaceholderBar } from "./SellaPlaceholderBar";
 
 /**
  * Connect surface layout. After F2 there is only ONE global nav rail (IconRail),
- * and Connect's tabs (Chat / Connection Request / Relationship) live there as the
- * Connect accordion children - so this layout no longer renders a second nav
- * column. It is now just the Connect surface's auth gate + a full-width content
- * frame. The global shell (rail + slim top bar) comes from the root layout.
+ * so this layout no longer renders a second nav column. Connect is now a flat
+ * rail entry (no accordion children — see `surfaces.ts`'s header for why,
+ * 2026-09-07); its own routes (`/connect/chat`, the default; `/connect/
+ * relationship`, still "soon"/disabled, unlinked but not deleted) are reached
+ * directly, not via a nav tab set. This layout is just the Connect surface's
+ * auth gate + a full-width content frame. The global shell (rail + slim top
+ * bar) comes from the root layout.
  *
  * Bouncer 1 — Connect surface gate (AUTH-01, D-01). An async Server Component so
  * the verification guard runs before rendering any Connect content. Redirect
@@ -36,7 +39,7 @@ export default async function ConnectLayout({
 
   return (
     <section className="flex h-full min-w-0 flex-1 gap-3">
-      {/* the surface content (chat, relationship, inbox…). It shrinks to the left
+      {/* the surface content (chat, relationship…). It shrinks to the left
           half when the deal card opens beside it - the chat "minimizes", the card
           takes the other half. */}
       <div className="flex min-w-0 flex-1 flex-col">{children}</div>

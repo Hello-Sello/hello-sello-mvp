@@ -871,3 +871,707 @@ page-shell behaviour that predates this ticket. **Ruled 2026-09-06:** filed as
 [HEL-92](https://linear.app/hellosello/issue/HEL-92) (Codebase Development
 Tickets); the accent-colour question (row 12) was ruled the same day —
 `connect_message`/`person` stay the same blue, no code change.
+
+---
+
+## T06 · Drop `deliver_deal` and `claim_deal_ticket`, and their tests
+
+Diff: `supabase/migrations/20260907090000_drop_deliver_deal_claim_deal_ticket.sql` (new —
+DDL-only, two `DROP FUNCTION IF EXISTS`), `supabase/tests/deliver_deal_test.sql` /
+`claim_deal_ticket_test.sql` + their two runners (deleted), `supabase/tests/
+send_deal_c2c_announce_test.sql` (edited — C9 removed, three cases `P1`-`P3` ported in from the
+deleted `deliver_deal_test.sql`, two stale citations repointed, one of those repointed citations
+itself fixed after review).
+
+**Verdict: 1 blocking finding (converged on independently by `/code-review` and `critic`, rung
+2 — a planning bug, not a `test-writer` slip: my own citation-fix instruction repointed a
+return-value coverage claim to a case that didn't cover it), fixed in one round and
+independently re-verified, including a temporary-break-then-restore proof the new assertion is
+actually load-bearing. 0 blocking from `security`. 7 + 4 notes across the two reviewers, all
+recorded below, none retried.**
+
+### I-M5 checkpoint — status correction
+
+STATE.md's T05 entry (and this ticket's own TICKETS.md text) carried the checkpoint as "still
+owed before T06 starts." It was not — the real, both-counts, run-for-real-against-production
+checkpoint had already happened 2026-09-07, same day, recorded in
+`docs/deploy/cloud-migrations-pending.md`'s "🔴 READ FIRST" section (im5a = 0, im5b = 5,
+row-level `updated_at` proof) before this ticket's build began. Re-checked at T06's own start,
+confirmed closed, not re-run.
+
+### Round trail
+
+- Pre-flight census (per the ticket's own instruction, run before writing the migration):
+  `pg_proc.prosrc` matched on call shape → 0 rows; broad `ILIKE` superset → exactly 3 rows
+  (`claim_deal_ticket` itself, `accept_connection_request`, `send_deal` — the latter two
+  comment-only, individually read and confirmed). Corrected a stale "4 rows" figure carried by
+  ADR I-M7/TICKETS T06 — 3 is what the catalog actually holds today, the 4th (pre-T01
+  `confirm_detected_deal`) is already gone.
+- `plan-checker` round 1: **OK, 0 blocking, 7 notes** — all held and folded into `PLAN-T06.md`
+  before any code was written. Most material: N1, its own "fold in before build" flag — deleting
+  `deliver_deal_test.sql` wholesale would have silently orphaned three live-behaviour cells
+  covering still-live `send_deal`/`confirm_detected_deal`, nowhere else in the suite. Also held:
+  N2 (a wrong leg in the reachability argument — corrected: D3 governs Discover only, the real
+  gate on `/connect/inbox` is `lenses.ts`/`InboxDetail.tsx`'s status check), N3 (softened
+  "provably unreachable" to name one real PostgREST-insert caveat), N4 (the verification grep
+  step's original scope couldn't pass — `supabase/` legitimately carries ~35 comment survivors),
+  N5 (two stale citations in the very file this ticket edits), N6 (the call-shape regex has a
+  blind spot the ILIKE cross-check closes; the migration header records both). N7 (record EARS-1
+  as a named exception at close, don't promote to blocking) — done, see below.
+- `test-writer` → ported P1-P3 (double-send guard; person-arm ticket-zero + co-owner-at-send;
+  `confirm_detected_deal`'s p2p birth into negotiation), deleted C9, fixed the two citations
+  the plan named, following each source cell and this file's own established idioms. Flagged a
+  genuine tool gap rather than faking completion: no Bash in its toolset, so it could not delete
+  the four dead files or run the runner itself.
+- Orchestrator completed the mechanical remainder: deleted the four dead files, ran
+  `run_send_deal_c2c_announce_test.sh` — **PASSED**, P1-P3 included, green against the
+  still-live (pre-DROP) functions.
+- `builder` → wrote the migration, green on first pass, no retry. Independently re-ran the
+  pre-flight census, `supabase db reset`, post-DROP census (0 rows), re-ran the suite post-DROP
+  (still green), full grep against `src/`/`e2e/` (matches the plan's named survivor list
+  exactly). Full SQL suite 62/64 — the 2 failures A/B-proven pre-existing by removing the new
+  migration and reproducing identically (HEL-83's promotion-status-gate fixture drift, already on
+  record in T01's own STATE.md entry, unrelated to this ticket).
+- `test-runner` independent pass (not trusting `builder`'s self-report): `db reset` clean, SQL
+  62/64 (same 2, confirmed via grep that neither failing suite even references either dropped
+  function), unit 514/514 (0 drift), `tsc` clean, eslint 6/15 (exact baseline match, 0 new),
+  post-DROP census 0 rows, `git status` scope check clean.
+- `/code-review high` + `critic` + `security`, parallel:
+  - **`/code-review` — 1 finding rated a genuine, freshly-introduced defect.** The repointed
+    §8.3 citation (`send_deal_c2c_announce_test.sql:32-33,141-143`) claimed case P2 proves
+    `send_deal`'s person-arm return value equals the p2p thread id. P2's own banner said the
+    opposite ("NOT 3b/3d, already covered by C3"), and neither P2 nor C3 actually captured the
+    return value — both called `send_deal` as a bare, result-discarding `SELECT`. My own
+    citation-fix instruction in `PLAN-T06.md` was the actual bug; `test-writer` executed it
+    faithfully. `/code-review`'s second finding (the `store.ts` gap) restates the plan's own
+    named, deliberate exception — not new.
+  - `critic` → 0 blocking, 7 notes. **N4 independently found the identical citation defect**
+    `/code-review` found — two reviewers converging on the same gap from different angles is why
+    it's rated blocking rather than a note. Also: N1 (EARS-1's gap must be named explicitly, not
+    omitted — done, see below), N2 (the post-build grep step's stated scope misses
+    `supabase/functions/` — re-checked directly by `critic`, 0 matches, conclusion holds), N3
+    (the migration's header cites `20260724120800`'s "never deployed apart" precedent without
+    carrying its coupling discipline — true, and the reachability argument is what actually
+    makes it safe, not the precedent), N5 (two new banners in P1/P3 described `deliver_deal`'s
+    no-op-on-co-owner logic as if live, when live `send_deal` stopped calling it entirely as of
+    an earlier migration — fixed alongside the blocking finding, see below), N6 (5 other files
+    outside T06's own scope carry now-stale citations into the deleted `deliver_deal_test.sql` —
+    correctly identified as debt, not scope creep), N7 (the P1-P3 port grew the file beyond
+    TICKETS.md's literal "delete the C9 block" text — justified by `plan-checker` N1 and
+    recorded in `PLAN-T06.md`/`STATE.md`, but TICKETS.md itself was never amended to say so).
+  - `security` → **0 blocking, 4 notes.** Independently re-ran the census with an even wider
+    regex than the plan used (also catching the `v_x := public.fn(...)` assignment shape) — still
+    0 rows; confirmed no function anywhere writes `pending_inbox_item`, so nothing can mint a new
+    `deal_card` ticket ever again. S1-S8 all pass or n/a (no dangling grants, no `pg_policies`
+    reference to either function, no cross-company read boundary change — the drop only *removes*
+    reads). Found the migration is worth more than "cleanup" (N-2): `claim_deal_ticket` never
+    checked its ticket's relationship before granting `deal_member` owner, so pre-drop a company
+    colleague excluded from a private deal could in principle forge a self-addressed ticket and
+    claim membership — this DROP closes that primitive, a genuine hardening, not merely dead-code
+    removal. Also corrected a false claim in the original (now-deleted) `claim_deal_ticket.sql`
+    header (N-1): `member_all`/`can_access_workspace` CAN express the claim bootstrap for
+    `company_wide` workspaces, contrary to what that file's 2026-07-20 comment said — moot now
+    that the file is gone, recorded for the historical record only. N-3 (a cheap post-drop
+    `to_regprocedure IS NULL` guard would harden I-J5 further) and N-4 (this migration isn't yet
+    in `cloud-migrations-pending.md`, which updates at `/ship`, not build time) — both legitimate
+    suggestions, neither acted on here per this project's own rule that notes are recorded, not
+    retried.
+- `builder` NOT dispatched for the fix — entirely inside `supabase/tests/**`, so per L-035 it
+  went to `test-writer`, never `builder`, even though the fix was well-understood and one file.
+  `test-writer` captured `send_deal`'s return value in P2's `DO` block, resolved the p2p thread
+  id the same way P3 already does, asserted equality (a strictly *stronger* proof than the
+  original `deliver_deal_test.sql` A2-3b, which only checked non-null) — and, bundled into the
+  same edit since it touched the same cases, fixed `critic`'s N5 (corrected the two banners that
+  wrongly attributed the ticket-zero behaviour to `deliver_deal` no-op logic). Flagged the same
+  Bash gap as before and asked the orchestrator to run verification.
+- Orchestrator verified independently: confirmed the file's `<>` operator was a literal
+  character, not an escaping artifact from the notification transcript; ran the suite —
+  **PASSED**; then, matching this slug's own established rigor (T05's builder proved its fix the
+  same way), **temporarily inverted the new assertion's condition, re-ran, and confirmed it
+  fails with the exact expected/got values** (proving the assertion is genuinely load-bearing,
+  not a tautology), reverted, re-ran — green again. Full `supabase db reset` + full SQL suite
+  sweep afterward: same 2 pre-existing failures, no new ones.
+- `tests 0/2` · `blocking-findings 1/2` — one round, well inside budget.
+
+### EARS-1 — named exception, not silently unmet (`plan-checker` N7, `critic` N1)
+
+TICKETS.md's EARS-1 ("no call site for either function shall remain in `src/`, `e2e/` or
+`supabase/`") is **not fully met by this ticket alone.**
+`src/modules/messaging/supabase/store.ts:580-584` still calls `claim_deal_ticket` via `.rpc()` —
+a real call site, not a comment. This is T07's declared scope
+(`docs/architecture/adr/0009-retire-connect-inbox.md`; TICKETS.md T07 names the exact range),
+and T06/T07 carry no dependency ordering on each other (Ready checkpoint marks them
+parallel-safe). `PLAN-T06.md` argues at length why this is safe anyway — not "provably
+unreachable" in an absolute sense (`critic`/`plan-checker` both corrected that wording), but
+unreachable given (1) T05's backfill flipped every pending `deal_card` row to `accepted` on
+production, (2) nothing sanctioned can mint a new one (0 remaining callers of `deliver_deal`,
+independently re-confirmed by `security` with a wider regex), (3) the real UI gate is
+`lenses.ts`/`InboxDetail.tsx`'s status check, not D3 as originally (wrongly) argued, with (4) one
+named, narrow caveat: `inbox_insert`'s `WITH CHECK` has no `type` predicate, so a hand-crafted
+PostgREST insert could in principle create a fresh row and reach the still-live "Pick up deal"
+button until T07 lands — today that would succeed, after this migration it errors instead
+(`PGRST202` in place of the RPC's own domain error), same user-facing outcome either way. T09
+depends on both T06 and T07, so this textual gap cannot survive past the e2e wave. Not a carve-out
+per PIPELINE §3/`/build` step 10 — the behavior change is named and understood, not undocumented,
+matching T05's own precedent for what "no carve-out" means.
+
+### Notes (rung 4-5, not retried)
+
+1. **(critic N1)** EARS-1's `store.ts` gap — see above, named explicitly rather than omitted.
+2. **(critic N2)** The plan's post-build grep verification step scoped itself to `src/`/`e2e/`
+   only; `supabase/functions/` (edge functions, which can call an RPC as `service_role` and
+   bypass the `authenticated`/`anon` revokes `deliver_deal` carried) wasn't explicitly swept.
+   `critic` ran it: 0 matches. Conclusion holds; the stated method wasn't exhaustive as written.
+3. **(critic N3)** The migration's header cites `20260724120800_drop_propose_edit_rpcs.sql`'s
+   "Their app callers die in plan 12-07 (same wave/PR — never deployed apart)" as its shape
+   precedent, but doesn't carry that precedent's coupling discipline — T06 and T07 truly can
+   deploy apart. The reachability argument (not the citation) is what makes this safe.
+4. **(critic N6)** Five other files carry now-stale citations into the deleted
+   `deliver_deal_test.sql`: `rls_isolation_test.sql:238` (a coverage pointer that now points at
+   nothing — compounds the fixed blocking finding), plus `decline_deal_test.sql:16`,
+   `finalize_deal_test.sql:13`, `assert_relationship_writable_test.sql:7,93,225`,
+   `announce_deal_event_test.sql:71`, `inbox_insert_receiver_gate_test.sql:30,195,198`,
+   `msg_all_deal_detected_gate_test.sql:40,181`, `e2e/deal-p2p-send.spec.ts:23`. Correctly
+   outside T06's own declared file list — real debt, not scope creep. Not fixed here.
+5. **(critic N7)** The P1-P3 port grew `send_deal_c2c_announce_test.sql` well beyond
+   TICKETS.md's literal text ("Also delete the C9 block at …:391-412"). The growth is
+   defensible — `plan-checker` N1 asked for it, `PLAN-T06.md` specifies it cell by cell,
+   `STATE.md` records it, and it prevents the L-061 class of silent test-count drift — but
+   TICKETS.md itself was never amended to say so, and the ADR's own scope-growth rule
+   (`0009 §…`, "keep the shipped system correct and buildable") doesn't literally cover
+   "prevent silent coverage loss" as a category. Judged acceptable, not smuggled.
+6. **(security N-1)** The original (now-deleted) `claim_deal_ticket.sql:10-13` header claimed
+   `deal_member`'s RLS "cannot express this bootstrap." `security` proved read-only, as a real
+   party non-member, that `member_all`/`can_access_workspace` actually *can* for `company_wide`
+   workspaces (the column default). Moot now the file is gone — recorded for the historical
+   record.
+7. **(security N-2, informational — not a defect, a deploy-value note)** This DROP is worth more
+   than dead-code cleanup: `claim_deal_ticket` never checked its ticket's relationship before
+   granting `deal_member` owner, so pre-drop a company colleague excluded from a private deal
+   could in principle forge a self-addressed `pending_inbox_item` row and claim membership on
+   it. The DROP closes that primitive. The forgeable-row half of the chain survives (pre-existing,
+   out of this diff's scope — `inbox_insert`'s missing `type` predicate) but its only remaining
+   consumer (`accept_connection_request`) allowlists three other types and checks the receiver,
+   so nothing chains off it today.
+8. **(security N-3)** A cheap post-drop `DO $$ IF to_regprocedure(...) IS NOT NULL THEN RAISE
+   EXCEPTION …` guard (this repo's own idiom, `profile_foundation_test.sql:31-33`) would harden
+   I-J5 further against a silent `IF EXISTS` no-op on a future signature mismatch. Not added —
+   I-J5's stated posture already accepts this residual risk as permanent, and notes aren't
+   retried.
+9. **(security N-4)** `20260907090000` isn't yet recorded in
+   `docs/deploy/cloud-migrations-pending.md` — that ledger updates at `/ship`, not at build time.
+
+---
+
+## T07 · Retire the `/connect/inbox` route and module
+
+Diff: 12 deletions (`src/app/connect/inbox/page.tsx`; `src/modules/connect/{index.ts,types.ts}`;
+`src/modules/connect/lib/{inbox-display.ts,lenses.ts,lenses.test.ts}`; six components under
+`src/modules/connect/components/`) + 5 edits (`next.config.ts` — redirect added;
+`src/modules/connect/lib/requestActionError.ts` — comment only; `src/modules/connect/supabase/
+inbox.ts` — heavily trimmed; `src/modules/messaging/supabase/store.ts` — dead branch removed;
+`src/types/database.types.ts` — two-line surgical edit).
+
+**Verdict: 0 blocking from `/code-review`, `critic`, or `plan-checker`'s round-1 REVISE (which
+had 0 blocking too — its 2 held notes were governing-document contradictions, not defects, both
+corrected before any code was written). 7 + 3 + 6 notes across all three reviewers, recorded
+below, none retried — matching this project's own rule that notes are recorded, not fixed,
+regardless of how trivial the fix would be.**
+
+### Round trail
+
+- Full import-graph traced by hand before planning (every importer of every file on TICKETS.md's
+  delete list, read directly) — surfaced two compile-breaking chains TICKETS.md doesn't name:
+  `claimItem`/`assignItem` orphaned once `InboxView.tsx` (their only caller) is deleted;
+  `dealPreviewOf`/`DealCardEmbed`/`money` orphaned once `getInbox` (their only caller) is
+  deleted. Also found, before touching the file: `database.types.ts` is NOT reproducible from
+  `supabase gen types` (an undocumented hand-edit on `update_deal_draft`, documented the hard way
+  in a prior slug) — planned a targeted two-line manual edit instead of a regeneration.
+- `plan-checker` round 1: **REVISE, 0 blocking, 7 notes, two held as governing-document
+  contradictions.** N2 — the ADR's own file-list table (`0009:256`) explicitly instructs deleting
+  `inbox.ts`'s `acceptItem` `deal_card` branch; the original plan wrongly left it, spot-verified
+  and corrected. N1 — **G4 routing corrected from auto-close to mandatory human stop**: this
+  ticket deletes 7 `.tsx` files, and PIPELINE §3 routes by the diff ("anything rendered → human
+  stop"), not by reachability; this slug's own gate log confirms the line is sharp
+  (T01/T02/T03/T05/T06 auto, none touched `.tsx`; T04 stopped because it did). N3 (a wrong
+  justification for a right conclusion, corrected), N4/N5 (doc-comment scope + 3 stale-prose
+  fixes), N6/N7 (name the real changes instead of asserting "no change"; assign the redirect
+  verification an owner) all held and folded into `PLAN-T07.md` before build.
+- `test-writer` deleted `lenses.test.ts` (4 tests, confirmed via `vitest run` on the file alone,
+  not a grep heuristic) after confirming its content matched the plan. Flagged the same no-Bash
+  tool gap as every prior ticket this slug; orchestrator ran the actual deletion.
+- `builder` executed the rest, green on first pass. One self-reported deviation, independently
+  verified twice (once by the orchestrator reading the result, once by `critic` reconstructing
+  the exact byte range): deleted 4 extra comment lines in `store.ts` (`:570-573`, not just the
+  named `:574-586`) because they described the `claim_deal_ticket` path and would otherwise sit
+  directly above an unrelated comment about `accept_connection_request` — L-045's "documented lie"
+  shape. `critic` confirmed this was required, not scope creep, and separately noted `PLAN-T07`
+  File 9 simply failed to state the same "range includes its own comment" discipline that
+  `plan-checker` N4 had already imposed on File 8.
+- Orchestrator independently verified the three EARS criteria (assigned owner per the plan's N7
+  fix, not left to the human stop alone): `tsc` clean, unit suite exactly **510/510** (514 − 4,
+  precise), and the `/connect/inbox → /discover` redirect live via curl (308 in dev, landing
+  correctly on `/discover`'s own auth gate).
+- `test-runner` independent full pass: **GREEN.** `tsc` clean, unit 510/510 (68 files, from 69),
+  SQL 62/64 (identical 2 pre-existing HEL-83 fixture fails as every prior ticket's baseline),
+  eslint 6/15 exact baseline match in the same 4 untouched files, redirect re-confirmed
+  independently on a separate port. Found a wider-than-instructed (but harmless) set of
+  comment-only stale references in files T07 correctly left alone — all either pre-existing or
+  already named as T09's declared scope in TICKETS.md.
+- `/code-review high` + `critic`, parallel (no `security` — no migration/RLS/RPC/auth/
+  server-action/cross-company-read surface in this diff):
+  - `/code-review` → 0 blocking, 3 findings, all comment/plumbing accuracy issues, none
+    functional (tests green either way). See Notes 1-3 below.
+  - `critic` → 0 blocking, 6 notes. Verified all three EARS criteria hold on intent, not just the
+    letter (`InboxItemView`'s deletion, `AcceptRequestType` cast, etc.); confirmed the ADR's
+    "Not touched, deliberately" fence (`connect_person`, `send_deal`,
+    `accept_connection_request`'s body) is intact; independently reconstructed the `store.ts`
+    deviation's exact byte range rather than trusting the report; independently re-verified the
+    `adr/0009:256` citation and the G4-routing correction, both hold. See Notes 4-9 below.
+
+### EARS-1 named-exception carryover — none this round
+
+Unlike T06, T07 carries no EARS gap of its own — its three criteria are fully met (redirect
+live, `tsc` clean, count exact). The one still-open exception from T06 (`store.ts:580-584`
+calling `claim_deal_ticket`) is **now closed** — T07 deleted that exact call site (File 9). T06's
+`REVIEW.md` entry above should be read with that in mind: the gap it named as "closed by T07" is
+now, in fact, closed, in this same working tree.
+
+### Notes (rung 4-5, not retried)
+
+1. **(`/code-review`)** `send_deal_c2c_announce_test.sql`'s P2 banner (this file was edited by
+   T06's own blocking-finding fix, not by T07 — surfaced here because T07's review round is what
+   read it) still opens "NOT 3b/3d, already covered by this file's own C3," directly contradicted
+   by the same banner's own later sentence ("ALSO asserts send_deal's return value…") and by the
+   file header three sections above. A residual self-contradiction from the T06 fix — the new
+   text was added correctly, but the old exclusion clause was never updated to match. No
+   functional gap (P2's assertions are correct and passing); the risk is exactly what
+   `docs/agents/LEARNINGS.md` L-070 (written this session, during T06's own fix) warns about — a
+   future editor trusting the stale half of the banner could delete the now-real assertion as
+   "redundant," reintroducing the gap L-070 just closed. Not fixed here, per this project's own
+   rule that notes are recorded, not retried — flagged prominently given the direct L-070 echo.
+2. **(`/code-review`)** T06's migration header (`20260907090000_…sql:41`) states `store.ts:580-
+   584 still calls claim_deal_ticket … removed by T07, not this ticket` — true when T06 was
+   written, false now that T07's diff (same uncommitted working tree) already removed that call
+   site. A stale forward-reference between two tickets in the same session. Not fixed here.
+3. **(`/code-review`)** `acceptItem` still passes `dealCardId: item.deal_card_id` into
+   `acceptInbox()`, which no longer reads `AcceptInput.dealCardId` anywhere (File 9 deleted the
+   one branch that did). Harmless dead plumbing — a direct, already-documented consequence of
+   `PLAN-T07.md`'s own deliberate decision to leave `messaging/types.ts` untouched (File 9's "Not
+   in scope" section). Converges with `critic`'s N4 below.
+4. **(`critic` N1, rung 5)** `requestActionError.ts`'s comment-only edit technically falls inside
+   ADR §3's Reused fence, which marks this file **"Untouched."** `critic`'s own brief would
+   promote any fence line to blocking; it resolved this in favour of the severity ladder instead
+   (rung 5, no leak/no silent failure/nothing that won't run) and flagged the tension explicitly
+   rather than silently picking one rule. The edit itself is `plan-checker` N5's fix (killing a
+   now-false "two surfaces" sentence) — the function body and its test are both unchanged.
+5. **(`critic` N2, rung 5)** The ADR contradicts itself: §3 says `acceptItem`/`declineItem`'s
+   "behavior does not [change]" (only the return type does, per D11); §4 explicitly instructs
+   deleting the `deal_card` branch, which **is** a behavior change for that (unreachable) case.
+   `builder` correctly followed §4. Recording that §3's row is now inaccurate, for whoever next
+   reads the ADR as ground truth.
+6. **(`critic` N3, rung 5)** TICKETS.md/ADR both say `database.types.ts` "must be regenerated";
+   this ticket does a targeted two-line edit instead (well-reasoned, `update_deal_draft`'s
+   hand-edit confirmed intact) — but nobody has confirmed there's no *other* drift between the
+   file and the live schema. One instance already visible, pre-existing and unrelated to T07:
+   `accept_connection_request`'s generated `Returns` type reads `Record<string, unknown>`, while
+   `store.ts:589-591` (a comment this ticket's own File 9 edit sits near, but does not touch)
+   still asserts *"The generated type still says `Returns: string`… until types regenerate."*
+   Neither claim is true today. Not this ticket's file to fix (the comment isn't in File 9's
+   named range) — flagged for whichever ticket eventually does the full regeneration.
+7. **(`critic` N4, rung 5) — ⚠️ needs Muskan's ruling, no owner left in this slug.**
+   `messaging/types.ts:327-331`'s `dealCardId` docblock still describes claiming a deal "via
+   `claim_deal_ticket`" — a function T06 dropped from the database — and still cites
+   `InboxItemView`, a type T07 deletes. `PLAN-T07.md`'s own justification for leaving this alone
+   was "the same class of decision as T06 leaving `database.types.ts`'s two stale RPC entries for
+   a later ticket" — but T07's own File 11 clears exactly those two entries in this same diff,
+   so the analogy that licensed the deferral no longer has a future ticket to land on: T08/T09
+   don't touch `messaging/`, and the slug ends at T09. **This residue currently has no home.**
+   Options: fold a one-line fix into T09 (nearby, already touching accept-adjacent surfaces), or
+   file it directly (this slug's own precedent — HEL-89/90/91 — files engineering findings with
+   no doc home straight to Linear team "Codebase Development Tickets", not `/track-doubt`). Not
+   filed automatically here per this project's "writes preview first" rule — surfaced for a
+   decision at this ticket's G4 stop.
+8. **(`critic` N5, rung 4)** Between T07 landing and T09 landing, `acceptItem`/`declineItem`'s
+   accept-write path has **zero behavioural test coverage** beyond `tsc`. The one unit test that
+   touches their caller explicitly disclaims them (`RequestsSection.test.tsx:5-6`, "needs a
+   browser — flagged as owed"), and the one e2e spec that did exercise them
+   (`e2e/inbox-accept.spec.ts`) drives the now-deleted `/connect/inbox` page and is dead until
+   T09 lands. Sequencing is TICKETS.md's own call (T09 explicitly depends on T06 **and** T07) —
+   not a defect, but the first thing to walk for real once T09 closes, and worth naming at G5.
+9. **(`critic` N6, rung 5)** One more detail for the G4 staging beyond what the plan already
+   named: `surfaces.ts:55`'s "Connection Request" nav entry is a **child of the Connect
+   sidebar accordion** — clicking it now leaves the Connect surface entirely and lands on
+   Discover, whose rail highlight then doesn't match what the user clicked. Cosmetic, temporary,
+   T08's to remove. Separately, out of every ticket's authority: `prototypes/inbox-prototype/
+   NOTES.md:54` still says "LOCKED: Variant A" for a page that no longer exists.
+
+### G4 staging (`visual-verifier`)
+
+**Ruled 2026-09-07: Muskan reviewed and passed** ("looks fine") — **the `g4/t07-*.png` files
+cited below were deleted afterward, per her explicit instruction.** The table and its prose stand
+as the record of what was staged and confirmed; the citations are historical, not live links.
+
+**⚠️ No prototype to compare against.** T07 deletes a route and its whole UI module; nothing new
+renders. Every row is staged against TICKETS.md T07's EARS lines and `PLAN-T07.md`'s "What
+actually needs staging at G4" — "verdict" here means "behaves as staged," not "matches a locked
+screen." Reached via a fresh `supabase db reset`, `next dev`, signed in as seeded
+`alice@greenleaf.test` (same door T04's staging used).
+
+#### Acceptance criteria (TICKETS.md T07 EARS)
+
+| # | Criterion | Verdict | Evidence |
+|---|---|---|---|
+| 1 | Navigate to `/connect/inbox` → redirect to `/discover` | **confirmed** | Signed in: final URL `/discover`, fully rendered. Chain `308 /connect/inbox → 200 /discover`. `g4/t07-01-inbox-redirect-lands-discover-1440.png` |
+| 1a | …signed out | **confirmed** | `308 /connect/inbox → 307 /discover → 200 /login` — the redirect fires before the auth gate, so the retired path never 404s. `g4/t07-02-signedout-inbox-lands-login.png` |
+| 1b | …in a production build | **confirmed** | `next build` clean; `.next/routes-manifest.json` carries the redirect; live `next start` returned the same 308. |
+| 1c | …at 390px | **confirmed** | Same 308 → `/discover`. `g4/t07-16-inbox-redirect-390.png` |
+| 2 | `tsc` zero errors | not a visual criterion | `test-runner`'s independent pass, above. |
+| 3 | Unit total 514 → 510 | not a visual criterion | Same. |
+
+#### The temporary dead-end — T07 ships ahead of T08
+
+| # | Entry point | Verdict | Evidence |
+|---|---|---|---|
+| 4 | Sidebar "Connection Request" (`surfaces.ts:55`) | **confirmed — dead-end** | Click → `308 /connect/inbox → 200 /discover`. `g4/t07-06` (before) → `g4/t07-08` (after) |
+| 5 | ⚠️ **Worse than `critic`'s prediction of a mere highlight mismatch.** | **confirmed** | Before: `aria-current="Chat"`, Connect `aria-expanded=true`. After clicking Connection Request: `aria-current="Discover"`, Connect `aria-expanded=**false**` — **the accordion collapses shut and the clicked item disappears from the rail** (`IconRail.tsx:194`). Pair: `g4/t07-06` vs `g4/t07-07` |
+| 6 | Discover list CTA (`CompaniesSection.tsx:100`) | **confirmed — dead-end** | 2 live "Wants to connect" pills (Bavaria, NordCanna) in seed data, both → 308 → `/discover` (the page already open). `g4/t07-09b`, `g4/t07-10` |
+| 7 | Company-page CTA (`ConnectActions.tsx:44`) | **confirmed — dead-end** | *"Bavaria Medical Cannabis GmbH wants to connect — open inbox →"* → 308 → `/discover`. Copy still promises an inbox. `g4/t07-11`, `g4/t07-11b`, `g4/t07-12` |
+
+#### Still-live surface — `/discover` and the Requests box
+
+| # | What | Verdict | Evidence |
+|---|---|---|---|
+| 8 | `/discover` renders normally post-deletion | **confirmed** | Full page, all sections, **0 console/page errors** across the whole run. `g4/t07-03` |
+| 9 | Requests box after the return-type trim | **confirmed** | "Requests", count 3, 3 Accept + 3 Decline buttons, badges `["Message","Connection","Person"]`. `g4/t07-04` |
+| 10 | Hover — Accept | **confirmed** | Darkens correctly, layout unaffected. `g4/t07-05` |
+| 11 | The accept **write** itself | **not exercised** | Irreversible control — not clicked without a go-ahead. Code path read instead: `RequestsSection.tsx:120-121` already discards the return and hides the row locally, matching D11. Same gap `critic` note 8 already named (zero behavioural cover until T09) — stays open. |
+| 12 | `pricelist_request` badge | **cannot-verify** | Not in seed; T04's staging hand-inserted a row for this, not repeated here. 3 of 4 kinds were visible. |
+
+#### Fit check
+
+| # | Width | Verdict | Evidence |
+|---|---|---|---|
+| 13 | 1440 / 1024 | **confirmed** | No clipping. `g4/t07-13` |
+| 14 | 768 | **pre-existing (HEL-92), T07 contributes nothing** | Identical to T04's row 22. `g4/t07-14` |
+| 15 | 390 | **pre-existing (HEL-92), T07 contributes nothing** | Identical to T04's row 23. `g4/t07-15` |
+
+#### Surfaced by this walk, not previously recorded
+
+16. `next.config.ts`'s own header comment says `permanent: true = 301`; Next actually emits
+    **308** in both dev and the built manifest — pre-existing (written for the SET-01 pair), but
+    now sits directly above T07's new line. One-line comment fix, no code change, not made here.
+17. The signed-out redirect chain drops deep-link intent (`/login` carries no `next=` param) —
+    pre-existing gate behaviour, not a T07 regression (a bare signed-out request to `/discover`
+    does the same).
+18. Sidebar label truncates to "Connection Req…" in the 200px rail — pre-existing, moot once T08
+    deletes the entry.
+19. `/discover/[companyId]`'s private-catalogue copy renders "…GmbHhasn't published…" (missing
+    space) — unrelated to T07, no owner.
+
+**Staged, not judged.** Rows 4-7 (the dead-end), row 5 especially (the accordion closes on the
+item you clicked), row 11 (the accept write path's coverage gap), and note 16 are what G4 exists
+to put in front of Muskan. Rows 14-15 are the already-filed HEL-92.
+
+---
+
+## T08 · Remove the nav entry and both Discover CTAs
+
+Diff: 3 edits — `src/shared/ui/surfaces.ts` (nav entry + unused icon import removed),
+`src/app/discover/[companyId]/ConnectActions.tsx` (link → non-interactive `div`),
+`src/app/discover/sections/CompaniesSection.tsx` (link → non-interactive `span`, arrow kept).
+
+**Verdict: 0 blocking from `plan-checker`'s round-1 REVISE (6 notes, all held and folded into
+`PLAN-T08.md` before build), `/code-review`, and `critic`.** `/code-review` reviewed the full
+working-tree diff (T06+T07+T08 together — no upstream commit boundary to isolate T08 alone) and
+found only 2 re-discoveries of already-open T07 findings (the T06 migration's stale
+forward-reference; `messaging/types.ts`'s residue — same item as T07's Note 4/`critic` N4, now
+independently confirmed a third time). `critic` found 5 notes, all rung 4-5.
+
+### Round trail
+
+- Read all 3 files + `DECISIONS.md` + the PRD's AC5 before planning — surfaced a real,
+  TICKETS.md-silent judgment call: the "incoming" connection-state branch in both CTA files is a
+  full UI branch (copy + icon + link), not a bare href, and a blind deletion would make an
+  "incoming" company fall through to a "send a new request" form.
+- `plan-checker` round 1: **REVISE, 0 blocking, 6 notes.** N1 (held) — the locked prototype
+  already renders this state as a non-interactive pill that keeps the arrow icon; the original
+  draft had dropped it. N2 (held) — a wrong sibling-branch citation in the plan's own reasoning,
+  corrected (the code was already right). N3 (held, real) — `ConnectActions` has a second mount
+  point (`BuyerShopView.tsx`'s `LockedCatalogue` slot) this plan hadn't traced, where the
+  de-interactivation leaves a whole panel's call-to-action dead with no path forward from a
+  company's detail page. N4 (held) — added a "Behavior changes" section naming this and two other
+  real changes. N5 (held) — the verification grep was scoped too narrowly to catch `surfaces.ts`.
+  N6 (2 more stale comments outside T08's 3 files) — recorded as follow-up debt, not fixed,
+  matches TICKETS.md's own file fence. All folded into `PLAN-T08.md` before any code was written.
+- `builder` executed green on first pass, verbatim per the corrected plan — including keeping
+  the arrow in `CompaniesSection.tsx` (confirmed by direct diff read, not just trusted).
+- Orchestrator + `test-runner` independent passes: both **GREEN.** `tsc` clean, unit 510/510
+  unchanged, SQL 62/64 (same 2 pre-existing fails), eslint 6/15 exact baseline match, `connect/
+  inbox` grep 0 hits in `src/` (survivors: the redirect + 3 e2e specs, T09's scope).
+- `/code-review high` + `critic`, parallel (no `security` — no migration/RLS/RPC/auth surface):
+  0 blocking from both. See notes below.
+
+### Notes (rung 4-5, not retried)
+
+1. **(`critic` N1, rung 5) — the plan overstated the prototype's authority; not fixed, recorded
+   for accuracy.** `plan-checker`'s original correction cited the locked prototype as *mandating*
+   the arrow. `critic` read `NOTES.md`'s actual "locked" bullet list directly: the connect-CTA
+   element type isn't among the four rules it locks, and `NOTES.md:43` files this pattern under
+   "Reusable components to mirror" — the prototype mirrored the app, not the reverse. A **sibling**
+   prototype (`discover-redesign-prototype/index.html:127`) renders the same state as an
+   interactive anchor. The shipped code (arrow kept) is still defensible — just not spec-mandated
+   the way the plan claimed.
+2. **(`critic` N2, rung 5) — ⚠️ a real, unintentional same-page inconsistency, surfaced by a
+   wrong citation in my own plan.** The plan's "independent corroboration" for keeping the arrow
+   cited `NewPeopleSection.tsx:64-69` as shipping "the identical pattern... with its arrow." Read
+   directly: that file's actual pill has **no arrow**. Net effect, on the live page: Discover's
+   company row pill (`CompaniesSection.tsx`) now carries an arrow; its person-row sibling
+   (`NewPeopleSection.tsx`) doesn't — same copy ("Wants to connect"), same tint, same
+   non-interactivity, two different shapes, on one screen. Not fixed here (this project's rule:
+   notes are recorded, not retried, especially after a design choice already went through one
+   correction round) — flagged prominently for a ruling: drop the arrow to match the person
+   pill's real precedent, or accept the inconsistency.
+3. **(`critic` N3, rung 4, `plan-checker` N3) — the `BuyerShopView` affordance loss, independently
+   re-confirmed, plus a third option worth considering.** `ConnectActions` mounts twice in
+   `BuyerShopView.tsx` (`:66`, `:79` — `critic` found the loss applies to BOTH mount points, not
+   only the locked one as the plan's write-up implied). The locked-catalogue slot's documented
+   purpose (`:92-110`, from a prior slug's own AC4) is carrying a call-to-action beside the
+   sentence that asks for one; post-T08 it renders an inert box instead. Not blocking — nothing
+   leaks or silently fails, the element is visibly inert, and the user is one back-navigation from
+   a working Accept in `RequestsSection`. **A third option the plan didn't weigh:** rather than
+   fully de-interactivating `ConnectActions`' branch, keep it a `Link` retargeted to `/discover` —
+   reproduces exactly what T07's own redirect already does today, adds no new affordance, invents
+   no design, and satisfies AC5's literal wording. Muskan's call, not a defect either way.
+4. **(`critic` N4, rung 5)** EARS-2's "no link to `/connect/inbox`" is currently proven by a
+   one-time grep, not a standing test. A 4-line addition to the existing
+   `CompaniesSection.test.tsx` (a `connectionState: 'incoming'` fixture asserting the rendered
+   HTML never contains `/connect/inbox`) would convert it into a regression guard. Not added —
+   TICKETS.md names no test file for this ticket and the live G4 walk + grep are the plan's
+   declared verification method.
+5. **(`critic` N5, `plan-checker` N6, rung 5)** The two stale comments outside T08's 3 declared
+   files (`IconRail.tsx:27`, `connect/layout.tsx:8`, the latter already stale from T07 too) —
+   `critic` agrees leaving them was correct given the file fence, with one addition:
+   `IconRail.tsx:27` sits closest to the code T08 changed and is the most likely to be found by a
+   future `grep "Connection Request"` sanity-check, landing exactly on the stale comment first.
+   Worth a small follow-up ticket for the T07+T08 shared debt, not a rebuke of this diff.
+6. **(`/code-review`, re-discovery, already open)** The T06 migration's stale forward-reference
+   comment and `messaging/types.ts`'s residue — both already recorded in T07's REVIEW.md section
+   (Notes 2 and 7/`critic` N4) — independently re-found by `/code-review` reading the full working
+   tree for T08's round. Third independent reviewer to flag the `messaging/types.ts` item; the
+   "needs Muskan's ruling, no owner left in this slug" status from T07 stands unchanged.
+
+### G4 staging (`visual-verifier`)
+
+**⚠️ No prototype to diff against.** T08 removes a nav entry and de-interactivates two CTAs;
+nothing new is designed. Every row is staged against TICKETS.md T08's EARS lines and
+`PLAN-T08.md`'s "Behavior changes" section — **"confirmed" means "behaves as staged," not
+"matches a locked screen."** Reached via a fresh `supabase db reset` (LOCAL stack,
+`.env.local` → `127.0.0.1:54321`), `next dev` on `:3000`, driven as seeded
+`alice@greenleaf.test` / GreenLeaf Cultivation (same door T04 and T07 used; session minted
+against local GoTrue rather than typed into the login form). Chromium, `deviceScaleFactor: 2`.
+
+#### 1 · The sidebar nav entry is gone (EARS-1)
+
+| # | State | Verdict | Evidence |
+|---|---|---|---|
+| 1 | Connect accordion, expanded | **confirmed — exactly 2 children** | Clicked the Connect parent: `aria-expanded` `false` → `true`; children render as **Chat** (`/connect/chat`, live) + **Relationship** (`state:"soon"`, greyed, non-clickable). No third entry. `g4/t08-01-sidebar-connect-accordion-open-1440.png`, `g4/t08-02-sidebar-accordion-zoom.png` |
+| 2 | The string "Connection Request" | **confirmed — absent** | `/Connection Request/i.test(document.body.innerText)` → `false` on `/discover` and on `/discover/[companyId]`. |
+| 3 | Any `href` to the retired route | **confirmed — none** | `document.querySelectorAll('[href*="/connect/inbox"]').length` → **0** on both pages. |
+| 4 | EARS-2's grep, re-run live | **confirmed — 0 hits** | `grep -rn "connect/inbox" src/` returns nothing. Survivors are exactly the two the plan predicted: `next.config.ts:24` (the intentional T07 redirect, outside `src/`) and 3 e2e specs (`inbox-accept`, `deal-c2c-create`, `deal-lands-in-c2c-chat` — T09's scope). |
+
+#### 2 · `ConnectActions.tsx` — the company-detail CTA
+
+Two seeded companies sit `incoming` toward GreenLeaf: **Bavaria Medical Cannabis GmbH**
+(`pending_inbox_item.type = connect`) and **NordCanna Distribution GmbH** (`connect_message`).
+Both were walked.
+
+| # | State | Verdict | Evidence |
+|---|---|---|---|
+| 5 | Default — Bavaria's detail page | **confirmed — non-interactive** | Renders `<div>`, `href` **null**, `cursor: auto`, `closest('a')` **false**. Copy reads *"Bavaria Medical Cannabis GmbH wants to connect"* — the `— open inbox →` tail is gone. Class list is the plan's, verbatim. `g4/t08-08-company-detail-bavaria-full-1440.png`, `g4/t08-09-company-detail-bavaria-cta-zoom.png` |
+| 6 | Hover | **confirmed — inert** | Mouse moved to the element's centre; `:hover` **did** match (so the pointer was on it), yet `background-color` was byte-identical before/after (`oklab(0.854862 0.090336 -0.0118939 / 0.6)`) and `cursor` stayed `auto`. The old `hover:bg-brand-soft` is gone. `g4/t08-10-company-detail-bavaria-cta-hovered.png` |
+| 7 | Second instance — NordCanna | **confirmed** | Same shape: `<div>`, no `href`, `cursor: auto`, *"NordCanna Distribution GmbH wants to connect"*. `g4/t08-12-company-detail-nordcanna-cta.png` |
+
+#### 2b · ⚠️ `BuyerShopView.tsx`'s locked-catalogue variant — found live, and it is the panel `critic` N3 described
+
+| # | State | Verdict | Evidence |
+|---|---|---|---|
+| 8 | The locked-catalogue call-to-action | **confirmed — the whole panel's CTA is now inert** | Bavaria has **0 products**, so `catalogueLocked` is true and the CTA renders in `LockedCatalogue`'s `connectAction` slot. The screenshot shows the panel entire: *"This catalogue is private"* → *"…Connect with them to see the products they keep off their public shop."* → and, beside it, an inert pink box. **The sentence asks the reader to connect; the control next to it no longer does anything.** `g4/t08-11-bavaria-locked-catalogue-panel.png` |
+| 9 | The *other* mount point (`BuyerShopView.tsx:66`, the unlocked shop header) | **cannot-verify — not reachable in seed** | `BuyerShopView.tsx:64` gates it on `!catalogueLocked`, so **exactly one `ConnectActions` mounts at a time** — the two are mutually exclusive, not both live as `critic` N3's "applies to BOTH mount points" reads. Both seeded `incoming` companies have 0 products, so only the locked branch is observable here. The code path is identical either way; only its container differs. |
+
+#### 3 · `CompaniesSection.tsx` — the Discover list pill
+
+| # | State | Verdict | Evidence |
+|---|---|---|---|
+| 10 | Default — 2 rows | **confirmed — `<span>`, arrow kept** | Both pills: tag `SPAN`, `href` **null**, `role` **null**, `cursor: auto`, `closest('a')`/`closest('button')` **false**, **1 `<svg>`** (the `ArrowRight`). Copy *"Wants to connect →"*. Class list matches the plan verbatim. `g4/t08-04-companies-section-1440.png`, `g4/t08-05-companies-pill-bavaria-zoom.png` |
+| 11 | Hover | **confirmed — inert** | Same test as row 6: `:hover` matched, background and cursor unchanged. `g4/t08-06-companies-pill-hovered.png` |
+
+#### 4 · ⚠️ The `NewPeopleSection` arrow inconsistency (`critic` N2) — staged for a ruling
+
+**The code-level fact holds** (`CompaniesSection.tsx` pill has an arrow; `NewPeopleSection.tsx:64-69`
+has none). **What the live walk adds is that it has no visual manifestation, because the person
+branch never renders.**
+
+| # | State | Verdict | Evidence |
+|---|---|---|---|
+| 12 | Side-by-side person pill vs company pill | **cannot-verify — structurally unreachable, not a seed gap** | `NewPeopleSection.tsx:127-132` filters `p.connectionState !== "incoming"` **before** rendering any card, and its own test asserts exactly this (`NewPeopleSection.test.tsx:29`, *"hides connected + incoming-request people"*). Its only consumer is `DiscoverShell.tsx:60`. So the `incoming` branch at `:64-69` cannot render from this section at all. Live: **0** person "Wants to connect" pills on the page. |
+| 13 | …and the seed *does* have an incoming person | **confirmed — it lands elsewhere** | Clara Vogt / Rheinland Apotheke (`pending_inbox_item.type = connect_person`) renders in the **Requests** box as a `Person`-badged row with Accept/Decline — not as a pill. `g4/t08-03-discover-top-1440.png` |
+| 14 | The nearest thing to a side-by-side | **staged** | Both sections in one 1440 viewport: "People you may know" (one card, a `+ Connect` **button**) directly above "Companies" (two `Wants to connect →` pills). `g4/t08-07-people-and-companies-same-view-1440.png` |
+| 15 | Consistency *within* the touched section | **confirmed — all 3 pills carry an icon** | `CompaniesSection`'s own three states render `Wants to connect →`, `Wants to connect →`, `✓ Connected` — 1 `<svg>` each. Inside its own list the arrow is the consistent choice; the mismatch `critic` named is with a sibling section whose pill does not render. Same screenshot as row 14. |
+
+#### 5 · Nothing else on `/discover` broke
+
+| # | State | Verdict | Evidence |
+|---|---|---|---|
+| 16 | Console / page / network errors | **confirmed — 0** | Across every run in this walk: `/discover`, both company detail pages, at 1440 / 1024 / 768 / 390. **0 console errors, 0 warnings, 0 `pageerror`, 0 failed requests.** |
+| 17 | General "does it look normal" pass | **confirmed** | Requests box (3 rows, badges `Message` / `Connection` / `Person`, Accept + Decline live), My network (David Berg; Rheinland, StonePharm), People you may know (Eva Klein), Companies (3, filters + search). `g4/t08-03-discover-top-1440.png`, `g4/t08-03b-discover-bottom-1440.png` |
+| 18 | Company detail page renders whole | **confirmed** | Banner, Verified pill, three info cards, locked-catalogue panel, Back to Discover. `g4/t08-08-company-detail-bavaria-full-1440.png` |
+
+#### 6 · Fit check — the component inside its real container
+
+| # | Width | Verdict | Evidence |
+|---|---|---|---|
+| 19 | 1440 | **confirmed** | Both CTAs sit in their containers with room to spare. Rows 5, 10. |
+| 20 | 1024 | **confirmed** | List pill `170×36`, no row overflow, not clipped. Detail CTA `320×64`, `overflowsParent: false`, in viewport. `g4/t08-14-fit-1024-companies-section.png`, `g4/t08-15-fit-1024-detail-cta.png` |
+| 21 | 768 | **confirmed for the CTAs** | Pill `170×36`, arrow intact, no overflow. Detail CTA `320×64`, fits. Company **names** truncate (`Bava…`, `Nord…`) — pre-existing row-grid behaviour, not T08's element. `g4/t08-14-fit-768-companies-section.png`, `g4/t08-15-fit-768-detail-cta.png` |
+| 22 | 390 — the pill | **deviates — but pre-existing, and proven so by control** | Pill's right edge lands at **462px** against a **390px** viewport and a **343px** row: off-screen. **Control run, same viewport:** the untouched `Connected` pill (Rheinland — a branch T08 never touched) clips **worse**, right edge **483px**. So the cause is the page-level container, not the `<a>`→`<span>` swap; same class as the already-filed **HEL-92**. `g4/t08-16-fit-390-companies-clipping.png`, `g4/t08-14-fit-390-companies-section.png` |
+| 23 | 390 — the detail CTA | **deviates — same pre-existing cause** | The rail never collapses, leaving a ~104px content column; the CTA becomes `104×144` and wraps *"Bavaria Medical Cannabis GmbH wants to connect"* over six lines. It stays inside its parent (`overflowsParent: false`) — the parent is what has collapsed. `g4/t08-15-fit-390-detail-cta.png`, `g4/t08-17-fit-390-detail-cta-page.png`, `g4/t08-13-fit-390-discover.png` |
+
+#### Surfaced by this walk, not previously recorded
+
+24. **`critic` N3's "BOTH mount points" is not observable as a pair** — see row 9. The two
+    `ConnectActions` mounts in `BuyerShopView.tsx` are mutually exclusive (`!catalogueLocked`
+    vs `emptyState`), so at most one is ever dead at a time. It does not soften the finding;
+    it narrows it.
+25. **`critic` N2's inconsistency is real in the source and invisible on the screen** — see rows
+    12-15. Whatever Muskan rules, the ruling is about code consistency, not about something a
+    user can currently see. Worth knowing before spending a change on it.
+26. `IconRail.tsx:27`'s stale comment (*"its children (Chat / Connection Request /
+    Relationship)"*) confirmed still present in the source T08 renders through — the exact
+    Note 5 debt, now with a live rail beside it showing two children.
+27. `/discover/[companyId]`'s *"GmbHhasn't published"* missing space is visible in every
+    locked-catalogue screenshot here. Already T07's note 19; still unowned.
+28. A dev-only `agentation` overlay (a `devDependency`) mounts a floating button bottom-right in
+    `next dev`. Suppressed in most shots; it survives in `g4/t08-16` and `g4/t08-17`. Not app UI.
+
+**Staged, not judged.** What G4 exists to put in front of Muskan here: **row 8** (the
+locked-catalogue panel now asks for an action it cannot offer — `plan-checker` N3 / `critic` N3,
+now rendered rather than reasoned about, with `critic`'s third option of a `Link` retargeted to
+`/discover` still on the table), **rows 12-15** (the arrow inconsistency is real in code and
+absent from the screen), and **rows 22-23** (390px breaks, but the control proves T08 did not
+cause it). Rows 1-4, 5-7, 10-11 and 16-18 are the ticket doing what it said it would.
+
+---
+
+## T09 · Update the e2e specs
+
+Diff: 5 files, all under `e2e/` — `deal-lands-in-c2c-chat.spec.ts`, `deal-c2c-create.spec.ts`,
+`fixtures/two-company.ts`, `discover-shop.spec.ts` (widened into per Muskan's explicit ruling,
+not in TICKETS.md's original list), `inbox-accept.spec.ts` (the substantial rewrite). No `src/`
+file touched. Last ticket in the slug's original nine.
+
+**Verdict: 0 blocking from `/code-review` or `critic`. Two `plan-checker` rounds before any code
+was written (round 1: 3 blocking, 5 notes; round 2: 1 blocking, 6 notes — the most of any ticket
+this slug), all held and folded in — this ticket needed by far the heaviest planning scrutiny,
+proportional to how far its real shape diverged from TICKETS.md's terse description.**
+
+### Round trail
+
+- Traced all three TICKETS.md-declared files by hand and found a problem TICKETS.md doesn't
+  name: `inbox-accept.spec.ts`'s second test wasn't just navigating to a deleted page — its whole
+  premise (an accept flow for an already-connected buyer's pricing ask) was obsoleted by **T02**,
+  an earlier, already-closed ticket in this same slug, independent of T06/T07. Verified directly
+  against `src/app/discover/actions.ts`'s `requestProductPricing` and the live RPC it calls:
+  connected-company pricing requests create zero `pending_inbox_item` rows now, "there is nothing
+  left to accept."
+- Found the identical T02-caused break a second time, in `e2e/discover-shop.spec.ts` — a file
+  TICKETS.md never names, previously flagged by T02's own G4 gate log as an open gap ("widen T09
+  or open a sibling ticket") and left unresolved since 2026-09-04. **Put to Muskan directly rather
+  than resolved unilaterally — ruled: widen T09 to include it.**
+- Plan written: `PLAN-T09.md`. `plan-checker` round 1: **REVISE, 3 blocking, 5 notes.** B1 (rung
+  2) — the first-drafted rewrite of `inbox-accept.spec.ts`'s Test 2 was vacuous: the RPC's dedup
+  guard is permanent, and `discover-shop.spec.ts` runs before `inbox-accept.spec.ts` in
+  Playwright's single-worker path-ordered execution and already fires the identical ask, so the
+  message would pre-exist and the new assertions would pass on someone else's write. Required two
+  new fixture helpers (`resetPricingRequestMessage`, `countPricingRequestMessages`). B2 (rung 3)
+  — T09's own EARS ("every spec shall pass") is literally unsatisfiable without the widening
+  above; this is where the ruling was obtained. B3 (rung 3) — a dangling import left behind after
+  an export deletion. N1 (rung 4, most material note) — wrongly dropped two assertions that
+  `docs/architecture/adr/0006-deal-draft-lands-in-chat.md:381` names as the *only* test coverage
+  anywhere for a live invariant (a second c2c thread / a duplicate "now connected" line); restored.
+  All held, folded in.
+- `plan-checker` round 2 (dispatched given round 1's severity — verifying the fix didn't
+  introduce a new problem): **REVISE, 1 blocking, 6 notes.** Round 1's fixes all independently
+  re-verified correct. New blocking finding, same class as B3: the plan called for asserting
+  `buildPricingRequestNote(...)`'s output, but that function lives in `src/` and no e2e spec has
+  ever imported across the `e2e/`↔`src/` boundary — fixed by using the already-verified literal
+  string directly. 6 notes (most material: had to state explicitly that the restored assertions
+  compare against snapshots captured *before* the ask, not re-derived after, or the guard becomes
+  tautological) all held and folded in. Orchestrator then did an independent full read-through to
+  confirm no further dangling forward-references — the exact mistake round 2's blocking finding
+  was. No round 3 dispatched.
+- `test-writer` executed all 5 files green on first pass, verbatim per the twice-corrected plan.
+  Two reasonable judgment calls on prose the plan gave intent for but not verbatim text (a test
+  title, several header-comment rewrites), both spot-checked directly by the orchestrator and
+  confirmed faithful.
+- Orchestrator: `tsc` clean; `countPersonRequestsForAlice` confirmed fully removed (export +
+  import). **Ran the four actually-touched spec files against the live local stack — 21/21
+  PASS**, including the two highest-risk tests, before handing off for independent verification.
+- `test-runner` independent full pass: **GREEN.** `tsc`/unit/SQL/eslint all clean or at exact
+  baseline. **Ran the full 154-test e2e suite** (not just the touched files) for broader
+  regression — all 21 of T09's own tests pass even inside the full run; 21 total suite failures,
+  all A/B-proven pre-existing against `main`, none tracing to T09. Surfaced a genuinely new
+  finding in passing: 7 of those 21 are a previously-uncatalogued pre-existing class
+  (`present-edit-model.spec.ts`/`present-info.spec.ts`, unrelated to 0027 entirely) — the
+  standing "15 GoTrue-class failures" baseline this slug has cited repeatedly undercounts; actual
+  is 21 across two classes. Recorded as debt, not fixed here.
+- `/code-review high` + `critic`, parallel (no `security` — no `src/`, migration, RLS, RPC, or
+  auth surface in this diff, pure test-file work):
+  - `critic` → 0 blocking, 5 notes, all rung 5. Confirmed the vacuous-test fix genuinely closes
+    the hole (traced the reset's DELETE predicate against the RPC's own dedup-guard predicate,
+    confirmed the reset is strictly *broader* than the guard so it can't leave a row the guard
+    would still see), confirmed the ADR fence intact, confirmed both halves of the Test-1
+    deletion argument (the DB-level CHECK constraint that makes `connect_person` unreachable to
+    Discover, and the unit test covering the badge-lookup class). See notes below.
+  - `/code-review` → 0 blocking, 2 findings. One was a process-timing artifact (this file's own
+    top `stage:` line hadn't been advanced yet — expected, done at gate-close, see below). The
+    other converges exactly with `critic`'s N2 — two independent reviewers on the same finding.
+
+### Notes (rung 4-5, not retried)
+
+1. **(`critic` N1, rung 5) — ✅ FIXED, ruled 2026-09-07.** The rewritten module header committed
+   the exact documented-lie class it was written to avoid, in the one paragraph that wasn't
+   rewritten from a verified fact: `inbox-accept.spec.ts:20-25` claimed DEV-83's general
+   regression needs no e2e retest because "no live path still exercises an accept between two
+   already-connected companies for ANY request type" — both supporting clauses were false
+   (`ConnectActions.tsx` only hides the *send* form once connected, it doesn't retire a request
+   sent before the pair connected by another route; `accept_connection_request`'s own migration
+   comment confirms this exact scenario is a normal case it explicitly handles). **Muskan ruled:
+   correct it.** Rewritten to state the real reason: the invariant moved into SQL test coverage —
+   `connection_consent_lockdown_test.sql` and `accept_connection_request_status_guard_test.sql`
+   both independently prove an accept onto an already-connected pair adopts rather than re-mints.
+   Re-verified: `tsc` clean, both affected specs still pass (13/13).
+2. **(`critic` N2 + `/code-review`, rung 5, two independent reviewers converged) — ✅ FIXED, ruled
+   2026-09-07.** `pricingRequestNote()` (`two-company.ts:456`) was dead code, left behind
+   inconsistently — this ticket's own diff deleted its OTHER orphaned export
+   (`countPersonRequestsForAlice`) under an explicit stated rule ("dead code with zero callers…
+   remove outright once certain") but hadn't applied it here. **Muskan ruled: delete it.** Done,
+   including its doc comment; the one remaining prose mention in `discover-shop.spec.ts:221`
+   (explaining where the coverage moved to) is historical narrative, not a call site, and stays
+   accurate as-is. Re-verified: `tsc` clean, no dangling reference.
+3. **(`critic` N3, rung 5)** `inbox-accept.spec.ts:132`'s hardcoded pricing-note string is a
+   third, un-cross-referenced copy — `pricingRequest.ts` and the RPC's SQL both carry "keep in
+   sync by hand" comments naming *each other*, but neither knows about this third copy. A change
+   to the note format would silently desync this one test. A one-line comment naming the owner
+   would close it; not added here.
+4. **(`critic` N4, rung 5)** A stale citation survives inside the very header this ticket
+   rewrote: `inbox-accept.spec.ts:9-10` still cites `InboxView.tsx:137` (deleted by T07) and a
+   swallowed-throw in `RequestsSection.tsx:98` that was fixed before this session. Same
+   documented-lie class as note 1, one paragraph over.
+5. **(`critic` N5, rung 5)** `discover-shop.spec.ts`'s Test #1 shares the same "doesn't
+   discriminate connected vs. dedup" hazard the plan explicitly named and commented in
+   `inbox-accept.spec.ts`, but the comment wasn't added to this file's sibling assertion.
+   Cosmetic — the test's own title is honest about being UI-only, nothing is factually wrong.
+6. **(`/code-review`, process note, not a code defect)** This file's own top `stage:` line lagged
+   T09's actual section during the review round — expected, since the orchestrator advances that
+   line as the final step at gate-close, not mid-round. Resolved by the time this section closes.
