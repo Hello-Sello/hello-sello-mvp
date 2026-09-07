@@ -212,11 +212,92 @@ Closed. **Its factual query, answered:** the lint baseline stash covered **five*
 
 ---
 
+### `visual-verifier` — G4 staging
+
+**21 screenshots** in `g4/`, live-vs-prototype pairs. Dev server confirmed serving current code and
+working tree == HEAD before capture. `supabase db reset` deliberately skipped (`/` is static, zero
+seeded-data dependency, a reset would be destructive for no benefit); the consent banner was hidden
+by CSS for capture only — **not** clicked, since Accept/Reject is a consent decision.
+
+#### Criteria and prototype differentiators
+
+| Item | Shipped | Approved design | Verdict |
+|---|---|---|---|
+| AC 1 | one `<h1>`, `ONE SECURE SPACE FOR EVERY B2B DEAL` | same | **match** |
+| AC 2 | D5 string byte-exact, em dash + `platform` | D5 (supersedes PRD AC 2) | **match** — ⚠️ the prototype PNG still draws the retired `plattform` + hyphen; **live is the correct one** |
+| AC 3 | `#what-you-can-do`, `<h2>` correct, exactly 3 cards | same | **match** |
+| AC 4 | new meta, neither retired phrase | M10 | **match** |
+| AC 5 | 16/16 | all twelve pre-existing pass | **match** |
+| Card 2 title | `Send to all your customers and suppliers` | **amendment 3** — plural | **match to approved**; differs from prototype **by design** |
+| Card 3 title | `Verified partners only` | **amendment 3** / D6 | **match to approved**; differs from prototype **by design** |
+| Card 3 body | existing longer body kept | D6 keeps the card verbatim | **match to approved** |
+| Eyebrow / heading / sub | as shipped | identical to `index.html:368-372` | **match** — but see V1 |
+| Card 3 icon | lucide `ShieldCheck` | prototype draws a circle-check | **deviates**, cosmetic — live keeps `ValueProps`' existing icon |
+
+*(Pointing this agent at the amendment rather than `?variant=C` is what stopped cards 2 and 3 being
+reported as failures. That routing was C2's whole purpose.)*
+
+#### Captured views
+
+| View | Finding | Verdict |
+|---|---|---|
+| Hero @1440 | h1 60px (prototype 68px). Live breaks `ONE SECURE SPACE FOR / EVERY B2B DEAL`; prototype breaks after `SPACE`. Live's second line is shorter — reads top-heavy | **deviates** |
+| Hero @1440 fit | h1→sub 24px, sub→CTA 36px, CTA above fold, no overflow. **No collision** | **match** |
+| §4 @1440 | 3-up, equal card heights (192px), 355px columns. Card 2's longer title wraps to 2 lines so its body drops a line — **body copy no longer shares a baseline** across the row | **deviates** — direct consequence of approved amendment 3 |
+| **§4 orphan band** | ⚠️ **640–1023px, not just 768** — wider than the ticket assumed. Worst at 1023px: one card in the left half, right half empty. Resolves to 3-up at 1024px | **needs-a-human-call** |
+| §4 @768 vs prototype | **Cannot be arbitrated by the prototype** — variant C has no 2-column state at all; it goes 3-up straight to 1-up at 900px | **cannot-verify** |
+| Hero @375 | h1 36px × 3 lines, balanced break, no widow; CTAs stack via pre-existing `flex-wrap`; no overflow | **match** |
+| §4 @375 | 1-up × 3 both sides | **match** |
+| **Hero @640-700** | h1 jumps to 60px at the `sm` breakpoint inside a ~592px box → 3 lines with `DEAL` stranded alone. Tightest point on the page | **needs-a-human-call** |
+| Hover @1440 | lift fires and matches the prototype | **match** |
+| Full page @1440 | 5907px, no overflow, all sections render | context |
+
+#### V1-V4 — the verifier's opinions
+
+**V1 · The eyebrow duplication is real and it is the page's only instance.** Every other pair is
+distinct *and* punchier: `HOW IT WORKS` / "Three steps from stranger to deal" · `SEE IT IN ACTION` /
+"A gated product, here's the inside" · `LOVED ON BOTH SIDES OF THE DEAL` / "What dealmakers say" ·
+`READY WHEN YOU ARE` / "Join the verified B2B network". §4 is the only literal prefix, and its
+heading is merely descriptive where the others are outcome phrases. **Faithful to the approved
+prototype**, so a design question, not a build slip. One prop to change.
+
+**V2 · The orphan row — the ruling most worth having, and there is a precedent one section down.**
+`HowItWorks.tsx:37` also renders 3 cards and uses **`sm:grid-cols-3` with no `lg:` step**, so it
+never orphans. §4 kept `sm:grid-cols-2` from its 4-card days. `sm:grid-cols-2 lg:grid-cols-3` →
+`sm:grid-cols-3` is **one class**, and it makes §4 match its sibling.
+**Deliberately NOT applied:** the ADR's blast radius authorises only the `lg` value, and 3 narrow
+cards at 640px is a design trade-off. **Muskan's call at G4.**
+
+**V3 · The longer `<h1>` holds up better than expected.** 2 lines at 1440 (9.1% of hero height, no
+collision), 3 balanced lines at 375. Soft spot is 640-700px only. Separately, the prototype's line
+break is better balanced — it puts the short line first.
+
+**V4 · Two extras.**
+- ⚠️ **Pre-existing, out of scope, and it confirms the ADR's own reasoning:** the cards'
+  `hover:shadow-[…]` **never applies**. `.glass` (`globals.css:60-66`) sets `box-shadow` as an
+  **unlayered** plain rule, and unlayered CSS beats Tailwind v4's layered utilities regardless of
+  specificity — so the hover shadow is dead code on **every** `.glass` element carrying a shadow
+  utility. Confirmed unchanged from HEAD. **This is the exact cascade-layer mechanism ADR §2 used to
+  reject `motion-reduce:animate-none` for T02** — the ADR predicted it in theory; here it is
+  already happening in practice. Wants its own ticket.
+- **§4 and §5 now read as the same section twice.** Dropping to 3 cards made §4 structurally
+  identical to `HowItWorks` directly beneath it — two consecutive rows of three glass cards with
+  icon + title + body. At 4 cards they read as different blocks. Rhythm observation for G4.
+
+**Evidence-quality note the verifier self-caught:** its first hover test reported the lift as
+broken. It was not — Tailwind v4 compiles `-translate-y-1` to the **`translate`** property, not
+`transform`, and it had been reading `transform`. Corrected before it reached the table.
+
+---
+
 ## Verdict — T01
 
-**No blocking findings from either reviewer.** 12 findings total: **1 rejected with reasoning**
-(F2), **4 fixed** (F4, C1, C2, C3, C5 — five edits), the rest carried to G4 as notes.
-Post-fix gate re-run: `tsc` clean, scoped `eslint` clean, **landing e2e 16/16**.
+**No blocking findings from any reviewer.** 12 review findings: **1 rejected with reasoning** (F2),
+**5 fixed** (F4, C1, C2, C3, C5), the rest carried to G4 as notes. Visual staging adds 4 more
+observations, **3 of which are design calls deliberately left to Muskan** (V1 eyebrow, V2 orphan
+band, V3 the 640-700px headline) and 1 pre-existing bug worth its own ticket (V4 dead hover shadow).
+Post-fix gate: `tsc` clean · scoped `eslint` clean · **landing e2e 16/16**.
+Committed `423b6f5`, pushed.
 
 ## Notes carried to G4 — none is a defect, all need Muskan's eye
 
