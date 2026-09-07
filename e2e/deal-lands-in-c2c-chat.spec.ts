@@ -10,9 +10,11 @@
  *   AC 2 — the recipient reaches it without visiting /connect/inbox ... IMPLIED
  *          by AC 1 + AC 3 together, not separately asserted (`plan-checker`
  *          N6 — a script proves nothing by omission; what proves it is the
- *          pair "reachable from chat" + "absent from the inbox lens")
+ *          pair "reachable from chat" + AC 3's DB-level absence fact, below)
  *   AC 3 — the Deal-tickets lens shows no NEW entry (pre-existing production
- *          tickets are allowed to survive — this is "no new", not "empty") .. test 2
+ *          tickets are allowed to survive — this is "no new", not "empty");
+ *          proven at :275 alone (`countTicketsForCard(cardId)).toBe(0)`) — T09
+ *          deleted the redundant /connect/inbox UI-lens check ........ test 2
  *   AC 6 — the addressee control's CALL SITE is wired correctly, not just its
  *          selector (T02 G4 ruling 2 / critic N1) ......................... test 1
  *
@@ -279,20 +281,6 @@ test('a company-addressed deal lands as a pill in the seller\'s c2c chat, opens 
     expect(countDealPillsOnThread('c2c')).toBe(1)
     expect(countDealPillsOnThread('p2p')).toBe(0)
 
-    // ---- AC 3 (AC 2 implied by this + AC 1 above): no NEW Deal-tickets entry ----
-    await alicePage.goto('/connect/inbox')
-    // B4: LensTabs renders UNCONDITIONALLY (InboxView.tsx:130), above the
-    // loading ternary (:132) — an absence assertion taken before load
-    // finishes would pass on a loading page, a blank page, or a crashed
-    // InboxView just as readily as on a correct one. Copies the shape already
-    // in deal-c2c-create.spec.ts (:164-169): wait for load, assert the
-    // POSITIVE empty-state string, THEN the absence.
-    await expect(alicePage.getByText('Loading inbox…')).toBeHidden({ timeout: 15000 })
-    await alicePage.getByRole('button', { name: /deal tickets/i }).click()
-    await expect(
-      alicePage.getByText('No deal tickets waiting to be picked up.', { exact: false }),
-    ).toBeVisible({ timeout: 15000 })
-    await expect(alicePage.getByText(PRODUCT_NAME)).toHaveCount(0)
   } finally {
     await aliceContext.close()
     await bobContext.close()

@@ -443,38 +443,6 @@ export function countPricingRequests(senderCompanyName: string, productCode: str
 }
 
 /**
- * The `note` of the ONE live per-product pricing ask a company sent GreenLeaf
- * about a product (by `supplier_product_code`), or null if none exists.
- * `countPricingRequests` proves the ROW exists; this proves what it SAYS —
- * D3's note must name the product, which is what makes T04's criterion 2 true
- * "to the seller's eye" (the note renders in InboxRow / InboxDetail; a bare
- * `metadata` key renders nowhere). Same scoping — and the same CALLER CONTRACT
- * as the counter above: both parameters are interpolated raw into single-quoted
- * SQL literals, so callers must pass literal constants, never runtime-derived
- * names.
- */
-export function pricingRequestNote(senderCompanyName: string, productCode: string): string | null {
-  const bin = psqlBin()
-  const out = execFileSync(
-    bin,
-    [
-      DB_URL,
-      '-At',
-      '-c',
-      `select pi.note from public.pending_inbox_item pi ` +
-        `join public.company sc on sc.id = pi.sender_company_id ` +
-        `join public.company gl on gl.name = 'GreenLeaf Cultivation' ` +
-        `join public.product p on p.company_id = gl.id and p.supplier_product_code = '${productCode}' ` +
-        `where sc.name = '${senderCompanyName}' and pi.type = 'pricelist_request' ` +
-        `and pi.status = 'pending' and pi.deleted_at is null ` +
-        `and pi.metadata->>'product_id' = p.id::text limit 1`,
-    ],
-    { encoding: 'utf8' },
-  ).trim()
-  return out || null
-}
-
-/**
  * The `status` of the ONE per-product pricing ask a company sent GreenLeaf, or
  * null if no such row exists. Same scoping and the same CALLER CONTRACT as
  * `countPricingRequests` above (both parameters interpolated raw — pass literal
@@ -625,31 +593,6 @@ export function countConnectionEstablishedLines(): number {
 }
 
 /**
- * Live `connect_person` requests aimed at Alice. The seed always plants one
- * (Clara Vogt -> Alice, seed.sql:1139-1157), which is what makes the inbox
- * regression test meaningful rather than vacuous: if this ever returns 0 the
- * test is asserting nothing and must be re-seeded, not deleted.
- */
-export function countPersonRequestsForAlice(): number {
-  const bin = psqlBin()
-  const out = execFileSync(
-    bin,
-    [
-      DB_URL,
-      '-At',
-      '-c',
-      `select count(*) from public.pending_inbox_item i ` +
-        `join public.person rp on rp.id = i.receiver_person_id ` +
-        `where i.type = 'connect_person' and i.status = 'pending' ` +
-        `and i.deleted_at is null ` +
-        `and rp.first_name = 'Alice' and rp.last_name = 'Green'`,
-    ],
-    { encoding: 'utf8' },
-  ).trim()
-  return Number(out)
-}
-
-/**
  * Remove StonePharm's pricing asks to GreenLeaf so the accept test starts from
  * "no ask yet" on a DB other tests have already used. Without this the ask from
  * a previous run is still `accepted`, T04's per-product dup-guard refuses to
@@ -675,6 +618,70 @@ export function resetPricingRequests(): void {
     ],
     { encoding: 'utf8' },
   )
+}
+
+/**
+ * Clear any live c2c pricing-ask message a company already sent GreenLeaf about
+ * one product (by supplier_product_code) — the message-layer equivalent of
+ * resetPricingRequests(), needed because T02's connected-company path (0027)
+ * writes a chat_message instead of a pending_inbox_item, and that message has
+ * no existing teardown anywhere in this fixture file. Without this, the RPC's
+ * permanent (thread, company, product) dedup guard makes a re-run — or a
+ * different spec file asking about the same product first, in a single-worker
+ * path-ordered suite — pass vacuously on a message this test never sent.
+ * Deletes ONLY this (company, product) message pair on the c2c thread; never
+ * touches pending_inbox_item (resetPricingRequests's job) or the thread itself.
+ */
+export function resetPricingRequestMessage(senderCompanyName: string, productCode: string): void {
+  const bin = psqlBin()
+  execFileSync(
+    bin,
+    [
+      DB_URL,
+      '-v', 'ON_ERROR_STOP=1',
+      '-c',
+      `delete from public.chat_message cm ` +
+        `using public.person p, public.company sc, public.company gl, public.product pr, ` +
+        `public.chat_thread t, public.relationship r ` +
+        `where cm.sender_person_id = p.id and p.company_id = sc.id and sc.name = '${senderCompanyName}' ` +
+        `and gl.name = 'GreenLeaf Cultivation' and pr.company_id = gl.id ` +
+        `and pr.supplier_product_code = '${productCode}' ` +
+        `and cm.thread_id = t.id and t.type = 'c2c' and t.deleted_at is null ` +
+        `and t.relationship_id = r.id and r.deleted_at is null ` +
+        `and (r.company_a_id, r.company_b_id) in ((sc.id, gl.id), (gl.id, sc.id)) ` +
+        `and cm.type = 'message' and cm.metadata->>'product_id' = pr.id::text`,
+    ],
+    { encoding: 'utf8' },
+  )
+}
+
+/**
+ * Count the live c2c pricing-ask messages a company sent GreenLeaf about one
+ * product — the message-layer equivalent of countPricingRequests(), for a
+ * caller with no open counterparty page to read the message off of (e.g.
+ * discover-shop.spec.ts, a single-page buyer-only test). Same scoping and the
+ * same CALLER CONTRACT (literal constants only).
+ */
+export function countPricingRequestMessages(senderCompanyName: string, productCode: string): number {
+  const bin = psqlBin()
+  const out = execFileSync(
+    bin,
+    [
+      DB_URL, '-At', '-c',
+      `select count(*) from public.chat_message cm ` +
+        `join public.person p on p.id = cm.sender_person_id ` +
+        `join public.company sc on sc.id = p.company_id ` +
+        `join public.company gl on gl.name = 'GreenLeaf Cultivation' ` +
+        `join public.product pr on pr.company_id = gl.id and pr.supplier_product_code = '${productCode}' ` +
+        `join public.chat_thread t on t.id = cm.thread_id and t.type = 'c2c' and t.deleted_at is null ` +
+        `join public.relationship r on r.id = t.relationship_id and r.deleted_at is null ` +
+        `and (r.company_a_id, r.company_b_id) in ((sc.id, gl.id), (gl.id, sc.id)) ` +
+        `where sc.name = '${senderCompanyName}' and cm.type = 'message' ` +
+        `and cm.metadata->>'product_id' = pr.id::text and cm.deleted_at is null`,
+    ],
+    { encoding: 'utf8' },
+  ).trim()
+  return Number(out)
 }
 
 const CREDENTIALS: Record<Who, { email: string; password: string }> = {
