@@ -4699,7 +4699,6 @@ export type Database = {
         Args: { p_person_id: string; p_role: string }
         Returns: undefined
       }
-      claim_deal_ticket: { Args: { p_deal_card_id: string }; Returns: string }
       close_deal_ticket: {
         Args: { p_deal_card_id: string }
         Returns: undefined
@@ -4753,7 +4752,6 @@ export type Database = {
         Args: { p_deal_card_id: string }
         Returns: undefined
       }
-      deliver_deal: { Args: { p_deal_card_id: string }; Returns: undefined }
       end_relationship: {
         Args: { p_reason?: string; p_relationship_id: string }
         Returns: undefined
