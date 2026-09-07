@@ -2362,3 +2362,75 @@ a negative assertion needs a companion cell proving the mechanism was actually e
 **See also** [[L-064]] (a deny-test that catches on SQLSTATE alone can pass for the wrong reason —
 the same family: a pass condition that under-discriminates), [[L-013]] (a green never run against
 its own failure is an assumption), [[L-033]] (measure the fixture, don't assume it).
+
+---
+
+## L-067 · A hash cited in docs on a branch that rebases is a claim with a shelf life
+
+**2026-09-07 · slug 0027 cloud push · caught by a peer session's audit, then a follow-up sweep**
+
+**Trigger** — citing a git commit hash in a doc (`DECISIONS.md`, `STATE.md`, a sync file) as
+evidence something exists or was done, on a personal branch this project rebases regularly.
+
+**What happened.** A single rebase (this session's own T04 base-sync, onto `origin/dev`) orphaned
+five separate commit hashes cited across six files — `docs/decisions/DECISIONS.md`,
+`docs/team/sync/muskan.md`, `STATE.md` (twice), `PLAN-T01.md`, and `.planning/BACKLOG-ARCHIVE.md`
+(three sites, only one of which a peer session's audit had found). None were malicious edits — the
+content each citation pointed at was identical, only the pointer died
+(`git merge-base --is-ancestor <hash> HEAD` now fails for all five).
+
+**The rule.** Cite the migration filename, the commit subject line, or a decision-doc section
+heading instead of a bare hash wherever the citation needs to survive a rebase. A hash is fine for
+a same-session "I just did this, here's the receipt" reference; it is not durable across this
+project's own git workflow. When a hash citation IS found stale, don't just fix the cited site —
+grep the whole repo for that same hash, since one rebase orphans every citation of it at once, not
+just the one someone happened to notice.
+
+---
+
+## L-068 · Never manually retype a large body for diffing — ask the database instead
+
+**2026-09-07 · slug 0027 cloud push, diff-against-live for `confirm_deal_change` · self-caught
+before it caused a real incident**
+
+**Trigger** — verifying a `create or replace function`'s live body against a local migration by
+copying the live text (from an MCP tool result, a JSON blob, a query result) into a file to run
+`diff` against.
+
+**What happened.** Manually retyping a ~280-line live function body into a file for `diff` silently
+dropped an entire 17-line block (a thread-resolution step, present in the real body). The resulting
+diff looked like a real, alarming discrepancy — production apparently missing logic the migration's
+own header assumed existed. It was actually a transcription error, not a production anomaly. Caught
+only because the finding was surprising enough to double-check with a narrow, database-computed
+boolean (`pg_get_functiondef(...) LIKE '%select dc.relationship_id into v_rel%'`) before acting on
+it, rather than trusting the hand-copied diff.
+
+**The rule.** Never manually transcribe a large text body between contexts for comparison. Ask the
+database (or the source of truth directly) a narrow, automatable question instead — "does this
+substring exist," "what's the character length," "does removing this text produce a match" —
+computed server-side, not retyped by hand. A surprising diff on hand-copied text is grounds for
+suspecting the copy, not the target.
+
+**See also** [[L-024]] (`diff` exits 0 on differing files here — never branch on it alone; the same
+family of "trust the tool's verdict, not your eyes" mistake, in the opposite direction).
+
+---
+
+## L-069 · `rtk`'s output corruption reaches `find`/`ls`/`grep`, not just `git`/`tsc`
+
+**2026-09-07 · slug 0027 T04/T05 build + cloud push · confirmed directly, multiple times**
+
+**Trigger** — running `find`, `ls`, or `grep` (bare, hook-rewritten) during any verification step
+whose result will be trusted — a file-existence check, a directory listing, a pattern search.
+
+**What happened.** `find` returned zero matches for a file confirmed to exist via `/usr/bin/find`
+moments later. `ls` printed unrelated eza-style summary output ("N files, N dirs") instead of a
+file listing. `grep` returned the tool's own `--help` text instead of search results. HEL-80
+already tracked this collapse for `git`/`tsc`/`vitest`/`eslint`/`psql`; this session confirms the
+same failure mode reaches basic filesystem tools too — the class is wider than HEL-80's own list.
+
+**The rule.** During any `/build` or `/ship` verification step, call the real binary path
+(`/usr/bin/find`, `/bin/ls`, `/usr/bin/grep`, etc.) explicitly rather than the bare command, for
+every tool in this class — not only the ones HEL-80 already named. Treat a suspiciously clean or
+suspiciously empty result from any wrapped shell command as a signal to re-run via the direct path
+before trusting it, especially right before a decision that's expensive to get wrong.

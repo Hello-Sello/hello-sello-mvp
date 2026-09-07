@@ -2261,3 +2261,28 @@ citation, not the commit hash (this branch rebases; a hash cited here already we
 see `docs/deploy/cloud-migrations-pending.md` for that history). **Pushed to production
 2026-09-07**, together with its app-code half (`PromotionTrack.tsx`/`CardFront.tsx`, PR #184) —
 see the ledger's "🔴 READ FIRST (2026-09-07)" for the full trail.
+
+---
+
+## 2026-09-07 — a same-deploy-coupled migration ships its app code via a narrow cherry-pick, not a full branch merge, when the branch is far ahead of the deploy target
+
+**What was decided.** HEL-83's migration (`20260903110000_promotion_status_gate.sql`) needed its
+app code (`PromotionTrack.tsx`, `CardFront.tsx`) live on production first, per the same-deploy
+rule. `claude/muskan/work` was 69 commits / 231 files ahead of `main` — a full merge would have
+shipped all of slug 0027's in-progress work (T01-T05) straight to production with none of
+`/ship`'s own gate, security scan, or G5 walk. Instead: cherry-picked just the 2-file diff onto a
+fresh branch off `main` (`hel-83-app-code-only`), verified `tsc`/eslint clean against `main`'s own
+baseline (not the source branch's), confirmed a Vercel preview build succeeded, merged via a
+narrow PR (#184), confirmed the production deploy went READY — **before** the matching migration
+was pushed, so the negotiation-only gate never went live server-side while the old unconditional
+Accept button was still the deployed UI.
+
+**Why this, not the alternative.** The alternative — merge the whole branch — is faster but
+conflates two unrelated concerns: "get this one ticket's fix live" and "ship everything else on
+the branch." The cherry-pick costs one extra branch + PR but keeps those two decisions
+independent of each other.
+
+**The rule this sets.** When a same-deploy-coupled ticket needs to reach production ahead of the
+rest of the branch, cherry-pick the specific file-level diff onto a fresh branch off the deploy
+target, verify it standalone (type-check + lint against the TARGET's baseline), and merge that
+narrowly. Reserve a full branch merge for when the whole branch has actually been through `/ship`.

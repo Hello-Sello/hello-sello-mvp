@@ -5,12 +5,11 @@
 
 ---
 
-**Last updated:** 2026-09-03 — session 101 — **HEL-67 Gap 2 built (sender forgery closed)**
-**Status:** active.
-**Linear issue in progress:** HEL-67 (Gap 2).
-**Shared files locked: none — all released.** (`docs/decisions/DECISIONS.md` — 2026-09-03 HEL-83
-ruling appended; `docs/deploy/cloud-migrations-pending.md` — `20260903110000` ledgered.)
-⚠️ `design_oo27` is mid-write in this same tree on `docs/muskan-build/0027-*` — untouched here.
+**Last updated:** 2026-09-07 — session 102 — **0027 T04+T05 closed; six migrations pushed to
+production, unblocking T06**
+**Status:** offline (session wrapped).
+**Linear issue in progress:** none — T06 next, new session.
+**Shared files locked: none — all released.**
 
 **HEL-83 built** (`20260903110000_promotion_status_gate.sql` — filename, not the commit hash,
 which already went stale once across a rebase; **pushed to production 2026-09-07**, app code via
@@ -26,8 +25,10 @@ edge-function debt item in the ledger, still one deploy each.
 ⚠️ `deno check` cannot verify either `index.ts` in this repo and never could — `functions-js`
 types pull an uninstalled `npm:openai`. Pre-existing; verified against an untouched function.
 
-**HEL-85 built** (commit `3c3b99f`, **local only**). `confirm_deal_change` re-imports the
-workspace half of `can_access_workspace`; ledgered as `20260903100000`. **Latent, not live** —
+**HEL-85 built** (`20260903100000_confirm_deal_change_workspace_gate.sql` — filename, not the
+commit hash, which went stale across a rebase; **pushed to production 2026-09-07**).
+`confirm_deal_change` re-imports the workspace half of `can_access_workspace`. **Latent, not
+live** —
 production has zero private workspaces, so it is not exploitable against prod data today.
 **L-066 added:** an RLS bypass cannot be measured from inside the role being bypassed — the first
 draft of the suite counted rows as the probe user and passed vacuously on a live exploit.
