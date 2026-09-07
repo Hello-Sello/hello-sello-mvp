@@ -23,6 +23,46 @@
 
 ---
 
+## 🔴 READ FIRST (2026-09-07, later same day) — TWO MORE MIGRATIONS PUSHED, `/ship 0027` in progress
+
+**Both now-pending migrations are LIVE ON PRODUCTION**, applied via two individual
+`apply_migration` calls (project `byipusuthdlskdxoexkt`), then history-stamped from
+`apply_migration`'s call-time versions (`20260907151041`, `20260907151450`) to the filenames'
+own timestamps (same repair procedure as every prior push this file records). Production tip is
+now `20260907140000`, verified directly against `supabase_migrations.schema_migrations` — not
+inferred from this file.
+
+**What shipped, in order:** `20260907090000` (0027/T06 — drops `deliver_deal`/`claim_deal_ticket`)
+→ `20260907140000` (`import_products_pack_sizes` — a parallel session's Present/Manage-Shop work,
+merged into `claude/muskan/work` earlier the same day; shipped together with 0027 since both sat
+on the same branch and both are DDL-only, no data-write ask-rule stop triggered).
+
+**Pre-flight, run for real before pushing:**
+- T06's drop: the call-shape-matched census (`select proname from pg_proc where prosrc ~*
+  '(perform|select)\s+public\.(deliver_deal|claim_deal_ticket)\s*\(''`) run directly against
+  PRODUCTION, not just local — **0 rows**, confirming the drop is safe on the actual target, not
+  inferred from local parity.
+- `import_products`: diffed the migration's `create or replace` body against
+  `pg_get_functiondef('public.import_products(jsonb)'::regprocedure)` fetched live — differs from
+  the migration's replacement by exactly the documented additive change (the `pack_sizes` half of
+  the `metadata` expression) and nothing else. Confirmed, not assumed from the migration's own
+  header claim.
+
+**Post-flight, run for real:**
+- `select proname from pg_proc where proname in ('deliver_deal','claim_deal_ticket')` → **0 rows**
+  — the drop took.
+- `import_products` grants: `anon` → `false`, `public` → `false`, `authenticated` → `true` ✓
+  (matches SECURITY-CHECKLIST S1's required form).
+- Security advisors checked post-push: no new finding referencing either touched function; the
+  full advisor set is pre-existing noise unrelated to this push (checked directly, not assumed).
+
+**Non-migration deploy debt this batch does NOT resolve:** 0027's own app code (T06-T09 +
+the Connect-flat-link fix) still needs its PR merged and Vercel deploy to go READY — that's
+`/ship` step 5, next. The parallel session's Present/Manage-Shop app code (drag-and-drop, pack
+sizes UI, Origin/region split) rides the same PR/deploy, since it's on the same branch.
+
+---
+
 ## 🔴 READ FIRST (2026-09-07) — SIX MORE MIGRATIONS PUSHED, ALL THREE "PENDING" HEADINGS BELOW ARE NOW STALE TOO
 
 **All six now-pending migrations are LIVE ON PRODUCTION**, applied this session via six individual
