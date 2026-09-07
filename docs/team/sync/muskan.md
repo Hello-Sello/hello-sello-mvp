@@ -5,6 +5,52 @@
 
 ---
 
+**Last updated:** 2026-09-07 — session `manage-shop-order-fix` — **DEV-167 (product order in
+Manage Shop) built, shipped straight to `main`, production migration pushed. No conflict with
+the concurrent `build_0028` session — confirmed against its lock list above, zero file overlap.**
+**Status:** offline (session closing after this entry).
+**Shared files locked: none — all released** (`docs/deploy/cloud-migrations-pending.md` and this
+file both edited from an isolated worktree, no lock needed — `build_0028`'s own entry above
+states "no schema, no migration, no RLS").
+
+**What happened.** Two bugs in the seller's Manage Shop grid, both from a bug report during
+manual testing (renaming "Tiger Eye" caused an unrelated product to inherit its price-tier edit,
+and the grid re-sorted on an unrelated save): (1) `getMyShop()`'s `.order("name")` had no
+tiebreaker — name ties could silently reshuffle position across any refresh, which is what made
+the tier-edit session look like it hit the wrong product; (2) drag-to-reorder was 100% client-only,
+never persisted (confirmed by the code's own comment deferring it to "a later phase"). Fixed both:
+new `product.shelf_position` (mirrors `product_image.position`/`product_media.position`, same
+integer-position-with-renumber pattern, third instance of it in this module) +
+`setProductShelfOrder`, wired into ShopView's existing Save/Discard flow (reorder now marks
+dirty on drag, flushes on Save, reverts on Discard — previously it didn't even mark dirty).
+`getMyShop()` now orders `shelf_position, name, id`.
+
+**Shipped outside the normal branch flow, deliberately** (Muskan's call: `claude/muskan/work` had
+an unrelated 0028 backlog that would've delayed this small, self-contained fix) — worktree branch
+`claude/muskan/manage-shop-order-fix` → cherry-picked onto `dev` (not merged whole; that branch's
+ancestry briefly included the entire unreviewed 0028 PRD/ADR/prototype body since it was cut from
+`claude/muskan/work` after 0028 had already landed there — caught before pushing, cherry-picked
+the one relevant commit instead) → PR #189 `dev → main`, merged by Muskan.
+
+**Real incident caught mid-session:** Vercel auto-deployed the `main` merge before the production
+migration was applied — `/present` was broken for every seller for a few minutes (query referenced
+a column that didn't exist yet on production). Caught, migration pushed via `supabase db push
+--linked`, verified live via `execute_sql`. Full detail: `docs/deploy/cloud-migrations-pending.md`,
+"🔴 READ FIRST (2026-09-07, later still)".
+
+**Verification:** `tsc` clean, full unit suite 515/515, `eslint` clean, manually verified in local
+dev (alice@greenleaf.test) — reorder persists across refresh, Discard reverts an unsaved reorder.
+Security advisors checked post-push on production — no new finding.
+
+**Cleanup:** worktrees `wt-manage-shop-order`, `wt-manage-shop-dnd` (old, already fully merged into
+`claude/muskan/work` — its branch was too) both removed, along with `claude/muskan/manage-shop-
+order-fix` and the scratch `_ship-temp-dev` branch used for the cherry-pick.
+
+**Still open:** DEV-167 not yet closed in Linear — holding it open until walked live in
+production (per this project's own G5 pattern), not just merged.
+
+---
+
 **Last updated:** 2026-09-07 — session `build_0028` — **`/build 0028` (landing-page-refresh),
 T01 + T02 back to back.**
 **Status:** active.
