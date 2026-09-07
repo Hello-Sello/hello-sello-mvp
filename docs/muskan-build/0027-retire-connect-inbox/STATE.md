@@ -2,7 +2,25 @@
 
 lane:   FULL
 branch: claude/muskan/work
-stage:  spec ✅ → prototype ✅ → design ✅ → build ✅ (T01 ✅ → T02 ✅ → T03 ✅ → T04 ✅ → T05 ✅ → T06 ✅ → T07 ✅ → T08 ✅ → T09 ✅) → ship (next)
+stage:  spec ✅ → prototype ✅ → design ✅ → build ✅ (T01 ✅ → T02 ✅ → T03 ✅ → T04 ✅ → T05 ✅ → T06 ✅ → T07 ✅ → T08 ✅ → T09 ✅) → ship (in progress — Step 2 gate GREEN, Step 3 security scan next)
+
+## /ship log
+- 2026-09-07 — 5 commits landed (T06-T09 + a live-feedback fix flattening Connect's sidebar
+  entry to a direct link, requested by Muskan while walking the app), pushed. Step 1 (rebase onto
+  `origin/dev`): no-op, branch already 0 behind, 80+ ahead. Step 2 (full gate) ran twice: first
+  pass RED on 2 locators broken by a parallel session's already-merged Present/Manage-Shop work
+  (not 0027's own work) — fixed (1-line each), 6 cascade-blocked tier-pricing tests recovered.
+  Second pass GREEN: unit 515/515, e2e 116 passed/21 failed (all pre-existing, 2 documented
+  classes)/9 skipped (intentional)/8 did-not-run (deterministic serial-mode cascade from the
+  same 21, unrelated files, predates 0027), SQL 62/64 (2 pre-existing HEL-83), tsc clean, eslint
+  6/15 exact baseline. **Corrected baseline for this slug's own record: the "15 e2e failures"
+  figure cited earlier this session was already known stale (21 is correct, established during
+  T09); this gate additionally establishes the "did-not-run" cascade shape, not previously
+  documented anywhere.**
+- ⚠️ Noticed in passing, not 0027's concern: an untracked `docs/muskan-build/0028-landing-page-
+  refresh/` appeared mid-ship — a fresh `/triage` result (Marcel's Linear DEV-164), clearly from
+  a separate, parallel Muskan session sharing this same working directory. Not touched, not
+  committed, no file overlap with anything in this commit sequence.
 
 ## Seed
 Muskan, 2026-08-31, via `/triage`: "deletion of connection request page inside connect"
