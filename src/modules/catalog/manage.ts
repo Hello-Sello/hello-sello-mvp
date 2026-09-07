@@ -225,6 +225,26 @@ export async function setProductImageOrder(productId: string, orderedIds: string
   return { ok: true };
 }
 
+/** Set the seller's shelf order for a group of products in their own shop grid
+ *  (DEV-167). `orderedIds` is the full product id list for one location group,
+ *  in the desired display order — the single authoritative writer of
+ *  `shelf_position`, mirroring setProductImageOrder/setProductMediaOrder. */
+export async function setProductShelfOrder(orderedIds: string[]): Promise<ManageResult> {
+  const supabase = await createClient();
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) return { error: "No company in session." };
+
+  for (let i = 0; i < orderedIds.length; i++) {
+    const { error } = await supabase
+      .from("product")
+      .update({ shelf_position: i })
+      .eq("id", orderedIds[i]);
+    if (error) return { error: error.message };
+  }
+  revalidatePath("/present");
+  return { ok: true };
+}
+
 /** Toggle a product between a public price and "Request pricing". */
 export async function setProductPricePublic(productId: string, isPublic: boolean): Promise<ManageResult> {
   const supabase = await createClient();

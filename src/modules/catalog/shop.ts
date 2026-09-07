@@ -204,7 +204,12 @@ export async function getMyShop(): Promise<Shop | null> {
     )
     .eq("company_id", companyId)
     .is("deleted_at", null)
-    .order("name");
+    // shelf_position carries an intentional seller reorder (DEV-167); name is
+    // the sensible default for anything never dragged; id is a pure tiebreaker
+    // so ties never silently reshuffle across refreshes (the original bug).
+    .order("shelf_position")
+    .order("name")
+    .order("id");
 
   // Prices come from the single owner (current-price view), stitched by id.
   // Degrade contract: a failed price read yields a priceless shop (null

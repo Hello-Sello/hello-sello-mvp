@@ -3330,6 +3330,7 @@ export type Database = {
           region: string | null
           resealable: boolean | null
           rrp_per_gram: number | null
+          shelf_position: number
           supplier_product_code: string | null
           terpene_percent: number | null
           thc_percent: number | null
@@ -3368,6 +3369,7 @@ export type Database = {
           region?: string | null
           resealable?: boolean | null
           rrp_per_gram?: number | null
+          shelf_position?: number
           supplier_product_code?: string | null
           terpene_percent?: number | null
           thc_percent?: number | null
@@ -3406,6 +3408,7 @@ export type Database = {
           region?: string | null
           resealable?: boolean | null
           rrp_per_gram?: number | null
+          shelf_position?: number
           supplier_product_code?: string | null
           terpene_percent?: number | null
           thc_percent?: number | null

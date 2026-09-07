@@ -36,7 +36,7 @@ import type {
 } from "@/modules/catalog";
 import {
   updateShopProfile, updateProductFields, addProductBatch, updateProductBatch,
-  softDeleteProductBatch, saveLadder,
+  softDeleteProductBatch, saveLadder, setProductShelfOrder,
 } from "@/modules/catalog/manage";
 import type { ProductFieldPatch, ProductBatchPatch } from "@/modules/catalog/manage";
 import { tiersFromDraft, validateLadder } from "@/modules/catalog/ladderDraft";
@@ -250,13 +250,14 @@ export function ShopView({
   // re-contexts the grid to that one group.
   const [loc, setLoc] = useState("All");
   // Client-only custom order of the location sections in edit mode (drag a header
-  // to reorder). Persisting a bespoke group order is Phase 16 (structured
-  // locations own ordering), so this stays ephemeral.
+  // to reorder). Persisting a bespoke group order is still Phase 16 (structured
+  // locations own ordering) — unlike productOrder below, this one stays ephemeral.
   const [groupOrder, setGroupOrder] = useState<string[]>([]);
-  // Client-only product order WITHIN each shop, keyed by group label (drag a card
-  // onto a sibling in the same shop to reorder). Same ephemeral rationale as
-  // groupOrder — a persisted per-product position is a later phase — so it resets
-  // to the default name order on reload.
+  // Product order WITHIN each shop, keyed by group label (drag a card onto a
+  // sibling in the same shop to reorder). Live state while dragging; flushed to
+  // `product.shelf_position` on Save (DEV-167) via setProductShelfOrder, the same
+  // "own dedicated bulk action" shape as setProductImageOrder/setProductMediaOrder
+  // — so, unlike groupOrder above, this now persists.
   const [productOrder, setProductOrder] = useState<Record<string, string[]>>({});
   // "Assign products to shop" dialog (edit mode) — the fast two-pane drag surface.
   const [assignOpen, setAssignOpen] = useState(false);
@@ -465,6 +466,15 @@ export function ShopView({
       if (r.error) { setError(r.error); setBusy(false); return; }
     }
 
+    // Persisted shelf order (DEV-167): one write per location group the seller
+    // actually dragged — mirrors setProductImageOrder/setProductMediaOrder, the
+    // same "own dedicated bulk action" shape already used to reorder a single
+    // product's images/media.
+    for (const orderedIds of Object.values(productOrder)) {
+      const r = await setProductShelfOrder(orderedIds);
+      if ("error" in r) { setError(r.error); setBusy(false); return; }
+    }
+
     // Flush the per-product pending tree (F-02) AFTER the chrome commit — the field
     // patch, then batch inserts / edits / soft-deletes, all under this one Save.
     // A drafted ladder (T04) routes through saveLadder INSTEAD of the plain price
@@ -515,6 +525,7 @@ export function ShopView({
     setLogoFile(null);
     setPendingLocations([]);
     setPendingProductEdits({});
+    setProductOrder({});
     setSaveVersion((v) => v + 1);
     router.refresh();
   }
@@ -577,6 +588,7 @@ export function ShopView({
     if (!group) return;
     const next = moveRelative(group.products.map((p) => p.id), draggedId, targetId, position);
     setProductOrder((prev) => ({ ...prev, [location]: next }));
+    setDirty(true);
   }
 
   // ProductCard reports the selected pack-size INDEX — resolved against the
