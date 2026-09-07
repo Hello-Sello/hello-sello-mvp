@@ -23,14 +23,14 @@
 --             — not merely as the SECURITY DEFINER                    → C6
 --   M10 [AC6] a THIRD company's member gets zero rows on all three reads → C7
 --   M11 [AC7] `authenticated` still holds EXECUTE on send_deal(uuid)   → C8
---   M8  [AC9] deliver_deal's definition is untouched by this migration → C9
 --   M4′ [AC4] a missing/soft-deleted c2c thread is healed (created) by a
 --             send, and a second send on a healed thread does not mint a
 --             second one                                          → C4 + C5
 --   §8.3 [ADR 0006, Muskan's G3 ruling — no ticket AC number] send_deal's
 --             return value is the c2c thread id for a company-addressed
 --             send too, not merely non-null (the person arm was already
---             covered by deliver_deal_test.sql:248-251, case A2-3b)   → C1
+--             covered by this file's own case P2, relocated from
+--             deliver_deal_test.sql A2-3b/3d by T06)                  → C1
 --
 -- Fixture: Alice @ GreenLeaf, Bob @ StonePharm, the seeded `demo-2d`
 -- relationship — which has a seeded c2c thread (seed/seed.sql:321) and a
@@ -62,6 +62,14 @@
 --
 -- Pattern copied from deliver_deal_test.sql (fixture idiom, identity-switch
 -- shape, one BEGIN…ROLLBACK transaction, no trace left).
+--
+-- P1-P3 below are relocated coverage, not this ticket's own M1-M11 list:
+-- three cells ported wholesale from deliver_deal_test.sql (A2-2b, A2-3a/3c/
+-- 3e, A2-4) before T06 (0027-retire-connect-inbox) deletes that file. They
+-- prove send_deal and confirm_detected_deal behavior — both unchanged by
+-- T06 — that this suite covers nowhere else; only deliver_deal itself (the
+-- DROP's actual subject) is lost. Filed here, not a new file, for
+-- continuity — T06 already touches this file to remove C9.
 --
 -- ⚠️ RED-FIRST: this EXITS NON-ZERO today — send_deal's company arm still
 -- calls deliver_deal only; it posts no chat_message at all for a
@@ -130,9 +138,9 @@ END $$;
 -- sender = Alice, body = "<her name> has sent a deal", metadata.deal_card_id
 -- = the card. ALSO asserts send_deal's return value: not null, and equal to
 -- that same c2c thread's id (ADR 0006 §8.3) — the company arm used to
--- return null; the person arm's return is already covered by
--- deliver_deal_test.sql:248-251 (case A2-3b), which made this the
--- asymmetric gap.
+-- return null; the person arm's return is already covered by this file's
+-- own case P2 (relocated from deliver_deal_test.sql A2-3b/3d by T06),
+-- which made this the asymmetric gap.
 -- ============================================================================
 
 SELECT set_config('request.jwt.claim.sub', (SELECT alice FROM _fix)::text, true);
@@ -389,25 +397,201 @@ BEGIN
 END $$;
 
 -- ============================================================================
--- C9 [M8 / AC9] — deliver_deal's definition is untouched by this migration:
--- its pending_inbox_item insert and its `if not exists` dedupe guard are
--- both still present. Whitespace-normalised + lowercased so re-indentation
--- never breaks this (same idiom as confirm_deal_change_lock_order_test.sql).
+-- P1 (ported from deliver_deal_test.sql A2-2b, :203-218) — DOUBLE-SEND GUARD:
+-- a second send_deal on a card already sent (reusing C1's card, kind 'c1')
+-- must be rejected — the card is no longer 'unsent'.
 -- ============================================================================
+
+SELECT set_config('request.jwt.claim.sub', (SELECT alice FROM _fix)::text, true);
+SELECT set_config('request.jwt.claims',
+       json_build_object('sub', (SELECT alice FROM _fix), 'role', 'authenticated')::text, true);
+SET LOCAL ROLE authenticated;
+DO $$
+BEGIN
+  BEGIN
+    PERFORM public.send_deal((SELECT id FROM _cards WHERE kind = 'c1'));
+    RAISE EXCEPTION 'P1 FAIL: a second send_deal on an already-sent card must be rejected';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM NOT LIKE '%only an unsent draft%' THEN RAISE; END IF;
+  END;
+END $$;
+RESET ROLE;
+
+-- ============================================================================
+-- P2 (ported from deliver_deal_test.sql A2-3a/3c/3e, :220-238,266-294 — NOT
+-- 3b/3d, already covered by this file's own C3) — PERSON-ARM TICKET-ZERO AND
+-- CO-OWNER-AT-SEND: a person-target birth (Bob as explicit counterparty)
+-- creates no ticket at birth or at send — no deal_card-type pending_inbox_
+-- item is ever written on this path anymore (per this ticket's own
+-- pre-flight census of the catalog), not because deliver_deal no-ops on a
+-- co-owner — and the counterparty joins as deal_member owner at send, not
+-- at birth. ALSO asserts send_deal's return value on the send below (ADR
+-- 0006 §8.3): not null, and equal to the p2p thread's id — the person-arm
+-- half of the return-value claim cited in the file header and in C1's
+-- comment. Kept as its own card ('p2') so these assertions don't entangle
+-- with C3's.
+-- ============================================================================
+
+SELECT set_config('request.jwt.claim.sub', (SELECT alice FROM _fix)::text, true);
+SELECT set_config('request.jwt.claims',
+       json_build_object('sub', (SELECT alice FROM _fix), 'role', 'authenticated')::text, true);
+SET LOCAL ROLE authenticated;
 DO $$
 DECLARE
-  v_def text;
+  v_card uuid;
 BEGIN
-  v_def := lower(regexp_replace(
-    pg_get_functiondef('public.deliver_deal(uuid)'::regprocedure),
-    '\s+', ' ', 'g'));
+  v_card := public.create_deal_draft(
+    (SELECT rel FROM _rel), 'offer', 50, 'EUR', NULL, NULL, false,
+    '[{"productName":"Probe Flower","quantity":"10","unit":"g","unitPrice":"5"}]'::jsonb,
+    NULL, NULL, (SELECT bob FROM _fix));
+  INSERT INTO _cards VALUES (v_card, 'p2');
+END $$;
+RESET ROLE;
 
-  IF position('insert into public.pending_inbox_item' IN v_def) = 0 THEN
-    RAISE EXCEPTION 'C9/M8 FAIL: deliver_deal no longer inserts into pending_inbox_item';
+DO $$
+DECLARE
+  v_n int;
+BEGIN
+  SELECT count(*) INTO v_n FROM pending_inbox_item
+  WHERE deal_card_id = (SELECT id FROM _cards WHERE kind = 'p2') AND deleted_at IS NULL;
+  IF v_n <> 0 THEN
+    RAISE EXCEPTION 'P2 FAIL: a person-target birth must create no ticket, got %', v_n;
+  END IF;
+END $$;
+
+SELECT set_config('request.jwt.claim.sub', (SELECT alice FROM _fix)::text, true);
+SELECT set_config('request.jwt.claims',
+       json_build_object('sub', (SELECT alice FROM _fix), 'role', 'authenticated')::text, true);
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE
+  v_thread uuid;
+  v_p2p    uuid;
+BEGIN
+  v_thread := public.send_deal((SELECT id FROM _cards WHERE kind = 'p2'));
+
+  SELECT t.id INTO v_p2p
+  FROM chat_thread t, _fix f, _rel r
+  WHERE t.relationship_id = r.rel AND t.type = 'p2p' AND t.deleted_at IS NULL
+    AND ((t.person_a_id = f.alice AND t.person_b_id = f.bob)
+      OR (t.person_a_id = f.bob   AND t.person_b_id = f.alice))
+  LIMIT 1;
+
+  IF v_thread IS NULL THEN
+    RAISE EXCEPTION 'P2/§8.3 FAIL: a person-target send must return the p2p thread id, got NULL';
+  END IF;
+  IF v_thread <> v_p2p THEN
+    RAISE EXCEPTION 'P2/§8.3 FAIL: send_deal must return the p2p thread id — expected %, got %', v_p2p, v_thread;
+  END IF;
+END $$;
+RESET ROLE;
+
+DO $$
+DECLARE
+  v_n int;
+BEGIN
+  -- still zero tickets: no deal_card-type pending_inbox_item is written on
+  -- this path anymore
+  SELECT count(*) INTO v_n FROM pending_inbox_item
+  WHERE deal_card_id = (SELECT id FROM _cards WHERE kind = 'p2') AND deleted_at IS NULL;
+  IF v_n <> 0 THEN
+    RAISE EXCEPTION 'P2 FAIL: a person-target send must create no company ticket, got %', v_n;
   END IF;
 
-  IF position('if not exists (select 1 from public.pending_inbox_item' IN v_def) = 0 THEN
-    RAISE EXCEPTION 'C9/M8 FAIL: deliver_deal lost its idempotency guard';
+  -- the counterparty joined as co-owner at send, not at birth
+  SELECT count(*) INTO v_n
+  FROM deal_member dm
+  JOIN deal_workspace dw ON dw.id = dm.deal_workspace_id
+  WHERE dw.deal_card_id = (SELECT id FROM _cards WHERE kind = 'p2')
+    AND dm.person_id = (SELECT bob FROM _fix)
+    AND dm.role = 'owner'
+    AND dm.removed_at IS NULL;
+  IF v_n <> 1 THEN
+    RAISE EXCEPTION 'P2 FAIL: the counterparty must become co-owner at send, got % memberships', v_n;
+  END IF;
+END $$;
+
+-- ============================================================================
+-- P3 (ported from deliver_deal_test.sql A2-4, :296-368) — CONFIRM_DETECTED_
+-- DEAL'S P2P DOOR BIRTHS STRAIGHT INTO NEGOTIATION WITH ZERO TICKETS: both
+-- sides accept a synthetic detection on the seeded p2p thread → the born
+-- card is 'negotiation' from birth (D-07, delivered-by-construction) and has
+-- ZERO tickets (that door always sets a counterparty person; its own chat
+-- message IS the person delivery — no deal_card-type pending_inbox_item is
+-- ever written on this path anymore, per this ticket's own pre-flight
+-- census of the catalog).
+-- Detection message inserted the same bypass-msg_all way confirm_detected_
+-- deal_no_ticket_test.sql does it, adapted from c2c to this file's own
+-- seeded p2p thread (_fix/_rel are already in scope; no new fixture
+-- identity needed).
+-- ============================================================================
+
+CREATE TEMP TABLE _p3_msg (id uuid) ON COMMIT DROP;
+GRANT SELECT ON _p3_msg TO authenticated;
+WITH thread AS (
+  SELECT t.id
+  FROM chat_thread t, _fix f, _rel r
+  WHERE t.relationship_id = r.rel AND t.type = 'p2p' AND t.deleted_at IS NULL
+    AND ((t.person_a_id = f.alice AND t.person_b_id = f.bob)
+      OR (t.person_a_id = f.bob   AND t.person_b_id = f.alice))
+  LIMIT 1
+), ins AS (
+  INSERT INTO chat_message (thread_id, sender, sender_person_id, type, body, metadata)
+  SELECT id, 'sella', NULL, 'deal_detected', 'Probe detection (P3, ported from deliver_deal_test.sql)',
+         '{"draft":{"currency":"EUR","line_items":[{"name":"Probe Flower","quantity":10,"unit":"g","unit_price":5}]}}'::jsonb
+  FROM thread
+  RETURNING id
+)
+INSERT INTO _p3_msg SELECT id FROM ins;
+
+DO $$
+BEGIN
+  IF (SELECT count(*) FROM _p3_msg) <> 1 THEN
+    RAISE EXCEPTION 'FIXTURE: seeded alice<->bob p2p thread not found for P3';
+  END IF;
+END $$;
+
+-- Alice accepts…
+SELECT set_config('request.jwt.claim.sub', (SELECT alice FROM _fix)::text, true);
+SELECT set_config('request.jwt.claims',
+       json_build_object('sub', (SELECT alice FROM _fix), 'role', 'authenticated')::text, true);
+SET LOCAL ROLE authenticated;
+SELECT public.confirm_detected_deal((SELECT id FROM _p3_msg), 'accept');
+RESET ROLE;
+
+-- …then Bob accepts → the card is born NOW, through create_deal_draft.
+SELECT set_config('request.jwt.claim.sub', (SELECT bob FROM _fix)::text, true);
+SELECT set_config('request.jwt.claims',
+       json_build_object('sub', (SELECT bob FROM _fix), 'role', 'authenticated')::text, true);
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE
+  v_card uuid;
+  v_born boolean;
+BEGIN
+  SELECT deal_card_id, born_now INTO v_card, v_born
+  FROM public.confirm_detected_deal((SELECT id FROM _p3_msg), 'accept');
+  IF v_card IS NULL OR NOT v_born THEN
+    RAISE EXCEPTION 'P3 FAIL: detection birth did not happen (card %, born %)', v_card, v_born;
+  END IF;
+  INSERT INTO _cards VALUES (v_card, 'p3');
+END $$;
+RESET ROLE;
+
+DO $$
+DECLARE
+  v_n int;
+  v_status text;
+BEGIN
+  SELECT count(*) INTO v_n FROM pending_inbox_item
+  WHERE deal_card_id = (SELECT id FROM _cards WHERE kind = 'p3') AND deleted_at IS NULL;
+  IF v_n <> 0 THEN
+    RAISE EXCEPTION 'P3 FAIL: a Sella-detected birth must create no ticket (double-delivery), got %', v_n;
+  END IF;
+  SELECT status INTO v_status FROM deal_card
+  WHERE id = (SELECT id FROM _cards WHERE kind = 'p3');
+  IF v_status <> 'negotiation' THEN
+    RAISE EXCEPTION 'P3 FAIL: the Sella door must birth straight into negotiation (D-07), got %', v_status;
   END IF;
 END $$;
 

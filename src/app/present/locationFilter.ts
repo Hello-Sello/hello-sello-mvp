@@ -58,20 +58,29 @@ export function groupByLocation<T extends Located>(products: T[]): LocationGroup
 export type Identified = { id: string };
 
 /**
- * Move `draggedId` to sit immediately before `targetId`, returning the new id
- * order. A no-op (returns the input order) when either id is missing or they are
- * the same — so a bad drop never scrambles the list. Pure: the client-only
- * `productOrder` reorder (drag a card within its shop) is built from this.
+ * Move `draggedId` to sit immediately before or after `targetId`, returning the
+ * new id order. A no-op (returns the input order) when either id is missing or
+ * they are the same — so a bad drop never scrambles the list. Pure: the
+ * client-only `productOrder` reorder (drag a card within its shop) is built
+ * from this. `position` is which side of `targetId` the card lands on — the
+ * only way to make a card the LAST item is dropping it after the last card, so
+ * callers must offer both sides, not just "before".
  */
-export function moveBefore(ids: string[], draggedId: string, targetId: string): string[] {
+export function moveRelative(
+  ids: string[],
+  draggedId: string,
+  targetId: string,
+  position: "before" | "after",
+): string[] {
   const from = ids.indexOf(draggedId);
   const to = ids.indexOf(targetId);
   if (from < 0 || to < 0 || from === to) return ids;
   const next = [...ids];
   next.splice(from, 1);
   // Re-find the target's index in the reduced array (it shifts left when the
-  // dragged card sat before it) so the insert lands just ahead of the target.
-  next.splice(next.indexOf(targetId), 0, draggedId);
+  // dragged card sat before it) so the insert lands on the requested side of it.
+  const targetIdx = next.indexOf(targetId);
+  next.splice(position === "after" ? targetIdx + 1 : targetIdx, 0, draggedId);
   return next;
 }
 

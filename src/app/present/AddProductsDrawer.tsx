@@ -245,6 +245,19 @@ function ManualTab({ busy, onImport }: { busy: boolean; onImport: (csv: string) 
           </label>
         ))}
       </div>
+      {/* Extra sellable sizes beyond the required "Pack size (g)" above — the
+          buyer picks one of these beside the price, like choosing a T-shirt
+          size. Same field ProductCard's "Edit details" dialog offers post-creation
+          (product.metadata.pack_sizes) — set it here instead of a two-step edit. */}
+      <label className="block">
+        <span className="text-xs font-semibold text-ink/70">Additional pack sizes (g) — comma-separated</span>
+        <input
+          className={input}
+          placeholder="e.g. 10, 20, 50"
+          value={vals["Additional pack sizes (g)"] ?? ""}
+          onChange={(e) => set("Additional pack sizes (g)", e.target.value)}
+        />
+      </label>
       {ENUM_FIELDS.map((f) => (
         <label key={f.header} className="block">
           <span className="text-xs font-semibold text-ink/70">{f.header} *</span>

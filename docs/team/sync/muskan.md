@@ -5,6 +5,180 @@
 
 ---
 
+**Last updated:** 2026-09-07 — worktree session (`wt-manage-shop-dnd`) — **Present-page Linear
+triage + 3 code fixes shipped to `claude/muskan/work`; session closing, handing off to the
+`hello-sello-product-6c` session below for merge/deploy.**
+**Status:** offline (session closed on request — "finish up, send everything, I'll merge +
+deploy from the other session").
+
+**What happened.** Walked Marcel's Present/Manage-Shop Linear tickets one by one against the
+live code and closed what was actually done: **DEV-119, DEV-101, DEV-106, DEV-104 → Done.**
+**DEV-111 was closed then REVERTED to In Progress same-session** — closed against its title
+alone, its real description held 4 more unbuilt asks (see LEARNINGS L-070, the mistake and the
+rule). Built and shipped in the same session: a drag-and-drop reorder bug (a card could never
+become the LAST item — `moveBefore` → `moveRelative` with before/after, decided by which half of
+the target card was dropped on) + its related stuck-outline bug; "Additional pack sizes (g)" on
+the manual Add Products form + CSV template/parser (new migration
+`20260907140000_import_products_pack_sizes.sql`); DEV-107's Origin+Region combined row and a new
+seller-set Badge (new/coming_soon/launch/re_launch) shown as a pill on the card image. Commit
+`049683d` (merged with this session's `8ce7967`, then rebased again by the other session onto
+`9b39d34` — see its message below, confirmed independently, zero file overlap both times).
+
+**Still open, real remaining scope (not just "not started"):** DEV-111 (uniform box sizing, an
+expand arrow, draggable links, and an entire "Manage shops per country" sub-feature — tags,
+certificate uploads); DEV-112 (the actual per-location links table doesn't exist yet, only a
+platform dropdown); DEV-107 (#1 trim skipped — Marcel already approved the current card as-is;
+#5 Wishlist deferred, needs the Buy page; #6/#7.1/#7.3/#7.4/#8 unverified either way). Untouched:
+DEV-150, DEV-96, DEV-65. DEV-158/DEV-167 have no description in Linear at all — need a scoping
+pass before anyone can act on them.
+
+**Owed, not done by this session (both gitignored, unreachable from a worktree that never had
+them):** CLAUDE.md's "What's next" doesn't mention any of this yet — worth a pointer next wrap.
+`.planning/session-log.md` likewise never got an entry for this thread. The worktree itself
+(`/Users/muskanmuskan/Documents/wt-manage-shop-dnd`) is left on disk, not removed — the dev
+server that was running on :3001 has been stopped.
+
+**New in LEARNINGS.md:** L-070 (Linear title ≠ scope — pull the real description before closing),
+L-071 (a shared local Supabase instance across worktrees can silently revert another session's
+already-applied migration on a container restart — verify the write landed, don't trust the
+apply command's own success message), L-072 (a fresh `git worktree` has none of the source
+directory's gitignored setup — `.env.local`, `node_modules` — and Turbopack specifically rejects
+a `node_modules` symlink pointing outside the worktree root, unlike webpack/vitest/tsc).
+
+---
+
+**Last updated:** 2026-09-07 — session 103 — **0027 build phase COMPLETE: T06-T09 closed, all
+nine tickets (T01-T09) done. Next stage is `/ship`.**
+**Status:** active — mid-session, substantial UNCOMMITTED work in this exact working tree
+(`/Users/muskanmuskan/Documents/Hello-Sello Product`, branch `claude/muskan/work`): T06 (drop
+`deliver_deal`/`claim_deal_ticket` + one migration), T07 (delete the whole `/connect/inbox`
+module), T08 (nav/CTA removal), T09 (5 e2e spec rewrites) — ~62 changed/new files, nothing
+committed yet (not asked to). Local HEAD == `origin/claude/muskan/work` (`1f258ff`) — the
+uncommitted work sits cleanly on top, zero drift from origin otherwise.
+**Cross-session note (2026-09-07):** a parallel session in `../wt-manage-shop-dnd`
+(`claude/muskan/manage-shop-dnd-fix`, also branched from `1f258ff`) merged its Present/Manage-Shop
+work (`049683d` — drag-and-drop reorder, "Additional pack sizes," Origin+Region/Badge on
+ProductCard, + `20260907140000_import_products_pack_sizes.sql`) into `claude/muskan/work` and
+pushed, then wrapped its own session with a second commit (`cec41ca` — `LEARNINGS.md` L-070/071/
+072, its own sync-file entry). Both synced cleanly via `pull --rebase`, verified zero file overlap
+with 0027's work both times. **`origin/claude/muskan/work` is now `cec41ca`, this session rebased
+onto it with a resolved `LEARNINGS.md` conflict — details below.**
+
+⚠️ **Real `LEARNINGS.md` numbering collision, third occurrence of this class (the allocator
+question `CLAUDE.md` already flags as open, unresolved).** Both sessions independently wrote a
+new entry titled "L-070" — different content, both legitimate (theirs: a Linear-ticket-scope
+lesson; mine: T06's repointed-citation lesson). Git caught it as a real merge conflict on `git
+stash pop` (not a silent duplicate — the insertion point was identical for both). Resolved by
+renumbering mine to L-073 (their L-070/071/072 kept as committed), verified no duplicate headers
+survive, `tsc` still clean. **Still no actual allocator exists** — this was manual, ad hoc
+resolution, same as every prior collision. Flagging again since "flag it again next time" hasn't
+produced a fix across three occurrences now.
+**Linear issue in progress:** none.
+**Shared files locked: none — all released.**
+
+**HEL-83 built** (`20260903110000_promotion_status_gate.sql` — filename, not the commit hash,
+which already went stale once across a rebase; **pushed to production 2026-09-07**, app code via
+PR #184). Muskan ruled: only `negotiation`.
+`offer_promotion` + `accept_promotion` gated; `decline_promotion` deliberately NOT (a gated
+decline would strand a pending promotion forever). UI drops Accept rather than disabling it.
+
+**HEL-86 built.** New `supabase/functions/_shared/relationshipGate.ts` classifies the gate RPC's
+outcome into writable / refused / missing / **unavailable**; only the last logs at error level.
+Both Sella edge functions use it. `vitest.config.ts` gained a `supabase/functions/**/*.test.ts`
+glob (one pure spec, 16 tests). **Both functions need a REDEPLOY** — folded into the existing
+edge-function debt item in the ledger, still one deploy each.
+⚠️ `deno check` cannot verify either `index.ts` in this repo and never could — `functions-js`
+types pull an uninstalled `npm:openai`. Pre-existing; verified against an untouched function.
+
+**HEL-85 built** (`20260903100000_confirm_deal_change_workspace_gate.sql` — filename, not the
+commit hash, which went stale across a rebase; **pushed to production 2026-09-07**).
+`confirm_deal_change` re-imports the workspace half of `can_access_workspace`. **Latent, not
+live** —
+production has zero private workspaces, so it is not exploitable against prod data today.
+**L-066 added:** an RLS bypass cannot be measured from inside the role being bypassed — the first
+draft of the suite counted rows as the probe user and passed vacuously on a live exploit.
+
+Released this session:
+- `docs/agents/LEARNINGS.md` — **L-065 added**: a ticket parked "blocked on X" is a claim with an
+  expiry date, and nothing re-checks it when X ships. Write the reverse edge on the BLOCKING
+  ticket, and at `/ship` ask "what did this release?".
+- (`docs/deploy/cloud-migrations-pending.md` edited and
+released, commit `86e8b59`: added the `20260903090000` ledger entry and struck three stale
+`⚠️ PENDING` headings covering 13 migrations that are live on production — verified against the
+remote via `list_migrations`, and corroborated by my own 2026-08-27 entry below saying "nothing
+cloud-pending". Bodies left verbatim per that file's annotate-never-delete rule.)
+
+**Built this session.** HEL-67 Gap 2 — `msg_all` WITH CHECK gains `sender = 'person' AND
+sender_person_id = auth.uid()`, closing chat-message sender forgery (commit `fc0f7da`). Was
+blocked on HEL-68 since 2026-08-25; HEL-68 + HEL-84 shipping on 2026-08-27 removed the three
+attributed-to-another-person write paths, which is what made the predicate writable. **LOCAL
+ONLY — the cloud push is Muskan's.** Gate: 61/61 SQL suites, 483 unit, tsc clean, chat e2e 4/4.
+`design_oo27` messaged, since 0027's "posts straight to chat" branches are now constrained to a
+person-voiced, self-attributed client write (or a definer).
+
+**Also closed: HEL-73** — was `🏁 SLUG COMPLETE` in slug 0025 and stale-`Backlog` in Linear.
+Closed on measured evidence, not on that record: its AC ran as written (61 SQL runners → e2e →
+61 again → the two seed-mutating specs it names → 61 a third time; **61/61 every time, no
+reset**), and both suites it named as casualties pass by name.
+
+⚠️ **A parallel session (`design_oo27`) is working in this same tree on 0027's `/design`.**
+Confirmed directly with it: it owns `docs/architecture/adr/0009-retire-connect-inbox.md`,
+`adr/ADR-INDEX.md` and `docs/muskan-build/0027-*`, and has **not** touched the ledger,
+`CONTEXT.md` or `DECISIONS.md`. No conflict either way — my commits staged their paths
+explicitly. It has cited `20260903090000` in its ADR; its own migrations will sort after it, so
+**the local tip is no longer `20260827150000`** — anything assuming that tip is now stale.
+
+---
+
+**Last updated:** 2026-08-31 — decision session — **Connection Request page retirement DECIDED,
+no code this session**
+**Status:** offline (session closed).
+**Shared files locked: none — all released.** (`docs/decisions/DECISIONS.md` edited without a
+prior lock — checked retroactively: Ayush fully offline since 2026-07-24, branch matched origin,
+no conflict.)
+
+**What happened.** Research + one resolved fork on retiring `/connect/inbox`: the accept gate
+stays for unconnected sends (pricing asks, deals), claim/assign/reassign/history retire (MVP =
+one person per company per side), Discover's `RequestsSection` becomes the one accept surface for
+all four `pending_inbox_item` types. Full entry: `DECISIONS.md`, "2026-08-31". Not yet triaged
+into a slug — next session's job.
+
+---
+
+**Last updated:** 2026-08-27 — session 98 — **0024 + 0026 SHIPPED (PR #182, #183); a live
+exploit found and closed mid-build**
+**Status:** offline (session closed). Production tip `20260827150000`; **nothing cloud-pending**
+(7 migrations + 2 edge-function redeploys all applied/deployed this session). G5 on both is
+**deliberately deferred**, not skipped — see `CLAUDE.md` #1b.
+**Shared files locked: none — all released.**
+
+**What shipped.** HEL-68 (0024): `accept_connection_request` mints c2c/p2p threads atomically
+with the relationship — clean ship, one deny-test correctness fix (`LEARNINGS.md` L-064).
+HEL-84 (0026): `assert_relationship_writable` gates `chat_message`/`pending_inbox_item` on
+relationship status. Full detail: `.planning/session-log.md` session 98.
+
+**The part worth flagging for anyone who reads this later.** 0026's plan took **6
+`plan-checker` rounds** to converge — every round a real catch, none noise. Once built and
+fully gated (`critic` clean too), `security`'s pre-G4 pass found a **live-proven exploit**: the
+shipped design's four-type system-message exemption in `msg_all` was keyed on
+`chat_message.type`, a client-writable column — a thread member on a suspended relationship
+bypassed the write gate entirely by mislabeling an ordinary message. Fixed via a `SECURITY
+DEFINER` RPC addendum (`announce_deal_event`), 2 more `plan-checker` rounds. **That fix's own
+follow-up security re-check then found a SECOND gap in the fix itself** — a dropped
+deal-workspace-membership check, also live-proven, also fixed and independently verified
+closed. `DECISIONS.md` + `ARCHITECTURE-NOTES.md` both updated, 2026-08-27 — the reusable lesson
+is that a client-facing RLS exemption keyed on any client-writable column is never a security
+boundary, and this is the third time this repo has hit that exact shape (HEL-67 Gap 1, 0024's
+own `send_deal` fix, now this).
+
+**Linear:** HEL-68 + HEL-84 moved Backlog → In Review (not Done — G5 owed, kept visible on
+purpose). HEL-82/HEL-67 commented (blockers cleared, both stay In Progress pending their own
+G5s). Two new follow-ups filed: HEL-85 (`confirm_deal_change` may have the same
+workspace-membership gap `announce_deal_event` just closed) and HEL-86 (low priority — the two
+Sella edge functions can't distinguish the new gate's refusal from a genuine RPC failure).
+
+---
+
 **Last updated:** 2026-08-25 — `workflow_retro` — **HEL-81+82+74 SHIPPED (PR #181); pipeline slimmed**
 **HEL-82 + HEL-74 BUILT, committed `fc2a07b`, pushed to `worktree-security-tickets`.**
 **Status:** offline (session closed). Production tip `20260825200000`; **nothing cloud-pending**. G5 on the shipped security work is OWED.

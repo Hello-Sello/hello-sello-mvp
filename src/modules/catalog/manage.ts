@@ -19,7 +19,7 @@ import { createClient } from "@/shared/db/server";
 import { getCurrentCompanyId } from "@/shared/auth";
 import type { TablesUpdate } from "@/types/database.types";
 import { isAllowedVideoUrl } from "./mediaLinks";
-import { DOMINANCE_CODES, IRRADIATION_CODES } from "./template";
+import { DOMINANCE_CODES, IRRADIATION_CODES, BADGE_CODES } from "./template";
 import { validateLocations } from "./locations";
 import {
   ladderErrorMessage, lookupStandardPriceRow, readCurrentPrices, savePriceLadder,
@@ -349,6 +349,9 @@ export type ProductFieldPatch = {
   /** Extra sellable pack sizes beyond `pack_size_grams` — v0, merged into
    *  `product.metadata.pack_sizes` (no schema change). [] clears it. */
   pack_sizes?: number[];
+  /** Seller-set lifecycle pill — v0, merged into `product.metadata.badge_code`
+   *  (no schema change), validated against BADGE_CODES. null clears it. */
+  badge_code?: string | null;
 };
 
 const NUMERIC_PRODUCT_FIELDS = [
@@ -407,15 +410,23 @@ export async function updateProductFields(
   // Merge (not replace) — metadata may carry other per-company custom columns
   // the card never touches. Read-then-write is fine at this scale (single
   // product row, owner-only edit); a real product_pack_size table is the
-  // planned fix once this outgrows a v0 stopgap.
-  if (patch.pack_sizes !== undefined) {
+  // planned fix once this outgrows a v0 stopgap. One read covers every v0
+  // metadata field in this patch, not one round-trip per field.
+  if (patch.pack_sizes !== undefined || patch.badge_code !== undefined) {
+    if (patch.badge_code != null && !BADGE_CODES.includes(patch.badge_code as (typeof BADGE_CODES)[number])) {
+      return { error: "Invalid badge." };
+    }
     const { data: existing } = await supabase
       .from("product")
       .select("metadata")
       .eq("id", productId)
       .single();
     const metadata = (existing?.metadata as Record<string, unknown> | null) ?? {};
-    productPatch.metadata = { ...metadata, pack_sizes: patch.pack_sizes };
+    productPatch.metadata = {
+      ...metadata,
+      ...(patch.pack_sizes !== undefined ? { pack_sizes: patch.pack_sizes } : {}),
+      ...(patch.badge_code !== undefined ? { badge_code: patch.badge_code } : {}),
+    };
   }
 
   if (Object.keys(productPatch).length > 0) {

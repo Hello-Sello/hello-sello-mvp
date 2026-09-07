@@ -4,9 +4,9 @@
  * Both accept paths RAISE rather than returning a row count, and both raise
  * texts are fixed strings owned by their migrations (`20260823090000`,
  * `20260724100400`). Matching them here — in one place, off the wire format —
- * keeps the two surfaces that call accept (the Connect inbox and the Discover
- * requests list) from each inventing their own wording, and keeps a raw
- * Postgres string from ever reaching a pharmacy's screen.
+ * keeps Discover's requests list from inventing its own wording, and keeps a
+ * raw Postgres string from ever reaching a pharmacy's screen. (This used to
+ * also cover the Connect inbox, retired in 0027.)
  *
  * It also covers the SEND side. `inbox_insert` gained a receiver-liveness
  * predicate (HEL-75, `20260825130000`), so sending to a company that has

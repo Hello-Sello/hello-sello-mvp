@@ -229,6 +229,23 @@ RESET ROLE;
 --      the RPC composes it itself from `person.first_name`/`last_name` or
 --      the fixed lifecycle text, per §12.2).
 -- ============================================================================
+-- BASELINE FIRST (2026-09-03). §D2 below used to assert a HARDCODED 4 against
+-- the SEEDED Alice<->Bob p2p thread, which this suite does not own. Any
+-- committed write of a lifecycle pill into that thread broke it — and
+-- `e2e/deal-change.spec.ts` does exactly that, deliberately ("propose-pill",
+-- "negotiate-pill-keeps-change"), through Playwright's own connection, which
+-- COMMITS. So the suite was green or red depending on whether that spec had run
+-- since the last `db reset`. Caught when it went red at 6.
+--
+-- This is `.claude/rules/supabase.md`'s own rule — "assert a delta, not a
+-- hardcoded count, so seed changes cannot break the test" — and the L-033 /
+-- HEL-73 family. §D1 keeps its absolute 4 legitimately: its thread is minted by
+-- THIS transaction and starts empty, so the absolute count IS the delta.
+CREATE TEMP TABLE _d_base ON COMMIT DROP AS
+SELECT count(*) AS n_p2p FROM public.chat_message
+WHERE thread_id = (SELECT thread_id FROM _p2p) AND sender = 'sella'
+  AND type IN ('deal_signed','deal_cancelled','deal_change_proposed','deal_negotiation_requested');
+
 SELECT set_config('request.jwt.claims', (SELECT json_build_object('sub', alice, 'role', 'authenticated')::text FROM _fix), true);
 SET LOCAL ROLE authenticated;
 DO $$
@@ -253,8 +270,9 @@ BEGIN
   SELECT count(*) INTO v_n_p2p FROM public.chat_message
   WHERE thread_id = (SELECT thread_id FROM _p2p) AND sender = 'sella'
     AND type IN ('deal_signed','deal_cancelled','deal_change_proposed','deal_negotiation_requested');
-  IF v_n_p2p <> 4 THEN
-    RAISE EXCEPTION 'D2/p2p-thread FAIL: expected 4 sella rows in Alice''s own p2p thread, got %', v_n_p2p;
+  IF v_n_p2p - (SELECT n_p2p FROM _d_base) <> 4 THEN
+    RAISE EXCEPTION 'D2/p2p-thread FAIL: expected §D to add 4 sella rows to Alice''s own p2p thread, added % (baseline %, now %)',
+      v_n_p2p - (SELECT n_p2p FROM _d_base), (SELECT n_p2p FROM _d_base), v_n_p2p;
   END IF;
 
   SELECT body INTO v_body FROM public.chat_message

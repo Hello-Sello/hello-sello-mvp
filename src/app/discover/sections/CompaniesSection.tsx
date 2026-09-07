@@ -97,10 +97,9 @@ function ConnectButton({ company }: { company: DiscoverCompany }) {
     );
   if (state === "incoming")
     return (
-      <a href="/connect/inbox"
-        className="inline-flex items-center gap-1.5 rounded-full bg-brand-soft/60 px-4 py-2 text-sm font-semibold text-brand-deep hover:bg-brand-soft">
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-soft/60 px-4 py-2 text-sm font-semibold text-brand-deep">
         Wants to connect <ArrowRight size={14} />
-      </a>
+      </span>
     );
   if (state === "requested" || optimistic)
     return (

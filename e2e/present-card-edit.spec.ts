@@ -252,7 +252,7 @@ test("F-05 · Save flushes the Cultivator + Origin spec-row edits (persists acro
   await captureFirstCardFields(page, ["cultivator", "country_of_origin"]);
   const card = page.getByTestId("product-card").first();
   await card.getByLabel("Cultivator").fill("Northern Grow Co");
-  await card.getByLabel("Origin").fill("Netherlands");
+  await card.getByLabel("Origin country").fill("Netherlands");
 
   await page.getByTestId("save-changes-btn").click();
   await expect(page.getByTestId("shop-surface")).toHaveAttribute("data-edit", "off");

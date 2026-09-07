@@ -18,6 +18,10 @@ const nextConfig: NextConfig = {
     return [
       { source: "/account", destination: "/settings/profile", permanent: true },
       { source: "/team", destination: "/settings/organization/team", permanent: true },
+      // /connect/inbox retires with this route/module (0027, ADR 0009 D6) — the
+      // page and every request type it handled now settle in Discover's own
+      // Requests box (T03/T04).
+      { source: "/connect/inbox", destination: "/discover", permanent: true },
     ];
   },
 };

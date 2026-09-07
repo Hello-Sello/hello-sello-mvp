@@ -122,6 +122,15 @@ function coerce(raw: string, col: TemplateColumn): { value: unknown } | { error:
         ? { error: `"${v}" not one of: ${(col.codes ?? []).join(", ")}` }
         : { value: code };
     }
+    case "number_list": {
+      const nums: number[] = [];
+      for (const part of v.split(",").map((s) => s.trim()).filter((s) => s !== "")) {
+        const n = parseGermanNumber(part);
+        if (n === null) return { error: `"${part}" is not a number` };
+        nums.push(n);
+      }
+      return { value: nums };
+    }
   }
 }
 

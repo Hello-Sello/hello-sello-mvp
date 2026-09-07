@@ -50,7 +50,7 @@ import { AssignProductsDialog } from "./AssignProductsDialog";
 import { PresentBanner } from "./PresentBanner";
 import { SaveBar } from "./SaveBar";
 import { InfoBox, DescriptionEditor } from "./InfoBox";
-import { filterByLocation, groupByLocation, applyProductOrder, moveBefore, UNASSIGNED } from "./locationFilter";
+import { filterByLocation, groupByLocation, applyProductOrder, moveRelative, UNASSIGNED } from "./locationFilter";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 // Cover/logo now live at a STABLE path (overwritten in place, never orphaned), so
@@ -146,12 +146,13 @@ const NUM_FIELD_KEYS = [
 ] as const;
 
 // F-05: the other spec-row fields (Cluster F), extending the SAME pending-edit
-// tree — free text (trim → null when cleared) + the two enum codes (raw code
-// string; "" means the seller picked "n.a." → null). Dominance/Irradiation are
-// selects on the card (not free text), but the wire value is still a string.
+// tree — free text (trim → null when cleared) + the enum codes (raw code
+// string; "" means the seller picked "n.a." → null). Dominance/Irradiation/
+// Badge are selects on the card (not free text), but the wire value is still
+// a string.
 const TEXT_FIELD_KEYS = [
   "cultivator", "country_of_origin", "region", "lineage_parent_a", "lineage_parent_b",
-  "dominance_code", "irradiation_code", "packaging_material", "supplier_product_code",
+  "dominance_code", "irradiation_code", "badge_code", "packaging_material", "supplier_product_code",
 ] as const;
 
 function toFieldPatch(f: ProductFieldDraft): ProductFieldPatch {
@@ -566,13 +567,15 @@ export function ShopView({
     setGroupOrder(current);
   }
 
-  // Reorder a card within its shop: place `draggedId` just before `targetId` in
-  // this location's client-only order. Keyed by the group LABEL (so the Unassigned
-  // bucket keys under its sentinel, matching applyProductOrder above).
-  function reorderProduct(location: string, draggedId: string, targetId: string) {
+  // Reorder a card within its shop: place `draggedId` on the given `position` side
+  // of `targetId` in this location's client-only order. Keyed by the group LABEL
+  // (so the Unassigned bucket keys under its sentinel, matching applyProductOrder
+  // above). `position` matters: "before" alone can never make a card the LAST
+  // item in its row — there'd be no card after it to drop "before".
+  function reorderProduct(location: string, draggedId: string, targetId: string, position: "before" | "after") {
     const group = orderedGroups.find((g) => g.location === location);
     if (!group) return;
-    const next = moveBefore(group.products.map((p) => p.id), draggedId, targetId);
+    const next = moveRelative(group.products.map((p) => p.id), draggedId, targetId, position);
     setProductOrder((prev) => ({ ...prev, [location]: next }));
   }
 
@@ -744,7 +747,7 @@ export function ShopView({
                   onBatchInsert={insertBatch}
                   onBatchChange={changeBatch}
                   onBatchRemove={removeBatch}
-                  onReorder={(draggedId, targetId) => reorderProduct(g.location, draggedId, targetId)}
+                  onReorder={(draggedId, targetId, position) => reorderProduct(g.location, draggedId, targetId, position)}
                   onAddToBasket={handleAddToBasket}
                   onRequestPricing={handleRequestPricing}
                   viewerIsOwner={viewerCanManage}

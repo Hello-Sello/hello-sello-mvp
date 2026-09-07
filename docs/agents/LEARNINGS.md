@@ -2258,3 +2258,308 @@ check because a never-granted function and a revoked one are indistinguishable; 
 the wrong check on the OTHER side, an exception class that under-discriminates instead of a
 grep that over-trusts), [[L-013]] (run the runner, not just the test — the same root cause:
 a green result was trusted without being run against the failure it exists to catch).
+
+---
+
+## L-065 · A ticket parked as "blocked" is a claim with an expiry date, and nothing in this pipeline re-checks it — the blocker cleared a week ago and no one noticed
+
+**2026-09-03 · session 101 · HEL-67 Gap 2 · caught by reading the ticket, not by any tool**
+
+**Trigger** — any ticket deliberately left open with a recorded reason it cannot be built
+yet ("blocked on X", "needs a product ruling", "do not force"), where X is another ticket in
+the same backlog.
+
+**What happened** — HEL-67 Gap 2 (chat-message sender forgery) was ruled un-buildable on
+2026-08-25 for a genuinely good reason: three `authenticated` write paths legitimately wrote
+in someone else's name, so `sender_person_id = auth.uid()` would have broken connection-accept
+outright. The ticket said so precisely, named its blocker (HEL-68), and Muskan ruled "ship
+Gap 1 now, do not force Gap 2." All correct.
+
+**HEL-68 shipped on 2026-08-27. HEL-84 shipped the same day and removed the fourth path.**
+Between them they deleted `rollout.ts` entirely and moved the Sella-voiced pills into
+`announce_deal_event`. Every one of Gap 2's blockers was gone — and neither slug's `/ship`
+noticed, because neither was built with HEL-67 in mind. The unblocking was a side effect.
+`CLAUDE.md`'s security backlog listed six items and **did not list HEL-67 at all**; it was
+found only by pulling the full Linear team list and reading a High-priority ticket sitting in
+`In Progress` that the personal notes had dropped.
+
+**Why the existing machinery missed it** — the pipeline records a blocker in the BLOCKED
+ticket ("Gap 2 is blocked on HEL-68") and never in the BLOCKING one. HEL-68's own STATE, ADR
+and ship notes say nothing about what closing it releases, so nothing at ship time prompts
+the question. The dependency is written down exactly once, in the file that only gets read
+when someone already suspects the work is doable. That is backwards: the moment the fact
+becomes actionable is the moment the blocker closes.
+
+**The rule** — when a ticket is parked with a named blocker, write the reverse edge too: add
+a line to the BLOCKING ticket saying what unblocks when it closes, and use Linear's real
+`blocks`/`blockedBy` relation rather than prose so it shows up on the blocker's own page.
+At `/ship`, before a slug closes, ask one question — *what did this release?* — and check the
+backlog for tickets naming it. A "blocked" note with no reverse edge decays into a "wontfix"
+that nobody ever revisits; this one cost a week on a High-priority security item, and it was
+only luck that the next session read the ticket rather than trusting the summary in
+`CLAUDE.md`.
+
+**Corollary, learned the same session** — the personal `CLAUDE.md` backlog is a *summary*,
+and it had drifted twice: it omitted HEL-67 entirely and mis-described HEL-73 as "the e2e half
+of HEL-68" when HEL-73 is the shared-seed mutation ticket ([[L-033]]), already complete in the
+repo and stale-Backlog in Linear. Read the tracker, not the note about the tracker
+([[L-030]]'s shape, applied to issues instead of line numbers).
+
+**See also** [[L-030]] (a written pointer goes stale and must be re-derived, never trusted),
+[[L-033]] (the HEL-73 subject this entry's corollary corrects), [[L-013]] (a claim that has
+never been re-run against reality is an assumption, not a result).
+
+---
+
+## L-066 · An RLS bypass cannot be measured from inside the role being bypassed — the boundary under test also hides the evidence that it failed
+
+**2026-09-03 · session 101 · HEL-85 · caught by a guard cell, one iteration before it would have shipped green**
+
+**Trigger** — any test that proves a `SECURITY DEFINER` function does NOT write somewhere, by
+counting rows before and after a call. Especially when the thing being protected is a row the
+probe user is not allowed to read.
+
+**What I did** — the HEL-85 suite mints a private `deal_workspace` and has Dana (a relationship
+member, deliberately not a `deal_member`) call `confirm_deal_change`. §B counted
+`chat_message` rows in the deal thread before and after, from inside Dana's own session:
+
+```sql
+SET LOCAL ROLE authenticated;   -- Dana
+SELECT count(*) INTO v_before FROM public.chat_message WHERE thread_id = ...;
+PERFORM public.confirm_deal_change(...);
+SELECT count(*) INTO v_after  FROM public.chat_message WHERE thread_id = ...;
+IF v_after > v_before THEN RAISE EXCEPTION 'exploit'; END IF;
+```
+
+It reported `before=0, after=0` and passed. A privileged count on the same thread, in the same
+transaction, showed **2**. The write had landed. The suite was green on a live exploit.
+
+**Why it was wrong** — `can_access_thread` gates SELECT on `chat_message`. Dana cannot read that
+thread; that is the entire premise of the test. So she cannot see the row she just wrote either.
+The definer bypassed RLS to insert; RLS then hid the result from her. Both counts were `0` for the
+same reason the test existed: **the boundary being violated is also the boundary that reports on
+it.** A `0 → 0` delta was indistinguishable from a working gate, and would have stayed
+indistinguishable forever — the cell could never have gone red, for any regression, ever.
+
+**The rule** — split the actor from the observer. The probe user makes the call and nothing else;
+every count, every assertion, every read of what happened runs **privileged, outside the role
+under test** (in this repo: `RESET ROLE`, or a `pg_temp` helper invoked before the `SET LOCAL
+ROLE`). If the probe user must carry something out of her own block — a `SQLERRM`, a returned id —
+write it to a scratch table she has `INSERT` on and read it back from outside. Concretely: never
+put a `SELECT count(*)` that decides a security verdict inside a `SET LOCAL ROLE authenticated`
+block.
+
+**What actually saved it** — not review, and not the assertion itself. A separate `silent-pass`
+cell, added because [[L-064]] says a deny-test must prove WHY it passed:
+
+> *nothing landed AND nothing raised. The RPC neither wrote nor refused, so this cell is not
+> evidence of a gate.*
+
+That fired, and it was the only signal anything was wrong. The lesson generalises past this bug:
+a negative assertion needs a companion cell proving the mechanism was actually exercised, because
+"nothing happened" is what both success and total non-execution look like.
+
+**See also** [[L-064]] (a deny-test that catches on SQLSTATE alone can pass for the wrong reason —
+the same family: a pass condition that under-discriminates), [[L-013]] (a green never run against
+its own failure is an assumption), [[L-033]] (measure the fixture, don't assume it).
+
+---
+
+## L-067 · A hash cited in docs on a branch that rebases is a claim with a shelf life
+
+**2026-09-07 · slug 0027 cloud push · caught by a peer session's audit, then a follow-up sweep**
+
+**Trigger** — citing a git commit hash in a doc (`DECISIONS.md`, `STATE.md`, a sync file) as
+evidence something exists or was done, on a personal branch this project rebases regularly.
+
+**What happened.** A single rebase (this session's own T04 base-sync, onto `origin/dev`) orphaned
+five separate commit hashes cited across six files — `docs/decisions/DECISIONS.md`,
+`docs/team/sync/muskan.md`, `STATE.md` (twice), `PLAN-T01.md`, and `.planning/BACKLOG-ARCHIVE.md`
+(three sites, only one of which a peer session's audit had found). None were malicious edits — the
+content each citation pointed at was identical, only the pointer died
+(`git merge-base --is-ancestor <hash> HEAD` now fails for all five).
+
+**The rule.** Cite the migration filename, the commit subject line, or a decision-doc section
+heading instead of a bare hash wherever the citation needs to survive a rebase. A hash is fine for
+a same-session "I just did this, here's the receipt" reference; it is not durable across this
+project's own git workflow. When a hash citation IS found stale, don't just fix the cited site —
+grep the whole repo for that same hash, since one rebase orphans every citation of it at once, not
+just the one someone happened to notice.
+
+---
+
+## L-068 · Never manually retype a large body for diffing — ask the database instead
+
+**2026-09-07 · slug 0027 cloud push, diff-against-live for `confirm_deal_change` · self-caught
+before it caused a real incident**
+
+**Trigger** — verifying a `create or replace function`'s live body against a local migration by
+copying the live text (from an MCP tool result, a JSON blob, a query result) into a file to run
+`diff` against.
+
+**What happened.** Manually retyping a ~280-line live function body into a file for `diff` silently
+dropped an entire 17-line block (a thread-resolution step, present in the real body). The resulting
+diff looked like a real, alarming discrepancy — production apparently missing logic the migration's
+own header assumed existed. It was actually a transcription error, not a production anomaly. Caught
+only because the finding was surprising enough to double-check with a narrow, database-computed
+boolean (`pg_get_functiondef(...) LIKE '%select dc.relationship_id into v_rel%'`) before acting on
+it, rather than trusting the hand-copied diff.
+
+**The rule.** Never manually transcribe a large text body between contexts for comparison. Ask the
+database (or the source of truth directly) a narrow, automatable question instead — "does this
+substring exist," "what's the character length," "does removing this text produce a match" —
+computed server-side, not retyped by hand. A surprising diff on hand-copied text is grounds for
+suspecting the copy, not the target.
+
+**See also** [[L-024]] (`diff` exits 0 on differing files here — never branch on it alone; the same
+family of "trust the tool's verdict, not your eyes" mistake, in the opposite direction).
+
+---
+
+## L-069 · `rtk`'s output corruption reaches `find`/`ls`/`grep`, not just `git`/`tsc`
+
+**2026-09-07 · slug 0027 T04/T05 build + cloud push · confirmed directly, multiple times**
+
+**Trigger** — running `find`, `ls`, or `grep` (bare, hook-rewritten) during any verification step
+whose result will be trusted — a file-existence check, a directory listing, a pattern search.
+
+**What happened.** `find` returned zero matches for a file confirmed to exist via `/usr/bin/find`
+moments later. `ls` printed unrelated eza-style summary output ("N files, N dirs") instead of a
+file listing. `grep` returned the tool's own `--help` text instead of search results. HEL-80
+already tracked this collapse for `git`/`tsc`/`vitest`/`eslint`/`psql`; this session confirms the
+same failure mode reaches basic filesystem tools too — the class is wider than HEL-80's own list.
+
+**The rule.** During any `/build` or `/ship` verification step, call the real binary path
+(`/usr/bin/find`, `/bin/ls`, `/usr/bin/grep`, etc.) explicitly rather than the bare command, for
+every tool in this class — not only the ones HEL-80 already named. Treat a suspiciously clean or
+suspiciously empty result from any wrapped shell command as a signal to re-run via the direct path
+before trusting it, especially right before a decision that's expensive to get wrong.
+
+---
+
+## L-070 · A Linear ticket's title is not its scope — pull the full description before verifying or closing
+
+**2026-09-07 · Present-page ticket triage (Marcel's DEV-10x tickets), worktree
+`wt-manage-shop-dnd` · caught by Muskan, self-corrected same turn**
+
+**Trigger** — verifying whether a Linear ticket is "done," or closing one, based on a title
+pulled from a list search (`list_issues` without `description` in `fields`, or a title that
+already reads like a full sentence).
+
+**What happened.** DEV-111's title was "Description in Present" — read as fully self-explanatory,
+so I delegated its verification to a sub-agent with just that title and closed it as Done once the
+description-editing feature checked out. Its actual Linear `description` field, never pulled,
+held four more asks (uniform box sizing, an expand arrow, draggable links, and an entire
+"Manage shops per country" sub-feature with tags and certificate uploads) — none of it built. The
+ticket had to be reverted to In Progress. Two OTHER tickets in the same batch (DEV-119, DEV-101)
+had genuinely empty `description` fields, so verifying against the title alone was correct for
+them — the mistake was treating "title looks complete" as proof, rather than checking.
+
+**Why it was wrong.** I trusted a title's apparent completeness as a proxy for a description
+being empty, instead of confirming it. A short or absent description is a fact about the ticket,
+not a guessable property of how the title reads.
+
+**The rule.** Before verifying a ticket against code, or closing it, call `get_issue` (or include
+`"description"` in a `list_issues` `fields` array) and read the actual field — every time, even
+when the title reads as a complete sentence. A ticket with a real, empty `description` (confirm by
+reading it) is the only case where the title-as-full-spec shortcut is safe.
+
+---
+
+## L-071 · A shared local Supabase instance across worktrees can silently revert another session's applied state
+
+**2026-09-07 · Present-page migration (`import_products` pack_sizes), worktree
+`wt-manage-shop-dnd` alongside a parallel session on `claude/muskan/work` · confirmed directly**
+
+**Trigger** — running `supabase db reset`, or applying a migration file directly to the local
+Postgres container, from ANY worktree, while another session/worktree of the same project might
+be running against the same local Supabase stack.
+
+**What happened.** `supabase migration list --local` showed a migration (`20260907090000`,
+another session's T06 work) already applied to the live local DB with no matching file in this
+worktree's `supabase/migrations/` — proof the two sessions share ONE Docker-based Postgres
+instance (`supabase_db_hello-sello-design`), not one per worktree. Applying a new migration
+directly via `docker exec ... psql < file.sql` appeared to succeed (`CREATE FUNCTION` printed),
+but a follow-up `pg_get_functiondef` check showed the OLD function body still live — the other
+session had restarted the shared DB container in between (confirmed via `docker ps`, "Up 6
+seconds"), silently discarding the direct SQL write. Re-applying after the container reported
+healthy again fixed it. A `supabase db reset` in this window would have been worse: replaying only
+THIS worktree's migration files onto the shared DB would have deleted the other session's already-
+applied, not-yet-committed `20260907090000` migration entirely.
+
+**Why it was wrong.** I treated the local Supabase stack as owned by my worktree, when it's
+actually one shared mutable resource two sessions were both writing to. A `CREATE FUNCTION`
+success message confirmed the statement ran, not that the result was still there moments later.
+
+**The rule.** Before any `supabase db reset` (never do this from a worktree without asking — it
+can delete another session's uncommitted-but-applied migrations) or direct SQL write to the local
+DB: check `docker ps` for the shared container's uptime/health as a signal of recent
+restarts, and re-verify the change landed via a direct query (`pg_get_functiondef`, `\d`, etc.)
+rather than trusting the apply command's own success output. Extends [[L-024]]/[[L-069]]'s "trust
+the tool's verdict, not your eyes" family to shared infrastructure, not just wrapped CLI output.
+
+---
+
+## L-072 · A fresh `git worktree` has none of the source directory's gitignored setup — env files, `node_modules`, nothing
+
+**2026-09-07 · Present-page fixes, worktree `wt-manage-shop-dnd` set up mid-session · confirmed
+directly, twice**
+
+**Trigger** — creating a fresh `git worktree add` and immediately trying to run the dev server or
+a test runner in it, assuming it behaves like a second checkout of the same project.
+
+**What happened, twice.** (1) `next dev` in the new worktree threw `Your project's URL and Key are
+required to create a Supabase client!` — `.env.local` is gitignored, so `git worktree add` never
+created it; had to `cp` it from the source directory and restart the dev server (env vars are read
+once at boot, a running process won't pick up a file that appears later). (2) `npx vitest` failed
+with `Cannot find module '.../node_modules/vitest/vitest.mjs'` — `node_modules` doesn't exist in a
+fresh worktree either. A symlink to the source directory's `node_modules` fixed `vitest`/`tsc`, but
+Turbopack (`next dev`) then failed outright — `Symlink [project]/node_modules is invalid, it points
+out of the filesystem root` — Turbopack's own sandboxing rejects a `node_modules` symlink that
+resolves outside the worktree root, unlike webpack/vitest/tsc, which don't care. Had to remove the
+symlink and run a real `npm ci` (safe here since the lockfile matched the source directory's
+exactly — worth confirming that before reusing a symlink at all).
+
+**The rule.** A new worktree only has what git tracks at that commit — nothing gitignored comes
+with it. Before running anything in one: `cp` every `.env*` file the app needs from the source
+checkout, and either run a real `npm ci` (safest, works with every tool including Turbopack) or,
+only as a faster shortcut for non-Turbopack tools (`vitest`, `tsc`, `eslint`), symlink
+`node_modules` from a directory with a lockfile confirmed to match.
+
+---
+
+## L-073 · A repointed coverage citation is a new claim — verify it against the target's actual assertions, not the source's old wording
+
+**2026-09-07 · slug 0027 T06 · caught by `/code-review` and `critic`, independently, same round**
+
+**Trigger** — deleting a file and relocating/repointing any comment that cites "this behavior is
+covered by [file:lines]" to point at a surviving file instead, during a test-file consolidation.
+
+**What happened.** `PLAN-T06.md` scoped a ported test case (P2) to cover exactly three cells from
+the file being deleted — "A2-3a/3c/3e … **NOT** 3b/3d, already covered by this file's own C3" —
+a correct, deliberate exclusion. Two paragraphs later, the same plan instructed `test-writer` to
+repoint a separate stale citation ("the person arm's return value … covered by
+`deliver_deal_test.sql:248-251, case A2-3b`") to read "covered by this file's own case P2." That
+is exactly the A2-3b cell P2 had just been scoped to exclude. Worse, the assumption behind the
+exclusion — "C3 already covers it" — was never checked either: C3 calls `send_deal` as a bare,
+result-discarding `SELECT`, same as P2 did before the fix. Neither case had ever captured the
+return value. Two independent reviewers caught the same gap from different angles
+(`/code-review` read the diff cold; `critic` cross-checked TICKETS.md against the shipped file).
+
+**Why it was wrong.** I treated a citation-repoint as a mechanical find-replace — "this content
+used to live in the deleted file, so point at wherever it landed now" — instead of as a new claim
+that has to be independently true. I never re-derived it from what the target case (P2) or the
+case I'd delegated it to (C3) actually asserts; I picked a target by proximity to the recent
+discussion, not by reading its assertions. I also never cross-checked the citation against a
+contradicting sentence I had written two paragraphs earlier in the same document — a single
+self-consistency pass over the plan would have caught it before `test-writer` ever ran.
+
+**The rule.** When repointing a "covered by X" citation during a file consolidation or deletion,
+re-derive the claim from the target's actual assertions (read the DO block, not the banner comment
+above it) — never carry the old citation's wording forward on the assumption that *something* in
+the new location must satisfy it. If the plan itself contains a nearby sentence that scopes the
+same content OUT of the case you're about to cite, that is a direct contradiction to resolve before
+the plan ships, not two independent facts that happen to coexist.
+
+**See also** [[L-002]] (the shape one level up: synchronized copies of the same fact drifting
+apart over time, rather than a citation being wrong from the moment it's written).

@@ -601,6 +601,24 @@ still applies once the ADR is drafted.
   historical entries) `ARCHITECTURE-NOTES.md` and `DECISIONS.md`'s stale
   citations of the deleted `announceDealEvent`/`actions.ts:682`. §12.7's
   documentation debt is now discharged. **0026 is ready for PR.**
+- **`/ship`, 2026-08-27, continued** — all 7 migrations applied to
+  production (`supabase db push --linked`); both edge functions redeployed
+  (`sella-detect`, `sella-summarize`). Ledgered as APPLIED with post-push
+  evidence (grants, migration tip `20260827150000`, S8 advisors — no new
+  ERROR beyond the already-accepted `current_pricelist_item` one). PR #183
+  → `main`. CI green, merged. Vercel production deploy
+  `dpl_6ZnLmXLYToK6MY4c12DZADRr199e` confirmed READY, aliased to
+  `hello-sello-mvp.vercel.app`.
+
+🏁 **SLUG COMPLETE** (build + ship mechanics). **G5 — OWED**: Muskan's own
+live walk on production is the only remaining step before this slug closes.
+The walk should specifically exercise: a chat post refused on a suspended
+relationship (AC1/AC2), a new connect/pricing request refused (AC3), the
+four deal-lifecycle pills (sign/decline/propose/negotiate) still posting on
+a suspended relationship (AC8/Invariant 16) — and, given this build's own
+history, the private-deal-workspace boundary specifically (a company
+colleague who isn't part of a private negotiation should NOT see a system
+pill land in that thread).
 
 ## Gate log
 - **G3 (spec + ADR, merged gate) — APPROVED, Muskan, 2026-08-26.** "yes, approved,"

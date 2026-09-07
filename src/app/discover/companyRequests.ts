@@ -4,11 +4,29 @@ import { createClient } from "@/shared/db/server";
  * Incoming COMPANY connection requests for the viewer's company — the "Company
  * requests" group of the Discover Requests section (DISC-11). A server read
  * mirroring the getInbox pattern: resolve the viewer's company, then return the
- * incoming (receiver = my company) pending connect / connect_message items. RLS
- * (inbox_select) shows a row to sender AND receiver, so the receiver-company
- * filter is what makes this INCOMING-only. No deal_card join (that's the
- * deal-ticket path, out of scope here).
+ * incoming (receiver = my company) pending connect / connect_message /
+ * pricelist_request items. RLS (inbox_select) shows a row to sender AND
+ * receiver, so the receiver-company filter is what makes this INCOMING-only.
+ * No deal_card join (that's the deal-ticket path, out of scope here).
  */
+
+/**
+ * The `pending_inbox_item.type` values this list surfaces. `inbox_request_type`
+ * seeds five codes total; two are deliberately excluded (T03, ADR I-J4):
+ * - `deal_card` — a different meaning here (D1/T01 already makes it practically
+ *   unreachable). This list means "someone awaits consent from a company they
+ *   haven't spoken to" (ADR I-J2); a deal_card ticket must never appear even if
+ *   a row existed.
+ * - `connect_person` — a different graph and a different accept RPC
+ *   (`accept_person_connection`), rendered instead by
+ *   `incomingPersonRequests.ts`/`DiscoverPersonRequest`. True by construction,
+ *   doubly: a `connect_person` row carries `receiver_person_id` instead of
+ *   `receiver_company_id` (the column went nullable specifically for this), so
+ *   this query's own `.eq("receiver_company_id", companyId)` can never match
+ *   one regardless of this filter.
+ */
+export const COMPANY_REQUEST_TYPES = ["connect", "connect_message", "pricelist_request"] as const;
+export type DiscoverCompanyRequestKind = (typeof COMPANY_REQUEST_TYPES)[number];
 
 export type DiscoverCompanyRequest = {
   itemId: string;
@@ -17,6 +35,7 @@ export type DiscoverCompanyRequest = {
   senderCompanyId: string;
   senderCompanyName: string;
   senderInitials: string;
+  type: DiscoverCompanyRequestKind;
 };
 
 type Row = {
@@ -25,6 +44,7 @@ type Row = {
   created_at: string;
   sender_company_id: string;
   sender: { name: string } | { name: string }[] | null;
+  type: DiscoverCompanyRequestKind;
 };
 
 const initials = (name: string) =>
@@ -41,6 +61,7 @@ export function mapCompanyRequestRow(r: Row): DiscoverCompanyRequest {
     senderCompanyId: r.sender_company_id,
     senderCompanyName: name,
     senderInitials: initials(name),
+    type: r.type,
   };
 }
 
@@ -62,11 +83,11 @@ export async function getIncomingConnectionRequests(): Promise<DiscoverCompanyRe
   const { data, error } = await supabase
     .from("pending_inbox_item")
     .select(
-      "id, note, created_at, sender_company_id, sender:company!pending_inbox_item_sender_company_id_fkey ( name )",
+      "id, note, created_at, sender_company_id, type, sender:company!pending_inbox_item_sender_company_id_fkey ( name )",
     )
     .eq("receiver_company_id", companyId)
     .eq("status", "pending")
-    .in("type", ["connect", "connect_message"])
+    .in("type", COMPANY_REQUEST_TYPES)
     .is("deleted_at", null)
     .order("created_at", { ascending: false });
   if (error || !data) return [];

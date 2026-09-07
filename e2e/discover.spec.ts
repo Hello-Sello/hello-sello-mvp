@@ -40,7 +40,7 @@ test("Discover renders every Variant D section", async ({ page }) => {
   await expect(page.getByText("Your ad could be here")).toBeVisible();
 
   // The duo + the two full-width sections are all present.
-  await expect(page.getByRole("heading", { level: 2, name: "Connection requests" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "Requests" })).toBeVisible();
   await expect(page.getByRole("heading", { level: 2, name: "My network" })).toBeVisible();
   await expect(page.getByRole("heading", { level: 2, name: "People you may know" })).toBeVisible();
   await expect(page.getByRole("heading", { level: 2, name: "Companies" })).toBeVisible();
@@ -50,7 +50,7 @@ test("Requests | My Network are an equal-height, side-by-side duo", async ({ pag
   await signIn(page);
   await page.goto("/discover");
 
-  const requests = sectionByHeading(page, "Connection requests");
+  const requests = sectionByHeading(page, "Requests");
   const network = sectionByHeading(page, "My network");
   const reqBox = await requests.boundingBox();
   const netBox = await network.boundingBox();

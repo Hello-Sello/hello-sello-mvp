@@ -6,9 +6,6 @@ import {
   ShoppingCart,
   Tag,
   ArrowLeftRight,
-  MessageCircle,
-  Inbox,
-  Users,
   type LucideIcon,
 } from "lucide-react";
 
@@ -20,7 +17,14 @@ import {
  *
  * A surface MAY declare `children`. The rail is data-driven and generic: any
  * surface with children renders as an accordion parent (expanded rail) and a
- * flyout popover (collapsed rail). Today only Connect carries children.
+ * flyout popover (collapsed rail) — kept for reuse, no surface uses it today.
+ * Connect carried `chat`/`relationship` children until 2026-09-07: once
+ * "Connection Request" retired (0027), `relationship` was the only other
+ * child and it's permanently `"soon"` (disabled) — a one-item live accordion
+ * added a click before reaching Connect's only real destination, so Connect
+ * became a flat link like every other surface. `/connect/page.tsx` already
+ * redirects bare `/connect` to `/connect/chat` — that's the one place "where
+ * Connect lands" is decided, not duplicated here.
  */
 export type SurfaceState = "active" | "soon";
 
@@ -43,20 +47,7 @@ export type Surface = {
 
 export const SURFACES: Surface[] = [
   { key: "home", label: "Home", href: "/home", icon: Home, state: "active" },
-  {
-    key: "connect",
-    label: "Connect",
-    href: "/connect",
-    icon: MessagesSquare,
-    state: "active",
-    children: [
-      { key: "chat", label: "Chat", href: "/connect/chat", icon: MessageCircle, state: "active" },
-      // "Connection Request" is the renamed old "Inbox" - route stays /connect/inbox.
-      { key: "inbox", label: "Connection Request", href: "/connect/inbox", icon: Inbox, state: "active" },
-      // Relationship stays "soon" (disabled). Route is the real singular folder.
-      { key: "relationship", label: "Relationship", href: "/connect/relationship", icon: Users, state: "soon" },
-    ],
-  },
+  { key: "connect", label: "Connect", href: "/connect", icon: MessagesSquare, state: "active" },
   { key: "discover", label: "Discover", href: "/discover", icon: Compass, state: "active" },
   { key: "present", label: "Present", href: "/present", icon: Store, state: "active" },
   { key: "buy", label: "Buy", href: "/buy", icon: ShoppingCart, state: "soon" },

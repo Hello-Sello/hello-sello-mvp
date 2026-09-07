@@ -983,3 +983,31 @@ boring. Verifying a git worktree's commits had reached an integration branch bef
 took two minutes; the first time it ran it saved 1,965 lines of security work that was stranded on
 a branch nobody had merged, and the second time it passed uneventfully. Value shows up in the one
 run out of two where the obvious assumption is wrong.
+
+## 2026-08-27 — A client-writable column is never the axis an authorization decision can key on
+
+HEL-84's `msg_all` exemption let four system-authored chat-pill types (`deal_signed`,
+`deal_cancelled`, `deal_change_proposed`, `deal_negotiation_requested`) bypass the new
+relationship-suspension gate — keyed on `chat_message.type`, a column `authenticated` holds
+unrestricted `INSERT`/`UPDATE` on. Live-proven exploitable: a thread member on a suspended
+relationship set an ordinary message's `type` to one of the four exempt values and the write went
+through. This is the third time this repo has hit this exact shape — HEL-67 Gap 1 (`type =
+'deal_detected'` forgeable), 0024's `send_deal` refactor (a chat pill's authenticity depended on
+which code path wrote it, not on anything the database could verify) — and each time the fix is
+the same: stop trying to distinguish a "real" system row from a forged one by column value, and
+instead move the write behind a `SECURITY DEFINER` RPC that bypasses RLS and performs its own
+authorization. **If an RLS policy's `WITH CHECK` carves out an exemption keyed on any column the
+writing role can set, that exemption is not a security boundary — it's decoration**, regardless of
+how narrow the carve-out looks. The fix (`announce_deal_event`, `docs/muskan-build/
+0026-relationship-write-gate/PLAN-HEL-84.md` §12) is the reusable shape: a definer function that
+performs the authorization the RLS policy no longer needs to, once the client-facing path stops
+being the place the write happens at all.
+
+**One more turn, same session.** The definer fix itself then needed the standing rule
+(`.claude/rules/supabase.md`: "a SECURITY DEFINER function must re-import every clause the RLS
+policy it replaces checked") applied a second time within the same function — its first draft
+re-imported the relationship-level authorization but dropped the workspace-level one
+(`can_access_thread`'s `deal` arm is scoped to `deal_workspace` membership, not just relationship
+membership), also live-proven exploitable before being closed. A definer function's authorization
+checklist is exactly as long as the RLS predicate it replaces, not as long as the one clause the
+current ticket had in mind when writing it.

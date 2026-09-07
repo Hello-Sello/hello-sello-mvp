@@ -77,6 +77,12 @@ export function LocationGroup({
       onDragOver={editing ? (e) => { e.preventDefault(); setOver(true); } : undefined}
       onDragLeave={editing ? () => setOver(false) : undefined}
       onDrop={editing ? handleDrop : undefined}
+      // dragend always fires on the drag source once the operation ends — drop,
+      // drop-on-invalid-target, or cancel — and bubbles up here regardless of
+      // whether a nested card's onDrop called stopPropagation (a same-location
+      // card reorder does, so this section's own onDrop never runs for that
+      // case). Without this, `over` could stay stuck true after such a drop.
+      onDragEnd={editing ? () => setOver(false) : undefined}
     >
       {showHeader && (
         <div

@@ -40,12 +40,9 @@ export function ConnectActions({
 
   if (state === "incoming")
     return (
-      <Link
-        href="/connect/inbox"
-        className="flex w-full items-center justify-center gap-2 rounded-2xl bg-brand-soft/60 px-5 py-3 text-sm font-bold text-brand-deep hover:bg-brand-soft"
-      >
-        {companyName} wants to connect — open inbox →
-      </Link>
+      <div className="flex w-full items-center justify-center gap-2 rounded-2xl bg-brand-soft/60 px-5 py-3 text-sm font-bold text-brand-deep">
+        {companyName} wants to connect
+      </div>
     );
 
   if (phase === "sent")

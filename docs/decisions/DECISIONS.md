@@ -2087,3 +2087,202 @@ not stop being reported — every note reaches the gate. The mitigation is that 
 anchored to the dry-run's own measured severity classes rather than to fresh judgement, and
 the agents are told explicitly: *do not promote a rung-4/5 finding to `blocking` because it
 feels important; say so in the note instead.*
+
+## 2026-08-27 — HEL-84's client-controlled-type exploit gets fixed properly, not downgraded
+
+**What was decided.** `security`'s post-build review of HEL-84 found the four-type
+`announceDealEvent` exemption in `msg_all`'s `WITH CHECK` was keyed on `chat_message.type`, a
+column `authenticated` can set to anything — live-proven exploitable: a thread member on a
+suspended relationship bypassed the entire write gate by mislabeling an ordinary message's
+`type` as one of the four exempt values. Offered two paths: fix it properly (move the
+exemption into a `SECURITY DEFINER` RPC, closing the client-facing door entirely) or downgrade
+PRD AC2/AC8's enforcement claim to "UI friction, not a security boundary" and ship as-is.
+**Decided: fix it properly.**
+
+**Why.** This repo has already solved the identical shape twice — HEL-67 Gap 1 refused a
+forgeable `type` outright rather than trying to distinguish real system rows from forged ones
+by column value, and 0024's `send_deal` refactor moved its own chat pill into a definer RPC for
+the same reason. A third instance of "a client-writable column decides whether RLS lets a write
+through" is a pattern, not a one-off — downgrading the AC would have shipped a compliance
+control the PRD describes as enforcement while it was actually decorative.
+
+**What it cost.** Real new scope beyond the 6-round-checked plan: a new RPC with its own
+authorization (2 more `plan-checker` rounds to converge), deleting the old client-side
+`announceDealEvent`/`resolveActorName` helpers, rewiring four call sites. The fix's own
+follow-up `security` re-check then found a second gap in the new RPC itself (a dropped
+deal-workspace-membership check) — also fixed, independently reproduced closed. Total: the
+slug's build stretched across roughly a full session past what the original converged plan
+implied.
+
+**What did NOT change.** The underlying product ruling — these four system-authored types stay
+exempt from the suspension gate (ADR 0008 Invariant 16, "an event already in motion is not a
+new write") — is untouched. Only the mechanism moved, from a client-facing carve-out to a
+server-side one.
+
+---
+
+## 2026-08-31 — Connection Request page retires; all four request types settle in Discover's accept gate, no ticket/claim system for MVP
+
+Follows from the shop→chat simplification (browse any Discover shop, add products, send to a
+company/person in chat) and MVP's single-person-per-company reality.
+
+- **Accept gate is KEPT for unconnected sends** (pricing asks, deals) — reaffirms Marcel's
+  2026-06-10 closed/consent directive. Sending a product ask or a deal to a company you're not
+  yet connected to still needs an explicit accept before a chat thread exists; it does not
+  auto-connect on send.
+- **Claim/assign/reassign/history retire.** MVP is one person per company on both sides, so the
+  team-ticket-ownership model (`/connect/inbox`'s lenses, `assigned_to`, admin reassign) has no
+  one to distinguish between — whoever's on the receiving side accepts directly.
+- **Discover's `RequestsSection`** (built 2026-07-23 for `connect`/`connect_message`, see `:1435`)
+  **becomes the one accept/decline surface for all four request types**, extended to also carry
+  `pricelist_request` and `deal_card` tickets — both currently excluded on purpose
+  (`companyRequests.ts`'s query filter and `RequestsSection`'s own "out of scope" note).
+  `deal_card` acceptance runs a different function (`claim_deal_ticket`) than the other three
+  (`acceptItem`) — `inbox.ts:287-290` — so folding it in means branching on type at accept-time,
+  not just widening a filter.
+- **`/connect/inbox` and its module** (InboxView, LensTabs, InboxList, InboxDetail, lenses.ts,
+  claim/assign functions) retire once `RequestsSection` covers the other two types — **not
+  before**: Sella's `deliver_deal` (via `confirm_detected_deal_births_negotiation`) is still the
+  one live door writing `deal_card` tickets there today (per the 2026-08-25 warning at `:1935`).
+- **Home's proposed deal-claim board** (2026-07-23, `:1440`) **is dropped for MVP** — moot without
+  multiple people per company to claim against. Revisit if a company ever has more than one team
+  member.
+
+---
+
+## 2026-09-01 — Correction: Sella's detected deals were never an "unconnected send"
+
+Found during `/spec 0027`'s interview, re-reading `confirm_detected_deal`'s own body
+(`confirm_detected_deal_relationship_write_gate_refactor.sql`).
+
+- **`confirm_detected_deal` only fires inside an existing chat thread on an existing
+  relationship** — it locks a `chat_message` of type `deal_detected`, reads that message's
+  `thread_id`, and reads the thread's `relationship_id`. The company pair is always already
+  connected by the time Sella can detect anything. The 2026-08-31 entry above filed this
+  under "accept gate kept for unconnected sends" — it isn't one.
+- **The "person unknown" branch doesn't need an accept gate.** It needs the one company
+  person resolved (MVP is one person per company) and the deal posted straight into the
+  existing chat, exactly as the person-known branch already does (`v_cp is not null`,
+  same function).
+- **`deliver_deal` and `claim_deal_ticket` retire entirely**, not relocate to Discover, once
+  this ships. ADR 0006 §7.2/J4's "kept alive for a door that has no traffic yet" justification
+  is discharged by this fix, not deferred past it.
+- **Pricing requests get the same split.** An ask to an already-connected company posts
+  straight into the existing chat; only a genuinely unconnected pricing ask still needs
+  Discover's accept gate — `requestProductPricing` currently uses one mechanism for both
+  cases on purpose (ADR-0005 G3), which this reopens for the connected case only.
+- Scope carried into `docs/PRD/0027-retire-connect-inbox.md`, slug `0027-retire-connect-inbox`.
+
+---
+
+## 2026-09-03 — Correction to the 2026-09-01 entry: no person resolve, and the one-person-per-company premise was false
+
+Found at `/design 0027`'s G3, by two independent `adr-checker` rounds, and verified against the
+repo before folding in. Supersedes the third bullet of the 2026-09-01 entry above.
+
+- **The deal was never unreachable, so nothing needed resolving.** `deal_workspace` is born
+  `company_wide` (`20260607090003_phase2_deal.sql:286`) and `can_access_workspace`
+  (`20260607170000_rls_policies.sql:117-125`) grants access to any relationship member on a
+  company-wide workspace — with **no `deal_member` row**. ADR 0006 §4.1 had already recorded
+  this; the 2026-09-01 entry re-derived the opposite from scratch. `confirm_detected_deal`
+  therefore just stops cutting the ticket and adds nothing in its place.
+- **"MVP is one person per company" is not true, and was never enforced.** `person.company_id`
+  carries no unique constraint and no partial unique index, and GreenLeaf Cultivation has two
+  people in our own seed data (`supabase/seed/seed.sql:114` — "Carla — a SECOND member of
+  GreenLeaf"). Any design that resolves "the company's one person" raises against existing
+  fixtures. The invariant is convention, not a constraint — treat it as such everywhere.
+- **The ticket branch is unreachable anyway.** Detection only ever lands on `p2p` threads, where
+  `chat_thread_p2p_has_both_people` (`20260607090003_phase2_deal.sql:132`) forces both person ids
+  non-null — so the counterparty is never unknown and the `else` branch never runs. The deletion
+  is dead-code removal, not a user-facing fix, and no G5 walk can show a before/after on it.
+- **What survives from 2026-09-01, unchanged:** the pricing-request split (an ask to an
+  already-connected company posts straight into the existing chat), the outright retirement of
+  `deliver_deal` and `claim_deal_ticket`, and the discharge of ADR 0006 §7.2/J4.
+- Locked in `docs/architecture/adr/0009-retire-connect-inbox.md` (G3 approved 2026-09-03).
+
+---
+
+## 2026-09-03 — A promotion may only be **offered or accepted** while the deal is in `negotiation`; **declining always works**
+
+**Decided by Muskan, 2026-09-03.** Closes HEL-83, which was filed explicitly as needing a product
+ruling rather than an engineering call — the actor is the legitimate buyer or seller acting at a
+bad time in the lifecycle, not an intruder, so "which statuses are still open for business" is a
+product question.
+
+**What was decided.** Of the seven `deal_card_status` codes, exactly one permits a promotion to be
+offered or accepted:
+
+| status | | |
+|---|---|---|
+| `negotiation` | sent, being negotiated | **ALLOWED** |
+| `unsent` | draft, private to the creating company | refused |
+| `confirmed` | both sides confirmed | refused |
+| `done` | delivery note + invoice present | refused (terminal) |
+| `cancelled` | cancelled | refused (terminal) |
+| `ticket_created` · `ticket_closed` | reopen ticket open / closed | refused |
+
+**Why.** None of the three promotion RPCs checked `deal_card.status` at all, so a promotion could
+be accepted onto a `done` deal — and `accept_promotion` inserts real `deal_line_item` rows, which
+then silently disagree with the invoice already issued against that deal. Reachable through the
+normal UI, not only by direct API call.
+
+- **It matches what the product already decided.** `sign_deal` is the only sibling with a real
+  status gate and it raises *"only a deal in negotiation can be signed"* — same rule, same shape,
+  same wording. And D-29 already says that once a deal closes, the only way back in is a reopen
+  ticket and *"the sealed deal terms never change again"* — which is why both ticket states refuse.
+- **There is no second gate to fall back on.** A promotion is deliberately sign-agnostic (D-26):
+  accepting one never touches `deal_confirmation` and never bumps the version. `deal_card.status`
+  is the only available lever, which is precisely why its absence mattered.
+- **Strict was the cheap direction.** Production holds zero `deal_promotion` rows, so there was
+  nothing to migrate and no back-compat risk. Widening later is a one-line change; the loose
+  direction is the one that is hard to undo, since deals that had already gained lines after
+  confirmation would need reconciling by hand.
+
+**Why `decline_promotion` is deliberately NOT gated.** Declining changes nothing on the deal — it
+sets `state='declined'` and stamps the resolver. Gating it would strand data: a deal that leaves
+`negotiation` while a promotion is still `pending` would leave that row pending forever, behind
+two buttons that both refuse, with no path to clear it. This mirrors HEL-84's own ruling one slug
+earlier, where a decline had to keep working on a suspended relationship (ADR 0008). The principle
+generalises: **gate what changes the deal, never the exit.**
+`promotion_status_gate_test.sql` §D exists to fail anyone who later "fixes the inconsistency".
+
+**Two implementation consequences worth keeping.**
+- The gate sits **after** each RPC's authorization check, never before, so an outsider is refused
+  for not being a party and never learns the card's status from the error message (§E proves it).
+- The UI **removes** Accept once the deal has moved on rather than disabling it — the project rule
+  is no dead disabled buttons (`.claude/rules/product.md`). Decline stays, matching the server.
+
+⚠️ **D-29 survives only in the header of `20260707140100_lifecycle_status_codes.sql`** — it is in
+no decision doc, and that is part of why this rule went unenforced for two months. It is restated
+above so it is findable here from now on.
+
+Built as `supabase/migrations/20260903110000_promotion_status_gate.sql` — filename is the durable
+citation, not the commit hash (this branch rebases; a hash cited here already went stale once,
+see `docs/deploy/cloud-migrations-pending.md` for that history). **Pushed to production
+2026-09-07**, together with its app-code half (`PromotionTrack.tsx`/`CardFront.tsx`, PR #184) —
+see the ledger's "🔴 READ FIRST (2026-09-07)" for the full trail.
+
+---
+
+## 2026-09-07 — a same-deploy-coupled migration ships its app code via a narrow cherry-pick, not a full branch merge, when the branch is far ahead of the deploy target
+
+**What was decided.** HEL-83's migration (`20260903110000_promotion_status_gate.sql`) needed its
+app code (`PromotionTrack.tsx`, `CardFront.tsx`) live on production first, per the same-deploy
+rule. `claude/muskan/work` was 69 commits / 231 files ahead of `main` — a full merge would have
+shipped all of slug 0027's in-progress work (T01-T05) straight to production with none of
+`/ship`'s own gate, security scan, or G5 walk. Instead: cherry-picked just the 2-file diff onto a
+fresh branch off `main` (`hel-83-app-code-only`), verified `tsc`/eslint clean against `main`'s own
+baseline (not the source branch's), confirmed a Vercel preview build succeeded, merged via a
+narrow PR (#184), confirmed the production deploy went READY — **before** the matching migration
+was pushed, so the negotiation-only gate never went live server-side while the old unconditional
+Accept button was still the deployed UI.
+
+**Why this, not the alternative.** The alternative — merge the whole branch — is faster but
+conflates two unrelated concerns: "get this one ticket's fix live" and "ship everything else on
+the branch." The cherry-pick costs one extra branch + PR but keeps those two decisions
+independent of each other.
+
+**The rule this sets.** When a same-deploy-coupled ticket needs to reach production ahead of the
+rest of the branch, cherry-pick the specific file-level diff onto a fresh branch off the deploy
+target, verify it standalone (type-check + lint against the TARGET's baseline), and merge that
+narrowly. Reserve a full branch merge for when the whole branch has actually been through `/ship`.
