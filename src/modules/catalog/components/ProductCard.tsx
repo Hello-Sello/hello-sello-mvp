@@ -35,7 +35,7 @@ import { PackSizeSelector } from "./PackSizeSelector";
 import { MediaManager } from "./MediaManager";
 import { softDeleteProduct, setProductProfileVisible } from "../manage";
 import { buyerVisibilityGaps, buyerVisibilityLabel } from "../visibility";
-import { DOMINANCE_CODES, IRRADIATION_CODES } from "../template";
+import { DOMINANCE_CODES, IRRADIATION_CODES, BADGE_CODES } from "../template";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 /** Build a public shop-media URL from a stored path (mirrors ShopView's builder). */
@@ -82,6 +82,7 @@ export type ProductFieldDraft = {
   lineage_parent_b?: string;
   dominance_code?: string;
   irradiation_code?: string;
+  badge_code?: string;
   packaging_material?: string;
   resealable?: boolean;
   supplier_product_code?: string;
@@ -117,12 +118,15 @@ type NumFieldKey =
 type TextFieldKey =
   | "cultivator" | "country_of_origin" | "region"
   | "packaging_material" | "supplier_product_code";
-type EnumFieldKey = "dominance_code" | "irradiation_code";
+type EnumFieldKey = "dominance_code" | "irradiation_code" | "badge_code";
 type SpecRowDef =
   | { kind: "text"; key: TextFieldKey; label: string; display: string }
   | { kind: "enum"; key: EnumFieldKey; label: string; display: string; codes: readonly string[]; labelMap: Record<string, string> }
   | { kind: "bool"; key: "resealable"; label: string; display: string }
-  | { kind: "lineage"; label: "Lineage"; display: string };
+  | { kind: "lineage"; label: "Lineage"; display: string }
+  // Origin — country_of_origin + region shown as one comma-joined row
+  // ("CANADA, Toronto"), same two-field-one-row shape as Lineage.
+  | { kind: "origin"; label: "Origin"; display: string };
 
 const specField =
   "w-full min-w-0 rounded border border-ink/15 bg-white px-1.5 py-0.5 text-xs font-semibold text-brand-deep focus:border-brand focus:outline-none";
@@ -138,6 +142,16 @@ const IRRADIATION_LABEL: Record<string, string> = {
   beta: "Beta",
   gamma: "Gamma",
   un_irradiated: "Un-irradiated",
+};
+// Badge (DEV-107 #4) — a seller-set lifecycle state shown as a pill on the
+// card image, replacing the old ad-hoc promo bubble baked into some cover
+// images. Codes come from ../template (BADGE_CODES, the validation owner);
+// this label map is display-only, same split as Dominance/Irradiation above.
+const BADGE_LABEL: Record<string, string> = {
+  new: "New",
+  coming_soon: "Coming Soon",
+  launch: "Launch",
+  re_launch: "Re-Launch",
 };
 
 /** Price as "8,00€" (comma decimal, EU convention) — matches ShopView's `eur`. */
@@ -193,9 +207,11 @@ export function ProductCard({
   /** Drop a pending insert, or mark a live lot for soft-delete. */
   onBatchRemove?: (productId: string, ref: BatchRef) => void;
   /** Reorder within the SAME shop: a card was dropped onto this one (dragged id,
-   *  this card's id). Only same-location drops reach here — a cross-shop drop
-   *  bubbles to the LocationGroup, which moves the location instead. Client-only. */
-  onReorder?: (draggedId: string, targetId: string) => void;
+   *  this card's id, and which side of this card it landed on — dropping on the
+   *  right half of the LAST card is the only way to make a card the last item).
+   *  Only same-location drops reach here — a cross-shop drop bubbles to the
+   *  LocationGroup, which moves the location instead. Client-only. */
+  onReorder?: (draggedId: string, targetId: string, position: "before" | "after") => void;
   /** Does the viewer own this product's shop? Gates the buy row (ADR-0005 §6).
    *  DEFAULTS TO `true` — deliberately the privileged value, so that a caller
    *  which does not pass it behaves exactly as the card does today (every
@@ -316,6 +332,9 @@ export function ProductCard({
   // another shop falls through (no stopPropagation) to LocationGroup, which
   // persists the location move instead. dataTransfer payloads are unreadable
   // during dragOver, so we always allow the drop and decide here on drop.
+  // Which side of the card the cursor is on decides before/after — dropping on
+  // the right half of a card (the last card, in particular) is the only way to
+  // place the dragged card AFTER it, since there's no further card to target.
   function handleReorderDrop(e: React.DragEvent) {
     setReorderOver(false);
     const draggedId = e.dataTransfer.getData("application/product-id");
@@ -324,7 +343,9 @@ export function ProductCard({
     if (from !== (p.location ?? "")) return; // cross-shop → let LocationGroup handle it
     e.preventDefault();
     e.stopPropagation();
-    onReorder?.(draggedId, p.id);
+    const rect = e.currentTarget.getBoundingClientRect();
+    const position = e.clientX - rect.left > rect.width / 2 ? "after" : "before";
+    onReorder?.(draggedId, p.id, position);
   }
 
   // Field draft accessors (controlled by the overlay, falling back to the product).
@@ -372,9 +393,15 @@ export function ProductCard({
       kind: "enum", key: "dominance_code", label: "Dominance", codes: DOMINANCE_CODES, labelMap: DOMINANCE_LABEL,
       display: p.dominance_code ? DOMINANCE_LABEL[p.dominance_code] ?? p.dominance_code : "n.a.",
     },
+    {
+      kind: "enum", key: "badge_code", label: "Badge", codes: BADGE_CODES, labelMap: BADGE_LABEL,
+      display: p.badge_code ? BADGE_LABEL[p.badge_code] ?? p.badge_code : "n.a.",
+    },
     { kind: "text", key: "cultivator", label: "Cultivator", display: p.cultivator ?? "n.a." },
-    { kind: "text", key: "country_of_origin", label: "Origin", display: p.country_of_origin ?? "n.a." },
-    { kind: "text", key: "region", label: "Region", display: p.region ?? "n.a." },
+    {
+      kind: "origin", label: "Origin",
+      display: [p.country_of_origin, p.region].filter(Boolean).join(", ") || "n.a.",
+    },
     {
       kind: "lineage", label: "Lineage",
       display: p.lineage_parent_a || p.lineage_parent_b ? `${p.lineage_parent_a ?? "?"} × ${p.lineage_parent_b ?? "?"}` : "n.a.",
@@ -468,6 +495,16 @@ export function ProductCard({
               >
                 {p.cultivar ?? p.name}
               </div>
+            )}
+
+            {/* Badge (DEV-107 #4) — the seller-set lifecycle pill, browse view
+                only (edit mode's grip/visibility/details toolbar owns this
+                corner while editing; the badge itself is still editable there
+                via the spec-row list below). */}
+            {!editing && p.badge_code && (
+              <span className="absolute left-2 top-2 z-[8] rounded-full bg-brand px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-white shadow-sm">
+                {BADGE_LABEL[p.badge_code] ?? p.badge_code}
+              </span>
             )}
 
             {/* carousel arrows + dots (only with >1 image) */}
@@ -1110,6 +1147,26 @@ function SpecFieldEditor({
         />
         {val ? "Yes" : "No"}
       </label>
+    );
+  }
+  if (row.kind === "origin") {
+    return (
+      <div className="flex flex-1 gap-1">
+        <input
+          aria-label="Origin country"
+          placeholder="Country"
+          value={fields.country_of_origin ?? (p.country_of_origin ?? "")}
+          onChange={(e) => onChange({ country_of_origin: e.target.value })}
+          className={`${specField} w-1/2`}
+        />
+        <input
+          aria-label="Origin region"
+          placeholder="Region"
+          value={fields.region ?? (p.region ?? "")}
+          onChange={(e) => onChange({ region: e.target.value })}
+          className={`${specField} w-1/2`}
+        />
+      </div>
     );
   }
   // Lineage — two independent parent fields side by side, one row.

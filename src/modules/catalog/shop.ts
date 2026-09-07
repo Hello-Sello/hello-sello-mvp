@@ -101,6 +101,11 @@ export type ShopProduct = {
    *  lightweight v0 (stored in `product.metadata.pack_sizes`, no schema change)
    *  ahead of a proper `product_pack_size` table in a later phase. */
   packSizes: number[];
+  /** Seller-set lifecycle pill (new/coming_soon/launch/re_launch) shown on the
+   *  card image — same v0 metadata pattern as packSizes: `product.metadata.
+   *  badge_code`, no schema change. Codes/labels live in ProductCard.tsx,
+   *  the only reader — unrecognised values still render (raw code as label). */
+  badge_code: string | null;
 };
 
 /** A profile link, stored in `company.metadata.links` (no column per link).
@@ -153,6 +158,15 @@ export function parsePackSizes(metadata: unknown): number[] {
   const raw = (metadata as { pack_sizes?: unknown } | null)?.pack_sizes;
   if (!Array.isArray(raw)) return [];
   return raw.filter((n): n is number => typeof n === "number" && Number.isFinite(n) && n > 0);
+}
+
+/** The badge code stashed in `product.metadata.badge_code` (v0, no schema
+ *  change). Tolerant of any legacy/foreign shape — null rather than throwing
+ *  on unexpected data. Not validated against the known code list here: an
+ *  unrecognised code still renders (ProductCard falls back to the raw code). */
+export function parseBadgeCode(metadata: unknown): string | null {
+  const raw = (metadata as { badge_code?: unknown } | null)?.badge_code;
+  return typeof raw === "string" && raw !== "" ? raw : null;
 }
 
 export async function getMyShop(): Promise<Shop | null> {
@@ -267,6 +281,7 @@ export async function getMyShop(): Promise<Shop | null> {
       bundle_price_per_gram: price?.tiers[0]?.pricePerGram ?? null,
       tiers: price?.tiers ?? [],
       packSizes: parsePackSizes(r.metadata),
+      badge_code: parseBadgeCode(r.metadata),
     };
   });
 

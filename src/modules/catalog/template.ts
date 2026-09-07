@@ -11,7 +11,7 @@
  */
 
 export type TargetTable = "product" | "pricelist" | "product_cost" | "batch" | "terpene";
-export type ColumnType = "text" | "number" | "money" | "percent" | "bool" | "date" | "enum";
+export type ColumnType = "text" | "number" | "money" | "percent" | "bool" | "date" | "enum" | "number_list";
 
 export type TemplateColumn = {
   /** Exact header string the seller sees in the template. */
@@ -28,6 +28,13 @@ export type TemplateColumn = {
 export const UNIT_CODES = ["g", "mL", "pack"] as const;
 export const DOMINANCE_CODES = ["indica", "sativa", "hybrid", "indica_dominant", "sativa_dominant"] as const;
 export const IRRADIATION_CODES = ["beta", "gamma", "un_irradiated"] as const;
+/** NOT a CSV/TEMPLATE_COLUMNS field — badge is a post-creation, seller-set
+ *  lifecycle pill (DEV-107 #4), never set at import time. Co-located here
+ *  only because this is the established shared home for validated enum code
+ *  lists: manage.ts (the validation owner) can't export plain constants —
+ *  it's a "use server" file — and ProductCard.tsx already imports its other
+ *  enum code lists from here. */
+export const BADGE_CODES = ["new", "coming_soon", "launch", "re_launch"] as const;
 
 export const TEMPLATE_COLUMNS: readonly TemplateColumn[] = [
   // --- product identity ---
@@ -38,6 +45,7 @@ export const TEMPLATE_COLUMNS: readonly TemplateColumn[] = [
   { header: "CBG %", field: "cbg_percent", table: "product", type: "percent" },
   { header: "CBN %", field: "cbn_percent", table: "product", type: "percent" },
   { header: "Pack size (g)", field: "pack_size_grams", table: "product", type: "number", required: true },
+  { header: "Additional pack sizes (g)", field: "pack_sizes", table: "product", type: "number_list" }, // → product.metadata.pack_sizes
   { header: "Unit", field: "unit_code", table: "product", type: "enum", required: true, codes: UNIT_CODES },
   { header: "Supplier code", field: "supplier_product_code", table: "product", type: "text", required: true },
   { header: "PZN", field: "local_code_pzn", table: "product", type: "text" },
