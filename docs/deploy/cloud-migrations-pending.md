@@ -23,6 +23,122 @@
 
 ---
 
+## 🔴 READ FIRST (2026-09-07) — SIX MORE MIGRATIONS PUSHED, ALL THREE "PENDING" HEADINGS BELOW ARE NOW STALE TOO
+
+**All six now-pending migrations are LIVE ON PRODUCTION**, applied this session via six individual
+`apply_migration` calls (project `byipusuthdlskdxoexkt`), then history-stamped from
+`apply_migration`'s call-time versions to the filenames' own timestamps (same repair procedure as
+the 2026-08-25 batch below). Production tip is now `20260904090000`, verified directly against
+`supabase_migrations.schema_migrations` — not inferred from this file.
+
+**What shipped, in order:** `20260903090000` (HEL-67 Gap 2) → `20260903100000` (HEL-85) →
+`20260903110000` (HEL-83) → `20260903120000` (0027/T01) → `20260903130000` (0027/T02) →
+`20260904090000` (0027/T05). The last three were never listed in this file at all before today —
+a gap this file's own reader had flagged twice (0027's `REVIEW.md`, T01 and T05 notes). Filed
+properly below, under their own headings, rather than folded into this note.
+
+**Same-deploy rule honored for HEL-83:** its app code (`PromotionTrack.tsx`, `CardFront.tsx`) does
+not exist on `main` as a full-branch merge — `claude/muskan/work` was 69 commits / 231 files ahead,
+far more than this one ticket. Instead, cherry-picked just the two-file diff onto a fresh branch
+off `main` (`hel-83-app-code-only`), verified `tsc`/`eslint` clean against `main`'s own baseline,
+confirmed the Vercel preview build succeeded, merged via PR #184, confirmed the production deploy
+went READY — **before** the matching migration was pushed, so the negotiation-only gate never went
+live server-side while the old unconditional Accept button was still the deployed UI.
+
+**Diff-against-live, run for real before pushing (not assumed from each migration's own header
+claim):** all four `create or replace function` bodies (`confirm_deal_change`, `offer_promotion`,
+`accept_promotion`, `confirm_detected_deal`) fetched via `pg_get_functiondef` and compared against
+each migration's replacement — every one differs from live by exactly its documented additive
+change and nothing else. `request_product_pricing_c2c` is a `create function` (net-new), nothing
+to diff.
+
+**I-M5 checkpoint (0027 T05's whole reason for existing) — both counts, run for real, after the
+push:**
+```sql
+select
+  (select count(*) from pending_inbox_item where type='deal_card' and status='pending' and deleted_at is null) as im5a,
+  (select count(*) from pending_inbox_item where type<>'deal_card' and status='pending' and deleted_at is null) as im5b;
+-- im5a = 0, im5b = 5
+```
+**im5a = 0.** For im5b, no "before" snapshot was captured ahead of the push (a real process miss,
+noted so it isn't repeated) — closed a different, stronger way instead: every one of the 5
+non-`deal_card` pending rows was individually checked against `updated_at`, and all 5 predate the
+push by weeks-to-months. `pending_inbox_item`'s own `BEFORE UPDATE` trigger
+(`trg_pending_inbox_item_set_updated_at`) stamps `updated_at` on any row an `UPDATE` reaches, so
+this is direct, row-level proof the backfill's `UPDATE` touched none of them — stronger than a
+before/after count would have been, not a weaker substitute for one.
+
+**Other post-flight, run for real:** new RPC grants — `anon` false, `PUBLIC` false, `authenticated`
+true ✓. `deal_promotion` row count still 0 (HEL-83's "zero blast radius" claim holds post-push) ✓.
+`chat_message` still carries exactly one policy (`msg_all`) ✓ — the `ALTER POLICY` did not fork it.
+
+---
+
+## ✅ APPLIED 2026-09-07 — 0027/T01, `confirm_detected_deal` stops cutting a deal ticket (ONE migration)
+
+**Status: LIVE ON PRODUCTION.** `20260903120000_confirm_detected_deal_drop_ticket_branch.sql`.
+Dead-code deletion, not a live-bug fix — the branch was unreachable through any sanctioned route
+(Sella detection only lands on p2p threads; `chat_thread_p2p_has_both_people` forces both person
+ids non-null there). Full reasoning: `docs/muskan-build/0027-retire-connect-inbox/PLAN-T01.md`,
+`REVIEW.md`. **Never listed under a `⚠️ PENDING` heading here before today** — gap flagged twice
+in `0027`'s own `REVIEW.md`, closed now rather than left open into `/ship`.
+
+**Diff-against-live:** `confirm_detected_deal`'s body fetched via `pg_get_functiondef` before the
+push and confirmed byte-identical to what T01's migration assumed, except for the one intended
+deletion (the `else perform deliver_deal(v_card)` branch). No drift.
+
+**Post-flight:** N/A beyond the diff above — this is a subtractive change with no new grant,
+policy, or data write, and no reachable behavior change (the branch was already dead).
+
+---
+
+## ✅ APPLIED 2026-09-07 — 0027/T02, pricing ask to a connected company posts to chat (ONE migration)
+
+**Status: LIVE ON PRODUCTION.** `20260903130000_request_product_pricing_c2c.sql` — new
+`SECURITY DEFINER` RPC, `request_product_pricing_c2c(uuid,uuid)`. Full reasoning:
+`docs/muskan-build/0027-retire-connect-inbox/PLAN-T02.md`, `REVIEW.md` (includes a fixed-and-
+reverified rung-1 leak found by `security` during build — the RPC's product lookup now calls
+`product_visible_to_caller`). **Never listed under a `⚠️ PENDING` heading here before today** —
+same gap as T01, above.
+
+**Post-flight, run for real:**
+```sql
+select coalesce(has_function_privilege('anon', 'public.request_product_pricing_c2c(uuid,uuid)', 'execute'), false) as anon_MUST_BE_FALSE,
+       coalesce(has_function_privilege('public', 'public.request_product_pricing_c2c(uuid,uuid)', 'execute'), false) as public_MUST_BE_FALSE,
+       coalesce(has_function_privilege('authenticated', 'public.request_product_pricing_c2c(uuid,uuid)', 'execute'), false) as authenticated_MUST_BE_TRUE;
+-- anon = false, public = false, authenticated = true ✓ (matches SECURITY-CHECKLIST S1's required form)
+```
+
+**Non-migration deploy debt this ticket owes, not yet done:** `requestProductPricing`'s TS branch
+onto this RPC (`src/app/discover/actions.ts`) ships with the app code, not with this migration —
+tracked by whichever slug/session next merges `0027`'s app code to `main`. The RPC sitting unused
+on production until then is harmless (additive, no existing caller reaches it).
+
+---
+
+## ✅ APPLIED 2026-09-07 — 0027/T05, backfill resolves every pending deal ticket (ONE migration, DATA WRITE)
+
+**Status: LIVE ON PRODUCTION.** `20260904090000_pending_inbox_item_deal_card_backfill.sql` — the
+one migration in this push that is a data write, not DDL (`ship`'s own ask-rule migration
+classification). Full reasoning: `docs/muskan-build/0027-retire-connect-inbox/PLAN-T05.md`,
+`REVIEW.md` (a `security`-caught test-rigor gap — the suite couldn't prove `status = 'pending'`
+was load-bearing — fixed and independently re-verified before this ticket closed). **Never listed
+under a `⚠️ PENDING` heading here before today** — same gap as T01/T02, above.
+
+**This is the migration the whole push existed to unblock** — T06 (dropping `deliver_deal` /
+`claim_deal_ticket`) is gated on this backfill's I-M5 checkpoint reading clean against a real
+environment, which cannot be satisfied locally (local seed carries zero `deal_card` pending
+tickets). **I-M5, both counts, run for real — see "🔴 READ FIRST (2026-09-07)" above for the
+full result and the row-level proof closing the missing before/after snapshot.** `im5a = 0`,
+`im5b`'s delta proven zero via `updated_at` on all 5 remaining rows, none touched.
+
+**Consequence, intended not accidental (D5/T01's I-M2):** every existing `deal_card` ticket is now
+unclaimable through `claim_deal_ticket` (its own precondition, `status = 'pending'`, no longer
+matches any row it used to). The deal itself is unaffected — reachable company-wide without a
+ticket, which is the entire point of this slug.
+
+---
+
 ## 🔴 READ FIRST (2026-09-03) — THE THREE `⚠️ PENDING` HEADINGS BELOW ARE STALE
 
 **All 13 migrations under them are LIVE ON PRODUCTION.** Verified 2026-09-03 against the
@@ -54,7 +170,10 @@ non-migration debt section, item 4).
 
 ---
 
-## ⚠️ PENDING (2026-09-03) — HEL-67 Gap 2, `msg_all` sender attribution (ONE migration, plain `db push`)
+## ~~⚠️ PENDING (2026-09-03) — HEL-67 Gap 2, `msg_all` sender attribution~~ → ✅ APPLIED 2026-09-07
+
+> Pushed 2026-09-07 — see "🔴 READ FIRST (2026-09-07)" at the top of this file. **Do not push
+> this again.** Body below is the pre-push record, untouched.
 
 **Status: LOCAL ONLY.** `20260903090000_msg_all_sender_attribution_gate.sql` sorts after
 production's tip `20260827150000`, so a plain `supabase db push --linked` (no `--include-all`)
@@ -103,7 +222,11 @@ exactly as its comment said it would.
 
 ---
 
-## ⚠️ PENDING (2026-09-03) — HEL-83, promotion status gate (ONE migration, plain `db push`)
+## ~~⚠️ PENDING (2026-09-03) — HEL-83, promotion status gate~~ → ✅ APPLIED 2026-09-07
+
+> Pushed 2026-09-07 — see "🔴 READ FIRST (2026-09-07)" at the top of this file. **Do not push
+> this again.** Its app-code half shipped first, via PR #184 (cherry-picked, not a full branch
+> merge — see the READ FIRST note for why). Body below is the pre-push record, untouched.
 
 **Status: LOCAL ONLY.** `20260903110000_promotion_status_gate.sql` sorts after `20260903100000`,
 so a plain `supabase db push --linked` takes all three of the day's migrations in filename order.
@@ -167,7 +290,10 @@ reviewed only. Worth an e2e cell when someone is next in that file.
 
 ---
 
-## ⚠️ PENDING (2026-09-03) — HEL-85, `confirm_deal_change` workspace gate (ONE migration, plain `db push`)
+## ~~⚠️ PENDING (2026-09-03) — HEL-85, `confirm_deal_change` workspace gate~~ → ✅ APPLIED 2026-09-07
+
+> Pushed 2026-09-07 — see "🔴 READ FIRST (2026-09-07)" at the top of this file. **Do not push
+> this again.** Body below is the pre-push record, untouched.
 
 **Status: LOCAL ONLY.** `20260903100000_confirm_deal_change_workspace_gate.sql` sorts after
 `20260903090000`, so a plain `supabase db push --linked` takes both in filename order.
