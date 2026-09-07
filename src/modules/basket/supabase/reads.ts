@@ -98,10 +98,16 @@ export async function getMyBasket(): Promise<BasketView> {
     .filter((id) => id !== viewerCompanyId);
   const relByCompany = new Map<string, string>();
   if (otherCompanyIds.length) {
+    // HEL-82: status can now be suspended/ended, not just active. Without this
+    // filter a suspended seller's cart lines still resolved a relationshipId
+    // and let the basket try to send through it — matching getMyConnections's
+    // own status check (messaging/supabase/connections.ts), which already
+    // treats "connected" as status === 'active', not just deleted_at is null.
     const { data: rels, error: relError } = await supabase
       .from("relationship")
       .select("id, company_a_id, company_b_id")
-      .is("deleted_at", null);
+      .is("deleted_at", null)
+      .eq("status", "active");
     if (relError) throw relError;
     for (const rel of rels ?? []) {
       const other = rel.company_a_id === viewerCompanyId ? rel.company_b_id : rel.company_a_id;

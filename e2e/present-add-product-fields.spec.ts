@@ -53,7 +53,7 @@ test("F-04 · manual Add-product form collects CBG/CBN/Region/Lineage/Packaging/
   await form.getByLabel(/supplier code/i).fill(`SKU-${Date.now()}`);
   await form.getByLabel(/^THC %/i).fill("18,5");
   await form.getByLabel(/^CBD %/i).fill("0,4");
-  await form.getByLabel(/pack size/i).fill("10");
+  await form.getByLabel(/^Pack size/i).fill("10");
   await form.getByLabel(/basic price per g/i).fill("5,00");
   await form.getByLabel(/^Unit/i).selectOption("g");
   await form.getByLabel(/^Dominance/i).selectOption("hybrid");

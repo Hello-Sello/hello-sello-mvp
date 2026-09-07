@@ -8,6 +8,14 @@
 > Plus the two G3 "file separately" rulings: **HEL-67** (§8.6 forgeable `deal_detected`)
 > and **HEL-68** (§8.10 c2c thread created by the browser).
 > Every ticket passed the Ready checkpoint: INVEST · sized S/M/XS · EARS criteria.
+>
+> **Later spin-outs, named here for traceability (none of them built by this slug):**
+> **HEL-74** (T01 G4 `security` N1 — `send_deal` never checks the relationship is live;
+> exploit later disproven, ticket corrected not closed) · **HEL-76** (T03 G4 `critic` N8 —
+> person-arm has no e2e proof; closed by PR #180's own test, see Gate log) · **HEL-77**
+> (claim rollout lost its browser cover) · **HEL-78** (`present-basket.spec.ts` dead
+> scaffolding) · **HEL-79** (`loginAs` load-correlated flake) · **HEL-80** (`rtk` collapses
+> psql/eslint/git output too, not just Playwright/vitest).
 
 ## Order and parallelism
 

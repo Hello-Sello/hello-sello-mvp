@@ -698,7 +698,10 @@ session start, or simply declaring applied migrations the way files are declared
 line — and they do not. `sender` has three values (`person`, `system`, `sella`) and `type` has
 fourteen, and the product **routinely has one identity speak in another's voice from an ordinary
 browser session**: `announceDealEvent` writes four deal-lifecycle pills as `sella` with a NULL author
-(`actions.ts:682`), the accept rollout writes `intro` as `sella` and `connection_established` as
+(`actions.ts:682` — ⚠️ **stale as of HEL-84's §12 addendum, 2026-08-27**: this call site was deleted;
+the four pills now write through the `announce_deal_event` `SECURITY DEFINER` RPC instead, a
+server-side writer, not an ordinary browser session — the underlying voice-vs-writer point this note
+makes is unaffected, only this specific example moved), the accept rollout writes `intro` as `sella` and `connection_established` as
 `system` (`rollout.ts:110,174`), and it writes a `person` message whose author is the **requester,
 not the caller** (`rollout.ts:179`).
 
@@ -896,3 +899,115 @@ this table with the same suspicion as a grant, not as an ordinary data column. `
 `condition_deltas` are CHECK-constrained to `jsonb_typeof = 'array'`; don't re-add a client-side
 `Array.isArray` fallback in a caller — that tolerance is exactly what let a non-array value ever
 reach these tables in the first place.
+
+---
+
+## 2026-08-25 — `relationship.status` is now a real lifecycle (HEL-82); two things anyone touching relationship membership needs to know
+
+**A relationship can be `active`, `suspended`, or `ended`** (`relationship_status`, seeded FK,
+`ended` marked `is_terminal`). Three SECURITY DEFINER RPCs own every transition —
+`suspend_relationship`/`reactivate_relationship` (suspended→active only, never from `ended`)/
+`end_relationship` — each `is_hs_team()`-gated, each writing two `audit_log` rows (one per
+`company_a_id`/`company_b_id`, as two separate single-row INSERTs — not one multi-row INSERT; the
+hash-chain trigger reads the latest `sequence_number` per row and two statements make each row's
+chain link unambiguous). `relationship` itself carries **no** RLS or grant change from this ticket
+— `authenticated` is still `SELECT`/`REFERENCES`-only, same as before HEL-82. HS staff read via a
+dedicated RPC, `list_relationships_admin()`, not via a broadened policy (see [[L-059]] in
+`docs/agents/LEARNINGS.md` for why the broadened-policy version was reverted before shipping).
+
+**"Delivering a deal" has two independent doors, and any future liveness/status/permission check on
+deal delivery needs both.** `send_deal` is the obvious one. `confirm_detected_deal` (Sella's
+double-accept path) is the other — it births a card straight into `negotiation` itself and, by its
+own header, must NEVER call `send_deal` (the caller there is the confirmer, not the initiator;
+`send_deal`'s initiator guard would reject it). HEL-74 added a relationship-liveness check to
+both — `20260825180000` (`send_deal`) and `20260825190000` (`confirm_detected_deal`) — for exactly
+this reason (see [[L-058]]). **Deliberately still open:** neither `create_deal_draft` (births a
+PRIVATE draft — nothing has reached the counterparty yet) nor `confirm_deal_change`/`sign_deal`
+(both operate on a deal that was already sent while the relationship WAS active) gained a liveness
+check — whether a mid-suspension negotiation should also freeze is a product call, not decided.
+
+**Two more doors that agree with `relationship.status` now, that didn't before:** `getMyConnections`
+(`messaging/supabase/connections.ts`) already required `status = 'active'`; the basket's own
+seller→relationship resolver (`basket/supabase/reads.ts`) filtered only `deleted_at is null` until
+this ticket added the same `status = 'active'` check — before, once suspension became reachable, a
+suspended seller's cart lines would still have resolved a `relationshipId` and let the basket try to
+send through it. `RelationshipHeader.tsx` also stopped hardcoding "Connected… since" — it now
+reflects the real status for both parties, not just for the HS operator.
+
+**Still open, filed as HEL-84 (High), not closed by this ticket:** neither `msg_all` (chat message
+insert) nor the pricing-request path (`discover/actions.ts`) carries a relationship-status check.
+`authenticated` holds `INSERT` on both `chat_message` and `pending_inbox_item` directly, so a
+suspended/ended pair can still exchange new chat messages and pricing asks — reachable the moment
+suspension ships, not latent. Anyone touching either path should check HEL-84 first.
+
+---
+
+## 2026-08-25 — a claim that nothing executes stops being about the code
+
+Three independent drifts surfaced in one session. They look unrelated and share one cause.
+
+1. **Six SQL suites had no runner.** 54 suite files, 49 runners. They were written, they read as
+   coverage, and they had never executed. When runners were finally written for all six, the first
+   run found `announcement_projection_test.sql` asserting `sender='sella'` while
+   `20260707130300_deal_event_system_voice.sql` had moved the announcement voice to `'system'` on
+   2026-07-07 — **wrong for roughly seven weeks.** Two more suites carried the opposite error:
+   `auth_gate` insisted in its own header that it must stay RED and passes; `rls_isolation` was
+   filed as broken and passes.
+2. **DEV-161 was fixed by accident and stayed open.** It reported `rls_isolation_test` failing on a
+   fresh `db reset` for three named reasons. All three had been repaired incidentally by Wave 3
+   (`be3abda`, `94f9b75`) — including, correctly, the assertion the ticket warned must not simply be
+   loosened. Nobody knew, because the artifact that would have reported it was the suite with no
+   runner.
+3. **`AGENTS.md` had never been loaded.** `CLAUDE.md` said *"project-wide rules live in
+   `AGENTS.md`"* as prose rather than an `@import`, and Claude Code reads `CLAUDE.md` and
+   `.claude/rules/`, never `AGENTS.md`. 281 lines of project rules were inert. The tell was sitting
+   in the file: its "current build state" section was last updated **2026-06-21**, two months
+   earlier, because a log with no reader does not get updated.
+
+**The shared cause.** In each case a written artifact continued to *look* authoritative while
+having no execution path — no runner, no reader, no load. Review does not catch this, because
+review reads the artifact and the artifact is well-formed. Only *trying to run it* catches it, and
+in all three cases that is exactly what did.
+
+**The implication for how we work.** Prefer executable verification over prose that stages a
+decision. Where a rule must live in prose, give it a mechanism that fails when the prose goes
+stale: suites and runners are kept **1:1 by census**, not by eye; a rule that governs Claude lives
+in `.claude/rules/` where it actually loads, with `AGENTS.md` as the human long form that says on
+line 3 that Claude does not read it. The same principle already had a narrower form in
+`PIPELINE.md` — *"a policy stated in two places where only one of them runs is a policy you don't
+actually have"* — which cost slug 0022 about thirty rulings. This is that rule generalised: **a
+policy with no runner at all is not a policy either.**
+
+**Corollary, from the same session.** The check that catches this class is usually cheap and
+boring. Verifying a git worktree's commits had reached an integration branch before deleting it
+took two minutes; the first time it ran it saved 1,965 lines of security work that was stranded on
+a branch nobody had merged, and the second time it passed uneventfully. Value shows up in the one
+run out of two where the obvious assumption is wrong.
+
+## 2026-08-27 — A client-writable column is never the axis an authorization decision can key on
+
+HEL-84's `msg_all` exemption let four system-authored chat-pill types (`deal_signed`,
+`deal_cancelled`, `deal_change_proposed`, `deal_negotiation_requested`) bypass the new
+relationship-suspension gate — keyed on `chat_message.type`, a column `authenticated` holds
+unrestricted `INSERT`/`UPDATE` on. Live-proven exploitable: a thread member on a suspended
+relationship set an ordinary message's `type` to one of the four exempt values and the write went
+through. This is the third time this repo has hit this exact shape — HEL-67 Gap 1 (`type =
+'deal_detected'` forgeable), 0024's `send_deal` refactor (a chat pill's authenticity depended on
+which code path wrote it, not on anything the database could verify) — and each time the fix is
+the same: stop trying to distinguish a "real" system row from a forged one by column value, and
+instead move the write behind a `SECURITY DEFINER` RPC that bypasses RLS and performs its own
+authorization. **If an RLS policy's `WITH CHECK` carves out an exemption keyed on any column the
+writing role can set, that exemption is not a security boundary — it's decoration**, regardless of
+how narrow the carve-out looks. The fix (`announce_deal_event`, `docs/muskan-build/
+0026-relationship-write-gate/PLAN-HEL-84.md` §12) is the reusable shape: a definer function that
+performs the authorization the RLS policy no longer needs to, once the client-facing path stops
+being the place the write happens at all.
+
+**One more turn, same session.** The definer fix itself then needed the standing rule
+(`.claude/rules/supabase.md`: "a SECURITY DEFINER function must re-import every clause the RLS
+policy it replaces checked") applied a second time within the same function — its first draft
+re-imported the relationship-level authorization but dropped the workspace-level one
+(`can_access_thread`'s `deal` arm is scoped to `deal_workspace` membership, not just relationship
+membership), also live-proven exploitable before being closed. A definer function's authorization
+checklist is exactly as long as the RLS predicate it replaces, not as long as the one clause the
+current ticket had in mind when writing it.

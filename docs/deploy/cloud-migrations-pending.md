@@ -23,6 +23,487 @@
 
 ---
 
+## 🔴 READ FIRST (2026-09-07, later same day) — TWO MORE MIGRATIONS PUSHED, `/ship 0027` in progress
+
+**Both now-pending migrations are LIVE ON PRODUCTION**, applied via two individual
+`apply_migration` calls (project `byipusuthdlskdxoexkt`), then history-stamped from
+`apply_migration`'s call-time versions (`20260907151041`, `20260907151450`) to the filenames'
+own timestamps (same repair procedure as every prior push this file records). Production tip is
+now `20260907140000`, verified directly against `supabase_migrations.schema_migrations` — not
+inferred from this file.
+
+**What shipped, in order:** `20260907090000` (0027/T06 — drops `deliver_deal`/`claim_deal_ticket`)
+→ `20260907140000` (`import_products_pack_sizes` — a parallel session's Present/Manage-Shop work,
+merged into `claude/muskan/work` earlier the same day; shipped together with 0027 since both sat
+on the same branch and both are DDL-only, no data-write ask-rule stop triggered).
+
+**Pre-flight, run for real before pushing:**
+- T06's drop: the call-shape-matched census (`select proname from pg_proc where prosrc ~*
+  '(perform|select)\s+public\.(deliver_deal|claim_deal_ticket)\s*\(''`) run directly against
+  PRODUCTION, not just local — **0 rows**, confirming the drop is safe on the actual target, not
+  inferred from local parity.
+- `import_products`: diffed the migration's `create or replace` body against
+  `pg_get_functiondef('public.import_products(jsonb)'::regprocedure)` fetched live — differs from
+  the migration's replacement by exactly the documented additive change (the `pack_sizes` half of
+  the `metadata` expression) and nothing else. Confirmed, not assumed from the migration's own
+  header claim.
+
+**Post-flight, run for real:**
+- `select proname from pg_proc where proname in ('deliver_deal','claim_deal_ticket')` → **0 rows**
+  — the drop took.
+- `import_products` grants: `anon` → `false`, `public` → `false`, `authenticated` → `true` ✓
+  (matches SECURITY-CHECKLIST S1's required form).
+- Security advisors checked post-push: no new finding referencing either touched function; the
+  full advisor set is pre-existing noise unrelated to this push (checked directly, not assumed).
+
+**Non-migration deploy debt this batch does NOT resolve:** 0027's own app code (T06-T09 +
+the Connect-flat-link fix) still needs its PR merged and Vercel deploy to go READY — that's
+`/ship` step 5, next. The parallel session's Present/Manage-Shop app code (drag-and-drop, pack
+sizes UI, Origin/region split) rides the same PR/deploy, since it's on the same branch.
+
+---
+
+## 🔴 READ FIRST (2026-09-07) — SIX MORE MIGRATIONS PUSHED, ALL THREE "PENDING" HEADINGS BELOW ARE NOW STALE TOO
+
+**All six now-pending migrations are LIVE ON PRODUCTION**, applied this session via six individual
+`apply_migration` calls (project `byipusuthdlskdxoexkt`), then history-stamped from
+`apply_migration`'s call-time versions to the filenames' own timestamps (same repair procedure as
+the 2026-08-25 batch below). Production tip is now `20260904090000`, verified directly against
+`supabase_migrations.schema_migrations` — not inferred from this file.
+
+**What shipped, in order:** `20260903090000` (HEL-67 Gap 2) → `20260903100000` (HEL-85) →
+`20260903110000` (HEL-83) → `20260903120000` (0027/T01) → `20260903130000` (0027/T02) →
+`20260904090000` (0027/T05). The last three were never listed in this file at all before today —
+a gap this file's own reader had flagged twice (0027's `REVIEW.md`, T01 and T05 notes). Filed
+properly below, under their own headings, rather than folded into this note.
+
+**Same-deploy rule honored for HEL-83:** its app code (`PromotionTrack.tsx`, `CardFront.tsx`) does
+not exist on `main` as a full-branch merge — `claude/muskan/work` was 69 commits / 231 files ahead,
+far more than this one ticket. Instead, cherry-picked just the two-file diff onto a fresh branch
+off `main` (`hel-83-app-code-only`), verified `tsc`/`eslint` clean against `main`'s own baseline,
+confirmed the Vercel preview build succeeded, merged via PR #184, confirmed the production deploy
+went READY — **before** the matching migration was pushed, so the negotiation-only gate never went
+live server-side while the old unconditional Accept button was still the deployed UI.
+
+**Diff-against-live, run for real before pushing (not assumed from each migration's own header
+claim):** all four `create or replace function` bodies (`confirm_deal_change`, `offer_promotion`,
+`accept_promotion`, `confirm_detected_deal`) fetched via `pg_get_functiondef` and compared against
+each migration's replacement — every one differs from live by exactly its documented additive
+change and nothing else. `request_product_pricing_c2c` is a `create function` (net-new), nothing
+to diff.
+
+**I-M5 checkpoint (0027 T05's whole reason for existing) — both counts, run for real, after the
+push:**
+```sql
+select
+  (select count(*) from pending_inbox_item where type='deal_card' and status='pending' and deleted_at is null) as im5a,
+  (select count(*) from pending_inbox_item where type<>'deal_card' and status='pending' and deleted_at is null) as im5b;
+-- im5a = 0, im5b = 5
+```
+**im5a = 0.** For im5b, no "before" snapshot was captured ahead of the push (a real process miss,
+noted so it isn't repeated) — closed a different, stronger way instead: every one of the 5
+non-`deal_card` pending rows was individually checked against `updated_at`, and all 5 predate the
+push by weeks-to-months. `pending_inbox_item`'s own `BEFORE UPDATE` trigger
+(`trg_pending_inbox_item_set_updated_at`) stamps `updated_at` on any row an `UPDATE` reaches, so
+this is direct, row-level proof the backfill's `UPDATE` touched none of them — stronger than a
+before/after count would have been, not a weaker substitute for one.
+
+**Other post-flight, run for real:** new RPC grants — `anon` false, `PUBLIC` false, `authenticated`
+true ✓. `deal_promotion` row count still 0 (HEL-83's "zero blast radius" claim holds post-push) ✓.
+`chat_message` still carries exactly one policy (`msg_all`) ✓ — the `ALTER POLICY` did not fork it.
+
+---
+
+## ✅ APPLIED 2026-09-07 — 0027/T01, `confirm_detected_deal` stops cutting a deal ticket (ONE migration)
+
+**Status: LIVE ON PRODUCTION.** `20260903120000_confirm_detected_deal_drop_ticket_branch.sql`.
+Dead-code deletion, not a live-bug fix — the branch was unreachable through any sanctioned route
+(Sella detection only lands on p2p threads; `chat_thread_p2p_has_both_people` forces both person
+ids non-null there). Full reasoning: `docs/muskan-build/0027-retire-connect-inbox/PLAN-T01.md`,
+`REVIEW.md`. **Never listed under a `⚠️ PENDING` heading here before today** — gap flagged twice
+in `0027`'s own `REVIEW.md`, closed now rather than left open into `/ship`.
+
+**Diff-against-live:** `confirm_detected_deal`'s body fetched via `pg_get_functiondef` before the
+push and confirmed byte-identical to what T01's migration assumed, except for the one intended
+deletion (the `else perform deliver_deal(v_card)` branch). No drift.
+
+**Post-flight:** N/A beyond the diff above — this is a subtractive change with no new grant,
+policy, or data write, and no reachable behavior change (the branch was already dead).
+
+---
+
+## ✅ APPLIED 2026-09-07 — 0027/T02, pricing ask to a connected company posts to chat (ONE migration)
+
+**Status: LIVE ON PRODUCTION.** `20260903130000_request_product_pricing_c2c.sql` — new
+`SECURITY DEFINER` RPC, `request_product_pricing_c2c(uuid,uuid)`. Full reasoning:
+`docs/muskan-build/0027-retire-connect-inbox/PLAN-T02.md`, `REVIEW.md` (includes a fixed-and-
+reverified rung-1 leak found by `security` during build — the RPC's product lookup now calls
+`product_visible_to_caller`). **Never listed under a `⚠️ PENDING` heading here before today** —
+same gap as T01, above.
+
+**Post-flight, run for real:**
+```sql
+select coalesce(has_function_privilege('anon', 'public.request_product_pricing_c2c(uuid,uuid)', 'execute'), false) as anon_MUST_BE_FALSE,
+       coalesce(has_function_privilege('public', 'public.request_product_pricing_c2c(uuid,uuid)', 'execute'), false) as public_MUST_BE_FALSE,
+       coalesce(has_function_privilege('authenticated', 'public.request_product_pricing_c2c(uuid,uuid)', 'execute'), false) as authenticated_MUST_BE_TRUE;
+-- anon = false, public = false, authenticated = true ✓ (matches SECURITY-CHECKLIST S1's required form)
+```
+
+**Non-migration deploy debt this ticket owes, not yet done:** `requestProductPricing`'s TS branch
+onto this RPC (`src/app/discover/actions.ts`) ships with the app code, not with this migration —
+tracked by whichever slug/session next merges `0027`'s app code to `main`. The RPC sitting unused
+on production until then is harmless (additive, no existing caller reaches it).
+
+---
+
+## ✅ APPLIED 2026-09-07 — 0027/T05, backfill resolves every pending deal ticket (ONE migration, DATA WRITE)
+
+**Status: LIVE ON PRODUCTION.** `20260904090000_pending_inbox_item_deal_card_backfill.sql` — the
+one migration in this push that is a data write, not DDL (`ship`'s own ask-rule migration
+classification). Full reasoning: `docs/muskan-build/0027-retire-connect-inbox/PLAN-T05.md`,
+`REVIEW.md` (a `security`-caught test-rigor gap — the suite couldn't prove `status = 'pending'`
+was load-bearing — fixed and independently re-verified before this ticket closed). **Never listed
+under a `⚠️ PENDING` heading here before today** — same gap as T01/T02, above.
+
+**This is the migration the whole push existed to unblock** — T06 (dropping `deliver_deal` /
+`claim_deal_ticket`) is gated on this backfill's I-M5 checkpoint reading clean against a real
+environment, which cannot be satisfied locally (local seed carries zero `deal_card` pending
+tickets). **I-M5, both counts, run for real — see "🔴 READ FIRST (2026-09-07)" above for the
+full result and the row-level proof closing the missing before/after snapshot.** `im5a = 0`,
+`im5b`'s delta proven zero via `updated_at` on all 5 remaining rows, none touched.
+
+**Consequence, intended not accidental (D5/T01's I-M2):** every existing `deal_card` ticket is now
+unclaimable through `claim_deal_ticket` (its own precondition, `status = 'pending'`, no longer
+matches any row it used to). The deal itself is unaffected — reachable company-wide without a
+ticket, which is the entire point of this slug.
+
+---
+
+## 🔴 READ FIRST (2026-09-03) — THE THREE `⚠️ PENDING` HEADINGS BELOW ARE STALE
+
+**All 13 migrations under them are LIVE ON PRODUCTION.** Verified 2026-09-03 against the
+remote itself (`list_migrations` via MCP, project `byipusuthdlskdxoexkt`): production's tip is
+`20260827150000` and every local migration file is present in
+`supabase_migrations.schema_migrations`. Corroborated independently by
+`docs/team/sync/muskan.md`'s 2026-08-27 entry — *"Production tip `20260827150000`; **nothing
+cloud-pending** (7 migrations + 2 edge-function redeploys all applied/deployed this session)"*.
+
+**Why this was dangerous, not just untidy.** The file's contract is that a `⚠️ PENDING` heading
+means "not on cloud." Three batches were pushed on 2026-08-27 and their headings never moved, so
+the file invited a re-push of work already live — and this is exactly the file whose own rule
+says a stale claim must be struck rather than left standing.
+
+**Annotated in place per this file's own correcting rule, not deleted** — each of the three
+headings below is struck through with a pointer here. The batch bodies (pre-flight queries,
+grant/drop analysis, same-deploy warnings) are untouched: they are the record of how each push
+was reasoned about, and they stay readable as that.
+
+**Only the 2026-09-03 batches are genuinely pending: `20260903090000`, `20260903100000` and
+`20260903110000`, immediately below. All three are INDEPENDENT of each other** — different
+objects (an RLS policy, one function, two functions), no shared call path, no ordering constraint
+beyond filename sort. Any may ship alone.
+
+⚠️ **But `20260903110000` (HEL-83) has APP-CODE COUPLING and its own must-ship-together rule** —
+`PromotionTrack.tsx` + `CardFront.tsx` go with it. The other two are DB-only. Separately,
+**HEL-86 needs both Sella edge functions redeployed** (no migration at all — see the
+non-migration debt section, item 4).
+
+---
+
+## ~~⚠️ PENDING (2026-09-03) — HEL-67 Gap 2, `msg_all` sender attribution~~ → ✅ APPLIED 2026-09-07
+
+> Pushed 2026-09-07 — see "🔴 READ FIRST (2026-09-07)" at the top of this file. **Do not push
+> this again.** Body below is the pre-push record, untouched.
+
+**Status: LOCAL ONLY.** `20260903090000_msg_all_sender_attribution_gate.sql` sorts after
+production's tip `20260827150000`, so a plain `supabase db push --linked` (no `--include-all`)
+picks it up alone.
+
+**Pure DDL, not a data write — the `apply_migration`/`execute_sql` ask-rule does not apply.**
+One `ALTER POLICY ... WITH CHECK` plus a `COMMENT ON POLICY`. No existing row is touched.
+
+| # | file | what it does |
+|---|---|---|
+| 1 | `20260903090000_msg_all_sender_attribution_gate.sql` | `msg_all`'s `WITH CHECK` gains `sender = 'person' AND sender_person_id = auth.uid()`. Closes HEL-67 Gap 2 — an authenticated thread member could attribute a message (including slug 0023's deal-arrival pill, *"<victim> has sent a deal"*) to any other person, or write in the `system`/`sella` voice. `USING` is deliberately **not** restated: `msg_all` is `FOR ALL` and the only policy on `chat_message`, so retyping the read half would silently change who can SELECT every message in the product (L-037). |
+
+**NO app-code coupling — this one is safe to push alone.** Unlike the promotion-RPC and
+`relationship_admin` batches below, nothing in `src/` changes with it. The two client writers
+(`store.ts:484`, `:518`) already send `sender: 'person'` + `sender_person_id: user.id` and have
+done since they were written; this migration makes the server enforce what they already do. A
+stale browser tab running older JS cannot violate it either, for the same reason.
+
+**Why it became buildable now, which is the part worth not losing.** Gap 2 was blocked, not
+deferred: three `authenticated` writers legitimately wrote in someone else's name, the worst
+being connection-accept seeding the *requester's* note (`rollout.ts:179`). HEL-68
+(`20260826100000`) deleted `rollout.ts`; HEL-84 (`20260827150000`) moved the four Sella-voiced
+pills into `announce_deal_event`. Both are live. **If either is ever reverted, this migration
+must be reverted with it** — it would start refusing legitimate writes.
+
+**Post-flight (assert the policy SHAPE, not data).** There is no data check worth running: a
+forged row is indistinguishable from a real one and nobody has forged one. Run against cloud
+after the push:
+
+```sql
+select pg_get_expr(polwithcheck, polrelid) ~ 'sender_person_id' as gap2_term_present,
+       pg_get_expr(polqual,      polrelid) !~ 'sender'          as read_door_untouched,
+       (select count(*) from pg_policy
+         where polrelid = 'public.chat_message'::regclass) = 1  as still_one_policy
+from pg_policy
+where polrelid = 'public.chat_message'::regclass and polname = 'msg_all';
+-- all three columns MUST be true
+```
+
+**Local proof.** Red-first reproduced on the pre-fix schema (§B1: Alice attributed a deal pill to
+Bob and it was accepted), green after. Full gate re-run: **61/61 SQL suites**, 483 unit tests,
+tsc clean, `e2e/chat-phase7.spec.ts` 4/4. The Gap 1 suite
+(`msg_all_deal_detected_gate_test.sql`) was edited in the same commit — its A3–A6 controls
+asserted the three write paths HEL-68/HEL-84 deleted, and its own documented trap (A6) fired
+exactly as its comment said it would.
+
+---
+
+## ~~⚠️ PENDING (2026-09-03) — HEL-83, promotion status gate~~ → ✅ APPLIED 2026-09-07
+
+> Pushed 2026-09-07 — see "🔴 READ FIRST (2026-09-07)" at the top of this file. **Do not push
+> this again.** Its app-code half shipped first, via PR #184 (cherry-picked, not a full branch
+> merge — see the READ FIRST note for why). Body below is the pre-push record, untouched.
+
+**Status: LOCAL ONLY.** `20260903110000_promotion_status_gate.sql` sorts after `20260903100000`,
+so a plain `supabase db push --linked` takes all three of the day's migrations in filename order.
+
+**Pure DDL, not a data write.** Two `create or replace` plus re-emitted grants. No existing row is
+touched — and there are none to touch (see blast radius below).
+
+| # | file | what it does |
+|---|---|---|
+| 1 | `20260903110000_promotion_status_gate.sql` | `offer_promotion` and `accept_promotion` gain `status = 'negotiation'`. Neither checked `deal_card.status` at all, so a promotion could be accepted onto a `done` (invoiced) or `cancelled` deal — and `accept_promotion` inserts real `deal_line_item` rows, which then disagree with the invoice already issued. `decline_promotion` is deliberately UNCHANGED. |
+
+**⚠️ SAME-DEPLOY REQUIRED — this one DOES have app-code coupling.** Unlike the day's other two
+batches, `src/modules/deals/components/PromotionTrack.tsx` and `CardFront.tsx` ship with it: the
+Accept button is now removed (not disabled) once the deal leaves `negotiation`, driven by a new
+`dealStatus` prop. Push the migration without the app code and a buyer still sees an Accept button
+that the server now refuses; ship the app code without the migration and the button correctly
+disappears while the RPC would still have allowed it. **Both together.**
+
+**The ruling, and where it lives.** Muskan, 2026-09-03 — only `negotiation`. Full reasoning in
+`docs/decisions/DECISIONS.md` under that date, and in the migration header. HEL-83 was filed as
+needing a product decision, not an engineering one.
+
+⚠️ **`decline_promotion` is deliberately NOT gated — do not "finish the job" later.** A gated
+decline would strand a `pending` promotion forever on any deal that left `negotiation` while one
+was open, behind two refusing buttons. Same principle as HEL-84's decline exemption.
+`promotion_status_gate_test.sql` §D fails anyone who changes this.
+
+**BLAST RADIUS: ZERO.** `deal_promotion` has **no rows on production** (verified 2026-09-03).
+Nothing to migrate, nothing to reconcile. Strict now is cheap; widening later is one line.
+
+**Provenance.** Both bodies generated from the LIVE production definitions, confirmed
+byte-identical to local before editing:
+`offer_promotion` md5 `e1a743b778b02054fe92776044e1157f` (1207 chars) ·
+`accept_promotion` md5 `8861480b6ab62a25e655f24c6ce57a5b` (1957 chars).
++10 lines each, all additive: one `v_status` declaration, one widened SELECT (`version` →
+`version, status` — same row, same lock, no extra query), one guard. Signatures unchanged, so
+`create or replace` is legal and grants survive.
+
+**Post-flight (cloud, after the push).**
+
+```sql
+select proname,
+       prosrc ilike '%only a deal in negotiation can carry a promotion%' as gate_present
+from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+where n.nspname = 'public'
+  and proname in ('offer_promotion','accept_promotion','decline_promotion')
+order by proname;
+-- offer_promotion  -> true
+-- accept_promotion -> true
+-- decline_promotion -> FALSE  (deliberate; see above)
+```
+
+**Local proof.** Red-first verified by reverting to the pre-fix bodies and re-running: §B failed
+("a promotion was OFFERED on a unsent deal"). Green after restoring. Gate: **63/63 SQL suites**,
+499 unit, tsc clean, `deal-change.spec.ts` 19 passed / 5 skipped.
+
+⚠️ **The UI half has NO automated cover.** Accept/Decline sit behind a client-side reveal
+(`revealed` state) and this repo's vitest env is pure node with no jsdom, so a static render
+cannot reach them. The server gate is fully covered; the button change is type-checked and
+reviewed only. Worth an e2e cell when someone is next in that file.
+
+---
+
+## ~~⚠️ PENDING (2026-09-03) — HEL-85, `confirm_deal_change` workspace gate~~ → ✅ APPLIED 2026-09-07
+
+> Pushed 2026-09-07 — see "🔴 READ FIRST (2026-09-07)" at the top of this file. **Do not push
+> this again.** Body below is the pre-push record, untouched.
+
+**Status: LOCAL ONLY.** `20260903100000_confirm_deal_change_workspace_gate.sql` sorts after
+`20260903090000`, so a plain `supabase db push --linked` takes both in filename order.
+
+**Pure DDL, not a data write — the `apply_migration`/`execute_sql` ask-rule does not apply.**
+One `create or replace` plus a re-emitted grant. No existing row is touched.
+
+| # | file | what it does |
+|---|---|---|
+| 1 | `20260903100000_confirm_deal_change_workspace_gate.sql` | `confirm_deal_change` gains the WORKSPACE half of `can_access_workspace`. It re-imported only `card_relationship_member` and dropped `(visibility = 'company_wide' OR is_workspace_member(ws))`. On a PRIVATE workspace a company colleague who is not a `deal_member` could resolve the held change — delete the `deal_pending_change` row, write `deal_card_log` + `deal_change_input`, and land a `deal_change_declined` message in a thread RLS hides from her. Same defect `announce_deal_event` had (HEL-84 §12); same remedy. |
+
+**SEVERITY: LATENT, NOT LIVE.** Production has **zero** private workspaces right now — all 30 that
+exist are `company_wide`, where the dropped conjunct is a no-op. Not exploitable against
+production data today; it arms the moment the first workspace is made private, which is an
+existing product capability one UPDATE away. Same posture HEL-74 shipped under.
+
+**NO app-code coupling.** Signature unchanged (`p_deal_card_id uuid, p_decision text, p_reason
+text` RETURNS integer), so `create or replace` is legal, grants survive, and no `src/` change
+ships with it. Safe to push alone or with `20260903090000`.
+
+⚠️ **The NULL-passthrough in the guard is load-bearing, do not "tidy" it.** 3 of the 33 cards on
+production carry **no `deal_workspace` row at all**. `can_access_workspace` is EXISTS-based and
+returns FALSE for a missing workspace, so an unconditional call would refuse a legitimate resolve
+on every one of those three. The guard therefore fires only when a workspace exists.
+
+**Provenance.** Generated from the LIVE production body (`md5 554a25ce2e932fc48cb9edf12f710815`,
+14655 chars, confirmed byte-identical to local before editing). Diff against that body is
+**+38 / −0 lines** — one `v_ws` declaration and one guard block. No predicate, lock order, branch
+or announcement altered.
+
+**Post-flight (cloud, after the push).** Asserts the guard is present and the passthrough intact:
+
+```sql
+select prosrc ilike '%can_access_workspace%'      as guard_present,
+       prosrc ilike '%v_ws is not null%'          as null_passthrough_intact,
+       prosrc ilike '%caller is not a member of this relationship%' as old_guard_survived
+from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+where n.nspname = 'public' and p.proname = 'confirm_deal_change';
+-- all three MUST be true
+```
+
+**Local proof.** Red-first reproduced live: Dana wrote 1 row into a private deal thread she cannot
+read. Green after. Gate: **62/62 SQL suites**, 483 unit, tsc clean, `deal-change.spec.ts` 19
+passed / 5 skipped (including `decline-clears-pending`, the exact path changed). New suite
+`confirm_deal_change_workspace_gate_test.sql` + runner (1:1 census re-run, holds).
+
+⚠️ **Read L-066 before trusting any similar suite.** The first draft of this one counted
+`chat_message` rows from inside the probe user's session and passed **vacuously on a live
+exploit** — she cannot read the thread she just wrote into, so before and after were both 0. All
+counts are now taken privileged.
+
+---
+
+## ✅ APPLIED 2026-08-27 (was PENDING 2026-08-27) — HEL-68 c2c/p2p thread atomicity (TWO migrations)
+
+**Status: LIVE ON PRODUCTION.** Pushed 2026-08-27 with `supabase db push --linked` (plain — no
+`--include-all`; both filenames sorted after cloud's tip `20260825200000`). Production tip is
+now `20260826100000`, verified against `supabase_migrations.schema_migrations`.
+
+**Stamps in order:** `20260826090000` → `20260826100000`.
+
+**Pure DDL, not data-writes — the `apply_migration`/`execute_sql` ask-rule does not apply.**
+Both migrations define/replace functions only; neither touches an existing row.
+
+| # | file | what it does |
+|---|---|---|
+| 1 | `20260826090000__resolve_or_create_c2c_p2p_thread.sql` | Two new internal helpers, `_resolve_or_create_c2c_thread(uuid)` and `_resolve_or_create_p2p_thread(uuid,uuid,uuid)` — plain (not `SECURITY DEFINER`), `REVOKE ALL FROM public, anon, authenticated`, callable only from inside another function's body (`accept_connection_request`, migration 2). |
+| 2 | `20260826100000_accept_connection_request_atomic_threads.sql` | `DROP` + `CREATE` of `accept_connection_request` — return signature changes (now returns the c2c/p2p thread ids too), so a `create or replace` can't be used; grant re-emitted in full (`GRANT EXECUTE ... TO authenticated`, matching the live pre-image). |
+
+**The gap it closes.** Accepting a connection used to be two round trips: the RPC minted the
+relationship with no thread, and the browser inserted the c2c thread afterward from a pure
+planner that "writes nothing." Closing the tab in between left a connected pair with no c2c
+conversation, with no repair path (before 0023's `send_deal` self-heal shipped). This migration
+moves both thread creations (c2c AND p2p, same transaction) inside the RPC itself, atomic with
+the relationship. `docs/architecture/adr/0007-*.md` has the full design; `ADR 0006 §8.10` is
+where this was ruled its own slug rather than folded into 0023.
+
+**Who loses writes when this lands.** The browser-side `planRollout`/its callers, deleted in the
+same diff (`src/modules/messaging/lib/rollout.ts` removed entirely) — dead code once the RPC
+does the insert itself. No client write site is newly blocked; the insert just moves server-side.
+
+**Grant/drop risk, already checked, not assumed.** `S4` (dependency census): grepped
+`pg_policies` and `pg_proc.prosrc` for any other caller of `accept_connection_request`'s old
+signature or either new helper — zero hits, nothing else depends on the dropped shape. `S5`
+(diff vs. live body): the new `accept_connection_request` body was diffed against the LIVE
+`20260825200000` definition, not a local copy — every existing guard (auth, company match,
+`FOR UPDATE`, NOT FOUND, deleted, `<> 'pending'`, receiver `IS DISTINCT FROM`, self-send, type
+allowlist, canonical company order, the `<> 'active'` status refusal, the
+`ON CONFLICT DO NOTHING` + re-select idiom) carries over verbatim; only additive deltas. The
+`DROP` + re-emitted `REVOKE ALL … FROM public, anon` / `GRANT … TO authenticated` tail matches
+the prior grant state exactly.
+
+**A deny-test correctness issue found and fixed pre-push, not a production issue.**
+`security`'s pre-ship scan (2026-08-27) found the local suite's §C deny-tests for the two new
+helpers caught on SQLSTATE 42501 alone — which an invoker-rights function shares with unrelated
+RLS/table-privilege denials, so the suite would stay green even with the protective `REVOKE`
+removed. The protection itself was independently verified sound by catalog query
+(`has_function_privilege` false for `anon`/`authenticated` on both helpers, no `PUBLIC` ACL
+entry). Fixed by adding an explicit `has_function_privilege` assertion beside the existing
+call-and-catch; RED-first verified by temporarily re-granting EXECUTE and confirming the suite
+fails, then reverting. `LEARNINGS.md` **L-064**.
+
+**Post-push evidence, all run against production 2026-08-27, none of it inferred:**
+
+| check | result |
+| -- | -- |
+| `_resolve_or_create_c2c_thread` / `_resolve_or_create_p2p_thread` — anon/authenticated EXECUTE | both `false` for both roles ✓ |
+| `accept_connection_request` keeps its `authenticated` EXECUTE grant post-`DROP`+`CREATE` | `true` ✓ |
+| Migration tip | `20260826100000` ✓ |
+| S8 advisors (security) | **95: 1 ERROR, 93 WARN, 1 INFO.** The one ERROR is the same already-accepted `security_definer_view` on `current_pricelist_item` (ADR-0004 §4). No new ERROR. |
+
+---
+
+## ~~⚠️ PENDING (2026-08-27) — HEL-84 relationship-write-gate (SEVEN migrations, plain `db push`)~~ → ✅ APPLIED 2026-08-27
+
+> **STRUCK 2026-09-03.** All seven ARE live on production — verified against
+> `supabase_migrations.schema_migrations` on the remote, and corroborated by
+> `docs/team/sync/muskan.md`'s own 2026-08-27 entry. The heading never moved when the batch was
+> pushed. See "🔴 READ FIRST (2026-09-03)" at the top of this file. **Do not push these again.**
+> Body left verbatim below — it is the record of how the push was reasoned about.
+
+**Status: ~~LOCAL ONLY~~ LIVE (2026-08-27).** All seven sort after `20260826100000` (0024's tip), so a
+plain `supabase db push --linked` (no `--include-all`) picks up the lot in filename
+order. Confirmed via `supabase migration list --linked` 2026-08-27: cloud tip is
+`20260826100000`; these seven are the only local-only rows.
+
+**Stamps in order:** `20260827090000` → `100000` → `110000` → `120000` → `130000` →
+`140000` → `150000`.
+
+**Pure DDL, not data-writes — the `apply_migration`/`execute_sql` ask-rule does not
+apply.** Every one of the seven defines/replaces a function or alters an RLS policy;
+none touches an existing row.
+
+| # | file | what it does |
+|---|---|---|
+| 1 | `20260827090000_assert_relationship_writable.sql` | New shared function — gates a write on `relationship.status`, NULL-passthrough for pre-connection/company-less threads, `service_role` exempt (discriminated on `auth.uid() IS NULL`, not `current_company_id() IS NULL` — the latter would fail open for a real, reachable company-less-caller population, caught in review). |
+| 2 | `20260827100000_msg_all_relationship_write_gate.sql` | `msg_all` gains the gate as a plain `AND` term — **no client-facing exemption of any kind.** An earlier draft carved out four `announceDealEvent` types by `type`, found live-exploitable (a thread member could bypass the whole gate by mislabeling an ordinary message's `type`) — closed by moving those four types into migration 7 instead. |
+| 3 | `20260827110000_inbox_insert_relationship_write_gate.sql` | `inbox_insert` gains the same gate, deriving the relationship via the canonical `least`/`greatest` company pair. |
+| 4 | `20260827120000_send_deal_relationship_write_gate_refactor.sql` | `create or replace` — `send_deal`'s existing inline liveness check refactored to call the shared function. |
+| 5 | `20260827130000_confirm_detected_deal_relationship_write_gate_refactor.sql` | Same refactor for `confirm_detected_deal`, gate stays inside the both-accepted branch (a decline must still succeed on a suspended relationship). |
+| 6 | `20260827140000_deliver_deal_relationship_write_gate.sql` | New gate on `deliver_deal` — currently unreachable through the product (its one live caller, `confirm_detected_deal`, already gates the same relationship first), kept so a future caller can't reopen the gap silently. |
+| 7 | `20260827150000_announce_deal_event.sql` | New `SECURITY DEFINER` RPC — the four system-authored deal-lifecycle chat pills (`deal_signed`, `deal_cancelled`, `deal_change_proposed`, `deal_negotiation_requested`), moved server-side so `type` is never client-supplied. Deliberately does NOT call `assert_relationship_writable` (ADR 0008 Invariant 16: these four are exempt from the suspension gate, an event already in motion is not a "new" write) — its own authorization is a relationship-party check plus a `deal_workspace` membership check for the deal-thread arm (a gap found post-build by `security`'s own re-check — an earlier version of this RPC re-imported the relationship-level check but dropped the workspace-level one, live-provenly letting a relationship member write into a PRIVATE deal thread she wasn't part of; fixed by calling the canonical `can_access_workspace` directly). |
+
+**⚠️ SAME-DEPLOY REQUIRED, migrations + two Edge Functions.**
+`supabase/functions/sella-detect/index.ts` and `supabase/functions/sella-summarize/index.ts`
+both gained a new call to migration 1's RPC (`assert_relationship_writable`) — this is
+**non-migration deploy debt**, tracked separately below, not covered by `db push`. If the
+migrations land without redeploying the two edge functions, nothing breaks (the RPC just
+sits unused by them); if the edge functions somehow deployed first, the RPC call would 404
+against a function that doesn't exist yet on the remote project. Deploy both edge functions
+in the same session as the migration push, migrations first.
+
+**Pre-push insurance query** (run before `db push` — confirms the two new definer
+call sites, `deliver_deal` and the announce RPC, aren't reachable by anyone they
+shouldn't be, post-push):
+
+```sql
+-- expect all FALSE except authed_MUST_BE_TRUE columns
+select p.proname,
+       coalesce(has_function_privilege('anon', p.oid, 'execute'), false)          as anon_MUST_BE_FALSE,
+       coalesce(has_function_privilege('authenticated', p.oid, 'execute'), false) as authed_result
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+ where n.nspname = 'public'
+   and p.proname in ('assert_relationship_writable', 'announce_deal_event');
+-- assert_relationship_writable: authed_result = true (client-facing, RLS call sites)
+-- announce_deal_event: authed_result = true (client-invoked directly from actions.ts)
+```
+
+---
+
 ## ✅ APPLIED 2026-08-25 (was PENDING 2026-08-25) — security batch: HEL-67 Gap 1 + HEL-75 + DEV-159 (THREE migrations)
 
 **Status: LIVE ON PRODUCTION.** Applied 2026-08-25 by the `ship_deal` session on Muskan's explicit
@@ -213,9 +694,19 @@ select has_table_privilege('authenticated','public.deal_line_item','UPDATE') as 
 
 ---
 
-## ⚠️ PENDING (2026-08-25) — deal_promotion + deal_line_item INSERT lockdown (TWO migrations, plain `db push`)
+## ~~⚠️ PENDING (2026-08-25) — deal_promotion + deal_line_item INSERT lockdown (TWO migrations, plain `db push`)~~ → ✅ APPLIED 2026-08-27
 
-**Status: LOCAL ONLY.** These sort after `20260825140000` (the DEV-159 batch above), so the same
+> **STRUCK 2026-09-03.** Both ARE live on production (`20260825150000`, `20260825160000`) —
+> verified on the remote. See "🔴 READ FIRST (2026-09-03)" at the top of this file.
+> **Do not push these again.** Body left verbatim below.
+>
+> ⚠️ **One live consequence to carry forward:** the app-code coupling this section warns about
+> (the three promotion RPCs `offer_promotion`/`accept_promotion`/`decline_promotion`) shipped
+> together as intended. **HEL-83 is still open against those same three RPCs** — none gates on
+> `deal_card.status`, so a promotion can still be accepted onto a sealed `done` deal. That is a
+> product ruling Muskan owes, not a deploy step.
+
+**Status: ~~LOCAL ONLY~~ LIVE (2026-08-27).** These sort after `20260825140000` (the DEV-159 batch above), so the same
 plain `supabase db push --linked` (no `--include-all`) picks them up too as long as they're applied
 in filename order with everything above. Written and verified locally on `claude/muskan/work` while
 the THREE-migration batch above was already mid-push in a separate parallel session — that session's
@@ -316,6 +807,56 @@ select p.proname,
        has_function_privilege('authenticated', p.oid, 'execute')           as authed_MUST_BE_TRUE
   from pg_proc p join pg_namespace n on n.oid = p.pronamespace
  where n.nspname = 'public' and p.proname in ('accept_promotion','offer_promotion','decline_promotion');
+```
+
+---
+
+## ~~⚠️ PENDING (2026-08-25) — HEL-82 relationship suspend/reactivate/end + HEL-74 liveness gates (FOUR migrations, plain `db push`)~~ → ✅ APPLIED 2026-08-27
+
+> **STRUCK 2026-09-03.** All four ARE live on production (`20260825170000`–`20260825200000`) —
+> verified on the remote. See "🔴 READ FIRST (2026-09-03)" at the top of this file.
+> **Do not push these again.** Body left verbatim below.
+>
+> ⚠️ **This batch's "all four, together, or none" warning is discharged** — they went as one.
+> What is NOT discharged is the **G5 walk**: `/admin/relationships` suspend/reactivate/end has
+> been live since 2026-08-27 and has never been driven by a human. HEL-82 and HEL-84 both sit
+> In Progress / In Review in Linear waiting on that walk, not on code. `CLAUDE.md` #1 and #1b.
+
+**Status: ~~LOCAL ONLY~~ LIVE (2026-08-27).** These sort after `20260825160000` (the deal_promotion/deal_line_item batch
+above), so the same plain `supabase db push --linked` (no `--include-all`) picks them up too as long
+as everything applies in filename order. Built in `worktree-security-tickets`.
+
+**Stamps in order:** `20260825170000` → `20260825180000` → `20260825190000` → `20260825200000`.
+
+⚠️ **SAME-DEPLOY REQUIRED, BOTH DIRECTIONS.** `src/app/admin/relationships/*` calls
+`list_relationships_admin`/`suspend_relationship`/`reactivate_relationship`/`end_relationship` — new
+in `20260825170000` — so the app code and this migration must land together (same rule as the
+promotion RPCs above). **And do not push a partial prefix of these four**: shipping `20260825170000`
+alone would make `suspended`/`ended` reachable while `send_deal`, `confirm_detected_deal`, and
+`accept_connection_request` still don't check it — a false sense of the compliance control actually
+working. All four, together, or none.
+
+| # | file | what it does |
+|---|---|---|
+| 1 | `20260825170000_relationship_admin_suspend_end.sql` | `list_relationships_admin`/`suspend_relationship`/`reactivate_relationship`/`end_relationship` (all `is_hs_team()`-gated SECURITY DEFINER). New `audit_action_type`/`auditable_content_type` lookup rows. `relationship` itself is untouched — no RLS/grant change on that table. |
+| 2 | `20260825180000_send_deal_relationship_liveness_guard.sql` | Re-emits `send_deal` (verbatim, from the live `20260825090000` body) with one added check: refuses a suspended/ended/missing relationship. |
+| 3 | `20260825190000_confirm_detected_deal_liveness_guard.sql` | Same check, on the SECOND delivery door — Sella's double-accept `confirm_detected_deal`, which never calls `send_deal` and would otherwise bypass migration 2 entirely. |
+| 4 | `20260825200000_accept_connection_request_status_guard.sql` | Refuses to silently adopt an existing non-active relationship — closes a "reconnect a suspended/ended pair via a fresh request" loop `20260823090000`'s own header had already flagged as future work. |
+
+**What this does NOT cover, on purpose — narrowed and ticketed, not silently gapped.** HEL-82's
+acceptance criteria says suspension should also block new chat messages and new pricing asks. Neither
+`msg_all` nor the pricing-request path (`discover/actions.ts`) gained a relationship-status check in
+this batch — both are reachable directly via PostgREST (`authenticated` holds `INSERT` on
+`chat_message`/`pending_inbox_item`), so this is a real, immediate gap the moment suspension becomes
+reachable, not a latent one. Follow-up ticket owed before this is treated as done; file it referencing
+this ledger entry.
+
+**Pre-push insurance query** (run before `db push`, confirms nothing already suspended/ended exists
+that this batch would newly start gating mid-flight):
+
+```sql
+select status, count(*) from relationship group by 1;
+-- expect: only 'active' rows today — suspended/ended have never been reachable.
 ```
 
 ---
@@ -1245,6 +1786,51 @@ non-migration steps explicitly rather than sweeping them with the batch:**
 **How to close it:** open the Supabase dashboard → Auth → Email Templates → Invite and compare
 against `supabase/templates/invite.html`. If it matches, mark this item discharged here and say
 where it was checked. If it does not, paste it — that IS the step.
+
+### 4. HEL-84 relationship-write-gate — two edge functions · **OWED** · ⚠️ NOW ALSO CARRIES HEL-86
+
+> **UPDATED 2026-09-03 (HEL-86).** Both functions changed again, in the same two places this
+> item already covers, so this is still ONE redeploy of each — not a second, separate step. But
+> the reason to do it grew: as of commit `912b4bb`+ they no longer treat every gate error alike.
+> A deliberate suspension, a missing relationship row, and **a gate RPC that is not deployed at
+> all** are now three distinguishable outcomes; only the last logs at `console.error`. The HTTP
+> response stays 200 in every case, so nothing calling them needs to change.
+>
+> **Why that matters specifically for THIS deploy.** Until these two functions ship, the exact
+> failure mode HEL-86 was filed about is live and invisible: if `assert_relationship_writable`
+> is present but a function is stale, or vice versa, every Sella run silently skips at HTTP 200
+> and looks like a quiet week. The new `console.error` line is what makes a half-deploy visible
+> — which means the observability arrives with the deploy, not before it.
+>
+> New shared module `supabase/functions/_shared/relationshipGate.ts` (owns the RPC name, the
+> SQLSTATE and the message parsing in one place). Covered by 16 unit tests via a new
+> `supabase/functions/**/*.test.ts` glob in `vitest.config.ts`.
+>
+> ⚠️ **`deno check` cannot verify either index.ts in this repo, and could not before this
+> change either** — `jsr:@supabase/functions-js`'s own types pull `npm:openai@^4.52.5`, which is
+> not installed, so the check dies on line 1 of every edge function including untouched ones
+> (verified against `sella-intro` and against the pre-change committed file). The new shared
+> module DOES `deno check` clean on its own. Treat the two index files as unverified-by-tooling
+> and read the diff.
+
+Both `supabase/functions/sella-detect/index.ts` and
+`supabase/functions/sella-summarize/index.ts` gained a new call to
+`assert_relationship_writable` (see the migration batch above, migration 1) —
+placed before their idempotency-claiming inserts and Bedrock calls, so a
+suspended-relationship run fails before paying for either.
+
+**Non-migration cloud steps — REQUIRED for the gate to actually reach Sella's
+automated writes (do WITH the migration push, migrations first — same-deploy
+rule):**
+- `supabase functions deploy sella-detect`
+- `supabase functions deploy sella-summarize`
+
+**Live consequence if skipped:** the migrations alone don't break anything —
+the RPC just sits unused by the currently-deployed edge functions. But the
+gate is INCOMPLETE for automated writes until both are redeployed: Sella's
+detection/summarize runs would keep writing to suspended relationships via
+`service_role`, the exact automated-write class ADR 0008's Locked #3 ("no
+exemption for automated writes") exists to close.
 
 ### Ruled and NOT outstanding — recorded so the survey is not re-run
 

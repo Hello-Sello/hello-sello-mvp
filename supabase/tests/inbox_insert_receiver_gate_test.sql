@@ -245,6 +245,128 @@ BEGIN
 END $$;
 RESET ROLE;
 
-DO $$ BEGIN RAISE NOTICE 'HEL-75 inbox_insert receiver gate: ALL CELLS PASSED (A1-A5, B1-B4, C1, D1)'; END $$;
+-- ============================================================================
+-- §E — HEL-84: inbox_insert's relationship-write-gate term. A relationship
+--      SUSPENDED mid-suite refuses a NEW connect/pricing request onto that
+--      pair (AC3); a connect_person row is unaffected (no company pair to
+--      derive from — Invariant 8's NULL-passthrough exercised via the real
+--      no-company-pair path, not just the function's own unit test in
+--      assert_relationship_writable_test.sql); and a soft-deleted + live
+--      relationship pair (Invariant 13 / round 2 F4 regression guard) still
+--      resolves to exactly one row and inserts — using GreenLeaf<->Rheinland,
+--      NOT GreenLeaf<->StonePharm (E3 below already suspends that pair; this
+--      cell needs a genuinely ACTIVE one). Position: after D1, before the
+--      file's own ROLLBACK.
+-- ============================================================================
+
+-- E0 — GreenLeaf<->StonePharm's relationship id, via this suite's own
+--      canonical-pair idiom (matching accept_connection_request's own
+--      least/greatest). Not in _t today — looked up dynamically.
+CREATE TEMP TABLE _e ON COMMIT DROP AS
+SELECT id AS rel_id FROM public.relationship
+ WHERE company_a_id = LEAST((SELECT greenleaf FROM _t), (SELECT stonepharm FROM _t))
+   AND company_b_id = GREATEST((SELECT greenleaf FROM _t), (SELECT stonepharm FROM _t))
+   AND deleted_at IS NULL;
+GRANT SELECT ON _e TO authenticated;
+
+DO $$
+BEGIN
+  IF (SELECT rel_id FROM _e) IS NULL THEN
+    RAISE EXCEPTION 'FIXTURE: GreenLeaf<->StonePharm relationship not found for §E — seed drift';
+  END IF;
+  IF (SELECT status FROM public.relationship WHERE id = (SELECT rel_id FROM _e)) <> 'active' THEN
+    RAISE EXCEPTION 'FIXTURE: GreenLeaf<->StonePharm is not active at §E start — a prior suite/cell left it dirty';
+  END IF;
+END $$;
+
+-- E1 — flip. Runs privileged (RESET ROLE — authenticated lacks UPDATE on
+--      relationship, 20260823090000:89); a plain UPDATE as authenticated
+--      would itself raise before this cell ever reached inbox_insert.
+RESET ROLE;
+UPDATE public.relationship SET status = 'suspended' WHERE id = (SELECT rel_id FROM _e);
+
+-- E2 — the flip actually took, asserted before relying on it — a wrong/NULL
+--      derivation in E0 would otherwise make E3 below pass vacuously.
+DO $$
+BEGIN
+  IF (SELECT status FROM public.relationship WHERE id = (SELECT rel_id FROM _e)) <> 'suspended' THEN
+    RAISE EXCEPTION 'E2/flip FAIL: relationship status is % after the UPDATE, expected suspended',
+      (SELECT status FROM public.relationship WHERE id = (SELECT rel_id FROM _e));
+  END IF;
+END $$;
+
+-- E3 (AC3) — Alice tries a fresh connect/pricing request onto the
+--     now-SUSPENDED GreenLeaf<->StonePharm pair. Refused. Catches
+--     raise_exception (P0001), NOT this file's neighboring
+--     insufficient_privilege idiom (§B) — assert_relationship_writable's
+--     raise is not a table/RLS-privilege denial.
+SELECT set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', true);
+SELECT set_config('request.jwt.claims', '{"sub":"11111111-1111-1111-1111-111111111111","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+DO $$
+BEGIN
+  BEGIN
+    INSERT INTO public.pending_inbox_item (type, sender_person_id, sender_company_id, receiver_company_id, status, note)
+    SELECT 'connect', alice, greenleaf, stonepharm, 'pending', 'HEL84 E3 refused on a suspended pair' FROM _t;
+    RAISE EXCEPTION 'E3/AC3: a connect request landed on a company with a SUSPENDED relationship to the sender';
+  EXCEPTION
+    WHEN raise_exception THEN
+      IF SQLERRM LIKE 'E3/AC3%' THEN RAISE; END IF;
+      IF SQLERRM NOT LIKE '%relationship is suspended%' THEN
+        RAISE EXCEPTION 'E3/AC3: refused for the WRONG reason (%)', SQLERRM;
+      END IF;
+  END;
+END $$;
+RESET ROLE;
+
+-- E4 (Invariant 8, NULL-passthrough via the real no-company-pair path) — a
+--     connect_person row has receiver_company_id IS NULL by CHECK, so this
+--     gate's own "receiver_company_id IS NULL OR assert_relationship_
+--     writable(...)" term short-circuits to true unconditionally (§3's own
+--     stated safety: least/greatest collapse to an unsatisfiable predicate
+--     for the NULL case, so there is no side-effecting raise to short-
+--     circuit around here). Unaffected even though the SENDER's own company
+--     has a relationship this very transaction just suspended (E1) —
+--     connect_person never derives a company pair at all.
+SELECT set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', true);
+SELECT set_config('request.jwt.claims', '{"sub":"11111111-1111-1111-1111-111111111111","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+INSERT INTO public.pending_inbox_item (type, sender_person_id, sender_company_id, receiver_person_id, receiver_company_id, status, note)
+SELECT 'connect_person', alice, greenleaf, bob, NULL, 'pending', 'HEL84 E4' FROM _t;
+DO $$
+BEGIN
+  IF (SELECT count(*) FROM public.pending_inbox_item WHERE note = 'HEL84 E4') <> 1 THEN
+    RAISE EXCEPTION 'E4/Invariant8: a connect_person row (no company pair) was refused by the new relationship-write gate';
+  END IF;
+END $$;
+RESET ROLE;
+
+-- E5 (Invariant 13 / round 2 F4 regression guard) — a company pair with BOTH
+--     a soft-deleted and a live relationship row still resolves to exactly
+--     one row (the deleted_at IS NULL filter in §3's own derivation
+--     subquery) and an ordinary send still succeeds — no "more than one row
+--     returned by a subquery" error. GreenLeaf<->Rheinland, NOT GreenLeaf<->
+--     StonePharm — E1 above already suspended that pair; this cell needs one
+--     that is genuinely 'active'. The extra soft-deleted relationship row is
+--     inserted privileged: authenticated has INSERT revoked on relationship
+--     too (20260823090000:89), same constraint as the UPDATE above.
+RESET ROLE;
+INSERT INTO public.relationship (company_a_id, company_b_id, initiated_by_company_id, status, deleted_at)
+SELECT LEAST(greenleaf, rheinland), GREATEST(greenleaf, rheinland), greenleaf, 'ended', now() FROM _t;
+
+SELECT set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', true);
+SELECT set_config('request.jwt.claims', '{"sub":"11111111-1111-1111-1111-111111111111","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+INSERT INTO public.pending_inbox_item (type, sender_person_id, sender_company_id, receiver_company_id, status, note)
+SELECT 'pricelist_request', alice, greenleaf, rheinland, 'pending', 'HEL84 E5' FROM _t;
+DO $$
+BEGIN
+  IF (SELECT count(*) FROM public.pending_inbox_item WHERE note = 'HEL84 E5') <> 1 THEN
+    RAISE EXCEPTION 'E5/Invariant13: an ordinary request onto a pair with a soft-deleted + live relationship row was refused (or raised "more than one row") instead of succeeding';
+  END IF;
+END $$;
+RESET ROLE;
+
+DO $$ BEGIN RAISE NOTICE 'HEL-75 inbox_insert receiver gate: ALL CELLS PASSED (A1-A5, B1-B4, C1, D1, HEL-84: E1-E2 flip, E3 AC3, E4 Invariant8, E5 Invariant13)'; END $$;
 
 ROLLBACK;

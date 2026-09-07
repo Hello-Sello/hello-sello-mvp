@@ -1980,3 +1980,586 @@ same family: don't assume a security-relevant predicate does only the obvious th
 [[L-055]] (a subquery in an RLS policy runs as the calling role — same family: RLS mechanics
 are easy to mismodel when you're not looking directly at them), [[L-027]] (a gate is only as
 strong as the write path to its input — the confused-deputy half of this same ticket).
+
+---
+
+## L-058 · Closing a delivery gap on the function the ticket names doesn't close it on every function with the same effect
+
+**2026-08-25 · HEL-74 · caught by `critic`, first review round**
+
+**Trigger** — a ticket names one RPC as "the door that delivers X" and you gate that RPC. Before
+declaring the gap closed, ask: does anything ELSE in the codebase produce the same effect?
+
+**What happened.** HEL-74 asked for `send_deal` to refuse delivering a new deal onto a
+suspended/ended relationship — a straightforward re-emit with one added check, and it worked. But
+`confirm_detected_deal` (Sella's double-accept path) also births a card straight into
+`negotiation` — by design it must NEVER call `send_deal` (its own header says so: the caller is
+the confirmer, not the initiator, and `send_deal`'s initiator guard would reject it). The first
+draft's migration header scoped OUT `create_deal_draft`/`confirm_deal_change`/`sign_deal`
+deliberately and by name — and simply never considered that a second, independent delivery path
+existed at all. Nothing in the ticket's own text or the `send_deal` diff would have surfaced this;
+it only came up because a reviewer asked "what else in this codebase delivers a deal" as a
+question, not as a check against the diff.
+
+**The rule** — when a ticket gates one function against an effect ("deliver a deal," "grant a
+promotion," "mint a relationship"), grep for every OTHER function that produces the SAME effect
+before writing the migration header's scope paragraph. A scope paragraph that lists what it
+deliberately excludes is only trustworthy if it was built from a census of doors, not from the
+ticket's own vocabulary — the ticket names the door it found, not the doors it didn't know about.
+
+**See also** [[L-037]] (narrowing a read door needs a reader census first — same shape, applied to
+delivery/write effects instead of reads), [[L-057]] (a definer replacing a policy must re-import
+every clause, not just the one the ticket is about — same family: the diff you wrote is not the
+same question as "is the thing actually closed").
+
+---
+
+## L-059 · Reusing an existing page for a new caller class is only safe if you check what ELSE reads that same table without an explicit membership check
+
+**2026-08-25 · HEL-82 · caught by `critic` + `security`, both independently, first review round**
+
+**Trigger** — adding `OR is_hs_team()` (or any similar `OR <new-caller-check>`) to an existing
+RLS policy's `USING` clause, to let a new caller class reach an existing page/table.
+
+**What happened.** The first draft of HEL-82 needed an HS-team operator to view a relationship
+they aren't a party to. The instinct — reuse the existing `/connect/relationship/[id]` page rather
+than build a new one — was right (and came from direct feedback: don't build new UI when an
+existing page can absorb the change). The mechanism chosen to make that page work for HS staff —
+broadening `rel_all`'s `USING` with `OR is_hs_team()` — was wrong, for two independent reasons
+review found: (1) the page was unreachable anyway, since the whole `/connect` tree sits behind
+`requireVerified()`, which the seeded companyless HS account never passes; (2) even if reachability
+were fixed by giving HS staff a company, three OTHER relationship readers
+(`messaging/supabase/store.ts`, `messaging/supabase/connections.ts`,
+`basket/supabase/reads.ts`) have no explicit membership check of their own — they rely entirely on
+RLS scoping the row down to "my company's relationships" for them. Broadening the shared RLS
+predicate for one new caller class would have silently broadened what ALL THREE of those readers
+return, none of which expected a non-member row to ever appear.
+
+**Why it looked fine.** `rel_all` is the only policy on `relationship`, so broadening it looked
+self-contained — it changes what one table's RLS returns, full stop. The blast radius isn't in
+`relationship`'s own policy; it's in every OTHER query that trusts RLS on that table to imply
+"caller is a real member," which is a fact those queries never verify themselves.
+
+**The rule** — before broadening a shared RLS predicate to admit a new caller class, census every
+reader of that table for an implicit "RLS already proved membership" assumption, the same way
+[[L-037]] asks for a reader census before narrowing. When the new caller class doesn't belong in
+the general population the table's OTHER readers assume (an HS operator among ordinary company
+members), prefer a dedicated SECURITY DEFINER read (here, `list_relationships_admin()`, same shape
+as the existing `list_pending_verifications()`) scoped to exactly the new caller, over widening a
+policy every unrelated reader also depends on.
+
+**See also** [[L-037]] (the read-side twin of this — narrowing needs a census, broadening needs one
+too), [[L-038]] (a "single owner" of a rule is a claim about agreement with the other doors — this
+is that claim failing in the opposite direction, an addition rather than a narrowing).
+
+---
+
+## L-060 · A live smoke test against a real authenticated client is stronger evidence than SQL impersonation — and a real committed side effect, not a rollback
+
+**2026-08-25 · HEL-82 · self-caught, by the suite's own exact-count assertion on the next run**
+
+**Trigger** — verifying a built feature works by signing in as a real seeded user through the
+actual client library (not `SET LOCAL ROLE` + `set_config('request.jwt.claims', …)` inside a SQL
+transaction) against the local dev stack.
+
+**What happened.** Every SQL suite in this repo runs inside `BEGIN…ROLLBACK` — zero net seed
+mutation is the house discipline (L-033). A quick Node script using `@supabase/supabase-js` to
+sign in as the seeded HS reviewer and call `suspend_relationship`/`reactivate_relationship`
+directly was genuinely useful — it proved the real auth+JWT path reaches `is_hs_team()` and the
+RPCs correctly, which a SQL suite's `set_config` impersonation can approximate but never fully
+prove. But that script talks to the local Postgres/PostgREST stack over the network, as a real
+client — there is no transaction wrapping it, and nothing rolled it back. It left 4 real,
+committed `audit_log` rows behind. The very next run of `relationship_admin_suspend_end_test.sql`
+failed its own `B3/audit: expected 2 audit_log rows` assertion — count 4, from the suite's own 2
+rows plus the smoke test's leftover 2.
+
+**Why it wasn't obviously wrong at the time.** The script's whole job was to prove a real
+end-to-end path works, which by construction means it isn't sandboxed in a rollback the way the
+SQL suites are — that's the exact thing that makes it more convincing than a SQL suite. It's easy
+to reach for it as "just another verification step" and forget it carries a real side effect the
+SQL suites don't.
+
+**The rule** — a script that authenticates as a real user through the actual client library and
+calls real RPCs over the network is not covered by "the test suites already roll back." Either
+wrap it in the same discipline (open a transaction and roll it back — awkward across a network
+client, but not impossible for local Postgres) or, simpler on a local dev stack, run
+`supabase db reset` immediately after and re-verify the SQL suites before treating the branch as
+clean. Don't assume a passing SQL suite run AFTER a manual client-side probe is telling the truth
+about a fresh baseline — it might be counting the probe's own leftovers.
+
+**See also** [[L-033]] (zero net seed mutation is the suite discipline this script fell outside
+of).
+
+---
+
+## L-061 · Tests are what make dead code look alive
+
+**2026-08-25 · session `workflow_retro` · found by an inbound-import census, not by review**
+
+**Trigger** — before concluding a module is in use, or before a cleanup pass decides what to
+keep. Check **inbound imports**, not test coverage.
+
+**What I did** — audited `src/` for unreferenced files and found eight, totalling 1,111 lines.
+Two of them — `deals/lib/finalize.ts` and `deals/lib/lineEditing.ts` — were imported by
+**nothing except their own test files**, and those tests carried **23 passing assertions** that
+ran on every `vitest` invocation. They had survived several review passes and a slug rollup.
+
+**Why it wasn't obviously wrong at the time.** A file with no importer and no test reads as
+suspicious — someone deletes it. A file with 17 green tests reads as load-bearing, because green
+tests are the signal we are trained to trust. The tests didn't cause the rot; they **camouflaged**
+it. `DocumentsTab.tsx` and `ProductList.tsx` compounded it differently: their only surviving
+mentions were *stale comments in live files* (`deals/actions.ts:68`, `CardFront.tsx:14`), which a
+grep for the name finds and a human reads as evidence of use.
+
+**The rule** — "is this used?" is answered by inbound imports, and only by inbound imports. A test
+file is not an importer; a comment is not an importer. Verify a static scan is authoritative first
+(this repo has **zero** dynamic imports in `src/`, so a grep is), then delete and let the suite
+adjudicate: the unit count must fall by **exactly** the number of tests the deleted modules owned.
+497 → 474 = exactly 6 + 17 was the proof the cut was surgical; any other number means something
+live was touched.
+
+**The counter-case, which matters as much.** `getProductBatches()` also had zero callers and was
+**kept**. It is the real batch reader for a picker currently faking its options
+(`CardFront.tsx:224` — *"FRONTEND-ONLY mock option lists"*). Unreferenced code is either
+**superseded by something that shipped** (delete) or **the correct implementation of something
+currently faked** (keep, and file the wire-up). Deleting the second kind removes the good version
+and leaves the mock.
+
+**See also** [[L-013]] (a green suite proves nothing if it never runs), [[L-062]].
+
+---
+
+## L-062 · A severity word with four authors and no owner is not a severity word
+
+**2026-08-25 · session `workflow_retro` · found by mapping the term before changing the rule**
+
+**Trigger** — before tuning any rule that counts a term (`blocking`, `critical`, `ready`,
+`done`), find every place that term is *produced*, not just where it is consumed.
+
+**What I did** — the checker loop had failed to converge on eight consecutive tickets, and the
+dry-run's own series showed why the stopping rule could never fire: findings 11·15·15·14·15·14·12,
+blockers 5·8·4·6·6·8·4, over seven rounds. I diagnosed it as *"`adr-checker` doesn't define
+`blocking`"* and was about to fix that one file. Mapping the term first showed **four** agents
+emit `blocking` — `adr-checker`, `plan-checker`, `security`, `critic` — and **only `critic`
+defined it**, and only because it had been rewritten hours earlier the same day.
+
+**Why it wasn't obviously wrong at the time.** Every agent file looked complete on its own. Each
+said `Severity: blocking | note` and moved on, which reads as a convention being referenced rather
+than a definition being omitted. The gap is only visible when you line all four up. Meanwhile the
+orchestrator's rule — *"stop at the first round with zero NEW blocking findings"* — looked precise,
+because it named a specific severity. It was counting a word with four private meanings, and had
+never once been satisfied in roughly fifteen attempts.
+
+**Why the rule was unfixable without the definition.** With no threshold, anything a checker felt
+strongly about became `blocking`, so the count could not decay. The dry-run had already measured
+the real signal — *find-rate is flat, **severity** decays: leaks → silent failures → won't-run →
+behavioural edges → contracts/wording* — but the rule read the axis that does not move.
+
+**The rule** — a rule that counts a term owns that term. Give it exactly one definition, in one
+place, and **name the mirrors**. Here: a five-rung ladder owned by `PIPELINE.md` §10 and copied
+verbatim into all four agents, with each copy carrying a line saying where the owner is. The
+duplication is deliberate and declared, because an agent file is a system prompt and a threshold
+the checker does not hold in context is a threshold it will not apply — four *undeclared* copies
+is what that replaces, not what it creates.
+
+**See also** [[L-038]] (a "single owner" is a claim about agreement, not about file count),
+[[L-061]].
+
+---
+
+## L-063 · An approved ADR's own findings are authoritative — re-deriving a build plan's citations from scratch can silently undo them
+
+**2026-08-27 · slug 0026-relationship-write-gate · `/build` step 2/3 · caught by `plan-checker` round 1**
+
+**Trigger** — writing a `/build` plan that implements an already-approved ADR, and citing a
+function/table/policy the plan-writer re-verified independently rather than copying forward
+from the ADR's own Blast-radius / call-site table.
+
+**What I did** — ADR 0008's Blast-radius section, written and reviewed two rounds earlier
+in this same session, says explicitly: *"`propose_deal` was in an earlier draft of this
+list and is removed... the function was `DROP FUNCTION`ed in
+`20260724120800_drop_propose_edit_rpcs.sql`... Named here so `/build` doesn't write
+`create or replace function public.propose_deal(...)`, which would silently resurrect a
+`SECURITY DEFINER` door around `msg_all`'s own gate."* Writing the build plan minutes
+later, I re-grepped for `propose_deal` myself, found its `CREATE OR REPLACE` (real), did
+not check for a *later* `DROP`, and put it back in the plan's call-site table — the exact
+mistake the ADR's own text names by filename and explains the consequence of.
+
+**Why it was wrong** — I treated "cite the live files" as meaning "re-derive every fact
+from scratch," when the ADR had already done that derivation, been checked twice, and
+recorded the corrected answer with its reasoning. Re-deriving instead of copying forward
+doesn't add rigor — it discards a correction that already cost two review rounds and
+reintroduces the exact defect those rounds exist to prevent. A fresh grep is not automatically
+more reliable than a prior verified one; it's just a chance to repeat the same incomplete
+check (this time: "does the CREATE exist" without "does a later DROP exist").
+
+**The rule** — when a build plan implements an approved ADR, the ADR's Blast-radius / Locked
+/ call-site sections are the source of truth for "which functions/tables does this touch,"
+not a citation to re-verify from zero. Read them, copy the conclusion forward, and cite the
+ADR itself as the reason. Only re-derive when something has changed since the ADR was
+approved (a new commit landed, time has passed) — and even then, re-derive by checking
+whether the ADR's *specific claim* still holds, not by repeating the same search from
+scratch and hoping it's more careful this time.
+
+**See also** [[L-041]] (a dependency scan must match the widest shape of the relationship,
+not the common spelling — the same root cause: checking for existence and not for the thing
+that would invalidate it), [[L-045]] (a comment claiming what a migration does NOT do
+becomes a lie the moment a later migration does it — `propose_deal`'s drop is the mirror
+case: a citation claiming a function DOES exist becomes a lie the moment a later migration
+removes it).
+
+---
+
+## L-064 · A deny-test that catches on SQLSTATE alone can pass for the wrong reason — an invoker-rights function's 42501 is not proof of its own GRANT
+
+**2026-08-27 · slug 0024-c2c-thread-atomicity · `/ship` step 3 · caught by `security`**
+
+**Trigger** — writing a deny-test for a function that is deliberately NOT `SECURITY DEFINER`
+(runs with the caller's own privileges), where the test's pass condition is "the call raised
+`insufficient_privilege` (42501)."
+
+**What I did** — `accept_connection_request_status_guard_test.sql` §C proved
+`_resolve_or_create_c2c_thread`/`_resolve_or_create_p2p_thread` (both invoker-rights, both
+`REVOKE ALL FROM public, anon, authenticated`) are unreachable directly, by calling each as
+`anon` and as `authenticated` and catching `WHEN insufficient_privilege THEN v_denied :=
+true`. The comment even named the right precedent (`connection_consent_lockdown_test.sql`
+block 11) and the right anti-pattern to avoid (L-010's "a function born without a grant reads
+the same as one revoked, so don't grep `proacl`") — and still shipped a test that proves
+nothing, because it fixed the wrong half of that precedent.
+
+**Why it was wrong** — 42501 is a SQLSTATE, not a cause. `connection_consent_lockdown_test.sql`'s
+idiom is sound there because `accept_connection_request` is `SECURITY DEFINER`: a regressed
+grant runs the whole body as the owner and raises a *different* code (`P0001
+not_authenticated`, from the function's own internal check), so catching 42501 specifically
+proves the GRANT layer stopped the call before the body ever ran. Neither helper here is
+`SECURITY DEFINER` — each runs as the caller. Pull the REVOKE and the call does not succeed;
+it fails one level deeper, for an unrelated reason, at the identical SQLSTATE: `anon` has no
+`SELECT` on `chat_thread` (permission denied for table → 42501); `authenticated` passes the
+table check but fails `thread_all`'s RLS `WITH CHECK` on a bogus id (row-level security
+violation → 42501). Same exception class, same `v_denied := true`, same green. I copied the
+SQLSTATE half of a working idiom without re-deriving whether the *reason* it's sound
+transfers to a function with different privilege semantics — it doesn't, silently.
+
+**The rule** — a deny-test's pass condition must be tied to the specific mechanism it claims
+to guard, not to whatever exception class that mechanism happens to share with other,
+unrelated denial paths. For a `SECURITY DEFINER` function, catching a body-raised SQLSTATE
+that only the intact function's own logic produces is sound. For an invoker-rights function
+(or anything else where the exception a broken guard raises and the exception a working guard
+raises are the same code), add a privilege-level assertion beside the call —
+`has_function_privilege(role, function, 'EXECUTE')` for a GRANT, the RLS-policy equivalent for
+a `WITH CHECK` — so the test goes red on the actual regression, not on some other check that
+happens to fail first. Keep the call-and-catch too; it proves the end-to-end behavior the
+privilege check alone can't. RED-first this class of test specifically by removing the exact
+guard it claims to protect and confirming the suite actually fails — a passing suite that has
+never been run against its own absence is an assumption, not a result ([[L-013]]).
+
+**See also** [[L-010]] (the sibling half of this same idiom — a `proacl` grep is the wrong
+check because a never-granted function and a revoked one are indistinguishable; this entry is
+the wrong check on the OTHER side, an exception class that under-discriminates instead of a
+grep that over-trusts), [[L-013]] (run the runner, not just the test — the same root cause:
+a green result was trusted without being run against the failure it exists to catch).
+
+---
+
+## L-065 · A ticket parked as "blocked" is a claim with an expiry date, and nothing in this pipeline re-checks it — the blocker cleared a week ago and no one noticed
+
+**2026-09-03 · session 101 · HEL-67 Gap 2 · caught by reading the ticket, not by any tool**
+
+**Trigger** — any ticket deliberately left open with a recorded reason it cannot be built
+yet ("blocked on X", "needs a product ruling", "do not force"), where X is another ticket in
+the same backlog.
+
+**What happened** — HEL-67 Gap 2 (chat-message sender forgery) was ruled un-buildable on
+2026-08-25 for a genuinely good reason: three `authenticated` write paths legitimately wrote
+in someone else's name, so `sender_person_id = auth.uid()` would have broken connection-accept
+outright. The ticket said so precisely, named its blocker (HEL-68), and Muskan ruled "ship
+Gap 1 now, do not force Gap 2." All correct.
+
+**HEL-68 shipped on 2026-08-27. HEL-84 shipped the same day and removed the fourth path.**
+Between them they deleted `rollout.ts` entirely and moved the Sella-voiced pills into
+`announce_deal_event`. Every one of Gap 2's blockers was gone — and neither slug's `/ship`
+noticed, because neither was built with HEL-67 in mind. The unblocking was a side effect.
+`CLAUDE.md`'s security backlog listed six items and **did not list HEL-67 at all**; it was
+found only by pulling the full Linear team list and reading a High-priority ticket sitting in
+`In Progress` that the personal notes had dropped.
+
+**Why the existing machinery missed it** — the pipeline records a blocker in the BLOCKED
+ticket ("Gap 2 is blocked on HEL-68") and never in the BLOCKING one. HEL-68's own STATE, ADR
+and ship notes say nothing about what closing it releases, so nothing at ship time prompts
+the question. The dependency is written down exactly once, in the file that only gets read
+when someone already suspects the work is doable. That is backwards: the moment the fact
+becomes actionable is the moment the blocker closes.
+
+**The rule** — when a ticket is parked with a named blocker, write the reverse edge too: add
+a line to the BLOCKING ticket saying what unblocks when it closes, and use Linear's real
+`blocks`/`blockedBy` relation rather than prose so it shows up on the blocker's own page.
+At `/ship`, before a slug closes, ask one question — *what did this release?* — and check the
+backlog for tickets naming it. A "blocked" note with no reverse edge decays into a "wontfix"
+that nobody ever revisits; this one cost a week on a High-priority security item, and it was
+only luck that the next session read the ticket rather than trusting the summary in
+`CLAUDE.md`.
+
+**Corollary, learned the same session** — the personal `CLAUDE.md` backlog is a *summary*,
+and it had drifted twice: it omitted HEL-67 entirely and mis-described HEL-73 as "the e2e half
+of HEL-68" when HEL-73 is the shared-seed mutation ticket ([[L-033]]), already complete in the
+repo and stale-Backlog in Linear. Read the tracker, not the note about the tracker
+([[L-030]]'s shape, applied to issues instead of line numbers).
+
+**See also** [[L-030]] (a written pointer goes stale and must be re-derived, never trusted),
+[[L-033]] (the HEL-73 subject this entry's corollary corrects), [[L-013]] (a claim that has
+never been re-run against reality is an assumption, not a result).
+
+---
+
+## L-066 · An RLS bypass cannot be measured from inside the role being bypassed — the boundary under test also hides the evidence that it failed
+
+**2026-09-03 · session 101 · HEL-85 · caught by a guard cell, one iteration before it would have shipped green**
+
+**Trigger** — any test that proves a `SECURITY DEFINER` function does NOT write somewhere, by
+counting rows before and after a call. Especially when the thing being protected is a row the
+probe user is not allowed to read.
+
+**What I did** — the HEL-85 suite mints a private `deal_workspace` and has Dana (a relationship
+member, deliberately not a `deal_member`) call `confirm_deal_change`. §B counted
+`chat_message` rows in the deal thread before and after, from inside Dana's own session:
+
+```sql
+SET LOCAL ROLE authenticated;   -- Dana
+SELECT count(*) INTO v_before FROM public.chat_message WHERE thread_id = ...;
+PERFORM public.confirm_deal_change(...);
+SELECT count(*) INTO v_after  FROM public.chat_message WHERE thread_id = ...;
+IF v_after > v_before THEN RAISE EXCEPTION 'exploit'; END IF;
+```
+
+It reported `before=0, after=0` and passed. A privileged count on the same thread, in the same
+transaction, showed **2**. The write had landed. The suite was green on a live exploit.
+
+**Why it was wrong** — `can_access_thread` gates SELECT on `chat_message`. Dana cannot read that
+thread; that is the entire premise of the test. So she cannot see the row she just wrote either.
+The definer bypassed RLS to insert; RLS then hid the result from her. Both counts were `0` for the
+same reason the test existed: **the boundary being violated is also the boundary that reports on
+it.** A `0 → 0` delta was indistinguishable from a working gate, and would have stayed
+indistinguishable forever — the cell could never have gone red, for any regression, ever.
+
+**The rule** — split the actor from the observer. The probe user makes the call and nothing else;
+every count, every assertion, every read of what happened runs **privileged, outside the role
+under test** (in this repo: `RESET ROLE`, or a `pg_temp` helper invoked before the `SET LOCAL
+ROLE`). If the probe user must carry something out of her own block — a `SQLERRM`, a returned id —
+write it to a scratch table she has `INSERT` on and read it back from outside. Concretely: never
+put a `SELECT count(*)` that decides a security verdict inside a `SET LOCAL ROLE authenticated`
+block.
+
+**What actually saved it** — not review, and not the assertion itself. A separate `silent-pass`
+cell, added because [[L-064]] says a deny-test must prove WHY it passed:
+
+> *nothing landed AND nothing raised. The RPC neither wrote nor refused, so this cell is not
+> evidence of a gate.*
+
+That fired, and it was the only signal anything was wrong. The lesson generalises past this bug:
+a negative assertion needs a companion cell proving the mechanism was actually exercised, because
+"nothing happened" is what both success and total non-execution look like.
+
+**See also** [[L-064]] (a deny-test that catches on SQLSTATE alone can pass for the wrong reason —
+the same family: a pass condition that under-discriminates), [[L-013]] (a green never run against
+its own failure is an assumption), [[L-033]] (measure the fixture, don't assume it).
+
+---
+
+## L-067 · A hash cited in docs on a branch that rebases is a claim with a shelf life
+
+**2026-09-07 · slug 0027 cloud push · caught by a peer session's audit, then a follow-up sweep**
+
+**Trigger** — citing a git commit hash in a doc (`DECISIONS.md`, `STATE.md`, a sync file) as
+evidence something exists or was done, on a personal branch this project rebases regularly.
+
+**What happened.** A single rebase (this session's own T04 base-sync, onto `origin/dev`) orphaned
+five separate commit hashes cited across six files — `docs/decisions/DECISIONS.md`,
+`docs/team/sync/muskan.md`, `STATE.md` (twice), `PLAN-T01.md`, and `.planning/BACKLOG-ARCHIVE.md`
+(three sites, only one of which a peer session's audit had found). None were malicious edits — the
+content each citation pointed at was identical, only the pointer died
+(`git merge-base --is-ancestor <hash> HEAD` now fails for all five).
+
+**The rule.** Cite the migration filename, the commit subject line, or a decision-doc section
+heading instead of a bare hash wherever the citation needs to survive a rebase. A hash is fine for
+a same-session "I just did this, here's the receipt" reference; it is not durable across this
+project's own git workflow. When a hash citation IS found stale, don't just fix the cited site —
+grep the whole repo for that same hash, since one rebase orphans every citation of it at once, not
+just the one someone happened to notice.
+
+---
+
+## L-068 · Never manually retype a large body for diffing — ask the database instead
+
+**2026-09-07 · slug 0027 cloud push, diff-against-live for `confirm_deal_change` · self-caught
+before it caused a real incident**
+
+**Trigger** — verifying a `create or replace function`'s live body against a local migration by
+copying the live text (from an MCP tool result, a JSON blob, a query result) into a file to run
+`diff` against.
+
+**What happened.** Manually retyping a ~280-line live function body into a file for `diff` silently
+dropped an entire 17-line block (a thread-resolution step, present in the real body). The resulting
+diff looked like a real, alarming discrepancy — production apparently missing logic the migration's
+own header assumed existed. It was actually a transcription error, not a production anomaly. Caught
+only because the finding was surprising enough to double-check with a narrow, database-computed
+boolean (`pg_get_functiondef(...) LIKE '%select dc.relationship_id into v_rel%'`) before acting on
+it, rather than trusting the hand-copied diff.
+
+**The rule.** Never manually transcribe a large text body between contexts for comparison. Ask the
+database (or the source of truth directly) a narrow, automatable question instead — "does this
+substring exist," "what's the character length," "does removing this text produce a match" —
+computed server-side, not retyped by hand. A surprising diff on hand-copied text is grounds for
+suspecting the copy, not the target.
+
+**See also** [[L-024]] (`diff` exits 0 on differing files here — never branch on it alone; the same
+family of "trust the tool's verdict, not your eyes" mistake, in the opposite direction).
+
+---
+
+## L-069 · `rtk`'s output corruption reaches `find`/`ls`/`grep`, not just `git`/`tsc`
+
+**2026-09-07 · slug 0027 T04/T05 build + cloud push · confirmed directly, multiple times**
+
+**Trigger** — running `find`, `ls`, or `grep` (bare, hook-rewritten) during any verification step
+whose result will be trusted — a file-existence check, a directory listing, a pattern search.
+
+**What happened.** `find` returned zero matches for a file confirmed to exist via `/usr/bin/find`
+moments later. `ls` printed unrelated eza-style summary output ("N files, N dirs") instead of a
+file listing. `grep` returned the tool's own `--help` text instead of search results. HEL-80
+already tracked this collapse for `git`/`tsc`/`vitest`/`eslint`/`psql`; this session confirms the
+same failure mode reaches basic filesystem tools too — the class is wider than HEL-80's own list.
+
+**The rule.** During any `/build` or `/ship` verification step, call the real binary path
+(`/usr/bin/find`, `/bin/ls`, `/usr/bin/grep`, etc.) explicitly rather than the bare command, for
+every tool in this class — not only the ones HEL-80 already named. Treat a suspiciously clean or
+suspiciously empty result from any wrapped shell command as a signal to re-run via the direct path
+before trusting it, especially right before a decision that's expensive to get wrong.
+
+---
+
+## L-070 · A Linear ticket's title is not its scope — pull the full description before verifying or closing
+
+**2026-09-07 · Present-page ticket triage (Marcel's DEV-10x tickets), worktree
+`wt-manage-shop-dnd` · caught by Muskan, self-corrected same turn**
+
+**Trigger** — verifying whether a Linear ticket is "done," or closing one, based on a title
+pulled from a list search (`list_issues` without `description` in `fields`, or a title that
+already reads like a full sentence).
+
+**What happened.** DEV-111's title was "Description in Present" — read as fully self-explanatory,
+so I delegated its verification to a sub-agent with just that title and closed it as Done once the
+description-editing feature checked out. Its actual Linear `description` field, never pulled,
+held four more asks (uniform box sizing, an expand arrow, draggable links, and an entire
+"Manage shops per country" sub-feature with tags and certificate uploads) — none of it built. The
+ticket had to be reverted to In Progress. Two OTHER tickets in the same batch (DEV-119, DEV-101)
+had genuinely empty `description` fields, so verifying against the title alone was correct for
+them — the mistake was treating "title looks complete" as proof, rather than checking.
+
+**Why it was wrong.** I trusted a title's apparent completeness as a proxy for a description
+being empty, instead of confirming it. A short or absent description is a fact about the ticket,
+not a guessable property of how the title reads.
+
+**The rule.** Before verifying a ticket against code, or closing it, call `get_issue` (or include
+`"description"` in a `list_issues` `fields` array) and read the actual field — every time, even
+when the title reads as a complete sentence. A ticket with a real, empty `description` (confirm by
+reading it) is the only case where the title-as-full-spec shortcut is safe.
+
+---
+
+## L-071 · A shared local Supabase instance across worktrees can silently revert another session's applied state
+
+**2026-09-07 · Present-page migration (`import_products` pack_sizes), worktree
+`wt-manage-shop-dnd` alongside a parallel session on `claude/muskan/work` · confirmed directly**
+
+**Trigger** — running `supabase db reset`, or applying a migration file directly to the local
+Postgres container, from ANY worktree, while another session/worktree of the same project might
+be running against the same local Supabase stack.
+
+**What happened.** `supabase migration list --local` showed a migration (`20260907090000`,
+another session's T06 work) already applied to the live local DB with no matching file in this
+worktree's `supabase/migrations/` — proof the two sessions share ONE Docker-based Postgres
+instance (`supabase_db_hello-sello-design`), not one per worktree. Applying a new migration
+directly via `docker exec ... psql < file.sql` appeared to succeed (`CREATE FUNCTION` printed),
+but a follow-up `pg_get_functiondef` check showed the OLD function body still live — the other
+session had restarted the shared DB container in between (confirmed via `docker ps`, "Up 6
+seconds"), silently discarding the direct SQL write. Re-applying after the container reported
+healthy again fixed it. A `supabase db reset` in this window would have been worse: replaying only
+THIS worktree's migration files onto the shared DB would have deleted the other session's already-
+applied, not-yet-committed `20260907090000` migration entirely.
+
+**Why it was wrong.** I treated the local Supabase stack as owned by my worktree, when it's
+actually one shared mutable resource two sessions were both writing to. A `CREATE FUNCTION`
+success message confirmed the statement ran, not that the result was still there moments later.
+
+**The rule.** Before any `supabase db reset` (never do this from a worktree without asking — it
+can delete another session's uncommitted-but-applied migrations) or direct SQL write to the local
+DB: check `docker ps` for the shared container's uptime/health as a signal of recent
+restarts, and re-verify the change landed via a direct query (`pg_get_functiondef`, `\d`, etc.)
+rather than trusting the apply command's own success output. Extends [[L-024]]/[[L-069]]'s "trust
+the tool's verdict, not your eyes" family to shared infrastructure, not just wrapped CLI output.
+
+---
+
+## L-072 · A fresh `git worktree` has none of the source directory's gitignored setup — env files, `node_modules`, nothing
+
+**2026-09-07 · Present-page fixes, worktree `wt-manage-shop-dnd` set up mid-session · confirmed
+directly, twice**
+
+**Trigger** — creating a fresh `git worktree add` and immediately trying to run the dev server or
+a test runner in it, assuming it behaves like a second checkout of the same project.
+
+**What happened, twice.** (1) `next dev` in the new worktree threw `Your project's URL and Key are
+required to create a Supabase client!` — `.env.local` is gitignored, so `git worktree add` never
+created it; had to `cp` it from the source directory and restart the dev server (env vars are read
+once at boot, a running process won't pick up a file that appears later). (2) `npx vitest` failed
+with `Cannot find module '.../node_modules/vitest/vitest.mjs'` — `node_modules` doesn't exist in a
+fresh worktree either. A symlink to the source directory's `node_modules` fixed `vitest`/`tsc`, but
+Turbopack (`next dev`) then failed outright — `Symlink [project]/node_modules is invalid, it points
+out of the filesystem root` — Turbopack's own sandboxing rejects a `node_modules` symlink that
+resolves outside the worktree root, unlike webpack/vitest/tsc, which don't care. Had to remove the
+symlink and run a real `npm ci` (safe here since the lockfile matched the source directory's
+exactly — worth confirming that before reusing a symlink at all).
+
+**The rule.** A new worktree only has what git tracks at that commit — nothing gitignored comes
+with it. Before running anything in one: `cp` every `.env*` file the app needs from the source
+checkout, and either run a real `npm ci` (safest, works with every tool including Turbopack) or,
+only as a faster shortcut for non-Turbopack tools (`vitest`, `tsc`, `eslint`), symlink
+`node_modules` from a directory with a lockfile confirmed to match.
+
+---
+
+## L-073 · A repointed coverage citation is a new claim — verify it against the target's actual assertions, not the source's old wording
+
+**2026-09-07 · slug 0027 T06 · caught by `/code-review` and `critic`, independently, same round**
+
+**Trigger** — deleting a file and relocating/repointing any comment that cites "this behavior is
+covered by [file:lines]" to point at a surviving file instead, during a test-file consolidation.
+
+**What happened.** `PLAN-T06.md` scoped a ported test case (P2) to cover exactly three cells from
+the file being deleted — "A2-3a/3c/3e … **NOT** 3b/3d, already covered by this file's own C3" —
+a correct, deliberate exclusion. Two paragraphs later, the same plan instructed `test-writer` to
+repoint a separate stale citation ("the person arm's return value … covered by
+`deliver_deal_test.sql:248-251, case A2-3b`") to read "covered by this file's own case P2." That
+is exactly the A2-3b cell P2 had just been scoped to exclude. Worse, the assumption behind the
+exclusion — "C3 already covers it" — was never checked either: C3 calls `send_deal` as a bare,
+result-discarding `SELECT`, same as P2 did before the fix. Neither case had ever captured the
+return value. Two independent reviewers caught the same gap from different angles
+(`/code-review` read the diff cold; `critic` cross-checked TICKETS.md against the shipped file).
+
+**Why it was wrong.** I treated a citation-repoint as a mechanical find-replace — "this content
+used to live in the deleted file, so point at wherever it landed now" — instead of as a new claim
+that has to be independently true. I never re-derived it from what the target case (P2) or the
+case I'd delegated it to (C3) actually asserts; I picked a target by proximity to the recent
+discussion, not by reading its assertions. I also never cross-checked the citation against a
+contradicting sentence I had written two paragraphs earlier in the same document — a single
+self-consistency pass over the plan would have caught it before `test-writer` ever ran.
+
+**The rule.** When repointing a "covered by X" citation during a file consolidation or deletion,
+re-derive the claim from the target's actual assertions (read the DO block, not the banner comment
+above it) — never carry the old citation's wording forward on the assumption that *something* in
+the new location must satisfy it. If the plan itself contains a nearby sentence that scopes the
+same content OUT of the case you're about to cite, that is a direct contradiction to resolve before
+the plan ships, not two independent facts that happen to coexist.
+
+**See also** [[L-002]] (the shape one level up: synchronized copies of the same fact drifting
+apart over time, rather than a citation being wrong from the moment it's written).

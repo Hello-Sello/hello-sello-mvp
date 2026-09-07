@@ -1,4 +1,13 @@
 # 0022 buyer-shop-view — work order
+
+> ⚠️ **The `g4/` screenshots were DELETED 2026-08-25 — deliberately, by Muskan's ruling,
+> as repo housekeeping.** 49 PNGs went; `docs/` dropped 18M → 3.6M. **No gate moved and no
+> verdict changed** — this is not a stage advance. Every G4 evidence table below still cites
+> its frames by filename (e.g. `02b-seller-present-full-1440x2400.png`); **those files no
+> longer exist.** Read each citation as *the frame this verdict was ruled on*, not as a file
+> you can open. The written findings are the surviving record and they stand unaltered.
+> Recoverable from git if ever needed: `git show 55aef9f^:<path>`.
+
 lane:   FULL
 stage:  triage ✅ · spec ✅ (G1) · prototype ✅ (G2) · design ✅ (G3 2026-08-19) ·
         build: **T00 ✅** · **T03 ✅** · **T01 ✅** · **T02 ✅ (G4 2026-08-21)** ·

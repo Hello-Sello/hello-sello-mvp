@@ -396,6 +396,11 @@ export function mapDiscoverShopRow(r: ShopRow): ShopProduct {
     // the raw `metadata->'pack_sizes'` jsonb, so the finite-and-positive filter
     // lives in exactly one place and the two shops cannot disagree.
     packSizes: parsePackSizes({ pack_sizes: r.pack_sizes }),
+    // NOT the same as pack_sizes above: the discover RPC does not project
+    // badge_code (a v0 seller/Present-only field so far), so it stays null on
+    // every Discover card — not an omission, deliberate, pending a follow-up
+    // if buyer-facing badges are wanted on this surface too.
+    badge_code: null,
   };
 }
 

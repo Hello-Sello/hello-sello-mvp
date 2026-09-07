@@ -24,10 +24,12 @@ import { usePersistedCollapse } from "./use-persisted-collapse";
  * to bottom: the Hello Sello wordmark + a state-aware collapse toggle, the 7
  * surfaces, and the account profile card.
  *
- * Connect is an ACCORDION parent: its children (Chat / Connection Request /
- * Relationship) open INDENTED below it joined by a connector-line tree, while
- * every other surface stays visible. When the rail is collapsed to an icon strip
- * the children move into a glass FLYOUT popover to the right of the Connect icon.
+ * A surface with `children` renders as an ACCORDION parent: its children open
+ * INDENTED below it joined by a connector-line tree, while every other
+ * surface stays visible. When the rail is collapsed to an icon strip the
+ * children move into a glass FLYOUT popover to the right of the parent icon.
+ * No surface uses this today (Connect did, until 2026-09-07 — see
+ * `surfaces.ts`'s own header for why) — the mechanism stays for reuse.
  *
  * Collapse is persisted in localStorage via usePersistedCollapse (the shared
  * SSR-safe useSyncExternalStore hook - no setState-in-effect, no hydration

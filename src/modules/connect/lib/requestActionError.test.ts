@@ -71,4 +71,52 @@ describe("requestActionError", () => {
       "This request has already been accepted.",
     );
   });
+
+  // ---- HEL-84 (0026-relationship-write-gate): assert_relationship_writable's
+  // two raise texts, reachable through this door via createPairInboxItem/
+  // requestProductPricing now that inbox_insert carries its own
+  // relationship-write-gate term (PLAN-HEL-84.md §3/§7).
+  it("a suspended relationship's raise says so in plain language, not the raw function name", () => {
+    const e = {
+      message: "assert_relationship_writable: relationship is suspended — no new writes",
+    };
+    expect(requestActionError(e)).toBe(
+      "This relationship is suspended — new messages and requests aren't allowed until it's reactivated.",
+    );
+  });
+
+  it("an ended relationship's raise matches the same branch — one status-agnostic message covers both", () => {
+    // The raise format is `relationship is % — no new writes`, substituting the
+    // actual status — 'ended' must match the same branch as 'suspended', not
+    // fall through to the generic message for lack of an exact-string match.
+    const e = {
+      message: "assert_relationship_writable: relationship is ended — no new writes",
+    };
+    expect(requestActionError(e)).toBe(
+      "This relationship is suspended — new messages and requests aren't allowed until it's reactivated.",
+    );
+  });
+
+  it("the relationship-status branch still matches when PostgREST wraps the text over lines", () => {
+    const e = {
+      message: "assert_relationship_writable: relationship is suspended\n— no new writes",
+    };
+    expect(requestActionError(e)).toBe(
+      "This relationship is suspended — new messages and requests aren't allowed until it's reactivated.",
+    );
+  });
+
+  it("assert_relationship_writable's not-found raise reuses INBOX_RLS's wording — the same 'can't tell existence from access' shape", () => {
+    const e = { message: "assert_relationship_writable: relationship not found" };
+    expect(requestActionError(e)).toBe("This company is no longer available.");
+  });
+
+  it("a DIFFERENT function's superficially similar 'relationship...not...found' raise does not borrow this sentence", () => {
+    // suspend_relationship's own raise (20260825170000_relationship_admin_
+    // suspend_end.sql:124) — an HS-team authorization/state error, not
+    // assert_relationship_writable's probe-safe "not found" refusal. Guards
+    // against a regex widened past the exact new raise shape.
+    const e = { message: "relationship not active or not found" };
+    expect(requestActionError(e)).toBe("We couldn't complete that. Please try again.");
+  });
 });

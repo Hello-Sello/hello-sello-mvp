@@ -12,7 +12,7 @@
  */
 import { describe, it, expect } from "vitest";
 // RED until 07-03 — locationFilter.ts is created by the grid + tabs plan.
-import { filterByLocation, moveBefore, applyProductOrder } from "./locationFilter";
+import { filterByLocation, moveRelative, applyProductOrder } from "./locationFilter";
 
 const products = [
   { id: "p1", name: "Aurora Haze 24", location: "Germany" },
@@ -50,23 +50,31 @@ describe("filterByLocation (UX-02 location tabs, D-06)", () => {
   });
 });
 
-describe("moveBefore (in-shop reorder, client-only)", () => {
+describe("moveRelative (in-shop reorder, client-only)", () => {
   it("moves a later card to sit just before an earlier one", () => {
-    expect(moveBefore(["a", "b", "c", "d"], "d", "b")).toEqual(["a", "d", "b", "c"]);
+    expect(moveRelative(["a", "b", "c", "d"], "d", "b", "before")).toEqual(["a", "d", "b", "c"]);
   });
 
   it("moves an earlier card to sit just before a later one", () => {
-    expect(moveBefore(["a", "b", "c", "d"], "a", "c")).toEqual(["b", "a", "c", "d"]);
+    expect(moveRelative(["a", "b", "c", "d"], "a", "c", "before")).toEqual(["b", "a", "c", "d"]);
   });
 
   it("dragging onto the very first card moves it to the front", () => {
-    expect(moveBefore(["a", "b", "c"], "c", "a")).toEqual(["c", "a", "b"]);
+    expect(moveRelative(["a", "b", "c"], "c", "a", "before")).toEqual(["c", "a", "b"]);
+  });
+
+  it("dropping AFTER the last card moves it to the end — the only way to make a card last", () => {
+    expect(moveRelative(["a", "b", "c"], "a", "c", "after")).toEqual(["b", "c", "a"]);
+  });
+
+  it("dropping a card after the one it already sits behind leaves order unchanged", () => {
+    expect(moveRelative(["a", "b", "c"], "b", "a", "after")).toEqual(["a", "b", "c"]);
   });
 
   it("is a no-op when dragged and target are the same, or either is missing", () => {
-    expect(moveBefore(["a", "b", "c"], "b", "b")).toEqual(["a", "b", "c"]);
-    expect(moveBefore(["a", "b", "c"], "z", "a")).toEqual(["a", "b", "c"]);
-    expect(moveBefore(["a", "b", "c"], "a", "z")).toEqual(["a", "b", "c"]);
+    expect(moveRelative(["a", "b", "c"], "b", "b", "before")).toEqual(["a", "b", "c"]);
+    expect(moveRelative(["a", "b", "c"], "z", "a", "before")).toEqual(["a", "b", "c"]);
+    expect(moveRelative(["a", "b", "c"], "a", "z", "before")).toEqual(["a", "b", "c"]);
   });
 });
 

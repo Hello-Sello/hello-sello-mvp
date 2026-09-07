@@ -23,7 +23,7 @@
  *   - D-27 / D-28 / T-07-08-03: the seller lands the ONE invoice artifact (the
  *     finalize precondition); an external non-member cannot read it (workspace
  *     isolation). The seller-only finalize GUARD + the pure gate are covered by
- *     the finalizeDeal server action + finalize.test.ts unit tests.
+ *     the finalizeDeal server action and the finalize_deal RPC.
  *   - AUDIT-01: a directly-created deal (createDeal, the living-deal-card birth
  *     path) writes a deal.created audit.
  *   - OBS-3 / SELL-01 / D-18: a committed change resolves via confirm_deal_change
@@ -305,7 +305,7 @@ test('group chat: every invited member (including a non-deal-party company) is a
  * close artifact (uploaded_by_company_id = the seller, the finalize precondition);
  * an external non-workspace company cannot read it (dealart_all workspace
  * isolation). The seller-only finalize GUARD and the pure finalize gate live in the
- * finalizeDeal server action + finalize.test.ts (unit).
+ * finalizeDeal server action and the finalize_deal SECURITY DEFINER RPC.
  */
 test('D-27/D-28: the seller lands the invoice artifact; a non-member cannot read it', async () => {
   const sellerEmail = CID.alice === sellerCompanyId ? 'alice@greenleaf.test' : 'bob@stonepharm.test'

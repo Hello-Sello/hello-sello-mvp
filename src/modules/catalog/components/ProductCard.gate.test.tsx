@@ -66,6 +66,7 @@ function makeProduct(overrides: Partial<ShopProduct> = {}): ShopProduct {
     bundle_price_per_gram: null,
     tiers: [],
     packSizes: [],
+    badge_code: null,
     ...overrides,
   };
 }

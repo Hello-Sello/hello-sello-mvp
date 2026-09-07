@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { runSummary, type SummaryLine } from "../_shared/sella/summarize.ts";
+import { checkRelationshipWritable, logGateOutcome } from "../_shared/relationshipGate.ts";
 
 // sella-summarize (Sella 4d): the "why it changed" summary. An edit is PERSON-WAITING
 // (a human just clicked Update), so by the placement rule it is triggered INLINE by the
@@ -68,6 +69,22 @@ Deno.serve(async (req: Request) => {
   const vNew = body?.version ?? (card.version as number);
   const vOld = vNew - 1;
   if (vOld < 1) return json({ deal_card_id: cardId, version: vNew, skipped: "no prior version (creation, not an edit)" }, 200);
+
+  // HEL-84 (0026-relationship-write-gate): gate BEFORE the deal_card_log
+  // reads below, runSummary (the Bedrock call), and the deal_card_log insert
+  // — a suspended/ended relationship must not pay for either on a run that
+  // was always going to be refused. Both targets (dealThread + p2pThread)
+  // share this one relationship (see PLAN-HEL-84.md §10), so one call covers
+  // both potential posts.
+  // HEL-86: see the twin comment in sella-detect. The skip and the 200 are
+  // unchanged; the three reasons behind them are now distinguishable, and a
+  // gate that is simply not deployed logs at error level instead of passing for
+  // an ordinary suspension.
+  const gate = await checkRelationshipWritable(supabase, card.relationship_id);
+  if (gate.kind !== "writable") {
+    logGateOutcome("sella-summarize", gate, { deal_card_id: cardId, version: vNew });
+    return json({ deal_card_id: cardId, version: vNew, skipped: "relationship not writable", gate: gate.kind }, 200);
+  }
 
   // idempotency: summarize each version at most once. The probe MUST match the
   // author the log is written under below (OBS-3: 'system'), or it would never

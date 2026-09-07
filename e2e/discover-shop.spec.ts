@@ -45,7 +45,7 @@
  */
 import { test, expect, type Page } from "@playwright/test";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { countPricingRequests, pricingRequestNote } from "./fixtures/two-company";
+import { countPricingRequests, resetPricingRequestMessage, countPricingRequestMessages } from "./fixtures/two-company";
 import { LOCAL_SUPABASE_URL, LOCAL_SERVICE_KEY } from "./fixtures/local-supabase";
 
 const BUYER_EMAIL = "bob@stonepharm.test";
@@ -203,13 +203,25 @@ test("a price_public=false card (AUR-1A) shows Request-pricing — proves ShopVi
  * (`ShopView` never passes `onRequestPricing` — plan "What is already
  * standing").
  *
- * The row is asserted via SQL (`countPricingRequests` / `pricingRequestNote`),
+ * The row is asserted via SQL (`countPricingRequests` / `countPricingRequestMessages`),
  * not the seller's own inbox UI — round 2's design (sign in as the seller,
  * count her inbox rows) is not executable: `proxy.ts` redirects a signed-in
  * user away from `/login` and there is no sign-out helper anywhere in `e2e/`,
  * so the identity switch would hang; and `playwright.config.ts` runs one
  * worker against one shared DB, so a bare inbox count would read high across
  * tests. Serial: tests 1 and 2 share Bob's per-product ask on AUR-1A.
+ *
+ * T09 (0027) correction to criterion 2: Bob (StonePharm) is CONNECTED to
+ * GreenLeaf, so his ask no longer cuts a `pricelist_request` ticket at all —
+ * T02's connected-company path posts a `chat_message` straight to the c2c
+ * thread instead (`request_product_pricing_c2c`). Test #2 below now proves
+ * the MESSAGE path (`countPricingRequestMessages`), not the ticket path; the
+ * ticket path stays proven exactly as before by Test #3's unconnected asker
+ * (Eva/Bavaria), via `countPricingRequests`. The old Test #2 also proved D3's
+ * note names the product ("true to the seller's eye") via `pricingRequestNote`
+ * — that specific proof no longer lives in this file; it moved to
+ * `inbox-accept.spec.ts`'s rewritten Test 2, which asserts the exact message
+ * text landed in the c2c chat. Not lost, relocated.
  */
 test.describe("T04 — per-product request pricing (HEL-58)", () => {
   test.describe.configure({ mode: "serial" });
@@ -227,7 +239,8 @@ test.describe("T04 — per-product request pricing (HEL-58)", () => {
     await expect(card.getByText(/pricing requested/i)).toBeVisible({ timeout: 15000 });
   });
 
-  test("#2 — criterion 2: a CONNECTED buyer's ask lands as a pricelist_request naming the product (Bob, AUR-1A)", async ({ page }) => {
+  test("#2 — criterion 2: a CONNECTED buyer's ask posts directly to the c2c chat, no ticket (Bob, AUR-1A)", async ({ page }) => {
+    resetPricingRequestMessage("StonePharm", "AUR-1A");
     await signInBuyer(page);
     await page.goto(`/discover/${GREENLEAF_ID}`);
 
@@ -235,15 +248,11 @@ test.describe("T04 — per-product request pricing (HEL-58)", () => {
     await card.getByTestId("request-pricing").click();
     await expect(card.getByText(/pricing requested/i)).toBeVisible({ timeout: 15000 });
 
-    // The write proof: exactly one live row. (Test #1 may already have
-    // created it — the per-product dup-guard then correctly keeps this at 1
-    // rather than adding a second, so the count is stable either way.)
-    expect(countPricingRequests("StonePharm", "AUR-1A")).toBe(1);
-
-    // D3: the note names the product — this is what makes criterion 2 true
-    // "to the seller's eye" (a bare `metadata` key renders nowhere).
-    const note = pricingRequestNote("StonePharm", "AUR-1A");
-    expect(note).toContain("Pedanios 31/1 COS-CA");
+    // The write proof, now at the message layer (T02, 0027): connected buyers
+    // never cut a ticket — exactly one live pricing-ask message, naming the
+    // product, posted to the existing c2c thread instead.
+    expect(countPricingRequestMessages("StonePharm", "AUR-1A")).toBe(1);
+    expect(countPricingRequests("StonePharm", "AUR-1A")).toBe(0);
   });
 
   test("#3 — criteria 1 + 3: a NON-CONNECTED buyer's ask carries metadata, and the dup-guard is per-product (Eva, AUR-1A then AUR-1F)", async ({ page }) => {

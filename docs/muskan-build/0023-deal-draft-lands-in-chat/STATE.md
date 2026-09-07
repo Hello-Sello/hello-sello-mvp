@@ -1,6 +1,15 @@
 # 0023 deal-draft-lands-in-chat — work order
+
+> ⚠️ **The `g4/` screenshots were DELETED 2026-08-25 — deliberately, by Muskan's ruling,
+> as repo housekeeping.** 15 PNGs went; `docs/` dropped 18M → 3.6M. **No gate moved and no
+> verdict changed** — this is not a stage advance. Every G4 evidence table below still cites
+> its frames by filename (e.g. `02-buyer-addressee-closed-whole-company.png`); **those files no
+> longer exist.** Read each citation as *the frame this verdict was ruled on*, not as a file
+> you can open. The written findings are the surviving record and they stand unaltered.
+> Recoverable from git if ever needed: `git show 55aef9f^:<path>`.
+
 lane:   FULL
-stage:  design ✅  →  build: **T01 ✅ CLOSED** → **T02 / HEL-64 ✅ CLOSED** → **T03 / HEL-65 ✅ CLOSED (G4 auto)** → **T04 / HEL-66 🔨 IN BUILD** (plan rev 1, `/build` step 3 — the LAST ticket)   ·   G2 /prototype SKIPPED (Muskan, 2026-08-25)
+stage:  design ✅ → build ✅ (T01-T04 all closed) → ship ✅ (PR #177 + #180) → **G5 WALKED 2026-08-25 — 🏁 SLUG COMPLETE**   ·   G2 /prototype SKIPPED (Muskan, 2026-08-25)
 branch: claude/muskan/work — no feature branch (Muskan's call, 2026-08-18)
 
 ## Seed
@@ -124,8 +133,8 @@ The seed named two entries. Only one is in scope:
 - `docs/muskan-build/0023-deal-draft-lands-in-chat/RESEARCH.md` — prior-art sweep **+ the
   `## Approaches (design)` report (5 options, A recommended) appended at /design step 1**
 - `docs/PRD/0023-deal-draft-lands-in-chat.md` — the WHAT, approved at G1.
-  ⚠️ **owes two amendments from G3** — `:131`'s edge-case row (§8.9) and AC1/AC2's
-  wording (§8.7). Until T04 lands them the PRD contradicts the ADR.
+  ✅ **T04 landed both G3 amendments** — `:131`'s edge-case row (§8.9, rewritten to the ruled
+  text) and AC1/AC2's wording (§8.7). No longer contradicts the ADR.
 - `docs/architecture/adr/0006-deal-draft-lands-in-chat.md` — the HOW, **accepted at G3**
 - `docs/architecture/adr/ADR-INDEX.md` — one-line entry added (/design step 5)
 - `docs/muskan-build/0023-deal-draft-lands-in-chat/TICKETS.md` — T01–T04, **all four now
@@ -740,6 +749,17 @@ is not this slug's job, but nothing else is tracking it.
   currently no way to disconnect at all" is a PRODUCT gap, bigger than HEL-74, and unowned.**
 
 ## Gate log
+- **SHIP + G5 — 2026-08-25. 🏁 SLUG 0023 COMPLETE.** PR #177 (T01-T04 + 3 security migrations)
+  merged → main → production. G5 live walk (Marcel/Aurora buyer → Canadian Craft seller,
+  `hello-sello-mvp.vercel.app`): all 5 walk-table items confirmed — default addressee "Whole
+  company" with named people if connected · company-addressed send → c2c only, zero inbox
+  items · person-addressed send → p2p only, zero c2c bleed · Deal-tickets lens shows no new
+  entry · pill opens the correct deal card. **G5 caught one real bug, outside the walk table:**
+  picking a person still landed the deal in the company chat — the exact seam `visual-verifier`
+  (T02 G4) and `critic` (T03 N8 / HEL-76) had both already flagged and routed as "offered, not
+  filed" because no AC covered it. Root cause was the two-step create-draft-then-open-card flow
+  losing the picked recipient before the separate Send click; fixed by sending immediately on
+  draft creation (`5aa6984`). Shipped as its own PR #180, which also closes HEL-76.
 - **T04 / HEL-66 — G4 AUTO 2026-08-25. 🏁 SLUG 0023 IS BUILD-COMPLETE (T01-T04).** Docs-only diff,
   nothing renders; all three carve-outs checked, none live. Budgets: `tests 0/2` ·
   `blocking-findings 1/2` · `G4 rounds 1`. **`tsc`/`eslint` deliberately NOT run** — no code in the

@@ -157,19 +157,9 @@ test('a c2c-chat-created deal lands in the recipient\'s c2c chat directly — no
 
     // ---- Bob's (the RECEIVING company's) Deal-tickets lens shows nothing new ----
     // There is no ticket to find any more (T01 deleted send_deal's call to
-    // deliver_deal on this arm), so the ONLY correct state is the lens's
-    // positive empty-state string — asserted AFTER load finishes, never
-    // before (an absence taken on a loading page passes just as readily as on
-    // an empty one).
-    await bobPage.goto('/connect/inbox')
-    await expect(bobPage.getByText('Loading inbox…')).toBeHidden({ timeout: 15000 })
-    await bobPage.getByRole('button', { name: /deal tickets/i }).click()
-    await expect(
-      bobPage.getByText('No deal tickets waiting to be picked up.', { exact: false }),
-    ).toBeVisible({ timeout: 15000 })
-    await expect(bobPage.getByText('Pedanios 31/1 COS-CA')).toHaveCount(0)
-    // the row fact behind the UI check above: zero pending_inbox_item rows for
-    // this card (T01 AC 2 / M2).
+    // deliver_deal on this arm). T09 dropped the redundant /connect/inbox
+    // UI-lens check that used to sit here — this is now the SOLE proof: zero
+    // pending_inbox_item rows for this card (T01 AC 2 / M2).
     expect(countTicketsForCard(cardId)).toBe(0)
 
     // ---- the pill is in BOB's OWN c2c chat already — no claim needed to reach it ----

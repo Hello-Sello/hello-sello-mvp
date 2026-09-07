@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { runDetection } from "../_shared/sella/detect.ts";
+import { checkRelationshipWritable, logGateOutcome } from "../_shared/relationshipGate.ts";
 import type { DetectionMessage, SellerProduct } from "../_shared/sella/context.ts";
 import {
   decideSurface,
@@ -96,6 +97,25 @@ Deno.serve(async (req: Request) => {
     .eq("id", threadId)
     .single();
   if (tErr || !thread) return json({ error: `thread not found: ${tErr?.message ?? "no row"}` }, 404);
+
+  // HEL-84 (0026-relationship-write-gate): gate BEFORE the idempotency claim
+  // (sella_detection insert, below) and the Bedrock call (runDetection) — a
+  // suspended/ended relationship must not pay for either on a run that was
+  // always going to be refused. This also means NO sella_detection memory row
+  // is written for a suspended-relationship run, unlike every other outcome
+  // of this function, which always writes one — a distinct, deliberate fact,
+  // not a gap in the memory trail.
+  // HEL-86: the skip is unchanged (still fails closed, still HTTP 200 — a
+  // non-2xx would drive pgmq/pg_cron into a retry loop against a condition that
+  // will not change). What changed is that the THREE reasons for it are no
+  // longer one indistinguishable "error": a deliberate suspension, a missing
+  // relationship row, and a gate that is not deployed at all now log
+  // differently and say so in the response body. Only the last is an error.
+  const gate = await checkRelationshipWritable(supabase, thread.relationship_id);
+  if (gate.kind !== "writable") {
+    logGateOutcome("sella-detect", gate, { thread_id: threadId });
+    return json({ thread_id: threadId, skipped: "relationship not writable", gate: gate.kind }, 200);
+  }
 
   // PERSON messages only - the actual buyer/seller negotiation. Sella's own lines
   // (deal_detected, intro) and system lines (connection_established) are NOT part of the
