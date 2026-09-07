@@ -36,7 +36,9 @@ content has a factual base rather than marketing filler:
 ## Functional requirements
 
 1. The hero `<h1>` reads **ONE SECURE SPACE FOR EVERY B2B DEAL**.
-2. The hero subhead carries Marcel's subtitle verbatim (see AC 2).
+2. ~~The hero subhead carries Marcel's subtitle verbatim (see AC 2).~~
+   ⚠️ **SUPERSEDED at G3, 2026-09-07 (ADR 0010 D5).** The subtitle ships **corrected**, not
+   verbatim — `platform` (not `plattform`) and an em dash (not a hyphen). See AC 2.
 3. §4 is recast from benefit framing ("Why Hello Sello / Built for safe B2B trade") to capability
    framing: creating offers and orders, and sending deals and orders to all your customers and
    suppliers.
@@ -72,9 +74,19 @@ JS mounts as a `"use client"` island, as `Reveal` and `CookieBanner` already do.
 
 1. Logged out, open `/` → the page has exactly one `<h1>` and it reads
    "ONE SECURE SPACE FOR EVERY B2B DEAL".
-2. The paragraph directly below that `<h1>` reads: "Turn daily conversations into structured deals
-   - together. Your fully EU GDPR compliant AI plattform for buyers and sellers to trade with
-   encrypted chat. All data is hosted in Germany."
+2. ⚠️ **SUPERSEDED at G3, 2026-09-07 (ADR 0010 D5) — walk the corrected string below, not the
+   struck one.** Muskan ruled both of Marcel's typos corrected, so this criterion's original
+   verbatim quote would fail against a page that is right.
+
+   ~~"Turn daily conversations into structured deals - together. Your fully EU GDPR compliant AI
+   plattform for buyers and sellers to trade with encrypted chat. All data is hosted in Germany."~~
+
+   **The string that ships, and the one G4/G5 walk** (note `platform` and the em dash):
+
+   > Turn daily conversations into structured deals — together. Your fully EU GDPR compliant AI
+   > platform for buyers and sellers to trade with encrypted chat. All data is hosted in Germany.
+
+   *(This is also what invariant M2 and `landing.spec.ts` case 14 bind to.)*
 3. Scroll to §4 → its heading reads "What you can do on Hello Sello", and its cards name creating
    offers and orders, and sending deals to customers and suppliers.
 4. Continue scrolling → a section headed "How your data is protected" appears after the

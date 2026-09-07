@@ -23,7 +23,7 @@ import { CookieBanner } from "./_landing/CookieBanner";
 export const metadata: Metadata = {
   title: "Hello Sello - B2B pharma trade, connected",
   description:
-    "Hello Sello is the B2B marketplace for verified companies. Discover trusted partners, connect safely with no cross-company leaks, and turn conversations into documented deals.",
+    "One secure space for every B2B deal. Verified buyers and sellers create offers and orders, send them to every partner, and trade in encrypted chat hosted in Germany.",
 };
 
 /**

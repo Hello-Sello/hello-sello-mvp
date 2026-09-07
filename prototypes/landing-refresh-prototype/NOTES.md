@@ -51,7 +51,7 @@ Two PRD constraints are already provable here, before any React is written:
   switcher toggles the same thing by hand. Measured, not screenshotted — per `LEARNINGS.md` L-025,
   where a CSS fix that looked correct in review did nothing.
 
-## ⚠️ AMENDED TWICE AT `/design` — C IS NEITHER FULL-BLEED NOR PILLS (Muskan, 2026-09-07)
+## ⚠️ AMENDED THREE TIMES — C IS NEITHER FULL-BLEED NOR PILLS, AND §4's COPY HAS MOVED
 
 **Read this before using anything below as a spec, and before `visual-verifier` compares the live
 page to `variant-C.png`.** Everything in this file that says C is a *full-bleed* band —
@@ -70,9 +70,24 @@ treatment on C's dark card. §7a ships taller than anything in this prototype. R
 § 5 reaches B2B advertising claims and expects them to be substantiable, and the grounding
 sentences already existed and were already verified in the PRD.
 
+**A THIRD amendment, added at `/build` T01 (2026-09-07) — §4's CARD COPY. Read this before
+comparing §4 against `?variant=C` or `variant-C.png`: two of the three card titles that shipped
+are NOT the strings this prototype draws.**
+
+| Card | This prototype (`index.html:362-367`) | **What shipped** | Why |
+|---|---|---|---|
+| 1 | `Create offers and orders` | *(unchanged)* | — |
+| 2 | `Send to every customer and supplier` — **singular** | **`Send to all your customers and suppliers`** — *plural* | `.claude/rules/product.md` makes the PRD beat the prototype. PRD FR3, Marcel's seed, ADR M3 and TICKETS AC 3 all say plural; this file was the only source saying singular. Invariant M3's test asserts `/customers and suppliers/i`, which the singular can never satisfy |
+| 3 | `Trade with verified partners` | **`Verified partners only`** | ADR D6: that is the card's real existing title (`ValueProps.tsx:13`), kept verbatim. **The paraphrase below at `:91` is a string that exists nowhere in the repo** |
+
+⚠️ **`visual-verifier` must compare §4's copy against the shipped titles above, not against this
+file or the PNG.** Pointed at `?variant=C` it would report a false failure on card 2 — the same
+class of false failure D3's "Consequence for G4" section exists to prevent.
+
 **Still valid from C:** the dark gradient palette, the EU circle of twelve gold stars around the
-lock, and §4 landing on 3 cards. **`variant-C.png` is superseded on containment AND on the claim
-treatment** — it remains an accurate reference for palette, ring geometry and type only.
+lock, and §4 landing on **3 cards** (the *count*, not the *copy*). **`variant-C.png` is superseded
+on containment, on the claim treatment AND on §4's card titles** — it remains an accurate reference
+for palette, ring geometry and type only.
 
 Also corrected: the check output at `:43` records `stars=9` for C. That run predates the EU-circle
 amendment — `index.html:346-351` builds `Array.from({length:12})`, so C has **twelve**.
@@ -88,8 +103,10 @@ recoloured for the dark band. C's original shield is dropped.
 The ring is EU-flag-correct: 12 stars, equal 30° spacing, each counter-rotated so it stays
 point-up as the circle turns. A slow 44s rotation; static under reduced motion.
 
-**§4 lands on 3 cards** — Marcel's two capabilities plus "Trade with verified partners" kept from
-today's `ValueProps`.
+**§4 lands on 3 cards** — Marcel's two capabilities plus the card kept from today's `ValueProps`.
+⚠️ **An earlier version of this line called that card "Trade with verified partners". That string
+exists nowhere in the repo** (ADR D6). Its real title is **`Verified partners only`**
+(`ValueProps.tsx:13`), and that is what shipped — see the third amendment above.
 
 ### Still open on the winning variant
 
