@@ -2,7 +2,7 @@
 
 lane:   FULL
 branch: claude/muskan/work
-stage:  spec ✅ → prototype ✅ → design ✅ → build ✅ (T01 ✅ → T02 ✅ → T03 ✅ → T04 ✅ → T05 ✅ → T06 ✅ → T07 ✅ → T08 ✅ → T09 ✅) → ship (in progress — Step 2 gate GREEN, Step 3 security scan next)
+stage:  spec ✅ → prototype ✅ → design ✅ → build ✅ (T01 ✅ → T02 ✅ → T03 ✅ → T04 ✅ → T05 ✅ → T06 ✅ → T07 ✅ → T08 ✅ → T09 ✅) → ship (in progress — Steps 1-4 done, migrations LIVE, security scan CLEAN — Step 5 PR next)
 
 ## /ship log
 - 2026-09-07 — 5 commits landed (T06-T09 + a live-feedback fix flattening Connect's sidebar
@@ -21,6 +21,33 @@ stage:  spec ✅ → prototype ✅ → design ✅ → build ✅ (T01 ✅ → T02
   refresh/` appeared mid-ship — a fresh `/triage` result (Marcel's Linear DEV-164), clearly from
   a separate, parallel Muskan session sharing this same working directory. Not touched, not
   committed, no file overlap with anything in this commit sequence.
+- 2026-09-07 — **Step 4 (migrations) done.** Both pending migrations — 0027/T06's
+  `20260907090000_drop_deliver_deal_claim_deal_ticket.sql` and the parallel Present/Manage-Shop
+  session's `20260907140000_import_products_pack_sizes.sql` (same branch, same push, both
+  DDL-only, no data-write ask-rule stop) — applied to production (`byipusuthdlskdxoexkt`) via
+  `apply_migration`, history stamps repaired to their filenames' own timestamps, pre/post-flight
+  verified directly against the live database (not inferred from local parity or migration-header
+  claims): T06's drop confirmed by a live call-shape census (0 rows) before AND after; `import_products`'s
+  replacement body diffed against the live `pg_get_functiondef` before applying (differs by exactly
+  the documented `pack_sizes` addition); grants and security advisors checked clean after. Full
+  record: `docs/deploy/cloud-migrations-pending.md`, "🔴 READ FIRST (2026-09-07, later same day)".
+  Committed `35f9563`, pushed. **Same-deploy rule is now an open window**: migrations are live,
+  app code is not yet merged/deployed — closes at Step 5.
+- 2026-09-07 — **Step 3 (security scan) — CLEAN, re-run.** The session that ran it originally
+  was compacted before its findings were written to this file, and this session's own recollection
+  of a "near-miss" `announce_deal_event`-area finding could not be verified after compaction — so
+  rather than act on an unverifiable memory, re-ran the Claude Security "scan changes" pass fresh
+  against the branch's full diff vs `origin/dev` (everything this PR carries: slugs 0022-0027 +
+  the parallel Present/Manage-Shop work), split across 3 parallel sub-reviews (SQL migrations ·
+  application code · edge functions) to keep the ~1.8MB diff out of context. **Zero findings at
+  confidence ≥8.** Specifically re-traced the `assert_relationship_writable` guard chain through
+  every `CREATE OR REPLACE` in the refactor migrations (the exact "predicate silently dropped"
+  failure shape this repo has hit twice before, most recently 0026's `announce_deal_event` fix) —
+  clean. Also independently verified: `deliver_deal`/`claim_deal_ticket` had zero live callers
+  before the drop; `request_product_pricing_c2c` derives the caller's company server-side from
+  `auth.uid()`, not client input; admin relationship actions are gated by `is_hs_team()` inside
+  the RPCs, not just the route redirect; the pack-sizes migration adds no new `SECURITY DEFINER`
+  surface. **Step 3 and Step 4 both done — Step 5 (PR) next.**
 
 ## Seed
 Muskan, 2026-08-31, via `/triage`: "deletion of connection request page inside connect"
