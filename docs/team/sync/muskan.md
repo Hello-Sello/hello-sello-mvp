@@ -56,13 +56,14 @@ module), T08 (nav/CTA removal), T09 (5 e2e spec rewrites) — ~62 changed/new fi
 committed yet (not asked to). Local HEAD == `origin/claude/muskan/work` (`1f258ff`) — the
 uncommitted work sits cleanly on top, zero drift from origin otherwise.
 **Cross-session note (2026-09-07):** a parallel session in `../wt-manage-shop-dnd`
-(`claude/muskan/manage-shop-dnd-fix`, also branched from `1f258ff`) asked to merge its
-Present/Manage-Shop work into `claude/muskan/work`. Confirmed zero file overlap with 0027's
-work. Safe for it to push directly to `origin/claude/muskan/work` (a remote-ref update, not a
-local checkout — git already blocks checking out a branch that's live in another worktree) —
-this session's LOCAL branch will show "behind origin" afterward, harmless until this session's
-own commit+push, which will need a `pull --rebase` first. Not fetched/rebased yet as of this
-note.
+(`claude/muskan/manage-shop-dnd-fix`, also branched from `1f258ff`) merged its Present/Manage-Shop
+work (`049683d` — drag-and-drop reorder, "Additional pack sizes," Origin+Region/Badge on
+ProductCard, + `20260907140000_import_products_pack_sizes.sql`) into `claude/muskan/work` and
+pushed. **`origin/claude/muskan/work` is now `21a6973`** (a merge of `8ce7967`, this sync commit,
+with `049683d`) — independently verified: clean merge, 16 files touched, zero overlap with 0027's
+work. This session's LOCAL branch is still at `1f258ff` (pre-both commits) with the same ~62
+uncommitted files on top — harmless; **next `pull --rebase` before this session's own commit+push
+will rebase onto `21a6973`**, one extra upstream commit, same zero-overlap guarantee holds.
 **Linear issue in progress:** none.
 **Shared files locked: none — all released.**
 
