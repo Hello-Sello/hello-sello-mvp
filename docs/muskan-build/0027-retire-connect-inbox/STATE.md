@@ -230,8 +230,9 @@ before D2's app code. ADR §6 supersedes `PRD:61`, which states the reverse.
   (hook-rewritten to `rtk git status`) reported
   `supabase/migrations/20260903110000_promotion_status_gate.sql` as
   untracked with an unrecorded decision; `/usr/bin/git` (bypassing the hook)
-  shows it's actually committed at `11e8769`, decision recorded
-  `DECISIONS.md:2259`. False alarm, corrected. Reinforces **HEL-80** — the
+  shows it's actually committed (as `20260903110000_promotion_status_gate.sql`
+  — filename, not the commit hash, which went stale across a later rebase),
+  decision recorded `DECISIONS.md:2259`. False alarm, corrected. Reinforces **HEL-80** — the
   rtk collapse trap now confirmed to hit plain `git status`, not just the
   tools already listed there.
 - `plan-checker` round 1 on `PLAN-T01.md`: REVISE — 1 blocking (a wrong
@@ -250,8 +251,9 @@ before D2's app code. ADR §6 supersedes `PRD:61`, which states the reverse.
   e2e (Playwright) skipped for this ticket: backend-only SQL change, no
   e2e spec exercises the deleted branch.
 - ⚠️ **New debt surfaced, not caused by T01:** HEL-83's
-  `20260903110000_promotion_status_gate.sql` (committed `11e8769` same
-  session, immediately before T01's build started) added a
+  `20260903110000_promotion_status_gate.sql` (committed same session,
+  immediately before T01's build started — filename is the durable
+  citation, the original commit hash went stale across a later rebase) added a
   `deal_card.status <> 'negotiation'` guard to the promotion RPCs. Two
   sibling suites' shared fixture (`deal_line_item_insert_lockdown_test.sql`,
   `deal_promotion_write_lockdown_test.sql` — both pick a card with no status

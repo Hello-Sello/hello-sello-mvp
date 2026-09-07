@@ -12,7 +12,9 @@
 ruling appended; `docs/deploy/cloud-migrations-pending.md` — `20260903110000` ledgered.)
 ⚠️ `design_oo27` is mid-write in this same tree on `docs/muskan-build/0027-*` — untouched here.
 
-**HEL-83 built** (commit `11e8769`, **local only**). Muskan ruled: only `negotiation`.
+**HEL-83 built** (`20260903110000_promotion_status_gate.sql` — filename, not the commit hash,
+which already went stale once across a rebase; **pushed to production 2026-09-07**, app code via
+PR #184). Muskan ruled: only `negotiation`.
 `offer_promotion` + `accept_promotion` gated; `decline_promotion` deliberately NOT (a gated
 decline would strand a pending promotion forever). UI drops Accept rather than disabling it.
 

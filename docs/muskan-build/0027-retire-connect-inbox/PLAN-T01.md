@@ -53,8 +53,9 @@ concrete, load-bearing basis for I-M2, not an assumption.
 
 New file: `supabase/migrations/20260903120000_confirm_detected_deal_drop_ticket_branch.sql`
 (picked to sort after the latest committed migration, `20260903110000_promotion_status_gate.sql`
-(commit `11e8769`, unrelated HEL-83 work, decision recorded `DECISIONS.md:2259`
-— not ours to touch, timestamp chosen to not collide with it).
+(unrelated HEL-83 work — filename is the citation, not the commit hash, which went stale across
+a later rebase; decision recorded `DECISIONS.md:2259`) — not ours to touch, timestamp chosen to
+not collide with it).
 
 `create or replace function public.confirm_detected_deal(...)` — full body
 verbatim from `20260827130000`'s live definition, with lines 182-185 deleted

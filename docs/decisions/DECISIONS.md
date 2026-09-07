@@ -2256,5 +2256,8 @@ generalises: **gate what changes the deal, never the exit.**
 no decision doc, and that is part of why this rule went unenforced for two months. It is restated
 above so it is findable here from now on.
 
-Built as `supabase/migrations/20260903110000_promotion_status_gate.sql` (commit `11e8769`,
-local-only at the time of writing; cloud push is Muskan's).
+Built as `supabase/migrations/20260903110000_promotion_status_gate.sql` — filename is the durable
+citation, not the commit hash (this branch rebases; a hash cited here already went stale once,
+see `docs/deploy/cloud-migrations-pending.md` for that history). **Pushed to production
+2026-09-07**, together with its app-code half (`PromotionTrack.tsx`/`CardFront.tsx`, PR #184) —
+see the ledger's "🔴 READ FIRST (2026-09-07)" for the full trail.
