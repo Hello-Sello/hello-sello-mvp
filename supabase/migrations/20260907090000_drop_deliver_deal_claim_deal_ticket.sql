@@ -1,0 +1,49 @@
+-- ============================================================================
+-- T06 (0027-retire-connect-inbox) · drop deliver_deal and claim_deal_ticket
+-- ----------------------------------------------------------------------------
+-- Lane A's company-delivery-ticket spine (deliver_deal writes a claimable
+-- 'deal_card' pending_inbox_item; claim_deal_ticket lets a receiving-company
+-- member pick it up) retires with this slug: D3 (T03) never surfaces
+-- deal_card rows in Discover's Requests list, D5 (T05, live) backfilled
+-- every existing pending deal_card ticket to 'accepted', and D1 (T01, live)
+-- removed the only remaining caller of deliver_deal
+-- (confirm_detected_deal's ticket branch).
+--
+-- Pre-drop census, matched on CALL SHAPE not name occurrence (a bare
+-- ILIKE '%deliver_deal%'/'%claim_deal_ticket%' returns false positives —
+-- accept_connection_request and send_deal both name these functions in
+-- comments inside their bodies):
+--   select proname from pg_proc
+--   where prosrc ~* '(perform|select)\s+public\.(deliver_deal|claim_deal_ticket)\s*\(';
+--   -- 0 rows, run against local Postgres before writing this migration.
+--
+-- The regex alone has a blind spot: it cannot see the assignment call
+-- shape (v_x := public.fn(...), a real idiom this codebase uses — see
+-- create_deal_draft's own callers) or an unqualified call. Zero callers
+-- is proven here by a SECOND, broader query instead:
+--   select proname from pg_proc
+--   where prosrc ilike '%deliver_deal%' or prosrc ilike '%claim_deal_ticket%';
+--   -- exactly 3 rows: claim_deal_ticket (itself), accept_connection_request,
+--   -- send_deal — the latter two read directly and confirmed comment-only.
+-- Every function that so much as MENTIONS either name is individually
+-- accounted for, which is a stronger guarantee than the call-shape regex
+-- alone.
+--
+-- Signatures copied from the defining/latest-replacing migrations:
+--   deliver_deal(uuid)       - 20260720095000_deliver_deal.sql,
+--                               re-emitted unchanged in signature by
+--                               20260827140000_deliver_deal_relationship_write_gate.sql
+--   claim_deal_ticket(uuid)  - 20260720110000_claim_deal_ticket.sql
+--
+-- I-J5's residual risk: nothing but this one-time census stops a future
+-- migration re-introducing a caller. No automated guard added for it.
+--
+-- src/modules/messaging/supabase/store.ts:580-584 still calls
+-- claim_deal_ticket via .rpc() as of this migration — unreachable given no
+-- pending deal_card row exists and no sanctioned writer can create one
+-- (see PLAN-T06.md for the full argument and its one named caveat),
+-- removed by T07, not this ticket.
+-- ============================================================================
+
+DROP FUNCTION IF EXISTS public.deliver_deal(uuid);
+DROP FUNCTION IF EXISTS public.claim_deal_ticket(uuid);
