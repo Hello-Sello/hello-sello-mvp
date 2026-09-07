@@ -99,10 +99,6 @@ finding total** (T01's plan, caught before any code was written), **zero** again
 23 review findings: **13 fixed**, 1 rejected with reasoning, 9 carried to G4.
 Commits `423b6f5` · `51d884b` · `5268f09`. **48 screenshots + one GIF** in `g4/`.
 
-**T01 closed the build loop without spending a single budget unit.** Five review findings were
-fixed inside the same pass (which is one fix round, not five), one was rejected with reasoning, and
-the rest are G4 notes. Commits: `423b6f5` (code) · `51d884b` (review + 21 G4 screenshots).
-
 **Reviewers routed for this diff:** `/code-review high` + `critic` **only**. `security` is **not**
 routed — ADR §4 and §7b both record S1-S8 as genuinely N/A (no migration, no RLS, no RPC, no auth,
 no server action; the only route touched is `/`, already public, its D-01 redirect unchanged).
