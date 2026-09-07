@@ -2,8 +2,9 @@
 
 lane:   STANDARD
 branch: claude/muskan/work
-stage:  design ✅ → **build — T01 code-complete + G4-staged ✅ · T02 IN PROGRESS**, round 1
-        T01 → T02 back to back; **ONE G4 for both**, at the end. Neither ticket has passed a gate.
+stage:  design ✅ → **build ✅ COMPLETE (T01 + T02) → ⏸ G4 OWED, then `/ship`**
+        Both tickets built, reviewed and G4-staged. **NO GATE HAS BEEN PASSED.** The diff renders,
+        so per the skill G4 is Muskan's and is never self-passed. One combined walk for both.
 
 ## Seed
 Marcel, via Linear DEV-164 "LANDINGPAGE" (2026-07-24), routed by Muskan 2026-09-07 via /triage:
@@ -86,11 +87,17 @@ amendment, not at the raw prototype.**
 
 **Round 1 opened 2026-09-07** (session `build_0028`). Budgets per ticket, unspent:
 
-| | T01 (DEV-178) — **spent** | T02 (DEV-179) — in progress |
+| | T01 (DEV-178) | T02 (DEV-179) |
 |---|---|---|
-| `tests` | **0/2** — green on the first run | 0/2 |
-| `blocking-findings` | **0/2** — zero blocking from any reviewer | 0/2 |
-| `G4 rounds` | 1 (not yet walked) | 1 (not yet walked) |
+| `tests` | **0/2** — green on the first run | **0/2** — green on the first run |
+| `blocking-findings` | **0/2** — zero blocking | **0/2** — zero blocking |
+| `G4 rounds` | 1 — **not yet walked** | 1 — **not yet walked** |
+
+**Both tickets closed the build loop without spending a single budget unit.** Across the whole
+slug: `plan-checker` ×1, `/code-review high` ×2, `critic` ×2, `visual-verifier` ×2 — **one blocking
+finding total** (T01's plan, caught before any code was written), **zero** against shipped code.
+23 review findings: **13 fixed**, 1 rejected with reasoning, 9 carried to G4.
+Commits `423b6f5` · `51d884b` · `5268f09`. **48 screenshots + one GIF** in `g4/`.
 
 **T01 closed the build loop without spending a single budget unit.** Five review findings were
 fixed inside the same pass (which is one fix round, not five), one was rejected with reasoning, and
@@ -283,3 +290,35 @@ genuinely new GDPR/security section, confirmed nowhere on the page today (`Trust
 logo strip, `SocialProof.tsx` is testimonials/metrics). IN SCOPE. No source assets exist for the
 stars/locks motif — /spec --amend should note it's a buildable CSS/SVG animation, not a video,
 so scope stays achievable without waiting on Marcel for footage.
+
+---
+
+## ⏸ G4 — OWED. Nine items, one walk, both tickets.
+
+**Nothing here is a defect blocking the build.** Both tickets are green with zero blocking
+findings. These are the calls the pipeline is not allowed to make for you. Evidence: `REVIEW.md`
+(full reasoning) and `g4/` (48 screenshots + `t02-lock-rotation.gif`).
+
+| # | Call | Where |
+|---|---|---|
+| 1 | 🔴 **"All data is hosted in Germany" is proven only for the DATABASE.** No `vercel.json`, no `preferredRegion`, no region in `next.config.ts` — the Next server functions run in Vercel's default region unless the dashboard overrides it. **UWG § 5** exposure. Fix is infra (pin the region) or copy (narrow the claim) | `Hero.tsx:39` |
+| 2 | 🔴 **The §7a padlock rotates** — on its side at 11s, inverted at 22s. `.dpb-core` inherits the ring's spin; the twelve stars are counter-rotated and the core is not. **Faithful to the prototype, which has the same omission** — so it is a reproduced prototype bug, not a build error, and `variant-C.png` being static means an approval from it could not have shown this. One-rule fix documented in `REVIEW.md`. **Recommend fixing** | `g4/t02-lock-rotation.gif` |
+| 3 | **The 44s cycle is invisible except through that bug.** 12 stars at 30° spacing, each counter-rotated upright ⇒ the star field's visual period is **3.67s, not 44s** (phases 30° and 60° are pixel-identical to 0°). Static, the ring reads as the EU flag; in motion the stars read as a slow shimmer. Bears on **J3** | — |
+| 4 | **§4's orphan row spans 640-1023px**, not just 768 — worst at 1023px. `HowItWorks.tsx:37` solves the identical 3-card problem next door with `sm:grid-cols-3`. One class, but the ADR authorised only the `lg` value | `ValueProps.tsx:37` |
+| 5 | **§4's eyebrow is a literal prefix of its own heading** — `WHAT YOU CAN DO` above `What you can do on Hello Sello`. The page's only such pair. Faithful to the prototype | `ValueProps.tsx:32-33` |
+| 6 | **`Hero.tsx:13` ships false** — still says "copy is interim placeholder framing (D-15)". **The ADR contradicts itself:** header `:8` says 0028 amends D-15; `:406-408` says confirmation is owed and G3 never gave it. Something is owed either way | `Hero.tsx:13` |
+| 7 | **Two more §7a departures from variant C, neither in the ADR:** the eyebrow `Security & compliance` (not in C at all) and the type scale (h2 30px vs C's 40px at 1440) | `DataProtection.tsx` |
+| 8 | **§7a is 1252px tall at 375px** — ~1.5 phone viewports for one section. The real mobile cost of D4's grid | `g4/t02-live-s7a-375-FINAL-ring220.png` |
+| 9 | **Tile border opacity** — tiles gained a 1px hairline because `bg-white/5` measured **1.01:1** against the card (an invisible boundary). `border-white/15` was chosen conservatively; the exact value is yours | `DataProtection.tsx` |
+
+### Three tickets this slug found but must not fix
+
+1. **`.glass` kills every `hover:shadow` on the page.** `globals.css:60-66` sets `box-shadow`
+   unlayered; unlayered CSS outranks Tailwind v4's layered utilities regardless of specificity, so
+   the utility loses silently on **every** `.glass` element. Pre-existing. **This is the same
+   cascade mechanism ADR §2 used to reject `motion-reduce:` — argued as theory, already happening.**
+2. **The document overflows horizontally at 320px.** Of 113 overflowing elements, **zero** are in
+   `#data-protection` — all are hero `hs-blob-*` / `hdf-*`. ADR §5's rule applies: file, do not fix.
+3. **D6's promised "grep-based cleanup sweep" does not exist as a ticket.** `HowItWorks.tsx:20`
+   still renders "no cross-company leaks" and `Footer.tsx:25` still renders "marketplace" — the
+   latter now the page's only such claim, contradicting `.claude/rules/project.md`.

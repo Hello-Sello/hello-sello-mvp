@@ -51,18 +51,31 @@ production (per this project's own G5 pattern), not just merged.
 
 ---
 
-**Last updated:** 2026-09-07 — session `build_0028` — **`/build 0028` (landing-page-refresh),
-T01 + T02 back to back.**
-**Status:** active.
-**Linear issue in progress:** DEV-178 (T01) then DEV-179 (T02).
-**Shared files locked** (landing surface only — no schema, no migration, no RLS):
-- `src/app/_landing/Hero.tsx`
-- `src/app/_landing/ValueProps.tsx`
-- `src/app/_landing/B2BOnlyBand.tsx` (docstring line only)
-- `src/app/_landing/DataProtection.tsx` (NEW)
-- `src/app/page.tsx`
-- `src/app/globals.css` (append-only `dpb-` block)
-- `e2e/landing.spec.ts` (append-only)
+**Last updated:** 2026-09-07 — session `build_0028` — **`/build 0028` (landing-page-refresh):
+T01 + T02 both BUILT, reviewed and G4-staged. Awaiting Muskan's single combined G4 walk.**
+**Status:** active — code complete, **no gate passed**. `/ship` is the next stage, not this one.
+**Linear:** DEV-178 (T01) + DEV-179 (T02) — both code-complete, **neither closed** (G4 owed).
+**Shared files locked: none — all released.** Landing surface only; **no schema, no migration,
+no RLS, no RPC**, so `security` was correctly not routed for either ticket (ADR 0010 §7b records
+S1-S8 as N/A).
+
+Released: `src/app/_landing/{Hero,ValueProps,B2BOnlyBand,DataProtection}.tsx` · `src/app/page.tsx` ·
+`src/app/globals.css` (append-only `dpb-` block, **0 deletions**) · `e2e/landing.spec.ts`
+(append-only, 12 → 21 cases) · `docs/PRD/0028-*` · `prototypes/landing-refresh-prototype/NOTES.md`.
+
+**Gate:** `tsc` · `eslint` · **21/21 landing e2e** · 515 unit · `next build` — all clean.
+**Zero blocking findings** across `plan-checker` ×1, `/code-review high` ×2, `critic` ×2.
+Commits `423b6f5`, `51d884b`, `5268f09`. 48 G4 screenshots + one GIF in the slug's `g4/`.
+
+⚠️ **Four things are Muskan's at G4, not mine** — full detail in the slug's `REVIEW.md`:
+the *"All data is hosted in Germany"* claim is substantiated **only for the database tier** (no
+`vercel.json`, no `preferredRegion`) · **the padlock in §7a rotates** (faithful to the prototype,
+which has the same missing counter-rotation on the core) · §4's orphan row spans **640-1023px** ·
+§4's eyebrow is a literal prefix of its own heading.
+
+**New:** `LEARNINGS.md` **L-074** — a flaky suite whose *failing case changes between runs* is an
+environment fault, not a regression; check the dev server's `application-code` time before
+re-reading the diff.
 
 ---
 
