@@ -5,6 +5,7 @@ import { LandingNav } from "./_landing/LandingNav";
 import { Hero } from "./_landing/Hero";
 import { TrustedBy } from "./_landing/TrustedBy";
 import { SocialProof } from "./_landing/SocialProof";
+import { DataProtection } from "./_landing/DataProtection";
 import { ProductFlipCard } from "./_landing/ProductFlipCard";
 import { ValueProps } from "./_landing/ValueProps";
 import { HowItWorks } from "./_landing/HowItWorks";
@@ -75,6 +76,8 @@ export default async function RootPage() {
         {/* §7 social proof — testimonials + metrics (illustrative / fictional
             stand-in until real proof exists; see SocialProof). */}
         <SocialProof />
+
+        <DataProtection />
 
         <B2BOnlyBand />
         <FAQ />

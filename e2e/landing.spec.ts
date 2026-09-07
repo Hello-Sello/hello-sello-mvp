@@ -376,3 +376,216 @@ test('meta description rewritten: equals T01 string, no retired phrases', async 
   expect(content).not.toContain('no cross-company leaks')
   expect(content).not.toContain('documented deals')
 })
+
+// ---------------------------------------------------------------------------
+// Case 17 — M6 (0028/T02): #data-protection carries an <h2> reading "How your
+// data is protected", and in DOCUMENT ORDER it sits after SocialProof's
+// "What dealmakers say" heading and before B2BOnlyBand's <h2>.
+// Anchored on the neighbouring <h2> headings, NOT on the text
+// "nicht an Verbraucher" — that phrase renders TWICE (§8 and the footer,
+// see case 5 above), so a text anchor would be satisfied by §7a placed
+// anywhere before the footer, including after B2BOnlyBand — the exact
+// placement bug M6 exists to catch. The footer's German line is a <p>
+// (Footer.tsx:91), so a heading-role/tag-scoped locator is unique.
+// RED: DataProtection.tsx and #data-protection do not exist (0028/T02 not
+// built) — the section locator resolves to nothing.
+// ---------------------------------------------------------------------------
+test('data protection order: h2 sits after SocialProof and before B2BOnlyBand headings', async ({
+  page,
+  context,
+}) => {
+  await context.clearCookies()
+  await page.goto('/')
+
+  const section = page.locator('#data-protection')
+  await expect(section.getByRole('heading', { level: 2 })).toHaveText(
+    'How your data is protected',
+  )
+
+  const order = await page.evaluate(() => {
+    const texts = Array.from(document.querySelectorAll('h2')).map(
+      (h) => h.textContent?.trim() ?? '',
+    )
+    return {
+      dealmakers: texts.findIndex((t) => t.includes('What dealmakers say')),
+      dataProtection: texts.findIndex((t) => t.includes('How your data is protected')),
+      b2bOnly: texts.findIndex((t) => t.includes('B2B only')),
+    }
+  })
+
+  expect(order.dealmakers, 'SocialProof heading must exist').toBeGreaterThanOrEqual(0)
+  expect(order.dataProtection, '#data-protection heading must exist').toBeGreaterThanOrEqual(0)
+  expect(order.b2bOnly, 'B2BOnlyBand heading must exist').toBeGreaterThanOrEqual(0)
+  expect(order.dealmakers, 'data-protection must come after SocialProof').toBeLessThan(
+    order.dataProtection,
+  )
+  expect(order.dataProtection, 'data-protection must come before B2BOnlyBand').toBeLessThan(
+    order.b2bOnly,
+  )
+})
+
+// ---------------------------------------------------------------------------
+// Case 18 — M4b (0028/T02): with motion permitted (Playwright's context
+// default is reducedMotion: 'no-preference', so "default media" is
+// deterministic), the computed animationName of .dpb-ring, ALL TWELVE
+// .dpb-star, and .dpb-lock is NOT "none" and matches the dpb- keyframe
+// naming convention.
+// This is what makes case 19 mean anything: "none" is animation-name's
+// INITIAL value, so an element carrying no animation rule at all also
+// reports "none" — a §7a that shipped completely static would pass case 19
+// on its own. This case proves the dpb- CSS actually loaded (L-025:
+// LEARNINGS.md:759-763 — a stale .next silently drops a new class from
+// document.styleSheets, which looks like a correct reduced-motion
+// implementation instead of a bug).
+// Enumerates ALL TWELVE stars via one evaluateAll over the whole NodeList —
+// not a sample — because a reduce rule matching `.dpb-star:first-child`
+// would pass a sample.
+// Queries .dpb-ring / .dpb-star / .dpb-lock directly, never the Reveal
+// wrapper — Reveal.tsx:59 carries a permanent `transition-all duration-700`,
+// which is a transition, not this component's animation, but is exactly the
+// kind of wrong-element read this guards against.
+// RED: none of .dpb-ring / .dpb-star / .dpb-lock exist yet (0028/T02 not
+// built) — locator.evaluate on zero elements throws.
+// ---------------------------------------------------------------------------
+test('data protection motion default: ring, all 12 stars, and lock resolve dpb- animation names', async ({
+  page,
+  context,
+}) => {
+  await context.clearCookies()
+  await page.goto('/')
+
+  const section = page.locator('#data-protection')
+
+  const ringName = await section
+    .locator('.dpb-ring')
+    .evaluate((el) => getComputedStyle(el).animationName)
+  expect(ringName).not.toBe('none')
+  expect(ringName).toMatch(/^dpb-/)
+
+  const starNames = await section
+    .locator('.dpb-star')
+    .evaluateAll((els) => els.map((el) => getComputedStyle(el).animationName))
+  expect(starNames, 'all twelve stars must be enumerated, not sampled').toHaveLength(12)
+  for (const name of starNames) {
+    expect(name).not.toBe('none')
+    expect(name).toMatch(/^dpb-/)
+  }
+
+  const lockName = await section
+    .locator('.dpb-lock')
+    .evaluate((el) => getComputedStyle(el).animationName)
+  expect(lockName).not.toBe('none')
+  expect(lockName).toMatch(/^dpb-/)
+})
+
+// ---------------------------------------------------------------------------
+// Case 19 — M4 (0028/T02): under emulateMedia({ reducedMotion: 'reduce' }),
+// the SAME three selectors (ring, all twelve stars, lock) resolve computed
+// animationName === "none", AND all four claim labels stay visible.
+// M4 alone is vacuous without case 18 (M4b) — see that case's comment.
+// The reduce rule must name all three animated selectors: a rule that stops
+// only the ring would leave twelve stars turning through a full 360° for a
+// reduced-motion user, which this case's full enumeration catches.
+// RED: none of .dpb-ring / .dpb-star / .dpb-lock exist yet, and the claim
+// labels do not exist (0028/T02 not built).
+// ---------------------------------------------------------------------------
+test('data protection motion reduced: ring, all 12 stars, and lock stop; claim labels stay visible', async ({
+  page,
+  context,
+}) => {
+  await context.clearCookies()
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.goto('/')
+
+  const section = page.locator('#data-protection')
+
+  const ringName = await section
+    .locator('.dpb-ring')
+    .evaluate((el) => getComputedStyle(el).animationName)
+  expect(ringName).toBe('none')
+
+  const starNames = await section
+    .locator('.dpb-star')
+    .evaluateAll((els) => els.map((el) => getComputedStyle(el).animationName))
+  expect(starNames, 'all twelve stars must be enumerated, not sampled').toHaveLength(12)
+  for (const name of starNames) {
+    expect(name).toBe('none')
+  }
+
+  const lockName = await section
+    .locator('.dpb-lock')
+    .evaluate((el) => getComputedStyle(el).animationName)
+  expect(lockName).toBe('none')
+
+  const LABELS = ['GDPR', 'Data encryption', 'Hosted in Germany', 'EU AI models']
+  for (const label of LABELS) {
+    await expect(
+      section.getByRole('heading', { level: 3, name: label, exact: true }),
+    ).toBeVisible()
+  }
+})
+
+// ---------------------------------------------------------------------------
+// Case 20 — M5 (0028/T02): with JavaScript disabled, all four claim labels
+// AND their four supporting sentences render VISIBLY (toBeVisible, not mere
+// presence — PRD constraint 2 says "final visible state", and presence is
+// not visibility).
+// Needs its own browser.newContext({ javaScriptEnabled: false }) — this
+// cannot be toggled on the shared fixture page — and the context is closed
+// in a `finally` so a failed assertion still releases it.
+// RED: DataProtection.tsx does not exist, so #data-protection resolves to
+// nothing and every getByRole/getByText lookup below finds no element
+// (0028/T02 not built).
+// ---------------------------------------------------------------------------
+test('data protection no js: all four claim labels and sentences are visible with JS disabled', async ({
+  browser,
+}) => {
+  const context = await browser.newContext({ javaScriptEnabled: false })
+  try {
+    const page = await context.newPage()
+    await page.goto('/')
+
+    const section = page.locator('#data-protection')
+    const CLAIMS: Array<[label: string, sentence: string]> = [
+      ['GDPR', 'Built to the EU General Data Protection Regulation.'],
+      ['Data encryption', 'Encrypted in transit and at rest.'],
+      ['Hosted in Germany', 'Every record lives in a German data centre.'],
+      ['EU AI models', 'Sella runs on AI models served inside the EU.'],
+    ]
+
+    for (const [label, sentence] of CLAIMS) {
+      await expect(
+        section.getByRole('heading', { level: 3, name: label, exact: true }),
+      ).toBeVisible()
+      await expect(section.getByText(sentence, { exact: true })).toBeVisible()
+    }
+  } finally {
+    await context.close()
+  }
+})
+
+// ---------------------------------------------------------------------------
+// Case 21 — M8 (0028/T02): at a 375×812 viewport, the whole document does
+// not overflow horizontally: document.documentElement.scrollWidth <=
+// clientWidth on `/`.
+// This asserts a whole-document property, not anything scoped to §7a — per
+// ADR 0010 §5, if this goes RED, check it against a stashed tree first: red
+// WITHOUT 0028's diff is a pre-existing bug to file, not to fix inside T02.
+// It has never been executed at 375px before this case, so it may already
+// pass today — that would make it a guard against regression rather than a
+// red-to-green criterion for this ticket, which is itself useful information.
+// ---------------------------------------------------------------------------
+test('data protection mobile overflow: 375px viewport produces no horizontal scroll', async ({
+  page,
+  context,
+}) => {
+  await context.clearCookies()
+  await page.setViewportSize({ width: 375, height: 812 })
+  await page.goto('/')
+
+  const overflow = await page.evaluate(() => ({
+    scrollWidth: document.documentElement.scrollWidth,
+    clientWidth: document.documentElement.clientWidth,
+  }))
+  expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.clientWidth)
+})

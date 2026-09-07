@@ -2563,3 +2563,41 @@ the plan ships, not two independent facts that happen to coexist.
 
 **See also** [[L-002]] (the shape one level up: synchronized copies of the same fact drifting
 apart over time, rather than a citation being wrong from the moment it's written).
+
+---
+
+## L-074 · A flaky suite whose failing case CHANGES between runs is an environment fault, not a regression — measure the server before re-reading the diff
+
+**2026-09-07 · slug 0028 T02 · caught by the failure pattern itself, before any code was touched**
+
+**Trigger** — a Playwright suite that was green goes red right after a change, AND either the wall
+clock jumped (seconds → minutes) or a *pre-existing* case fails that the diff cannot plausibly
+reach. Especially after `rm -rf .next`, a `globals.css` edit, or any full-cache invalidation.
+
+**What happened.** T02's landing suite ran **21/21 in 17.8s**. Four small review fixes later — all
+CSS and comments — the same suite reported `1 failed` in **4.0m**, and the failure was case 4
+(`/impressum`, `/datenschutz`, `/agb` each return 200), a pre-existing case about routes the diff
+never touches. Re-running produced a *different* result: **3 failed** in 6.7m, this time cases 2, 3
+and 8. Nothing in the tree changed between those two runs.
+
+The cause was in the dev server, not the suite. The builder had (correctly, per L-025) wiped `.next`
+before verifying; the review fixes then re-invalidated the CSS. The server log showed the real
+number: `GET / 200 in 17.8s (application-code: 17.4s)`, repeatedly, ranging 3.5s-17.8s per request.
+Playwright's assertion timeout is 5s. **Whichever case happened to hit a cold route lost the race**,
+which is why the identity of the failing case moved between runs. Warming every route the suite
+touches (`/`, `/impressum`, `/datenschutz`, `/agb`, `/login`) brought requests to 0.11-0.47s and the
+suite back to **21/21**, with zero code changes.
+
+**Why the pattern is the tell.** A real regression is deterministic: the same case fails every run,
+and it is a case related to the diff. Two runs that fail *different* pre-existing cases cannot both
+be describing one defect in the code. The wall clock is the corroborating signal — a 14x slowdown is
+never caused by a CSS comment. Reading the diff harder would never have found this; reading the
+**server log** found it in one look.
+
+**The rule.** Before re-reading a diff for a suspected regression, check two things: (1) does the
+failing case change between runs, and (2) what does the dev server report as `application-code`
+time per request? If the case moves or requests take multiples of the assertion timeout, warm the
+routes and re-run *first*. Corollary for this repo: after any `rm -rf .next`, **warm every route the
+target spec touches before trusting a red result** — `landing.spec.ts` alone needs five. This is the
+diagnosable half of HEL-79's "load-correlated flake"; it is not luck and it is not the test's fault.
+⚠️ Do not "fix" it by raising timeouts — that hides a cold cache behind a slower gate.

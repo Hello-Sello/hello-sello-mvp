@@ -2,7 +2,8 @@
 
 lane:   STANDARD
 branch: claude/muskan/work
-stage:  design ✅ → **build — IN PROGRESS (T01), round 1** · T01 → T02 back to back, one G4 for both
+stage:  design ✅ → **build — T01 code-complete + G4-staged ✅ · T02 IN PROGRESS**, round 1
+        T01 → T02 back to back; **ONE G4 for both**, at the end. Neither ticket has passed a gate.
 
 ## Seed
 Marcel, via Linear DEV-164 "LANDINGPAGE" (2026-07-24), routed by Muskan 2026-09-07 via /triage:
@@ -85,11 +86,15 @@ amendment, not at the raw prototype.**
 
 **Round 1 opened 2026-09-07** (session `build_0028`). Budgets per ticket, unspent:
 
-| | T01 (DEV-178) | T02 (DEV-179) |
+| | T01 (DEV-178) — **spent** | T02 (DEV-179) — in progress |
 |---|---|---|
-| `tests` | 0/2 | 0/2 |
-| `blocking-findings` | 0/2 | 0/2 |
-| `G4 rounds` | 1 | 1 |
+| `tests` | **0/2** — green on the first run | 0/2 |
+| `blocking-findings` | **0/2** — zero blocking from any reviewer | 0/2 |
+| `G4 rounds` | 1 (not yet walked) | 1 (not yet walked) |
+
+**T01 closed the build loop without spending a single budget unit.** Five review findings were
+fixed inside the same pass (which is one fix round, not five), one was rejected with reasoning, and
+the rest are G4 notes. Commits: `423b6f5` (code) · `51d884b` (review + 21 G4 screenshots).
 
 **Reviewers routed for this diff:** `/code-review high` + `critic` **only**. `security` is **not**
 routed — ADR §4 and §7b both record S1-S8 as genuinely N/A (no migration, no RLS, no RPC, no auth,
@@ -180,7 +185,60 @@ no server action; the only route touched is `/`, already public, its D-01 redire
   substantiated only for the **database** tier. Verified — no `vercel.json`, no `preferredRegion`,
   no region in `next.config.ts`, so the Next server functions run in Vercel's default region. UWG
   § 5 exposure. `REVIEW.md` G4 note 0.
-  **T01 code-complete.** Next: step 9 `visual-verifier`, then T02.
+- 2026-09-07 — **T01 G4-STAGED. 21 live-vs-prototype screenshots in `g4/`.** Committed `423b6f5`
+  (code) + `51d884b` (review + screenshots), both pushed. **The gate itself is NOT passed** — it is
+  held open deliberately so T01 and T02 are walked together, once.
+  Routing the verifier at the **amendment** rather than `?variant=C` is what stopped §4's cards 2
+  and 3 being reported as failures; that was C2's entire purpose, and it worked.
+  **Three design calls left for Muskan, none of them defects:** the eyebrow is a literal prefix of
+  the heading and the page's only such pair · **the orphan row is 640-1023px, not just 768** — and
+  `HowItWorks.tsx:37` next door already solves the identical 3-card problem with `sm:grid-cols-3`,
+  a one-class change the ADR's blast radius does not authorise · the `<h1>` strands `DEAL` alone at
+  640-700px.
+  ⚠️ **One pre-existing bug found that vindicates ADR §2 in practice:** the cards'
+  `hover:shadow-[…]` **never fires**. `.glass` (`globals.css:60-66`) sets `box-shadow` **unlayered**,
+  and unlayered CSS outranks Tailwind v4's layered utilities regardless of specificity — so the
+  utility loses silently on **every** `.glass` element. This is the exact cascade mechanism the ADR
+  used to reject `motion-reduce:animate-none` for T02: the ADR argued it as theory, and it is
+  already happening on the live page. **Wants its own ticket.** It also means T02's reduce rule
+  belongs in the `dpb-` block, as planned — not on the elements.
+  **T01 DONE for this stage.**
+- 2026-09-07 — **T02 tests written and measured. Cases 17-21 appended** (M6, M4b, M4, M5, M8);
+  **213 insertions, 0 deletions** — cases 1-16 byte-identical. `test-writer` again flagged it has
+  no shell rather than asserting RED from source; ran them directly.
+  **4 failed, 1 PASSED — and the pass is the useful result.** Case 21 (M8, no horizontal overflow
+  at 375px) is **green before §7a exists**. ADR §5 anticipated the opposite — that M8 might be red
+  for a pre-existing reason with no in-scope fix, and told us to stash and check. **Measuring it at
+  the red stage inverts that problem:** we now hold a proven-green pre-diff baseline, so if M8 goes
+  red after T02, **T02 caused it** — no stash archaeology required. M8 is a regression guard for
+  this ticket, not a red-to-green criterion.
+- 2026-09-07 — **T02 BUILT + REVIEWED. 11 findings, ZERO blocking. `tests 0/2`,
+  `blocking-findings 0/2` — both budgets unspent.** Gate: `tsc` · `eslint` · **21/21** · 515 unit ·
+  `next build`, all clean. **7 fixed, 4 to G4.** Full detail in `REVIEW.md`.
+  **Fence verified independently, not on report:** `globals.css` **0 deletions** (pure append, the
+  fragile `.speclist-scroll` untouched) · `B2BOnlyBand` `+1/-1` docstring, **zero JSX** ·
+  `page.tsx` `+3/-0` · **no reduced-motion leak** — exactly three animations declared, exactly
+  those three named in the reduce rule, `.dpb-card`/`.dpb-core` animate nothing.
+  🔴 **The finding that needs Muskan's eyes on MOTION, not a screenshot: the padlock rotates.**
+  `.dpb-core` is a child of the spinning `.dpb-ring`; parent transforms apply to descendants; the
+  twelve stars carry `dpb-counter` to cancel it and **the core carries nothing**. Measured live —
+  on its side at 11s, upside-down at 22s. **Not fixed: the locked prototype has the identical
+  structure**, so it ships as approved, and it is squarely judgment item **J3**. One-rule fix
+  documented if wanted.
+  ⚠️ **One fixed finding was MY error, propagated into shipped code.** `PLAN-T02.md` asserted that
+  giving `.dpb-star` a `var()` fallback "would silently defeat the override" — **false**; a
+  fallback is consulted only when the property is unset. The builder faithfully turned my false
+  claim into a source comment. Both corrected; the real reason to declare it once is DRY.
+- 2026-09-07 — ⚠️ **Two red suite runs that were ENVIRONMENT, not code — written up as L-074.**
+  Run 1: 1 failure (case 4, legal routes) in 4.0m. Run 2: 3 failures (cases 2, 3, 8) in 6.7m,
+  **nothing changed between them**. The tell was that the failing case *moved* — two runs failing
+  different pre-existing cases cannot both describe one defect. Server log had it:
+  `GET / 200 in 17.8s (application-code: 17.4s)` against Playwright's 5s assertion timeout, because
+  `.next` had been wiped (correctly, per L-025) and the CSS edits re-invalidated it. Warming five
+  routes restored **21/21 with zero code changes**. **L-074 records the rule: check whether the
+  failing case changes between runs BEFORE re-reading the diff.**
+  Now at step 9, `visual-verifier` on §7a — briefed to capture the lock at four points in one 44s
+  cycle, since neither a test nor a single frame can show a rotation.
 
 ## For Muskan
 

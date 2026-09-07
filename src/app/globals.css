@@ -575,3 +575,115 @@ html { scroll-behavior: smooth; }
 }
 .speclist-scroll::-webkit-scrollbar-thumb:hover { background: rgb(0 0 0 / 0.35); }
 .speclist-scroll > * { scroll-snap-align: start; }
+
+/* =====================================================================
+   DATA PROTECTION BAND (landing §7a - "How your data is protected")
+   Twelve gold EU stars on a circle around a pulsing lock. The ring turns
+   and each star counter-rotates at the same speed, so a star holds its
+   radius and stays upright while the circle moves. Pure CSS on
+   server-rendered markup (ADR 0010 D2) - no client island, no dependency.
+   Scoped `dpb-`, matching the hs-blob- / dc- / hdf- / pcard- convention.
+   FOUR colours here are literals, not design tokens - #1a0a2e and #3d0f26
+   (the gradient's aubergine/plum ends), #ffcc00 (EU flag gold) and #fff.
+   They are the prototype's palette and live nowhere but this block; only
+   --color-brand and --color-brand-deep below are real tokens.
+   ===================================================================== */
+.dpb-card {
+  background: linear-gradient(120deg, #1a0a2e 0%, var(--color-brand-deep) 55%, #3d0f26 100%);
+}
+
+.dpb-ring {
+  /* --dpb-size and --dpb-inset are declared ONCE, here, and inherited by
+     .dpb-star and by @keyframes dpb-counter. That is what lets the 480px query
+     at the bottom of this block resize the whole ring by overriding one
+     property on one selector.
+     --dpb-inset is the gap between the ring edge and a star's centre. It is
+     read in TWO places that must agree - .dpb-star's resting transform and
+     dpb-counter's `to` frame - so it lives in one custom property rather than
+     as a magic number written twice. */
+  --dpb-size: 220px;
+  --dpb-inset: 14px;
+  position: relative;
+  width: var(--dpb-size);
+  height: var(--dpb-size);
+  margin: 0 auto;
+  animation: dpb-spin 44s linear infinite;
+}
+
+.dpb-star {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 22px;
+  height: 22px;
+  margin: -11px 0 0 -11px;
+  color: #ffcc00; /* EU flag gold */
+  transform: rotate(var(--dpb-a))
+             translateY(calc(var(--dpb-size) / -2 + var(--dpb-inset)))
+             rotate(calc(-1 * var(--dpb-a)));
+  animation: dpb-counter 44s linear infinite;
+}
+
+@keyframes dpb-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* `transform` is ONE property, so this keyframe cannot "add" a rotation to the
+   star's resting transform - it restates the whole rotate/translateY/rotate
+   chain with the extra -360deg. If this ever drifts from .dpb-star's transform
+   above, the stars spiral off the ring radius instead of holding it - and no
+   test catches that, because cases 18/19 read `animationName` only. Both the
+   radius (--dpb-size) and the inset (--dpb-inset) are therefore custom
+   properties, so the two copies cannot disagree about the geometry. */
+@keyframes dpb-counter {
+  to {
+    transform: rotate(var(--dpb-a))
+               translateY(calc(var(--dpb-size) / -2 + var(--dpb-inset)))
+               rotate(calc(-1 * var(--dpb-a) - 360deg));
+  }
+}
+
+/* Sized and shadowed from variant C's OWN override (index.html:206-210), not
+   from the prototype's generic `.ring .core` (index.html:158-163). C is the
+   locked variant, and the difference is load-bearing on a dark card: the
+   generic rule's --color-brand-deep shadow is near-invisible against the
+   aubergine, and the 10px gold halo is what visually ties the core to the
+   twelve EU stars around it. */
+.dpb-core {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 104px;
+  height: 104px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: radial-gradient(circle at 35% 30%, var(--color-brand), var(--color-brand-deep));
+  box-shadow: 0 20px 50px -14px rgba(0, 0, 0, 0.7), 0 0 0 10px rgba(255, 204, 0, 0.07);
+}
+
+.dpb-lock {
+  animation: dpb-pulse 3.4s ease-in-out infinite;
+}
+
+@keyframes dpb-pulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.09); }
+}
+
+/* All THREE animated selectors must be named. Stopping the ring alone leaves
+   twelve stars turning a full 360deg for a visitor who asked for no motion. */
+@media (prefers-reduced-motion: reduce) {
+  .dpb-ring, .dpb-star, .dpb-lock { animation: none; }
+}
+
+/* No mobile ring-shrink. An earlier draft carried
+   `@media (max-width: 480px) { .dpb-ring { --dpb-size: 168px } }`. It was
+   REMOVED after the G4 visual pass measured two things against it: (a) it was
+   never needed - at 375px the card's content box is 263px, so the full 220px
+   ring fits with 21px of slack each side and clips nothing; and (b) it was
+   actively harmful - only --dpb-size shrank, while .dpb-core stayed 104px and
+   the stars stayed 22px, so the ring-to-core gap went 23px -> MINUS 3px and the
+   stars overlapped the core's gold halo. It was also outside ADR 0010 §4's
+   authorised radius for this block. Variant C has no mobile query either. */

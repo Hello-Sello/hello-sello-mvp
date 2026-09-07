@@ -290,7 +290,7 @@ broken. It was not — Tailwind v4 compiles `-translate-y-1` to the **`translate
 
 ---
 
-## Verdict — T01
+## Verdict — T01 *(see T02 below for the rest of the slug)*
 
 **No blocking findings from any reviewer.** 12 review findings: **1 rejected with reasoning** (F2),
 **5 fixed** (F4, C1, C2, C3, C5), the rest carried to G4 as notes. Visual staging adds 4 more
@@ -311,3 +311,209 @@ Committed `423b6f5`, pushed.
 | 5 | **The kept card's reveal delay shifted 0 ms → 160 ms** as `Verified partners only` moved from index 0 to index 2 (`ValueProps.tsx:44`, `delayMs={i * 80}`). The `Reveal` map is untouched as *code* and changed as *rendered timing* |
 | 6 | **`marketplace` still renders on `/`** at `Footer.tsx:25` (*"The verified B2B marketplace for dealmakers"*), contradicting `.claude/rules/project.md`'s "not a marketplace". Correctly out of scope — T01 only removed it from `page.tsx:26`, as a side effect |
 | 7 | **`HowItWorks.tsx:20` still contains "no cross-company leaks"** and **`PITCH.md:17` still leads "AI FOR DEALMAKERS"** — both deliberately stale (ADR D6; G3 ruling). A grep-driven cleanup sweep would hit both; it must not |
+
+---
+
+# T02 — New §7a "How your data is protected" + the EU star ring (DEV-179)
+
+## Gate results
+
+| Suite | Result |
+|---|---|
+| `npx tsc --noEmit` | **PASS** |
+| `playwright test e2e/landing.spec.ts` | **PASS — 21/21** (12 pre-existing + 4 T01 + 5 T02) |
+| `npx vitest run` | **PASS** — 515 tests / 69 files |
+| `npx next build` | **PASS** |
+| `eslint` on the touched files | **PASS** — exit 0 |
+
+⚠️ **Two intermediate runs went red and BOTH were environment, not code** — written up as **L-074**.
+Run 1: `1 failed` (case 4, `/impressum` etc.) in 4.0m. Run 2: `3 failed` (cases 2, 3, 8) in 6.7m,
+**with nothing changed between them**. The tell is that the failing case *moved*: two runs failing
+different pre-existing cases cannot both describe one defect. The server log had it —
+`GET / 200 in 17.8s (application-code: 17.4s)` against Playwright's 5s assertion timeout, because
+`.next` had been wiped (correctly, per L-025) and the CSS edits re-invalidated it. Warming five
+routes returned the suite to **21/21 with zero code changes**.
+
+## Fence — verified independently, not taken on report
+
+| Claim | Evidence |
+|---|---|
+| `globals.css` is a **pure append** | `git diff -U0 … \| grep -c '^-[^-]'` → **0 deletions**. `.speclist-scroll` (the fragile block L-025 was written about) untouched |
+| `B2BOnlyBand.tsx` docstring only | `+1/-1`, line 4, `full-bleed` dropped, **zero JSX** — the one authorised exception, used exactly once |
+| `page.tsx` | `+3/-0`: import + element between `<SocialProof />` and `<B2BOnlyBand />`. `metadata` and the D-01 redirect intact |
+| **No reduced-motion leak** | The block declares exactly **three** animations — `.dpb-ring`→`dpb-spin`, `.dpb-star`→`dpb-counter`, `.dpb-lock`→`dpb-pulse` — and the reduce rule names exactly those three. `.dpb-card` and `.dpb-core` declare none. 1:1, nothing uncovered |
+| Server component | no `"use client"`; only `Reveal` (already a fenced client island) is imported |
+| Copy is the ADR's, not the prototype's | grep for `end to end of our stack`, `never leaves the EU`, `transatlantic` → **no matches** |
+
+## Findings
+
+### `critic` — 5 findings, **0 blocking**, 3 fixed, 2 to G4
+
+All seven EARS criteria discharged, each with a named test. D2/D3/D4 conformance confirmed.
+Accessibility clean: `aria-hidden` on the ring hides all twelve star SVGs *and* the lock in one
+attribute; heading outline is `<h1>` (Hero) → `<h2>` (§7a) → four `<h3>`, no skipped level; contrast
+passes AA at every opacity used (eyebrow ≈6.5:1 against the gradient's lightest end).
+
+- **N1 · ✅ FIXED** — `#data-protection` omitted `scroll-mt-24`, **which T01's own review added to
+  `#what-you-can-do` earlier in this same slug**, for the same reason, citing the same ADR line.
+  *"Two halves of one slug now read the same instruction differently."* Fair, and fixed.
+- **N2 · ✅ FIXED** — the docstring sat above the private `CLAIMS` array, not above the exported
+  `DataProtection`. Every neighbour attaches it to the exported symbol. Moved; `CLAIMS` kept a short
+  comment recording that its sentences are the ADR's, not the prototype's.
+- **N5 · ✅ FIXED** — `PLAN-T02.md` counted six cases (17-22) and "22 green". **There is no case
+  22** — the plan's own row says M9 is discharged by the file run. Five cases ship; total is 21.
+  Corrected so the G4 log does not hunt for a case that was never written.
+- **N3 · → G4** — the sub-line `German hosting, EU AI models, encrypted throughout.` is
+  un-invented (variant C's own, `index.html:422` — the builder cited `:421`, which is C's `<h2>`)
+  but **no artifact records it as approved copy for what ships**. Substantively: `encrypted
+  throughout` is unqualified and sits directly above the tile that qualifies it (*Encrypted in
+  transit and at rest.*). **Same UWG § 5 family as G4 note 0.**
+- **N4 · → G4** — variant A's claim tiles are `border-radius: 24px` + a 1px border (`rounded-3xl`);
+  the shipped tiles are `rounded-2xl` (16px), no border. Padding was carried across exactly, which
+  is why the radius stands out. Consequence: the tiles no longer echo the card's own `rounded-3xl`.
+
+### `/code-review high` — 6 findings, **0 blocking**, 4 fixed, 1 to G4, 1 accepted-as-declared
+
+- 🔴 **CR1 · → G4, THE ONE TO LOOK AT · `(code-review, globals.css .dpb-core)`**
+  **The padlock rotates.** `.dpb-core` is a child of `.dpb-ring`, which runs `dpb-spin`
+  (`rotate(360deg)`). Parent transforms apply to the whole subtree, and the core has **no
+  counter-rotation** — the twelve stars get `dpb-counter` for exactly this reason, the core gets
+  nothing. Measured live at t=11s: `.dpb-ring` → `matrix(0,1,-1,0,0,0)` (90°), `.dpb-core` →
+  `transform: none`. **So the lock lies on its side at 11s and is upside-down at 22s**, and the
+  core's off-centre highlight and directional shadow orbit with it.
+  **NOT fixed, deliberately.** The locked prototype has the identical structure
+  (`index.html:158-163` — `.ring .core` carries no counter-animation), so this ships **as
+  approved**, and changing it is a design decision the ADR's blast radius does not authorise. It
+  also bears directly on **J3** — *"the star ring reads as the EU flag, not as a loading spinner"* —
+  which §5 already lists as Muskan's call.
+  **The fix, if wanted, is one rule:** give `.dpb-core` a `dpb-counter-core` animation restating
+  `rotate(-360deg)` over the same 44s, and add `.dpb-core` to the reduce rule's selector list.
+  ⚠️ **Neither the tests nor a static screenshot can surface this** — cases 18/19 read
+  `animationName`, and a screenshot catches one frame. It needs a human looking at motion.
+- **CR2 · ✅ FIXED** — `.dpb-core` had been ported from the prototype's **generic** `.ring .core`
+  (96px, `--color-brand-deep` shadow) rather than **variant C's own override** (`index.html:206-210`:
+  104px, `rgba(0,0,0,.7)` shadow + a 10px `rgba(255,204,0,.07)` gold halo). A third, unrecorded
+  departure from `?variant=C`. It matters on a dark card: a `#7a1638` shadow is near-invisible
+  against the aubergine, and the gold halo is what visually ties the core to the EU stars. Restored
+  to C's values, with a comment recording why.
+- **CR4 · ✅ FIXED — and it was MY error, propagated into the code.** The CSS comment claimed
+  giving `.dpb-star` its own fallback *"would silently defeat that override."* **That is false about
+  `var()`**: a fallback is consulted only when the property is unset, and `.dpb-star` is always
+  inside `.dpb-ring`, which always sets it — so a fallback there would be dead, not dangerous. The
+  prototype is the counter-example (`index.html:150` uses `var(--ring,260px)` and `:205` overrides
+  it correctly). **The false claim originated in `PLAN-T02.md` §1.2 point 3, which I wrote**, and
+  the builder faithfully turned it into a source comment. Both corrected; the honest reason to
+  declare it once is DRY, not correctness.
+- **CR5 · ✅ FIXED** — the `14px` star inset was written **twice** (`.dpb-star`'s resting transform
+  and `dpb-counter`'s `to` frame) with nothing enforcing agreement, and **no test guards it**: cases
+  18/19 read `animationName` only, so editing one copy makes the stars spiral off the ring radius
+  over each 44s cycle **while all 21 tests stay green**. Hoisted into `--dpb-inset` beside
+  `--dpb-size`, so the two copies cannot disagree about the geometry.
+- **CR6 · ✅ FIXED** — the block comment claimed the two gradient ends were the only non-token
+  colours; `#ffcc00` and `#fff` are literals in the same block. Inventory corrected to four.
+- **CR3 · → G4, accepted as a declared departure** — `@media (max-width: 480px) { .dpb-ring
+  { --dpb-size: 168px } }` is **outside ADR §4's authorised radius** for `globals.css` (which names
+  the three keyframes and *one* reduce rule) and no test exercises it: case 21 passes with or
+  without, because at 375px the card's content box is 263px, which already fits the 220px ring.
+  **Kept rather than removed** — it is defensive responsive polish, and stripping it risks a
+  cramped mobile render that the visual pass would then flag. Recorded as a departure so it is
+  decided rather than unnoticed.
+
+## The builder's seven declared deviations — recorded here because they existed nowhere else
+
+`critic` flagged that only two of the seven reached a reviewer and none had landed in a repo
+artifact. *An instruction nothing carries is a wish.* All seven, with adjudication:
+
+| # | Deviation | Adjudication |
+|---|---|---|
+| 1 | Sub-line taken from variant C rather than invented | **Right call** — un-invented and traceable. But unrecorded as approved copy → N3, G4 |
+| 2 | Claim tiles `rounded-2xl bg-white/5` instead of A's `.glass` | **Faithful, not a departure.** D4 says A's treatment *on C's dark card*; `.glass` is white-62% and unreadable there, so the surface **had** to change. The radius that travelled with it is N4 → G4 |
+| 3 | Added an aubergine-retinted `shadow-[…]` on the card div | **Accepted** — `B2BOnlyBand.tsx:14` carries the equivalent raspberry-tinted shadow; retinting matches the idiom |
+| 4 | `as CSSProperties` cast on the star's inline style | **Required** — csstype has no index signature for `--*` custom properties |
+| 5 | Explicit `0%`/`100%` gradient stops | **Cosmetic**, identical rendered output |
+| 6 | Also ran `next build` | **Correct** — PLAN-T02 §2 step 4 names it |
+| 7 | Re-ran Playwright/eslint through `node …/cli.js` because `rtk` collapsed the output | **Correct, and the right instinct** — HEL-80. Same result both ways |
+
+## Verdict — T02
+
+**No blocking findings from either reviewer.** 11 findings: **7 fixed**, 4 carried to G4.
+Post-fix gate: `tsc` clean · `eslint` clean · **21/21** · `globals.css` still a pure append.
+🔴 **CR1 (the rotating padlock) is the one that needs your eyes on motion, not on a screenshot.**
+
+### `visual-verifier` — G4 staging (T02)
+
+**27 screenshots + one GIF**, all `t02-` prefixed, in `g4/`. Driven through Playwright rather than
+the Chrome extension, which is what made exact animation phases possible. `supabase db reset`
+skipped (`/` is public, `DataProtection` is static, every context is cookie-free — a reset would be
+destructive for no benefit). Cookie banner suppressed by CSS, **not** clicked.
+
+#### 🔴 The rotating padlock — confirmed three ways, and it looks broken
+
+`t02-lock-rotation.gif` (24 frames, one full 44s cycle) · `t02-lock-rotation-strip.png` · four
+singles at 0/11/22/33s.
+
+`.dpb-core`'s own transform is `none` while `.dpb-ring` reads 90° at t=11s, so **the core's net
+rotation is the ring's**. Two independent real-time runs measured 58.5→148.8→238.4→328.4° and
+40.1→130.1→220.2° at 11s intervals — exactly 90° per 11s, so the paused frames are live behaviour,
+not a pausing artefact.
+
+**The verifier's plain verdict: "it looks broken."** At 11s and 33s the padlock reads as a coffee
+mug; at 22s as a handbag. The core's specular highlight tips with it, so at 22s the sphere is lit
+from below. **A padlock is an orientation-bearing glyph** — a sideways keyhole is not something a
+viewer can read as intentional. Faithful to the locked prototype (`index.html:158-163`, no
+counter-rotation on the core): **a faithful build of a prototype defect, not a build error.**
+
+#### 🔴 A second, sharper finding on J3 — the 44-second cycle is invisible except through the bug
+
+With the core hidden, the twelve stars were compared byte-for-byte across phases: **phase 30° and
+phase 60° are pixel-identical to phase 0.** Twelve stars at 30° spacing, each counter-rotated
+upright, means **the star field's visual period is 3.67 seconds, not 44.** The stars drift 30° and
+reset, forever.
+
+**So the only element communicating the long revolution is the padlock — and it communicates it by
+falling over.** On J3 as asked: *static*, the ring reads as the EU flag. *In motion*, the stars read
+as a slow 3.7s shimmer — closer to a spinner than a flag — and the lock reads as a bug.
+
+#### Staging table (abridged; full table in the agent's return)
+
+| Item | Shipped | Approved design | Verdict |
+|---|---|---|---|
+| AC 1-5 (position, claims+sentences, motion on, reduced-motion, no-JS) | all as specified | — | **match** |
+| Palette | `linear-gradient(120deg, rgb(26,10,46), rgb(122,22,56) 55%, rgb(61,15,38))` | prototype C computes the **identical** string | **match**, byte-for-byte |
+| Ring + core geometry | 220px ring, 12 stars, 22px glyphs, **104px core**, C's own shadow + gold halo | survives from C unchanged | **match**, byte-for-byte *(this is CR2's fix landing)* |
+| **D3 containment** | contained `rounded-3xl`, `max-w-6xl` | **the amendment** — prototype's full-bleed superseded | **match to approved** |
+| **D4 claim grid** | 4-up grid, §7a 724px tall vs prototype's 568px | **the amendment** — A's grid on C's card, taller | **match to approved** |
+| **J5 — dark card + pink band** | two `rounded-3xl` cards, same 1152px width, same radius, 48px white gutter | D3 was made to answer exactly this | ✅ **match — D3 worked** |
+| Eyebrow `Security & compliance` | present | **not in variant C at all** — comes from `PLAN-T02.md`. A third departure, at build-plan level | **differs** → G4 |
+| Type scale | h2 30px @1440, sub 14px | prototype C: h2 **40px** @1440, sub 16px | **differs** → G4 (fourth departure) |
+| §7a at 375 | section is **1252px tall** — ~1.5 phone viewports | D4 accepted §7a would be taller | **needs-a-human-call** → G4 |
+| Fit, 15 widths 320→1920 | ring never clipped, grid steps 1→2→4 cleanly at 640/1024 | — | **match** |
+| **320px overflow** | document overflows (`scrollWidth 359`) — but of **113 overflowing elements, ZERO are inside `#data-protection`**; all are hero `hs-blob-*` / `hdf-*` | ADR §5: red without 0028's diff = pre-existing, **file, do not fix** | **pre-existing page bug** → own ticket |
+
+Text contrast passes AA throughout: `<h3>` 10.2-12.6:1, body 5.7-6.9:1, eyebrow 4.6:1 (narrowly).
+
+#### Two fixes this pass forced — both reversed an earlier call of mine
+
+- **✅ REMOVED the `@media (max-width: 480px)` ring shrink (was CR3, "accepted as declared").** The
+  verifier measured it and it was **both unnecessary and harmful**: at 375px the card's content box
+  is 263px, so the full 220px ring fits with **21px slack each side** and clips nothing — *and* the
+  shrink moved only `--dpb-size` while `.dpb-core` stayed 104px and stars stayed 22px, so the
+  ring-to-core gap went **23px → −3px and the stars overlapped the core's gold halo.** It was also
+  outside ADR §4's authorised radius. Removed, with the measurements recorded in the CSS.
+  **I had accepted this on reasoning; measurement overturned it.**
+- **✅ ADDED a 1px hairline border to the claim tiles, and restored `rounded-3xl` (was N4).** The
+  radius was the lesser half. The measurable failure: `bg-white/5` over that gradient gives
+  **1.01-1.09:1 fill contrast** against the card the tiles sit on — tile 1 is **1.01, i.e. its
+  boundary is invisible**, and the tiles only read where the card's gradient happens to shift
+  beneath them. Variant A's tiles carry a 1px border, which is what gave them an edge; dropping it
+  on a *dark* card (where 5% white has nowhere near the separation 62% white had on a light one) is
+  the substantive deviation from what D4 cited. `border-white/15` chosen conservatively —
+  **the exact opacity is a G4 call.**
+
+#### J5, answered
+
+**D3 worked; the premise really did dissolve.** Two cards of identical width and identical
+`rounded-3xl` radius, separated by a clean 48px white gutter, read as a deliberate pair — dark
+statement, then bright statement — not a collision. No seam left to argue about. One live question:
+§7a's core is `radial-gradient(brand → brand-deep)`, the **same pink** as the band 400px below.
+Either a rhyme or a duplicated accent; the verifier leans rhyme.
