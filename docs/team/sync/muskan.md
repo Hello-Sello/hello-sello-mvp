@@ -5,6 +5,21 @@
 
 ---
 
+**Last updated:** 2026-09-07 — session `build_0028` — **`/build 0028` (landing-page-refresh),
+T01 + T02 back to back.**
+**Status:** active.
+**Linear issue in progress:** DEV-178 (T01) then DEV-179 (T02).
+**Shared files locked** (landing surface only — no schema, no migration, no RLS):
+- `src/app/_landing/Hero.tsx`
+- `src/app/_landing/ValueProps.tsx`
+- `src/app/_landing/B2BOnlyBand.tsx` (docstring line only)
+- `src/app/_landing/DataProtection.tsx` (NEW)
+- `src/app/page.tsx`
+- `src/app/globals.css` (append-only `dpb-` block)
+- `e2e/landing.spec.ts` (append-only)
+
+---
+
 **Last updated:** 2026-09-07 — worktree session (`wt-manage-shop-dnd`) — **Present-page Linear
 triage + 3 code fixes shipped to `claude/muskan/work`; session closing, handing off to the
 `hello-sello-product-6c` session below for merge/deploy.**
