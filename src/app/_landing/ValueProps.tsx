@@ -1,45 +1,43 @@
-import { ShieldCheck, Lock, Workflow, BadgeCheck } from "lucide-react";
+import { ShieldCheck, Tag, Send } from "lucide-react";
 import { SectionHeading } from "./SectionHeading";
 import { Reveal } from "./Reveal";
 
 /**
- * Value props (§4). Buyer-outcome cards rendered via a co-located `ValueProp`
- * sub-component (the `Meta` idiom). Glass cards with a gradient icon tile and a
- * hover lift give the Aurora feel.
+ * What you can do (§4). Capability cards — what a member can actually do here —
+ * rendered via a co-located `ValueProp` sub-component (the `Meta` idiom). Glass
+ * cards with a brand-tinted icon and a hover lift give the Aurora feel.
+ *
+ * The file and export keep the `ValueProps` name: renaming would reach
+ * `page.tsx`'s import, which 0028 fences as untouched.
  */
 const PROPS = [
+  {
+    icon: Tag,
+    title: "Create offers and orders",
+    body: "Build an offer or an order in the chat you are already having. No separate tool, no re-keying.",
+  },
+  {
+    icon: Send,
+    title: "Send to all your customers and suppliers",
+    body: "Push a deal or an order out to your whole book at once, or to one partner at a time.",
+  },
   {
     icon: ShieldCheck,
     title: "Verified partners only",
     body: "Every company is business-verified before it can trade, so you always know exactly who is on the other side of the deal.",
   },
-  {
-    icon: Lock,
-    title: "No cross-company leaks",
-    body: "Strict company isolation keeps your catalogue, pricing, and deals private. Nothing is shared until you choose to connect.",
-  },
-  {
-    icon: Workflow,
-    title: "One place, end to end",
-    body: "Chat, sell, buy, and negotiate in a single space, instead of jumping between mail, chat, PDFs, and your ERP.",
-  },
-  {
-    icon: BadgeCheck,
-    title: "Documented deals",
-    body: "AI turns every conversation into a structured deal. Quantities, prices, and terms are captured and frozen at deal time.",
-  },
 ];
 
 export function ValueProps() {
   return (
-    <section className="mx-auto max-w-6xl px-6 py-20">
+    <section id="what-you-can-do" className="mx-auto max-w-6xl scroll-mt-24 px-6 py-20">
       <SectionHeading
-        eyebrow="Why Hello Sello"
-        title="Built for safe B2B trade"
-        sub="Replace scattered chats, mail and spreadsheets with one clear flow between companies you can trust."
+        eyebrow="What you can do"
+        title="What you can do on Hello Sello"
+        sub="Buyers and sellers, one platform — connect and trade fast."
       />
 
-      <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
         {PROPS.map((p, i) => (
           <Reveal key={p.title} delayMs={i * 80}>
             <ValueProp icon={p.icon} title={p.title} body={p.body} />

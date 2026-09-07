@@ -27,16 +27,16 @@ export function Hero() {
         <Reveal delayMs={60}>
           <h1 className="mx-auto mt-6 max-w-4xl text-4xl font-bold leading-[1.05] tracking-tight text-ink sm:text-6xl">
             <span className="bg-gradient-to-r from-brand to-brand-deep bg-clip-text text-transparent">
-              AI FOR DEALMAKERS
+              ONE SECURE SPACE FOR EVERY B2B DEAL
             </span>
           </h1>
         </Reveal>
 
         <Reveal delayMs={120}>
           <p className="mx-auto mt-6 max-w-2xl text-lg text-ink-muted">
-            Discover verified partners, connect safely with no cross-company
-            leaks, and turn the conversation into a structured, documented deal,
-            all in one place.
+            Turn daily conversations into structured deals — together. Your
+            fully EU GDPR compliant AI platform for buyers and sellers to trade
+            with encrypted chat. All data is hosted in Germany.
           </p>
         </Reveal>
 
