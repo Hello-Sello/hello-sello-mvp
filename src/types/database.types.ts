@@ -3321,6 +3321,7 @@ export type Database = {
           lineage_parent_b: string | null
           local_code_pzn: string | null
           location: string | null
+          location_id: string | null
           metadata: Json
           name: string
           pack_size_grams: number | null
@@ -3360,6 +3361,7 @@ export type Database = {
           lineage_parent_b?: string | null
           local_code_pzn?: string | null
           location?: string | null
+          location_id?: string | null
           metadata?: Json
           name: string
           pack_size_grams?: number | null
@@ -3399,6 +3401,7 @@ export type Database = {
           lineage_parent_b?: string | null
           local_code_pzn?: string | null
           location?: string | null
+          location_id?: string | null
           metadata?: Json
           name?: string
           pack_size_grams?: number | null
@@ -3453,6 +3456,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "irradiation_type"
             referencedColumns: ["code"]
+          },
+          {
+            foreignKeyName: "product_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "shop_location"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "product_unit_code_fkey"
@@ -4360,6 +4370,38 @@ export type Database = {
           },
         ]
       }
+      shop_location: {
+        Row: {
+          company_id: string
+          created_at: string
+          id: string
+          name: string
+          position: number
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          id?: string
+          name: string
+          position?: number
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          id?: string
+          name?: string
+          position?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shop_location_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "company"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       strain_dominance: {
         Row: {
           code: string
@@ -4826,24 +4868,17 @@ export type Database = {
       }
       get_my_basket_lines: {
         Args: never
-        // Six of these ten are nullable and this file is hand-maintained, so
-        // until it is generated the compiler repeats whatever a human wrote
-        // here. Four go NULL BY DESIGN — the RPC gates the product's details on
-        // live visibility per read (`case when product_visible_to_caller(...)`
-        // with no ELSE), which is the whole point of the round-3 fix.
-        // seller_company_name comes off a LEFT JOIN; pack_size_grams is
-        // nullable on the base table.
         Returns: {
-          cultivar: string | null
+          cultivar: string
           id: string
-          local_code_pzn: string | null
+          local_code_pzn: string
           pack_count: number
-          pack_size_grams: number | null
+          pack_size_grams: number
           product_id: string
-          product_name: string | null
+          product_name: string
           seller_company_id: string
-          seller_company_name: string | null
-          unit_code: string | null
+          seller_company_name: string
+          unit_code: string
         }[]
       }
       get_public_profile: {
@@ -5132,6 +5167,9 @@ export type Database = {
         Args: { p_reason?: string; p_relationship_id: string }
         Returns: undefined
       }
+      // HAND-CORRECTED — re-apply after every `supabase gen types`. The generator
+      // emits SQL function params as non-null; these four genuinely accept NULL,
+      // and updateDealDraft() in src/modules/deals/actions.ts passes null to them.
       update_deal_draft: {
         Args: {
           p_currency: string
