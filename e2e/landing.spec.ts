@@ -476,6 +476,17 @@ test('data protection motion default: ring, all 12 stars, and lock resolve dpb- 
     .evaluate((el) => getComputedStyle(el).animationName)
   expect(lockName).not.toBe('none')
   expect(lockName).toMatch(/^dpb-/)
+
+  // .dpb-core counter-rotates the ring so the padlock stays upright. Without it
+  // the core inherits the parent's spin and the lock tumbles (on its side at
+  // 11s, inverted at 22s). Asserted here as well as in case 19 so the pair stays
+  // symmetric: every element the reduce rule names must also be proven to
+  // animate when motion IS allowed, or M4 goes vacuous for that element.
+  const coreName = await section
+    .locator('.dpb-core')
+    .evaluate((el) => getComputedStyle(el).animationName)
+  expect(coreName).not.toBe('none')
+  expect(coreName).toMatch(/^dpb-/)
 })
 
 // ---------------------------------------------------------------------------
@@ -516,6 +527,14 @@ test('data protection motion reduced: ring, all 12 stars, and lock stop; claim l
     .locator('.dpb-lock')
     .evaluate((el) => getComputedStyle(el).animationName)
   expect(lockName).toBe('none')
+
+  // The core's counter-rotation must stop too. It is only needed to cancel the
+  // ring, so leaving it running under reduce would spin the padlock backwards
+  // against a stationary ring — worse than the bug it was added to fix.
+  const coreName = await section
+    .locator('.dpb-core')
+    .evaluate((el) => getComputedStyle(el).animationName)
+  expect(coreName).toBe('none')
 
   const LABELS = ['GDPR', 'Data encryption', 'Hosted in Germany', 'EU AI models']
   for (const label of LABELS) {

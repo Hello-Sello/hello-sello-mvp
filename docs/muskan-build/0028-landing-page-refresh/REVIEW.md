@@ -517,3 +517,58 @@ Text contrast passes AA throughout: `<h3>` 10.2-12.6:1, body 5.7-6.9:1, eyebrow 
 statement, then bright statement — not a collision. No seam left to argue about. One live question:
 §7a's core is `radial-gradient(brand → brand-deep)`, the **same pink** as the band 400px below.
 Either a rhyme or a duplicated accent; the verifier leans rhyme.
+
+---
+
+## Post-G4 fixes — 2026-09-08, on Muskan's instruction
+
+Two of the nine G4 calls were answered "yes, fix". Both were one-line changes; both were verified
+by **measurement**, not by eye alone.
+
+### 1. The §7a padlock no longer rotates *(was G4 call 2 / CR1)*
+
+`.dpb-core` gained `animation: dpb-counter-core 44s linear infinite` with
+`@keyframes dpb-counter-core { to { transform: rotate(-360deg); } }` — the same cancellation
+`.dpb-star` already used, at the same period and timing function (any mismatch and the cancellation
+drifts). Safe to animate `transform` on the core because it is centred by `inset: 0; margin: auto`,
+**not** by a transform, so no positioning is lost.
+
+⚠️ **The important half of this fix is not the keyframe.** Adding a fourth animated element means
+adding it to the reduced-motion rule — otherwise the fix *creates* exactly the leak invariant M4
+exists to catch, and leaves the padlock spinning backwards against a stationary ring for a
+reduced-motion visitor, which is worse than the bug it replaced. So:
+
+- `@media (prefers-reduced-motion: reduce)` now names **all four**: `.dpb-ring, .dpb-star,
+  .dpb-core, .dpb-lock`
+- **e2e cases 18 and 19 extended to enumerate `.dpb-core`.** Case 18 proves it animates when motion
+  is allowed; case 19 proves it stops under reduce. Symmetric by design — every element the reduce
+  rule names must also be proven to animate, or M4 goes vacuous for that element.
+
+**Verified:** net lock rotation `= 0.0` at two independent phases — `ring 8.2° + core 351.8°` and
+`ring 89.9° + core 270.1°`. *(Honest limit: `animations: 'disabled'` on the first screenshot froze
+the ring, so the 22s/33s samples re-read one phase rather than three. Two distinct phases both
+netting exactly zero is conclusive given the cancellation is deterministic, but four phases were
+not sampled.)* Frames in `g4/t02-lock-FIXED-*.png`.
+
+**Consequence for J3, worth stating:** the star field's visual period was always 3.67s, so the 44s
+revolution was only ever legible *through* the tumbling lock. What ships now is a slow continuous
+star drift around a stationary padlock — which is what J3 actually asks for (*ambient*, not a
+spinner).
+
+### 2. §4's orphan row is gone *(was G4 call 4 / F6)*
+
+`sm:grid-cols-2 lg:grid-cols-3` → **`sm:grid-cols-3`**, byte-identical to `HowItWorks.tsx:37` one
+section below, which carries the same three-card shape and never orphaned. The `sm:grid-cols-2` was
+left over from when §4 had four cards.
+
+**Verified:** §4 renders **1 row at 768, 900 and 1023px** — the full band that previously showed
+2 + 1 with an empty half. `g4/t01-s4-FIXED-{768,900,1023}.png`.
+
+### Gate after both fixes
+
+`tsc` clean · **landing e2e 21/21** · `globals.css` still a pure append (0 deletions).
+Server warmed before the run, per **L-074**.
+
+**Seven G4 calls remain open** — see `STATE.md`'s G4 table. The headline one is unchanged and
+unaffected by these fixes: **"All data is hosted in Germany" is substantiated only for the database
+tier.**

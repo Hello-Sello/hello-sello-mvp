@@ -37,7 +37,11 @@ export function ValueProps() {
         sub="Buyers and sellers, one platform — connect and trade fast."
       />
 
-      <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+      {/* sm:grid-cols-3, no lg: step - matching HowItWorks.tsx:37 one section down,
+          which has the same three-card shape. The old sm:grid-cols-2 was left over
+          from when this section had four cards, and with three it left one card
+          alone on a second row across the whole 640-1023px band. */}
+      <div className="mt-12 grid gap-5 sm:grid-cols-3">
         {PROPS.map((p, i) => (
           <Reveal key={p.title} delayMs={i * 80}>
             <ValueProp icon={p.icon} title={p.title} body={p.body} />

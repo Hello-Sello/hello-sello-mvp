@@ -661,6 +661,20 @@ html { scroll-behavior: smooth; }
   color: #fff;
   background: radial-gradient(circle at 35% 30%, var(--color-brand), var(--color-brand-deep));
   box-shadow: 0 20px 50px -14px rgba(0, 0, 0, 0.7), 0 0 0 10px rgba(255, 204, 0, 0.07);
+  /* Counter-rotates the ring, exactly as .dpb-star does. Without this the core
+     inherits the parent's spin and the padlock tumbles - on its side at 11s,
+     inverted at 22s - because a transform on a parent applies to its whole
+     subtree. The prototype counter-rotated the stars and missed the core, so
+     the tumble shipped there too (index.html:158-163); it is a reproduced
+     prototype bug, not a design choice. Safe to animate `transform` here: the
+     core is centred by `inset: 0; margin: auto`, NOT by a transform, so nothing
+     of its positioning is lost. Same 44s period and `linear` timing as the ring,
+     or the cancellation drifts. */
+  animation: dpb-counter-core 44s linear infinite;
+}
+
+@keyframes dpb-counter-core {
+  to { transform: rotate(-360deg); }
 }
 
 .dpb-lock {
@@ -672,10 +686,13 @@ html { scroll-behavior: smooth; }
   50%      { transform: scale(1.09); }
 }
 
-/* All THREE animated selectors must be named. Stopping the ring alone leaves
-   twelve stars turning a full 360deg for a visitor who asked for no motion. */
+/* All FOUR animated selectors must be named. Stopping the ring alone leaves
+   twelve stars turning a full 360deg for a visitor who asked for no motion.
+   .dpb-core joined this list the moment it gained a counter-rotation - adding an
+   animation without adding it here is precisely the leak invariant M4 exists to
+   catch, and e2e cases 18/19 enumerate all four for that reason. */
 @media (prefers-reduced-motion: reduce) {
-  .dpb-ring, .dpb-star, .dpb-lock { animation: none; }
+  .dpb-ring, .dpb-star, .dpb-core, .dpb-lock { animation: none; }
 }
 
 /* No mobile ring-shrink. An earlier draft carried
