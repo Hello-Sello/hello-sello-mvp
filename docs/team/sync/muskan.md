@@ -46,8 +46,18 @@ Security advisors checked post-push on production — no new finding.
 `claude/muskan/work` — its branch was too) both removed, along with `claude/muskan/manage-shop-
 order-fix` and the scratch `_ship-temp-dev` branch used for the cherry-pick.
 
-**Still open:** DEV-167 not yet closed in Linear — holding it open until walked live in
-production (per this project's own G5 pattern), not just merged.
+**Still open:** DEV-167 not yet closed in Linear. Its real description has THREE asks, not one —
+almost closed it against the title alone (same trap as L-070). Only the second is built:
+(1) country-shop groups themselves need to be rename-able and re-arrangeable (Berlin/London
+order) — **not built**, different state (`groupOrder`) than what shipped, still deferred to
+Phase 16 in the code; (2) manual product order within a shop — **built, shipped, walked live in
+production by Muskan** 2026-09-07; (3) click a product image → big pop-up — **not built**,
+unrelated. Left DEV-167 open (still Todo) with asks 1 and 3 as the remaining scope; Muskan wants
+both built together in a NEW session, not this one. **Post-production-walk cleanup done**: the
+fix (`9565b3f`) was cherry-picked onto `dev`/`main` only, not `claude/muskan/work` — merged back
+in afterward so this branch doesn't drift from what's live. Confirmed via `merge-base
+--is-ancestor`: all three of `origin/claude/muskan/work`, `origin/dev`, `origin/main` now carry
+it. No stray worktrees or branches remain (`git worktree list` shows only the main checkout).
 
 ---
 
