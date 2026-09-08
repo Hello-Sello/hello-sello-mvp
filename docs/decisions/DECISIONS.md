@@ -2341,3 +2341,28 @@ the 2026-09-07 `shelf_position` outage bought.
 
 *(Source: DEV-167 build session 2026-09-08 with Muskan. Supersedes the location half of the
 2026-06-26 and 2026-07-02 entries; the address half of both still stands.)*
+
+---
+
+## 2026-09-08 — Product photos zoom on HOVER, not click — and hover is never the only trigger
+
+**Decision: hovering a product photo in the Present grid opens the full picture over that card
+(hover-zoom); click and keyboard focus open it too.**
+
+*Why it is recorded at all:* the researched default was click. Baymard rates hover-zoom and
+click-to-enlarge equally on desktop, and Marcel's ticket said "when clicking on image". Click was
+built first. Muskan asked for hover twice, explicitly, so hover is the decision — but hover alone
+would have been wrong for reasons no preference overrides: hover does not exist on a tablet, and a
+hover-only control fails WCAG 2.1.1 (keyboard). Focus and click therefore remain live.
+
+**The three constraints kept** (WCAG 1.4.13, content on hover): Escape dismisses without moving the
+mouse; the pointer can travel onto the panel without it vanishing; nothing closes on a timer of its
+own. A short delay before OPENING is fine and deliberate — it stops the grid strobing as the mouse
+sweeps across it.
+
+**Sizing rule that came out of three failed attempts:** the panel takes the CARD's own width. A
+centred full-screen panel put the arrows where the pointer could not reach them without closing it;
+a fixed 340px panel was wider than a card and covered the neighbouring product. Deriving the size
+from the card removes the guess at any window size or column count.
+
+*(Source: DEV-167 build session 2026-09-08 with Muskan, driven live in local dev.)*
