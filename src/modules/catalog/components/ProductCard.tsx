@@ -280,6 +280,29 @@ export function ProductCard({
   // Carousel index over p.images (wraps); busy guards the immediate actions.
   const [imgIdx, setImgIdx] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  // Hover-zoom timers. Opening is delayed so sweeping the mouse across the grid
+  // does not strobe a full-size photo for every card it crosses; closing is
+  // delayed so the pointer can cross the gap from the card to the enlarged photo
+  // without it vanishing on the way (WCAG 1.4.13 "hoverable"). Neither timer
+  // ever closes an OPEN preview on its own — that would break "persistent".
+  const openTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function cancelTimers() {
+    if (openTimer.current) { clearTimeout(openTimer.current); openTimer.current = null; }
+    if (closeTimer.current) { clearTimeout(closeTimer.current); closeTimer.current = null; }
+  }
+  function zoomIn() {
+    if (closeTimer.current) { clearTimeout(closeTimer.current); closeTimer.current = null; }
+    if (lightboxOpen || openTimer.current) return;
+    openTimer.current = setTimeout(() => { openTimer.current = null; setLightboxOpen(true); }, 350);
+  }
+  function zoomOut() {
+    if (openTimer.current) { clearTimeout(openTimer.current); openTimer.current = null; }
+    if (closeTimer.current) return;
+    closeTimer.current = setTimeout(() => { closeTimer.current = null; setLightboxOpen(false); }, 180);
+  }
+  useEffect(() => cancelTimers, []);
   const [busy, setBusy] = useState(false);
   // Full-field edit dialog (edit mode): the same spec rows as the inline scroll
   // list, laid out full-size — feedback was that the cramped inline inputs are
@@ -491,7 +514,9 @@ export function ProductCard({
               position={idx + 1}
               onPrev={() => setImgIdx((i) => i - 1)}
               onNext={() => setImgIdx((i) => i + 1)}
-              onClose={() => setLightboxOpen(false)}
+              onClose={() => { cancelTimers(); setLightboxOpen(false); }}
+              onPointerEnterImage={zoomIn}
+              onPointerLeaveImage={zoomOut}
             />
           )}
           <div
@@ -499,18 +524,24 @@ export function ProductCard({
             className={`relative aspect-square max-h-[250px] w-full shrink-0 overflow-hidden bg-brand-soft/40 ${
               cover && !editing ? "cursor-zoom-in" : ""
             }`}
-            // A real control, not a click handler on a div: Enter/Space must open
-            // it too, and edit mode keeps the frame inert because the drag grip
-            // and delete tools live in this same corner.
+            // Hover is the trigger Marcel asked for, but never the only one:
+            // focus opens it for keyboard users and click for touch, where hover
+            // does not exist at all. Edit mode keeps the frame inert — the drag
+            // grip and delete tools live in this same corner.
             {...(cover && !editing
               ? {
                   role: "button" as const,
                   tabIndex: 0,
                   "aria-label": `View ${p.cultivar ?? p.name} full size`,
-                  onClick: () => setLightboxOpen(true),
+                  onMouseEnter: zoomIn,
+                  onMouseLeave: zoomOut,
+                  onFocus: zoomIn,
+                  onBlur: zoomOut,
+                  onClick: () => { cancelTimers(); setLightboxOpen(true); },
                   onKeyDown: (e: React.KeyboardEvent) => {
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault();
+                      cancelTimers();
                       setLightboxOpen(true);
                     }
                   },

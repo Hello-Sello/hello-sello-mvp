@@ -3,10 +3,16 @@
 /**
  * Full-size product photo viewer.
  *
- * Opens on CLICK, never on hover. Hover has no equivalent on a tablet, and a
- * hover-only control fails WCAG 2.1.1 (keyboard) — a seller's device is as
- * likely to be an iPad as a laptop. The card shows a zoom cursor so the photo
- * still reads as clickable.
+ * The "hover-zoom" pattern: the card opens this on hover. Hover is the trigger
+ * Marcel asked for, but it is never the ONLY trigger — focus and click open it
+ * too, because hover does not exist on a tablet and a hover-only control would
+ * lock out anyone on a keyboard.
+ *
+ * WCAG 1.4.13 governs content shown on hover, and asks for three things:
+ *   • dismissible — Escape closes it without moving the mouse
+ *   • hoverable   — the pointer can move ONTO the photo without it vanishing,
+ *                   which is why the image reports enter/leave to the card
+ *   • persistent  — it never closes on a timer of its own
  *
  * Rendered through a portal to document.body deliberately: ProductCard's flip
  * animation puts a `transform` on an ancestor, and a transformed ancestor
@@ -26,6 +32,8 @@ export function ImageLightbox({
   onPrev,
   onNext,
   onClose,
+  onPointerEnterImage,
+  onPointerLeaveImage,
 }: {
   src: string;
   alt: string;
@@ -36,6 +44,11 @@ export function ImageLightbox({
   onPrev: () => void;
   onNext: () => void;
   onClose: () => void;
+  /** The enlarged photo tells the card when the pointer is over it, so moving
+   *  the mouse from the card onto the photo does not count as "left the card".
+   *  This is the "hoverable" half of WCAG 1.4.13. */
+  onPointerEnterImage?: () => void;
+  onPointerLeaveImage?: () => void;
 }) {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -56,14 +69,18 @@ export function ImageLightbox({
       aria-modal="true"
       aria-label={`${alt} — full size`}
       onClick={onClose}
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-ink/80 p-6 backdrop-blur-sm"
+      // The backdrop must NOT take the pointer. It covers the card that opened
+      // this, so if it were interactive the card would immediately register
+      // "mouse left" and the preview would flicker shut the instant it appeared.
+      // Everything the user actually needs to touch re-enables pointer events.
+      className="pointer-events-none fixed inset-0 z-[100] flex items-center justify-center bg-ink/80 p-6 backdrop-blur-sm"
     >
       <button
         type="button"
         onClick={onClose}
         aria-label="Close photo"
         data-testid="lightbox-close"
-        className="absolute right-5 top-5 rounded-full bg-white/10 p-2 text-white hover:bg-white/25"
+        className="pointer-events-auto absolute right-5 top-5 rounded-full bg-white/10 p-2 text-white hover:bg-white/25"
       >
         <X size={20} />
       </button>
@@ -75,7 +92,7 @@ export function ImageLightbox({
             aria-label="Previous photo"
             data-testid="lightbox-prev"
             onClick={(e) => { e.stopPropagation(); onPrev(); }}
-            className="absolute left-4 grid h-11 w-11 place-items-center rounded-full bg-white/10 text-white hover:bg-white/25"
+            className="pointer-events-auto absolute left-4 grid h-11 w-11 place-items-center rounded-full bg-white/10 text-white hover:bg-white/25"
           >
             <ChevronLeft size={22} />
           </button>
@@ -84,7 +101,7 @@ export function ImageLightbox({
             aria-label="Next photo"
             data-testid="lightbox-next"
             onClick={(e) => { e.stopPropagation(); onNext(); }}
-            className="absolute right-4 grid h-11 w-11 place-items-center rounded-full bg-white/10 text-white hover:bg-white/25"
+            className="pointer-events-auto absolute right-4 grid h-11 w-11 place-items-center rounded-full bg-white/10 text-white hover:bg-white/25"
           >
             <ChevronRight size={22} />
           </button>
@@ -100,8 +117,10 @@ export function ImageLightbox({
         src={src}
         alt={alt}
         onClick={(e) => e.stopPropagation()}
+        onMouseEnter={onPointerEnterImage}
+        onMouseLeave={onPointerLeaveImage}
         data-testid="lightbox-image"
-        className="max-h-full max-w-full rounded-2xl object-contain shadow-2xl"
+        className="pointer-events-auto max-h-full max-w-full rounded-2xl object-contain shadow-2xl"
       />
     </div>,
     document.body,
