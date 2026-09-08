@@ -108,6 +108,14 @@ Don't skip for "small" decisions — extensibility hooks and data-shape choices 
 
 (Load-bearing decisions go in `docs/architecture/adr/` as a full ADR via `/grill-with-docs` — this rule is for the lighter scratchpad capture.)
 
+**Monthly rotation (added 2026-09-08).** Applies to both `ARCHITECTURE-NOTES.md` and
+`DECISIONS.md` — both are dated, append-only logs with the same growth problem. When the first
+entry of a new month is about to be added to either file, move the just-closed month's dated
+entries out to `<FILE>-YYYY-MM.md` first, and add it to the Archive index at the top of the
+active file. Keeps each active file to its non-dated reference content + current month only.
+(`LEARNINGS.md` is deliberately exempt — it's L-numbered, not date-organized, and gets grep'd
+whole by trigger; splitting it by date would break that.)
+
 ---
 
 ## Shared files — fast PR culture

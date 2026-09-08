@@ -313,6 +313,8 @@ region pin for the server-function tier, so if that ever becomes load-bearing ag
 compliance audit, a customer question naming the specific claim), that absence is what to check
 first — this ruling is about the fact, not about adding evidence for it to the repo.
 
+- 2026-09-08 - g4/ screenshots removed from git + disk (slug complete, no longer needed).
+
 ## For Muskan
 
 ### ✅ ALL FOUR CLOSED AT G3, 2026-09-07 — kept for the trail, nothing owed

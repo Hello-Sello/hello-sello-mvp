@@ -73,3 +73,6 @@ npm-debug.log*
 
 # --- Personal project tracker (Muskan's private reading aid) ---
 docs/muskan-build/tracker.html
+
+# --- G4 visual-verification screenshots (ephemeral review artifacts, not documentation) ---
+docs/muskan-build/*/g4/
