@@ -2,28 +2,34 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDownUp, Check, Eye, Filter, MoreVertical, Printer, Send } from "lucide-react";
-import type { SellerOrderRow } from "@/modules/allocate/orders";
+import type { OrderRow } from "@/modules/allocate/orders";
 import type { OrderStatusCode } from "@/modules/allocate/status";
 
 /**
- * Orders & offers — the seller's order inbox (Task 2, 260707-0ob plan 2).
+ * Orders & offers — the order inbox shared by Sell (seller's view of each
+ * buyer) and Buy (buyer's view of each supplier), `side` picking which.
  * Faithful port of `prototypes/allocate-prototype/index.html`'s Excel-style
  * `renderOrderHead`/`setOSort`/`toggleOFilter` table, over the REAL
- * `getSellerOrders()` read (Plan 4 passes the rows in as a server-fetched
- * prop — this component owns no data fetching itself).
+ * `getSellerOrders()`/`getBuyerOrders()` reads (each page passes its rows in
+ * as a server-fetched prop — this component owns no data fetching itself).
  *
  * Row click + the ⋮ menu's View both dispatch `hs:open-deal-card` — the same
- * window-event contract `AllocateDealCardHost` listens for, so opening an
- * order always opens the REAL deal card (`DealCard`), never a rebuilt
- * receipt UI (T-260707-05 is a UI-only accept for Send/Print below).
+ * window-event contract `DealCardHost` listens for, so opening an order
+ * always opens the REAL deal card (`DealCard`), never a rebuilt receipt UI
+ * (T-260707-05 is a UI-only accept for Send/Print below).
  */
+function sideLabels(side: "seller" | "buyer") {
+  return side === "seller"
+    ? { column: "Customer", topSort: "Top accounts first" }
+    : { column: "Supplier", topSort: "Top suppliers first" };
+}
 
-const ORDERED_VIA_LABELS: Record<SellerOrderRow["orderedVia"], string> = {
+const ORDERED_VIA_LABELS: Record<OrderRow["orderedVia"], string> = {
   hello_sello: "Hello Sello",
   email: "E-mail",
   fax: "Fax",
 };
-const ORDERED_VIA_CODES = Object.keys(ORDERED_VIA_LABELS) as SellerOrderRow["orderedVia"][];
+const ORDERED_VIA_CODES = Object.keys(ORDERED_VIA_LABELS) as OrderRow["orderedVia"][];
 
 const STATUS_LABELS: Record<OrderStatusCode, string> = {
   sales_offer: "Sales offer",
@@ -80,11 +86,11 @@ function parseOrderDate(s: string): number {
 type SortKey = "customer" | "customerTop" | "received" | "delivery" | "sku";
 type SortState = { key: SortKey | null; dir: 1 | -1 };
 type FilterState = {
-  orderedVia: Set<SellerOrderRow["orderedVia"]>;
+  orderedVia: Set<OrderRow["orderedVia"]>;
   status: Set<OrderStatusCode>;
 };
 
-function applySortAndFilter(orders: SellerOrderRow[], sort: SortState, filter: FilterState) {
+function applySortAndFilter(orders: OrderRow[], sort: SortState, filter: FilterState) {
   let rows = orders.filter(
     (o) =>
       (filter.orderedVia.size === 0 || filter.orderedVia.has(o.orderedVia)) &&
@@ -94,10 +100,12 @@ function applySortAndFilter(orders: SellerOrderRow[], sort: SortState, filter: F
   if (sort.key === "customerTop") {
     // "Top accounts first" — pre-sort by each order's own value_net desc.
     // Same signal isKeyAccount classifies by (see status.ts), simpler than
-    // threading a per-buyer keyAccountRank onto every row (<interfaces>).
+    // threading a per-counterparty keyAccountRank onto every row (<interfaces>).
     rows = [...rows].sort((a, b) => (b.valueNet ?? 0) - (a.valueNet ?? 0));
   } else if (sort.key === "customer") {
-    rows = [...rows].sort((a, b) => a.customerName.localeCompare(b.customerName) * sort.dir);
+    rows = [...rows].sort(
+      (a, b) => a.counterparty.name.localeCompare(b.counterparty.name) * sort.dir,
+    );
   } else if (sort.key === "received") {
     rows = [...rows].sort(
       (a, b) => (parseOrderDate(a.receivedAt) - parseOrderDate(b.receivedAt)) * sort.dir,
@@ -118,7 +126,8 @@ function openDealCard(dealCardId: string) {
   window.dispatchEvent(new CustomEvent("hs:open-deal-card", { detail: { dealCardId } }));
 }
 
-export function OrdersTable({ orders }: { orders: SellerOrderRow[] }) {
+export function OrdersTable({ orders, side }: { orders: OrderRow[]; side: "seller" | "buyer" }) {
+  const labels = sideLabels(side);
   const [sort, setSort] = useState<SortState>({ key: null, dir: 1 });
   const [filter, setFilter] = useState<FilterState>({
     orderedVia: new Set(),
@@ -174,7 +183,7 @@ export function OrdersTable({ orders }: { orders: SellerOrderRow[] }) {
             <tr>
               <Th>Order Nr.</Th>
               <SortableTh
-                label="Customer"
+                label={labels.column}
                 colKey="customer"
                 open={openMenu === "head:customer"}
                 onToggle={() => setOpenMenu(openMenu === "head:customer" ? null : "head:customer")}
@@ -187,7 +196,7 @@ export function OrdersTable({ orders }: { orders: SellerOrderRow[] }) {
                   Sort Z → A
                 </MenuButton>
                 <MenuButton onClick={() => { setSort({ key: "customerTop", dir: 1 }); setOpenMenu(null); }}>
-                  Top accounts first
+                  {labels.topSort}
                 </MenuButton>
                 {(sort.key === "customer" || sort.key === "customerTop") && (
                   <MenuButton onClick={() => { setSort({ key: null, dir: 1 }); setOpenMenu(null); }}>
@@ -301,7 +310,7 @@ export function OrdersTable({ orders }: { orders: SellerOrderRow[] }) {
                 <td className="whitespace-nowrap px-3 py-2.5 font-mono text-[11.5px] font-semibold text-brand-deep">
                   {o.orderNumber}
                 </td>
-                <td className="whitespace-nowrap px-3 py-2.5 font-semibold text-ink">{o.customerName}</td>
+                <td className="whitespace-nowrap px-3 py-2.5 font-semibold text-ink">{o.counterparty.name}</td>
                 <td className="whitespace-nowrap px-3 py-2.5 text-ink-muted">{o.receivedAt}</td>
                 <td className="whitespace-nowrap px-3 py-2.5 text-ink-muted">{o.deliveryAt ?? "—"}</td>
                 <td className="px-3 py-2.5 text-center text-ink-muted">{o.skuCount}</td>
