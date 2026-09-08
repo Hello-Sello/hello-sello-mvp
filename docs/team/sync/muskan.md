@@ -34,10 +34,8 @@ coordinated with `orders` first. **If you build on a worktree branch, assume the
 protect shared docs and coordinate by message instead.**
 
 **Left for whoever picks this up:** G5 on production once the migration ships · the contract-step
-drop of `product.location` · 4 undiagnosed `present-info.spec.ts` e2e failures · 3 stale-selector
-failures in `present-edit-model.spec.ts` from `1cb26e8` (2026-07-07), HEL-78 shape · products
-created outside `setProductLocation` (e2e fixtures) never get `location_id`, which matters before
-the old column is dropped.
+drop of `product.location`, which **HEL-95** must be fixed before. Everything else found this
+session is on the tracker — **HEL-93**, **HEL-94**, **HEL-95**, and a scope comment on **HEL-80**.
 
 ---
 
