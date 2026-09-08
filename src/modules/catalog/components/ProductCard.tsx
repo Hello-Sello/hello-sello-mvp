@@ -26,6 +26,7 @@ import {
   GripVertical, Trash2, ChevronLeft, ChevronRight, ChevronDown, X, Pencil,
   MessageSquareQuote, Check,
 } from "lucide-react";
+import { ImageLightbox } from "./ImageLightbox";
 import type { ShopProduct } from "../shop";
 import { packSizes, resolveTierPrice } from "../pricing";
 import { ladderRows } from "../ladderPanel";
@@ -278,6 +279,7 @@ export function ProductCard({
   const [liked, setLiked] = useState(false);
   // Carousel index over p.images (wraps); busy guards the immediate actions.
   const [imgIdx, setImgIdx] = useState(0);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   // Full-field edit dialog (edit mode): the same spec rows as the inline scroll
   // list, laid out full-size — feedback was that the cramped inline inputs are
@@ -481,9 +483,39 @@ export function ProductCard({
               .pc-photo max-height) so the fixed-height card keeps ~294px for the
               spec rows below — without the cap the square image swallows the card
               and the spec list collapses to ~0px (object-cover crops the overflow). */}
+          {lightboxOpen && cover && (
+            <ImageLightbox
+              src={cover}
+              alt={p.cultivar ?? p.name}
+              count={images.length}
+              position={idx + 1}
+              onPrev={() => setImgIdx((i) => i - 1)}
+              onNext={() => setImgIdx((i) => i + 1)}
+              onClose={() => setLightboxOpen(false)}
+            />
+          )}
           <div
             data-testid="card-photo"
-            className="relative aspect-square max-h-[250px] w-full shrink-0 overflow-hidden bg-brand-soft/40"
+            className={`relative aspect-square max-h-[250px] w-full shrink-0 overflow-hidden bg-brand-soft/40 ${
+              cover && !editing ? "cursor-zoom-in" : ""
+            }`}
+            // A real control, not a click handler on a div: Enter/Space must open
+            // it too, and edit mode keeps the frame inert because the drag grip
+            // and delete tools live in this same corner.
+            {...(cover && !editing
+              ? {
+                  role: "button" as const,
+                  tabIndex: 0,
+                  "aria-label": `View ${p.cultivar ?? p.name} full size`,
+                  onClick: () => setLightboxOpen(true),
+                  onKeyDown: (e: React.KeyboardEvent) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setLightboxOpen(true);
+                    }
+                  },
+                }
+              : {})}
           >
             {cover ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -512,14 +544,14 @@ export function ProductCard({
               <>
                 <button
                   type="button" aria-label="Previous image" data-testid="carousel-prev"
-                  onClick={() => setImgIdx((i) => i - 1)}
+                  onClick={(e) => { e.stopPropagation(); setImgIdx((i) => i - 1); }}
                   className="absolute left-1.5 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-full bg-ink/45 text-white backdrop-blur hover:bg-ink/70"
                 >
                   <ChevronLeft size={16} />
                 </button>
                 <button
                   type="button" aria-label="Next image" data-testid="carousel-next"
-                  onClick={() => setImgIdx((i) => i + 1)}
+                  onClick={(e) => { e.stopPropagation(); setImgIdx((i) => i + 1); }}
                   className="absolute right-1.5 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-full bg-ink/45 text-white backdrop-blur hover:bg-ink/70"
                 >
                   <ChevronRight size={16} />
