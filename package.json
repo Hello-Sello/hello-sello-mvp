@@ -10,7 +10,8 @@
     "test": "PLAYWRIGHT_FORCE_ASYNC_LOADER=1 playwright test",
     "test:ui": "PLAYWRIGHT_FORCE_ASYNC_LOADER=1 playwright test --ui",
     "test:unit": "vitest run",
-    "test:unit:watch": "vitest"
+    "test:unit:watch": "vitest",
+    "check:functions": "deno check supabase/functions/*/index.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.3",

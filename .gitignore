@@ -76,3 +76,8 @@ docs/muskan-build/tracker.html
 
 # --- G4 visual-verification screenshots (ephemeral review artifacts, not documentation) ---
 docs/muskan-build/*/g4/
+
+# written by `npm run check:functions`; not committed — introducing a Deno
+# lockfile would also change how `supabase functions deploy` resolves, and that
+# is a deploy decision, not a side effect of type-checking.
+deno.lock

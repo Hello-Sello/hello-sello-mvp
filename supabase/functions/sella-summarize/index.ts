@@ -1,4 +1,3 @@
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { runSummary, type SummaryLine } from "../_shared/sella/summarize.ts";
 import { checkRelationshipWritable, logGateOutcome } from "../_shared/relationshipGate.ts";

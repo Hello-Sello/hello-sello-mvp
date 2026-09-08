@@ -1,4 +1,3 @@
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { runDetection } from "../_shared/sella/detect.ts";
 import { checkRelationshipWritable, logGateOutcome } from "../_shared/relationshipGate.ts";
@@ -205,11 +204,18 @@ Deno.serve(async (req: Request) => {
   if (!outcome.ok) {
     return json({ thread_id: threadId, last_message_id: lastMessageId, outcome }, 200);
   }
+  // Capture the narrowed branch. `postDetectedMessage` below is a hoisted
+  // function declaration, and TypeScript does not carry an outer `!outcome.ok`
+  // narrowing into one — it cannot know when the function is called. Reading
+  // `result` in there was therefore a type error even though the early
+  // return above makes an ok:false outcome unreachable by then. Binding the
+  // fields once keeps the guard's guarantee everywhere it is used.
+  const { result, evidence, isDeal } = outcome;
 
-  const deal = outcome.isDeal ? outcome.result.deal : null;
+  const deal = isDeal ? result.deal : null;
   const decision = decideSurface(prev, {
-    isDeal: outcome.isDeal,
-    verdict: outcome.result.verdict,
+    isDeal,
+    verdict: result.verdict,
     deal,
   });
 
@@ -221,11 +227,11 @@ Deno.serve(async (req: Request) => {
     .insert({
       thread_id: threadId,
       last_message_id: lastMessageId,
-      verdict: outcome.result.verdict,
-      confidence: outcome.result.confidence,
-      product_key: outcome.isDeal ? productKey(deal) : null,
-      draft: outcome.isDeal ? deal : null,
-      evidence: outcome.isDeal ? outcome.evidence : null,
+      verdict: result.verdict,
+      confidence: result.confidence,
+      product_key: isDeal ? productKey(deal) : null,
+      draft: isDeal ? deal : null,
+      evidence: isDeal ? evidence : null,
       surfaced_message_id: null,
     })
     .select("id")
@@ -256,10 +262,10 @@ Deno.serve(async (req: Request) => {
         body: `Sella spotted a deal: ${deal?.summary ?? "see details"}`,
         metadata: {
           detection_id: detectionId,
-          verdict: outcome.result.verdict,
-          confidence: outcome.result.confidence,
+          verdict: result.verdict,
+          confidence: result.confidence,
           draft: deal,
-          evidence: outcome.evidence,
+          evidence,
           votes,
           product_key: productKey(deal),
           superseded_by: null,
@@ -306,9 +312,9 @@ Deno.serve(async (req: Request) => {
     productCount: sellerProducts.length,
     last_message_id: lastMessageId,
     detection_id: detectionId,
-    verdict: outcome.result.verdict,
-    confidence: outcome.result.confidence,
-    isDeal: outcome.isDeal,
+    verdict: result.verdict,
+    confidence: result.confidence,
+    isDeal,
     decision: decision.kind,
     surfaced_message_id: surfacedMessageId,
   });
