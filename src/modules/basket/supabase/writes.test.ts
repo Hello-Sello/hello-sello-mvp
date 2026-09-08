@@ -42,7 +42,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("@/shared/db/client", () => ({ createClient: vi.fn() }));
 
-import { addToBasket, BasketAdmissionError } from "./writes";
+import { addToBasket, updateBasketLinePackCount, BasketAdmissionError } from "./writes";
 import { createClient } from "@/shared/db/client";
 
 // Bob — seeded, connected buyer (supabase/seed/seed.sql). The identity here
@@ -117,5 +117,64 @@ describe("addToBasket — 42501 admission-refusal mapping (T07, PLAN-T07.md §6,
       expect.objectContaining({ owner_person_id: OWNER_ID, product_id: "admissible-product-id", pack_count: 1 }),
       { onConflict: "owner_person_id,product_id" },
     );
+  });
+});
+
+/**
+ * The pack-count floor (HEL-78).
+ *
+ * `e2e/present-basket.spec.ts` claimed to cover the drawer's +/- stepper and
+ * never ran a line of it — 3 `test.fixme`, 0 live tests, asserting test-ids
+ * `BasketDrawer.tsx` has never carried. Deleting it left the "a basket line is
+ * at least one pack" rule with no cover at all, so it is pinned here.
+ *
+ * Pinned at the WRITE, not through the drawer, and that is the point rather
+ * than a convenience: the rule used to live only in the Decrease handler's
+ * `Math.max(1, packCount - 1)`. A click handler cannot be the owner of a data
+ * invariant — every other caller (and the column, which has no CHECK) was free
+ * to write 0. The sibling `updateBasketLinePackSize` already guarded its own
+ * argument this way; this suite is what stops the two drifting apart again.
+ *
+ * The runner is `environment: "node"` with no DOM (see this file's header), so
+ * the stepper's CLICK behaviour remains uncovered here by necessity, not by
+ * oversight — it needs an e2e, and an e2e that drives the drawer is currently
+ * entangled with a live stacking bug in the app chrome. Named, not smuggled.
+ */
+function makeUpdateDb() {
+  const eq = vi.fn().mockResolvedValue({ error: null });
+  const update = vi.fn().mockReturnValue({ eq });
+  return { from: vi.fn().mockReturnValue({ update }), update, eq };
+}
+
+describe("updateBasketLinePackCount — a basket line is at least one pack (HEL-78)", () => {
+  // 0 is the one the shipped UI would produce the instant the drawer's
+  // `Math.max(1, …)` is dropped; the rest are what any other caller can send.
+  it.each([0, -1, -0.5, Number.NaN, Number.POSITIVE_INFINITY])(
+    "refuses pack_count %p, and refuses it BEFORE touching the database",
+    async (bad) => {
+      const db = makeUpdateDb();
+      vi.mocked(createClient).mockReturnValue(db as never);
+
+      await expect(updateBasketLinePackCount("line-1", bad)).rejects.toThrow(/at least 1/);
+      // The guard is worthless if it throws after the row is already written.
+      expect(db.update).not.toHaveBeenCalled();
+    },
+  );
+
+  it("accepts 1 — the floor itself is a legal value, not an off-by-one refusal", async () => {
+    const db = makeUpdateDb();
+    vi.mocked(createClient).mockReturnValue(db as never);
+
+    await expect(updateBasketLinePackCount("line-1", 1)).resolves.toBeUndefined();
+    expect(db.update).toHaveBeenCalledWith(expect.objectContaining({ pack_count: 1 }));
+    expect(db.eq).toHaveBeenCalledWith("id", "line-1");
+  });
+
+  it("accepts a raise — the guard is a floor, not a freeze", async () => {
+    const db = makeUpdateDb();
+    vi.mocked(createClient).mockReturnValue(db as never);
+
+    await expect(updateBasketLinePackCount("line-1", 7)).resolves.toBeUndefined();
+    expect(db.update).toHaveBeenCalledWith(expect.objectContaining({ pack_count: 7 }));
   });
 });

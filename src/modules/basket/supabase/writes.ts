@@ -97,7 +97,22 @@ export async function addToBasket(
   if (error) throwWriteError(error);
 }
 
+/**
+ * A basket line is at least one pack. Guarded HERE, next to the write, for the
+ * same reason `updateBasketLinePackSize` guards its own argument: nothing below
+ * this line says no. `product_basket_line.pack_count` is a bare
+ * `numeric not null default 1` with no CHECK, so PostgREST will happily store 0
+ * or -3 and the basket then prices and sends a line of nothing.
+ *
+ * Until this guard, the rule lived only in `BasketDrawer`'s Decrease handler
+ * (`Math.max(1, packCount - 1)`) — a click handler, i.e. the one place a second
+ * caller would never look. That handler is still correct and still the right
+ * affordance; it just is not the owner.
+ */
 export async function updateBasketLinePackCount(lineId: string, packCount: number): Promise<void> {
+  if (!Number.isFinite(packCount) || packCount < 1) {
+    throw new Error("basket: pack count must be at least 1");
+  }
   const supabase = createClient();
   const { error } = await supabase
     .from("product_basket_line")
