@@ -2601,3 +2601,28 @@ routes and re-run *first*. Corollary for this repo: after any `rm -rf .next`, **
 target spec touches before trusting a red result** — `landing.spec.ts` alone needs five. This is the
 diagnosable half of HEL-79's "load-correlated flake"; it is not luck and it is not the test's fault.
 ⚠️ Do not "fix" it by raising timeouts — that hides a cold cache behind a slower gate.
+
+---
+
+## L-075 · Two Claude sessions sharing ONE working tree can each go stale on origin — re-fetch immediately before every push, and `--force-with-lease` is not optional
+
+**2026-09-08 · slug 0028 ship · caught by a peer session's git archaeology, before any push landed**
+
+**Trigger** — a `/ship` (or any) session about to push a rebased branch, while a same-owner session
+is active on the SAME checkout (confirmed here via `git worktree list` showing one checkout and
+`git reflog` showing both sessions' operations interleaved in one history).
+
+**What happened.** `/ship 0028` fetched `origin/dev`, rebased `claude/muskan/work`, ran the full
+gate — all clean, ~40 minutes elapsed. In that window, the other session pushed two small docs-only
+commits straight to `origin/claude/muskan/work`. The ship session's picture of "origin" was the one
+fetched at the start of the run; it never re-fetched before preparing to push. A plain `git push
+--force` at that point would have silently deleted both commits from the remote ref. The other
+session caught it first, independently, via `git merge-base --is-ancestor origin/claude/muskan/work
+HEAD` returning NO — verified again here before acting on it, not taken on trust.
+
+**The rule.** Immediately before any push that rewrites history, `git fetch origin` again — not
+"fetched at session start," fetched right before the push — and check `--is-ancestor`. If NO, diff
+what's origin-only against local content before assuming it's noise (here it was two real,
+undocumented decisions) and cherry-pick before pushing. **Never plain `--force`; `--force-with-lease`
+is the default for every rewritten push** — it turns silent data loss into a refused push you're
+forced to investigate.

@@ -2,9 +2,9 @@
 
 lane:   STANDARD
 branch: claude/muskan/work
-stage:  design ✅ → **build ✅ COMPLETE (T01 + T02) → ⏸ G4 OWED, then `/ship`**
-        Both tickets built, reviewed and G4-staged. **NO GATE HAS BEEN PASSED.** The diff renders,
-        so per the skill G4 is Muskan's and is never self-passed. One combined walk for both.
+stage:  design ✅ → build ✅ → **G4 ✅ ACCEPTED (Muskan, 2026-09-08) → `/ship` IN PROGRESS**
+        Two of nine G4 calls fixed (`abffde0`); remaining seven accepted as-is/deferred, none are
+        defects. Full gate green, security scan clean. Merge target this round is **dev only**.
 
 ## Seed
 Marcel, via Linear DEV-164 "LANDINGPAGE" (2026-07-24), routed by Muskan 2026-09-07 via /triage:
@@ -242,6 +242,43 @@ no server action; the only route touched is `/`, already public, its D-01 redire
   failing case changes between runs BEFORE re-reading the diff.**
   Now at step 9, `visual-verifier` on §7a — briefed to capture the lock at four points in one 44s
   cycle, since neither a test nor a single frame can show a rotation.
+- 2026-09-08 — **G4 ruled ACCEPTED by Muskan.** Two calls answered "fix" (padlock rotation, §4
+  orphan row — both shipped in `abffde0`). Remaining seven G4 items (§7a's server-region claim,
+  the eyebrow/heading duplication, the ADR self-contradiction on D-15, the four minor departures)
+  accepted as-is or deferred — none are defects, all are judgment calls the pipeline correctly
+  refused to make. `/ship` proceeding on that basis. Merge target for this round is **`dev` only**
+  — Ayush continues landing-page work on top before any `dev → main` release.
+- 2026-09-08 — **Rebase onto origin/dev: clean, no conflicts** (picked up DEV-167's shelf-position
+  fix from a disjoint worktree session — zero file overlap).
+- 2026-09-08 — **Full gate: tsc clean · unit 515/515 · eslint 6 pre-existing errors (same files/
+  lines as the documented baseline, none in 0028's diff) · e2e 124+/146.** e2e failures fall into
+  three proven buckets, none attributable to 0028: (a) the documented `sb_secret_` JWT key-class
+  issue (~14, `auth.admin.createUser` rejects the new key format) · (b) 7 failures split across
+  `present-edit-model.spec.ts`/`present-info.spec.ts`, pre-existing on `origin/dev` (confirmed:
+  0028's diff never touches those files) · (c) 1 failure in `auth-gate.spec.ts`, also pre-existing.
+  ⚠️ **One false alarm caught and fixed environmentally, not in code:** `landing.spec.ts:488`
+  (today's `.dpb-core` counter-rotation fix) failed on the first run — the dev server was serving a
+  **stale CSS bundle** from before `abffde0` (`.dpb-core` had no `animation` property in the actual
+  served chunk, though the source file was correct). `.next` wiped, server restarted, routes warmed
+  — bundle confirmed to contain `dpb-counter-core`, landing suite now 21/21. Same environment-fault
+  class as L-074, different symptom (stale artifact, not slow-compile timeout).
+- 2026-09-08 — **Security scan (Claude Security plugin, scan-changes mode): zero findings.**
+  Verified the ADR's S1-S8 N/A call rather than trusting it — migration set byte-identical to
+  origin/dev, no `middleware.ts`, all 4 touched components are server components, zero matches for
+  any dynamic-input/secret pattern across all 496 added lines. One process caveat logged: a secret
+  sweep's first run silently no-opped on an unsupported grep flag; re-run confirmed genuine no-match.
+- 2026-09-08 — **e2e non-JWT failures resolved to root cause with dev_167's help.** Of the 7
+  originally flagged: **3 in `present-edit-model.spec.ts` are stale test-ids**, broken since
+  `1cb26e8` (2026-07-07) renamed `add-location-input/btn` → `add-shop-input/confirm` and the spec
+  was never updated — unrelated to 0028 or to DEV-167's shelf-position fix, worth its own ticket
+  (same shape as HEL-78). **4 in `present-info.spec.ts` remain genuinely undiagnosed** — all three
+  test-ids used (`info-card-warehouse`, `info-more`, `present-banner`) still exist in source, so
+  not stale-selector rot; dev_167 is running it down with a trace, not attributed to anything yet.
+- 2026-09-08 — **Pushed to origin/claude/muskan/work.** Caught mid-push: the other active Muskan
+  session (dev_167, same working tree) had pushed 2 docs-only commits directly to origin
+  (`8b557db`, `68f5856`) after my last fetch. A plain `--force` would have dropped them silently.
+  Verified via `--is-ancestor` (NO), confirmed both commits docs-only, cherry-picked both, verified
+  content present, pushed with `--force-with-lease`. Origin now matches local HEAD exactly. → L-075.
 
 ## For Muskan
 
