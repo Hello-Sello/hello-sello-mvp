@@ -73,55 +73,62 @@ export function ImageLightbox({
       // this, so if it were interactive the card would immediately register
       // "mouse left" and the preview would flicker shut the instant it appeared.
       // Everything the user actually needs to touch re-enables pointer events.
-      className="pointer-events-none fixed inset-0 z-[100] flex items-center justify-center bg-ink/80 p-6 backdrop-blur-sm"
+      // Kept light: this is a preview glanced at on hover, not a screen opened.
+      className="pointer-events-none fixed inset-0 z-[100] flex items-center justify-center bg-ink/40 p-6 backdrop-blur-[2px]"
     >
-      <button
-        type="button"
-        onClick={onClose}
-        aria-label="Close photo"
-        data-testid="lightbox-close"
-        className="pointer-events-auto absolute right-5 top-5 rounded-full bg-white/10 p-2 text-white hover:bg-white/25"
-      >
-        <X size={20} />
-      </button>
-
-      {count > 1 && (
-        <>
-          <button
-            type="button"
-            aria-label="Previous photo"
-            data-testid="lightbox-prev"
-            onClick={(e) => { e.stopPropagation(); onPrev(); }}
-            className="pointer-events-auto absolute left-4 grid h-11 w-11 place-items-center rounded-full bg-white/10 text-white hover:bg-white/25"
-          >
-            <ChevronLeft size={22} />
-          </button>
-          <button
-            type="button"
-            aria-label="Next photo"
-            data-testid="lightbox-next"
-            onClick={(e) => { e.stopPropagation(); onNext(); }}
-            className="pointer-events-auto absolute right-4 grid h-11 w-11 place-items-center rounded-full bg-white/10 text-white hover:bg-white/25"
-          >
-            <ChevronRight size={22} />
-          </button>
-          <span className="absolute bottom-6 left-1/2 -translate-x-1/2 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-white">
-            {position} / {count}
-          </span>
-        </>
-      )}
-
-      {/* Clicking the photo itself must not close — only the backdrop does. */}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={src}
-        alt={alt}
-        onClick={(e) => e.stopPropagation()}
+      {/* Controls live ON the photo, not at the screen edges — the photo is
+          capped well short of the viewport, so edge-anchored arrows would float
+          in empty space far away from the thing they act on. */}
+      <div
+        className="pointer-events-auto relative"
         onMouseEnter={onPointerEnterImage}
         onMouseLeave={onPointerLeaveImage}
-        data-testid="lightbox-image"
-        className="pointer-events-auto max-h-full max-w-full rounded-2xl object-contain shadow-2xl"
-      />
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={src}
+          alt={alt}
+          data-testid="lightbox-image"
+          className="max-h-[60vh] max-w-[60vw] rounded-2xl object-contain shadow-2xl"
+        />
+
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close photo"
+          data-testid="lightbox-close"
+          className="absolute -right-3 -top-3 rounded-full bg-white p-1.5 text-ink shadow-lg ring-1 ring-ink/10 hover:bg-ink/5"
+        >
+          <X size={16} />
+        </button>
+
+        {count > 1 && (
+          <>
+            <button
+              type="button"
+              aria-label="Previous photo"
+              data-testid="lightbox-prev"
+              onClick={onPrev}
+              className="absolute left-2 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full bg-ink/45 text-white backdrop-blur hover:bg-ink/70"
+            >
+              <ChevronLeft size={20} />
+            </button>
+            <button
+              type="button"
+              aria-label="Next photo"
+              data-testid="lightbox-next"
+              onClick={onNext}
+              className="absolute right-2 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full bg-ink/45 text-white backdrop-blur hover:bg-ink/70"
+            >
+              <ChevronRight size={20} />
+            </button>
+            <span className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-ink/55 px-3 py-1 text-xs font-semibold text-white backdrop-blur">
+              {position} / {count}
+            </span>
+          </>
+        )}
+      </div>
     </div>,
     document.body,
   );
