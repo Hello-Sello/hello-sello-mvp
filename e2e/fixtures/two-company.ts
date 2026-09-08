@@ -50,6 +50,7 @@
  */
 import type { Browser, BrowserContext, Locator, Page } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
+import { existsSync } from 'node:fs'
 
 /** The two seeded counterparties — Alice (GreenLeaf) and Bob (StonePharm). */
 export type Who = 'alice' | 'bob'
@@ -710,11 +711,80 @@ export async function loginAs(page: Page, who: Who): Promise<void> {
   await page.waitForURL((url) => !url.pathname.includes('/login'))
 }
 
+/** Where each side's signed-in session is cached between tests. Gitignored —
+ *  these files hold live auth cookies. */
+export const STORAGE_STATE: Record<Who, string> = {
+  alice: 'playwright/.auth/alice.json',
+  bob: 'playwright/.auth/bob.json',
+}
+
+/** `/home` is gated; `/` is the PUBLIC landing (shared/db/proxy.ts allowlists
+ *  `path === '/'` exactly). Probing the session on `/` therefore proves nothing
+ *  — an anonymous visitor is served the landing page and never sees `/login`. */
+const GATED_PROBE = '/home'
+
+function isSignedOut(page: Page): boolean {
+  return new URL(page.url()).pathname.startsWith('/login')
+}
+
+/**
+ * A signed-in context for one side: restore the cached session when it is still
+ * live, sign in for real when it is not.
+ *
+ * The cache is what this is FOR. `deal-change.spec.ts` calls `openTwoContexts`
+ * in every one of its 24 `beforeEach` hooks, so it drove the login form 48 times
+ * per full-file run — and the flake this replaces landed exactly there, timing
+ * out at `page.goto('/login')` or the `waitForURL` off it, at a different test
+ * position each attempt. Restoring cookies skips that form. `@supabase/ssr`'s
+ * `createBrowserClient` keeps the session in COOKIES, which is what
+ * `storageState` captures, so this works at all.
+ *
+ * The FALLBACK is what makes it safe, and it is not belt-and-braces — a cached
+ * session in this repo has three ways to be dead before it is next used:
+ *   - `supabase/config.toml` sets `enable_refresh_token_rotation = true` with a
+ *     10s `refresh_token_reuse_interval` and a 3600s JWT, so replaying one
+ *     refresh token across a run longer than the JWT lifetime can trip GoTrue's
+ *     reuse detection and revoke the whole token family;
+ *   - `password-reset.spec.ts` performs two real password changes on Alice
+ *     (restoring the seeded one after), and a password update terminates her
+ *     other sessions;
+ *   - `email-change.spec.ts` flips the same account's email and back.
+ * Driving the login form per test was immune to all three because it minted a
+ * fresh session every time. Re-authenticating on a dead probe keeps that
+ * immunity while still paying for the form only when it is actually needed.
+ */
+export async function openSignedInContext(
+  browser: Browser,
+  who: Who,
+): Promise<{ context: BrowserContext; page: Page }> {
+  if (existsSync(STORAGE_STATE[who])) {
+    const context = await browser.newContext({ storageState: STORAGE_STATE[who] })
+    const page = await context.newPage()
+    await page.goto(GATED_PROBE)
+    if (!isSignedOut(page)) return { context, page }
+    await context.close() // cached session is dead — fall through and re-mint it
+  }
+
+  const context = await browser.newContext()
+  const page = await context.newPage()
+  await loginAs(page, who)
+  await page.goto(GATED_PROBE)
+  // Captured only once the gated page has actually rendered: `signIn` redirects
+  // via `/`, and proxy.ts persists any rotated cookie on the request it gates,
+  // so snapshotting earlier can save a token that is already superseded.
+  await context.storageState({ path: STORAGE_STATE[who] })
+  return { context, page }
+}
+
 /**
  * Open two independent browser contexts and return a logged-in page for each
  * side. Separate contexts (not just two tabs) are required so Alice's and Bob's
  * Supabase sessions never share cookies — the two-sided sign / negotiate gate
  * only makes sense when each side acts as itself.
+ *
+ * Both sides are brought up concurrently: the contexts are independent, and
+ * this runs in all 24 of deal-change's `beforeEach` hooks, so serialising the
+ * two page loads doubles a cost paid 24 times for no reason.
  */
 export async function openTwoContexts(
   browser: Browser,
@@ -724,13 +794,16 @@ export async function openTwoContexts(
   alicePage: Page
   bobPage: Page
 }> {
-  const aliceContext = await browser.newContext()
-  const bobContext = await browser.newContext()
-  const alicePage = await aliceContext.newPage()
-  const bobPage = await bobContext.newPage()
-  await loginAs(alicePage, 'alice')
-  await loginAs(bobPage, 'bob')
-  return { aliceContext, bobContext, alicePage, bobPage }
+  const [alice, bob] = await Promise.all([
+    openSignedInContext(browser, 'alice'),
+    openSignedInContext(browser, 'bob'),
+  ])
+  return {
+    aliceContext: alice.context,
+    bobContext: bob.context,
+    alicePage: alice.page,
+    bobPage: bob.page,
+  }
 }
 
 /**
