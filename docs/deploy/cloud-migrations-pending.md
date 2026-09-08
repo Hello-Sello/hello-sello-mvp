@@ -23,6 +23,32 @@
 
 ---
 
+## 🔴 READ FIRST (2026-09-07, later still) — `product.shelf_position` PUSHED, PRODUCTION WAS BRIEFLY BROKEN
+
+**Shipped outside the normal flow: straight from a worktree fix branch, cherry-picked onto `dev`,
+PR #189 `dev → main`, merged by Muskan.** Not through `claude/muskan/work` — that branch had an
+unrelated backlog (0028 build in progress) that would have delayed this fix, and DEV-167 (Manage
+Shop product order) was small and fully self-contained, so it shipped directly.
+
+**Real incident, not a hypothetical.** Vercel auto-deployed the `main` merge commit
+(`010d996`, 2026-09-07 17:15 UTC) before the migration was applied — `getMyShop()`'s query
+(`.order("shelf_position")...`) went live referencing a column that did not exist on production
+yet, breaking `/present` for every seller until the push below landed. Caught and fixed within
+minutes of the merge, not by design — **the lesson: same-deploy sequencing (migration before or
+with the code, never after) applies even to a fix shipped outside `claude/muskan/work`.**
+
+**Pushed via `supabase db push --linked` (project `byipusuthdlskdxoexkt`)**, one migration:
+`20260907150000_product_shelf_position.sql` — `alter table product add column shelf_position
+smallint not null default 0`. Verified via `supabase migration list --linked` before (only this
+one pending, tip was `20260907140000`, matching the ledger) and via direct `execute_sql` after
+(`shelf_position | smallint | 0` present). Security advisors checked post-push — no new finding
+tied to `shelf_position` or the `product` table.
+
+**Non-migration deploy debt this does NOT resolve:** none — this fix has no edge functions, no
+secrets, nothing beyond the one column.
+
+---
+
 ## 🔴 READ FIRST (2026-09-07, later same day) — TWO MORE MIGRATIONS PUSHED, `/ship 0027` in progress
 
 **Both now-pending migrations are LIVE ON PRODUCTION**, applied via two individual

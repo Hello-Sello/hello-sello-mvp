@@ -112,8 +112,21 @@ Geometry, ported from `index.html:145-165` with the `dpb-` prefix:
    extra `-360deg`. Any drift between `.dpb-star`'s base transform and the keyframe's makes the
    stars wobble along the ring instead of holding their radius.
 3. **`--dpb-size` is set on `.dpb-ring` and *inherited* by `.dpb-star`.** That is why the 480px
-   media query can shrink the whole ring by overriding one property on one selector — and why
-   `.dpb-star` must **not** carry its own fallback value, which would silently ignore the override.
+   media query can shrink the whole ring by overriding one property on one selector.
+
+   ⚠️ **CORRECTION — this plan stated a CSS rule that is false, and `/code-review` caught it.**
+   The original text said `.dpb-star` "must **not** carry its own fallback value, which would
+   silently ignore the override." **That is wrong about how `var()` works.**
+   `var(--dpb-size, 220px)` uses the fallback **only when the property is not set at all**; when
+   `.dpb-ring` sets it, the inherited value wins and the fallback is simply never consulted. Since
+   `.dpb-star` is always inside `.dpb-ring`, a fallback there would be dead, not dangerous. The
+   prototype is the counter-example: `.ring .star` uses `var(--ring,260px)` (`index.html:150`)
+   while `.vC .ring{--ring:220px}` (`:205`) overrides it correctly.
+   The real reason to declare it once is **DRY, not correctness.** Same for `--dpb-inset`, added
+   after `/code-review` finding 5 — the `14px` star inset was written twice (resting transform and
+   `dpb-counter`'s `to` frame) with nothing enforcing agreement, and **no test guards it**: cases
+   18/19 read `animationName` only, so editing one copy makes the stars spiral off the ring radius
+   while all 21 tests stay green.
 
 **Why not `motion-reduce:animate-none`** (ADR §2, written out): `globals.css:1` is
 `@import "tailwindcss"` — Tailwind v4, utilities in `@layer utilities`. The appended `dpb-` block is
@@ -150,7 +163,12 @@ seam" problem that never existed (ADR §5b ruling 1).
 | 19 | **M4** | `emulateMedia({ reducedMotion: 'reduce' })`. Same elements → `animationName === "none"`, **and** all four claim labels still visible |
 | 20 | **M5** | Fresh context with `javaScriptEnabled: false`. All four labels **and** all four supporting sentences `toBeVisible()` |
 | 21 | **M8** | 375×812 viewport → `document.documentElement.scrollWidth <= clientWidth` |
-| 22 | **M9** | (covered by running the whole file — 12 pre-existing + 4 from T01 + these) |
+| — | **M9** | **Not a case.** Discharged by running the whole file — 12 pre-existing + 4 from T01 + these 5 |
+
+⚠️ **Corrected after `critic` round 1:** an earlier draft of this table numbered M9 as "case 22" and
+§2 below said "22 green". **There is no case 22** — the row's own text says it is covered by the
+file run. **Five cases ship (17-21); the file total is 21.** Flagged so the G4 log does not go
+hunting for a case that was never written.
 
 **Four traps these tests must dodge:**
 - **M6 must NOT anchor on `nicht an Verbraucher`.** It renders **twice** — §8 and the footer
@@ -176,7 +194,7 @@ seam" problem that never existed (ADR §5b ruling 1).
    the new `dpb-` class **absent from `document.styleSheets`**, which fails case 18 and *passes*
    case 19, i.e. it looks like a correct reduced-motion implementation. That is L-025 exactly.
 4. `tsc` + `eslint` + `next build`.
-5. `test-runner`: the whole `landing.spec.ts` — 12 + 4 (T01) + 6 = **22 green**.
+5. `test-runner`: the whole `landing.spec.ts` — 12 + 4 (T01) + **5** = **21 green**.
 
 ---
 

@@ -2,7 +2,9 @@
 
 lane:   STANDARD
 branch: claude/muskan/work
-stage:  design ✅ → **build — IN PROGRESS (T01), round 1** · T01 → T02 back to back, one G4 for both
+stage:  design ✅ → build ✅ → **G4 ✅ ACCEPTED (Muskan, 2026-09-08) → `/ship` IN PROGRESS**
+        Two of nine G4 calls fixed (`abffde0`); remaining seven accepted as-is/deferred, none are
+        defects. Full gate green, security scan clean. Merge target this round is **dev only**.
 
 ## Seed
 Marcel, via Linear DEV-164 "LANDINGPAGE" (2026-07-24), routed by Muskan 2026-09-07 via /triage:
@@ -87,9 +89,15 @@ amendment, not at the raw prototype.**
 
 | | T01 (DEV-178) | T02 (DEV-179) |
 |---|---|---|
-| `tests` | 0/2 | 0/2 |
-| `blocking-findings` | 0/2 | 0/2 |
-| `G4 rounds` | 1 | 1 |
+| `tests` | **0/2** — green on the first run | **0/2** — green on the first run |
+| `blocking-findings` | **0/2** — zero blocking | **0/2** — zero blocking |
+| `G4 rounds` | 1 — **not yet walked** | 1 — **not yet walked** |
+
+**Both tickets closed the build loop without spending a single budget unit.** Across the whole
+slug: `plan-checker` ×1, `/code-review high` ×2, `critic` ×2, `visual-verifier` ×2 — **one blocking
+finding total** (T01's plan, caught before any code was written), **zero** against shipped code.
+23 review findings: **13 fixed**, 1 rejected with reasoning, 9 carried to G4.
+Commits `423b6f5` · `51d884b` · `5268f09`. **48 screenshots + one GIF** in `g4/`.
 
 **Reviewers routed for this diff:** `/code-review high` + `critic` **only**. `security` is **not**
 routed — ADR §4 and §7b both record S1-S8 as genuinely N/A (no migration, no RLS, no RPC, no auth,
@@ -180,7 +188,97 @@ no server action; the only route touched is `/`, already public, its D-01 redire
   substantiated only for the **database** tier. Verified — no `vercel.json`, no `preferredRegion`,
   no region in `next.config.ts`, so the Next server functions run in Vercel's default region. UWG
   § 5 exposure. `REVIEW.md` G4 note 0.
-  **T01 code-complete.** Next: step 9 `visual-verifier`, then T02.
+- 2026-09-07 — **T01 G4-STAGED. 21 live-vs-prototype screenshots in `g4/`.** Committed `423b6f5`
+  (code) + `51d884b` (review + screenshots), both pushed. **The gate itself is NOT passed** — it is
+  held open deliberately so T01 and T02 are walked together, once.
+  Routing the verifier at the **amendment** rather than `?variant=C` is what stopped §4's cards 2
+  and 3 being reported as failures; that was C2's entire purpose, and it worked.
+  **Three design calls left for Muskan, none of them defects:** the eyebrow is a literal prefix of
+  the heading and the page's only such pair · **the orphan row is 640-1023px, not just 768** — and
+  `HowItWorks.tsx:37` next door already solves the identical 3-card problem with `sm:grid-cols-3`,
+  a one-class change the ADR's blast radius does not authorise · the `<h1>` strands `DEAL` alone at
+  640-700px.
+  ⚠️ **One pre-existing bug found that vindicates ADR §2 in practice:** the cards'
+  `hover:shadow-[…]` **never fires**. `.glass` (`globals.css:60-66`) sets `box-shadow` **unlayered**,
+  and unlayered CSS outranks Tailwind v4's layered utilities regardless of specificity — so the
+  utility loses silently on **every** `.glass` element. This is the exact cascade mechanism the ADR
+  used to reject `motion-reduce:animate-none` for T02: the ADR argued it as theory, and it is
+  already happening on the live page. **Wants its own ticket.** It also means T02's reduce rule
+  belongs in the `dpb-` block, as planned — not on the elements.
+  **T01 DONE for this stage.**
+- 2026-09-07 — **T02 tests written and measured. Cases 17-21 appended** (M6, M4b, M4, M5, M8);
+  **213 insertions, 0 deletions** — cases 1-16 byte-identical. `test-writer` again flagged it has
+  no shell rather than asserting RED from source; ran them directly.
+  **4 failed, 1 PASSED — and the pass is the useful result.** Case 21 (M8, no horizontal overflow
+  at 375px) is **green before §7a exists**. ADR §5 anticipated the opposite — that M8 might be red
+  for a pre-existing reason with no in-scope fix, and told us to stash and check. **Measuring it at
+  the red stage inverts that problem:** we now hold a proven-green pre-diff baseline, so if M8 goes
+  red after T02, **T02 caused it** — no stash archaeology required. M8 is a regression guard for
+  this ticket, not a red-to-green criterion.
+- 2026-09-07 — **T02 BUILT + REVIEWED. 11 findings, ZERO blocking. `tests 0/2`,
+  `blocking-findings 0/2` — both budgets unspent.** Gate: `tsc` · `eslint` · **21/21** · 515 unit ·
+  `next build`, all clean. **7 fixed, 4 to G4.** Full detail in `REVIEW.md`.
+  **Fence verified independently, not on report:** `globals.css` **0 deletions** (pure append, the
+  fragile `.speclist-scroll` untouched) · `B2BOnlyBand` `+1/-1` docstring, **zero JSX** ·
+  `page.tsx` `+3/-0` · **no reduced-motion leak** — exactly three animations declared, exactly
+  those three named in the reduce rule, `.dpb-card`/`.dpb-core` animate nothing.
+  🔴 **The finding that needs Muskan's eyes on MOTION, not a screenshot: the padlock rotates.**
+  `.dpb-core` is a child of the spinning `.dpb-ring`; parent transforms apply to descendants; the
+  twelve stars carry `dpb-counter` to cancel it and **the core carries nothing**. Measured live —
+  on its side at 11s, upside-down at 22s. **Not fixed: the locked prototype has the identical
+  structure**, so it ships as approved, and it is squarely judgment item **J3**. One-rule fix
+  documented if wanted.
+  ⚠️ **One fixed finding was MY error, propagated into shipped code.** `PLAN-T02.md` asserted that
+  giving `.dpb-star` a `var()` fallback "would silently defeat the override" — **false**; a
+  fallback is consulted only when the property is unset. The builder faithfully turned my false
+  claim into a source comment. Both corrected; the real reason to declare it once is DRY.
+- 2026-09-07 — ⚠️ **Two red suite runs that were ENVIRONMENT, not code — written up as L-074.**
+  Run 1: 1 failure (case 4, legal routes) in 4.0m. Run 2: 3 failures (cases 2, 3, 8) in 6.7m,
+  **nothing changed between them**. The tell was that the failing case *moved* — two runs failing
+  different pre-existing cases cannot both describe one defect. Server log had it:
+  `GET / 200 in 17.8s (application-code: 17.4s)` against Playwright's 5s assertion timeout, because
+  `.next` had been wiped (correctly, per L-025) and the CSS edits re-invalidated it. Warming five
+  routes restored **21/21 with zero code changes**. **L-074 records the rule: check whether the
+  failing case changes between runs BEFORE re-reading the diff.**
+  Now at step 9, `visual-verifier` on §7a — briefed to capture the lock at four points in one 44s
+  cycle, since neither a test nor a single frame can show a rotation.
+- 2026-09-08 — **G4 ruled ACCEPTED by Muskan.** Two calls answered "fix" (padlock rotation, §4
+  orphan row — both shipped in `abffde0`). Remaining seven G4 items (§7a's server-region claim,
+  the eyebrow/heading duplication, the ADR self-contradiction on D-15, the four minor departures)
+  accepted as-is or deferred — none are defects, all are judgment calls the pipeline correctly
+  refused to make. `/ship` proceeding on that basis. Merge target for this round is **`dev` only**
+  — Ayush continues landing-page work on top before any `dev → main` release.
+- 2026-09-08 — **Rebase onto origin/dev: clean, no conflicts** (picked up DEV-167's shelf-position
+  fix from a disjoint worktree session — zero file overlap).
+- 2026-09-08 — **Full gate: tsc clean · unit 515/515 · eslint 6 pre-existing errors (same files/
+  lines as the documented baseline, none in 0028's diff) · e2e 124+/146.** e2e failures fall into
+  three proven buckets, none attributable to 0028: (a) the documented `sb_secret_` JWT key-class
+  issue (~14, `auth.admin.createUser` rejects the new key format) · (b) 7 failures split across
+  `present-edit-model.spec.ts`/`present-info.spec.ts`, pre-existing on `origin/dev` (confirmed:
+  0028's diff never touches those files) · (c) 1 failure in `auth-gate.spec.ts`, also pre-existing.
+  ⚠️ **One false alarm caught and fixed environmentally, not in code:** `landing.spec.ts:488`
+  (today's `.dpb-core` counter-rotation fix) failed on the first run — the dev server was serving a
+  **stale CSS bundle** from before `abffde0` (`.dpb-core` had no `animation` property in the actual
+  served chunk, though the source file was correct). `.next` wiped, server restarted, routes warmed
+  — bundle confirmed to contain `dpb-counter-core`, landing suite now 21/21. Same environment-fault
+  class as L-074, different symptom (stale artifact, not slow-compile timeout).
+- 2026-09-08 — **Security scan (Claude Security plugin, scan-changes mode): zero findings.**
+  Verified the ADR's S1-S8 N/A call rather than trusting it — migration set byte-identical to
+  origin/dev, no `middleware.ts`, all 4 touched components are server components, zero matches for
+  any dynamic-input/secret pattern across all 496 added lines. One process caveat logged: a secret
+  sweep's first run silently no-opped on an unsupported grep flag; re-run confirmed genuine no-match.
+- 2026-09-08 — **e2e non-JWT failures resolved to root cause with dev_167's help.** Of the 7
+  originally flagged: **3 in `present-edit-model.spec.ts` are stale test-ids**, broken since
+  `1cb26e8` (2026-07-07) renamed `add-location-input/btn` → `add-shop-input/confirm` and the spec
+  was never updated — unrelated to 0028 or to DEV-167's shelf-position fix, worth its own ticket
+  (same shape as HEL-78). **4 in `present-info.spec.ts` remain genuinely undiagnosed** — all three
+  test-ids used (`info-card-warehouse`, `info-more`, `present-banner`) still exist in source, so
+  not stale-selector rot; dev_167 is running it down with a trace, not attributed to anything yet.
+- 2026-09-08 — **Pushed to origin/claude/muskan/work.** Caught mid-push: the other active Muskan
+  session (dev_167, same working tree) had pushed 2 docs-only commits directly to origin
+  (`8b557db`, `68f5856`) after my last fetch. A plain `--force` would have dropped them silently.
+  Verified via `--is-ancestor` (NO), confirmed both commits docs-only, cherry-picked both, verified
+  content present, pushed with `--force-with-lease`. Origin now matches local HEAD exactly. → L-075.
 
 ## For Muskan
 
@@ -225,3 +323,35 @@ genuinely new GDPR/security section, confirmed nowhere on the page today (`Trust
 logo strip, `SocialProof.tsx` is testimonials/metrics). IN SCOPE. No source assets exist for the
 stars/locks motif — /spec --amend should note it's a buildable CSS/SVG animation, not a video,
 so scope stays achievable without waiting on Marcel for footage.
+
+---
+
+## ⏸ G4 — OWED. Nine items, one walk, both tickets.
+
+**Nothing here is a defect blocking the build.** Both tickets are green with zero blocking
+findings. These are the calls the pipeline is not allowed to make for you. Evidence: `REVIEW.md`
+(full reasoning) and `g4/` (48 screenshots + `t02-lock-rotation.gif`).
+
+| # | Call | Where |
+|---|---|---|
+| 1 | 🔴 **"All data is hosted in Germany" is proven only for the DATABASE.** No `vercel.json`, no `preferredRegion`, no region in `next.config.ts` — the Next server functions run in Vercel's default region unless the dashboard overrides it. **UWG § 5** exposure. Fix is infra (pin the region) or copy (narrow the claim) | `Hero.tsx:39` |
+| 2 | ✅ **FIXED 2026-09-08 on Muskan's instruction — the §7a padlock no longer rotates.** `.dpb-core` gained `dpb-counter-core` (−360deg over the same 44s, `linear`), exactly as `.dpb-star` already did, and **joined the reduced-motion rule** — adding a fourth animation without naming it there would have been the very leak M4 exists to catch. Cases 18 and 19 extended to enumerate `.dpb-core`, so the pair stays symmetric. Verified by measurement: `ring 8.2° + core 351.8° = 0.0` and `ring 89.9° + core 270.1° = 0.0` | `g4/t02-lock-FIXED-*.png` |
+| 3 | **The 44s cycle stays invisible — and that is now fine, arguably better.** 12 stars at 30° spacing, each counter-rotated upright ⇒ the star field's visual period is **3.67s, not 44s** (phases 30° and 60° are pixel-identical to 0°). With item 2 fixed, what remains is a slow continuous star drift around a **stationary** padlock. That is what **J3** asks for — *ambient*, not a spinner. Before the fix, the only thing communicating the long cycle was the lock falling over | — |
+| 4 | ✅ **FIXED 2026-09-08 on Muskan's instruction — §4's orphan row is gone.** `sm:grid-cols-2 lg:grid-cols-3` → **`sm:grid-cols-3`**, byte-identical to `HowItWorks.tsx:37` one section down, which has the same three-card shape and never orphaned. The old `sm:grid-cols-2` was left over from when §4 had four cards. Verified: §4 renders **1 row at 768, 900 and 1023px** — the whole band that previously showed 2+1 | `g4/t01-s4-FIXED-*.png` |
+| 5 | **§4's eyebrow is a literal prefix of its own heading** — `WHAT YOU CAN DO` above `What you can do on Hello Sello`. The page's only such pair. Faithful to the prototype | `ValueProps.tsx:32-33` |
+| 6 | **`Hero.tsx:13` ships false** — still says "copy is interim placeholder framing (D-15)". **The ADR contradicts itself:** header `:8` says 0028 amends D-15; `:406-408` says confirmation is owed and G3 never gave it. Something is owed either way | `Hero.tsx:13` |
+| 7 | **Two more §7a departures from variant C, neither in the ADR:** the eyebrow `Security & compliance` (not in C at all) and the type scale (h2 30px vs C's 40px at 1440) | `DataProtection.tsx` |
+| 8 | **§7a is 1252px tall at 375px** — ~1.5 phone viewports for one section. The real mobile cost of D4's grid | `g4/t02-live-s7a-375-FINAL-ring220.png` |
+| 9 | **Tile border opacity** — tiles gained a 1px hairline because `bg-white/5` measured **1.01:1** against the card (an invisible boundary). `border-white/15` was chosen conservatively; the exact value is yours | `DataProtection.tsx` |
+
+### Three tickets this slug found but must not fix
+
+1. **`.glass` kills every `hover:shadow` on the page.** `globals.css:60-66` sets `box-shadow`
+   unlayered; unlayered CSS outranks Tailwind v4's layered utilities regardless of specificity, so
+   the utility loses silently on **every** `.glass` element. Pre-existing. **This is the same
+   cascade mechanism ADR §2 used to reject `motion-reduce:` — argued as theory, already happening.**
+2. **The document overflows horizontally at 320px.** Of 113 overflowing elements, **zero** are in
+   `#data-protection` — all are hero `hs-blob-*` / `hdf-*`. ADR §5's rule applies: file, do not fix.
+3. **D6's promised "grep-based cleanup sweep" does not exist as a ticket.** `HowItWorks.tsx:20`
+   still renders "no cross-company leaks" and `Footer.tsx:25` still renders "marketplace" — the
+   latter now the page's only such claim, contradicting `.claude/rules/project.md`.

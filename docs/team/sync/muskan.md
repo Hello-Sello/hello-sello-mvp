@@ -5,18 +5,87 @@
 
 ---
 
-**Last updated:** 2026-09-07 — session `build_0028` — **`/build 0028` (landing-page-refresh),
-T01 + T02 back to back.**
-**Status:** active.
-**Linear issue in progress:** DEV-178 (T01) then DEV-179 (T02).
-**Shared files locked** (landing surface only — no schema, no migration, no RLS):
-- `src/app/_landing/Hero.tsx`
-- `src/app/_landing/ValueProps.tsx`
-- `src/app/_landing/B2BOnlyBand.tsx` (docstring line only)
-- `src/app/_landing/DataProtection.tsx` (NEW)
-- `src/app/page.tsx`
-- `src/app/globals.css` (append-only `dpb-` block)
-- `e2e/landing.spec.ts` (append-only)
+**Last updated:** 2026-09-07 — session `manage-shop-order-fix` — **DEV-167 (product order in
+Manage Shop) built, shipped straight to `main`, production migration pushed. No conflict with
+the concurrent `build_0028` session — confirmed against its lock list above, zero file overlap.**
+**Status:** offline (session closing after this entry).
+**Shared files locked: none — all released** (`docs/deploy/cloud-migrations-pending.md` and this
+file both edited from an isolated worktree, no lock needed — `build_0028`'s own entry above
+states "no schema, no migration, no RLS").
+
+**What happened.** Two bugs in the seller's Manage Shop grid, both from a bug report during
+manual testing (renaming "Tiger Eye" caused an unrelated product to inherit its price-tier edit,
+and the grid re-sorted on an unrelated save): (1) `getMyShop()`'s `.order("name")` had no
+tiebreaker — name ties could silently reshuffle position across any refresh, which is what made
+the tier-edit session look like it hit the wrong product; (2) drag-to-reorder was 100% client-only,
+never persisted (confirmed by the code's own comment deferring it to "a later phase"). Fixed both:
+new `product.shelf_position` (mirrors `product_image.position`/`product_media.position`, same
+integer-position-with-renumber pattern, third instance of it in this module) +
+`setProductShelfOrder`, wired into ShopView's existing Save/Discard flow (reorder now marks
+dirty on drag, flushes on Save, reverts on Discard — previously it didn't even mark dirty).
+`getMyShop()` now orders `shelf_position, name, id`.
+
+**Shipped outside the normal branch flow, deliberately** (Muskan's call: `claude/muskan/work` had
+an unrelated 0028 backlog that would've delayed this small, self-contained fix) — worktree branch
+`claude/muskan/manage-shop-order-fix` → cherry-picked onto `dev` (not merged whole; that branch's
+ancestry briefly included the entire unreviewed 0028 PRD/ADR/prototype body since it was cut from
+`claude/muskan/work` after 0028 had already landed there — caught before pushing, cherry-picked
+the one relevant commit instead) → PR #189 `dev → main`, merged by Muskan.
+
+**Real incident caught mid-session:** Vercel auto-deployed the `main` merge before the production
+migration was applied — `/present` was broken for every seller for a few minutes (query referenced
+a column that didn't exist yet on production). Caught, migration pushed via `supabase db push
+--linked`, verified live via `execute_sql`. Full detail: `docs/deploy/cloud-migrations-pending.md`,
+"🔴 READ FIRST (2026-09-07, later still)".
+
+**Verification:** `tsc` clean, full unit suite 515/515, `eslint` clean, manually verified in local
+dev (alice@greenleaf.test) — reorder persists across refresh, Discard reverts an unsaved reorder.
+Security advisors checked post-push on production — no new finding.
+
+**Cleanup:** worktrees `wt-manage-shop-order`, `wt-manage-shop-dnd` (old, already fully merged into
+`claude/muskan/work` — its branch was too) both removed, along with `claude/muskan/manage-shop-
+order-fix` and the scratch `_ship-temp-dev` branch used for the cherry-pick.
+
+**Still open:** DEV-167 not yet closed in Linear. Its real description has THREE asks, not one —
+almost closed it against the title alone (same trap as L-070). Only the second is built:
+(1) country-shop groups themselves need to be rename-able and re-arrangeable (Berlin/London
+order) — **not built**, different state (`groupOrder`) than what shipped, still deferred to
+Phase 16 in the code; (2) manual product order within a shop — **built, shipped, walked live in
+production by Muskan** 2026-09-07; (3) click a product image → big pop-up — **not built**,
+unrelated. Left DEV-167 open (still Todo) with asks 1 and 3 as the remaining scope; Muskan wants
+both built together in a NEW session, not this one. **Post-production-walk cleanup done**: the
+fix (`9565b3f`) was cherry-picked onto `dev`/`main` only, not `claude/muskan/work` — merged back
+in afterward so this branch doesn't drift from what's live. Confirmed via `merge-base
+--is-ancestor`: all three of `origin/claude/muskan/work`, `origin/dev`, `origin/main` now carry
+it. No stray worktrees or branches remain (`git worktree list` shows only the main checkout).
+
+---
+
+**Last updated:** 2026-09-07 — session `build_0028` — **`/build 0028` (landing-page-refresh):
+T01 + T02 both BUILT, reviewed and G4-staged. Awaiting Muskan's single combined G4 walk.**
+**Status:** active — code complete, **no gate passed**. `/ship` is the next stage, not this one.
+**Linear:** DEV-178 (T01) + DEV-179 (T02) — both code-complete, **neither closed** (G4 owed).
+**Shared files locked: none — all released.** Landing surface only; **no schema, no migration,
+no RLS, no RPC**, so `security` was correctly not routed for either ticket (ADR 0010 §7b records
+S1-S8 as N/A).
+
+Released: `src/app/_landing/{Hero,ValueProps,B2BOnlyBand,DataProtection}.tsx` · `src/app/page.tsx` ·
+`src/app/globals.css` (append-only `dpb-` block, **0 deletions**) · `e2e/landing.spec.ts`
+(append-only, 12 → 21 cases) · `docs/PRD/0028-*` · `prototypes/landing-refresh-prototype/NOTES.md`.
+
+**Gate:** `tsc` · `eslint` · **21/21 landing e2e** · 515 unit · `next build` — all clean.
+**Zero blocking findings** across `plan-checker` ×1, `/code-review high` ×2, `critic` ×2.
+Commits `423b6f5`, `51d884b`, `5268f09`. 48 G4 screenshots + one GIF in the slug's `g4/`.
+
+⚠️ **Four things are Muskan's at G4, not mine** — full detail in the slug's `REVIEW.md`:
+the *"All data is hosted in Germany"* claim is substantiated **only for the database tier** (no
+`vercel.json`, no `preferredRegion`) · **the padlock in §7a rotates** (faithful to the prototype,
+which has the same missing counter-rotation on the core) · §4's orphan row spans **640-1023px** ·
+§4's eyebrow is a literal prefix of its own heading.
+
+**New:** `LEARNINGS.md` **L-074** — a flaky suite whose *failing case changes between runs* is an
+environment fault, not a regression; check the dev server's `application-code` time before
+re-reading the diff.
 
 ---
 
