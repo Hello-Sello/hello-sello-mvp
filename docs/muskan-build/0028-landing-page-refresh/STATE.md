@@ -2,9 +2,9 @@
 
 lane:   STANDARD
 branch: claude/muskan/work
-stage:  design ✅ → build ✅ → **G4 ✅ ACCEPTED (Muskan, 2026-09-08) → `/ship` IN PROGRESS**
-        Two of nine G4 calls fixed (`abffde0`); remaining seven accepted as-is/deferred, none are
-        defects. Full gate green, security scan clean. Merge target this round is **dev only**.
+stage:  design ✅ → build ✅ → G4 ✅ → G5 ✅ → **SLUG COMPLETE, 2026-09-08**
+        Merged to `dev` only (`8fb3228`); Ayush continues landing-page work on top before any
+        `dev → main` release. ⚠️ **One G4 item survives closure, unresolved — see "Still open" below.**
 
 ## Seed
 Marcel, via Linear DEV-164 "LANDINGPAGE" (2026-07-24), routed by Muskan 2026-09-07 via /triage:
@@ -97,7 +97,8 @@ amendment, not at the raw prototype.**
 slug: `plan-checker` ×1, `/code-review high` ×2, `critic` ×2, `visual-verifier` ×2 — **one blocking
 finding total** (T01's plan, caught before any code was written), **zero** against shipped code.
 23 review findings: **13 fixed**, 1 rejected with reasoning, 9 carried to G4.
-Commits `423b6f5` · `51d884b` · `5268f09`. **48 screenshots + one GIF** in `g4/`.
+Commits `423b6f5` · `51d884b` · `5268f09`. **57 screenshots + one GIF** in `g4/` (verified via
+`/bin/ls`, not the shell's `ls` — see the rollup note below on why that distinction mattered here).
 
 **Reviewers routed for this diff:** `/code-review high` + `critic` **only**. `security` is **not**
 routed — ADR §4 and §7b both record S1-S8 as genuinely N/A (no migration, no RLS, no RPC, no auth,
@@ -279,6 +280,38 @@ no server action; the only route touched is `/`, already public, its D-01 redire
   (`8b557db`, `68f5856`) after my last fetch. A plain `--force` would have dropped them silently.
   Verified via `--is-ancestor` (NO), confirmed both commits docs-only, cherry-picked both, verified
   content present, pushed with `--force-with-lease`. Origin now matches local HEAD exactly. → L-075.
+- 2026-09-08 — **PR #192 (claude/muskan/work → dev) merged.** Merge commit `8fb3228`. Vercel
+  deploy for `dev` confirmed READY.
+- 2026-09-08 — **G5 PASSED.** Muskan walked `https://hello-sello-dh4tn7bgc-hello-sello.vercel.app`
+  live and said "looks fine" — no per-item written detail against the five-point walk list below.
+- 2026-09-08 — **`rollup` run.** Verdict table + contradiction list in the slug's records (this
+  session's transcript; not copied verbatim here). Four factual corrections made as a direct
+  result, each independently re-verified before fixing rather than taken on the rollup's word:
+  `REVIEW.md`'s `critic` header said "3 fixed, 3 to G4" — body shows **4 fixed, 1 to G4 (C4), 1
+  resolved (C6)**, header corrected. `PLAN-T02.md`'s Risks table (§4) still stated the `--dpb-size`
+  fallback claim `REVIEW.md:406` said was "both corrected" — it wasn't, in this one location;
+  corrected. Screenshot count corrected 48 → 57 (`/bin/ls`, not the shell's wrapped `ls`, which
+  returned 0 on the first attempt — same silent-no-op class as the security scan's grep flag
+  earlier in this slug; both are `rtk`-hook symptoms, not new bugs, and reinforce the standing
+  HEL-80 backlog item rather than needing their own ticket).
+  🔴 **Rollup's one substantive finding, not a paperwork one: G5's visual "looks fine" does not
+  and structurally cannot discharge G4 item #1** — the Germany-hosting claim is still proven only
+  for the database tier, still a live UWG §5 exposure. Carried forward below, explicitly, so
+  closing this slug doesn't quietly close that with it.
+
+## G5 — PASSED (visual walk only)
+
+Deploy: `https://hello-sello-dh4tn7bgc-hello-sello.vercel.app`. Walked against PRD
+`docs/PRD/0028-landing-page-refresh.md`'s acceptance criteria — hero headline/subhead, §4's three
+capability cards, §7a, reduced motion. Muskan: "looks fine."
+
+✅ **G4 item #1 RULED CLOSED by Muskan, 2026-09-08.** The codebase-level proof only covered the
+database tier — no `vercel.json`/`preferredRegion`/region pin for the Next server functions — but
+Muskan confirmed the underlying fact directly: data is hosted in Germany. No infra fix or copy
+narrowing needed. Recorded here rather than left as a silent gap: the *codebase* still carries no
+region pin for the server-function tier, so if that ever becomes load-bearing again (a new
+compliance audit, a customer question naming the specific claim), that absence is what to check
+first — this ruling is about the fact, not about adding evidence for it to the repo.
 
 ## For Muskan
 
@@ -330,7 +363,7 @@ so scope stays achievable without waiting on Marcel for footage.
 
 **Nothing here is a defect blocking the build.** Both tickets are green with zero blocking
 findings. These are the calls the pipeline is not allowed to make for you. Evidence: `REVIEW.md`
-(full reasoning) and `g4/` (48 screenshots + `t02-lock-rotation.gif`).
+(full reasoning) and `g4/` (57 screenshots + `t02-lock-rotation.gif`).
 
 | # | Call | Where |
 |---|---|---|

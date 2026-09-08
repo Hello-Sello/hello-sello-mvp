@@ -4,13 +4,13 @@ import {
   getAllocationWorklist,
   getSellerCalendarDeals,
   calendarKpis,
+  OrdersTable,
 } from "@/modules/allocate";
 import { DealCalendar } from "@/modules/deals";
 import { SurfacePlaceholder } from "@/shared/ui/SurfacePlaceholder";
-import { OrdersTable } from "./OrdersTable";
+import { DealCardHost } from "@/shared/ui/DealCardHost";
 import { BatchesSection } from "./BatchesSection";
 import { JumpStrip } from "./JumpStrip";
-import { AllocateDealCardHost } from "./AllocateDealCardHost";
 
 /**
  * Allocate (Sell surface, DEV-76/DEV-157/DEV-151) — the seller's one
@@ -71,7 +71,7 @@ export default async function SellPage() {
       </div>
 
       <section id="orders-section">
-        <OrdersTable orders={orders} />
+        <OrdersTable orders={orders} side="seller" />
       </section>
 
       <section id="batches-section">
@@ -82,7 +82,7 @@ export default async function SellPage() {
         <DealCalendar deals={calendarDeals} kpis={currentMonthKpis} side="seller" />
       </section>
 
-      <AllocateDealCardHost />
+      <DealCardHost />
     </div>
   );
 }

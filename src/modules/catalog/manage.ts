@@ -245,6 +245,124 @@ export async function setProductShelfOrder(orderedIds: string[]): Promise<Manage
   return { ok: true };
 }
 
+// ── Shop locations — the seller's named country shops ───────────────────────
+// A shop is its OWN row, not a label repeated on every product. That is what
+// makes rename a single write instead of an N-row rewrite, and it gives the
+// display order somewhere to live. `position` keeps the same contract as
+// setProductImageOrder/setProductMediaOrder/setProductShelfOrder: the caller
+// passes the full ordered id list, we renumber it 0..n-1.
+
+/** The (company_id, name) unique index is what stops two shops silently
+ *  collapsing into one on rename. Turn its raw violation into a sentence the
+ *  seller can act on; pass anything else straight through. */
+function shopNameError(raw: string, name: string): string {
+  return raw.includes("uq_shop_location_company_name")
+    ? `You already have a shop called "${name}".`
+    : raw;
+}
+
+/** Trim + bound a shop name, so every entry point applies the same rule. */
+function cleanShopName(name: string): { name: string } | { error: string } {
+  const trimmed = name.trim();
+  if (!trimmed) return { error: "A shop needs a name." };
+  if (trimmed.length > 80) return { error: "That shop name is too long (80 characters max)." };
+  return { name: trimmed };
+}
+
+/** Insert a shop at the end of the company's order. The single writer of a new
+ *  shop row, so "what position does a new shop get" is answered in one place. */
+async function appendShopLocation(
+  supabase: Db,
+  companyId: string,
+  name: string,
+): Promise<{ id: string } | { error: string }> {
+  const { data: last } = await supabase
+    .from("shop_location")
+    .select("position")
+    .eq("company_id", companyId)
+    .order("position", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const { data: created, error } = await supabase
+    .from("shop_location")
+    .insert({ company_id: companyId, name, position: (last?.position ?? -1) + 1 })
+    .select("id")
+    .single();
+  if (error || !created) {
+    return { error: shopNameError(error?.message ?? "Could not create that shop.", name) };
+  }
+  return { id: created.id };
+}
+
+/** Add a named shop for the caller's company, appended after the last one.
+ *  Deliberately strict about duplicates: a seller typing a name they already
+ *  have is a mistake worth naming, not a silent no-op. */
+export async function createShopLocation(name: string): Promise<ManageResult> {
+  const supabase = await createClient();
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) return { error: "No company in session." };
+
+  const clean = cleanShopName(name);
+  if ("error" in clean) return clean;
+
+  const appended = await appendShopLocation(supabase, companyId, clean.name);
+  if ("error" in appended) return appended;
+  revalidatePath("/present");
+  return { ok: true };
+}
+
+/** Rename one shop — the whole point of the entity: one row, one write. The old
+ *  free-text model had to rewrite the label on every product in the group. */
+export async function renameShopLocation(id: string, name: string): Promise<ManageResult> {
+  const supabase = await createClient();
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) return { error: "No company in session." };
+
+  const clean = cleanShopName(name);
+  if ("error" in clean) return clean;
+
+  const { error } = await supabase
+    .from("shop_location")
+    .update({ name: clean.name })
+    .eq("id", id);
+  if (error) return { error: shopNameError(error.message, clean.name) };
+  revalidatePath("/present");
+  return { ok: true };
+}
+
+/** Set the seller's display order for their shops. `orderedIds` is the full id
+ *  list in the desired order — the single authoritative writer of `position`. */
+export async function setShopLocationOrder(orderedIds: string[]): Promise<ManageResult> {
+  const supabase = await createClient();
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) return { error: "No company in session." };
+
+  for (let i = 0; i < orderedIds.length; i++) {
+    const { error } = await supabase
+      .from("shop_location")
+      .update({ position: i })
+      .eq("id", orderedIds[i]);
+    if (error) return { error: error.message };
+  }
+  revalidatePath("/present");
+  return { ok: true };
+}
+
+/** Remove a shop. Its products are NOT deleted — product.location_id is
+ *  ON DELETE SET NULL, so they fall back to the unassigned group and stay
+ *  sellable. Un-filing a shop is never a catalogue decision. */
+export async function deleteShopLocation(id: string): Promise<ManageResult> {
+  const supabase = await createClient();
+  const companyId = await getCurrentCompanyId();
+  if (!companyId) return { error: "No company in session." };
+
+  const { error } = await supabase.from("shop_location").delete().eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/present");
+  return { ok: true };
+}
+
 /** Toggle a product between a public price and "Request pricing". */
 export async function setProductPricePublic(productId: string, isPublic: boolean): Promise<ManageResult> {
   const supabase = await createClient();
@@ -326,7 +444,30 @@ export async function setProductLocation(
   if (!companyId) return { error: "No company in session." };
 
   const value = location?.trim() || null;
-  const { error } = await supabase.from("product").update({ location: value }).eq("id", productId);
+
+  // Callers still pass a plain shop NAME; resolving it to a row happens here, so
+  // nothing above this layer has to know a shop is a row. Assigning to a name the
+  // seller already has reuses that shop — unlike createShopLocation, a duplicate
+  // here is the normal case, not a mistake. Both columns are written while the
+  // legacy `location` label still exists (expand/contract); `location_id` is what
+  // rename and reorder actually hang off.
+  let locationId: string | null = null;
+  if (value) {
+    const { data: existing } = await supabase
+      .from("shop_location")
+      .select("id")
+      .eq("company_id", companyId)
+      .eq("name", value)
+      .maybeSingle();
+    const resolved = existing ?? (await appendShopLocation(supabase, companyId, value));
+    if ("error" in resolved) return resolved;
+    locationId = resolved.id;
+  }
+
+  const { error } = await supabase
+    .from("product")
+    .update({ location: value, location_id: locationId })
+    .eq("id", productId);
   if (error) return { error: error.message };
   revalidatePath("/present");
   return { ok: true };

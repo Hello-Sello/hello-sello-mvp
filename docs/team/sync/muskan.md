@@ -5,6 +5,58 @@
 
 ---
 
+**Last updated:** 2026-09-08 — session `dev_167` — **DEV-167 closed. Asks 1 (country shops
+rename-able + re-arrangeable) and 3 (photo hover-zoom) built in worktree `wt-dev-167` on
+`claude/muskan/dev-167`, merged to `claude/muskan/work` as `70cf83a`.**
+**Status:** offline (session closing after this entry).
+**Shared files locked: none — but read the caveat below, I could not run the lock ritual.**
+
+**What shipped.** `shop_location` is now a real table (name + position) with `product.location_id`
+replacing the free-text `product.location` as the grouping identity — renaming a shop is one
+`UPDATE` instead of an N-row rewrite, and the display order finally has somewhere to live. Rename
+and drag-to-re-arrange both live in the **Assign products to shop** dialog; the grid renders in the
+saved order and its section-header drag now persists (it silently discarded before). Product photos
+zoom on hover, sized to the card's own width. `tsc` clean, 515/515 unit, `eslint` clean, all three
+driven live in local dev by Muskan.
+
+⚠️ **NOT DEPLOYED — `20260908120000_shop_location_entity.sql` is LOCAL ONLY and same-deploy
+coupled.** `getMyShop()` selects `shop_location(name)`, so the app code breaks against a database
+that lacks the table. Push the migration **with or before** the code — additive-only, so early is
+safe, late is a repeat of the 2026-09-07 `/present` outage. Queued under "⚠️ PENDING (2026-09-08)"
+in `docs/deploy/cloud-migrations-pending.md`.
+
+⚠️ **Lock-ritual caveat, please read.** I edited four shared docs — `DECISIONS.md`,
+`ARCHITECTURE-NOTES.md`, `CONTEXT.md`, `cloud-migrations-pending.md` — from an isolated worktree
+branch. A lock entry written on my own branch is **invisible to anyone reading this file on
+`claude/muskan/work`**, so the ritual could not do its job. It cost one real conflict in
+`DECISIONS.md` at merge (both `orders` and I appended same-day entries); resolved keeping both,
+coordinated with `orders` first. **If you build on a worktree branch, assume the sync file cannot
+protect shared docs and coordinate by message instead.**
+
+**Left for whoever picks this up:** G5 on production once the migration ships · the contract-step
+drop of `product.location`, which **HEL-95** must be fixed before. Everything else found this
+session is on the tracker — **HEL-93**, **HEL-94**, **HEL-95**, and a scope comment on **HEL-80**.
+
+---
+
+**Last updated:** 2026-09-08 — session `orders` — **Buy page activated (Orders & offers table
+only, MVP cut) — Sell/Allocate untouched. Pushed as `547c272` to `claude/muskan/work`.**
+**Status:** offline (session closing after this entry).
+**Shared files locked: none.** Checked `dev_167` (worktree `wt-dev-167`, branch
+`claude/muskan/dev-167`) before editing — zero file overlap confirmed (`present`/`catalog`/
+`database.types.ts` vs. this session's `allocate`/`sell`/`buy`/`shared/ui`), so worked directly
+on `claude/muskan/work` without the lock dance.
+
+⚠️ **Two things for whoever reads this next.** (1) I ran `pkill -f "next dev"` mid-session to
+clean up my own duplicate dev server — it matches on command string, not directory, so it also
+killed `dev_167`'s server (different worktree) and caused a stale-UI round trip for Muskan.
+Scope any future kill by `cwd`, or just bind a non-default port from the start (`next dev -p
+3010` worked fine, including password-login auth, despite `config.toml`'s `site_url` being
+pinned to `:3000`). (2) `claude/muskan/work` was being held by a `ship_0028` session for a G5
+walk on the dev deploy today — caught via `dev_167` before committing anything; held the commit
+until Muskan confirmed `ship_0028` was done. If you're picking up fresh, check nobody else has
+the branch mid-gate before pushing.
+
 **Last updated:** 2026-09-07 — session `manage-shop-order-fix` — **DEV-167 (product order in
 Manage Shop) built, shipped straight to `main`, production migration pushed. No conflict with
 the concurrent `build_0028` session — confirmed against its lock list above, zero file overlap.**

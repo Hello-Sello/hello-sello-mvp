@@ -7,8 +7,13 @@ Buyer-side operations surface where a pharmacy/procurement team tracks purchase 
 ## Status
 
 - Depth: **prototype finalized** (design contract = `prototypes/buy-prototype/`, built + finalized through 6 rounds of feedback, 2026-07-05, committed `dee2739`)
-- Last updated: 2026-07-08
-- Build status: **BUILDING NOW.**
+- Last updated: 2026-09-08
+- Build status: **LIVE, MVP cut only, and not this doc's 3-block design.** The page is just an
+  Orders & offers table (reusing Sell's `OrdersTable` component, `side="buyer"`) — a section this
+  doc doesn't describe at all, added as a minimal MVP slice, not a build-out of Blocks 1-3 below.
+  Nav flipped `soon`→`active` 2026-09-08. KPI strip, Deals timeline/Sales calendar, and
+  Analytics + Sheet remain unbuilt, still just the prototype's design
+  (`docs/decisions/DECISIONS.md`, 2026-09-08 entry).
 
 ## Who uses this surface and why
 

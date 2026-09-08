@@ -2626,3 +2626,42 @@ what's origin-only against local content before assuming it's noise (here it was
 undocumented decisions) and cherry-pick before pushing. **Never plain `--force`; `--force-with-lease`
 is the default for every rewritten push** — it turns silent data loss into a refused push you're
 forced to investigate.
+
+## L-076 — a generated file that has been hand-corrected must SAY SO, inside itself
+
+Regenerating `src/types/database.types.ts` after adding a table silently reverted four params on
+`update_deal_draft` from `string | null` / `number | null` back to non-null. Supabase's generator
+cannot know a SQL function's parameters accept NULL, so someone had corrected them by hand — and
+marked it **nowhere in the file**. The only trace was a passing sentence in a doc comment in
+`src/modules/deals/actions.ts`.
+
+`tsc` caught it, but as four errors in `modules/deals` from a change to `modules/catalog` — far from
+the cause. Worse, the diff *looked* additive: a check for removed lines came back empty because
+`rtk` truncated the `grep`, and that empty result was reported as "purely additive, zero deletions".
+
+**Rule:** any generated artifact carrying a manual correction gets a marker comment at the
+correction, naming what to re-apply and why. The regenerated file now carries
+`HAND-CORRECTED — re-apply after every supabase gen types`. **And:** never conclude "no deletions"
+from an empty filtered result without confirming the filter itself ran.
+
+## L-077 — verify the listening process, not a list of pids
+
+Muskan reloaded `/present` three times and saw stale UI each time, across two "restarts". Cause: a
+detached `next dev` from the main checkout held :3000, and `lsof -ti:3000` returned a **truncated**
+list that did not include it, so it survived every cleanup. The worktree server bound the port only
+briefly before losing it back.
+
+The check that actually settles it is the listening process's **own working directory**:
+
+```
+for pid in $(lsof -ti:3000 -sTCP:LISTEN); do lsof -a -p $pid -d cwd -Fn | grep ^n; done
+```
+
+"A command printed no errors" and "the process serving this page is the one I built" are different
+claims. With worktrees in play only the second one means anything.
+
+Same session, same root cause, higher stakes: `rtk` rendered `git log -1` showing a **non-merge
+commit as HEAD** immediately after a successful merge — two outputs that flatly contradicted each
+other. `rtk proxy <cmd>` gave the truth. **Reach for `rtk proxy` by default wherever a wrong answer
+is expensive** — merges, deploys, migration state. Extends L-069 / HEL-80, now confirmed to reach
+`git log`, `lsof`, `ls` and `grep`.

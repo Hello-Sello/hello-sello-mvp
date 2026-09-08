@@ -170,3 +170,20 @@ Consumed by Matt Pocock's `grill-with-docs` and `improve-codebase-architecture` 
 | **Accept gate** | The rule that a send to someone you're not yet connected to — a connect ask or a pricing ask — needs an explicit accept from the receiver before a chat thread exists; it does not auto-connect on send. Reaffirms Marcel's 2026-06-10 closed/consent directive. **A deal can never trigger this gate** — every `deal_card` is created inside an already-existing relationship, by construction (`send_deal` and Sella's `confirm_detected_deal` both operate on a `relationship_id` that already exists). (2026-08-31 decision, amended 2026-09-01, `DECISIONS.md`; slug `0027-retire-connect-inbox`.) |
 
 *Maintained by `grill-with-docs` (proposes additions during grilling — humans confirm) and direct edits. Add new terms when they're locked in Layer docs or surface during code review.*
+
+## Shop vs warehouse (2026-09-08)
+
+Two things briefly shared the word **location**, and conflating them cost real confusion during the
+DEV-167 build. They are unrelated.
+
+- **Shop** — `shop_location` (id, company_id, name, position). How a seller *files* products for
+  display: "Berlin", "London", "Toronto Warehouse". Nameable, re-arrangeable, and **seller-only** —
+  no buyer view, deal document or order document reads it. It is a presentation grouping, not a
+  place. Before 2026-09-08 this lived as free text repeated on every product (`product.location`),
+  which is why renaming one was an N-row rewrite.
+- **Warehouse** — `company.metadata.locations`, surfaced as "Warehouse 1/2/3" beside the
+  Headquarter address. Where stock physically sits. Structured addresses for these remain deferred
+  (see the Phase-16 entries in `DECISIONS.md`).
+
+A shop may be *named* after a warehouse — sellers do this — but nothing links them. Renaming a shop
+moves no stock.

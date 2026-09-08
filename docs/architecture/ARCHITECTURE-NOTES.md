@@ -274,6 +274,7 @@ Prototyped in `prototypes/chat-prototype` (decisions: DECISIONS.md `## 2026-06-0
 - **A storage bucket used for owner *management* needs a company-scoped SELECT policy — `remove()` does select-then-delete.** `shop-media` originally had INSERT/UPDATE/DELETE but no SELECT, so deleting a photo silently orphaned the file (the API found nothing to delete and returned `[]`). Fix = `shop_media_select` scoped to `(storage.foldername(name))[1] = current_company_id()` — a company lists only its OWN folder, so no broad/anon listing is reopened and public storefront URLs are unaffected. **Any bucket where the owner must delete/list their files needs a matching SELECT policy, not just write policies.** *(migration `20260610170000`; root-caused via live testing.)*
 - **One authoritative `position` writer.** "Make cover" and move-left/right both resolve in the client to a full ordered id list passed to `setProductImageOrder`, which writes `position = index`. Delete leaves gaps (ordering is by `position`, so gaps are harmless and the next reorder rewrites them) — no read-modify-write recompaction. Carousel = Embla (~7 KB, zero-dep); image frame is `aspect-[4/3]` to stay proportionate in the card grid.
 - **`product.shelf_position` (DEV-167) is the third instance of the position-writer pattern** — same integer position + full-list renumber as `product_image.position`/`product_media.position`, now on `product` itself for the seller's own shop-grid order.
+- **`shop_location` (DEV-167) is the fourth instance, and the first to own a NAME.** Promoting the Present grouping label from free text on every product to a row of its own is what turns a rename from an N-row rewrite into one `UPDATE`; a `unique (company_id, name)` index is what stops two shops collapsing into one. Seller-only: no buyer view, deal doc or order doc reads it, so it carries a company-scoped policy AND an explicit `revoke ... from anon` (the grant is a separate door from the policy — SEC-02). Shipped expand/contract, with `product.location` dual-written until a later migration drops it.
 
 ## Profile & QR business card (2026-06-10 session 19, build)
 
@@ -1012,3 +1013,16 @@ re-imported the relationship-level authorization but dropped the workspace-level
 membership), also live-proven exploitable before being closed. A definer function's authorization
 checklist is exactly as long as the RLS predicate it replaces, not as long as the one clause the
 current ticket had in mind when writing it.
+
+## 2026-09-08 — The buyer/seller mirror-component pattern, now used twice
+
+Any surface that shows the same deal data from opposite sides (Sell = seller's view of each
+buyer, Buy = buyer's view of each supplier) follows one shape: a shared row type with a neutral
+`counterparty: {id, name}` field — never `customerName`/`buyerCompanyId` baked in one direction —
+a read function per role that narrows a base RLS-scoped fetch by the caller's derived role
+(`sellerCompanyId`/`buyerCompanyId` from `@/modules/deals`), and one component taking a
+`side: "seller" | "buyer"` prop to swap only the display labels. `DealCalendar`/`CalendarDeal`
+established this first (`docs/muskan-build/deal-calendar.md`); `OrdersTable`/`OrderRow`
+(`src/modules/allocate`) is the second instance, generalized from a seller-only original when Buy
+adopted it. The next buyer/seller-mirrored surface should reach for this shape by default rather
+than re-deriving it.
