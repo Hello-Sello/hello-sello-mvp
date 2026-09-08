@@ -4,10 +4,13 @@
  * Hover-zoom preview — a small panel that pops up BESIDE the card you are
  * hovering, not a viewer that covers the page.
  *
- * Anchoring it to the card is not cosmetic. A centred panel sits far from the
- * card that opened it, so reaching its arrows means crossing empty space, and
- * the preview closes on the way — the arrows are visible but unreachable.
- * Sitting flush against the card makes that trip a few pixels.
+ * It sits ON its own card, matched to the card's width. Two earlier shapes were
+ * wrong for reasons worth keeping: a centred full-screen panel put the arrows
+ * far from the card, so the pointer left the card and closed the preview before
+ * ever reaching them; a fixed-width panel beside the card was wider than a card
+ * and covered the neighbouring product. Taking the card's OWN width means it can
+ * never spill onto a neighbour whatever the grid does, and because it lands
+ * directly over the photo there is no gap for the pointer to cross at all.
  *
  * Hover is the trigger, never the only one: focus and click open it too,
  * because hover does not exist on a tablet and a hover-only control would lock
@@ -21,11 +24,6 @@
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { X, ChevronLeft, ChevronRight } from "lucide-react";
-
-/** Panel edge length. Square so the position maths is the same whatever shape
- *  the photo is — a portrait bottle and a landscape box get the same box. */
-const PANEL = 340;
-const GAP = 10;
 
 export function ImageHoverPreview({
   src,
@@ -71,16 +69,13 @@ export function ImageHoverPreview({
 
   if (typeof document === "undefined" || !anchor) return null;
 
-  // Prefer the right of the card; flip left when there is no room, and keep the
-  // whole panel on screen vertically for cards near the top or bottom.
-  const roomRight = anchor.right + GAP + PANEL <= window.innerWidth;
-  const left = roomRight
-    ? anchor.right + GAP
-    : Math.max(GAP, anchor.left - GAP - PANEL);
-  const top = Math.min(
-    Math.max(GAP, anchor.top + anchor.height / 2 - PANEL / 2),
-    Math.max(GAP, window.innerHeight - PANEL - GAP),
-  );
+  // Square, exactly as wide as the card. The card's photo frame is capped at
+  // 250px tall while the card itself is wider, so a square is visibly taller
+  // than what it replaces — the photo grows downward over its OWN card body,
+  // never sideways into the next product.
+  const size = anchor.width;
+  const left = anchor.left;
+  const top = anchor.top;
 
   return createPortal(
     <div
@@ -89,7 +84,7 @@ export function ImageHoverPreview({
       aria-label={`${alt} — larger view`}
       onMouseEnter={onPointerEnter}
       onMouseLeave={onPointerLeave}
-      style={{ top, left, width: PANEL, height: PANEL }}
+      style={{ top, left, width: size, height: size }}
       className="fixed z-[100] overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-ink/10"
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
