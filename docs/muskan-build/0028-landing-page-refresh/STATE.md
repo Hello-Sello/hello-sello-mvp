@@ -279,6 +279,16 @@ no server action; the only route touched is `/`, already public, its D-01 redire
   (`8b557db`, `68f5856`) after my last fetch. A plain `--force` would have dropped them silently.
   Verified via `--is-ancestor` (NO), confirmed both commits docs-only, cherry-picked both, verified
   content present, pushed with `--force-with-lease`. Origin now matches local HEAD exactly. → L-075.
+- 2026-09-08 — **PR #192 (claude/muskan/work → dev) merged.** Merge commit `8fb3228`. Vercel
+  deploy for `dev` confirmed READY. **G5 OWED — staged below, not walked.**
+
+## ⏸ G5 — OWED. Walk on the live dev deploy.
+
+Deploy: `https://hello-sello-dh4tn7bgc-hello-sello.vercel.app` (Vercel deployment protection is on
+— sign in with the usual account). Walk PRD `docs/PRD/0028-landing-page-refresh.md`'s acceptance
+criteria against `/` on this URL: hero headline/subhead, §4's three capability cards (no orphan row
+768-1023px), §7a "How your data is protected" (padlock stationary, stars drifting, four claims with
+supporting sentences), reduced motion respected. This is Muskan's gate — not self-passed.
 
 ## For Muskan
 
