@@ -1012,3 +1012,16 @@ re-imported the relationship-level authorization but dropped the workspace-level
 membership), also live-proven exploitable before being closed. A definer function's authorization
 checklist is exactly as long as the RLS predicate it replaces, not as long as the one clause the
 current ticket had in mind when writing it.
+
+## 2026-09-08 — The buyer/seller mirror-component pattern, now used twice
+
+Any surface that shows the same deal data from opposite sides (Sell = seller's view of each
+buyer, Buy = buyer's view of each supplier) follows one shape: a shared row type with a neutral
+`counterparty: {id, name}` field — never `customerName`/`buyerCompanyId` baked in one direction —
+a read function per role that narrows a base RLS-scoped fetch by the caller's derived role
+(`sellerCompanyId`/`buyerCompanyId` from `@/modules/deals`), and one component taking a
+`side: "seller" | "buyer"` prop to swap only the display labels. `DealCalendar`/`CalendarDeal`
+established this first (`docs/muskan-build/deal-calendar.md`); `OrdersTable`/`OrderRow`
+(`src/modules/allocate`) is the second instance, generalized from a seller-only original when Buy
+adopted it. The next buyer/seller-mirrored surface should reach for this shape by default rather
+than re-deriving it.

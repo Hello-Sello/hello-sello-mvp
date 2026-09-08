@@ -2286,3 +2286,22 @@ independent of each other.
 rest of the branch, cherry-pick the specific file-level diff onto a fresh branch off the deploy
 target, verify it standalone (type-check + lint against the TARGET's baseline), and merge that
 narrowly. Reserve a full branch merge for when the whole branch has actually been through `/ship`.
+
+---
+
+## 2026-09-08 — Buy ships for MVP as just the Orders & offers table; the rest of BUY.md's design is deferred
+
+**What was decided.** Buy's nav item flips from `state: "soon"` to `"active"` with only the
+Orders & offers table on the page — the buyer's twin of Sell's same section, fed by a new
+`getBuyerOrders()`. BUY.md's full documented design (KPI strip, Deals timeline/Sales calendar,
+Analytics + Sheet) stays out of this cut.
+
+**Why this, not the alternative.** BUY.md's Status line already read "Build status: BUILDING
+NOW," implying the whole three-block design was in flight. Muskan's call: for MVP, buyers just
+need visibility into orders sent/received — the KPI strip, calendar and analytics layers can
+wait. Building the minimal slice also let Orders & offers get reused verbatim (same `OrdersTable`
+component Sell already ships, generalized with a `side` prop) rather than forked.
+
+**The rule this sets.** Treat BUY.md's three-block design as the eventual target, not the current
+build boundary — Buy's live surface is Orders & offers only until each further block is
+separately decided in. BUY.md's Status section is updated to match.
