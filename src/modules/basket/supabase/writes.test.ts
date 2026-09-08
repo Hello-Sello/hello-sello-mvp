@@ -121,7 +121,7 @@ describe("addToBasket — 42501 admission-refusal mapping (T07, PLAN-T07.md §6,
 });
 
 /**
- * The pack-count floor (HEL-78).
+ * The pack-count floor.
  *
  * `e2e/present-basket.spec.ts` claimed to cover the drawer's +/- stepper and
  * never ran a line of it — 3 `test.fixme`, 0 live tests, asserting test-ids
@@ -146,7 +146,7 @@ function makeUpdateDb() {
   return { from: vi.fn().mockReturnValue({ update }), update, eq };
 }
 
-describe("updateBasketLinePackCount — a basket line is at least one pack (HEL-78)", () => {
+describe("updateBasketLinePackCount — a basket line is at least one pack", () => {
   // 0 is the one the shipped UI would produce the instant the drawer's
   // `Math.max(1, …)` is dropped; the rest are what any other caller can send.
   it.each([0, -1, -0.5, Number.NaN, Number.POSITIVE_INFINITY])(
