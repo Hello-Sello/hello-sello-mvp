@@ -133,7 +133,9 @@ rather than silently fixed.
 
 ---
 
-### `critic` — 6 findings, **0 blocking**, 3 fixed, 3 to G4
+### `critic` — 6 findings, **0 blocking**, 4 fixed, 1 to G4, 1 resolved
+<!-- Corrected at rollup, 2026-09-08: header undercounted the body below (C1/C2/C3/C5 fixed,
+     C4 to G4, C6 resolved) — not the same disposition as "to G4". -->
 
 It flagged its own limit up front: no shell, so two of its "untouched" conclusions rest on the
 diffstat rather than a re-derived `git diff`. I had already verified the diff directly — its fence

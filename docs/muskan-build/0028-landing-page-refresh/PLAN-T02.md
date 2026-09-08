@@ -218,7 +218,7 @@ N/A**, confirmed by `adr-checker` round 2. The `security` agent is **not** route
 | Reduce rule names the ring only | Case 19 enumerates ring + 12 stars + lock |
 | Keyframe/base-transform drift → stars wobble off the ring | Both restate the identical `rotate/translateY/rotate` chain |
 | **M8 (case 21) red for a pre-existing reason** | ⚠️ **`git stash` and re-run.** Red *without* 0028's diff = pre-existing bug: **file it, do not fix it inside T02** (ADR §5). Nothing looks likely to trip it, but 375px has never been executed |
-| `--dpb-size` fallback duplicated onto `.dpb-star` | Would silently defeat the 480px override; set it once on `.dpb-ring` and let it inherit |
+| `--dpb-size` fallback duplicated onto `.dpb-star` | Set once on `.dpb-ring`, inherited — not because a duplicate `var()` fallback would "silently defeat" anything (a fallback only applies when the property is unset; this plan's original claim otherwise was wrong and corrected during T02 review, `REVIEW.md`) — but for DRY: one property, one place it can drift |
 | The dark card hard-codes `#1a0a2e` / `#3d0f26` | Not tokens — the prototype's aubergine/plum gradient ends. Scoped to the `dpb-` block; flagged at G4, not invented |
 
 ---
