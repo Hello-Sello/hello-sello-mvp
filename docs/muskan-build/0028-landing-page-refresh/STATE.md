@@ -305,12 +305,13 @@ Deploy: `https://hello-sello-dh4tn7bgc-hello-sello.vercel.app`. Walked against P
 `docs/PRD/0028-landing-page-refresh.md`'s acceptance criteria — hero headline/subhead, §4's three
 capability cards, §7a, reduced motion. Muskan: "looks fine."
 
-⚠️ **Still open after slug close — G4 item #1, unresolved by G5 or anything else in this slug:**
-*"All data is hosted in Germany"* (`Hero.tsx:39`) is proven only for the database tier — no
-`vercel.json`, no `preferredRegion`, no region pin in `next.config.ts`, so Next server functions
-run in Vercel's default region. UWG § 5 exposure. Fix is infra (pin the region) or copy (narrow
-the claim). Needs a decision and a tracked follow-up — not something this slug can close on its
-own, and not something a visual walk was ever going to catch.
+✅ **G4 item #1 RULED CLOSED by Muskan, 2026-09-08.** The codebase-level proof only covered the
+database tier — no `vercel.json`/`preferredRegion`/region pin for the Next server functions — but
+Muskan confirmed the underlying fact directly: data is hosted in Germany. No infra fix or copy
+narrowing needed. Recorded here rather than left as a silent gap: the *codebase* still carries no
+region pin for the server-function tier, so if that ever becomes load-bearing again (a new
+compliance audit, a customer question naming the specific claim), that absence is what to check
+first — this ruling is about the fact, not about adding evidence for it to the repo.
 
 ## For Muskan
 
